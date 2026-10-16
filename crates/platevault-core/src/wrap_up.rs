@@ -120,6 +120,9 @@ impl Library {
 
 /// `<processing location>/<Project>/`, or `None` before the user chose a
 /// processing location (so the Project has no folder yet).
-fn project_folder(parent: Option<&NativePath>, name: &str) -> Result<Option<PathBuf>, LibraryError> {
+fn project_folder(
+    parent: Option<&NativePath>,
+    name: &str,
+) -> Result<Option<PathBuf>, LibraryError> {
     parent.map(|parent| layout::project_folder(&parent.to_path_buf()?, name)).transpose()
 }

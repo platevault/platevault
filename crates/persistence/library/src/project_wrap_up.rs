@@ -25,8 +25,8 @@ use platevault_model::{
     Availability, ClosePolicy, ClosedSnapshot, FileIdentity, ItemReason, KeptViewLink,
     LibraryError, Location, ManifestEntry, MeasurementMethod, NativePath, ObservationFingerprint,
     ProjectLifecycle, ProjectOperation, ProjectOperationKind, Revision, SettledPin,
-    StorageItemDraft, StorageOperationKind, TrashGroup, WrapUpBlocker, WrapUpOutcome,
-    WrapUpRecord, WrapUpStatus, WrapUpStep,
+    StorageItemDraft, StorageOperationKind, TrashGroup, WrapUpBlocker, WrapUpOutcome, WrapUpRecord,
+    WrapUpStatus, WrapUpStep,
 };
 use sqlx::sqlite::{SqliteConnection, SqliteRow};
 use sqlx::{Connection, Row};
@@ -65,13 +65,16 @@ fn blocked(blocker: &WrapUpBlocker) -> LibraryError {
             format!("Apply or discard {count} changes first")
         }
         WrapUpBlocker::OperationRunning { kind } => {
-            format!("a {} operation is running on this Project; wait for it to finish", match kind {
-                ProjectOperationKind::Apply => "Apply",
-                ProjectOperationKind::CopyToOutput => "Copy to Output",
-                ProjectOperationKind::CleanUp => "Clean up",
-                ProjectOperationKind::Trash => "Trash",
-                ProjectOperationKind::Archive => "Archive",
-            })
+            format!(
+                "a {} operation is running on this Project; wait for it to finish",
+                match kind {
+                    ProjectOperationKind::Apply => "Apply",
+                    ProjectOperationKind::CopyToOutput => "Copy to Output",
+                    ProjectOperationKind::CleanUp => "Clean up",
+                    ProjectOperationKind::Trash => "Trash",
+                    ProjectOperationKind::Archive => "Archive",
+                }
+            )
         }
     })
 }
@@ -113,11 +116,13 @@ impl Catalog {
                 return Err(blocked(blocker));
             }
             for later in WrapUpStep::ORDER.iter().rev().filter(|later| **later >= step) {
-                sqlx::query("DELETE FROM project_wrap_up_steps WHERE project_id = ?1 AND step = ?2")
-                    .bind(project_id.to_string())
-                    .bind(to_text(later)?)
-                    .execute(&mut *conn)
-                    .await?;
+                sqlx::query(
+                    "DELETE FROM project_wrap_up_steps WHERE project_id = ?1 AND step = ?2",
+                )
+                .bind(project_id.to_string())
+                .bind(to_text(later)?)
+                .execute(&mut *conn)
+                .await?;
             }
             read_status(conn, project_id).await?
         }))
@@ -241,7 +246,10 @@ async fn require_step(
         let detail = if status.records.iter().any(|record| record.step == step) {
             format!("{} is recorded; reopen it from the step strip first", step_label(step))
         } else {
-            format!("Wrap up runs Clean up, Trash, then Archive; {} can't run yet", step_label(step))
+            format!(
+                "Wrap up runs Clean up, Trash, then Archive; {} can't run yet",
+                step_label(step)
+            )
         };
         return Err(invalid(detail));
     }
@@ -259,9 +267,14 @@ async fn finish_step(
     if active.as_ref().map(|active| active.id) != Some(operation.id) {
         return Err(LibraryError::NotFound(format!("active Project operation {}", operation.id)));
     }
-    let record =
-        insert_record(conn, operation.project_id, step, WrapUpOutcome::Finished, Some(operation.id))
-            .await?;
+    let record = insert_record(
+        conn,
+        operation.project_id,
+        step,
+        WrapUpOutcome::Finished,
+        Some(operation.id),
+    )
+    .await?;
     project_operations::settle_operation(conn, operation.id).await?;
     Ok(record)
 }
@@ -465,7 +478,8 @@ impl Catalog {
                 ProjectOperationKind::Trash,
             )
             .await?;
-            let drafts: Vec<StorageItemDraft> = items.iter().map(|item| item.draft.clone()).collect();
+            let drafts: Vec<StorageItemDraft> =
+                items.iter().map(|item| item.draft.clone()).collect();
             let storage =
                 storage::insert_operation(conn, StorageOperationKind::Trash, &drafts).await?;
             for (seq, item) in items.iter().enumerate() {
@@ -573,7 +587,10 @@ impl Catalog {
     }
 }
 
-async fn read_trash(conn: &mut SqliteConnection, storage_operation_id: Uuid) -> Result<WrapUpTrash> {
+async fn read_trash(
+    conn: &mut SqliteConnection,
+    storage_operation_id: Uuid,
+) -> Result<WrapUpTrash> {
     let rows = sqlx::query(
         "SELECT seq, operation_id, trash_group, item_id, asset_id, recorded_at \
          FROM wrap_up_trash_items WHERE storage_operation_id = ?1 ORDER BY seq",
@@ -581,8 +598,9 @@ async fn read_trash(conn: &mut SqliteConnection, storage_operation_id: Uuid) -> 
     .bind(storage_operation_id.to_string())
     .fetch_all(&mut *conn)
     .await?;
-    let first =
-        rows.first().ok_or_else(|| LibraryError::NotFound(format!("trash step {storage_operation_id}")))?;
+    let first = rows
+        .first()
+        .ok_or_else(|| LibraryError::NotFound(format!("trash step {storage_operation_id}")))?;
     let operation_id = parse_uuid(&first.try_get::<String, _>("operation_id")?)?;
     let operation = read_operation(conn, operation_id).await?;
     let optional = |row: &SqliteRow, column: &str| -> Result<Option<Uuid>> {
@@ -641,88 +659,7 @@ const IN_OPEN_VIEWS: &str = "SELECT DISTINCT e.asset_id, p.name FROM view_manife
 
 async fn read_trash_basis(conn: &mut SqliteConnection, project_id: Uuid) -> Result<TrashBasis> {
     let inputs = project_view::read_inputs(conn, project_id).await?;
-    let held = project_inputs::held_captures(conn, project_id).await?;
-    let held_ids: BTreeSet<Uuid> =
-        held.iter().flat_map(|held| held.capture.copies.iter().map(|copy| copy.asset_id)).collect();
-    let held_assets: Vec<Asset> =
-        load_assets(conn, &held_ids).await?.into_iter().filter(live).collect();
-    let (key_of, logical) = logical_captures(conn, &held_assets).await?;
-    let mut calibration: BTreeSet<Uuid> = BTreeSet::new();
-    for session in project_desired_sessions(conn, project_id).await? {
-        let Some(settled) = admission::read_calibration(conn, session).await?.settled() else {
-            continue;
-        };
-        for pin in [&settled.dark, &settled.flat, &settled.bias] {
-            if let SettledPin::Pinned { target } = pin {
-                calibration.extend(target.files.iter().filter_map(|file| file.asset_id));
-            }
-        }
-    }
-    let calibration_assets: Vec<Asset> =
-        load_assets(conn, &calibration).await?.into_iter().filter(live).collect();
-    let digests: BTreeSet<String> = held_assets
-        .iter()
-        .chain(&calibration_assets)
-        .filter_map(|asset| asset.fingerprint.content_sha256.clone())
-        .collect();
-    let same_bytes: Vec<Asset> = if digests.is_empty() {
-        Vec::new()
-    } else {
-        sqlx::query(SAME_BYTES)
-            .bind(to_json(&digests)?)
-            .fetch_all(&mut *conn)
-            .await?
-            .iter()
-            .map(super::asset_from_row)
-            .collect::<Result<_>>()?
-    };
-    let with_bytes = |group: Vec<Asset>| -> Vec<Asset> {
-        let digests: BTreeSet<&String> =
-            group.iter().filter_map(|asset| asset.fingerprint.content_sha256.as_ref()).collect();
-        let mut copies: BTreeMap<Uuid, Asset> =
-            group.iter().map(|asset| (asset.id, asset.clone())).collect();
-        for asset in &same_bytes {
-            if asset.fingerprint.content_sha256.as_ref().is_some_and(|sha| digests.contains(sha)) {
-                copies.entry(asset.id).or_insert_with(|| asset.clone());
-            }
-        }
-        let mut copies: Vec<Asset> = copies.into_values().collect();
-        copies.sort_by_key(|copy| (copy.location_id, copy.id));
-        copies
-    };
-    let mut frames = Vec::new();
-    let mut seen_keys = BTreeSet::new();
-    for capture in &held {
-        let Some(key) =
-            capture.capture.copies.iter().find_map(|copy| key_of.get(&copy.asset_id))
-        else {
-            continue;
-        };
-        if !seen_keys.insert(key.clone()) {
-            continue;
-        }
-        let group: Vec<Asset> =
-            logical.get(key).into_iter().flatten().filter(|asset| live(asset)).cloned().collect();
-        if group.is_empty() {
-            continue;
-        }
-        let quality = capture_quality(&group.iter().collect::<Vec<_>>());
-        frames.push(WrapUpFrame {
-            key: capture.capture.capture_key,
-            light: true,
-            quality,
-            copies: with_bytes(group),
-        });
-    }
-    for asset in calibration_assets {
-        let quality = capture_quality(&[&asset]);
-        frames.push(WrapUpFrame {
-            key: asset.id,
-            light: false,
-            quality,
-            copies: with_bytes(vec![asset]),
-        });
-    }
+    let frames = project_frames(conn, project_id).await?;
     let all_copies: BTreeSet<Uuid> =
         frames.iter().flat_map(|frame| frame.copies.iter().map(|copy| copy.id)).collect();
     let mut in_open_views: BTreeMap<Uuid, Vec<String>> = BTreeMap::new();
@@ -763,6 +700,104 @@ async fn read_trash_basis(conn: &mut SqliteConnection, project_id: Uuid) -> Resu
     })
 }
 
+/// The Project's held light captures and the raw calibration frames its
+/// sessions' pins use, each with every live byte-identical copy.
+async fn project_frames(conn: &mut SqliteConnection, project_id: Uuid) -> Result<Vec<WrapUpFrame>> {
+    let held = project_inputs::held_captures(conn, project_id).await?;
+    let held_ids: BTreeSet<Uuid> =
+        held.iter().flat_map(|held| held.capture.copies.iter().map(|copy| copy.asset_id)).collect();
+    let held_assets: Vec<Asset> =
+        load_assets(conn, &held_ids).await?.into_iter().filter(live).collect();
+    let (key_of, logical) = logical_captures(conn, &held_assets).await?;
+    let calibration = pinned_frames(conn, project_id).await?;
+    let calibration_assets: Vec<Asset> =
+        load_assets(conn, &calibration).await?.into_iter().filter(live).collect();
+    let digests: BTreeSet<String> = held_assets
+        .iter()
+        .chain(&calibration_assets)
+        .filter_map(|asset| asset.fingerprint.content_sha256.clone())
+        .collect();
+    let same_bytes = same_bytes(conn, &digests).await?;
+    let mut frames = Vec::new();
+    let mut seen_keys = BTreeSet::new();
+    for capture in &held {
+        let Some(key) = capture.capture.copies.iter().find_map(|copy| key_of.get(&copy.asset_id))
+        else {
+            continue;
+        };
+        if !seen_keys.insert(key.clone()) {
+            continue;
+        }
+        let group: Vec<Asset> =
+            logical.get(key).into_iter().flatten().filter(|asset| live(asset)).cloned().collect();
+        if group.is_empty() {
+            continue;
+        }
+        let quality = capture_quality(&group.iter().collect::<Vec<_>>());
+        frames.push(WrapUpFrame {
+            key: capture.capture.capture_key,
+            light: true,
+            quality,
+            copies: with_bytes(&group, &same_bytes),
+        });
+    }
+    for asset in &calibration_assets {
+        let quality = capture_quality(&[asset]);
+        frames.push(WrapUpFrame {
+            key: asset.id,
+            light: false,
+            quality,
+            copies: with_bytes(std::slice::from_ref(asset), &same_bytes),
+        });
+    }
+    Ok(frames)
+}
+
+/// The raw calibration frames the settled pins of the Project's sessions use.
+async fn pinned_frames(conn: &mut SqliteConnection, project_id: Uuid) -> Result<BTreeSet<Uuid>> {
+    let mut frames = BTreeSet::new();
+    for session in project_desired_sessions(conn, project_id).await? {
+        let Some(settled) = admission::read_calibration(conn, session).await?.settled() else {
+            continue;
+        };
+        for pin in [&settled.dark, &settled.flat, &settled.bias] {
+            if let SettledPin::Pinned { target } = pin {
+                frames.extend(target.files.iter().filter_map(|file| file.asset_id));
+            }
+        }
+    }
+    Ok(frames)
+}
+
+async fn same_bytes(conn: &mut SqliteConnection, digests: &BTreeSet<String>) -> Result<Vec<Asset>> {
+    if digests.is_empty() {
+        return Ok(Vec::new());
+    }
+    sqlx::query(SAME_BYTES)
+        .bind(to_json(digests)?)
+        .fetch_all(&mut *conn)
+        .await?
+        .iter()
+        .map(super::asset_from_row)
+        .collect()
+}
+
+/// `group` with every copy of `same_bytes` that holds one of its digests.
+fn with_bytes(group: &[Asset], same_bytes: &[Asset]) -> Vec<Asset> {
+    let digests: BTreeSet<&String> =
+        group.iter().filter_map(|asset| asset.fingerprint.content_sha256.as_ref()).collect();
+    let mut copies: BTreeMap<Uuid, Asset> =
+        group.iter().map(|asset| (asset.id, asset.clone())).collect();
+    for asset in same_bytes {
+        if asset.fingerprint.content_sha256.as_ref().is_some_and(|sha| digests.contains(sha)) {
+            copies.entry(asset.id).or_insert_with(|| asset.clone());
+        }
+    }
+    let mut copies: Vec<Asset> = copies.into_values().collect();
+    copies.sort_by_key(|copy| (copy.location_id, copy.id));
+    copies
+}
+
 async fn project_desired_sessions(
     conn: &mut SqliteConnection,
     project_id: Uuid,
@@ -783,7 +818,8 @@ async fn registered_locations(conn: &mut SqliteConnection) -> Result<Vec<Locatio
         .iter()
         .map(|row| {
             let created: String = row.try_get("created_at")?;
-            let registered = super::instant(&created).ok_or_else(|| corrupt("registration time"))?;
+            let registered =
+                super::instant(&created).ok_or_else(|| corrupt("registration time"))?;
             Ok((registered, super::location_from_row(row)?))
         })
         .collect::<Result<Vec<_>>>()?;
@@ -1276,10 +1312,11 @@ impl Catalog {
             if operation.state == platevault_model::ProjectOperationState::Active {
                 project_operations::settle_operation(conn, operation.id).await?;
             }
-            let current: String = sqlx::query_scalar("SELECT lifecycle FROM projects WHERE id = ?1")
-                .bind(operation.project_id.to_string())
-                .fetch_one(&mut *conn)
-                .await?;
+            let current: String =
+                sqlx::query_scalar("SELECT lifecycle FROM projects WHERE id = ?1")
+                    .bind(operation.project_id.to_string())
+                    .fetch_one(&mut *conn)
+                    .await?;
             let current: ProjectLifecycle = from_text(&current)?;
             if current == ProjectLifecycle::Closing {
                 let next = if run.moves.iter().any(|step| step.repointed) {
@@ -1375,11 +1412,15 @@ async fn journal_archive(
     Ok(storage)
 }
 
-async fn read_archive(conn: &mut SqliteConnection, storage_operation_id: Uuid) -> Result<ArchiveRun> {
-    let rows = sqlx::query("SELECT * FROM archive_moves WHERE storage_operation_id = ?1 ORDER BY seq")
-        .bind(storage_operation_id.to_string())
-        .fetch_all(&mut *conn)
-        .await?;
+async fn read_archive(
+    conn: &mut SqliteConnection,
+    storage_operation_id: Uuid,
+) -> Result<ArchiveRun> {
+    let rows =
+        sqlx::query("SELECT * FROM archive_moves WHERE storage_operation_id = ?1 ORDER BY seq")
+            .bind(storage_operation_id.to_string())
+            .fetch_all(&mut *conn)
+            .await?;
     let first = rows
         .first()
         .ok_or_else(|| LibraryError::NotFound(format!("archive {storage_operation_id}")))?;
@@ -1446,13 +1487,7 @@ async fn read_archive(conn: &mut SqliteConnection, storage_operation_id: Uuid) -
             repointed_links.push(link.clone());
         }
     }
-    Ok(ArchiveRun {
-        storage_operation_id,
-        project_id,
-        project_operation,
-        moves,
-        repointed_links,
-    })
+    Ok(ArchiveRun { storage_operation_id, project_id, project_operation, moves, repointed_links })
 }
 
 async fn read_move(
@@ -1508,7 +1543,7 @@ async fn take_snapshot(
 
 /// Where a frame's catalog record moves: from the observation a transfer
 /// reviewed to its verified destination copy.
-pub(crate) struct RecordMove<'a> {
+pub struct RecordMove<'a> {
     pub asset_id: Uuid,
     pub from_location_id: Uuid,
     pub from_path: &'a NativePath,
@@ -1527,7 +1562,7 @@ pub(crate) struct RecordMove<'a> {
 /// # Errors
 /// `IdentityConflict` when the record is no longer what was reviewed, or
 /// the catalog records another frame at the destination.
-pub(crate) async fn move_asset_record(
+pub async fn move_asset_record(
     conn: &mut SqliteConnection,
     record: &RecordMove<'_>,
 ) -> Result<String> {

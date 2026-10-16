@@ -67,6 +67,7 @@ impl Library {
     /// `Conflict` when the Project or its View moved since the review;
     /// `InvalidInput` for a row the review doesn't offer, while Wrap up
     /// doesn't open or out of order; catalog errors.
+    #[allow(clippy::too_many_lines)]
     pub async fn clean_up(
         &self,
         request: &CleanUpRequest,
@@ -93,11 +94,19 @@ impl Library {
             )));
         }
         if selected.is_empty() {
-            let outcome =
-                if review.entries.is_empty() { WrapUpOutcome::Finished } else { WrapUpOutcome::Skipped };
+            let outcome = if review.entries.is_empty() {
+                WrapUpOutcome::Finished
+            } else {
+                WrapUpOutcome::Skipped
+            };
             let record = self
                 .catalog()
-                .record_wrap_up_step(project_id, review.desired_revision, WrapUpStep::CleanUp, outcome)
+                .record_wrap_up_step(
+                    project_id,
+                    review.desired_revision,
+                    WrapUpStep::CleanUp,
+                    outcome,
+                )
                 .await?;
             return Ok(CleanUpReport { record, results: Vec::new(), view_removed: false });
         }
@@ -116,25 +125,27 @@ impl Library {
             } else {
                 match &entry.kind {
                     CleanUpEntryKind::Placed { seq, .. } => {
-                        let installed = inputs.installed.as_ref().ok_or_else(|| {
-                            LibraryError::Conflict {
+                        let installed =
+                            inputs.installed.as_ref().ok_or_else(|| LibraryError::Conflict {
                                 id: project_id,
                                 current: review.desired_revision,
                                 successors: Vec::new(),
-                            }
-                        })?;
+                            })?;
                         let placed = installed
                             .entries
                             .iter()
                             .find(|placed| placed.seq == *seq)
                             .cloned()
-                            .ok_or_else(|| {
-                                LibraryError::NotFound(format!("View entry {seq}"))
-                            })?;
+                            .ok_or_else(|| LibraryError::NotFound(format!("View entry {seq}")))?;
                         let original = original_of(&inputs, &placed);
                         let trash = Arc::clone(&trash);
                         let outcome = blocking(move || {
-                            Ok(remove_placed(&absolute, &placed, original.as_deref(), trash.as_ref()))
+                            Ok(remove_placed(
+                                &absolute,
+                                &placed,
+                                original.as_deref(),
+                                trash.as_ref(),
+                            ))
                         })
                         .await?;
                         if let CleanUpOutcome::Deleted | CleanUpOutcome::Trashed = outcome {
@@ -192,9 +203,10 @@ impl Library {
             return Ok(kept(ReasonCode::SourceUnavailable, format!("{} is gone", path.display())));
         };
         let trash = Arc::clone(trash);
-        let retired =
-            blocking(move || Ok(retirement(trash::retire(trash.as_ref(), &item.evidence, &[], || Ok(())))))
-                .await?;
+        let retired = blocking(move || {
+            Ok(retirement(trash::retire(trash.as_ref(), &item.evidence, &[], || Ok(()))))
+        })
+        .await?;
         if retired == CleanUpOutcome::Trashed {
             self.catalog()
                 .review_previous_item(project_id, path, PreviousItemReview::Trashed)
@@ -211,9 +223,9 @@ fn kept(code: ReasonCode, detail: String) -> CleanUpOutcome {
 fn retirement(retired: Retirement) -> CleanUpOutcome {
     match retired {
         Retirement::Moved => CleanUpOutcome::Trashed,
-        Retirement::Unsupported(reason) | Retirement::Blocked(reason) | Retirement::Uncertain(reason) => {
-            CleanUpOutcome::Kept { reason }
-        }
+        Retirement::Unsupported(reason)
+        | Retirement::Blocked(reason)
+        | Retirement::Uncertain(reason) => CleanUpOutcome::Kept { reason },
     }
 }
 
@@ -277,7 +289,9 @@ fn remove_placed(
             match files::old_link(path, entry, original.as_ref()) {
                 Ok(()) => match fs::remove_file(path) {
                     Ok(()) => CleanUpOutcome::Deleted,
-                    Err(error) => kept(ReasonCode::WriteFailed, format!("{}: {error}", path.display())),
+                    Err(error) => {
+                        kept(ReasonCode::WriteFailed, format!("{}: {error}", path.display()))
+                    }
                 },
                 Err(_) => kept(
                     ReasonCode::DestinationChanged,
@@ -296,7 +310,10 @@ fn remove_placed(
                 );
             };
             let ours = inventory::probe_fingerprint(path).ok().filter(|observed| {
-                entry.written.as_ref().is_some_and(|written| same_identity(&observed.identity, written))
+                entry
+                    .written
+                    .as_ref()
+                    .is_some_and(|written| same_identity(&observed.identity, written))
             });
             let Some(observed) = ours else {
                 return kept(
@@ -332,7 +349,11 @@ fn remove_placed(
 /// Remove `View/` once every entry left it and it holds nothing, and
 /// `View (previous)/` once it holds nothing; only emptied folders go, never
 /// anything recursively. Returns whether each is gone.
-fn remove_emptied(project: &Path, every_entry_removed: bool, previous_touched: bool) -> (bool, bool) {
+fn remove_emptied(
+    project: &Path,
+    every_entry_removed: bool,
+    previous_touched: bool,
+) -> (bool, bool) {
     let view = project.join(VIEW_FOLDER);
     let view_gone = every_entry_removed && {
         if files::holds_nothing(&view) {

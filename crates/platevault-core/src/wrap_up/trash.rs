@@ -44,9 +44,9 @@ use crate::project_output::OutputProtection;
 use crate::{
     ApplicableQuality, Asset, Availability, EntryEvidence, EntryKind, ItemChange, ItemOutcome,
     ItemPhase, ItemReason, KeptCopy, LibraryError, Location, LocationRole, NativePath,
-    ObservationFingerprint, ReasonCode, StorageOperationState, TrashCandidate, TrashGroup,
-    TrashGroupOffer, TrashRefusal, TrashReport, TrashRequest, TrashReview, TrashSupport,
-    WrapUpOutcome, WrapUpStep,
+    ObservationFingerprint, ReasonCode, StorageItem, StorageOperationState, TrashCandidate,
+    TrashGroup, TrashGroupOffer, TrashRefusal, TrashReport, TrashRequest, TrashReview,
+    TrashSupport, WrapUpOutcome, WrapUpStep,
 };
 
 /// One row's items with what each journals.
@@ -159,55 +159,11 @@ impl Library {
     ) -> Result<TrashReport, LibraryError> {
         let catalog = self.catalog();
         let storage = journal.storage_operation_id;
-        let mut operation = catalog.storage_operation(storage).await?;
+        let operation = catalog.storage_operation(storage).await?;
         if operation.state == StorageOperationState::Reviewed {
-            operation = catalog.start_storage_operation(storage).await?;
+            catalog.start_storage_operation(storage).await?;
         }
-        // A rejected frame moves whole: every copy re-verifies before the first moves.
-        let mut frames: BTreeMap<Uuid, Vec<u32>> = BTreeMap::new();
-        for item in journal.items.iter().filter(|item| item.group == TrashGroup::RejectedFrames) {
-            if let Some(frame) = item.item_id {
-                frames.entry(frame).or_default().push(item.seq);
-            }
-        }
-        for seqs in frames.values() {
-            let untouched = seqs.iter().all(|seq| {
-                operation.items.get(*seq as usize).is_some_and(|step| step.phase == ItemPhase::Pending)
-            });
-            if !untouched {
-                continue;
-            }
-            let sources: Vec<EntryEvidence> = seqs
-                .iter()
-                .filter_map(|seq| operation.items.get(*seq as usize).map(|step| step.source.clone()))
-                .collect();
-            let trash = Arc::clone(trash);
-            let refusal = blocking(move || {
-                Ok(sources.iter().find_map(|source| movable(source, trash.as_ref()).err().map(|why| (source.path.clone(), why))))
-            })
-            .await?;
-            if let Some((path, reason)) = refusal {
-                for seq in seqs {
-                    let step = &operation.items[*seq as usize];
-                    let reason = if step.source.path == path {
-                        reason.clone()
-                    } else {
-                        ItemReason::new(
-                            reason.code,
-                            format!("another copy of this frame was refused: {}: {}", path.display(), reason.detail),
-                        )
-                    };
-                    let change = ItemChange {
-                        phase: ItemPhase::Settled,
-                        outcome: Some(ItemOutcome::Blocked),
-                        reason: Some(reason),
-                        written: None,
-                    };
-                    catalog.advance_storage_item(storage, step.seq, step.revision, &change).await?;
-                }
-                operation = catalog.storage_operation(storage).await?;
-            }
-        }
+        self.refuse_partial_frames(&journal, trash).await?;
         let operation = self.run_storage_operation(storage, Arc::clone(trash)).await?;
         let mut trashed = Vec::new();
         let mut recorded = Vec::new();
@@ -241,29 +197,99 @@ impl Library {
         }
         Ok(TrashReport { record, moved, refused })
     }
+
+    /// A rejected frame moves whole (STO-FR-15): before the first of its
+    /// copies moves, every copy re-verifies, and one that doesn't refuses
+    /// them all, naming it.
+    async fn refuse_partial_frames(
+        &self,
+        journal: &WrapUpTrash,
+        trash: &Arc<dyn OsTrash>,
+    ) -> Result<(), LibraryError> {
+        let catalog = self.catalog();
+        let storage = journal.storage_operation_id;
+        let mut frames: BTreeMap<Uuid, Vec<u32>> = BTreeMap::new();
+        for item in journal.items.iter().filter(|item| item.group == TrashGroup::RejectedFrames) {
+            if let Some(frame) = item.item_id {
+                frames.entry(frame).or_default().push(item.seq);
+            }
+        }
+        for seqs in frames.values() {
+            let operation = catalog.storage_operation(storage).await?;
+            let steps: Vec<StorageItem> =
+                operation.items.into_iter().filter(|step| seqs.contains(&step.seq)).collect();
+            if !steps.iter().all(|step| step.phase == ItemPhase::Pending) {
+                continue;
+            }
+            let sources: Vec<EntryEvidence> =
+                steps.iter().map(|step| step.source.clone()).collect();
+            let trash = Arc::clone(trash);
+            let refusal = blocking(move || {
+                Ok(sources.iter().find_map(|source| {
+                    movable(source, trash.as_ref()).err().map(|why| (source.path.clone(), why))
+                }))
+            })
+            .await?;
+            let Some((path, reason)) = refusal else { continue };
+            for step in &steps {
+                let why = if step.source.path == path {
+                    reason.clone()
+                } else {
+                    ItemReason::new(
+                        reason.code,
+                        format!(
+                            "another copy of this frame was refused: {}: {}",
+                            path.display(),
+                            reason.detail
+                        ),
+                    )
+                };
+                let change = ItemChange {
+                    phase: ItemPhase::Settled,
+                    outcome: Some(ItemOutcome::Blocked),
+                    reason: Some(why),
+                    written: None,
+                };
+                catalog.advance_storage_item(storage, step.seq, step.revision, &change).await?;
+            }
+        }
+        Ok(())
+    }
 }
 
 /// D19 for one copy about to move: its volume keeps what the OS Trash
 /// receives, and it still holds its reviewed identity and digest.
 fn movable(source: &EntryEvidence, trash: &dyn OsTrash) -> Result<(), ItemReason> {
-    let path = source.path.to_path_buf().map_err(|error| {
-        ItemReason::new(ReasonCode::SourceUnavailable, error.to_string())
-    })?;
+    let path = source
+        .path
+        .to_path_buf()
+        .map_err(|error| ItemReason::new(ReasonCode::SourceUnavailable, error.to_string()))?;
     if let TrashSupport::Unsupported { reason, detail } =
         trash.support(&path, source.fingerprint.size_bytes)
     {
-        return Err(ItemReason::new(ReasonCode::TrashUnsupported, format!("{detail} ({reason:?})")));
+        return Err(ItemReason::new(
+            ReasonCode::TrashUnsupported,
+            format!("{detail} ({reason:?})"),
+        ));
     }
     verify_source(source)
 }
 
+/// The three rows in one pass over the basis, in the step's order; kept
+/// together because each row's refusals read the same location and View
+/// facts.
+#[allow(clippy::too_many_lines)]
 fn offers(
     basis: &TrashBasis,
     protection: &OutputProtection,
     trash: &dyn OsTrash,
 ) -> Result<Offers, LibraryError> {
-    let locations: BTreeMap<Uuid, (usize, &Location)> =
-        basis.locations.iter().enumerate().map(|(order, location)| (location.id, (order, location))).collect();
+    let locations: BTreeMap<Uuid, (usize, &Location)> = basis
+        .locations
+        .iter()
+        .enumerate()
+        .map(|(order, location)| (location.id, (order, location)))
+        .collect();
     let file = |asset: &Asset| -> Option<PathBuf> {
         let (_, location) = locations.get(&asset.location_id)?;
         Some(location.path.to_path_buf().ok()?.join(asset.relative_path.relative_path().ok()?))
@@ -272,7 +298,11 @@ fn offers(
     let mut refused: BTreeMap<TrashGroup, Vec<TrashRefusal>> = BTreeMap::new();
 
     // Rejected frames.
-    for frame in basis.frames.iter().filter(|frame| frame.light && frame.quality == ApplicableQuality::Unusable) {
+    for frame in basis
+        .frames
+        .iter()
+        .filter(|frame| frame.light && frame.quality == ApplicableQuality::Unusable)
+    {
         let copies: Vec<&Asset> =
             frame.copies.iter().filter(|copy| copy.availability != Availability::Missing).collect();
         let Some(first) = copies.first() else { continue };
@@ -284,7 +314,11 @@ fn offers(
                     group: TrashGroup::RejectedFrames,
                     item_id: Some(frame.key),
                     asset_id: Some(copy.id),
-                    draft: crate::StorageItemDraft { source: evidence, relied_on: Vec::new(), destination: None },
+                    draft: crate::StorageItemDraft {
+                        source: evidence,
+                        relied_on: Vec::new(),
+                        destination: None,
+                    },
                 }),
                 Err(refusal_of) => {
                     refusal = Some(refusal_of);
@@ -293,16 +327,22 @@ fn offers(
             }
         }
         match refusal {
-            Some((path, reason)) => refused.entry(TrashGroup::RejectedFrames).or_default().push(TrashRefusal {
-                id: Some(frame.key),
-                path: path.unwrap_or_else(|| NativePath::from_path(&file(first).unwrap_or_default())),
-                reason,
-            }),
+            Some((path, reason)) => {
+                refused.entry(TrashGroup::RejectedFrames).or_default().push(TrashRefusal {
+                    id: Some(frame.key),
+                    path: path
+                        .unwrap_or_else(|| NativePath::from_path(&file(first).unwrap_or_default())),
+                    reason,
+                });
+            }
             None => planned.entry(TrashGroup::RejectedFrames).or_default().push(Planned {
                 candidate: TrashCandidate {
                     id: Some(frame.key),
                     files: items.iter().map(|item| item.draft.source.path.clone()).collect(),
-                    size_bytes: items.iter().map(|item| item.draft.source.fingerprint.size_bytes).sum(),
+                    size_bytes: items
+                        .iter()
+                        .map(|item| item.draft.source.fingerprint.size_bytes)
+                        .sum(),
                     kept: None,
                 },
                 items,
@@ -321,25 +361,30 @@ fn offers(
                 continue;
             }
             match processing_file(&path, trash) {
-                Ok(evidence) => planned.entry(TrashGroup::ProcessingFiles).or_default().push(Planned {
-                    candidate: TrashCandidate {
-                        id: None,
-                        files: vec![evidence.path.clone()],
-                        size_bytes: evidence.fingerprint.size_bytes,
-                        kept: None,
-                    },
-                    items: vec![TrashItemDraft {
-                        group: TrashGroup::ProcessingFiles,
-                        item_id: None,
-                        asset_id: None,
-                        draft: crate::StorageItemDraft { source: evidence, relied_on: Vec::new(), destination: None },
-                    }],
-                }),
-                Err(reason) => refused.entry(TrashGroup::ProcessingFiles).or_default().push(TrashRefusal {
-                    id: None,
-                    path: NativePath::from_path(&path),
-                    reason,
-                }),
+                Ok(evidence) => {
+                    planned.entry(TrashGroup::ProcessingFiles).or_default().push(Planned {
+                        candidate: TrashCandidate {
+                            id: None,
+                            files: vec![evidence.path.clone()],
+                            size_bytes: evidence.fingerprint.size_bytes,
+                            kept: None,
+                        },
+                        items: vec![TrashItemDraft {
+                            group: TrashGroup::ProcessingFiles,
+                            item_id: None,
+                            asset_id: None,
+                            draft: crate::StorageItemDraft {
+                                source: evidence,
+                                relied_on: Vec::new(),
+                                destination: None,
+                            },
+                        }],
+                    });
+                }
+                Err(reason) => refused
+                    .entry(TrashGroup::ProcessingFiles)
+                    .or_default()
+                    .push(TrashRefusal { id: None, path: NativePath::from_path(&path), reason }),
             }
         }
     }
@@ -363,25 +408,35 @@ fn offers(
                         .map(|evidence| (evidence, kept))
                 });
                 match checked {
-                    Ok((evidence, kept)) => planned.entry(TrashGroup::DuplicateCopies).or_default().push(Planned {
-                        candidate: TrashCandidate {
-                            id: Some(extra.id),
-                            files: vec![evidence.path.clone()],
-                            size_bytes: evidence.fingerprint.size_bytes,
-                            kept: Some(kept.path.clone()),
-                        },
-                        items: vec![TrashItemDraft {
-                            group: TrashGroup::DuplicateCopies,
-                            item_id: Some(extra.id),
-                            asset_id: Some(extra.id),
-                            draft: crate::StorageItemDraft { source: evidence, relied_on: vec![kept], destination: None },
-                        }],
-                    }),
-                    Err(reason) => refused.entry(TrashGroup::DuplicateCopies).or_default().push(TrashRefusal {
-                        id: Some(extra.id),
-                        path: NativePath::from_path(&file(extra).unwrap_or_default()),
-                        reason,
-                    }),
+                    Ok((evidence, kept)) => {
+                        planned.entry(TrashGroup::DuplicateCopies).or_default().push(Planned {
+                            candidate: TrashCandidate {
+                                id: Some(extra.id),
+                                files: vec![evidence.path.clone()],
+                                size_bytes: evidence.fingerprint.size_bytes,
+                                kept: Some(kept.path.clone()),
+                            },
+                            items: vec![TrashItemDraft {
+                                group: TrashGroup::DuplicateCopies,
+                                item_id: Some(extra.id),
+                                asset_id: Some(extra.id),
+                                draft: crate::StorageItemDraft {
+                                    source: evidence,
+                                    relied_on: vec![kept],
+                                    destination: None,
+                                },
+                            }],
+                        });
+                    }
+                    Err(reason) => {
+                        refused.entry(TrashGroup::DuplicateCopies).or_default().push(
+                            TrashRefusal {
+                                id: Some(extra.id),
+                                path: NativePath::from_path(&file(extra).unwrap_or_default()),
+                                reason,
+                            },
+                        );
+                    }
                 }
             }
         }
@@ -390,8 +445,12 @@ fn offers(
     let groups: Vec<TrashGroupOffer> = TrashGroup::ORDER
         .into_iter()
         .map(|group| {
-            let items: Vec<TrashCandidate> =
-                planned.get(&group).into_iter().flatten().map(|planned| planned.candidate.clone()).collect();
+            let items: Vec<TrashCandidate> = planned
+                .get(&group)
+                .into_iter()
+                .flatten()
+                .map(|planned| planned.candidate.clone())
+                .collect();
             TrashGroupOffer {
                 group,
                 size_bytes: items.iter().map(|item| item.size_bytes).sum(),
@@ -432,9 +491,13 @@ fn library_copy(
     captures_only: bool,
 ) -> Result<EntryEvidence, (Option<NativePath>, ItemReason)> {
     let shown = path.as_deref().map(NativePath::from_path);
-    let refuse = |code: ReasonCode, detail: String| Err((shown.clone(), ItemReason::new(code, detail)));
+    let refuse =
+        |code: ReasonCode, detail: String| Err((shown.clone(), ItemReason::new(code, detail)));
     let Some(path) = path else {
-        return refuse(ReasonCode::SourceUnavailable, format!("copy {} has no registered location", copy.id));
+        return refuse(
+            ReasonCode::SourceUnavailable,
+            format!("copy {} has no registered location", copy.id),
+        );
     };
     if let Some(projects) = in_open_views.get(&copy.id) {
         return refuse(
@@ -443,7 +506,10 @@ fn library_copy(
         );
     }
     let Some((_, location)) = locations.get(&copy.location_id) else {
-        return refuse(ReasonCode::SourceUnavailable, format!("{} has no location", path.display()));
+        return refuse(
+            ReasonCode::SourceUnavailable,
+            format!("{} has no location", path.display()),
+        );
     };
     if captures_only && location.role != LocationRole::Captures {
         return refuse(
@@ -451,13 +517,20 @@ fn library_copy(
             format!("{} is not in a Captures location; only Captures copies move", path.display()),
         );
     }
-    if copy.availability != Availability::Available || location.availability != Availability::Available {
+    if copy.availability != Availability::Available
+        || location.availability != Availability::Available
+    {
         return refuse(ReasonCode::SourceUnavailable, format!("{} is not online", path.display()));
     }
     let Some(sha256) = copy.fingerprint.content_sha256.clone() else {
-        return refuse(ReasonCode::SourceDrift, format!("{} has no recorded digest", path.display()));
+        return refuse(
+            ReasonCode::SourceDrift,
+            format!("{} has no recorded digest", path.display()),
+        );
     };
-    if let TrashSupport::Unsupported { reason, detail } = trash.support(&path, copy.fingerprint.size_bytes) {
+    if let TrashSupport::Unsupported { reason, detail } =
+        trash.support(&path, copy.fingerprint.size_bytes)
+    {
         return refuse(ReasonCode::TrashUnsupported, format!("{detail} ({reason:?})"));
     }
     Ok(EntryEvidence {
@@ -476,10 +549,16 @@ fn processing_file(path: &Path, trash: &dyn OsTrash) -> Result<EntryEvidence, It
     if let TrashSupport::Unsupported { reason, detail } =
         trash.support(path, evidence.fingerprint.size_bytes)
     {
-        return Err(ItemReason::new(ReasonCode::TrashUnsupported, format!("{detail} ({reason:?})")));
+        return Err(ItemReason::new(
+            ReasonCode::TrashUnsupported,
+            format!("{detail} ({reason:?})"),
+        ));
     }
     if evidence.kind != EntryKind::File && fs::read_link(path).is_err() {
-        return Err(ItemReason::new(ReasonCode::SourceUnavailable, format!("{} is unreadable", path.display())));
+        return Err(ItemReason::new(
+            ReasonCode::SourceUnavailable,
+            format!("{} is unreadable", path.display()),
+        ));
     }
     Ok(evidence)
 }
@@ -497,8 +576,17 @@ fn keeper<'a>(
         .copied()
         .filter_map(|copy| {
             let (order, location) = locations.get(&copy.location_id)?;
-            let library = matches!(location.role, LocationRole::Captures | LocationRole::Calibration);
-            Some(((!library, *order, first_observed.get(&copy.id).copied().unwrap_or(i64::MAX), copy.id), copy))
+            let library =
+                matches!(location.role, LocationRole::Captures | LocationRole::Calibration);
+            Some((
+                (
+                    !library,
+                    *order,
+                    first_observed.get(&copy.id).copied().unwrap_or(i64::MAX),
+                    copy.id,
+                ),
+                copy,
+            ))
         })
         .min_by_key(|(rank, _)| *rank)
         .map(|(_, copy)| copy)
@@ -508,7 +596,10 @@ fn keeper<'a>(
 /// re-verified before the move.
 fn kept_copy(keeper: &Asset, path: Option<&Path>) -> Result<KeptCopy, ItemReason> {
     let (Some(path), Some(sha256)) = (path, keeper.fingerprint.content_sha256.clone()) else {
-        return Err(ItemReason::new(ReasonCode::KeptCopyUnproven, "the kept copy has no recorded digest"));
+        return Err(ItemReason::new(
+            ReasonCode::KeptCopyUnproven,
+            "the kept copy has no recorded digest",
+        ));
     };
     if keeper.availability != Availability::Available {
         return Err(ItemReason::new(

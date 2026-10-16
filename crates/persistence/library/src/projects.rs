@@ -18,17 +18,17 @@ use platevault_model::{
     DuplicateRequest, ExclusionBasis, GoalIdentity, GoalInput, GoalProgress, GoalSpec, GoalTally,
     GoalTemplate, GoalTemplateInput, InclusionBasis, LibraryError, MeasurementMethod,
     MeasurementOutcome, MeasurementRecord, MetricId, MetricState, Microseconds, PanelInput,
-    Project, ProjectCandidate, ProjectDetail, ProjectGoal, ProjectInput, ProjectQuery,
-    ProjectRejection, ProjectState, ProjectSubject, ProjectSummary, ProjectViewSettings,
-    QualityCriterion, RecordValidity, ReferenceKind, RejectionMark, Revision, RunStage,
-    SubjectInput, SubjectPanel,
+    Project, ProjectCandidate, ProjectDesired, ProjectDetail, ProjectGoal, ProjectInput,
+    ProjectQuery, ProjectRejection, ProjectState, ProjectSubject, ProjectSummary,
+    ProjectViewSettings, QualityCriterion, RecordValidity, ReferenceKind, RejectionMark, Revision,
+    RunStage, SubjectInput, SubjectPanel,
 };
 use sqlx::sqlite::{SqliteConnection, SqliteRow};
 use sqlx::{Connection, Row};
 use uuid::Uuid;
 
-use super::project_inputs::{self, NewGroup};
 use super::admission;
+use super::project_inputs::{self, NewGroup};
 use super::views::{self, RunUse};
 use super::{
     capture_quality, conflict, db_revision, fingerprint_matches, from_json, from_text, json_ids,
@@ -1181,7 +1181,7 @@ const fn counted(asset: &Asset) -> bool {
     !matches!(asset.availability, Availability::Trashed | Availability::Retired)
 }
 
-pub(super) async fn progress_basis(
+pub async fn progress_basis(
     conn: &mut SqliteConnection,
     id: Uuid,
     method: &MeasurementMethod,
@@ -1534,80 +1534,8 @@ impl Catalog {
             } else {
                 BTreeSet::new()
             };
-            let mut groups: HashMap<Uuid, Uuid> = HashMap::new();
-            for group in &desired.groups {
-                let holds = desired
-                    .sessions
-                    .iter()
-                    .any(|held| held.group_id == group.id && chosen.contains(&held.session_id));
-                if !holds && !goal_groups.contains(&group.id) {
-                    continue;
-                }
-                let copy = NewGroup {
-                    id: Uuid::new_v4(),
-                    rig_id: group.rig_id,
-                    name: group.name.clone(),
-                    origin: group.origin,
-                    optics: group.optics.clone(),
-                    framing: group.framing.clone(),
-                };
-                project_inputs::insert_group(conn, id, &copy).await?;
-                if group.panel {
-                    sqlx::query("UPDATE project_groups SET panel = 1 WHERE id = ?1")
-                        .bind(copy.id.to_string())
-                        .execute(&mut *conn)
-                        .await?;
-                }
-                groups.insert(group.id, copy.id);
-            }
-            // The user's own frame choices carry over by copy; every other
-            // capture follows the Library as it stands now.
-            let overrides: HashMap<Uuid, CaptureInclusion> = desired
-                .captures
-                .iter()
-                .filter(|capture| {
-                    matches!(
-                        capture.inclusion,
-                        CaptureInclusion::Included { basis: InclusionBasis::Explicit }
-                            | CaptureInclusion::Excluded { basis: ExclusionBasis::User }
-                    )
-                })
-                .flat_map(|capture| {
-                    capture.copies.iter().map(|copy| (copy.asset_id, capture.inclusion))
-                })
-                .collect();
-            for held in desired.sessions.iter().filter(|held| chosen.contains(&held.session_id)) {
-                let group = groups[&held.group_id];
-                let basis =
-                    admission::require_admission(conn, id, group, held.session_id, None).await?;
-                project_inputs::insert_member(
-                    conn,
-                    id,
-                    held.session_id,
-                    group,
-                    held.placement,
-                    held.target_id,
-                    &basis,
-                )
-                .await?;
-                for capture in project_inputs::session_captures(conn, held.session_id).await? {
-                    let inclusion = capture
-                        .copies
-                        .iter()
-                        .find_map(|copy| overrides.get(&copy.asset_id).copied())
-                        .unwrap_or(capture.inclusion);
-                    project_inputs::insert_capture(
-                        conn,
-                        id,
-                        capture.session_id,
-                        capture.capture_key,
-                        &capture.copies,
-                        inclusion,
-                        capture.quality_when_added,
-                    )
-                    .await?;
-                }
-            }
+            let groups = copy_groups(conn, id, &desired, &chosen, &goal_groups).await?;
+            copy_sessions(conn, id, &desired, &chosen, &groups).await?;
             if request.goals {
                 let mut goals = goal_inputs(conn, request.project_id).await?;
                 for goal in &mut goals {
@@ -1619,6 +1547,101 @@ impl Catalog {
         });
         Ok(project)
     }
+}
+
+/// Copy the source's groups that hold a chosen session or carry a goal the
+/// duplicate keeps, with fresh ids; returns the source id → copy id map.
+async fn copy_groups(
+    conn: &mut SqliteConnection,
+    id: Uuid,
+    desired: &ProjectDesired,
+    chosen: &BTreeSet<Uuid>,
+    goal_groups: &BTreeSet<Uuid>,
+) -> Result<HashMap<Uuid, Uuid>> {
+    let mut groups = HashMap::new();
+    for group in &desired.groups {
+        let holds = desired
+            .sessions
+            .iter()
+            .any(|held| held.group_id == group.id && chosen.contains(&held.session_id));
+        if !holds && !goal_groups.contains(&group.id) {
+            continue;
+        }
+        let copy = NewGroup {
+            id: Uuid::new_v4(),
+            rig_id: group.rig_id,
+            name: group.name.clone(),
+            origin: group.origin,
+            optics: group.optics.clone(),
+            framing: group.framing,
+        };
+        project_inputs::insert_group(conn, id, &copy).await?;
+        if group.panel {
+            sqlx::query("UPDATE project_groups SET panel = 1 WHERE id = ?1")
+                .bind(copy.id.to_string())
+                .execute(&mut *conn)
+                .await?;
+        }
+        groups.insert(group.id, copy.id);
+    }
+    Ok(groups)
+}
+
+/// Add each chosen session to its group's copy through the admission rule
+/// (its current pins), on the Target it joined the source on, with its live
+/// captures; the user's own frame choices carry over, every other capture
+/// follows the Library as it stands now.
+async fn copy_sessions(
+    conn: &mut SqliteConnection,
+    id: Uuid,
+    desired: &ProjectDesired,
+    chosen: &BTreeSet<Uuid>,
+    groups: &HashMap<Uuid, Uuid>,
+) -> Result<()> {
+    let overrides: HashMap<Uuid, CaptureInclusion> = desired
+        .captures
+        .iter()
+        .filter(|capture| {
+            matches!(
+                capture.inclusion,
+                CaptureInclusion::Included { basis: InclusionBasis::Explicit }
+                    | CaptureInclusion::Excluded { basis: ExclusionBasis::User }
+            )
+        })
+        .flat_map(|capture| capture.copies.iter().map(|copy| (copy.asset_id, capture.inclusion)))
+        .collect();
+    for held in desired.sessions.iter().filter(|held| chosen.contains(&held.session_id)) {
+        let group = groups[&held.group_id];
+        let basis = admission::require_admission(conn, id, group, held.session_id, None).await?;
+        project_inputs::insert_member(
+            conn,
+            id,
+            held.session_id,
+            group,
+            held.placement,
+            held.target_id,
+            &basis,
+        )
+        .await?;
+        for capture in project_inputs::session_captures(conn, held.session_id).await? {
+            let inclusion = capture
+                .copies
+                .iter()
+                .find_map(|copy| overrides.get(&copy.asset_id).copied())
+                .unwrap_or(capture.inclusion);
+            project_inputs::insert_capture(
+                conn,
+                id,
+                capture.session_id,
+                capture.capture_key,
+                &capture.copies,
+                inclusion,
+                capture.quality_when_added,
+            )
+            .await?;
+        }
+    }
+    Ok(())
 }
 
 /// The Project's name and state.

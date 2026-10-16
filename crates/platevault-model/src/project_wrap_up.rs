@@ -139,7 +139,8 @@ pub enum TrashGroup {
 }
 
 impl TrashGroup {
-    pub const ORDER: [Self; 3] = [Self::RejectedFrames, Self::ProcessingFiles, Self::DuplicateCopies];
+    pub const ORDER: [Self; 3] =
+        [Self::RejectedFrames, Self::ProcessingFiles, Self::DuplicateCopies];
 }
 
 /// One item a Trash row moves under its approval.

@@ -75,7 +75,7 @@ async fn goals_met_never_close_the_project() {
     let status = catalog.wrap_up_status(project).await.unwrap();
     assert_eq!(status.lifecycle, ProjectLifecycle::Open);
     assert_eq!((status.blocker, status.current), (None, Some(WrapUpStep::CleanUp)));
-    assert!(status.records.is_empty());
+    assert_eq!(status.records, Vec::<platevault_model::WrapUpRecord>::new());
     assert_eq!(status.desired_revision, before, "nothing wrote the Project");
     assert!(catalog.closed_snapshot(project).await.unwrap().is_none());
 
@@ -111,7 +111,8 @@ async fn close_locks_for_good_with_a_calibration_snapshot() {
     let assets = catalog.session(session).await.unwrap().assets;
     catalog.set_quality(&[expected(&assets[0])], Quality::Unusable, DiskProbe).await.unwrap();
     assert_eq!(catalog.closed_snapshot(project).await.unwrap().unwrap(), snapshot);
-    assert!(catalog.project_pending_changes(project).await.unwrap().is_empty());
+    let pending = catalog.project_pending_changes(project).await.unwrap();
+    assert_eq!(pending, Vec::<platevault_model::PendingChange>::new());
 
     let desired = catalog.project_desired(project).await.unwrap();
     let refused =
@@ -126,7 +127,10 @@ async fn close_locks_for_good_with_a_calibration_snapshot() {
     assert_eq!(kind(&again), "invalid_input", "{again}");
 
     let status = catalog.wrap_up_status(project).await.unwrap();
-    assert_eq!(status.blocker, Some(WrapUpBlocker::NotOpen { lifecycle: ProjectLifecycle::Closed }));
+    assert_eq!(
+        status.blocker,
+        Some(WrapUpBlocker::NotOpen { lifecycle: ProjectLifecycle::Closed })
+    );
     assert_eq!(status.current, None, "the Wrap up tab is a read-only record");
     let steps: Vec<_> = status.records.iter().map(|record| (record.step, record.outcome)).collect();
     assert_eq!(
@@ -177,7 +181,10 @@ async fn wrap_up_runs_its_steps_in_order_and_reopens_back_to_front() {
         .unwrap_err();
     assert_eq!(kind(&busy), "invalid_input", "{busy}");
     let record = catalog.finish_clean_up(&operation, false).await.unwrap();
-    assert_eq!((record.outcome, record.operation_id), (WrapUpOutcome::Finished, Some(operation.id)));
+    assert_eq!(
+        (record.outcome, record.operation_id),
+        (WrapUpOutcome::Finished, Some(operation.id))
+    );
     catalog
         .record_wrap_up_step(project, revision, WrapUpStep::Trash, WrapUpOutcome::Skipped)
         .await
@@ -231,7 +238,10 @@ async fn duplicate_continues_a_closed_project_with_its_joined_target() {
     assert_eq!(copied.lifecycle, ProjectLifecycle::Open);
     assert_eq!(copied.groups.len(), 1);
     assert_ne!(copied.groups[0].id, source.groups[0].id, "fresh ids, no link");
-    assert_eq!((&copied.groups[0].name, copied.groups[0].rig_id), (&source.groups[0].name, source.groups[0].rig_id));
+    assert_eq!(
+        (&copied.groups[0].name, copied.groups[0].rig_id),
+        (&source.groups[0].name, source.groups[0].rig_id)
+    );
     assert_eq!(copied.sessions[0].session_id, session);
     assert_eq!(copied.sessions[0].target_id, joined, "Duplicate copies the joined Target");
     assert_ne!(joined, other.candidate.id);

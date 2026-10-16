@@ -600,7 +600,7 @@ async fn require_free_name(
     }
 }
 
-pub(super) async fn insert_group(
+pub async fn insert_group(
     conn: &mut SqliteConnection,
     project: Uuid,
     group: &NewGroup,
@@ -784,7 +784,7 @@ async fn add_session(conn: &mut SqliteConnection, project: Uuid, add: &SessionAd
 /// The session row with the admission basis `require_admission` returned
 /// in the caller's transaction, in its group with its placement and the
 /// Target it joins on.
-pub(super) async fn insert_member(
+pub async fn insert_member(
     conn: &mut SqliteConnection,
     project: Uuid,
     session: Uuid,
@@ -813,7 +813,7 @@ pub(super) async fn insert_member(
 
 /// The session's live logical captures (D16) as they stand, each with every
 /// copy's decision revision and observation.
-pub(super) async fn session_captures(
+pub async fn session_captures(
     conn: &mut SqliteConnection,
     session_id: Uuid,
 ) -> Result<Vec<ProjectCapture>> {
@@ -845,7 +845,7 @@ pub(super) async fn session_captures(
 
 /// One capture of `session_id` and its copies, with the Project's choice
 /// and its quality when added; each is held once per Project.
-pub(super) async fn insert_capture(
+pub async fn insert_capture(
     conn: &mut SqliteConnection,
     project: Uuid,
     session_id: Uuid,
@@ -1136,7 +1136,7 @@ impl FrameChanges {
     }
 }
 
-pub(super) async fn pending_changes(
+pub async fn pending_changes(
     conn: &mut SqliteConnection,
     id: Uuid,
 ) -> Result<Vec<PendingChange>> {

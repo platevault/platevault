@@ -86,7 +86,7 @@ async fn clean_up_retires_only_the_reviewed_rows_and_never_output() {
     let trash = bin(&world);
 
     let review = world.library.clean_up_review(world.project).await.unwrap();
-    assert!(!review.entries.is_empty());
+    assert!(review.entries.len() > 1, "{review:#?}");
     assert!(review.entries.iter().all(|entry| entry.preselected), "Copies are ticked");
     assert!(review.entries.iter().all(|entry| entry.path.display().starts_with("View")));
     let request = |selected: Vec<NativePath>| CleanUpRequest {
@@ -100,14 +100,21 @@ async fn clean_up_retires_only_the_reviewed_rows_and_never_output() {
     assert_eq!(kind(&refused), "invalid_input", "{refused}");
 
     let chosen = review.entries[0].path.clone();
-    let report = world.library.clean_up(&request(vec![chosen.clone()]), trash.dyn_trash()).await.unwrap();
+    let report =
+        world.library.clean_up(&request(vec![chosen.clone()]), trash.dyn_trash()).await.unwrap();
     assert_eq!(report.results.len(), 1, "{report:#?}");
     assert_eq!(report.results[0].outcome, CleanUpOutcome::Trashed);
-    assert_eq!((report.record.step, report.record.outcome), (WrapUpStep::CleanUp, WrapUpOutcome::Finished));
+    assert_eq!(
+        (report.record.step, report.record.outcome),
+        (WrapUpStep::CleanUp, WrapUpOutcome::Finished)
+    );
     assert!(!report.view_removed);
     assert_eq!(trash.moved(), [world.folder().join(chosen.to_path_buf().unwrap())]);
     for entry in &review.entries[1..] {
-        assert!(world.folder().join(entry.path.to_path_buf().unwrap()).exists(), "unticked rows stay");
+        assert!(
+            world.folder().join(entry.path.to_path_buf().unwrap()).exists(),
+            "unticked rows stay"
+        );
     }
     assert!(output.exists() && processing.exists(), "Output/ and Processing/ are never touched");
     assert!(world.light(HA[0]).exists(), "originals are never Clean up's");
@@ -140,7 +147,7 @@ async fn symlinks_are_deleted_after_their_no_follow_check() {
     assert!(matches!(report.results[0].outcome, CleanUpOutcome::Kept { .. }), "{report:#?}");
     assert!(report.results[1..].iter().all(|result| result.outcome == CleanUpOutcome::Deleted));
     assert!(fs::symlink_metadata(&changed).is_ok() && elsewhere.exists());
-    assert!(trash.moved().is_empty(), "a link holds no data: deleted, not trashed");
+    assert_eq!(trash.moved(), Vec::<std::path::PathBuf>::new(), "a link is deleted, not trashed");
     assert!(!report.view_removed, "the kept link holds the View");
     assert!(world.light(HA[0]).exists() && world.light(OIII[0]).exists());
 }
@@ -182,7 +189,10 @@ async fn trash_moves_a_row_only_when_it_is_ticked() {
     };
     let report = world.library.wrap_up_trash(&request, trash.dyn_trash()).await.unwrap();
     assert_eq!(report.moved, [NativePath::from_path(&intermediate)], "{report:#?}");
-    assert_eq!((report.record.step, report.record.outcome), (WrapUpStep::Trash, WrapUpOutcome::Finished));
+    assert_eq!(
+        (report.record.step, report.record.outcome),
+        (WrapUpStep::Trash, WrapUpOutcome::Finished)
+    );
     assert!(world.light(HA[0]).exists() && world.light(HA[1]).exists(), "the unticked row stays");
     assert!(output.exists());
     let assets = world.library.catalog().session(ha.id).await.unwrap().assets;
@@ -201,9 +211,13 @@ async fn close_locks_with_its_calibration_and_duplicate_takes_current_pins() {
         world.library.catalog().apply_inputs(world.project).await.unwrap().installed.unwrap();
     let trash = bin(&world);
     skip_to_archive(&world, &trash).await;
-    let request =
-        CloseRequest { project_id: world.project, desired_revision: revision(&world).await, archive: None };
-    let report = world.library.close_project(&request, trash.dyn_trash(), &Unattended).await.unwrap();
+    let request = CloseRequest {
+        project_id: world.project,
+        desired_revision: revision(&world).await,
+        archive: None,
+    };
+    let report =
+        world.library.close_project(&request, trash.dyn_trash(), &Unattended).await.unwrap();
 
     assert_eq!(report.lifecycle, ProjectLifecycle::Closed);
     assert_eq!(report.snapshot.applied_generation, Some(installed.generation));
@@ -223,7 +237,8 @@ async fn close_locks_with_its_calibration_and_duplicate_takes_current_pins() {
     world.pin(ha.id, "flat", &world.raw_set(OIII_FLATS[0], "2026-10-13").await).await;
     let snapshot = world.library.closed_snapshot(world.project).await.unwrap().unwrap();
     assert_eq!(snapshot, report.snapshot, "a reassignment never changes a Closed Project");
-    assert!(world.library.catalog().project_pending_changes(world.project).await.unwrap().is_empty());
+    let pending = world.library.catalog().project_pending_changes(world.project).await.unwrap();
+    assert_eq!(pending, Vec::<PendingChange>::new(), "Library changes never touch it");
     let locked = world
         .library
         .apply_preview(world.project)
@@ -231,7 +246,8 @@ async fn close_locks_with_its_calibration_and_duplicate_takes_current_pins() {
         .map_or(true, |preview| !preview.blockers.is_empty());
     assert!(locked, "a Closed Project takes no Apply");
     assert!(world.view().exists(), "the kept View stays");
-    let reopen = world.library.reopen_wrap_up_step(world.project, WrapUpStep::Archive).await.unwrap_err();
+    let reopen =
+        world.library.reopen_wrap_up_step(world.project, WrapUpStep::Archive).await.unwrap_err();
     assert_eq!(kind(&reopen), "invalid_input");
 
     let oiii = world.session_of(&world.captures, OIII[0]).await;
@@ -268,7 +284,11 @@ async fn a_stopped_close_resumes_to_archived_with_its_kept_view_repointed() {
     let archive_root = fs::canonicalize(archive_root).unwrap();
     let archive = world
         .library
-        .register_location(NativePath::from_path(&archive_root), "Archive-T7".into(), LocationRole::Captures)
+        .register_location(
+            NativePath::from_path(&archive_root),
+            "Archive-T7".into(),
+            LocationRole::Captures,
+        )
         .await
         .unwrap();
     let trash = bin(&world);
@@ -282,14 +302,21 @@ async fn a_stopped_close_resumes_to_archived_with_its_kept_view_repointed() {
     let request = CloseRequest {
         project_id: world.project,
         desired_revision: revision(&world).await,
-        archive: Some(ArchiveSelection { destination: archive.id, sessions, digest: review.digest }),
+        archive: Some(ArchiveSelection {
+            destination: archive.id,
+            sessions,
+            digest: review.digest,
+        }),
     };
     let stop = StopAfter(AtomicUsize::new(9));
     let report = world.library.close_project(&request, trash.dyn_trash(), &stop).await.unwrap();
     assert_eq!(report.lifecycle, ProjectLifecycle::Closing, "{report:#?}");
     assert!(!report.archive.as_ref().unwrap().settled);
     let status = world.library.wrap_up_status(world.project).await.unwrap();
-    assert_eq!(status.blocker, Some(WrapUpBlocker::NotOpen { lifecycle: ProjectLifecycle::Closing }));
+    assert_eq!(
+        status.blocker,
+        Some(WrapUpBlocker::NotOpen { lifecycle: ProjectLifecycle::Closing })
+    );
 
     world.reopen().await;
     let settled = world.library.recover_wrap_up(trash.dyn_trash()).await.unwrap();
@@ -311,7 +338,10 @@ async fn a_stopped_close_resumes_to_archived_with_its_kept_view_repointed() {
     }
     assert!(!world.light(HA[0]).exists() && !world.light(OIII[0]).exists(), "originals retired");
     assert_eq!(trash.moved().len(), 4, "only the four originals went to the OS Trash");
-    assert_eq!(world.library.closed_snapshot(world.project).await.unwrap().unwrap(), report.snapshot);
+    assert_eq!(
+        world.library.closed_snapshot(world.project).await.unwrap().unwrap(),
+        report.snapshot
+    );
     let after = world.library.catalog().project_desired(world.project).await.unwrap();
     assert_eq!(after.sessions, desired.sessions, "archiving changes no Project's sessions");
 }

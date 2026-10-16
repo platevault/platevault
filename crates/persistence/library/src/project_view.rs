@@ -581,7 +581,7 @@ async fn failed_building(
         .and_then(|expected| expected.building))
 }
 
-pub(super) async fn read_inputs(
+pub async fn read_inputs(
     conn: &mut SqliteConnection,
     project_id: Uuid,
 ) -> Result<ApplyInputs> {

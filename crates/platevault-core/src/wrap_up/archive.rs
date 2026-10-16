@@ -235,6 +235,9 @@ impl Library {
         Ok(drafts)
     }
 
+    // One pass lays out, holds and drafts each file in review order, as the
+    // run Prepare planner does (prepare.rs); splitting it scatters the holds.
+    #[allow(clippy::too_many_lines)]
     async fn archive_plan(
         &self,
         project: Option<Uuid>,
@@ -254,8 +257,12 @@ impl Library {
         let holders = catalog.archive_holders(project, sessions).await?;
         let asset_ids: BTreeSet<Uuid> = assets.iter().map(|asset| asset.asset.id).collect();
         let links = catalog.kept_view_links(project, &asset_ids).await?;
-        let locations: BTreeMap<Uuid, Location> =
-            catalog.list_locations().await?.into_iter().map(|location| (location.id, location)).collect();
+        let locations: BTreeMap<Uuid, Location> = catalog
+            .list_locations()
+            .await?
+            .into_iter()
+            .map(|location| (location.id, location))
+            .collect();
         let destination_ready = {
             let root = root.clone();
             let online = destination.availability == Availability::Available;
@@ -276,7 +283,8 @@ impl Library {
             let mut session_drafts = Vec::new();
             for archived in assets.iter().filter(|asset| asset.session_id == *session) {
                 let asset = &archived.asset;
-                let Some(from) = absolute(&locations, asset.location_id, &asset.relative_path) else {
+                let Some(from) = absolute(&locations, asset.location_id, &asset.relative_path)
+                else {
                     continue;
                 };
                 let laid_out = layouts.remove(&asset.id).unwrap_or_else(|| Err(String::new()));
@@ -289,20 +297,32 @@ impl Library {
                         None
                     }
                 };
-                let to = to_path.as_ref().and_then(|path| Some(root.join(path.relative_path().ok()?)));
+                let to =
+                    to_path.as_ref().and_then(|path| Some(root.join(path.relative_path().ok()?)));
                 files.push(ArchiveFile {
                     asset_id: asset.id,
                     from: NativePath::from_path(&from),
-                    to: to.as_deref().map_or_else(|| destination.path.clone(), NativePath::from_path),
+                    to: to
+                        .as_deref()
+                        .map_or_else(|| destination.path.clone(), NativePath::from_path),
                     size_bytes: asset.fingerprint.size_bytes,
                 });
                 let (Some(to_path), Some(to)) = (to_path, to) else { continue };
                 let refusal = if asset.location_id == destination_id {
-                    Some((ReasonCode::DestinationOccupied, "it is already in the archive location".into()))
+                    Some((
+                        ReasonCode::DestinationOccupied,
+                        "it is already in the archive location".into(),
+                    ))
                 } else if asset.availability != Availability::Available {
-                    Some((ReasonCode::SourceUnavailable, format!("{} is not online", from.display())))
+                    Some((
+                        ReasonCode::SourceUnavailable,
+                        format!("{} is not online", from.display()),
+                    ))
                 } else if asset.fingerprint.content_sha256.is_none() {
-                    Some((ReasonCode::SourceDrift, format!("{} has no recorded digest", from.display())))
+                    Some((
+                        ReasonCode::SourceDrift,
+                        format!("{} has no recorded digest", from.display()),
+                    ))
                 } else if !destination_ready {
                     Some((
                         ReasonCode::WriteFailed,
@@ -320,7 +340,10 @@ impl Library {
                 let reads: Vec<KeptViewLink> = links
                     .iter()
                     .filter(|record| record.link.asset_id == asset.id)
-                    .filter_map(|record| absolute_link(record).map(|link| KeptViewLink { link, ..record.link.clone() }))
+                    .filter_map(|record| {
+                        absolute_link(record)
+                            .map(|link| KeptViewLink { link, ..record.link.clone() })
+                    })
                     .collect();
                 listed_links.extend(reads.iter().cloned());
                 session_drafts.push(ArchiveDraft {
@@ -356,7 +379,9 @@ impl Library {
         let review_links: Vec<KeptViewLink> = listed_links
             .into_iter()
             .filter(|link| {
-                assets.iter().any(|asset| asset.asset.id == link.asset_id && selectable.contains(&asset.session_id))
+                assets.iter().any(|asset| {
+                    asset.asset.id == link.asset_id && selectable.contains(&asset.session_id)
+                })
             })
             .collect();
         let digest = {
@@ -420,8 +445,12 @@ impl Library {
     ) -> Result<ArchiveProgress, LibraryError> {
         let _claim = Claim::take(storage)?;
         let catalog = self.catalog();
-        let locations: BTreeMap<Uuid, Location> =
-            catalog.list_locations().await?.into_iter().map(|location| (location.id, location)).collect();
+        let locations: BTreeMap<Uuid, Location> = catalog
+            .list_locations()
+            .await?
+            .into_iter()
+            .map(|location| (location.id, location))
+            .collect();
         let mut run = catalog.archive_run(storage).await?;
         for index in 0..run.moves.len() {
             if run.moves[index].outcome.is_some() {
@@ -446,6 +475,9 @@ impl Library {
 
     /// Advance one file to its outcome, stopping at a durable step when
     /// `control` asks.
+    // The file's durable steps in their journal order; each early return is a
+    // recorded resume point.
+    #[allow(clippy::too_many_lines)]
     async fn archive_one(
         &self,
         run: &ArchiveRun,
@@ -474,24 +506,37 @@ impl Library {
         }
         if item.phase == ItemPhase::DestinationVerified {
             let to = absolute(locations, step.to_location_id, &step.to_path).ok_or_else(|| {
-                LibraryError::PersistenceFailure(format!("archive move {} has no destination", step.seq))
+                LibraryError::PersistenceFailure(format!(
+                    "archive move {} has no destination",
+                    step.seq
+                ))
             })?;
             if !step.repointed {
                 let Some(fingerprint) = verified_copy(&item, &to).await? else {
                     let reason = ItemReason::new(
                         ReasonCode::DestinationChanged,
-                        format!("{} changed after it was verified; the original stays", to.display()),
+                        format!(
+                            "{} changed after it was verified; the original stays",
+                            to.display()
+                        ),
                     );
-                    return self.keep_source(storage, &item, ArchiveMoveOutcome::Blocked, reason).await;
+                    return self
+                        .keep_source(storage, &item, ArchiveMoveOutcome::Blocked, reason)
+                        .await;
                 };
                 match catalog.record_archive_repoint(storage, step.seq, &fingerprint).await {
                     Ok(()) => {}
                     Err(LibraryError::IdentityConflict(detail)) => {
                         let reason = ItemReason::new(
                             ReasonCode::DestinationOccupied,
-                            format!("{detail}; the original stays and {} is left for review", to.display()),
+                            format!(
+                                "{detail}; the original stays and {} is left for review",
+                                to.display()
+                            ),
                         );
-                        return self.keep_source(storage, &item, ArchiveMoveOutcome::Blocked, reason).await;
+                        return self
+                            .keep_source(storage, &item, ArchiveMoveOutcome::Blocked, reason)
+                            .await;
                     }
                     Err(error) => return Err(error),
                 }
@@ -499,11 +544,16 @@ impl Library {
                     return Ok(());
                 }
             }
-            let from = absolute(locations, step.from_location_id, &step.from_path).ok_or_else(|| {
-                LibraryError::PersistenceFailure(format!("archive move {} has no source", step.seq))
-            })?;
+            let from =
+                absolute(locations, step.from_location_id, &step.from_path).ok_or_else(|| {
+                    LibraryError::PersistenceFailure(format!(
+                        "archive move {} has no source",
+                        step.seq
+                    ))
+                })?;
             let done: BTreeSet<EntryKey> = run.repointed_links.iter().map(key).collect();
-            let records = catalog.kept_view_links(run.project_id, &BTreeSet::from([step.asset_id])).await?;
+            let records =
+                catalog.kept_view_links(run.project_id, &BTreeSet::from([step.asset_id])).await?;
             for record in records.iter().filter(|record| !done.contains(&key(&record.link))) {
                 match self.repoint(storage, record, locations, &from, &to).await? {
                     Ok(identity) => {
@@ -511,7 +561,9 @@ impl Library {
                             || record.link.clone(),
                             |link| KeptViewLink { link, ..record.link.clone() },
                         );
-                        catalog.record_kept_link_repoint(storage, step.seq, &link, &identity).await?;
+                        catalog
+                            .record_kept_link_repoint(storage, step.seq, &link, &identity)
+                            .await?;
                     }
                     Err(reason) => {
                         return self
@@ -563,7 +615,10 @@ impl Library {
         };
         let reason = reason.or_else(|| {
             (outcome != ArchiveMoveOutcome::Archived).then(|| {
-                ItemReason::new(ReasonCode::Interrupted, "the file settled without its record moving")
+                ItemReason::new(
+                    ReasonCode::Interrupted,
+                    "the file settled without its record moving",
+                )
             })
         });
         self.catalog().settle_archive_move(storage, seq, outcome, reason.as_ref()).await
@@ -629,14 +684,20 @@ impl Library {
 }
 
 /// `path` below `location`'s root.
-fn absolute(locations: &BTreeMap<Uuid, Location>, location: Uuid, path: &NativePath) -> Option<PathBuf> {
+fn absolute(
+    locations: &BTreeMap<Uuid, Location>,
+    location: Uuid,
+    path: &NativePath,
+) -> Option<PathBuf> {
     Some(locations.get(&location)?.path.to_path_buf().ok()?.join(path.relative_path().ok()?))
 }
 
 /// A kept-View link's absolute path: `<Project>/View/<entry>`.
 fn absolute_link(record: &KeptLinkRecord) -> Option<NativePath> {
     let project = project_folder(record.parent.as_ref(), &record.project_name).ok()??;
-    Some(NativePath::from_path(&project.join(VIEW_FOLDER).join(record.entry.path.relative_path().ok()?)))
+    Some(NativePath::from_path(
+        &project.join(VIEW_FOLDER).join(record.entry.path.relative_path().ok()?),
+    ))
 }
 
 /// The archive copy's observation with the verified digest, while it is
@@ -714,7 +775,11 @@ fn repoint_link(
         }
         return Err(ItemReason::new(
             ReasonCode::Interrupted,
-            format!("{} could not be swapped back; the old link is at {}", link.display(), staged.display()),
+            format!(
+                "{} could not be swapped back; the old link is at {}",
+                link.display(),
+                staged.display()
+            ),
         ));
     }
     fs::remove_file(staged).map_err(|error| failed(format!("{}: {error}", staged.display())))?;
