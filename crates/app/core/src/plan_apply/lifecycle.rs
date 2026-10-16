@@ -1,7 +1,7 @@
 use super::{
-    active_runs, apply_repo, audit_item_cancelled, bus_err, check_overlap_and_register,
-    compute_plan_path_set, db_err, item_row_to_executor_item, new_id, plans_repo,
-    resolve_root_path, spawn_executor_run, ActiveRun, CancellationToken, CasSnapshot,
+    active_runs, append_plan_transition, apply_repo, audit_item_cancelled, bus_err,
+    check_overlap_and_register, compute_plan_path_set, db_err, item_row_to_executor_item,
+    plans_repo, resolve_root_path, spawn_executor_run, ActiveRun, CancellationToken, CasSnapshot,
     ContractError, ErrorCode, ErrorSeverity, EventBus, ExecutorItem, HashMap, PlanApplyStatus,
     PlanApplyingResumed, PlanCancelResponse, PlanItemRetryResponse, PlanItemSkipResponse,
     PlanResumeResponse, RetryQueue, SkipSet, Source, SpawnExecutorParams, SqlitePool, Timestamp,
@@ -155,6 +155,9 @@ pub async fn cancel_plan(
         )
         .await
         .map_err(db_err)?;
+
+        // The plan-level row follows the state it records (Tier 2, §II, §V).
+        append_plan_transition(pool, plan_id, &run_id, "paused", "cancelled", &at).await;
 
         return Ok(PlanCancelResponse {
             plan_id: plan_id.to_owned(),
@@ -482,19 +485,7 @@ pub async fn resume_plan(
     .await
     .map_err(bus_err)?;
 
-    let _ = apply_repo::append_event(
-        pool,
-        &new_id(),
-        run_id,
-        plan_id,
-        None,
-        "paused",
-        "applying",
-        &resumed_at,
-        None,
-        None,
-    )
-    .await;
+    append_plan_transition(pool, plan_id, run_id, "paused", "applying", &resumed_at).await;
 
     // Restart the executor over the remaining pending items (issue #575).
     // No live progress-channel caller for resume today (the contract has no

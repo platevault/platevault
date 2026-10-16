@@ -95,7 +95,9 @@ fn channel_sink() -> (OperationEventSink, UnboundedReceiver<OperationEvent>) {
 /// `Completed`/`Failed` event, which `terminal::handle_completed` emits after
 /// its state, audit and bus writes. Panics if that event does not arrive
 /// within 10 s.
-async fn recv_until_terminal(events: &mut UnboundedReceiver<OperationEvent>) -> Vec<OperationEvent> {
+async fn recv_until_terminal(
+    events: &mut UnboundedReceiver<OperationEvent>,
+) -> Vec<OperationEvent> {
     let received = async {
         let mut received = Vec::new();
         while let Some(event) = events.recv().await {
@@ -319,24 +321,15 @@ async fn apply_plan_starts_successfully() {
 /// (asserted separately) — the sink is an additive live projection (§II).
 #[tokio::test]
 async fn apply_plan_streams_operation_events() {
-    use std::sync::Mutex;
-
     let (db, bus) = setup().await;
     insert_approved_plan_with_items(&db, "p-evt", 1).await;
 
-    let captured: Arc<Mutex<Vec<OperationEvent>>> = Arc::new(Mutex::new(Vec::new()));
-    let sink_store = captured.clone();
-    let sink: OperationEventSink = Arc::new(move |event: OperationEvent| {
-        sink_store.lock().unwrap().push(event);
-    });
-
+    let (sink, mut received) = channel_sink();
     let resp = apply_plan(db.pool(), &bus, "p-evt", "test-token", Some(sink)).await.unwrap();
 
-    // Let the background executor run to completion.
-    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-
-    let events = captured.lock().unwrap().clone();
-    assert!(!events.is_empty(), "sink must receive long-op events");
+    // Wait for the run's terminal event itself rather than a fixed delay, which
+    // a slow terminal write outlasts (astro-plan-o82vv).
+    let events = recv_until_terminal(&mut received).await;
 
     // First event is the Started projection carrying a Running handle.
     let first = &events[0];
@@ -349,14 +342,12 @@ async fn apply_plan_streams_operation_events() {
         assert!(window[1].sequence > window[0].sequence, "sequence must be monotonic");
     }
 
-    // The run terminates with a Completed (or Failed) event carrying a
-    // terminal handle.
-    let last = events.last().unwrap();
-    assert!(
-        matches!(last.event_type, OperationEventType::Completed | OperationEventType::Failed),
-        "last event must be a terminal Completed/Failed, got {:?}",
-        last.event_type
-    );
+    // The run terminates with its Completed (or Failed) event: nothing follows
+    // it before the finished run drops the sink.
+    let after = tokio::time::timeout(Duration::from_secs(10), received.recv())
+        .await
+        .expect("the finished run dropped its sink within 10 s");
+    assert!(after.is_none(), "no event may follow the terminal one, got {after:?}");
 
     // Durable audit trail is retained: the DB still holds run events.
     let plan = repo::get_plan(db.pool(), "p-evt", false).await.unwrap();
@@ -1933,6 +1924,14 @@ fn dummy_active_run() -> ActiveRun {
     }
 }
 
+/// A run's path claim for a terminal handler called directly, registered in a
+/// registry of its own so it cannot overlap a concurrently running test's runs.
+fn unshared_claim(plan_id: &str) -> ActiveRunGuard {
+    let registry = Arc::new(DashMap::new());
+    registry.insert(plan_id.to_owned(), dummy_active_run());
+    ActiveRunGuard { registry, plan_id: plan_id.to_owned() }
+}
+
 /// FR-017: on a *normal* scope exit the guard's `Drop` removes the entry
 /// exactly once. This is the Completed / Cancelled / Paused path.
 #[test]
@@ -2486,9 +2485,16 @@ async fn cancelling_a_paused_plan_appends_one_paused_to_cancelled_row() {
     let (db, bus) = setup().await;
     let plan_id = "p-cancel-audit";
     insert_approved_plan_with_items(&db, plan_id, 2).await;
-    apply_repo::cas_approved_to_applying(db.pool(), plan_id, "run-cancel-audit", "test-token", 2, 2)
-        .await
-        .unwrap();
+    apply_repo::cas_approved_to_applying(
+        db.pool(),
+        plan_id,
+        "run-cancel-audit",
+        "test-token",
+        2,
+        2,
+    )
+    .await
+    .unwrap();
     apply_repo::pause_run(db.pool(), plan_id, "run-cancel-audit", "disk.full", 0, 0, 0, 0, 2)
         .await
         .unwrap();
@@ -2578,6 +2584,7 @@ async fn gfd2_completed_path_sweeps_orphaned_applying_items() {
         None,
         None,
         TerminalCounts { succeeded: 1, failed: 0, skipped: 0, cancelled: 0 },
+        unshared_claim(plan_id),
     )
     .await;
 
@@ -2777,6 +2784,7 @@ async fn a_pause_records_the_items_still_to_run_not_the_settled_ones() {
         "item.stale",
         None,
         TerminalCounts { succeeded: 1, ..TerminalCounts::default() },
+        unshared_claim("p-pause-count"),
     )
     .await;
 
@@ -2830,6 +2838,7 @@ async fn a_pause_that_cannot_be_written_is_not_reported_as_paused() {
         "disk.full",
         Some(&emitter),
         TerminalCounts::default(),
+        unshared_claim("p-pause-fail"),
     )
     .await;
 
@@ -2987,6 +2996,7 @@ async fn a_cancelled_run_whose_terminal_write_fails_is_not_reported_as_cancelled
         "run-cancel-write",
         Some(&emitter),
         TerminalCounts::default(),
+        unshared_claim("p-cancel-write"),
     )
     .await;
 
@@ -3059,6 +3069,7 @@ async fn a_completed_run_whose_terminal_write_fails_is_not_reported_as_terminal(
         None,
         Some(&emitter),
         TerminalCounts { succeeded: 1, ..TerminalCounts::default() },
+        unshared_claim("p-complete-write"),
     )
     .await;
 
@@ -3192,7 +3203,9 @@ async fn a_paused_cancel_whose_audit_row_is_lost_is_logged_and_still_cancels() {
         tracing_subscriber::registry().with(ErrorFieldCapture(errors.clone())),
     );
 
-    cancel_plan(db.pool(), &bus, plan_id).await.expect("a lost audit row must not refuse the cancel");
+    cancel_plan(db.pool(), &bus, plan_id)
+        .await
+        .expect("a lost audit row must not refuse the cancel");
 
     let plan = repo::get_plan(db.pool(), plan_id, false).await.unwrap();
     assert_eq!(plan.state, "cancelled");
@@ -3237,6 +3250,7 @@ async fn a_pause_after_a_skip_counts_the_rows_not_the_lagging_plan_counter() {
         "disk.full",
         None,
         TerminalCounts::default(),
+        unshared_claim("p-pause-skip"),
     )
     .await;
 
@@ -3310,6 +3324,7 @@ async fn completed_view_generation_apply_prepares_the_project() {
         Some(&project_id),
         None,
         TerminalCounts { succeeded: 1, failed: 0, skipped: 0, cancelled: 0 },
+        unshared_claim(plan_id),
     )
     .await;
 
@@ -3372,6 +3387,7 @@ async fn partially_applied_view_generation_leaves_lifecycle_ready() {
         Some(&project_id),
         None,
         TerminalCounts { succeeded: 1, failed: 1, skipped: 0, cancelled: 0 },
+        unshared_claim(plan_id),
     )
     .await;
 

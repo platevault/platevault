@@ -1,11 +1,11 @@
 use super::{
-    apply_repo, bus_err, check_overlap_and_register, compute_plan_path_set, db_err, execute_plan,
-    item_row_to_executor_item, json, new_id, plans_repo, resolve_root_path, verify_approval_token,
-    ActiveRun, ActiveRunGuard, ApplyOutcome, CancellationToken, ContractError, ErrorCode,
-    ErrorSeverity, EventBus, ExecutorItem, HashMap, OpEventEmitter, OperationEventSink,
-    OperationEventType, OperationId, OperationStatus, PlanApplyCallbacks, PlanApplyResponse,
-    PlanApplyingStarted, RetryQueue, SkipSet, Source, SqlitePool, TerminalCounts, Timestamp,
-    Utf8PathBuf, TOPIC_PLAN_APPLYING_STARTED,
+    append_plan_transition, apply_repo, bus_err, check_overlap_and_register, compute_plan_path_set,
+    db_err, execute_plan, item_row_to_executor_item, json, new_id, plans_repo, resolve_root_path,
+    verify_approval_token, ActiveRun, ActiveRunGuard, ApplyOutcome, CancellationToken,
+    ContractError, ErrorCode, ErrorSeverity, EventBus, ExecutorItem, HashMap, OpEventEmitter,
+    OperationEventSink, OperationEventType, OperationId, OperationStatus, PlanApplyCallbacks,
+    PlanApplyResponse, PlanApplyingStarted, RetryQueue, SkipSet, Source, SqlitePool,
+    TerminalCounts, Timestamp, Utf8PathBuf, TOPIC_PLAN_APPLYING_STARTED,
 };
 
 // ── apply_plan ────────────────────────────────────────────────────────────────
@@ -167,19 +167,7 @@ pub async fn apply_plan(
     .map_err(bus_err)?;
 
     // Append plan-level start audit event.
-    let _ = apply_repo::append_event(
-        pool,
-        &new_id(),
-        &run_id,
-        plan_id,
-        None,
-        "approved",
-        "applying",
-        &started_at,
-        None,
-        None,
-    )
-    .await;
+    append_plan_transition(pool, plan_id, &run_id, "approved", "applying", &started_at).await;
 
     // Emit the long-op `Started` event carrying the running OperationHandle
     // (spec 042 US16, T240).
@@ -355,8 +343,8 @@ pub(super) fn spawn_executor_run(params: SpawnExecutorParams) {
     // The spawned task owns the RAII removal guard, so its `Drop` removes the
     // registry entry on ANY exit — normal completion *or* an unwind if
     // `execute_plan` panics mid-apply (FR-017 scenario 2). Removal is always
-    // that `Drop`; the pause branch below only moves it earlier, it never
-    // removes the entry by hand.
+    // that `Drop`: each outcome's terminal handler takes the guard and drops it
+    // just before its state write, it never removes the entry by hand.
     tokio::spawn(async move {
         let callbacks = PlanApplyCallbacks::new(
             pool.clone(),
@@ -394,6 +382,7 @@ pub(super) fn spawn_executor_run(params: SpawnExecutorParams) {
                     plan_project_id.as_deref(),
                     op_emitter.as_ref(),
                     counts,
+                    run_guard,
                 )
                 .await;
             }
@@ -405,22 +394,11 @@ pub(super) fn spawn_executor_run(params: SpawnExecutorParams) {
                     &run_id,
                     op_emitter.as_ref(),
                     counts,
+                    run_guard,
                 )
                 .await;
             }
             ApplyOutcome::Paused { reason, counts } => {
-                // Release the registry entry BEFORE the paused state becomes
-                // observable. `resume_plan` (lifecycle.rs, R-Concur-1) and
-                // `cancel_plan` (GF-5) both require that a paused plan holds
-                // no `ActiveRun`, and both are reached from the paused plan
-                // row or the `plan.applying.paused` event. Holding the claim
-                // across `handle_paused`'s writes made a resume that reacted
-                // to either one fail with `plan.invalid_state` ("already has
-                // an active apply run"), and made a cancel signal a
-                // cancellation token no executor was left to observe. The
-                // executor has stopped and this branch performs no filesystem
-                // work, so the path claim has nothing left to protect.
-                drop(run_guard);
                 super::terminal::handle_paused(
                     &pool,
                     &bus,
@@ -429,6 +407,7 @@ pub(super) fn spawn_executor_run(params: SpawnExecutorParams) {
                     &reason,
                     op_emitter.as_ref(),
                     counts,
+                    run_guard,
                 )
                 .await;
             }
