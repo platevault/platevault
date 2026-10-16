@@ -6,13 +6,26 @@
 # in a PR rather than living only in GitHub's UI, and so re-applying after a
 # job rename is a one-liner instead of a click-path.
 #
-# Why each setting:
+# The JSON holds the live protection set (reconciled in #1617), so `apply` is a
+# no-op unless the file changed in review. Why each setting:
 #
-#   strict: true          Branches must be up to date with main before merging.
-#                         Costly while main churns, correct once it settles.
+#   strict: false         Branches need not be up to date with main before
+#                         merging. The merge queue re-runs the required
+#                         contexts on the queued merge result (ci.yml and
+#                         e2e.yml both trigger on merge_group), so forcing a
+#                         rebase per PR would only add churn.
 #   enforce_admins: false Sole maintainer needs an override path when a runner
 #                         or an upstream dependency breaks.
 #   reviews: null         Solo repo; a required-review rule would just block.
+#
+# Required contexts, and the job that publishes each:
+#   Detect changes (CI)                          ci.yml `changes`
+#   Unit + integration (L1+L2) — ubuntu-latest   ci.yml `integration` (or
+#   Unit + integration (L1+L2) — windows-latest  `integration-idle` when no
+#                                                Rust/frontend lane is active)
+#   UI mock-mode (Playwright)                    ci.yml `ui-e2e-gate`
+#   Real-UI smoke (L3) — ubuntu-latest           e2e.yml `e2e-smoke-gate-ubuntu`
+#   Supply chain (cargo-deny)                    ci.yml `supply-chain`
 #
 # Required contexts are the GATE jobs, never the workers they depend on: a gate
 # already depends on its shards, so requiring the shards as well would add
@@ -25,15 +38,17 @@
 #
 # Excluded on purpose:
 #   Real-UI journeys (L3) — <os>           the full matrix runs on main pushes
-#                                          and dispatch, never on pull_request,
-#                                          so it publishes nothing to require on
-#                                          a PR. PRs are gated by the smoke
-#                                          context instead (two-tier strategy in
-#                                          e2e.yml's header).
+#                                          and dispatch, never on pull_request
+#                                          or merge_group, so it publishes
+#                                          nothing to require on a PR. PRs are
+#                                          gated by the smoke context instead
+#                                          (two-tier strategy in e2e.yml's
+#                                          header). The macos-latest leg runs
+#                                          only on a `run_macos` dispatch:
+#                                          blocked upstream, see issue #489
+#                                          (tauri-plugin-webdriver).
 #   Real-UI smoke (L3) — windows-latest    no windows smoke job exists; windows
 #                                          L3 is main-push only.
-#   Real-UI journeys (L3) — macos-latest   blocked upstream, see issue #489
-#                                          (tauri-plugin-webdriver)
 #   Unit + integration (L1+L2) — macos-latest
 #                                          Held out only while the frontend
 #                                          suite still runs on Rust-only PRs.
