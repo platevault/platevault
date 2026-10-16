@@ -17,11 +17,11 @@ holds a paid Apple Developer account.
 |---|---|---|
 | **SignPath Foundation** | Free for qualifying OSS | **Chosen.** See eligibility below. |
 | Azure Trusted Signing / Artifact Signing | $9.99/mo (5,000 sigs), no free/OSS tier; Public Trust certs restricted to individuals in US/Canada only as of 2026 | Rejected — not free, and the maintainer isn't in an eligible individual-signing country for Public Trust |
-| Certum Open Source Code Signing | ~€14, no longer free (discontinued the free tier some years ago) | Rejected — not free |
+| Certum Open Source Code Signing | 29 USD for an activation code on your own cryptoCertum card and reader ([Certum, read 2026-10-16](https://certum.store/open-source-code-signing-code.html)), or 58 USD in the SimplySign cloud, up to 5,000 signatures a month ([Certum, read 2026-10-16](https://certum.store/open-source-code-signing-on-simplysign.html)) | Rejected — not free. The paid fallback if SignPath Foundation declines |
 | Sigstore (Fulcio/Rekor/cosign) | Free | Rejected — does not produce Windows-SmartScreen-trusted Authenticode signatures for `.exe`/`.msi` |
 | OSSign | Free for qualifying OSS (newer entrant) | Not evaluated in depth; SignPath has a longer track record and an existing Tauri-adjacent GitHub Action — kept as a fallback note only |
 
-Sources: [SignPath Foundation](https://signpath.org/), [SignPath Foundation terms](https://signpath.org/terms.html), [Azure Artifact Signing pricing](https://azure.microsoft.com/en-us/pricing/details/artifact-signing/), [Trusted Signing individual developer access (Microsoft Community Hub)](https://techcommunity.microsoft.com/blog/microsoft-security-blog/trusted-signing-is-now-open-for-individual-developers-to-sign-up-in-public-previ/4273554), [Certum Open Source Code Signing](https://certum.store/open-source-code-signing-code.html), [comparecheapssl.com 2026 comparison](https://comparecheapssl.com/free-code-signing-certificate-and-how-to-get-it/).
+Sources: [SignPath Foundation](https://signpath.org/), [SignPath Foundation terms](https://signpath.org/terms.html), [Azure Artifact Signing pricing](https://azure.microsoft.com/en-us/pricing/details/artifact-signing/), [Trusted Signing individual developer access (Microsoft Community Hub)](https://techcommunity.microsoft.com/blog/microsoft-security-blog/trusted-signing-is-now-open-for-individual-developers-to-sign-up-in-public-previ/4273554), [Certum Open Source Code Signing](https://certum.store/open-source-code-signing-code.html) and [in the cloud](https://certum.store/open-source-code-signing-on-simplysign.html), [comparecheapssl.com 2026 comparison](https://comparecheapssl.com/free-code-signing-certificate-and-how-to-get-it/).
 
 ## SignPath Foundation eligibility for this repo
 
