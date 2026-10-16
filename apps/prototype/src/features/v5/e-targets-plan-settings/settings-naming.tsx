@@ -9,22 +9,23 @@
  * library holds one, and the path with every value missing. The Tokens table
  * below lists what a template may use and what each writes when its value
  * is missing. A type without an override uses its default. Templates are
- * checked as typed; Save writes the changed ones, and an invalid one is
- * refused inline with nothing saved.
+ * checked as typed against the whitelisted tokens and separators
+ * (`validateNamingTemplate`), each problem a field error; Save writes the
+ * changed ones, and an invalid one is refused inline with nothing saved.
  */
 import { useState } from "react"
 import { useMessages } from "@/app/preferences"
 import { ActionBar } from "@/components/app/actions"
 import type { Action } from "@/components/app/contracts"
 import { useSaveState } from "@/components/app/feedback"
-import { type TemplateToken, type TemplateValues, templateTokenProblems, TokenTemplateField, useTokenColumns } from "@/components/app/fields"
+import { type TemplateToken, type TemplateValues, TokenTemplateField, useTokenColumns } from "@/components/app/fields"
 import { SettingsSection } from "@/components/app/settings"
 import { ListSection, SettingsPage } from "@/components/templates/settings-page"
 import { newestVersion } from "@/domain/calibration"
 import { rigName, sessionNamingValues } from "@/domain/derive"
 import { DEFAULT_NAMING, NAMING_TOKENS, type NamingValues, namingTemplate, namingValues, resolveNamingTemplate, validateNamingTemplate } from "@/domain/templates"
 import type { Catalog, NamingFrameType, NamingToken } from "@/domain/types"
-import { fileName } from "@/lib/format"
+import { fileName, formatNight } from "@/lib/format"
 import { type Messages, m, say } from "@/lib/i18n"
 import { setNamingOmit, setNamingTemplate } from "@/store/actions/settings"
 import { type CommitResult, useStore } from "@/store/core"
@@ -83,11 +84,15 @@ function sampleValues(messages: Messages, catalog: Catalog, type: NamingFrameTyp
   }
   const session = Object.values(catalog.sessions).find((s) => s.imageType === type && !s.supersededBy)
   if (!session) return null
-  return { from: session.channel ? `${session.night} · ${session.channel}` : session.night, values: sessionNamingValues(catalog, session, type) }
+  const night = formatNight(session.night)
+  return { from: session.channel ? `${night} · ${session.channel}` : night, values: sessionNamingValues(catalog, session, type) }
 }
 
 /** The domain's resolution (sanitised values, the token's fallback or nothing once omitted), so the preview reads as Import and Archive will write it. */
 const resolve = (template: string, values: TemplateValues, omit: readonly string[]) => resolveNamingTemplate(template, values as NamingValues, omit as readonly NamingToken[]).path
+
+/** Domain errors TokenTemplateField reports itself from the same token whitelist, so the page passes on only the rest. */
+const FIELD_OWN_ERRORS = new Set<string>(["domain_naming_unknown_token", "domain_naming_unmatched_brace"])
 
 export function NamingSettingsPage() {
   const messages = useMessages()
@@ -100,17 +105,14 @@ export function NamingSettingsPage() {
   const tokenColumns = useTokenColumns({ omitWhenMissing: omit, onOmitWhenMissingChange: (tokens) => void save(() => setNamingOmit(tokens as NamingToken[])) })
 
   const tokens: TemplateToken[] = NAMING_TOKENS.map((t) => ({ token: t.token, label: say(messages, t.label), example: EXAMPLE[t.token] ?? t.fallback, fallback: t.fallback }))
-  const known = tokens.map((t) => t.token)
   const saved = (type: NamingFrameType) => namingTemplate(overrides, type)
   const text = (type: NamingFrameType) => drafts[type] ?? saved(type)
-  /** The domain's checks the field does not make itself: `..`, reserved names and a leading `/` (the field names unknown tokens). */
-  const domainErrors = (type: NamingFrameType) => {
-    const own = new Set<string>(templateTokenProblems(text(type), known).unknown.map((token) => messages.domain_naming_unknown_token({ token })))
-    return validateNamingTemplate(text(type))
+  /** The domain's checks the field does not make itself: refused characters, `..`, reserved names and a leading `/` (the field names unknown tokens and an unmatched brace). */
+  const domainErrors = (type: NamingFrameType) =>
+    validateNamingTemplate(text(type))
+      .filter((ref) => !("key" in ref && FIELD_OWN_ERRORS.has(ref.key)))
       .map((ref) => say(messages, ref))
-      .filter((message) => !own.has(message))
-  }
-  const invalid = (type: NamingFrameType) => validateNamingTemplate(text(type)).length > 0 || templateTokenProblems(text(type), known).unmatched
+  const invalid = (type: NamingFrameType) => validateNamingTemplate(text(type)).length > 0
   const changed = TYPES.filter((t) => text(t.type) !== saved(t.type))
   const refused = changed.filter((t) => invalid(t.type))
   const atDefaults = TYPES.every((t) => text(t.type) === DEFAULT_NAMING[t.type])

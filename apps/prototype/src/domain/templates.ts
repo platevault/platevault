@@ -299,17 +299,36 @@ const RESERVED = new Set(["con", "prn", "aux", "nul", "com1", "lpt1", ".", ".."]
 const MAX_SEGMENT = 80
 /** Characters no file or folder name may hold on Windows, and so on no computer PlateVault writes to. */
 const UNSAFE_NAME_CHARACTERS = /[\\:*?"<>|]/g
+/** A `{token}`: the braces and a name holding no brace. */
+const NAMING_TOKEN = /\{([^{}]*)\}/g
 
-/** Errors a template has before it is saved or resolved: unknown tokens, literal characters no file or folder name may hold, `..` and reserved names. */
+/**
+ * The separators a template may type around its tokens (wmbp9), besides
+ * letters, digits and spaces: each is safe in a file or folder name on every
+ * computer PlateVault writes to. `/` starts a folder.
+ */
+export const NAMING_SEPARATORS = ["/", "-", "_", "."] as const
+
+/** One literal character a template may hold: a letter, a digit, a space or a whitelisted separator. */
+const ALLOWED_LITERAL = /^[\p{L}\p{N} /\-_.]$/u
+
+/**
+ * Errors a template has before it is saved or resolved: unknown tokens, a
+ * brace without its partner, literal characters outside the letters,
+ * digits, spaces and `NAMING_SEPARATORS`, `..`, reserved names and a leading
+ * `/`. Each unknown token and each refused character is named once.
+ */
 export function validateNamingTemplate(template: string): MessageRef[] {
   const errors: MessageRef[] = []
   const known = new Set(NAMING_TOKENS.map((t) => t.token))
-  for (const match of template.matchAll(/\{([^}]*)\}/g)) {
-    if (!known.has(match[1] as NamingToken)) errors.push(msg("domain_naming_unknown_token", { token: match[0] }))
-  }
+  const unknown = new Set<string>()
+  for (const match of template.matchAll(NAMING_TOKEN)) if (!known.has(match[1] as NamingToken)) unknown.add(match[0])
+  for (const token of unknown) errors.push(msg("domain_naming_unknown_token", { token }))
   // Token values are made safe when they resolve (`sanitize`); the text typed around them is checked here.
-  const unsafe = [...new Set(template.replace(/\{[^}]*\}/g, "").match(UNSAFE_NAME_CHARACTERS) ?? [])]
-  if (unsafe.length > 0) errors.push(msg("domain_naming_unsafe_characters", { characters: unsafe.join(" ") }))
+  const literal = [...template.replace(NAMING_TOKEN, "")]
+  if (literal.some((c) => c === "{" || c === "}")) errors.push(msg("domain_naming_unmatched_brace"))
+  const refused = [...new Set(literal.filter((c) => c !== "{" && c !== "}" && !ALLOWED_LITERAL.test(c)))]
+  if (refused.length > 0) errors.push(msg("domain_naming_disallowed_characters", { characters: refused.join(" "), separators: NAMING_SEPARATORS.join(" ") }))
   for (const segment of template.split("/")) {
     if (segment === "..") errors.push(msg("domain_naming_parent_folder"))
     else if (RESERVED.has(segment.toLowerCase())) errors.push(msg("domain_naming_reserved", { name: segment }))
@@ -332,7 +351,7 @@ function sanitize(value: string): string {
 export function resolveNamingTemplate(template: string, values: NamingValues, omit: readonly NamingToken[] = []): { path: string; fallbacks: NamingToken[] } {
   const fallbacks: NamingToken[] = []
   let omitted = false
-  const resolved = template.replace(/\{([^}]*)\}/g, (_, name: string) => {
+  const resolved = template.replace(NAMING_TOKEN, (_, name: string) => {
     const token = NAMING_TOKENS.find((t) => t.token === name)
     if (!token) return ""
     const value = values[token.token]
