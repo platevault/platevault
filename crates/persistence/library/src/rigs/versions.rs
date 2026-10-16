@@ -74,6 +74,7 @@ impl Catalog {
             insert_rig_version(conn, version).await?;
             for session in unversioned_sessions(conn, version.rig_id).await? {
                 record_session_rig_version(conn, session, version.rig_id).await?;
+                crate::calibration::rig_recorded(conn, session).await?;
             }
             version.clone()
         });

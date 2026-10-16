@@ -523,9 +523,11 @@ impl World {
             &[&id, AT],
         )
         .await;
+        // Ingestion recorded the session's calibration; the test settles it
+        // by hand, so no matching is left pending for it.
         self.sql(
             "INSERT INTO session_calibration (session_id, generation, matching_pending, updated_at) \
-             VALUES (?1, 1, 0, ?2)",
+             VALUES (?1, 1, 0, ?2) ON CONFLICT (session_id) DO UPDATE SET matching_pending = 0",
             &[&id, AT],
         )
         .await;

@@ -65,6 +65,8 @@ mod rig_version;
 pub use rig_version::*;
 mod session_calibration;
 pub use session_calibration::*;
+mod session_matching;
+pub use session_matching::*;
 mod session_intake;
 pub use session_intake::*;
 mod session_framing;

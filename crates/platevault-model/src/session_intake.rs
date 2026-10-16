@@ -19,7 +19,9 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{InputKind, LibraryError, ProjectLifecycle, Revision, SessionCalibration};
+use crate::{
+    CalibrationHealth, InputKind, LibraryError, ProjectLifecycle, Revision, SessionCalibration,
+};
 
 /// Where a session stands in its intake flow.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
@@ -104,6 +106,13 @@ pub enum AdmissionBlocker {
     CalibrationUnsettled {
         kinds: Vec<InputKind>,
     },
+    /// Provisional (lead default 2026-10-16, decision record §9; to confirm
+    /// with the owner): pinned kinds whose files changed or went missing.
+    /// The session waits in Needs calibration until they are reassigned or
+    /// their bytes return; Projects that already hold it keep it.
+    CalibrationDrifted {
+        kinds: Vec<InputKind>,
+    },
 }
 
 impl fmt::Display for AdmissionBlocker {
@@ -121,6 +130,14 @@ impl fmt::Display for AdmissionBlocker {
             Self::CalibrationUnsettled { kinds } => {
                 let kinds: Vec<&str> = kinds.iter().map(|kind| kind.as_str()).collect();
                 write!(f, "its calibration is not settled: choose its {} first", kinds.join(", "))
+            }
+            Self::CalibrationDrifted { kinds } => {
+                let kinds: Vec<&str> = kinds.iter().map(|kind| kind.as_str()).collect();
+                write!(
+                    f,
+                    "its pinned {} changed or went missing: reassign them first",
+                    kinds.join(", ")
+                )
             }
         }
     }
@@ -147,13 +164,14 @@ impl From<AdmissionRefusal> for LibraryError {
     }
 }
 
-/// A session's readiness and calibration as admission reads them, with the
-/// blockers that keep it from any Project.
+/// A session's readiness and calibration as admission reads them, with each
+/// pin's health and the blockers that keep it from any Project.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionAdmission {
     pub intake: SessionIntake,
     pub calibration: SessionCalibration,
+    pub health: CalibrationHealth,
     pub blockers: Vec<AdmissionBlocker>,
 }
 
@@ -165,23 +183,42 @@ fn readiness_blockers(intake: &SessionIntake) -> impl Iterator<Item = AdmissionB
     superseded.into_iter().chain(not_ready)
 }
 
-fn calibration_blocker(calibration: &SessionCalibration) -> Option<AdmissionBlocker> {
-    let kinds = calibration.unsettled_kinds();
-    (!kinds.is_empty()).then_some(AdmissionBlocker::CalibrationUnsettled { kinds })
+/// The calibration blockers on joining: kinds neither pinned nor No, and,
+/// provisionally (decision record §9, lead default 2026-10-16, to confirm
+/// with the owner), pinned kinds whose files drifted. This is the one place
+/// that decides what drift means for joining; Apply's refusal of a held
+/// session's drifted pin is separate and stands either way (D-W113).
+fn calibration_blockers(
+    calibration: &SessionCalibration,
+    health: CalibrationHealth,
+) -> impl Iterator<Item = AdmissionBlocker> {
+    let unsettled = calibration.unsettled_kinds();
+    let unsettled = (!unsettled.is_empty())
+        .then_some(AdmissionBlocker::CalibrationUnsettled { kinds: unsettled });
+    let drifted: Vec<InputKind> = health
+        .drifted_kinds()
+        .into_iter()
+        .filter(|kind| calibration.kind(*kind).is_settled())
+        .collect();
+    let drifted =
+        (!drifted.is_empty()).then_some(AdmissionBlocker::CalibrationDrifted { kinds: drifted });
+    unsettled.into_iter().chain(drifted)
 }
 
 /// What keeps a session from every Project: superseded, not Ready, or
-/// calibration not settled. Empty for a session any open Project may add.
+/// calibration not settled or drifted. Empty for a session any open Project
+/// may add.
 #[must_use]
 pub fn session_blockers(
     intake: &SessionIntake,
     calibration: &SessionCalibration,
+    health: &CalibrationHealth,
 ) -> Vec<AdmissionBlocker> {
-    readiness_blockers(intake).chain(calibration_blocker(calibration)).collect()
+    readiness_blockers(intake).chain(calibration_blockers(calibration, *health)).collect()
 }
 
 /// The admission rule for adding a session to a group on `group_rig` of a
-/// Project in `lifecycle`.
+/// Project in `lifecycle`, with the health of the session's pins.
 ///
 /// # Errors
 /// [`AdmissionRefusal`] naming every blocker.
@@ -190,6 +227,7 @@ pub fn admit_session(
     group_rig: Uuid,
     intake: &SessionIntake,
     calibration: &SessionCalibration,
+    health: &CalibrationHealth,
 ) -> Result<AdmissionBasis, AdmissionRefusal> {
     let locked = (!lifecycle.is_open()).then_some(AdmissionBlocker::ProjectLocked { lifecycle });
     let rig = (intake.rig_id != Some(group_rig))
@@ -198,7 +236,7 @@ pub fn admit_session(
         .into_iter()
         .chain(readiness_blockers(intake))
         .chain(rig)
-        .chain(calibration_blocker(calibration))
+        .chain(calibration_blockers(calibration, *health))
         .collect();
     if blockers.is_empty() {
         Ok(AdmissionBasis {

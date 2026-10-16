@@ -283,6 +283,9 @@ pub enum SessionFilter {
     /// Sessions with a confirmed Target that are neither a Project's candidate
     /// nor a member of any Project's run.
     NotInAnyProject,
+    /// The calibration queue: sessions with a kind neither pinned nor No,
+    /// Ready or not, and sessions whose pinned file changed or went missing.
+    NeedsCalibration,
 }
 
 /// A page of Sessions: light sessions of Captures locations (LIB-FR-16), newest
@@ -1223,7 +1226,12 @@ enum Members {
 impl Members {
     fn of(filter: Option<SessionFilter>) -> Self {
         match filter {
-            None | Some(SessionFilter::NeedsTarget | SessionFilter::NotInAnyProject) => Self::Live,
+            None
+            | Some(
+                SessionFilter::NeedsTarget
+                | SessionFilter::NotInAnyProject
+                | SessionFilter::NeedsCalibration,
+            ) => Self::Live,
             Some(SessionFilter::Trashed) => Self::Trashed,
         }
     }
@@ -4344,6 +4352,58 @@ struct GroupContext<'a> {
     assets: &'a [Asset],
 }
 
+/// Calibration frames a kept session gained: calibration arrived, so the
+/// sessions still waiting are matched again (LIB-FR-25).
+fn calibration_frames_added<'a>(
+    added: impl IntoIterator<Item = &'a BTreeSet<Uuid>>,
+    assets: &[Asset],
+) -> bool {
+    let added: BTreeSet<&Uuid> = added.into_iter().flatten().collect();
+    assets
+        .iter()
+        .any(|asset| added.contains(&asset.id) && asset.effective.is_light() == Some(false))
+}
+
+/// What a new session keeps and records beside its members: its frames'
+/// recorded rig version and camera, and, for a light session, its
+/// calibration record, matched after the commit (LIB-FR-23).
+async fn record_new_session(
+    conn: &mut SqliteConnection,
+    id: Uuid,
+    members: &BTreeSet<Uuid>,
+    context: &GroupContext<'_>,
+) -> Result<()> {
+    let frame_sessions: Vec<Option<Uuid>> =
+        members.iter().map(|asset| context.old_session_of.get(asset).copied()).collect();
+    rigs::versions::inherit_successor(conn, id, &frame_sessions).await?;
+    calibration::session_ingested(conn, id, members, context.assets).await
+}
+
+/// Attach the frames each kept session gained at `grouping_revision`.
+/// Calibration frames among them are calibration arriving: the sessions
+/// still waiting are matched again (LIB-FR-25).
+async fn grow_kept_sessions(
+    conn: &mut SqliteConnection,
+    kept: &[(Uuid, SessionCandidate, BTreeSet<Uuid>)],
+    grouping_revision: Revision,
+    assets: &[Asset],
+) -> Result<()> {
+    for (id, _, added) in kept {
+        if !added.is_empty() {
+            attach_members(conn, *id, added).await?;
+            sqlx::query("UPDATE sessions SET grouping_revision = ?1 WHERE id = ?2")
+                .bind(db_revision(grouping_revision)?)
+                .bind(id.to_string())
+                .execute(&mut *conn)
+                .await?;
+        }
+    }
+    if calibration_frames_added(kept.iter().map(|(_, _, added)| added), assets) {
+        calibration::calibration_arrived(conn).await?;
+    }
+    Ok(())
+}
+
 async fn commit_plan(
     conn: &mut SqliteConnection,
     plan: GroupPlan,
@@ -4393,21 +4453,9 @@ async fn commit_plan(
         for association in inherit.associations(context) {
             upsert_association(conn, &association, &created_at).await?;
         }
-        // The successor keeps its frames' recorded rig version and camera.
-        let frame_sessions: Vec<Option<Uuid>> =
-            members.iter().map(|asset| context.old_session_of.get(asset).copied()).collect();
-        rigs::versions::inherit_successor(conn, id, &frame_sessions).await?;
+        record_new_session(conn, id, &members, context).await?;
     }
-    for (id, _, added) in &plan.kept {
-        if !added.is_empty() {
-            attach_members(conn, *id, added).await?;
-            sqlx::query("UPDATE sessions SET grouping_revision = ?1 WHERE id = ?2")
-                .bind(db_revision(grouping_revision)?)
-                .bind(id.to_string())
-                .execute(&mut *conn)
-                .await?;
-        }
-    }
+    grow_kept_sessions(conn, &plan.kept, grouping_revision, context.assets).await?;
     if plan.superseded.is_empty() {
         return Ok(None);
     }
@@ -5567,6 +5615,9 @@ async fn confirm_one(
     if kind == AssociationKind::Equipment {
         // Confirming a rig records the version the session was captured with.
         rigs::versions::record_session_rig_version(conn, session.id, subject).await?;
+        // Its camera's defaults apply, and its calibration is matched again
+        // for the rig version and camera it now has.
+        calibration::rig_recorded(conn, session.id).await?;
     }
     sqlx::query("UPDATE sessions SET decision_revision = ?1 WHERE id = ?2")
         .bind(db_revision(decision_revision)?)

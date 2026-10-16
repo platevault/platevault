@@ -319,9 +319,10 @@ async fn not_in_any_project_excludes_candidates_and_members() {
     let world = world().await;
     let confirmed = world.ids(&[RC_HA, ES_HA, RC_L, RC_SII]).await;
     assert_eq!(world.listed(SessionFilter::NotInAnyProject).await, confirmed);
+    let needs_calibration = world.listed(SessionFilter::NeedsCalibration).await.len() as u64;
     assert_eq!(
         world.counts().await,
-        SessionFilterCounts { needs_target: 4, not_in_any_project: 4 },
+        SessionFilterCounts { needs_target: 4, not_in_any_project: 4, needs_calibration },
         "the counts are the filters' list lengths"
     );
 

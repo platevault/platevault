@@ -1,11 +1,12 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! The Sessions filters "Needs a Target" and "Not in any Project", their
-//! counts, Create Project prefill and Add to Project (LIB-FR-17, PRJ-FR-19,
-//! D-W59). The filters are derived on read from current associations, Project
-//! subjects and rigs, and run memberships. Nothing here writes a run row; Add
-//! to Project writes only Project rows and adds one to the Project revision.
+//! The Sessions filters "Needs a Target", "Not in any Project" and "Needs
+//! calibration", their counts, Create Project prefill and Add to Project
+//! (LIB-FR-17, PRJ-FR-19, D-W59). The filters are derived on read from
+//! current associations, Project subjects and rigs, run memberships and
+//! session calibration. Nothing here writes a run row; Add to Project writes
+//! only Project rows and adds one to the Project revision.
 
 use std::collections::HashSet;
 
@@ -19,9 +20,9 @@ use uuid::Uuid;
 
 use super::projects::{load_project, require_project};
 use super::{
-    check_expected_sessions, conflict, db_revision, lineage_successors, listed_sessions,
-    load_equipment, load_session_row, load_target, now, parse_uuid, require_revision, Catalog,
-    Members, Result, SessionFilter,
+    calibration, check_expected_sessions, conflict, db_revision, lineage_successors,
+    listed_sessions, load_equipment, load_session_row, load_target, now, parse_uuid,
+    require_revision, Catalog, Members, Result, SessionFilter,
 };
 
 /// Sessions with a confirmed Target.
@@ -44,8 +45,9 @@ const IN_A_PROJECT: &str = "SELECT ta.session_id FROM associations ta \
      WHERE v.trashed_at IS NULL";
 
 impl Catalog {
-    /// The lengths of the "Needs a Target" and "Not in any Project" lists over
-    /// the default Sessions scope, from one catalog snapshot. Read-only.
+    /// The lengths of the "Needs a Target", "Not in any Project" and "Needs
+    /// calibration" lists over the default Sessions scope, from one catalog
+    /// snapshot. Read-only.
     ///
     /// # Errors
     /// `PersistenceFailure` when the catalog cannot be read.
@@ -54,11 +56,18 @@ impl Catalog {
         let mut snapshot = conn.begin().await?;
         let listed = listed_sessions(&mut snapshot, false, None, Members::Live).await?;
         let standing = Standing::read(&mut snapshot).await?;
+        let mut needs_calibration = 0;
+        for id in &listed {
+            if !calibration::session_needs(&mut snapshot, *id).await?.is_empty() {
+                needs_calibration += 1;
+            }
+        }
         snapshot.rollback().await?;
         let count = |filter| listed.iter().filter(|id| standing.holds(filter, **id)).count() as u64;
         Ok(SessionFilterCounts {
             needs_target: count(SessionFilter::NeedsTarget),
             not_in_any_project: count(SessionFilter::NotInAnyProject),
+            needs_calibration,
         })
     }
 
@@ -145,9 +154,18 @@ pub async fn retain(
     filter: Option<SessionFilter>,
     mut listed: Vec<Uuid>,
 ) -> Result<Vec<Uuid>> {
-    let Some(filter @ (SessionFilter::NeedsTarget | SessionFilter::NotInAnyProject)) = filter
-    else {
-        return Ok(listed);
+    let filter = match filter {
+        Some(SessionFilter::NeedsCalibration) => {
+            let mut queue = Vec::with_capacity(listed.len());
+            for id in listed {
+                if !calibration::session_needs(conn, id).await?.is_empty() {
+                    queue.push(id);
+                }
+            }
+            return Ok(queue);
+        }
+        Some(filter @ (SessionFilter::NeedsTarget | SessionFilter::NotInAnyProject)) => filter,
+        Some(SessionFilter::Trashed) | None => return Ok(listed),
     };
     let standing = Standing::read(conn).await?;
     listed.retain(|id| standing.holds(filter, *id));
@@ -174,7 +192,7 @@ impl Standing {
             SessionFilter::NotInAnyProject => {
                 self.confirmed.contains(&id) && !self.in_project.contains(&id)
             }
-            SessionFilter::Trashed => true,
+            SessionFilter::Trashed | SessionFilter::NeedsCalibration => true,
         }
     }
 }

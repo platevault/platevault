@@ -10,15 +10,15 @@
 
 use platevault_model::{
     admit_session, session_blockers, AdmissionBlocker, ApplicableQuality, ApplyJournal,
-    ApplyOutcome, ApplyPhase, BasisCapture, BasisGroup, BasisSession, CalibrationNeed, Camera,
-    CameraBasis, CameraLink, CaptureInclusion, ChangeSource, Classification, ClosePolicy,
-    ClosedSnapshot, CopyBasis, DeclineOrigin, EntryEvidence, EntryInput, EntryKind, EntryName,
-    EntryPlacement, EntrySource, Evaluation, ExclusionBasis, ExpectedTree, FileIdentity,
-    ForeignItem, ForeignItemState, GroupKeywords, GroupName, GroupOrigin, InclusionBasis,
-    InputKind, InputRef, ManifestEntry, ManifestState, MasterBasis, MasterEvidence,
-    MasterOfferState, NativePath, ObservationFingerprint, OpticsSignature, OutputKind,
-    OutputObservation, OutputOrigin, OutputState, PathSensitivity, PendingChange, PinHealth,
-    PinOrigin, PinState, PinTarget, PinnedFile, PreviousItem, PreviousItemReason,
+    ApplyOutcome, ApplyPhase, BasisCapture, BasisGroup, BasisSession, CalibrationHealth,
+    CalibrationNeed, Camera, CameraBasis, CameraLink, CaptureInclusion, ChangeSource,
+    Classification, ClosePolicy, ClosedSnapshot, CopyBasis, DeclineOrigin, EntryEvidence,
+    EntryInput, EntryKind, EntryName, EntryPlacement, EntrySource, Evaluation, ExclusionBasis,
+    ExpectedTree, FileIdentity, ForeignItem, ForeignItemState, GroupKeywords, GroupName,
+    GroupOrigin, InclusionBasis, InputKind, InputRef, ManifestEntry, ManifestState, MasterBasis,
+    MasterEvidence, MasterOfferState, NativePath, ObservationFingerprint, OpticsSignature,
+    OutputKind, OutputObservation, OutputOrigin, OutputState, PathSensitivity, PendingChange,
+    PinHealth, PinOrigin, PinState, PinTarget, PinnedFile, PreviousItem, PreviousItemReason,
     PreviousItemReview, ProcessingMasterOffer, ProjectBasis, ProjectCapture, ProjectDesired,
     ProjectGroup, ProjectLifecycle, ProjectOperation, ProjectOperationKind, ProjectOperationState,
     ProjectSessionMember, ProjectViewSettings, RigVersion, RotatorPresence, SessionCalibration,
@@ -599,14 +599,21 @@ fn readiness_follows_the_intake_flow_target_then_rig_then_review() {
 fn only_a_ready_settled_current_session_on_the_groups_rig_joins_an_open_project() {
     let session = id(20);
     let calibration = settled_calibration(session);
-    let basis = admit_session(ProjectLifecycle::Open, id(60), &ready_intake(session), &calibration)
-        .unwrap();
+    let intact = CalibrationHealth::INTACT;
+    let basis = admit_session(
+        ProjectLifecycle::Open,
+        id(60),
+        &ready_intake(session),
+        &calibration,
+        &intact,
+    )
+    .unwrap();
     assert_eq!((basis.grouping_revision, basis.calibration_generation), (1, 3));
 
     let mut unsettled = calibration;
     unsettled.dark = PinState::Unresolved;
     assert_eq!(
-        session_blockers(&ready_intake(session), &unsettled),
+        session_blockers(&ready_intake(session), &unsettled, &intact),
         [AdmissionBlocker::CalibrationUnsettled { kinds: vec![InputKind::Dark] }]
     );
 
@@ -614,7 +621,8 @@ fn only_a_ready_settled_current_session_on_the_groups_rig_joins_an_open_project(
     needs_review.review_finished = false;
     needs_review.superseded = true;
     let refusal =
-        admit_session(ProjectLifecycle::Closed, id(61), &needs_review, &unsettled).unwrap_err();
+        admit_session(ProjectLifecycle::Closed, id(61), &needs_review, &unsettled, &intact)
+            .unwrap_err();
     assert_eq!(
         refusal.blockers,
         [
@@ -629,6 +637,61 @@ fn only_a_ready_settled_current_session_on_the_groups_rig_joins_an_open_project(
     let error = platevault_model::LibraryError::from(refusal.clone());
     assert_eq!(error.response(None, None).kind, "invalid_input", "{error}");
     round_trip(&refusal);
+}
+
+/// Provisional (decision record §9, lead default 2026-10-16): a drifted pin
+/// keeps the session out of new joins; the pin stays settled.
+#[test]
+fn a_drifted_pin_keeps_a_session_out_of_new_joins() {
+    let session = id(20);
+    let calibration = settled_calibration(session);
+    let drifted = CalibrationHealth { flat: PinHealth::Changed, ..CalibrationHealth::INTACT };
+    assert!(calibration.settled().is_some(), "the drifted pin stays pinned");
+    assert_eq!(
+        session_blockers(&ready_intake(session), &calibration, &drifted),
+        [AdmissionBlocker::CalibrationDrifted { kinds: vec![InputKind::Flat] }]
+    );
+    let refusal = admit_session(
+        ProjectLifecycle::Open,
+        id(60),
+        &ready_intake(session),
+        &calibration,
+        &drifted,
+    )
+    .unwrap_err();
+    assert_eq!(
+        refusal.blockers,
+        [AdmissionBlocker::CalibrationDrifted { kinds: vec![InputKind::Flat] }]
+    );
+    assert!(refusal.to_string().contains("flat changed or went missing"), "{refusal}");
+    round_trip(&refusal);
+}
+
+#[test]
+fn a_reassignment_reads_as_a_calibration_change_since_the_applied_view() {
+    let session = id(20);
+    let applied = settled_calibration(session).settled().unwrap();
+    let mut current = settled_calibration(session);
+    assert_eq!(current.changes_since(&applied), []);
+    current.flat = PinState::Declined { origin: DeclineOrigin::User };
+    current.dark = PinState::Unresolved;
+    assert_eq!(
+        current.changes_since(&applied),
+        [
+            PendingChange::CalibrationChanged {
+                session_id: session,
+                kind: InputKind::Dark,
+                from: applied.dark.clone(),
+                to: None,
+            },
+            PendingChange::CalibrationChanged {
+                session_id: session,
+                kind: InputKind::Flat,
+                from: applied.flat.clone(),
+                to: Some(SettledPin::Declined),
+            },
+        ]
+    );
 }
 
 // ── Rigs ─────────────────────────────────────────────────────────────────────

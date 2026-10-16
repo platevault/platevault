@@ -165,6 +165,9 @@ impl Library {
         // APPLY (069, F4): restore the old View or finish installing the new
         // one for every Apply an earlier run left unsettled.
         crate::apply::reconcile(&library).await;
+        // CAL (068, F4): match the sessions whose calibration matching an
+        // earlier run left pending (LIB-FR-23, LIB-FR-25).
+        library.match_calibration_after_commit().await;
         Ok(library)
     }
 
@@ -798,6 +801,8 @@ impl Library {
                 })
                 .await?;
                 self.refresh_target_suggestions(location.id).await?;
+                // Calibration is matched after the commit (LIB-FR-23).
+                self.match_calibration_after_commit().await;
                 let _ = self.progress.send(completed);
                 Ok(())
             }

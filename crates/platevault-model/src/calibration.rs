@@ -334,6 +334,14 @@ pub enum CriterionId {
     SetTemperature,
     Channel,
     OpticalTrain,
+    /// F4 flats: the rig version the flats were taken with is the lights'
+    /// (CAL-FR-19); any new version, a remount included, is incompatible.
+    RigVersion,
+    /// F4 flats: the ROTATANG difference against the thresholds in Settings
+    /// (CAL-FR-20).
+    Rotation,
+    /// F4 darks and bias: the readout mode, compared when recorded (CAL-FR-21).
+    ReadoutMode,
 }
 
 /// Exact comparison only (D13); the wire states it on every row.
@@ -1493,4 +1501,15 @@ pub trait CalibrationRules: Send + Sync {
         -> Evaluation;
     /// Build requirements, order and preselect candidates, and apply decisions.
     fn plan(&self, basis: &CalibrationViewBasis) -> CalibrationViewPlan;
+    /// F4 session matching (CAL-FR-19 to CAL-FR-21): every input of `kind`
+    /// that passes the hard checks against one light session, best first,
+    /// with the cautions that keep each from being pinned automatically.
+    /// The thresholds and windows are the caller's workflow settings.
+    fn match_session(
+        &self,
+        kind: InputKind,
+        light: &crate::SessionLight,
+        inputs: &[crate::SessionInput],
+        settings: &crate::WorkflowSettings,
+    ) -> crate::KindMatch;
 }

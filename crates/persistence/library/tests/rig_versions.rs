@@ -649,17 +649,10 @@ async fn camera_defaults_and_aliases_reassign_nothing() {
     fx.confirm(&oct_5, &esprit).await;
     assert_eq!(fx.catalog.session_camera(oct_5.id).await.unwrap(), Some(camera.clone()));
 
-    // A calibration record already decided by the user (CAL writes these).
+    // Ingestion recorded the light session's calibration (CAL).
     let mut raw = fx.raw().await;
-    sqlx::query(
-        "INSERT INTO session_calibration (session_id, generation, matching_pending, updated_at) \
-         VALUES (?1, 1, 0, '2026-10-16T08:00:00Z')",
-    )
-    .bind(oct_5.id.to_string())
-    .execute(&mut raw)
-    .await
-    .unwrap();
     let before = calibration_state(&mut raw, oct_5.id).await;
+    assert_eq!(before.len(), 3, "every kind has a state");
 
     let edited = Camera { no_darks: true, alias: Some("Esprit cam".into()), ..camera.clone() };
     let saved = fx.catalog.save_cameras(&[edited]).await.unwrap().remove(0);

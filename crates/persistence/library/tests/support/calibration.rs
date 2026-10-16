@@ -17,10 +17,11 @@ use persistence_library::{Catalog, LocationRegistration, SourceProbe};
 use platevault_model::{
     Asset, CalibrationRules, CalibrationViewBasis, CalibrationViewPlan, CandidateEvaluation,
     CaptureEvidence, CaptureKey, CaptureMetadata, Classification, CriterionId, CriterionResult,
-    Evaluation, EvidenceField, GroupingResult, ImageFormat, InputEvidence, InputKind,
-    LightEvidence, Location, LocationRole, MasterBasis, MasterEvidence, NativePath, Requirement,
-    RequirementState, ScanBatch, ScanFile, ScanIssue, ScanObservation, ScanOperation, ScanProgress,
-    ScanState, SessionCandidate, Tolerance, UnresolvedReason, Verdict,
+    Evaluation, EvidenceField, GroupingResult, ImageFormat, InputEvidence, InputKind, KindMatch,
+    LightEvidence, Location, LocationRole, MasterBasis, MasterEvidence, MatchCaution, MatchOffer,
+    NativePath, PinTarget, Requirement, RequirementState, ScanBatch, ScanFile, ScanIssue,
+    ScanObservation, ScanOperation, ScanProgress, ScanState, SessionCandidate, SessionInput,
+    SessionLight, Tolerance, UnresolvedReason, Verdict, WorkflowSettings,
 };
 use uuid::Uuid;
 
@@ -353,6 +354,51 @@ impl CalibrationRules for TestRules {
             required_kinds: basis.plan.required_kinds.clone(),
             requirements,
         }
+    }
+
+    /// Each input of the kind the test criteria don't refuse, in input
+    /// order: pinnable when every criterion is compatible. The ranking and
+    /// window rules are the product's (core); these tests cover the
+    /// catalog's writes.
+    fn match_session(
+        &self,
+        kind: InputKind,
+        light: &SessionLight,
+        inputs: &[SessionInput],
+        _settings: &WorkflowSettings,
+    ) -> KindMatch {
+        let lights = LightEvidence {
+            session_id: light.session_id,
+            grouping_revision: 0,
+            capture: light.capture.clone(),
+        };
+        let offers = inputs
+            .iter()
+            .filter(|input| input.kind == kind)
+            .filter_map(|input| {
+                let evidence = InputEvidence {
+                    kind: input.kind,
+                    form: input.input.form(),
+                    capture: input.capture.clone(),
+                };
+                let evaluation = self.evaluate(kind, &lights, &evidence);
+                let cautions = match evaluation.verdict {
+                    Verdict::Incompatible => return None,
+                    Verdict::Unknown => {
+                        vec![MatchCaution::CriterionUnknown { criteria: evaluation.blocking() }]
+                    }
+                    Verdict::Compatible => Vec::new(),
+                };
+                let target = PinTarget {
+                    input: input.input,
+                    captured: input.captured,
+                    files: input.files.clone(),
+                    evaluation,
+                };
+                Some(MatchOffer { target, cautions })
+            })
+            .collect();
+        KindMatch { kind, offers }
     }
 }
 

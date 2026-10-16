@@ -1064,6 +1064,9 @@ impl Library {
         if !indexed.is_empty() {
             self.catalog().record_import_progress(id, &indexed).await?;
         }
+        // The review's frame types regroup the frames: match the sessions
+        // that regroup made, after its commit. Import never waits on it.
+        self.match_calibration_after_commit().await;
         Ok(waiting)
     }
 
