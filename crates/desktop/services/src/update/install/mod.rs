@@ -6,10 +6,12 @@
 //! Every step here receives a [`Payload`], which [`Staged::reverify`] checked
 //! against its minisign signature just before, so nothing unverified reaches
 //! an installer. Every program an install runs is named by absolute path. A
-//! step that runs with more rights than the user's checks the payload again
-//! once it holds them (astro-plan-ryj83): the deb/rpm and macOS root scripts
-//! against [`Payload`]'s size and SHA-256, and the Windows installers through
-//! the handle that keeps ordinary writers out (not code running as the user).
+//! step that runs as root checks the payload again once it holds those rights
+//! (astro-plan-ryj83): the deb/rpm and macOS root scripts against
+//! [`Payload`]'s size and SHA-256. The Windows installers are not re-checked
+//! after the UAC prompt; they inherit the verified handle, which keeps
+//! ordinary writers out until they exit but not code running as the user
+//! (`windows::launch_installer`).
 //!
 //! [`Staged::reverify`]: super::signature::Staged::reverify
 

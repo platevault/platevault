@@ -21,9 +21,12 @@
 //! - **Linux**: an `AppImage` replaces itself; a deb or rpm is installed with
 //!   `pkexec`, so the polkit prompt appears only after the user chose Install.
 //!
-//! An install step that runs with more rights than the user's, behind
-//! polkit, UAC or the macOS administrator prompt, checks the payload again
-//! once it holds them (astro-plan-ryj83; see `install`).
+//! An install step that runs as root, behind polkit or the macOS
+//! administrator prompt, checks the payload again once it holds those rights
+//! (astro-plan-ryj83; see `install`). The Windows installers, which UAC
+//! elevates, are not re-checked after the prompt: the handle the app verified
+//! keeps ordinary writers out until they exit, but not code that runs as the
+//! user.
 //!
 //! Nothing is downloaded until the user chooses Install now or Install on
 //! quit. A check never downloads, and the startup check runs only while

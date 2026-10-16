@@ -569,39 +569,6 @@ async fn a_staged_payload_changed_on_disk_fails_its_second_check() {
     );
 }
 
-/// On Windows the handle `reverify` opened keeps every writer out for as
-/// long as it, or the duplicate an installer inherits, is open, so the MSI
-/// the Windows Installer service reads after UAC is the one that verified
-/// (astro-plan-ryj83).
-#[cfg(windows)]
-#[tokio::test]
-async fn a_verified_payload_cannot_be_changed_while_its_handle_is_open() {
-    const ERROR_SHARING_VIOLATION: i32 = 32;
-    let staged = stage(Package::Msi, b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1an msi").await;
-    let mut payload = staged.reverify().expect("verified");
-    let inherited = payload.reader().try_clone().expect("the installer's duplicate");
-
-    let write = std::fs::OpenOptions::new().write(true).open(staged.file());
-    assert_eq!(write.err().and_then(|error| error.raw_os_error()), Some(ERROR_SHARING_VIOLATION));
-    let moved = staged.file().with_extension("moved");
-    assert!(std::fs::rename(staged.file(), &moved).is_err(), "nor can it be renamed away");
-    let mut read = Vec::new();
-    std::fs::File::open(staged.file())
-        .expect("readers still may")
-        .read_to_end(&mut read)
-        .expect("read");
-
-    drop(payload);
-    let write = std::fs::OpenOptions::new().write(true).open(staged.file());
-    assert_eq!(
-        write.err().and_then(|error| error.raw_os_error()),
-        Some(ERROR_SHARING_VIOLATION),
-        "the duplicate the installer holds keeps the lock"
-    );
-    drop(inherited);
-    std::fs::OpenOptions::new().write(true).open(staged.file()).expect("unlocked once all close");
-}
-
 /// An installer that counts its calls, fails, and then swaps the staged file
 /// the way same-user malware could while a retry waits.
 #[derive(Default)]

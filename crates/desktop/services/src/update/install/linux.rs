@@ -20,31 +20,36 @@ const PKEXEC: &str = "/usr/bin/pkexec";
 /// pkexec's exit status when the user dismissed the authentication dialog,
 /// and when authorization was refused or could not be obtained (pkexec(1)).
 const PKEXEC_NOT_AUTHORIZED: [i32; 2] = [126, 127];
-/// [`PRIVILEGED_INSTALL`]'s exit status when root's copy of the payload is not
-/// the one the app verified.
+/// [`PRIVILEGED_INSTALL`]'s exit statuses when root's copy of the payload is
+/// not the one the app verified: its digest, or its size.
 const PAYLOAD_CHANGED: i32 = 65;
+const PAYLOAD_SIZE_CHANGED: i32 = 70;
 /// `$0` of [`PRIVILEGED_INSTALL`], which `sh` reports its errors under.
 const SCRIPT_NAME: &str = "platevault-update";
 
 /// The root shell `pkexec` runs to install a deb or rpm (astro-plan-ryj83).
 /// The payload arrives on standard input, the verified handle, so root never
 /// opens a path the user can write. `$1` is the SHA-256 of the bytes the app
-/// verified, `$2` the package tool, `$3` its install flag and `$4` the file
-/// name. The script copies the payload into a directory of its own under the
-/// sticky `/tmp`, which only root can enter, checks the copy against `$1`,
-/// and only then hands the copy to the package manager.
+/// verified, `$2` their size, `$3` the package tool, `$4` its install flag and
+/// `$5` the file name. The script copies at most one byte more than `$2` into
+/// a directory of its own under the sticky `/tmp`, which only root can enter,
+/// checks the copy's size against `$2` and its digest against `$1`, and only
+/// then hands the copy to the package manager, with nothing on its standard
+/// input.
 ///
-/// It exits with the tool's status, [`PAYLOAD_CHANGED`] (65) for a copy that
-/// differs, or 1 for a failure of its own steps; never 126 or 127, which are
-/// pkexec's own ([`PKEXEC_NOT_AUTHORIZED`]), so `sh`'s "not found" for a
-/// missing tool is not read as a dismissed prompt.
+/// It exits with the tool's status, [`PAYLOAD_SIZE_CHANGED`] (70) or
+/// [`PAYLOAD_CHANGED`] (65) for a copy that differs, or 1 for a failure of
+/// its own steps; never 126 or 127, which are pkexec's own
+/// ([`PKEXEC_NOT_AUTHORIZED`]), so `sh`'s "not found" for a missing tool is
+/// not read as a dismissed prompt.
 const PRIVILEGED_INSTALL: &str = r#"d=$(/bin/mktemp -d /tmp/platevault-update.XXXXXXXXXX) || exit 1
 trap '/bin/rm -rf -- "$d"' EXIT
-f="$d/$4"
-/bin/cat > "$f" || exit 1
+f="$d/$5"
+/usr/bin/head -c "$(($2 + 1))" > "$f" || exit 1
+[ "$(/usr/bin/stat -c %s -- "$f")" = "$2" ] || exit 70
 s=$(/usr/bin/sha256sum < "$f") || exit 1
 [ "${s%% *}" = "$1" ] || exit 65
-"$2" "$3" "$f"
+"$3" "$4" "$f" </dev/null
 s=$?
 [ "$s" -lt 126 ] || s=1
 exit "$s""#;
@@ -85,7 +90,7 @@ pub(super) fn install_package(
     payload: &mut Payload<'_>,
     package: Package,
 ) -> Result<Installed, UpdateError> {
-    run_package(package_command(package, payload.sha256()), payload)
+    run_package(package_command(package, payload.sha256(), payload.size()), payload)
 }
 
 /// Run `command`, a [`package_command`], with the verified `payload` on its
@@ -104,16 +109,17 @@ fn run_package(mut command: Command, payload: &mut Payload<'_>) -> Result<Instal
 }
 
 /// `pkexec` running [`PRIVILEGED_INSTALL`] for `package`, which checks its
-/// copy against `sha256` before `dpkg -i` or `rpm -U` installs it. Every
-/// program is named by absolute path, so nothing is looked up on the caller's
-/// `PATH`.
-pub(super) fn package_command(package: Package, sha256: &str) -> Command {
+/// copy against `sha256` and `size` before `dpkg -i` or `rpm -U` installs
+/// it. Every program is named by absolute path, so nothing is looked up on
+/// the caller's `PATH`.
+pub(super) fn package_command(package: Package, sha256: &str, size: u64) -> Command {
     let (tool, flag) =
         if package == Package::Rpm { ("/usr/bin/rpm", "-U") } else { ("/usr/bin/dpkg", "-i") };
     let mut command = Command::new(PKEXEC);
     command
-        .args(["/bin/sh", "-c", PRIVILEGED_INSTALL, SCRIPT_NAME, sha256, tool, flag])
-        .arg(package.payload_file_name());
+        .args(["/bin/sh", "-c", PRIVILEGED_INSTALL, SCRIPT_NAME, sha256])
+        .arg(size.to_string())
+        .args([tool, flag, package.payload_file_name()]);
     command
 }
 
@@ -124,7 +130,7 @@ fn package_outcome(status: ExitStatus) -> Result<Installed, UpdateError> {
         Some(code) if PKEXEC_NOT_AUTHORIZED.contains(&code) => Err(UpdateError::Permission(
             format!("{PKEXEC} was not authorized to install the update ({status})"),
         )),
-        Some(PAYLOAD_CHANGED) => Err(UpdateError::Signature(
+        Some(PAYLOAD_CHANGED | PAYLOAD_SIZE_CHANGED) => Err(UpdateError::Signature(
             "the update changed before the package manager could read it".to_owned(),
         )),
         _ => Err(UpdateError::Install(format!(
@@ -154,7 +160,7 @@ mod tests {
 
     #[test]
     fn a_deb_installs_through_pkexec_running_the_checking_script() {
-        let command = package_command(Package::Deb, SHA256);
+        let command = package_command(Package::Deb, SHA256, 42);
         assert_eq!(command.get_program(), "/usr/bin/pkexec");
         // One argument each, and no path at all: the payload is on stdin.
         assert_eq!(
@@ -165,6 +171,7 @@ mod tests {
                 PRIVILEGED_INSTALL,
                 SCRIPT_NAME,
                 SHA256,
+                "42",
                 "/usr/bin/dpkg",
                 "-i",
                 "update.deb"
@@ -174,20 +181,27 @@ mod tests {
 
     #[test]
     fn an_rpm_installs_through_pkexec_running_the_checking_script() {
-        let command = package_command(Package::Rpm, SHA256);
+        let command = package_command(Package::Rpm, SHA256, 7);
         assert_eq!(command.get_program(), "/usr/bin/pkexec");
-        assert_eq!(args(&command)[3..], [SCRIPT_NAME, SHA256, "/usr/bin/rpm", "-U", "update.rpm"]);
+        assert_eq!(
+            args(&command)[3..],
+            [SCRIPT_NAME, SHA256, "7", "/usr/bin/rpm", "-U", "update.rpm"]
+        );
     }
 
-    /// Every program the root script runs is named by absolute path, and it
-    /// reads the payload from standard input only.
+    /// Every program the root script runs is named by absolute path; it
+    /// reads the payload from standard input only, at most one byte more
+    /// than the verified size, and gives the package manager none of it.
     #[test]
     fn the_root_script_names_its_programs_and_reads_no_payload_path() {
-        for program in ["/bin/mktemp", "/bin/rm", "/bin/cat", "/usr/bin/sha256sum"] {
+        for program in
+            ["/bin/mktemp", "/bin/rm", "/usr/bin/head", "/usr/bin/stat", "/usr/bin/sha256sum"]
+        {
             assert!(PRIVILEGED_INSTALL.contains(program), "{program}");
         }
-        assert!(PRIVILEGED_INSTALL.contains(r#"/bin/cat > "$f""#));
-        assert!(!PRIVILEGED_INSTALL.contains("$5"), "no further argument");
+        assert!(PRIVILEGED_INSTALL.contains(r#"/usr/bin/head -c "$(($2 + 1))" > "$f""#));
+        assert!(PRIVILEGED_INSTALL.contains(r#""$3" "$4" "$f" </dev/null"#));
+        assert!(!PRIVILEGED_INSTALL.contains("$6"), "no further argument");
     }
 
     #[test]
@@ -200,7 +214,12 @@ mod tests {
                 "{not_authorized}"
             );
         }
-        assert!(matches!(package_outcome(status(65)), Err(UpdateError::Signature(_))));
+        for changed in [65, 70] {
+            assert!(
+                matches!(package_outcome(status(changed)), Err(UpdateError::Signature(_))),
+                "{changed}"
+            );
+        }
         for failed in [1, 2] {
             assert!(
                 matches!(package_outcome(status(failed)), Err(UpdateError::Install(_))),
@@ -258,7 +277,8 @@ mod tests {
         use sha2::{Digest as _, Sha256};
 
         use super::super::{
-            package_command, run_package, PAYLOAD_CHANGED, PRIVILEGED_INSTALL, SCRIPT_NAME,
+            package_command, run_package, PAYLOAD_CHANGED, PAYLOAD_SIZE_CHANGED,
+            PRIVILEGED_INSTALL, SCRIPT_NAME,
         };
         use crate::update::install::{check_format, Installed};
         use crate::update::Package;
@@ -287,13 +307,14 @@ mod tests {
         }
 
         /// Run the script with `payload` on standard input, as the copy the
-        /// app verified with digest `sha256`.
+        /// app verified as [`PACKAGE`], with digest `sha256`.
         fn run(payload: &[u8], sha256: &str, tool: &Path) -> Option<i32> {
             let mut stdin = tempfile::tempfile().expect("payload");
             stdin.write_all(payload).expect("payload bytes");
             stdin.rewind().expect("rewind");
             Command::new("/bin/sh")
                 .args(["-c", PRIVILEGED_INSTALL, SCRIPT_NAME, sha256])
+                .arg(PACKAGE.len().to_string())
                 .arg(tool)
                 .args(["-i", "update.deb"])
                 .stdin(stdin)
@@ -326,15 +347,30 @@ mod tests {
         }
 
         /// The swap the re-review describes: the user-writable file changed
-        /// after the app verified it, so root's copy no longer matches.
+        /// after the app verified it, keeping its size, so root's copy no
+        /// longer has its digest.
         #[test]
-        fn a_payload_swapped_after_the_check_never_reaches_the_package_manager() {
+        fn a_payload_changed_after_the_check_never_reaches_the_package_manager() {
             let dir = tempfile::tempdir().expect("tempdir");
             let tool = package_tool(dir.path(), 0);
+            let mut changed = PACKAGE.to_vec();
+            changed[PACKAGE.len() - 1] ^= 0xff;
 
-            let status = run(b"!<arch>\nswapped in by malware", &sha256(PACKAGE), &tool);
+            assert_eq!(run(&changed, &sha256(PACKAGE), &tool), Some(PAYLOAD_CHANGED));
 
-            assert_eq!(status, Some(PAYLOAD_CHANGED));
+            assert!(!dir.path().join("given").exists(), "the package manager never ran");
+        }
+
+        /// A longer payload is refused on its size: root copies at most one
+        /// byte more than the verified size, however much there is.
+        #[test]
+        fn a_payload_that_grew_is_refused_on_its_size() {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let tool = package_tool(dir.path(), 0);
+            let grown = [PACKAGE, &[0; 1 << 16]].concat();
+
+            assert_eq!(run(&grown, &sha256(PACKAGE), &tool), Some(PAYLOAD_SIZE_CHANGED));
+
             assert!(!dir.path().join("given").exists(), "the package manager never ran");
         }
 
@@ -361,11 +397,11 @@ mod tests {
             let staged = crate::update::tests::stage(Package::Deb, PACKAGE).await;
             let mut payload = staged.reverify().expect("verified");
             check_format(payload.reader(), Package::Deb).expect("a deb");
-            let pkexec = package_command(Package::Deb, payload.sha256());
+            let pkexec = package_command(Package::Deb, payload.sha256(), payload.size());
             let mut args: Vec<std::ffi::OsString> =
                 pkexec.get_args().map(std::ffi::OsStr::to_os_string).collect();
-            assert_eq!(args[5], "/usr/bin/dpkg");
-            args[5] = tool.into_os_string();
+            assert_eq!(args[6], "/usr/bin/dpkg");
+            args[6] = tool.into_os_string();
             let mut command = Command::new(&args[0]);
             command.args(&args[1..]);
 

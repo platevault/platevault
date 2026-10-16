@@ -93,7 +93,7 @@ impl Staged {
         let mut verifier = stream_verifier(&self.key, &self.signature)?;
         #[cfg(unix)]
         let mut digest = Sha256::new();
-        #[cfg(target_os = "macos")]
+        #[cfg(unix)]
         let mut size = 0_u64;
         let mut buffer = vec![0_u8; 64 * 1024];
         loop {
@@ -104,7 +104,7 @@ impl Staged {
             verifier.update(&buffer[..read]);
             #[cfg(unix)]
             digest.update(&buffer[..read]);
-            #[cfg(target_os = "macos")]
+            #[cfg(unix)]
             {
                 size += read as u64;
             }
@@ -120,7 +120,7 @@ impl Staged {
             file,
             #[cfg(unix)]
             sha256: format!("{:x}", digest.finalize()),
-            #[cfg(target_os = "macos")]
+            #[cfg(unix)]
             size,
         })
     }
@@ -157,7 +157,7 @@ pub struct Payload<'a> {
     /// hex, and how many there were.
     #[cfg(unix)]
     sha256: String,
-    #[cfg(target_os = "macos")]
+    #[cfg(unix)]
     size: u64,
 }
 
@@ -183,7 +183,7 @@ impl Payload<'_> {
     }
 
     /// How many bytes verified, which bounds the privileged step's copy.
-    #[cfg(target_os = "macos")]
+    #[cfg(unix)]
     pub const fn size(&self) -> u64 {
         self.size
     }
