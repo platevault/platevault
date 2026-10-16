@@ -131,9 +131,13 @@ pub async fn classify(
         if let Some(cached) =
             repo::get_classification(pool, &req.inbox_item_id).await.ok().flatten()
         {
-            // If sig matches, return from cache
+            // If sig matches and the evidence still names this item's files,
+            // return from cache.
             if item.content_signature.as_deref() == Some(&cached.content_signature) {
-                return build_response_from_cache(pool, &item, &cached).await;
+                let evidence = repo::list_evidence(pool, &item.id).await.unwrap_or_default();
+                if evidence_names_item_files(&item, &evidence) {
+                    return build_response_from_cache(pool, &item, &cached, &evidence).await;
+                }
             }
         }
     }
@@ -1706,14 +1710,40 @@ async fn build_breakdown(
     entries
 }
 
+/// Whether every cached evidence row names a file this item classifies: the
+/// master file itself, or a file directly inside the item's folder, because
+/// classify enumerates one folder level.
+///
+/// Before bd astro-plan-3pvvc, `wire_path` turned a `\` inside a macOS or
+/// Linux file name into `/`, so the file `a\b.fits` was stored as `a/b.fits`:
+/// one level deeper than its folder, and the name of a different file. A
+/// cached classification holding such a row is recomputed rather than
+/// reused, so its evidence, metadata and confirm paths name the file that was
+/// classified. `Path` compares by component, so on Windows either separator
+/// matches.
+fn evidence_names_item_files(
+    item: &persistence_inbox::repositories::inbox::InboxItemRow,
+    evidence: &[persistence_inbox::repositories::inbox::InboxEvidenceRow],
+) -> bool {
+    let item_path = Path::new(&item.relative_path);
+    evidence.iter().all(|ev| {
+        let file = Path::new(&ev.relative_file_path);
+        if item.is_master_item == 0 {
+            file.parent() == Some(item_path)
+        } else {
+            file == item_path
+        }
+    })
+}
+
 /// Build a ClassifyResponse from cached DB rows.
 async fn build_response_from_cache(
     pool: &SqlitePool,
     item: &persistence_inbox::repositories::inbox::InboxItemRow,
     cached: &persistence_inbox::repositories::inbox::InboxClassificationRow,
+    evidence_rows: &[persistence_inbox::repositories::inbox::InboxEvidenceRow],
 ) -> Result<ClassifyResponse, ContractError> {
     let breakdown_rows = repo::list_breakdown(pool, &item.id).await.unwrap_or_default();
-    let evidence_rows = repo::list_evidence(pool, &item.id).await.unwrap_or_default();
 
     let breakdown: Vec<BreakdownEntry> = breakdown_rows
         .into_iter()
@@ -2517,6 +2547,78 @@ mod tests {
         assert_eq!(row.relative_file_path, "a\\b.fits");
         assert_eq!(row.override_filter.as_deref(), Some("Ha"), "the override survives the rescan");
         assert_eq!(row.override_stale, 0, "the file the override names did not change");
+    }
+
+    /// A classification cached before bd astro-plan-3pvvc stored the macOS or
+    /// Linux file `a\b.fits` as `a/b.fits`. The content signature hashes only
+    /// the file name, size, mtime and header bytes, so it still matches after
+    /// the upgrade. The cache must not hand that row back: classify recomputes
+    /// it under the file's own path. A cached classification whose evidence
+    /// names its own files is still served from the cache.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn cached_evidence_from_the_old_backslash_text_is_recomputed() {
+        use persistence_inbox::repositories::inbox as inbox_repo;
+
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        write_fits_with_imagetyp(root, "a\\b.fits", "Light Frame");
+        let plain = root.join("plain");
+        std::fs::create_dir_all(&plain).unwrap();
+        write_fits_with_imagetyp(&plain, "x.fits", "Light Frame");
+
+        let db = test_db().await;
+        let pool = db.pool();
+        let classify_item = |id: &'static str| {
+            let req = ClassifyRequest {
+                inbox_item_id: id.to_owned(),
+                root_absolute_path: root.to_owned(),
+                force_rescan: false,
+            };
+            classify(pool, req)
+        };
+        let evidence = |id: &'static str| async move {
+            let rows = inbox_repo::list_evidence(pool, id).await.unwrap();
+            rows.into_iter().map(|e| (e.id, e.relative_file_path)).collect::<Vec<_>>()
+        };
+        for (id, relative_path) in [("item-legacy", ""), ("item-plain", "plain")] {
+            repo::insert_inbox_item(
+                pool,
+                &InsertInboxItem {
+                    id,
+                    root_id: "root-1",
+                    relative_path,
+                    file_count: 0,
+                    content_signature: None,
+                    lane: "fits",
+                },
+            )
+            .await
+            .unwrap();
+            classify_item(id).await.unwrap();
+        }
+
+        // Rewrite the row the way the old producer stored it.
+        sqlx::query(
+            "UPDATE inbox_classification_evidence SET relative_file_path = 'a/b.fits' \
+             WHERE inbox_item_id = 'item-legacy'",
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+        let plain_before = evidence("item-plain").await;
+
+        classify_item("item-legacy").await.unwrap();
+        classify_item("item-plain").await.unwrap();
+
+        let legacy_paths: Vec<String> =
+            evidence("item-legacy").await.into_iter().map(|(_, path)| path).collect();
+        assert_eq!(legacy_paths, ["a\\b.fits"], "the old text is recomputed");
+        assert_eq!(
+            evidence("item-plain").await,
+            plain_before,
+            "a cache whose evidence names its own files is reused, row ids included"
+        );
     }
 
     /// spec 041 FR-046: a generic `inbox_file_overrides` entry (set via
