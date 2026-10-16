@@ -1,137 +1,95 @@
 ---
 id: J44
-title: Move Unusable frames to the OS Trash from the library clean-up, outside a Project's Wrap up, and put one back
-version: 3
+title: Trash library-Unusable frames through a Project's Wrap up
+version: 4
 status: draft
 last_reviewed: 2026-10-12
 actors: [primary-user]
-surfaces: [cleanup, sessions, targets, projects, view-review, frame-review, status-bar, activity]
+surfaces: [projects, wrap-up, sessions, targets, frame-review, status-bar, activity]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#copy-rules, HARNESS-V5-FEEDBACK-R1.md#round-5, HARNESS-V5-FEEDBACK-R1.md#round-7-user-2026-10-12-run-views-research-designrun-views-optionsmd, HARNESS-V5-FEEDBACK-R1.md#round-8-user-2026-10-12, P-SB3, P-PREP3, P-TRASH2, D19, D-W42, D-W43, D-W52, D-W54, D-W57, specs/063-clean-rebuild-contract/workflow-decisions.md, specs/064-library-inventory/spec.md, specs/065-project-goals/spec.md, specs/071-storage-custody/spec.md, apps/prototype/messages/en-GB.json, J22, J24, J32, J34, J39]
+trace: [HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#copy-rules, HARNESS-V5-FEEDBACK-R1.md#round-5, HARNESS-V5-FEEDBACK-R1.md#round-7-user-2026-10-12-run-views-research-designrun-views-optionsmd, HARNESS-V5-FEEDBACK-R1.md#round-8-user-2026-10-12, P-SB3, P-PREP3, P-TRASH2, D19, D-W79, D-W43, D-W52, D-W78, D-W57, specs/063-clean-rebuild-contract/workflow-decisions.md, specs/064-library-inventory/spec.md, specs/065-project-goals/spec.md, specs/071-storage-custody/spec.md, apps/prototype/messages/en-GB.json, J22, J24, J32, J34, J39, 063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 066-view-selection, 071-storage-custody, D-W93, D-W94, D-W97, D-W100, specs/066-view-selection/spec.md]
 ---
 
 ## Goal
 
-The user clears frames marked Unusable without waiting for a Project's Wrap
-up. X marks a frame Unusable library-wide, and every Unusable frame becomes a
-purge candidate. In the library clean-up of Unusable frames, the user reads
-which frames PlateVault may move and which it refuses, with each reason, moves
-the rest to the OS Trash, and later puts one back. Done means:
-
-- The clean-up offered exactly the library-Unusable frames it may move, in a Project or in none, while Project `NGC 7000 HOO` was still open with runs that are not Complete. A frame in a Complete run's prepared revision was offered. Four frames were refused, each with its reason. One was linked by the view of a run that is not Complete, one was a recorded input of a Result, one had a copy on a location without OS Trash, and one sat on an Offline location. No Project-only reject and no Usable or Unreviewed frame was offered.
-- Every copy of each moved frame went to the OS Trash after a re-check at move time, and so did its links in the kept views of Complete runs, which the review counted. A frame whose bytes changed after the review was refused and left in place, no other prepared entry moved, and nothing was permanently deleted.
-- The Trashed frames counted nowhere and showed only under the Sessions "Trashed" filter and, marked "Trashed", in the fixed memberships of the Complete runs that hold them.
-- Put back in the OS Trash plus a rescan returned a frame as Unusable, and the clean-up offered it again.
-- Once the run that is not Complete was prepared again without it, the frame its view had linked was offered and moved.
+The user moves library-Unusable frames belonging to Project `NGC 7000 HOO` to the OS Trash through that Project's Wrap up. The Trash step offers only Unusable frames in the Project's sessions and lists custody refusals. Done means the View is removed through Clean up, nine frames (ten physical files) reach the OS Trash after identity and digest re-verification, the one frame changed after review is kept, and the Project's `Output/` is untouched. The offer excludes a frame held in another open Project's View and frames whose copies are not all eligible for OS Trash. Restoring a trashed frame in the OS and rescanning returns it as Unusable; after the other Project Applies its pending Library removal, the previously blocked frame becomes eligible in Wrap up Trash.
 
 ## Preconditions
 
-- P1: The J34 starting world: J34/P1 to J34/P11 hold, and no step of J34 has run. Project `NGC 7000 HOO` is open. `NGC7000-HOO-Siril` and `26 Sep symlink check` read Complete, and `24 Sep flat check` and `NGC7000 HOO combine` are not Complete, so its Wrap up is blocked (J34/S1). These frames are library Unusable:
-  - the two 18 Sep frames of J34/P3, members of the Complete run `NGC7000-HOO-Siril`, with symlink entries in its prepared revision;
-  - the five library-Unusable rejected 30 Sep frames of J34/P2, among them F-drift (J34/P7) and F-dup, which also has a byte copy on `Scratch` (J34/P6);
-  - F-res, F-prep and F-ab of J34/P4.
-
-  Neither Project-only reject of J34/P2 is library Unusable: the 30 Sep frame reads Unreviewed, and the 28 Sep frame reads Usable.
-- P2: The `4 Oct M 33` session of J32/P3 lies under `Astro-T7/Captures/M33/2026-10-04/` and is indexed: 16 Ha 300 s `RedCat` lights with Target M 33 and rig `RedCat` Confirmed, a candidate of no Project and a member of no run. M 33 is ★ in My targets, as in J32/P4. Two of its lights, MX-1 and MX-2, are marked Unusable in the library, and the other 14 read Usable.
+- P1: Project `NGC 7000 HOO` is open and has no pending changes. It has a Symlinks View and a populated `Output/` folder. F-prep is also in the View of the separate open Project `NGC 7000 Ha deep`, which has a pending Library removal of it and has not yet Applied it. The HOO Project's sessions, which include `4 Oct M 33`, hold these Unusable frames:
+  - two from 18 Sep;
+  - five from 30 Sep, including F-drift and F-dup;
+  - F-res, F-prep and F-ab from 28 Sep;
+  - MX-1 and MX-2 from `4 Oct M 33`;
+  - C-x from `12 Sep`, a session the Project also holds (P4).
+- P2: `Astro-T7/Captures/M33/2026-10-04/` holds the indexed `4 Oct M 33` session: 16 Ha 300 s `RedCat` lights with confirmed Target M 33, confirmed rig and settled calibration. The session belongs to `NGC 7000 HOO`, which also names M 33 as a subject. MX-1 and MX-2 are Unusable; the other 14 frames are Usable.
 - P3: Besides the J34/P11 files, `Backup/Captures/M33/2026-10-04/` holds a byte copy of MX-1, indexed with `Backup/Captures`. `Backup` has an OS Trash.
 - P4: While `Cold-1` was online, one 12 Sep frame, C-x, was marked Unusable in the library. `Cold-1` is offline again, as in J19/P3, so `Cold-1 captures` reads Offline.
 - P5: The J27/P7 helper is available, and F-drift is its target in S2.
-- P6: The isolated account's Trash inventory is recorded as in J27/P4. So are a manifest (path, size, SHA-256) of every file under `Astro-T7/Captures`, `Scratch/Captures` and `Backup/Captures`, and directory listings of the prepared folders of `NGC7000-HOO-Siril`, `26 Sep symlink check`, `Ha deep` and `Ha deep v1`.
+- P6: The isolated account's OS Trash inventory is recorded. So are a manifest (path, size, SHA-256) of every file under `Astro-T7/Captures`, `Scratch/Captures` and `Backup/Captures`, and directory listings of the Views of `NGC 7000 HOO` and `NGC 7000 Ha deep`.
 
 ## Steps
 
-### S1 — Open the library clean-up while the Project is open {#S1}
+### S1 — Open Project Wrap up and review Trash eligibility {#S1}
+- **Do:** In `NGC 7000 HOO`, open Wrap up. In Clean up, select removal of the Project's Symlinks View, review the file list, and proceed. Open Trash and read its rejected-frame offer and refusals.
+- **Expect:** Trash offers exactly 10 of this Project's library-Unusable frames: the two 18 Sep frames, four 30 Sep frames other than F-dup, F-ab and F-res, and MX-1 and MX-2. It lists three refusals: F-prep because open Project `NGC 7000 Ha deep` still has it in its View; F-dup because one copy is on `Scratch`, which has no OS Trash; and C-x because `Cold-1 captures` is Offline. F-res is eligible: PlateVault records no Result lineage, and an Output file is not a custody reason.
+- **Expect (negative):** No Usable or Unreviewed frame is offered. The offer includes only Unusable frames in this Project's sessions, not every Unusable frame in the library. No capture moves before confirmation, and no link or copy from another Project's View is moved.
+- **Trace:** PRJ-FR-14, PRJ-FR-15 · STO-FR-14, STO-FR-15 · D-W93, D-W97
 
-- **Do:** Open the library clean-up of Unusable frames. Read its offer, its count and size, and open the disclosure of its refusals.
-- **Expect:**
-  - The offer lists 9 frames, each with its session: the two 18 Sep frames, the four 30 Sep frames other than F-dup, F-ab, and MX-1 and MX-2 of `4 Oct M 33`, a session in no Project. F-ab is offered, because its place in a prepared revision of the Complete run `Ha deep v1` is no refusal reason.
-  - The size covers the four 30 Sep frames, the two 18 Sep frames, F-ab, MX-2 and both copies of MX-1. A symlink entry in `NGC7000-HOO-Siril/` holds none of a frame's bytes.
-  - A terse refusal counts 4 frames, and its disclosure lists each with its reason:
-    - F-prep: `Can't trash 1 · linked by Ha deep ▸`, leading to the Prepare step of `Ha deep` in Project `NGC 7000 Ha deep`, a run that is not Complete.
-    - F-res: a recorded input of the accepted Ha stack of `Ha deep v1`.
-    - F-dup: one of its copies sits on `Scratch`, which has no OS Trash, so neither copy moves.
-    - C-x: its location `Cold-1 captures` is Offline.
-- **Expect (negative):** Neither Project-only reject is offered or counted, and no library-Usable or Unreviewed frame is offered, including the 14 Usable M 33 lights. Opening the clean-up moves no file. `NGC 7000 HOO` stays open, and its four runs keep their states.
-- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 6 ("Reject is library-wide by default": Unusable frames become purge candidates, and a library clean-up offers to move them to the OS Trash), §Copy rules (terse refusals), §Round 7 P-PREP3 ("Linked · 0 B"), §Round 8 P-TRASH2 ("Can't trash · linked by {run} ▸") · PRJ-FR-15 (refusal reasons) · STO-FR-15 · STO-AC-18 · D-W42, D-W43, D-W54, D-W57 · G2, G4
+### S2 — Confirm the reviewed Trash move {#S2}
+- **Do:** With Trash's review open, use the P5 helper to change F-drift in place. Confirm the selected rejected-frame move. Read progress, Activity and the summary, then restore F-drift's recorded bytes and mtime with the helper.
+- **Expect:** The review lists each selected frame's physical copies, identities and SHA-256. MX-1 lists both copies. Re-verification refuses F-drift because its bytes changed after review; the other nine frames move, comprising ten physical files because both MX-1 copies move. The summary names nine moved frames, one drift refusal and no permanent deletion. No View links are moved with these captures.
+- **Expect (negative):** Nothing outside registered Captures locations moves. Both copies of F-dup, F-prep and C-x remain at their original paths. No other file changes.
+- **Trace:** STO-FR-14, STO-FR-15 · STO-AC-18, STO-AC-19 · PRJ-FR-15 · D19, D-W43
 
-### S2 — Move the offered frames to the OS Trash {#S2}
+### S3 — Confirm the Trashed records are hidden {#S3}
+- **Do:** Read Sessions, Targets, the affected Project's totals and frame review for `4 Oct M 33`; rescan `Astro-T7/Captures` and `Backup/Captures`.
+- **Expect:** Sessions shows two fewer 18 Sep frames, two fewer 28 Sep frames, three fewer 30 Sep frames and 14 frames in `4 Oct M 33`. The nine moved frames count nowhere in totals, goals or review and are absent from Project suggestions. Rescans report none of them Missing.
+- **Expect (negative):** No session view or Project View includes a Trashed frame. A Result file does not retain input lineage or prevent a capture from being trashed.
+- **Trace:** LIB-FR-18, LIB-AC-19 · PRJ-FR-16 · D-W93, D-W97
 
-- **Do:** Start the move and read the review. With the P5 helper, overwrite F-drift in place. Then confirm the move to the OS Trash, and read the status bar while it runs and the operation's Activity entry. Afterwards, restore F-drift's saved bytes and mtime with the helper.
-- **Expect:**
-  - The review lists the 9 frames with every copy of each, each copy with its identity and SHA-256. MX-1 lists two copies, under `Astro-T7/Captures/M33/2026-10-04/` and `Backup/Captures/M33/2026-10-04/`. Trash support reads available for `Astro-T7` and `Backup`.
-  - The review's changes list reads `Also removes 4 links in kept run views`: the symlinks to the two 18 Sep frames and F-ab in `NGC7000-HOO-Siril/`, and to F-ab in `Ha deep v1/`.
-  - The move runs as one trash operation. The status bar's running work names it with a mini progress bar, Activity lists it once, and progress shows per-frame outcomes.
-  - The summary names 8 frames moved to the OS Trash and 1 kept with its reason, F-drift with drift named, and reads that nothing was deleted permanently.
-  - The 9 moved files, both copies of MX-1 among them, and the 4 links are newly in the OS Trash, and the library marks the 8 frames Trashed.
-- **Expect (negative):**
-  - Nothing is permanently deleted, and no file outside a registered Captures location moves.
-  - No other prepared entry moves. The listings of `26 Sep symlink check` and `Ha deep` equal P6, and those of `NGC7000-HOO-Siril` and `Ha deep v1` equal P6 without the 4 links.
-  - F-drift, F-prep, F-res, both copies of F-dup and both Project-only rejects remain at their paths, and after the restore they match P6.
-- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 6, §Round 5 (P-SB3), §Round 8 P-TRASH2 ("If the user kept it, the Trash review says 'Also removes N links in kept run views', and the move takes those links with the frame") · STO-FR-15 · STO-AC-19 · PRJ-FR-15 · PRJ-AC-17 · LIB-FR-18 · root SC-010 · D19, D-W43, D-W57 · prototype `op_trash_summary` ("{trashed} moved to the OS Trash ({bytes}); {refused} kept with a reason. Nothing was deleted permanently.", messages/en-GB.json @ 4f470775)
-
-### S3 — Confirm the Trashed frames are hidden {#S3}
-
-- **Do:** Read the 18, 28 and 30 Sep and `4 Oct M 33` rows in Sessions, and the Captured column of NGC 7000 and M 33 in Targets. Read the "captured" goal numbers of `NGC 7000 SHO`. Open the fixed memberships of `NGC7000-HOO-Siril` and `Ha deep v1`, and frame review on `4 Oct M 33`. Then rescan `Astro-T7/Captures` and `Backup/Captures`.
-- **Expect:**
-  - Sessions shows 2 fewer frames for 18 Sep, 1 fewer for 28 Sep and 3 fewer for 30 Sep, and 14 frames for `4 Oct M 33`.
-  - NGC 7000's Captured falls by Ha 0h 15m and OIII 0h 15m, and M 33's reads Ha 1h 10m, 0h 10m less than before S2.
-  - In `NGC 7000 SHO`, Ha and OIII "captured" each fall by 0h 15m.
-  - `NGC7000-HOO-Siril`'s fixed membership still lists the two 18 Sep frames and F-ab, marked "Trashed", and `Ha deep v1`'s lists F-ab, marked "Trashed".
-  - Frame review of `4 Oct M 33` lists 14 frames, without MX-1 and MX-2.
-  - The rescans report none of the 8 frames Missing.
-- **Expect (negative):** No Trashed frame is offered by any run picker, counted in any goal or total, measured or thumbnailed in frame review, or shown on Home. The open run `Ha deep` lists no Trashed frame.
-- **Trace:** LIB-FR-18 · LIB-AC-19 · PRJ-FR-09, PRJ-FR-16 · PIX-AC-19 · PLAN-TGT-FR-08 · D-W43, D-W52, D-W66 · HARNESS-V5-IA.md S10, S12
-
-### S4 — Find the frames under the Trashed filter {#S4}
-
+### S4 — Find the records in the Trashed filter {#S4}
 - **Do:** In Sessions, choose the **Trashed** filter.
-- **Expect:** Exactly the 8 frames are listed, each with its last-observed metadata and the S2 operation that trashed it.
-- **Expect (negative):** F-drift, F-prep, F-res, F-dup, C-x and both Project-only rejects are not listed.
-- **Trace:** LIB-FR-18 · LIB-AC-19 · PRJ-FR-16 · D-W43 · prototype `sessions_trashed_help` (messages/en-GB.json @ 4f470775)
+- **Expect:** Exactly nine frames are listed with their last-observed metadata and the operation that moved them. F-drift, F-prep, F-dup and C-x are absent.
+- **Trace:** LIB-FR-18, LIB-AC-19 · D-W43
 
-### S5 — Put one frame back and meet it in the clean-up again {#S5}
+### S5 — Restore one capture and reopen the Trash step {#S5}
+- **Do:** Put back MX-2 in the OS Trash and rescan `Astro-T7/Captures`. Read `4 Oct M 33`, M 33's Captured total and Sessions' Trashed filter. Reopen the Project's Trash step.
+- **Expect:** MX-2 returns as Unusable, leaves the Trashed filter and raises `4 Oct M 33` to 15 frames and M 33's Captured by 0h 05m. The filter lists eight frames. Trash offers MX-2 and F-drift, and still refuses F-prep, F-dup and C-x.
+- **Expect (negative):** PlateVault offers no restore of its own. Closing the reviewed Trash step moves no file.
+- **Trace:** LIB-FR-18, LIB-AC-19 · PRJ-FR-14 to PRJ-FR-16 · D-W43, D-W97
 
-- **Do:** In the OS Trash, put back MX-2. Rescan `Astro-T7/Captures`. Read `4 Oct M 33` in Sessions, M 33's Captured in Targets, and the Trashed filter. Then open the library clean-up of Unusable frames again, read its offer and refusals, and close it without moving anything.
-- **Expect:**
-  - MX-2 returns as Unusable and leaves the Trashed filter, which now lists 7 frames. `4 Oct M 33` reads 15 frames, and M 33's Captured rises by 0h 05m. MX-2's history still shows its Trashed episode.
-  - The clean-up offers exactly 2 frames, MX-2 and F-drift, and still refuses F-prep, F-res, F-dup and C-x, each with its reason.
-- **Expect (negative):** PlateVault offers no restore of its own, and MX-2 reads neither Missing nor ChangedContent. Closing the clean-up moves no file.
-- **Trace:** LIB-FR-18 · LIB-AC-19 · PRJ-FR-16 · PRJ-AC-17 · STO-FR-15 · D-W43 · HARNESS-V5-FEEDBACK-R1.md §Round 6
-
-### S6 — Prepare the open run again, then move F-prep {#S6}
-
-- **Do:** In the clean-up's refusals, follow F-prep's `linked by Ha deep ▸`. In the Prepare step of `Ha deep`, choose **Prepare…**, read the confirmation and confirm. Then open the library clean-up of Unusable frames again, start the move, read the review and confirm.
-- **Expect:**
-  - The link opens `Ha deep` at its Prepare step. The confirmation reads `Prepare Ha deep (rev 2)?`. Afterwards the run reads Prepared, and its new view, `Ha deep (rev 2)/`, links no Unusable frame. The first prepared folder of `Ha deep` stays beside it and still links F-prep.
-  - The clean-up offers exactly 3 frames, MX-2, F-drift and F-prep, and still refuses F-res, F-dup and C-x, each with its reason.
-  - The review's changes list reads `Also removes 2 links in kept run views`: F-prep's symlinks in `NGC7000-HOO-Siril/` and in the first prepared folder of `Ha deep`.
-  - The summary names 3 frames moved to the OS Trash. The 3 files and those 2 links are newly in the OS Trash, and the Trashed filter lists 10 frames.
-- **Expect (negative):** Preparing again changes no saved membership and sends no catalogue frame to the OS Trash. No entry of `26 Sep symlink check`, `Ha deep v1` or `Ha deep (rev 2)/` changes, F-res, both copies of F-dup and C-x stay at their paths, and nothing is permanently deleted.
-- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 8 P-TRASH2 ("Refreshing the run's view drops the link (rejected frames have already left its membership), and then the frame can go") · STO-FR-15 · D-W43 · J24/S17 (a new revision's folder sits beside the first) · G6
+### S6 — Apply the other Project's Library removal, then trash F-prep {#S6}
+- **Do:** Follow F-prep's refusal to `NGC 7000 Ha deep`. In Sessions, read its pending Library removal and choose Apply on View. Return to `NGC 7000 HOO`'s open Wrap up Trash step, review the refreshed offer and confirm it.
+- **Expect:** Apply rebuilds `NGC 7000 Ha deep`'s View without F-prep. Trash in `NGC 7000 HOO` now offers exactly MX-2, F-drift and F-prep, and refuses only F-dup and C-x. The three eligible captures move to the OS Trash after re-verification, and Sessions' Trashed filter lists 11 frames.
+- **Expect (negative):** Apply moves no original capture. The Trash operation removes no files from another Project's View and permanently deletes nothing.
+- **Trace:** VSEL-FR-12, VSEL-FR-15 · PRJ-FR-14, PRJ-FR-15 · STO-FR-14, STO-FR-15 · D-W97, D-W100
 
 ## Success criteria
 
-- SC1: With `NGC 7000 HOO` open and 2 of its runs not Complete, the clean-up offers exactly 9 frames, including 1 in a Complete run's prepared revision and 2 of a session in no Project, and lists exactly 4 refusals, each with its reason. It offers 0 of the 2 Project-only rejects and 0 Usable or Unreviewed frames (S1).
-- SC2: Exactly 8 frames, 9 files, reach the OS Trash, together with exactly 4 links in kept run views, which the review counts. F-drift is refused 1 time with drift named. 0 other prepared entries move, and 0 files are permanently deleted (S2).
-- SC3: Every copy moves or none does: MX-1 moves 2 of its 2 copies, and F-dup moves 0 of its 2 (S1, S2).
-- SC4: The Trashed frames appear in 0 pickers, frame reviews, goals or totals. They show only under the Trashed filter (8 frames) and, marked "Trashed", in the fixed memberships of `NGC7000-HOO-Siril` (3 frames) and `Ha deep v1` (1 frame). The rescans report 0 of them Missing (S3, S4).
-- SC5: Put back plus rescan returns 1 frame as Unusable. The Trashed filter then lists 7 frames, and the clean-up offers exactly 2 (S5).
-- SC6: After `Ha deep` is prepared again, the clean-up offers exactly 3 frames, F-prep among them, and refuses 3. The move takes exactly 2 links with them, 1 in a kept view of a Complete run and 1 in a superseded folder of `Ha deep`, and the Trashed filter then lists 10 frames (S6).
+- SC1: Trash offers exactly 10 frames and lists exactly three initial custody refusals: F-prep, F-dup and C-x (S1).
+- SC2: Exactly nine frames and ten physical capture files reach the OS Trash at S2; F-drift is refused at execution, and zero files are permanently deleted.
+- SC3: Both MX-1 copies move; neither F-dup copy moves. A frame with any refused physical copy is wholly refused.
+- SC4: After S2, nine frames appear in Sessions' Trashed filter, count nowhere else and are not Missing after rescan (S3, S4).
+- SC5: Restoring MX-2 and rescanning returns it as Unusable; the filter then lists eight and Wrap up Trash offers exactly MX-2 and F-drift (S5).
+- SC6: After the other Project Applies its pending Library removal, Trash offers exactly three frames, refuses two, and the Trashed filter lists 11 (S6).
 
 ## Known gaps
 
-- G1: Not validated: the rebuilt application does not exist, and the v5 prototype at ui-harness-v5 4f470775 does not yet implement Round 6. Product behavior follows HARNESS-V5-FEEDBACK-R1.md §Round 6 "Reject is library-wide by default" (@ 4f470775), §Round 7 P-PREP3 (@ 12638a7c) and §Round 8 P-TRASH2. It also follows the trash and custody rules of D-W43, D-W52, D-W54 and D-W57, and the 064, 065 and 071 specs cited above. No implementation has been validated against them.
-- G2: Contract drift: STO-FR-03, STO-FR-14, STO-AC-20, PRJ-FR-15 and LIB-FR-18 still name the Project's Done / Archive sheet, now Wrap up, as the only way a library frame reaches the Trash. Round 6 adds the library clean-up of Unusable frames, which this journey follows. Those requirements need an amendment.
-- G3: Out of scope for this journey: an unreadable copy, a stale review, a location whose OS removal deletes immediately (STO-FR-15) and a ChangedContent frame (LIB-FR-09) are not exercised in the library clean-up. Blocks readiness until covered by a step or a journey.
-- G4: Unresolved implementation qualification: F-res needs Tool-recorded input lineage from a processing tool (J34/G4), and S1's F-res refusal depends on it. Blocks readiness.
+- G1: Not validated: the rebuilt application has not been validated. The behavior in this journey follows the current 064, 065 and 071 specs and D-W93 to D-W116; no implementation has been validated against them.
+- G2: (dissolved 2026-10-15): J44 now trashes Unusable frames through the Project's Wrap up, the route STO-FR-03, STO-FR-14, PRJ-FR-15 and LIB-FR-18 name, so the contract and the journey agree.
+- G3: Out of scope for this journey: an unreadable copy, a stale review, a location whose OS removal deletes immediately (STO-FR-15) and a ChangedContent frame (LIB-FR-09) are not exercised in Wrap up's Trash step. Blocks readiness until covered by a step or a journey.
+- G4: (dissolved 2026-10-15): D-W93 puts Result lineage out of scope, so F-res is eligible without tool-recorded lineage (S1, J34/G4).
 - G5: (dissolved 2026-10-12): answered by Round 8 P-TRASH2. S1 refuses F-prep while the view of `Ha deep` links it, S2 counts and moves the 4 links of the kept views of `NGC7000-HOO-Siril` and `Ha deep v1` with their frames, and S6 moves F-prep once `Ha deep` is prepared again.
-- G6: Unresolved product question: P-TRASH2 names the views of Complete runs, not the superseded folder an unfinished run keeps after it is prepared again (J24/S17). S6 follows the prototype: the guard reads only the run's latest view, and a superseded folder's links count in "Also removes N links in kept run views" and go to the OS Trash with the frame. Blocks readiness.
+- G6: (dissolved 2026-10-15): D-W100 builds every View from the originals and keeps no superseded run folder, so the guard reads only the other Project's current View (S1, S6).
 
 ## Delta log
-
 - **Δ2** 2026-10-12 · S1 · behavior-change
   P-PREP3: the Complete run `NGC7000-HOO-Siril` holds symlinks, so the offer's size covers every offered frame, the two 18 Sep frames and F-ab included.
   Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 7 (user, 2026-10-12) P-PREP3 (apps/prototype/design/ on ui-harness-v5 @ 12638a7c) · by: JourneysV5.R7Prep3 (intent-gated)
 - **Δ3** 2026-10-12 · S1, S2, +S6 · behavior-change
   P-TRASH2: F-prep is refused as `Can't trash 1 · linked by Ha deep ▸` while the view of that unfinished run links it, and preparing `Ha deep` again lets it go. The review counts the links of kept views of Complete runs ("Also removes 4 links in kept run views"), and the move takes them with their frames.
   Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 8 (user, 2026-10-12) P-TRASH2 (apps/prototype/design/ on ui-harness-v5) · by: R8JourneysDocs (intent-gated)
+- **Δ4** 2026-10-15 · S1, S2, S3, S4, S5, S6 · behavior-change
+  Library-Unusable frames are trashed only through an owning Project's Wrap up. The offer is limited to that Project's sessions and current custody rules; no Result lineage or Project-only rejection governs eligibility.
+  Evidence: D-W93 to D-W106 (F4 Project model, owner's answers of 2026-10-14) in PR #1804, PRJ-FR-14 to PRJ-FR-16, LIB-FR-18, VSEL-FR-12, VSEL-FR-15, STO-FR-14, STO-FR-15 · by: SpecF4Writer2 (intent-gated)
