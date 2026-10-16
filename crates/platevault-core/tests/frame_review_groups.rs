@@ -1,13 +1,10 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Run-group Review all (spec 067 PIX-FR-17, PIX-AC-18; spec 066 VSEL-FR-19,
-//! VSEL-AC-22; D-W41) over generated FITS sessions of NGC 7000 Mosaic with
-//! four panel runs: one list spans every panel run with a Panel column and a
-//! Panel filter, each frame listed as its own panel run's Review step lists
-//! it. A mark routes as in that panel run, changes only the marked frame's
-//! quality and keeps every frame in its own panel run's membership. Fixture
-//! files are only read.
+//! Legacy run-group Review listing (spec 067, D-W78) checks panel labels and
+//! sorting only. Session intake owns library-quality marks; Review all no
+//! longer routes marks through a panel run's membership draft. Fixture files
+//! are only read.
 #![cfg(unix)]
 
 mod support;
@@ -43,9 +40,6 @@ const NIGHTS: [(&str, (f64, f64), Option<u32>); 7] = [
     ("2026-09-07", (314.0, 47.0), None),
 ];
 const OFF_PANEL: usize = 6;
-
-const LIBRARY: QualityLabel = QualityLabel::Rejected { scope: LabelScope::Library };
-const THIS_PROJECT: QualityLabel = QualityLabel::Rejected { scope: LabelScope::ThisProject };
 
 fn write_frames(root: &Path) {
     for (night, (ra, dec), _) in NIGHTS {
@@ -254,67 +248,14 @@ impl World {
         kind(&error)
     }
 
-    async fn row(&self, asset: Uuid) -> ReviewFrame {
-        let list = self.list(self.review_all(), None).await;
-        list.frames.into_iter().find(|frame| frame.asset.id == asset).unwrap()
-    }
-
-    /// Route one mark through Review all with the listed draft revision of the
-    /// frame's panel run.
-    async fn mark(&self, asset: Uuid, mark: &ReviewMark) -> Result<ReviewMarked, LibraryError> {
-        let list = self.list(self.review_all(), None).await;
-        let frame = list.frames.iter().find(|frame| frame.asset.id == asset).unwrap();
-        let view = frame.panel.expect("a Review all frame names its panel run").view_id;
-        let run = list.panels.iter().find(|panel| panel.run.view_id == view).unwrap().run;
-        self.review().review_mark(self.review_all(), run.draft_revision, mark).await
-    }
-
-    async fn library_mark(&self, asset: Uuid, quality: Quality) -> ReviewMarked {
-        let row = self.row(asset).await;
-        let asset = ExpectedAsset {
-            asset_id: row.asset.id,
-            decision_revision: row.asset.decision_revision,
-            fingerprint: row.asset.fingerprint,
-        };
-        self.mark(asset.asset_id, &ReviewMark::Library { asset, quality }).await.unwrap()
-    }
-
-    async fn project_mark(&self, asset: Uuid, rejected: bool) -> ReviewMarked {
-        let row = self.row(asset).await;
-        let mark = RejectionMark {
-            asset_id: row.asset.id,
-            fingerprint: row.asset.fingerprint,
-            expected_revision: row.project.revision,
-            rejected,
-        };
-        self.mark(asset, &ReviewMark::Project { mark }).await.unwrap()
-    }
-
-    /// Every asset record by id.
-    async fn records(&self) -> BTreeMap<Uuid, Asset> {
-        let assets = self.library.catalog().location_assets(self.location).await.unwrap();
-        assets.into_iter().map(|asset| (asset.id, asset)).collect()
-    }
-
-    /// Every asset record by id, as JSON.
     async fn assets(&self) -> BTreeMap<Uuid, serde_json::Value> {
-        let records = self.records().await;
-        records.into_iter().map(|(id, a)| (id, serde_json::to_value(&a).unwrap())).collect()
-    }
-
-    /// Each panel run's own Review step list, as JSON, by panel number.
-    async fn panel_runs(&self) -> BTreeMap<u32, serde_json::Value> {
-        let mut runs = BTreeMap::new();
-        for panel in &self.group.panels {
-            let list = self.list(ReviewContext::Run { view_id: panel.view.id }, None).await;
-            runs.insert(panel.panel.number, serde_json::to_value(&list).unwrap());
-        }
-        runs
+        let assets = self.library.catalog().location_assets(self.location).await.unwrap();
+        assets.into_iter().map(|asset| (asset.id, serde_json::to_value(asset).unwrap())).collect()
     }
 
     fn assert_manifest(&self) {
         for (path, digest) in &self.manifest {
-            assert_eq!(&support::digest(path), digest, "{} is read-only", path.display());
+            assert_eq!(&support::digest(path), digest, "{}", path.display());
         }
     }
 }
@@ -428,120 +369,5 @@ async fn review_all_lists_every_panel_with_panel_column_and_filter() {
 
     // Listing writes nothing and reads no source.
     assert_eq!(world.assets().await, before);
-    world.assert_manifest();
-}
-
-/// PIX-AC-18, PIX-FR-17: a Review all mark routes through the frame's panel
-/// run as a single run's Review step does. It changes only that frame's
-/// quality, and every frame stays in its own panel run's membership.
-#[tokio::test]
-async fn mark_changes_only_that_frames_quality_and_keeps_panel_membership() {
-    let world = World::new().await;
-    let (_, view_2) = world.panel(2);
-    let before = world.assets().await;
-    let runs_before = world.panel_runs().await;
-    let panels_before: BTreeMap<Uuid, ReviewPanel> = world
-        .list(world.review_all(), None)
-        .await
-        .frames
-        .iter()
-        .map(|frame| (frame.asset.id, frame.panel.unwrap()))
-        .collect();
-    let frame = nights_in(&world, 2)[0];
-
-    // X on a Panel 2 frame: Panel 2's Review step writes it and moves its member.
-    let marked = world.library_mark(frame, Quality::Unusable).await;
-    let member = marked.member.expect("an open panel run's mark moves its draft member");
-    assert_eq!(
-        (member.state, member.reason),
-        (MemberState::Excluded, MemberReason::Rejected { scope: RejectScope::Library })
-    );
-    let draft = marked.draft_revision.expect("the mark started Panel 2's draft revision");
-
-    // Only the marked frame's quality changed.
-    let after = world.records().await;
-    for (id, record) in &after {
-        if *id == frame {
-            assert_eq!(record.quality, Quality::Unusable);
-        } else {
-            assert_eq!(&serde_json::to_value(record).unwrap(), &before[id], "asset {id}");
-        }
-    }
-    let row = world.row(frame).await;
-    assert_eq!(row.label, LIBRARY);
-
-    // The frame stays in Panel 2's membership; no other panel run changed.
-    assert_eq!(row.panel, Some(panels_before[&frame]));
-    assert_eq!(row.member.unwrap().state, MemberState::Excluded);
-    let runs_after = world.panel_runs().await;
-    for number in [1, 3, 4] {
-        assert_eq!(runs_after[&number], runs_before[&number], "panel {number} is unchanged");
-    }
-    let own = world.list(ReviewContext::Run { view_id: view_2 }, None).await;
-    assert!(own.frames.iter().any(|listed| listed.asset.id == frame));
-    assert_eq!(own.run.unwrap().draft_revision, draft);
-    let panels_after: BTreeMap<Uuid, ReviewPanel> = world
-        .list(world.review_all(), None)
-        .await
-        .frames
-        .iter()
-        .map(|listed| (listed.asset.id, listed.panel.unwrap()))
-        .collect();
-    assert_eq!(panels_after, panels_before, "every frame keeps its panel run");
-
-    // A stale draft revision of the frame's panel run conflicts.
-    let stale = ExpectedAsset {
-        asset_id: row.asset.id,
-        decision_revision: row.asset.decision_revision,
-        fingerprint: row.asset.fingerprint,
-    };
-    let error = world
-        .review()
-        .review_mark(
-            world.review_all(),
-            draft + 1,
-            &ReviewMark::Library { asset: stale, quality: Quality::Unreviewed },
-        )
-        .await
-        .unwrap_err();
-    assert_eq!(kind(&error), "conflict", "{error}");
-
-    // U restores it to Panel 2's draft; P and Reject for this Project only on
-    // other panels' frames change only those frames.
-    let restored = world.library_mark(frame, Quality::Unreviewed).await;
-    let member = restored.member.unwrap();
-    assert_eq!((member.state, member.reason), (MemberState::Included, MemberReason::Restored));
-    let picked = nights_in(&world, 1)[0];
-    let marked = world.library_mark(picked, Quality::Usable).await;
-    assert_eq!(marked.member.unwrap().state, MemberState::Included);
-    let rejected = nights_in(&world, 3)[0];
-    let marked = world.project_mark(rejected, true).await;
-    assert_eq!(marked.member.unwrap().state, MemberState::Excluded);
-    let list = world.list(world.review_all(), None).await;
-    for listed in &list.frames {
-        let expected = match listed.asset.id {
-            id if id == picked => QualityLabel::Picked,
-            id if id == rejected => THIS_PROJECT,
-            _ => QualityLabel::Unreviewed,
-        };
-        assert_eq!(listed.label, expected, "{}", listed.asset.id);
-        assert_eq!(listed.panel, Some(panels_before[&listed.asset.id]));
-    }
-
-    // A frame no panel run holds cannot be marked through Review all.
-    let off = world.frames[OFF_PANEL];
-    let records = world.records().await;
-    let asset = &records[&off];
-    let mark = ReviewMark::Library {
-        asset: ExpectedAsset {
-            asset_id: off,
-            decision_revision: asset.decision_revision,
-            fingerprint: asset.fingerprint.clone(),
-        },
-        quality: Quality::Unusable,
-    };
-    let error = world.review().review_mark(world.review_all(), 0, &mark).await.unwrap_err();
-    assert_eq!(kind(&error), "invalid_input", "{error}");
-    assert_eq!(world.assets().await[&off], before[&off]);
     world.assert_manifest();
 }

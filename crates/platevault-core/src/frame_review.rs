@@ -1,14 +1,13 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Frame review (spec 067): the measurement queue, the memory-only preview
-//! cache and `SubframeSelector` import review over the catalog's measurement
-//! tables.
+//! Frame review (spec 067) computes, previews and imports measurements, and
+//! supplies the Review step for a session's Target → Rig → Review intake (spec
+//! 064 LIB-FR-20, PIX-FR-18; D-W78). Quality marks are durable library decisions;
+//! Finish and reopen write the session's grouping-revision-bound intake record.
 //!
 //! Sources are read only through `Catalog::open_contained`, which hashes every
-//! byte it hands out. Measuring, previewing and importing write measurement
-//! rows only: never a source file, a preview file, or an asset, quality,
-//! session, association, correction, View or Project record.
+//! byte it hands out. Measurement/import operations never change source files.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use std::io::Read;
@@ -149,6 +148,38 @@ impl FrameReview {
     /// twice; `PersistenceFailure` for an unreadable catalog.
     pub async fn frame_states(&self, assets: &[Uuid]) -> Result<Vec<FrameState>, LibraryError> {
         self.shared.frame_states(assets).await
+    }
+
+    /// The session's readiness, calibration pins and admission blockers.
+    ///
+    /// # Errors
+    /// `NotFound` for an unknown session; catalog corruption and read errors propagate.
+    pub async fn session_intake(
+        &self,
+        session_id: Uuid,
+    ) -> Result<platevault_model::SessionAdmission, LibraryError> {
+        self.shared.catalog.session_admission(session_id).await
+    }
+
+    /// Finish Review at the grouping revision the caller reviewed.
+    ///
+    /// # Errors
+    /// `Conflict` for a stale grouping revision; `InvalidInput` for remaining
+    /// Unreviewed live captures or a superseded session; `NotFound` for an unknown session.
+    pub async fn finish_review(
+        &self,
+        session_id: Uuid,
+        expected_grouping_revision: platevault_model::Revision,
+    ) -> Result<platevault_model::Revision, LibraryError> {
+        self.shared.catalog.finish_session_review(session_id, expected_grouping_revision).await
+    }
+
+    /// Reopen Review for a Ready session, deleting only its session review row.
+    ///
+    /// # Errors
+    /// `NotFound` for an unknown session; `InvalidInput` unless the session is Ready.
+    pub async fn reopen_review(&self, session_id: Uuid) -> Result<(), LibraryError> {
+        self.shared.catalog.reopen_session_review(session_id).await
     }
 
     /// The Running run, if any.
