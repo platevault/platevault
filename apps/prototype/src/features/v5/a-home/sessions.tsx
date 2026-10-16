@@ -76,7 +76,7 @@ function sessionCount(picks: SessionKind[]): number {
   return new Set(picks.map((p) => p.sessionId)).size
 }
 
-/** Confirm calibration: each suggestion of the selected sessions becomes the user's pin (LIB-FR-23); asks first for more than one session. */
+/** Confirm suggestions: each suggestion of the selected sessions becomes the user's pin (LIB-FR-23), after its confirmation. */
 function confirmCalibrationAction(m: Messages, selected: SessionRow[], onDone: () => void): Action {
   const picks = picksOf(selected, PIN_KINDS, ["suggested"])
   const count = sessionCount(picks)
@@ -85,7 +85,7 @@ function confirmCalibrationAction(m: Messages, selected: SessionRow[], onDone: (
     label: m.sessions_confirm_suggestions(),
     icon: Check,
     unavailable: picks.length === 0 ? { action: m.sessions_confirm_suggestions(), reason: m.calibration_choices_none_suggested(), blockers: [] } : undefined,
-    confirm: count > 1 ? { title: m.sessions_confirm_calibration_title({ count }), summary: m.sessions_confirm_calibration_summary({ count: picks.length }), confirm: { label: m.verb_confirm() } } : undefined,
+    confirm: { title: m.sessions_confirm_calibration_title({ count }), summary: m.sessions_confirm_calibration_summary({ count: picks.length }), confirm: { label: m.verb_confirm() } },
     run: () => {
       const result = confirmCalibration(picks)
       if (result.ok) onDone()
