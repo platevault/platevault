@@ -2045,27 +2045,32 @@ async fn apply_plan_allows_disjoint_active_plan() {
     tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
 }
 
-/// FR-017 (astro-plan-4bk7e): once a plan reads finished, its run no longer
-/// claims the plan's paths, so a plan over the same paths is accepted from that
-/// moment, as a plan over a paused run's paths already was.
+/// Apply `first`, hold its run's task at its terminal long-op event, and return
+/// the state `first` reads there with the result of applying `second` while
+/// the task is held.
 ///
-/// The first run's sink holds its task at the terminal long-op event, which
-/// `terminal::handle_completed` emits after the terminal state commits. The
-/// second apply runs while the first task is held there, so it cannot be
-/// accepted merely because the first task went on to finish.
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn an_overlapping_plan_is_accepted_once_the_first_plan_reads_finished() {
-    let (db, bus) = setup().await;
-    insert_approved_plan_with_items(&db, "p-claim-first", 1).await;
-    // The same item paths as the first plan, so the two path sets overlap.
-    insert_approved_plan_with_items_at(&db, "p-claim-second", "p-claim-first", 1).await;
-
+/// The terminal handlers emit that event after the terminal state commits, so
+/// `second` cannot be accepted merely because the first task went on to
+/// finish. With `cancel_first`, the first run's token is cancelled from its
+/// `Started` event, which `apply_plan` emits before it spawns the executor, so
+/// the run stops at its first item boundary and ends `Cancelled`.
+async fn apply_overlapping_plan_while_first_is_held(
+    db: &Database,
+    bus: &EventBus,
+    first: &str,
+    second: &str,
+    cancel_first: bool,
+) -> (String, Result<PlanApplyResponse, ContractError>) {
     let (finished_tx, finished_rx) = tokio::sync::oneshot::channel::<()>();
     let (release_tx, release_rx) = std::sync::mpsc::channel::<()>();
     let finished_tx = std::sync::Mutex::new(Some(finished_tx));
     let release_rx = std::sync::Mutex::new(release_rx);
-    let sink: OperationEventSink = Arc::new(move |event: OperationEvent| {
-        if matches!(event.event_type, OperationEventType::Completed | OperationEventType::Failed) {
+    let first_id = first.to_owned();
+    let sink: OperationEventSink = Arc::new(move |event: OperationEvent| match event.event_type {
+        OperationEventType::ItemStarted if cancel_first => {
+            active_runs().get(&first_id).expect("the run is registered").cancel_token.cancel();
+        }
+        OperationEventType::Completed | OperationEventType::Failed => {
             if let Some(tx) = finished_tx.lock().unwrap().take() {
                 let _ = tx.send(());
             }
@@ -2073,21 +2078,65 @@ async fn an_overlapping_plan_is_accepted_once_the_first_plan_reads_finished() {
             // releases the task, instead of holding a worker thread forever.
             let _ = release_rx.lock().unwrap().recv_timeout(Duration::from_secs(10));
         }
+        _ => {}
     });
 
-    apply_plan(db.pool(), &bus, "p-claim-first", "test-token", Some(sink)).await.unwrap();
+    apply_plan(db.pool(), bus, first, "test-token", Some(sink)).await.unwrap();
     tokio::time::timeout(Duration::from_secs(10), finished_rx)
         .await
         .expect("the first run emitted its terminal event within 10 s")
         .expect("the first run's sink signalled its terminal event");
 
-    let first = repo::get_plan(db.pool(), "p-claim-first", false).await.unwrap();
-    assert_ne!(first.state, "applying", "the first plan reads finished at this point");
-
-    let second = apply_plan(db.pool(), &bus, "p-claim-second", "test-token", None).await;
+    let first_state = repo::get_plan(db.pool(), first, false).await.unwrap().state;
+    let second = apply_plan(db.pool(), bus, second, "test-token", None).await;
     release_tx.send(()).unwrap();
+    (first_state, second)
+}
 
+/// FR-017 (astro-plan-4bk7e): once a plan reads finished, its run no longer
+/// claims the plan's paths, so a plan over the same paths is accepted from that
+/// moment, as a plan over a paused run's paths already was.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn an_overlapping_plan_is_accepted_once_the_first_plan_reads_finished() {
+    let (db, bus) = setup().await;
+    insert_approved_plan_with_items(&db, "p-claim-first", 1).await;
+    // The same item paths as the first plan, so the two path sets overlap.
+    insert_approved_plan_with_items_at(&db, "p-claim-second", "p-claim-first", 1).await;
+
+    let (first_state, second) = apply_overlapping_plan_while_first_is_held(
+        &db,
+        &bus,
+        "p-claim-first",
+        "p-claim-second",
+        false,
+    )
+    .await;
+
+    assert_ne!(first_state, "applying", "the first plan reads finished at this point");
     let second = second.expect("a plan over a finished plan's paths must be accepted");
+    assert_eq!(second.new_state, "applying");
+}
+
+/// The Cancelled counterpart (astro-plan-4bk7e): a cancelled run frees the
+/// plan's paths before the plan reads `cancelled`.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn an_overlapping_plan_is_accepted_once_the_first_plan_reads_cancelled() {
+    let (db, bus) = setup().await;
+    insert_approved_plan_with_items(&db, "p-claim-cancel-first", 1).await;
+    insert_approved_plan_with_items_at(&db, "p-claim-cancel-second", "p-claim-cancel-first", 1)
+        .await;
+
+    let (first_state, second) = apply_overlapping_plan_while_first_is_held(
+        &db,
+        &bus,
+        "p-claim-cancel-first",
+        "p-claim-cancel-second",
+        true,
+    )
+    .await;
+
+    assert_eq!(first_state, "cancelled", "the first run took the Cancelled path");
+    let second = second.expect("a plan over a cancelled plan's paths must be accepted");
     assert_eq!(second.new_state, "applying");
 }
 

@@ -101,10 +101,11 @@ pub async fn cancel_plan(
         found
     };
 
-    // GF-5: A paused plan has no live ActiveRun (the executor's guard dropped
-    // it when it returned Paused). Without a running executor, nothing will
-    // ever observe the cancel token — transition DB state directly and emit
-    // per-item audit rows matching the executor's Cancelled path.
+    // GF-5: A paused plan has no live ActiveRun (`terminal::handle_paused`
+    // dropped the run's guard before writing the pause). Without a running
+    // executor, nothing will ever observe the cancel token — transition DB
+    // state directly and emit per-item audit rows matching the executor's
+    // Cancelled path.
     if !has_active_run && plan_row.state == "paused" {
         let at = Timestamp::now_iso();
         let run_id = apply_repo::get_active_run(pool, plan_id)
@@ -441,12 +442,12 @@ pub async fn resume_plan(
         .collect();
 
     // Re-register the ActiveRun (R-Concur-1). A paused run has no registry
-    // entry — the original spawned task's ActiveRunGuard already dropped it
-    // when execute_plan returned Paused — so resume must reclaim the plan's
-    // full claimed path set (all items, not just the remaining pending
-    // ones: the plan still owns its whole footprint for the run's
-    // duration) before the executor can run again. Cancel/skip/retry state
-    // does not carry over a pause boundary; a fresh set is correct here.
+    // entry — `terminal::handle_paused` dropped the original run's
+    // ActiveRunGuard on entry, before writing the pause — so resume must
+    // reclaim the plan's full claimed path set (all items, not just the
+    // remaining pending ones: the plan still owns its whole footprint for the
+    // run's duration) before the executor can run again. Cancel/skip/retry
+    // state does not carry over a pause boundary; a fresh set is correct here.
     //
     // The pre-pause run's queue is already closed by `execute_plan`, so a
     // `retry_plan_item` call landing between here and the executor's start

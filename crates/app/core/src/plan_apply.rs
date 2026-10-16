@@ -163,11 +163,14 @@ struct ActiveRun {
 /// exactly once, regardless of how the task scope exits.
 ///
 /// For those outcomes the task hands the guard to the outcome's `terminal`
-/// handler, which drops it immediately before the write that takes the plan
-/// out of `applying`. The handler's finalizers (a project manifest write, view
-/// rows) still run under the claim, and a plan that reads finished or paused
-/// claims nothing: a plan over the same paths is not refused as overlapping,
-/// and a resume or cancel of a paused plan finds no run left to signal
+/// handler. `handle_completed` and `handle_cancelled` drop it immediately
+/// before the write that takes the plan out of `applying`, so their finalizers
+/// and item cancels (a project manifest write, view rows) still run under the
+/// claim. `handle_paused` drops it on entry: a paused run has no work left to
+/// protect, and a skip accepted while it reads the pending items would skew the
+/// pause record. Either way a plan that reads finished or paused claims
+/// nothing: a plan over the same paths is not refused as overlapping, and a
+/// resume or cancel of a paused plan finds no run left to signal
 /// (astro-plan-4bk7e).
 struct ActiveRunGuard {
     registry: Arc<DashMap<String, ActiveRun>>,

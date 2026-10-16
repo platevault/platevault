@@ -321,8 +321,8 @@ pub(super) async fn handle_cancelled(
 /// `list_crash_interrupted_plans` classify at the next boot, and the long-op
 /// event carries the failure instead of a pause.
 ///
-/// `run_guard` is the run's path claim; it is released just before the pause
-/// is written (see [`ActiveRunGuard`]).
+/// `run_guard` is the run's path claim; it is released as soon as the handler
+/// starts, before it reads what the pause records (see [`ActiveRunGuard`]).
 pub(super) async fn handle_paused(
     pool: &SqlitePool,
     bus: &EventBus,
@@ -333,6 +333,19 @@ pub(super) async fn handle_paused(
     counts: TerminalCounts,
     run_guard: ActiveRunGuard,
 ) {
+    // Release the claim first, before this handler reads anything. The
+    // executor has stopped, so a skip landing from here on must be refused
+    // (`run.not_found`) rather than accepted: a skip accepted between
+    // `list_pending_items` and `pause_run` below would make the pause record
+    // one item too many still to run (astro-plan-ajy4v). `resume_plan`
+    // (lifecycle.rs, R-Concur-1) and `cancel_plan` (GF-5) also require that a
+    // paused plan holds no `ActiveRun`, and both react to the paused plan row
+    // or the `plan.applying.paused` event: holding the claim across the pause
+    // write made such a resume fail with `plan.invalid_state` ("already has an
+    // active apply run") and such a cancel signal a cancellation token no
+    // executor was left to observe. This handler performs no filesystem work,
+    // so the claim has nothing left to protect.
+    drop(run_guard);
     let at = Timestamp::now_iso();
     let counts = cumulative_counts(pool, plan_id, &counts).await;
 
@@ -356,16 +369,6 @@ pub(super) async fn handle_paused(
         }
     };
 
-    // Release the claim before the paused state becomes observable.
-    // `resume_plan` (lifecycle.rs, R-Concur-1) and `cancel_plan` (GF-5) both
-    // require that a paused plan holds no `ActiveRun`, and both are reached
-    // from the paused plan row or the `plan.applying.paused` event. Holding the
-    // claim across this write made a resume that reacted to either one fail
-    // with `plan.invalid_state` ("already has an active apply run"), and made a
-    // cancel signal a cancellation token no executor was left to observe. The
-    // executor has stopped and this handler performs no filesystem work, so the
-    // path claim has nothing left to protect.
-    drop(run_guard);
     if let Err(e) = apply_repo::pause_run(
         pool,
         plan_id,

@@ -344,7 +344,7 @@ pub(super) fn spawn_executor_run(params: SpawnExecutorParams) {
     // registry entry on ANY exit — normal completion *or* an unwind if
     // `execute_plan` panics mid-apply (FR-017 scenario 2). Removal is always
     // that `Drop`: each outcome's terminal handler takes the guard and drops it
-    // just before its state write, it never removes the entry by hand.
+    // before its state write, it never removes the entry by hand.
     tokio::spawn(async move {
         let callbacks = PlanApplyCallbacks::new(
             pool.clone(),
