@@ -42,6 +42,9 @@ use crate::Removal;
 const ROOTS: u32 = WM_APP;
 /// Posted to end the thread.
 const STOP: u32 = WM_APP + 1;
+/// Sent by the tests with a `*mut Vec<usize>` to read the registration ids.
+#[cfg(test)]
+const IDS: u32 = WM_APP + 2;
 /// The window class every `RemovalNotices` in the process shares.
 const CLASS: &str = "PlateVaultRemovalNotices";
 /// Grants a requested removal; `BROADCAST_QUERY_DENY` would refuse it.
@@ -292,10 +295,23 @@ extern "system" fn window_proc(
 ) -> LRESULT {
     let removal = if message == WM_DEVICECHANGE { notice(wparam) } else { None };
     if let Some(notice) = removal {
-        if let Some(id) = registration(lparam) {
+        // SAFETY: with a removal event Windows passes a DEV_BROADCAST_HDR
+        // that starts a broadcast of `dbch_size` bytes living for the call.
+        #[allow(unsafe_code)]
+        let id = unsafe { registration(lparam) };
+        if let Some(id) = id {
             with_handler(|handler| handler.notice(id, notice));
         }
         return GRANT;
+    }
+    #[cfg(test)]
+    if message == IDS {
+        // SAFETY: the tests send IDS, synchronously, with a pointer to a
+        // vector they own.
+        #[allow(unsafe_code)]
+        let ids = unsafe { &mut *(lparam as *mut Vec<usize>) };
+        with_handler(|handler| ids.extend(handler.ids()));
+        return 0;
     }
     // SAFETY: passes on this procedure's own arguments, as a window procedure
     // must for the messages it does not handle.
@@ -317,14 +333,18 @@ fn notice(event: WPARAM) -> Option<Notice> {
 
 /// The registration id a removal event names; `None` for an event about
 /// anything but a handle.
-fn registration(lparam: LPARAM) -> Option<usize> {
+///
+/// # Safety
+/// `lparam` is null or points at a `DEV_BROADCAST_HDR` that starts a
+/// broadcast at least `dbch_size` bytes long, as Windows passes with a
+/// removal event.
+#[allow(unsafe_code)]
+unsafe fn registration(lparam: LPARAM) -> Option<usize> {
     let header = lparam as *const DEV_BROADCAST_HDR;
     if header.is_null() {
         return None;
     }
-    // SAFETY: for the removal events Windows passes a DEV_BROADCAST_HDR that
-    // lives for the call.
-    #[allow(unsafe_code)]
+    // SAFETY: the caller passes a DEV_BROADCAST_HDR.
     let header_fields = unsafe { *header };
     if header_fields.dbch_devicetype != DBT_DEVTYP_HANDLE
         || usize::try_from(header_fields.dbch_size).ok()? < NOTIFICATION_END
@@ -334,7 +354,6 @@ fn registration(lparam: LPARAM) -> Option<usize> {
     // SAFETY: a DBT_DEVTYP_HANDLE header starts a DEV_BROADCAST_HANDLE, and
     // its size covers `dbch_hdevnotify`, read without assuming the broadcast
     // is aligned for it.
-    #[allow(unsafe_code)]
     let notification = unsafe {
         header
             .byte_add(mem::offset_of!(DEV_BROADCAST_HANDLE, dbch_hdevnotify))
@@ -348,6 +367,9 @@ fn registration(lparam: LPARAM) -> Option<usize> {
 trait Handle {
     fn notice(&mut self, id: usize, notice: Notice);
     fn follow(&mut self);
+    /// The registration ids held now.
+    #[cfg(test)]
+    fn ids(&self) -> Vec<usize>;
 }
 
 thread_local! {
@@ -388,5 +410,128 @@ impl<K: Clone + Eq + Hash> Handle for Handler<K> {
             let window = self.window;
             self.registrations.follow(&roots, |handle| register(window, handle));
         }
+    }
+
+    #[cfg(test)]
+    fn ids(&self) -> Vec<usize> {
+        self.registrations.ids()
+    }
+}
+
+/// The window, its registrations and their handles, driven by notices the
+/// tests send as Windows sends them; only a real device removal is left out.
+#[cfg(test)]
+mod tests {
+    use std::time::{Duration, Instant};
+
+    use windows_sys::Win32::UI::WindowsAndMessaging::SendMessageW;
+
+    use super::*;
+
+    /// Send `message` to the window and return the procedure's answer.
+    fn send(window: usize, message: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+        // SAFETY: the window lives while its test holds the notices, and
+        // `lparam` points at data that outlives this synchronous call.
+        #[allow(unsafe_code)]
+        let answer =
+            unsafe { SendMessageW(ptr::without_provenance_mut(window), message, wparam, lparam) };
+        answer
+    }
+
+    /// The registration ids the window holds, once there are `count` of
+    /// them or five seconds passed: the roots it registers arrive posted.
+    fn registered(window: usize, count: usize) -> Vec<usize> {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            let mut ids: Vec<usize> = Vec::new();
+            send(window, IDS, 0, (&raw mut ids) as LPARAM);
+            if ids.len() == count || Instant::now() > deadline {
+                return ids;
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+    }
+
+    /// A removal `event` about registration `id`, as Windows broadcasts it.
+    fn notify(window: usize, event: u32, id: usize) -> LRESULT {
+        let broadcast = DEV_BROADCAST_HANDLE {
+            dbch_size: FILTER_SIZE,
+            dbch_devicetype: DBT_DEVTYP_HANDLE,
+            dbch_hdevnotify: ptr::without_provenance_mut(id),
+            ..DEV_BROADCAST_HANDLE::default()
+        };
+        send(window, WM_DEVICECHANGE, event as WPARAM, (&raw const broadcast) as LPARAM)
+    }
+
+    /// Whether a handle is open on `root`: opening it with no sharing fails.
+    fn held(root: &Path) -> bool {
+        OpenOptions::new()
+            .read(true)
+            .share_mode(0)
+            .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+            .open(root)
+            .is_err()
+    }
+
+    #[test]
+    fn a_requested_removal_closes_the_root_before_it_is_granted() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_path_buf();
+        let (reported, reports) = mpsc::channel();
+        let notices = RemovalNotices::start(move |key: &&str, removal| {
+            let _ = reported.send((*key, removal));
+        })
+        .unwrap();
+        // A second window registers no class of its own.
+        drop(RemovalNotices::<&str>::start(|_, _| {}).unwrap());
+        let window = notices.roots.window;
+
+        assert!(notices.roots().watch(HashMap::from([("card", root.clone())])));
+        let [id] = registered(window, 1)[..] else { panic!("one registration") };
+        assert!(held(&root), "the registration holds the root open");
+
+        assert_eq!(notify(window, DBT_DEVICEQUERYREMOVE, id), GRANT);
+        assert_eq!(reports.try_recv(), Ok(("card", Removal::Requested)));
+        assert!(!held(&root), "closed before the removal was granted");
+
+        assert_eq!(notify(window, DBT_DEVICEQUERYREMOVEFAILED, id), GRANT);
+        assert_eq!(reports.try_recv(), Ok(("card", Removal::Refused)));
+        assert!(held(&root), "open again once the removal was refused");
+
+        assert_eq!(notify(window, DBT_DEVICEREMOVECOMPLETE, id), GRANT);
+        assert_eq!(reports.try_recv(), Ok(("card", Removal::Removed)));
+        assert_eq!(registered(window, 0), [] as [usize; 0]);
+        assert!(!held(&root), "nothing holds a removed volume");
+        // A notice for a registration that ended reaches nobody.
+        assert_eq!(notify(window, DBT_DEVICEQUERYREMOVE, id), GRANT);
+        assert!(reports.try_recv().is_err());
+    }
+
+    #[test]
+    fn dropping_waits_for_a_callback_still_running() {
+        let dir = tempfile::tempdir().unwrap();
+        let (entered, entering) = mpsc::channel();
+        let (finish, finishing) = mpsc::channel::<()>();
+        let notices = RemovalNotices::start(move |_: &&str, _| {
+            let _ = entered.send(());
+            let _ = finishing.recv();
+        })
+        .unwrap();
+        let window = notices.roots.window;
+        assert!(notices.roots().watch(HashMap::from([("card", dir.path().to_path_buf())])));
+        let [id] = registered(window, 1)[..] else { panic!("one registration") };
+
+        let requested = thread::spawn(move || notify(window, DBT_DEVICEQUERYREMOVE, id));
+        entering.recv_timeout(Duration::from_secs(5)).expect("the callback runs");
+        let (dropped, done) = mpsc::channel();
+        let dropping = thread::spawn(move || {
+            drop(notices);
+            let _ = dropped.send(());
+        });
+        assert!(done.recv_timeout(Duration::from_millis(300)).is_err(), "gone mid-callback");
+        finish.send(()).unwrap();
+        done.recv_timeout(Duration::from_secs(5)).expect("dropped once the callback returned");
+        assert_eq!(requested.join().unwrap(), GRANT);
+        dropping.join().unwrap();
     }
 }

@@ -123,6 +123,12 @@ impl<K: Clone + Eq + Hash, N> Registrations<K, N> {
             Notice::Removed => self.entries.remove(&id).map(|entry| (entry.key, Removal::Removed)),
         }
     }
+
+    /// The ids of the registrations held now.
+    #[cfg(all(test, windows))]
+    pub fn ids(&self) -> Vec<usize> {
+        self.entries.keys().copied().collect()
+    }
 }
 
 #[cfg(test)]
