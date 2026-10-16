@@ -12,15 +12,28 @@
 //! its own.
 //!
 //! [`Offers::current`] and [`Offers::feed`] say where the offer for the
-//! release stands: [`OfferChannel::System`] only while the notification the
-//! OS accepted is on screen, else [`OfferChannel::InApp`], and the UI shows
-//! its in-app notice. The in-app notice takes over when notification
-//! permission is denied, the notification system shows no buttons, the
-//! notification cannot be shown, the OS has not accepted it within
-//! [`OFFER_DEADLINE`], the user answered or closed it, or it was withdrawn.
-//! The notification is withdrawn when the phase leaves "available" or a
-//! newer release is offered. A release offered once and available again,
-//! after a failed download for one, is offered in-app.
+//! release stands. [`OfferChannel::System`] holds only while a notification
+//! that stays on screen until it is answered ([`Delivery::Persistent`]) is
+//! outstanding. Everywhere else the notification is a heads-up
+//! ([`Delivery::Transient`]) and [`OfferChannel::InApp`] keeps the in-app
+//! notice visible:
+//!
+//! - macOS: `System` for the Alert notification style, which stays until
+//!   the user acts. The Banner style leaves the screen by itself, and Focus
+//!   sends it to Notification Center, so a banner is a heads-up.
+//! - Windows: a heads-up until the app can read whether the user turned its
+//!   toasts off (`ToastNotifier.Setting`, decision D2 pending).
+//! - Linux and the other freedesktop systems: a heads-up. The notification
+//!   does not expire, but at normal urgency a server such as GNOME Shell
+//!   moves it off screen into its tray.
+//!
+//! The in-app notice also takes over when notification permission is
+//! denied, the notification system shows no buttons, the notification
+//! cannot be shown, the OS has not accepted it within [`OFFER_DEADLINE`],
+//! the user answered or closed it, or it was withdrawn. The notification is
+//! withdrawn when the phase leaves "available" or a newer release is
+//! offered. A release offered once and available again, after a failed
+//! download for one, is offered in-app.
 //!
 //! The offer is made from the check result alone, so nothing downloads
 //! before a click.
@@ -99,9 +112,10 @@ pub enum Response {
 
 impl Response {
     /// The response a notification reports by `identifier`: a button's
-    /// identifier, else a dismissal, such as a body click (`default`, the
-    /// macOS default action) or a close (`__closed`, the macOS dismiss
-    /// action).
+    /// identifier, else a dismissal, such as a body click or a close
+    /// (`com.apple.UNNotificationDefaultActionIdentifier` and
+    /// `com.apple.UNNotificationDismissActionIdentifier` on macOS, `default`
+    /// and `__closed` through `notify-rust`).
     #[must_use]
     pub fn from_identifier(identifier: &str) -> Self {
         OfferAction::from_identifier(identifier).map_or(Self::Dismissed, Self::Chose)
@@ -158,6 +172,16 @@ impl OfferText {
     }
 }
 
+/// How long an accepted notification stays on screen.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Delivery {
+    /// Until the user answers it: the notification carries the offer.
+    Persistent,
+    /// It may leave the screen unanswered: a heads-up beside the in-app
+    /// notice.
+    Transient,
+}
+
 /// Why the system notification cannot carry the offer.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Refusal {
@@ -207,15 +231,16 @@ impl Responder {
 pub trait SystemOffer: Send + Sync + 'static {
     /// Show `text` with an Install now and an Install on quit button, and
     /// pass the user's response to `responder`. Resolves once the OS accepted
-    /// the notification, or with why it cannot carry the offer.
+    /// the notification, with how long it stays on screen, or with why it
+    /// cannot carry the offer.
     fn post(
         &self,
         text: &OfferText,
         responder: Responder,
-    ) -> impl Future<Output = Result<(), Refusal>> + Send;
+    ) -> impl Future<Output = Result<Delivery, Refusal>> + Send;
 
-    /// Take the notification [`Self::post`] showed off screen, where the OS
-    /// allows it.
+    /// Take the notification [`Self::post`] showed, or is still showing, off
+    /// screen, where the OS allows it.
     fn withdraw(&self);
 }
 
@@ -270,14 +295,14 @@ impl Offers {
         let (events, received) = mpsc::unbounded_channel();
         let statuses = forward_statuses(port.status(), events.clone());
         let offer = Offer {
+            status: port.status(),
             port,
             system,
             locale,
             events,
             published: Arc::clone(&published),
-            latest: UpdateStatus::idle(),
             offered: None,
-            outstanding: false,
+            outstanding: None,
         };
         let task = async move {
             tokio::join!(statuses, offer.run(received));
@@ -314,12 +339,14 @@ struct Offer<P, S, L> {
     locale: L,
     events: mpsc::UnboundedSender<Event>,
     published: Arc<watch::Sender<UpdateOffer>>,
-    /// The last status the port published.
-    latest: UpdateStatus,
+    /// The port's status as it is now, which a click is judged against: the
+    /// queue may not have reached the latest change yet.
+    status: Latest<UpdateStatus>,
     /// The release last posted.
     offered: Option<String>,
-    /// Whether the notification for `offered` is on screen.
-    outstanding: bool,
+    /// How the notification for `offered` stays on screen, while it is
+    /// posted and unanswered.
+    outstanding: Option<Delivery>,
 }
 
 impl<P, S, L> Offer<P, S, L>
@@ -340,11 +367,10 @@ where
 
     async fn on_status(&mut self, status: UpdateStatus) {
         let available = status.version.clone().filter(|_| status.phase == UpdatePhase::Available);
-        self.latest = status;
         match available {
             Some(version) if self.offered.as_ref() == Some(&version) => {
-                // Still on screen, or answered, closed or withdrawn earlier.
-                if !self.outstanding {
+                // Still posted, or answered, closed or withdrawn earlier.
+                if self.outstanding != Some(Delivery::Persistent) {
                     self.publish(&version, OfferChannel::InApp);
                 }
             }
@@ -352,9 +378,12 @@ where
                 self.withdraw();
                 self.offered = Some(version.clone());
                 let channel = match self.post(&version).await {
-                    Ok(()) => {
-                        self.outstanding = true;
-                        OfferChannel::System
+                    Ok(delivery) => {
+                        self.outstanding = Some(delivery);
+                        match delivery {
+                            Delivery::Persistent => OfferChannel::System,
+                            Delivery::Transient => OfferChannel::InApp,
+                        }
                     }
                     Err(refusal) => {
                         tracing::info!(?refusal, version, "the in-app notice offers the update");
@@ -367,9 +396,9 @@ where
         }
     }
 
-    /// Post the offer of `version`; a notification the OS does not accept in
-    /// time is withdrawn should it appear later.
-    async fn post(&self, version: &str) -> Result<(), Refusal> {
+    /// Post the offer of `version`. A notification the OS does not accept in
+    /// time is withdrawn, where the OS allows it, should it appear later.
+    async fn post(&self, version: &str) -> Result<Delivery, Refusal> {
         let text = OfferText::new((self.locale)(), version).map_err(Refusal::Failed)?;
         let responder = Responder { version: version.to_owned(), events: self.events.clone() };
         let posted = tokio::time::timeout(OFFER_DEADLINE, self.system.post(&text, responder)).await;
@@ -381,10 +410,9 @@ where
 
     /// Take the outstanding notification off screen and offer in-app.
     fn withdraw(&mut self) {
-        if !self.outstanding {
+        if self.outstanding.take().is_none() {
             return;
         }
-        self.outstanding = false;
         self.system.withdraw();
         if let Some(version) = self.offered.clone() {
             self.publish(&version, OfferChannel::InApp);
@@ -392,13 +420,13 @@ where
     }
 
     fn on_response(&mut self, version: &str, response: Response) {
-        if self.outstanding && self.offered.as_deref() == Some(version) {
-            self.outstanding = false;
+        if self.offered.as_deref() == Some(version) && self.outstanding.take().is_some() {
             self.publish(version, OfferChannel::InApp);
         }
         let Response::Chose(action) = response else { return };
-        if !allows(&self.latest, version, action) {
-            tracing::info!(?action, version, phase = ?self.latest.phase, "a stale offer button was ignored");
+        let now = self.status.current();
+        if !allows(&now, version, action) {
+            tracing::info!(?action, version, phase = ?now.phase, "a stale offer button was ignored");
             return;
         }
         // Each on its own task, as each in-app button runs its own command.

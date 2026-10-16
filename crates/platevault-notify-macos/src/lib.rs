@@ -56,14 +56,25 @@ impl Authorization {
     }
 }
 
+/// How the app's notifications appear on screen.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AlertStyle {
+    /// Off screen: only in Notification Center, or not shown.
+    None,
+    /// A banner that leaves the screen by itself.
+    Banner,
+    /// An alert that stays until the user acts on it.
+    Alert,
+}
+
 /// The app's notification settings that decide whether a notification is
 /// seen.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Settings {
     pub authorization: Authorization,
-    /// Notifications appear on screen as a banner or an alert, not only in
-    /// Notification Center.
-    pub alerts: bool,
+    /// How notifications appear on screen; `None` too when the user turned
+    /// alerts off for the app.
+    pub style: AlertStyle,
 }
 
 /// The main bundle's identifier; `None` for an unbundled process.
@@ -99,19 +110,25 @@ impl NotificationCenter {
             // for the duration of this completion handler.
             #[allow(unsafe_code)]
             let settings = unsafe { settings.as_ref() };
+            let style = match settings.alertStyle() {
+                _ if settings.alertSetting() != UNNotificationSetting::Enabled => AlertStyle::None,
+                UNAlertStyle::Alert => AlertStyle::Alert,
+                UNAlertStyle::Banner => AlertStyle::Banner,
+                _ => AlertStyle::None,
+            };
             done(Settings {
                 authorization: Authorization::from_status(settings.authorizationStatus()),
-                alerts: settings.alertSetting() == UNNotificationSetting::Enabled
-                    && settings.alertStyle() != UNAlertStyle::None,
+                style,
             });
         });
         self.0.getNotificationSettingsWithCompletionHandler(&block);
     }
 
-    /// Remove the delivered notification `identifier` from the screen and
-    /// from Notification Center.
+    /// Remove the notification `identifier` from the screen and from
+    /// Notification Center, and drop it if it is still waiting to be shown.
     pub fn withdraw(&self, identifier: &str) {
         let identifiers = NSArray::from_retained_slice(&[NSString::from_str(identifier)]);
+        self.0.removePendingNotificationRequestsWithIdentifiers(&identifiers);
         self.0.removeDeliveredNotificationsWithIdentifiers(&identifiers);
     }
 

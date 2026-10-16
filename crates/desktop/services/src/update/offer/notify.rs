@@ -26,7 +26,7 @@ pub fn show(
     std::thread::Builder::new()
         .name("update-offer".to_owned())
         .spawn(move || {
-            handle.wait_for_action(|identifier| responder.respond_identifier(identifier))
+            handle.wait_for_action(|identifier| responder.respond_identifier(identifier));
         })
         .map(drop)
         .map_err(|error| Refusal::Failed(error.to_string()))

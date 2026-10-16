@@ -7145,13 +7145,20 @@ export type NonBlockingSummary = {
  *  (astro-plan-c72oo).
  */
 export type OfferChannel = 
-/**  A system notification with both buttons is on screen. */
+/**
+ *  A system notification with both buttons is outstanding that stays on
+ *  screen until the user answers it: on macOS, the Alert notification
+ *  style. Elsewhere the notification is only a heads-up beside the in-app
+ *  notice.
+ */
 "system" | 
 /**
- *  The in-app notice carries them: notification permission was denied,
- *  the notification system shows no buttons, the notification could not
- *  be shown or was not accepted in time, or the user answered or closed
- *  it, or it was withdrawn.
+ *  The in-app notice carries them: the notification is a heads-up that
+ *  may leave the screen unanswered (a macOS banner, a Windows toast, a
+ *  freedesktop notification), notification permission was denied, the
+ *  notification system shows no buttons, the notification could not be
+ *  shown or was not accepted in time, or the user answered or closed it,
+ *  or it was withdrawn.
  */
 "in-app";
 
