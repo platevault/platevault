@@ -117,8 +117,7 @@ export const variantStyles = styleVariants({
       },
       '&:active': {
         background: vars.destructiveBgHover,
-        // biome-ignore lint/plugin/no-raw-colour-css-ts: pressed-in depth cue, a fixed black inset in every theme; no inset-shadow token exists and adding one is a token-scale decision (#1334).
-        boxShadow: 'inset 0 2px 5px rgba(0,0,0,0.22)',
+        boxShadow: vars.shadowInset,
       },
       '&:disabled': {
         background: vars.destructiveBg,
