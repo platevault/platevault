@@ -40,4 +40,5 @@ pub mod tonight;
 pub mod view_geometry;
 pub mod view_groups;
 pub mod view_selection;
+pub mod wrap_up;
 pub use model::*;

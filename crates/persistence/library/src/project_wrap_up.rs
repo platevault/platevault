@@ -1139,10 +1139,10 @@ impl Catalog {
     }
 
     /// The archive copy of move `seq` verified: move the frame's catalog
-    /// record to it (keeping its id, decisions and memberships, and
-    /// rebinding the bases bound to the observation it left) and record
-    /// each kept-View link that now reads it, with its new identity, in
-    /// one transaction.
+    /// record to it, keeping its id, decisions and memberships and rebinding
+    /// the bases bound to the observation it left. Its kept-View links are
+    /// repointed after this and recorded one by one
+    /// ([`Catalog::record_kept_link_repoint`]).
     ///
     /// # Errors
     /// `IdentityConflict` when the record changed since review or the
@@ -1153,22 +1153,15 @@ impl Catalog {
         storage_operation_id: Uuid,
         seq: u32,
         to_fingerprint: &ObservationFingerprint,
-        links: &[(KeptViewLink, FileIdentity)],
     ) -> Result<()> {
+        if to_fingerprint.content_sha256.is_none() {
+            return Err(invalid("a verified archive copy carries its digest"));
+        }
         write_txn!(self, |conn| {
-            let run = read_archive(conn, storage_operation_id).await?;
-            let step = run
-                .moves
-                .iter()
-                .find(|step| step.seq == seq)
-                .ok_or_else(|| LibraryError::NotFound(format!("archive move {seq}")))?;
+            let step = read_move(conn, storage_operation_id, seq).await?;
             if step.outcome.is_some() || step.repointed {
                 return Err(invalid(format!("archive move {seq} already moved its record")));
             }
-            let sha256 = to_fingerprint
-                .content_sha256
-                .clone()
-                .ok_or_else(|| invalid("a verified archive copy carries its digest"))?;
             let at = move_asset_record(
                 conn,
                 &RecordMove {
@@ -1182,24 +1175,6 @@ impl Catalog {
                 },
             )
             .await?;
-            for (link, identity) in links {
-                sqlx::query(
-                    "INSERT INTO view_entry_repoints (project_id, generation, seq, \
-                     storage_operation_id, target_location_id, target_path, sha256, \
-                     link_identity, repointed_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
-                )
-                .bind(link.project_id.to_string())
-                .bind(super::db_revision(link.generation)?)
-                .bind(i64::from(link.seq))
-                .bind(storage_operation_id.to_string())
-                .bind(step.to_location_id.to_string())
-                .bind(path_key(&step.to_path))
-                .bind(&sha256)
-                .bind(to_json(identity)?)
-                .bind(&at)
-                .execute(&mut *conn)
-                .await?;
-            }
             sqlx::query(
                 "UPDATE archive_moves SET repointed_at = ?3 \
                  WHERE storage_operation_id = ?1 AND seq = ?2",
@@ -1207,6 +1182,49 @@ impl Catalog {
             .bind(storage_operation_id.to_string())
             .bind(i64::from(seq))
             .bind(&at)
+            .execute(&mut *conn)
+            .await?;
+        });
+        Ok(())
+    }
+
+    /// Record that `link`, one of move `seq`'s kept-View links, now reads the
+    /// archive copy, with the link's new no-follow `identity` (D-W111).
+    ///
+    /// # Errors
+    /// `InvalidInput` before the move's record moved; `PersistenceFailure`
+    /// when the schema refuses it (an open Project's View).
+    pub async fn record_kept_link_repoint(
+        &self,
+        storage_operation_id: Uuid,
+        seq: u32,
+        link: &KeptViewLink,
+        identity: &FileIdentity,
+    ) -> Result<()> {
+        write_txn!(self, |conn| {
+            let step = read_move(conn, storage_operation_id, seq).await?;
+            if !step.repointed {
+                return Err(invalid(format!("archive move {seq} has not moved its record yet")));
+            }
+            let sha256 = load_asset(conn, step.asset_id)
+                .await?
+                .fingerprint
+                .content_sha256
+                .ok_or_else(|| corrupt("archived frame digest"))?;
+            sqlx::query(
+                "INSERT INTO view_entry_repoints (project_id, generation, seq, \
+                 storage_operation_id, target_location_id, target_path, sha256, \
+                 link_identity, repointed_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            )
+            .bind(link.project_id.to_string())
+            .bind(super::db_revision(link.generation)?)
+            .bind(i64::from(link.seq))
+            .bind(storage_operation_id.to_string())
+            .bind(step.to_location_id.to_string())
+            .bind(path_key(&step.to_path))
+            .bind(&sha256)
+            .bind(to_json(identity)?)
+            .bind(now()?)
             .execute(&mut *conn)
             .await?;
         });
@@ -1435,6 +1453,19 @@ async fn read_archive(conn: &mut SqliteConnection, storage_operation_id: Uuid) -
         moves,
         repointed_links,
     })
+}
+
+async fn read_move(
+    conn: &mut SqliteConnection,
+    storage_operation_id: Uuid,
+    seq: u32,
+) -> Result<ArchiveMoveRecord> {
+    read_archive(conn, storage_operation_id)
+        .await?
+        .moves
+        .into_iter()
+        .find(|step| step.seq == seq)
+        .ok_or_else(|| LibraryError::NotFound(format!("archive move {seq}")))
 }
 
 /// The Closed snapshot, in Close's transaction while the Project is still

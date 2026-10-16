@@ -27,7 +27,7 @@
 //! next outgoing View does with them is open with the owner (decision
 //! record §9).
 
-mod files;
+pub(crate) mod files;
 mod plan;
 
 use std::collections::{BTreeMap, BTreeSet};

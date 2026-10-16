@@ -31,7 +31,7 @@ use uuid::Uuid;
 
 use crate::custody::trash::OsTrash;
 use crate::custody::{in_place, observe_entry, same_identity, transfer};
-use crate::import::{classify, naming_metadata, writability};
+use crate::import::writability;
 use crate::library::{blocking, Library};
 use crate::{
     inventory, ArchiveDestination, ArchiveHold, ArchiveItem, ArchiveKind, ArchiveOutcome,
@@ -281,33 +281,7 @@ impl Library {
         &self,
         asset: &ArchiveAsset,
     ) -> Result<Result<(NativePath, Vec<NamingFallback>), ArchiveHold>, LibraryError> {
-        let frame = &asset.asset;
-        let Some(frame_type) = classify(&frame.effective, &frame.relative_path) else {
-            return Ok(Err(ArchiveHold::Naming {
-                detail: "the frame has no frame-type header to choose its template".into(),
-            }));
-        };
-        let mut metadata = naming_metadata(&frame.effective, frame_type);
-        if metadata.target.is_none() {
-            metadata.target.clone_from(&asset.target);
-        }
-        let resolution = match self.resolve_naming(frame_type, &metadata).await {
-            Ok(resolution) => resolution,
-            Err(LibraryError::InvalidInput(detail)) => {
-                return Ok(Err(ArchiveHold::Naming { detail }))
-            }
-            Err(error) => return Err(error),
-        };
-        let source = frame.relative_path.relative_path()?;
-        let name = source.file_name().ok_or_else(|| {
-            LibraryError::InvalidInput(format!("{} names no file", source.display()))
-        })?;
-        let mut relative = PathBuf::new();
-        for segment in resolution.relative_path.split('/').filter(|part| !part.is_empty()) {
-            relative.push(segment);
-        }
-        relative.push(name);
-        Ok(Ok((NativePath::from_path(&relative), resolution.fallbacks)))
+        Ok(self.archive_layout(asset).await?.map_err(|detail| ArchiveHold::Naming { detail }))
     }
 
     /// Start a reviewed transfer: re-check every item and destination, hold

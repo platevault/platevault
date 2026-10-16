@@ -543,7 +543,7 @@ const fn unverified(entry: &ManifestEntry) -> PreviousItemReason {
 
 /// An old link goes once it is still the link `PlateVault` placed, by its
 /// own identity, and points at its original's current path.
-fn old_link(
+pub fn old_link(
     path: &Path,
     entry: &ManifestEntry,
     original: Option<&PathBuf>,
