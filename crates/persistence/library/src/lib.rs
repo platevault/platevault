@@ -4357,6 +4357,10 @@ async fn commit_plan(
         for association in inherit.associations(context) {
             upsert_association(conn, &association, &created_at).await?;
         }
+        // The successor keeps its frames' recorded rig version and camera.
+        let frame_sessions: Vec<Option<Uuid>> =
+            members.iter().map(|asset| context.old_session_of.get(asset).copied()).collect();
+        rigs::versions::inherit_successor(conn, id, &frame_sessions).await?;
     }
     for (id, _, added) in &plan.kept {
         if !added.is_empty() {
@@ -5511,6 +5515,10 @@ async fn confirm_one(
         decision_revision,
     };
     upsert_association(conn, &association, updated_at).await?;
+    if kind == AssociationKind::Equipment {
+        // Confirming a rig records the version the session was captured with.
+        rigs::versions::record_session_rig_version(conn, session.id, subject).await?;
+    }
     sqlx::query("UPDATE sessions SET decision_revision = ?1 WHERE id = ?2")
         .bind(db_revision(decision_revision)?)
         .bind(session.id.to_string())
