@@ -87,7 +87,7 @@ function assemble(edit = () => {}) {
   const files = {};
   for (const name of BUNDLE_NAMES) {
     files[name] = Buffer.from(`bundle bytes of ${name}`);
-    files[`${name}.sig`] = signFile(files[name], name, key);
+    files[`${name}.sig`] = signFile(files[name], name, key, '0.7.0');
   }
   for (const name of OTHER_ASSETS) files[name] = Buffer.from(name);
   edit(files, key);
@@ -194,7 +194,7 @@ function assemble(edit = () => {}) {
 {
   const { problems } = assemble((files) => {
     const name = 'PlateVault_0.7.0_amd64.deb';
-    files[`${name}.sig`] = signFile(files[name], name, makeKey());
+    files[`${name}.sig`] = signFile(files[name], name, makeKey(), '0.7.0');
   });
   assertProblem(problems, /^linux-x86_64-deb: .* was made with key [0-9A-F]{16}, but the app trusts key [0-9A-F]{16}$/, 'a foreign key is named');
 }
@@ -214,6 +214,24 @@ function assemble(edit = () => {}) {
     'the mismatched signed version is named',
   );
   assertEqual(problems.length, 1, 'only the mismatched bundle is reported');
+}
+
+// ── a signature that names no version ───────────────────────────────────────
+// latest.json is unsigned, so such a signature could carry an older release
+// under a newer version number; the in-app updater refuses it, so the gate
+// does too (e.g. a bundle signed with `tauri signer sign` but no --app-version).
+{
+  const { manifest, problems } = assemble((files, key) => {
+    const name = 'PlateVault_0.7.0_x64-setup.exe';
+    files[`${name}.sig`] = signFile(files[name], name, key);
+  });
+  assertEqual(manifest, null, 'no manifest when a signature names no version');
+  assertProblem(
+    problems,
+    /^windows-x86_64-nsis: the signature in PlateVault_0\.7\.0_x64-setup\.exe\.sig does not name the version it was signed for/,
+    'the signature without a version is named',
+  );
+  assertEqual(problems.length, 1, 'only that bundle is reported');
 }
 
 // ── a signature made for this version ───────────────────────────────────────
@@ -239,6 +257,23 @@ function assemble(edit = () => {}) {
   assertProblem(problems, /^linux-x86_64-rpm: .* is not a minisign signature$/, 'a garbled signature is named');
 }
 
+// ── a legacy unhashed signature ─────────────────────────────────────────────
+// The services-crate client streams the payload and only verifies prehashed
+// `ED` signatures, so a legacy `Ed` one must not reach latest.json.
+{
+  const { manifest, problems } = assemble((files, key) => {
+    const name = 'PlateVault_0.7.0_amd64.AppImage';
+    const sig = sign(null, files[name], key.privateKey);
+    const trusted = `timestamp:1791820000\tfile:${name}`;
+    const globalSig = sign(null, Buffer.concat([sig, Buffer.from(trusted)]), key.privateKey);
+    const sigLine = Buffer.concat([Buffer.from('Ed', 'latin1'), key.keyId, sig]).toString('base64');
+    const box = `untrusted comment: legacy signature\n${sigLine}\ntrusted comment: ${trusted}\n${globalSig.toString('base64')}\n`;
+    files[`${name}.sig`] = Buffer.from(box).toString('base64');
+  });
+  assertEqual(manifest, null, 'no manifest with a legacy signature');
+  assertProblem(problems, /^linux-x86_64-appimage: .* uses the legacy unhashed minisign format/, 'the legacy signature is named');
+}
+
 // ── a bundle without its signature ──────────────────────────────────────────
 {
   const { problems } = assemble((files) => {
@@ -254,7 +289,7 @@ function assemble(edit = () => {}) {
   const { manifest, problems } = assemble((files, key) => {
     const name = 'PlateVault_0.7.0_x64.app.tar.gz';
     files[name] = Buffer.from(name);
-    files[`${name}.sig`] = signFile(files[name], name, key);
+    files[`${name}.sig`] = signFile(files[name], name, key, '0.7.0');
   });
   assertEqual(manifest, null, 'no manifest while a signature is unclaimed');
   assertProblem(problems, /^PlateVault_0\.7\.0_x64\.app\.tar\.gz\.sig: an updater signature no UPDATER_BUNDLES row claims/, 'the unclaimed signature is named');
@@ -279,7 +314,7 @@ function runCli(edit, { rotateKey = false } = {}) {
     const files = {};
     for (const name of BUNDLE_NAMES) {
       files[name] = Buffer.from(`bundle bytes of ${name}`);
-      files[`${name}.sig`] = signFile(files[name], name, key);
+      files[`${name}.sig`] = signFile(files[name], name, key, '0.7.0');
     }
     edit?.(files);
     mkdirSync(assetsDir);

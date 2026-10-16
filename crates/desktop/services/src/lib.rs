@@ -17,6 +17,7 @@ pub mod jobs;
 pub mod log_stream;
 mod logging;
 pub mod notifications;
+pub mod update;
 
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, PoisonError};

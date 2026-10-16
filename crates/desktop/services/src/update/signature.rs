@@ -1,0 +1,280 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
+//! Minisign verification of update payloads.
+//!
+//! The rules match the release's manifest gate
+//! (`scripts/assemble-updater-manifest.mjs`), so a release the gate publishes
+//! is one this client installs:
+//!
+//! - the signature is minisign `ED` (Ed25519 over the BLAKE2b-512 digest of
+//!   the payload) made with the key the app embeds;
+//! - both the payload signature and the trusted-comment signature verify;
+//! - the trusted comment's `version:` field, which Tauri CLI 2.12 and later
+//!   write, names the version the manifest announces. A signature without the
+//!   field is refused. `latest.json` is not signed, so the field is the only
+//!   thing tying the announced version to the payload: without it, any older
+//!   signed payload could be announced as a newer release and installed as a
+//!   rollback. The releases before 0.7.0 carry no field, but this client is
+//!   only ever offered releases newer than itself.
+//!
+//! The payload is hashed while it streams to its staging file, so a large
+//! bundle never sits in memory, and a [`Staged`] payload exists only once its
+//! signature has verified. [`Staged::reverify`] checks it again right before
+//! an installer reads it.
+
+use std::fs::{self, File};
+use std::io::{Read as _, Seek as _, Write as _};
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::{Duration, SystemTime};
+
+use base64::Engine as _;
+use minisign_verify::{PublicKey, Signature, StreamVerifier};
+
+use super::http::Source;
+use super::manifest::Release;
+use super::{Package, UpdateError};
+
+const SIGNED_VERSION_FIELD: &str = "version:";
+/// The staging directories' name prefix in the temp dir.
+const PAYLOAD_DIR_PREFIX: &str = "platevault-update-payload-";
+/// How old a leftover staging directory must be before a later run removes
+/// it.
+const STALE_AFTER: Duration = Duration::from_hours(24);
+
+/// The minisign public key update signatures must verify against.
+pub struct TrustedKey(PublicKey);
+
+impl TrustedKey {
+    /// Decode the key as `tauri.conf.json` stores it (`plugins.updater.pubkey`):
+    /// base64 of a minisign public key file.
+    pub fn from_config(base64_key_file: &str) -> Result<Self, UpdateError> {
+        let text = decode_box(base64_key_file)
+            .ok_or_else(|| UpdateError::Config("the update public key is not base64".to_owned()))?;
+        PublicKey::decode(&text).map(Self).map_err(|error| {
+            UpdateError::Config(format!("the update public key is not a minisign key: {error}"))
+        })
+    }
+}
+
+/// A downloaded payload whose signature verified, in a private staging
+/// directory that is removed when the value is dropped unless [`Self::keep`]
+/// was called.
+pub struct Staged {
+    dir: PathBuf,
+    file: PathBuf,
+    key: PublicKey,
+    signature: Signature,
+    keep: AtomicBool,
+}
+
+impl Staged {
+    /// The verified payload file.
+    #[cfg_attr(all(target_os = "macos", not(test)), allow(dead_code))]
+    pub fn file(&self) -> &Path {
+        &self.file
+    }
+
+    /// Open the payload and verify it against its signature again. It waits
+    /// in a directory the user can write to for as long as an install on quit
+    /// or a retry is pending, so every install checks it right before the
+    /// installer reads it, and installers that run in this process read the
+    /// returned handle rather than the path.
+    pub fn reverify(&self) -> Result<Payload<'_>, UpdateError> {
+        let mut file = File::open(&self.file)?;
+        let mut verifier = stream_verifier(&self.key, &self.signature)?;
+        let mut buffer = vec![0_u8; 64 * 1024];
+        loop {
+            let read = file.read(&mut buffer)?;
+            if read == 0 {
+                break;
+            }
+            verifier.update(&buffer[..read]);
+        }
+        verifier.finalize().map_err(|_| {
+            UpdateError::Signature(
+                "the staged update changed after it was downloaded and verified".to_owned(),
+            )
+        })?;
+        file.rewind()?;
+        Ok(Payload { staged: self, file })
+    }
+
+    /// Leave the staging directory in place for an installer that reads the
+    /// payload after the app has exited. A later run's
+    /// [`remove_stale_payloads`] removes it: Windows does not empty `%TEMP%`
+    /// unless Storage Sense or Disk Cleanup is set up to.
+    #[cfg_attr(not(windows), allow(dead_code))]
+    pub fn keep(&self) {
+        self.keep.store(true, Ordering::SeqCst);
+    }
+}
+
+impl Drop for Staged {
+    fn drop(&mut self) {
+        if !self.keep.load(Ordering::SeqCst) {
+            // Best effort: a later run's `remove_stale_payloads` removes a
+            // leftover.
+            let _ = fs::remove_dir_all(&self.dir);
+        }
+    }
+}
+
+/// A staged payload that verified against its signature again just now,
+/// open for the installer.
+pub struct Payload<'a> {
+    // Read by the installers that run in another process: Windows and Linux.
+    #[cfg_attr(all(target_os = "macos", not(test)), allow(dead_code))]
+    staged: &'a Staged,
+    file: File,
+}
+
+impl Payload<'_> {
+    /// The payload's path, for an installer that runs in another process.
+    #[cfg_attr(all(target_os = "macos", not(test)), allow(dead_code))]
+    pub fn path(&self) -> &Path {
+        self.staged.file()
+    }
+
+    /// The verified file, positioned at its start, for an installer that runs
+    /// in this process.
+    pub fn reader(&mut self) -> &mut File {
+        &mut self.file
+    }
+
+    /// See [`Staged::keep`].
+    #[cfg(windows)]
+    pub fn keep(&self) {
+        self.staged.keep();
+    }
+}
+
+/// Download `release` for `package` from `source` into a fresh staging
+/// directory and verify it against `key`. Nothing is returned for a payload
+/// whose signature fails, and its directory is removed.
+pub async fn download_verified(
+    source: &dyn Source,
+    release: &Release,
+    package: Package,
+    key: &TrustedKey,
+) -> Result<Staged, UpdateError> {
+    let signature = decode_signature(&release.signature)?;
+    check_signed_version(&signature, &release.version_text)?;
+
+    let dir = tempfile::Builder::new().prefix(PAYLOAD_DIR_PREFIX).tempdir()?;
+    let file = dir.path().join(package.payload_file_name());
+    // From here the directory belongs to `staged`, whose drop removes it on
+    // every early return below.
+    let staged = Staged {
+        dir: dir.keep(),
+        file,
+        key: key.0.clone(),
+        signature,
+        keep: AtomicBool::new(false),
+    };
+    let mut verifier = stream_verifier(&staged.key, &staged.signature)?;
+    let mut out = File::create(&staged.file)?;
+    source
+        .download(&release.url, &mut |chunk| {
+            verifier.update(chunk);
+            out.write_all(chunk)
+        })
+        .await?;
+    out.sync_all()?;
+    drop(out);
+    verifier.finalize().map_err(|_| {
+        UpdateError::Signature(
+            "the downloaded update does not match its signature (was the file changed after it was signed?)"
+                .to_owned(),
+        )
+    })?;
+    Ok(staged)
+}
+
+/// A verifier for `signature` under `key`, refusing another key and the
+/// legacy unhashed format.
+fn stream_verifier<'a>(
+    key: &'a PublicKey,
+    signature: &'a Signature,
+) -> Result<StreamVerifier<'a>, UpdateError> {
+    key.verify_stream(signature).map_err(|error| match error {
+        minisign_verify::Error::UnexpectedKeyId => UpdateError::Signature(
+            "the update was signed with a key this app does not trust".to_owned(),
+        ),
+        minisign_verify::Error::UnsupportedLegacyMode => {
+            UpdateError::Signature("the update has a legacy minisign signature".to_owned())
+        }
+        other => UpdateError::Signature(format!("the update signature is unusable: {other}")),
+    })
+}
+
+/// Decode a manifest `signature` value: base64 of a minisign `.sig` file.
+fn decode_signature(base64_sig_file: &str) -> Result<Signature, UpdateError> {
+    let text = decode_box(base64_sig_file)
+        .ok_or_else(|| UpdateError::Signature("the update signature is not base64".to_owned()))?;
+    Signature::decode(&text).map_err(|error| {
+        UpdateError::Signature(format!("the update signature is not a minisign signature: {error}"))
+    })
+}
+
+/// Require the signature's trusted comment to name the version the manifest
+/// announces. A signature for another version, or one that names none, may
+/// be an older signed payload served as a newer release. The trusted comment
+/// is covered by the global signature, which [`download_verified`] checks.
+fn check_signed_version(signature: &Signature, announced: &str) -> Result<(), UpdateError> {
+    let Some(signed) = signature
+        .trusted_comment()
+        .split('\t')
+        .find_map(|field| field.strip_prefix(SIGNED_VERSION_FIELD))
+    else {
+        return Err(UpdateError::Signature(
+            "the update signature does not name the version it was signed for".to_owned(),
+        ));
+    };
+    if signed.trim_start_matches('v') != announced.trim_start_matches('v') {
+        return Err(UpdateError::Signature(format!(
+            "the update was signed for version {signed}, but the manifest announces {announced}"
+        )));
+    }
+    Ok(())
+}
+
+/// One base64 value holding a minisign text file, as UTF-8.
+fn decode_box(base64_text: &str) -> Option<String> {
+    let bytes = base64::engine::general_purpose::STANDARD.decode(base64_text.trim()).ok()?;
+    String::from_utf8(bytes).ok()
+}
+
+/// Remove the staging directories earlier runs left in the temp dir: the
+/// Windows installers read theirs after the app has exited, so nothing
+/// removed it, and a crash leaves one on any OS. Only directories older than
+/// a day go, so a payload an installer may still be reading stays.
+pub fn remove_stale_payloads() {
+    remove_stale_payloads_in(&std::env::temp_dir(), SystemTime::now());
+}
+
+/// [`remove_stale_payloads`] over `dir`, judging age against `now`.
+pub(super) fn remove_stale_payloads_in(dir: &Path, now: SystemTime) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        if !entry.file_name().to_string_lossy().starts_with(PAYLOAD_DIR_PREFIX) {
+            continue;
+        }
+        // Not followed: a symlink with the prefix is not a directory here.
+        let stale = entry
+            .metadata()
+            .ok()
+            .filter(fs::Metadata::is_dir)
+            .and_then(|metadata| metadata.modified().ok())
+            .and_then(|modified| now.duration_since(modified).ok())
+            .is_some_and(|age| age > STALE_AFTER);
+        if stale {
+            if let Err(error) = fs::remove_dir_all(entry.path()) {
+                tracing::debug!(path = %entry.path().display(), %error, "cannot remove a stale update payload");
+            }
+        }
+    }
+}

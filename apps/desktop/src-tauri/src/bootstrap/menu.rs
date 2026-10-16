@@ -20,8 +20,8 @@ pub const MENU_ID_SETTINGS: &str = "menu-settings";
 
 /// Menu id for the app's own Quit item. `PredefinedMenuItem::quit` is not
 /// used: on macOS it sends `terminate:` and on Windows it posts
-/// `PostQuitMessage`, and neither reaches `RunEvent::ExitRequested`, so the
-/// install-on-quit gate (`update_exit_gate`) would never see it.
+/// `PostQuitMessage`, and neither reaches `RunEvent::ExitRequested`, so a
+/// staged "Install on quit" (`crate::updater`) would never see it.
 /// `on_menu_event` answers this id with `app.exit(0)`, which does.
 pub const MENU_ID_QUIT: &str = "menu-quit";
 

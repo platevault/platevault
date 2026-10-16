@@ -456,7 +456,7 @@ mod window_grants {
         "plugin:mcp-bridge|start_ipc_monitor",
     ];
     /// Granted to the legacy `main` window by `default.json` only.
-    const LEGACY_ONLY: [&str; 13] = [
+    const LEGACY_ONLY: [&str; 11] = [
         "plugin:dialog|open",
         "plugin:dialog|save",
         "plugin:dialog|message",
@@ -467,8 +467,6 @@ mod window_grants {
         "plugin:window|close",
         "plugin:window|show",
         "plugin:window|set_focus",
-        "plugin:updater|check",
-        "plugin:process|restart",
         "plugin:window-state|restore_state",
     ];
 

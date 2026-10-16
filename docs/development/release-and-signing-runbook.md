@@ -12,7 +12,7 @@ and the version baseline was reset from 1.0.0 back to 0.x.
 3. Merging tags `vX.Y.Z`, publishes the GitHub Release, and the `build` job in
    `.github/workflows/release-please.yml` builds + **signs** the bundles on all
    three OS and uploads them plus `latest.json`.
-4. `tauri-plugin-updater` clients poll
+4. The in-app updater (`crates/desktop/services/src/update`; tauri-plugin-updater in 0.5.x/0.6.x installs) polls
    `https://github.com/nightwatch-astro/alm/releases/latest/download/latest.json`
    and verify each bundle's `.sig` against the pubkey embedded in
    `apps/desktop/src-tauri/tauri.conf.json`.

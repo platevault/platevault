@@ -2,7 +2,7 @@
 
 PlateVault's Windows and macOS release artifacts are unsigned by their
 platform's native code-signing mechanism. Both already carry a minisign
-signature consumed by `tauri-plugin-updater`
+signature consumed by the in-app updater (`crates/desktop/services/src/update`)
 (`TAURI_SIGNING_PRIVATE_KEY[_PASSWORD]`), but that signature is invisible to
 the OS itself — Windows SmartScreen/UAC and macOS Gatekeeper still flag the
 app as untrusted because there is no Authenticode or Developer ID signature.
@@ -94,7 +94,7 @@ The two signatures do different jobs, but on Windows they cover the **same
 file**, so the order matters:
 
 - **minisign** (`TAURI_SIGNING_PRIVATE_KEY`) signs the updater payload that
-  `tauri-plugin-updater` verifies against the embedded public key in
+  the in-app updater verifies against the embedded public key in
   `tauri.conf.json`, gating in-app auto-update installs. Already active.
 - **Authenticode** (SignPath) signs the `.exe`/`.msi` binary itself so Windows
   SmartScreen and the OS installer UI show a trusted publisher instead of
@@ -121,14 +121,23 @@ The `updater-manifest` job writes that file once per release, after every
   leg cannot be silently left out;
 - every signature verifies against the bytes on the release, using the public
   key in `apps/desktop/src-tauri/tauri.conf.json`;
-- every signature whose trusted comment records a version (Tauri CLI 2.12 and
-  later write a `version:` field) was made for the manifest's `version`,
-  ignoring a leading `v`. A signature without the field is accepted.
+- every signature's trusted comment records the version it was made for (the
+  `version:` field that `tauri build` and `tauri signer sign --app-version`
+  write from Tauri CLI 2.12 on), and that version is the manifest's
+  `version`, ignoring a leading `v`.
 
-Together these are the checks tauri-plugin-updater 2.13 runs before it
-installs an update with `requireSignedVersion` off, PlateVault's setting. A
-signed version that differs from the manifest is rejected whatever that
-setting says; it only decides whether a signature without one is rejected.
+Together these are the checks the in-app updater runs before it installs an
+update (`crates/desktop/services/src/update/signature.rs`). `latest.json` is
+not signed, so the signed version is the only thing that ties the version it
+announces to the payload. The in-app updater therefore refuses a signature
+without one: an older release's signature could otherwise be announced as a
+newer release and installed as a rollback. The releases up to v0.6.1 were
+built with Tauri CLI 2.11 and carry no field, but the in-app updater is only
+ever offered releases newer than itself. tauri-plugin-updater 2.13 in 0.6.x
+installs runs the same checks with `requireSignedVersion` off, so it also
+accepts a signature without the field. The in-app updater accepts prehashed
+`ED` signatures only, which `tauri build` writes, so the gate rejects the
+legacy `Ed` form.
 
 If any check fails, the run is red and the new release has no `latest.json`,
 so clients' update checks fail until the failed jobs are re-run. Before this

@@ -5,10 +5,11 @@ edition.workspace = true
 license.workspace = true
 
 # Framework-agnostic desktop backend services: notifications, logging, the log
-# viewer stream and job-progress feeds. A UI host (the Tauri shell today) adapts
-# them to its own event mechanism. No Tauri framework crate (`tauri*`),
-# `flutter_rust_bridge` or `raw-window-handle` may enter this dependency graph;
-# `tests/dependency_boundary.rs` enforces that and documents its one exemption.
+# viewer stream, job-progress feeds and the signed updater. A UI host (the
+# Tauri shell today) adapts them to its own event mechanism. No Tauri framework
+# crate (`tauri*`), `flutter_rust_bridge` or `raw-window-handle` may enter this
+# dependency graph; `tests/dependency_boundary.rs` enforces that and documents
+# its one exemption.
 
 [dependencies]
 app_core = { path = "../../app/core" }
@@ -16,22 +17,47 @@ audit = { path = "../../audit" }
 contracts_core = { path = "../../contracts/core" }
 persistence_lifecycle = { path = "../../persistence/lifecycle" }
 platevault_core = { path = "../../platevault-core" }
+# The updater (`src/update`): base64 unwraps the minisign key and signature
+# boxes as tauri.conf.json and latest.json store them; minisign-verify is the
+# verifier tauri-plugin-updater 2.13 used, here in its streaming form;
+# reqwest fetches the manifest and payload; semver compares versions;
+# tempfile holds the staged payload.
+base64 = "0.22.1"
+minisign-verify = "0.3.0"
 notify-rust = { workspace = true }
+reqwest = { workspace = true, features = ["system-proxy"] }
+semver = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sqlx = { workspace = true }
+tempfile = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-appender = { workspace = true }
 tracing-subscriber = { workspace = true }
 uuid = { workspace = true }
 
+# The macOS update unpacks the `.app.tar.gz` and exchanges the bundles with
+# rustix's `renameat_with(EXCHANGE)`, as platevault_core does for its links.
+# The swap's tests run on every Unix, so other Unix targets get the three
+# crates for tests only.
+[target.'cfg(target_os = "macos")'.dependencies]
+flate2 = "1.1.9"
+rustix = { version = "1.1", features = ["fs"] }
+tar = "0.4.46"
+
+[target.'cfg(all(unix, not(target_os = "macos")))'.dev-dependencies]
+flate2 = "1.1.9"
+rustix = { version = "1.1", features = ["fs"] }
+tar = "0.4.46"
+
 [dev-dependencies]
+# Signs test payloads with throwaway keys for the updater's signature tests.
+minisign = { workspace = true }
 persistence_core = { path = "../../persistence/core" }
 # Real FITS frames for the measurement feed tests.
 platevault_pixels = { path = "../../platevault-pixels", features = ["fixtures"] }
-tokio = { workspace = true, features = ["time"] }
-tempfile = { workspace = true }
+tokio = { workspace = true, features = ["time", "net", "io-util"] }
 
 [lints]
 workspace = true

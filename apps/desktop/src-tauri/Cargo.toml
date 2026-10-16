@@ -48,9 +48,8 @@ persistence_targets = { path = "../../../crates/persistence/targets" }
 workflow_artifacts = { path = "../../../crates/workflow/artifacts" }
 serde = { workspace = true }
 serde_json.workspace = true
-# Version parsing for the dev-tools-gated PV_E2E_VERSION_OVERRIDE hook.
-# Already a transitive dep via tauri-plugin-updater; listed explicitly so it
-# is accessible at the crate boundary without relying on leakage.
+# The running version the updater compares against, and the dev-tools-gated
+# PV_E2E_VERSION_OVERRIDE that replaces it.
 semver = { workspace = true }
 specta = { workspace = true }
 specta-typescript = { workspace = true }
@@ -66,9 +65,6 @@ tauri-plugin-mcp-bridge = { workspace = true, optional = true }
 tauri-plugin-single-instance = { workspace = true }
 tauri-plugin-window-state = { workspace = true }
 tauri-plugin-log = { workspace = true }
-tauri-plugin-updater = { workspace = true }
-# Relaunch-to-apply step for the updater plugin (spec 051 US10, T056).
-tauri-plugin-process = { workspace = true }
 tauri-specta = { workspace = true }
 # E2E automation surface — ONLY compiled when the `e2e` feature is enabled.
 # Release binaries MUST omit this feature so the embedded WebDriver server

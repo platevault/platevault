@@ -22,7 +22,9 @@ name: Release Please
 # succeeded and every updater signature verifies against the bytes on the
 # release. This is what makes
 # https://github.com/platevault/platevault/releases/latest/download/latest.json
-# resolve for `tauri-plugin-updater`. The embedded public key that verifies
+# resolve for the in-app updater: the services-crate client (0.7.0 on) and
+# tauri-plugin-updater in 0.5.x/0.6.x installs read the same file, so every
+# release keeps every platform key. The embedded public key that verifies
 # these signatures lives in apps/desktop/src-tauri/tauri.conf.json and is
 # owned by a separate US10 lane, not this workflow.
 
@@ -223,7 +225,7 @@ jobs:
       # v1 breaking changes that do NOT bite us:
       #   - .app.tar.gz (macOS updater artifact) now embeds the app version in
       #     the filename. latest.json points at the asset names actually on the
-      #     release, and tauri-plugin-updater 2.x follows GitHub's redirects, so
+      #     release, and both updater clients follow GitHub's redirects, so
       #     installed clients resolve the new names.
       #   - updaterJsonKeepUniversal removed (now always on): we never set it.
       #   - assetNamePattern renamed to artifactNamePattern: we don't use it.
@@ -475,9 +477,9 @@ jobs:
       # key. `--app-version` records the release version in the trusted comment,
       # as the bundler does for its own signatures, and it is read from the same
       # tauri.conf.json the updater-manifest job announces in latest.json.
-      # tauri-plugin-updater 2.13 rejects an update whose signed version differs
-      # from latest.json's, and with `requireSignedVersion` on it also rejects a
-      # signature that carries no version.
+      # The in-app updater refuses an update whose signed version differs
+      # from latest.json's, or whose signature carries no version, and the
+      # updater-manifest job refuses to publish either.
       - name: Sign the signed bundles for the updater
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}

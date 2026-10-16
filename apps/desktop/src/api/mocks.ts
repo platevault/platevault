@@ -1411,9 +1411,21 @@ const mockHandlers = {
     // Mock mode never has a crashed prior process.
     return { uncleanShutdown: false, interruptedPlanIds: [] };
   },
-  update_install_on_quit_begin: async () => {
-    // Mock mode has no updater and never defers a quit, so nothing may install.
-    return false;
+  // Mock mode has no updater: nothing is ever found, downloaded or installed.
+  update_status: async () => {
+    return { phase: 'idle', version: null, body: null, error: null };
+  },
+  update_check_on_startup: async () => {
+    return null;
+  },
+  update_check: async () => {
+    return null;
+  },
+  update_install_now: async () => {
+    return null;
+  },
+  update_install_on_quit: async () => {
+    return null;
   },
   native_menu_set_labels: async () => {
     // Mock mode has no native menu to relabel.

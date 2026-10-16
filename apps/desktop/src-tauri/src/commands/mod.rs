@@ -70,6 +70,7 @@ pub mod target_lookup;
 pub mod target_management;
 pub mod targets_list;
 pub mod tools;
+pub mod update;
 pub mod view_groups;
 pub mod view_lifecycle;
 pub mod view_selection;
