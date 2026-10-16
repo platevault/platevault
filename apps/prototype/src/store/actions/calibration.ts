@@ -58,6 +58,7 @@ import {
   calibrationSources,
   candidatesFor,
   confirmChoice,
+  importCameraRefusal,
   KIND_NOUN,
   type MasterMatch,
   masterImportMatch,
@@ -75,7 +76,7 @@ import {
 } from "@/domain/calibration"
 import { masterPins, masterProjects } from "@/domain/calibration-library"
 import { createFolder, fileAt, makeFile, volumeForPath, writeFiles } from "@/domain/disk"
-import { ingestFiles, isUnder, nightOf } from "@/domain/indexing"
+import { ingestFiles, isUnder, NO_MASTER_CAMERAS, nightOf } from "@/domain/indexing"
 import { unitCount } from "@/domain/labels"
 import { sessionRef } from "@/domain/membership"
 import { type TrashItem, trashBlock, viewLinks } from "@/domain/storage"
@@ -194,7 +195,8 @@ function register(state: PrototypeState, process: CalibrationProcess): StepResul
   const file = process.storagePath ? fileAt(state.disk, process.storagePath) : undefined
   if (!storage || !file) return fail(state, process, "register", msg("store_cal_master_missing"))
   const at = nowIso()
-  const catalog = ingestFiles(state.catalog, state.disk, state.settings, storage, [file], at)
+  const cameras: ReadonlyMap<string, CameraId> = process.cameraId ? new Map([[file.path, process.cameraId]]) : NO_MASTER_CAMERAS
+  const catalog = ingestFiles(state.catalog, state.disk, state.settings, storage, [file], at, cameras)
   const master = Object.values(catalog.masters).find((m) => m.versions.some((v) => v.path === file.path))
   const version = master?.versions.find((v) => v.path === file.path)
   if (!master || !version) return fail(state, process, "register", msg("store_cal_not_a_master"))
@@ -412,19 +414,23 @@ export interface MasterImportOutcome {
 /**
  * Import one master file stacked elsewhere into structured calibration
  * storage as a process without a session (Stack and Detect skipped, Raws
- * does not apply), then Register it. `accept` refuses a match the caller
- * does not take; a file that is not a master, or a Duplicate, is always
- * refused. A failed step stays recorded on its process.
+ * does not apply), then Register it, linked to `cameraId` (LIB-FR-26). The
+ * camera must be of the file's model, and one is needed while the rigs hold
+ * several cameras of that model. `accept` refuses a match the caller does
+ * not take; a file that is not a master, or a Duplicate, is always refused.
+ * A failed step stays recorded on its process.
  */
-function importOne(path: string, label: MessageRef, accept: (match: Exclude<MasterMatch, { kind: "duplicate" }>) => MessageRef | null): MasterImportOutcome {
+function importOne(path: string, cameraId: CameraId | null, label: MessageRef, accept: (match: Exclude<MasterMatch, { kind: "duplicate" }>) => MessageRef | null): MasterImportOutcome {
   const { catalog, disk } = store.getState()
   const file = fileAt(disk, path)
-  const match = file ? masterImportMatch(catalog, disk, file) : null
+  const match = file ? masterImportMatch(catalog, disk, file, cameraId) : null
   const kind = file ? masterKindOf(file) : null
   const outcome = (result: CommitResult, masterId: MasterId | null = null, versionId: MasterVersionId | null = null): MasterImportOutcome => ({ path, match, result, masterId, versionId })
   if (!file) return outcome(refuse(label, [msg("store_cal_path_unreadable", { path })], HREF))
   if (!match || !kind) return outcome(refuse(label, [msg("store_cal_not_master_imagetyp")], HREF))
   if (match.kind === "duplicate") return outcome(refuse(label, [msg("store_cal_already_in_library")], HREF))
+  const cameraRefusal = importCameraRefusal(catalog, file.header?.instrument ?? null, cameraId)
+  if (cameraRefusal) return outcome(refuse(label, [cameraRefusal], HREF))
   const refusal = accept(match)
   if (refusal) return outcome(refuse(label, [refusal], HREF))
   const at = nowIso()
@@ -436,6 +442,7 @@ function importOne(path: string, label: MessageRef, accept: (match: Exclude<Mast
     profileId: null,
     outputFolder: null,
     detected: { path, sha256: file.sha256, ncombine: file.header?.ncombine ?? null },
+    cameraId,
     storagePath: null,
     masterId: null,
     versionId: null,
@@ -453,15 +460,22 @@ function importOne(path: string, label: MessageRef, accept: (match: Exclude<Mast
   return outcome(refuse(label, [failed?.reason ?? msg("store_cal_master_missing")], HREF))
 }
 
+/** One file Import masters imports, and the camera the user linked it to (null: none chosen, it matches by model). */
+export interface MasterImportFile {
+  path: string
+  cameraId: CameraId | null
+}
+
 /**
  * Import masters (CAL-FR-13): each selected file by its preview match
- * (`masterImportMatch`). New becomes a master record; New version joins the
- * record whose settings it matches as a dated version, which repoints no
- * session; Duplicate and a file that is not a master are refused. Light
- * sessions still waiting are filled; a pin never moves.
+ * (`masterImportMatch`) with the camera chosen for it. New becomes a master
+ * record linked to that camera; New version joins the record whose settings
+ * and camera it shares as a dated version, which repoints no session;
+ * Duplicate and a file that is not a master are refused. Light sessions
+ * still waiting are filled; a pin never moves.
  */
-export function importMasterFiles(paths: string[]): MasterImportOutcome[] {
-  return paths.map((path) => importOne(path, IMPORT_BLOCKED, () => null))
+export function importMasterFiles(files: MasterImportFile[]): MasterImportOutcome[] {
+  return files.map((f) => importOne(f.path, f.cameraId, IMPORT_BLOCKED, () => null))
 }
 
 /**
@@ -476,7 +490,7 @@ export function addMasterVersion(masterId: MasterId, path: string): MasterImport
   if (!master) return { path, match: null, result: MISSING, masterId: null, versionId: null }
   const name = masterRecordRef(catalog, master)
   const label = msg("store_refused", { label: msg("store_cal_label_add_version", { master: name }) })
-  return importOne(path, label, (match) => (match.kind === "version" && match.master.id === masterId ? null : msg("store_cal_not_version_of", { master: name })))
+  return importOne(path, master.cameraId, label, (match) => (match.kind === "version" && match.master.id === masterId ? null : msg("store_cal_not_version_of", { master: name })))
 }
 
 /** Calibration settings › Old masters after (C9): darks and bias whose newest version is older than this many days read "Old · {n} d". */

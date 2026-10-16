@@ -1087,6 +1087,8 @@ export interface CalibrationProcess {
   outputFolder: string | null
   /** The master found in the output folder, or the file imported directly. */
   detected: { path: string; sha256: string; ncombine: number | null } | null
+  /** The physical camera Import masters linked the file to (LIB-FR-26); null links none, so the master matches by model. */
+  cameraId: CameraId | null
   /** Where Import put the master in structured calibration storage. */
   storagePath: string | null
   masterId: MasterId | null

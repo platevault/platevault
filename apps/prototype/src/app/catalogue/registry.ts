@@ -89,6 +89,7 @@ export const CATALOGUE: CatalogueEntry[] = [
       "SwitchField",
       "ChoiceListField",
       "PathField",
+      "FilesField",
       "TokenTemplateField",
       "TokenTable",
       "ArgumentsField",

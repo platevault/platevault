@@ -16,7 +16,7 @@
  */
 import { projectHref } from "@/domain/derive"
 import { fileKey } from "@/domain/disk"
-import { ingestFiles, listLocation, markScanStopped, markVerificationPending, settleLocationScan } from "@/domain/indexing"
+import { ingestFiles, listLocation, markScanStopped, markVerificationPending, NO_MASTER_CAMERAS, settleLocationScan } from "@/domain/indexing"
 import { unitCount } from "@/domain/labels"
 import type { ProjectTabId } from "@/domain/project-view"
 import { runningDuplicateScan } from "@/domain/storage"
@@ -330,7 +330,7 @@ const indexHandler: OperationHandler = {
     const size = volume?.network ? (ticks % NETWORK_TICKS_PER_FILE === 0 ? 1 : 0) : next.faults.slowIndexing ? SLOW_BATCH : BATCH
     const batchPaths = volumeMounted ? current.pending.slice(0, size) : []
     const files = batchPaths.map((p) => next.disk.files[fileKey(location.volumeId, p)]).filter((f) => f !== undefined)
-    if (files.length > 0) next = { ...next, catalog: ingestFiles(next.catalog, next.disk, next.settings, location, files, nowIso()) }
+    if (files.length > 0) next = { ...next, catalog: ingestFiles(next.catalog, next.disk, next.settings, location, files, nowIso(), NO_MASTER_CAMERAS) }
     const observed = [...current.observed, ...batchPaths]
     const pending = current.pending.slice(batchPaths.length)
     payload = { ...payload, ticks, current: { ...current, pending, observed }, counts: { ...payload.counts, read: payload.counts.read + files.length } }

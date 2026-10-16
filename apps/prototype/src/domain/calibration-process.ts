@@ -88,6 +88,7 @@ export function awaitingStackProcess(session: Session, now: IsoDateTime): Calibr
     profileId: null,
     outputFolder: null,
     detected: null,
+    cameraId: null,
     storagePath: null,
     masterId: null,
     versionId: null,

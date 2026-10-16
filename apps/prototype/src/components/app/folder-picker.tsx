@@ -2,8 +2,9 @@
  * Simulated OS chooser (foundation-owned, HLD §8). Lists volumes and folders
  * from the simulated disk, including empty folders; offline volumes and
  * access-denied folders show their reason. `mode` picks what it returns, as
- * the native panels do: a folder (default), a file matching `filters`, or an
- * application bundle (the simulated computer's Applications folder is a root).
+ * the native panels do: a folder (default), a file matching `filters`,
+ * several files of one folder ("files", each press selects or clears one),
+ * or an application bundle (the simulated computer's Applications folder is a root).
  * Choosing only returns a path: it never registers a location or writes
  * anything. Used for locations (T1), View folder parents (T4), storage
  * destinations (T5) and by `PathField` (fields.tsx).
@@ -15,7 +16,9 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { filesUnder, listFolders, volumeForPath } from "@/domain/disk"
 import { isUnder } from "@/domain/indexing"
+import { unitCount } from "@/domain/labels"
 import type { Disk } from "@/domain/types"
+import { say } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import { useStore } from "@/store/core"
 import { PathText } from "./data"
@@ -24,7 +27,7 @@ import { Notice } from "./feedback"
 /** What the chooser returns: the current folder, a file, or an application bundle. */
 export type PathPickerMode = "folder" | "file" | "executable"
 
-export interface FolderPickerProps {
+interface FolderPickerBaseProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   /** Names the task, e.g. "Choose a capture folder". */
@@ -34,12 +37,12 @@ export interface FolderPickerProps {
   initialPath?: string | null
   /** Verb of the primary action; the chosen name follows: "Choose Captures". */
   chooseVerb?: string
-  /** Default "folder". */
-  mode?: PathPickerMode
-  /** File extensions `file` mode lists, e.g. `[".fits", ".xisf"]`; every file when omitted. */
+  /** File extensions `file` and `files` modes list, e.g. `[".fits", ".xisf"]`; every file when omitted. */
   filters?: readonly string[]
-  onChoose: (path: string) => void
 }
+
+/** One path (default "folder"), or with `mode: "files"` the files selected in one folder, in list order. */
+export type FolderPickerProps = FolderPickerBaseProps & ({ mode?: PathPickerMode; onChoose: (path: string) => void } | { mode: "files"; onChoose: (paths: string[]) => void })
 
 /** A place in the side list: a volume, or the Applications folder in `executable` mode. */
 interface Root {
@@ -109,12 +112,15 @@ function entriesIn(disk: Disk, folder: string, mode: PathPickerMode, filters: re
   return [...folders, ...files]
 }
 
-export function FolderPicker({ open, onOpenChange, title, description, initialPath, chooseVerb, mode = "folder", filters, onChoose }: FolderPickerProps) {
+export function FolderPicker(props: FolderPickerProps) {
+  const { open, onOpenChange, title, description, initialPath, chooseVerb, filters } = props
+  const many = props.mode === "files"
+  const mode: PathPickerMode = props.mode === "files" ? "file" : (props.mode ?? "folder")
   const m = useMessages()
   const disk = useStore((s) => s.disk)
   const roots: Root[] = mode === "executable" ? [{ id: "applications", name: m.folder_picker_applications(), mountPath: APPLICATIONS, mounted: true }, ...volumeRoots(disk)] : volumeRoots(disk)
   const [current, setCurrent] = useState(() => startPath(disk, roots, initialPath))
-  const [selected, setSelected] = useState<string | null>(null)
+  const [selected, setSelected] = useState<string[]>([])
   const listPane = useRef<HTMLDivElement>(null)
   const upButton = useRef<HTMLButtonElement>(null)
   const chooseButton = useRef<HTMLButtonElement>(null)
@@ -123,7 +129,7 @@ export function FolderPicker({ open, onOpenChange, title, description, initialPa
   useEffect(() => {
     if (!open) return
     setCurrent(startPath(disk, roots, initialPath))
-    setSelected(null)
+    setSelected([])
   }, [open])
   // Opening a folder replaces the control that was pressed: keep keyboard focus in the list.
   useEffect(() => {
@@ -136,17 +142,25 @@ export function FolderPicker({ open, onOpenChange, title, description, initialPa
 
   function openFolder(path: string) {
     focusAfterMove.current = true
-    setSelected(null)
+    setSelected([])
     setCurrent(path)
   }
 
-  function choose(path: string) {
-    onChoose(path)
+  function choose(paths: string[]) {
+    if (props.mode === "files") props.onChoose(paths)
+    else props.onChoose(paths[0]!)
     onOpenChange(false)
+  }
+
+  /** A press selects a file; with several files it selects or clears that one. */
+  function press(path: string) {
+    setSelected(!many ? [path] : selected.includes(path) ? selected.filter((p) => p !== path) : [...selected, path])
   }
 
   const root = roots.find((v) => v.mounted && isUnder(current, v.mountPath))
   const entries = entriesIn(disk, current, mode, filters)
+  /** The selection in list order. */
+  const inOrder = (paths: readonly string[]) => entries.filter((e) => paths.includes(e.path)).map((e) => e.path)
   const denied = disk.deniedPaths.some((p) => isUnder(current, p))
   const crumbs = root
     ? [root.mountPath, ...current.slice(root.mountPath.length).split("/").filter(Boolean)].map((_, index, parts) =>
@@ -156,8 +170,9 @@ export function FolderPicker({ open, onOpenChange, title, description, initialPa
   const parent = root && current !== root.mountPath ? parentOf(current) : null
   const currentName = root && current === root.mountPath ? root.name : nameOf(current)
   const choosesFolder = mode === "folder"
-  const chosen = choosesFolder ? current : selected
+  const chosen = choosesFolder ? [current] : inOrder(selected)
   const verb = chooseVerb ?? m.verb_choose()
+  const chosenName = chosen.length > 1 ? say(m, unitCount("files", chosen.length)) : chosen.length === 1 ? (choosesFolder ? currentName : nameOf(chosen[0]!)) : null
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -261,10 +276,11 @@ export function FolderPicker({ open, onOpenChange, title, description, initialPa
                           data-folder-row
                           variant="ghost"
                           size="sm"
-                          aria-pressed={selected === entry.path}
-                          className={cn("w-full justify-start", selected === entry.path && "bg-primary/10 text-foreground")}
-                          onClick={() => setSelected(entry.path)}
-                          onDoubleClick={() => choose(entry.path)}
+                          aria-pressed={selected.includes(entry.path)}
+                          className={cn("w-full justify-start", selected.includes(entry.path) && "bg-primary/10 text-foreground")}
+                          onClick={() => press(entry.path)}
+                          // The two presses before it toggled the file back: a double press chooses the selection with this file.
+                          onDoubleClick={() => choose(many ? inOrder([...selected, entry.path]) : [entry.path])}
                         >
                           {entry.kind === "app" ? <AppWindow aria-hidden="true" data-icon="inline-start" /> : <File aria-hidden="true" data-icon="inline-start" />}
                           <span className="truncate">{entry.name}</span>
@@ -278,11 +294,11 @@ export function FolderPicker({ open, onOpenChange, title, description, initialPa
           </div>
         </div>
         <DialogFooter className="bottom-0 m-0 items-center rounded-b-xl sm:justify-between">
-          <PathText path={chosen ?? current} className="min-w-0 text-muted-foreground" />
+          <PathText path={chosen.length === 1 ? chosen[0]! : current} className="min-w-0 text-muted-foreground" />
           <div className="flex shrink-0 gap-2">
             <DialogClose render={<Button variant="outline" />}>{m.verb_cancel()}</DialogClose>
-            <Button ref={chooseButton} disabled={!chosen} onClick={() => chosen && choose(chosen)}>
-              {chosen ? `${verb} ${choosesFolder ? currentName : nameOf(chosen)}` : verb}
+            <Button ref={chooseButton} disabled={chosen.length === 0} onClick={() => chosen.length > 0 && choose(chosen)}>
+              {chosenName ? `${verb} ${chosenName}` : verb}
             </Button>
           </div>
         </DialogFooter>
