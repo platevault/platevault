@@ -162,11 +162,6 @@ pub(super) async fn handle_completed(
         return;
     }
 
-    // [DEBUG-5gll9] TEMPORARY fail-first race widening: holds the window between
-    // the terminal-state commit above and the audit append below open. Reverted
-    // before landing.
-    tokio::time::sleep(std::time::Duration::from_millis(250)).await;
-
     let _ = apply_repo::append_event(
         pool,
         &new_id(),
