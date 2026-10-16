@@ -160,6 +160,12 @@ fn register(
         }
 
         let dirs = dirs(path.as_std_path());
+        // The listers name a real root first. Nothing listed means the root
+        // changed, or could not be read, after the probe: an empty success
+        // would watch nothing.
+        if dirs.is_empty() {
+            return Err(format!("failed to watch {path}: its folders could not be listed"));
+        }
         // Root path (dirs[0]) failure is always fatal — if we cannot watch the
         // root itself, there is nothing useful the watcher can do.
         let mut is_root = true;
@@ -335,5 +341,20 @@ mod tests {
 
         assert_eq!(report.watched, [root]);
         assert_eq!(report.skipped, [] as [(std::path::PathBuf, String); 0]);
+    }
+
+    /// The root probes fine, then its folders cannot be listed (it changed,
+    /// or a read failed, meanwhile): the registration fails instead of
+    /// reporting a watch on nothing.
+    #[test]
+    fn a_root_whose_folders_cannot_be_listed_fails_the_registration() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = [Utf8PathBuf::from_path_buf(dir.path().canonicalize().unwrap()).unwrap()];
+        let mut watcher =
+            notify::recommended_watcher(|_: Result<notify::Event, notify::Error>| {}).unwrap();
+
+        let result = register(&mut watcher, &paths, false, false, true, |_| Vec::new());
+
+        assert!(result.is_err(), "registered nothing as a success: {result:?}");
     }
 }
