@@ -68,9 +68,24 @@ export interface LogExport {
  * via the `definition` "Error".
  */
 export interface Error {
-  code: "path.write.denied" | "path.parent.missing" | "range.invalid" | "format.unsupported";
+  /**
+   * Source mapping: path.write.denied (crates/app/core/src/log_stream.rs:59), path.parent.missing (log_stream.rs:60), range.invalid (log_stream.rs:61), format.unsupported (log_stream.rs:62), database.error (log_stream.rs:64-86), serialise.error (log_stream.rs:65, 88-90), io.error (log_stream.rs:66, 91-93), export.unfinished_file (log_stream.rs:67, 94-96). Command-level failures originate in apps/desktop/src-tauri/src/commands/log.rs:99-132; shared wire names are defined in crates/contracts/core/src/error_code.rs:467-486.
+   */
+  code:
+    | "path.write.denied"
+    | "path.parent.missing"
+    | "range.invalid"
+    | "format.unsupported"
+    | "database.error"
+    | "serialise.error"
+    | "io.error"
+    | "export.unfinished_file";
   message: string;
   details?: {
+    /**
+     * For export.unfinished_file, absolute path of the unfinished export (crates/app/errors/src/lib.rs:174-176).
+     */
+    path?: string;
     [k: string]: unknown;
   };
 }
