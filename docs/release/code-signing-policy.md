@@ -28,11 +28,16 @@ is expected, and does not mean the file came from somewhere else.
 
 With the SignPath Foundation certificate, these Windows files will be signed:
 
+- the application, `desktop_shell.exe`, and the rebuilt Library shell,
+  `platevault-library.exe`, which both installers put on disk;
 - the NSIS installer, `PlateVault_<version>_x64-setup.exe`;
 - the MSI installer, `PlateVault_<version>_x64_en-US.msi`.
 
-The application inside them, `desktop_shell.exe`, stays unsigned until the
-release workflow signs it before it builds the installers.
+The release workflow signs the two programs first and then builds the
+installers around the signed copies, so the programs you install are the
+copies SignPath signed. One installed file stays unsigned: the
+`uninstall.exe` that the NSIS installer writes into the install folder while
+it installs. The MSI has no such file; Windows uninstalls it.
 
 Only files built from this repository's source are signed. Third-party
 binaries bundled with PlateVault are never signed with this certificate.
