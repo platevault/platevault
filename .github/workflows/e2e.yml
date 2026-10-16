@@ -1061,8 +1061,8 @@ jobs:
   #
   # LPT assignment -> shard totals 104s / 103s / 104s, max = 104s.
   # (Previous count-balanced assignment: 159s / 97s / 74s, max = 159s.)
-  # #1227 then moved six IPC-only journeys out of this suite, taking 42.1s
-  # from shard 2 and 13.9s from shard 3 (rows removed from the table above):
+  # #1227 then moved five IPC-only journeys and deleted a redundant sixth,
+  # taking 42.1s from shard 2 and 13.9s from shard 3 (rows removed above):
   # by these averages 104s / 61s / 90s. Not rebalanced since.
   #
   # Verified locally (2026-07-23, cargo-nextest 0.9.132), before #1227:

@@ -785,6 +785,7 @@ async fn lifecycle_integrity() {
 async fn cleanup_plan_review() {
     let _protection_defaults_lock = PROTECTION_DEFAULTS_TEST_LOCK.lock().await;
     let be = Backend::start().await;
+    reset_protection_defaults(&be).await;
 
     // The artifact watcher's attach-time reconciliation needs the project's
     // output folder to exist already.
