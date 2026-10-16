@@ -22,6 +22,17 @@ export default {
   referenceFiles: ['src/styles/tokens.css', '../../packages/tokens/tokens-docs.css'],
   rules: {
     'no-unknown-custom-properties': true,
+    // Hand-written CSS takes colour from tokens only (#1334): a raw literal
+    // bypasses theming and the contrast checks run on the token set.
+    'color-no-hex': true,
+    'function-disallowed-list': ['rgb', 'rgba', 'hsl', 'hsla'],
   },
   ignoreFiles: ['dist/**', 'node_modules/**', '.ds-css/**'],
+  overrides: [
+    {
+      // The generated token stylesheet is where raw colour values live.
+      files: ['src/styles/tokens.css'],
+      rules: { 'color-no-hex': null, 'function-disallowed-list': null },
+    },
+  ],
 };
