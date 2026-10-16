@@ -176,9 +176,10 @@ pub struct TreeWatch {
 /// not watched yet: it is reported as [`ArtifactEventKind::NeedsRescan`], and
 /// the consumer restarts the watcher over the new folder set and walks the
 /// tree for the files the new folder already holds. So is a change of a
-/// folder's permissions or owner, which can change what a walk lists below
-/// it while no event names the files there, and an event about a path that
-/// is not UTF-8, which cannot be forwarded. A link or junction at a
+/// folder's permissions or owner (on Windows, a change of a folder that no
+/// longer opens), which can change what a walk lists below it while no
+/// event names the files there, and an event about a path that is not
+/// UTF-8, which cannot be forwarded. A link or junction at a
 /// path an event names is reported as that path, never followed, so a watched
 /// folder that a link replaced reaches the consumer like one that went away.
 /// The folders are listed before they are registered, in one batch; one
@@ -206,7 +207,7 @@ enum NewFolders {
     /// watched, on any volume.
     Skip,
     /// [`ArtifactEventKind::NeedsRescan`], because the folder is not watched;
-    /// so does a change of a folder's access ([`changes_access`]) and an
+    /// so does a change of a folder's access ([`folder_rescans`]) and an
     /// event about a path that is not UTF-8. A link or junction
     /// is forwarded as its own path. Only the folders on each path's own
     /// volume are watched.
@@ -222,8 +223,7 @@ const fn brings_folder(kind: EventKind) -> bool {
 /// Whether `kind` may change who can list a folder: its permissions, owner
 /// or access list changed (inotify `IN_ATTRIB`, `FSEvents` inode metadata or
 /// owner changes). Its timestamps and extended attributes do not. Windows
-/// reports no metadata kind, only `Modify(Any)`, also for a folder whose
-/// contents changed, so this never holds there.
+/// reports no metadata kind: see [`folder_rescans`].
 const fn changes_access(kind: EventKind) -> bool {
     matches!(
         kind,
@@ -231,6 +231,21 @@ const fn changes_access(kind: EventKind) -> bool {
             MetadataKind::Any | MetadataKind::Permissions | MetadataKind::Ownership
         ))
     )
+}
+
+/// Whether an event of `kind` naming `folder` asks a tree watcher for a
+/// rescan: the folder was brought into the tree, or who can list it may
+/// have changed.
+///
+/// Windows reports a folder's access list change only as `Modify(Any)`,
+/// which it also reports for every entry written in the folder, so such an
+/// event rescans only once the folder no longer opens. One that opens again
+/// is found by the sweep that lists the walk's unlisted folders again.
+fn folder_rescans(folder: &std::path::Path, kind: EventKind) -> bool {
+    brings_folder(kind)
+        || changes_access(kind)
+        || (matches!(kind, EventKind::Modify(ModifyKind::Any))
+            && std::fs::read_dir(folder).is_err())
 }
 
 fn needs_rescan() -> ArtifactFileEvent {
@@ -296,8 +311,7 @@ fn forward_path(
         return send(ArtifactFileEvent { path: utf8, kind });
     }
     if utf8.is_dir() {
-        let rescan = rescans && (brings_folder(event_kind) || changes_access(event_kind));
-        return !rescan || send(needs_rescan());
+        return !(rescans && folder_rescans(path, event_kind)) || send(needs_rescan());
     }
     send(ArtifactFileEvent { path: utf8, kind })
 }
@@ -587,6 +601,37 @@ mod tests {
         assert!(rescans(MetadataKind::Ownership));
         assert!(!rescans(MetadataKind::WriteTime));
         assert!(!rescans(MetadataKind::Extended));
+    }
+
+    /// Windows names a folder's access change only as a generic
+    /// modification, as it names each file written in the folder: a tree
+    /// watcher rescans only once the folder no longer opens. The kind is
+    /// built here, so the unreadable folder is made with Unix permissions.
+    #[cfg(unix)]
+    #[test]
+    fn a_generic_folder_change_rescans_once_the_folder_no_longer_opens() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let folder = dir.path().join("night");
+        std::fs::create_dir(&folder).unwrap();
+        let modified = Event::new(EventKind::Modify(ModifyKind::Any)).add_path(folder.clone());
+        let rescans = || {
+            let mut kinds = Vec::new();
+            forward(Ok(modified.clone()), NewFolders::Rescan, |event| {
+                kinds.push(event.kind);
+                true
+            });
+            kinds == [ArtifactEventKind::NeedsRescan]
+        };
+        assert!(!rescans(), "a file written in it");
+
+        std::fs::set_permissions(&folder, std::fs::Permissions::from_mode(0o000)).unwrap();
+        let unreadable = std::fs::read_dir(&folder).is_err();
+        let rescanned = rescans();
+        std::fs::set_permissions(&folder, std::fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(unreadable, "needs a user file permissions bind, not root");
+        assert!(rescanned, "it no longer opens");
+        assert_eq!(forwarded(Ok(modified)), [] as [ArtifactEventKind; 0]);
     }
 
     #[tokio::test]
