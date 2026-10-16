@@ -13,7 +13,9 @@
  *   state (P11, F9: import CSV, import masters). The StepStrip goes under
  *   the title and the footer acts on the step on screen, as StepFooter does
  *   on a page. Initial focus goes to the first field; Escape and Cancel
- *   close it and return focus to the trigger.
+ *   close it and return focus to the trigger. An action with `confirm`
+ *   asks first, as everywhere else: its ConfirmDialog opens over the form,
+ *   and confirming it runs the action (a review's Move all to Trash).
  * - `useDialogCommit`: the commit rule both FormDialog and ConfirmDialog
  *   share. A returned failure keeps the dialog open with the error and turns
  *   the action into Retry; a promise shows the action busy and keeps the
@@ -35,6 +37,7 @@ import { Spinner } from "@/components/ui/spinner"
 import { m } from "@/lib/i18n"
 import type { CommitResult } from "@/store/core"
 import type { Action, StepFlow } from "./contracts"
+import { ConfirmDialog } from "./confirm-dialog"
 import { ActionError } from "./feedback"
 import { BlockersPreview } from "./previews"
 import { StepStrip, stepEditable, useStepActions } from "./step-flow"
@@ -324,6 +327,9 @@ function DialogFrame({ trigger, title, size = "md", confirm, cancel, strip, skip
   const formId = useId()
   const form = useRef<HTMLFormElement>(null)
   const { isOpen, setOpen, commit, busy, error, finalFocus } = useDialogCommit(options)
+  const [reviewing, setReviewing] = useState(false)
+  /** Runs the action, or opens its ConfirmDialog first when it has one. */
+  const act = (action: Action) => (action.confirm ? setReviewing(true) : commit(action.run, closeOnConfirm))
 
   // Skip leaves with its step, and a gate wraps or unwraps the action; focus then stays in the footer, on its last control.
   useLayoutEffect(() => {
@@ -337,7 +343,7 @@ function DialogFrame({ trigger, title, size = "md", confirm, cancel, strip, skip
   function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault()
     if (busy || !confirm || confirm.unavailable || confirm.kind === "destructive") return
-    commit(confirm.run, closeOnConfirm)
+    act(confirm)
   }
 
   // Under a strip, focus starts on the step's first field rather than on the strip.
@@ -359,13 +365,14 @@ function DialogFrame({ trigger, title, size = "md", confirm, cancel, strip, skip
         <DialogFooter
           confirm={confirm}
           form={formId}
-          onConfirm={confirm ? () => commit(confirm.run, closeOnConfirm) : undefined}
+          onConfirm={confirm ? () => act(confirm) : undefined}
           cancel={cancel}
           skip={skip}
           onSkip={skip ? () => commit(skip.run, closeOnConfirm) : undefined}
           busy={busy}
           failed={error !== null}
         />
+        {confirm?.confirm ? <ConfirmDialog {...confirm.confirm} open={reviewing} onOpenChange={setReviewing} onConfirm={() => commit(confirm.run, closeOnConfirm)} /> : null}
       </DialogContent>
     </Dialog>
   )

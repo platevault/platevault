@@ -14,13 +14,17 @@
  * record; an earlier one reopens from the footer until Close (F5). A closed
  * Project's Wrap up is read-only. Output is never offered. Every offered
  * row folds out the exact files it moves, unlinks or keeps (astro-plan-
- * lz898), and Archive says up front that Close is for good: no Reopen.
+ * lz898), with each file's SHA-256 where the library recorded it; Proceed's
+ * review lists the same files per group (astro-plan-6bh3p), and a row that
+ * stays says why in one or two words. Archive says up front that Close is
+ * for good: no Reopen.
  */
 import { useNavigate } from "@tanstack/react-router"
 import { CheckCheck, Package, Trash2 } from "lucide-react"
 import { type ReactNode, useState } from "react"
 import { useMessages } from "@/app/preferences"
 import { ActionButton } from "@/components/app/actions"
+import { FileTable } from "@/components/app/confirm-dialog"
 import type { Column, ConfirmSpec, FileRow } from "@/components/app/contracts"
 import { KeyValueList } from "@/components/app/data"
 import { DataTable, type DataTableToolbar } from "@/components/app/data-table"
@@ -34,14 +38,13 @@ import { fileAt } from "@/domain/disk"
 import { archiveLocations, defaultArchiveLocation, type StepLink } from "@/domain/derive"
 import { WRAP_UP_NAME, WRAP_UP_STEPS } from "@/domain/labels"
 import { entryItems, TRASH_OFFER_KINDS, trashOffers, viewCleanupOffer, wrapUpFlowState } from "@/domain/project-view"
-import type { TrashItem } from "@/domain/storage"
 import type { OperationId, Project, WrapUpStepId } from "@/domain/types"
 import { fileName, formatBytes, formatCount, formatDateTime } from "@/lib/format"
 import { type Messages, msg, say } from "@/lib/i18n"
 import { startArchiveTransfer } from "@/store/actions/archive"
 import { type WrapUpSelection, wrapUpFlow } from "@/store/actions/flows"
 import { setProjectArchiveLocation } from "@/store/actions/projects"
-import { moveToOsTrash } from "@/store/actions/trash"
+import { moveToOsTrash, type ReviewedFile, trashFileRows } from "@/store/actions/trash"
 import { type PrototypeState, useStore } from "@/store/core"
 import type { ProjectChrome } from "./project"
 
@@ -78,7 +81,8 @@ interface OfferRow {
   link: boolean
   /** Ticked when the step opens (F1). */
   preselected: boolean
-  items: TrashItem[]
+  /** What the row hands to the OS Trash, as its review lists it; for a row that stays, its one file and why. */
+  files: ReviewedFile[]
   status: { label: string; link?: StepLink } | null
 }
 
@@ -95,7 +99,7 @@ function offerRows(m: Messages, state: PrototypeState, offers: TrashOffer[]): Of
         size: entry.sizeBytes,
         link: Boolean(fileAt(state.disk, entry.path)?.linkTarget),
         preselected: entry.preselected,
-        items: entryItems(offer, entry),
+        files: entryItems(offer, entry),
         status: null,
       }),
     )
@@ -109,7 +113,7 @@ function offerRows(m: Messages, state: PrototypeState, offers: TrashOffer[]): Of
         size: 0,
         link: false,
         preselected: false,
-        items: [],
+        files: refusal.path ? [{ path: refusal.path, refused: refusal }] : [],
         status: { label: say(m, refusal.reason), link: refusal.link },
       }),
     )
@@ -146,8 +150,9 @@ function moveFiles(row: ArchiveRow): FileRow[] {
   return row.moves.map((move) => ({ file: fileName(move.from.path), from: folderOf(move.from.path), to: folderOf(move.to.path), action: "move", size: move.sizeBytes }))
 }
 
-function offerFiles(rows: OfferRow[]): FileRow[] {
-  return rows.map((r) => ({ file: r.label, from: r.path ? folderOf(r.path) : "", action: r.link ? "unlink" : "trash", size: r.size }))
+/** The exact files of the rows, as their review lists them: every item each row hands to the OS Trash. */
+function offerFiles(m: Messages, state: PrototypeState, rows: OfferRow[]): FileRow[] {
+  return trashFileRows(m, state, rows.flatMap((r) => r.files))
 }
 
 // ---------------------------------------------------------------------------
@@ -188,12 +193,12 @@ export function WrapUpPage({ project, chrome, step }: { project: Project; chrome
       const confirm: ConfirmSpec = {
         title: m.wrapup_cleanup_confirm_items({ count: rows.length }),
         summary: m.wrapup_cleanup_summary({ links: formatCount(links), copies: formatCount(rows.length - links), size: formatBytes(rows.reduce((n, r) => n + r.size, 0)) }),
-        groups: [{ label: say(m, OFFER_NAME["view-cleanup"]), rows: offerFiles(rows) }],
+        groups: [{ label: say(m, OFFER_NAME["view-cleanup"]), rows: offerFiles(m, state, rows) }],
         confirm: { label: m.wrapup_clean_up() },
       }
       const folders = [project.view?.folderPath, project.previous?.folderPath].filter((f): f is string => Boolean(f))
       const start = (): OperationId[] => [
-        moveToOsTrash({ kind: "view-cleanup", title: msg("op_offer_to_trash", { offer: OFFER_NAME["view-cleanup"], name: project.name }), projectId: project.id, items: rows.flatMap((r) => r.items), pruneFolders: folders, unit: "entries", href: href("cleanup") }),
+        moveToOsTrash({ kind: "view-cleanup", title: msg("op_offer_to_trash", { offer: OFFER_NAME["view-cleanup"], name: project.name }), projectId: project.id, items: rows.flatMap((r) => r.files), pruneFolders: folders, unit: "entries", href: href("cleanup") }),
       ]
       return { offered: movable.cleanup.length, selected: rows.length, confirm, start }
     }
@@ -203,7 +208,7 @@ export function WrapUpPage({ project, chrome, step }: { project: Project; chrome
       const confirm: ConfirmSpec = {
         title: m.wrapup_trash_confirm_title({ count: rows.length }),
         summary: formatBytes(rows.reduce((n, r) => n + r.size, 0)),
-        groups: kinds.map((kind) => ({ label: say(m, OFFER_NAME[kind]), rows: offerFiles(rows.filter((r) => r.kind === kind)) })),
+        groups: kinds.map((kind) => ({ label: say(m, OFFER_NAME[kind]), rows: offerFiles(m, state, rows.filter((r) => r.kind === kind)) })),
         confirm: { label: m.common_move_to_trash(), kind: "destructive" },
       }
       const start = (): OperationId[] =>
@@ -212,7 +217,7 @@ export function WrapUpPage({ project, chrome, step }: { project: Project; chrome
             kind,
             title: msg("op_offer_to_trash", { offer: OFFER_NAME[kind], name: project.name }),
             projectId: project.id,
-            items: rows.filter((r) => r.kind === kind).flatMap((r) => r.items),
+            items: rows.filter((r) => r.kind === kind).flatMap((r) => r.files),
             href: href("trash"),
           }),
         )
@@ -275,9 +280,10 @@ interface Select {
   onChange: (ids: string[]) => void
 }
 
-/** One step's offers: Clean up's View files, or Trash's three groups in their order. Each row folds out the exact files it moves (lz898). */
+/** One step's offers: Clean up's View files, or Trash's three groups in their order. Each row folds out the exact files it moves (lz898), as Proceed's review lists them. */
 function OfferTable({ label, rows, select, empty }: { label: string; rows: OfferRow[]; select: Select | null; empty: ReactNode }) {
   const m = useMessages()
+  const catalog = useStore((s) => s.catalog)
   const disk = useStore((s) => s.disk)
   const kinds = [...new Set(rows.map((r) => r.kind))]
   const columns: Column<OfferRow>[] = [
@@ -287,16 +293,6 @@ function OfferTable({ label, rows, select, empty }: { label: string; rows: Offer
     { id: "size", header: m.dialog_col_size(), cell: (r) => (r.status || r.size === 0 ? "–" : formatBytes(r.size)), sortValue: (r) => r.size, align: "right" },
     { id: "status", header: m.dialog_col_status(), cell: (r) => <StatusCell status={r.status} />, sortValue: (r) => r.status?.label ?? null, truncate: true },
   ]
-  /** The files one row hands to the OS Trash or unlinks; a row that stays shows its one file and why. */
-  const files = (r: OfferRow): FileRow[] =>
-    r.status
-      ? r.path
-        ? [{ file: fileName(r.path), from: folderOf(r.path), action: "keep", size: fileAt(disk, r.path)?.sizeBytes ?? 0, status: r.status }]
-        : []
-      : r.items.map((item) => {
-          const file = fileAt(disk, item.path)
-          return { file: fileName(item.path), from: folderOf(item.path), action: file?.linkTarget ? "unlink" : "trash", size: file?.linkTarget ? 0 : (file?.sizeBytes ?? 0), status: item.refusedReason ? { label: say(m, item.refusedReason) } : undefined }
-        })
   return (
     <DataTable
       label={label}
@@ -305,7 +301,7 @@ function OfferTable({ label, rows, select, empty }: { label: string; rows: Offer
       getRowId={(r) => r.id}
       scroll="none"
       rowLabel={(r) => r.label}
-      expand={{ isExpandable: (r) => files(r).length > 0, render: (r) => <FileTable label={r.label} rows={files(r)} /> }}
+      expand={{ isExpandable: (r) => r.files.length > 0, render: (r) => <FileTable label={m.wrapup_files_of({ name: r.label })} rows={trashFileRows(m, { catalog, disk }, r.files)} /> }}
       groups={kinds.length > 1 ? { key: (r) => r.kind, label: (kind, group) => m.wrapup_group_line({ name: say(m, OFFER_NAME[kind as OfferKind]), count: group.length }), compare: (a, b) => kinds.indexOf(a as OfferKind) - kinds.indexOf(b as OfferKind) } : undefined}
       selection={select ? { ...select, rowLabel: (r) => r.label, isSelectable: (r) => !r.status, countLabel: (count) => m.wrapup_items({ count }) } : undefined}
       empty={empty}
@@ -347,7 +343,7 @@ function ArchiveTable({ project, rows, blocked, select, editable }: { project: P
       scroll="none"
       toolbar={toolbar}
       rowLabel={(r) => r.label}
-      expand={{ isExpandable: (r) => r.row !== null, render: (r) => (r.row ? <FileTable label={r.label} rows={moveFiles(r.row)} /> : null) }}
+      expand={{ isExpandable: (r) => r.row !== null, render: (r) => (r.row ? <FileTable label={m.wrapup_files_of({ name: r.label })} rows={moveFiles(r.row)} /> : null) }}
       selection={select ? { ...select, rowLabel: (r) => r.label, isSelectable: (r) => r.row !== null, countLabel: (count) => m.project_sessions_selected({ count }) } : undefined}
       empty={
         <EmptyState
@@ -358,19 +354,6 @@ function ArchiveTable({ project, rows, blocked, select, editable }: { project: P
       }
     />
   )
-}
-
-/** The files a row moves, one level under it: File · From · To · Size. */
-function FileTable({ label, rows }: { label: string; rows: FileRow[] }) {
-  const m = useMessages()
-  const action = (r: FileRow) => (r.action === "keep" ? (r.status?.label ?? m.status_keep()) : r.action === "unlink" ? m.dialog_to_unlink() : r.action === "move" ? (r.to ?? "–") : m.dialog_to_trash())
-  const columns: Column<FileRow & { key: string }>[] = [
-    { id: "file", header: m.dialog_col_file(), cell: (r) => r.file, sortValue: (r) => r.file, rowHeader: true, truncate: true },
-    { id: "from", header: m.dialog_col_from(), cell: (r) => r.from, sortValue: (r) => r.from, truncate: true },
-    { id: "to", header: m.dialog_col_to(), cell: action, sortValue: action, truncate: true },
-    { id: "size", header: m.dialog_col_size(), cell: (r) => (r.size > 0 ? formatBytes(r.size) : "–"), sortValue: (r) => r.size, align: "right" },
-  ]
-  return <DataTable label={m.wrapup_files_of({ name: label })} rows={rows.map((r, i) => ({ ...r, key: String(i) }))} columns={columns} getRowId={(r) => r.key} scroll="none" />
 }
 
 /** A settled step's record: how it ended and what its work moved (§5.6: Finished or Skipped, with date and moved bytes). */

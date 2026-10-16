@@ -9,8 +9,8 @@
  * Links pointing at a moved copy are rebuilt to its new path, so no View
  * dangles (STO-FR-06); a Closed Project's kept View is repointed that way
  * and the repoint is recorded in Activity, while the Project stays locked.
- * There is no Restore. `offerFileRows` words a Trash offer as the confirm
- * dialog's file rows, for Wrap up's Trash step and Sessions' Unusable purge.
+ * There is no Restore. `offerFileRows` lists a Trash offer's exact files as
+ * the confirm dialog's file rows, for Sessions' Unusable purge.
  */
 import type { FileRow } from "@/components/app/contracts"
 import type { ArchiveMove, ArchiveRow, TrashOffer } from "@/domain/archive"
@@ -21,29 +21,25 @@ import { unitCount } from "@/domain/labels"
 import { viewLinks } from "@/domain/storage"
 import type { ActivityEvent, Catalog, Disk, OperationId, ProjectId, Session, SessionId } from "@/domain/types"
 import { formatBytes, formatCount } from "@/lib/format"
-import { joinRefs, type MessageRef, type Messages, msg, nightRef, say, verbatim } from "@/lib/i18n"
+import { joinRefs, type MessageRef, type Messages, msg, nightRef, verbatim } from "@/lib/i18n"
 import { nowIso, type PrototypeState, store, withCatalog } from "@/store/core"
 import { type OperationHandler, patchOperation, settleOperation, startOperation } from "@/store/operations"
-
-/** The folder holding a path: "/Volumes/A/M31/x.fits" → "/Volumes/A/M31". */
-function folderOf(path: string): string {
-  return path.split("/").slice(0, -1).join("/")
-}
+import { trashFileRows } from "./trash"
 
 /**
- * A Trash offer as ConfirmDialog file rows: each entry moves to the OS Trash;
- * each refusal stays, with its reason and, when it has one, the link that resolves it (P-TRASH2).
+ * A Trash offer as ConfirmDialog file rows (astro-plan-6bh3p): every file
+ * its approval hands to the OS Trash, each copy of a frame on its own row;
+ * each refusal stays, with its terse reason and, when it has one, the link
+ * that resolves it (P-TRASH2).
  */
-export function offerFileRows(m: Messages, offer: TrashOffer): { moved: FileRow[]; kept: FileRow[] } {
+export function offerFileRows(m: Messages, world: Pick<PrototypeState, "catalog" | "disk">, offer: TrashOffer): { moved: FileRow[]; kept: FileRow[] } {
   return {
-    moved: offer.entries.map((entry) => ({ file: entry.label, from: folderOf(entry.path), action: "trash", size: entry.sizeBytes })),
-    kept: offer.refusals.map((refusal) => ({
-      file: refusal.label,
-      from: refusal.path === null ? "" : folderOf(refusal.path),
-      action: "trash",
-      size: 0,
-      status: { label: say(m, refusal.reason), ...(refusal.link ? { link: refusal.link } : {}) },
-    })),
+    moved: trashFileRows(m, world, offer.items),
+    kept: trashFileRows(
+      m,
+      world,
+      offer.refusals.flatMap((refusal) => (refusal.path === null ? [] : [{ path: refusal.path, refused: refusal }])),
+    ),
   }
 }
 

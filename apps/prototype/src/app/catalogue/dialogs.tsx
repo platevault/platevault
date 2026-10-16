@@ -38,11 +38,11 @@ function frames(count: number, filter: string, action: FileRow["action"], to?: s
   return Array.from({ length: count }, (_, index) => ({ file: `M31_${filter}_300s_${String(index + 1).padStart(4, "0")}.fits`, from: CAPTURES, to, action, size: 33_554_432 }))
 }
 
-/** The Trash groups: unusable frames with per-file refusals, intermediates, and a group with nothing in it. */
+/** The Trash groups: unusable frames, two of them staying with their terse reasons, intermediates, and a group with nothing in it. */
 function trashGroups(m: Messages, defaultOpen: boolean): ConfirmGroup[] {
   const rejects = frames(6, "L", "trash")
-  rejects[1] = { ...rejects[1]!, status: { label: m.run_profile_read_only() } }
-  rejects[3] = { ...rejects[3]!, status: { label: m.equipment_used_by_projects({ count: 1 }), link: { to: "/projects" } } }
+  rejects[1] = { ...rejects[1]!, action: "keep", status: { label: m.domain_trash_read_only() } }
+  rejects[3] = { ...rejects[3]!, action: "keep", status: { label: m.equipment_used_by_projects({ count: 1 }), link: { to: "/projects" } } }
   const intermediates: FileRow[] = ["registered", "calibrated", "integrated"].map((stage) => ({ file: `M31_L_${stage}.xisf`, from: WORK, action: "trash", size: 402_653_184 }))
   return [
     { label: m.wrapup_offer_rejects(), rows: rejects, defaultOpen },

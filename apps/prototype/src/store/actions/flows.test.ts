@@ -1,12 +1,13 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
+import { rawItems, stepRecord } from "@/domain/calibration-process"
 import { liveLightSessions, sessionReadiness } from "@/domain/derive"
 import { wrapUpFlowState, wrapUpStepLink } from "@/domain/project-view"
 import { createSeed } from "@/domain/seed"
-import type { Project } from "@/domain/types"
+import type { CalibrationProcess, Project } from "@/domain/types"
 import { m } from "@/lib/i18n"
 import { type PrototypeState, SCHEMA_VERSION, store } from "@/store/core"
 import { initialSliceStates, sliceVersions } from "@/store/slices"
-import { sessionIntake, wrapUpFlow, type WrapUpSelection } from "./flows"
+import { calibrationFlow, sessionIntake, wrapUpFlow, type WrapUpSelection } from "./flows"
 
 // The demo's "M 31 LRGB": Wrap up's Clean up is done, Trash and Archive are still to do.
 const M31 = "prj_m31"
@@ -23,6 +24,25 @@ const project = (): Project => store.getState().catalog.projects[M31]!
 const nothing: WrapUpSelection = { offered: 0, selected: 0, start: () => [] }
 const flow = (selection: WrapUpSelection = nothing) => wrapUpFlow(store.getState(), project(), m, selection)
 const stepState = (id: string) => flow().steps.find((s) => s.id === id)?.state
+
+describe("a calibration process as a flow (P-CAL3)", () => {
+  it("reviews every raw file Finish calibration moves to the OS Trash, a refused one with its reason in a word (astro-plan-6bh3p)", () => {
+    const state = store.getState()
+    const kept = Object.values(state.catalog.calibrationProcesses).find((p) => p.sessionId && rawItems(state.catalog, p).length > 1)!
+    const done = stepRecord("done", "2026-09-08T20:00:00.000Z")
+    const atRaws: CalibrationProcess = { ...kept, raws: null, steps: { stack: done, detect: done, import: done, register: done, raws: stepRecord("failed", "2026-09-08T20:01:00.000Z") } }
+    const items = rawItems(state.catalog, atRaws)
+    const world = { ...state, disk: { ...state.disk, readOnlyPaths: [items[0]!.path] } }
+    const proceed = calibrationFlow(world, atRaws, null, m).proceed!
+    expect(proceed.label).toBe(m.stepflow_finish_calibration())
+    const frames = new Set(items.map((i) => i.assetId)).size
+    expect(proceed.confirm?.title).toBe(m.calibration_raws_trash_title({ count: frames, n: String(frames) }))
+    const rows = proceed.confirm!.groups![0]!.rows
+    expect(rows).toHaveLength(items.length)
+    expect(rows[0]).toMatchObject({ action: "keep", status: { label: m.domain_trash_read_only() } })
+    expect(rows.slice(1).every((r) => r.action === "trash" && r.status === undefined && Boolean(r.sha256))).toBe(true)
+  })
+})
 
 describe("Wrap up as a flow (C3, F2, F4, F5)", () => {
   it("records a step with nothing left as Finished and moves on to the next one", async () => {

@@ -47,7 +47,7 @@ import { useFollowLink } from "@/components/app/links"
 import { ActionButton } from "@/components/app/actions"
 import { issuesFacet, matchesIssueFilter, pageIssues, parseIssueFilter, rowIssues, withIssueItems } from "@/components/app/issue-actions"
 import { Box } from "@/components/app/box"
-import type { Action, Column, Facet, FileRow, MenuItem } from "@/components/app/contracts"
+import type { Action, Column, Facet, MenuItem } from "@/components/app/contracts"
 import { KeyValueList, type KeyValueItem } from "@/components/app/data"
 import { EmptyState, toast } from "@/components/app/feedback"
 import { CountBadge, Pill } from "@/components/app/pill"
@@ -60,14 +60,16 @@ import { KIND_NAME, KINDS, masterAge, masterKindOf, newestVersion, versionDrift,
 import { type MasterPin, masterPins, masterProjects, versionPins } from "@/domain/calibration-library"
 import { CALIBRATION_STEP_NAME, calibrationProcesses, type ProcessView } from "@/domain/calibration-process"
 import { isLocked, projectLink, rigName, type StepLink } from "@/domain/derive"
-import { fileAt } from "@/domain/disk"
+import { fileAt, trashRefusal } from "@/domain/disk"
 import { nightOf } from "@/domain/indexing"
 import { sessionLabel } from "@/domain/membership"
+import { trashBlock, viewLinks, type ViewLinks } from "@/domain/storage"
 import type { CalibrationKind, CalibrationMaster, Catalog, Disk, DiskFile, MasterId, MasterVersion, Session } from "@/domain/types"
 import { fileName, formatCount, formatDateTime, formatExposure, formatNight } from "@/lib/format"
 import { type Messages, msg, say } from "@/lib/i18n"
 import { hideMaster, restoreMaster, setMasterCamera, trashMaster } from "@/store/actions/calibration"
 import { adoptionCheck, adoptProcessingMaster } from "@/store/actions/project-view"
+import { type ReviewedFile, trashFileRows } from "@/store/actions/trash"
 import { type CommitResult, store, useStore } from "@/store/core"
 import { useIssues } from "@/store/issues"
 import {
@@ -141,15 +143,9 @@ function haystack(m: Messages, catalog: Catalog, master: CalibrationMaster): str
     .toLowerCase()
 }
 
-/** One version's file as the Move to Trash review names it: its name, folder and SHA-256 (CAL-FR-17). */
-function trashRow(disk: Disk, version: MasterVersion): FileRow {
-  return {
-    file: fileName(version.path),
-    from: version.path.slice(0, version.path.lastIndexOf("/")),
-    action: "trash",
-    size: fileAt(disk, version.path)?.sizeBytes ?? 0,
-    sha256: version.adoption?.verifiedSha256 ?? version.sha256,
-  }
+/** One version's file as the Move to Trash review names it (CAL-FR-17): its SHA-256, and why it stays, as `trashMaster` asks. */
+function reviewedVersion(disk: Disk, links: ViewLinks, version: MasterVersion): ReviewedFile {
+  return { path: version.path, sha256: version.adoption?.verifiedSha256 ?? version.sha256, refused: trashBlock(disk, links, version.path) }
 }
 
 /** The camera of a raw set: its rig camera's alias, else the header's model. */
@@ -200,6 +196,7 @@ export function CalibrationPage() {
   const requested = VIEWS.find((v) => v === search.view)
   const view: View = requested ?? (search.process ? "processes" : search.filter === "dismissed" ? "hidden" : "masters")
   const pins = masterPins(catalog)
+  const links = viewLinks(catalog, disk)
   const pinsOf = (master: CalibrationMaster) => pins.get(master.id) ?? []
   const now = Date.now() + clockOffset
   const oldLabel = (master: CalibrationMaster) => {
@@ -285,7 +282,7 @@ export function CalibrationPage() {
       confirm: {
         title: m.common_trash_named_title({ name: masterLabel(m, catalog, master) }),
         summary: released(master),
-        groups: [{ label: m.calibration_versions(), rows: versionsNewestFirst(master).map((v) => trashRow(disk, v)), defaultOpen: true }],
+        groups: [{ label: m.calibration_versions(), rows: trashFileRows(m, { catalog, disk }, versionsNewestFirst(master).map((v) => reviewedVersion(disk, links, v))), defaultOpen: true }],
         confirm: { label, kind: "destructive" },
       },
       run: () => trashMaster(master.id).result,
@@ -407,13 +404,14 @@ export function CalibrationPage() {
       const done = (result: CommitResult) => said(result, say(m, msg("store_saved_added_to_library", { name })))
       if (!check.ok && check.ownCopy) {
         const own = fileAt(disk, check.ownCopy)
+        const refusal = trashRefusal(disk, check.ownCopy)
         return {
           id: "adopt",
           label,
           confirm: {
             title: m.project_output_adopt_title({ name }),
             summary: say(m, check.reasons[0]!),
-            groups: own ? [{ label: m.calibration_own_copy(), rows: [{ file: fileName(own.path), from: own.path.slice(0, own.path.lastIndexOf("/")), action: "trash", size: own.sizeBytes, sha256: own.sha256 }], defaultOpen: true }] : undefined,
+            groups: own ? [{ label: m.calibration_own_copy(), rows: trashFileRows(m, { catalog, disk }, [{ path: own.path, sha256: own.sha256, refused: refusal ? { reason: refusal } : null }]), defaultOpen: true }] : undefined,
             confirm: { label: m.calibration_trash_copy_and_add() },
           },
           run: () => done(adoptProcessingMaster(c.project.id, c.master.file.path, c.master.file.sha256, { trashOwnCopy: true })),

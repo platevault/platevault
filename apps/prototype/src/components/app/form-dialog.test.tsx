@@ -73,6 +73,40 @@ describe("FormDialog", () => {
     await user.click(screen.getByRole("button", { name: "Delete run" }))
     expect(run).toHaveBeenCalledOnce()
   })
+
+  it("asks first when its action has a confirm: Cancel keeps the form, the review's action runs it and closes both (astro-plan-6bh3p)", async () => {
+    const user = userEvent.setup()
+    const run = vi.fn()
+    function Review() {
+      const [open, setOpen] = useState(true)
+      const moveAll: Action = {
+        id: "move-all",
+        label: "Move all to Trash",
+        kind: "destructive",
+        confirm: { title: "Move 2 copies to Trash?", groups: [{ label: "M31_L_0001.fits", rows: [{ file: "M31_L_0001.fits", from: "/Volumes/Spare/M31", action: "trash", size: 1024, sha256: "ab12" }], defaultOpen: true }], confirm: { label: "Move to Trash", kind: "destructive" } },
+        run,
+      }
+      return (
+        <FormDialog open={open} onOpenChange={setOpen} title="Duplicates" size="lg" confirm={moveAll}>
+          <TextField label="Name" value="" onChange={() => {}} />
+        </FormDialog>
+      )
+    }
+    render(<Review />)
+    await user.click(await screen.findByRole("button", { name: "Move all to Trash" }))
+    const review = await screen.findByRole("alertdialog", { name: "Move 2 copies to Trash?" })
+    expect(within(review).getByRole("table", { name: "M31_L_0001.fits" })).toBeInTheDocument()
+    expect(within(review).getByText("ab12")).toBeInTheDocument()
+    await user.click(within(review).getByRole("button", { name: m.verb_cancel() }))
+    await vi.waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull())
+    expect(run).not.toHaveBeenCalled()
+    expect(screen.getByRole("dialog", { name: "Duplicates" })).toBeInTheDocument()
+
+    await user.click(screen.getByRole("button", { name: "Move all to Trash" }))
+    await user.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Move to Trash" }))
+    expect(run).toHaveBeenCalledOnce()
+    await vi.waitFor(() => expect(screen.queryByRole("dialog", { name: "Duplicates" })).toBeNull())
+  })
 })
 
 /** A ListSection-style opener: an ActionButton whose action opens a controlled FormDialog from state. */

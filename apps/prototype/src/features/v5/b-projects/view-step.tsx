@@ -43,7 +43,7 @@ import { ViewFolderTree } from "@/components/domain/view-folder-tree"
 import type { DetailSection } from "@/components/templates/detail-page"
 import { CHOICE_STATE_NAME, KIND_NAME, NO_KIND_NAME, sourceRef } from "@/domain/calibration"
 import { isLocked, isMosaic, type StepLink } from "@/domain/derive"
-import { filesUnder, freeBytes, volumeForPath } from "@/domain/disk"
+import { filesUnder, freeBytes, trashRefusal, volumeForPath } from "@/domain/disk"
 import { MODE_NAME, orderedProfiles, profileRef } from "@/domain/labels"
 import { sessionLongRef } from "@/domain/membership"
 import {
@@ -69,6 +69,7 @@ import type { ApplicationKind, CalibrationChoice, Catalog, CorrectionField, Disk
 import { fileName, formatBytes, formatCount, formatDateTime } from "@/lib/format"
 import { type Messages, say } from "@/lib/i18n"
 import { type ApplyPhase, type ApplySheet, applyPhase, discardChanges, reviewLeftover, startApply } from "@/store/actions/project-view"
+import { trashFileRows } from "@/store/actions/trash"
 import { setProjectSettings } from "@/store/actions/projects"
 import { type CommitResult, type PrototypeState, store, updateSlice, useStore } from "@/store/core"
 
@@ -263,16 +264,22 @@ const PHASE_TEXT: Record<Exclude<ApplyPhase, "waiting">, (m: Messages) => string
   swapping: (m) => m.view_phase_swapping(),
 }
 
-/** Keep, Move into View and a reviewed Move to Trash for one file in `View (previous)/` (D-W110). */
-function leftoverActions(m: Messages, project: Project, leftover: PreviousLeftover): MenuItem[] {
-  if (isLocked(project)) return []
+/** Keep, Move into View and a reviewed Move to Trash for one file in `View (previous)/` (D-W110); the review folds out that file (astro-plan-6bh3p). */
+function leftoverActions(m: Messages, world: Pick<PrototypeState, "catalog" | "disk">, project: Project, leftover: PreviousLeftover): MenuItem[] {
+  if (isLocked(project) || !project.previous) return []
   const name = fileName(leftover.path)
+  const path = `${project.previous.folderPath}/${leftover.path}`
+  const refusal = trashRefusal(world.disk, path)
   const trash: Action = {
     id: "trash",
     label: m.common_move_to_trash(),
     icon: Trash2,
     kind: "destructive",
-    confirm: { title: m.common_trash_named_title({ name }), summary: `${formatBytes(leftover.sizeBytes)} · ${m.view_previous_trash_provisional()}`, confirm: { label: m.common_move_to_trash(), kind: "destructive" } },
+    confirm: {
+      title: m.common_trash_named_title({ name }),
+      groups: [{ label: m.project_previous_title(), rows: trashFileRows(m, world, [{ path, refused: refusal ? { reason: refusal } : null }]), defaultOpen: true }],
+      confirm: { label: m.common_move_to_trash(), kind: "destructive" },
+    },
     run: () => reviewLeftover(project.id, leftover.path, "trash"),
   }
   return [
@@ -284,12 +291,14 @@ function leftoverActions(m: Messages, project: Project, leftover: PreviousLeftov
 
 function LeftoverTable({ project, leftovers, label }: { project: Project; leftovers: PreviousLeftover[]; label: string }) {
   const m = useMessages()
+  const catalog = useStore((s) => s.catalog)
+  const disk = useStore((s) => s.disk)
   const columns: Column<PreviousLeftover>[] = [
     { id: "file", header: m.dialog_col_file(), cell: (l) => l.path, sortValue: (l) => l.path, rowHeader: true, truncate: true },
     { id: "reason", header: m.dialog_col_status(), cell: (l) => leftoverReason(m, l), sortValue: (l) => leftoverReason(m, l), truncate: true },
     { id: "size", header: m.dialog_col_size(), cell: (l) => formatBytes(l.sizeBytes), sortValue: (l) => l.sizeBytes, align: "right" },
   ]
-  return <BoxTable label={label} rows={leftovers} columns={columns} getRowId={(l) => l.path} rowLabel={(l) => l.path} rowActions={(l) => leftoverActions(m, project, l)} empty={m.view_previous_empty()} />
+  return <BoxTable label={label} rows={leftovers} columns={columns} getRowId={(l) => l.path} rowLabel={(l) => l.path} rowActions={(l) => leftoverActions(m, { catalog, disk }, project, l)} empty={m.view_previous_empty()} />
 }
 
 // ---------------------------------------------------------------------------

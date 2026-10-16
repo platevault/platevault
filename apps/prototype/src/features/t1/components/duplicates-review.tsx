@@ -20,7 +20,7 @@ import { useMemo, useState } from "react"
 import { useMessages } from "@/app/preferences"
 import { ActionBar, ActionButton } from "@/components/app/actions"
 import { pageIssues, withIssueItems } from "@/components/app/issue-actions"
-import type { Action, Column, FileRow, MenuItem } from "@/components/app/contracts"
+import type { Action, Column, ConfirmSpec, MenuItem } from "@/components/app/contracts"
 import { KeyValueList, PathText } from "@/components/app/data"
 import { DataTable } from "@/components/app/data-table"
 import { EmptyState, toast } from "@/components/app/feedback"
@@ -31,6 +31,7 @@ import type { AssetCopy, Catalog } from "@/domain/types"
 import { formatBytes, formatCount, formatDateTime } from "@/lib/format"
 import { say } from "@/lib/i18n"
 import { cleanUpDuplicates, startDuplicateScan } from "@/store/actions/storage"
+import { trashFileRows } from "@/store/actions/trash"
 import { useStore } from "@/store/core"
 import { useIssues } from "@/store/issues"
 
@@ -82,12 +83,27 @@ export function DuplicatesReview({ open, onClose }: { open: boolean; onClose: ()
     toast({ message: m.duplicates_moving({ count: copies, n: formatCount(copies) }), action: { id: "show", label: m.verb_show(), run: () => void navigate({ to: "/activity" }) } })
   }
 
+  /** The review of moving the leaving copies of `chosen`: one fold-out per frame with the exact copies (astro-plan-6bh3p). */
+  function review(chosen: DuplicateGroup[]): ConfirmSpec {
+    const paths = chosen.flatMap((g) => leaving(g).map((c) => c.path))
+    const kept = keptViewLinks(links, paths).length
+    return {
+      title: m.wrapup_offer_duplicates({ count: paths.length, n: formatCount(paths.length), size: formatBytes(chosen.reduce((n, g) => n + leaving(g).length * g.sizeBytes, 0)) }),
+      summary: [m.duplicates_frames_keep_copy({ count: chosen.length, n: formatCount(chosen.length) }), ...(kept > 0 ? [m.trash_also_removes_links({ count: kept })] : [])].join(" · "),
+      groups: chosen.map((g) => ({
+        label: g.fileName,
+        rows: trashFileRows(
+          m,
+          { catalog, disk },
+          leaving(g).map((c) => ({ path: c.path, assetId: g.assetId, refused: trashBlock(disk, links, c.path) })),
+        ),
+        defaultOpen: chosen.length === 1,
+      })),
+      confirm: { label: m.common_move_to_trash(), kind: "destructive" },
+    }
+  }
+
   function moveOthers(g: DuplicateGroup): Action {
-    const files: FileRow[] = leaving(g).map((c) => ({ file: g.fileName, from: c.path, action: "trash", size: g.sizeBytes }))
-    const viewLinks = keptViewLinks(
-      links,
-      files.map((f) => f.from),
-    ).length
     const block = blocked(g)
     return {
       id: "move-others",
@@ -95,12 +111,7 @@ export function DuplicatesReview({ open, onClose }: { open: boolean; onClose: ()
       kind: "destructive",
       opensDialog: true,
       unavailable: block ? { action: m.trash_cant(), reason: say(m, block.reason), blockers: [] } : undefined,
-      confirm: {
-        title: m.wrapup_offer_duplicates({ count: files.length, n: formatCount(files.length), size: formatBytes(files.length * g.sizeBytes) }),
-        summary: [m.duplicates_frames_keep_copy({ count: 1, n: formatCount(1) }), ...(viewLinks > 0 ? [m.trash_also_removes_links({ count: viewLinks })] : [])].join(" · "),
-        groups: [{ label: locationName(catalog, leaving(g)[0]!), rows: files, defaultOpen: true }],
-        confirm: { label: m.common_move_to_trash(), kind: "destructive" },
-      },
+      confirm: review([g]),
       run: () => move([g]),
     }
   }
@@ -116,7 +127,7 @@ export function DuplicatesReview({ open, onClose }: { open: boolean; onClose: ()
       id: "status",
       header: m.duplicates_col_outcome(),
       sortValue: (r) => (r.kept ? 0 : r.block ? 2 : 1),
-      cell: (r) => (r.kept ? m.status_keep() : r.block ? m.duplicates_cant_trash({ reason: say(m, r.block.reason) }) : m.session_os_trash()),
+      cell: (r) => (r.kept ? m.status_keep() : r.block ? say(m, r.block.reason) : m.session_os_trash()),
     },
   ]
 
@@ -126,6 +137,7 @@ export function DuplicatesReview({ open, onClose }: { open: boolean; onClose: ()
     label: m.duplicates_move_all(),
     kind: "destructive",
     unavailable: movable.length === 0 ? { action: m.trash_cant(), reason: m.duplicates_none_movable(), blockers: [] } : undefined,
+    confirm: movable.length > 0 ? review(movable) : undefined,
     run: () => move(movable),
   }
 

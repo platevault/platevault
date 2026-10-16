@@ -21,7 +21,7 @@
  * and rig the intake pickers hold.
  */
 import type { Action, Blocker, ConfirmSpec, FlowStep, StepFlow } from "@/components/app/contracts"
-import { CALIBRATION_STEP_NAME } from "@/domain/calibration-process"
+import { CALIBRATION_STEP_NAME, rawItems } from "@/domain/calibration-process"
 import {
   calibrationFlowState,
   calibrationStepLink,
@@ -39,13 +39,16 @@ import {
 } from "@/domain/derive"
 import { WRAP_UP_NAME, WRAP_UP_STEPS } from "@/domain/labels"
 import { wrapUpFlowState, type WrapUpFlowState, wrapUpStepLink } from "@/domain/project-view"
+import { trashBlock, viewLinks } from "@/domain/storage"
 import type { CalibrationProcess, CalibrationStepId, OperationId, OpticalTrainId, ProfileId, Project, Session, TargetId, WrapUpStepId } from "@/domain/types"
+import { formatCount } from "@/lib/format"
 import { joinRefs, type MessageRef, type Messages, msg, say } from "@/lib/i18n"
 import { type CommitResult, store } from "@/store/core"
 import { detectMasters, discardRaws, importMaster, keepRaws, startStack } from "./calibration"
 import { confirmRig, confirmTarget, filedUnclassified, fileIntoTarget } from "./library"
 import { recordWrapUpStep, reopenWrapUpStep, wrapUpRefusal } from "./projects"
 import { refuse } from "./shared"
+import { trashFileRows } from "./trash"
 
 // ---------------------------------------------------------------------------
 // Wording
@@ -214,8 +217,9 @@ function wrapUpReopen(m: Messages, project: Project, stepId: WrapUpStepId, state
  * A calibration process as a flow: Stack → Detect → Import → Register →
  * Raws, ordered, with no reopen. Each step runs as part of one operation or
  * chains on by itself, so `next` is null and the page follows `current`.
- * Raws is optional: Finish calibration moves the raws to the OS Trash, Skip
- * keeps them. `profileId` is the tool profile Stack hands the raws to.
+ * Raws is optional: Finish calibration moves the raws to the OS Trash after
+ * a review that folds out every raw file (astro-plan-6bh3p), Skip keeps
+ * them. `profileId` is the tool profile Stack hands the raws to.
  */
 export function calibrationFlow(world: World, process: CalibrationProcess, profileId: ProfileId | null, m: Messages): StepFlow {
   const state = calibrationFlowState(world, process, profileId)
@@ -223,10 +227,25 @@ export function calibrationFlow(world: World, process: CalibrationProcess, profi
   const base = { steps, current: state.current, ordered: true, next: null, linkFor: (stepId: string) => calibrationStepLink(process.id, stepId as CalibrationStepId) }
   if (state.finished) return { ...base, proceed: null }
   const last = state.current === "raws"
+  const proceed: Action = { id: "calibration-proceed", label: last ? m.stepflow_finish_calibration() : m.stepflow_proceed(), run: () => calibrationProceed(process, state.current, profileId) }
+  const review = last ? rawsReview(m, world, process) : null
   return {
     ...base,
-    proceed: { id: "calibration-proceed", label: last ? m.stepflow_finish_calibration() : m.stepflow_proceed(), run: () => calibrationProceed(process, state.current, profileId) },
+    proceed: review ? { ...proceed, confirm: review } : proceed,
     skip: last ? { id: "calibration-skip", label: m.stepflow_skip(), run: () => keepRaws(process.id) } : undefined,
+  }
+}
+
+/** Finish calibration's review: every raw file it moves to the OS Trash, and each that stays with its terse reason, as the move asks again. Null with nothing to move. */
+function rawsReview(m: Messages, world: World, process: CalibrationProcess): ConfirmSpec | null {
+  const items = rawItems(world.catalog, process)
+  if (items.length === 0) return null
+  const links = viewLinks(world.catalog, world.disk)
+  const frames = new Set(items.map((item) => item.assetId)).size
+  return {
+    title: m.calibration_raws_trash_title({ count: frames, n: formatCount(frames) }),
+    groups: [{ label: m.settings_raw_frames(), rows: trashFileRows(m, world, items.map((item) => ({ ...item, refused: trashBlock(world.disk, links, item.path) }))) }],
+    confirm: { label: m.common_move_to_trash(), kind: "destructive" },
   }
 }
 

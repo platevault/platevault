@@ -58,6 +58,23 @@ describe("Wrap up: Clean up → Trash → Archive and Close (PRJ-FR-14, F1, astr
     expect(await screen.findByRole("table", { name: /^Files of / })).toBeInTheDocument()
   })
 
+  it("reviews the exact files per group on Proceed, each copy with its SHA-256, and a row that stays reads its reason in a word (astro-plan-6bh3p)", async () => {
+    renderWrapUp(M31, "trash")
+    const user = userEvent.setup()
+    const table = await screen.findByRole("table", { name: m.trash_title() })
+    expect(within(table).getAllByText(m.domain_trash_read_only()).length).toBeGreaterThan(0)
+    await user.click(screen.getByRole("button", { name: new RegExp(`^${m.stepflow_proceed()}`) }))
+    const review = within(await screen.findByRole("alertdialog"))
+    await user.click(review.getByRole("button", { name: new RegExp(`^${m.wrapup_offer_rejects()} · `) }))
+    const files = review.getByRole("table", { name: m.wrapup_offer_rejects() })
+    expect(within(files).getByRole("columnheader", { name: new RegExp(m.storage_sha256()) })).toBeInTheDocument()
+    const state = store.getState()
+    const offer = trashOffers(state, state.catalog.projects[M31]!)["rejected-frames"]
+    expect(within(files).getAllByRole("row")).toHaveLength(offer.items.length + 1)
+    const first = offer.items[0]!
+    expect(within(files).getByText(state.catalog.assets[first.assetId!]!.copies.find((c) => c.path === first.path)!.sha256)).toBeInTheDocument()
+  })
+
   it("says up front that Close project is for good", async () => {
     renderWrapUp(MOSAIC, "archive")
     expect(await screen.findByText(m.wrapup_close_for_good())).toBeInTheDocument()

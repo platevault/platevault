@@ -19,7 +19,7 @@
 import { Inbox } from "lucide-react"
 import { useLayoutEffect, useRef, useState } from "react"
 import { useMessages } from "@/app/preferences"
-import type { Action, Column, Facet, FileRow, MenuItem, Preset } from "@/components/app/contracts"
+import type { Action, Column, Facet, MenuItem, Preset } from "@/components/app/contracts"
 import { DataTable } from "@/components/app/data-table"
 import { EmptyState } from "@/components/app/feedback"
 import { type FacetPatch, FilterBar } from "@/components/app/filter-bar"
@@ -30,6 +30,7 @@ import { Toggle } from "@/components/ui/toggle"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import type { Asset, Session } from "@/domain/types"
 import { formatBytes, formatCount, formatDuration, formatExposure, formatNight } from "@/lib/format"
+import { trashFileRows } from "@/store/actions/trash"
 import { useStore } from "@/store/core"
 
 type TableState = "rows" | "loading" | "empty" | "error"
@@ -66,7 +67,9 @@ function distinct<T>(values: T[]): T[] {
 export function DataTableCatalogue() {
   const m = useMessages()
   const sessions = useStore((s) => Object.values(s.catalog.sessions).filter((x) => x.imageType === "light" && x.supersededBy === null))
-  const assets = useStore((s) => s.catalog.assets)
+  const catalog = useStore((s) => s.catalog)
+  const disk = useStore((s) => s.disk)
+  const assets = catalog.assets
   const [wide, setWide] = useState(false)
   const [state, setState] = useState<TableState>("rows")
   const [query, setQuery] = useState("")
@@ -132,7 +135,7 @@ export function DataTableCatalogue() {
         title: m.common_trash_named_title({ name: m.session_count({ count: ids.length }) }),
         groups: trashedSessions.map((s) => ({
           label: sessionName(s),
-          rows: framesOf(s).map((a): FileRow => ({ file: a.fileName, from: a.copies[0]?.path ?? "–", action: "trash", size: a.sizeBytes })),
+          rows: trashFileRows(m, { catalog, disk }, framesOf(s).flatMap((a) => a.copies.map((c) => ({ path: c.path, assetId: a.id })))),
         })),
         confirm: { label: m.common_move_to_trash(), kind: "destructive" },
       },

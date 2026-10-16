@@ -167,17 +167,17 @@ function archiveAction(m: Messages, state: PrototypeState, selected: SessionRow[
   }
 }
 
-/** Move to Trash… for the Unusable frames of the sessions shown (or selected): the library clean-up (round 6). */
+/** Move to Trash… for the Unusable frames of the sessions shown (or selected): the library clean-up (round 6). Its review lists every copy it trashes and every frame that stays, with why (astro-plan-6bh3p). */
 function trashUnusableAction(m: Messages, state: PrototypeState, scope: SessionRow[], onDone: () => void): Action | null {
   const offer = unusableFramesOffer(state, scope.flatMap((r) => r.unusable))
   if (offer.count === 0 && offer.refusals.length === 0) return null
-  const { moved, kept } = offerFileRows(m, offer)
+  const { moved, kept } = offerFileRows(m, state, offer)
   return {
     id: "trash-unusable",
     label: m.common_move_to_trash(),
     icon: Trash2,
     kind: "destructive",
-    unavailable: offer.count === 0 ? { action: m.sessions_cant_trash(), reason: m.sessions_all_kept({ count: offer.refusals.length }), blockers: offer.refusals.map((r) => ({ label: `${r.label} · ${say(m, r.reason)}`, link: r.link })) } : undefined,
+    unavailable: offer.count === 0 ? { action: m.trash_cant(), reason: m.sessions_all_kept({ count: offer.refusals.length }), blockers: offer.refusals.map((r) => ({ label: `${r.label} · ${say(m, r.reason)}`, link: r.link })) } : undefined,
     confirm: {
       title: m.sessions_trash_unusable_title({ count: offer.count, n: formatCount(offer.count) }),
       summary: formatBytes(offer.sizeBytes),
