@@ -404,6 +404,16 @@ pub async fn inbox_scan_folder(
     // one per leaf folder (N autocommits → 1).
     let mut tx = pool.begin().await.map_err(|e| ContractError::internal(e.to_string()))?;
 
+    // Rows an earlier scan stored under the old backslash text for an entry
+    // this scan stores under its own text (bd astro-plan-3pvvc). They go
+    // first: an old row can hold the key a master row of this scan needs, as
+    // a folder placeholder at `g/h.fits` (group key `''`, like a master's) does
+    // for the real master `g/h.fits`, and `INSERT OR IGNORE` would then skip
+    // the master.
+    retire_legacy_rows(&mut tx, &req.root_id, &legacy_rows)
+        .await
+        .map_err(|e| ContractError::internal(e.to_string()))?;
+
     for scanned_item in &scanned {
         // ── Source-group upsert (T065, R-10/R-12) ────────────────────────────
         //
@@ -467,12 +477,6 @@ pub async fn inbox_scan_folder(
         // untouched, because a detected master IS a real, classified,
         // confirmable thing. `sub_count` remains the source group's file count.
     }
-
-    // Rows an earlier scan stored under the old backslash text for an entry
-    // this scan just stored under its own text (bd astro-plan-3pvvc).
-    retire_legacy_rows(&mut tx, &req.root_id, &legacy_rows)
-        .await
-        .map_err(|e| ContractError::internal(e.to_string()))?;
 
     tx.commit().await.map_err(|e| ContractError::internal(e.to_string()))?;
 

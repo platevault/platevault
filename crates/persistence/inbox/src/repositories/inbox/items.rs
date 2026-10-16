@@ -295,14 +295,16 @@ pub async fn delete_unconfirmed_master_rows_conn(
 
 /// Delete the unconfirmed master item stored for `relative_path` under
 /// `root_id`, as [`delete_unconfirmed_master_rows_conn`] does, where that
-/// path now names a folder (bd astro-plan-3pvvc: an earlier scan stored the
-/// file `a\b.fits` as `a/b.fits`, and a folder `a/b.fits` is there).
+/// path now names a folder the scan stores (bd astro-plan-3pvvc: an earlier
+/// scan stored the file `a\b.fits` as `a/b.fits`, and a folder `a/b.fits` is
+/// there).
 ///
-/// The source groups at that path belong to the folder: the group a scan
+/// The source groups at that path belong to the folder: the group the scan
 /// writes for it, which takes over the master's `sg-auto-*` group when the
-/// master had one, since a group is unique per root and path. They are kept,
-/// with the folder's file overrides; only the master's own overrides, keyed
-/// at exactly that path, are deleted, and only when the master item is.
+/// master had one, since a group is unique per root and path, and which may
+/// hold the folder's file overrides. They are kept, even when no item refers
+/// to them yet; only the master's own overrides, keyed at exactly that path,
+/// are deleted, and only when the master item is.
 ///
 /// # Errors
 /// Returns `persistence_core::DbError::Database` on connection failure.

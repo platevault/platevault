@@ -1153,10 +1153,14 @@ mod tests {
     }
 
     /// A master file whose name holds a backslash beside a folder at its old
-    /// text: the master `a\b.fits` beside the folder `b.fits` (holding a light
-    /// frame) in the folder `a`, and the master `c\d.fits` beside an empty
-    /// folder `d.fits` in `c`. A master row names a file, so the old rows
-    /// `a/b.fits` and `c/d.fits` are listed, as rows whose path names a folder.
+    /// text. A master row names a file, so every such old row is listed:
+    /// - `a/b.fits`, a folder holding a light frame, which this scan stores:
+    ///   the row is listed as one whose path names a stored folder, so the
+    ///   folder's groups stay;
+    /// - `c/d.fits`, an empty folder, and `g/h.fits`, a folder holding only a
+    ///   subfolder with a light frame: this scan stores neither, so the rows
+    ///   are listed as plain stale masters, which go with their groups.
+    ///
     /// Kept: `e/f.fits`, where a link to a folder sits.
     #[cfg(unix)]
     #[test]
@@ -1164,7 +1168,7 @@ mod tests {
         let tmp = tmpdir();
         let root = tmp.path();
         let master = Some(("STACKCNT", 30));
-        for name in ["a\\b.fits", "c\\d.fits", "e\\f.fits"] {
+        for name in ["a\\b.fits", "c\\d.fits", "e\\f.fits", "g\\h.fits"] {
             write_realistic_fits(root, name, Some("DARK"), master);
         }
         let nested = root.join("a").join("b.fits");
@@ -1174,12 +1178,16 @@ mod tests {
         fs::create_dir_all(root.join("e")).unwrap();
         std::os::unix::fs::symlink(root.join("c").join("d.fits"), root.join("e").join("f.fits"))
             .unwrap();
+        let deep = root.join("g").join("h.fits").join("sub");
+        fs::create_dir_all(&deep).unwrap();
+        write_realistic_fits(&deep, "x.fits", Some("LIGHT"), None);
 
         let scanned = scan_root(root, &ScanOptions::default()).unwrap();
         assert_eq!(
             scanned.legacy_rows,
             crate::legacy_rows::LegacyRows {
-                masters_at_folders: ["a/b.fits", "c/d.fits"].map(str::to_owned).to_vec(),
+                masters: ["c/d.fits", "g/h.fits"].map(str::to_owned).to_vec(),
+                masters_at_folders: vec!["a/b.fits".to_owned()],
                 ..Default::default()
             }
         );

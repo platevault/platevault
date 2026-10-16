@@ -10,8 +10,9 @@
 //! stays and names the nested path. When nothing is there, the old row can
 //! never be classified. When a frame that is not a master is there, a master
 //! row would classify and confirm that other file. When a folder is there, a
-//! master row names something that cannot be a master file; the folder's
-//! source groups stay, and only the master item and its own overrides go.
+//! master row names something that cannot be a master file; when this scan
+//! stores that folder, its source groups stay, and only the master item and
+//! its own overrides go.
 //! When a file is there, a folder row's items would plan sources below
 //! something that is not a folder; that file may be a real master, as
 //! `g/h.fits` beside the folder `g\h.fits`, and then only the folder's rows
@@ -67,9 +68,12 @@ pub struct LegacyRows {
     pub folders: Vec<String>,
     /// Master item paths.
     pub masters: Vec<String>,
-    /// Master item paths that now name a folder. A master item names a file,
-    /// so such a row is stale too, but the source groups at its path are the
-    /// folder's and stay: only the item and its own overrides go.
+    /// Master item paths that now name a folder this scan stores. A master
+    /// item names a file, so such a row is stale too, but the source groups at
+    /// its path are the folder's and stay: only the item and its own
+    /// overrides go. A folder the scan does not store (empty, or holding only
+    /// subfolders) has no group of its own, so a master row there is listed
+    /// in `masters` and goes with its groups.
     pub masters_at_folders: Vec<String>,
     /// Master item paths this scan stores itself that are also the old text
     /// of another master it stores, as `a/b.fits` is for `a\b.fits`. The row
@@ -116,8 +120,10 @@ pub(crate) fn find(root: &Path, items: &[ScannedInboxItem]) -> LegacyRows {
             rows.masters.push(old);
         } else {
             match look_up(root, &old) {
-                Entry::Absent => rows.masters.push(old),
-                Entry::Folder => rows.masters_at_folders.push(old),
+                Entry::Folder if folders.contains(old.as_str()) => {
+                    rows.masters_at_folders.push(old);
+                }
+                Entry::Absent | Entry::Folder => rows.masters.push(old),
                 Entry::Other | Entry::Unknown => {}
             }
         }

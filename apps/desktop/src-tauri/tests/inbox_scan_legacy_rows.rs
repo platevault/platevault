@@ -722,3 +722,127 @@ async fn an_old_master_row_at_a_folders_path_goes_and_the_folder_stays() {
         .unwrap();
     assert_eq!(classified, 0, "the old master's classification goes with it");
 }
+
+/// The master `a\b.fits` beside an empty folder `b.fits` in the folder `a`.
+/// The old scan stored the master under `a/b.fits` and gave it an override,
+/// so its own `sg-auto-*` group is there. The scan stores no group for an
+/// empty folder, so that group is no folder's: the scan deletes the old master
+/// row with its classification, override and group.
+#[tokio::test]
+async fn an_old_master_row_at_an_empty_folders_path_goes_with_its_group() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    write_fits(root, "a\\b.fits", "DARK", Some(30));
+    std::fs::create_dir_all(root.join("a").join("b.fits")).unwrap();
+
+    let db = Database::in_memory().await.expect("in-memory database");
+    db.migrate().await.expect("run migrations");
+    let pool = db.pool().clone();
+    sqlx::query(
+        "INSERT INTO registered_sources (id, path, kind, scan_depth, created_at, created_via) \
+         VALUES ('root-1', ?, 'inbox', 'recursive', '2026-01-01T00:00:00Z', 'first_run')",
+    )
+    .bind(root.to_str().unwrap())
+    .execute(&pool)
+    .await
+    .unwrap();
+    repo::insert_inbox_item(
+        &pool,
+        &repo::InsertInboxItem {
+            id: "old-master",
+            root_id: "root-1",
+            relative_path: "a/b.fits",
+            file_count: 1,
+            content_signature: Some("sig-old"),
+            lane: "fits",
+        },
+    )
+    .await
+    .unwrap();
+    sqlx::query("UPDATE inbox_items SET is_master_item = 1 WHERE id = 'old-master'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    seed_classified(&pool, "old-master", "a/b.fits").await;
+    repo::set_overrides(&pool, "old-master", "a/b.fits", None, Some("Ha"), None, None)
+        .await
+        .unwrap();
+
+    scan(&pool, root).await;
+
+    let items: Vec<String> =
+        sqlx::query_scalar("SELECT relative_path FROM inbox_items ORDER BY relative_path")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    assert_eq!(items, ["a\\b.fits"], "the old master row goes; the master's own row is stored");
+    let groups: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM inbox_source_groups WHERE relative_path = 'a/b.fits'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(groups, 0, "the old master's group goes: no folder there has one");
+    let overrides: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM inbox_file_overrides")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(overrides, 0, "the old master's override goes");
+    let classified: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM inbox_classifications")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(classified, 0, "the old master's classification goes with it");
+}
+
+/// The folder `g\h.fits` beside the master `h.fits` in the folder `g`. The
+/// old scan stored the folder's placeholder row under `g/h.fits`, the
+/// master's own text, with the same empty group key a master row has, so the
+/// master's insert was skipped and the master has no row. The scan deletes the
+/// placeholder before it stores masters, so the master gets its row.
+#[tokio::test]
+async fn an_old_folder_placeholder_at_a_masters_path_gives_way_to_the_master() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    write_fits(&root.join("g\\h.fits"), "x.fits", "LIGHT", None);
+    write_fits(&root.join("g"), "h.fits", "DARK", Some(30));
+
+    let db = Database::in_memory().await.expect("in-memory database");
+    db.migrate().await.expect("run migrations");
+    let pool = db.pool().clone();
+    sqlx::query(
+        "INSERT INTO registered_sources (id, path, kind, scan_depth, created_at, created_via) \
+         VALUES ('root-1', ?, 'inbox', 'recursive', '2026-01-01T00:00:00Z', 'first_run')",
+    )
+    .bind(root.to_str().unwrap())
+    .execute(&pool)
+    .await
+    .unwrap();
+    repo::insert_inbox_item(
+        &pool,
+        &repo::InsertInboxItem {
+            id: "old-placeholder",
+            root_id: "root-1",
+            relative_path: "g/h.fits",
+            file_count: 1,
+            content_signature: Some("sig-old"),
+            lane: "fits",
+        },
+    )
+    .await
+    .unwrap();
+
+    scan(&pool, root).await;
+
+    let rows: Vec<(String, i64)> = sqlx::query_as(
+        "SELECT relative_path, is_master_item FROM inbox_items ORDER BY relative_path",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        rows,
+        [("g/h.fits".to_owned(), 1)],
+        "the placeholder goes; the master's own row is stored"
+    );
+}
