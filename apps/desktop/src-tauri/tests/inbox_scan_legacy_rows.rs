@@ -14,6 +14,7 @@
 
 use std::path::Path;
 
+use app_core::inbox::classify::{classify, ClassifyRequest};
 use app_core::inbox::confirm::{confirm, ConfirmRequest};
 use app_core::inbox_plan::cancel_inbox_plan;
 use audit::bus::EventBus;
@@ -368,4 +369,94 @@ async fn an_old_master_kept_for_its_plan_is_not_planned_again_after_cancel() {
     let links: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM inbox_plan_links").fetch_one(&pool).await.unwrap();
     assert_eq!(links, 0);
+}
+
+/// A real master at `a/b.fits` beside the root-level master `a\b.fits`. The
+/// nested row is that master's own: the scan stores it under its current text
+/// and classify records master evidence for it. Confirm must plan it, not
+/// remove it as a stale old-text row.
+#[tokio::test]
+async fn a_real_nested_master_beside_a_backslash_master_is_planned() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    write_fits(root, "a\\b.fits", "DARK", Some(30));
+    write_fits(&root.join("a"), "b.fits", "DARK", Some(30));
+
+    let db = Database::in_memory().await.expect("in-memory database");
+    db.migrate().await.expect("run migrations");
+    let pool = db.pool().clone();
+    // The inbox and a calibration library to plan masters into.
+    for (id, kind) in [("root-1", "inbox"), ("dest-cal", "calibration")] {
+        sqlx::query(
+            "INSERT INTO registered_sources (id, path, kind, scan_depth, created_at, created_via) \
+             VALUES (?, ?, ?, 'recursive', '2026-01-01T00:00:00Z', 'first_run')",
+        )
+        .bind(id)
+        .bind(root.to_str().unwrap())
+        .bind(kind)
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+
+    scan(&pool, root).await;
+    let masters: Vec<(String, String)> = sqlx::query_as(
+        "SELECT relative_path, id FROM inbox_items WHERE is_master_item = 1 ORDER BY relative_path",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    let paths: Vec<&str> = masters.iter().map(|(path, _)| path.as_str()).collect();
+    assert_eq!(paths, ["a/b.fits", "a\\b.fits"], "the scan stores both masters");
+    let nested_id = masters[0].1.clone();
+
+    let classified = classify(
+        &pool,
+        ClassifyRequest {
+            inbox_item_id: nested_id.clone(),
+            root_absolute_path: root.to_path_buf(),
+            force_rescan: false,
+        },
+    )
+    .await
+    .expect("classify the nested master");
+    let evidence: Vec<(String, i64)> = sqlx::query_as(
+        "SELECT relative_file_path, is_master FROM inbox_classification_evidence \
+         WHERE inbox_item_id = ?",
+    )
+    .bind(&nested_id)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(evidence, [("a/b.fits".to_owned(), 1)], "classify read the nested master");
+
+    let bus = EventBus::with_pool(pool.clone());
+    confirm(
+        &pool,
+        &bus,
+        ConfirmRequest {
+            inbox_item_id: nested_id.clone(),
+            content_signature: classified.content_signature,
+            destructive_destination: None,
+            root_absolute_path: root.to_path_buf(),
+            root_id: None,
+            chosen_attribution: None,
+        },
+    )
+    .await
+    .expect("the nested master is planned");
+
+    let state: String = sqlx::query_scalar("SELECT state FROM inbox_items WHERE id = ?")
+        .bind(&nested_id)
+        .fetch_one(&pool)
+        .await
+        .expect("the nested master's row stays");
+    assert_eq!(state, "plan_open");
+    let links: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM inbox_plan_links WHERE inbox_item_id = ?")
+            .bind(&nested_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(links, 1);
 }
