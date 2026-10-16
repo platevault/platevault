@@ -84,7 +84,7 @@ function unfinishedExportPath(err: ContractError): string | null {
   const { details } = err;
   if (typeof details !== 'object' || details === null) return null;
   const path = (details as Record<string, unknown>).path;
-  return typeof path === 'string' ? path : null;
+  return typeof path === 'string' && path.length > 0 ? path : null;
 }
 
 /**
