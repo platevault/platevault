@@ -35,7 +35,7 @@ The user opens PlateVault and decides what to do next from Home. Home shows pend
   | `Pleiades 2025` (Closed) | M 45 | `Esprit` | LRGB | any | Not listed in Open work |
 
 - P3: Sessions needing work:
-  - `2 Oct OIII`: 48 frames, all Unreviewed. It can join a Project only once it is Ready and its calibration is settled.
+  - `2 Oct OIII`: 48 frames, all Unreviewed, with unsettled flats, so it waits in Needs calibration. It can join a Project only once it is Ready and its calibration is settled.
   - `12 Sep`, `24 Sep`, `26 Sep` and `30 Sep`, the worked example's OIII sessions: 127 frames, reviewed Ready sessions suggested to `NGC 7000 HOO`, and not added to it.
   - `1 Oct Ha`: reviewed and Ready, with unsettled flats. It waits in Needs calibration, appears in Home's Pending work and is suggested to `IC 1396 Ha` with "Choose its flats first"; it has not been added.
   - `4 Oct M 33`: reviewed and Ready, with confirmed Target M 33 on rig `RedCat`, and not yet held by a Project. Its calibration is settled.
@@ -51,7 +51,7 @@ The user opens PlateVault and decides what to do next from Home. Home shows pend
 ### S1 — Open Home {#S1}
 
 - **Do:** Launch PlateVault.
-- **Expect:** Home is the first surface shown. At 1280 px it has two columns: Pending ingestions, Pending work and Open work on the left; Status, Tonight and Calendar on the right. The order is fixed. Pending work includes `1 Oct Ha` in Needs calibration and its suggestion to `IC 1396 Ha`. Open work lists the four open Projects and their Next actions. Status reads `Nothing running`.
+- **Expect:** Home is the first surface shown. At 1280 px it has two columns: Pending ingestions, Pending work and Open work on the left; Status, Tonight and Calendar on the right. The order is fixed. Pending work's Needs calibration lists 2 sessions, `1 Oct Ha` and `2 Oct OIII`, and Pending work includes `1 Oct Ha`'s suggestion to `IC 1396 Ha`. Open work lists the four open Projects and their Next actions. Status reads `Nothing running`.
 - **Expect (negative):** Home has no alerts list or Issues hub. It has no header buttons or Getting started checklist. The Targets page is not the first surface, and no Inbox exists.
 - **Trace:** PRJ-FR-17, PRJ-FR-19 · PRJ-AC-18, PRJ-AC-20, PRJ-AC-23 · LIB-FR-17, LIB-FR-23 · D-W89, D-W92, D-W94, D-W105
 
@@ -103,7 +103,7 @@ The user opens PlateVault and decides what to do next from Home. Home shows pend
 - **Expect:** Before the action, Home's Pending work includes:
   - `3 Oct` with `OBJECT Cygnus field` and `5 Oct` with `No OBJECT`, both needing a Target.
   - `4 Oct M 33`, which is not in a Project and offers **Create Project…** or **Add to Project**.
-  - `1 Oct Ha` in Needs calibration, also suggested to `IC 1396 Ha` with "Choose its flats first".
+  - `1 Oct Ha` and `2 Oct OIII` in Needs calibration, each suggested with "Choose its flats first": `1 Oct Ha` to `IC 1396 Ha` and `2 Oct OIII` to `NGC 7000 HOO`.
   - `12 Sep`, `24 Sep`, `26 Sep` and `30 Sep` as Ready suggestions to `NGC 7000 HOO`.
 
   The New Project sheet opens prefilled with subject M 33 and rig `RedCat`. Creating it opens the `M 33` Project page but does not add the session. Back on Home, the two Needs a Target sessions remain, `4 Oct M 33` remains outside the Project, and `M 33`'s Next is **Add sessions**. Its Sessions step lists `4 Oct M 33` as a suggestion; it cannot be added until the user chooses it.
