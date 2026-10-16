@@ -5,21 +5,27 @@
  *
  * - The Status facet: All, Needs review (the intake queue, C14), Needs a
  *   Target, Needs calibration (the Library's calibration queue, LIB-FR-23),
- *   Not in any Project, Unusable and Trashed, with counts (D-W25, D-W43).
- *   Trashed sessions show only under Trashed.
+ *   Not in any Project, Duplicates (F5), Unusable and Trashed, with counts
+ *   (D-W25, D-W43). Trashed sessions show only under Trashed.
+ * - Each row reads its darks, flats and bias (what still needs a choice, or
+ *   Pinned) and carries the duplicates badge when its frames have extra
+ *   copies (F5).
  * - A row opens the session; its ⋯ and context menu offer Review frames
- *   (the intake at its first open step), Choose Target and Add to Project
- *   (D-W59).
- * - Selected sessions offer Archive… (the reviewed transfer Wrap up uses,
- *   STO-FR-13): refused for a session an open Project holds; a Closed
- *   Project's kept View is repointed. The Unusable facet offers Move to
- *   Trash… for its Unusable frames (library clean-up through the OS Trash
+ *   (the intake at its first open step; review stays open once Ready),
+ *   Choose Target and Add to Project (D-W59), which is unavailable with its
+ *   reason until the session is Ready and settled (PRJ-FR-08).
+ * - Selected sessions offer Confirm calibration (their suggestions become
+ *   pins) and No darks, No flats or No bias (for the kinds still waiting or
+ *   suggested), each asking first, and Archive… (the reviewed transfer Wrap
+ *   up uses, STO-FR-13): refused for a session an open Project holds; a
+ *   Closed Project's kept View is repointed. The Unusable facet offers Move
+ *   to Trash… for its Unusable frames (library clean-up through the OS Trash
  *   engine).
  * - After an Import, `?import=<operation>` lists the sessions it filled
  *   first and marks them New.
  */
 import { useNavigate, useSearch } from "@tanstack/react-router"
-import { Archive, Download, Eye, Layers, ListChecks, Target, Trash2 } from "lucide-react"
+import { Archive, Check, CircleSlash, Download, Eye, Layers, ListChecks, Target, Trash2 } from "lucide-react"
 import { useState } from "react"
 import { useMessages } from "@/app/preferences"
 import { useFollowLink } from "@/components/app/links"
@@ -28,19 +34,23 @@ import type { Action, Column, FileRow, MenuItem } from "@/components/app/contrac
 import { EmptyState, type PageNotice } from "@/components/app/feedback"
 import { Pill } from "@/components/app/pill"
 import { StatusBadge } from "@/components/app/status"
+import { DuplicatesBadge } from "@/components/domain/duplicates-badge"
 import { ListPage } from "@/components/templates/list-page"
 import { type ArchivePlan, sessionsArchivePlan, unusableFramesOffer } from "@/domain/archive"
+import { NO_KIND_NAME, PIN_KINDS } from "@/domain/calibration"
 import { formatHours, sessionIntakeEntry, sessionIntakeLink } from "@/domain/derive"
 import { sessionLabel } from "@/domain/membership"
+import type { PinKind } from "@/domain/types"
 import { formatBytes, formatCount, formatNight } from "@/lib/format"
 import { type Messages, msg, say } from "@/lib/i18n"
 import type { SearchParams } from "@/routes"
 import { offerFileRows, startArchiveTransfer } from "@/store/actions/archive"
+import { confirmCalibration, type SessionKind, setNoCalibration } from "@/store/actions/calibration"
 import { moveToOsTrash } from "@/store/actions/trash"
 import { type PrototypeState, useStore } from "@/store/core"
 import type { ImportPayload } from "./import-run"
 import { addToProjectItems } from "./parts"
-import { ReadinessBadge } from "./session"
+import { CalibrationSummary, ReadinessBadge } from "./session"
 import { filterCounts, filterLabel, matchesFilter, openHolder, parseFilter, SESSION_FILTERS, type SessionFilter, type SessionRow, sessionRows } from "./session-model"
 
 function emptyTitle(m: Messages, filter: SessionFilter): string {
@@ -50,10 +60,56 @@ function emptyTitle(m: Messages, filter: SessionFilter): string {
     "needs-target": m.sessions_empty_needs_target,
     "needs-calibration": m.sessions_empty_needs_calibration,
     "not-in-project": m.sessions_empty_not_in_project,
+    duplicates: m.sessions_empty_duplicates,
     unusable: m.sessions_empty_unusable,
     trashed: m.sessions_empty_trashed,
   }
   return title[filter]()
+}
+
+/** The kinds of the selected sessions a batch acts on, one pick per session and kind. */
+function picksOf(rows: SessionRow[], kinds: readonly PinKind[], states: ReadonlyArray<"waiting" | "suggested">): SessionKind[] {
+  return rows.flatMap((r) => kinds.flatMap((kind) => (r.session.calibration && (states as readonly string[]).includes(r.session.calibration[kind].state) ? [{ sessionId: r.session.id, kind }] : [])))
+}
+
+function sessionCount(picks: SessionKind[]): number {
+  return new Set(picks.map((p) => p.sessionId)).size
+}
+
+/** Confirm suggestions: each suggestion of the selected sessions becomes the user's pin (LIB-FR-23), after its confirmation. */
+function confirmCalibrationAction(m: Messages, selected: SessionRow[], onDone: () => void): Action {
+  const picks = picksOf(selected, PIN_KINDS, ["suggested"])
+  const count = sessionCount(picks)
+  return {
+    id: "confirm-calibration",
+    label: m.sessions_confirm_suggestions(),
+    icon: Check,
+    unavailable: picks.length === 0 ? { action: m.sessions_confirm_suggestions(), reason: m.calibration_choices_none_suggested(), blockers: [] } : undefined,
+    confirm: { title: m.sessions_confirm_calibration_title({ count }), summary: m.sessions_confirm_calibration_summary({ count: picks.length }), confirm: { label: m.verb_confirm() } },
+    run: () => {
+      const result = confirmCalibration(picks)
+      if (result.ok) onDone()
+      return result
+    },
+  }
+}
+
+/** No darks, No flats or No bias for the selected sessions whose kind still waits or is only suggested (CAL-FR-05: no reason asked; a pin is never overridden here). */
+function noCalibrationAction(m: Messages, selected: SessionRow[], kind: PinKind, onDone: () => void): Action {
+  const picks = picksOf(selected, [kind], ["waiting", "suggested"])
+  const choice = say(m, NO_KIND_NAME[kind])
+  return {
+    id: `no-${kind}`,
+    label: choice,
+    icon: CircleSlash,
+    unavailable: picks.length === 0 ? { action: choice, reason: m.sessions_no_choice_none({ choice }), blockers: [] } : undefined,
+    confirm: { title: m.sessions_set_no_title({ choice, count: picks.length }), summary: m.sessions_set_no_summary(), confirm: { label: choice } },
+    run: () => {
+      const result = setNoCalibration(picks)
+      if (result.ok) onDone()
+      return result
+    },
+  }
 }
 
 /** Why Archive… is unavailable for the selection (round 6); null when it can run. */
@@ -195,6 +251,7 @@ export function SessionsPage() {
         <>
           {`${formatNight(r.session.night, true)} · ${r.session.channel ?? m.palette_session_no_filter()}`}
           {imported.has(r.session.id) ? <Pill tone="info">{m.sessions_new()}</Pill> : null}
+          {r.duplicates > 0 ? <DuplicatesBadge count={r.duplicates} /> : null}
         </>
       ),
     },
@@ -226,6 +283,12 @@ export function SessionsPage() {
       ),
     },
     { id: "review", header: m.sessions_column_review(), sortValue: (r) => (r.trashed ? "" : r.readiness), cell: (r) => <ReadinessBadge readiness={r.readiness} unreviewed={r.unreviewed} trashed={r.trashed} /> },
+    {
+      id: "calibration",
+      header: m.nav_calibration(),
+      sortValue: (r) => (r.trashed ? 2 : r.needsCalibration ? 0 : 1),
+      cell: (r) => (r.trashed || !r.session.calibration ? "–" : <CalibrationSummary calibration={r.session.calibration} disk={state.disk} />),
+    },
     {
       id: "projects",
       header: m.nav_projects(),
@@ -282,7 +345,10 @@ export function SessionsPage() {
         },
         batchActions: (ids) => {
           const picked = rows.filter((r) => ids.includes(r.session.id) && !r.trashed)
-          return [archiveAction(m, state, picked, clearSelection), ...(trashUnusable ? [trashUnusable] : [])]
+          const calibration = [confirmCalibrationAction(m, picked, clearSelection), ...PIN_KINDS.map((kind) => noCalibrationAction(m, picked, kind, clearSelection))]
+          const archive = [archiveAction(m, state, picked, clearSelection), ...(trashUnusable ? [trashUnusable] : [])]
+          // The queue's own actions lead there; elsewhere they follow Archive… under More.
+          return filter === "needs-calibration" ? [...calibration, ...archive] : [...archive, ...calibration]
         },
         toolbar: {
           search: { label: m.sessions_search(), placeholder: m.sessions_search_placeholder(), value: query, onChange: (value) => setParams({ q: value }) },

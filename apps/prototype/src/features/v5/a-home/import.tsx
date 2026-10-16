@@ -8,22 +8,25 @@
  *   which can be saved as a source. An existing library folder is added in
  *   Settings › Locations, where it is indexed in place.
  * - Preview (import-preview.tsx): each file's destination; lights become
- *   sessions filed under their Target (P-IMP2), raw calibration frames go to
- *   a calibration process (P-CAL3), masters to the Calibration library;
+ *   sessions filed under their Target (P-IMP2), split by framing with Merge
+ *   framings and Re-split (LIB-AC-31), each with its darks, flats and bias
+ *   as the import will leave them; raw calibration frames go to a
+ *   calibration process (P-CAL3), masters to the Calibration library;
  *   held and skipped files; Copy or Move. Its terminal Proceed is Import…,
  *   with every file in the confirm. It is unavailable while the preview has
- *   a blocking row (F3).
+ *   a blocking row (F3); calibration never blocks it.
  * - Import runs as an operation: the page turns read-only and shows its
  *   progress and outcome. A source that vanishes pauses it as Interrupted
  *   until Retry. Its calibration fills only sessions still waiting; sessions
  *   set to No that it matches are offered, unticked, under "Also use for
- *   these sessions" (LIB-FR-25). Import ends by opening the first imported
- *   session the review queue holds (C14), or Sessions with the imported
- *   sessions marked.
+ *   these sessions" (LIB-FR-25). The outcome reads each imported session's
+ *   calibration and links what waits to Needs calibration. Import ends by
+ *   opening the first imported session the review queue holds (C14), or
+ *   Sessions with the imported sessions marked.
  */
 import { useNavigate, useSearch } from "@tanstack/react-router"
 import { Check, Download, FolderOpen, FolderSearch, HardDrive, Layers, ListChecks, Plus, RotateCcw, Save } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useMessages } from "@/app/preferences"
 import { useFollowLink } from "@/components/app/links"
 import { ActionBar } from "@/components/app/actions"
@@ -38,7 +41,7 @@ import { StatusBadge } from "@/components/app/status"
 import { stepEditable } from "@/components/app/step-flow"
 import { StepPage } from "@/components/templates/step-page"
 import { type ArrivalUse, type CalSource, calibrationArrival, KIND_NAME, rawSource, sourceRef, versionSource } from "@/domain/calibration"
-import { importReviewLink, type StepLink } from "@/domain/derive"
+import { importReviewLink, needsCalibration, type StepLink } from "@/domain/derive"
 import { removableDevices } from "@/domain/devices"
 import { sessionLongLabel } from "@/domain/membership"
 import type { CalibrationSource, Operation, SessionId } from "@/domain/types"
@@ -48,10 +51,11 @@ import { alsoUseCalibration } from "@/store/actions/calibration"
 import { type PrototypeState, updateSlice, useStore } from "@/store/core"
 import { isSettled } from "@/store/operations"
 import { settleGrowingFiles } from "@/store/simulation"
-import type { ImportDraft, ImportSourceChoice } from "@/store/slices/a"
+import { type ImportDraft, type ImportSourceChoice, withoutReviewChoices } from "@/store/slices/a"
 import { freshFrameCount, type ImportPlan, planImport, routeFor, savedSourceAt, sourcePathOf, typeLabel } from "./import-model"
 import { importConfirm, PreviewStep } from "./import-preview"
 import { type ImportPayload, saveImportSource, startImport } from "./import-run"
+import { CalibrationSummary } from "./session"
 
 /** Simulated time the capture device needs to finish writing a held file. */
 const SETTLE_MS = 6000
@@ -82,7 +86,7 @@ function defaultSource(state: PrototypeState): ImportSourceChoice | null {
 }
 
 function selectSource(source: ImportSourceChoice, newOnly = true) {
-  setDraft({ source, newOnly, typed: {}, targets: {} })
+  updateSlice("a", (a) => ({ ...a, importDraft: { ...withoutReviewChoices(a.importDraft), source, newOnly } }))
 }
 
 /** The import this page started, while its operation is recorded. */
@@ -147,7 +151,8 @@ export function ImportPage() {
   const search = useSearch({ strict: false }) as { step?: string; location?: string }
   const state = useStore((s) => s)
   const draft = state.slices.a.importDraft
-  const plan = planImport(state, draft)
+  const { catalog, disk, settings } = state
+  const plan = useMemo(() => planImport({ catalog, disk, settings }, draft), [catalog, disk, settings, draft])
   const op = lastImportOp(state)
   const viewing: ImportStepId = search.step === "preview" ? "preview" : "source"
   const flow = importFlow(m, plan, draft, viewing, op)
@@ -352,6 +357,8 @@ function OutcomeStep({ state, op }: { state: PrototypeState; op: Operation }) {
   const masters = payload.copied.filter((c) => routeFor(c.type) === "masters").length
   const toCalibration = masters > 0 || imported.some((s) => s.imageType !== "light")
   const review = settled ? importReviewLink(state.catalog, payload.sessionIds) : null
+  // Import never waits for calibration: what it leaves unsettled waits in Needs calibration (LIB-FR-23).
+  const waiting = settled ? imported.filter((s) => s.imageType === "light" && needsCalibration(state.disk, s)).length : 0
   const reset = () => {
     updateSlice("a", (a) => ({ ...a, lastImport: null }))
     follow(importLink("source"))
@@ -360,6 +367,7 @@ function OutcomeStep({ state, op }: { state: PrototypeState; op: Operation }) {
     ...(review ? [{ id: "review", label: m.import_review_sessions(), icon: ListChecks, run: () => follow(review) }] : []),
     ...(settled && imported.some((s) => s.imageType === "light") ? [{ id: "sessions", label: m.import_show_in_sessions(), run: () => void navigate({ to: "/sessions", search: { import: op.id } }) }] : []),
     ...(settled && toCalibration ? [{ id: "calibration", label: m.import_show_in_calibration(), run: () => void navigate({ to: "/calibration" }) }] : []),
+    ...(waiting > 0 ? [{ id: "needs-calibration", label: m.import_needs_calibration_count({ count: waiting }), run: () => void navigate({ to: "/sessions", search: { filter: "needs-calibration" } }) }] : []),
     { id: "more", label: m.import_more(), icon: RotateCcw, unavailable: settled ? undefined : { action: m.import_more(), reason: m.status_running(), blockers: [] }, run: reset },
   ]
   type Row = (typeof imported)[number]
@@ -372,6 +380,12 @@ function OutcomeStep({ state, op }: { state: PrototypeState; op: Operation }) {
       header: m.import_column_state(),
       sortValue: (s) => s.target.status,
       cell: (s) => (s.imageType === "light" ? <StatusBadge kind="association" value={s.target.status} /> : m.import_route_stack()),
+    },
+    {
+      id: "calibration",
+      header: m.nav_calibration(),
+      sortValue: (s) => (s.imageType === "light" && needsCalibration(state.disk, s) ? 0 : 1),
+      cell: (s) => (s.imageType === "light" && s.calibration ? <CalibrationSummary calibration={s.calibration} disk={state.disk} /> : "–"),
     },
   ]
   return (

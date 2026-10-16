@@ -1,18 +1,21 @@
 /**
  * Slice A shared pieces: Add to Project as menu items (D-W59: it also adds
- * the session's Target as a subject and its rig, then the session itself,
- * which must be Ready and settled, PRJ-FR-08) with its confirm, Create
- * Project prefilled from a session, and the terse refusal for a failed
- * write. Used by Home, Sessions and the session detail.
+ * the session's Target as a subject and its rig, then the session itself)
+ * with its confirm, Create Project prefilled from a session, and the terse
+ * refusal for a failed write. Used by Home, Sessions and the session detail.
+ * Only a session that is Ready and calibration-settled can join a Project
+ * (`canJoinProject`, PRJ-FR-08): otherwise each Project item is unavailable
+ * with its `joinBlocker` ("Choose its flats first") and a link to where it is
+ * resolved; the store refuses the same on every path.
  */
 import type { Action, MenuItem } from "@/components/app/contracts"
 import { toast } from "@/components/app/feedback"
 import { type RefusalProps, refusalFrom } from "@/components/app/refusal"
 import { openSheet } from "@/app/ui-state"
-import { findInput, rigName, sessionRigId, sessionTargetId } from "@/domain/derive"
+import { canJoinProject, findInput, joinBlocker, rigName, sessionIntakeEntry, sessionReadiness, sessionRigId, sessionTargetId, type StepLink } from "@/domain/derive"
 import { sessionLabel } from "@/domain/membership"
-import type { Catalog, Project, SessionId } from "@/domain/types"
-import type { Messages } from "@/lib/i18n"
+import type { Catalog, Project, Session, SessionId } from "@/domain/types"
+import { type Messages, say } from "@/lib/i18n"
 import { addSessionToProject } from "@/store/actions/projects"
 import type { CommitResult } from "@/store/core"
 
@@ -34,6 +37,18 @@ export function createProjectAction(m: Messages, sessionId: SessionId): Action {
   return { id: `create-project-${sessionId}`, label: m.newproject_create(), opensDialog: true, run: () => openSheet({ kind: "new-project", fromSessionId: sessionId }) }
 }
 
+/** Where a session that cannot join yet is resolved: its intake while it is not Ready, else its calibration on its details. */
+export function joinBlockerLink(catalog: Catalog, session: Session): StepLink {
+  return sessionReadiness(catalog, session) === "ready" ? { to: "/sessions/$sessionId", params: { sessionId: session.id } } : sessionIntakeEntry(catalog, session)
+}
+
+/** Add to Project's unavailable state for a session that is not Ready and settled: the reason and where to resolve it. */
+export function joinUnavailable(m: Messages, catalog: Catalog, session: Session): Action["unavailable"] {
+  if (canJoinProject(catalog, session)) return undefined
+  const blocker = joinBlocker(catalog, session)
+  return { action: m.session_add_to_project(), reason: blocker ? say(m, blocker) : m.store_record_missing(), blockers: [{ label: sessionLabel(m, session), link: joinBlockerLink(catalog, session) }] }
+}
+
 /** Adding one session to one Project: the confirm names what the Project gains, the outcome is a toast. */
 function addAction(m: Messages, catalog: Catalog, sessionId: SessionId, project: Project): Action {
   const session = catalog.sessions[sessionId]!
@@ -49,6 +64,7 @@ function addAction(m: Messages, catalog: Catalog, sessionId: SessionId, project:
   return {
     id: `add-to-${project.id}`,
     label: project.name,
+    unavailable: joinUnavailable(m, catalog, session),
     confirm: {
       title: m.session_add_to_project_title({ session: label, project: project.name }),
       summary: changes.join(" · "),

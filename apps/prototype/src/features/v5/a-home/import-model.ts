@@ -19,16 +19,27 @@
  *   already imported from this saved source (Import new), a non-image file,
  *   or a destination name already taken by different bytes.
  * Blockers are terse chips ("Astro-T7 offline"). Nothing here writes state.
+ *
+ * Merge framings imports a capture's framings as one session, and Re-split
+ * returns the split (D-W107, LIB-AC-31). Import review previews what the
+ * import's ingestion will do (`previewImport`): the same C ingestion
+ * (`ingestFiles`) on a what-if copy of the library with the copies in place,
+ * calibration locations first so lights see the batch's calibration, then
+ * the choices made in review (`applyImportChoices`). The import operation
+ * runs the same two steps on the real copies.
  */
+import { type CalSource, calibrationSources, candidatesFor, confirmChoice, noChoice, PIN_KINDS, pickChoice, sourceKey } from "@/domain/calibration"
 import { masterStoragePath } from "@/domain/calibration-process"
-import { fileAt, freeBytes, volumeForPath } from "@/domain/disk"
-import { framingOf, isUnder, nightOf, sessionGroupingKey, splitByFraming, targetAtPointing } from "@/domain/indexing"
+import type { World } from "@/domain/derive"
+import { fileAt, freeBytes, makeFile, volumeForPath, writeFiles } from "@/domain/disk"
+import { framingOf, ingestFiles, isUnder, NO_MASTER_CAMERAS, nightOf, sessionGroupingKey, splitByFraming, targetAtPointing } from "@/domain/indexing"
 import { locationAvailability } from "@/domain/library"
 import { headerNamingValues, namingTemplate, resolveNamingTemplate } from "@/domain/templates"
 import type { Blocker } from "@/components/app/contracts"
 import { formatBytes } from "@/lib/format"
 import { m, type MessageRef, type Messages, msg, say } from "@/lib/i18n"
 import type {
+  AppSettings,
   AssetId,
   CalibrationKind,
   Catalog,
@@ -36,16 +47,20 @@ import type {
   DiskFile,
   ImageType,
   ImportSource,
+  IsoDateTime,
   Location,
+  LocationId,
   LocationRole,
   NamingFrameType,
   NamingToken,
+  PinKind,
+  Session,
   SessionId,
   TargetId,
   Volume,
 } from "@/domain/types"
 import type { PrototypeState } from "@/store/core"
-import type { ImportDraft } from "@/store/slices/a"
+import type { ImportCalibrationChoice, ImportDraft } from "@/store/slices/a"
 
 export type ImportRole = Extract<LocationRole, "captures" | "calibration">
 
@@ -111,10 +126,18 @@ export interface TargetChoice {
 
 /** An incoming light session (P-IMP2): its frames, grouped and split by framing as indexing does (LIB-AC-31), file under its Target. */
 export interface IncomingSession {
-  /** The session grouping key, with its framing after the first; the draft's Target choice is keyed by it. */
+  /** The session grouping key, with its framing after the first; the draft's Target and calibration choices are keyed by it. */
   key: string
+  /** The capture's grouping key, shared by its framings: Merge framings and Re-split act on it. */
+  captureKey: string
   /** 1 for the capture key's first framing, 2 for "framing 2" and so on (D-W107). */
   framing: number
+  /** How many framings the capture splits into by the Settings margins; above 1 it can be merged. */
+  framings: number
+  /** The user merged the capture's framings: one session for all of them. */
+  merged: boolean
+  /** Frames with no RA/DEC: they never split and stay in this session [PROVISIONAL, C's rule]. */
+  unpointed: number
   /** OBJECT: a hint only, never the Target. */
   objectLabel: string | null
   /** The Target whose footprint contains the session's pointing (nearest centre); null without one. */
@@ -163,6 +186,8 @@ export interface ImportPlan {
   volume: Volume | null
   /** The source folder is on a mounted volume. */
   online: boolean
+  /** Every folder the batch reads: the source, then the folders added to it ("Add calibration files…"). */
+  folders: Array<{ path: string; extra: boolean; online: boolean }>
   items: PlanItem[]
   groups: DestinationGroup[]
   held: { unclassified: UnclassifiedHold[]; settling: DiskFile[] }
@@ -221,14 +246,17 @@ function locationWritable(disk: Disk, location: Location): { writable: boolean; 
   return { writable: true, volume, problem: null }
 }
 
+/** What the import plan and its preview read: the library, the disk and the settings. */
+export type ImportWorld = Pick<PrototypeState, "catalog" | "disk" | "settings">
+
 /** The chosen destination, else the first writable one of the role. */
-export function chosenDestination(state: PrototypeState, draft: ImportDraft, role: ImportRole): Location | null {
+export function chosenDestination(state: ImportWorld, draft: ImportDraft, role: ImportRole): Location | null {
   const id = role === "captures" ? draft.capturesLocationId : draft.calibrationLocationId
   const all = destinationLocations(state.catalog, role)
   return all.find((l) => l.id === id) ?? all.find((l) => locationWritable(state.disk, l).writable) ?? all[0] ?? null
 }
 
-export function sourcePathOf(state: PrototypeState, draft: ImportDraft): { path: string; label: string; saved: ImportSource | null } | null {
+export function sourcePathOf(state: ImportWorld, draft: ImportDraft): { path: string; label: string; saved: ImportSource | null } | null {
   if (!draft.source) return null
   if (draft.source.kind === "folder") return { path: draft.source.path, label: draft.source.path, saved: savedSourceAt(state.catalog, draft.source.path) }
   const saved = state.catalog.importSources[draft.source.id]
@@ -277,7 +305,7 @@ export function sourceOnline(disk: Disk, path: string): boolean {
 }
 
 /** Where a planned frame is written: the type's naming template, or structured storage for a master. A light resolves `{target}` to its session's Target. */
-function destinationFor(state: PrototypeState, location: Location, file: DiskFile, type: Exclude<ImageType, "unknown">, target: string | null): { destFolder: string; destPath: string; fallbacks: NamingToken[] } {
+function destinationFor(state: ImportWorld, location: Location, file: DiskFile, type: Exclude<ImageType, "unknown">, target: string | null): { destFolder: string; destPath: string; fallbacks: NamingToken[] } {
   const header = file.header!
   if (routeFor(type) === "masters") {
     const kind = type.slice("master-".length) as CalibrationKind
@@ -301,16 +329,19 @@ function lightKey(file: DiskFile): string {
 /**
  * The incoming light sessions (P-IMP2) of each light, by file path: grouped
  * by key, then split by framing with the Settings margins as intake splits
- * them (`splitByFraming`), each prefilled with the Target its mean pointing
- * associates, unless the draft chose another Target or Unclassified (null).
+ * them (`splitByFraming`), unless the user merged the capture's framings;
+ * each prefilled with the Target its mean pointing associates, unless the
+ * draft chose another Target or Unclassified (null).
  */
-function incomingSessions(state: PrototypeState, draft: ImportDraft, lights: DiskFile[]): Map<string, IncomingSession> {
+function incomingSessions(state: ImportWorld, draft: ImportDraft, lights: DiskFile[]): Map<string, IncomingSession> {
   const { catalog } = state
   const byKey = new Map<string, DiskFile[]>()
   for (const file of lights) byKey.set(lightKey(file), [...(byKey.get(lightKey(file)) ?? []), file])
   const out = new Map<string, IncomingSession>()
   for (const [captureKey, all] of byKey) {
-    splitByFraming(all, (f) => framingOf(f.header!), state.settings.matching.framing).forEach((files, i) => {
+    const split = splitByFraming(all, (f) => framingOf(f.header!), state.settings.matching.framing)
+    const merged = split.length > 1 && draft.merged.includes(captureKey)
+    ;(merged ? [all] : split).forEach((files, i) => {
       const framing = i + 1
       const key = framing === 1 ? captureKey : `${captureKey}|framing ${framing}`
       const pointed = files.map((f) => f.header!).filter((h) => h.ra !== null && h.dec !== null)
@@ -319,26 +350,48 @@ function incomingSessions(state: PrototypeState, draft: ImportDraft, lights: Dis
       const chosen = key in draft.targets ? draft.targets[key] : suggested?.id
       const record = chosen ? catalog.targets[chosen] : undefined
       const target = !chosen ? null : chosen === suggested?.id ? suggested : record ? { id: record.id, name: record.name } : suggested
-      const session: IncomingSession = { key, framing, objectLabel: files[0]!.header!.object, suggested, target }
+      const session: IncomingSession = {
+        key,
+        captureKey,
+        framing,
+        framings: split.length,
+        merged,
+        unpointed: files.length - pointed.length,
+        objectLabel: files[0]!.header!.object,
+        suggested,
+        target,
+      }
       for (const file of files) out.set(file.path, session)
     })
   }
   return out
 }
 
-export function planImport(state: PrototypeState, draft: ImportDraft): ImportPlan | null {
+/** Why Move cannot take files from this folder (a chip, "No OS Trash"); null when it can. */
+function moveRefusal(disk: Disk, path: string): string | null {
+  const volumeId = volumeForPath(disk, path)
+  const volume = volumeId ? disk.volumes[volumeId] : undefined
+  if (!volume?.mounted) return m.import_not_connected()
+  if (!volume.writable || disk.readOnlyPaths.some((p) => isUnder(path, p))) return m.import_read_only_source()
+  if (volume.trash === "unsupported") return m.import_no_os_trash()
+  return null
+}
+
+export function planImport(state: ImportWorld, draft: ImportDraft): ImportPlan | null {
   const source = sourcePathOf(state, draft)
   if (!source) return null
   const { disk, catalog } = state
   const volumeId = volumeForPath(disk, source.path)
   const volume = volumeId ? (disk.volumes[volumeId] ?? null) : null
   const online = sourceOnline(disk, source.path)
+  const extras = draft.extraFolders.filter((path) => !isUnder(path, source.path))
   const plan: ImportPlan = {
     sourcePath: source.path,
     sourceLabel: source.label,
     saved: source.saved,
     volume,
     online,
+    folders: [{ path: source.path, extra: false, online }, ...extras.map((path) => ({ path, extra: true, online: sourceOnline(disk, path) }))],
     items: [],
     groups: [],
     held: { unclassified: [], settling: [] },
@@ -349,7 +402,14 @@ export function planImport(state: PrototypeState, draft: ImportDraft): ImportPla
     blockers: [],
   }
   const destinations: Record<ImportRole, Location | null> = { captures: chosenDestination(state, draft, "captures"), calibration: chosenDestination(state, draft, "calibration") }
-  const files = online && volume ? sourceFiles(disk, volume, source.path) : []
+  // The source's files, then those of each added folder; a file two folders hold is read once.
+  const read = new Map<string, DiskFile>()
+  for (const folder of online ? plan.folders : []) {
+    const folderVolumeId = volumeForPath(disk, folder.path)
+    const folderVolume = folderVolumeId ? disk.volumes[folderVolumeId] : undefined
+    if (folder.online && folderVolume) for (const file of sourceFiles(disk, folderVolume, folder.path)) if (!read.has(file.path)) read.set(file.path, file)
+  }
+  const files = [...read.values()]
   const known = librarySha(catalog)
   const importedBefore = draft.newOnly && source.saved ? new Set(source.saved.importedSha256) : new Set<string>()
   const unclassified = new Map<string, DiskFile[]>()
@@ -431,14 +491,206 @@ export function planImport(state: PrototypeState, draft: ImportDraft): ImportPla
     plan.destinations.push({ role, location, volume: check.volume, neededBytes: needed, freeBytes: free, writable: check.writable, problem })
   }
 
-  if (!volume?.mounted) plan.move = { allowed: false, reason: m.import_not_connected() }
-  else if (!volume.writable || disk.readOnlyPaths.some((p) => isUnder(source.path, p))) plan.move = { allowed: false, reason: m.import_read_only_source() }
-  else if (volume.trash === "unsupported") plan.move = { allowed: false, reason: m.import_no_os_trash() }
-  else plan.move = { allowed: true, reason: null }
+  // Move sends every source it copied to the OS Trash, so each folder the batch reads must allow it.
+  const refusal = plan.folders.map((f) => moveRefusal(disk, f.path)).find((r) => r !== null) ?? null
+  plan.move = refusal ? { allowed: false, reason: refusal } : { allowed: true, reason: null }
 
   if (!online) plan.blockers.push({ label: volume?.mounted ? m.folder_picker_live_denied({ name: source.label }) : m.import_source_not_connected({ name: source.label }) })
   else if (plan.items.length === 0) plan.blockers.push({ label: plan.held.unclassified.length > 0 || plan.held.settling.length > 0 ? m.import_only_held() : m.import_nothing_new() })
+  for (const folder of plan.folders) if (folder.extra && !folder.online) plan.blockers.push({ label: m.import_source_not_connected({ name: folder.path }) })
   for (const d of plan.destinations) if (d.problem) plan.blockers.push({ label: d.problem })
   if (draft.mode === "move" && !plan.move.allowed && plan.move.reason) plan.blockers.push({ label: m.import_move_blocked({ reason: plan.move.reason }) })
   return plan
+}
+
+// ---------------------------------------------------------------------------
+// Ingestion: what Import does once its copies verified, previewed in review
+// ---------------------------------------------------------------------------
+
+/** Margins under which every frame of a capture is one framing (a rotation difference is at most 90°): a merged capture imports as one session (D-W107). */
+const ONE_FRAMING = { centrePct: Number.POSITIVE_INFINITY, rotationDeg: 90 }
+
+/** The verified copy Import writes at `dest`: the source's bytes and header. */
+export function copiedFile(source: DiskFile, dest: string, volumeId: Volume["id"], at: IsoDateTime): DiskFile {
+  return makeFile({ path: dest, volumeId, sizeBytes: source.sizeBytes, kind: source.kind, header: source.header, pixelTruth: source.pixelTruth, sha256: source.sha256, modifiedAt: at })
+}
+
+/** One file the import wrote: where, read as which type, and whether its capture's framings were merged. */
+export interface ImportedEntry {
+  dest: string
+  locationId: LocationId
+  type: ImageType
+  merged: boolean
+}
+
+/** Copies of one location read in one ingestion; a merged capture's lights come in a batch of their own. */
+export interface ImportBatch {
+  location: Location
+  files: DiskFile[]
+  merged: boolean
+}
+
+/** The ingestion batches of the copies on `disk`. A typed Unclassified file is read as the type the user gave it. */
+export function importBatches(catalog: Catalog, disk: Disk, entries: ImportedEntry[]): ImportBatch[] {
+  const batches = new Map<string, ImportBatch>()
+  for (const entry of entries) {
+    const location = catalog.locations[entry.locationId]
+    const file = fileAt(disk, entry.dest)
+    if (!location || !file?.header) continue
+    const key = `${location.id}|${entry.merged}`
+    const batch = batches.get(key) ?? { location, files: [], merged: entry.merged }
+    batch.files.push({ ...file, header: { ...file.header, imageType: entry.type } })
+    batches.set(key, batch)
+  }
+  return [...batches.values()]
+}
+
+/**
+ * Read the import's copies into the library through C's ingestion
+ * (`ingestFiles`, which matches calibration after each batch): calibration
+ * locations first, so lights are matched against the batch's calibration as
+ * well as the library's, then captures, merged captures last with every
+ * frame in one framing. Import never waits for calibration: whatever stays
+ * unsettled waits in Needs calibration (LIB-FR-23).
+ */
+export function ingestImport(catalog: Catalog, disk: Disk, settings: Pick<AppSettings, "matching">, batches: ImportBatch[], at: IsoDateTime): Catalog {
+  const order = (b: ImportBatch) => (b.location.role === "captures" ? 1 : 0) + (b.merged ? 1 : 0)
+  const oneFraming = { matching: { ...settings.matching, framing: { ...settings.matching.framing, ...ONE_FRAMING } } }
+  return [...batches]
+    .filter((b) => b.files.length > 0)
+    .sort((a, b) => order(a) - order(b))
+    .reduce((next, b) => ingestFiles(next, disk, b.merged ? oneFraming : settings, b.location, b.files, at, NO_MASTER_CAMERAS), catalog)
+}
+
+/** Calibration chosen in review for one incoming session, by kind. */
+export type ImportChoices = Partial<Record<PinKind, ImportCalibrationChoice>>
+
+/**
+ * The calibration chosen in import review, applied to the sessions the
+ * import filled (LIB-FR-23): Confirm turns the kind's suggestion into the
+ * user's pin (`confirmChoice`; any other state stays), No settles it with no
+ * reason, and Choose pins the picked source while it is still offered. A
+ * kind with no choice keeps what matching gave it.
+ */
+export function applyImportChoices(catalog: Catalog, disk: Disk, settings: Pick<AppSettings, "matching">, picks: Array<{ sessionId: SessionId; choices: ImportChoices }>, at: IsoDateTime): Catalog {
+  let sources: CalSource[] | null = null
+  let sessions: Catalog["sessions"] | null = null
+  for (const { sessionId, choices } of picks) {
+    const session = catalog.sessions[sessionId]
+    if (!session?.calibration) continue
+    let calibration = session.calibration
+    for (const kind of PIN_KINDS) {
+      const choice = choices[kind]
+      if (!choice) continue
+      const current = calibration[kind]
+      let next = current
+      if (choice.state === "confirm") next = confirmChoice(current, at)
+      else if (choice.state === "none") next = noChoice(at)
+      else {
+        sources ??= calibrationSources(catalog, disk)
+        const key = sourceKey(choice.source)
+        const candidate = candidatesFor(catalog, settings, session, kind, sources).find((c) => c.source.key === key)
+        if (candidate) next = pickChoice(candidate, at)
+      }
+      if (next !== current) calibration = { ...calibration, [kind]: next }
+    }
+    if (calibration === session.calibration) continue
+    sessions ??= { ...catalog.sessions }
+    sessions[sessionId] = { ...session, calibration }
+  }
+  return sessions ? { ...catalog, sessions } : catalog
+}
+
+/** The session each copy at these paths was read into. */
+export function sessionsAt(catalog: Catalog, paths: ReadonlySet<string>): Map<string, SessionId> {
+  const out = new Map<string, SessionId>()
+  for (const asset of Object.values(catalog.assets)) {
+    if (!asset.sessionId) continue
+    for (const copy of asset.copies) if (paths.has(copy.path)) out.set(copy.path, asset.sessionId)
+  }
+  return out
+}
+
+/** The incoming sessions' calibration choices from the draft, against the sessions their frames landed in. */
+export function choicePicks(items: ReadonlyArray<{ destPath: string; sessionKey: string | null }>, landed: Map<string, SessionId>, calibration: ImportDraft["calibration"]): Array<{ sessionId: SessionId; choices: ImportChoices }> {
+  const out = new Map<SessionId, ImportChoices>()
+  for (const item of items) {
+    const sessionId = landed.get(item.destPath)
+    const choices = item.sessionKey ? calibration[item.sessionKey] : undefined
+    if (sessionId && choices && !out.has(sessionId)) out.set(sessionId, choices)
+  }
+  return [...out].map(([sessionId, choices]) => ({ sessionId, choices }))
+}
+
+export interface ImportPreview {
+  /** The library once the import ran, its copies in place: a what-if, never written. */
+  world: Pick<World, "catalog" | "disk" | "settings">
+  /** The session each incoming light session becomes, by its key. */
+  sessionOf: Map<string, SessionId>
+  /** Per calibration destination group (by key): the light sessions its sets would calibrate, those that wait and the incoming ones ("Used for"). */
+  usedFor: Map<string, Session[]>
+}
+
+/**
+ * What the import's ingestion will do, for import review: the same steps the
+ * operation runs (`ingestImport`, then `applyImportChoices`) on a what-if
+ * copy of the library with the copies written. Each incoming session shows
+ * its darks, flats and bias as matching leaves them (pinned automatically,
+ * suggested or not found) and each calibration set what it would calibrate.
+ */
+export function previewImport(state: ImportWorld, plan: ImportPlan, draft: ImportDraft, at: IsoDateTime): ImportPreview {
+  const disk = writeFiles(
+    state.disk,
+    plan.items.map((i) => copiedFile(i.file, i.destPath, i.location.volumeId, at)),
+  )
+  const entries = plan.items.map((i): ImportedEntry => ({ dest: i.destPath, locationId: i.location.id, type: i.type, merged: i.session?.merged ?? false }))
+  const ingested = ingestImport(state.catalog, disk, state.settings, importBatches(state.catalog, disk, entries), at)
+  const landed = sessionsAt(ingested, new Set(plan.items.map((i) => i.destPath)))
+  const items = plan.items.map((i) => ({ destPath: i.destPath, sessionKey: i.session?.key ?? null }))
+  const catalog = applyImportChoices(ingested, disk, state.settings, choicePicks(items, landed, draft.calibration), at)
+  const sessionOf = new Map<string, SessionId>()
+  for (const item of plan.items) {
+    const id = landed.get(item.destPath)
+    if (item.session && id && !sessionOf.has(item.session.key)) sessionOf.set(item.session.key, id)
+  }
+  const usedFor = new Map<string, Session[]>()
+  for (const group of plan.groups) {
+    if (group.route === "sessions") continue
+    const keys = new Set(group.items.flatMap((i) => batchSourceKeys(catalog, i.destPath, landed.get(i.destPath))))
+    usedFor.set(group.key, sessionsCalibratedBy(state.catalog, catalog, keys))
+  }
+  return { world: { catalog, disk, settings: state.settings }, sessionOf, usedFor }
+}
+
+/** The calibration source a copy became: the master version at its path, or the raw calibration session it joined. */
+function batchSourceKeys(catalog: Catalog, path: string, sessionId: SessionId | undefined): string[] {
+  for (const master of Object.values(catalog.masters)) {
+    const version = master.versions.find((v) => v.path === path)
+    if (version) return [sourceKey({ type: "master", masterId: master.id, versionId: version.id })]
+  }
+  const session = sessionId ? catalog.sessions[sessionId] : undefined
+  return session && session.imageType !== "light" ? [sourceKey({ type: "raw", sessionId: session.id })] : []
+}
+
+/** Light sessions whose pin or suggestion for a kind comes from these sources after the import and did not before: what a new set would calibrate. */
+function sessionsCalibratedBy(before: Catalog, after: Catalog, keys: ReadonlySet<string>): Session[] {
+  if (keys.size === 0) return []
+  return Object.values(after.sessions)
+    .filter((s) => {
+      if (s.imageType !== "light" || s.supersededBy || !s.calibration) return false
+      return PIN_KINDS.some((kind) => {
+        const choice = s.calibration![kind]
+        if ((choice.state !== "pinned" && choice.state !== "suggested") || !keys.has(sourceKey(choice.source))) return false
+        const earlier = before.sessions[s.id]?.calibration?.[kind]
+        return !earlier || ((earlier.state !== "pinned" && earlier.state !== "suggested") || sourceKey(earlier.source) !== sourceKey(choice.source))
+      })
+    })
+    .sort((a, b) => a.night.localeCompare(b.night) || (a.channel ?? "").localeCompare(b.channel ?? ""))
+}
+
+/** The draft's choices for an incoming session after one kind is set; `null` clears it back to matching. */
+export function withChoice(calibration: ImportDraft["calibration"], sessionKey: string, kind: PinKind, choice: ImportCalibrationChoice | null): ImportDraft["calibration"] {
+  const { [kind]: _dropped, ...rest } = calibration[sessionKey] ?? {}
+  const next: ImportChoices = choice ? { ...rest, [kind]: choice } : rest
+  return { ...calibration, [sessionKey]: next }
 }

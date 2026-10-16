@@ -1,21 +1,23 @@
 /**
  * S13 Import as an operation (slice A, D-W11, D-W24). The "import" handler
  * copies each planned file to its destination, verifies the copy's SHA-256
- * against the source, then reads the copies into the library through the
- * one ingestion (`ingestFiles`): lights become sessions, split by framing,
+ * against the source, then reads the copies into the library through C's
+ * ingestion (`ingestImport` → `ingestFiles`): calibration first, then lights,
+ * which become sessions split by framing (a merged capture as one session)
  * with their calibration matched and pinned (LIB-FR-23; Import never waits
- * for it) and the Targets the preview chose confirmed (P-IMP2; an
- * Unclassified session waits for File into Target), each new raw
+ * for it), then the calibration chosen in review is applied
+ * (`applyImportChoices`) and the Targets the preview chose confirmed (P-IMP2;
+ * an Unclassified session waits for File into Target). Each new raw
  * calibration session becomes a calibration process awaiting Stack (P-CAL3),
  * and a master in structured calibration storage is a library master. A
- * source that vanishes mid-copy (card pulled, share dropped)
+ * source folder that vanishes mid-copy (card pulled, share dropped)
  * pauses the import as Interrupted with its queue intact; Retry resumes it
  * once the source is back. Move hands the verified sources to the foundation
  * OS Trash engine ("import-move" episode) once every copy has verified; a
  * source whose copy failed is never trashed. Also: saving an Import source.
  */
-import { fileAt, makeFile, writeFiles } from "@/domain/disk"
-import { bundledTarget, ingestFiles, NO_MASTER_CAMERAS } from "@/domain/indexing"
+import { fileAt, writeFiles } from "@/domain/disk"
+import { bundledTarget } from "@/domain/indexing"
 import { unitCount } from "@/domain/labels"
 import type { ImageType, ImportSource, ImportSourceId, LocationId, OperationId, OperationItem, SessionId, VolumeId } from "@/domain/types"
 import { formatBytes, formatCount } from "@/lib/format"
@@ -24,8 +26,8 @@ import { sessionWithTarget } from "@/store/actions/library"
 import { moveToOsTrash } from "@/store/actions/trash"
 import { type CommitResult, commit, nowIso, type PrototypeState, recordActivity, store, updateSlice, withCatalog } from "@/store/core"
 import { type OperationHandler, patchOperation, settleOperation, startOperation } from "@/store/operations"
-import type { ImportDraft } from "@/store/slices/a"
-import { type ImportPlan, routeFor, sourceOnline, type TargetChoice, TYPE_NAME } from "./import-model"
+import { type ImportDraft, withoutReviewChoices } from "@/store/slices/a"
+import { applyImportChoices, choicePicks, copiedFile, type ImportPlan, importBatches, ingestImport, routeFor, sessionsAt, sourceOnline, type TargetChoice, TYPE_NAME } from "./import-model"
 
 interface QueueItem {
   src: string
@@ -38,18 +40,26 @@ interface QueueItem {
   group: string
   /** A light's Target, confirmed once it is read (P-IMP2); null is Unclassified. Absent for calibration frames and masters. */
   target?: TargetChoice | null
+  /** A light's incoming session key: the review's calibration choices are keyed by it. Absent for calibration frames and masters. */
+  sessionKey?: string
+  /** The light's capture had its framings merged in review: it imports as one session. */
+  merged?: boolean
 }
 
 export interface ImportPayload {
   sourceId: ImportSourceId | null
   sourceLabel: string
   sourcePath: string
+  /** Every folder the batch reads: the source, then the folders added to it. */
+  folders: string[]
   mode: "copy" | "move"
   queue: QueueItem[]
   copied: Array<QueueItem & { sha256: string; sizeBytes: number }>
   failed: Array<QueueItem & { reason: MessageRef }>
   phase: "copy" | "index" | "trash"
   skipped: { duplicate: number; imported: number; held: number; notImage: number; nameTaken: number }
+  /** Calibration chosen in review, by incoming session key: applied once the frames are read. */
+  calibration: ImportDraft["calibration"]
   /** Sessions the imported frames belong to, for Sessions' "Imported" highlight. */
   sessionIds: SessionId[]
   trashRequested: boolean
@@ -72,8 +82,9 @@ function groupItems(payload: ImportPayload, items: OperationItem[]): OperationIt
 }
 
 function copyBatch(state: PrototypeState, opId: OperationId, payload: ImportPayload): PrototypeState {
-  // The source went away mid-import: pause with the queue intact, so Retry resumes once it is back.
-  if (!sourceOnline(state.disk, payload.sourcePath)) return patchOperation(state, opId, { status: "interrupted", summary: msg("import_source_disconnected", { name: payload.sourceLabel }) })
+  // A source folder went away mid-import: pause with the queue intact, so Retry resumes once it is back.
+  const gone = payload.folders.find((folder) => !sourceOnline(state.disk, folder))
+  if (gone !== undefined) return patchOperation(state, opId, { status: "interrupted", summary: msg("import_source_disconnected", { name: gone === payload.sourcePath ? payload.sourceLabel : gone }) })
   let disk = state.disk
   const queue = [...payload.queue]
   const copied = [...payload.copied]
@@ -90,7 +101,7 @@ function copyBatch(state: PrototypeState, opId: OperationId, payload: ImportPayl
       failed.push({ ...item, reason: volume ? msg("run_parent_read_only", { name: volume.name }) : msg("op_import_destination_not_writable") })
       continue
     }
-    const written = makeFile({ path: item.dest, volumeId: item.destVolumeId, sizeBytes: source.sizeBytes, kind: source.kind, header: source.header, pixelTruth: source.pixelTruth, sha256: source.sha256, modifiedAt: now })
+    const written = copiedFile(source, item.dest, item.destVolumeId, now)
     disk = writeFiles(disk, [written])
     // Verify: re-read the copy and compare its digest with the source's.
     const check = fileAt(disk, item.dest)
@@ -109,22 +120,18 @@ function copyBatch(state: PrototypeState, opId: OperationId, payload: ImportPayl
   })
 }
 
-/** Read the verified copies into the library, as indexing would, and record them on the saved source. */
+/** Read the verified copies into the library, as indexing would, apply the review's calibration choices, and record them on the saved source. */
 function indexCopies(state: PrototypeState, opId: OperationId, payload: ImportPayload): PrototypeState {
   const now = nowIso()
-  let catalog = state.catalog
-  const byLocation = new Map<LocationId, typeof payload.copied>()
-  for (const item of payload.copied) byLocation.set(item.locationId, [...(byLocation.get(item.locationId) ?? []), item])
-  for (const [locationId, items] of byLocation) {
-    const location = catalog.locations[locationId]
-    if (!location) continue
-    // A typed Unclassified file is read as the type the user gave it; its observed header stays as captured.
-    const files = items.flatMap((item) => {
-      const file = fileAt(state.disk, item.dest)
-      return file?.header ? [{ ...file, header: { ...file.header, imageType: item.type } }] : []
-    })
-    catalog = ingestFiles(catalog, state.disk, state.settings, location, files, now, NO_MASTER_CAMERAS)
-  }
+  const entries = payload.copied.map((item) => ({ dest: item.dest, locationId: item.locationId, type: item.type, merged: item.merged ?? false }))
+  const ingested = ingestImport(state.catalog, state.disk, state.settings, importBatches(state.catalog, state.disk, entries), now)
+  const landed = sessionsAt(ingested, new Set(payload.copied.map((q) => q.dest)))
+  const picks = choicePicks(
+    payload.copied.map((q) => ({ destPath: q.dest, sessionKey: q.sessionKey ?? null })),
+    landed,
+    payload.calibration,
+  )
+  const catalog = applyImportChoices(ingested, state.disk, state.settings, picks, now)
   const destPaths = new Map(payload.copied.map((q) => [q.dest, q]))
   const assets = { ...catalog.assets }
   const sessions = { ...catalog.sessions }
@@ -133,6 +140,7 @@ function indexCopies(state: PrototypeState, opId: OperationId, payload: ImportPa
   for (const asset of Object.values(assets)) {
     const item = asset.copies.map((c) => destPaths.get(c.path)).find((q) => q !== undefined)
     if (!item) continue
+    // A typed Unclassified file was read as the type the user gave it; its observed header stays as captured.
     if (item.typed) assets[asset.id] = { ...asset, observed: { ...asset.observed, imageType: "unknown" } }
     if (asset.sessionId) sessionIds.add(asset.sessionId)
     if (asset.sessionId && item.target !== undefined) chosen.set(asset.sessionId, item.target)
@@ -242,13 +250,14 @@ export function startImport(plan: ImportPlan, draft: ImportDraft): OperationId {
       type: item.type,
       typed: item.typed,
       group: g.key,
-      ...(item.session ? { target: item.session.target } : {}),
+      ...(item.session ? { target: item.session.target, sessionKey: item.session.key, merged: item.session.merged } : {}),
     })),
   )
   const payload: ImportPayload = {
     sourceId: plan.saved?.id ?? null,
     sourceLabel: plan.sourceLabel,
     sourcePath: plan.sourcePath,
+    folders: plan.folders.map((f) => f.path),
     mode: draft.mode,
     queue,
     copied: [],
@@ -261,6 +270,7 @@ export function startImport(plan: ImportPlan, draft: ImportDraft): OperationId {
       notImage: plan.skipped.notImage.length,
       nameTaken: plan.skipped.nameTaken.length,
     },
+    calibration: draft.calibration,
     sessionIds: [],
     trashRequested: false,
     trashOperationId: null,
@@ -284,7 +294,7 @@ export function startImport(plan: ImportPlan, draft: ImportDraft): OperationId {
     canPause: true,
     canCancel: true,
   })
-  updateSlice("a", (a) => ({ ...a, lastImport: { kind: "import", operationId: id }, importDraft: { ...a.importDraft, typed: {}, targets: {} } }))
+  updateSlice("a", (a) => ({ ...a, lastImport: { kind: "import", operationId: id }, importDraft: withoutReviewChoices(a.importDraft) }))
   return id
 }
 

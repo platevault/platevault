@@ -16,6 +16,7 @@ import { useFollowLink } from "@/components/app/links"
 import { Section } from "@/components/app/page"
 import { CalibrationChoices, type CalibrationChoicesProps, calibrationChoiceRows } from "@/components/domain/calibration-choices"
 import { CalibrationDiagram, calibrationDiagram } from "@/components/domain/calibration-diagram"
+import { DuplicatesBadge } from "@/components/domain/duplicates-badge"
 import { ViewFolderTree } from "@/components/domain/view-folder-tree"
 import { Button } from "@/components/ui/button"
 import { calibrationSources, candidatesFor, noChoice, pickChoice } from "@/domain/calibration"
@@ -241,6 +242,19 @@ function Trees({ state, whatIf }: { state: PrototypeState; whatIf: PrototypeStat
   )
 }
 
+/** F5's duplicates badge on a session row: one extra copy, and several. */
+function Duplicates() {
+  const m = useMessages()
+  return (
+    <ComponentSection components={["DuplicatesBadge"]} description={m.catalogue_f4_duplicates_desc()} level={3}>
+      <Specimen caption={m.catalogue_f4_duplicates_counts()}>
+        <DuplicatesBadge count={1} />
+        <DuplicatesBadge count={12} />
+      </Specimen>
+    </ComponentSection>
+  )
+}
+
 export function F4Catalogue() {
   const m = useMessages()
   const state = useStore((s) => s)
@@ -251,6 +265,7 @@ export function F4Catalogue() {
       <Diagrams state={state} whatIf={whatIf} now={now} />
       <Choices state={state} whatIf={whatIf} />
       <Trees state={state} whatIf={whatIf} />
+      <Duplicates />
     </Section>
   )
 }

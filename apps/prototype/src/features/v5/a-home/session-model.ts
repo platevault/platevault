@@ -2,12 +2,14 @@
  * Slice-local derivations for S1 Home and S12 Sessions: one row model per
  * library light session, the Sessions facet buckets (D-W24, D-W25, D-W43;
  * Unusable, round 6; Needs review is the intake queue, C14; Needs
- * calibration is the Library's calibration queue, LIB-FR-23), the Projects
- * that hold a session, and the intake Review step's search. The Target,
- * Project and calibration buckets come from the foundation
- * `sessionsNeedingWork`, the queue from `reviewQueue` and the Unreviewed
- * count from `sessionUnreviewedFrames`, so Home, the Issues hub, the intake
- * gates and the Sessions facets always agree. Nothing here writes state.
+ * calibration is the Library's calibration queue, LIB-FR-23; Duplicates is
+ * F5's, SHA-256-confirmed live extra copies), the Projects that hold a
+ * session, and the intake Review step's search. The Target, Project and
+ * calibration buckets come from the foundation `sessionsNeedingWork`, the
+ * queue from `reviewQueue`, the Unreviewed count from
+ * `sessionUnreviewedFrames` and the duplicates from `sessionDuplicateCopies`,
+ * so Home, the intake gates and the Sessions facets always agree. Nothing
+ * here writes state.
  */
 import {
   findInput,
@@ -23,14 +25,15 @@ import {
   sessionUnreviewedFrames,
 } from "@/domain/derive"
 import { effectiveExposureS, qualityApplicability } from "@/domain/library"
+import { sessionDuplicateCopies } from "@/domain/storage"
 import type { AssetId, Catalog, Project, Session, SessionId } from "@/domain/types"
 import type { MessageRef, Messages } from "@/lib/i18n"
 import type { PrototypeState } from "@/store/core"
 
-export type SessionFilter = "all" | "needs-review" | "needs-target" | "needs-calibration" | "not-in-project" | "unusable" | "trashed"
+export type SessionFilter = "all" | "needs-review" | "needs-target" | "needs-calibration" | "not-in-project" | "duplicates" | "unusable" | "trashed"
 
 /** The Sessions facet's values after "All", in menu order. */
-export const SESSION_FILTERS: Array<Exclude<SessionFilter, "all">> = ["needs-review", "needs-target", "needs-calibration", "not-in-project", "unusable", "trashed"]
+export const SESSION_FILTERS: Array<Exclude<SessionFilter, "all">> = ["needs-review", "needs-target", "needs-calibration", "not-in-project", "duplicates", "unusable", "trashed"]
 
 export function filterLabel(m: Messages, filter: SessionFilter): string {
   const label: Record<SessionFilter, () => string> = {
@@ -39,6 +42,7 @@ export function filterLabel(m: Messages, filter: SessionFilter): string {
     "needs-target": m.sessions_filter_needs_target,
     "needs-calibration": m.sessions_filter_needs_calibration,
     "not-in-project": m.sessions_filter_not_in_project,
+    duplicates: m.sessions_filter_duplicates,
     unusable: m.status_unusable,
     trashed: m.status_trashed,
   }
@@ -69,6 +73,8 @@ export interface SessionRow {
   /** In the Library's Needs calibration queue (LIB-FR-23): a kind not settled, or a pinned file changed or missing. */
   needsCalibration: boolean
   notInProject: boolean
+  /** F5: extra live copies of its frames the latest duplicate scan found (0 for none, and for a Trashed session). */
+  duplicates: number
   trashed: boolean
 }
 
@@ -94,6 +100,7 @@ export function sessionRows(state: PrototypeState): SessionRow[] {
   const needsCalibration = new Set(work.needsCalibration.map((s) => s.id))
   const notInProject = new Set(work.notInProject.map((s) => s.id))
   const queued = new Set(reviewQueue(catalog).map((s) => s.id))
+  const duplicates = sessionDuplicateCopies(state)
   return Object.values(catalog.sessions)
     .filter((s) => s.imageType === "light" && !s.supersededBy)
     .map((session): SessionRow => {
@@ -115,6 +122,7 @@ export function sessionRows(state: PrototypeState): SessionRow[] {
         needsTarget: needsTarget.has(session.id),
         needsCalibration: needsCalibration.has(session.id),
         notInProject: notInProject.has(session.id),
+        duplicates: trashed ? 0 : (duplicates.get(session.id) ?? 0),
         trashed,
       }
     })
@@ -128,6 +136,7 @@ export function matchesFilter(row: SessionRow, filter: SessionFilter): boolean {
   if (filter === "needs-target") return row.needsTarget
   if (filter === "needs-calibration") return row.needsCalibration
   if (filter === "not-in-project") return row.notInProject
+  if (filter === "duplicates") return row.duplicates > 0
   if (filter === "unusable") return row.unusable.length > 0
   return true
 }
@@ -140,6 +149,7 @@ export function filterCounts(rows: SessionRow[]): Record<SessionFilter, number> 
     "needs-target": count("needs-target"),
     "needs-calibration": count("needs-calibration"),
     "not-in-project": count("not-in-project"),
+    duplicates: count("duplicates"),
     unusable: count("unusable"),
     trashed: count("trashed"),
   }

@@ -53,7 +53,7 @@ export const CATALOGUE: CatalogueEntry[] = [
     components: ["Plate", "Histogram", "MoonLine", "DarkLine", "AltitudeSpark", "NightCalendar", "MoonPhase", "MosaicField", "SiteMap", "CornerGrid", "FrameThumbnails", "SessionPlots", "StarCutouts"],
     Entry: DomainCatalogue,
   },
-  { id: "f4", components: ["CalibrationDiagram", "CalibrationChoices", "CalibrationChoiceBadge", "ViewFolderTree", "PlaceLink"], Entry: F4Catalogue },
+  { id: "f4", components: ["CalibrationDiagram", "CalibrationChoices", "CalibrationChoiceBadge", "ViewFolderTree", "PlaceLink", "DuplicatesBadge"], Entry: F4Catalogue },
   { id: "goal-fields", components: ["GoalKindsFields", "GoalValuesEditor"], Entry: GoalFieldsCatalogue },
   { id: "step-flow", components: ["StepStrip", "StepFooter", "CurrentLink"], Entry: StepFlowCatalogue },
   {

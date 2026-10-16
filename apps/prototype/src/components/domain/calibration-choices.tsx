@@ -71,12 +71,13 @@ export interface CalibrationChoiceRow {
   revision: number
   /** "18 Sep · Ha · 300 s". */
   session: MessageRef
-  sessionLink: StepLink
+  /** The session's page; null for a session not in the library yet (import review), which reads as plain text. */
+  sessionLink: StepLink | null
   kind: PinKind
   choice: CalibrationChoice
   /** The pinned or suggested source as a list names it; null while waiting or No. */
   source: MessageRef | null
-  /** The source's place: the master in the Calibration library, or the raw calibration session. */
+  /** The source's place: the master in the Calibration library, or the raw calibration session; null for one not in the library yet, which reads as plain text. */
   sourceLink: StepLink | null
   /** A pinned file now: "ok", or changed, missing or unreadable (the pin stays). */
   health: PinHealth
@@ -237,7 +238,7 @@ export function CalibrationChoices({ label, rows, groupBySession, changeable = t
       id: "source",
       header: m.evidence_column_source(),
       truncate: true,
-      cell: (r) => (r.source && r.sourceLink ? <PlaceLink link={r.sourceLink}>{say(m, r.source)}</PlaceLink> : "–"),
+      cell: (r) => (r.source ? (r.sourceLink ? <PlaceLink link={r.sourceLink}>{say(m, r.source)}</PlaceLink> : say(m, r.source)) : "–"),
       sortValue: (r) => (r.source ? say(m, r.source) : null),
     },
     { id: "evidence", header: m.evidence_column_evidence(), truncate: true, cell: evidenceText, sortValue: evidenceText },
@@ -284,7 +285,7 @@ export function CalibrationChoices({ label, rows, groupBySession, changeable = t
         grouped
           ? {
               key: (r) => r.sessionId,
-              label: (_, group) => <PlaceLink link={group[0]!.sessionLink}>{say(m, group[0]!.session)}</PlaceLink>,
+              label: (_, group) => (group[0]!.sessionLink ? <PlaceLink link={group[0]!.sessionLink}>{say(m, group[0]!.session)}</PlaceLink> : say(m, group[0]!.session)),
               compare: (a, b) => order.indexOf(a) - order.indexOf(b),
             }
           : undefined
