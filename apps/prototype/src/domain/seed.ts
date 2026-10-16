@@ -4,34 +4,47 @@
  * Both share the same simulated disk so the empty seed can be indexed into
  * the same library through onboarding.
  *
- * Demo contents:
- * - "Cygnus HOO 2026" (open): NGC 7000 and the 3-panel "IC 5070 mosaic";
- *   rigs RedCat 51 / ASI2600MM (mono: Ha, OIII, SII) and Esprit 100 /
- *   ASI533MC (OSC), HOO goals counting Usable frames, an exposure mismatch on
- *   the OSC rig. Goal conditions (C7): NGC 7000 has a "Finish by" date with
- *   12 nights left when the demo loads; the mosaic has a season window
- *   pre-filled from IC 5070's visibility and the default ±10% panel balance,
- *   which its empty Panel 3 breaks. Runs: one
- *   Complete with Cleanup available, one at Review with unreviewed frames,
- *   one blocked at Calibrate, a run group whose Panel 2 is Partial and whose
- *   Panel 3 is in the Trash, and one trashed run in the Project Trash.
- * - "M 31 LRGB" (open, every run Complete): in Wrap up with Clean up done and
- *   Trash and Archive still to do (rejected frames, intermediates, duplicate
+ * Demo contents (F4 Project model):
+ * - "Cygnus HOO 2026" (open, Symlinks): NGC 7000 in three groups, RedCat
+ *   51 / ASI2600MM, its "Framing 2" (24 Sep, where intake split a session
+ *   at a 0.6° re-point) and Esprit 100 / ASI533MC (OSC). Its View is
+ *   applied with GROUP_ folders, Darks and Bias per group and the gain in
+ *   the light folders' names; since Apply, labelled pending changes wait:
+ *   the Project added 30 Sep OIII, the Library rejected three frames and a
+ *   late 180 s dark replaced the OSC session's No darks. View holds the
+ *   user's notes (unplaced); Output holds a final image, a Copy to Output
+ *   and a file still being written; Processing/ holds a generated master
+ *   flat whose adoption finds PlateVault's own unregistered copy at its
+ *   destination. A "Finish by" goal condition has 12 nights left.
+ *   Suggestions: 2 Oct Ha ("Choose its flats first": a new rig version has
+ *   no flats), 12 Sep OIII (addable), and sessions still to review.
+ * - "IC 5070 mosaic" (open, Copies): three panel groups, per-panel goals
+ *   and a season window; Panel 3 joined after the last Apply; View
+ *   (previous)/ holds a rewritten copy and two of the user's files, one
+ *   kept. Its Panel 2 Ha originals are on Cold-1, which is offline.
+ * - "M 31 LRGB" (open, Copies): in Wrap up with Clean up done and Trash and
+ *   Archive still to do (rejected frames, Processing files, duplicate
  *   copies); it archives to the NAS archive, not the Default. Its goals use
  *   every kind: integration with an FWHM bar (part of its L frames sit over
- *   the limit: "below bar"), frame counts, Usable only.
- *   A master dark from its Results was dismissed (Restore offer); its run
- *   recorded flats and bias and no master dark (darks stacked in PixInsight).
- * - "Heart and Soul" (open): no runs, candidates waiting.
- * - Library: sessions that need a Target, sessions in no Project, a Trashed
- *   session, an offline volume (Cold-1) and a running scan of a network share;
- *   two archive locations (one Default); two removable devices connected, an
- *   ASIAIR card (recognised layout) and a generic USB stick.
- * - Calibration (P-CAL3): masters only, in structured storage. Calibration
- *   processes: a raw Ha flat session awaiting Stack, 120 s darks mid-stack in
- *   PixInsight, 300 s darks finished with their raws in the OS Trash, bias
- *   finished with its raws kept, and an OIII flat whose Stack output was not
- *   found.
+ *   the limit: "below bar"), frame counts, Usable only. Its camera is the
+ *   second ASI2600MM ("Don't use darks"); a generated master dark was hidden.
+ * - "NGC 7000 OIII test" (Closed): its kept Symlinks View, frozen goals and
+ *   calibration; its only session is held by no open Project.
+ * - "Heart and Soul" (open): no sessions yet, its matches still to review.
+ * - Library: sessions that need a Target or calibration, sessions in no
+ *   Project, a Trashed session, an offline volume (Cold-1) and a running
+ *   scan of a network share; two archive locations (one Default); two
+ *   removable devices connected, an ASIAIR card (recognised layout) and a
+ *   generic USB stick.
+ * - Equipment: two ASI2600MM cameras with physical aliases, RedCat's two rig
+ *   versions (camera remounted on 1 Oct).
+ * - Calibration (P-CAL3): masters in structured storage, a 300 s dark and an
+ *   OIII flat with two dated versions each, linked to their physical camera;
+ *   pins matched at ingestion, suggestions the user confirmed, No choices.
+ *   Calibration processes: a raw Ha flat session awaiting Stack, 120 s darks
+ *   mid-stack in PixInsight, 300 s darks finished with their raws in the OS
+ *   Trash, bias finished with its raws kept, and an OIII flat whose Stack
+ *   output was not found.
  * - Targets: favourites, a southern Target with no window tonight, a default
  *   site, and tonight's plan of two Targets.
  * - Goal templates: one user template carrying conditions (C7): an FWHM bar,
@@ -40,52 +53,51 @@
  * All names, paths and counts are illustrative fixtures.
  */
 import { fileName, formatCount } from "@/lib/format"
-import { joinRefs, m, msg, verbatim } from "@/lib/i18n"
-import { assignmentId, automaticAssignments, calibrationPlan, DEFAULT_MASTER_MAX_AGE_DAYS } from "./calibration"
-import { CALIBRATION_STEP_NAME, processIdFor, processRef, stepRecord } from "./calibration-process"
-import { DEFAULT_MOON_AVOIDANCE, DEFAULT_MOON_CONSTRAINTS, unitCount } from "./labels"
-import { createFolder, fakeSha256, fileAt, fileKey, makeFile, writeFiles } from "./disk"
-import { confirmedEvidence, indexLocationsSync, stableHash } from "./indexing"
-import { addSessions, describeDiff, diffContent, emptyContent } from "./membership"
+import { m, msg, verbatim } from "@/lib/i18n"
+import { calibrateSessions, confirmChoice, DEFAULT_MASTER_MAX_AGE_DAYS, noChoice } from "./calibration"
+import { adoptionDestination, CALIBRATION_STEP_NAME, processIdFor, processRef, stepRecord } from "./calibration-process"
+import { closeSnapshot, projectHref } from "./derive"
+import { DEFAULT_GROUP_KEYWORDS, DEFAULT_MATCHING, DEFAULT_MOON_AVOIDANCE, DEFAULT_MOON_CONSTRAINTS, unitCount } from "./labels"
+import { createFolder, fakeSha256, fileAt, fileKey, filesUnder, makeFile, type NewFile, writeFiles } from "./disk"
+import { capturedRigVersionId, confirmedEvidence, indexLocationsSync, stableHash } from "./indexing"
 import { simulateMeasurement } from "./measurement"
 import { defaultCriteria, seasonWindow, shiftNight, upcomingNight } from "./planning"
+import { appliedViewFor, placeEntry, projectPaths, viewPlan } from "./project-view"
 import { pixelScaleArcsec } from "./sky"
 import { DEFAULT_PANEL_BALANCE_PCT, qualityBarFor } from "./templates"
-import type {
-  ActivityEvent,
-  AppSettings,
-  ApplicationProfile,
-  Asset,
-  AssetId,
-  CalibrationAssignment,
-  Catalog,
-  Disk,
-  DiskFile,
-  Filter,
-  FrameHeader,
-  Goal,
-  GoalChannel,
-  ImageType,
-  Location,
-  MembershipRevision,
-  Operation,
-  PixelTruth,
-  Preparation,
-  ResultKind,
-  ResultRecord,
-  Run,
-  RunGroup,
-  SeedName,
-  SelectionReason,
-  Session,
-  SimulatedApp,
-  SimulationFaults,
-  Subject,
-  SubjectConditions,
-  Target,
-  TrashEpisodeKind,
-  Volume,
-  VolumeId,
+import {
+  type ActivityEvent,
+  type AppSettings,
+  type ApplicationProfile,
+  type Asset,
+  type CalibrationChoice,
+  type Catalog,
+  DEFAULT_REMINDER_LEAD_MIN,
+  type Disk,
+  type DiskFile,
+  type Filter,
+  type FrameHeader,
+  type Goal,
+  type GoalChannel,
+  type ImageType,
+  type Location,
+  type Operation,
+  type PinKind,
+  type PixelTruth,
+  type Project,
+  type ProjectGroup,
+  type ProjectInput,
+  type SeedName,
+  type Session,
+  type SimulatedApp,
+  type SimulationFaults,
+  type Subject,
+  type SubjectConditions,
+  type Target,
+  type TrashEpisodeKind,
+  type ViewEntry,
+  type Volume,
+  type VolumeId,
 } from "./types"
 
 export const VOLUME_IDS = {
@@ -153,7 +165,8 @@ interface Train {
 }
 
 const REDCAT: Train = { instrument: "ZWO ASI2600MM Pro", telescope: "RedCat 51", focalLengthMm: 250, widthPx: 6248, heightPx: 4176, pixelSizeUm: 3.76, gain: 100, offset: 50, ccdTempC: -10, bayerPattern: null }
-const FRA400: Train = { ...REDCAT, telescope: "Askar FRA400", focalLengthMm: 400 }
+/** The second ASI2600MM ("2600MM #2") runs colder on the FRA400: its own bias, and its darks are "Don't use darks". */
+const FRA400: Train = { ...REDCAT, telescope: "Askar FRA400", focalLengthMm: 400, ccdTempC: -15 }
 const ESPRIT: Train = { instrument: "ZWO ASI533MC Pro", telescope: "Esprit 100", focalLengthMm: 550, widthPx: 3008, heightPx: 3008, pixelSizeUm: 3.76, gain: 101, offset: 50, ccdTempC: -5, bayerPattern: "RGGB" }
 
 function mulberry32(seed: number) {
@@ -289,15 +302,19 @@ function baseFiles(): DiskFile[] {
     ...light(VOLUME_IDS.cold, "Captures/NGC7000/2026-09-12/OIII", "Light_NGC7000_300s_OIII", 24, "2026-09-12T21:30:00Z", 300, "OIII", "NGC 7000", { ...NGC7000, rotationDeg: rot }),
     ...light(A, "Captures/NGC7000/2026-09-18/Ha", "Light_NGC7000_300s_Ha", 55, "2026-09-18T20:40:00Z", 300, "Ha", "NGC 7000", { ...NGC7000, rotationDeg: rot }),
     ...light(A, "Captures/NGC7000/2026-09-24/OIII", "Light_NGC7000_300s_OIII", 20, "2026-09-24T20:10:00Z", 300, "OIII", "NGC 7000", { ...NGC7000, rotationDeg: rot }),
-    // OBJECT names NGC 7000 but the capture wrote no RA/DEC: the Target stays unresolved (OBJECT is a label, never evidence).
+    // Later that night the mount re-pointed 0.6° north: intake splits it off as "framing 2" (D-W107).
+    ...light(A, "Captures/NGC7000/2026-09-24/OIII", "Light_NGC7000_300s_OIII_B", 16, "2026-09-24T22:10:00Z", 300, "OIII", "NGC 7000", { ra: NGC7000.ra, dec: NGC7000.dec + 0.6, rotationDeg: rot }),
+    // OBJECT names NGC 7000 but the capture wrote no RA/DEC: the Target stays unresolved (OBJECT is a label, never evidence), and with no pointing nothing splits.
     ...light(A, "Captures/NGC7000/2026-09-26/OIII", "Light_Cygnus_300s_OIII", 35, "2026-09-26T19:55:00Z", 300, "OIII", "NGC 7000", null),
     // No telescope or focal-length keywords: the rig needs review.
     ...light(A, "Captures/NGC7000/2026-09-28/Ha", "Light_NGC7000_300s_Ha", 56, "2026-09-28T19:50:00Z", 300, "Ha", "NGC 7000", { ...NGC7000, rotationDeg: rot }, { overrides: { telescope: null, focalLengthMm: null } }),
+    // Six trailed frames the review marks Unusable.
     ...light(A, "Captures/NGC7000/2026-09-30/OIII", "Light_NGC7000_300s_OIII", 48, "2026-09-30T19:45:00Z", 300, "OIII", "NGC 7000", { ...NGC7000, rotationDeg: rot }, { truth: (i) => (i >= 12 && i <= 17 ? { trailed: true, eccentricity: 0.78, fwhmPx: 4.1 } : {}) }),
+    // RedCat's camera was remounted on 1 Oct: a new rig version, so these lights need flats taken with it.
     ...light(A, "Captures/NGC7000/2026-10-02/Ha", "Light_NGC7000_300s_Ha", 10, "2026-10-02T19:40:00Z", 300, "Ha", "NGC 7000", { ...NGC7000, rotationDeg: rot }),
     // No OBJECT and no pointing: the Target stays unresolved.
     ...light(A, "Captures/Unsorted/2026-09-22", "Light_300s_Ha", 10, "2026-09-22T21:10:00Z", 300, "Ha", null, null),
-    // NGC 7000 on Esprit 100 / ASI533MC (OSC, L-eXtreme): 180 s lights have no 180 s dark.
+    // NGC 7000 on Esprit 100 / ASI533MC (OSC, L-eXtreme): 180 s lights; their 180 s darks arrived later (5 Oct).
     ...osc("Captures/NGC7000/2026-09-21/OSC", "Light_NGC7000_180s_LeX", 40, "2026-09-21T20:30:00Z"),
     ...osc("Captures/NGC7000/2026-10-01/OSC", "Light_NGC7000_180s_LeX", 30, "2026-10-01T20:00:00Z"),
     // IC 5070 mosaic panels on RedCat; one session points between panels 1 and 2. Only Panel 2 points inside IC 5070 itself:
@@ -308,10 +325,10 @@ function baseFiles(): DiskFile[] {
     ...panel("Captures/IC5070/2026-09-17/OIII", "Light_IC5070_P2_300s_OIII", 24, "2026-09-17T20:30:00Z", "OIII", 1),
     ...panel("Captures/IC5070/2026-09-19/Ha", "Light_IC5070_P3_300s_Ha", 20, "2026-09-19T20:30:00Z", "Ha", 2),
     ...light(A, "Captures/IC5070/2026-09-20/Ha", "Light_IC5070_300s_Ha", 12, "2026-09-20T20:30:00Z", 300, "Ha", "IC 5070", { ra: IC5070.ra, dec: (PANEL_DEC[0]! + PANEL_DEC[1]!) / 2, rotationDeg: 0 }),
-    // Heart and Soul on RedCat, waiting for a first run.
+    // Heart and Soul on RedCat, still to review.
     ...light(A, "Imaging/HeartSoul/2026-09-14/Ha", "Light_Heart_300s_Ha", 20, "2026-09-14T20:40:00Z", 300, "Ha", "Heart Nebula", { ra: 38.2, dec: 61.45, rotationDeg: 0 }),
     ...light(A, "Imaging/HeartSoul/2026-09-15/Ha", "Light_Soul_300s_Ha", 18, "2026-09-15T20:40:00Z", 300, "Ha", "Soul Nebula", { ra: 42.8, dec: 60.43, rotationDeg: 0 }),
-    // M 31 on Askar FRA400 / ASI2600MM; the 25 Aug session was moved to the OS Trash.
+    // M 31 on Askar FRA400 / ASI2600MM #2; the 25 Aug session was moved to the OS Trash.
     ...fra("Imaging/M31/2026-08-25/L", "Light_M31_120s_L_test", 8, "2026-08-25T22:00:00Z", 120, "L", "M31", { ra: 10.685, dec: 41.269, rotationDeg: 12 }),
     ...fra("Imaging/M31/2026-09-02/L", "Light_M31_120s_L", 60, "2026-09-02T21:00:00Z", 120, "L", "M31", { ra: 10.685, dec: 41.269, rotationDeg: 12 }),
     ...fra("Imaging/M31/2026-09-03/R", "Light_M31_120s_R", 20, "2026-09-03T21:00:00Z", 120, "R", "M31", { ra: 10.685, dec: 41.269, rotationDeg: 12 }),
@@ -320,19 +337,24 @@ function baseFiles(): DiskFile[] {
     // M 33: a confirmed Target that no Project names.
     ...fra("Imaging/M33/2026-08-30/L", "Light_M33_120s_L", 40, "2026-08-30T22:00:00Z", 120, "L", "M33", { ra: 23.462, dec: 30.66, rotationDeg: 0 }),
     // Calibration (P-CAL3): raw sessions wait under Raw/ for their calibration process (day-time sets stay in one night);
-    // masters live in structured storage, flats per rig, filter and night, darks and bias per camera and settings.
+    // masters live in structured storage, flats per rig, filter and night, darks and bias per camera and settings. A master
+    // with the same settings taken on another date is a second dated version of one record (CAL-FR-14).
     ...calibrationSet("Calibration/Raw/Darks/300s/2026-09-08", "Dark_300s_G100", 30, "2026-09-08T14:00:00Z", "dark", 300, null),
     ...calibrationSet("Calibration/Raw/Darks/120s/2026-09-08", "Dark_120s_G100", 30, "2026-09-08T17:00:00Z", "dark", 120, null),
     ...calibrationSet("Calibration/Raw/Bias/2026-09-08", "Bias_G100", 50, "2026-09-08T18:30:00Z", "bias", 0.000032, null),
     ...calibrationSet("Calibration/Raw/Flats/Ha/2026-09-18", "Flat_RedCat_Ha", 30, "2026-09-19T05:20:00Z", "flat", 1.5, "Ha"),
     ...calibrationSet("Calibration/Raw/Flats/OIII/2026-09-26", "Flat_RedCat_OIII", 30, "2026-09-27T05:25:00Z", "flat", 2.0, "OIII"),
     storedMaster("Darks/ZWO ASI2600MM Pro/300s_g100_o50_-10C", "2026-09-08", "master-dark", 300, null, "2026-09-08T19:10:00Z", REDCAT, 30),
+    storedMaster("Darks/ZWO ASI2600MM Pro/300s_g100_o50_-10C", "2026-03-14", "master-dark", 300, null, "2026-03-14T19:10:00Z", REDCAT, 30),
     storedMaster("Bias/ZWO ASI2600MM Pro/g100_o50", "2026-09-08", "master-bias", 0.000032, null, "2026-09-08T20:00:00Z", REDCAT, 50),
+    storedMaster("Bias/ZWO ASI2600MM Pro 2/g100_o50_-15C", "2026-09-02", "master-bias", 0.000032, null, "2026-09-02T12:00:00Z", FRA400, 50),
     storedMaster("Flats/RedCat 51 - ASI2600MM/Ha/2026-09-12", "2026-09-12", "master-flat", 1.5, "Ha", "2026-09-13T05:40:00Z", REDCAT, 30),
     storedMaster("Flats/RedCat 51 - ASI2600MM/OIII/2026-09-12", "2026-09-12", "master-flat", 2.0, "OIII", "2026-09-13T06:10:00Z", REDCAT, 30),
+    storedMaster("Flats/RedCat 51 - ASI2600MM/OIII/2026-09-24", "2026-09-24", "master-flat", 2.0, "OIII", "2026-09-25T05:30:00Z", REDCAT, 30),
     ...(["L", "R", "G", "B"] as const).map((f, i) => storedMaster(`Flats/Askar FRA400 - ASI2600MM/${f}/2026-09-02`, "2026-09-02", "master-flat", 1, f, `2026-09-03T07:${String(i * 10).padStart(2, "0")}:00Z`, FRA400, 20)),
     storedMaster("Darks/ZWO ASI533MC Pro/120s_g101_o50_-5C", "2026-09-10", "master-dark", 120, null, "2026-09-10T18:00:00Z", ESPRIT, 20),
     storedMaster("Darks/ZWO ASI533MC Pro/300s_g101_o50_-5C", "2026-09-10", "master-dark", 300, null, "2026-09-10T18:10:00Z", ESPRIT, 20),
+    storedMaster("Darks/ZWO ASI533MC Pro/180s_g101_o50_-5C", "2026-10-05", "master-dark", 180, null, "2026-10-05T18:00:00Z", ESPRIT, 20),
     storedMaster("Bias/ZWO ASI533MC Pro/g101_o50", "2026-09-10", "master-bias", 0.000032, null, "2026-09-10T18:20:00Z", ESPRIT, 40),
     storedMaster("Flats/Esprit 100 - ASI533MC/L-eXtreme/2026-09-21", "2026-09-21", "master-flat", 3.0, "L-eXtreme", "2026-09-22T06:30:00Z", ESPRIT, 25),
     // C9: a 600 s master dark written 91 days before the demo loads, so the library shows its "Old · 91 d" badge.
@@ -486,20 +508,16 @@ export function emptyCatalog(): Catalog {
     opticalTrains: {},
     sites: {},
     projects: {},
-    runs: {},
-    runGroups: {},
     goalTemplates: {},
     measurements: {},
     measurementImports: {},
     masters: {},
     calibrationProcesses: {},
     profiles: builtInProfiles(),
-    preparations: {},
-    results: {},
     trashEpisodes: {},
     importSources: {},
     plans: {},
-    reminders: { enabled: false, siteId: null, leadTimeMin: null, permission: "not-requested", deliveredWindowKeys: [], enabledAt: null },
+    reminders: { enabled: false, siteId: null, leadTimeMin: DEFAULT_REMINDER_LEAD_MIN, permission: "not-requested", deliveredWindowKeys: [], enabledAt: null, checkedAt: null },
     calendarExports: [],
   }
 }
@@ -512,13 +530,15 @@ export function defaultSettings(): AppSettings {
     moonConstraints: structuredClone(DEFAULT_MOON_CONSTRAINTS),
     moonAvoidance: structuredClone(DEFAULT_MOON_AVOIDANCE),
     onboarding: { completedAt: null, deferredRoles: [] },
-    lastOutputParent: null,
+    lastProcessingParent: null,
     naming: {},
     namingOmit: [],
     keepRawCalibration: false,
     masterMaxAgeDays: DEFAULT_MASTER_MAX_AGE_DAYS,
     targetLookup: { enabled: true, provider: "cds-sesame" },
-    defaultRunView: "symlink",
+    defaultInputMode: "symlink",
+    keywords: { ...DEFAULT_GROUP_KEYWORDS },
+    matching: structuredClone(DEFAULT_MATCHING),
     developerModeCheck: "not-windows",
   }
 }
@@ -535,6 +555,7 @@ export function defaultFaults(): SimulationFaults {
     noSite: false,
     developerMode: "not-windows",
     quickActions: "one-click",
+    viewFileHeld: false,
   }
 }
 
@@ -598,13 +619,18 @@ function findSession(catalog: Catalog, predicate: (s: Session) => boolean): Sess
 // ---------------------------------------------------------------------------
 
 const RIG = { redcat: "otr_redcat", esprit: "otr_esprit", fra: "otr_fra400" } as const
-const PROJECT = { cygnus: "prj_cygnus", m31: "prj_m31", heart: "prj_heart" } as const
+/** Two ASI2600MM cameras of one model: each has its own physical alias, and darks and bias link to one of them (LIB-FR-26). */
+const CAMERA = { first: "cam_2600", second: "cam_2600b", osc: "cam_533" } as const
+const PROJECT = { cygnus: "prj_cygnus", mosaic: "prj_ic5070", m31: "prj_m31", heart: "prj_heart", oiii: "prj_ngc_oiii" } as const
 const PROCESSING = "/Volumes/Astro-T7/Processing"
 
 function equipment(catalog: Catalog) {
+  const mono = { widthPx: 6248, heightPx: 4176, pixelSizeUm: 3.76, kind: "mono" as const, source: "manual" as const, noBias: false }
   catalog.cameras = {
-    cam_2600: { id: "cam_2600", name: "ASI2600MM Pro", aliases: ["ZWO ASI2600MM Pro"], source: "manual", widthPx: 6248, heightPx: 4176, pixelSizeUm: 3.76, kind: "mono" },
-    cam_533: { id: "cam_533", name: "ASI533MC Pro", aliases: ["ZWO ASI533MC Pro"], source: "manual", widthPx: 3008, heightPx: 3008, pixelSizeUm: 3.76, kind: "osc" },
+    [CAMERA.first]: { id: CAMERA.first, name: "ASI2600MM Pro", aliases: ["ZWO ASI2600MM Pro"], physicalAlias: "2600MM #1", noDarks: false, ...mono },
+    // The FRA400's camera: "Don't use darks" settles its sessions as No darks with no warning (CAL-FR-22).
+    [CAMERA.second]: { id: CAMERA.second, name: "ASI2600MM Pro", aliases: ["ZWO ASI2600MM Pro"], physicalAlias: "2600MM #2", noDarks: true, ...mono },
+    [CAMERA.osc]: { id: CAMERA.osc, name: "ASI533MC Pro", aliases: ["ZWO ASI533MC Pro"], source: "manual", widthPx: 3008, heightPx: 3008, pixelSizeUm: 3.76, kind: "osc", physicalAlias: null, noDarks: false, noBias: false },
   }
   catalog.telescopes = {
     tel_redcat: { id: "tel_redcat", name: "RedCat 51", aliases: ["William Optics RedCat 51"], source: "manual", focalLengthMm: 250, apertureMm: 51 },
@@ -639,128 +665,144 @@ function equipment(catalog: Catalog) {
       return id
     })
   }
+  const optics = (cameraId: string, telescopeId: string, effectiveFocalLengthMm: number, rigId: string) => ({ cameraId, telescopeId, reducerId: null, effectiveFocalLengthMm, filterIds: filterIds[rigId]!, rotator: false })
   catalog.opticalTrains = {
+    // RedCat's camera was remounted on 1 Oct: a second dated version with the same optics (PLAN-EQ-FR-07). Flats need the lights' version.
     [RIG.redcat]: {
-      id: RIG.redcat, name: "RedCat 51 / ASI2600MM", source: "manual", cameraId: "cam_2600", telescopeId: "tel_redcat", effectiveFocalLengthMm: 250, notes: "",
-      filterIds: filterIds[RIG.redcat]!,
+      id: RIG.redcat,
+      name: "RedCat 51 / ASI2600MM",
+      source: "manual",
+      notes: "",
+      ...optics(CAMERA.first, "tel_redcat", 250, RIG.redcat),
+      versionId: "rv_redcat_2",
+      versionFrom: "2026-10-01",
+      history: [{ id: "rv_redcat_1", from: "2026-01-01", ...optics(CAMERA.first, "tel_redcat", 250, RIG.redcat) }],
     },
-    [RIG.esprit]: {
-      id: RIG.esprit, name: "Esprit 100 / ASI533MC", source: "manual", cameraId: "cam_533", telescopeId: "tel_esprit", effectiveFocalLengthMm: 550, notes: "",
-      filterIds: filterIds[RIG.esprit]!,
-    },
-    [RIG.fra]: {
-      id: RIG.fra, name: "Askar FRA400 / ASI2600MM", source: "manual", cameraId: "cam_2600", telescopeId: "tel_fra400", effectiveFocalLengthMm: 400, notes: "",
-      filterIds: filterIds[RIG.fra]!,
-    },
+    [RIG.esprit]: { id: RIG.esprit, name: "Esprit 100 / ASI533MC", source: "manual", notes: "", ...optics(CAMERA.osc, "tel_esprit", 550, RIG.esprit), versionId: "rv_esprit_1", versionFrom: "2026-01-01", history: [] },
+    [RIG.fra]: { id: RIG.fra, name: "Askar FRA400 / ASI2600MM", source: "manual", notes: "", ...optics(CAMERA.second, "tel_fra400", 400, RIG.fra), versionId: "rv_fra400_1", versionFrom: "2026-01-01", history: [] },
   }
 }
 
-const decided = (asset: Asset, value: "usable" | "unusable", at = "2026-09-29T10:00:00.000Z"): Asset => ({ ...asset, quality: { value, decidedAt: at, basisSha256: asset.sha256 } })
+/**
+ * Masters indexed from the Calibration location match by camera model until
+ * they are linked to a physical camera; with two ASI2600MM cameras each one
+ * is linked, as Import masters records it (LIB-FR-26).
+ */
+function linkMasterCameras(catalog: Catalog) {
+  const link = (folder: string, cameraId: string) => {
+    for (const master of Object.values(catalog.masters)) {
+      if (master.versions.some((v) => v.path.includes(`/Calibration/${folder}/`))) catalog.masters[master.id] = { ...master, cameraId }
+    }
+  }
+  link("Darks/ZWO ASI2600MM Pro", CAMERA.first)
+  link("Bias/ZWO ASI2600MM Pro", CAMERA.first)
+  link("Flats/RedCat 51 - ASI2600MM", CAMERA.first)
+  link("Bias/ZWO ASI2600MM Pro 2", CAMERA.second)
+  link("Flats/Askar FRA400 - ASI2600MM", CAMERA.second)
+}
 
-/** The user's confirmation, recorded as the store's Confirm Target / Confirm rig record it: a separate user row. */
+const decided = (asset: Asset, value: "usable" | "unusable", at: string): Asset => ({ ...asset, quality: { value, decidedAt: at, basisSha256: asset.sha256 } })
+
+/** The user's confirmation, recorded as the store's Confirm Target / Confirm rig record it: a separate user row, and the rig version the session was captured with. */
 function confirm(catalog: Catalog, session: Session, targetId: string | null, rigId: string | null) {
   const at = "2026-09-29T09:00:00.000Z"
   const target = targetId ? catalog.targets[targetId] : undefined
   const rig = rigId ? catalog.opticalTrains[rigId] : undefined
-  catalog.sessions[session.id] = {
-    ...session,
-    target: target ? { value: target.id, status: "confirmed", evidence: confirmedEvidence(session.target.evidence, msg("session_confirm_target"), verbatim(target.name)), confirmedAt: at } : session.target,
-    equipment: rig ? { value: rig.id, status: "confirmed", evidence: confirmedEvidence(session.equipment.evidence, msg("session_confirm_rig"), verbatim(rig.name)), confirmedAt: at } : session.equipment,
+  const current = catalog.sessions[session.id]!
+  const next: Session = {
+    ...current,
+    target: target ? { value: target.id, status: "confirmed", evidence: confirmedEvidence(current.target.evidence, msg("session_confirm_target"), verbatim(target.name)), confirmedAt: at } : current.target,
+    equipment: rig ? { value: rig.id, status: "confirmed", evidence: confirmedEvidence(current.equipment.evidence, msg("session_confirm_rig"), verbatim(rig.name)), confirmedAt: at } : current.equipment,
   }
+  catalog.sessions[session.id] = { ...next, rigVersionId: capturedRigVersionId(catalog, next) }
 }
 
-/** A first save: its accepted changes are worded as Save run words them (VSEL-FR-16). */
-function revision(catalog: Catalog, content: ReturnType<typeof emptyContent>, savedAt: string): MembershipRevision {
-  return { ...content, revision: 1, savedAt, accepted: describeDiff(catalog, diffContent(null, content)) }
-}
-
-function run(fields: Pick<Run, "id" | "name" | "projectId" | "subjectId" | "rigId"> & Partial<Run>): Run {
+/** A Project with the fields every demo Project shares; `fields` override them. */
+function project(fields: Pick<Project, "id" | "name" | "subjects" | "rigIds" | "goals" | "createdAt"> & Partial<Project>): Project {
   return {
-    panelId: null,
-    groupId: null,
-    setup: { profileId: PROFILE_IDS.pixinsight, inputMode: null, calibrationPolicy: "automatic" },
-    revisions: [],
-    draft: null,
-    calibration: [],
-    masterOffers: [],
-    outputParent: PROCESSING,
-    completion: "open",
-    completedAt: null,
-    stageBeforeComplete: null,
-    trashedAt: null,
     notes: "",
-    createdAt: "2026-09-29T12:00:00.000Z",
+    inputs: [],
+    groups: [],
+    settings: { profileId: PROFILE_IDS.pixinsight, mode: "symlink", processingParent: PROCESSING, keywords: null },
+    folderPath: null,
+    view: null,
+    previous: null,
+    output: {},
+    masterOffers: [],
+    archiveLocationId: null,
+    wrapUp: {},
+    state: "open",
+    closedAt: null,
+    snapshot: null,
+    archive: null,
     revision: 1,
     ...fields,
   }
 }
 
-interface Prepared {
-  record: Preparation
-  files: DiskFile[]
+function group(id: string, name: string, createdAt: string, panel = false): ProjectGroup {
+  return { id, name, panel, createdAt }
 }
 
-/** A Symlinks preparation: one symlink per included frame under `<folder>/lights/` (PREP-FR-04, P-PREP3). */
-function symlinkPreparation(catalog: Catalog, r: Run, folderPath: string, resultsPath: string, assetIds: AssetId[], at: string, extra: Partial<Preparation> = {}): Prepared {
-  const files = assetIds.map((id) => {
-    const asset = catalog.assets[id]!
-    return makeFile({ path: `${folderPath}/lights/${asset.fileName}`, volumeId: A, sizeBytes: 0, kind: "fits", linkTarget: asset.copies[0]!.path, modifiedAt: at })
-  })
-  const record: Preparation = {
-    id: `prep_${r.id}`,
-    runId: r.id,
-    groupId: r.groupId,
-    prepRevision: 1,
-    membershipRevision: 1,
-    profileId: PROFILE_IDS.pixinsight,
-    mode: "symlink",
-    folderPath,
-    resultsPath,
-    entryCount: assetIds.length,
-    footprintBytes: 0,
-    state: "prepared",
-    operationId: null,
-    preparedAssetIds: assetIds,
-    preparedCalibrationCount: 0,
-    blocked: [],
-    metadataDecisions: [],
-    launches: [{ at, outcome: "opened" }],
-    unverified: null,
-    createdAt: at,
-    settledAt: at,
-    ...extra,
+function input(session: Session, groupId: string): ProjectInput {
+  return { sessionId: session.id, groupId, excluded: [], included: [] }
+}
+
+/**
+ * A Project's View built from its originals as Apply builds it, in one go
+ * (VSEL-FR-16): every planned entry placed, verified and recorded as the
+ * applied state, with the Project folder's `Processing/` and `Output/`.
+ */
+function buildView(catalog: Catalog, disk: Disk, settings: AppSettings, built: Project, at: string): { disk: Disk; project: Project } {
+  const world = { catalog, disk, settings }
+  const paths = projectPaths(world, built)!
+  const plan = viewPlan(world, built)
+  let next = createFolder(createFolder(disk, { volumeId: A, path: paths.processing }), { volumeId: A, path: paths.output })
+  const entries: ViewEntry[] = []
+  const copies = new Map<string, DiskFile>()
+  for (const planned of plan.entries) {
+    const placed = placeEntry(next, planned, paths.view, built.settings.mode, at, copies.get(planned.originalPath) ?? null)
+    if (!placed.ok) throw new Error(`Demo seed: ${built.name} cannot place ${planned.path}`)
+    next = writeFiles(next, [placed.file])
+    if (placed.entry.copySha256 !== null && !copies.has(planned.originalPath)) copies.set(planned.originalPath, placed.file)
+    entries.push(placed.entry)
   }
-  return { record, files }
+  return { disk: next, project: { ...built, folderPath: paths.root, view: appliedViewFor(world, built, paths.view, entries, plan.layout, at, `op_apply_${built.id}`) } }
 }
 
-function resultFile(path: string, at: string, sizeBytes = 104_390_000, kind: DiskFile["kind"] = "xisf"): DiskFile {
-  return makeFile({ path, volumeId: A, sizeBytes, kind, modifiedAt: at })
+/** The header of a master PlateVault finds in a tool's folder: RedCat's settings, no pointing. */
+const REDCAT_MASTER_HEADER: FrameHeader = {
+  imageType: "master-flat",
+  object: null,
+  filter: "Ha",
+  exposureS: 1.5,
+  dateObs: "2026-10-01T22:00:00.000Z",
+  instrument: REDCAT.instrument,
+  telescope: REDCAT.telescope,
+  focalLengthMm: REDCAT.focalLengthMm,
+  binning: 1,
+  gain: REDCAT.gain,
+  offset: REDCAT.offset,
+  ccdTempC: REDCAT.ccdTempC,
+  ra: null,
+  dec: null,
+  rotationDeg: null,
+  widthPx: REDCAT.widthPx,
+  heightPx: REDCAT.heightPx,
+  pixelSizeUm: REDCAT.pixelSizeUm,
+  bayerPattern: null,
+  siteLat: null,
+  siteLon: null,
+  ncombine: 30,
 }
 
-function resultRecord(id: string, r: Run, file: DiskFile, kind: ResultKind | null, channel: string | null, fields: Partial<ResultRecord> = {}): ResultRecord {
-  return {
-    id,
-    runId: r.id,
-    groupId: r.groupId,
-    path: file.path,
-    kind,
-    channel,
-    intermediate: false,
-    discovered: "results-folder",
-    fromPrepRevision: 1,
-    processingState: "written",
-    association: "tool-recorded",
-    lineage: "tool-recorded",
-    acceptance: "candidate",
-    acceptedAt: null,
-    sha256: file.sha256,
-    contentState: "unchanged",
-    trashed: null,
-    ...fields,
-  }
+/** An image a tool or the user wrote into a Project folder; a master carries a master header. */
+function imageFile(path: string, at: string, imageType: ImageType | null = null, extra: Partial<NewFile> = {}): DiskFile {
+  const header = imageType ? { ...REDCAT_MASTER_HEADER, imageType, dateObs: at } : null
+  return makeFile({ path, volumeId: A, sizeBytes: 104_390_000, kind: path.endsWith(".tif") ? "tiff" : "xisf", header, modifiedAt: at, ...extra })
 }
 
-/** Demo: the harness v5 review library. */
+/** Demo: the harness review library, F4 Project model (HARNESS-V5-IA.md § Seed). */
 function demoSeed(): SeedData {
   const files = [...baseFiles(), ...nasFiles()]
   // M 31 R and G frames also sit on Spare: byte-identical duplicate copies (D-W74).
@@ -779,28 +821,35 @@ function demoSeed(): SeedData {
     loc_imaging: location("loc_imaging", "Astro-T7 imaging", "/Volumes/Astro-T7/Imaging", A, "captures"),
     loc_cold: location("loc_cold", "Cold-1 captures", "/Volumes/Cold-1/Captures", VOLUME_IDS.cold, "captures"),
     loc_calibration: location("loc_calibration", "Astro-T7 calibration", "/Volumes/Astro-T7/Calibration", A, "calibration"),
-    loc_processing: location("loc_processing", "Astro-T7 processing", PROCESSING, A, "results"),
     // Registered after Astro-T7, so its byte-identical M 31 copies are the ones the Duplicates review offers to move (Round 6 keeper rule).
     loc_spare: location("loc_spare", "Spare captures", "/Volumes/Spare/Captures", VOLUME_IDS.spare, "captures", "2026-09-02T18:00:00.000Z"),
     loc_archive: location("loc_archive", "Archive", "/Volumes/Archive", VOLUME_IDS.archive, "archive"),
-    // P-ARC1: a second archive location; Archive is the Default, M 31 picks this one.
+    // P-ARC1: a second archive location. Archive is the Default; M 31 picks this one.
     loc_archive_nas: location("loc_archive_nas", "NAS archive", "/Volumes/NAS/Archive", VOLUME_IDS.nas, "archive"),
     loc_nas: location("loc_nas", "NAS captures", "/Volumes/NAS/Captures", VOLUME_IDS.nas, "captures"),
   }
-  catalog = indexLocationsSync(catalog, disk, ["loc_cold"], "2026-09-13T08:00:00.000Z")
-  catalog = indexLocationsSync(catalog, disk, ["loc_captures", "loc_imaging", "loc_calibration", "loc_spare", "loc_archive"], "2026-10-04T08:00:00.000Z")
+  const settings = defaultSettings()
+  settings.onboarding = { completedAt: "2026-09-01T18:12:00.000Z", deferredRoles: [] }
+  settings.defaultSiteId = "site_backyard"
+  settings.defaultArchiveLocationId = "loc_archive"
+  settings.lastProcessingParent = PROCESSING
 
+  // Calibration first: masters and raw sets are in the library when the lights arrive, so ingestion pins what it can (CAL-FR-02).
+  catalog = indexLocationsSync(catalog, disk, settings, ["loc_calibration"], "2026-09-12T08:00:00.000Z")
+  linkMasterCameras(catalog)
+  catalog = indexLocationsSync(catalog, disk, settings, ["loc_cold"], "2026-09-13T08:00:00.000Z")
+  catalog = indexLocationsSync(catalog, disk, settings, ["loc_captures", "loc_imaging", "loc_spare", "loc_archive"], "2026-10-04T08:00:00.000Z")
   const session = (night: string, channel: string, predicate: (s: Session) => boolean = () => true) =>
     findSession(catalog, (s) => s.imageType === "light" && s.night === night && s.channel === channel && predicate(s))
-  const ngc = catalog.sessions[session("2026-09-18", "Ha").id]!.target.value!
+  const ngc = session("2026-09-18", "Ha").target.value!
   const ic5070Target = ensureTarget(catalog, "tgt_ic5070", "IC 5070", ["Pelican Nebula", "IC5070"], IC5070.ra, IC5070.dec, { width: 1.0, height: 0.8 })
   const m31 = session("2026-09-02", "L").target.value!
   const heartIds = [session("2026-09-14", "Ha", (s) => s.objectLabel === "Heart Nebula"), session("2026-09-15", "Ha")]
-
   const s = {
     oiii0912: session("2026-09-12", "OIII"),
     ha0918: session("2026-09-18", "Ha"),
-    oiii0924: session("2026-09-24", "OIII"),
+    oiii0924: session("2026-09-24", "OIII", (x) => x.framing === 1),
+    oiii0924b: session("2026-09-24", "OIII", (x) => x.framing === 2),
     cygnus0926: session("2026-09-26", "OIII"),
     ha0928: session("2026-09-28", "Ha"),
     oiii0930: session("2026-09-30", "OIII"),
@@ -813,30 +862,37 @@ function demoSeed(): SeedData {
     p2ha: session("2026-09-16", "Ha"),
     p2oiii: session("2026-09-17", "OIII"),
     p3ha: session("2026-09-19", "Ha"),
-    flagged: session("2026-09-20", "Ha"),
+    between: session("2026-09-20", "Ha"),
     m31test: session("2026-08-25", "L"),
     m31: { L: session("2026-09-02", "L"), R: session("2026-09-03", "R"), G: session("2026-09-03", "G"), B: session("2026-09-03", "B") },
     m33: session("2026-08-30", "L"),
   }
-
   // Confirmed associations: Targets and rigs the review relies on.
-  for (const x of [s.oiii0912, s.ha0918, s.oiii0924, s.oiii0930, s.ha1002]) confirm(catalog, x, ngc, RIG.redcat)
+  for (const x of [s.oiii0912, s.ha0918, s.oiii0924, s.oiii0924b, s.ha0928, s.oiii0930, s.ha1002]) confirm(catalog, x, ngc, RIG.redcat)
   for (const x of [s.osc0921, s.osc1001]) confirm(catalog, x, ngc, RIG.esprit)
-  for (const x of [s.p1ha, s.p1oiii, s.p2ha, s.p2oiii, s.p3ha, s.flagged]) confirm(catalog, x, ic5070Target, RIG.redcat)
+  for (const x of [s.p1ha, s.p1oiii, s.p2ha, s.p2oiii, s.p3ha, s.between]) confirm(catalog, x, ic5070Target, RIG.redcat)
   for (const x of heartIds) confirm(catalog, x, x.target.value, RIG.redcat)
   for (const x of [s.m31test, s.m31.L, s.m31.R, s.m31.G, s.m31.B]) confirm(catalog, x, m31, RIG.fra)
   confirm(catalog, s.m33, s.m33.target.value, RIG.fra)
-  // Rig confirmed, Target still unresolved or in review: these sessions need a Target.
+  // Rig confirmed, Target still unresolved: these sessions need a Target.
   confirm(catalog, s.cygnus0926, null, RIG.redcat)
   confirm(catalog, s.unsorted, null, RIG.redcat)
+  // Confirming a rig matches what still waits again (its camera and rig version are now known); pins stay.
+  catalog = calibrateSessions(catalog, disk, settings, "2026-10-04T09:00:00.000Z")
 
-  // Library quality: reviewed sessions are Usable; M 31 L has five Unusable frames.
-  const reviewed = [s.ha0918, s.oiii0924, s.osc0921, s.p1ha, s.p1oiii, s.p2ha, s.p2oiii, s.p3ha, s.m31.R, s.m31.G, s.m31.B]
-  for (const x of reviewed) for (const id of x.assetIds) catalog.assets[id] = decided(catalog.assets[id]!, "usable")
-  const unusableL = new Set([2, 16, 28, 43, 57])
-  s.m31.L.assetIds.forEach((id, index) => {
-    catalog.assets[id] = decided(catalog.assets[id]!, unusableL.has(index) ? "unusable" : "usable")
-  })
+  // Library quality, decided before each Project's Apply read it. M 31 L has five Unusable frames; 30 Sep OIII six trailed ones.
+  const review = (x: Session, at: string, unusable: ReadonlySet<number> = new Set()) => {
+    catalog.sessions[x.id]!.assetIds.forEach((id, index) => {
+      catalog.assets[id] = decided(catalog.assets[id]!, unusable.has(index) ? "unusable" : "usable", at)
+    })
+  }
+  review(s.oiii0912, "2026-09-13T10:00:00.000Z")
+  for (const x of [s.p1ha, s.p1oiii, s.p2ha, s.p2oiii, s.p3ha]) review(x, "2026-09-21T10:00:00.000Z")
+  for (const x of [s.ha0918, s.oiii0924, s.oiii0924b, s.osc0921]) review(x, "2026-09-30T10:00:00.000Z")
+  review(s.oiii0930, "2026-10-01T12:00:00.000Z", new Set([12, 13, 14, 15, 16, 17]))
+  review(s.ha1002, "2026-10-03T10:00:00.000Z")
+  review(s.m31.L, "2026-09-04T10:00:00.000Z", new Set([2, 16, 28, 43, 57]))
+  for (const x of [s.m31.R, s.m31.G, s.m31.B]) review(x, "2026-09-04T10:00:00.000Z")
   // Cached measurements for the M 31 broadband frames.
   const scale = pixelScaleArcsec(3.76, 400)
   for (const x of [s.m31.L, s.m31.R, s.m31.G, s.m31.B]) {
@@ -846,85 +902,240 @@ function demoSeed(): SeedData {
     }
   }
 
+  // Calibration choices the user made (LIB-FR-23, LIB-FR-25): suggestions confirmed on the sessions the Projects hold.
+  const choose = (x: Session, kind: PinKind, choice: (current: CalibrationChoice) => CalibrationChoice) => {
+    const current = catalog.sessions[x.id]!
+    catalog.sessions[x.id] = { ...current, calibration: { ...current.calibration!, [kind]: choice(current.calibration![kind]) } }
+  }
+  for (const x of [s.p1oiii, s.p2ha, s.p2oiii]) choose(x, "flat", (c) => confirmChoice(c, "2026-09-21T11:00:00.000Z"))
+  choose(s.oiii0930, "flat", (c) => confirmChoice(c, "2026-10-03T09:00:00.000Z"))
+
   // Targets: favourites and a southern Target with no window tonight.
   for (const id of [m31, s.m33.target.value!]) catalog.targets[id] = { ...catalog.targets[id]!, favourite: true }
   const tuc = ensureTarget(catalog, "tgt_ngc104", "NGC 104", ["47 Tucanae", "Caldwell 106"], 6.024, -72.081, { width: 0.5, height: 0.5 })
   catalog.targets[tuc] = { ...catalog.targets[tuc]!, favourite: true }
 
-  // Projects. Goal conditions (C7) are relative to tonight at the default site, so the demo always has nights left.
+  // Goal conditions (C7) are relative to tonight at the default site, so the demo always has nights left.
   const backyard = catalog.sites.site_backyard!
   const tonight = upcomingNight(backyard, Date.now())
-  const subject = (id: string, targetId: string, mosaic: Subject["mosaic"] = null, conditions?: SubjectConditions): Subject => ({ id, targetId, mosaic, ...(conditions ? { conditions } : {}) })
-  const ngcSubject = subject("sub_ngc7000", ngc, null, { panelBalancePct: DEFAULT_PANEL_BALANCE_PCT, window: { kind: "finish-by", night: shiftNight(tonight, 11) } })
-  const mosaicSubject = subject(
-    "sub_ic5070",
-    ic5070Target,
-    {
-      name: "IC 5070 mosaic",
-      centre: { ...IC5070 },
-      panels: PANEL_DEC.map((dec, i) => ({ id: `pnl_${i + 1}`, n: i + 1, ra: IC5070.ra, dec, rotationDeg: 0 })),
+  const subject = (id: string, targetId: string, conditions?: SubjectConditions): Subject => ({ id, targetId, ...(conditions ? { conditions } : {}) })
+  const ngcSubject = subject("sub_ngc7000", ngc, { panelBalancePct: DEFAULT_PANEL_BALANCE_PCT, window: { kind: "finish-by", night: shiftNight(tonight, 11) } })
+  const mosaicSubject = subject("sub_ic5070", ic5070Target, { panelBalancePct: DEFAULT_PANEL_BALANCE_PCT, window: seasonWindow(IC5070, backyard, defaultCriteria(backyard), tonight) })
+  const goal = (id: string, subjectId: string, channel: GoalChannel, hours: number | null, groupId: string | null = null, extra: Partial<Goal> = {}): Goal => ({
+    id,
+    subjectId,
+    groupId,
+    channel,
+    integrationS: hours === null ? null : hours * 3600,
+    frameCount: null,
+    qualityBar: qualityBarFor(null),
+    ...extra,
+  })
+
+  // "Cygnus HOO 2026" (Symlinks): three groups (two framings on RedCat, and the Esprit), so the View has GROUP_ folders, Darks and
+  // Bias inside each group (two cameras) and the gain in the light folders' names (RedCat 100, Esprit 101).
+  const cyg = { redcat: "grp_cyg_redcat", framing: "grp_cyg_framing2", esprit: "grp_cyg_esprit" }
+  let cygnus = project({
+    id: PROJECT.cygnus,
+    name: "Cygnus HOO 2026",
+    notes: m.seed_project_cygnus_notes(),
+    subjects: [ngcSubject],
+    rigIds: [RIG.redcat, RIG.esprit],
+    goals: [goal("goal_ngc_ha", ngcSubject.id, "Ha", 10), goal("goal_ngc_oiii", ngcSubject.id, "OIII", 10)],
+    groups: [
+      group(cyg.redcat, "RedCat 51 / ASI2600MM", "2026-09-19T08:00:00.000Z"),
+      group(cyg.framing, "RedCat 51 / ASI2600MM · Framing 2", "2026-09-30T18:00:00.000Z"),
+      group(cyg.esprit, "Esprit 100 / ASI533MC", "2026-09-30T18:05:00.000Z"),
+    ],
+    inputs: [input(s.ha0918, cyg.redcat), input(s.oiii0924, cyg.redcat), input(s.oiii0924b, cyg.framing), input(s.osc0921, cyg.esprit)],
+    createdAt: "2026-09-10T19:00:00.000Z",
+    revision: 6,
+  })
+  // At Apply the 21 Sep OSC session was set to No darks; its 180 s darks arrived on 5 Oct and "Also use for these sessions" pinned
+  // them, so the open Project reads a labelled calibration change (LIB-FR-25).
+  const oscDark = catalog.sessions[s.osc0921.id]!.calibration!.dark
+  choose(s.osc0921, "dark", () => noChoice("2026-09-30T20:00:00.000Z"))
+  ;({ disk, project: cygnus } = buildView(catalog, disk, settings, cygnus, "2026-10-01T09:00:00.000Z"))
+  choose(s.osc0921, "dark", () => (oscDark.state === "pinned" ? { ...oscDark, at: "2026-10-05T19:00:00.000Z", by: "user" } : oscDark))
+  // Since Apply: the Project added 30 Sep OIII, and the Library marked three 18 Sep Ha frames Unusable.
+  cygnus = { ...cygnus, inputs: [...cygnus.inputs, input(s.oiii0930, cyg.redcat)] }
+  for (const index of [7, 21, 40]) catalog.assets[s.ha0918.assetIds[index]!] = decided(catalog.assets[s.ha0918.assetIds[index]!]!, "unusable", "2026-10-02T10:00:00.000Z")
+  const cygPaths = projectPaths({ settings }, cygnus)!
+  const wbpp = `${cygPaths.processing}/WBPP`
+  const generatedFlat = imageFile(`${wbpp}/master/masterFlat_BIN-1_FILTER-Ha.xisf`, "2026-10-01T21:40:00.000Z", "master-flat")
+  const cygMaster = imageFile(`${wbpp}/master/masterLight_BIN-1_FILTER-Ha.xisf`, "2026-10-01T22:00:00.000Z")
+  disk = writeFiles(disk, [
+    cygMaster,
+    imageFile(`${wbpp}/master/masterLight_BIN-1_FILTER-OIII.xisf`, "2026-10-01T22:10:00.000Z"),
+    generatedFlat,
+    makeFile({ path: `${wbpp}/logs/WBPP.log`, volumeId: A, sizeBytes: 220_000, kind: "log", modifiedAt: "2026-10-01T22:12:00.000Z" }),
+    // A file PlateVault didn't place: the user's notes in View, which the next Apply asks about (VSEL-FR-14).
+    makeFile({ path: `${cygPaths.view}/notes.txt`, volumeId: A, sizeBytes: 2_400, kind: "text", modifiedAt: "2026-10-02T21:00:00.000Z" }),
+    imageFile(`${cygPaths.output}/NGC7000-HOO.tif`, "2026-10-03T20:00:00.000Z", null, { sizeBytes: 156_500_000 }),
+    imageFile(`${cygPaths.output}/NGC7000-Ha.xisf`, "2026-10-02T09:00:00.000Z", null, { sha256: cygMaster.sha256 }),
+    // Still being written by the tool: Output shows it as writing (RES-FR-01).
+    imageFile(`${cygPaths.output}/NGC7000-HOO-starless.tif`, "2026-10-04T07:55:00.000Z", null, { sizeBytes: 98_000_000, growing: true }),
+  ])
+  cygnus = {
+    ...cygnus,
+    output: {
+      "NGC7000-HOO.tif": { kind: "final-image", channel: null, copiedFrom: null, at: "2026-10-03T20:05:00.000Z" },
+      "NGC7000-Ha.xisf": { kind: "linear-integration", channel: "Ha", copiedFrom: cygMaster.path, at: "2026-10-02T09:00:00.000Z" },
     },
-    { panelBalancePct: DEFAULT_PANEL_BALANCE_PCT, window: seasonWindow(IC5070, backyard, defaultCriteria(backyard), tonight) },
-  )
-  const goal = (id: string, subjectId: string, channel: GoalChannel, hours: number | null, panelId: string | null = null, extra: Partial<Goal> = {}): Goal => ({ id, subjectId, panelId, channel, integrationS: hours === null ? null : hours * 3600, frameCount: null, qualityBar: qualityBarFor(null), ...extra })
-  const project = { archiveLocationId: null, wrapUp: {} }
+  }
+  // Adopting the generated master flat (CAL-FR-06): an earlier adoption stopped after copying it, so its fixed destination holds
+  // PlateVault's own unregistered copy. Adopt names that copy and offers a reviewed Move to Trash before it retries.
+  const flatDestination = adoptionDestination(catalog, settings, generatedFlat, "flat")
+  if (flatDestination) disk = writeFiles(disk, [{ ...generatedFlat, path: flatDestination, inode: generatedFlat.inode + 11, modifiedAt: "2026-10-02T08:00:00.000Z" }])
+
+  // "IC 5070 mosaic" (Copies): panel groups make the Project a mosaic (PRJ-FR-29); each panel has its own goals. Panel 3 joined
+  // after the last Apply, and that Apply left files in View (previous)/: a copy WBPP rewrote and two of the user's files, one kept.
+  const panel = (n: number) => group(`grp_ic5070_p${n}`, `Panel ${n}`, "2026-09-12T19:00:00.000Z", true)
+  const panels = [panel(1), panel(2), panel(3)]
+  let mosaic = project({
+    id: PROJECT.mosaic,
+    name: "IC 5070 mosaic",
+    subjects: [mosaicSubject],
+    rigIds: [RIG.redcat],
+    goals: panels.flatMap((p) => [goal(`goal_${p.id}_ha`, mosaicSubject.id, "Ha", 4, p.id), goal(`goal_${p.id}_oiii`, mosaicSubject.id, "OIII", 4, p.id)]),
+    groups: panels,
+    inputs: [input(s.p1ha, panels[0]!.id), input(s.p1oiii, panels[0]!.id), input(s.p2ha, panels[1]!.id), input(s.p2oiii, panels[1]!.id)],
+    settings: { profileId: PROFILE_IDS.pixinsight, mode: "copy", processingParent: PROCESSING, keywords: null },
+    createdAt: "2026-09-12T19:00:00.000Z",
+    revision: 4,
+  })
+  ;({ disk, project: mosaic } = buildView(catalog, disk, settings, mosaic, "2026-09-23T09:00:00.000Z"))
+  mosaic = { ...mosaic, inputs: [...mosaic.inputs, input(s.p3ha, panels[2]!.id)] }
+  const mosaicPaths = projectPaths({ settings }, mosaic)!
+  const rewritten = mosaic.view!.entries.find((e) => e.role === "light")!
+  disk = writeFiles(disk, [
+    makeFile({ path: `${mosaicPaths.previous}/${rewritten.path}`, volumeId: A, sizeBytes: rewritten.sizeBytes, kind: "fits", sha256: fakeSha256(rewritten.path, 5), modifiedAt: "2026-09-22T23:10:00.000Z" }),
+    makeFile({ path: `${mosaicPaths.previous}/notes-panel-2.txt`, volumeId: A, sizeBytes: 3_200, kind: "text", modifiedAt: "2026-09-22T21:00:00.000Z" }),
+    makeFile({ path: `${mosaicPaths.previous}/framing-sketch.png`, volumeId: A, sizeBytes: 420_000, kind: "other", modifiedAt: "2026-09-20T12:00:00.000Z" }),
+    imageFile(`${mosaicPaths.output}/Panels/Panel-1/IC5070-Panel-1-HOO.xisf`, "2026-09-24T21:00:00.000Z"),
+    imageFile(`${mosaicPaths.processing}/WBPP/master/masterLight_BIN-1_FILTER-Ha_PANEL-Panel-1.xisf`, "2026-09-23T22:00:00.000Z"),
+  ])
+  mosaic = {
+    ...mosaic,
+    previous: {
+      folderPath: mosaicPaths.previous,
+      at: "2026-09-23T09:00:00.000Z",
+      leftovers: [
+        { path: rewritten.path, reason: "changed-copy", sizeBytes: rewritten.sizeBytes, kept: false },
+        { path: "notes-panel-2.txt", reason: "unplaced", sizeBytes: 3_200, kept: false },
+        // Reviewed as Keep: it stays and is not asked about again.
+        { path: "framing-sketch.png", reason: "unplaced", sizeBytes: 420_000, kept: true },
+      ],
+    },
+    output: { "Panels/Panel-1/IC5070-Panel-1-HOO.xisf": { kind: "mosaic-panel", channel: null, copiedFrom: null, at: "2026-09-24T21:05:00.000Z" } },
+  }
+
+  // "M 31 LRGB" (Copies): in Wrap up with Clean up done (its View's copies are in the OS Trash) and Trash and Archive still to do;
+  // it archives to the NAS archive, not the Default. Goals use every kind: integration with an FWHM bar (part of the L frames sit
+  // over the limit: "below bar"), frame counts, Usable only.
+  const m31Group = "grp_m31_fra"
+  let m31Project = project({
+    id: PROJECT.m31,
+    name: "M 31 LRGB",
+    notes: m.seed_project_m31_notes(),
+    subjects: [subject("sub_m31", m31)],
+    rigIds: [RIG.fra],
+    goals: [
+      goal("goal_m31_l", "sub_m31", "L", 2, null, { qualityBar: qualityBarFor(5.25) }),
+      goal("goal_m31_r", "sub_m31", "R", null, null, { frameCount: 20 }),
+      goal("goal_m31_g", "sub_m31", "G", null, null, { frameCount: 20 }),
+      goal("goal_m31_b", "sub_m31", "B", null, null, { frameCount: 20 }),
+    ],
+    groups: [group(m31Group, "Askar FRA400 / ASI2600MM", "2026-09-04T18:00:00.000Z")],
+    inputs: [s.m31.L, s.m31.R, s.m31.G, s.m31.B].map((x) => input(x, m31Group)),
+    settings: { profileId: PROFILE_IDS.pixinsight, mode: "copy", processingParent: PROCESSING, keywords: null },
+    archiveLocationId: "loc_archive_nas",
+    createdAt: "2026-09-01T19:00:00.000Z",
+    revision: 5,
+  })
+  ;({ disk, project: m31Project } = buildView(catalog, disk, settings, m31Project, "2026-09-05T09:00:00.000Z"))
+  const m31Paths = projectPaths({ settings }, m31Project)!
+  const m31Wbpp = `${m31Paths.processing}/WBPP`
+  const generatedDark = imageFile(`${m31Wbpp}/master/masterDark_BIN-1_EXPOSURE-120.00s.xisf`, "2026-09-07T20:10:00.000Z", null, {
+    header: { ...REDCAT_MASTER_HEADER, imageType: "master-dark", filter: null, exposureS: 120, telescope: null, focalLengthMm: null, ccdTempC: -15, dateObs: "2026-09-07T20:10:00.000Z" },
+  })
+  const m31Masters = (["L", "R", "G", "B"] as const).map((c) => imageFile(`${m31Wbpp}/master/masterLight_BIN-1_FILTER-${c}.xisf`, "2026-09-07T20:30:00.000Z"))
+  const m31Intermediates = s.m31.L.assetIds.slice(0, 12).flatMap((id) => {
+    const stem = catalog.assets[id]!.fileName.replace(/\.fits$/, "")
+    return [imageFile(`${m31Wbpp}/calibrated/${stem}_c.xisf`, "2026-09-07T19:00:00.000Z"), imageFile(`${m31Wbpp}/registered/${stem}_c_r.xisf`, "2026-09-07T19:40:00.000Z")]
+  })
+  const m31Copied = m31Masters.map((f) => imageFile(`${m31Paths.output}/${fileName(f.path)}`, "2026-09-08T09:00:00.000Z", null, { sha256: f.sha256 }))
+  disk = writeFiles(disk, [generatedDark, ...m31Masters, ...m31Intermediates, imageFile(`${m31Paths.output}/M31-LRGB.tif`, "2026-09-09T21:00:00.000Z", null, { sizeBytes: 156_500_000 }), ...m31Copied])
+  // Clean up moved the View's copies to the OS Trash (F1); Trash and Archive are still to do.
+  const trashAt = "2026-09-10T08:31:00.000Z"
+  const viewCopies = filesUnder(disk, m31Project.view!.folderPath)
+  for (const file of viewCopies) delete disk.files[fileKey(file.volumeId, file.path)]
+  disk = { ...disk, trash: [...disk.trash, ...viewCopies.map((file) => ({ file, originalPath: file.path, trashedAt: trashAt }))] }
+  catalog.trashEpisodes.trash_m31_view = {
+    id: "trash_m31_view",
+    kind: "view-cleanup",
+    at: trashAt,
+    projectId: PROJECT.m31,
+    items: viewCopies.map((file) => ({ path: file.path, volumeId: file.volumeId, sizeBytes: file.sizeBytes, assetId: null, outcome: "trashed" as const, reason: null })),
+    operationId: "op_cleanup_m31",
+  }
+  m31Project = {
+    ...m31Project,
+    output: {
+      "M31-LRGB.tif": { kind: "final-image", channel: null, copiedFrom: null, at: "2026-09-09T21:05:00.000Z" },
+      ...Object.fromEntries(m31Copied.map((f, i) => [fileName(f.path), { kind: "linear-integration" as const, channel: (["L", "R", "G", "B"] as const)[i]!, copiedFrom: m31Masters[i]!.path, at: "2026-09-08T09:00:00.000Z" }])),
+    },
+    // The generated master dark was hidden: it is not offered again for that file and digest (CAL-FR-06).
+    masterOffers: [{ path: generatedDark.path, sha256: generatedDark.sha256, state: "hidden", at: "2026-09-08T09:30:00.000Z" }],
+    wrapUp: { cleanup: { state: "done", at: trashAt, operationIds: ["op_cleanup_m31"], redo: false } },
+  }
+
+  // "NGC 7000 OIII test" (Closed, Symlinks): Clean up kept its View's links, Trash and Archive were skipped, and Close froze its
+  // goals and calibration (PRJ-FR-25). Its session is held by no open Project, so Sessions › Archive… repoints the kept View.
+  const oiiiGroup = "grp_oiii_redcat"
+  let oiiiTest = project({
+    id: PROJECT.oiii,
+    name: "NGC 7000 OIII test",
+    subjects: [subject("sub_ngc_oiii", ngc)],
+    rigIds: [RIG.redcat],
+    goals: [goal("goal_oiii_test", "sub_ngc_oiii", "OIII", 2)],
+    groups: [group(oiiiGroup, "RedCat 51 / ASI2600MM", "2026-09-13T09:00:00.000Z")],
+    inputs: [input(s.oiii0912, oiiiGroup)],
+    createdAt: "2026-09-13T09:00:00.000Z",
+    revision: 4,
+  })
+  ;({ disk, project: oiiiTest } = buildView(catalog, disk, settings, oiiiTest, "2026-09-14T09:00:00.000Z"))
+  const oiiiPaths = projectPaths({ settings }, oiiiTest)!
+  disk = writeFiles(disk, [imageFile(`${oiiiPaths.output}/NGC7000-OIII-test.tif`, "2026-09-15T21:00:00.000Z", null, { sizeBytes: 156_500_000 })])
+  const closedAt = "2026-09-16T09:10:00.000Z"
+  oiiiTest = {
+    ...oiiiTest,
+    output: { "NGC7000-OIII-test.tif": { kind: "final-image", channel: "OIII", copiedFrom: null, at: "2026-09-15T21:05:00.000Z" } },
+    wrapUp: {
+      cleanup: { state: "done", at: "2026-09-16T09:00:00.000Z", operationIds: [], redo: false },
+      trash: { state: "skipped", at: "2026-09-16T09:05:00.000Z", operationIds: [], redo: false },
+      archive: { state: "skipped", at: closedAt, operationIds: [], redo: false },
+    },
+    state: "closed",
+    closedAt,
+  }
+  oiiiTest = { ...oiiiTest, snapshot: closeSnapshot(catalog, oiiiTest, closedAt) }
+
   catalog.projects = {
-    [PROJECT.cygnus]: {
-      id: PROJECT.cygnus,
-      name: "Cygnus HOO 2026",
-      notes: m.seed_project_cygnus_notes(),
-      subjects: [ngcSubject, mosaicSubject],
-      rigIds: [RIG.redcat, RIG.esprit],
-      goals: [
-        goal("goal_ngc_ha", ngcSubject.id, "Ha", 10),
-        goal("goal_ngc_oiii", ngcSubject.id, "OIII", 10),
-        ...mosaicSubject.mosaic!.panels.flatMap((p) => [goal(`goal_${p.id}_ha`, mosaicSubject.id, "Ha", 4, p.id), goal(`goal_${p.id}_oiii`, mosaicSubject.id, "OIII", 4, p.id)]),
-      ],
-      ...project,
-      state: "open",
-      doneAt: null,
-      archive: null,
-      createdAt: "2026-09-10T19:00:00.000Z",
-      revision: 3,
-    },
-    [PROJECT.m31]: {
-      id: PROJECT.m31,
-      name: "M 31 LRGB",
-      notes: m.seed_project_m31_notes(),
-      subjects: [subject("sub_m31", m31)],
-      rigIds: [RIG.fra],
-      // Every goal kind: integration with an FWHM bar, frame counts, Usable only. The L bar sits inside the measured
-      // spread (about 4.7″ to 5.8″), so some L frames count and the rest show as below the bar (C7).
-      goals: [
-        goal("goal_m31_l", "sub_m31", "L", 2, null, { qualityBar: qualityBarFor(5.25) }),
-        goal("goal_m31_r", "sub_m31", "R", null, null, { frameCount: 20 }),
-        goal("goal_m31_g", "sub_m31", "G", null, null, { frameCount: 20 }),
-        goal("goal_m31_b", "sub_m31", "B", null, null, { frameCount: 20 }),
-      ],
-      // P-WRAP1: every run is Complete; Clean up is done, Trash and Archive are still to do. P-ARC1: it archives to the NAS.
-      archiveLocationId: "loc_archive_nas",
-      // Clean up records the run-view removal it started, so it reads Finished once that operation succeeded (F2).
-      wrapUp: { cleanup: { state: "done", at: "2026-09-10T08:31:00.000Z", operationIds: ["op_cleanup_m31"], redo: false } },
-      state: "open",
-      doneAt: null,
-      archive: null,
-      createdAt: "2026-09-01T19:00:00.000Z",
-      revision: 4,
-    },
-    [PROJECT.heart]: {
+    [PROJECT.cygnus]: cygnus,
+    [PROJECT.mosaic]: mosaic,
+    [PROJECT.m31]: m31Project,
+    // "Heart and Soul": no sessions yet; its matching sessions still need review.
+    [PROJECT.heart]: project({
       id: PROJECT.heart,
       name: "Heart and Soul",
       notes: m.seed_project_heart_notes(),
       subjects: heartIds.map((x, i) => subject(`sub_heart_${i + 1}`, catalog.sessions[x.id]!.target.value!)),
       rigIds: [RIG.redcat],
       goals: heartIds.flatMap((_, i) => [goal(`goal_heart_${i + 1}_ha`, `sub_heart_${i + 1}`, "Ha", 10), goal(`goal_heart_${i + 1}_oiii`, `sub_heart_${i + 1}`, "OIII", null, null, { frameCount: 120 })]),
-      ...project,
-      state: "open",
-      doneAt: null,
-      archive: null,
       createdAt: "2026-09-14T19:00:00.000Z",
-      revision: 1,
-    },
+    }),
+    [PROJECT.oiii]: oiiiTest,
   }
   // A user goal template carrying every condition (C7): an FWHM bar, an edited panel balance and a season window.
   catalog.goalTemplates = {
@@ -937,191 +1148,25 @@ function demoSeed(): SeedData {
     },
   }
 
-  // Memberships are read while Cold-1 is still connected, so its frames were included when saved.
-  const candidate = (x: Session, rig: string, subjectName: string): { session: Session; reason: SelectionReason } => ({
-    session: catalog.sessions[x.id]!,
-    reason: { kind: "candidate", detail: msg("domain_candidate_reason", { target: subjectName, rig: catalog.opticalTrains[rig]!.name }) },
-  })
-  const panelReason = (x: Session, n: number): { session: Session; reason: SelectionReason } => ({
-    session: catalog.sessions[x.id]!,
-    reason: { kind: "panel-pointing", detail: joinRefs([msg("domain_candidate_reason", { target: "IC 5070 mosaic", rig: "RedCat 51 / ASI2600MM" }), msg("domain_panel_pointing_inside", { panel: msg("review_panel_n", { n }) })], " · ") },
-  })
-  const content = (items: Array<{ session: Session; reason: SelectionReason }>) => addSessions(emptyContent(), disk, catalog, items)
-
-  const runA = run({
-    id: "run_ngc_hoo",
-    name: "NGC 7000 HOO RedCat",
-    projectId: PROJECT.cygnus,
-    subjectId: ngcSubject.id,
-    rigId: RIG.redcat,
-    revisions: [revision(catalog, content([candidate(s.ha0918, RIG.redcat, "NGC 7000"), candidate(s.oiii0924, RIG.redcat, "NGC 7000")]), "2026-09-29T12:30:00.000Z")],
-    completion: "complete",
-    completedAt: "2026-10-03T21:00:00.000Z",
-    stageBeforeComplete: "results",
-    createdAt: "2026-09-29T12:00:00.000Z",
-  })
-  const runB = run({
-    id: "run_ngc_oiii",
-    name: "NGC 7000 OIII deep",
-    projectId: PROJECT.cygnus,
-    subjectId: ngcSubject.id,
-    rigId: RIG.redcat,
-    setup: { profileId: null, inputMode: null, calibrationPolicy: "automatic" },
-    revisions: [revision(catalog, content([candidate(s.oiii0930, RIG.redcat, "NGC 7000")]), "2026-10-01T09:00:00.000Z")],
-    createdAt: "2026-10-01T08:50:00.000Z",
-  })
-  const runC = run({
-    id: "run_ngc_osc",
-    name: "NGC 7000 dual-band Esprit",
-    projectId: PROJECT.cygnus,
-    subjectId: ngcSubject.id,
-    rigId: RIG.esprit,
-    setup: { profileId: PROFILE_IDS.siril, inputMode: null, calibrationPolicy: "automatic" },
-    revisions: [revision(catalog, content([candidate(s.osc0921, RIG.esprit, "NGC 7000")]), "2026-09-30T20:00:00.000Z")],
-    createdAt: "2026-09-30T19:40:00.000Z",
-  })
-  const runD = run({
-    id: "run_ngc_test",
-    name: "NGC 7000 Ha quick look",
-    projectId: PROJECT.cygnus,
-    subjectId: ngcSubject.id,
-    rigId: RIG.redcat,
-    revisions: [revision(catalog, content([candidate(s.ha0918, RIG.redcat, "NGC 7000")]), "2026-09-25T20:00:00.000Z")],
-    trashedAt: "2026-09-30T08:00:00.000Z",
-    createdAt: "2026-09-25T19:50:00.000Z",
-  })
-  const group: RunGroup = {
-    id: "grp_ic5070",
-    name: "IC 5070 mosaic",
-    projectId: PROJECT.cygnus,
-    subjectId: mosaicSubject.id,
-    rigId: RIG.redcat,
-    runIds: ["run_ic5070_p1", "run_ic5070_p2", "run_ic5070_p3"],
-    setup: { profileId: PROFILE_IDS.pixinsight, inputMode: null, calibrationPolicy: "automatic" },
-    outputParent: PROCESSING,
-    createdAt: "2026-09-27T18:00:00.000Z",
-    revision: 1,
-  }
-  const panelRun = (n: number, sessions: Session[], extra: Partial<Run> = {}) =>
-    run({
-      id: `run_ic5070_p${n}`,
-      name: `IC 5070 mosaic Panel ${n}`,
-      projectId: PROJECT.cygnus,
-      subjectId: mosaicSubject.id,
-      rigId: RIG.redcat,
-      panelId: `pnl_${n}`,
-      groupId: group.id,
-      setup: null,
-      revisions: [revision(catalog, content(sessions.map((x) => panelReason(x, n))), "2026-09-27T18:30:00.000Z")],
-      createdAt: "2026-09-27T18:00:00.000Z",
-      ...extra,
-    })
-  const p1 = panelRun(1, [s.p1ha, s.p1oiii])
-  const p2 = panelRun(2, [s.p2ha, s.p2oiii])
-  const p3 = panelRun(3, [s.p3ha], { trashedAt: "2026-10-02T09:00:00.000Z" })
-  const m31Run = run({
-    id: "run_m31",
-    name: "M 31 LRGB FRA400",
-    projectId: PROJECT.m31,
-    subjectId: "sub_m31",
-    rigId: RIG.fra,
-    revisions: [revision(catalog, content([s.m31.L, s.m31.R, s.m31.G, s.m31.B].map((x) => candidate(x, RIG.fra, "M 31"))), "2026-09-07T17:50:00.000Z")],
-    completion: "complete",
-    completedAt: "2026-09-10T08:00:00.000Z",
-    stageBeforeComplete: "results",
-    createdAt: "2026-09-07T17:30:00.000Z",
-  })
-
-  // Preparations and Results on disk.
-  const cygnus = `${PROCESSING}/Cygnus HOO 2026`
-  const prepA = symlinkPreparation(catalog, runA, `${cygnus}/${runA.name}`, `${cygnus}/${runA.name} Results`, runA.revisions[0]!.included, "2026-09-29T13:00:00.000Z")
-  const prepD = symlinkPreparation(catalog, runD, `${cygnus}/${runD.name}`, `${cygnus}/${runD.name} Results`, runD.revisions[0]!.included, "2026-09-25T20:30:00.000Z")
-  const prepP1 = symlinkPreparation(catalog, p1, `${cygnus}/IC 5070 mosaic/Panel 1`, `${cygnus}/IC 5070 mosaic Results/Panel 1`, p1.revisions[0]!.included, "2026-09-27T19:00:00.000Z")
-  // Panel 2: the Ha frames on Cold-1 could not be read: the preparation is Partial.
-  const p2Included = p2.revisions[0]!.included
-  const p2Offline = p2Included.filter((id) => catalog.assets[id]!.copies[0]!.volumeId === VOLUME_IDS.cold)
-  const p2Ready = p2Included.filter((id) => !p2Offline.includes(id))
-  const prepP2 = symlinkPreparation(catalog, p2, `${cygnus}/IC 5070 mosaic/Panel 2`, `${cygnus}/IC 5070 mosaic Results/Panel 2`, p2Ready, "2026-09-27T19:05:00.000Z", {
-    entryCount: p2Included.length,
-    state: "partial",
-    launches: [],
-    blocked: p2Offline.map((id) => ({ assetId: id, path: catalog.assets[id]!.copies[0]!.path, reason: msg("run_entry_offline", { name: "Cold-1" }) })),
-  })
-  const m31Path = `${PROCESSING}/M 31 LRGB/${m31Run.name}`
-  const prepM31 = symlinkPreparation(catalog, m31Run, m31Path, `${m31Path} Results`, m31Run.revisions[0]!.included, "2026-09-07T18:00:00.000Z")
-  catalog.preparations = Object.fromEntries([prepA, prepD, prepP1, prepP2, prepM31].map((p) => [p.record.id, p.record]))
-
-  const resultsA = `${cygnus}/${runA.name} Results`
-  const masterLight = (dir: string, channel: string, when: string) => resultFile(`${dir}/master/masterLight_BIN-1_FILTER-${channel}.xisf`, when)
-  const aFiles = {
-    ha: masterLight(resultsA, "Ha", "2026-10-01T22:00:00.000Z"),
-    oiii: masterLight(resultsA, "OIII", "2026-10-01T22:10:00.000Z"),
-    final: resultFile(`${resultsA}/NGC7000-HOO.tif`, "2026-10-03T20:00:00.000Z", 156_500_000, "tiff"),
-    flat: masterFile("masterFlat_BIN-1_FILTER-Ha.xisf", "master-flat", 1.5, "Ha", "2026-10-01T21:40:00.000Z", A, `Processing/Cygnus HOO 2026/${runA.name} Results/master`),
-  }
-  const m31Results = `${m31Path} Results`
-  const m31Final = resultFile(`${m31Results}/M31-LRGB.tif`, "2026-09-09T21:00:00.000Z", 156_500_000, "tiff")
-  const m31Masters = (["L", "R", "G", "B"] as const).map((c) => masterLight(m31Results, c, "2026-09-07T20:30:00.000Z"))
-  const m31Intermediates = s.m31.L.assetIds.slice(0, 12).flatMap((id) => {
-    const stem = catalog.assets[id]!.fileName.replace(/\.fits$/, "")
-    return [resultFile(`${m31Results}/calibrated/${stem}_c.xisf`, "2026-09-07T19:00:00.000Z"), resultFile(`${m31Results}/registered/${stem}_c_r.xisf`, "2026-09-07T19:40:00.000Z")]
-  })
-  const resultsD = resultFile(`${cygnus}/${runD.name} Results/master/masterLight_BIN-1_FILTER-Ha.xisf`, "2026-09-26T21:00:00.000Z")
-  disk = writeFiles(disk, [...prepA.files, ...prepD.files, ...prepP1.files, ...prepP2.files, ...prepM31.files, ...Object.values(aFiles), m31Final, ...m31Masters, ...m31Intermediates, resultsD])
-
-  const accepted = (when: string): Partial<ResultRecord> => ({ acceptance: "accepted", acceptedAt: when })
-  const results: ResultRecord[] = [
-    resultRecord("res_ngc_ha", runA, aFiles.ha, "linear-integration", "Ha", accepted("2026-10-02T09:00:00.000Z")),
-    resultRecord("res_ngc_oiii", runA, aFiles.oiii, "linear-integration", "OIII", accepted("2026-10-02T09:00:00.000Z")),
-    resultRecord("res_ngc_final", runA, aFiles.final, "final-image", null, { ...accepted("2026-10-03T20:30:00.000Z"), discovered: "attached", association: "user-linked", lineage: "unknown" }),
-    resultRecord("res_m31_final", m31Run, m31Final, "final-image", null, accepted("2026-09-09T21:10:00.000Z")),
-    ...m31Masters.map((f, i) => resultRecord(`res_m31_${"lrgb"[i]}`, m31Run, f, "linear-integration", "LRGB"[i]!, accepted("2026-09-08T09:00:00.000Z"))),
-    ...m31Intermediates.map((f, i) => resultRecord(`res_m31_int_${i + 1}`, m31Run, f, null, "L", { intermediate: true })),
-    resultRecord("res_ngc_test", runD, resultsD, "linear-integration", "Ha"),
-  ]
-  catalog.results = Object.fromEntries(results.map((r) => [r.id, r]))
-  // A master flat found in Run A's Results: a candidate master, offered once (D-W5, D-W55).
-  const flatMasterId = `mst_${stableHash(aFiles.flat.path)}`
-  catalog.masters[flatMasterId] = {
-    id: flatMasterId, kind: "flat", path: aFiles.flat.path, cameraName: REDCAT.instrument, widthPx: REDCAT.widthPx, heightPx: REDCAT.heightPx, binning: 1, gain: REDCAT.gain, offset: REDCAT.offset,
-    exposureS: null, channel: "Ha", opticalTrainId: RIG.redcat, ccdTempC: REDCAT.ccdTempC, frameCount: 30, createdAt: aFiles.flat.modifiedAt, state: "candidate",
-    origin: { kind: "generated", runId: runA.id, sourcePath: aFiles.flat.path, sessionId: null }, adoption: null,
-  }
-  runA.masterOffers = [{ masterId: flatMasterId, state: "pending", at: "2026-10-02T09:00:00.000Z" }]
-  // P-CAL2: a 120 s master dark found in M 31's Results was dismissed; the Calibration library lists it under Dismissed with Restore offer.
-  const m31Dark = masterFile("masterDark_BIN-1_EXPOSURE-120.00s.xisf", "master-dark", 120, null, "2026-09-07T20:10:00.000Z", A, `Processing/M 31 LRGB/${m31Run.name} Results/master`, FRA400)
-  disk = writeFiles(disk, [m31Dark])
-  const m31DarkId = `mst_${stableHash(m31Dark.path)}`
-  catalog.masters[m31DarkId] = {
-    id: m31DarkId, kind: "dark", path: m31Dark.path, cameraName: FRA400.instrument, widthPx: FRA400.widthPx, heightPx: FRA400.heightPx, binning: 1, gain: FRA400.gain, offset: FRA400.offset,
-    exposureS: 120, channel: null, opticalTrainId: null, ccdTempC: FRA400.ccdTempC, frameCount: 30, createdAt: m31Dark.modifiedAt, state: "candidate",
-    origin: { kind: "generated", runId: m31Run.id, sourcePath: m31Dark.path, sessionId: null }, adoption: null,
-  }
-  m31Run.masterOffers = [{ masterId: m31DarkId, state: "dismissed", at: "2026-09-08T09:30:00.000Z" }]
-
-  catalog.runs = Object.fromEntries([runA, runB, runC, runD, p1, p2, p3, m31Run].map((r) => [r.id, r]))
-  catalog.runGroups = { [group.id]: group }
-
   /** Move each frame's copy to the OS Trash as one recorded episode, as the Trash engine would have. */
   const trashFrames = (episodeId: string, kind: TrashEpisodeKind, at: string, projectId: string | null, assetIds: string[], quality: "unusable" | null) => {
     const items = assetIds.map((id) => {
       const asset = catalog.assets[id]!
       const copy = asset.copies[0]!
-      return { path: copy.path, volumeId: copy.volumeId, sizeBytes: asset.sizeBytes, assetId: id, resultId: null, outcome: "trashed" as const, reason: null }
+      return { path: copy.path, volumeId: copy.volumeId, sizeBytes: asset.sizeBytes, assetId: id, outcome: "trashed" as const, reason: null }
     })
     for (const item of items) {
       const key = fileKey(item.volumeId, item.path)
-      const { [key]: file, ...files } = disk.files
-      disk = { ...disk, files, trash: [...disk.trash, { file: file!, originalPath: item.path, trashedAt: at }] }
+      const { [key]: file, ...rest } = disk.files
+      disk = { ...disk, files: rest, trash: [...disk.trash, { file: file!, originalPath: item.path, trashedAt: at }] }
       const asset = catalog.assets[item.assetId]!
       catalog.assets[item.assetId] = { ...(quality ? decided(asset, quality, "2026-09-06T10:00:00.000Z") : asset), trashed: { at, episodeId } }
     }
-    catalog.trashEpisodes = { ...catalog.trashEpisodes, [episodeId]: { id: episodeId, kind, at, projectId, runIds: [], items, operationId: null } }
+    catalog.trashEpisodes = { ...catalog.trashEpisodes, [episodeId]: { id: episodeId, kind, at, projectId, items, operationId: null } }
   }
-
-  // The 25 Aug M 31 test session was moved to the OS Trash from M 31's Done / Archive sheet.
-  const trashAt = "2026-09-12T09:30:00.000Z"
-  trashFrames("trash_m31_test", "rejected-frames", trashAt, PROJECT.m31, s.m31test.assetIds, "unusable")
+  // The 25 Aug M 31 test session was moved to the OS Trash from M 31's Wrap up.
+  const testTrashAt = "2026-09-12T09:30:00.000Z"
+  trashFrames("trash_m31_test", "rejected-frames", testTrashAt, PROJECT.m31, s.m31test.assetIds, "unusable")
 
   // Calibration processes (P-CAL3). Indexing routed each raw session into a process awaiting Stack;
   // the Ha flat still waits. 300 s darks and bias finished in PixInsight (raws trashed, raws kept),
@@ -1132,30 +1177,37 @@ function demoSeed(): SeedData {
   const biasRaw = rawSession("bias", () => true)
   const flatOiii = rawSession("flat", (x) => x.channel === "OIII")
   const stacking = `${PROCESSING}/Stacking`
-  const processOf = (session: Session) => catalog.calibrationProcesses[processIdFor(session.id)]!
-  const finishProcess = (session: Session, output: string, masterDir: string, stackedAt: string, at: string, raws: "trashed" | "kept") => {
-    const master = Object.values(catalog.masters).find((m) => m.path.includes(`/Calibration/${masterDir}/`))!
-    const stored = fileAt(disk, master.path)!
-    const toolOutput = makeFile({ path: `${output}/${fileName(master.path)}`, volumeId: A, sizeBytes: stored.sizeBytes, kind: "xisf", header: stored.header, sha256: stored.sha256, modifiedAt: at })
+  const processOf = (x: Session) => catalog.calibrationProcesses[processIdFor(x.id)]!
+  const finishProcess = (x: Session, output: string, storedPath: string, stackedAt: string, at: string, raws: "trashed" | "kept") => {
+    const master = Object.values(catalog.masters).find((mst) => mst.versions.some((v) => v.path.endsWith(storedPath)))!
+    const version = master.versions.find((v) => v.path.endsWith(storedPath))!
+    const stored = fileAt(disk, version.path)!
+    const toolOutput = makeFile({ path: `${output}/${fileName(version.path)}`, volumeId: A, sizeBytes: stored.sizeBytes, kind: "xisf", header: stored.header, sha256: stored.sha256, modifiedAt: at })
     disk = writeFiles(disk, [toolOutput])
     const ncombine = stored.header?.ncombine ?? null
-    catalog.masters[master.id] = { ...master, origin: { kind: "stacked", runId: null, sourcePath: toolOutput.path, sessionId: session.id }, adoption: { destinationPath: master.path, verifiedSha256: stored.sha256, adoptedAt: at } }
-    catalog.calibrationProcesses[processIdFor(session.id)] = {
-      ...processOf(session),
+    catalog.masters[master.id] = {
+      ...master,
+      versions: master.versions.map((v) =>
+        v.id === version.id ? { ...v, origin: { kind: "stacked", projectId: null, sourcePath: toolOutput.path, sessionId: x.id }, adoption: { destinationPath: v.path, verifiedSha256: stored.sha256, adoptedAt: at } } : v,
+      ),
+    }
+    catalog.calibrationProcesses[processIdFor(x.id)] = {
+      ...processOf(x),
       profileId: PROFILE_IDS.pixinsight,
       outputFolder: output,
       detected: { path: toolOutput.path, sha256: stored.sha256, ncombine },
-      storagePath: master.path,
+      storagePath: version.path,
       masterId: master.id,
+      versionId: version.id,
       raws,
       steps: { stack: stepRecord("done", stackedAt), detect: stepRecord("done", at), import: stepRecord("done", at), register: stepRecord("done", at), raws: stepRecord("done", at) },
       updatedAt: at,
     }
   }
   catalog.calibrationProcesses = { ...catalog.calibrationProcesses }
-  finishProcess(dark300, `${stacking}/Dark 300 s 8 Sep`, "Darks/ZWO ASI2600MM Pro/300s_g100_o50_-10C", "2026-09-08T18:20:00.000Z", "2026-09-08T19:10:00.000Z", "trashed")
+  finishProcess(dark300, `${stacking}/Dark 300 s 8 Sep`, "300s_g100_o50_-10C/MasterDark_2026-09-08.xisf", "2026-09-08T18:20:00.000Z", "2026-09-08T19:10:00.000Z", "trashed")
   trashFrames("trash_cal_dark300", "calibration-raws", "2026-09-08T19:11:00.000Z", null, dark300.assetIds, null)
-  finishProcess(biasRaw, `${stacking}/Bias 8 Sep`, "Bias/ZWO ASI2600MM Pro/g100_o50", "2026-09-08T19:30:00.000Z", "2026-09-08T20:00:00.000Z", "kept")
+  finishProcess(biasRaw, `${stacking}/Bias 8 Sep`, "Bias/ZWO ASI2600MM Pro/g100_o50/MasterBias_2026-09-08.xisf", "2026-09-08T19:30:00.000Z", "2026-09-08T20:00:00.000Z", "kept")
   const dark120Output = `${stacking}/Dark 120 s 8 Sep`
   disk = createFolder(disk, { volumeId: A, path: dark120Output })
   const stackDark120: Operation = {
@@ -1192,22 +1244,6 @@ function demoSeed(): SeedData {
     updatedAt: "2026-09-27T09:10:00.000Z",
   }
 
-  // What the Complete runs handed off, as Complete records it (a Complete run is never matched again): Run A's
-  // automatic masters; M 31's flats and bias and no master dark, its 120 s darks stacked in PixInsight (the master its Results hold).
-  const recordHandoff = (r: Run, at: string, withoutMaster: CalibrationAssignment[] = []) => {
-    const plan = calibrationPlan(catalog, disk, { ...r, completion: "open" }, "automatic", r.revisions[0]!)
-    catalog.runs[r.id] = { ...r, calibration: [...automaticAssignments(catalog, disk, r.id, plan, at), ...withoutMaster] }
-  }
-  recordHandoff(runA, runA.completedAt!)
-  const noDarkAt = "2026-09-07T17:55:00.000Z"
-  recordHandoff(
-    m31Run,
-    m31Run.completedAt!,
-    m31Run.revisions[0]!.sessions.map(({ sessionId }): CalibrationAssignment => ({ id: assignmentId(m31Run.id, sessionId, "dark"), lightSessionId: sessionId, kind: "dark", input: null, state: "exception", criteria: [], exception: { reason: m.seed_dark_exception_reason(), at: noDarkAt }, basis: { at: noDarkAt, files: [] } })),
-  )
-  // The prepared open runs recorded their calibration at Calibrate's Proceed, before Prepare (§5.4), so Calibrate reads Finished.
-  for (const [r, at] of [[runD, "2026-09-25T20:25:00.000Z"], [p1, "2026-09-27T18:55:00.000Z"], [p2, "2026-09-27T18:55:00.000Z"]] as const) recordHandoff(catalog.runs[r.id]!, at)
-
   // One drifted-content frame: an M 31 L frame changed on disk after review (LIB-FR-09).
   const driftedId = s.m31.L.assetIds[6]!
   const drifted = catalog.assets[driftedId]!
@@ -1216,7 +1252,7 @@ function demoSeed(): SeedData {
   disk.files[fileKey(A, driftedPath)] = { ...fileAt(disk, driftedPath)!, sha256: driftedSha, modifiedAt: "2026-09-20T22:14:00Z" }
   catalog.assets[driftedId] = { ...drifted, sha256: driftedSha, copies: drifted.copies.map((c) => ({ ...c, sha256: driftedSha })) }
 
-  // Cold-1 was disconnected after its sessions were saved into runs.
+  // Cold-1 was disconnected after its sessions were added to Projects.
   disk.volumes[VOLUME_IDS.cold] = { ...disk.volumes[VOLUME_IDS.cold]!, mounted: false }
 
   // Removable devices connected when the demo loads: an ASIAIR card (recognised layout) and a generic USB stick.
@@ -1232,26 +1268,42 @@ function demoSeed(): SeedData {
     catalog.plans[targetId] = { targetId, nights: [tonight], criteria: { minAltitudeDeg: 25, darkness: "astronomical", maxMoonIlluminationPct: null, minMoonSeparationDeg: null, minDurationMin: 60 }, updatedAt: "2026-10-01T18:00:00.000Z" }
   }
 
+  const m31Entries = m31Project.view!.entries.length
   const cleanupM31: Operation = {
     id: "op_cleanup_m31",
     kind: "cleanup",
-    title: msg("store_label_clean_up_named", { name: m31Run.name }),
+    title: msg("store_label_clean_up_named", { name: m31Project.name }),
     status: "succeeded",
-    scope: { runIds: [m31Run.id], projectId: PROJECT.m31 },
-    progress: { done: m31Run.revisions[0]!.included.length, total: m31Run.revisions[0]!.included.length, unit: "entries" },
+    scope: { projectId: PROJECT.m31 },
+    progress: { done: m31Entries, total: m31Entries, unit: "entries" },
     items: [],
-    summary: msg("seed_cleanup_summary", { count: m31Run.revisions[0]!.included.length, n: formatCount(m31Run.revisions[0]!.included.length) }),
+    summary: msg("seed_cleanup_summary", { count: m31Entries, n: formatCount(m31Entries) }),
     canPause: false,
     canCancel: false,
     payload: {},
     createdAt: "2026-09-10T08:30:00.000Z",
-    updatedAt: "2026-09-10T08:31:00.000Z",
-    settledAt: "2026-09-10T08:31:00.000Z",
+    updatedAt: trashAt,
+    settledAt: trashAt,
   }
-  // The M 31 run's prepared links were cleaned up.
-  for (const file of prepM31.files) delete disk.files[fileKey(file.volumeId, file.path)]
-  // Refusals the Done / Archive sheet shows: one rejected M 31 L frame and one duplicate copy of an R frame
-  // on Spare lost write permission, so each offer lists a refused item with its reason (D-W57).
+  const cygEntries = cygnus.view!.entries.length
+  const applyCygnus: Operation = {
+    id: cygnus.view!.operationId,
+    kind: "apply",
+    title: msg("op_apply_title", { name: cygnus.name }),
+    status: "succeeded",
+    scope: { projectId: PROJECT.cygnus },
+    progress: { done: cygEntries, total: cygEntries, unit: "entries" },
+    items: [],
+    summary: msg("op_apply_swapped", { entries: unitCount("entries", cygEntries) }),
+    canPause: false,
+    canCancel: false,
+    payload: {},
+    createdAt: "2026-10-01T08:58:00.000Z",
+    updatedAt: cygnus.view!.at,
+    settledAt: cygnus.view!.at,
+  }
+  // Refusals Wrap up's Trash shows: one rejected M 31 L frame and one duplicate copy of an R frame on Spare lost write
+  // permission, so each offer lists a refused item with its reason (D-W57).
   const lockedReject = catalog.assets[s.m31.L.assetIds[2]!]?.copies[0]?.path
   const lockedDuplicate = s.m31.R.assetIds.map((id) => catalog.assets[id]?.copies.find((c) => c.path.startsWith("/Volumes/Spare/"))?.path).find((p) => p !== undefined)
   disk = { ...disk, readOnlyPaths: [lockedReject, lockedDuplicate].filter((p): p is string => p !== undefined) }
@@ -1275,28 +1327,14 @@ function demoSeed(): SeedData {
     settledAt: null,
   }
 
-  const settings = defaultSettings()
-  settings.onboarding = { completedAt: "2026-09-01T18:12:00.000Z", deferredRoles: [] }
-  settings.defaultSiteId = "site_backyard"
-  settings.defaultArchiveLocationId = "loc_archive"
-  settings.lastOutputParent = PROCESSING
   const activity: ActivityEvent[] = [
-    { id: "act_trash_m31", at: trashAt, kind: "operation", title: msg("seed_move_rejected_title", { count: 8, n: formatCount(8) }), status: "succeeded", detail: msg("seed_trash_m31_detail", { frames: unitCount("frames", 8), session: "M 31 25 Aug L" }), operationId: null, href: `/projects/${PROJECT.m31}` },
-    { id: "act_cleanup_m31", at: cleanupM31.settledAt!, kind: "operation", title: cleanupM31.title, status: "succeeded", detail: cleanupM31.summary, operationId: cleanupM31.id, href: `/projects/${PROJECT.m31}/runs/${m31Run.id}/done` },
-    {
-      id: "act_prep_p2",
-      at: "2026-09-27T19:06:00.000Z",
-      kind: "operation",
-      title: msg("store_label_prepare_named", { name: p2.name }),
-      status: "partial",
-      detail: msg("seed_prep_p2_detail", { count: p2Offline.length, n: formatCount(p2Offline.length), volume: "Cold-1", entries: unitCount("entries", p2Ready.length) }),
-      operationId: null,
-      href: `/projects/${PROJECT.cygnus}/runs/${p2.id}/prepare`,
-    },
+    { id: "act_apply_cygnus", at: applyCygnus.settledAt!, kind: "operation", title: applyCygnus.title, status: "succeeded", detail: applyCygnus.summary, operationId: applyCygnus.id, href: projectHref(PROJECT.cygnus, { stage: "view" }) },
+    { id: "act_trash_m31", at: testTrashAt, kind: "operation", title: msg("seed_move_rejected_title", { count: 8, n: formatCount(8) }), status: "succeeded", detail: msg("seed_trash_m31_detail", { frames: unitCount("frames", 8), session: "M 31 25 Aug L" }), operationId: null, href: projectHref(PROJECT.m31) },
+    { id: "act_cleanup_m31", at: trashAt, kind: "operation", title: cleanupM31.title, status: "succeeded", detail: cleanupM31.summary, operationId: cleanupM31.id, href: projectHref(PROJECT.m31, { stage: "wrap-up" }) },
     { id: "act_stack_oiii", at: "2026-09-27T09:10:00.000Z", kind: "operation", title: msg("store_cal_stack_title", { name: processRef(catalog, processOf(flatOiii)) }), status: "failed", detail: msg("store_cal_failed_at", { reason: msg("store_cal_tool_output_not_found"), step: CALIBRATION_STEP_NAME.detect }), operationId: null, href: "/calibration" },
     { id: "act_stack_dark300", at: "2026-09-08T19:10:00.000Z", kind: "operation", title: msg("store_cal_stack_title", { name: processRef(catalog, processOf(dark300)) }), status: "succeeded", detail: msg("store_cal_registered_from", { file: "MasterDark_2026-09-08.xisf", frames: unitCount("frames", 30) }), operationId: null, href: "/calibration" },
   ]
-  return { seed: "demo", disk, catalog, operations: { [cleanupM31.id]: cleanupM31, [scan.id]: scan, [stackDark120.id]: stackDark120 }, activity, settings, faults: defaultFaults() }
+  return { seed: "demo", disk, catalog, operations: { [cleanupM31.id]: cleanupM31, [applyCygnus.id]: applyCygnus, [scan.id]: scan, [stackDark120.id]: stackDark120 }, activity, settings, faults: defaultFaults() }
 }
 
 /** A Target record outside the bundled reference objects (or the one indexing created), keyed by `id`. */

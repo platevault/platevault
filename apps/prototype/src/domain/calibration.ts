@@ -539,6 +539,21 @@ export function emptyCalibration(): SessionCalibration {
   return { dark: { state: "waiting" }, flat: { state: "waiting" }, bias: { state: "waiting" } }
 }
 
+/** A suggestion the user confirmed: it counts as their pin from now on (LIB-FR-23). Any other choice stays as it is. */
+export function confirmChoice(choice: CalibrationChoice, at: IsoDateTime): CalibrationChoice {
+  return choice.state === "suggested" ? { state: "pinned", source: choice.source, evidence: choice.evidence, at, by: "user" } : choice
+}
+
+/** The user picks one candidate (Choose…, Reassign): pinned by the user with its evidence (LIB-FR-25). */
+export function pickChoice(candidate: Pick<PinCandidate, "source" | "evidence">, at: IsoDateTime): CalibrationChoice {
+  return { state: "pinned", source: candidate.source.source, evidence: candidate.evidence, at, by: "user" }
+}
+
+/** No darks, No flats or No bias: settles the kind with no reason (CAL-FR-05). */
+export function noChoice(at: IsoDateTime): CalibrationChoice {
+  return { state: "none", at, by: "user" }
+}
+
 /** Settled: every kind pinned or an explicit No (LIB-FR-23); a suggestion counts only once confirmed. */
 export function isSettled(calibration: SessionCalibration | null): boolean {
   return calibration !== null && PIN_KINDS.every((kind) => calibration[kind].state === "pinned" || calibration[kind].state === "none")

@@ -119,7 +119,7 @@ export type PendingWork =
  * kind. A session reviewed for several Projects shows once.
  */
 export function pendingWork(world: Pick<World, "disk" | "catalog">): PendingWork[] {
-  const work = sessionsNeedingWork(world.catalog)
+  const work = sessionsNeedingWork(world.catalog, world.disk)
   const byNight = (a: { session: Session }, b: { session: Session }) => a.session.night.localeCompare(b.session.night) || a.session.id.localeCompare(b.session.id)
   const unreviewed = [...new Map(work.unreviewed.map((u) => [u.session.id, u])).values()]
   return [

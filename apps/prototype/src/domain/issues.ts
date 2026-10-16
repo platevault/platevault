@@ -106,8 +106,8 @@ export function deriveIssues(world: World, _nowMs: number = Date.now() + world.f
   const out: Issue[] = []
   const library: IssueOwner = { kind: "library" }
 
-  // Library queues: a Target, a Project, settled calibration (LIB-FR-17, LIB-FR-23).
-  const work = sessionsNeedingWork(catalog)
+  // Library queues: a Target, a Project, settled calibration with its pinned files intact (LIB-FR-17, LIB-FR-23, D-W113).
+  const work = sessionsNeedingWork(catalog, disk)
   if (work.needsTarget.length > 0) {
     out.push({ id: "sessions:needs-target", group: "sessions", kind: "needs-target", severity: "warning", count: work.needsTarget.length, name: null, about: null, owner: library, link: { to: "/sessions", search: { filter: "needs-target" } } })
   }

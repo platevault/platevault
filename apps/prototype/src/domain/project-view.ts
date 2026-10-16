@@ -45,24 +45,28 @@ import {
   viewCorrections,
   type World,
 } from "./derive"
-import { fileAt, filesUnder, freeBytes, trashRefusal, volumeForPath } from "./disk"
-import { isUnder, sameFraming, sessionFraming, sessionRigVersion, stableHash } from "./indexing"
+import { fakeSha256, fileAt, filesUnder, freeBytes, makeFile, trashRefusal, volumeForPath } from "./disk"
+import { deniedAncestor, isUnder, sameFraming, sessionFraming, sessionRigVersion, stableHash } from "./indexing"
 import { WRAP_UP_NAME, WRAP_UP_STEPS } from "./labels"
 import { assetAvailability, preferredCopy } from "./library"
-import { frameOut, framesRef, sessionLongRef } from "./membership"
+import { frameOut, framesRef, sessionExposureS, sessionLongRef } from "./membership"
 import { bestWindowTonight, defaultCriteria } from "./planning"
 import { keptCopy, type TrashBlock, trashBlock, type TrashItem, viewLinks } from "./storage"
 import type {
+  AppliedView,
   AssetId,
   CalibrationChoice,
   CalibrationKind,
   Catalog,
   CorrectionField,
+  Disk,
   DiskFile,
+  FrameHeader,
   GroupKeywords,
   InputMode,
   IsoDateTime,
   Operation,
+  OperationId,
   OperationKind,
   OutputKind,
   OutputMeta,
@@ -289,8 +293,10 @@ function suffixed(name: string, n: number): string {
  * `Darks/` and `Bias/` at the top with one camera and inside each group
  * with several, shared unless the Project mixes versions with the same
  * settings, when each goes into the night folders of the lights that use
- * it; `GAIN_`/`OFFSET_` folders inside each of those when the Project mixes
- * gain or offset (D-W108; their placement is provisional). Entries keep
+ * it; the gain and offset are part of the folder name itself when the
+ * Project mixes them, filter, gain, offset and exposure in that order
+ * (`Ha_GAIN_120_OFFSET_50_300s`, D-W108; the order and the exposure part
+ * are provisional). Entries keep
  * their names for life: a newcomer that clashes takes a suffix
  * (PREP-FR-19). A Closed Project plans from its frozen calibration.
  */
@@ -311,8 +317,22 @@ export function viewPlan(world: Pick<World, "catalog" | "disk" | "settings">, pr
     const group = groupsUsed.find((g) => g.id === groupId)
     return layout.groupLevel && group ? [groupFolder(world, project, group)] : []
   }
-  const tokens = (s: Session): string[] => [...(layout.gain ? [`GAIN_${folderToken(String(s.gain ?? "none"))}`] : []), ...(layout.offset ? [`OFFSET_${folderToken(String(s.offset ?? "none"))}`] : [])]
-  const filterPart = (s: Session): string[] => (s.channel ? [folderToken(s.channel)] : [])
+  /**
+   * The settings part of a folder name (D-W108): the filter folder alone,
+   * or, when the Project mixes gain or offset, one name holding the filter,
+   * the mixed GAIN_ and OFFSET_ values and, for lights, the exposure.
+   * Darks and bias name only the mixed values.
+   */
+  const settingsPart = (s: Session, part: "lights" | "flats" | "calibration"): string[] => {
+    const mixed = layout.gain || layout.offset
+    const parts = [
+      ...(part !== "calibration" && s.channel ? [folderToken(s.channel)] : []),
+      ...(layout.gain ? [`GAIN_${folderToken(String(s.gain ?? "none"))}`] : []),
+      ...(layout.offset ? [`OFFSET_${folderToken(String(s.offset ?? "none"))}`] : []),
+      ...(part === "lights" && mixed ? [`${folderToken(String(Number(sessionExposureS(s).toFixed(3))))}s`] : []),
+    ]
+    return parts.length > 0 ? [parts.join("_")] : []
+  }
 
   // A second flat set for one group, night and filter gets its own night folder.
   const flatSets = new Map<string, string[]>()
@@ -374,7 +394,7 @@ export function viewPlan(world: Pick<World, "catalog" | "disk" | "settings">, pr
       }
       const copy = preferredCopy(disk, catalog, asset)
       add({
-        folder: [...group, night, "Lights", ...filterPart(session), ...tokens(session)].join("/"),
+        folder: [...group, night, "Lights", ...settingsPart(session, "lights")].join("/"),
         name: asset.fileName,
         identity: `asset:${id}`,
         source: { type: "asset", assetId: id },
@@ -397,10 +417,10 @@ export function viewPlan(world: Pick<World, "catalog" | "disk" | "settings">, pr
       }
       const folder =
         kind === "flat"
-          ? [...group, night, "Flats", ...filterPart(session), ...tokens(session)]
+          ? [...group, night, "Flats", ...settingsPart(session, "flats")]
           : (versions.get(scopeKey(h, kind, source))?.size ?? 0) > 1
-            ? [...group, night, kind === "dark" ? "Darks" : "Bias", ...tokens(session)]
-            : [...(layout.perGroupDarks ? group : []), kind === "dark" ? "Darks" : "Bias", ...tokens(session)]
+            ? [...group, night, kind === "dark" ? "Darks" : "Bias", ...settingsPart(session, "calibration")]
+            : [...(layout.perGroupDarks ? group : []), kind === "dark" ? "Darks" : "Bias", ...settingsPart(session, "calibration")]
       for (const file of source.files) {
         const found = readable(world, file.path)
         if (!found) {
@@ -487,6 +507,94 @@ export function viewTree(entries: ReadonlyArray<Pick<PlannedEntry, "path" | "siz
     if (mode === "copy") node.bytes += entry.sizeBytes
   }
   return root
+}
+
+/** What placing one planned entry writes, or why it cannot (PREP-FR-09). */
+export type PlacedEntry = { ok: true; file: DiskFile; entry: ViewEntry } | { ok: false; reason: MessageRef }
+
+/** Whether a volume can hard-link one copy into a second folder; exFAT and network shares copy separately (provisional). */
+function hardLinks(disk: Disk, path: string): boolean {
+  const volumeId = volumeForPath(disk, path)
+  const volume = volumeId ? disk.volumes[volumeId] : undefined
+  return Boolean(volume && volume.symlinks && !volume.network)
+}
+
+/** A header with the corrected values an isolated patched copy writes (PREP-FR-03). */
+function patchedHeader(header: FrameHeader | null, patches: PlannedEntry["patches"]): FrameHeader | null {
+  if (!header || patches.length === 0) return header
+  const out = { ...header }
+  for (const { field, value } of patches) {
+    if (field === "target") out.object = value
+    else if (field === "equipment") out.telescope = value
+    else if (field === "filter") out.filter = value
+    else if (field === "exposure") out.exposureS = Number.parseFloat(value)
+    else out.focalLengthMm = Number.parseFloat(value)
+  }
+  return out
+}
+
+/**
+ * One planned entry written under `root` (`View (building)/`) from its
+ * original only (PREP-FR-06, PREP-FR-09): a symlink, a copy, or an isolated
+ * patched copy. The original must be readable and still hold the bytes the
+ * plan read, and nothing may sit at the destination. `sameOriginal` is a
+ * copy this build already wrote of the same original: a second Copies
+ * entry is hard-linked to it where the volume can, else copied again
+ * (provisional). Pure: the caller writes `file` to the disk.
+ */
+export function placeEntry(disk: Disk, planned: PlannedEntry, root: string, mode: InputMode, at: IsoDateTime, sameOriginal: DiskFile | null): PlacedEntry {
+  const denied = deniedAncestor(disk, planned.originalPath)
+  if (denied) return { ok: false, reason: msg("op_prep_denied", { path: planned.originalPath }) }
+  const source = fileAt(disk, planned.originalPath)
+  if (!source) return { ok: false, reason: msg("op_prep_not_reachable", { path: planned.originalPath }) }
+  if (source.sha256 !== planned.sha256) return { ok: false, reason: msg("op_prep_source_changed") }
+  const path = `${root}/${planned.path}`
+  if (fileAt(disk, path)) return { ok: false, reason: msg("op_prep_destination_exists", { path }) }
+  if (disk.readOnlyPaths.some((p) => isUnder(path, p))) return { ok: false, reason: msg("op_prep_write_removed", { folder: root }) }
+  const volumeId = volumeForPath(disk, path)
+  if (!volumeId || !disk.volumes[volumeId]?.mounted) return { ok: false, reason: msg("op_prep_destination_offline", { folder: root }) }
+  const copy = isCopyEntry(mode, planned)
+  const plain = planned.patches.length === 0
+  const file = copy
+    ? makeFile({
+        path,
+        volumeId,
+        sizeBytes: source.sizeBytes,
+        kind: source.kind,
+        header: patchedHeader(source.header, planned.patches),
+        pixelTruth: source.pixelTruth,
+        sha256: plain ? source.sha256 : fakeSha256(path, 7),
+        inode: plain && sameOriginal && hardLinks(disk, path) ? sameOriginal.inode : undefined,
+        modifiedAt: at,
+      })
+    : makeFile({ path, volumeId, sizeBytes: 0, kind: source.kind, linkTarget: source.path, modifiedAt: at })
+  return {
+    ok: true,
+    file,
+    entry: { path: planned.path, source: planned.source, role: planned.role, originalPath: source.path, sha256: source.sha256, sizeBytes: copy ? source.sizeBytes : 0, copySha256: copy ? file.sha256 : null },
+  }
+}
+
+/** Whether a placed entry reads back as written: a copy's bytes, or a link to an original that still holds the planned bytes. */
+export function entryVerified(disk: Disk, root: string, entry: ViewEntry): boolean {
+  const file = fileAt(disk, `${root}/${entry.path}`)
+  if (!file) return false
+  if (entry.copySha256 !== null) return file.sha256 === entry.copySha256
+  return file.linkTarget === entry.originalPath && fileAt(disk, entry.originalPath)?.sha256 === entry.sha256
+}
+
+/**
+ * The applied state an Apply records once its build swapped in
+ * (VSEL-FR-16): the desired inputs, groups and settings as they were, the
+ * calibration each held session read, and the entries it placed.
+ */
+export function appliedViewFor(world: Pick<World, "catalog">, project: Project, folderPath: string, entries: ViewEntry[], layout: ViewLayout, at: IsoDateTime, operationId: OperationId): AppliedView {
+  const calibration: AppliedView["calibration"] = {}
+  for (const input of project.inputs) {
+    const cal = heldCalibration(world.catalog, project, input.sessionId)
+    if (cal) calibration[input.sessionId] = cal
+  }
+  return { at, operationId, folderPath, settings: structuredClone(project.settings), inputs: structuredClone(project.inputs), groups: structuredClone(project.groups), calibration, entries, layout }
 }
 
 // ---------------------------------------------------------------------------

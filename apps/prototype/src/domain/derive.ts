@@ -10,7 +10,7 @@
  * worded by the screen with `say(m, …)`, so it follows a language switch;
  * the name helpers that return a string take the caller's `m`.
  */
-import { isSettled, unsettledKinds } from "./calibration"
+import { isSettled, sessionPinProblems, unsettledKinds } from "./calibration"
 import { CALIBRATION_STEPS, stackRefusals } from "./calibration-process"
 import { latestCorrection } from "./corrections"
 import { BANDS, GOAL_CHANNELS, isGoalChannel, NARROW_BANDS, numberText } from "./labels"
@@ -874,7 +874,7 @@ export interface SessionsNeedingWork {
   notInProject: Session[]
   /** Sessions open Projects match that still have Unreviewed frames: they wait in the review queue (P-REV2). */
   unreviewed: Array<{ session: Session; projectId: ProjectId; frames: number }>
-  /** Light sessions whose calibration is not settled, reviewed or not (Import never waits): the Library's "Needs calibration" queue (LIB-FR-23), which Home counts. */
+  /** Light sessions that need calibration (`needsCalibration`), reviewed or not (Import never waits): the Library's "Needs calibration" queue (LIB-FR-23), which Home counts. */
   needsCalibration: Session[]
   /** Suggestions of an open Project that it can add now (PRJ-FR-19): Ready and settled. */
   readyToAdd: Array<{ session: Session; projectId: ProjectId }>
@@ -909,10 +909,20 @@ export function reviewQueue(catalog: Catalog): Session[] {
     .sort((a, b) => a.night.localeCompare(b.night) || a.startedAt.localeCompare(b.startedAt) || a.id.localeCompare(b.id))
 }
 
-/** The Library's "Needs calibration" queue (LIB-FR-23): live light sessions whose darks, flats or bias are not settled, oldest night first. */
-export function calibrationQueue(catalog: Catalog): Session[] {
+/**
+ * Whether a light session waits in the Library's "Needs calibration" queue
+ * (LIB-FR-23, D-W113): a kind still waiting or only suggested, or a pinned
+ * file that changed or went missing. The pin stays; the user reassigns it
+ * there. A pinned file on a volume that is not mounted is offline, not drift.
+ */
+export function needsCalibration(disk: Disk, session: Session): boolean {
+  return !isSettled(session.calibration) || sessionPinProblems(disk, session.calibration).some((p) => p.state !== "unreadable")
+}
+
+/** The Library's "Needs calibration" queue (`needsCalibration`), oldest night first. */
+export function calibrationQueue(catalog: Catalog, disk: Disk): Session[] {
   return liveLightSessions(catalog)
-    .filter((s) => !isSettled(s.calibration))
+    .filter((s) => needsCalibration(disk, s))
     .sort((a, b) => a.night.localeCompare(b.night) || a.startedAt.localeCompare(b.startedAt) || a.id.localeCompare(b.id))
 }
 
@@ -921,14 +931,14 @@ export function sessionIntakeLink(sessionId: SessionId, step: SessionIntakeStepI
   return { to: "/sessions/$sessionId", params: { sessionId }, search: { step } }
 }
 
-export function sessionsNeedingWork(catalog: Catalog): SessionsNeedingWork {
+export function sessionsNeedingWork(catalog: Catalog, disk: Disk): SessionsNeedingWork {
   const live = liveLightSessions(catalog)
   const inProjects = sessionsInProjects(catalog)
   const out: SessionsNeedingWork = { needsTarget: [], notInProject: [], unreviewed: [], needsCalibration: [], readyToAdd: [] }
   for (const session of live) {
     if (!sessionTargetId(session)) out.needsTarget.push(session)
     else if (!inProjects.has(session.id)) out.notInProject.push(session)
-    if (!isSettled(session.calibration)) out.needsCalibration.push(session)
+    if (needsCalibration(disk, session)) out.needsCalibration.push(session)
   }
   for (const project of Object.values(catalog.projects)) {
     if (project.state !== "open") continue

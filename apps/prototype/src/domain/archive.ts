@@ -11,7 +11,7 @@ import { archiveDestination, defaultArchiveLocation, liveAssetIds, sessionNaming
 import { qualityApplicability } from "./library"
 import { keptCopy, keptViewLinks, type TrashBlock, trashBlock, type TrashItem, viewLinks, type ViewLinks } from "./storage"
 import { namingTemplate, resolveNamingTemplate } from "./templates"
-import type { Asset, AssetCopy, AssetId, Catalog, Disk, Location, Operation, Project, Session, SessionId, Volume } from "./types"
+import type { Asset, AssetCopy, AssetId, Catalog, Disk, Location, Operation, Project, ProjectId, Session, SessionId, Volume } from "./types"
 import { formatBytes, formatCount, formatNight } from "@/lib/format"
 import { m, type MessageRef, msg } from "@/lib/i18n"
 
@@ -193,12 +193,14 @@ export interface ArchivePlan {
   volume: Volume | null
   freeBytes: number
   rows: ArchiveRow[]
-  /** Kept because another open Project holds them (D-W46, STO-FR-13); a suggestion does not count. */
+  /** Kept because an open Project holds them (D-W46, STO-FR-13); a suggestion does not count. */
   kept: Array<{ session: Session; projects: string[] }>
   refused: Array<{ session: Session; reason: MessageRef }>
   sizeBytes: number
   /** A reason that refuses the whole archive, e.g. no archive location. */
   blocked: MessageRef | null
+  /** Closed Projects whose kept View links frames the transfer moves: the links are repointed and recorded, the Project stays locked (D-W111). */
+  repoints: Array<{ project: Project; links: number }>
 }
 
 function joinPath(...parts: string[]): string {
@@ -227,7 +229,7 @@ function moveRefusal(state: World, move: ArchiveMove): MessageRef | null {
   return null
 }
 
-function planOver(state: World, sessions: Session[], destinationFor: (session: Session, asset: Asset) => CopyRef | null, destination: Location | null, blocked: MessageRef | null): Omit<ArchivePlan, "kept"> {
+function planOver(state: World, sessions: Session[], destinationFor: (session: Session, asset: Asset) => CopyRef | null, destination: Location | null, blocked: MessageRef | null): Omit<ArchivePlan, "kept" | "repoints"> {
   const { catalog, disk } = state
   const volume = destination ? (disk.volumes[destination.volumeId] ?? null) : null
   const rows: ArchiveRow[] = []
@@ -258,21 +260,58 @@ function planOver(state: World, sessions: Session[], destinationFor: (session: S
   return { destination, volume, freeBytes: free, rows, refused, sizeBytes, blocked: block }
 }
 
+/** The open Projects holding each session; a suggestion does not count, nor a Closed Project (STO-FR-13). */
+function openHolders(catalog: Catalog, except: ProjectId | null): Map<SessionId, string[]> {
+  const out = new Map<SessionId, string[]>()
+  for (const project of Object.values(catalog.projects)) {
+    if (project.id === except || project.state !== "open") continue
+    for (const input of project.inputs) out.set(input.sessionId, [...(out.get(input.sessionId) ?? []), project.name])
+  }
+  return out
+}
+
+/** Links in Closed Projects' kept Views that point at a copy the rows move, counted per Project (D-W111). */
+function keptViewRepoints(state: World, rows: ArchiveRow[]): ArchivePlan["repoints"] {
+  const moved = new Set(rows.flatMap((r) => r.moves.map((m) => m.from.path)))
+  const links = viewLinks(state.catalog, state.disk)
+  const counts = new Map<ProjectId, { project: Project; links: number }>()
+  for (const path of moved) {
+    for (const link of links.get(path) ?? []) {
+      if (link.holds) continue
+      const entry = counts.get(link.project.id) ?? { project: link.project, links: 0 }
+      entry.links += 1
+      counts.set(link.project.id, entry)
+    }
+  }
+  return [...counts.values()].sort((a, b) => a.project.name.localeCompare(b.project.name))
+}
+
+/** Why Sessions › Archive… cannot select a session (STO-FR-13): an open Project holds it. Null when it can. */
+export function sessionArchiveBlocker(catalog: Catalog, sessionId: SessionId): MessageRef | null {
+  const holders = openHolders(catalog, null).get(sessionId)
+  return holders ? msg("archive_held_by_open_project", { names: holders.join(", ") }) : null
+}
+
 /**
- * Archive… from Sessions (round 6): sessions in no Project transfer to the
- * Default archive location along the naming template, the same reviewed
- * transfer as Wrap up's. The caller offers only sessions in no Project.
+ * Archive… from Sessions (STO-FR-13, section 9 of the F4 record): the
+ * chosen sessions transfer to the Default archive location along the naming
+ * template, the same reviewed transfer as Wrap up's. A session an open
+ * Project holds is not selectable, so it is listed as kept; a suggestion
+ * does not count as holding. Sessions only Closed Projects hold transfer,
+ * and those Projects' kept Views are repointed (`repoints`).
  */
 export function sessionsArchivePlan(state: World, sessions: Session[]): ArchivePlan {
   const destination = defaultArchiveLocation(state)
+  const held = openHolders(state.catalog, null)
   const plan = planOver(
     state,
-    [...sessions].sort((a, b) => a.night.localeCompare(b.night)),
+    [...sessions].filter((s) => !held.has(s.id)).sort((a, b) => a.night.localeCompare(b.night)),
     (session, asset) => (destination ? { locationId: destination.id, volumeId: destination.volumeId, path: joinPath(templatedFolder(state, destination.path, session), asset.fileName) } : null),
     destination,
     destination ? null : msg("wrapup_no_archive_location"),
   )
-  return { ...plan, kept: [] }
+  const kept = sessions.filter((s) => held.has(s.id)).map((session) => ({ session, projects: held.get(session.id)! }))
+  return { ...plan, kept, repoints: keptViewRepoints(state, plan.rows) }
 }
 
 /**
@@ -280,16 +319,13 @@ export function sessionsArchivePlan(state: World, sessions: Session[]): ArchiveP
  * holds transfer to the chosen archive location (the Project's own, else
  * the Default) along the naming template. A session another open Project
  * holds stays and is listed as kept (D-W46); being another Project's
- * suggestion does not count, nor being held by a Closed one.
+ * suggestion does not count, nor being held by a Closed one, whose kept
+ * View is repointed instead.
  */
 export function archivePlan(state: World, project: Project, destinationId?: string | null): ArchivePlan {
   const { catalog } = state
   const archived = new Set(project.archive?.sessionIds ?? [])
-  const usedElsewhere = new Map<SessionId, string[]>()
-  for (const other of Object.values(catalog.projects)) {
-    if (other.id === project.id || other.state !== "open") continue
-    for (const input of other.inputs) usedElsewhere.set(input.sessionId, [...(usedElsewhere.get(input.sessionId) ?? []), other.name])
-  }
+  const usedElsewhere = openHolders(catalog, project.id)
   const members = project.inputs
     .map((input) => catalog.sessions[input.sessionId])
     .filter((s): s is Session => s !== undefined && !archived.has(s.id))
@@ -304,5 +340,5 @@ export function archivePlan(state: World, project: Project, destinationId?: stri
     destination,
     destination ? null : msg("wrapup_no_archive_location"),
   )
-  return { ...plan, kept }
+  return { ...plan, kept, repoints: keptViewRepoints(state, plan.rows) }
 }

@@ -22,8 +22,9 @@
  * Nothing here writes state; the actions are in `src/store/actions/calibration.ts`.
  */
 import { KIND_NAME } from "./calibration"
-import { filesUnder } from "./disk"
-import { namingTemplate, namingValues, type NamingValues, resolveNamingTemplate } from "./templates"
+import { fileAt, filesUnder } from "./disk"
+import { nightOf } from "./indexing"
+import { headerNamingValues, namingTemplate, namingValues, type NamingValues, resolveNamingTemplate } from "./templates"
 import type {
   ApplicationProfile,
   AppSettings,
@@ -272,4 +273,33 @@ export function masterStoragePath(storage: Location, settings: Pick<AppSettings,
   const { path } = resolveNamingTemplate(namingTemplate(settings.naming, `master-${kind}` as NamingFrameType), values, settings.namingOmit)
   const folder = path.endsWith("/") ? path.slice(0, -1) : path
   return `${storage.path}/${folder}/Master${MASTER_FILE_KIND[kind]}_${night}.${ext}`
+}
+
+/**
+ * Where adopting a generated master puts it (CAL-FR-06, P-CAL3): its fixed
+ * destination in structured calibration storage, laid out by its own
+ * header like any imported master. Null without a Calibration location or
+ * a readable header.
+ */
+export function adoptionDestination(catalog: Catalog, settings: Pick<AppSettings, "naming" | "namingOmit">, file: DiskFile, kind: CalibrationKind): string | null {
+  const storage = calibrationStorage(catalog)
+  if (!storage || !file.header) return null
+  const ext = file.path.slice(file.path.lastIndexOf(".") + 1)
+  return masterStoragePath(storage, settings, kind, headerNamingValues(file.header, `master-${kind}`), nightOf(file.header.dateObs), ext)
+}
+
+/**
+ * What sits at an adoption's fixed destination: nothing; PlateVault's own
+ * unregistered copy, byte-identical to the master being adopted and known
+ * to no master version or frame (an adoption that stopped before it
+ * registered), which adoption names and offers to move to the OS Trash
+ * after review before it retries; or another file, which refuses it.
+ */
+export type AdoptionDestination = { kind: "free" } | { kind: "own-copy"; file: DiskFile } | { kind: "taken"; file: DiskFile }
+
+export function adoptionDestinationState(catalog: Catalog, disk: Disk, path: string, sha256: string): AdoptionDestination {
+  const file = fileAt(disk, path)
+  if (!file) return { kind: "free" }
+  const registered = Object.values(catalog.masters).some((m) => m.versions.some((v) => v.path === path)) || Object.values(catalog.assets).some((a) => a.copies.some((c) => c.path === path))
+  return !registered && file.sha256 === sha256 ? { kind: "own-copy", file } : { kind: "taken", file }
 }

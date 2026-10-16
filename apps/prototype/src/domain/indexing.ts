@@ -256,10 +256,15 @@ export function confirmedEvidence(evidence: Evidence[], label: MessageRef, value
   return [...evidence.filter((e) => e.source !== "user"), { source: "user", label, value, agrees: true }]
 }
 
-function findOrDetectCamera(catalog: Catalog, header: NonNullable<DiskFile["header"]>): Camera | null {
-  if (!header.instrument) return null
-  const existing = Object.values(catalog.cameras).find((c) => matchesName(header.instrument!, [c.name, ...c.aliases]))
-  if (existing) return existing
+/**
+ * The cameras a header's INSTRUME names: every camera of that model (two or
+ * more when the rigs hold several of one model, each with its own physical
+ * alias, LIB-FR-26), else one detected record.
+ */
+function camerasFor(catalog: Catalog, header: NonNullable<DiskFile["header"]>): Camera[] {
+  if (!header.instrument) return []
+  const existing = Object.values(catalog.cameras).filter((c) => matchesName(header.instrument!, [c.name, ...c.aliases]))
+  if (existing.length > 0) return existing
   const camera: Camera = {
     id: `cam_${stableHash(header.instrument)}`,
     name: header.instrument,
@@ -274,12 +279,15 @@ function findOrDetectCamera(catalog: Catalog, header: NonNullable<DiskFile["head
     noBias: false,
   }
   catalog.cameras[camera.id] = camera
-  return camera
+  return [camera]
 }
 
-function trainFor(catalog: Catalog, camera: Camera, telescope: Telescope, night: NightDate): OpticalTrain {
-  const existing = Object.values(catalog.opticalTrains).find((t) => t.cameraId === camera.id && t.telescopeId === telescope.id)
+/** The rig of one of these cameras (all one model) on the telescope, else a new detected rig with the first. */
+function trainFor(catalog: Catalog, cameras: Camera[], telescope: Telescope, night: NightDate): OpticalTrain {
+  const ids = new Set(cameras.map((c) => c.id))
+  const existing = Object.values(catalog.opticalTrains).find((t) => t.cameraId !== null && ids.has(t.cameraId) && t.telescopeId === telescope.id)
   if (existing) return existing
+  const camera = cameras[0]!
   // Trains created from headers stay "detected" until Confirm equipment promotes them (D11).
   const id = `otr_${stableHash(`${camera.id}|${telescope.id}`)}`
   const train: OpticalTrain = {
@@ -378,15 +386,15 @@ export function associateEquipment(catalog: Catalog, header: NonNullable<DiskFil
     },
   ]
   const trainLabel = msg("domain_optical_train")
-  const camera = findOrDetectCamera(catalog, header)
-  if (!camera) return { value: null, status: "unresolved", evidence, confirmedAt: null }
+  const cameras = camerasFor(catalog, header)
+  if (cameras.length === 0) return { value: null, status: "unresolved", evidence, confirmedAt: null }
 
   const telescopes = Object.values(catalog.telescopes)
   const named = header.telescope
     ? telescopes.find((t) => matchesName(header.telescope!, [t.name, ...t.aliases]))
     : undefined
   if (named) {
-    const train = trainFor(catalog, camera, named, nightOf(header.dateObs))
+    const train = trainFor(catalog, cameras, named, nightOf(header.dateObs))
     evidence.push({ source: "equipment-record", label: trainLabel, value: verbatim(train.name), agrees: true })
     return { value: train.id, status: "associated", evidence, confirmedAt: null }
   }
@@ -394,7 +402,7 @@ export function associateEquipment(catalog: Catalog, header: NonNullable<DiskFil
     ? telescopes.find((t) => Math.abs(t.focalLengthMm - header.focalLengthMm!) / t.focalLengthMm < 0.02)
     : undefined
   if (byFocal) {
-    const train = trainFor(catalog, camera, byFocal, nightOf(header.dateObs))
+    const train = trainFor(catalog, cameras, byFocal, nightOf(header.dateObs))
     const telescopeEvidence = evidence[1]!
     telescopeEvidence.agrees = false
     evidence.push({ source: "equipment-record", label: trainLabel, value: msg("indexing_train_focal_match", { name: train.name }), agrees: null })
@@ -410,7 +418,7 @@ export function associateEquipment(catalog: Catalog, header: NonNullable<DiskFil
       apertureMm: null,
     }
     catalog.telescopes[telescope.id] = telescope
-    const train = trainFor(catalog, camera, telescope, nightOf(header.dateObs))
+    const train = trainFor(catalog, cameras, telescope, nightOf(header.dateObs))
     evidence.push({ source: "equipment-record", label: trainLabel, value: msg("indexing_train_detected", { name: train.name }), agrees: true })
     return { value: train.id, status: "associated", evidence, confirmedAt: null }
   }
