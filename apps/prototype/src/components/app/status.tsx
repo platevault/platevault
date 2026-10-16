@@ -15,20 +15,25 @@
 import {
   Archive,
   Ban,
+  CalendarClock,
   Check,
   CheckCheck,
   Circle,
   CircleAlert,
   CircleArrowRight,
+  CircleArrowUp,
   CircleCheck,
   CircleDashed,
   CircleDot,
   CircleEllipsis,
   CircleHelp,
+  CirclePlus,
   CircleSlash,
   CircleX,
+  Copy,
   CopyX,
   Clock,
+  EyeOff,
   FileDiff,
   Hourglass,
   Link2,
@@ -212,6 +217,39 @@ export const STATUS = {
     failed: s(m.status_failed_fit, "danger", CircleX),
     unavailable: s(m.status_not_measured, "muted", CircleDashed),
   },
+  /** A calibration process (domain/calibration-process `ProcessStatus`), so a badge takes `view.status`. */
+  process: {
+    "awaiting-stack": s(m.status_to_stack, "info", CircleArrowRight),
+    stacking: s(m.status_stacking, "info", Loader),
+    importing: s(m.status_importing, "info", Loader),
+    "trashing-raws": s(m.status_trashing_raws, "info", Loader),
+    failed: s(m.status_failed, "danger", CircleX),
+    done: s(m.status_done, "success", CircleCheck),
+  },
+  /** A master file's match against the library in an import preview (CAL-FR-13); "New version of {master}" passes its own label. */
+  masterMatch: {
+    new: s(m.status_new, "success", CirclePlus),
+    version: s(m.status_new_version, "info", CircleArrowUp),
+    duplicate: s(m.status_duplicate, "muted", Copy),
+    "not-master": s(m.status_not_a_master, "muted", CircleSlash),
+  },
+  /** A generated master's offer to the library: still offered, or hidden by the user. */
+  offer: {
+    offered: s(m.status_offered, "info", CircleDot),
+    hidden: s(m.status_declined, "muted", EyeOff),
+  },
+  /** A master past its age limit; the caller's label carries the age ("Old · 40 d"). */
+  masterAge: {
+    old: s(m.status_old, "warning", CalendarClock),
+  },
+  /** A prototype rule the owner has not settled yet. */
+  rule: {
+    provisional: s(m.status_provisional, "muted", Hourglass),
+  },
+  developerMode: {
+    on: s(m.status_on, "success", Check),
+    off: s(m.status_off, "warning", TriangleAlert),
+  },
   save: {
     saved: s(m.status_saved, "neutral", Check),
     unsaved: s(m.status_unsaved_changes, "warning", CircleAlert),
@@ -285,7 +323,7 @@ export function StatusBadge<K extends StatusKind>({ kind, value, label, classNam
   const Icon = meta.icon
   return (
     <Badge variant="outline" className={cn(STATUS_CLASS, TONE_CLASS[meta.tone], className)} data-status={`${kind}:${value}`}>
-      <Icon aria-hidden="true" className={cn(value === "running" && "motion-safe:animate-spin")} />
+      <Icon aria-hidden="true" className={cn(meta.icon === Loader && "motion-safe:animate-spin")} />
       {label ?? meta.label}
     </Badge>
   )

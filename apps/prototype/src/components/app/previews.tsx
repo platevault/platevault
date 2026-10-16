@@ -43,7 +43,7 @@ import { type MessageRef, msg, say } from "@/lib/i18n"
 import { BoxTable } from "./box"
 import type { Blocker, BlockerColumns, Column } from "./contracts"
 import { KeyValueList } from "./data"
-import { Pill } from "./pill"
+import { StatusBadge } from "./status"
 
 const FOCUSABLE = "a[href], button:not([disabled]), [tabindex]:not([tabindex='-1'])"
 
@@ -195,14 +195,17 @@ export function BlockersPreview({ action, reason, blockers, columns, actions, ch
 export interface UsedByPreviewProps {
   /** "Used by 6 runs". */
   label: string
-  /** The full list, filtered to this use. */
-  link: StepLink
+  /** The full list, filtered to this use; without one, the first user's page. */
+  link?: StepLink
   /** The users, each linked to its own page. */
   items: { label: string; link?: StepLink }[]
 }
 
+/** "Used by 6 runs ▸"; "–" when there is nowhere to link (no `link` and no linked first user). */
 export function UsedByPreview({ label, link, items }: UsedByPreviewProps) {
-  const trigger = <PlaceLink link={link}>{label}</PlaceLink>
+  const target = link ?? items[0]?.link
+  if (!target) return "–"
+  const trigger = <PlaceLink link={target}>{label}</PlaceLink>
   if (items.length === 0) return trigger
   return (
     <Preview trigger={trigger}>
@@ -266,7 +269,7 @@ export function MasterPreview({ label, link, master, version, age, usedBy, compa
     <Preview trigger={trigger} title={compact ? label : undefined}>
       {age ? (
         <span className="flex">
-          <Pill tone="warning">{age}</Pill>
+          <StatusBadge kind="masterAge" value="old" label={age} />
         </span>
       ) : null}
       <KeyValueList items={items} />

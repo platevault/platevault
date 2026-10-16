@@ -3,8 +3,9 @@
  * location and a Target.
  *
  * - NightPicker: ‹ · the night (a calendar popover) · › · Today. The arrows
- *   step a night, or a week with `weekStep`. One planning context, shared by
- *   Home and Targets.
+ *   step a night, or a week with `weekStep`; `weekJumps` adds « » week
+ *   steps beside night steps. One planning context, shared by Home and
+ *   Targets.
  * - SitePicker: a Select of the saved sites with the default marked, plus
  *   "Manage sites…".
  * - SiteLocationField: latitude, longitude and elevation fields, which stay
@@ -17,7 +18,7 @@
  *   host searches, so the picker shows whatever results and lookup state the
  *   host hands it.
  */
-import { CalendarDays, ChevronLeft, ChevronRight, LocateFixed } from "lucide-react"
+import { CalendarDays, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, LocateFixed } from "lucide-react"
 import { type KeyboardEvent, lazy, Suspense, useEffect, useId, useMemo, useRef, useState } from "react"
 import { useMessages } from "@/app/preferences"
 import { roundCoordinate, validLatLon } from "@/components/domain/coordinates"
@@ -80,6 +81,8 @@ export interface NightPickerProps {
   min?: string
   /** ‹ › step a week instead of a night. */
   weekStep?: boolean
+  /** « before ‹ and » after › step a week, while ‹ › step a night (`weekStep` then has no effect). */
+  weekJumps?: boolean
   disabled?: boolean
   /** Inside a Field: the control id and the label and description that name the group instead of "Night". */
   id?: string
@@ -87,15 +90,17 @@ export interface NightPickerProps {
   "aria-describedby"?: string
 }
 
-/** ‹ · night · › · Today, as one labelled group. Today stays in place (disabled) on tonight, so nothing moves. */
-export function NightPicker({ value, onChange, today, min = today, weekStep = false, disabled = false, id, "aria-labelledby": labelledBy, "aria-describedby": describedBy }: NightPickerProps) {
+/** [«] ‹ · night · › [»] · Today, as one labelled group. Today stays in place (disabled) on tonight, so nothing moves. */
+export function NightPicker({ value, onChange, today, min = today, weekStep = false, weekJumps = false, disabled = false, id, "aria-labelledby": labelledBy, "aria-describedby": describedBy }: NightPickerProps) {
   const m = useMessages()
   const [open, setOpen] = useState(false)
-  const step = weekStep ? 7 : 1
+  const byWeek = weekStep && !weekJumps
+  const step = byWeek ? 7 : 1
   const choose = (night: string) => onChange(night < min ? min : night)
   return (
     <span role="group" id={id} aria-label={labelledBy ? undefined : m.tonight_night()} aria-labelledby={labelledBy} aria-describedby={describedBy} className="inline-flex items-center gap-0.5" data-night-picker>
-      <IconButton label={weekStep ? m.picker_week_previous() : m.targets_night_previous()} icon={ChevronLeft} disabled={disabled || value <= min} onClick={() => choose(shiftNight(value, -step))} />
+      {weekJumps ? <IconButton label={m.picker_week_previous()} icon={ChevronsLeft} disabled={disabled || value <= min} onClick={() => choose(shiftNight(value, -7))} /> : null}
+      <IconButton label={byWeek ? m.picker_week_previous() : m.targets_night_previous()} icon={ChevronLeft} disabled={disabled || value <= min} onClick={() => choose(shiftNight(value, -step))} />
       <Popover open={open} onOpenChange={setOpen}>
         {/* A fixed minimum width, so a shorter date never moves the › and Today buttons. */}
         <PopoverTrigger render={<Button variant="outline" size="sm" disabled={disabled} className="min-w-32 tabular-nums" />}>
@@ -114,7 +119,8 @@ export function NightPicker({ value, onChange, today, min = today, weekStep = fa
           />
         </PopoverContent>
       </Popover>
-      <IconButton label={weekStep ? m.picker_week_next() : m.targets_night_next()} icon={ChevronRight} disabled={disabled} onClick={() => choose(shiftNight(value, step))} />
+      <IconButton label={byWeek ? m.picker_week_next() : m.targets_night_next()} icon={ChevronRight} disabled={disabled} onClick={() => choose(shiftNight(value, step))} />
+      {weekJumps ? <IconButton label={m.picker_week_next()} icon={ChevronsRight} disabled={disabled} onClick={() => choose(shiftNight(value, 7))} /> : null}
       <Button variant="ghost" size="sm" disabled={disabled || value === today} onClick={() => onChange(today)}>
         {m.picker_today()}
       </Button>
