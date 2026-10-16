@@ -1,13 +1,13 @@
 ---
 id: J33
 title: Process a mosaic with Project panel groups
-version: 5
+version: 6
 status: draft
 last_reviewed: 2026-10-06
 actors: [primary-user]
 surfaces: [projects, sessions, calibration, view, output, wrap-up, home]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 065-project-goals, 066-view-selection, 067-frame-review, 068-calibration-inputs, 069-application-handoff, 070-results-reuse, D04, D19, D-W4, D-W5, D-W26, D-W29, D-W38, D-W41, D-W47, D-W51, D-W54, D-W55, D-W67, D-W72, D-W73, D-W75, specs/063-clean-rebuild-contract/spec.md, specs/065-project-goals/spec.md, specs/066-view-selection/spec.md, specs/067-frame-review/spec.md, specs/068-calibration-inputs/spec.md, specs/069-application-handoff/spec.md, specs/070-results-reuse/spec.md, HARNESS-V5-IA.md#S3, HARNESS-V5-IA.md#S4, HARNESS-V5-IA.md#S7, HARNESS-V5-IA.md#S8, HARNESS-V5-FEEDBACK-R1.md#b-projects-project-new-project-start-run-trash-wrap-up, HARNESS-V5-FEEDBACK-R1.md#round-1b-decisions-user-2026-10-09, HARNESS-V5-FEEDBACK-R1.md#round-5, HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#round-7, P-CAL3, P-PREP3, apps/prototype/src/features/v5/b-projects/mosaic-editor.tsx, 064-library-inventory, 071-storage-custody, D-W93, D-W94, D-W95, D-W98, D-W99, D-W100, D-W101, D-W105, specs/063-clean-rebuild-contract/workflow-decisions.md, specs/064-library-inventory/spec.md, specs/071-storage-custody/spec.md]
+trace: [063-clean-rebuild-contract, 065-project-goals, 066-view-selection, 067-frame-review, 068-calibration-inputs, 069-application-handoff, 070-results-reuse, D04, D19, D-W4, D-W5, D-W26, D-W29, D-W38, D-W41, D-W47, D-W51, D-W54, D-W55, D-W67, D-W72, D-W73, D-W75, specs/063-clean-rebuild-contract/spec.md, specs/065-project-goals/spec.md, specs/066-view-selection/spec.md, specs/067-frame-review/spec.md, specs/068-calibration-inputs/spec.md, specs/069-application-handoff/spec.md, specs/070-results-reuse/spec.md, HARNESS-V5-IA.md#S3, HARNESS-V5-IA.md#S4, HARNESS-V5-IA.md#S7, HARNESS-V5-IA.md#S8, HARNESS-V5-FEEDBACK-R1.md#b-projects-project-new-project-start-run-trash-wrap-up, HARNESS-V5-FEEDBACK-R1.md#round-1b-decisions-user-2026-10-09, HARNESS-V5-FEEDBACK-R1.md#round-5, HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#round-7, P-CAL3, P-PREP3, apps/prototype/src/features/v5/b-projects/mosaic-editor.tsx, 064-library-inventory, 071-storage-custody, D-W93, D-W94, D-W95, D-W98, D-W99, D-W100, D-W101, D-W105, specs/063-clean-rebuild-contract/workflow-decisions.md, specs/064-library-inventory/spec.md, specs/071-storage-custody/spec.md, D-W107, D-W114]
 ---
 
 ## Goal
@@ -30,7 +30,7 @@ The user organizes the seven in-scope Veil sessions in Project `Veil Mosaic HOO`
   | 16 Aug | OIII | 10 | inside the Veil Nebula framing, outside every panel |
   | 17 Aug | Ha | 10 | none (Position unknown) |
 
-- P3: The four panel framings are recorded by the captures' pointing and rotation evidence, with a 20% overlap between adjacent framings. This is within the provisional 5 to 40% overlap at which PlateVault offers groups as mosaic panels. The P2 pointings place the 10 and 11 Aug sessions in Panel 1, 12 Aug in Panel 2, 13 Aug in Panel 3, and 14 Aug in Panel 4. The 15 Aug session is ambiguous between Panels 1 and 2; the 17 Aug session has no pointing and starts as Framing unknown.
+- P3: The four panel framings are recorded by the captures' pointing and rotation evidence, with a 20% overlap between adjacent framings. This is within the default 5 to 40% overlap at which PlateVault offers groups as mosaic panels (D-W114). The P2 pointings place the 10 and 11 Aug sessions in Panel 1, 12 Aug in Panel 2, 13 Aug in Panel 3, and 14 Aug in Panel 4. Intake split each night by framing, so each session has one framing (D-W107). The 15 Aug session's framing is ambiguous between Panels 1 and 2; the 17 Aug session has no pointing and starts as Framing unknown.
 - P4: The Calibration library contains the master darks and flats for the seven sessions. Calibration was matched at ingestion and pinned on each session; any suggested match was confirmed during import review, and the 17 Aug session is explicitly set to No flats. No raw calibration frame is assigned in the Project.
 - P5: PixInsight is installed. Its WBPP profile is configured in PlateVault with recorded evidence that it reads input folders and never writes into its input files (D04).
 - P6: `Work/Processing` exists on `Astro-T7`, writable, on the same volume as `Astro-T7/Captures`. `Astro-T7` supports symbolic links. The Project's View mode is Symlinks. On the `desktop-ui` (Windows) lane, Windows Developer Mode is on.
@@ -58,8 +58,8 @@ The user organizes the seven in-scope Veil sessions in Project `Veil Mosaic HOO`
 ### S1c — Place the ambiguous and unknown framings {#S1c}
 - **Do:** Move 15 Aug to Panel 2 and move 17 Aug from Framing unknown to Panel 3. Do not add 16 Aug.
 - **Expect:** The seven sessions are grouped as P3 specifies: 10 and 11 Aug in Panel 1, 12 and 15 Aug in Panel 2, 13 and 17 Aug in Panel 3, and 14 Aug in Panel 4. Unknown pointing is not treated as zero distance.
-- **Expect (negative):** Moving sessions between groups changes no capture metadata or library quality.
-- **Trace:** PRJ-FR-31, PRJ-FR-27, VSEL-FR-04, VSEL-FR-12 · D-W95
+- **Expect (negative):** Moving sessions between groups changes no capture metadata or library quality. Each move takes a whole session, and no control moves single frames of a session to another panel.
+- **Trace:** PRJ-FR-08, PRJ-FR-31, PRJ-FR-27, PRJ-AC-47, VSEL-FR-04, VSEL-FR-12 · D-W95, D-W107
 
 ### S2 — Check panel goals and progress {#S2}
 - **Do:** Read each panel's Ha and OIII goals and progress on the Project page.
@@ -153,10 +153,13 @@ The user organizes the seven in-scope Veil sessions in Project `Veil Mosaic HOO`
 
 - G1: The rebuilt application has not been validated. Product behavior follows the current specs and D-W93 to D-W106; no implementation has been validated against them.
 - G2: The WBPP profile's capability probe and folder input remain unqualified (D04). Blocks readiness.
-- G3: The provisional 5 to 40% overlap rule and framing tolerances have not been validated against the panel fixture. The P3 geometry and the session movements in S1c are explicit fixture data, not claims about automatic assignment outside those conditions. Blocks readiness.
+- G3: The default 5 to 40% overlap rule and framing tolerances (D-W114) have not been validated against the panel fixture. The P3 geometry and the session movements in S1c are explicit fixture data, not claims about automatic assignment outside those conditions. Blocks readiness.
 - G4: Canceling Apply and a Project mixing cameras are outside this journey.
 
 ## Delta log
 - **Δ5** 2026-10-15 · S1, S1a, S1b, S1c, S2, S2a, S3, S5, S5a, S6, S7, S8, S9, S10, S11, S12, S13, S14, S15 · behavior-change
   Mosaic panels are Project groups, calibration is pinned on sessions, Apply builds their View, and panel and assembled Results live in `Output/`. Wrap up keeps Output and is the only route for rejected captures to the OS Trash.
   Evidence: D-W93 to D-W106 (F4 Project model, owner's answers of 2026-10-14) in PR #1804, PRJ-FR-03, PRJ-FR-31, PRJ-FR-27 to PRJ-FR-29, VSEL-FR-07, PREP-FR-06, PREP-FR-16, RES-FR-01, RES-FR-08, STO-FR-14 · by: SpecF4Writer2 (intent-gated)
+- **Δ6** 2026-10-16 · S1c · behavior-change
+  Sessions split at intake by framing, so each panel group holds whole sessions and S1c moves whole sessions only. The overlap and framing defaults are settled.
+  Evidence: D-W107 and D-W114 (owner's answers of 2026-10-15/16) in PR #1804, LIB-FR-04, PRJ-FR-08, PRJ-FR-29, PRJ-FR-31, PRJ-AC-47 · by: SpecF4Answers (intent-gated)

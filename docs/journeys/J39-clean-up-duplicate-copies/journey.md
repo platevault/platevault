@@ -1,13 +1,13 @@
 ---
 id: J39
 title: Clean up duplicate copies found by the automatic scan
-version: 4
+version: 5
 status: draft
 last_reviewed: 2026-10-12
 actors: [primary-user]
 surfaces: [duplicates, status-bar, locations, indexing, activity, sessions, projects, wrap-up]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#round-5, HARNESS-V5-FEEDBACK-R1.md#storage-and-duplicates, HARNESS-V5-FEEDBACK-R1.md#round-8-user-2026-10-12, P-STO2, P-ISS1, HARNESS-V5-IA.md#S15, HARNESS-V5-IA.md#round-2-foundation-2026-10-09, HARNESS-V5-FEEDBACK-R1.md#e2-calibration-storage-settings, apps/prototype/src/domain/storage.ts, apps/prototype/src/store/actions/storage.ts, apps/prototype/src/domain/issues.ts, apps/prototype/src/components/app/confirm-dialog.tsx, D-W43, D-W57, D-W74, specs/071-storage-custody/spec.md, J34, J38, specs/063-clean-rebuild-contract/workflow-decisions.md#D-W93-D-W106, specs/064-library-inventory/spec.md#LIB-FR-22, specs/065-project-goals/spec.md#PRJ-FR-14-PRJ-FR-15, specs/071-storage-custody/spec.md#STO-FR-16, D-W92, D-W94, D-W97]
+trace: [HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#round-5, HARNESS-V5-FEEDBACK-R1.md#storage-and-duplicates, HARNESS-V5-FEEDBACK-R1.md#round-8-user-2026-10-12, P-STO2, P-ISS1, HARNESS-V5-IA.md#S15, HARNESS-V5-IA.md#round-2-foundation-2026-10-09, HARNESS-V5-FEEDBACK-R1.md#e2-calibration-storage-settings, apps/prototype/src/domain/storage.ts, apps/prototype/src/store/actions/storage.ts, apps/prototype/src/domain/issues.ts, apps/prototype/src/components/app/confirm-dialog.tsx, D-W43, D-W57, D-W74, specs/071-storage-custody/spec.md, J34, J38, specs/063-clean-rebuild-contract/workflow-decisions.md#D-W93-D-W106, specs/064-library-inventory/spec.md#LIB-FR-22, specs/065-project-goals/spec.md#PRJ-FR-14-PRJ-FR-15, specs/071-storage-custody/spec.md#STO-FR-16, D-W92, D-W94, D-W97, D-W116]
 ---
 
 ## Goal
@@ -98,12 +98,19 @@ The user finds byte-identical extra copies through Sessions' Duplicates filter a
 - **Expect (negative):** The put-back file matches its P5 manifest entry. M-1's session count and quality are unchanged, and no new session appears. `Card-3` remains unregistered and contributes no copy.
 - **Trace:** LIB-FR-22; LIB-FR-18; PRJ-FR-15; STO-FR-16
 
+### S6a — Read the kept copy for a tie inside one location {#S6a}
+
+- **Do:** Outside PlateVault, copy `Astro-T7/Captures/M33/2026-10-04/` to `Astro-T7/Captures/M33/2026-10-04 copy/` and set the copies' file creation and modification times to 2026-09-01 00:00 local, so they are older than the originals. In Settings › Locations, rescan `Astro-T7 captures`. Reopen the Trash step of `NGC 7000 HOO`'s Wrap up from the step strip and read the duplicate-copy group for M-1 and M-2. Leave the step without confirming.
+- **Expect:** M-1 and M-2 each have two copies in `Astro-T7 captures`, the earliest-registered location, so they tie for the kept copy. For each, the original under `M33/2026-10-04/`, which PlateVault catalogued first, is preselected as the kept copy, and the `2026-10-04 copy/` file is offered as an extra copy, although its file is older. M-1's put-back `Spare` copy is offered as well.
+- **Expect (negative):** No file moves, because the user confirmed nothing. The older file times do not make a copy the kept copy.
+- **Trace:** PRJ-FR-15; STO-FR-16; STO-AC-28 · D-W74, D-W116
+
 ### S7 — Verify custody {#S7}
 
 - **Do:** Outside PlateVault, recompute the P5 manifests and frame counts, and list the OS Trash.
 - **Expect:**
-  - The OS Trash holds exactly 4 files: the `Spare` copy of M-2, the `Cold-1` and `Spare` copies of N-1, and the `Cold-1` copy of C-1. Each matches its P5 size and SHA-256.
-  - Every other file on the five volumes matches P5, including the put-back M-1 copy, the `Scratch` copy of S-1 and both `Card-3` copies.
+  - The OS Trash holds exactly 4 files: the `Spare` copy of M-2, the `Cold-1` and `Spare` copies of N-1, and the `Spare` copy of C-1. Each matches its P5 size and SHA-256.
+  - Every other file on the five volumes matches P5, including the put-back M-1 copy, the `Scratch` copy of S-1 and both `Card-3` copies. The two files under `Astro-T7/Captures/M33/2026-10-04 copy/` that S6a made match the M-1 and M-2 originals.
   - Every session's frame count matches P5.
 - **Expect (negative):** No file was permanently deleted, renamed or rewritten, and no original (P2 "Original" column) left its location. No `Card-3` file is in the OS Trash.
 - **Trace:** specs/071-storage-custody/spec.md · D-W43, D-W74
@@ -117,6 +124,7 @@ The user finds byte-identical extra copies through Sessions' Duplicates filter a
 - SC5: 0 files are permanently deleted, 0 originals move, 0 session frame counts change, and 0 frames read Trashed (S4, S5, S7).
 - SC6: With `Card-3` connected through S1 to S7, 0 of its copies are counted or listed at S1, S2 and S6, and both its files match P5 at S7.
 - SC7: S5a reopens the refused duplicate in the Duplicates review without changing files; after the put-back and rescan, Sessions lists M-1 as a duplicate again.
+- SC8: At S6a, the kept copy for M-1 and M-2 is the first-catalogued original in both of the 2 tied groups, and 0 files move.
 
 ## Known gaps
 
@@ -126,7 +134,7 @@ The user finds byte-identical extra copies through Sessions' Duplicates filter a
 - G4: (dissolved 2026-10-12): answered by Round 6 "The keeper is the copy in the earliest-registered location"; S2 now asserts it with a fixture where the oldest file (the `Spare` copy of N-1, P2) is in the last-registered location and is not the keeper.
 - G5: Out of scope for this journey: a copy whose bytes change between the scan and the move (D-W74 rehashes each copy before it moves), a copy on an offline volume, and a scan canceled from the status bar. Each needs fault injection or pacing. Blocks readiness until covered by a step or a journey.
 - G6: No separate duplicate-copy keeper choice is specified for the Duplicates review; removal and the kept-copy rule are specified for the Project's Wrap up Trash offer by PRJ-FR-15 and STO-FR-16.
-- G7: Unresolved product question: which copy is the keeper when two or more copies of a group sit in the same earliest-registered location (for example a session folder duplicated inside `Astro-T7 captures`)? Round 6 dropped the "then the oldest" tie-break. Options: (a, recommended) the copy PlateVault catalogued first in that location, which stays stable however file times change; (b) the oldest file, as Round 5 read, which a copy tool that rewrites file times can change; (c) no preselection for such a group, so the user must choose before Move the others is offered. No step covers this case. Blocks readiness.
+- G7: (dissolved 2026-10-16): answered by the owner's answer of 2026-10-15/16 (D-W116): when copies tie for the kept copy in the same earliest-registered location, the copy PlateVault catalogued first is preselected, and nothing is removed without review. S6a and SC8 now assert it with copies whose files are older than the originals.
 
 ## Delta log
 
@@ -137,3 +145,6 @@ The user finds byte-identical extra copies through Sessions' Duplicates filter a
 - **Δ4** 2026-10-15 · S1, S2, S3, S4, S5, S5a, S6 · behavior-change
   Duplicate copies are found through Sessions' Duplicates filter and review; disposal is offered in the Project's Wrap up Trash step, which names the kept copy and refuses unsupported moves.
   Evidence: D-W93 to D-W106 in specs/063-clean-rebuild-contract/workflow-decisions.md, LIB-FR-22, PRJ-FR-14, PRJ-FR-15, STO-FR-16 · by: SpecF4Writer2 (intent-gated)
+- **Δ5** 2026-10-16 · +S6a, S7 · behavior-change
+  A tie for the kept copy inside one location preselects the copy PlateVault catalogued first, never the oldest file; S6a reads it without moving anything.
+  Evidence: D-W116 (owner's answers of 2026-10-15/16) in PR #1804, PRJ-FR-15, STO-FR-16, STO-AC-28 · by: SpecF4Answers (intent-gated)

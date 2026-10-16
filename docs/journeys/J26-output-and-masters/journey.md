@@ -1,13 +1,13 @@
 ---
 id: J26
 title: Discover Project Output and adopt a calibration master
-version: 5
+version: 6
 status: draft
 last_reviewed: 2026-10-03
 actors: [primary-user]
 surfaces: [results, calibration, projects, activity]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 070-results-reuse, 068-calibration-inputs, 069-application-handoff, 071-storage-custody, D04, D05, D09, D13, D19, D-W4, D-W5, D-W8, D-W51, D-W55, D-W56, D-W67, D-W70, specs/063-clean-rebuild-contract/decisions.md, specs/063-clean-rebuild-contract/workflow-decisions.md, specs/070-results-reuse/spec.md, specs/068-calibration-inputs/spec.md, specs/069-application-handoff/spec.md, specs/071-storage-custody/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-h-results-and-generated-masters, HARNESS-V5-IA.md#S5, HARNESS-V5-IA.md#S14, HARNESS-V5-IA.md#round-2b-foundation-status-bar-and-p-cal3-2026-10-09, HARNESS-V5-FEEDBACK-R1.md#domain-and-seed-foundation, HARNESS-V5-FEEDBACK-R1.md#round-1b-decisions-user-2026-10-09, P-CAL2, P-CAL3, apps/prototype/src/features/v5/e-targets-plan-settings/calibration.tsx, apps/prototype/messages/en-GB.json, J36, HARNESS-V5-FEEDBACK-R1.md#round-6, D-W93, D-W94, D-W97, D-W98, D-W100, D-W101, D-W103]
+trace: [063-clean-rebuild-contract, 070-results-reuse, 068-calibration-inputs, 069-application-handoff, 071-storage-custody, D04, D05, D09, D13, D19, D-W4, D-W5, D-W8, D-W51, D-W55, D-W56, D-W67, D-W70, specs/063-clean-rebuild-contract/decisions.md, specs/063-clean-rebuild-contract/workflow-decisions.md, specs/070-results-reuse/spec.md, specs/068-calibration-inputs/spec.md, specs/069-application-handoff/spec.md, specs/071-storage-custody/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-h-results-and-generated-masters, HARNESS-V5-IA.md#S5, HARNESS-V5-IA.md#S14, HARNESS-V5-IA.md#round-2b-foundation-status-bar-and-p-cal3-2026-10-09, HARNESS-V5-FEEDBACK-R1.md#domain-and-seed-foundation, HARNESS-V5-FEEDBACK-R1.md#round-1b-decisions-user-2026-10-09, P-CAL2, P-CAL3, apps/prototype/src/features/v5/e-targets-plan-settings/calibration.tsx, apps/prototype/messages/en-GB.json, J36, HARNESS-V5-FEEDBACK-R1.md#round-6, D-W93, D-W94, D-W97, D-W98, D-W100, D-W101, D-W103, D-W113]
 ---
 
 ## Goal
@@ -146,10 +146,10 @@ The user opens the Project's Output step to find its Results, saves finished ima
 
 ### S9a — Detect drift in the adopted master {#S9a}
 
-- **Do:** With the P5 helper, change the adopted master's bytes in place while preserving its size and mtime. Open the Calibration library and the Project's Calibrate step.
-- **Expect:** The master reads drifted against its adoption digest and needs review. The pinned calibration assignment does not silently change.
-- **Expect (negative):** The changed master is not treated as a valid pinned or suggested calibration input.
-- **Trace:** CAL-FR-08 · CAL-AC-10 · D19, D-W101
+- **Do:** With the P5 helper, change the adopted master's bytes in place while preserving its size and mtime. Open the Calibration library, the Project's Calibrate step and the details of the session that pins the master.
+- **Expect:** The master reads drifted against its adoption digest and needs review. The pin stays: the session still shows the master pinned and reads its file as changed, with **Reassign…**.
+- **Expect (negative):** The changed master is not treated as a valid pinned or suggested calibration input, and no other master is pinned in its place by itself.
+- **Trace:** CAL-FR-08 · LIB-FR-23 · CAL-AC-10, CAL-AC-29 · D19, D-W101, D-W113
 
 ### S9b — Restore the adopted master bytes {#S9b}
 
@@ -198,3 +198,6 @@ The user opens the Project's Output step to find its Results, saves finished ima
 - **Δ5** 2026-10-15 · S1, S1a, S2, S3, S3a, S4, S4a, S5, S6, S7, S7a, S8, S8a, S8b, S8c, S9, S9a, S9b, S9c · behavior-change
   Results are files in the Project's `Output/`; there is no acceptance, lineage or use of a Result as a Project input. Copy to Output… brings tool files over from `Processing/`, and the once-only generated-master offer moves to Output. Master adoption, drift and hiding follow the Calibration library contract.
   Evidence: D-W93 to D-W106 (F4 Project model, owner's answers of 2026-10-14) in PR #1804, 070 RES-FR-01 to RES-FR-11, 068 CAL-FR-06 to CAL-FR-09, 071 STO-FR-16 · by: SpecF4Writer2 (intent-gated)
+- **Δ6** 2026-10-16 · S9a · behavior-change
+  A drifted pinned master keeps its pin; the session reads the file as changed with Reassign…, and nothing switches to another master.
+  Evidence: D-W113 (owner's answers of 2026-10-15/16) in PR #1804, CAL-FR-08, LIB-FR-23, CAL-AC-29 · by: SpecF4Answers (intent-gated)

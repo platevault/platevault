@@ -1,13 +1,13 @@
 ---
 id: J34
 title: Wrap up and close a Project after trashing rejected frames and Processing files
-version: 6
+version: 7
 status: draft
 last_reviewed: 2026-10-06
 actors: [primary-user]
 surfaces: [projects, wrap-up, archive, sessions, targets, home, view-review, locations, activity, status-bar, issues]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 066-view-selection, 067-frame-review, 068-calibration-inputs, 070-results-reuse, 071-storage-custody, 072-observing-plans, D19, D-W26, D-W42, D-W43, D-W46, D-W52, D-W54, D-W57, D-W66, D-W70, D-W74, D-W77, D-W80, D-W81, P-WRAP1, P-ARC1, P-TRASH2, specs/063-clean-rebuild-contract/spec.md, specs/063-clean-rebuild-contract/workflow-decisions.md, specs/064-library-inventory/spec.md, specs/065-project-goals/spec.md, specs/066-view-selection/spec.md, specs/070-results-reuse/spec.md, specs/071-storage-custody/spec.md, HARNESS-V5-IA.md#S1, HARNESS-V5-IA.md#S2, HARNESS-V5-IA.md#S3, HARNESS-V5-IA.md#S8, HARNESS-V5-IA.md#S9, HARNESS-V5-IA.md#S16, HARNESS-V5-FEEDBACK-R1.md#copy-rules, HARNESS-V5-FEEDBACK-R1.md#domain-and-seed, HARNESS-V5-FEEDBACK-R1.md#b-projects, HARNESS-V5-FEEDBACK-R1.md#round-5, HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#input-modes-user-2026-10-10-research-designinput-modes-researchmd, HARNESS-V5-FEEDBACK-R1.md#round-8-user-2026-10-12, D-W93, D-W94, D-W96, D-W97, D-W98, D-W100, PRJ-FR-14, PRJ-FR-15, PRJ-FR-16, PRJ-FR-25, PRJ-FR-30, PRJ-FR-32, STO-FR-01, STO-FR-06, STO-FR-07, STO-FR-08, STO-FR-13, STO-FR-14, STO-FR-15, STO-FR-16, VSEL-FR-12, LIB-FR-18]
+trace: [063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 066-view-selection, 067-frame-review, 068-calibration-inputs, 070-results-reuse, 071-storage-custody, 072-observing-plans, D19, D-W26, D-W42, D-W43, D-W46, D-W52, D-W54, D-W57, D-W66, D-W70, D-W74, D-W77, D-W80, D-W81, P-WRAP1, P-ARC1, P-TRASH2, specs/063-clean-rebuild-contract/spec.md, specs/063-clean-rebuild-contract/workflow-decisions.md, specs/064-library-inventory/spec.md, specs/065-project-goals/spec.md, specs/066-view-selection/spec.md, specs/070-results-reuse/spec.md, specs/071-storage-custody/spec.md, HARNESS-V5-IA.md#S1, HARNESS-V5-IA.md#S2, HARNESS-V5-IA.md#S3, HARNESS-V5-IA.md#S8, HARNESS-V5-IA.md#S9, HARNESS-V5-IA.md#S16, HARNESS-V5-FEEDBACK-R1.md#copy-rules, HARNESS-V5-FEEDBACK-R1.md#domain-and-seed, HARNESS-V5-FEEDBACK-R1.md#b-projects, HARNESS-V5-FEEDBACK-R1.md#round-5, HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#input-modes-user-2026-10-10-research-designinput-modes-researchmd, HARNESS-V5-FEEDBACK-R1.md#round-8-user-2026-10-12, D-W93, D-W94, D-W96, D-W97, D-W98, D-W100, PRJ-FR-14, PRJ-FR-15, PRJ-FR-16, PRJ-FR-25, PRJ-FR-30, PRJ-FR-32, STO-FR-01, STO-FR-06, STO-FR-07, STO-FR-08, STO-FR-13, STO-FR-14, STO-FR-15, STO-FR-16, VSEL-FR-12, LIB-FR-18, D-W112]
 ---
 
 ## Goal
@@ -200,9 +200,9 @@ The user wraps up Project `NGC 7000 HOO` after its View changes have been applie
 ### S12a — Duplicate the Archived Project to continue {#S12a}
 
 - **Do:** On the Archived Project, choose **Duplicate…**, keep its sessions, groups and overrides, goals, notes and settings ticked, and confirm. Open the new Project's View step.
-- **Expect:** The duplicate is a new open Project that holds 18, 24, 26, 28 and 30 Sep in the same groups, with the same overrides, goals, notes and settings. Its archived sessions are at their `Archive/NGC7000` paths. It has no View until its first Apply, which needs `Archive` online.
-- **Expect (negative):** No file is copied, and the duplicate shows no "Duplicated from" note or link to the original. The original remains Archived and locked, and editing the duplicate never changes it.
-- **Trace:** HARNESS-V5-IA.md S3, S9 · PRJ-FR-25, PRJ-FR-30 · PRJ-AC-27, PRJ-AC-43 · STO-AC-07 · D-W93, D-W96, D-W97 · G5
+- **Expect:** The duplicate is a new open Project that holds 18, 24, 26, 28 and 30 Sep in the same groups, with the same overrides, goals, notes and settings. Its archived sessions are at their `Archive/NGC7000` paths. Its 24 Sep session uses the session's current calibration, No darks as chosen in S12, while the Archived Project still shows the darks recorded at Close. It has no View until its first Apply, which needs `Archive` online.
+- **Expect (negative):** No file is copied, and the duplicate shows no "Duplicated from" note or link to the original. The duplicate takes nothing from the original's Close snapshot. The original remains Archived and locked, and editing the duplicate never changes it.
+- **Trace:** HARNESS-V5-IA.md S3, S9 · PRJ-FR-25, PRJ-FR-30 · PRJ-AC-27, PRJ-AC-43 · STO-AC-07 · D-W93, D-W96, D-W97, D-W112 · G5
 
 ## Success criteria
 
@@ -213,7 +213,7 @@ The user wraps up Project `NGC 7000 HOO` after its View changes have been applie
 - SC5: Exactly 415 tool files and 1 generated source, listed as a verified duplicate of the kept library copy, reach the OS Trash. 0 Results in `Output/` and 0 adopted library masters do (S9).
 - SC6: Put back plus rescan returns 1 frame as Unusable, and the Trashed filter then lists 6 (S10).
 - SC7: Archive goes to `Archive/NGC7000`, the Default archive location, keeps 28 Sep and transfers 4 sessions, including 30 Sep, which is only another Project's suggestion (S5, S11).
-- SC8: Close transfers the selected sessions only after destination and reference verification, keeps `Output/`, and leaves the Project Archived and locked. Duplicate… creates an independent open Project without copying files (S11, S11a, S12, S12a).
+- SC8: Close transfers the selected sessions only after destination and reference verification, keeps `Output/`, and leaves the Project Archived and locked. Duplicate… creates an independent open Project without copying files, and its 24 Sep session uses the current No darks choice, not the Close snapshot (S11, S11a, S12, S12a).
 - SC9: The duplicate-copies offer counts exactly 2 copies and lists 1 refusal. Exactly 2 copies reach the OS Trash, and every frame keeps at least 1 copy (S3, S9a).
 - SC10: Skipping Clean up twice moves 0 files, and the Project's View keeps every symlink (S3b).
 - SC11: The Project reads Closing during Archive's transfer and Archived after it succeeds. The Archived Project offers 0 Reopen or Restore actions, takes 0 pending changes from the library or calibration, and offers Duplicate… (S11, S11a, S12, S12a).
@@ -249,3 +249,6 @@ The user wraps up Project `NGC 7000 HOO` after its View changes have been applie
   Wrap up opens only with no pending changes and proceeds Clean up → Trash → Archive, each step confirmed with Proceed; Close project… is Archive's Proceed. The Project's single Symlinks View replaces the run views, so the Trash offer refuses only frames another open Project's View links, and Archive repoints that View.
   Closed and Archived Projects are locked for good with no Reopen or session restore, and library or calibration changes never reach them; Duplicate… continues them.
   Evidence: D-W93 to D-W106 (F4 Project model, owner's answers of 2026-10-14) in PR #1804, 065 PRJ-FR-14 to PRJ-FR-16, PRJ-FR-18, PRJ-FR-25, PRJ-FR-30, PRJ-FR-32; 066 VSEL-FR-12; 071 STO-FR-01, STO-FR-06 to STO-FR-08, STO-FR-13 to STO-FR-16 · by: SpecF4Writer2, SpecF4Writer3 (intent-gated)
+- **Δ7** 2026-10-16 · S12a · behavior-change
+  Duplicate uses each session's current calibration pins, not the original's Close snapshot, so the duplicate's 24 Sep reads the No darks choice made after Close.
+  Evidence: D-W112 (owner's answers of 2026-10-15/16) in PR #1804, PRJ-FR-30, PRJ-AC-43, FR-036 · by: SpecF4Answers (intent-gated)

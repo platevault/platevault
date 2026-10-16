@@ -217,7 +217,7 @@
           "G2 (implementation qualification) no fault fixture yet produces a destination hash mismatch, so the hash-failure branch is not exercised.",
           "G3 (implementation qualification) no fault control yet makes one symlink's repoint fail (P4), and the flow does not name the method of source retirement after verification.",
           "G5 (implementation qualification) no fault control yet pauses an item after destination verification and before retirement (P5).",
-          "G9 (product question) Round 6 lets Sessions archive sessions that are in no Project, but says nothing about a selection that also holds a session of a Project, a candidate or a member of a run, or about archiving part…"
+          "G9 (product question) Round 6 lets Sessions archive sessions that are in no Project, but the F4 specs start Archive from the Archive step of a Project's Wrap up (STO-FR-06, STO-FR-13) and name no Sessions entry point, and Round 6 says nothing about a Sessions selection that holds a session a Project holds or suggests."
         ]
       },
       {
@@ -257,11 +257,8 @@
       {
         "id": "J34",
         "blocking": [
-          "G3 (out of scope) archive transfer failures, interruption and a symlink that cannot be repointed are J28's.",
-          "G4 (implementation qualification) P4 needs Tool-recorded input lineage from a processing tool for F-res.",
-          "G5 (out of scope) approving the restore of an Archived session after Reopen (STO-FR-13) is not exercised, because S12a stops at the review.",
-          "G6 (out of scope) Next reading Wrap up (D-W35, HARNESS-V5-IA.md S1) is not observed, because the Project's candidates keep library-Unreviewed frames (P2), so Review N new frames comes first.",
-          "G7 (out of scope) approving Clean up runs (Clean up all…) in Wrap up is not exercised, because S3b skips it so that J28 keeps the prepared symlinks."
+          "G3 (out of scope) archive transfer failures, interruption and a symlink that cannot be repointed are J28's; J28 forks from S5.",
+          "G7 (out of scope) approving Clean up's View removal is not exercised, because S3b skips it so that the View's symlinks remain for Archive to repoint; J27 covers View removal."
         ]
       },
       {
@@ -303,8 +300,7 @@
         "id": "J39",
         "blocking": [
           "G2 (implementation qualification) P1 to P4 need a seeded catalog with indexed copies on `Cold-1` and `Scratch` and no scan recorded after them.",
-          "G5 (out of scope) a copy whose bytes change between the scan and the move (D-W74 rehashes each copy before it moves), a copy on an offline volume, and a scan canceled from the status bar.",
-          "G7 (product question) which copy is the keeper when two or more copies of a group sit in the same earliest-registered location (for example a session folder duplicated inside `Astro-T7 captures`)?"
+          "G5 (out of scope) a copy whose bytes change between the scan and the move (D-W74 rehashes each copy before it moves), a copy on an offline volume, and a scan canceled from the status bar."
         ]
       },
       {
@@ -337,9 +333,7 @@
       {
         "id": "J44",
         "blocking": [
-          "G3 (out of scope) an unreadable copy, a stale review, a location whose OS removal deletes immediately (STO-FR-15) and a ChangedContent frame (LIB-FR-09) are not exercised in the library clean-up.",
-          "G4 (implementation qualification) F-res needs Tool-recorded input lineage from a processing tool (J34/G4), and S1's F-res refusal depends on it.",
-          "G6 (product question) P-TRASH2 names the views of Complete runs, not the superseded folder an unfinished run keeps after it is prepared again (S6: `Ha deep`'s first folder still links F-prep)."
+          "G2 (out of scope) an unreadable copy, a stale Trash review, an OS removal that deletes immediately and a ChangedContent frame are not exercised here."
         ]
       }
     ]

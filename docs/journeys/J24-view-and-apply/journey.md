@@ -1,13 +1,13 @@
 ---
 id: J24
 title: Build and open a Project View
-version: 6
+version: 7
 status: draft
 last_reviewed: 2026-10-03
 actors: [primary-user]
 surfaces: [preparation, projects, sessions, applications, status-bar]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 069-application-handoff, 070-results-reuse, D02, D04, D09, D13, D15, D19, D-W3, D-W5, D-W49, D-W51, D-W67, D-W72, specs/063-clean-rebuild-contract/decisions.md, specs/063-clean-rebuild-contract/workflow-decisions.md, specs/069-application-handoff/spec.md, specs/070-results-reuse/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-f-prepare-and-open-the-view, HARNESS-V5-IA.md#S5, HARNESS-V5-IA.md#fix-pass, HARNESS-V5-FEEDBACK-R1.md#c-run-and-run-group, HARNESS-V5-FEEDBACK-R1.md#b-projects-project-new-project-start-run-trash-wrap-up, HARNESS-V5-FEEDBACK-R1.md#round-5, P-SB3, HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#round-7, P-PREP3, RUN-VIEWS-OPTIONS.md, 066-view-selection, 068-calibration-inputs, 071-storage-custody, D-W94, D-W98, D-W99, D-W100, D-W101, specs/066-view-selection/spec.md, specs/068-calibration-inputs/spec.md, specs/071-storage-custody/spec.md]
+trace: [063-clean-rebuild-contract, 069-application-handoff, 070-results-reuse, D02, D04, D09, D13, D15, D19, D-W3, D-W5, D-W49, D-W51, D-W67, D-W72, specs/063-clean-rebuild-contract/decisions.md, specs/063-clean-rebuild-contract/workflow-decisions.md, specs/069-application-handoff/spec.md, specs/070-results-reuse/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-f-prepare-and-open-the-view, HARNESS-V5-IA.md#S5, HARNESS-V5-IA.md#fix-pass, HARNESS-V5-FEEDBACK-R1.md#c-run-and-run-group, HARNESS-V5-FEEDBACK-R1.md#b-projects-project-new-project-start-run-trash-wrap-up, HARNESS-V5-FEEDBACK-R1.md#round-5, P-SB3, HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#round-7, P-PREP3, RUN-VIEWS-OPTIONS.md, 066-view-selection, 068-calibration-inputs, 071-storage-custody, D-W94, D-W98, D-W99, D-W100, D-W101, specs/066-view-selection/spec.md, specs/068-calibration-inputs/spec.md, specs/071-storage-custody/spec.md, D-W113]
 ---
 
 ## Goal
@@ -32,6 +32,7 @@ Done means:
 - P6: The J19/P5 source manifest is available.
 - P7: On the Windows `desktop-ui` lane, Developer Mode is off initially and can be enabled in Windows Settings. The macOS lane has no Developer Mode prerequisite.
 - P8: A Windows file-handle fixture can hold one current View entry in use and release it on demand.
+- P9: The master flat pinned on the 28 Sep session has a backup of its bytes and mtime and a same-size variant with different bytes, both kept outside PlateVault.
 
 ## Steps
 
@@ -89,6 +90,13 @@ Done means:
 - **Expect:** The sheet names the offline original and Apply is disabled. After the original is back online, reopening the sheet lists it as available.
 - **Expect (negative):** The View and `View (previous)/` remain unchanged while the original is offline. Apply never omits it silently.
 - **Trace:** VSEL-FR-14 · PREP-FR-06 · D-W100
+
+### S8b — Refuse Apply while a pinned flat file changed {#S8b}
+
+- **Do:** Close the sheet. Outside PlateVault, overwrite the 28 Sep session's pinned master flat with its P9 variant and restore its mtime. Open the 28 Sep session in Sessions, then open **Apply…** again. Restore the flat's P9 backup and reopen **Apply…**.
+- **Expect:** The session still shows the master flat pinned and reads it as changed, with **Reassign…**. The sheet names the changed flat with a link to reassign it on the session, and Apply is refused. After the backup is restored, the sheet no longer names the flat and Apply is available.
+- **Expect (negative):** No other flat is pinned or placed by itself, and the pin is not removed. The View and `View (previous)/` stay unchanged while the flat differs.
+- **Trace:** VSEL-FR-14 · CAL-FR-08 · LIB-FR-23 · VSEL-AC-35, CAL-AC-29 · D-W113
 
 ### S9 — Build the first View {#S9}
 
@@ -177,6 +185,7 @@ Done means:
 - SC6: Group and mode changes leave the current View unchanged until Apply, and the Apply sheet names the move, mode, folder tree, layout note and space for two Views (S12, S13, S14).
 - SC7: While Windows holds a View entry, Apply waits after building; cancel keeps the current View, and releasing the file allows a later Apply to swap in the complete new View (S15, S15a, S16).
 - SC8: Copies on the clone-capable volume read as cloned; old entries are not reused, symlinks are removed without following targets, and no original changes (S16, S17).
+- SC9: A changed pinned flat refuses Apply with a link to reassign it, 0 other flats are pinned, and the pin stays (S8b).
 
 ## Known gaps
 
@@ -187,3 +196,6 @@ Done means:
 - **Δ6** 2026-10-15 · S1, S1a, S4, S5, S6, S7, S8, +S8a, S9, S10, S10a, S11, S12, S13, S14, S15, S15a, S16, S17 · behavior-change
   The Project's first Apply builds its View from originals; later group and mode changes stay pending until Apply. The sheet, folder tree, safe swap, Windows file-use wait and verified Open describe the Project View rather than a processing run.
   Evidence: D-W93 to D-W106 (F4 Project model, owner's answers of 2026-10-14) in PR #1804, VSEL-FR-12 to VSEL-FR-21, PREP-FR-01 to PREP-FR-19, STO-FR-10 · by: SpecF4Writer2 (intent-gated)
+- **Δ7** 2026-10-16 · +S8b · behavior-change
+  When a pinned calibration file changes, the pin stays, the session reads the file as changed, and Apply refuses with a link to reassign it; nothing switches by itself.
+  Evidence: D-W113 (owner's answers of 2026-10-15/16) in PR #1804, CAL-FR-08, LIB-FR-23, VSEL-FR-14, VSEL-AC-35, CAL-AC-29 · by: SpecF4Answers (intent-gated)

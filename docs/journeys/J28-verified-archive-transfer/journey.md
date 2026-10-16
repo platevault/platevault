@@ -1,13 +1,13 @@
 ---
 id: J28
 title: Archive Project sessions with verified transfer from Wrap up and Sessions
-version: 6
+version: 7
 status: draft
 last_reviewed: 2026-10-03
 actors: [primary-user]
 surfaces: [archive, wrap-up, projects, sessions, view-review, locations, activity, status-bar, issues]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 066-view-selection, 069-application-handoff, 071-storage-custody, D02, D06, D09, D11, D19, D-W3, D-W20, D-W26, D-W46, D-W77, D-W80, D-W81, P-WRAP1, P-ARC1, P-STO2, P-SB3, specs/063-clean-rebuild-contract/decisions.md, specs/064-library-inventory/spec.md, specs/065-project-goals/spec.md, specs/066-view-selection/spec.md, specs/069-application-handoff/spec.md, specs/071-storage-custody/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-j-verified-archive-transfer, HARNESS-V5-IA.md#S9, HARNESS-V5-IA.md#S12, HARNESS-V5-IA.md#S16, HARNESS-V5-IA.md#S17, HARNESS-V5-FEEDBACK-R1.md#copy-rules, HARNESS-V5-FEEDBACK-R1.md#domain-and-seed, HARNESS-V5-FEEDBACK-R1.md#b-projects, HARNESS-V5-FEEDBACK-R1.md#round-5, HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#input-modes-user-2026-10-10-research-designinput-modes-researchmd, D-W93, D-W94, D-W97, D-W100, PRJ-FR-14, PRJ-FR-25, PRJ-FR-30, PREP-FR-10, STO-FR-06, STO-FR-07, STO-FR-08, STO-FR-13, STO-AC-07, VSEL-FR-09]
+trace: [063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 066-view-selection, 069-application-handoff, 071-storage-custody, D02, D06, D09, D11, D19, D-W3, D-W20, D-W26, D-W46, D-W77, D-W80, D-W81, P-WRAP1, P-ARC1, P-STO2, P-SB3, specs/063-clean-rebuild-contract/decisions.md, specs/064-library-inventory/spec.md, specs/065-project-goals/spec.md, specs/066-view-selection/spec.md, specs/069-application-handoff/spec.md, specs/071-storage-custody/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-j-verified-archive-transfer, HARNESS-V5-IA.md#S9, HARNESS-V5-IA.md#S12, HARNESS-V5-IA.md#S16, HARNESS-V5-IA.md#S17, HARNESS-V5-FEEDBACK-R1.md#copy-rules, HARNESS-V5-FEEDBACK-R1.md#domain-and-seed, HARNESS-V5-FEEDBACK-R1.md#b-projects, HARNESS-V5-FEEDBACK-R1.md#round-5, HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#input-modes-user-2026-10-10-research-designinput-modes-researchmd, D-W93, D-W94, D-W97, D-W100, PRJ-FR-14, PRJ-FR-25, PRJ-FR-30, PREP-FR-10, STO-FR-06, STO-FR-07, STO-FR-08, STO-FR-13, STO-AC-07, VSEL-FR-09, D-W111]
 ---
 
 ## Goal
@@ -30,6 +30,7 @@ The user archives the sessions of Project `NGC 7000 HOO` from the Archive step o
 - P4: A fault control makes the repoint of one named View symlink fail until it is released: the symlink to the 26 Sep frame F-ref, which is not the P5 frame (fault fixture for S8; G3).
 - P5: For one named 26 Sep frame, a backup of its original bytes and nanosecond mtime and a replacement file of identical size with different bytes, kept outside PlateVault. A fault control pauses that item after destination verification and before source retirement (G5).
 - P6: Before S1, the `4 Oct M 33` session is added under `Astro-T7/Captures/M33/2026-10-04/` and indexed: 16 Ha 300 s `RedCat` lights with Target M 33 and rig `RedCat` Confirmed. M 33 is a subject of no Project, and no Project holds the session. A SHA-256 list of its files is recorded.
+- P7: Closed Project `NGC 7000 first light` holds the 24 Sep session. It was closed with no Archive and kept its Symlinks View, which holds 20 symlinks to 24 Sep frames under `Astro-T7/Captures/`. Its sessions, goals, Close snapshot and Wrap up record are recorded outside PlateVault.
 
 ## Steps
 
@@ -68,9 +69,9 @@ The user archives the sessions of Project `NGC 7000 HOO` from the Archive step o
 ### S4 — Read the reference updates {#S4}
 
 - **Do:** In the Archive step, open the affected View references for the Project's sessions.
-- **Expect:** The step lists each affected View symlink with its current target under `Astro-T7/Captures/` and its proposed target under `Archive/NGC7000`. When a session moves, its View symlinks are repointed. The symlinks to 28 Sep frames are not repointed because that session stays on `Astro-T7`.
-- **Expect (negative):** The step offers no reference-mode choice, and no entry changes kind: no symlink is replaced by a copy.
-- **Trace:** flow J · STO-FR-06 · STO-AC-10 · D-W81 · HARNESS-V5-FEEDBACK-R1.md §Input modes ("Archiving with links": a symlinked entry is repointed when its session moves) · G7
+- **Expect:** The step lists each affected View symlink with its current target under `Astro-T7/Captures/` and its proposed target under `Archive/NGC7000`. When a session moves, its View symlinks are repointed. The symlinks to 28 Sep frames are not repointed because that session stays on `Astro-T7`. The step also lists the 20 symlinks in the View that Closed Project `NGC 7000 first light` kept (P7), with proposed targets under `Archive/NGC7000`.
+- **Expect (negative):** The step offers no reference-mode choice, and no entry changes kind: no symlink is replaced by a copy. The Closed Project's View is not a reason to keep 24 Sep in place.
+- **Trace:** flow J · STO-FR-06 · STO-AC-10, STO-AC-27 · D-W81, D-W111 · HARNESS-V5-FEEDBACK-R1.md §Input modes ("Archiving with links": a symlinked entry is repointed when its session moves) · G7
 
 ### S5 — Review and approve the transfer {#S5}
 
@@ -126,9 +127,9 @@ The user archives the sessions of Project `NGC 7000 HOO` from the Archive step o
 ### S9a — Resolve the drifted item {#S9a}
 
 - **Do:** Restore the P5 frame's original bytes and recorded mtime, review the item's current evidence, and choose **Retry** for it in the transfer's Activity entry.
-- **Expect:** The current source matches its snapshot again, the destination and its references re-verify, and only then is the source retired. With every item settled, 18, 24, 26 and 30 Sep read Archived, and the Project reads Archived.
-- **Expect (negative):** The archived copy still matches P3, and no other item changes phase.
-- **Trace:** flow J · HARNESS-V5-IA.md S9 · STO-FR-07 · STO-AC-14 · D06, D19
+- **Expect:** The current source matches its snapshot again, the destination and its references re-verify, and only then is the source retired. With every item settled, 18, 24, 26 and 30 Sep read Archived, and the Project reads Archived. The 20 symlinks of `NGC 7000 first light`'s kept View point to the 24 Sep frames under `Archive/NGC7000`, and Activity records the repoint for that Project.
+- **Expect (negative):** The archived copy still matches P3, and no other item changes phase. `NGC 7000 first light` stays Closed with the sessions, goals, snapshot and Wrap up record P7 recorded, and it gains no pending change.
+- **Trace:** flow J · HARNESS-V5-IA.md S9 · STO-FR-06, STO-FR-07 · STO-AC-14, STO-AC-27 · D06, D19, D-W111
 
 ### S9b — Open the archive review from Sessions {#S9b}
 
@@ -200,6 +201,7 @@ The user archives the sessions of Project `NGC 7000 HOO` from the Archive step o
 - SC10: 0 of the 56 28 Sep files are copied, moved or retired from S1 through S9a; the session stays on `Astro-T7` because another Project that is not Closed holds it.
 - SC11: Make default moves 0 files, and the archive goes to the Project's chosen `Archive/NGC7000`, with 0 to paths under the Default `Archive/Long-term` (S1a, S5).
 - SC12: Archiving `4 Oct M 33` from Sessions moves exactly 16 files, all to the Default `Archive/Long-term`, retires 0 sources before their destination verifies and changes 0 Projects. Closing its review first moves 0 files (S9b, S9c).
+- SC13: All 20 symlinks of the View that Closed Project `NGC 7000 first light` kept point to `Archive/NGC7000` after S9a, Activity records 1 repoint for it, and its sessions, goals, snapshot and Wrap up record change 0 times (S4, S9a).
 
 ## Known gaps
 
@@ -234,3 +236,6 @@ The user archives the sessions of Project `NGC 7000 HOO` from the Archive step o
   Archive is the last step of Wrap up, and its Proceed is Close project…, which an unmet gate such as an impostor volume disables. The Project reads Closing until the transfer succeeds, then Archived, and stays locked with no Reopen or session restore.
   The Project's single Symlinks View replaces the run views. Archive repoints its symlinks, and Open in {app} re-verifies their targets and is refused while the archive is Offline or Retired.
   Evidence: D-W93 to D-W106 (F4 Project model, owner's answers of 2026-10-14) in PR #1804, 065 PRJ-FR-14, PRJ-FR-25, PRJ-FR-30; 069 PREP-FR-10; 071 STO-FR-06 to STO-FR-08, STO-FR-13, STO-AC-07 · by: SpecF4Writer2, SpecF4Writer3 (intent-gated)
+- **Δ7** 2026-10-16 · S4, S9a · behavior-change
+  Archive repoints the symlinks of a Closed Project's kept View when it moves their originals, records the repoint and changes nothing else in that Project.
+  Evidence: D-W111 (owner's answers of 2026-10-15/16) in PR #1804, FR-011, PRJ-FR-25, STO-FR-06, STO-AC-27 · by: SpecF4Answers (intent-gated)

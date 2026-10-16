@@ -1,13 +1,13 @@
 ---
 id: J25
 title: Add sessions and apply Project View changes
-version: 6
+version: 7
 status: draft
 last_reviewed: 2026-10-03
 actors: [primary-user]
 surfaces: [projects, sessions, indexing, locations, preparation, applications, duplicates, status-bar]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 066-view-selection, 069-application-handoff, 070-results-reuse, 071-storage-custody, D02, D08, D09, D16, D19, D-W34, D-W45, D-W66, specs/063-clean-rebuild-contract/decisions.md, specs/064-library-inventory/spec.md, specs/065-project-goals/spec.md, specs/066-view-selection/spec.md, specs/069-application-handoff/spec.md, specs/070-results-reuse/spec.md, specs/071-storage-custody/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-g-refresh-an-existing-view, HARNESS-V5-IA.md#S5, HARNESS-V5-IA.md#S12, HARNESS-V5-FEEDBACK-R1.md#round-5, P-STO2, P-SB3, HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#round-7, P-PREP3, 068-calibration-inputs, D-W93, D-W94, D-W95, D-W96, D-W98, D-W99, D-W100, D-W101, D-W105, D-W106, specs/068-calibration-inputs/spec.md]
+trace: [063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 066-view-selection, 069-application-handoff, 070-results-reuse, 071-storage-custody, D02, D08, D09, D16, D19, D-W34, D-W45, D-W66, specs/063-clean-rebuild-contract/decisions.md, specs/064-library-inventory/spec.md, specs/065-project-goals/spec.md, specs/066-view-selection/spec.md, specs/069-application-handoff/spec.md, specs/070-results-reuse/spec.md, specs/071-storage-custody/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-g-refresh-an-existing-view, HARNESS-V5-IA.md#S5, HARNESS-V5-IA.md#S12, HARNESS-V5-FEEDBACK-R1.md#round-5, P-STO2, P-SB3, HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#round-7, P-PREP3, 068-calibration-inputs, D-W93, D-W94, D-W95, D-W96, D-W98, D-W99, D-W100, D-W101, D-W105, D-W106, specs/068-calibration-inputs/spec.md, D-W109, D-W110]
 ---
 
 ## Goal
@@ -64,10 +64,10 @@ Done means: the Project shows the addition, group and calibration changes as pen
 
 ### S4 — Inspect pending Project changes {#S4}
 
-- **Do:** Open Sessions and the View step and inspect the pending-change rows.
-- **Expect:** Rows name the added Ha session, the group move and the calibration reassignment and identify the source of each change. The View step shows the pending-change count and **Apply…**.
-- **Expect (negative):** The View remains byte-for-byte as listed in P1 until Apply. The unselected OIII suggestion stays out of the Project.
-- **Trace:** VSEL-FR-12, VSEL-FR-16 · D-W100
+- **Do:** Open Sessions and the View step and inspect the pending-change rows. Try to discard the calibration reassignment row.
+- **Expect:** Rows name the added Ha session, the group move and the calibration reassignment and identify the source of each change. The added session and the group move offer Discard. The calibration reassignment offers no Discard: its row says it came from the session's calibration, links to that session, and offers Remove session from Project. The View step shows the pending-change count and **Apply…**.
+- **Expect (negative):** The View remains byte-for-byte as listed in P1 until Apply. The unselected OIII suggestion stays out of the Project. Trying to discard the reassignment changes neither the session's pinned flats nor the pending changes.
+- **Trace:** VSEL-FR-12, VSEL-FR-16 · VSEL-AC-33 · D-W100, D-W109
 
 ### S5 — Review the Apply sheet {#S5}
 
@@ -111,6 +111,16 @@ Done means: the Project shows the addition, group and calibration changes as pen
 - **Expect (negative):** PlateVault changes neither physical copy, does not substitute the changed copy, and moves no file to Trash.
 - **Trace:** LIB-FR-08 · LIB-AC-15 · D-W96
 
+### S7c — Review `View (previous)/` before the next Apply {#S7c}
+
+- **Do:** On the Sessions step, exclude one frame of the 18 Sep session. Open **Apply…** and read it. For the leftovers in `View (previous)/`, choose keep for the user note and Trash for the changed copy, then confirm Apply.
+- **Expect:**
+  - Before anything else, the sheet lists the two files `View (previous)/` still holds from S7a, the changed copy and the unticked user note, each with keep, move and Trash, and Apply is disabled until both are reviewed. It also lists the `.Info.txt` in the View with its tick box (VSEL-FR-20).
+  - After the review, the changed copy is in the OS Trash and Apply is enabled. Apply swaps in a View without the excluded frame.
+  - The note stays in `View (previous)/`, and no `View (previous 2)/` or other numbered folder exists.
+- **Expect (negative):** No leftover is deleted or moved before the user chooses for it, and Apply does not start while one is unreviewed. The kept note's bytes are unchanged.
+- **Trace:** VSEL-FR-14, VSEL-FR-20 · VSEL-AC-34 · STO-FR-10 · D-W110
+
 ## Success criteria
 
 - SC1: Adding the Ha session changes Project membership once by 10 frames, leaves the OIII session out, and changes the View 0 times before Apply (S1, S4).
@@ -120,6 +130,8 @@ Done means: the Project shows the addition, group and calibration changes as pen
 - SC5: On Windows, Apply waits with the specified message after building, cancel preserves the old View, and releasing the file allows a later complete swap (S7, S7a).
 - SC6: The new View has the added Ha frames exactly once and freshly built from originals; the ticked unplaced file moves only after swap, while the changed copy and unticked note remain in `View (previous)/` and are never deleted (S7a).
 - SC7: The new duplicate copy conflict raises the count from exactly 10 byte-identical duplicate copies to 9, with 0 files moved and no integration change (S1, S7b).
+- SC8: Discard is offered for the Project's own changes and refused for the calibration reassignment, which changes 0 pins (S4).
+- SC9: With 2 leftovers in `View (previous)/`, Apply stays disabled until both are reviewed; afterwards 1 file is in the OS Trash, 1 stays in `View (previous)/`, and 0 numbered `View (previous)` folders exist (S7c).
 
 ## Known gaps
 
@@ -130,3 +142,6 @@ Done means: the Project shows the addition, group and calibration changes as pen
 - **Δ6** 2026-10-15 · S1, S2, S2a, S2b, S3, S4, S5, S5a, S6, S7, +S7a, +S7b · behavior-change
   New sessions are suggestions on the Project, and additions, group moves and calibration reassignments stay pending until Apply. The Apply sheet names exact changes, shows the rebuilt folder tree and preserves files PlateVault did not place or copies that differ from its recorded contents.
   Evidence: D-W93 to D-W106 (F4 Project model, owner's answers of 2026-10-14) in PR #1804, VSEL-FR-12 to VSEL-FR-21, PREP-FR-06, PREP-FR-08, PREP-FR-16 to PREP-FR-19, STO-FR-10 · by: SpecF4Writer2 (intent-gated)
+- **Δ7** 2026-10-16 · S4, +S7c · behavior-change
+  A Project discards only its own pending edits; a calibration reassignment is fixed on the session or by removing it. The next Apply waits until the user reviews each file `View (previous)/` still holds: keep, move or Trash.
+  Evidence: D-W109 and D-W110 (owner's answers of 2026-10-15/16) in PR #1804, VSEL-FR-12, VSEL-FR-14, VSEL-AC-33, VSEL-AC-34, STO-FR-10 · by: SpecF4Answers (intent-gated)
