@@ -14,6 +14,7 @@
 //! directory or symlink that appears at the destination after validation is
 //! kept as it is, however late it appears.
 
+use std::fmt;
 use std::fs::File;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -104,6 +105,39 @@ pub fn validate_export_destination(dest: &Path) -> Result<ExportDestination, Des
 pub enum ExportWriteError {
     Rejected(DestinationRejected),
     Io(io::Error),
+    /// The copy fallback failed after it claimed the destination name, and the
+    /// export's own unfinished file is still there. It is never removed by
+    /// name, because another process can put its own entry at that name, so a
+    /// retry to that name is refused until the user deletes it. `emptied`
+    /// says whether it was truncated and synced; otherwise it holds a partial
+    /// copy.
+    LeftUnfinished {
+        path: PathBuf,
+        source: io::Error,
+        emptied: bool,
+    },
+}
+
+impl fmt::Display for ExportWriteError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Rejected(rejected) => f.write_str(rejected.message()),
+            Self::Io(e) => e.fmt(f),
+            Self::LeftUnfinished { path, source, emptied } => {
+                let file = if *emptied { "an empty file" } else { "a partly written file" };
+                write!(f, "the export failed ({source}) and {file} remains at {}", path.display())
+            }
+        }
+    }
+}
+
+impl std::error::Error for ExportWriteError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Rejected(_) => None,
+            Self::Io(e) | Self::LeftUnfinished { source: e, .. } => Some(e),
+        }
+    }
 }
 
 impl From<DestinationRejected> for ExportWriteError {
@@ -140,10 +174,10 @@ impl ExportDestination {
     /// the destination claimed with `create_new` and the bytes copied in:
     /// still never a replacement, but the copy is visible while it is written.
     /// If the process dies during that copy, a truncated file remains at the
-    /// destination name; if the copy fails, the export's own file stays there
-    /// emptied, because removing it by name could remove an entry another
-    /// process put there. Either way a retry to that name is refused as
-    /// existing.
+    /// destination name; if the copy fails, the export's own file stays there,
+    /// emptied where truncating it succeeds, because removing it by name could
+    /// remove an entry another process put there. Either way a retry to that
+    /// name is refused as existing.
     ///
     /// The temporary file is removed on every path, a panic in `write`
     /// included.
@@ -151,8 +185,11 @@ impl ExportDestination {
     /// # Errors
     /// Returns [`ExportWriteError::Rejected`] with
     /// [`DestinationRejected::AlreadyExists`] when an entry took the
-    /// destination name after validation, and [`ExportWriteError::Io`] for
-    /// filesystem and serialisation failures.
+    /// destination name after validation,
+    /// [`ExportWriteError::LeftUnfinished`] when the copy fallback failed and
+    /// left the export's own file at the destination, and
+    /// [`ExportWriteError::Io`] for other filesystem and serialisation
+    /// failures.
     pub fn write_atomically<W>(&self, write: W) -> Result<u64, ExportWriteError>
     where
         W: FnOnce(&mut File) -> io::Result<()>,
@@ -256,17 +293,22 @@ fn link_or_copy(mut temp: NamedTempFile, final_path: &Path) -> Result<(), Export
 /// can see the copy while it is written. If the process dies during the copy,
 /// a truncated file remains at the destination name.
 ///
-/// A copy that fails part-way is emptied through its own handle and left at
-/// the name. Removing it would go by name, and between any check of the name
-/// and the removal another process can put its own entry there.
-/// `before_cleanup` runs right before that cleanup; tests race it through it.
+/// A copy that fails part-way is emptied and synced through its own handle and
+/// left at the name, reported as [`ExportWriteError::LeftUnfinished`] so the
+/// user learns that a file remains there and where. Removing it would go by
+/// name, and between any check of the name and the removal another process
+/// can put its own entry there. When the name no longer holds the export's
+/// file at that point, the failure is a plain [`ExportWriteError::Io`]: the
+/// entry there is someone else's, and the error must not send the user to
+/// delete it. That check only shapes the report, never an action on the name.
+/// `before_cleanup` runs right before the cleanup; tests race it through it.
 #[cfg(unix)]
-fn copy_into_new(
-    temp: &mut File,
+fn copy_into_new<R: io::Read + io::Seek>(
+    temp: &mut R,
     final_path: &Path,
     before_cleanup: impl FnOnce(&Path),
 ) -> Result<(), ExportWriteError> {
-    use std::io::{Seek, SeekFrom};
+    use std::io::SeekFrom;
 
     let mut out = File::options()
         .write(true)
@@ -277,12 +319,27 @@ fn copy_into_new(
         .seek(SeekFrom::Start(0))
         .and_then(|_| io::copy(temp, &mut out))
         .and_then(|_| out.sync_all());
-    if let Err(e) = copied {
-        before_cleanup(final_path);
-        let _ = out.set_len(0);
-        return Err(e.into());
+    let Err(source) = copied else {
+        return Ok(());
+    };
+    before_cleanup(final_path);
+    let emptied = out.set_len(0).and_then(|()| out.sync_all()).is_ok();
+    if names(final_path, &out) {
+        Err(ExportWriteError::LeftUnfinished { path: final_path.to_path_buf(), source, emptied })
+    } else {
+        Err(source.into())
     }
-    Ok(())
+}
+
+/// Whether `path` names `file` right now.
+#[cfg(unix)]
+fn names(path: &Path, file: &File) -> bool {
+    use std::os::unix::fs::MetadataExt;
+
+    match (path.symlink_metadata(), file.metadata()) {
+        (Ok(named), Ok(held)) => (named.dev(), named.ino()) == (held.dev(), held.ino()),
+        _ => false,
+    }
 }
 
 #[cfg(test)]
@@ -617,46 +674,82 @@ mod tests {
         assert_eq!(std::fs::read(&taken).expect("read"), b"user data");
     }
 
-    /// A copy that fails after the name is claimed empties the file it created
-    /// and leaves it at the name. A write-only temporary file makes the copy's
-    /// read fail with `EBADF` once `create_new` has succeeded.
+    /// Serves `bytes` once and then fails, like a copy that runs out of space
+    /// part-way through.
+    #[cfg(unix)]
+    struct FailsAfter<'a> {
+        bytes: &'a [u8],
+        served: bool,
+    }
+
+    #[cfg(unix)]
+    impl io::Read for FailsAfter<'_> {
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            if self.served {
+                return Err(io::Error::other("the copy ran out of space"));
+            }
+            let n = self.bytes.len().min(buf.len());
+            buf[..n].copy_from_slice(&self.bytes[..n]);
+            self.served = true;
+            Ok(n)
+        }
+    }
+
+    #[cfg(unix)]
+    impl io::Seek for FailsAfter<'_> {
+        fn seek(&mut self, _: io::SeekFrom) -> io::Result<u64> {
+            Ok(0)
+        }
+    }
+
+    /// A copy that fails after writing part of the export empties the file it
+    /// created, leaves that same file at the name, and says so with its path.
     #[cfg(unix)]
     #[test]
-    fn a_failed_copy_leaves_only_its_own_file_emptied() {
+    fn a_copy_failing_part_way_empties_its_own_file_and_reports_it() {
+        use std::os::unix::fs::MetadataExt;
+
         let (_guard, dir) = tempdir();
-        let temp_path = dir.join("temp");
-        let mut temp = File::options().write(true).create_new(true).open(&temp_path).expect("temp");
-        temp.write_all(b"export").expect("write temp");
         let dest = dir.join("out.json");
+        let mut source = FailsAfter { bytes: b"partial export", served: false };
+        let mut before = None;
 
-        let err = copy_into_new(&mut temp, &dest, |_| {}).expect_err("copy fails");
+        let err = copy_into_new(&mut source, &dest, |final_path| {
+            let claimed = final_path.symlink_metadata().expect("claimed file");
+            before = Some((claimed.ino(), claimed.len()));
+        })
+        .expect_err("copy fails");
 
-        let ebadf = rustix::io::Errno::BADF.raw_os_error();
-        assert!(
-            matches!(&err, ExportWriteError::Io(e) if e.raw_os_error() == Some(ebadf)),
-            "{err:?}"
-        );
-        let left = dest.symlink_metadata().expect("the claimed file stays");
-        assert!(left.is_file() && left.len() == 0, "{left:?}");
-        let mut names: Vec<PathBuf> =
+        let (ino, written) = before.expect("cleanup ran");
+        assert_eq!(written, 14, "the copy wrote part of the export before failing");
+        match &err {
+            ExportWriteError::LeftUnfinished { path, source, emptied } => {
+                assert_eq!(path, &dest);
+                assert_eq!(source.to_string(), "the copy ran out of space");
+                assert!(emptied);
+            }
+            other => panic!("expected LeftUnfinished, got {other:?}"),
+        }
+        assert!(err.to_string().contains("an empty file remains at"), "{err}");
+        let left = dest.symlink_metadata().expect("the export's own file stays");
+        assert_eq!((left.ino(), left.len()), (ino, 0), "the same file, emptied");
+        let names: Vec<PathBuf> =
             std::fs::read_dir(&dir).expect("read dir").map(|e| e.expect("entry").path()).collect();
-        names.sort();
-        assert_eq!(names, [dest, temp_path]);
+        assert_eq!(names, [dest]);
     }
 
     /// An entry another process swaps in under the name just before a failed
-    /// copy's cleanup acts is kept: the cleanup never removes by name.
+    /// copy's cleanup acts is kept, and the error does not point the user at
+    /// it as the export's leftover: the name no longer holds the export's file.
     #[cfg(unix)]
     #[test]
     fn a_failed_copy_keeps_an_entry_swapped_in_just_before_its_cleanup() {
         let (_guard, dir) = tempdir();
-        let temp_path = dir.join("temp");
-        let mut temp = File::options().write(true).create_new(true).open(&temp_path).expect("temp");
-        temp.write_all(b"export").expect("write temp");
         let dest = dir.join("out.json");
         let theirs = dir.join("theirs");
+        let mut source = FailsAfter { bytes: b"partial export", served: false };
 
-        let err = copy_into_new(&mut temp, &dest, |final_path| {
+        let err = copy_into_new(&mut source, &dest, |final_path| {
             std::fs::write(&theirs, b"another process").expect("seed");
             std::fs::rename(&theirs, final_path).expect("swap another inode in");
         })

@@ -232,6 +232,8 @@
   "err_dev_mode_disabled": "Este recurso de desenvolvedor está desativado.",
   "err_equipment_duplicate": "Este equipamento já está na sua biblioteca.",
   "err_equipment_not_found": "Esse equipamento não pôde ser encontrado.",
+  "err_export_unfinished_file": "Um arquivo de exportação incompleto ficou no local escolhido. Exclua-o antes de exportar novamente.",
+  "err_export_unfinished_file_at": "Um arquivo de exportação incompleto ficou em {path}. Exclua-o antes de exportar novamente.",
   "err_file_not_found": "Esse arquivo não pôde ser encontrado.",
   "err_filesystem_destination_exists": "Já existe algo no destino.",
   "err_filters_invalid": "Esses filtros de arquivo não são válidos.",

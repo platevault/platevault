@@ -44,6 +44,10 @@ pub enum LogError {
     Export { code: LogExportErrorCode, message: String },
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
+    /// The export failed and left its own unfinished file at the destination
+    /// (`ExportWriteError::LeftUnfinished`); the message names the path.
+    #[error("{0}")]
+    UnfinishedExport(String),
 }
 
 impl LogError {
@@ -59,6 +63,7 @@ impl LogError {
             Self::Database(_) => "database.error",
             Self::Serialise(_) => "serialise.error",
             Self::Io(_) => "io.error",
+            Self::UnfinishedExport(_) => "export.unfinished_file",
         }
     }
 }
@@ -84,6 +89,9 @@ impl From<LogError> for ContractError {
             }
             LogError::Io(e) => {
                 Self::new(ErrorCode::IoError, e.to_string(), ErrorSeverity::Fatal, false)
+            }
+            LogError::UnfinishedExport(message) => {
+                Self::new(ErrorCode::ExportUnfinishedFile, message, ErrorSeverity::Blocking, false)
             }
         }
     }
@@ -272,6 +280,8 @@ pub struct ExportOptions {
 ///
 /// # Errors
 /// Returns `LogError::Export` for filesystem / format problems.
+/// Returns `LogError::UnfinishedExport` when the write failed and left its own
+/// unfinished file at the destination.
 /// Returns `LogError::Database` on query failure.
 pub async fn export_entries(
     pool: &SqlitePool,
@@ -321,6 +331,9 @@ pub async fn export_entries(
                 message: format!("{}: {}", rejected.message(), dest.display()),
             },
             ExportWriteError::Io(e) => LogError::Io(e),
+            left @ ExportWriteError::LeftUnfinished { .. } => {
+                LogError::UnfinishedExport(left.to_string())
+            }
         })?;
 
     Ok((validated.path().to_string_lossy().into_owned(), count, bytes))
@@ -685,5 +698,15 @@ mod tests {
 
         assert!(matches!(err, LogError::Export { code: LogExportErrorCode::PathWriteDenied, .. }));
         assert_eq!(std::fs::read(&outside).expect("read"), b"outside");
+    }
+
+    /// The UI shows the leftover file's path and the delete-before-retry
+    /// advice for this code, so it must stay distinct from a plain I/O error.
+    #[test]
+    fn an_unfinished_export_keeps_its_own_contract_code() {
+        let err = ContractError::from(LogError::UnfinishedExport("left at /x".to_owned()));
+
+        assert_eq!(err.code, ErrorCode::ExportUnfinishedFile);
+        assert_eq!(err.message, "left at /x");
     }
 }

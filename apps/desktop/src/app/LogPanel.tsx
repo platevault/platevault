@@ -15,7 +15,7 @@ import { useLogPanel } from './LogPanelContext';
 import { subscribeLog, getLogSnapshot } from '@/data/logStore';
 import { commands } from '@/bindings/index';
 import { unwrap } from '@/api/ipc';
-import { errMessage } from '@/lib/errors';
+import { exportErrMessage } from '@/lib/errors';
 import { useHotkeys } from '@/lib/useHotkeys';
 import { EmptyState } from '@/ui/EmptyState';
 import { observeElementOffsetWithCleanup } from '@/lib/observe-element-offset';
@@ -137,9 +137,9 @@ export function LogPanel() {
 
   const handleExport = useCallback(async () => {
     setExportError(null);
+    let filePath: string | null = null;
     try {
       const requestId = crypto.randomUUID?.() ?? `req-${Date.now()}`;
-      let filePath: string | null = null;
       try {
         const { save: showSaveDialog } = await import(
           '@tauri-apps/plugin-dialog'
@@ -167,7 +167,7 @@ export function LogPanel() {
         ),
       );
     } catch (err) {
-      setExportError(errMessage(err));
+      setExportError(exportErrMessage(err, filePath));
     }
   }, [showDiagnostics]);
 

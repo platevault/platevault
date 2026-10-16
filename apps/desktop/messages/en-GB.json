@@ -232,6 +232,8 @@
   "err_dev_mode_disabled": "This developer feature is turned off.",
   "err_equipment_duplicate": "This equipment is already in your library.",
   "err_equipment_not_found": "That equipment could not be found.",
+  "err_export_unfinished_file": "An incomplete export file remains at the chosen location. Delete it before exporting again.",
+  "err_export_unfinished_file_at": "An incomplete export file remains at {path}. Delete it before exporting again.",
   "err_file_not_found": "That file could not be found.",
   "err_filesystem_destination_exists": "Something already exists at the destination.",
   "err_filters_invalid": "Those file filters aren't valid.",

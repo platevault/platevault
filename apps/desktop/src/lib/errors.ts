@@ -9,6 +9,7 @@
  * "[object Object]" when the caught value is a ContractError.
  */
 import type { ContractError_Serialize as ContractError } from '@/bindings/index';
+import { m } from '@/lib/i18n';
 import { ERROR_MESSAGES, errorFallback } from './error-messages';
 
 export type { ContractError };
@@ -64,6 +65,26 @@ export function errMessage(err: unknown): string {
     return err.message;
   }
   return String(err);
+}
+
+/**
+ * `errMessage` for an export to `filePath`, the destination the user chose.
+ * An export that failed after claiming that destination leaves its own
+ * incomplete file there, and a retry to the same name is refused until the user
+ * deletes it, so that message names the path.
+ */
+export function exportErrMessage(
+  err: unknown,
+  filePath: string | null,
+): string {
+  if (
+    filePath !== null &&
+    isContractError(err) &&
+    err.code === 'export.unfinished_file'
+  ) {
+    return m.err_export_unfinished_file_at({ path: filePath });
+  }
+  return errMessage(err);
 }
 
 /**

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { describe, it, expect, vi } from 'vitest';
-import { errMessage, isContractError } from './errors';
+import { errMessage, exportErrMessage, isContractError } from './errors';
 import { errorFallback } from './error-messages';
 import { m } from '@/lib/i18n';
 
@@ -41,6 +41,29 @@ describe('errMessage (spec 046 US2 — single translation point)', () => {
   it('stringifies any other thrown value (never "[object Object]")', () => {
     expect(errMessage('plain string')).toBe('plain string');
     expect(errMessage(42)).toBe('42');
+  });
+});
+
+describe('exportErrMessage', () => {
+  const unfinished = { code: 'export.unfinished_file', message: 'raw' };
+
+  it('names the chosen path for an export that left its own incomplete file', () => {
+    const msg = exportErrMessage(unfinished, '/Volumes/STICK/log.json');
+    expect(msg).toBe(
+      m.err_export_unfinished_file_at({ path: '/Volumes/STICK/log.json' }),
+    );
+    expect(msg).toContain('/Volumes/STICK/log.json');
+  });
+
+  it('falls back to the path-free wording when no path was chosen', () => {
+    expect(exportErrMessage(unfinished, null)).toBe(
+      m.err_export_unfinished_file(),
+    );
+  });
+
+  it('resolves every other error exactly as errMessage does', () => {
+    const denied = { code: 'path.write.denied', message: 'raw' };
+    expect(exportErrMessage(denied, '/tmp/out.json')).toBe(errMessage(denied));
   });
 });
 
