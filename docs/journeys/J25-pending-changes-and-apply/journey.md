@@ -7,7 +7,7 @@ last_reviewed: 2026-10-03
 actors: [primary-user]
 surfaces: [projects, sessions, indexing, locations, preparation, applications, duplicates, status-bar]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 066-view-selection, 069-application-handoff, 070-results-reuse, 071-storage-custody, D02, D08, D09, D16, D19, D-W34, D-W45, D-W66, specs/063-clean-rebuild-contract/decisions.md, specs/064-library-inventory/spec.md, specs/065-project-goals/spec.md, specs/066-view-selection/spec.md, specs/069-application-handoff/spec.md, specs/070-results-reuse/spec.md, specs/071-storage-custody/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-g-refresh-an-existing-view, HARNESS-V5-IA.md#S5, HARNESS-V5-IA.md#S12, HARNESS-V5-FEEDBACK-R1.md#round-5, P-STO2, P-SB3, HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#round-7, P-PREP3, 068-calibration-inputs, D-W93, D-W94, D-W95, D-W96, D-W98, D-W99, D-W100, D-W101, D-W105, D-W106, specs/068-calibration-inputs/spec.md, D-W109, D-W110]
+trace: [063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 066-view-selection, 069-application-handoff, 070-results-reuse, 071-storage-custody, D02, D08, D09, D16, D19, D-W96, D-W100, specs/063-clean-rebuild-contract/decisions.md, specs/064-library-inventory/spec.md, specs/065-project-goals/spec.md, specs/066-view-selection/spec.md, specs/069-application-handoff/spec.md, specs/070-results-reuse/spec.md, specs/071-storage-custody/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-g-refresh-an-existing-view, HARNESS-V5-IA.md#S5, HARNESS-V5-IA.md#S12, HARNESS-V5-FEEDBACK-R1.md#round-5, P-STO2, P-SB3, HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#round-7, P-PREP3, 068-calibration-inputs, D-W93, D-W94, D-W95, D-W98, D-W99, D-W101, D-W105, D-W106, specs/068-calibration-inputs/spec.md, D-W109, D-W110]
 ---
 
 ## Goal
@@ -19,7 +19,7 @@ Done means: the Project shows the addition, group and calibration changes as pen
 ## Preconditions
 
 - P1: J24 completed: Project `NGC 7000 HOO` has 208 light frames in `Work/Processing/NGC 7000 HOO/View/`, in Copies mode, with its 28 Sep session in group `RedCat · 2`. A listing of the View entries is recorded outside PlateVault.
-- P2: Two new RedCat sessions with confirmed Target NGC 7000, reviewed frames and settled, pinned calibration are available to index: one Ha session and one OIII session, each with 10 frames, captured after 30 Sep.
+- P2: Two new RedCat sessions with confirmed Target NGC 7000, reviewed frames and settled, pinned calibration are available to index: one Ha session and one OIII session, each with 10 lights of 300 s, captured after 30 Sep.
 - P3: Every frame in the new Ha session also has a byte-identical copy in registered location `Spare`; one named `Spare` copy has a same-size variant with different bytes kept outside PlateVault.
 - P4: The Project holds the 18 Sep session, whose original is on the `Astro-T7` location and can be made offline and restored.
 - P5: One named copy in the current View can be changed in place and restored from a backup. The View also contains a DSS `.Info.txt` file and a user note that PlateVault did not place.
@@ -135,12 +135,29 @@ Done means: the Project shows the addition, group and calibration changes as pen
 
 ## Known gaps
 
-- G1: The rebuilt application has not been validated against the Project-level Apply flow specified by 066, 069 and 071 as amended for D-W93 to D-W106.
-- G2: The Duplicates review and its clean-up are covered by J39/S2 to J39/S6; this journey verifies the duplicate warning and conflict state only.
+- G1: Not validated: the rebuilt application has not been validated against the Project-level Apply flow specified by 066, 069 and 071 as amended by D-W93 to D-W116.
+- G2: (dissolved 2026-10-15): D-W100 removes preparation revisions and the run's shared Results folder, so no revision 3 is prepared. Each Apply builds a complete View from the originals, and S7a and S7c cover the replaced View's entries (STO-FR-10).
+- G3: Out of scope for this journey: path repair after an archive transfer is distinct from refresh and is exercised in J28/S8.
+- G4: Out of scope for this journey: adding a session while an external application reads the View (VSEL-AC-12) is not exercised, and no frame is an explicit inclusion, so the D09 pinning of manual inclusions is not observed. Blocks readiness until covered by a step or a journey.
+- G5: Covered elsewhere: the Duplicates review and its clean-up (Keep this copy, Move the others to the OS Trash) opened from the S1 warning are exercised by J39 (S2 to S6); this journey only reads the warning.
+- G6: Rests on provisional F4 items, pending the owner's confirmation in PR #1804: D-W110's rule that a kept file stays in `View (previous)/` and a later Apply asks only about files not yet reviewed (S7c, SC9), D-W96's matching rule and its "captured" count (S1), and D-W95's "re-add View in your tool" note (S5). If the owner changes one, the steps that cite it change.
 
 ## Delta log
+- **Δ2** 2026-10-06 · S1, S3, S4, S5, +S2a, +S2b, +S5a · behavior-change
+  The run offers "Add N new sessions" for new candidates. A Complete run asks for Reopen first, and Reopen returns it to the stage it was in. A member whose Target is re-confirmed stays and is flagged "no longer matches subject" with an offer to remove it. Saving adds a membership revision that feeds "in project".
+  Evidence: specs/066-view-selection VSEL-FR-12, VSEL-FR-17, VSEL-AC-06, VSEL-AC-20, VSEL-AC-24. specs/070-results-reuse RES-FR-07, RES-AC-08. Workflow decisions D-W34, D-W45, D-W66. 065 PRJ-FR-04, PRJ-FR-21, 071 STO-FR-10 and 069 PREP-FR-07. Rig name `RedCat` from J15 · by: journey-scribe (intent-gated)
+- **Δ3** 2026-10-12 · S1, S2a, S2b, S3, S4, S5, S5a, S7 · behavior-change
+  The refresh lives in Select: "2 new candidates" with Add 2 or per-row Add to run, and "No longer matches" with Remove, in place of a separate refresh diff with accept/decline. A Complete run's Select is read-only until Reopen in the header, which returns the run to Prepare.
+  Indexing a byte-identical copy raises an automatic "10 duplicate copies" warning in the status bar, and nothing is moved.
+  Evidence: HARNESS-V5-IA.md §Screens S5 (header Complete / Reopen; Select "refresh flags") and S12 (Confirm rig); HARNESS-V5-FEEDBACK-R1.md §Round 5 "Duplicates are scanned automatically", "Duplicates review has clean-up", P-STO2 and P-SB3; prototype src/features/v5/c-runs/select-step.tsx, run.tsx, model.ts and messages/en-GB.json (apps/prototype/ on ui-harness-v5 @ b5e813a5); user instruction 2026-10-12 · by: JourneysV5.U3Runs (intent-gated)
+- **Δ4** 2026-10-12 · S2a, S2b · behavior-change
+  P1 now reads the run as 208 cloned frame entries (Independent copy) instead of hard links. Completing the run in S2b offers Clean up of its prepared copies with the footprint "0 B extra · cloned", which frees no space, and the user leaves the offer. Confirming IC 5070 against NGC 7000 pointing in S2a shows a mismatch warning in the session's Target box.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 6 (user, 2026-10-10) "Confirming a Target the pointing disagrees with" (@ 4f470775); §Input modes (user, 2026-10-10) P-PREP2 "Independent copy", "Footprint is real", "Prepared copies are cleaned up when a run is done" (@ d609ff55) (apps/prototype/design/ on ui-harness-v5); user answers to the PR #1788 journey questions · by: JourneysV5 (lead, intent-gated)
+- **Δ5** 2026-10-12 · S2b · behavior-change
+  P1 reads the run's 208 entries as symlinks (Symlinks run view). Completing the run in S2b offers "Remove run view · links only", ticked, in the Complete confirmation; the user unticks it, so nothing is removed.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 7 (user, 2026-10-12) P-PREP3 (apps/prototype/design/ on ui-harness-v5 @ 12638a7c) · by: JourneysV5.R7Prep3 (intent-gated)
 - **Δ6** 2026-10-15 · S1, S2, S2a, S2b, S3, S4, S5, S5a, S6, S7, +S7a, +S7b · behavior-change
-  New sessions are suggestions on the Project, and additions, group moves and calibration reassignments stay pending until Apply. The Apply sheet names exact changes, shows the rebuilt folder tree and preserves files PlateVault did not place or copies that differ from its recorded contents.
+  New sessions are suggestions on the Project, and additions, group moves and calibration reassignments stay pending until Apply. The Apply sheet names exact changes, shows the rebuilt folder tree and preserves files PlateVault did not place or copies that differ from its recorded contents. Δ2 to Δ5 above stay as the refresh journey's history; G2 is dissolved, G3 to G5 keep their meaning, and G6 is new.
   Evidence: D-W93 to D-W106 (F4 Project model, owner's answers of 2026-10-14) in PR #1804, VSEL-FR-12 to VSEL-FR-21, PREP-FR-06, PREP-FR-08, PREP-FR-16 to PREP-FR-19, STO-FR-10 · by: SpecF4Writer2 (intent-gated)
 - **Δ7** 2026-10-16 · S4, +S7c · behavior-change
   A Project discards only its own pending edits; a calibration reassignment is fixed on the session or by removing it. The next Apply waits until the user reviews each file `View (previous)/` still holds: keep, move or Trash.

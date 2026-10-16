@@ -45,13 +45,11 @@ The user sets how imported files are named, which goals a new Project starts wit
   - Master darks `masters/darks/{exposure}/`
   - Master bias `masters/bias/`
 - **Trace:** STO-IMP-FR-07 · D-W84 · D-W93
-- **Trace:** STO-IMP-FR-07 · D-W84 · D-W93
 
-### S2 — Read the chip editor and its preview {#S2}
+### S2 — Read the template field and its preview {#S2}
 
 - **Do:** Read the Lights editor.
 - **Expect:** A plain text field edits the Lights template, with a live preview beside it and a table of nine tokens: `{target}`, `{filter}`, `{date}`, `{frame_type}`, `{camera}`, `{exposure}`, `{gain}`, `{binning}` and `{set_temp}`. The table shows each token's rendering when its value is available and when it is not, and lets the user leave a token out when unavailable. The preview resolves a sample 18 Sep Ha session of NGC 7000 to `NGC 7000/Ha/2026-09-18/light/`.
-- **Trace:** STO-IMP-FR-07 · D-W84
 - **Trace:** STO-IMP-FR-07 · STO-IMP-AC-08 · D-W84
 
 ### S3 — Edit and save the Lights template {#S3}
@@ -64,7 +62,7 @@ The user sets how imported files are named, which goals a new Project starts wit
 ### S4 — Try an invalid template {#S4}
 
 - **Do:** In the As text field, change the template to `{rig}/../{date}/` without saving.
-- **Expect:** Typing `{object}` shows an inline validation error because it is not a listed token, and the template cannot be saved. A template containing `..` also shows an inline error and cannot be saved. Discard restores `{target}/{date}/{filter}/`.
+- **Expect:** Typing `{rig}` shows an inline validation error because it is not a listed token, and the template cannot be saved. The `..` in the same template also shows an inline error and cannot be saved. Discard restores `{target}/{date}/{filter}/`.
 - **Expect (negative):** The saved template does not change and no Activity entry is recorded.
 - **Trace:** templates.ts validateNamingTemplate · settings-naming.tsx (inline refusal)
 
@@ -190,7 +188,7 @@ The user sets how imported files are named, which goals a new Project starts wit
 
 ## Known gaps
 
-- G1: Not validated. The rebuilt application does not implement these Settings sections in this form yet. The expected behavior follows LIB-FR-21, PLAN-EQ-FR-07, PLAN-EQ-FR-08, PRJ-FR-31, PRJ-FR-28, PREP-FR-04, PREP-FR-15, STO-IMP-FR-07 and D-W84 to D-W106.
+- G1: Not validated. The rebuilt application does not implement these Settings sections in this form yet. The expected behavior follows LIB-FR-21, PLAN-EQ-FR-07, PLAN-EQ-FR-08, PRJ-FR-31, PRJ-FR-28, PREP-FR-04, PREP-FR-15, STO-IMP-FR-07 and D-W84 to D-W116, including the D-W114 defaults that S16b reads.
 - G2: Unresolved implementation qualification: P1 needs a seeded catalog (J32's fixture world plus P3's three Archive locations and the Project's Wrap up destination). No fixture builder exists. Blocks readiness.
 - G3: (dissolved 2026-10-12): answered by Round 6 "Disk use per location"; S13 now asserts each row's catalogued bytes plus its volume's free space, with the `Cold-1` figures of P7 and an uncatalogued file that must not be counted.
 - G4: Out of scope:
@@ -209,8 +207,8 @@ The user sets how imported files are named, which goals a new Project starts wit
   The Import preview prefills no Target for Card-2's no-pointing session (OBJECT is a hint only); the destination resolves once the user picks NGC 7000.
   Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 6 (user, 2026-10-10) "Disk use per location", "P-IMP2: confirm Targets in the Import preview" (apps/prototype/design/ on ui-harness-v5 @ 4f470775); user answers to the PR #1788 journey questions · by: JourneysV5.R6G (intent-gated)
 - **Δ3** 2026-10-12 · +S16a · behavior-change
-  Settings › Applications holds the Default Project input mode (Symlinks or Copies) and, on Windows, a Developer Mode check with Open Windows settings and Check again.
-  Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 7 (user, 2026-10-12) P-PREP3 (apps/prototype/design/ on ui-harness-v5 @ 12638a7c); D-W98 and PREP-FR-04, PREP-FR-15 · by: JourneysV5.R7Prep3 (intent-gated)
+  Settings › Applications holds the Default run view (Symlinks or Copies) and, on Windows, a Windows Developer Mode check with Open Windows settings and Check again.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 7 (user, 2026-10-12) P-PREP3 (apps/prototype/design/ on ui-harness-v5 @ 12638a7c); Settings placement as the U9 prototype slice builds it (R7U9Views, 2026-10-12) · by: JourneysV5.R7Prep3 (intent-gated)
 - **Δ4** 2026-10-15 · S1, S2, S3, S4, S5, S6, S13, S16a, +S16b · behavior-change
   Naming uses plain text templates and a token table; the Project input mode replaces the run view. Global Settings cover Project framing and GROUP/PANEL folder keywords.
   Evidence: D-W84 to D-W106, STO-IMP-FR-07, PRJ-FR-31, PRJ-FR-28 and PREP-FR-04 · by: SpecF4Writer2 (intent-gated)

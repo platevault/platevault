@@ -7,7 +7,7 @@ last_reviewed: 2026-10-12
 actors: [primary-user]
 surfaces: [projects, wrap-up, sessions, targets, frame-review, status-bar, activity]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#copy-rules, HARNESS-V5-FEEDBACK-R1.md#round-5, HARNESS-V5-FEEDBACK-R1.md#round-7-user-2026-10-12-run-views-research-designrun-views-optionsmd, HARNESS-V5-FEEDBACK-R1.md#round-8-user-2026-10-12, P-SB3, P-PREP3, P-TRASH2, D19, D-W42, D-W43, D-W52, D-W54, D-W57, specs/063-clean-rebuild-contract/workflow-decisions.md, specs/064-library-inventory/spec.md, specs/065-project-goals/spec.md, specs/071-storage-custody/spec.md, apps/prototype/messages/en-GB.json, J22, J24, J32, J34, J39, 063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 066-view-selection, 071-storage-custody, D-W93, D-W94, D-W97, D-W100, specs/066-view-selection/spec.md]
+trace: [HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#copy-rules, HARNESS-V5-FEEDBACK-R1.md#round-5, HARNESS-V5-FEEDBACK-R1.md#round-7-user-2026-10-12-run-views-research-designrun-views-optionsmd, HARNESS-V5-FEEDBACK-R1.md#round-8-user-2026-10-12, P-SB3, P-PREP3, P-TRASH2, D19, D-W79, D-W43, D-W52, D-W78, D-W57, specs/063-clean-rebuild-contract/workflow-decisions.md, specs/064-library-inventory/spec.md, specs/065-project-goals/spec.md, specs/071-storage-custody/spec.md, apps/prototype/messages/en-GB.json, J22, J24, J32, J34, J39, 063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 066-view-selection, 071-storage-custody, D-W93, D-W94, D-W97, D-W100, specs/066-view-selection/spec.md]
 ---
 
 ## Goal
@@ -20,7 +20,8 @@ The user moves library-Unusable frames belonging to Project `NGC 7000 HOO` to th
   - two from 18 Sep;
   - five from 30 Sep, including F-drift and F-dup;
   - F-res, F-prep and F-ab from 28 Sep;
-  - MX-1 and MX-2 from `4 Oct M 33`.
+  - MX-1 and MX-2 from `4 Oct M 33`;
+  - C-x from `12 Sep`, a session the Project also holds (P4).
 - P2: `Astro-T7/Captures/M33/2026-10-04/` holds the indexed `4 Oct M 33` session: 16 Ha 300 s `RedCat` lights with confirmed Target M 33, confirmed rig and settled calibration. The session belongs to `NGC 7000 HOO`, which also names M 33 as a subject. MX-1 and MX-2 are Unusable; the other 14 frames are Usable.
 - P3: Besides the J34/P11 files, `Backup/Captures/M33/2026-10-04/` holds a byte copy of MX-1, indexed with `Backup/Captures`. `Backup` has an OS Trash.
 - P4: While `Cold-1` was online, one 12 Sep frame, C-x, was marked Unusable in the library. `Cold-1` is offline again, as in J19/P3, so `Cold-1 captures` reads Offline.
@@ -75,10 +76,20 @@ The user moves library-Unusable frames belonging to Project `NGC 7000 HOO` to th
 
 ## Known gaps
 
-- G1: The rebuilt application has not been validated. The behavior in this journey follows the current 064, 065 and 071 specs and the F4 decisions; no implementation has been validated against them.
-- G2: An unreadable copy, stale Trash review, OS removal that deletes immediately and ChangedContent frame are not exercised here.
+- G1: Not validated: the rebuilt application has not been validated. The behavior in this journey follows the current 064, 065 and 071 specs and D-W93 to D-W116; no implementation has been validated against them.
+- G2: (dissolved 2026-10-15): J44 now trashes Unusable frames through the Project's Wrap up, the route STO-FR-03, STO-FR-14, PRJ-FR-15 and LIB-FR-18 name, so the contract and the journey agree.
+- G3: Out of scope for this journey: an unreadable copy, a stale review, a location whose OS removal deletes immediately (STO-FR-15) and a ChangedContent frame (LIB-FR-09) are not exercised in Wrap up's Trash step. Blocks readiness until covered by a step or a journey.
+- G4: (dissolved 2026-10-15): D-W93 puts Result lineage out of scope, so F-res is eligible without tool-recorded lineage (S1, J34/G4).
+- G5: (dissolved 2026-10-12): answered by Round 8 P-TRASH2. S1 refuses F-prep while the view of `Ha deep` links it, S2 counts and moves the 4 links of the kept views of `NGC7000-HOO-Siril` and `Ha deep v1` with their frames, and S6 moves F-prep once `Ha deep` is prepared again.
+- G6: (dissolved 2026-10-15): D-W100 builds every View from the originals and keeps no superseded run folder, so the guard reads only the other Project's current View (S1, S6).
 
 ## Delta log
+- **Δ2** 2026-10-12 · S1 · behavior-change
+  P-PREP3: the Complete run `NGC7000-HOO-Siril` holds symlinks, so the offer's size covers every offered frame, the two 18 Sep frames and F-ab included.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 7 (user, 2026-10-12) P-PREP3 (apps/prototype/design/ on ui-harness-v5 @ 12638a7c) · by: JourneysV5.R7Prep3 (intent-gated)
+- **Δ3** 2026-10-12 · S1, S2, +S6 · behavior-change
+  P-TRASH2: F-prep is refused as `Can't trash 1 · linked by Ha deep ▸` while the view of that unfinished run links it, and preparing `Ha deep` again lets it go. The review counts the links of kept views of Complete runs ("Also removes 4 links in kept run views"), and the move takes them with their frames.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 8 (user, 2026-10-12) P-TRASH2 (apps/prototype/design/ on ui-harness-v5) · by: R8JourneysDocs (intent-gated)
 - **Δ4** 2026-10-15 · S1, S2, S3, S4, S5, S6 · behavior-change
   Library-Unusable frames are trashed only through an owning Project's Wrap up. The offer is limited to that Project's sessions and current custody rules; no Result lineage or Project-only rejection governs eligibility.
   Evidence: D-W93 to D-W106 (F4 Project model, owner's answers of 2026-10-14) in PR #1804, PRJ-FR-14 to PRJ-FR-16, LIB-FR-18, VSEL-FR-12, VSEL-FR-15, STO-FR-14, STO-FR-15 · by: SpecF4Writer2 (intent-gated)

@@ -1,6 +1,6 @@
 ---
 id: J18
-title: Get oriented after setup and track first-run progress on Home
+title: Get oriented after setup and make a first import, Project and View
 version: 6
 status: draft
 last_reviewed: 2026-07-19
@@ -72,7 +72,7 @@ first Apply builds the Project's View from the original sessions.
 
 - **Do:** In Settings, use the control that replays the orientation walk (G4).
 - **Expect:** The walk reopens at its first stop, whether it was previously finished or skipped.
-- **Expect (negative):** Replaying the walk does not reset or alter the checklist's tick state. The two are independent.
+- **Expect (negative):** Replaying the walk creates, changes or removes no location, session, Project or Target, and Home's sections read as they did before the replay.
 - **Trace:** product decision 2026-07-18 (spec 056 FR-005) · G4
 
 ### S6 — Read the Home dashboard {#S6}
@@ -85,77 +85,78 @@ first Apply builds the Project's View from the original sessions.
 ### S7 — Read Home's pending and open work {#S7}
 
 - **Do:** Read Pending ingestions, Pending work and Open work on Home.
-- **Expect:** With no indexed data or Project, Pending ingestions offers **Add a Captures location**; Pending work offers **Import captures**; Open work reads **No Projects in progress.** and offers **New Project…**. Each section opens the page that owns its rows.
+- **Expect:** With `Empty/Captures` registered and indexed (S1) and no session or Project, Pending ingestions reads **Everything is imported.**; Pending work reads **Import captures to start sorting them.** and offers **Import…**; Open work reads **No Projects in progress.** and offers **New Project…**. Each section opens the page that owns its rows.
 - **Expect (negative):** Home has no first-run checklist or Project summary line above its sections.
 - **Trace:** PRJ-FR-17, PRJ-FR-19, PRJ-FR-22 · D-W89
 
-### S7a — Turn on Windows Developer Mode from the checklist {#S7a}
+### S7a — Turn on Windows Developer Mode and check it again {#S7a}
 
-- **Do:** On the `desktop-ui` lane, read Home's Status section. On the `desktop-ui-macos` lane, skip this platform-specific check.
-- **Expect:** With no operation running, Status reads **Nothing running.** Windows Developer Mode is checked during setup, in Settings and when Apply is reviewed.
-- **Expect (negative):** Home shows no Developer Mode checklist item or progress count.
-- **Trace:** PRJ-FR-17, PRJ-FR-22 · PREP-FR-15 · D-W89, D-W81
+- **Do:** On the `desktop-ui` lane, read Home's Status section. Open Settings › Applications and read the Windows Developer Mode row. Choose **Open Windows settings**, turn Developer Mode on, return to PlateVault and click **Check again**. On the `desktop-ui-macos` lane, read Home's Status section and Settings › Applications only.
+- **Expect:** With no operation running, Status reads **Nothing running.** On the `desktop-ui` lane, the Developer Mode row reads Off, with **Open Windows settings** and **Check again**, and after **Check again** it reads On. On the `desktop-ui-macos` lane, Settings › Applications shows no Developer Mode row.
+- **Expect (negative):** Home shows no Developer Mode item or progress count. **Open Windows settings** alone does not change the row, and the check creates, links or moves no file.
+- **Trace:** PRJ-FR-17, PRJ-FR-22 · PREP-FR-04, PREP-FR-15 · D-W81, D-W89, D-W98
 
-### S9 — A real Import auto-ticks the first-import item {#S9}
+### S9 — Import real captures and finish their review {#S9}
 
-- **Do:** From the Import navigation entry, choose **Choose folder…**, pick `Untyped/`, read the preview, then close the sheet without importing. Open Import again and choose `Card-1` as the source. Its destination is `Empty/Captures`, the only Captures location. In the preview, confirm NGC 7000 as the incoming session's Target, choosing it there if it is not prefilled. Choose **Copy** and click **Import 30 frames**. When the import finishes, open Home.
+- **Do:** From the Import navigation entry, choose **Choose folder…**, pick `Untyped/`, read the preview, then close the sheet without importing. Open Import again and choose `Card-1` as the source. Its destination is `Empty/Captures`, the only Captures location. In the preview, confirm NGC 7000 as the incoming session's Target, choosing it there if it is not prefilled. For the session's darks, flats and bias, which read not found, choose **No darks**, **No flats** and **No bias**. Choose **Copy** and click **Import 30 frames**. When the import finishes, open the session's intake Review step, choose **Mark rest usable**, confirming it if PlateVault asks, then choose **Finish review**. Open Home.
 - **Expect:** For `Untyped/`, the preview holds both frames, the start button is unavailable, and the sheet reads `Only held files`. No session is created.
-- **Expect:** The Card-1 import's summary reads `30 frames · <size> · 1 session`. One Ready session with confirmed Target NGC 7000 appears in Sessions.
-- **Expect (negative):** Neither the held-only `Untyped/` source nor closing the sheet ticks anything. No Inbox and no later filing step appears. No demo or sample session was created to produce the tick: the only frames are the user's own 30 imported ones.
-- **Trace:** STO-IMP-FR-02, STO-IMP-FR-06 · LIB-FR-16, LIB-FR-20 · D-W11, D-W24 · PRJ-FR-17, PRJ-FR-22
+- **Expect:** The Card-1 preview shows the session's darks, flats and bias as not found, then as No darks, No flats and No bias after the choices. The import's summary reads `30 frames · <size> · 1 session`, and the session lands with its 30 frames Unreviewed. After **Mark rest usable** all 30 frames read Usable, and **Finish review** makes the session Ready. Sessions then lists one Ready session with confirmed Target NGC 7000 and settled calibration, and it is in neither the Needs review nor the Needs calibration filter.
+- **Expect (negative):** Neither the held-only `Untyped/` source nor closing the sheet creates a session or changes Home. No Inbox and no later filing step appears. The session is not Ready before **Finish review**. No demo or sample session is created: the only frames are the user's own 30 imported ones.
+- **Trace:** STO-IMP-FR-02, STO-IMP-FR-06, STO-IMP-AC-11 · LIB-FR-16, LIB-FR-20, LIB-FR-23, LIB-FR-24 · CAL-FR-05 · PIX-FR-18 · D-W11, D-W24, D-W78, D-W105 · PRJ-FR-17, PRJ-FR-22
 
-### S9a — A real Project create auto-ticks its item {#S9a}
+### S9a — Create a real Project {#S9a}
 
 - **Do:** In Home's Open work empty state, choose **New Project…** and create a Project named `First light` with subject NGC 7000 and rig `RedCat`. Open Home.
 - **Expect:** Once `First light` is saved, it appears in Home's Open work with its next step. Its Project page shows Sessions, Calibrate, View, Output and Wrap up.
-- **Expect (negative):** No demo, sample or placeholder Project was created to produce the tick. `First light` is the only Project, with the subject and rig the user entered.
+- **Expect (negative):** No demo, sample or placeholder Project is created. `First light` is the only Project, with the subject and rig the user entered.
 - **Trace:** PRJ-FR-01, PRJ-FR-07, PRJ-FR-17, PRJ-FR-22 · LIB-FR-05 · D-W94, D-W96, D-W98
 
 ### S9b — Apply the first Project View {#S9b}
 
 - **Do:** On the `First light` Project page, add the Card-1 session from Suggestions, inspect its group and calibration in Sessions and Calibrate, then open View and choose **Apply…**. Review the sheet and proceed. Open the Project's Output section.
-- **Expect:** The session is added only after the user selects it. Apply builds `View/` from the original session, swaps it in and reports the Project's first applied View. Output lists Results in `Output/`; it is empty until the user saves or copies a Result there.
+- **Expect:** The Card-1 session is suggested because it is Ready with settled calibration, and it is added only after the user selects it. On the `desktop-ui` lane the Developer Mode check reads On (S7a), so the Symlinks Apply is not refused; on the `desktop-ui-macos` lane no Developer Mode check runs. On both lanes Apply builds `View/` from the original session, swaps it in and reports the Project's first applied View. Output lists Results in `Output/`; it is empty until the user saves or copies a Result there.
 - **Expect (negative):** No file changes before Apply, no original is changed or moved, and no tool writes into `Output/`.
-- **Trace:** PRJ-FR-07, PRJ-FR-08 · VSEL-FR-03, VSEL-FR-12, VSEL-FR-14, VSEL-FR-16 · PREP-FR-06, PREP-FR-07 · RES-FR-01 · D-W94, D-W98, D-W100
+- **Trace:** PRJ-FR-07, PRJ-FR-08 · VSEL-FR-03, VSEL-FR-12, VSEL-FR-14, VSEL-FR-16 · PREP-FR-06, PREP-FR-07, PREP-FR-15 · RES-FR-01 · D-W81, D-W94, D-W96, D-W98, D-W100, D-W105
 
-### S9c — The checklist leaves Home once every item is done {#S9c}
+### S9c — Home keeps its sections across a relaunch {#S9c}
 
 - **Do:** After S9b, open Home. Then quit and relaunch the app, and open Home again.
 - **Expect:** Home still shows the same six sections in the same order. `First light` remains in Open work with its View applied.
 - **Expect (negative):** The orientation walk does not open again (S4). Home shows no Getting started checklist.
 - **Trace:** PRJ-FR-17, PRJ-FR-32 · D-W89, D-W94, D-W100
 
-### S17 — Restore from Settings re-seeds from real state {#S17}
+### S17 — Settings offers no checklist to restore {#S17}
 
 - **Do:** Open Settings and then Home after the restart in S9c.
 - **Expect:** The Project remains in Open work with its View applied. Home's Status, Tonight and calendar sections remain present, and no setup checklist is restored.
 - **Expect (negative):** Returning to Settings or Home creates no demo or sample data and does not replay the walk.
 - **Trace:** PRJ-FR-17, PRJ-FR-32 · D-W89, D-W94
 
-### S18 — The checklist never blocks ordinary workflow {#S18}
+### S18 — Open the first Project from Home's Open work {#S18}
 
-- **Do:** From `First light`'s Project menu, choose **Duplicate…** and name the copy `Second light`.
-- **Expect:** `Second light` is an independent open Project with the same chosen sessions, groups and settings as `First light`; it has no files and no link to the original. Home lists both Projects in Open work.
-- **Expect (negative):** Duplicating the Project copies no files and creates no link or "Duplicated from" note.
+- **Do:** On Home, choose the `First light` row in Open work.
+- **Expect:** The row opens the `First light` Project page. Its Sessions step holds the Card-1 session, and its View step reads applied.
+- **Expect (negative):** Opening the Project from Home adds, removes or changes no session, Project or file, and no step is gated on a checklist.
+- **Trace:** PRJ-FR-17, PRJ-FR-32 · D-W89, D-W94
 
 ## Success criteria
 
 - SC1: Across one fresh install, the orientation walk opens on its own exactly once (S1) and 0 more times across at least one later restart (S4). This is checkable through a persisted one-time-orientation flag and by observing no walk overlay on relaunch.
 - SC2: Both terminal walk outcomes, Finish (S2) and Skip or Escape (S3), satisfy SC1 on their own. The walk does not distinguish "skipped" from "finished" for re-run purposes.
 - SC3: Home shows the six sections in PRJ-FR-17's fixed order and no checklist, tabs, header buttons or summary line (S6, S7, S7a, S9c, S17).
-- SC4: The held-only `Untyped/` source creates 0 sessions; Card-1 creates exactly one Ready session; creating `First light` creates one Project; its first successful Apply builds one View from its selected original sessions (S9, S9a, S9b).
+- SC4: The held-only `Untyped/` source creates 0 sessions; Card-1 creates exactly one session, which is Ready with No darks, No flats and No bias only after **Finish review**; creating `First light` creates one Project; its first successful Apply builds one View from its selected original sessions, on the `desktop-ui` lane after Developer Mode reads On (S7a, S9, S9a, S9b).
 - SC5: Zero demo, sample or seeded-for-display records exist among sessions, Projects, Targets or Results at any point during or after this journey. Every record traces to a real user action taken during the journey.
-- SC6: Once all 4 items are done, Home shows 0 checklists across at least one full relaunch (S9c), until the Settings restore (S17) is used.
-- SC8: A done item never goes back to not done on its own (S9 to S9c). The restore re-seeds all 4 items as done from real catalog state (S17).
-- SC9: Home has no tabs or header buttons, and duplicate creates one independent Project without copying files or blocking ordinary Home navigation (S6, S18).
+- SC9: Home has no tabs or header buttons, and its Open work row opens the `First light` Project page (S6, S18).
 
 ## Known gaps
 
 - G1: Not validated. The rebuilt application does not exist, and the v2 behavior was checked only against the legacy implementation of spec 056. Nothing in this version has been validated.
-- G2: (dissolved 2026-10-12): the one-time orientation walk and its unresolved details remain in S1 to S5 and G4; Home's current layout and omission of a setup checklist are specified by PRJ-FR-17 (S6, S7).
+- G2: (dissolved 2026-10-12): answered by Round 6 "Onboarding: walk plus checklist", which is now the owning decision; the contract text follows in D-W28 order. S1 to S5 now assert a one-time walk after setup that ends on Home's checklist. S6, S7, S9 to S9c and S17 assert a Getting started checklist on Home with exactly the four items setup, first import, first Project and first run, shown until all four are done. The page groups and gates of the spec 056 design are gone. G4 to G6 hold what Round 6 leaves open.
+- G3: (dissolved 2026-10-15): S9b no longer prepares a run or launches Siril. It applies the Project's first View (D-W94, D-W100), so this journey needs no tool profile and no failing executable; J24/S10 covers the launch refusal.
 - G4: Unresolved product question: Round 6 decides only that there is "an orientation walk after setup". No source answers four things. (1) Which pages the stops show, and in what order. (2) Which page setup hands over to. (3) Whether **Index later** and **Set up later** also launch the walk. (4) Where in Settings the replay control lives. S1, S2 and S5 assert only what holds under every answer. Blocks readiness.
-- G5: Unresolved product question: Round 6 does not specify whether importing an existing library folder by indexing in place counts as the first import. S9 covers only a copied Card-1 import. Blocks readiness.
-- G6: (dissolved 2026-10-15): Home has no setup checklist under PRJ-FR-17; S6, S7 and S7a now assert the current dashboard sections and their empty states.
+- G5: (dissolved 2026-10-15): D-W89 leaves the setup checklist off Home, so no setup, import, Project or run outcome ticks an item. S9 to S9b assert the import, Project and Apply outcomes themselves.
+- G6: (dissolved 2026-10-15): Home has no setup checklist under PRJ-FR-17 and D-W89; S6, S7 and S7a now assert the current dashboard sections and their empty states.
+- G7: Rests on provisional F4 items, pending the owner's confirmation in PR #1804: D-W96's matching rule, which makes the Ready Card-1 session a suggestion of `First light` (S9b), and D-W100's rule that the first Apply builds the View with no separate Start processing (S9b). If the owner changes either, S9b changes with it.
 
 ## Delta log
 
@@ -190,16 +191,17 @@ The v1 Known-gaps entry (G1: "no code implements this design yet; first
 validation run pending") is removed — the implementation has landed and the
 steps above were checked against it.
 
-- **Δ3** 2026-10-06 · S1, S2, S5, S7, S9, S9a, S9b, S17, S18 · behavior-change
-  The orientation walk was updated to end at Home. Import became the first-import milestone, Project creation became the next milestone, and a Project View replaced the former tool-workflow milestone. The Home checklist description in this historical entry is superseded by PRJ-FR-17.
-  Evidence: 063 FR-020, 064 LIB-FR-10, LIB-FR-16 and 071 STO-IMP-FR-01 at e4476231; superseded by D-W89, D-W94 and PRJ-FR-17 · by: agent (intent-gated, user instruction)
+- **Δ3** 2026-10-06 · S1, S2, S5, S7, retired old 8, S9, S9a, S9b, S17, S18 · behavior-change
+  The walk starts on Home and visits Home, Import, Sessions and Targets, because the Inbox is gone and Home is the Projects dashboard. The checklist groups follow the same pages. Import replaces the Inbox confirm as the first auto-ticked item, and a 0-imported Import ticks nothing. A Project is created with a subject and rig, and the tool launch runs from a processing run. The restore-source step S10 is retired and its id stays unused; the 0-imported Import in S9 now covers outcome-shape filtering.
+  Evidence: D-W1, D-W3, D-W7, D-W11, D-W24, D-W33, D-W39, 063 FR-020, 064 LIB-FR-10, LIB-FR-16 and 071 STO-IMP-FR-01 at e4476231. Rig name `RedCat` from J15/S3; spec text for these steps unchanged at d45a22ad · by: agent (intent-gated, user instruction)
 
 - **Δ4** 2026-10-12 · S1, S2, S5, S6, S7, S9, S9a, S9b, +S9c, S17, S18 · behavior-change
-  This historical entry described a Getting started checklist on Home. The current Home dashboard has six sections, no header buttons and no setup checklist (PRJ-FR-17). Import confirms its Target in the preview, and a held-only source cannot start. The Project's first View is built with Apply; the page stops in the walk remain open (G4).
-  Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 6 (user, 2026-10-10) "Onboarding: walk plus checklist", "P-IMP2: confirm Targets in the Import preview" (apps/prototype/design/ on ui-harness-v5 @ 4f470775); superseded by D-W89, D-W94, D-W98 and D-W100 · by: JourneysV5.R6H (intent-gated)
-- **Δ5** 2026-10-12 · S1, S7a · behavior-change
-  This historical entry described a Developer Mode item in Home's checklist. Developer Mode is now verified at setup and Apply; Home has no such checklist item (PREP-FR-15, PRJ-FR-17).
-  Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 7 (user, 2026-10-12) P-PREP3 "Windows prerequisite" (apps/prototype/design/ on ui-harness-v5 @ 12638a7c); superseded by D-W81, D-W89 and PREP-FR-15 · by: JourneysV5.R7Prep3 (intent-gated)
-- **Δ6** 2026-10-15 · S1, S2, S6, S7, S7a, S9, S9a, S9b, S9c, S17, S18 · behavior-change
-  The Project is the processing unit: the first Project View is built with Apply, and Results live in Output/. Home now has six sections, no header buttons and no setup checklist; the onboarding journey follows that dashboard.
-  Evidence: D-W93 to D-W106, PRJ-FR-07, PRJ-FR-17, PRJ-FR-22, VSEL-FR-16, PREP-FR-06, RES-FR-01 · by: SpecF4Writer2 (intent-gated)
+  The Getting started checklist moves from the sidebar flyout to Home and holds exactly four items: setup, first import, first Project and first run. It leaves Home once all four are done, and Settings restores it. The walk follows the v5 setup (Welcome, Locations, Index) and ends on Home's checklist. Its page stops are open (G4).
+  Import confirms the Target in its preview, and a held-only source cannot start. The run is auto-named, and ticks change state in place without animation (HIGH-LEVEL-DESIGN.md §7 Motion). Retired old steps 8 (gated item), 11 (manual check and dismiss), 12 and 13 (spotlight), 14 (icon-collapsed sidebar), 15 (flyout collapse) and 16 (remove before done); what replaces them is G5 and G6. G2 is dissolved; G4 to G6 are new.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 6 (user, 2026-10-10) "Onboarding: walk plus checklist", "P-IMP2: confirm Targets in the Import preview", "Rename runs and Projects" (apps/prototype/design/ on ui-harness-v5 @ 4f470775); user answers to the PR #1788 journey questions · by: JourneysV5.R6H (intent-gated)
+- **Δ5** 2026-10-12 · S1, +S7a · behavior-change
+  On Windows, setup's Locations step shows a Windows Developer Mode row (Off/On, Open Windows settings, Check again) that blocks nothing, and while it is off Home's checklist holds a fifth item, "Turn on Windows Developer Mode", which ticks once a check finds it on.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 7 (user, 2026-10-12) P-PREP3 "Windows prerequisite" (apps/prototype/design/ on ui-harness-v5 @ 12638a7c); setup row and checklist item as the U9 prototype slice builds them (R7U9Views, 2026-10-12) · by: JourneysV5.R7Prep3 (intent-gated)
+- **Δ6** 2026-10-15 · S1, S2, S5, S6, S7, S7a, S9, S9a, S9b, S9c, S17, S18 · behavior-change
+  The Project is the processing unit: the first Project View is built with Apply, and Results live in Output/. Home now has six sections, no header buttons and no setup checklist, so nothing ticks: SC6 and SC8 are retired, G3 and G5 are dissolved, and S18 opens the first Project from Open work instead of testing the checklist. S9 finishes the Card-1 session's review and sets No darks, No flats and No bias in the import review, so it is Ready with settled calibration before S9b adds it. On Windows, S7a turns Developer Mode on, so S9b's Symlinks Apply isn't refused.
+  Evidence: D-W78, D-W81, D-W89, D-W93 to D-W106, PRJ-FR-07, PRJ-FR-17, PRJ-FR-22, LIB-FR-23, LIB-FR-24, VSEL-FR-16, PREP-FR-06, PREP-FR-15, RES-FR-01 · by: SpecF4Writer2 (intent-gated)

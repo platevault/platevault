@@ -124,7 +124,7 @@ running, and the notifications history. Done means:
   - After the second eject, the `Cold-1 captures` row shows `Cold-1 captures offline` again with its ×, and ⚠ reads 4.
   - After the final mount, the bar reads `3 of 3 online` and ⚠ reads 3.
 - **Expect (negative):** Dismissing the issue marks no location online. No `12 Sep` frame reads Missing, and no session is removed.
-- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 8 P-ISS1 ("A dismissed issue stays hidden until it changes … a location going offline again brings it back", "its page still shows it") · D-W92 · src/domain/issues.ts location-offline · J39/S5a, J39/S6
+- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 8 P-ISS1 ("A dismissed issue stays hidden until it changes … a location going offline again brings it back", "its page still shows it") · D-W92 · src/domain/issues.ts location-offline
 
 ### S6 — Read the selection count {#S6}
 
@@ -170,9 +170,9 @@ running, and the notifications history. Done means:
 - **Expect:** The left of the bar reads `4 of 4 online`. After the index, a duplicate scan runs on its own. Then:
   - ⚠ reads 4.
   - Sessions, filtered to the affected rows, lists `4 Oct M 33` with the badge `2 copies · 104 MB` (LIB-FR-22).
-  - Following it opens the Duplicates review with 2 groups, M-1 and M-2. Each group has two copies, and the `Astro-T7 captures` copy, in the earlier-registered location, is preselected as the keeper.
+  - Following it opens the Duplicates review with 2 groups, M-1 and M-2. Each group has two copies, one in `Astro-T7 captures` and one in `Spare captures`. The review names no keeper and offers no removal (LIB-FR-22); the Project's Wrap up names the kept copy (J39/S3).
 
-  J39 continues the clean-up from here.
+  J39 continues the clean-up from here, with each duplicates issue on its session row and a row-level Dismiss.
 - **Expect (negative):** Neither the index, the scan nor opening the review moves, trashes or writes a file. Sessions still lists `4 Oct M 33` with the same frame count. The 12 `Card-2` sources, still connected, are not counted: the issue does not read 14 copies, and no group lists a `Card-2` path.
 - **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 5 Storage and duplicates (⚠ issue "N duplicate copies · 2.1 GB" opening the Duplicates review) · HARNESS-V5-FEEDBACK-R1.md §Round 6 "registered library locations only … the copy in the earliest-registered location" · J39
 
@@ -218,6 +218,7 @@ running, and the notifications history. Done means:
 - G3: Unresolved implementation qualification: S8 needs the import interrupted at a known point, and S10 needs a rescan that runs long enough to focus. No pacing or fault fixture exists. Blocks readiness.
 - G4: Out of scope for this journey: failed work (`… failed`, ⛔, from an operation that fails) and an unreadable location (`… unreadable`, ⛔, Fix). Both need fault injection. A failed calibration process belongs to the calibration process journey, and an adopted master that changed belongs to J26. Blocks readiness until covered by a step or a journey.
 - G5: Out of scope for this journey: the bar at narrow widths, when running work overflows into `+N more running`, and in other languages.
+- G6: (dissolved 2026-10-15): D-W92 removes the Issues hub, so there is no hub group to assert. The duplicates issue sits on its session row, and the ⚠ counter opens Sessions filtered to that row (S11).
 
 ## Delta log
 
@@ -232,5 +233,5 @@ running, and the notifications history. Done means:
   No Issues hub and no toolbar Issues button: each issue shows on the row it affects. The ⛔ ⚠ ℹ counters show counts only and open the owning page filtered to the affected rows, or a menu of those pages, with no list of issues. Dismiss and Restore live on the rows, with Show dismissed on the owning page.
   Evidence: owner's answers of 2026-10-14 (Q12, F7), D-W92 and 063 FR-032 in PR #1804 · by: SpecAmendmentsR9 (intent-gated)
 - **Δ5** 2026-10-15 · S1, S2, S3, S4, S5a, S6, S7, S8, S9, S11, S14 · behavior-change
-  Issues now sit on F4 Project, session and Output rows: a failed Apply, a session in Needs calibration and a master offer on the Project's Output step replace run-row examples. The counter arithmetic remains 1 + 3 + 3 = 7 at S1; dismissal counts reflect row-level actions.
-  Evidence: D-W93 to D-W106 in PR #1804, 063 FR-032, 064 LIB-FR-17/LIB-FR-23, 065 PRJ-FR-17/PRJ-FR-18, 068 CAL-FR-06, 070 RES-FR-11 · by: SpecF4Writer2 (intent-gated)
+  Issues now sit on F4 Project, session and Output rows: a failed Apply, a session in Needs calibration and a master offer on the Project's Output step replace run-row examples. The counter arithmetic remains 1 + 3 + 3 = 7 at S1; dismissal counts reflect row-level actions. S11's Duplicates review names no keeper, because the Project's Wrap up names the kept copy (J39/S3), and G6 is dissolved with the Issues hub.
+  Evidence: D-W92, D-W93 to D-W106 in PR #1804, 063 FR-032, 064 LIB-FR-17/LIB-FR-22/LIB-FR-23, 065 PRJ-FR-15/PRJ-FR-17/PRJ-FR-18, 068 CAL-FR-06, 070 RES-FR-11 · by: SpecF4Writer2 (intent-gated)

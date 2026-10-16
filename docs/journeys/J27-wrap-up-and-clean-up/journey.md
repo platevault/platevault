@@ -7,7 +7,7 @@ last_reviewed: 2026-10-03
 actors: [primary-user]
 surfaces: [wrap-up, cleanup, projects, results, activity, status-bar]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 066-view-selection, 069-application-handoff, 070-results-reuse, 071-storage-custody, 065-project-goals, D09, D16, D19, D-W26, D-W43, D-W51, D-W66, D-W70, D-W72, P-WRAP1, P-SB3, P-PREP3, specs/063-clean-rebuild-contract/decisions.md, specs/063-clean-rebuild-contract/workflow-decisions.md, specs/066-view-selection/spec.md, specs/069-application-handoff/spec.md, specs/070-results-reuse/spec.md, specs/071-storage-custody/spec.md, specs/065-project-goals/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-i-completion-and-selectable-cleanup, HARNESS-V5-IA.md#S3, HARNESS-V5-IA.md#S5, HARNESS-V5-IA.md#S8, HARNESS-V5-IA.md#fix-pass, HARNESS-V5-FEEDBACK-R1.md#copy-rules, HARNESS-V5-FEEDBACK-R1.md#domain-and-seed, HARNESS-V5-FEEDBACK-R1.md#b-projects, HARNESS-V5-FEEDBACK-R1.md#c-run-and-run-group, HARNESS-V5-FEEDBACK-R1.md#round-5, HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#round-7-user-2026-10-12-run-views-research-designrun-views-optionsmd, D-W94, D-W97, D-W98, D-W100]
+trace: [063-clean-rebuild-contract, 066-view-selection, 069-application-handoff, 070-results-reuse, 071-storage-custody, 065-project-goals, D09, D16, D19, D-W26, D-W43, D-W98, D-W96, D-W97, D-W94, P-WRAP1, P-SB3, P-PREP3, specs/063-clean-rebuild-contract/decisions.md, specs/063-clean-rebuild-contract/workflow-decisions.md, specs/066-view-selection/spec.md, specs/069-application-handoff/spec.md, specs/070-results-reuse/spec.md, specs/071-storage-custody/spec.md, specs/065-project-goals/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-i-completion-and-selectable-cleanup, HARNESS-V5-IA.md#S3, HARNESS-V5-IA.md#S5, HARNESS-V5-IA.md#S8, HARNESS-V5-IA.md#fix-pass, HARNESS-V5-FEEDBACK-R1.md#copy-rules, HARNESS-V5-FEEDBACK-R1.md#domain-and-seed, HARNESS-V5-FEEDBACK-R1.md#b-projects, HARNESS-V5-FEEDBACK-R1.md#c-run-and-run-group, HARNESS-V5-FEEDBACK-R1.md#round-5, HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#round-7-user-2026-10-12-run-views-research-designrun-views-optionsmd, D-W100]
 ---
 
 ## Goal
@@ -30,14 +30,14 @@ The user wraps up the open Project `NGC 7000 HOO` through Clean up, Trash and Ar
 - P7: The Project's `Processing/` contains 118 tool files and the generated source of an adopted master whose library copy is known. Its `Output/` contains two Results.
 - P8: A frame has byte-identical copies in Captures location A and B; B was registered later. The B copy is a source of a Symlinks View in another open Project.
 - P9: A fault control can hold Apply running on a separate open Project until released.
-- P10: The Project to close holds sessions S1 through S4. Another open Project also holds S2; an online Archive location is available for the selected sessions.
+- P10: The Project to close holds four sessions, `Wrap-1` to `Wrap-4`. Another open Project also holds `Wrap-2`; an online Archive location is available for the selected sessions.
 
 ## Steps
 
 ### S1 — Open Wrap up after clearing pending changes {#S1}
 
-- **Do:** With one group move pending, open Wrap up and read the gate. Choose its link to View, discard the pending change, then open Wrap up again.
-- **Expect:** Before the change is cleared, Wrap up reads "Apply or discard 1 changes first ▸" and leads to View. Once no change or Project operation is pending, Wrap up opens at Clean up and shows the ordered steps Clean up → Trash → Archive.
+- **Do:** With two group moves pending, open Wrap up and read the gate. Choose its link to View, discard both pending changes, then open Wrap up again.
+- **Expect:** Before the changes are cleared, Wrap up reads "Apply or discard 2 changes first ▸" and leads to View. Once no change or Project operation is pending, Wrap up opens at Clean up and shows the ordered steps Clean up → Trash → Archive.
 - **Expect (negative):** Trash and Archive are not available for editing before Clean up is Finished or Skipped.
 - **Trace:** PRJ-FR-14, PRJ-FR-32 · VSEL-FR-12 · D-W80, D-W97
 
@@ -121,15 +121,15 @@ The user wraps up the open Project `NGC 7000 HOO` through Clean up, Trash and Ar
 ### S13 — Review Processing and duplicate-copy offers {#S13}
 
 - **Do:** Review the other groups in Wrap up's Trash step for the Project in P7 and the duplicate-copy fixture in P8.
-- **Expect:** The step offers `Processing/` files and eligible duplicate copies as separate groups. Its file list identifies the kept library copy for a duplicate. `Output/` Results are excluded; the generated source of an adopted master is identified as a duplicate and names the kept library copy.
-- **Expect (negative):** No file in `Output/` or protected candidate-master source is offered, and no duplicate is moved unless the kept copy re-verifies.
-- **Trace:** PRJ-FR-15 · STO-FR-16 · STO-AC-21, STO-AC-23 · RES-FR-06 · D-W74, D-W97, D-W98
+- **Expect:** The step offers `Processing/` files and eligible duplicate copies as separate groups. Its file list identifies the kept library copy for a duplicate. For the P8 frame, the kept copy is the one in location A, the earlier-registered Captures location, and the B copy is listed as not selectable with a "Linked by" reason that names the other open Project, whose Symlinks View links it. `Output/` Results are excluded; the generated source of an adopted master is identified as a duplicate and names the kept library copy.
+- **Expect (negative):** No file in `Output/` or protected candidate-master source is offered, the P8 frame's B copy is not offered for the move, and no duplicate is moved unless the kept copy re-verifies.
+- **Trace:** PRJ-FR-14, PRJ-FR-15 · PRJ-AC-30 · STO-FR-16 · STO-AC-21, STO-AC-23 · RES-FR-06 · D-W74, D-W97, D-W98
 
 ### S14 — Archive sessions and close the Project {#S14}
 
-- **Do:** In the Archive step, review the sessions for `NGC 7000 HOO`, expand the selected rows and confirm each file's from and to paths. Keep S2 unselected because another open Project holds it. Choose **Close project…** and confirm.
-- **Expect:** S2 is not selectable and names the other open Project. The selected sessions show their source and archive paths. After confirmation the Project reads Closing while the transfer runs, then Archived when it succeeds; `Output/` remains in place.
-- **Expect (negative):** No file moves before confirmation. S2 stays at its source path, and files in `Output/` are neither archived nor trashed.
+- **Do:** In the Archive step, review the sessions for `NGC 7000 HOO`, expand the selected rows and confirm each file's from and to paths. Choose **Close project…** and confirm.
+- **Expect:** `Wrap-2` is not selectable and names the other open Project that holds it. The selected sessions show their source and archive paths. After confirmation the Project reads Closing while the transfer runs, then Archived when it succeeds; `Output/` remains in place.
+- **Expect (negative):** No file moves before confirmation. `Wrap-2` stays at its source path, and files in `Output/` are neither archived nor trashed.
 - **Trace:** PRJ-FR-14 · STO-FR-06, STO-FR-07, STO-FR-13 · STO-AC-17 · RES-FR-06 · D-W97, D-W98
 
 ### S14a — Confirm the Closed Project stays locked {#S14a}
@@ -156,13 +156,18 @@ The user wraps up the open Project `NGC 7000 HOO` through Clean up, Trash and Ar
 - SC6: Wrap up is refused while Apply runs and names the operation; a later step cannot proceed before Clean up is Finished or Skipped (S1, S11a).
 - SC7: The rejected-frame offer covers 37 of the 40 Unusable frames and names the 3 held by another open Project as not selectable (S12).
 - SC8: Trash offers `Processing/` files and eligible duplicate copies, identifies each kept copy, and excludes `Output/` (S13).
-- SC9: Archive identifies each file's source and destination, retains S2 while another open Project holds it, and closes the Project only after the selected transfer succeeds (S14).
+- SC9: Archive identifies each file's source and destination, retains `Wrap-2` while another open Project holds it, and closes the Project only after the selected transfer succeeds (S14).
 - SC10: Closed and Archived Projects cannot be reopened; Duplicate… copies Project data but copies 0 files (S14a, S14b).
 
 ## Known gaps
 
-- G1: Not validated: the rebuilt application does not exist. Expected behavior follows specs 063 to 072 and workflow decisions D-W93 to D-W106 in PR #1804; no implementation has been validated against them.
-- G2: Unresolved implementation qualification: the fault control in P9 must hold Apply running so S11a can verify that Wrap up refuses to open during a Project operation. Blocks readiness.
+- G1: Not validated: the rebuilt application does not exist. Expected behavior follows specs 063 to 072 and workflow decisions D-W93 to D-W116 in PR #1804; no implementation has been validated against them.
+- G2: (dissolved 2026-10-12): answered by §Round 7 P-PREP3: there is no file-list mode, so every run's Clean up lists the entries of its run folder.
+- G3: (dissolved 2026-10-15): D-W100 replaces preparation revisions with `View (previous)/`. S2 lists what it still holds in Clean up, and J25/S7c covers its review before the next Apply (STO-FR-10).
+- G5: Unresolved implementation qualification: no fault control yet holds Apply running on a separate open Project (P9), and S11a depends on it. Blocks readiness.
+- G6: (dissolved 2026-10-12): answered by §Round 7 P-PREP3 ("No verification of originals after a run"): no original is re-hashed after a run.
+- G7: (dissolved 2026-10-15): there is no Complete confirmation. Wrap up's Clean up removes the View (S7, S8, S11) under D-W97, and S7 and S8 refuse a copy without verified retained-original proof (STO-FR-04).
+- G8: Rests on provisional F4 items, pending the owner's confirmation in PR #1804: D-W97's Clean up offer of the View with Copies ticked and Symlinks unticked, plus whatever `View (previous)/` still holds (S2, S3, SC2), and its "Apply or discard N changes first" gate copy (S1). If the owner changes one, the steps that cite it change.
 
 ## Delta log
 
@@ -181,5 +186,5 @@ The user wraps up the open Project `NGC 7000 HOO` through Clean up, Trash and Ar
   `NGC7000-HOO-Siril` and `26 Sep symlink check` use the Symlinks run view, and `28 Sep Ha copy check` uses Copies. Complete's confirmation offers **Remove run view** and the run's intermediates, both ticked and both through the OS Trash; S1 and S2 untick them. The last-copy fixture (old P3) and the re-hash of originals are gone.
   Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 7 (user, 2026-10-12) P-PREP3, "No verification of originals after a run", "Intermediates cleanup stays" (apps/prototype/design/ on ui-harness-v5 @ 12638a7c; research RUN-VIEWS-OPTIONS.md) · by: JourneysV5.R7Prep3 (intent-gated)
 - **Δ6** 2026-10-15 · S1, S2, S3, S4, S5, S7, S8, S9, S10, S11, S11a, S12, S13, S14, S14a, S14b · behavior-change
-  Projects now close through Wrap up: Clean up removes the View and surfaces `View (previous)/`, Trash offers rejected frames, `Processing/` files and duplicate copies, and Archive precedes Close project…. `Output/` is kept, and Closed or Archived Projects cannot be reopened.
+  Projects now close through Wrap up: Clean up removes the View and surfaces `View (previous)/`, Trash offers rejected frames, `Processing/` files and duplicate copies, and Archive precedes Close project…. `Output/` is kept, and Closed or Archived Projects cannot be reopened. G2 and G6 stay dissolved, G3 and G7 are dissolved, G5 now covers the Apply hold, and G8 is new. P10's sessions are `Wrap-1` to `Wrap-4`, so their names don't collide with step ids.
   Evidence: D-W93 to D-W106 (F4 Project model, owner's answers of 2026-10-14) in PR #1804, 065 PRJ-FR-14 and PRJ-FR-15, 071 STO-FR-01 to STO-FR-05, STO-FR-10, STO-FR-14 to STO-FR-16 · by: SpecF4Writer2 (intent-gated)

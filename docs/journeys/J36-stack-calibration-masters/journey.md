@@ -183,8 +183,7 @@ Light sessions are later matched to these masters at ingestion (J23). Done means
 - G1: Not validated: the rebuilt application does not exist. Behavior follows the harness v5 design, which the user instructed on 2026-10-12 that journeys describe. Its sources are `HARNESS-V5-IA.md` §Screens S14 and S16 and §Round 2b foundation, and `HARNESS-V5-FEEDBACK-R1.md` §Round 1b P-CAL3, §Domain and seed P-CAL2 and §Round 5 Calibration (apps/prototype/design/ on ui-harness-v5 @ b5e813a5), §Round 6 (@ 4f470775, not yet implemented in the prototype), plus the prototype's calibration process. No implementation has been validated against them.
 - G2: Unresolved implementation qualification: the P5 stand-in does not exist. The design also does not say how PlateVault hands raw frames to a profile (a script, launch arguments or a watched folder), so S3 asserts only the output folder and the running watch. A real PixInsight or Siril stack is not exercised. Blocks readiness.
 - G3: (dissolved 2026-10-12): answered by Round 6 "Dismiss is refused while a run uses the master", now Hide (D-W76); S12 asserts that a master no session uses hides, leaves the master list (6 masters) and returns with Restore (7). Hide and Move to Trash are refused while an open or Closed Project uses the master through its sessions (CAL-FR-17, provisional); no Project exists in this journey, so no step exercises that refusal.
-- G4: Out of scope for this journey, and blocks readiness until covered by a step or a journey:
-  - dark flats;
+- G4: Out of scope for this journey, and blocks readiness until covered by a step or a journey (dark flats are not on this list, because PlateVault never matches, suggests or assigns them):
   - Import routing raw calibration frames into a process awaiting Stack (J31);
   - Import failures for offline storage, `Copy did not verify` and `Write permission removed`;
   - a Raws failure that keeps refused frames;

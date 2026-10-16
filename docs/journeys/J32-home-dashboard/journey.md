@@ -7,7 +7,7 @@ last_reviewed: 2026-10-06
 actors: [primary-user]
 surfaces: [home, projects, sessions, frame-review, targets, planning, view-review, wrap-up, locations, indexing, duplicates, activity]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 067-frame-review, 072-observing-plans, D-W14, D-W27, D-W33, D-W35, D-W36, D-W37, D-W39, D-W40, D-W48, D-W59, D-W60, D-W63, D-W66, specs/063-clean-rebuild-contract/spec.md, specs/064-library-inventory/spec.md, specs/065-project-goals/spec.md, specs/067-frame-review/spec.md, specs/072-observing-plans/spec.md, HARNESS-V5-IA.md#S1, HARNESS-V5-IA.md#S3, HARNESS-V5-IA.md#S9, HARNESS-V5-IA.md#S10, HARNESS-V5-FEEDBACK-R1.md#round-5, HARNESS-V5-FEEDBACK-R1.md#round-6, P-PLAN2, P-STO2, P-WRAP1, apps/prototype/src/features/v5/a-home/home.tsx, apps/prototype/src/domain/derive.ts#projectNext, 068-calibration-inputs, 070-results-reuse, D-W89, D-W92, D-W94, D-W95, D-W96, D-W98, D-W100, D-W101, D-W105, D-W106, PRJ-FR-17, PRJ-FR-18, PRJ-FR-19, PRJ-AC-18, PRJ-AC-20, LIB-FR-17, LIB-FR-20, LIB-FR-23, CAL-FR-06, RES-FR-11]
+trace: [063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 067-frame-review, 072-observing-plans, D-W14, D-W27, D-W96, D-W89, D-W36, D-W95, D-W40, D-W59, D-W60, D-W63, specs/063-clean-rebuild-contract/spec.md, specs/064-library-inventory/spec.md, specs/065-project-goals/spec.md, specs/067-frame-review/spec.md, specs/072-observing-plans/spec.md, HARNESS-V5-IA.md#S1, HARNESS-V5-IA.md#S3, HARNESS-V5-IA.md#S9, HARNESS-V5-IA.md#S10, HARNESS-V5-FEEDBACK-R1.md#round-5, HARNESS-V5-FEEDBACK-R1.md#round-6, P-PLAN2, P-STO2, P-WRAP1, apps/prototype/src/features/v5/a-home/home.tsx, apps/prototype/src/domain/derive.ts#projectNext, 068-calibration-inputs, 070-results-reuse, D-W92, D-W94, D-W98, D-W100, D-W101, D-W105, D-W106, PRJ-FR-17, PRJ-FR-18, PRJ-FR-19, PRJ-AC-18, PRJ-AC-20, LIB-FR-17, LIB-FR-20, LIB-FR-23, CAL-FR-06, RES-FR-11]
 ---
 
 ## Goal
@@ -18,7 +18,7 @@ The user opens PlateVault and decides what to do next from Home. Home shows pend
 - Each open Project's Next action follows PRJ-FR-18: review matching sessions that need review; open a Project step waiting on the user, including a suggested session that needs calibration or a failed Apply; plan tonight for an unmet goal with an observing window; otherwise apply changes, open the tool or add sessions. A Closed Project is not in Open work.
 - A Project row opens its Project page.
 - Finishing review of a session can move a Project's Next to its matching suggestion waiting in Needs calibration; Home shows both the queue item and the suggestion.
-- Done Projects appear only behind **Show done**.
+- A Closed Project never appears in Open work, and Home offers no Show done control.
 - Reading Home and following its actions changes no file or quality state and does not Apply pending Project changes.
 
 ## Preconditions
@@ -31,7 +31,7 @@ The user opens PlateVault and decides what to do next from Home. Home shows pend
   | `NGC 7000 HOO` | NGC 7000 | `RedCat` | Ha 10h, OIII 10h | Ha 6h10 in project · 9h15 captured; OIII 4h00 in project · 14h35 captured | 1 session needs review; Next opens Sessions filtered to Needs review |
   | `Veil Mosaic HOO` | mosaic `Veil Mosaic`, Panels 1 to 4 | `RedCat` | Ha 10h and OIII 10h per panel | 0h00 in project for every panel | Next: Plan tonight |
   | `M 31 OSC` | M 31 | `Esprit` | OSC broadband 10h | 3h00 in project · 4h30 captured | Apply failed; Next opens the Project's View step |
-  | `IC 1396 Ha` | IC 1396 | `RedCat` | Ha 5h | 5h20 in project · 6h40 captured | Next: Open in Siril |
+  | `IC 1396 Ha` | IC 1396 | `RedCat` | Ha 5h | 5h20 in project · 6h40 captured | `1 Oct Ha` suggested with unsettled flats; Next: Choose its flats first |
   | `Pleiades 2025` (Closed) | M 45 | `Esprit` | LRGB | any | Not listed in Open work |
 
 - P3: Sessions needing work:
@@ -55,7 +55,7 @@ The user opens PlateVault and decides what to do next from Home. Home shows pend
 - **Expect (negative):** Home has no alerts list or Issues hub. It has no header buttons or Getting started checklist. The Targets page is not the first surface, and no Inbox exists.
 - **Trace:** PRJ-FR-17, PRJ-FR-19 · PRJ-AC-18, PRJ-AC-20, PRJ-AC-23 · LIB-FR-17, LIB-FR-23 · D-W89, D-W92, D-W94, D-W105
 
-### S2 — Read the Projects box {#S2}
+### S2 — Read Open work {#S2}
 
 - **Do:** Read each Project row.
 - **Expect:** Open work lists exactly four open Projects. Each row shows its Project progress, current status and one Next action. The Closed `Pleiades 2025` Project is not listed.
@@ -73,14 +73,14 @@ The user opens PlateVault and decides what to do next from Home. Home shows pend
 - **Expect (negative):** Opening the row applies no changes, marks no frame and changes no Project.
 - **Trace:** PRJ-FR-07, PRJ-FR-27, PRJ-FR-30 · D-W94, D-W95, D-W96
 
-### S3 — Follow Review 48 new frames {#S3}
+### S3 — Follow 1 session needs review {#S3}
 
 - **Do:** On the `NGC 7000 HOO` Open work row, click **1 session needs review**. Open `2 Oct OIII` from the filtered Sessions list and return without marking a frame.
 - **Expect:** Sessions opens filtered to Needs review and lists `2 Oct OIII` with its 48 Unreviewed frames. The session has not been added to the Project.
 - **Expect (negative):** Opening and leaving the review changes no frame's quality.
 - **Trace:** PRJ-FR-18, PRJ-AC-19 · LIB-FR-17, LIB-FR-20 · D-W78, D-W94
 
-### S4 — Review the frames in the sheet over Home and watch Next move {#S4}
+### S4 — Finish the session's review and watch Next move {#S4}
 
 - **Do:** Open `2 Oct OIII` from Sessions filtered to Needs review. Mark all 48 frames Usable, completing the bulk-mark confirmation if PlateVault asks (G6), then choose **Finish review**. Return to Home and follow `NGC 7000 HOO`'s Next action.
 - **Expect:** The session's Review step lists the 48 frames; after marking and finishing review they all read Usable and the session becomes Ready. Its calibration is unsettled, so it enters Needs calibration, appears as a suggestion to `NGC 7000 HOO` on Home, and the Project's Next reads **Choose its flats first**.
@@ -89,13 +89,12 @@ The user opens PlateVault and decides what to do next from Home. Home shows pend
 
 ### S5 — Follow the other Next actions {#S5}
 
-- **Do:** Return to Home after each action. Click `M 31 OSC`'s Next, then `Veil Mosaic HOO`'s **Plan tonight**, then `IC 1396 Ha`'s **Wrap up**. Then click **Plan tonight** in Home's header.
+- **Do:** Return to Home after each action. Click `M 31 OSC`'s Next, then `Veil Mosaic HOO`'s **Plan tonight**. Then click the `IC 1396 Ha` row and, on its Project page, open the **Wrap up** step.
 - **Expect:**
   - `M 31 OSC`'s Next opens its View step, where the failed Apply is shown on the Project.
   - **Plan tonight** on `Veil Mosaic HOO` opens the Targets page with its night set to tonight and scoped to that Project (`?project=`). It lists `Veil Mosaic` with its panels and unmet goals, and its best window and altitude are computed for the mosaic's centre at Backyard.
-  - **Wrap up** opens `IC 1396 Ha`'s Wrap up step. Its steps are Clean up, Trash and Archive, followed by **Close project…**.
-  - The header's **Plan tonight** opens the Targets page with its night set to tonight and no Project scope.
-- **Expect (negative):** Following these actions moves, trashes or archives nothing and Applies no changes. `IC 1396 Ha` remains Open, and its View and Output are unchanged. No action opens a separate Plan page: `/plan` redirects to the Targets page.
+  - The `IC 1396 Ha` row opens its Project page, and the Wrap up step there shows Clean up, Trash and Archive, followed by **Close project…**.
+- **Expect (negative):** Following these actions moves, trashes or archives nothing and Applies no changes. `IC 1396 Ha` remains Open, and its View and Output are unchanged. No Open work row offers Wrap up as its Next, and Home has no header **Plan tonight** button. No action opens a separate Plan page: `/plan` redirects to the Targets page.
 - **Trace:** PRJ-FR-14, PRJ-FR-17, PRJ-FR-18 · PRJ-AC-19 · PLAN-FR-11 · D-W89, D-W94, D-W97
 
 ### S6 — Act on sessions needing work {#S6}
@@ -115,7 +114,7 @@ The user opens PlateVault and decides what to do next from Home. Home shows pend
 
 - **Do:** Read the Tonight box. Open Targets, keep the night on tonight at Backyard, and compare each Tonight window with that Target's altitude column.
 - **Expect:** Tonight lists the best window, with start, end, peak altitude and Moon separation, for NGC 7000, Veil Mosaic, M 31, IC 1396 and M 33, with M 33 marked ★. The Veil Mosaic window uses the mosaic's centre. The box shows tonight's darkness window and the Moon's phase, illumination, rise and set. Every value names Backyard and its time zone. Each listed Target's window matches the best window marked in its altitude column on the Targets page, whose tooltip states the same peak altitude and time.
-- **Expect (negative):** M 45 is not listed, because its Project is Done and it is not ★. No window is listed for a Target without one tonight.
+- **Expect (negative):** M 45 is not listed, because its Project is Closed and it is not ★. No window is listed for a Target without one tonight.
 - **Trace:** Home dashboard · HARNESS-V5-IA.md S1 Tonight · HARNESS-V5-FEEDBACK-R1.md Round 5 P-PLAN2 · PLAN-FR-11 · PLAN-AC-11 · PV-PLAN-SC-04 · D-W39, D-W60, D-W63
 
 ### S8 — Read goal progress in Open work {#S8}
@@ -162,10 +161,11 @@ The user opens PlateVault and decides what to do next from Home. Home shows pend
 
 ## Known gaps
 
-- G1: Not validated. The rebuilt application does not exist. Expected behavior follows specs 063, 064, 065, 067, 068, 070 and 072 at head and workflow decisions D-W93 to D-W106. No implementation has been validated against them.
+- G1: Not validated. The rebuilt application does not exist. Expected behavior follows specs 063, 064, 065, 067, 068, 070 and 072 at head and workflow decisions D-W93 to D-W116. No implementation has been validated against them.
 - G2: Unresolved implementation qualification: P1 and P2 need a seeded catalog in a known state at a fixed local time. No fixture builder exists, and the windows depend on Backyard's coordinates. Blocks readiness.
 - G5: Out of scope for this journey: a session that qualifies for more than one Pending work category, and the Status section's Pause, Resume and Retry actions, are not exercised. Blocks readiness until covered by a step or a journey.
 - G6: Unresolved product question: Round 6 asks for confirmation on large bulk marks ("⌘A then P/X/U on many frames", "Mark 120 frames Unusable?") but sets no size, so S4 cannot say whether ⌘A then P on 48 frames asks first. Options: (a, recommended) every mark on a ⌘A selection asks, whatever its count, so S4 reads a "Mark 48 frames Usable?" confirmation and no frame changes before it is confirmed; (b) a fixed count; (c) every mark on more than one frame. Single-frame P, X and U never ask. Mirrors J22/G8. Blocks readiness.
+- G7: Rests on provisional F4 items, pending the owner's confirmation in PR #1804: D-W105's "Choose its flats first" copy (S2, S4, S6), D-W96's matching rule and its "captured" count (S2, S4, S6, S8), and PRJ-FR-18's provisional "Add sessions" Next copy and the step a waiting Project opens at (S2, S6). If the owner changes one, the steps that cite it change.
 
 ## Delta log
 
@@ -176,6 +176,6 @@ The user opens PlateVault and decides what to do next from Home. Home shows pend
 - **Δ3** 2026-10-12 · S1, S4 · behavior-change
   Home shows a Getting started checklist until setup, a first import, a first Project and a first run are done; in this fixture all four are done, so S1 asserts its absence. S4's ⌘A bulk mark may now ask for confirmation, and G6 records that the size that triggers it is undecided.
   Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 6 (user, 2026-10-10) "Onboarding: walk plus checklist", "Large bulk marks need confirmation" (apps/prototype/design/ on ui-harness-v5 @ 4f470775); user answers to the PR #1788 journey questions · by: JourneysV5.R6C (intent-gated)
-- **Δ4** 2026-10-15 · S1, S2, S2a, S3, S4, S5, S6, S8, S9, S10 · behavior-change
-  Home now follows the F4 contract: its sections show pending sessions and suggestions, open Projects and their Next actions, status and planning. Projects replace runs; review, calibration, Apply, View and Output govern the Project flow.
-  Evidence: D-W93 to D-W106 in PR #1804, 063 FR-032, 064 LIB-FR-17/LIB-FR-20/LIB-FR-23, 065 PRJ-FR-17 to PRJ-FR-19, 068 CAL-FR-06, 070 RES-FR-11 · by: SpecF4Writer2 (intent-gated)
+- **Δ4** 2026-10-15 · S1, S2, S2a, S3, S4, S5, S6, S7, S8, S9, S10 · behavior-change
+  Home now follows the F4 contract: its sections show pending sessions and suggestions, open Projects and their Next actions, status and planning. Projects replace runs; review, calibration, Apply, View and Output govern the Project flow. Home has no header buttons or Show done, so S5 opens Wrap up from the Project page and S9 lists no Closed Project; P2's `IC 1396 Ha` Next is **Choose its flats first**, and S2 to S4 are retitled for Open work and session intake.
+  Evidence: D-W89, D-W93 to D-W106 in PR #1804, 063 FR-032, 064 LIB-FR-17/LIB-FR-20/LIB-FR-23, 065 PRJ-FR-17 to PRJ-FR-19, 068 CAL-FR-06, 070 RES-FR-11 · by: SpecF4Writer2 (intent-gated)

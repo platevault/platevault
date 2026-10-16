@@ -7,7 +7,7 @@ last_reviewed: 2026-10-06
 actors: [primary-user]
 surfaces: [home, import, settings, naming, sessions, calibration, calibration-process, locations, activity, status-bar, issues, duplicates]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 064-library-inventory, 068-calibration-inputs, 071-storage-custody, D19, D-W7, D-W11, D-W12, D-W20, D-W24, D-W33, D-W39, D-W58, D-W93, D-W94, D-W101, D-W102, D-W103, D-W104, D-W105, specs/063-clean-rebuild-contract/spec.md, specs/064-library-inventory/spec.md, specs/068-calibration-inputs/spec.md, specs/071-storage-custody/spec.md, HARNESS-V5-IA.md#S1, HARNESS-V5-IA.md#S12, HARNESS-V5-IA.md#S13, HARNESS-V5-IA.md#S14, HARNESS-V5-IA.md#S16, HARNESS-V5-IA.md#round-2-foundation, HARNESS-V5-IA.md#round-2b-foundation, HARNESS-V5-FEEDBACK-R1.md#domain-and-seed, HARNESS-V5-FEEDBACK-R1.md#round-1b-decisions, HARNESS-V5-FEEDBACK-R1.md#round-5, HARNESS-V5-FEEDBACK-R1.md#round-6, P-CAL3, P-SB3, P-IMP2, apps/prototype/src/domain/devices.ts, apps/prototype/src/domain/templates.ts, apps/prototype/src/features/v5/a-home/import-model.ts, apps/prototype/src/features/v5/a-home/import-run.ts, D-W107]
+trace: [063-clean-rebuild-contract, 064-library-inventory, 068-calibration-inputs, 071-storage-custody, D19, D-W89, D-W11, D-W12, D-W20, D-W24, D-W96, D-W58, D-W93, D-W94, D-W101, D-W102, D-W103, D-W104, D-W105, specs/063-clean-rebuild-contract/spec.md, specs/064-library-inventory/spec.md, specs/068-calibration-inputs/spec.md, specs/071-storage-custody/spec.md, HARNESS-V5-IA.md#S1, HARNESS-V5-IA.md#S12, HARNESS-V5-IA.md#S13, HARNESS-V5-IA.md#S14, HARNESS-V5-IA.md#S16, HARNESS-V5-IA.md#round-2-foundation, HARNESS-V5-IA.md#round-2b-foundation, HARNESS-V5-FEEDBACK-R1.md#domain-and-seed, HARNESS-V5-FEEDBACK-R1.md#round-1b-decisions, HARNESS-V5-FEEDBACK-R1.md#round-5, HARNESS-V5-FEEDBACK-R1.md#round-6, P-CAL3, P-SB3, P-IMP2, apps/prototype/src/domain/devices.ts, apps/prototype/src/domain/templates.ts, apps/prototype/src/features/v5/a-home/import-model.ts, apps/prototype/src/features/v5/a-home/import-run.ts, D-W107]
 ---
 
 ## Goal
@@ -15,7 +15,8 @@ trace: [063-clean-rebuild-contract, 064-library-inventory, 068-calibration-input
 The user brings new captures into the library the way Lightroom imports
 photos. They connect a capture device, whose capture layout PlateVault
 recognises, or pick a saved source, a folder or an OS-mounted network path.
-The preview lists each incoming light session with its Target, prefilled
+The preview splits each night's lights into sessions by framing, which the user
+can merge or re-split, and lists each incoming light session with its Target, prefilled
 from its pointing, with OBJECT shown only as a hint, and each session's darks, flats and bias
 as pinned automatically, suggested (confirm it) or not found. The user
 confirms the Target there, changes it, or picks Unclassified. They check the templated
@@ -33,6 +34,7 @@ until Retry. A saved source supports Import new, and an already organized
 folder is added in place. Done means:
 
 - Every imported light session carries the Target its preview showed at import, Confirmed, and its frames sit under that Target's `{target}` folder, or under `unclassified/…` when the user picked Unclassified. OBJECT never fills a Target or `{target}` by itself, and no file moves after an import.
+- Intake splits a night's lights into sessions by framing: a meridian flip keeps one session, a larger shift starts a "… · framing 2" session, and the user can merge and re-split in the preview before anything is written.
 - Every imported light and raw calibration file sits at its templated path with its original basename, the master sits at its structured-storage path, and every imported file matches its source's SHA-256.
 - Copy leaves every source unchanged. Move sends a source to the OS Trash only after its destination verifies, and Move is unavailable for a source with no OS Trash.
 - Held, duplicate and skipped items add nothing to the catalog, and files on a capture card raise no duplicates warning.
@@ -167,8 +169,8 @@ folder is added in place. Done means:
 
 ### S10 — Import from a network share that drops mid-import {#S10}
 
-- **Do:** Click **Choose folder…** and pick `/Volumes/astro-share/incoming`. Keep the prefilled Target of `5 Oct OIII`. Try to choose **Move**, then choose **Copy** and start the import. After at least 5 items read verified, unmount the share in the OS and read the import and the status bar's ⚠ popout. Mount it again and click **Retry**.
-- **Expect:** The preview lists `5 Oct OIII` (20 lights) with Target NGC 7000 prefilled from its pointing, under `NGC 7000/OIII/2026-10-05/light/`. Move is unavailable and reads `No OS Trash`, so the import uses Copy. The source is flagged as a network volume, and hashing shows progress. After the unmount, the import pauses and reads `Interrupted`: verified items keep their state, the source reads Offline and the rest stay pending. The status bar's ⚠ popout lists the import as interrupted. Retry resumes the recorded work and imports the remaining items. The summary reads `20 frames · <size> · 1 session`, every share file stays in place, and Sessions lists a new 5 Oct OIII session of 20 frames with Target NGC 7000 Confirmed.
+- **Do:** Click **Choose folder…** and pick `/Volumes/astro-share/incoming`. Keep the prefilled Target of `5 Oct OIII`. Try to choose **Move**, then choose **Copy** and start the import. After at least 5 items read verified, unmount the share in the OS and read the import and the status bar's ⚠ counter. Mount it again and click **Retry**.
+- **Expect:** The preview lists `5 Oct OIII` (20 lights) with Target NGC 7000 prefilled from its pointing, under `NGC 7000/OIII/2026-10-05/light/`. Move is unavailable and reads `No OS Trash`, so the import uses Copy. The source is flagged as a network volume, and hashing shows progress. After the unmount, the import pauses and reads `Interrupted`: verified items keep their state, the source reads Offline and the rest stay pending. The status bar's ⚠ counter counts the interrupted import and leads to Activity filtered to it, not to a list of issues. Retry resumes the recorded work and imports the remaining items. The summary reads `20 frames · <size> · 1 session`, every share file stays in place, and Sessions lists a new 5 Oct OIII session of 20 frames with Target NGC 7000 Confirmed.
 - **Expect (negative):** The vanished source does not fail the import: no item reads failed or `source gone`. No file on the share is removed, and no file is reported Missing. Retry does not copy a verified item again and does not decide what is done by checking whether a filename exists.
 - **Trace:** Import · STO-IMP-FR-01, STO-IMP-FR-04, STO-IMP-FR-06 · STO-IMP-AC-03, STO-IMP-AC-09 · LIB-FR-19 · LIB-AC-20 · D-W11, D-W12 · HARNESS-V5-IA.md §Screens S13 · `import-model.ts` (Move needs a source with an OS Trash) · HARNESS-V5-FEEDBACK-R1.md §Round 5 (P-SB3), §Round 6 (Import source vanishes mid-import) · G2
 
@@ -210,8 +212,8 @@ folder is added in place. Done means:
 - SC5: Move at S9 puts exactly 12 sources in the OS Trash. At S10, Move is unavailable, the import reads `Interrupted` after the unmount, 0 share files are removed and 0 verified items are copied twice.
 - SC6: S11 copies, renames or moves 0 files.
 - SC7: At S12, 100% of imported destination files match their source's SHA-256, and 0 files were permanently deleted or overwritten.
-- SC8: Card-1 reads ASIAIR (S1) and Card-2 reads USB device (S9). 0 duplicate-copies issues are raised after S6, S8, S9, S10 or S11, and 0 duplicates warnings name a `Card-1` file.
-- SC9: The 4 imported light sessions land with the Target their preview showed: 3 with NGC 7000 Confirmed (`2 Oct Ha` and `5 Oct OIII` prefilled from pointing, `2 Oct OIII` changed at S5a) and 1 with no Target under `unclassified/` (`4 Oct Ha`, S9). 0 Targets and 0 folders come from OBJECT, and 0 files move after an import (S12).
+- SC8: Card-1 reads ASIAIR (S1) and Card-2 reads USB device (S9). 0 duplicate-copies issues are raised after S6, S8, S9, S10, S10a or S11, and 0 duplicates warnings name a `Card-1` file.
+- SC9: The 6 imported light sessions land with the Target their preview showed: 5 with NGC 7000 Confirmed (`2 Oct Ha`, `5 Oct OIII` and the two 6 Oct sessions of S10a prefilled from pointing, `2 Oct OIII` changed at S5a) and 1 with no Target under `unclassified/` (`4 Oct Ha`, S9). 0 Targets and 0 folders come from OBJECT, and 0 files move after an import (S10a, S12).
 - SC10: At S10a the preview lists exactly 2 sessions, of 24 and 10 lights. The merge shows 1 session of 34, the re-split restores the 2 sessions, and 0 bytes are written before the import starts.
 
 ## Known gaps
@@ -224,6 +226,7 @@ folder is added in place. Done means:
 - G7: (dissolved 2026-10-12): answered by Round 6 "Import source vanishes mid-import"; S10 now asserts that the import pauses as `Interrupted`, fails no item, and resumes on Retry. Unmounting the share at a known point still needs the fixture tooling that G2 records.
 - G8: Unresolved product question: P-IMP2 prefills a session's Target from its pointing, but Round 6 does not say what the preview shows for a session whose pointing is missing or that no Target's footprint contains (`2 Oct OIII`, `4 Oct Ha`), or whether Import waits for a choice. Options: (a, recommended) Unclassified is preselected, so the import is always available and the user chooses a Target only to file it under that Target; (b) the Target is empty and Import is unavailable until the user chooses a Target or Unclassified, which forces a decision but blocks a quick card dump. S3 and S9 assert only that no Target is prefilled and that no light is listed under a Target's folder; S5a and S9 choose explicitly. Blocks readiness.
 - G9: Unresolved implementation qualification: the Card-1 fixture doesn't fix the calibration evidence of its two light sessions, so no step asserts which Import review state their darks, flats and bias read (LIB-FR-24, STO-IMP-AC-11). Blocks readiness until a fixture fixes them.
+- G10: Rests on a provisional F4 item, pending the owner's confirmation in PR #1804: D-W107's rule that frames with no pointing evidence stay in one session, which keeps `2 Oct OIII` (S6) and `4 Oct Ha` (S9) whole. If the owner changes it, those steps change.
 
 ## Delta log
 
@@ -235,9 +238,9 @@ folder is added in place. Done means:
   The Import preview lists each incoming session with its Target, prefilled from pointing, with OBJECT shown only as a hint. The user changes `2 Oct OIII` to NGC 7000 (S5a) and picks Unclassified for `4 Oct Ha` (S9). The import files frames under `{target}/…` or `unclassified/…` at once and moves nothing later.
   A share that drops mid-import pauses the import as Interrupted until Retry (S10), and capture-card files raise no duplicates warning (S7, S8). P5 gives the share's lights OBJECT and pointing. Dissolves G6 and G7, and adds G8.
   Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 6 (user, 2026-10-10) "P-IMP2: confirm Targets in the Import preview", "Import source vanishes mid-import", "The duplicate scan covers registered library locations only" (apps/prototype/design/ on ui-harness-v5 @ 4f470775); user answers to the PR #1788 journey questions · by: JourneysV5.R6A (intent-gated)
-- **Δ4** 2026-10-15 · S7 · behavior-change
-  Import review shows each new light session's darks, flats and bias as pinned automatically, suggested or not found, and Import never waits for calibration: an unsettled session waits in Needs calibration. The toolbar has no Issues hub.
+- **Δ4** 2026-10-15 · S7, S10 · behavior-change
+  Import review shows each new light session's darks, flats and bias as pinned automatically, suggested or not found, and Import never waits for calibration: an unsettled session waits in Needs calibration. The toolbar has no Issues hub, and S10's ⚠ counter leads to Activity instead of listing the interrupted import.
   Evidence: D-W92, D-W101 to D-W105 (F4 Project model, owner's answers of 2026-10-14) in PR #1804, 064 LIB-FR-23, LIB-FR-24, 071 STO-IMP-FR-02, STO-IMP-AC-11 · by: SpecF4Writer2 (intent-gated)
 - **Δ5** 2026-10-16 · +S10a, S12 · behavior-change
-  Intake splits a night's lights into sessions by framing, and the import preview shows each split, which the user can merge or re-split before starting the import. A meridian flip doesn't split.
+  Intake splits a night's lights into sessions by framing, and the import preview shows each split, which the user can merge or re-split before starting the import. A meridian flip doesn't split. The Goal and Done means name the split, and SC9 counts S10a's two sessions among the 6 imported light sessions.
   Evidence: D-W107 (owner's answers of 2026-10-15/16) in PR #1804, LIB-FR-04, LIB-FR-24, LIB-AC-31, STO-IMP-FR-03 · by: SpecF4Answers (intent-gated)

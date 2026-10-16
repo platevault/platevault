@@ -7,7 +7,7 @@ last_reviewed: 2026-10-03
 actors: [primary-user]
 surfaces: [calibration, projects, view-review, applications]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 068-calibration-inputs, 069-application-handoff, D04, D13, D15, D19, D-W3, D-W5, D-W37, D-W49, D-W50, D-W55, specs/063-clean-rebuild-contract/decisions.md, specs/063-clean-rebuild-contract/workflow-decisions.md, specs/068-calibration-inputs/spec.md, specs/069-application-handoff/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-e-choose-calibration-and-application-preparation, HARNESS-V5-IA.md#S5, HARNESS-V5-IA.md#S14, HARNESS-V5-IA.md#S16, HARNESS-V5-IA.md#round-2b-foundation-status-bar-and-p-cal3-2026-10-09, HARNESS-V5-FEEDBACK-R1.md#round-1b-decisions-user-2026-10-09, HARNESS-V5-FEEDBACK-R1.md#round-5-user-2026-10-10, P-CAL3, apps/prototype/src/domain/calibration.ts, apps/prototype/messages/en-GB.json, J36, HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#round-7, P-PREP3, 064-library-inventory, 065-project-goals, 066-view-selection, D-W93, D-W94, D-W95, D-W96, D-W97, D-W98, D-W99, D-W100, D-W101, D-W102, D-W103, D-W104, D-W105, D-W106, specs/063-clean-rebuild-contract/spec.md, specs/064-library-inventory/spec.md, specs/065-project-goals/spec.md, specs/066-view-selection/spec.md]
+trace: [063-clean-rebuild-contract, 068-calibration-inputs, 069-application-handoff, D04, D13, D15, D19, D-W3, D-W5, D-W95, D-W94, D-W101, specs/063-clean-rebuild-contract/decisions.md, specs/063-clean-rebuild-contract/workflow-decisions.md, specs/068-calibration-inputs/spec.md, specs/069-application-handoff/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-e-choose-calibration-and-application-preparation, HARNESS-V5-IA.md#S5, HARNESS-V5-IA.md#S14, HARNESS-V5-IA.md#S16, HARNESS-V5-IA.md#round-2b-foundation-status-bar-and-p-cal3-2026-10-09, HARNESS-V5-FEEDBACK-R1.md#round-1b-decisions-user-2026-10-09, HARNESS-V5-FEEDBACK-R1.md#round-5-user-2026-10-10, P-CAL3, apps/prototype/src/domain/calibration.ts, apps/prototype/messages/en-GB.json, J36, HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#round-7, P-PREP3, 064-library-inventory, 065-project-goals, 066-view-selection, D-W93, D-W96, D-W97, D-W98, D-W99, D-W100, D-W102, D-W103, D-W104, D-W105, D-W106, specs/063-clean-rebuild-contract/spec.md, specs/064-library-inventory/spec.md, specs/065-project-goals/spec.md, specs/066-view-selection/spec.md]
 ---
 
 ## Goal
@@ -146,9 +146,14 @@ The user checks the pinned calibration for the sessions in Project `NGC 7000 HOO
 
 ## Known gaps
 
-- G1: The rebuilt application has not been validated against this journey. This journey follows the current contracts in specs 064, 066, 068 and 069 and D-W93 to D-W106.
-- G2: Siril's profile capability evidence has not been exercised here; the PixInsight/WBPP and SETI Astro Suite Pro profiles are also outside this journey.
-- G3: Per-panel calibration is outside this journey; the Project diagram and pinned-session rules are specified by CAL-FR-09 and CAL-FR-23.
+- G1: Not validated: the rebuilt application has not been validated against this journey. This journey follows the current contracts in specs 064, 066, 068 and 069 and D-W93 to D-W116.
+- G2: Unresolved implementation qualification: Siril profile capability probes (D04) must exist before S8 can show verified evidence. The PixInsight/WBPP and SETI Astro Suite Pro profiles are not exercised in this journey. Blocks readiness.
+- G3: Out of scope for this journey: calibration across mosaic panel groups is covered by J33. The Project diagram and pinned-session rules are specified by CAL-FR-09 and CAL-FR-23.
+- G4: (dissolved 2026-10-12): answered by Round 6 "Calibration Off"; S7a now asserts that with **Auto-assign** off the 3 compatible masters read Suggested, none is assigned, and only an accepted one becomes a handoff input.
+- G5: (dissolved 2026-10-12): answered by Round 6 "Rename runs and Projects"; S7 now asserts that the run starts auto-named `NGC 7000 RedCat` and is renamed `24 Sep flat check` on the run header.
+- G6: (dissolved 2026-10-15): D-W101 matches calibration at ingestion and makes the Project's Calibrate step a read-only check, so no Calibrate row offers `Stack from <session>`. Raw sets wait as calibration processes in the Calibration library, which J36 stacks.
+- G7: (dissolved 2026-10-15): PREP-AC-11 (D-W81, D-W83) answers it: for a profile whose input-write behavior is unknown or write-prone, Symlinks is refused with the input-write risk named, and Copies is offered without a silent mode change. S9 asserts that refusal for a generic application.
+- G8: Rests on provisional F4 items, pending the owner's confirmation in PR #1804: D-W106's refusal of Hide on a master an open Project uses through its sessions (S7b, SC5), and D-W102's ranking, which makes the 30 Sep master the best fully compatible flat for 24 Sep (P2, S3). If the owner changes one, the steps that cite it change.
 
 ## Delta log
 
@@ -167,5 +172,5 @@ The user checks the pinned calibration for the sessions in Project `NGC 7000 HOO
   Prepare's Run view offers **Symlinks** (the Settings default) and **Copies**; the Automatic, file-list and linked-originals modes are gone. A patched correction reaches the application through Copies.
   Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 7 (user, 2026-10-12) P-PREP3 (apps/prototype/design/ on ui-harness-v5 @ 12638a7c; research RUN-VIEWS-OPTIONS.md) · by: JourneysV5.R7Prep3 (intent-gated)
 - **Δ6** 2026-10-15 · S1, S2, S3, S4a, S5, S6, S7, S7a, S7b, S7c, S8, S9, S10, S11 · behavior-change
-  Calibration is pinned on sessions at ingestion; Project Calibrate is a read-only diagram, and profile and input-mode choices are in View. Dated versions have no Latest or Update notice, and darks and bias use the Old badge.
-  Evidence: D-W93 to D-W106 (F4 Project model, owner's answers of 2026-10-14) in PR #1804, LIB-FR-23 to LIB-FR-26, CAL-FR-02 to CAL-FR-09, CAL-FR-13 to CAL-FR-23, PREP-FR-01, PREP-FR-03, PREP-FR-04, PREP-FR-06, PREP-FR-08, PREP-FR-09 · by: SpecF4Writer2 (intent-gated)
+  Calibration is pinned on sessions at ingestion; Project Calibrate is a read-only diagram, and profile and input-mode choices are in View. Dated versions have no Latest or Update notice, and darks and bias use the Old badge. S9 refuses Symlinks for a profile with unknown input-write behavior, which dissolves G7; G6 is dissolved because Calibrate has no rows to offer Stack, and G8 is new.
+  Evidence: D-W93 to D-W106 (F4 Project model, owner's answers of 2026-10-14) in PR #1804, LIB-FR-23 to LIB-FR-26, CAL-FR-02 to CAL-FR-09, CAL-FR-13 to CAL-FR-23, PREP-FR-01, PREP-FR-03, PREP-FR-04, PREP-FR-06, PREP-FR-08, PREP-FR-09, PREP-AC-11 · by: SpecF4Writer2 (intent-gated)

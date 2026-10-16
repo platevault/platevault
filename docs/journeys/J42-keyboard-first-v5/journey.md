@@ -7,7 +7,7 @@ last_reviewed: 2026-10-12
 actors: [primary-user]
 surfaces: [keyboard, shell, status-bar, home, projects, sessions, import, locations, settings, appearance, calibration, view, output, wrap-up, activity]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [HARNESS-V5-FEEDBACK-R1.md#shell-and-navigation-foundation, HARNESS-V5-FEEDBACK-R1.md#copy-rules-every-screen-every-slice, HARNESS-V5-FEEDBACK-R1.md#d-review, HARNESS-V5-FEEDBACK-R1.md#round-5, P-SB3, P-STO2, P-PLAN2, HARNESS-V5-IA.md#source-list-sidebar, HARNESS-V5-IA.md#S6, HARNESS-V5-IA.md#round-2-foundation-2026-10-09, HARNESS-V5-IA.md#round-2b-foundation-status-bar-and-p-cal3-2026-10-09, HARNESS-V5-IA.md#fix-pass-2026-10-09, apps/prototype/src/app/command-palette.tsx, apps/prototype/src/app/navigation.ts, apps/prototype/src/app/history.tsx, apps/prototype/src/app/shortcuts.tsx, apps/prototype/src/app/shell.tsx, apps/prototype/src/components/app/row-menu.tsx, apps/prototype/src/components/app/clearable-input.tsx, apps/prototype/src/components/app/confirm-dialog.tsx, apps/prototype/src/features/v5/d-review/shortcuts.tsx, apps/prototype/src/features/v5/d-review/frame-review.tsx, apps/prototype/src/features/t1/settings/appearance-page.tsx, D-W14, D-W22, D-W42, D-W53, D-W54, specs/067-frame-review/spec.md, J16, J22, J38, FR-025, FR-026, FR-031, PRJ-FR-07, PRJ-FR-14, PRJ-FR-27, PRJ-FR-28, VSEL-FR-02, VSEL-FR-03, VSEL-FR-14, VSEL-FR-16, LIB-FR-21, CAL-FR-09, PREP-FR-04, PREP-FR-06, PREP-FR-16, RES-FR-01, RES-FR-02, D-W93 to D-W106]
+trace: [HARNESS-V5-FEEDBACK-R1.md#shell-and-navigation-foundation, HARNESS-V5-FEEDBACK-R1.md#copy-rules-every-screen-every-slice, HARNESS-V5-FEEDBACK-R1.md#d-review, HARNESS-V5-FEEDBACK-R1.md#round-5, P-SB3, P-STO2, P-PLAN2, HARNESS-V5-IA.md#source-list-sidebar, HARNESS-V5-IA.md#S6, HARNESS-V5-IA.md#round-2-foundation-2026-10-09, HARNESS-V5-IA.md#round-2b-foundation-status-bar-and-p-cal3-2026-10-09, HARNESS-V5-IA.md#fix-pass-2026-10-09, apps/prototype/src/app/command-palette.tsx, apps/prototype/src/app/navigation.ts, apps/prototype/src/app/history.tsx, apps/prototype/src/app/shortcuts.tsx, apps/prototype/src/app/shell.tsx, apps/prototype/src/components/app/row-menu.tsx, apps/prototype/src/components/app/clearable-input.tsx, apps/prototype/src/components/app/confirm-dialog.tsx, apps/prototype/src/features/v5/d-review/shortcuts.tsx, apps/prototype/src/features/v5/d-review/frame-review.tsx, apps/prototype/src/features/t1/settings/appearance-page.tsx, D-W14, D-W22, D-W79, D-W53, D-W78, specs/067-frame-review/spec.md, J16, J22, J38, FR-025, FR-026, FR-031, PRJ-FR-07, PRJ-FR-14, PRJ-FR-27, PRJ-FR-28, VSEL-FR-02, VSEL-FR-03, VSEL-FR-14, VSEL-FR-16, LIB-FR-21, CAL-FR-09, PREP-FR-04, PREP-FR-06, PREP-FR-16, RES-FR-01, RES-FR-02, D-W93 to D-W106]
 ---
 
 ## Goal
@@ -23,7 +23,7 @@ Done means:
 
 - From launch through the Project's Wrap up step, every step is done with the keyboard. The pointer is never moved or clicked.
 - The open Project `NGC 7000 HOO` holds five Ready sessions with settled calibration and 214 lights in one group. Its View is not applied, and its Output folder is empty.
-- No keystroke typed into a field triggered a shortcut. The one destructive action opened was canceled at a confirmation that had focus, so nothing was trashed.
+- No keystroke typed into a field triggered a shortcut, and no keystroke trashed, moved or deleted anything.
 - After each dialog, menu or sheet closes, focus is back on the control that opened it.
 - No file under the registered locations changed.
 
@@ -33,7 +33,7 @@ Done means:
 - P2: The Project's `Output/` folder is empty.
 - P3: Preferences are at their defaults: single-key shortcuts on and sidebar expanded.
 - P4: On macOS, System Settings › Keyboard › Keyboard navigation is on, so Tab reaches every control. No pointer is used after launch (G3).
-- P5: The status bar shows no issue other than what the J21 state raises, and no work is running.
+- P5: The status bar shows no issue, and no work is running.
 - P6: A rescan of `Astro-T7 captures` takes long enough to move focus onto it (G2).
 - P7: The J19/P5 manifest is available.
 
@@ -171,7 +171,7 @@ Done means:
 - SC1: Steps S1 to S14 are completed with 0 pointer events after launch.
 - SC2: At S10 the Project lists five Ready sessions with 214 lights in one RedCat group, and at S12 its Apply sheet shows 214 light entries in the Project's View layout.
 - SC3: Typing in a field (S3, S9) triggers 0 shortcuts. With single-key shortcuts off (S8), 0 single-key shortcuts fire, and ⌘K still opens the palette.
-- SC4: Focus returns to the opener after each of these 5 closes: the shortcuts dialog (S1), the row menu (S4), the confirmation (S5), the sheet (S6) and the palette (S8). After Cancel it lands on the bell (S7).
+- SC4: Focus returns to the opener after each of these 4 closes: the shortcuts dialog (S1), the row menu (S4), the sheet (S6) and the palette (S8). After Cancel it lands on the bell (S7).
 - SC5: No Project is duplicated or closed (S5, S14), no import starts (S6), no Apply starts (S12), and no registered source file changes (S15).
 
 ## Known gaps

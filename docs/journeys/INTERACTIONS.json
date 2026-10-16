@@ -69,7 +69,7 @@
     {
       "flowStep": "B4",
       "owner": "066-view-selection",
-      "journeyStep": "J14/S2a, J14/S2b, J20/S8",
+      "journeyStep": "J14/S2a, J14/S2b, J21/S9",
       "spec": "066-view-selection VSEL-FR-01, VSEL-FR-03, VSEL-AC-16; 065-project-goals PRJ-FR-08, PRJ-FR-09; D-W94, D-W96, D-W105",
       "action": "From a Target page, preview adding the Target to an existing Project, then use the Project's Sessions step to add a Ready session whose calibration is settled.",
       "expect": "The Target page offers Add to Project and New Project, not a run action. The Project receives only sessions the user adds, and a session can be added only when Ready and calibration is settled.",
@@ -537,7 +537,7 @@
     {
       "flowStep": "Cross-flow: Missing geometry",
       "owner": "066-view-selection",
-      "journeyStep": "J21/S3, J21/S4, J33/S1c, J33/S3",
+      "journeyStep": "J21/S3, J21/S4, J33/S1c",
       "spec": "066-view-selection VSEL-FR-04, VSEL-FR-07, VSEL-AC-02; 065-project-goals PRJ-FR-31, PRJ-FR-27, PRJ-FR-29; D-W33, D-W95",
       "action": "Read sessions with pointing-only or no position evidence in the Project's Sessions step, including a Project with panel groups.",
       "expect": "Position unknown reads with no distance, and pointing-only sessions show a distance with no footprint. They remain manually selectable; geometry supports group assignment and the mosaic panel map.",
@@ -699,7 +699,7 @@
     {
       "flowStep": "Cross-flow: Closing with no Result",
       "owner": "070-results-reuse",
-      "journeyStep": "J27/S1, J33/S15",
+      "journeyStep": "J27/S1",
       "spec": "070-results-reuse RES-FR-06, RES-FR-08, RES-AC-06, RES-AC-12; 065-project-goals PRJ-FR-14, PRJ-FR-25; D-W97, D-W98",
       "action": "Close a Project with an empty Output/ and a mosaic Project with panel results but no assembled image.",
       "expect": "The Project can close without a Result or assembled mosaic, and its state becomes Closed or Archived after successful Archive. Output/ remains in place.",
