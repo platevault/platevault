@@ -185,6 +185,14 @@ fn base_builder() -> Builder<tauri::Wry> {
         .typ::<contracts_core::targets::ResolverSettingsGetRequest>()
         .typ::<contracts_core::targets::ResolverSettingsUpdateRequest>()
         .typ::<contracts_core::targets::ResolverSettingsResponse>()
+        // astro-plan-c72oo: how long the backend waits for the OS to accept
+        // the update offer's notification, so the webview's in-app notice
+        // knows when to stop waiting for the backend's offer.
+        .constant(
+            "UPDATE_OFFER_DEADLINE_MS",
+            u32::try_from(desktop_services::update::offer::OFFER_DEADLINE.as_millis())
+                .expect("the offer deadline fits in u32 milliseconds"),
+        )
 }
 
 // `collect_commands!` uses `$b:ident $(:: …)*` patterns — it cannot accept a

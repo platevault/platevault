@@ -98,7 +98,9 @@ pub fn register<R: Runtime>(app: &AppHandle<R>, notifier: Notifier, identity: &A
         app.clone(),
         UPDATE_OFFER_EVENT,
         offers.feed(),
-        |offer, error| tracing::debug!(channel = ?offer.channel, %error, "update offer event not delivered"),
+        // At warn: the webview falls back to its in-app notice only once
+        // the offer has gone unanswered past its deadline.
+        |offer, error| tracing::warn!(channel = ?offer.channel, %error, "update offer event not delivered"),
     ));
     app.manage(offers);
     app.manage(updater);

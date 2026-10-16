@@ -2205,6 +2205,9 @@ export const commands = {
 	devSchemaGet: (request: DevSchemaGetRequest) => typedError<DevSchemaGetResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("dev_schema_get", { request })),
 };
 
+/* Constants */
+export const UPDATE_OFFER_DEADLINE_MS = 30000 as const;
+
 /* Types */
 /**
  *  An acquisition session as seen through the IPC boundary.

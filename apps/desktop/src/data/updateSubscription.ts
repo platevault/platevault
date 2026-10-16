@@ -33,6 +33,7 @@
 import { type IpcResult, unwrap } from '@/api/ipc';
 import {
   commands,
+  UPDATE_OFFER_DEADLINE_MS,
   type UpdateOffer,
   type UpdatePhase,
   type UpdateStatus,
@@ -46,6 +47,12 @@ const STATUS_EVENT = 'update:status';
 
 /** Backend → webview offer pushes. Mirrors `updater::UPDATE_OFFER_EVENT`. */
 const OFFER_EVENT = 'update:offer';
+
+/**
+ * How much longer than the backend's own deadline for the system post the
+ * in-app choices wait for its offer, so the offer event has time to arrive.
+ */
+const DECIDING_MARGIN_MS = 5_000;
 
 // E2E test-injection seam: a journey spec can set this before navigation to
 // seed a specific update phase without a backend updater. Only consulted in
@@ -119,7 +126,39 @@ let subscribed = false;
 let generation = 0;
 let unlisten: (() => void) | null = null;
 
+/**
+ * The release whose offer the backend is deciding, and the timer after
+ * which the in-app notice offers it anyway: the backend may never publish,
+ * should its offer task have ended or an `update:offer` event been lost.
+ */
+let decidingFor: string | null = null;
+let decidingTimer: ReturnType<typeof setTimeout> | null = null;
+
+function clearDeciding(): void {
+  if (decidingTimer !== null) clearTimeout(decidingTimer);
+  decidingTimer = null;
+  decidingFor = null;
+}
+
+/** Start or stop waiting for the backend's offer, after every change. */
+function watchDeciding(): void {
+  const version =
+    offerHolder(current, currentOffer) === 'deciding' ? current.version : null;
+  if (version === decidingFor) return;
+  clearDeciding();
+  if (version === null) return;
+  decidingFor = version;
+  decidingTimer = setTimeout(() => {
+    decidingTimer = null;
+    console.warn(
+      `[updateSubscription] no offer for ${version} arrived; the in-app notice offers it`,
+    );
+    setOffer({ version, channel: 'in-app' });
+  }, UPDATE_OFFER_DEADLINE_MS + DECIDING_MARGIN_MS);
+}
+
 function notify(): void {
+  watchDeciding();
   for (const listener of listeners) listener();
 }
 

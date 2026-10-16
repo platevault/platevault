@@ -11,7 +11,11 @@
  * modules resolve and are mocked here.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type { UpdateOffer, UpdateStatus } from '@/bindings/index';
+import {
+  UPDATE_OFFER_DEADLINE_MS,
+  type UpdateOffer,
+  type UpdateStatus,
+} from '@/bindings/index';
 
 const { mockCommands, mockGetVersion, mockListen } = vi.hoisted(() => ({
   mockCommands: {
@@ -26,7 +30,11 @@ const { mockCommands, mockGetVersion, mockListen } = vi.hoisted(() => ({
   mockListen: vi.fn(),
 }));
 
-vi.mock('@/bindings/index', () => ({ commands: mockCommands }));
+// The real bindings but for the commands, so the generated constants stay.
+vi.mock('@/bindings/index', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/bindings/index')>()),
+  commands: mockCommands,
+}));
 vi.mock('@tauri-apps/api/event', () => ({ listen: mockListen }));
 vi.mock('@tauri-apps/api/app', () => ({ getVersion: mockGetVersion }));
 
@@ -236,6 +244,65 @@ describe('startUpdateSubscription', () => {
     await started;
 
     expect(getUpdateSnapshot().phase).toBe('downloading');
+  });
+
+  // The backend may never publish an offer: its offer task ended, or the
+  // `update:offer` event was lost.
+  describe('while the backend decides where to offer a release', () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    const holder = () =>
+      offerHolder(getUpdateSnapshot(), getUpdateOfferSnapshot());
+
+    it('offers it in-app once the backend is past its deadline without an offer', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      await startUpdateSubscription();
+      push?.(status({ phase: 'available', version: '0.7.0' }));
+      expect(holder()).toBe('deciding');
+
+      vi.advanceTimersByTime(UPDATE_OFFER_DEADLINE_MS);
+      expect(holder()).toBe('deciding');
+      vi.advanceTimersByTime(UPDATE_OFFER_DEADLINE_MS);
+      expect(holder()).toBe('in-app');
+      expect(getUpdateOfferSnapshot()).toEqual({
+        version: '0.7.0',
+        channel: 'in-app',
+      });
+      expect(warn).toHaveBeenCalled();
+      warn.mockRestore();
+    });
+
+    it('keeps the offer the backend makes in time', async () => {
+      await startUpdateSubscription();
+      push?.(status({ phase: 'available', version: '0.7.0' }));
+      vi.advanceTimersByTime(UPDATE_OFFER_DEADLINE_MS);
+      pushOffer?.({ version: '0.7.0', channel: 'system' });
+
+      vi.advanceTimersByTime(UPDATE_OFFER_DEADLINE_MS * 4);
+      expect(holder()).toBe('system');
+    });
+
+    it('waits afresh for a newer release', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      await startUpdateSubscription();
+      push?.(status({ phase: 'available', version: '0.7.0' }));
+      vi.advanceTimersByTime(UPDATE_OFFER_DEADLINE_MS);
+      push?.(status({ phase: 'available', version: '0.7.1' }));
+
+      vi.advanceTimersByTime(UPDATE_OFFER_DEADLINE_MS);
+      expect(holder()).toBe('deciding');
+      vi.advanceTimersByTime(UPDATE_OFFER_DEADLINE_MS);
+      expect(getUpdateOfferSnapshot()).toEqual({
+        version: '0.7.1',
+        channel: 'in-app',
+      });
+      warn.mockRestore();
+    });
   });
 
   // React StrictMode runs the effect setup → cleanup → setup while the first
