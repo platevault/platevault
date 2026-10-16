@@ -562,3 +562,91 @@ async fn a_master_row_the_old_scan_shared_takes_the_nested_masters_fields() {
         (Some("dark"), Some("Ha"), Some(300.0))
     );
 }
+
+/// The folder `g\h.fits` beside the master `h.fits` in the folder `g`. The
+/// old scan stored the folder under `g/h.fits`, the master's own text, with
+/// a classified sub-item, so the queue held a folder row nobody can
+/// classify. The scan deletes the folder's rows there and keeps the master
+/// row, which is linked to a plan.
+#[tokio::test]
+async fn an_old_folder_row_at_a_masters_path_goes_and_the_master_stays() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    write_fits(&root.join("g\\h.fits"), "x.fits", "LIGHT", None);
+    write_fits(&root.join("g"), "h.fits", "DARK", Some(30));
+
+    let db = Database::in_memory().await.expect("in-memory database");
+    db.migrate().await.expect("run migrations");
+    let pool = db.pool().clone();
+    sqlx::query(
+        "INSERT INTO registered_sources (id, path, kind, scan_depth, created_at, created_via) \
+         VALUES ('root-1', ?, 'inbox', 'recursive', '2026-01-01T00:00:00Z', 'first_run')",
+    )
+    .bind(root.to_str().unwrap())
+    .execute(&pool)
+    .await
+    .unwrap();
+    repo::insert_inbox_item(
+        &pool,
+        &repo::InsertInboxItem {
+            id: "master-gh",
+            root_id: "root-1",
+            relative_path: "g/h.fits",
+            file_count: 1,
+            content_signature: Some("sig-master"),
+            lane: "fits",
+        },
+    )
+    .await
+    .unwrap();
+    sqlx::query("UPDATE inbox_items SET is_master_item = 1 WHERE id = 'master-gh'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let plan = persistence_plans::repositories::plans::InsertPlan {
+        id: "plan-master",
+        title: "Inbox confirm",
+        origin: "inbox",
+        origin_path: None,
+        plan_type: "split",
+        destructive_destination: "archive",
+        parent_plan_id: None,
+        total_bytes_required: 0,
+    };
+    persistence_plans::repositories::plans::insert_plan(&pool, &plan).await.unwrap();
+    repo::insert_plan_link(&pool, "master-gh", "plan-master").await.unwrap();
+    repo::update_inbox_item_state(&pool, "master-gh", "plan_open").await.unwrap();
+    seed_old_folder(&pool, "old-gh", "old-gh-light", "g/h.fits").await;
+
+    scan(&pool, root).await;
+
+    let rows: Vec<(String, String, i64)> = sqlx::query_as(
+        "SELECT id, relative_path, is_master_item FROM inbox_items ORDER BY relative_path, id",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        rows,
+        [("master-gh".to_owned(), "g/h.fits".to_owned(), 1)],
+        "the folder's sub-item goes; the master row stays"
+    );
+    let groups: Vec<String> =
+        sqlx::query_scalar("SELECT relative_path FROM inbox_source_groups ORDER BY relative_path")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        groups,
+        ["g", "g\\h.fits"],
+        "the old folder group goes; the scan's groups are stored"
+    );
+    let overrides: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM inbox_file_overrides")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(overrides, 0, "the old folder's override goes with its group");
+    let links: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM inbox_plan_links").fetch_one(&pool).await.unwrap();
+    assert_eq!(links, 1, "the master's plan link stays");
+}

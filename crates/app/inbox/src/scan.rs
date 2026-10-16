@@ -136,6 +136,11 @@ pub struct ScannedInboxItem {
     /// Each entry becomes its own `inbox_items` row. The remaining non-master
     /// FITS/XISF files are grouped into the folder-level row.
     pub masters: Vec<ScannedMasterFile>,
+    /// FITS/XISF files in this folder whose header this scan could not read,
+    /// so whether they are masters is unknown. They are not in `masters`, and
+    /// they are no proof that a file is not a master either (bd
+    /// astro-plan-3pvvc): the next scan that reads them decides.
+    pub unread_files: Vec<PathBuf>,
 }
 
 impl ScannedInboxItem {
@@ -208,18 +213,25 @@ fn is_xisf_extension(ext: &str) -> bool {
 
 // ── Master detection at scan time ─────────────────────────────────────────────
 
-/// Attempt to extract metadata and detect whether `path` is a calibration
-/// master.  Called only for FITS/XISF files in leaf folders.
-///
-/// Returns `Some(ScannedMasterFile)` when the file is identified as a master.
-/// Returns `None` when not a master or metadata is unreadable.
-fn try_detect_master(abs_path: &Path, rel_path: &str, ext: &str) -> Option<ScannedMasterFile> {
+/// What the scan learned from one FITS/XISF file's header.
+enum MasterRead {
+    /// The file is a calibration master.
+    Master(ScannedMasterFile),
+    /// The header was read, and it is not a master.
+    NotMaster,
+    /// The header could not be read, so whether it is a master is unknown.
+    Unread,
+}
+
+/// Extract metadata and detect whether `path` is a calibration master.
+/// Called only for FITS/XISF files in leaf folders.
+fn read_master(abs_path: &Path, rel_path: &str, ext: &str) -> MasterRead {
     // Cached extract (F0): memoized by (path, mtime, size). Unsupported
     // extensions and headers in which no keyword is readable surface as `Err`
     // here, so such a file is declined outright rather than path-inferred. A
     // readable header that merely lacks `IMAGETYP` still reaches
     // `detect_master` below and may be classified from its path.
-    let bundle = cached_extract(abs_path).ok()?;
+    let Ok(bundle) = cached_extract(abs_path) else { return MasterRead::Unread };
 
     let image_typ_raw = bundle.image_typ.as_deref();
     let stack_count = bundle.stack_count;
@@ -227,17 +239,17 @@ fn try_detect_master(abs_path: &Path, rel_path: &str, ext: &str) -> Option<Scann
 
     let detect_input = DetectInput { imagetyp: image_typ_raw, stack_count, file_name, rel_path };
 
-    let detection = detect_master(&detect_input)?;
+    let Some(detection) = detect_master(&detect_input) else { return MasterRead::NotMaster };
 
     if !detection.is_master {
-        return None;
+        return MasterRead::NotMaster;
     }
 
     let format = file_format_from_ext(ext);
     let filter = bundle.filter.clone();
     let exposure_s = bundle.exposure.as_deref().and_then(|v| v.parse::<f64>().ok());
 
-    Some(ScannedMasterFile {
+    MasterRead::Master(ScannedMasterFile {
         abs_path: abs_path.to_owned(),
         relative_path: rel_path.to_owned(),
         format,
@@ -420,22 +432,20 @@ fn process_leaf(root: &Path, leaf: &LeafDir) -> ScannedInboxItem {
     let format = folder_format(&leaf.fits_files, &leaf.xisf_files, &leaf.video_files);
 
     // Master detection: FITS-lane folders only.
-    let masters: Vec<ScannedMasterFile> = if lane == Lane::Fits {
-        all_image_files
-            .iter()
-            .filter_map(|abs_path| {
-                let ext = abs_path
-                    .extension()
-                    .and_then(|e| e.to_str())
-                    .unwrap_or("")
-                    .to_ascii_lowercase();
-                let rel = relative_utf8(root, abs_path);
-                try_detect_master(abs_path, &rel, &ext)
-            })
-            .collect()
-    } else {
-        vec![]
-    };
+    let mut masters: Vec<ScannedMasterFile> = Vec::new();
+    let mut unread_files: Vec<PathBuf> = Vec::new();
+    if lane == Lane::Fits {
+        for abs_path in &all_image_files {
+            let ext =
+                abs_path.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
+            let rel = relative_utf8(root, abs_path);
+            match read_master(abs_path, &rel, &ext) {
+                MasterRead::Master(master) => masters.push(master),
+                MasterRead::NotMaster => {}
+                MasterRead::Unread => unread_files.push((*abs_path).clone()),
+            }
+        }
+    }
 
     ScannedInboxItem {
         folder_path: leaf.dir_path.clone(),
@@ -447,6 +457,7 @@ fn process_leaf(root: &Path, leaf: &LeafDir) -> ScannedInboxItem {
         lane,
         format,
         masters,
+        unread_files,
     }
 }
 
@@ -1061,11 +1072,11 @@ mod tests {
 
     /// A backslash folder name next to something that is not a folder at its
     /// old text: the folder `c\d` beside the regular file `d` in the folder
-    /// `c`. A folder row stored for `c/d` could only plan sources below a
-    /// file, so it is listed. Kept: `e/f`, where a link sits (a link is never
-    /// proof of anything), and `g/h.fits`, which this scan stores as a master,
-    /// because deleting a folder row also deletes the items of every source
-    /// group at its path.
+    /// `c`, and the folder `g\h.fits` beside the master `h.fits` in the
+    /// folder `g`. A folder row stored for `c/d` or `g/h.fits` could only plan
+    /// sources below a file, so both are listed; deleting the `g/h.fits`
+    /// folder rows keeps the master row stored there. Kept: `e/f`, where a
+    /// link sits (a link is never proof of anything).
     #[cfg(unix)]
     #[test]
     fn scan_lists_an_old_folder_row_whose_path_names_a_file() {
@@ -1087,10 +1098,57 @@ mod tests {
         assert_eq!(
             scanned.legacy_rows,
             crate::legacy_rows::LegacyRows {
-                folders: vec!["c/d".to_owned()],
+                folders: ["c/d", "g/h.fits"].map(str::to_owned).to_vec(),
                 ..Default::default()
             }
         );
+    }
+
+    /// A readable master `a\b.fits` beside the nested `a/b.fits` whose header
+    /// this scan cannot read: its bytes are not a header, or (when the test
+    /// does not run as root) it cannot be opened, as for the nested `n/o.fits`
+    /// beside `n\o.fits`. Whether the nested file is a master is unknown, so
+    /// the old rows `a/b.fits` and `n/o.fits`, which may be those masters' own,
+    /// are kept for a later scan to decide.
+    #[cfg(unix)]
+    #[test]
+    fn scan_keeps_an_old_master_row_whose_nested_file_it_cannot_read() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let tmp = tmpdir();
+        let root = tmp.path();
+        let master = Some(("STACKCNT", 30));
+        write_realistic_fits(root, "a\\b.fits", Some("DARK"), master);
+        write_realistic_fits(root, "n\\o.fits", Some("DARK"), master);
+        fs::create_dir_all(root.join("a")).unwrap();
+        write_file(&root.join("a"), "b.fits", b"not a FITS header");
+        let locked = root.join("n").join("o.fits");
+        fs::create_dir_all(root.join("n")).unwrap();
+        write_realistic_fits(&root.join("n"), "o.fits", Some("LIGHT"), None);
+        fs::set_permissions(&locked, fs::Permissions::from_mode(0o000)).unwrap();
+        let locked_is_unreadable = fs::File::open(&locked).is_err();
+
+        let scanned = scan_root(root, &ScanOptions::default()).unwrap();
+        fs::set_permissions(&locked, fs::Permissions::from_mode(0o644)).unwrap();
+
+        let unread: Vec<String> = scanned
+            .items
+            .iter()
+            .flat_map(|item| &item.unread_files)
+            .map(|file| relative_utf8(root, file))
+            .collect();
+        let expected: &[&str] =
+            if locked_is_unreadable { &["a/b.fits", "n/o.fits"] } else { &["a/b.fits"] };
+        assert_eq!(unread, expected, "the scan reports the headers it could not read");
+        if locked_is_unreadable {
+            assert_eq!(scanned.legacy_rows, crate::legacy_rows::LegacyRows::default());
+        } else {
+            assert_eq!(
+                scanned.legacy_rows.masters,
+                ["n/o.fits"],
+                "running as root, the light frame at n/o.fits is read"
+            );
+        }
     }
 
     /// Constitution §I regression: a symlinked subdirectory reachable from the

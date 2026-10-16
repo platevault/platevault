@@ -11,16 +11,20 @@
 //! never be classified. When a frame that is not a master is there, a master
 //! row would classify and confirm that other file. When a file is there, a
 //! folder row's items would plan sources below something that is not a
-//! folder. [`find`] lists the old rows a scan proves stale, and [`retire`]
-//! deletes them.
+//! folder; that file may be a real master, as `g/h.fits` beside the folder
+//! `g\h.fits`, and then only the folder's rows go. [`find`] lists the old
+//! rows a scan proves stale, and [`retire`] deletes them.
 //!
 //! An old row is kept when this scan stores the same text itself (a nested
 //! folder or master really is there, and the row is its own), or when
 //! something the scan could not account for is at the nested path: an
-//! unreadable folder, a link on the way there (a dangling one may be an
-//! unmounted drive), a folder where a master row was stored. Only unconfirmed
-//! rows are deleted: still `pending_classification` or `classified`, with no
-//! plan linking them; a folder is kept whole when any of its items is not.
+//! unreadable folder, a file whose header it could not read, a link on the
+//! way there (a dangling one may be an unmounted drive), a folder where a
+//! master row was stored. Only unconfirmed rows are deleted: still
+//! `pending_classification` or `classified`, with no plan linking them; a
+//! folder is kept whole when any of its items is not.
+//! A folder's rows never include a master row, so deleting them never touches
+//! a master stored at the same path.
 //!
 //! A kept master row can still hold another file's master fields. When the
 //! old scan read both `a\b.fits` and a nested master `a/b.fits`, it wrote both
@@ -79,19 +83,20 @@ pub(crate) fn find(root: &Path, items: &[ScannedInboxItem]) -> LegacyRows {
         items.iter().flat_map(|item| &item.masters).map(|m| m.relative_path.as_str()).collect();
     let master_files: HashSet<&Path> =
         items.iter().flat_map(|item| &item.masters).map(|m| m.abs_path.as_path()).collect();
+    let unread_files: HashSet<&Path> =
+        items.iter().flat_map(|item| &item.unread_files).map(PathBuf::as_path).collect();
+    // Files the scan read and found not to be masters. A file whose header it
+    // could not read is unknown, and unknown is never proof.
     let frames: HashSet<&Path> = items
         .iter()
         .flat_map(|item| item.fits_files.iter().chain(&item.xisf_files))
         .map(PathBuf::as_path)
-        .filter(|file| !master_files.contains(file))
+        .filter(|file| !master_files.contains(file) && !unread_files.contains(file))
         .collect();
 
     let mut rows = LegacyRows::default();
     for old in folders.iter().filter_map(|text| old_text(text)) {
-        // A path the scan stores as a master is skipped: deleting a folder
-        // also deletes the items of every source group at its path, and that
-        // includes the group `set_overrides` creates for the master.
-        if folders.contains(old.as_str()) || masters.contains(old.as_str()) {
+        if folders.contains(old.as_str()) {
             continue;
         }
         if never_current(&old) || matches!(look_up(root, &old), Entry::Absent | Entry::Other) {

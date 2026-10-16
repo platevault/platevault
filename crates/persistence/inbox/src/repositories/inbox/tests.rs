@@ -2410,3 +2410,107 @@ async fn deleting_unconfirmed_old_rows_removes_their_children_and_keeps_linked_f
     }
     assert_eq!(count("SELECT COUNT(*) FROM inbox_plan_links").await, 2, "plan links stay");
 }
+
+/// bd astro-plan-3pvvc: an earlier scan stored the folder `g\h.fits` under
+/// the text `g/h.fits`, where a real master `g/h.fits` is stored too.
+/// Deleting the folder's rows at that path must keep the master row.
+/// - `g/h.fits`: the master was given overrides first, so `set_overrides`
+///   made its group at that path, and the folder's scan then wrote into that
+///   same group (the path is unique per root). The master is plan-linked.
+/// - `p/q.fits`: the folder's scan made the group; the master has none.
+///
+/// The folder's sub-items and its file overrides go. The master items, the
+/// master's group with its own override, its classification and its plan
+/// link stay; the folder-only group goes.
+#[tokio::test]
+async fn deleting_old_folder_rows_at_a_master_path_keeps_the_master() {
+    let db = test_db().await;
+    let pool = db.pool();
+    let ids = |sql: &'static str| async move {
+        sqlx::query_scalar::<_, String>(sql).fetch_all(pool).await.unwrap()
+    };
+    let plan = persistence_plans::repositories::plans::InsertPlan {
+        id: "plan-open",
+        title: "Inbox confirm",
+        origin: "inbox",
+        origin_path: None,
+        plan_type: "split",
+        destructive_destination: "archive",
+        parent_plan_id: None,
+        total_bytes_required: 0,
+    };
+    persistence_plans::repositories::plans::insert_plan(pool, &plan).await.unwrap();
+    for (id, path) in [("m-gh", "g/h.fits"), ("m-pq", "p/q.fits")] {
+        insert_inbox_item(pool, &sample_item_at(id, path)).await.unwrap();
+        sqlx::query("UPDATE inbox_items SET is_master_item = 1 WHERE id = ?")
+            .bind(id)
+            .execute(pool)
+            .await
+            .unwrap();
+        seed_classified_children(pool, id, path).await;
+    }
+    set_overrides(pool, "m-gh", "g/h.fits", None, Some("Ha"), None, None).await.unwrap();
+    insert_plan_link(pool, "m-gh", "plan-open").await.unwrap();
+    update_inbox_item_state(pool, "m-gh", "plan_open").await.unwrap();
+    let folder_group = UpsertSourceGroup {
+        id: "g-pq",
+        root_id: "root-1",
+        relative_path: "p/q.fits",
+        content_signature: None,
+        format: Some("fits"),
+        lane: Some("move"),
+        file_count: 1,
+    };
+    upsert_inbox_source_group(pool, &folder_group).await.unwrap();
+    for (id, group, path) in
+        [("gh-light", "sg-auto-m-gh", "g/h.fits"), ("pq-light", "g-pq", "p/q.fits")]
+    {
+        set_file_override(pool, group, &format!("{path}/x.fits"), "filter", "OIII", None, None)
+            .await
+            .unwrap();
+        let sub = UpsertInboxSubItem {
+            id,
+            root_id: "root-1",
+            relative_path: path,
+            source_group_id: group,
+            group_key: "type=light",
+            group_label: "light",
+            frame_type: Some("light"),
+            content_signature: "sig",
+            file_count: 1,
+            lane: "fits",
+            needs_review: false,
+        };
+        upsert_inbox_sub_item(pool, &sub).await.unwrap();
+        seed_classified_children(pool, id, &format!("{path}/x.fits")).await;
+    }
+
+    let mut conn = pool.acquire().await.unwrap();
+    for path in ["g/h.fits", "p/q.fits"] {
+        delete_unconfirmed_folder_rows_conn(&mut conn, "root-1", path).await.unwrap();
+    }
+    drop(conn);
+
+    assert_eq!(
+        ids("SELECT id FROM inbox_items ORDER BY id").await,
+        ["m-gh", "m-pq"],
+        "the folder's sub-items go; both masters stay"
+    );
+    assert_eq!(
+        ids("SELECT id FROM inbox_source_groups ORDER BY id").await,
+        ["sg-auto-m-gh"],
+        "the master's group stays; the folder-only group goes"
+    );
+    assert_eq!(
+        ids("SELECT relative_file_path || ' ' || property_key || '=' || value \
+             FROM inbox_file_overrides ORDER BY 1")
+        .await,
+        ["g/h.fits filter=Ha"],
+        "only the master's own override is left"
+    );
+    assert_eq!(
+        ids("SELECT inbox_item_id FROM inbox_classifications ORDER BY 1").await,
+        ["m-gh", "m-pq"]
+    );
+    assert_eq!(ids("SELECT inbox_item_id FROM inbox_plan_links").await, ["m-gh"]);
+}

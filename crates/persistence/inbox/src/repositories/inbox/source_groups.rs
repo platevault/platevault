@@ -138,11 +138,18 @@ pub async fn update_source_group_child_count_conn(
 /// file metadata and the groups' file overrides — when all of them are
 /// unconfirmed.
 ///
-/// The folder's rows are the folder items at that path and every item in a
+/// The folder's rows are the items that are not masters at that path or in a
 /// source group at that path. They are unconfirmed when each is still
 /// `pending_classification` or `classified` and no plan links it. When any is
 /// not, nothing at that path is deleted, so a confirmed or plan-linked
 /// sub-item keeps its siblings, its group and the group's overrides.
+///
+/// A master item is never one of the folder's rows. A master file can be
+/// stored at the same path, as `g/h.fits` is when an earlier scan stored the
+/// folder `g\h.fits` under that text (bd astro-plan-3pvvc), and its own
+/// source group (the one `set_overrides` creates) is then a group at that
+/// path. The master item, its state and its group stay; only the overrides
+/// that group holds for files below that path, the folder's, are deleted.
 ///
 /// # Errors
 /// Returns `persistence_core::DbError::Database` on connection failure.
@@ -155,8 +162,8 @@ pub async fn delete_unconfirmed_folder_rows_conn(
     // literal SQL here.
     let kept: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM inbox_items
-         WHERE root_id = ?1
-           AND ((relative_path = ?2 AND is_master_item = 0)
+         WHERE root_id = ?1 AND is_master_item = 0
+           AND (relative_path = ?2
                 OR source_group_id IN (
                     SELECT id FROM inbox_source_groups WHERE root_id = ?1 AND relative_path = ?2))
            AND (state NOT IN ('pending_classification', 'classified')
@@ -171,10 +178,20 @@ pub async fn delete_unconfirmed_folder_rows_conn(
     }
     sqlx::query(
         "DELETE FROM inbox_items
-         WHERE root_id = ?1
-           AND ((relative_path = ?2 AND is_master_item = 0)
+         WHERE root_id = ?1 AND is_master_item = 0
+           AND (relative_path = ?2
                 OR source_group_id IN (
                     SELECT id FROM inbox_source_groups WHERE root_id = ?1 AND relative_path = ?2))",
+    )
+    .bind(root_id)
+    .bind(relative_path)
+    .execute(&mut *conn)
+    .await?;
+    sqlx::query(
+        "DELETE FROM inbox_file_overrides
+         WHERE source_group_id IN (
+                   SELECT id FROM inbox_source_groups WHERE root_id = ?1 AND relative_path = ?2)
+           AND substr(relative_file_path, 1, length(?2) + 1) = ?2 || '/'",
     )
     .bind(root_id)
     .bind(relative_path)
