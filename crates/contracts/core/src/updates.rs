@@ -81,3 +81,33 @@ impl UpdateStatus {
         Self { phase: UpdatePhase::Idle, version: None, body: None, error: None }
     }
 }
+
+/// Where the Install now and Install on quit offer for a release is made
+/// (astro-plan-c72oo).
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "kebab-case")]
+pub enum OfferChannel {
+    /// A system notification carries both buttons.
+    System,
+    /// The in-app notice carries them: notification permission was denied,
+    /// the notification system shows no buttons, or the notification could
+    /// not be shown.
+    InApp,
+}
+
+/// Where the offer for the release the last check found was made.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateOffer {
+    /// The release offered; `None` until a check has found one.
+    pub version: Option<String>,
+    pub channel: OfferChannel,
+}
+
+impl UpdateOffer {
+    /// No offer made yet.
+    #[must_use]
+    pub const fn none() -> Self {
+        Self { version: None, channel: OfferChannel::InApp }
+    }
+}
