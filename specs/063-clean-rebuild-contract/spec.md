@@ -4,13 +4,13 @@
 
 **Created**: 2026-10-03
 
-**Amended**: 2026-10-16, to the owner's answers of 2026-10-15/16, D-W107 to D-W116.
+**Amended**: 2026-10-16, to the owner's answers of 2026-10-15/16, D-W107 to D-W116, and to the owner's second batch of 2026-10-16, D-W117 to D-W121, which also amends D-W107, D-W108, D-W110 and D-W113 in place.
 
 **Status**: Draft; conservative product decisions and all human-approval gate waivers are authorized. Requirements analysis and implementation verification remain required.
 
 **Input**: Rebuild PlateVault cleanly, preserve the old code as a recoverable reference, and reuse code where it satisfies the agreed product contract.
 
-The [product flow](../../docs/reviews/2026-10-03-product-flow-and-journeys.md) supplies the interaction details and worked example. The [workflow redesign](decisions.md#workflow-redesign-2026-10-06) of 2026-10-06 and its later rounds (decisions D-W1 through D-W116) amend it: the Project is the processing unit, with its sessions in groups and one input folder, its View, and Home is a dashboard rather than the Targets list. Where the product flow and a D-W decision disagree, the decision governs. This specification defines shared behavior and feature ownership. It does not authorize product implementation or claim that the redesigned flows run.
+The [product flow](../../docs/reviews/2026-10-03-product-flow-and-journeys.md) supplies the interaction details and worked example. The [workflow redesign](decisions.md#workflow-redesign-2026-10-06) of 2026-10-06 and its later rounds (decisions D-W1 through D-W121) amend it: the Project is the processing unit, with its sessions in groups and one input folder, its View, and Home is a dashboard rather than the Targets list. Where the product flow and a D-W decision disagree, the decision governs. This specification defines shared behavior and feature ownership. It does not authorize product implementation or claim that the redesigned flows run.
 
 ## User Scenarios & Testing
 
@@ -168,18 +168,19 @@ The visual system, tokens and component catalogue are documented as a DESIGN.md 
 - **FR-026**: Every row with actions MUST offer them in its `⋯` menu, and its context menu MUST list the same actions. Selecting rows MUST replace the toolbar with a batch bar of the same height, so nothing on the page moves. (D-W91)
 - **FR-027**: Tabular data MUST show in tables with sortable headers and with empty, loading and error states. Label and value facts MUST show as a key-value list. (D-W91)
 - **FR-028**: A task MUST open in a centered dialog, details in a docked detail panel, a preview on hover or focus, and a long flow as a step page. Side fold-out sheets MUST NOT be used, apart from the navigation drawer at narrow widths. Status badges and pills MUST be inert; navigation MUST use links or tabs. Help MUST appear only on demand. (D-W91)
-- **FR-029**: An irreversible action MUST ask for confirmation in a dialog that lists the affected files in groups. A reversible action MUST run at once and offer Undo. (D-W91)
+- **FR-029**: An irreversible action MUST ask for confirmation in a dialog that lists the affected files in groups. A reversible action MUST run at once and offer Undo, with one exception: a frame mark made on a ⌘A or threshold selection MUST ask for confirmation first (PIX-FR-14). (D-W91, D-W118)
 - **FR-030**: Interface copy MUST be microcopy. Buttons MUST be a verb and an object in 1 to 3 words, in sentence case, ending in "…" only when more input or a confirmation follows. Headings MUST be 1 or 2 words and MUST NOT restate the content below. A refusal MUST read "{Action} blocked · {count} {reason} ▸" or "Can't {verb} · {reason} ▸". Each state MUST have one status word, used everywhere. An absent value MUST read as an en dash (U+2013), and an empty state MUST be one line plus one action. (D-W91)
 - **FR-031**: The `⋯` button and Shift+F10 MUST open the same menu, Escape MUST return focus to where it came from, and pointer targets MUST be at least 24 px (WCAG 2.5.8). (D-W91)
 - **FR-032**: The product MUST have no Issues hub. A problem MUST show on the row it affects, with its action, on each page that lists that row, and Home follows the same rule (FR-020). The status bar's severity counters MUST show counts only and open the owning page filtered to the affected rows, or, when there are several, a menu naming those pages with their counts; they MUST NOT list the issues themselves. Dismiss and Restore MUST act on the rows, and the counters MUST count only issues that are not dismissed. (D-W89, D-W92)
+- **FR-037**: Each table whose rows the user can open, select or act on MUST be one Tab stop, on its current row, followed by that row's own controls. ↑ and ↓ MUST move between rows, Home and End to the first and last row, and Page Up and Page Down by one screen. Space MUST select or clear the focused row, and only while single-key shortcuts are on. Enter MUST open the row, and Shift+F10 or the Menu key MUST open the row's menu (FR-031). Focus MUST return to the row after its menu or a dialog it opened closes, and after a confirmed action removes a row, focus MUST move to the next row. Provisional: after the last row is removed, focus moves to the previous row, and a table's header controls, such as select-all and the sort buttons, keep their own Tab stops. (D-W121)
 
 ### Project model
 
 The feature specs hold the detailed rules; these requirements are the part every surface keeps.
 
 - **FR-033**: PlateVault MUST group a Project's sessions by rig and framing, and the user MUST be able to create, split and rename groups and move sessions between them. A Project MUST add whole sessions to its groups and MUST NOT divide a session's frames between groups. Marking a group as a mosaic panel MUST make the Project a mosaic; there is no mosaic mode chosen up front. PV-PRJ owns the rules. (D-W95, D-W107)
-- **FR-034**: Apply MUST build a complete new View from the originals only and swap it in, keeping the old one as `View (previous)/`, and MUST change nothing when any original it needs is offline or any pinned calibration file has changed or is missing. Apply MUST wait while `View (previous)/` holds files the user hasn't reviewed. A Project MUST discard only its own pending edits. One PlateVault operation runs per Project at a time (provisional). Open: how the swap treats files the user kept in `View (previous)/`, whether the outgoing View merges into that folder and what happens on a name clash (D-W110). PV-VSEL, PV-PREP and PV-STO own the rules. (D-W100, D-W109, D-W110, D-W113)
-- **FR-035**: Flats, darks and bias MUST be matched to light sessions at ingestion and pinned on the session, and a session MUST be settled before a Project can add it. A Project's Calibrate step MUST be a read-only check. A pin MUST stay when its file changes or goes missing, and nothing MUST switch to another file by itself. Dark flats MUST be ignored. PV-LIB and PV-CAL own the rules. (D-W93, D-W101 to D-W106, D-W113)
+- **FR-034**: Apply MUST build a complete new View from the originals only and swap it in, keeping the old one as `View (previous)/`, and MUST change nothing when any original it needs is offline or any pinned calibration file has changed or is missing. Apply MUST wait while `View (previous)/` holds files the user hasn't reviewed, and MUST NOT ask again about a file the user kept there. A Project MUST discard only its own pending edits. One PlateVault operation runs per Project at a time (provisional). Open: what the next Apply does with the outgoing View when `View (previous)/` already holds kept files, merging into that folder with a suffix on name clashes or moving kept files to a separate folder (D-W110). PV-VSEL, PV-PREP and PV-STO own the rules. (D-W100, D-W109, D-W110, D-W113)
+- **FR-035**: Flats, darks and bias MUST be matched to light sessions at ingestion and pinned on the session, and a session MUST be settled before a Project can add it. A Project's Calibrate step MUST be a read-only check. A pin MUST stay when its file changes or goes missing, the session MUST then wait in "Needs calibration", and nothing MUST switch to another file by itself. Dark flats MUST be ignored. PV-LIB and PV-CAL own the rules. (D-W93, D-W101 to D-W106, D-W113)
 - **FR-036**: Duplicate MUST copy what the user chose (sessions, groups and overrides, goals, notes and settings) and no files, and MUST use each session's current calibration pins. The duplicate MUST be fully independent, with no link to the original. Result lineage, outputs as inputs, tool caches and stacking inside PlateVault are out of scope. (D-W93, D-W96, D-W112)
 
 ### Feature ownership
@@ -275,6 +276,7 @@ The user authorized conservative product defaults and, on 2026-10-04, waived eve
 | Harness v5 round 9, 2026-10-12 to 2026-10-14 (D-W76 to D-W92) | All feature owners |
 | F4 Project model, 2026-10-14 (D-W93 to D-W106) | All feature owners |
 | F4 owner's answers, 2026-10-15/16 (D-W107 to D-W116) | All feature owners |
+| Owner's second batch, 2026-10-16 (D-W117 to D-W121, and D-W107, D-W108, D-W110 and D-W113 amended in place) | All feature owners |
 
 The existing constitution prohibits debayering. A raw/CFA review specification must define supported read-only channel handling or seek an explicit constitutional amendment before adding debayered preview behavior.
 
