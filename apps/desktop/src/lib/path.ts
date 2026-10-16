@@ -51,8 +51,28 @@ export function resolveRevealPath(
 }
 
 /**
- * Return the last path segment (filename or directory name) of a
- * forward-slash or back-slash-separated path.
+ * Return the last name of a wire path: a root-relative path from the backend
+ * (`relativePath`, `relativeFilePath`, a plan item's `fromPath`).
+ *
+ * `/` is the only separator in wire text (`fs_pathsafe::wire_path`). On macOS
+ * and Linux a `\` is part of a name and stays in it (bd astro-plan-3pvvc), so
+ * `folder/a\b.fits` ends in `a\b.fits`, not `b.fits`. Returns the whole path
+ * when it ends in `/`.
+ */
+export function wireBasename(path: string): string {
+  return path.slice(path.lastIndexOf('/') + 1) || path;
+}
+
+/** The separators of a native path: both under a Windows path, `/` otherwise. */
+function nativeSeparators(path: string): RegExp {
+  return isWindowsPath(path) ? /[/\\]/ : /\//;
+}
+
+/**
+ * Return the last name of a native path, such as a source root from the
+ * folder picker. A Windows path (drive or UNC share) splits on `/` and `\`;
+ * any other path only on `/`, because there `\` is part of a name. For a path
+ * from the backend use {@link wireBasename}.
  *
  * Previously duplicated in `features/inbox/inboxDetailHelpers.ts` and
  * `features/inbox/planPanelHelpers.ts` (both had identical bodies).
@@ -62,17 +82,18 @@ export function resolveRevealPath(
  * keeps its own copy intentionally.
  */
 export function basename(path: string): string {
-  const parts = path.replace(/\\/g, '/').split('/');
+  const parts = path.split(nativeSeparators(path));
   return parts[parts.length - 1] || path;
 }
 
 /**
- * Return the second-to-last path segment (the basename's parent directory
- * name). Returns an empty string when the path has fewer than two segments.
+ * Return the second-to-last name of a native path (the basename's parent
+ * directory name), splitting as {@link basename} does. Returns an empty
+ * string when the path has fewer than two names.
  *
  * Previously only in `features/inbox/inboxDetailHelpers.ts`.
  */
 export function parentSegment(path: string): string {
-  const parts = path.replace(/\\/g, '/').split('/').filter(Boolean);
+  const parts = path.split(nativeSeparators(path)).filter(Boolean);
   return parts.length >= 2 ? parts[parts.length - 2] : '';
 }

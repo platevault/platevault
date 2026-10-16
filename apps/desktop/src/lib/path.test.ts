@@ -2,7 +2,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { describe, it, expect } from 'vitest';
-import { resolveRevealPath, basename, parentSegment } from './path';
+import {
+  resolveRevealPath,
+  basename,
+  parentSegment,
+  wireBasename,
+} from './path';
 
 describe('resolveRevealPath', () => {
   it('joins a forward-slash relative path onto a unix root', () => {
@@ -101,5 +106,36 @@ describe('parentSegment', () => {
 
   it('filters empty segments from trailing slashes', () => {
     expect(parentSegment('sessions/2024/')).toBe('sessions');
+  });
+});
+
+// bd astro-plan-3pvvc: `/` is the only separator in a wire path; on macOS and
+// Linux a backslash is part of a name.
+describe('wireBasename', () => {
+  it('keeps a backslash in the last name', () => {
+    expect(wireBasename('folder/a\\b.fits')).toBe('a\\b.fits');
+    expect(wireBasename('a\\b.fits')).toBe('a\\b.fits');
+  });
+
+  it('returns the last name of a nested path', () => {
+    expect(wireBasename('sessions/2024/IC1396')).toBe('IC1396');
+    expect(wireBasename('filename.fits')).toBe('filename.fits');
+  });
+
+  it('returns the whole path when it ends with a slash', () => {
+    expect(wireBasename('sessions/2024/')).toBe('sessions/2024/');
+  });
+});
+
+describe('native basename and parentSegment', () => {
+  it('keep a backslash in a name under a macOS or Linux path', () => {
+    expect(basename('/data/a\\b')).toBe('a\\b');
+    expect(parentSegment('/data/a\\b/Lights')).toBe('a\\b');
+  });
+
+  it('split on both separators under a Windows drive or UNC path', () => {
+    expect(basename('D:/Astro\\Lights')).toBe('Lights');
+    expect(basename('\\\\nas\\astro\\lib')).toBe('lib');
+    expect(parentSegment('C:\\Users\\sjors/Lights')).toBe('sjors');
   });
 });

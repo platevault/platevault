@@ -11,8 +11,8 @@
 
 import type { InboxPlanAction } from './store';
 import { m } from '@/lib/i18n';
-import { basename } from '@/lib/path';
-export { basename };
+import { wireBasename } from '@/lib/path';
+export { wireBasename };
 
 function actionLabel(kind: string): string {
   switch (kind) {
@@ -137,7 +137,7 @@ export function frameTypeLabel(
   // Match a frame keyword INSIDE the file name (e.g. "bias_001.fits",
   // "master_dark_300s.fits") so per-file rows of an in-place mixed folder get
   // their real type instead of the folder's dominant hint.
-  const base = basename(action.fromPath).toLowerCase();
+  const base = wireBasename(action.fromPath).toLowerCase();
   for (const [token, singular] of FRAME_TYPE_KEYWORDS) {
     if (base.includes(token)) return singular;
   }

@@ -16,13 +16,13 @@ import type { PlanApplyProgress } from '@/features/plans/usePlanApplyProgress';
 import * as pp from './plan-panel.css';
 import type { InboxOpenPlan } from './store';
 import {
-  basename,
   breakdownDestination,
   buildGroupBreakdown,
   buildGroupSummary,
   frameTypeCountLabel,
   frameTypeLabel,
   pluralLabel,
+  wireBasename,
 } from './planPanelHelpers';
 
 export interface PlanGroupRowProps {
@@ -371,7 +371,7 @@ export function PlanGroupRow({
               >
                 <span aria-hidden="true" />
                 <span className={pp.fileName} title={a.fromPath}>
-                  {basename(a.fromPath)}
+                  {wireBasename(a.fromPath)}
                 </span>
                 <span className={pp.fileAction}>
                   {/* Per-file frame type (composition), inferred from the
