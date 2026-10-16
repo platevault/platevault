@@ -60,7 +60,11 @@ mod notices {
     /// Forwards removal notices to the managed [`CaptureWatch`] until dropped.
     /// Drop it after the watch shut down, so no removal request waits on a
     /// discovery that is stopping.
-    pub struct EjectNotices(RemovalNotices<Uuid>);
+    pub struct EjectNotices {
+        /// Held for its drop, which ends every registration and the window
+        /// thread.
+        _notices: RemovalNotices<Uuid>,
+    }
 
     impl EjectNotices {
         /// Start forwarding to the [`CaptureWatch`] that `app` manages, for the
@@ -80,7 +84,7 @@ mod notices {
             })
             .map_err(|error| format!("cannot start removal notices: {error}"))?;
             tauri::async_runtime::spawn(follow(library, counts, notices.roots()));
-            Ok(Self(notices))
+            Ok(Self { _notices: notices })
         }
     }
 
