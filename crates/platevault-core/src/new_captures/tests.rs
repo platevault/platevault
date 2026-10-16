@@ -21,7 +21,9 @@ use super::{
 };
 use crate::inventory::{self, Entry, Listing, RootRefusal, RootStamp};
 use crate::library::{fixtures, Library};
-use crate::{LibraryError, Location, LocationRole, NativePath, ScanOperation, ScanState};
+use crate::{
+    LibraryError, Location, LocationRole, NativePath, PathSensitivity, ScanOperation, ScanState,
+};
 
 /// Ticks short enough for tests; the OS watcher, walks and shutdown grace are
 /// real.
@@ -1550,4 +1552,23 @@ async fn a_frame_in_place_of_a_counted_folder_forgets_the_frames_below_it() {
 
     watched.recheck(folder, Entry::Frame);
     assert_eq!(watched.new.into_values().collect::<Vec<_>>(), [folder.to_path_buf()]);
+}
+
+/// A case-only rename on a volume that folds case names one frame under two
+/// spellings in one batch, in no set order: the frame found under the new
+/// spelling stays counted once, though the old spelling's entry is gone.
+#[tokio::test]
+async fn a_case_only_rename_keeps_its_frame_counted_once() {
+    let fx = fixture().await;
+    let root = fx.base.join("Captures");
+    let location = captures(&fx.library, &root).await;
+    let mut watched = counted(location, &root);
+    let volume = &mut watched.location.identity.volume;
+    (volume.case, volume.normalization) =
+        (PathSensitivity::Insensitive, PathSensitivity::Insensitive);
+    let (old, new) = (PathBuf::from("ha_001.fits"), PathBuf::from("Ha_001.fits"));
+    watched.recheck(&old, Entry::Frame);
+
+    watched.recheck_all(&[(new.clone(), Entry::Frame), (old, Entry::Other)]);
+    assert_eq!(watched.new.into_values().collect::<Vec<_>>(), [new]);
 }

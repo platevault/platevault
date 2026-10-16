@@ -737,6 +737,23 @@ impl Watched {
         }
     }
 
+    /// [`Self::recheck`] for each path one batch of live events named, every
+    /// path that holds no frame first. On a volume that folds case or
+    /// normalization, two spellings of one name share an identity, and a
+    /// rename between them names both in one batch, in no set order: the
+    /// frame found under one spelling must outlast the other spelling's
+    /// removal. A frame below a path found gone is counted as well; when that
+    /// path was a watched folder, the watcher restarts and walks it again.
+    fn recheck_all(&mut self, entries: &[(PathBuf, Entry)]) {
+        let frame = |entry: &Entry| *entry == Entry::Frame;
+        for (relative, entry) in entries.iter().filter(|(_, entry)| !frame(entry)) {
+            self.recheck(relative, *entry);
+        }
+        for (relative, entry) in entries.iter().filter(|(_, entry)| frame(entry)) {
+            self.recheck(relative, *entry);
+        }
+    }
+
     /// Drop the new files below a folder that went away or was replaced.
     fn forget_below(&mut self, folder: &Path) {
         if self.new.is_empty() {
@@ -1378,11 +1395,7 @@ impl Run {
             return;
         };
         match entries {
-            Ok(entries) => {
-                for (relative, entry) in entries.iter().flatten() {
-                    watched.recheck(relative, *entry);
-                }
-            }
+            Ok(entries) => watched.recheck_all(entries.as_deref().unwrap_or_default()),
             Err(_) => watched.rescan = true,
         }
     }
