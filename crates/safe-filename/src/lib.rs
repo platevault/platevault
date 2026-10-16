@@ -17,7 +17,8 @@
 //!    leading/trailing whitespace and dots.
 //! 3. Path-traversal rejection: `.` or `..`.
 //! 4. Windows reserved device-name rejection (CON, PRN, AUX, NUL, COM1–9,
-//!    LPT1–9) on the pre-first-dot stem, case-insensitive, on all platforms.
+//!    COM¹–³, LPT1–9, LPT¹–³) on the pre-first-dot stem, case-insensitive, on
+//!    all platforms.
 //! 5. Unicode confusables detection via `unicode-security` (mixed-script),
 //!    relaxed to admit a mixed Latin/Greek value.
 //!
@@ -142,9 +143,12 @@ pub fn step3_traversal_check(segment: &str) -> Result<(), SanitizeError> {
 /// Windows device names that must not appear as path segment names.
 ///
 /// Checked case-insensitively on all platforms (constitution requirement).
+/// Windows also reserves the superscript-digit forms COM¹-³ and LPT¹-³
+/// (Microsoft, "Naming Files, Paths, and Namespaces").
 static WINDOWS_RESERVED_NAMES: &[&str] = &[
     "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8",
-    "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+    "COM9", "COM¹", "COM²", "COM³", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8",
+    "LPT9", "LPT¹", "LPT²", "LPT³",
 ];
 
 /// Step 4: Return an error if the segment (after prior sanitization) names a
@@ -316,6 +320,9 @@ mod tests {
     #[case("nul", true)] // lowercase reserved
     #[case("COM9", true)] // numbered device
     #[case("lpt1", true)] // lowercase numbered device
+    #[case("COM¹", true)] // superscript-digit device
+    #[case("lpt³", true)] // lowercase superscript-digit device
+    #[case("Com².json", true)] // mixed case, with an extension
     #[case("CONtrast", false)] // CON prefix is not reserved
     #[case("NGC7000", false)]
     // normal name
@@ -390,6 +397,32 @@ mod tests {
     fn full_pipeline_reserved_name_rejected() {
         let err = sanitize_token_value("target", "CON").unwrap_err();
         assert!(matches!(err, SanitizeError::ReservedName { .. }));
+    }
+
+    /// astro-plan-y4nbe.1: Windows reserves COM¹-³ and LPT¹-³ (superscript
+    /// digits) like COM1-9 and LPT1-9, in any case, with an extension, and with
+    /// trailing dots or spaces (which step 2 trims before the device check).
+    #[rstest]
+    fn full_pipeline_superscript_device_rejected(
+        #[values("COM¹", "COM²", "COM³", "LPT¹", "LPT²", "LPT³")] name: &str,
+        #[values("", ".fits", ".", "  ", ". .", ".fits.")] suffix: &str,
+        #[values(false, true)] lowercase: bool,
+    ) {
+        let base = if lowercase { name.to_lowercase() } else { name.to_owned() };
+        let raw = format!("{base}{suffix}");
+        let err = sanitize_token_value("target", &raw).unwrap_err();
+        assert!(matches!(err, SanitizeError::ReservedName { .. }), "{raw:?} must be reserved");
+    }
+
+    /// Superscript digits outside ¹-³, and a superscript suffix on a longer
+    /// stem, are not device names.
+    #[rstest]
+    #[case("COM⁴")]
+    #[case("LPT⁰")]
+    #[case("COM¹0")]
+    #[case("COMET¹")]
+    fn full_pipeline_superscript_non_device_allowed(#[case] raw: &str) {
+        assert!(sanitize_token_value("target", raw).is_ok());
     }
 
     /// astro-plan-3v3r.1.23: the pipeline reports "nothing left" as an error, so
