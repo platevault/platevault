@@ -172,8 +172,8 @@ Done means:
 
 - **Do:** Inspect the new View tree and the Project's Apply details.
 - **Expect:** The tree has `GROUP_` folders for RedCat and `RedCat · 2`, then hyphenated `NIGHT_` folders with `Lights/Ha_300s/` and assigned `Flats/Ha/`. `Darks/` and `Bias/` are shared at the top for the one camera. Copies are fresh copies from originals and are clones on the fixture volume that supports clones. The previous View is removed after its recorded entries are safely removed.
-- **Expect (negative):** No hard link points to an original, and no Result is inside View or written into Output by Siril.
-- **Trace:** PREP-FR-04, PREP-FR-06, PREP-FR-16 · STO-FR-10 · D-W98, D-W99, D-W100
+- **Expect (negative):** No View entry is a hard link, to an original or to another copy, and no Result is inside View or written into Output by Siril.
+- **Trace:** PREP-FR-04, PREP-FR-06, PREP-FR-16 · STO-FR-10 · D-W81, D-W98, D-W99, D-W100
 
 ## Success criteria
 

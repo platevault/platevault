@@ -58,9 +58,9 @@ The user wraps up the open Project `NGC 7000 HOO` through Clean up, Trash and Ar
 ### S4 — Inspect cleanup entries {#S4}
 
 - **Do:** Expand the selected View row and inspect its entries before changing the selection.
-- **Expect:** Each entry shows its path, role, other Project references, retained-original evidence and estimated bytes. A copy hard-linked into multiple View paths is counted once.
+- **Expect:** Each entry shows its path, role, other Project references, retained-original evidence and estimated bytes. Each copy is its own entry with its own size, and no entry is a hard link (PREP-FR-04).
 - **Expect (negative):** Link sizes are not presented as guaranteed reclaim, and files outside the View and `View (previous)/` are not included.
-- **Trace:** STO-FR-01, STO-FR-02 · STO-AC-08 · D-W97
+- **Trace:** STO-FR-01, STO-FR-02 · STO-AC-08 · PREP-FR-04 · D-W81, D-W97
 
 ### S5 — Choose View entries for cleanup {#S5}
 
