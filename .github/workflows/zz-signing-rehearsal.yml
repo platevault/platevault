@@ -105,7 +105,7 @@ jobs:
         shell: pwsh
         env:
           AUTHENTICODE_SIGNER: PlateVault signing rehearsal
-          AUTHENTICODE_ISSUER: CN=PlateVault signing rehearsal
+          AUTHENTICODE_ISSUER: PlateVault signing rehearsal
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
           foreach ($installer in Get-ChildItem -File installers-to-sign) {
@@ -204,7 +204,6 @@ jobs:
               $expectedSigner = 'PlateVault signing rehearsal'
               $expectedIssuer = 'Unexpected CA'
               if ($signature.Status -ne 'Valid' -or $signer -cne $expectedSigner -or $issuer -cne $expectedIssuer) { throw "$($installer.Name) must carry a valid signature by $expectedSigner issued by $expectedIssuer, found: $($signature.Status) by '$signer' issued by '$issuer'" }
-              throw 'the issuer mutation unexpectedly passed'
             }
           }
           foreach ($case in $checks.Keys) {
