@@ -1,6 +1,6 @@
 /**
  * Slice A: S1 Home, S12 Sessions, S13 Import. Owned by the slice A screen
- * agent. Holds Home's Show done filter (D-W48), the Import draft (source,
+ * agent. Holds Home's Show closed filter (D-W48), the Import draft (source,
  * Copy or Move, destinations, the frame types typed for Unclassified holds
  * and the Target chosen per incoming session, P-IMP2) and the last started
  * Import or Add folder operation, and registers the "import" operation
@@ -31,8 +31,8 @@ export function emptyImportDraft(): ImportDraft {
 }
 
 export interface AState {
-  /** Home: Done Projects are hidden behind "Show done" (D-W48). */
-  showDone: boolean
+  /** Home: Closed and Archived Projects are hidden behind "Show closed" (D-W48). */
+  showClosed: boolean
   importDraft: ImportDraft
   /** The Import page shows this operation's progress and outcome until the user starts another. */
   lastImport: { kind: "import"; operationId: OperationId } | null
@@ -40,7 +40,7 @@ export interface AState {
 
 export const aSlice: SliceDefinition<AState> = {
   id: "a",
-  version: 3,
-  initial: () => ({ showDone: false, importDraft: emptyImportDraft(), lastImport: null }),
+  version: 4,
+  initial: () => ({ showClosed: false, importDraft: emptyImportDraft(), lastImport: null }),
   operations: [importHandler],
 }

@@ -2,9 +2,9 @@
  * Flow builders (round 10, plan §5): each staged flow as the `StepFlow`
  * contract (components/app/contracts.ts) that StepStrip and StepFooter
  * render. The step states, gates and summaries are the domain's
- * (`runFlowState`, `sessionIntakeState`, `wrapUpFlowState`,
- * `calibrationFlowState` in domain/derive.ts); a builder words them with the
- * caller's `m` and attaches the current step's Proceed. Call them during
+ * (`sessionIntakeState` and `calibrationFlowState` in domain/derive.ts,
+ * `wrapUpFlowState` in domain/project-view.ts); a builder words them with
+ * the caller's `m` and attaches the current step's Proceed. Call them during
  * render, so the words follow the language.
  *
  * Contract as agreed with U7 (StepFlow rendering):
@@ -14,30 +14,20 @@
  * - `next` is where the host goes once Proceed succeeds: the next step for a
  *   write that settles at once, null for one that starts an operation (the
  *   step reads Running, then Finished when the operation succeeds, F2).
- * - `proceed` is null once the flow is finished (a Finished or trashed run,
- *   a closed Project, a finished calibration process): every step is
- *   read-only and Reopen lives in the object menu (F7).
+ * - `proceed` is null once the flow is finished (a closed Project, a
+ *   finished calibration process): every step is read-only.
  *
- * Work a page still owns until W3 moves it into the store comes in through
- * `host`: Prepare's operation and confirm, Wrap up's selection, the Target
+ * Work a page owns comes in through `host`: Wrap up's selection, the Target
  * and rig the intake pickers hold.
  */
-import type { Action, Blocker, ConfirmSpec, FileRow, FlowStep, StepFlow } from "@/components/app/contracts"
+import type { Action, Blocker, ConfirmSpec, FlowStep, StepFlow } from "@/components/app/contracts"
 import { CALIBRATION_STEP_NAME } from "@/domain/calibration-process"
 import {
   calibrationFlowState,
   calibrationStepLink,
   type DerivedStep,
   type FlowGate,
-  groupFlowState,
-  type GroupFlowState,
-  groupStepLink,
   nextInReviewQueue,
-  panelRef,
-  runFlowState,
-  type RunFlowState,
-  runResults,
-  runStepLink,
   SESSION_INTAKE_NAME,
   SESSION_INTAKE_STEPS,
   sessionIntakeEntry,
@@ -46,22 +36,16 @@ import {
   type SessionIntakeStepId,
   type StepLink,
   type World,
-  wrapUpFlowState,
-  type WrapUpFlowState,
-  wrapUpStepLink,
 } from "@/domain/derive"
-import { fileAt } from "@/domain/disk"
-import { STEP_NAME, WRAP_UP_NAME, WRAP_UP_STEPS } from "@/domain/labels"
-import type { CalibrationProcess, CalibrationStepId, OperationId, OpticalTrainId, ProfileId, Project, Run, RunStep, RunGroup, Session, TargetId, WrapUpStepId } from "@/domain/types"
-import { fileName } from "@/lib/format"
+import { WRAP_UP_NAME, WRAP_UP_STEPS } from "@/domain/labels"
+import { wrapUpFlowState, type WrapUpFlowState, wrapUpStepLink } from "@/domain/project-view"
+import type { CalibrationProcess, CalibrationStepId, OperationId, OpticalTrainId, ProfileId, Project, Session, TargetId, WrapUpStepId } from "@/domain/types"
 import { joinRefs, type MessageRef, type Messages, msg, say } from "@/lib/i18n"
 import { type CommitResult, store } from "@/store/core"
 import { detectMasters, discardRaws, importMaster, keepRaws, startStack } from "./calibration"
 import { confirmRig, confirmTarget, filedUnclassified, fileIntoTarget } from "./library"
 import { recordWrapUpStep, reopenWrapUpStep, wrapUpRefusal } from "./projects"
-import { finishRun, recordRunCalibration, saveRun } from "./runs"
 import { refuse } from "./shared"
-import { preparedEntryItems } from "./trash"
 
 // ---------------------------------------------------------------------------
 // Wording
@@ -88,138 +72,6 @@ function stepAfter<Id extends string>(order: Id[], current: Id): Id | null {
 }
 
 // ---------------------------------------------------------------------------
-// Run (D1, D5, C2, C10, C15)
-// ---------------------------------------------------------------------------
-
-export interface RunFlowHost {
-  /**
-   * Prepare's commit step (F2): the page's preparation with its folder-layout
-   * confirm. `start` starts it and returns the commit result; the step reads
-   * Finished once the preparation is prepared and verified. P6 moves the
-   * preparation into the store.
-   */
-  prepare: { confirm?: ConfirmSpec; start: () => CommitResult }
-}
-
-/** The run view Finish run removes (F6): its links are unlinked, its copies go to the OS Trash. */
-function runViewRows(world: World, run: Run): FileRow[] {
-  return preparedEntryItems(world, run.id).flatMap((item): FileRow[] => {
-    if (item.refusedReason) return []
-    const file = fileAt(world.disk, item.path)
-    const from = item.path.slice(0, item.path.lastIndexOf("/"))
-    return [{ file: fileName(item.path), from, action: file?.linkTarget ? "unlink" : "trash", size: file?.linkTarget ? 0 : (file?.sizeBytes ?? 0) }]
-  })
-}
-
-/** The run's Products Finish run keeps (§5.4): each accepted Result, staying in its folder. */
-function productRows(world: World, run: Run): FileRow[] {
-  return runResults(world.catalog, run.id)
-    .products.filter((result) => result.acceptance === "accepted")
-    .map((result): FileRow => ({ file: fileName(result.path), from: result.path.slice(0, result.path.lastIndexOf("/")), action: "keep", size: fileAt(world.disk, result.path)?.sizeBytes ?? 0 }))
-}
-
-/**
- * The run as a flow: Select → Calibrate → Prepare → Results (§5.4), not
- * ordered (each step derives from the run's data, so an edit makes its step
- * current again). Proceed saves the selection, records the calibration,
- * starts Prepare, and on Results is Finish run, which freezes the
- * calibration (D5) and removes the run view (F6). Its confirm lists the
- * Products it keeps, an empty group when none was accepted, then the run
- * view it removes, when there is one.
- */
-export function runFlow(world: World, run: Run, m: Messages, host: RunFlowHost): StepFlow {
-  const state = runFlowState(world, run)
-  const steps = state.steps.map((step) => flowStep(m, step, STEP_NAME[step.id]))
-  const base = { steps, current: state.current, ordered: false, linkFor: (stepId: string) => runStepLink(run, stepId as RunStep) }
-  if (state.finishedAt || state.trashed) return { ...base, proceed: null, next: null }
-  return { ...base, ...runProceed(world, run, m, host, state) }
-}
-
-function runProceed(world: World, run: Run, m: Messages, host: RunFlowHost, state: RunFlowState): Pick<StepFlow, "proceed" | "next"> {
-  const proceed = (work: Action["run"], extra: Partial<Action> = {}): Action => ({ id: "run-proceed", label: m.stepflow_proceed(), run: work, ...extra })
-  switch (state.current) {
-    case "select":
-      return { proceed: proceed(() => (run.draft ? saveRun(run.id) : { ok: true })), next: runStepLink(run, "calibrate") }
-    case "calibrate":
-      return { proceed: proceed(() => recordRunCalibration(run.id)), next: runStepLink(run, "prepare") }
-    case "prepare":
-      return { proceed: proceed(host.prepare.start, host.prepare.confirm ? { confirm: host.prepare.confirm } : {}), next: null }
-    case "results": {
-      const rows = runViewRows(world, run)
-      const summaryOf = (id: RunStep) => state.steps.find((s) => s.id === id)?.summary ?? null
-      const summary = joinRefs([summaryOf("results"), summaryOf("calibrate")].filter((s): s is MessageRef => s !== null), " · ")
-      const confirm: ConfirmSpec = {
-        title: m.stepflow_finish_run_title({ name: run.name }),
-        summary: say(m, summary),
-        groups: [{ label: m.run_results_products(), rows: productRows(world, run) }, ...(rows.length > 0 ? [{ label: m.run_check_mode(), rows }] : [])],
-        confirm: { label: m.stepflow_finish_run() },
-      }
-      return { proceed: { id: "run-finish", label: m.stepflow_finish_run(), run: () => finishRun(run.id, { keepView: false }).result, confirm }, next: null }
-    }
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Run group (§5.2)
-// ---------------------------------------------------------------------------
-
-export interface GroupFlowHost {
-  /**
-   * Prepare's commit step (F2): Prepare all with its folder-layout confirm.
-   * `start` starts every panel's preparation; the step reads Finished once
-   * every panel is prepared and verified.
-   */
-  prepare: { confirm?: ConfirmSpec; start: () => CommitResult }
-}
-
-/** Every panel's result: ok when all are, else the first refusal or failure. Every panel that can still moves on. */
-function allPanels(results: CommitResult[]): CommitResult {
-  return results.find((r) => !r.ok) ?? { ok: true }
-}
-
-/**
- * The run group as a flow: the run flow's four steps over its live panels
- * (`groupFlowState`). Proceed acts on every panel: Select saves each panel's
- * draft, Calibrate records each panel's calibration, Prepare runs the host's
- * Prepare all, and Results is Finish all panels, which finishes every
- * panel's run and removes each run view (F6).
- */
-export function groupFlow(world: World, group: RunGroup, m: Messages, host: GroupFlowHost): StepFlow {
-  const state = groupFlowState(world, group)
-  const steps = state.steps.map((step) => flowStep(m, step, STEP_NAME[step.id]))
-  const base = { steps, current: state.current, ordered: false, linkFor: (stepId: string) => groupStepLink(group, stepId as RunStep) }
-  if (state.finishedAt) return { ...base, proceed: null, next: null }
-  return { ...base, ...groupProceed(world, group, m, host, state) }
-}
-
-function groupProceed(world: World, group: RunGroup, m: Messages, host: GroupFlowHost, state: GroupFlowState): Pick<StepFlow, "proceed" | "next"> {
-  const proceed = (work: Action["run"], extra: Partial<Action> = {}): Action => ({ id: "group-proceed", label: m.stepflow_proceed(), run: work, ...extra })
-  const runs = state.panels.map((p) => p.run)
-  switch (state.current) {
-    case "select":
-      return { proceed: proceed(() => allPanels(runs.filter((run) => run.draft).map((run) => saveRun(run.id)))), next: groupStepLink(group, "calibrate") }
-    case "calibrate":
-      return { proceed: proceed(() => allPanels(runs.map((run) => recordRunCalibration(run.id)))), next: groupStepLink(group, "prepare") }
-    case "prepare":
-      return { proceed: proceed(host.prepare.start, host.prepare.confirm ? { confirm: host.prepare.confirm } : {}), next: null }
-    case "results": {
-      const open = state.panels.filter((p) => p.flow.finishedAt === null)
-      const groups = open.flatMap((p) => {
-        const rows = runViewRows(world, p.run)
-        return rows.length > 0 ? [{ label: say(m, panelRef(p.panel)), rows }] : []
-      })
-      const confirm: ConfirmSpec = {
-        title: m.stepflow_finish_all_panels_title({ name: group.name }),
-        summary: m.rungroup_panels_count({ count: open.length }),
-        groups: groups.length > 0 ? groups : undefined,
-        confirm: { label: m.stepflow_finish_all_panels() },
-      }
-      return { proceed: { id: "group-finish", label: m.stepflow_finish_all_panels(), run: () => allPanels(open.map((p) => finishRun(p.run.id, { keepView: false }).result)), confirm }, next: null }
-    }
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Session intake (P-REV2, C10, C14, C15)
 // ---------------------------------------------------------------------------
 
@@ -235,9 +87,7 @@ export interface SessionIntakeHost {
  * Target's Proceed confirms the chosen Target (File into Target for a
  * session imported as Unclassified), Rig's confirms the rig, and Review's
  * is Finish review: blocked while a frame is Unreviewed, then it opens the
- * next session the review queue holds (C14). Review's marks stay locked
- * while an unfinished run's prepared view uses the session (C10; the
- * Review step's summary says so and `markFrames` refuses).
+ * next session the review queue holds (C14).
  */
 export function sessionIntake(world: World, session: Session, m: Messages, host: SessionIntakeHost): StepFlow {
   const state = sessionIntakeState(world, session)
@@ -294,7 +144,7 @@ export interface WrapUpSelection {
 }
 
 /**
- * Wrap up as a flow: Clean up runs → Trash → Archive, ordered (C3). Later
+ * Wrap up as a flow: Clean up → Trash → Archive, ordered (C3). Later
  * steps stay read-only until the earlier ones are finished or skipped; an
  * earlier one reopens until Close (F5). Each step is a selection step, so it
  * has no Skip: Proceed with nothing selected records it Skipped (F4).
@@ -329,7 +179,7 @@ function wrapUpProceed(projectId: string, step: WrapUpStepId, selection: WrapUpS
   return recordWrapUpStep(projectId, step, { kind: "started", operationIds: selection.start() })
 }
 
-/** Close project's confirm: the archive moves, with how steps 1 and 2 ended ("Clean up runs: Finished 10 Sep · Trash: Skipped"). */
+/** Close project's confirm: the archive moves, with how steps 1 and 2 ended ("Clean up: Finished 10 Sep · Trash: Skipped"). */
 function closeConfirm(m: Messages, project: Project, state: WrapUpFlowState, selection: WrapUpSelection): ConfirmSpec {
   const earlier = state.steps.filter((s) => s.id !== "archive").map((s) => (s.summary ? joinRefs([WRAP_UP_NAME[s.id], s.summary], ": ") : WRAP_UP_NAME[s.id]))
   return {
@@ -343,7 +193,8 @@ function closeConfirm(m: Messages, project: Project, state: WrapUpFlowState, sel
 /**
  * Reopen step (F5): an earlier finished or skipped step, until Close. As
  * `reopenWrapUpStep` refuses, it is unavailable while any step carries a
- * gate: a step's work still runs, or a run was reopened.
+ * gate: a step's work still runs, a change is pending, or another
+ * operation works on the Project.
  */
 function wrapUpReopen(m: Messages, project: Project, stepId: WrapUpStepId, state: WrapUpFlowState): Action {
   const label = m.stepflow_reopen_step()

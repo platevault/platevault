@@ -55,6 +55,7 @@ import { formatCount } from "@/lib/format"
 import { joinRefs, m, type MessageRef, msg } from "@/lib/i18n"
 import { type CommitResult, commit, nowIso, type PrototypeState, store } from "@/store/core"
 import type { OperationHandler } from "@/store/operations"
+import { keywordRefusals } from "./settings"
 import { closedRefusal, freshId, MISSING, recordSaved, refuse, refuseWithGate } from "./shared"
 
 const projectHref = (id: ProjectId) => `/projects/${id}`
@@ -268,6 +269,8 @@ export function setProjectSettings(projectId: ProjectId, patch: Partial<ProjectS
   if (patch.processingParent !== undefined && project.folderPath && patch.processingParent !== project.settings.processingParent) {
     return refuse(msg("store_refused", { label }), [msg("project_reason_folder_fixed", { path: project.folderPath })], projectHref(projectId))
   }
+  const keywordReasons = patch.keywords ? keywordRefusals(patch.keywords) : []
+  if (keywordReasons.length > 0) return refuse(msg("store_refused", { label }), keywordReasons, projectHref(projectId))
   return editProject(projectId, label, project.revision, (p) => ({ ...p, settings: { ...p.settings, ...patch } }))
 }
 
@@ -519,16 +522,19 @@ function wrapUpLabel(step: WrapUpStepId): MessageRef {
  * Project is closed, Wrap up is not available (`wrapUpGate`: a change is
  * pending or another operation works on it), an earlier step is neither
  * finished nor skipped (C3), or the step is settled or still running. Null
- * when it may proceed.
+ * when it may proceed. `starting` names the operations this step's Proceed
+ * has just started: the check reads the Project as it was before them, so
+ * the step's own work never refuses its record.
  */
-export function wrapUpRefusal(projectId: ProjectId, step: WrapUpStepId): CommitResult | null {
+export function wrapUpRefusal(projectId: ProjectId, step: WrapUpStepId, starting: ReadonlyArray<OperationId> = []): CommitResult | null {
   const state = store.getState()
   const project = state.catalog.projects[projectId]
   if (!project) return MISSING
   const label = wrapUpLabel(step)
   const closed = closedRefusal(project, label)
   if (closed) return closed
-  const flow = wrapUpFlowState(state, project)
+  const operations = starting.length === 0 ? state.operations : Object.fromEntries(Object.entries(state.operations).filter(([id]) => !starting.includes(id)))
+  const flow = wrapUpFlowState({ ...state, operations }, project)
   const title = msg("store_refused", { label })
   const href = `${projectHref(projectId)}?stage=wrap-up`
   if (flow.unavailable) return refuseWithGate(label, flow.unavailable, href)
@@ -548,7 +554,7 @@ export function wrapUpRefusal(projectId: ProjectId, step: WrapUpStepId): CommitR
  * no transfer the Project closes now, else when the transfer succeeds.
  */
 export function recordWrapUpStep(projectId: ProjectId, step: WrapUpStepId, outcome: WrapUpOutcome): CommitResult {
-  const refused = wrapUpRefusal(projectId, step)
+  const refused = wrapUpRefusal(projectId, step, outcome.kind === "started" ? outcome.operationIds : [])
   if (refused) return refused
   const project = store.getState().catalog.projects[projectId]!
   const at = nowIso()

@@ -1,18 +1,20 @@
 /**
  * Prototype world controls (foundation-owned). These change the simulated
  * disk, the simulated clock or arm faults so reviewers can reach offline,
- * partial, drift, restore, copy, collision and failed-write states. They never
- * write the catalog directly; PlateVault observes their effects the next time
- * it reads the disk.
+ * partial, drift, restore, copy, collision, failed-write, tool-rerun and
+ * held-file states. They never write the catalog directly; PlateVault
+ * observes their effects the next time it reads the disk.
  */
 import { useSyncExternalStore } from "react"
 import { rawFrameIds } from "@/domain/calibration-process"
 import { arrivalFiles, defaultFaults, deviceFiles, VOLUME_IDS } from "@/domain/seed"
 import { fakeSha256, fileAt, fileKey, filesUnder, makeFile, removeFile, volumeForPath, writeFiles } from "@/domain/disk"
 import { isUnder } from "@/domain/indexing"
-import type { CalibrationProcessId, Disk, DiskFile, QuickActionMode, SimulationFaults, VolumeId } from "@/domain/types"
+import { projectPaths, toolFolder } from "@/domain/project-view"
+import type { CalibrationProcessId, Disk, DiskFile, ProjectId, QuickActionMode, SimulationFaults, VolumeId } from "@/domain/types"
 import { type MessageRef, msg } from "@/lib/i18n"
 import { nowIso, store } from "./core"
+import { ensureTicker } from "./operations"
 
 const WBPP_PREFIX = { dark: "masterDark", flat: "masterFlat", bias: "masterBias", "dark-flat": "masterDarkFlat" } as const
 
@@ -35,6 +37,52 @@ export function toolFinishedStacking(processId: CalibrationProcessId): boolean {
   const file = makeFile({ path, volumeId, sizeBytes: first.widthPx * first.heightPx * 4 + 23_040, kind: "xisf", header, sha256: fakeSha256(path, Date.parse(at)), modifiedAt: at })
   store.setState((s) => ({ ...s, disk: writeFiles(s.disk, [file]) }))
   return true
+}
+
+/**
+ * An external tool reruns on a Project's View (PREP-FR-07, owner §1): it
+ * writes only into its own `Processing/<tool>/` folder, overwriting its
+ * earlier files there with new bytes and writing a master light per channel
+ * and binning the View holds, named as WBPP does. `Output/` never changes,
+ * so no Result is overwritten (RES-FR-02); a master it rewrote has a new
+ * digest and is offered once more (CAL-FR-06). False when the Project has no
+ * applied View or its volume is offline.
+ */
+export function rerunTool(projectId: ProjectId, tool = "WBPP"): boolean {
+  const state = store.getState()
+  const project = state.catalog.projects[projectId]
+  const paths = project?.view ? projectPaths(state, project) : null
+  const volumeId = paths ? volumeForPath(state.disk, paths.root) : null
+  if (!project?.view || !paths || !volumeId || !state.disk.volumes[volumeId]?.mounted) return false
+  const folder = toolFolder(paths, tool)
+  const at = nowIso()
+  const version = Date.parse(at)
+  const rewritten = filesUnder(state.disk, folder)
+    .filter((file) => !file.linkTarget)
+    .map((file): DiskFile => ({ ...file, previousSha256: file.sha256, sha256: fakeSha256(file.path, version), modifiedAt: at }))
+  const written = new Set(rewritten.map((file) => file.path))
+  const masters = [
+    ...new Set(
+      project.view.inputs.flatMap((input) => {
+        const session = state.catalog.sessions[input.sessionId]
+        return session ? [`${folder}/master/masterLight_BIN-${session.binning}_FILTER-${session.channel ?? "none"}.xisf`] : []
+      }),
+    ),
+  ]
+    .filter((path) => !written.has(path))
+    .map((path) => makeFile({ path, volumeId, sizeBytes: 104_390_000, kind: "xisf", sha256: fakeSha256(path, version), modifiedAt: at }))
+  store.setState((s) => ({ ...s, disk: writeFiles(s.disk, [...rewritten, ...masters]) }))
+  return true
+}
+
+/**
+ * A tool holds a file in a View, or lets it go (Windows, PREP-FR-18): an
+ * Apply that finished its build waits ("Waiting for a tool to release a file
+ * in View") while it is held, and carries on by itself once it is released.
+ */
+export function setViewFileHeld(held: boolean) {
+  setFault("viewFileHeld", held)
+  if (!held) ensureTicker()
 }
 
 export function setVolumeMounted(volumeId: VolumeId, mounted: boolean) {

@@ -1,18 +1,45 @@
 /**
  * Settings writes shared by every screen (foundation-owned): goal templates
  * (D-W30, D-W47), naming templates and the tokens they omit (D-W20,
- * STO-IMP-FR-07) and application profiles (PREP-FR-01, PREP-FR-02). The
- * Equipment records (cameras, telescopes, reducers, filters, rigs) write
- * through Settings › Equipment's own actions
+ * STO-IMP-FR-07), application profiles (PREP-FR-01, PREP-FR-02), the default
+ * View mode, the GROUP and PANEL keywords and the matching thresholds
+ * (PREP-FR-04, PRJ-FR-28, D-W114), and the dated rig versions and camera
+ * calibration facts that matching reads (PLAN-EQ-FR-07, LIB-FR-26,
+ * CAL-FR-22). The Equipment records themselves (cameras, telescopes,
+ * reducers, filters, rigs) write through Settings › Equipment's own actions
  * (`e-targets-plan-settings/settings-actions.ts`). Failed writes stay unsaved
  * with Retry; the last saved value stays in effect.
  */
+import { calibrateSessions } from "@/domain/calibration"
+import { currentRigVersion, sessionRigVersion } from "@/domain/indexing"
+import { MODE_NAME } from "@/domain/labels"
 import { PROFILE_IDS } from "@/domain/seed"
 import { clampMoonAvoidance, type MoonAvoidance } from "@/domain/planning"
 import { NAMING_TOKENS, validateNamingTemplate } from "@/domain/templates"
-import type { ApplicationProfile, Band, GoalTemplate, GoalTemplateId, InputMode, LocationId, MoonConstraint, NamingFrameType, NamingToken, ProfileId, SimulatedApp } from "@/domain/types"
-import { joinRefs, type MessageRef, msg, verbatim } from "@/lib/i18n"
-import { type CommitResult, commit, store, withCatalog } from "@/store/core"
+import type {
+  ApplicationProfile,
+  Band,
+  Camera,
+  CameraId,
+  Catalog,
+  GoalTemplate,
+  GoalTemplateId,
+  GroupKeywords,
+  InputMode,
+  IsoDateTime,
+  LocationId,
+  MatchingSettings,
+  MoonConstraint,
+  NamingFrameType,
+  NamingToken,
+  NightDate,
+  OpticalTrainId,
+  ProfileId,
+  RigVersion,
+  SimulatedApp,
+} from "@/domain/types"
+import { joinRefs, type MessageRef, msg, nightRef, verbatim } from "@/lib/i18n"
+import { type CommitResult, commit, nowIso, type PrototypeState, store, withCatalog } from "@/store/core"
 import { freshId, MISSING, recordSaved, refuse } from "./shared"
 
 // ---------------------------------------------------------------------------
@@ -170,8 +197,8 @@ export function addApplicationProfile(input: { name: string; executablePath: str
 
 /**
  * Remove a profile the user added. Built-in profiles stay, and so does a
- * profile any run (outside the Trash) has set up or prepared with, so no run
- * loses the application it records.
+ * profile any Project hands its View to (its View settings or its applied
+ * View), so no Project loses the application it records.
  */
 export function removeApplicationProfile(id: ProfileId): CommitResult {
   const { catalog } = store.getState()
@@ -179,10 +206,9 @@ export function removeApplicationProfile(id: ProfileId): CommitResult {
   if (!profile) return MISSING
   const label = msg("project_remove_named", { name: profile.name })
   if (BUILT_IN_PROFILES.has(id)) return refuse(msg("store_refused", { label }), [msg("status_built_in")], APPS_HREF)
-  const prepared = new Set(Object.values(catalog.preparations).filter((p) => p.profileId === id).map((p) => p.runId))
-  const runs = Object.values(catalog.runs).filter((run) => !run.trashedAt && (run.setup?.profileId === id || prepared.has(run.id)))
-  if (runs.length > 0) {
-    const usedBy = joinRefs([msg("calibration_used_by_runs", { count: runs.length }), joinRefs(runs.map((run) => verbatim(run.name)), ", ")], " · ")
+  const projects = Object.values(catalog.projects).filter((p) => p.settings.profileId === id || p.view?.settings.profileId === id)
+  if (projects.length > 0) {
+    const usedBy = joinRefs([msg("equipment_used_by_projects", { count: projects.length }), joinRefs(projects.map((p) => verbatim(p.name)), ", ")], " · ")
     return refuse(msg("store_refused", { label }), [usedBy], APPS_HREF)
   }
   const result = commit(label, (s) =>
@@ -202,13 +228,228 @@ export function updateApp(id: string, patch: Partial<SimulatedApp>) {
 }
 
 // ---------------------------------------------------------------------------
-// Run views (P-PREP3)
+// Project defaults and keywords (PREP-FR-04, PRJ-FR-28, P-PREP3)
 // ---------------------------------------------------------------------------
 
-/** The run view a run uses until it picks one in Prepare. */
-export function setDefaultRunView(mode: InputMode): CommitResult {
-  return commit(msg("settings_default_run_view"), (s) => ({ ...s, settings: { ...s.settings, defaultRunView: mode } }), { href: "/settings/applications" })
+/** The View mode a new Project starts with (PREP-FR-04); an existing Project keeps its own. */
+export function setDefaultInputMode(mode: InputMode): CommitResult {
+  const result = commit(msg("settings_default_input_mode"), (s) => ({ ...s, settings: { ...s.settings, defaultInputMode: mode } }), { href: APPS_HREF })
+  if (result.ok) recordSaved(msg("settings_default_input_mode"), MODE_NAME[mode], APPS_HREF)
+  return result
 }
+
+/** The folder keywords the View already uses beside GROUP and PANEL: a group keyword may not take one of them. */
+const VIEW_KEYWORDS = ["NIGHT", "GAIN", "OFFSET"]
+
+/**
+ * Why these GROUP and PANEL keyword names cannot name View folders
+ * (PRJ-FR-28): each is a letter then letters or digits, so `<KEYWORD>_<value>`
+ * reads back as one keyword; the two differ, and neither is a keyword the
+ * View already uses (NIGHT, GAIN, OFFSET). Empty when they can.
+ */
+export function keywordRefusals(keywords: GroupKeywords): MessageRef[] {
+  const names = [keywords.group, keywords.panel]
+  const reasons: MessageRef[] = names.filter((name) => !/^[A-Za-z][A-Za-z0-9]*$/.test(name)).map((name) => msg("settings_keyword_invalid", { name: name || "–" }))
+  if (keywords.group.toUpperCase() === keywords.panel.toUpperCase()) reasons.push(msg("settings_keyword_same"))
+  for (const name of names) if (VIEW_KEYWORDS.includes(name.toUpperCase())) reasons.push(msg("settings_keyword_reserved", { name }))
+  return reasons
+}
+
+/** The GROUP and PANEL keyword names every Project uses unless it sets its own (PRJ-FR-28); a change reaches each View on its next Apply. */
+export function setGroupKeywords(keywords: GroupKeywords): CommitResult {
+  const next = { group: keywords.group.trim(), panel: keywords.panel.trim() }
+  const label = msg("settings_label_group_keywords")
+  const reasons = keywordRefusals(next)
+  if (reasons.length > 0) return refuse(msg("store_refused", { label }), reasons, APPS_HREF)
+  const result = commit(label, (s) => ({ ...s, settings: { ...s.settings, keywords: next } }), { href: APPS_HREF })
+  if (result.ok) recordSaved(label, verbatim(`${next.group} · ${next.panel}`), APPS_HREF)
+  return result
+}
+
+// ---------------------------------------------------------------------------
+// Matching (D-W114, PRJ-FR-31, CAL-FR-19 to CAL-FR-21)
+// ---------------------------------------------------------------------------
+
+const EQUIPMENT_HREF = "/settings/equipment"
+
+export type MatchingPatch = { [K in keyof MatchingSettings]?: Partial<MatchingSettings[K]> }
+
+/** A threshold in its range; a value that is not a number keeps the current one. */
+function clamp(value: number | undefined, current: number, min: number, max: number, whole = false): number {
+  if (value === undefined || !Number.isFinite(value)) return current
+  const bounded = Math.min(max, Math.max(min, value))
+  return whole ? Math.round(bounded) : bounded
+}
+
+/** The thresholds with `patch` merged in and each clamped to its range: percentages 0-100, angles 0-90°, windows whole nights or days. */
+function mergedMatching(current: MatchingSettings, patch: MatchingPatch): MatchingSettings {
+  const { framing, flats, darks, bias } = current
+  const f = patch.framing ?? {}
+  const fl = patch.flats ?? {}
+  const dk = patch.darks ?? {}
+  const bs = patch.bias ?? {}
+  return {
+    framing: {
+      overlapPct: clamp(f.overlapPct, framing.overlapPct, 0, 100),
+      centrePct: clamp(f.centrePct, framing.centrePct, 0, 100),
+      rotationDeg: clamp(f.rotationDeg, framing.rotationDeg, 0, 90),
+      panelOverlapMinPct: clamp(f.panelOverlapMinPct, framing.panelOverlapMinPct, 0, 100),
+      panelOverlapMaxPct: clamp(f.panelOverlapMaxPct, framing.panelOverlapMaxPct, 0, 100),
+    },
+    flats: { fineDeg: clamp(fl.fineDeg, flats.fineDeg, 0, 90), warnDeg: clamp(fl.warnDeg, flats.warnDeg, 0, 90), windowNights: clamp(fl.windowNights, flats.windowNights, 0, 365, true) },
+    darks: { windowDays: clamp(dk.windowDays, darks.windowDays, 0, 3650, true), temperatureWarnC: clamp(dk.temperatureWarnC, darks.temperatureWarnC, 0, 50) },
+    bias: { windowDays: clamp(bs.windowDays, bias.windowDays, 0, 3650, true), temperatureWarnC: clamp(bs.temperatureWarnC, bias.temperatureWarnC, 0, 50) },
+  }
+}
+
+/**
+ * The framing and calibration matching thresholds (D-W114). Framing applies
+ * to later intake splits and group placement; the calibration thresholds
+ * match every kind still waiting or suggested now, as ingestion would, while
+ * pins and Nos never change (CAL-FR-02). Refused when a lower bound passes
+ * its upper one (panel overlap, the flats' fine and warning rotation).
+ */
+export function setMatchingSettings(patch: MatchingPatch): CommitResult {
+  const label = msg("settings_label_matching")
+  const next = mergedMatching(store.getState().settings.matching, patch)
+  const reasons: MessageRef[] = []
+  if (next.framing.panelOverlapMinPct > next.framing.panelOverlapMaxPct) reasons.push(msg("settings_matching_panel_overlap_order"))
+  if (next.flats.fineDeg > next.flats.warnDeg) reasons.push(msg("settings_matching_flat_rotation_order"))
+  if (reasons.length > 0) return refuse(msg("store_refused", { label }), reasons, EQUIPMENT_HREF)
+  const at = nowIso()
+  const result = commit(
+    label,
+    (s) => {
+      const settings = { ...s.settings, matching: next }
+      return { ...s, settings, catalog: calibrateSessions(s.catalog, s.disk, settings, at) }
+    },
+    { href: EQUIPMENT_HREF },
+  )
+  if (result.ok) recordSaved(label, null, EQUIPMENT_HREF)
+  return result
+}
+
+// ---------------------------------------------------------------------------
+// Rig versions and camera calibration facts (PLAN-EQ-FR-07, LIB-FR-26, CAL-FR-22)
+// ---------------------------------------------------------------------------
+
+/** The optics a rig version records. */
+export type RigOptics = Omit<RigVersion, "id" | "from">
+
+function sameOptics(a: RigOptics, b: RigOptics): boolean {
+  return (
+    a.cameraId === b.cameraId &&
+    a.telescopeId === b.telescopeId &&
+    a.reducerId === b.reducerId &&
+    a.effectiveFocalLengthMm === b.effectiveFocalLengthMm &&
+    a.rotator === b.rotator &&
+    a.filterIds.length === b.filterIds.length &&
+    a.filterIds.every((id) => b.filterIds.includes(id))
+  )
+}
+
+/**
+ * Edit a rig's optics from a night on (PLAN-EQ-FR-07): the current version
+ * is frozen into the history and the new one applies from `from`. Each
+ * session keeps the version it recorded (LIB-FR-26), so nothing earlier is
+ * remapped and no flat pin changes; a session settling its rig later takes
+ * the version in effect on its night. Refused unless `from` falls after the
+ * current version's first night; optics equal to the current ones write
+ * nothing.
+ */
+export function addRigVersion(rigId: OpticalTrainId, from: NightDate, optics: RigOptics): CommitResult {
+  const rig = store.getState().catalog.opticalTrains[rigId]
+  if (!rig) return MISSING
+  const href = `${EQUIPMENT_HREF}?rig=${rigId}`
+  const label = msg("settings_label_rig_version", { name: rig.name })
+  if (sameOptics(currentRigVersion(rig), optics)) return { ok: true }
+  if (from <= rig.versionFrom) return refuse(msg("store_refused", { label }), [msg("settings_rig_version_after", { night: nightRef(rig.versionFrom) })], href)
+  const versionId = freshId("rv", `${rigId}|${from}`)
+  const result = commit(
+    label,
+    (s) =>
+      withCatalog(s, (c) => {
+        const current = c.opticalTrains[rigId]!
+        const next = { ...current, ...optics, versionId, versionFrom: from, history: [...current.history, currentRigVersion(current)] }
+        return { ...c, opticalTrains: { ...c.opticalTrains, [rigId]: next } }
+      }),
+    { href },
+  )
+  if (result.ok) recordSaved(msg("settings_saved_rig_version", { name: rig.name, night: nightRef(from) }), null, href)
+  return result
+}
+
+/**
+ * Name one physical camera (LIB-FR-26): darks and bias link to it by this
+ * alias once the rigs hold two cameras of its model. Unique across cameras;
+ * null clears it, refused while another camera shares its model.
+ */
+export function setCameraAlias(cameraId: CameraId, alias: string | null): CommitResult {
+  const { catalog } = store.getState()
+  const camera = catalog.cameras[cameraId]
+  if (!camera) return MISSING
+  const href = EQUIPMENT_HREF
+  const label = msg("settings_label_camera_alias", { name: camera.name })
+  const next = alias?.trim() || null
+  const others = Object.values(catalog.cameras).filter((c) => c.id !== cameraId)
+  const taken = next ? others.find((c) => c.physicalAlias?.toLowerCase() === next.toLowerCase()) : undefined
+  if (taken) return refuse(msg("store_refused", { label }), [msg("settings_camera_alias_taken", { alias: next!, name: taken.name })], href)
+  if (!next && others.some((c) => c.name.toLowerCase() === camera.name.toLowerCase())) return refuse(msg("store_refused", { label }), [msg("settings_camera_alias_needed", { name: camera.name })], href)
+  const result = commit(label, (s) => withCatalog(s, (c) => ({ ...c, cameras: { ...c.cameras, [cameraId]: { ...c.cameras[cameraId]!, physicalAlias: next } } })), { href })
+  if (result.ok) recordSaved(msg("equipment_saved_named", { name: camera.name }), next ? verbatim(next) : null, href)
+  return result
+}
+
+/**
+ * The catalog after a camera's "Don't use darks" / "Don't use bias" changed
+ * (CAL-FR-22): a No the camera default set goes back to waiting once the
+ * default is off, and matching then settles every kind still waiting or
+ * suggested, as No by the default where it is on. Pins and the user's own
+ * Nos stay.
+ */
+function withCameraDefaults(state: PrototypeState, catalog: Catalog, camera: Camera, at: IsoDateTime): Catalog {
+  let sessions = catalog.sessions
+  for (const session of Object.values(catalog.sessions)) {
+    if (!session.calibration || sessionRigVersion(catalog, session)?.version.cameraId !== camera.id) continue
+    const calibration = { ...session.calibration }
+    let changed = false
+    for (const [kind, on] of [["dark", camera.noDarks], ["bias", camera.noBias]] as const) {
+      const choice = calibration[kind]
+      if (choice.state === "none" && choice.by === "camera-default" && !on) {
+        calibration[kind] = { state: "waiting" }
+        changed = true
+      }
+    }
+    if (!changed) continue
+    if (sessions === catalog.sessions) sessions = { ...catalog.sessions }
+    sessions[session.id] = { ...session, calibration }
+  }
+  return calibrateSessions(sessions === catalog.sessions ? catalog : { ...catalog, sessions }, state.disk, state.settings, at)
+}
+
+/** A camera's "Don't use darks" and "Don't use bias" defaults (CAL-FR-22): its sessions settle as No with no warning, overridable per session. */
+export function setCameraCalibrationDefaults(cameraId: CameraId, patch: Partial<Pick<Camera, "noDarks" | "noBias">>): CommitResult {
+  const camera = store.getState().catalog.cameras[cameraId]
+  if (!camera) return MISSING
+  const href = EQUIPMENT_HREF
+  const label = msg("settings_label_camera_defaults", { name: camera.name })
+  const at = nowIso()
+  const result = commit(
+    label,
+    (s) =>
+      withCatalog(s, (c) => {
+        const next = { ...c.cameras[cameraId]!, ...patch }
+        return withCameraDefaults(s, { ...c, cameras: { ...c.cameras, [cameraId]: next } }, next, at)
+      }),
+    { href },
+  )
+  if (result.ok) recordSaved(msg("equipment_saved_named", { name: camera.name }), null, href)
+  return result
+}
+
+// ---------------------------------------------------------------------------
+// Windows Developer Mode (P-PREP3)
+// ---------------------------------------------------------------------------
 
 /** Check again: PlateVault reads the computer's Windows Developer Mode now. */
 export function checkDeveloperMode(): CommitResult {
