@@ -17,13 +17,24 @@
 //! The app replaced is the one this process was launched from
 //! (astro-plan-uyguq): [`LaunchedBundle`] reads its device and inode at
 //! launch, and the install goes ahead only while the app at that path still
-//! has them, so a bundle swapped in after launch is refused, not pinned as it
-//! is. That pin names the bundle directory, not what it holds, and the
-//! identity is read from whatever the bundle holds when the install starts.
-//! An app that reads as ad-hoc signed or unsigned then remains a residual
-//! risk, whether it was launched like that or a process of the user's
-//! rewrote the files inside it in place, which keeps the directory's device
-//! and inode: its update is held to no identity, only to the minisign check.
+//! has them. They are checked before the app's identity is read, again just
+//! before the swap, and, on what the swap moved out of the app's path, right
+//! after it, as root checks them. A bundle swapped in after launch is
+//! refused, and put back where the swap moved it, rather than pinned as it
+//! is or replaced.
+//!
+//! Residual risks, which no device and inode can tell apart:
+//!
+//! - The record is read when `main` starts. A bundle swapped in between the
+//!   process starting and that read is recorded as the launched app.
+//! - The pin names the bundle directory, not what it holds, and the identity
+//!   is read from whatever the bundle holds when the install starts. An app
+//!   that reads as ad-hoc signed or unsigned then is held to no identity,
+//!   only to the minisign check, whether it was launched like that or a
+//!   process of the user's rewrote the files inside it in place, which keeps
+//!   the directory's device and inode. So is an update over the launched app
+//!   when another bundle was swapped in during the identity read and back
+//!   out before the next check: the identity read is that bundle's.
 //!
 //! The swap is the one `tauri-plugin-updater` 2.13.3 made: the two bundles are
 //! exchanged in one step where the file system can (APFS), so the app path
@@ -92,13 +103,18 @@ pub struct LaunchedBundle {
 }
 
 impl LaunchedBundle {
-    /// The `.app` directory holding this executable (`X.app/Contents/MacOS/x`),
-    /// as it is now: read at launch. The bundle is found from the
-    /// executable's path by name alone, made absolute so it names the same
-    /// place whatever the working directory is by the time of the install.
+    /// The bundle holding this executable, as it is now: read at launch.
     #[cfg(target_os = "macos")]
     pub(super) fn running() -> Result<Self, UpdateError> {
-        let executable = std::path::absolute(std::env::current_exe()?)?;
+        Self::holding(&std::env::current_exe()?)
+    }
+
+    /// The `.app` directory holding `executable` (`X.app/Contents/MacOS/x`),
+    /// as it is now. The bundle is found from the executable's path by name
+    /// alone, made absolute so it names the same place whatever the working
+    /// directory is by the time of the install.
+    fn holding(executable: &Path) -> Result<Self, UpdateError> {
+        let executable = std::path::absolute(executable)?;
         let bundle = executable
             .ancestors()
             .nth(3)
@@ -118,6 +134,54 @@ impl LaunchedBundle {
         let id = entry_id(&path)?;
         Ok(Self { path, id })
     }
+
+    /// Refuse to go on unless the entry at the bundle's path is still the one
+    /// launched.
+    fn check_in_place(&self) -> Result<(), UpdateError> {
+        if still_at(&self.path, self.id)? {
+            Ok(())
+        } else {
+            Err(app_replaced(&self.path, None))
+        }
+    }
+
+    /// Whether the entry at `path`, where a move put what it took from the
+    /// bundle's path, is the one launched. One that cannot be read is not.
+    fn moved_to(&self, path: &Path) -> bool {
+        entry_id(path).is_ok_and(|id| id == self.id)
+    }
+}
+
+/// Whether the entry at `path` is still the one whose device and inode are
+/// `id`. An empty path is not, and nor is one whose directory was replaced
+/// by a file.
+fn still_at(path: &Path, id: (u64, u64)) -> io::Result<bool> {
+    match entry_id(path) {
+        Ok(found) => Ok(found == id),
+        Err(error)
+            if matches!(error.kind(), io::ErrorKind::NotFound | io::ErrorKind::NotADirectory) =>
+        {
+            Ok(false)
+        }
+        Err(error) => Err(error),
+    }
+}
+
+/// The error for an `installed` path that no longer holds the app this
+/// process was launched from; `kept` is where what was found there instead
+/// is kept, when it could not be put back.
+fn app_replaced(installed: &Path, kept: Option<&Path>) -> UpdateError {
+    let replaced =
+        format!("{} is no longer the app PlateVault was launched from", installed.display());
+    UpdateError::AppReplaced(match kept {
+        None => {
+            format!("{replaced}, so nothing was installed; a restart launches what is there now")
+        }
+        Some(kept) => format!(
+            "{replaced}; what was found there instead of the app is kept at {}",
+            kept.display()
+        ),
+    })
 }
 
 /// Replace the app `launched` names with the bundle in the `.app.tar.gz`
@@ -127,8 +191,9 @@ impl LaunchedBundle {
 /// dialog says `admin_prompt`. Whenever this fails, the installed app is left
 /// as it was, except when the previous app could not be put back after a
 /// failed move: it is then kept where [`UpdateError::PreviousAppNotRestored`]
-/// says.
-#[cfg_attr(not(target_os = "macos"), allow(unused_variables))]
+/// says. Another bundle found at the app's path is refused
+/// ([`UpdateError::AppReplaced`]) and left there, or, should the swap have
+/// moved it and not be able to put it back, kept as a previous app is.
 pub fn install_bundle(
     launched: &LaunchedBundle,
     payload: &mut Payload<'_>,
@@ -141,31 +206,10 @@ pub fn install_bundle(
     tar::Archive::new(GzDecoder::new(payload.reader())).unpack(staging.path())?;
     let update = single_bundle(staging.path())?;
     check_identity(signing, &update, &identity)?;
-    let backup = staging.path().join("previous.app");
-    // Only a permission error, which neither the exchange nor the moves get
-    // past, needs the administrator.
-    let swapped = match swap(installed, &update, &backup) {
-        Ok(()) => Ok(()),
-        #[cfg(target_os = "macos")]
-        Err(error) if error.kind() == io::ErrorKind::PermissionDenied => {
-            tracing::debug!(%error, "this user cannot move the app; asking for administrator rights");
-            PrivilegedInstall::new(launched, payload, &update, &identity)
-                .and_then(|install| install.run(admin_prompt))
-        }
-        Err(error) => Err(error.into()),
-    };
-    if let Err(error) = swapped {
-        let home = std::env::home_dir();
-        return Err(
-            match keep_backup_if_not_restored(installed, staging, &backup, home.as_deref()) {
-                Some(kept) => {
-                    tracing::error!(%error, kept = %kept.display(), "the update failed and the previous app could not be put back");
-                    UpdateError::PreviousAppNotRestored { kept, cause: Box::new(error) }
-                }
-                None => error,
-            },
-        );
-    }
+    // The unpack and the identity check can take seconds, in which another
+    // process of the user's could swap another bundle in.
+    launched.check_in_place()?;
+    move_into_place(launched, payload, &update, staging, &identity, admin_prompt)?;
     #[cfg(target_os = "macos")]
     {
         // A fresh modification date makes Launch Services re-read the bundle.
@@ -174,29 +218,78 @@ pub fn install_bundle(
     Ok(())
 }
 
+/// Put `update`, the verified bundle unpacked into `staging`, in place of the
+/// app `launched` names, as [`install_bundle`] says.
+#[cfg_attr(not(target_os = "macos"), allow(unused_variables))]
+fn move_into_place(
+    launched: &LaunchedBundle,
+    payload: &Payload<'_>,
+    update: &Path,
+    staging: tempfile::TempDir,
+    identity: &Identity,
+    admin_prompt: &str,
+) -> Result<(), UpdateError> {
+    let installed = launched.path.as_path();
+    let backup = staging.path().join("previous.app");
+    let home = std::env::home_dir();
+    // Only a permission error, which neither the exchange nor the moves get
+    // past, needs the administrator.
+    let error = match swap(launched, update, &backup) {
+        Ok(()) => return Ok(()),
+        #[cfg(target_os = "macos")]
+        Err(SwapError::Io(error)) if error.kind() == io::ErrorKind::PermissionDenied => {
+            tracing::debug!(%error, "this user cannot move the app; asking for administrator rights");
+            match PrivilegedInstall::new(launched, payload, update, identity)
+                .and_then(|install| install.run(admin_prompt))
+            {
+                Ok(()) => return Ok(()),
+                Err(error) => error,
+            }
+        }
+        Err(SwapError::Io(error)) => error.into(),
+        Err(SwapError::NotLaunched { stranded }) => {
+            return Err(not_launched(installed, staging, stranded, home.as_deref()));
+        }
+    };
+    Err(match keep_backup_if_not_restored(installed, staging, &backup, home.as_deref()) {
+        Some(kept) => {
+            tracing::error!(%error, kept = %kept.display(), "the update failed and the previous app could not be put back");
+            UpdateError::PreviousAppNotRestored { kept, cause: Box::new(error) }
+        }
+        None => error,
+    })
+}
+
+/// The refusal of a swap that moved another bundle than the launched app out
+/// of its path at `installed`. Should that bundle be `stranded` in `staging`,
+/// it is kept aside rather than deleted with it.
+fn not_launched(
+    installed: &Path,
+    staging: tempfile::TempDir,
+    stranded: Option<PathBuf>,
+    fallback_dir: Option<&Path>,
+) -> UpdateError {
+    let Some(entry) = stranded else {
+        return app_replaced(installed, None);
+    };
+    let kept = keep_aside(installed, staging, &entry, fallback_dir);
+    tracing::error!(kept = %kept.display(), "another bundle came out of the app's path and could not be put back");
+    app_replaced(installed, Some(&kept))
+}
+
 /// The identity of the app `launched` names, read only once the entry at its
 /// path has been found to be still the one launched: its device and inode
 /// are read first, before anything else reads the app by path. A bundle
 /// swapped in after launch is refused here, whatever identity it has, and so
-/// is an empty path; one swapped in after this read is refused by
-/// [`PrivilegedInstall::of`] and by root, which replace the launched entry or
-/// nothing (astro-plan-ryj83).
+/// is an empty path; one swapped in after this read is refused before the
+/// swap, by the swap, by [`PrivilegedInstall::of`] and by root, which replace
+/// the launched entry or nothing (astro-plan-ryj83).
 fn identify_launched(
     launched: &LaunchedBundle,
     signing: &dyn CodeSigning,
 ) -> Result<Identity, UpdateError> {
-    let installed = launched.path.as_path();
-    let found = match entry_id(installed) {
-        Err(error) if error.kind() == io::ErrorKind::NotFound => None,
-        found => Some(found?),
-    };
-    if found != Some(launched.id) {
-        return Err(UpdateError::AppReplaced(format!(
-            "{} is no longer the app PlateVault was launched from, so nothing was installed; a restart launches what is there now",
-            installed.display()
-        )));
-    }
-    signing.identity(installed)
+    launched.check_in_place()?;
+    signing.identity(&launched.path)
 }
 
 /// The device and inode of the entry at `path`, a link itself if it is one.
@@ -274,21 +367,52 @@ fn single_bundle(dir: &Path) -> Result<PathBuf, UpdateError> {
     }
 }
 
-/// Put `update` at `installed`. Where the file system can, the two are
-/// exchanged in one step and the previous app ends up at `update`; elsewhere
-/// `installed` moves to `backup` first and comes back if the second move
-/// fails.
-fn swap(installed: &Path, update: &Path, backup: &Path) -> io::Result<()> {
+/// Why [`swap`] put nothing in place.
+#[derive(Debug)]
+enum SwapError {
+    Io(io::Error),
+    /// What the swap moved out of the app's path was not the launched app but
+    /// another bundle, swapped in after the last check. It was put back,
+    /// unless it is `stranded` there, in the staging dir.
+    NotLaunched {
+        stranded: Option<PathBuf>,
+    },
+}
+
+impl From<io::Error> for SwapError {
+    fn from(error: io::Error) -> Self {
+        Self::Io(error)
+    }
+}
+
+/// Put `update` at the app `launched` names. Where the file system can, the
+/// two are exchanged in one step and the previous app ends up at `update`;
+/// elsewhere the app moves to `backup` first and comes back if the second
+/// move fails. What came out of the app's path must be the launched app, told
+/// by its device and inode as root tells it: anything else came from a swap
+/// after the last check, so it is put back and nothing is installed.
+fn swap(launched: &LaunchedBundle, update: &Path, backup: &Path) -> Result<(), SwapError> {
+    let installed = launched.path.as_path();
     // File systems report a missing exchange differently (`ENOTSUP` on HFS+,
     // `EINVAL` elsewhere), so anything but a permission error, which the
     // moves would hit too, gets the fallback.
     match exchange(installed, update) {
+        Ok(()) if launched.moved_to(update) => Ok(()),
+        Ok(()) => Err(put_back(update, || exchange(installed, update))),
         Err(error) if error.kind() != io::ErrorKind::PermissionDenied => {
             tracing::debug!(%error, "cannot exchange the app bundles; moving them instead");
-            replace(installed, update, backup)
+            replace(launched, update, backup)
         }
-        other => other,
+        Err(error) => Err(error.into()),
     }
+}
+
+/// Put back, with `move_back`, what a swap moved out of the app's path to
+/// `out` because it was not the launched app. It is stranded at `out` should
+/// the move fail and leave it there.
+fn put_back(out: &Path, move_back: impl FnOnce() -> io::Result<()>) -> SwapError {
+    let stranded = move_back().is_err() && fs::symlink_metadata(out).is_ok();
+    SwapError::NotLaunched { stranded: stranded.then(|| out.to_path_buf()) }
 }
 
 /// Exchange `installed` and `update` atomically (`renamex_np` with
@@ -299,16 +423,21 @@ fn exchange(installed: &Path, update: &Path) -> io::Result<()> {
     renameat_with(CWD, update, CWD, installed, RenameFlags::EXCHANGE).map_err(io::Error::from)
 }
 
-/// Move `update` to `installed`, keeping what was at `installed` in `backup`
-/// until that has succeeded. If the second move fails, the first is undone
-/// as far as the file system lets it.
-fn replace(installed: &Path, update: &Path, backup: &Path) -> io::Result<()> {
+/// Move `update` to the app `launched` names, keeping what was there in
+/// `backup` until that has succeeded. What the first move brought to `backup`
+/// must be the launched app; anything else is moved back. If the second move
+/// fails, the first is undone as far as the file system lets it.
+fn replace(launched: &LaunchedBundle, update: &Path, backup: &Path) -> Result<(), SwapError> {
+    let installed = launched.path.as_path();
     fs::rename(installed, backup)?;
+    if !launched.moved_to(backup) {
+        return Err(put_back(backup, || fs::rename(backup, installed)));
+    }
     if let Err(error) = fs::rename(update, installed) {
         // Best effort: the error worth reporting is the failed move, and a
         // failed restore is caught by `keep_backup_if_not_restored`.
         let _ = fs::rename(backup, installed);
-        return Err(error);
+        return Err(error.into());
     }
     Ok(())
 }
@@ -555,8 +684,8 @@ impl PrivilegedInstall {
         update: &Path,
         identity: &Identity,
     ) -> Result<Self, UpdateError> {
-        if entry_id(installed)? != pinned {
-            return Err(app_changed(installed, None));
+        if !still_at(installed, pinned)? {
+            return Err(app_replaced(installed, None));
         }
         let (parent, name) = resolved_location(installed)?;
         let (archive_dir, archive) = resolved_location(archive)?;
@@ -657,7 +786,7 @@ impl PrivilegedInstall {
             // Should the message not parse, the installed app's directory is
             // where the script's directory is.
             Some(KEPT_IN_WORK_DIR) => not_restored(kept_in_work.unwrap_or_else(|| self.parent.clone())),
-            Some(APP_CHANGED) => app_changed(&self.parent.join(&self.name), kept_in_work.as_deref()),
+            Some(APP_CHANGED) => app_replaced(&self.parent.join(&self.name), kept_in_work.as_deref()),
             Some(OUTCOME_UNKNOWN) => UpdateError::Install(format!(
                 "whether the update was moved into place with administrator rights could not be told{}",
                 kept_in_work.map_or_else(String::new, |kept| format!(
@@ -670,25 +799,6 @@ impl PrivilegedInstall {
             )),
         }
     }
-}
-
-/// The error for an `installed` path that no longer held the app the user
-/// context pinned; `kept` is where root kept what it found there instead.
-#[cfg(target_os = "macos")]
-fn app_changed(installed: &Path, kept: Option<&Path>) -> UpdateError {
-    let changed = format!(
-        "{} changed while the update was being installed with administrator rights",
-        installed.display()
-    );
-    UpdateError::Install(match kept {
-        None => format!("{changed}, so nothing was installed"),
-        Some(kept) => {
-            format!(
-                "{changed}; what was found there instead of the app is kept at {}",
-                kept.display()
-            )
-        }
-    })
 }
 
 /// `path`'s directory with every symbolic link resolved, and its name there:
@@ -739,11 +849,8 @@ fn previous_version_name(installed: &Path) -> OsString {
 }
 
 /// After a failed swap, where the previous app is if it never made it back to
-/// `installed`. `backup` is then the only copy left, inside `staging`, which
-/// is deleted on drop and sits in the system temp dir that macOS empties on
-/// its own. So it moves next to `installed`, or to `fallback_dir` (the home
-/// folder) when that is not writable, under [`previous_version_name`]. If
-/// neither works, `staging` is kept rather than deleted.
+/// `installed`: `backup`, which is then the only copy left, kept by
+/// [`keep_aside`].
 fn keep_backup_if_not_restored(
     installed: &Path,
     staging: tempfile::TempDir,
@@ -753,6 +860,21 @@ fn keep_backup_if_not_restored(
     if fs::symlink_metadata(installed).is_ok() || fs::symlink_metadata(backup).is_err() {
         return None;
     }
+    Some(keep_aside(installed, staging, backup, fallback_dir))
+}
+
+/// Where `entry`, which came out of the app's path at `installed` and could
+/// not go back, is kept. It is inside `staging`, which is deleted on drop and
+/// sits in the system temp dir that macOS empties on its own. So it moves next
+/// to `installed`, or to `fallback_dir` (the home folder) when that is not
+/// writable, under [`previous_version_name`]. If neither works, `staging` is
+/// kept rather than deleted.
+fn keep_aside(
+    installed: &Path,
+    staging: tempfile::TempDir,
+    entry: &Path,
+    fallback_dir: Option<&Path>,
+) -> PathBuf {
     let name = previous_version_name(installed);
     let kept = [installed.parent(), fallback_dir]
         .into_iter()
@@ -761,12 +883,12 @@ fn keep_backup_if_not_restored(
         // `rename` replaces an empty directory, so never move onto anything
         // already there.
         .filter(|kept| fs::symlink_metadata(kept).is_err())
-        .find(|kept| fs::rename(backup, kept).is_ok());
-    if kept.is_some() {
+        .find(|kept| fs::rename(entry, kept).is_ok());
+    if let Some(kept) = kept {
         return kept;
     }
     let _ = staging.keep();
-    Some(backup.to_path_buf())
+    entry.to_path_buf()
 }
 
 /// The macOS installer over an explicit launched bundle, for tests.
@@ -802,7 +924,7 @@ mod tests {
 
     use super::{
         exchange, identify_launched, keep_backup_if_not_restored, replace, staging_dir_among, swap,
-        CodeSigning, Identity, LaunchedBundle,
+        CodeSigning, Identity, LaunchedBundle, SwapError,
     };
     use crate::update::UpdateError;
 
@@ -814,6 +936,19 @@ mod tests {
 
     fn version(path: &Path) -> String {
         fs::read_to_string(path.join("version")).expect("version")
+    }
+
+    /// The bundle at `path`, as launched now.
+    fn launched(path: &Path) -> LaunchedBundle {
+        LaunchedBundle::at(path.to_path_buf()).expect("launch")
+    }
+
+    /// Moves the app at `installed` away to `moved-away.app` and puts
+    /// another bundle, `foreign`, at its name, as another process of the
+    /// user's can, and of an admin user's can in `/Applications`.
+    fn replace_installed(dir: &Path, installed: &Path) {
+        fs::rename(installed, dir.join("moved-away.app")).expect("move the app away");
+        bundle(installed, "foreign");
     }
 
     #[cfg(target_os = "macos")]
@@ -874,6 +1009,41 @@ mod tests {
         assert_eq!(launched.id, (app.dev(), app.ino()), "the pin is the launched app's");
     }
 
+    /// The launched bundle is the `.app` directory three levels above the
+    /// running executable.
+    #[test]
+    fn the_launched_bundle_is_the_app_holding_the_executable() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let app = dir.path().join("X.app");
+        fs::create_dir_all(app.join("Contents/MacOS")).expect("bundle dirs");
+        let executable = app.join("Contents/MacOS/x");
+        fs::write(&executable, "").expect("executable");
+        let entry = fs::symlink_metadata(&app).expect("metadata");
+
+        let launched = LaunchedBundle::holding(&executable).expect("launched bundle");
+
+        assert_eq!(launched.path, app);
+        assert_eq!(launched.id, (entry.dev(), entry.ino()));
+    }
+
+    /// The launched app's folder replaced by a file reads as a replaced app,
+    /// as an empty path does, not as an error reading the file system.
+    #[test]
+    fn a_launched_app_whose_folder_became_a_file_is_replaced() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let folder = dir.path().join("Applications");
+        fs::create_dir(&folder).expect("folder");
+        let installed = folder.join("App.app");
+        bundle(&installed, "old");
+        let launched = launched(&installed);
+        fs::rename(&folder, dir.path().join("Moved")).expect("move the folder");
+        fs::write(&folder, "a file").expect("a file in its place");
+
+        let error = launched.check_in_place().expect_err("replaced");
+
+        assert!(matches!(error, UpdateError::AppReplaced(_)), "{error}");
+    }
+
     #[test]
     fn replace_moves_the_update_into_place() {
         let dir = tempfile::tempdir().expect("tempdir");
@@ -882,7 +1052,7 @@ mod tests {
         bundle(&installed, "old");
         bundle(&update, "new");
 
-        replace(&installed, &update, &backup).expect("replace");
+        replace(&launched(&installed), &update, &backup).expect("replace");
 
         assert_eq!(version(&installed), "new");
         assert_eq!(version(&backup), "old");
@@ -895,9 +1065,12 @@ mod tests {
         let (installed, backup) = (dir.path().join("App.app"), dir.path().join("backup"));
         bundle(&installed, "old");
 
-        let error = replace(&installed, &dir.path().join("missing"), &backup).expect_err("missing");
+        let error = replace(&launched(&installed), &dir.path().join("missing"), &backup);
 
-        assert_eq!(error.kind(), std::io::ErrorKind::NotFound);
+        assert!(
+            matches!(&error, Err(SwapError::Io(error)) if error.kind() == std::io::ErrorKind::NotFound),
+            "{error:?}"
+        );
         assert_eq!(version(&installed), "old");
         assert!(!backup.exists());
     }
@@ -908,9 +1081,12 @@ mod tests {
         let (installed, backup) = (dir.path().join("App.app"), dir.path().join("backup"));
         bundle(&installed, "old");
 
-        let error = swap(&installed, &dir.path().join("missing"), &backup).expect_err("missing");
+        let error = swap(&launched(&installed), &dir.path().join("missing"), &backup);
 
-        assert_eq!(error.kind(), std::io::ErrorKind::NotFound, "{error}");
+        assert!(
+            matches!(&error, Err(SwapError::Io(error)) if error.kind() == std::io::ErrorKind::NotFound),
+            "{error:?}"
+        );
         assert_eq!(version(&installed), "old");
         assert!(!backup.exists());
     }
@@ -943,11 +1119,53 @@ mod tests {
         bundle(&update, "new");
         let backup = dir.path().join("backup");
 
-        swap(&installed, &update, &backup).expect("swap");
+        swap(&launched(&installed), &update, &backup).expect("swap");
 
         assert_eq!(version(&installed), "new");
         let previous = if exchange_supported(dir.path()) { update } else { backup };
         assert_eq!(version(&previous), "old", "the previous app waits in the staging dir");
+    }
+
+    /// Another bundle swapped in after the last check: what the swap moved
+    /// out of the app's path is not the launched app, so it goes back and the
+    /// update stays in staging, whether the swap exchanged or moved.
+    #[test]
+    fn the_swap_puts_back_a_bundle_that_is_not_the_launched_app() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let (installed, update) = (dir.path().join("App.app"), dir.path().join("update"));
+        bundle(&installed, "old");
+        bundle(&update, "new");
+        let backup = dir.path().join("backup");
+        let launched = launched(&installed);
+        replace_installed(dir.path(), &installed);
+
+        let error = swap(&launched, &update, &backup);
+
+        assert!(matches!(error, Err(SwapError::NotLaunched { stranded: None })), "{error:?}");
+        assert_eq!(version(&installed), "foreign", "the other bundle is back");
+        assert_eq!(version(&update), "new", "nothing was installed");
+        assert_eq!(version(&dir.path().join("moved-away.app")), "old");
+        assert!(!backup.exists());
+    }
+
+    /// The same in the moves alone, which APFS would otherwise never reach:
+    /// the first move brought the other bundle out, so it moves back.
+    #[test]
+    fn replace_puts_back_a_bundle_that_is_not_the_launched_app() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let (installed, update, backup) =
+            (dir.path().join("App.app"), dir.path().join("update"), dir.path().join("backup"));
+        bundle(&installed, "old");
+        bundle(&update, "new");
+        let launched = launched(&installed);
+        replace_installed(dir.path(), &installed);
+
+        let error = replace(&launched, &update, &backup);
+
+        assert!(matches!(error, Err(SwapError::NotLaunched { stranded: None })), "{error:?}");
+        assert_eq!(version(&installed), "foreign", "the other bundle is back");
+        assert_eq!(version(&update), "new", "nothing was installed");
+        assert!(!backup.exists());
     }
 
     fn exchange_supported(dir: &Path) -> bool {
@@ -1008,7 +1226,7 @@ mod tests {
             administrator_script, applescript_string, entry_id, osascript, Identity,
             PrivilegedInstall, COPY_SECONDS, RENAME_JXA,
         };
-        use super::{bundle, owner, version};
+        use super::{bundle, owner, replace_installed, version};
         use crate::update::UpdateError;
 
         /// Names `sh` and `AppleScript` would both misread unquoted.
@@ -1349,14 +1567,6 @@ function run(argv) {{
             assert_installed(dir.path(), &installed);
         }
 
-        /// Moves the app at `installed` away to `moved-away.app` and puts
-        /// another bundle, `foreign`, at its name, as another process of an
-        /// admin user's can in `/Applications`.
-        fn replace_installed(dir: &Path, installed: &Path) {
-            fs::rename(installed, dir.join("moved-away.app")).expect("move the app away");
-            bundle(installed, "foreign");
-        }
-
         /// JavaScript that does what [`replace_installed`] does, once, from
         /// root's directory.
         const REPLACE_INSTALLED: &str = r#"  var fm = $.NSFileManager.defaultManager;
@@ -1407,7 +1617,7 @@ function run(argv) {{
             let message = "0:1: execution error: The command exited with a non-zero status. (69)";
             assert!(matches!(
                 install.failure(message),
-                UpdateError::Install(detail) if detail.contains("nothing was installed")
+                UpdateError::AppReplaced(detail) if detail.contains("nothing was installed")
             ));
         }
 
@@ -1460,7 +1670,7 @@ function run(argv) {{
             );
 
             match refused {
-                Err(UpdateError::Install(detail)) => {
+                Err(UpdateError::AppReplaced(detail)) => {
                     assert!(detail.contains("nothing was installed"), "{detail}");
                 }
                 other => panic!("not refused: {other:?}"),
@@ -1521,7 +1731,7 @@ function run(argv) {{
 
             let message = String::from_utf8_lossy(&output.stderr);
             assert!(message.trim_end().ends_with("(69)"), "{message}");
-            let UpdateError::Install(detail) = install.failure(message.trim()) else {
+            let UpdateError::AppReplaced(detail) = install.failure(message.trim()) else {
                 panic!("{message}");
             };
             let kept = PathBuf::from(
@@ -1816,6 +2026,7 @@ function run(argv) {{
                     UpdateError::Permission(_) => "permission",
                     UpdateError::Signature(_) => "signature",
                     UpdateError::Identity(_) => "identity",
+                    UpdateError::AppReplaced(_) => "app-replaced",
                     UpdateError::Install(_) => "install",
                     _ => "other",
                 })
@@ -1827,7 +2038,7 @@ function run(argv) {{
                     "signature",
                     "signature",
                     "identity",
-                    "install",
+                    "app-replaced",
                     "install",
                     "install"
                 ]
