@@ -970,9 +970,13 @@ struct OverrideSnapshot {
 /// Before the evidence/metadata wipe on a rescan, snapshot all evidence rows
 /// that carry any override, paired with a staleness flag (spec 041 R-4 / T025).
 ///
-/// For each such row that also appears in the current scan:
-/// - compare stored file identity (size/mtime in `inbox_file_metadata`) against
-///   the current on-disk stat; set `stale = true` when they differ.
+/// For each such row that names a file in the current scan (see
+/// [`file_for_evidence`]):
+/// - key the snapshot by that file's current wire text, so an override stored
+///   under the old backslash text follows the file it was set on;
+/// - compare stored file identity (size/mtime in `inbox_file_metadata`, under
+///   the row's stored text) against that file's current on-disk stat; set
+///   `stale = true` when they differ.
 ///
 /// Called BEFORE `delete_evidence_for_item` / `delete_file_metadata_for_item`.
 /// After the fresh evidence re-insert the caller must:
@@ -989,6 +993,13 @@ async fn snapshot_overrides(
     let mut snapshots = Vec::new();
 
     let evidence = repo::list_evidence(pool, inbox_item_id).await.unwrap_or_default();
+    let current: Vec<(String, &Path)> = file_paths
+        .iter()
+        .filter_map(|p| {
+            let relative = p.strip_prefix(root_absolute_path).ok()?;
+            Some((fs_pathsafe::wire_path(relative), p.as_path()))
+        })
+        .collect();
 
     for ev in evidence {
         let has_override = ev.manual_override.is_some()
@@ -1001,13 +1012,9 @@ async fn snapshot_overrides(
         }
 
         // Only re-apply for files that appear in the current scan.
-        let in_scan = file_paths.iter().any(|p| {
-            p.strip_prefix(root_absolute_path)
-                .is_ok_and(|r| fs_pathsafe::wire_path(r) == ev.relative_file_path)
-        });
-        if !in_scan {
+        let Some((current_path, abs)) = file_for_evidence(&ev.relative_file_path, &current) else {
             continue;
-        }
+        };
 
         // Compare stored identity against current on-disk stat.
         let stale = 'stale: {
@@ -1017,8 +1024,7 @@ async fn snapshot_overrides(
                 .flatten();
             let Some(prior) = prior else { break 'stale false };
 
-            let abs = root_absolute_path.join(&ev.relative_file_path);
-            let Ok(md) = std::fs::metadata(&abs) else { break 'stale false };
+            let Ok(md) = std::fs::metadata(abs) else { break 'stale false };
             let new_size = i64::try_from(md.len()).ok();
             let new_mtime = md
                 .modified()
@@ -1029,7 +1035,7 @@ async fn snapshot_overrides(
         };
 
         snapshots.push(OverrideSnapshot {
-            relative_file_path: ev.relative_file_path,
+            relative_file_path: current_path.clone(),
             manual_override: ev.manual_override,
             override_filter: ev.override_filter,
             override_exposure_s: ev.override_exposure_s,
@@ -1039,6 +1045,41 @@ async fn snapshot_overrides(
     }
 
     snapshots
+}
+
+/// The file in `current` (wire text, absolute path) that an evidence row
+/// stored under `stored` names.
+///
+/// That is the file whose wire text is `stored`. Failing that, it is the file
+/// whose text the old `wire_path` stored as `stored`
+/// ([`crate::legacy_rows::old_text`]): before bd astro-plan-3pvvc a macOS or
+/// Linux name such as `a\b.fits` was stored as `a/b.fits`. Such a row is only
+/// carried over when exactly one file maps to it. When several do, the row
+/// could have been any of theirs, so none is chosen and its override is
+/// dropped, as for a file that left the scan. Classify lists one folder
+/// level, and a name contains no `/`, so there the old text of different
+/// files always differs; the check guards the rule, not a case classify
+/// reaches.
+fn file_for_evidence<'a>(
+    stored: &str,
+    current: &'a [(String, &'a Path)],
+) -> Option<&'a (String, &'a Path)> {
+    if let Some(file) = current.iter().find(|(text, _)| text == stored) {
+        return Some(file);
+    }
+    let mut mapped = current
+        .iter()
+        .filter(|(text, _)| crate::legacy_rows::old_text(text).as_deref() == Some(stored));
+    let file = mapped.next()?;
+    if mapped.next().is_some() {
+        tracing::warn!(
+            stored,
+            "classify: several files map to an evidence row stored under old text; \
+             its override is not carried over"
+        );
+        return None;
+    }
+    Some(file)
 }
 
 /// Classification identity for a file whose frame type could not be determined
@@ -2677,6 +2718,118 @@ mod tests {
         for (id, rows) in legacy_ids.into_iter().zip(recomputed) {
             assert_eq!(evidence(id).await, rows, "{id}: recomputed text is served from the cache");
         }
+    }
+
+    /// A classification cached before bd astro-plan-3pvvc stored the file
+    /// `a\b.fits` as `a/b.fits`, and the user set overrides on that row. The
+    /// recompute keys the evidence by the file's own text, and the overrides
+    /// must follow it there instead of being dropped with the old row. The
+    /// nested `a/b.fits` has a different size, so reading its identity for
+    /// the staleness check would mark the untouched file's override stale.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn overrides_on_a_row_stored_under_the_old_backslash_text_follow_the_file() {
+        use persistence_inbox::repositories::inbox as inbox_repo;
+
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let nested_dir = root.join("a");
+        std::fs::create_dir_all(&nested_dir).unwrap();
+        write_fits_with_imagetyp(root, "a\\b.fits", "Light Frame");
+        write_fits_with_imagetyp(&nested_dir, "b.fits", "Dark Frame");
+        std::fs::OpenOptions::new()
+            .append(true)
+            .open(nested_dir.join("b.fits"))
+            .unwrap()
+            .write_all(b"a longer file")
+            .unwrap();
+
+        let db = test_db().await;
+        let pool = db.pool();
+        repo::insert_inbox_item(
+            pool,
+            &InsertInboxItem {
+                id: "item-root",
+                root_id: "root-1",
+                relative_path: "",
+                file_count: 0,
+                content_signature: None,
+                lane: "fits",
+            },
+        )
+        .await
+        .unwrap();
+        let classify_root = || {
+            classify(
+                pool,
+                ClassifyRequest {
+                    inbox_item_id: "item-root".to_owned(),
+                    root_absolute_path: root.to_owned(),
+                    force_rescan: false,
+                },
+            )
+        };
+        classify_root().await.unwrap();
+
+        // Store the evidence and metadata rows the way the old producer did,
+        // then set overrides on the old row.
+        for table in ["inbox_classification_evidence", "inbox_file_metadata"] {
+            // AssertSqlSafe: `table` comes from the fixed list above.
+            sqlx::query(sqlx::AssertSqlSafe(format!(
+                "UPDATE {table} SET relative_file_path = 'a/b.fits' \
+                 WHERE inbox_item_id = 'item-root'"
+            )))
+            .execute(pool)
+            .await
+            .unwrap();
+        }
+        inbox_repo::set_overrides(
+            pool,
+            "item-root",
+            "a/b.fits",
+            Some("dark"),
+            Some("Ha"),
+            Some(120.0),
+            Some("2x2"),
+        )
+        .await
+        .unwrap();
+
+        classify_root().await.unwrap();
+
+        let rows = inbox_repo::list_evidence(pool, "item-root").await.unwrap();
+        let [row] = rows.as_slice() else { panic!("one evidence row, got {rows:?}") };
+        assert_eq!(row.relative_file_path, "a\\b.fits");
+        assert_eq!(
+            (
+                row.manual_override.as_deref(),
+                row.override_filter.as_deref(),
+                row.override_exposure_s,
+                row.override_binning.as_deref()
+            ),
+            (Some("dark"), Some("Ha"), Some(120.0), Some("2x2")),
+            "the overrides follow the file they were set on"
+        );
+        assert_eq!(row.override_stale, 0, "the file the overrides name did not change");
+    }
+
+    /// `file_for_evidence` names the file whose wire text is the stored text,
+    /// or else the one file whose old text it is. When several files have
+    /// that old text, it names none.
+    #[test]
+    fn file_for_evidence_maps_old_text_to_exactly_one_file() {
+        let files = [
+            ("p/x.fits".to_owned(), Path::new("/r/p/x.fits")),
+            ("p/a\\b.fits".to_owned(), Path::new("/r/p/a\\b.fits")),
+            ("q\\r/s.fits".to_owned(), Path::new("/r/q\\r/s.fits")),
+            ("q/r\\s.fits".to_owned(), Path::new("/r/q/r\\s.fits")),
+        ];
+        let text = |stored: &str| file_for_evidence(stored, &files).map(|(text, _)| text.as_str());
+        assert_eq!(text("p/x.fits"), Some("p/x.fits"));
+        assert_eq!(text("p/a\\b.fits"), Some("p/a\\b.fits"));
+        assert_eq!(text("p/a/b.fits"), Some("p/a\\b.fits"));
+        assert_eq!(text("q/r/s.fits"), None, "two files have this old text");
+        assert_eq!(text("p/y.fits"), None);
     }
 
     /// spec 041 FR-046: a generic `inbox_file_overrides` entry (set via

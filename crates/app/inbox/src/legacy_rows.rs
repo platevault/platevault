@@ -149,8 +149,10 @@ pub async fn retire_stale_master(pool: &SqlitePool, inbox_item_id: &str) -> DbRe
     Ok(retired)
 }
 
-/// The text the old `wire_path` stored for `text`, when it differs.
-fn old_text(text: &str) -> Option<String> {
+/// The text the old `wire_path` stored for `text`, when it differs. Also used
+/// by classify to carry an override from a cached evidence row stored under
+/// the old text to the file it was set on.
+pub(crate) fn old_text(text: &str) -> Option<String> {
     text.contains('\\').then(|| text.replace('\\', "/"))
 }
 
