@@ -13,6 +13,7 @@ contracts_core = { path = "../../contracts/core" }
 persistence_core = { path = "../../persistence/core" }
 anyhow = { workspace = true }
 sqlx.workspace = true
+serde_json.workspace = true
 
 [lints]
 workspace = true

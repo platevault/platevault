@@ -2,9 +2,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * LogPanel export failure: an export that failed after claiming the chosen
+ * LogPanel export failure: an export that failed after claiming its
  * destination leaves its own incomplete file there, and a retry to that name
- * is refused until the user deletes it, so the error names the path.
+ * is refused until the user deletes it, so the error names the file. It names
+ * the path the backend wrote (under the canonicalized parent), which the path
+ * the dialog returned may no longer reach once a symlink in it is retargeted.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
@@ -17,7 +19,7 @@ vi.mock('@tanstack/react-router', () => ({
 }));
 
 vi.mock('@tauri-apps/plugin-dialog', () => ({
-  save: vi.fn().mockResolvedValue('/Volumes/STICK/log-export.json'),
+  save: vi.fn().mockResolvedValue('/Volumes/STICK/link/log-export.json'),
 }));
 
 vi.mock('@/bindings/index', () => ({
@@ -37,7 +39,7 @@ vi.mock('@/bindings/index', () => ({
         message: 'backend diagnostic',
         severity: 'blocking',
         retryable: false,
-        details: null,
+        details: { path: '/Volumes/STICK/real/log-export.json' },
       },
     }),
   },
@@ -52,7 +54,7 @@ describe('LogPanel export failure', () => {
     resetLogStore();
   });
 
-  it('names the incomplete file the export left at the chosen path', async () => {
+  it('names the incomplete file at the path the backend wrote', async () => {
     render(
       <LogPanelProvider>
         <LogPanel />
@@ -64,7 +66,7 @@ describe('LogPanel export failure', () => {
     );
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Could not export: An incomplete export file remains at /Volumes/STICK/log-export.json. Delete it before exporting again.',
+      'Could not export: An incomplete export file remains at /Volumes/STICK/real/log-export.json. Delete it before exporting again.',
     );
   });
 });

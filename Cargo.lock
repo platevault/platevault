@@ -178,6 +178,7 @@ dependencies = [
  "audit",
  "contracts_core",
  "persistence_core",
+ "serde_json",
  "sqlx",
 ]
 

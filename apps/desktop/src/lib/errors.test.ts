@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { describe, it, expect, vi } from 'vitest';
-import { errMessage, exportErrMessage, isContractError } from './errors';
+import { errMessage, isContractError } from './errors';
 import { errorFallback } from './error-messages';
 import { m } from '@/lib/i18n';
 
@@ -44,26 +44,29 @@ describe('errMessage (spec 046 US2 — single translation point)', () => {
   });
 });
 
-describe('exportErrMessage', () => {
-  const unfinished = { code: 'export.unfinished_file', message: 'raw' };
+describe('errMessage for an export that left its own incomplete file', () => {
+  const unfinished = (details: unknown) => ({
+    code: 'export.unfinished_file',
+    message: 'raw',
+    details,
+  });
 
-  it('names the chosen path for an export that left its own incomplete file', () => {
-    const msg = exportErrMessage(unfinished, '/Volumes/STICK/log.json');
+  it('names the path the backend reports in details.path', () => {
+    const msg = errMessage(
+      unfinished({ path: '/Volumes/STICK/real/log.json' }),
+    );
     expect(msg).toBe(
-      m.err_export_unfinished_file_at({ path: '/Volumes/STICK/log.json' }),
+      m.err_export_unfinished_file_at({ path: '/Volumes/STICK/real/log.json' }),
     );
-    expect(msg).toContain('/Volumes/STICK/log.json');
+    expect(msg).toContain('/Volumes/STICK/real/log.json');
   });
 
-  it('falls back to the path-free wording when no path was chosen', () => {
-    expect(exportErrMessage(unfinished, null)).toBe(
-      m.err_export_unfinished_file(),
-    );
-  });
-
-  it('resolves every other error exactly as errMessage does', () => {
-    const denied = { code: 'path.write.denied', message: 'raw' };
-    expect(exportErrMessage(denied, '/tmp/out.json')).toBe(errMessage(denied));
+  it('falls back to the path-free wording when details carry no path', () => {
+    for (const details of [undefined, null, {}, { path: 42 }]) {
+      expect(errMessage(unfinished(details))).toBe(
+        m.err_export_unfinished_file(),
+      );
+    }
   });
 });
 

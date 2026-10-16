@@ -44,10 +44,11 @@ pub enum LogError {
     Export { code: LogExportErrorCode, message: String },
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
-    /// The export failed and left its own unfinished file at the destination
-    /// (`ExportWriteError::LeftUnfinished`); the message names the path.
-    #[error("{0}")]
-    UnfinishedExport(String),
+    /// The export failed and left its own unfinished file at `path`, the
+    /// destination under its canonicalized parent
+    /// (`ExportWriteError::LeftUnfinished`).
+    #[error("{message}")]
+    UnfinishedExport { path: std::path::PathBuf, message: String },
 }
 
 impl LogError {
@@ -63,7 +64,7 @@ impl LogError {
             Self::Database(_) => "database.error",
             Self::Serialise(_) => "serialise.error",
             Self::Io(_) => "io.error",
-            Self::UnfinishedExport(_) => "export.unfinished_file",
+            Self::UnfinishedExport { .. } => "export.unfinished_file",
         }
     }
 }
@@ -90,8 +91,8 @@ impl From<LogError> for ContractError {
             LogError::Io(e) => {
                 Self::new(ErrorCode::IoError, e.to_string(), ErrorSeverity::Fatal, false)
             }
-            LogError::UnfinishedExport(message) => {
-                Self::new(ErrorCode::ExportUnfinishedFile, message, ErrorSeverity::Blocking, false)
+            LogError::UnfinishedExport { path, message } => {
+                crate::errors::export_unfinished_file(&path, message)
             }
         }
     }
@@ -331,8 +332,9 @@ pub async fn export_entries(
                 message: format!("{}: {}", rejected.message(), dest.display()),
             },
             ExportWriteError::Io(e) => LogError::Io(e),
-            left @ ExportWriteError::LeftUnfinished { .. } => {
-                LogError::UnfinishedExport(left.to_string())
+            ExportWriteError::LeftUnfinished(file) => {
+                let message = file.to_string();
+                LogError::UnfinishedExport { path: file.into_path(), message }
             }
         })?;
 
@@ -700,13 +702,23 @@ mod tests {
         assert_eq!(std::fs::read(&outside).expect("read"), b"outside");
     }
 
-    /// The UI shows the leftover file's path and the delete-before-retry
-    /// advice for this code, so it must stay distinct from a plain I/O error.
+    /// The UI names the leftover file from `details.path` and adds the
+    /// delete-before-retry advice for this code, so the code stays distinct
+    /// from a plain I/O error and the canonical path reaches the details.
     #[test]
-    fn an_unfinished_export_keeps_its_own_contract_code() {
-        let err = ContractError::from(LogError::UnfinishedExport("left at /x".to_owned()));
+    fn an_unfinished_export_carries_its_code_and_canonical_path() {
+        let err = ContractError::from(LogError::UnfinishedExport {
+            path: std::path::PathBuf::from("/private/tmp/real/log.json"),
+            message: "left at /private/tmp/real/log.json".to_owned(),
+        });
 
         assert_eq!(err.code, ErrorCode::ExportUnfinishedFile);
-        assert_eq!(err.message, "left at /x");
+        assert_eq!(err.message, "left at /private/tmp/real/log.json");
+        assert_eq!(
+            err.details,
+            contracts_core::JsonAny::from(serde_json::json!({
+                "path": "/private/tmp/real/log.json"
+            }))
+        );
     }
 }

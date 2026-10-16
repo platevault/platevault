@@ -12,7 +12,7 @@ import type {
   AuditOutcome,
 } from '@/bindings/index';
 import { useEntityNames, entityNameKey } from '@/hooks/useEntityNames';
-import { errMessage, exportErrMessage } from '@/lib/errors';
+import { errMessage } from '@/lib/errors';
 import { formatDateTime, toEpochMs } from '@/lib/datetime';
 import { entityPath } from '@/lib/entity-path';
 import { m } from '@/lib/i18n';
@@ -255,8 +255,8 @@ export function AuditLog() {
   const handleExport = useCallback(async () => {
     setExportError(null);
     setExporting(true);
-    let filePath: string | null = null;
     try {
+      let filePath: string | null = null;
       try {
         const { save: showSaveDialog } = await import(
           '@tauri-apps/plugin-dialog'
@@ -272,7 +272,7 @@ export function AuditLog() {
       if (!filePath) return;
       await auditExport(filePath, filters);
     } catch (err: unknown) {
-      setExportError(exportErrMessage(err, filePath));
+      setExportError(errMessage(err));
     } finally {
       setExporting(false);
     }

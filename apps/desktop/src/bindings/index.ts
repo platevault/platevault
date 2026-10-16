@@ -4014,6 +4014,8 @@ export type ErrorCode = "validation.request_envelope_invalid" | "dev_mode.disabl
 /**
  *  An export failed after claiming its destination and its own
  *  unfinished file remains there; the user deletes it before retrying.
+ *  `details.path` names that file, under the destination's canonicalized
+ *  parent.
  */
 "export.unfinished_file" | 
 /**

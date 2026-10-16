@@ -302,7 +302,6 @@ pub async fn audit_export(
     file_path: String,
     filters: Option<AuditFilterDto>,
 ) -> Result<AuditExportResponse, ContractError> {
-    use contracts_core::{error_code::ErrorCode, ErrorSeverity};
     use fs_pathsafe::export_dest::{validate_export_destination, ExportWriteError};
     use std::io::Write;
     use std::path::Path;
@@ -335,12 +334,9 @@ pub async fn audit_export(
                 validated.path().display()
             )),
             ExportWriteError::Io(e) => ContractError::internal(format!("write error: {e}")),
-            left @ ExportWriteError::LeftUnfinished { .. } => ContractError::new(
-                ErrorCode::ExportUnfinishedFile,
-                left.to_string(),
-                ErrorSeverity::Blocking,
-                false,
-            ),
+            ExportWriteError::LeftUnfinished(file) => {
+                app_core::errors::export_unfinished_file(file.path(), file.to_string())
+            }
         })?;
 
     Ok(AuditExportResponse {

@@ -351,7 +351,9 @@ describe('AuditLog', () => {
     );
   });
 
-  it('names the incomplete file an export failure left at the chosen path', async () => {
+  it('names the incomplete file at the path the backend wrote, not the chosen one', async () => {
+    // The dialog returns /tmp/audit-export.ndjson; the backend writes under the
+    // canonicalized parent, which a symlinked /tmp resolves elsewhere.
     mockExport.mockResolvedValue({
       status: 'error',
       error: {
@@ -359,7 +361,7 @@ describe('AuditLog', () => {
         message: 'backend diagnostic',
         severity: 'blocking',
         retryable: false,
-        details: null,
+        details: { path: '/private/tmp/audit-export.ndjson' },
       },
     });
 
@@ -371,7 +373,7 @@ describe('AuditLog', () => {
     fireEvent.click(exportBtn);
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Could not export: An incomplete export file remains at /tmp/audit-export.ndjson. Delete it before exporting again.',
+      'Could not export: An incomplete export file remains at /private/tmp/audit-export.ndjson. Delete it before exporting again.',
     );
   });
 

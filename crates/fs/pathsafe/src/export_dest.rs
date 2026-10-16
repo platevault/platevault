@@ -106,16 +106,8 @@ pub enum ExportWriteError {
     Rejected(DestinationRejected),
     Io(io::Error),
     /// The copy fallback failed after it claimed the destination name, and the
-    /// export's own unfinished file is still there. It is never removed by
-    /// name, because another process can put its own entry at that name, so a
-    /// retry to that name is refused until the user deletes it. `emptied`
-    /// says that truncating it and syncing that succeeded; otherwise it may
-    /// still hold part of the export.
-    LeftUnfinished {
-        path: PathBuf,
-        source: io::Error,
-        emptied: bool,
-    },
+    /// export's own unfinished file is still there.
+    LeftUnfinished(UnfinishedFile),
 }
 
 impl fmt::Display for ExportWriteError {
@@ -123,14 +115,7 @@ impl fmt::Display for ExportWriteError {
         match self {
             Self::Rejected(rejected) => f.write_str(rejected.message()),
             Self::Io(e) => e.fmt(f),
-            Self::LeftUnfinished { path, source, emptied } => {
-                let file = if *emptied {
-                    "an empty file"
-                } else {
-                    "a file that may still hold part of the export"
-                };
-                write!(f, "the export failed ({source}) and {file} remains at {}", path.display())
-            }
+            Self::LeftUnfinished(file) => file.fmt(f),
         }
     }
 }
@@ -139,8 +124,60 @@ impl std::error::Error for ExportWriteError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Rejected(_) => None,
-            Self::Io(e) | Self::LeftUnfinished { source: e, .. } => Some(e),
+            Self::Io(e) => Some(e),
+            Self::LeftUnfinished(file) => std::error::Error::source(file),
         }
+    }
+}
+
+/// The export's own unfinished file at the destination, left by a copy
+/// fallback that failed after it claimed the name. It is never removed by
+/// name, because another process can put its own entry at that name, so a
+/// retry to that name is refused until the user deletes it.
+#[derive(Debug)]
+pub struct UnfinishedFile {
+    path: PathBuf,
+    source: io::Error,
+    /// Truncating the file and syncing that succeeded; otherwise it may still
+    /// hold part of the export.
+    emptied: bool,
+}
+
+impl UnfinishedFile {
+    /// Where the file remains: the validated destination under its
+    /// canonicalized parent, which the path the caller passed in may no
+    /// longer reach once a symlink in it is retargeted.
+    #[must_use]
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    /// [`Self::path`], owned.
+    #[must_use]
+    pub fn into_path(self) -> PathBuf {
+        self.path
+    }
+}
+
+impl fmt::Display for UnfinishedFile {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let file = if self.emptied {
+            "an empty file"
+        } else {
+            "a file that may still hold part of the export"
+        };
+        write!(
+            f,
+            "the export failed ({}) and {file} remains at {}",
+            self.source,
+            self.path.display()
+        )
+    }
+}
+
+impl std::error::Error for UnfinishedFile {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.source)
     }
 }
 
@@ -331,7 +368,11 @@ fn copy_into_new<R: io::Read + io::Seek>(
     before_cleanup(final_path);
     let emptied = out.set_len(0).and_then(|()| out.sync_all()).is_ok();
     if names(final_path, &out) {
-        Err(ExportWriteError::LeftUnfinished { path: final_path.to_path_buf(), source, emptied })
+        Err(ExportWriteError::LeftUnfinished(UnfinishedFile {
+            path: final_path.to_path_buf(),
+            source,
+            emptied,
+        }))
     } else {
         Err(source.into())
     }
@@ -729,10 +770,10 @@ mod tests {
         let (ino, written) = before.expect("cleanup ran");
         assert_eq!(written, 14, "the copy wrote part of the export before failing");
         match &err {
-            ExportWriteError::LeftUnfinished { path, source, emptied } => {
-                assert_eq!(path, &dest);
-                assert_eq!(source.to_string(), "the copy ran out of space");
-                assert!(emptied);
+            ExportWriteError::LeftUnfinished(file) => {
+                assert_eq!(file.path(), dest);
+                assert_eq!(file.source.to_string(), "the copy ran out of space");
+                assert!(file.emptied);
             }
             other => panic!("expected LeftUnfinished, got {other:?}"),
         }
