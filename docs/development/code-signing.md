@@ -17,11 +17,11 @@ holds a paid Apple Developer account.
 |---|---|---|
 | **SignPath Foundation** | Free for qualifying OSS | **Chosen.** See eligibility below. |
 | Azure Trusted Signing / Artifact Signing | $9.99/mo (5,000 sigs), no free/OSS tier; Public Trust certs restricted to individuals in US/Canada only as of 2026 | Rejected — not free, and the maintainer isn't in an eligible individual-signing country for Public Trust |
-| Certum Open Source Code Signing | ~€14, no longer free (discontinued the free tier some years ago) | Rejected — not free |
+| Certum Open Source Code Signing | 29 USD for an activation code on your own cryptoCertum card and reader ([Certum, read 2026-10-16](https://certum.store/open-source-code-signing-code.html)), or 58 USD in the SimplySign cloud, up to 5,000 signatures a month ([Certum, read 2026-10-16](https://certum.store/open-source-code-signing-on-simplysign.html)) | Rejected — not free. The paid fallback if SignPath Foundation declines |
 | Sigstore (Fulcio/Rekor/cosign) | Free | Rejected — does not produce Windows-SmartScreen-trusted Authenticode signatures for `.exe`/`.msi` |
 | OSSign | Free for qualifying OSS (newer entrant) | Not evaluated in depth; SignPath has a longer track record and an existing Tauri-adjacent GitHub Action — kept as a fallback note only |
 
-Sources: [SignPath Foundation](https://signpath.org/), [SignPath Foundation terms](https://signpath.org/terms.html), [Azure Artifact Signing pricing](https://azure.microsoft.com/en-us/pricing/details/artifact-signing/), [Trusted Signing individual developer access (Microsoft Community Hub)](https://techcommunity.microsoft.com/blog/microsoft-security-blog/trusted-signing-is-now-open-for-individual-developers-to-sign-up-in-public-previ/4273554), [Certum Open Source Code Signing](https://certum.store/open-source-code-signing-code.html), [comparecheapssl.com 2026 comparison](https://comparecheapssl.com/free-code-signing-certificate-and-how-to-get-it/).
+Sources: [SignPath Foundation](https://signpath.org/), [SignPath Foundation terms](https://signpath.org/terms.html), [Azure Artifact Signing pricing](https://azure.microsoft.com/en-us/pricing/details/artifact-signing/), [Trusted Signing individual developer access (Microsoft Community Hub)](https://techcommunity.microsoft.com/blog/microsoft-security-blog/trusted-signing-is-now-open-for-individual-developers-to-sign-up-in-public-previ/4273554), [Certum Open Source Code Signing](https://certum.store/open-source-code-signing-code.html) and [in the cloud](https://certum.store/open-source-code-signing-on-simplysign.html), [comparecheapssl.com 2026 comparison](https://comparecheapssl.com/free-code-signing-certificate-and-how-to-get-it/).
 
 ## SignPath Foundation eligibility for this repo
 
@@ -36,57 +36,140 @@ Per the [official terms](https://signpath.org/terms.html), a project must be:
    and publishes GitHub Releases with Windows bundles, so this condition is
    met once the first tagged release exists.
 6. Documented (functionality described on the release/download page).
+7. Reputable, for an executable program: "we require a certain verifiable
+   reputation" (terms, *Common misunderstandings*).
 
-**Verdict: eligible.** No blockers identified. The certificate is issued to
-SignPath Foundation itself (Sectigo-issued OV cert), so the Authenticode
-publisher name shown to users will read "SignPath Foundation," not
-"PlateVault" or the maintainer's name — this is a program-wide constraint, not
-something specific to this repo.
+**Verdict: not yet.** PlateVault meets conditions 1–6, but probably not
+condition 7 today. On 2026-10-16 the repository had no stars and one fork,
+five months after it was created, and the research of 2026-10-13 found no
+outside references to it. In June 2026 SignPath declined a comparable project
+for this reason and invited it to apply again later. The rejection, as that
+project reported it, names what SignPath looks at: stars, forks and
+contributors, independent discussions, articles, and sustained activity
+([Arsarneq/docent#72](https://github.com/Arsarneq/docent/issues/72)).
+
+On 2026-10-13 the owner chose to prepare now and apply later (decision D1,
+recorded in `astro-plan-eub2i`): the code signing policy, the privacy
+statement and the signing pipeline below are prepared now, and the owner
+applies once the project has outside references. The project-page conditions
+SignPath also sets, such as the code signing policy, team roles, MFA and
+privacy, are tracked under
+[Code signing policy → Open conditions](../release/code-signing-policy.md#open-conditions).
+
+The certificate is issued to SignPath Foundation itself, an OV certificate
+from GlobalSign (GlobalSign GCC R45 CodeSigning CA 2020, as on the signed
+[vim-win32-installer](https://github.com/vim/vim-win32-installer) v9.2.1202
+setup, read 2026-10-16), so the Authenticode publisher name shown to users will
+read "SignPath Foundation," not "PlateVault" or the maintainer's name — this is
+a program-wide constraint, not something specific to this repo.
 
 ## How SignPath integrates with GitHub Actions / Tauri
 
-Tauri v2's own signing mechanism (`bundle.windows.signCommand` in
-`tauri.conf.json`, see the [Tauri Windows signing docs](https://v2.tauri.app/distribute/sign/windows/))
-expects a local `signtool`-style command run during the Windows build, and
-explicitly requires a custom command when cross-compiling from Linux/macOS.
-That path is a plausible future option, but the pattern this doc wires up
-instead is **post-build signing of the already-built `tauri-action` output**,
-because:
+Tauri v2 can sign during the build: the bundler runs
+`bundle.windows.signCommand` from `tauri.conf.json` on each file it signs and
+waits for it (see the [Tauri Windows signing docs](https://v2.tauri.app/distribute/sign/windows/)).
+SignPath Foundation's plan cannot serve such a command. Every signing request
+must carry a GitHub artifact that the workflow uploaded, and an approver must
+approve it, and the plan offers no hash-based signing a local command could
+call ([SignPath's GitHub connector](https://docs.signpath.io/trusted-build-systems/github)).
+Signing the finished installers after the build is the pattern SignPath
+documents and adopters use (e.g. [DB Browser for SQLite's writeup](https://sqlitebrowser.org/blog/signing-windows-executables-our-journey-with-signpath/),
+[AMD gaia's SignPath wiring](https://github.com/amd/gaia/issues/732)). It
+leaves the app inside them unsigned, though: signing an NSIS `setup.exe` does
+not sign the files packed in it. Smart App Control and a Microsoft Store
+listing check the installed executables too. So the workflow splits the
+Windows build around two signing requests, the executables and then the
+installers, as [Astera](https://github.com/parsingk/Astera/blob/main/docs/code-signing.md)
+does. Every executable the installers put on disk is then signed, except the
+NSIS uninstaller (see [Known limits](#known-limits)).
 
-- It doesn't require changing `tauri.conf.json` or touching the Windows build
-  step at all (constitution/task constraint: don't modify build-affecting
-  config in this PR).
-- It matches the pattern SignPath documents and the pattern real adopters use
-  (e.g. [DB Browser for SQLite's writeup](https://sqlitebrowser.org/blog/signing-windows-executables-our-journey-with-signpath/),
-  [AMD gaia's SignPath wiring](https://github.com/amd/gaia/issues/732)).
+Flow, once enabled (`.github/workflows/release-please.yml`, the Windows leg of
+the `build` job):
 
-Flow, once enabled (`.github/workflows/release-please.yml`):
-
-1. `build` job (Windows leg only) uploads the unsigned `.exe`/`.msi` as a
-   workflow artifact (`windows-unsigned-bundles`) after `tauri-action`
-   uploads them to the release. The paths come from `tauri-action`'s
-   `artifactPaths` output, because the bundles land in the workspace's cargo
-   target directory (`target/release/bundle/`), not under
-   `apps/desktop/src-tauri/`. This step is itself gated on
-   `vars.ENABLE_WINDOWS_SIGNING == 'true'`, so with the variable unset it is
-   skipped and today's release output is unchanged.
-2. `sign-windows` job downloads that artifact and flattens it, so the `.exe`
-   and `.msi` sit at the artifact root, which is the layout the SignPath
-   artifact configuration must expect. It re-uploads the result under a fresh
-   artifact ID (SignPath's action needs a `github-artifact-id` from an
-   `upload-artifact` step in the *same* job), then submits it via
+1. `tauri build --no-bundle` compiles the app and packs no installer.
+2. The leg prepares the first request: `nsis/desktop_shell.exe` and
+   `msi/desktop_shell.exe`, each stamped for its installer, and the package's
+   other executables at the root, today `platevault-library.exe`. The
+   installers ship every bin target of the `desktop_shell` package. The
+   bundler would stamp the app itself while it packs each installer: the
+   first `__TAURI_BUNDLE_TYPE_VAR_UNK` in the binary becomes
+   `__TAURI_BUNDLE_TYPE_VAR_NSS` or `__TAURI_BUNDLE_TYPE_VAR_MSI`. The app
+   reads that stamp to choose its update package
+   (`apps/desktop/src-tauri/src/updater.rs`), and the bundler's write would
+   break a signature made before it. So the leg stamps both copies the same
+   way first. It refuses a binary that holds the marker other than exactly
+   once.
+3. It uploads them as the `windows-app-for-signing` artifact and submits
+   request 1 with the app artifact configuration through
    [`signpath/github-action-submit-signing-request`](https://github.com/signpath/github-action-submit-signing-request).
-3. The job signs each Authenticode-signed file again with minisign
-   (`tauri signer sign`, same key), because Authenticode changed its bytes.
-   It then uploads each bundle and its new `.sig` to the same GitHub Release
-   with `gh release upload --clobber`, replacing the unsigned copies and their
-   now-stale signatures.
-4. `updater-manifest` job publishes `latest.json` (see below).
+4. It checks that every file came back with a valid signature by SignPath
+   Foundation and puts the signed copies in the cargo target directory. It
+   then runs `tauri bundle` twice, `--bundles nsis` around the NSIS copy and
+   `--bundles msi` around the MSI copy. `--no-binary-patching` keeps the
+   bundler from stamping the app again, and `--no-sign` keeps it from writing
+   updater signatures that request 2 would make stale.
+5. It uploads `setup.exe` and the `.msi` as `windows-installers-for-signing`
+   and submits request 2 with the installer artifact configuration.
+6. It checks that SignPath Foundation signed both installers and unpacks them:
+   7-Zip for the NSIS installer's files and the MSI's streams, `msiexec /a` for
+   the files the MSI installs. The check runs both ways round. Each installer
+   must carry every signed copy meant for it, byte for byte. Every PE file
+   (executable or DLL) in an installer must be one of those copies, or a
+   third-party file the step lists with its reason: today the NSIS plugins
+   (`nsDialogs`, `nsis_tauri_utils`, `NSISdl`, `StartMenu`, `System`) and
+   WiX's `WixUIWixca` custom action, which run during installation and are
+   not installed. SignPath Foundation signs only files built from this
+   repository, so they keep their own signatures, if any (`WixUIWixca` carries
+   WiX Toolset's). A bin target, sidecar or resource added later fails the
+   leg until it is signed or listed. So does a list entry that neither
+   installer carries any more, and an unpacked tree (the NSIS files, the
+   `msiexec /a` files or the MSI's streams) with no PE file in it, which
+   would mean the unpacking failed quietly.
+7. It signs each installer with minisign (`tauri signer sign --app-version`,
+   the bundler's key), attests the signed installers, and uploads them and
+   their `.sig` files to the GitHub Release.
+8. The `updater-manifest` job publishes `latest.json` (see below).
 
-This job is entirely gated on `vars.ENABLE_WINDOWS_SIGNING == 'true'`. That
-repo Actions variable is **unset today**, so `sign-windows` — and the
-artifact-collection step it depends on — never runs, and the `build` job's
-behavior is unchanged.
+Step 2 copies Tauri CLI 2.12.2's bundler, the version `pnpm-lock.yaml` pins:
+the marker, the `NSS` and `MSI` codes, and which bin targets it packs. Check
+them again on any `@tauri-apps/cli` bump; step 6 fails a release whose
+installers pack an executable step 2 did not send. Step 1 runs the command
+`tauri-action` runs on the other legs, `tauri build` in `apps/desktop` with no
+extra arguments, plus `--no-bundle`.
+
+Each request waits up to an hour for its approval
+(`wait-for-completion-timeout-in-seconds: 3600`; the action's default, 600 s,
+gave the approver ten minutes), so a release needs two approvals, each within
+an hour. The `build` job sets no `timeout-minutes`, so GitHub's six-hour job
+limit applies, and the workflow's concurrency group never cancels a run in
+progress. Both submit steps pin the commit that the action's `v2` and `v2.3`
+tags point at, 2.3.0 in SignPath's changelog. The `build` job grants
+`actions: read`, which the action's `github-token` input needs: the SignPath
+connector reads the job's details and downloads its artifact with that token.
+
+Every one of these steps is gated on `vars.ENABLE_WINDOWS_SIGNING == 'true'`.
+That repo Actions variable is **unset today**, so they are all skipped, and
+the Windows leg builds, attests and uploads through `tauri-action` like the
+other legs.
+
+### Known limits
+
+- **The NSIS uninstaller stays unsigned.** The NSIS installer writes
+  `uninstall.exe` into the install folder while it installs, built from
+  `setup.exe`'s own stub, so it is in no installer that SignPath could sign.
+  Tauri signs it only through NSIS's `!uninstfinalize`, which runs the
+  bundler's sign command during the build (`installer.nsi` and
+  `nsis/mod.rs`, Tauri CLI 2.12.2), and `--no-sign` skips it. SignPath's
+  plan offers no sign command, as above. The uninstaller runs when someone
+  uninstalls PlateVault, or chooses to uninstall from the installer's
+  reinstall page. NSIS updates do not run it. On a PC with Smart App Control
+  on, Windows may block it. The MSI is not affected: Windows Installer
+  uninstalls it. Signing it would need a third approach, for example a custom
+  NSIS template that ships a pre-built uninstaller signed in request 1.
+- **A test-signing policy cannot rehearse the SignPath steps.** Step 4
+  accepts only a valid signature by SignPath Foundation, so a run with
+  SignPath's test certificate fails there, before the installers are built.
+  The first full run is the first signed release.
 
 ## Interaction with the minisign updater signature
 
@@ -105,15 +188,17 @@ v2 `createUpdaterArtifacts: true` signs the installers directly). Authenticode
 embeds its signature in the file, so a minisign signature made before it no
 longer matches what clients download, and the updater would reject every
 Windows update. So the minisign signature must be made **after** Authenticode.
-`sign-windows` does that in step 3 above, and `updater-manifest` checks it.
+The Windows leg does that in step 7 above, after both signing requests, and
+`updater-manifest` checks it.
 
 ## Updater manifest (`latest.json`)
 
 Installed copies poll
 `https://github.com/platevault/platevault/releases/latest/download/latest.json`.
 The `updater-manifest` job writes that file once per release, after every
-`build` leg and, when enabled, `sign-windows` have succeeded. It runs
-`scripts/assemble-updater-manifest.mjs`, which publishes nothing unless:
+`build` leg has succeeded, the Windows signing steps included when they are
+on. It runs `scripts/assemble-updater-manifest.mjs`, which publishes nothing
+unless:
 
 - every updater bundle in its `UPDATER_BUNDLES` table (macOS `.app.tar.gz`,
   Linux AppImage/deb/rpm, Windows NSIS/MSI) is on the release with its `.sig`;
@@ -157,24 +242,72 @@ one release, pass the previous release's config as `--pubkey-conf`, e.g.
 
 ## Application checklist (user action required)
 
-1. Apply at <https://signpath.org/apply> with the repo URL
+1. Once the project has outside references (see the verdict above), apply at
+   <https://signpath.org/apply> with the repo URL
    (`https://github.com/platevault/platevault`) and confirm AGPL-3.0-only
    licensing.
 2. Once approved, create in the SignPath dashboard: an organization, a
-   project, a signing policy (test/release-signing), and an artifact
-   configuration for the NSIS `.exe`/MSI outputs. Note the slugs.
+   project, a release-signing policy, and two artifact configurations. Note
+   the slugs. GitHub artifacts are ZIP files, so both configurations start at
+   `<zip-file>`, and `*` in a path does not match `/`
+   ([syntax](https://docs.signpath.io/artifact-configuration/syntax)).
+   - The app configuration, for request 1. The two stamped copies of the app
+     sit in `nsis/` and `msi/`, and the other executables at the root:
+
+     ```xml
+     <artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+       <zip-file>
+         <pe-file path="nsis/desktop_shell.exe"><authenticode-sign/></pe-file>
+         <pe-file path="msi/desktop_shell.exe"><authenticode-sign/></pe-file>
+         <pe-file path="*.exe" min-matches="0" max-matches="unbounded"><authenticode-sign/></pe-file>
+       </zip-file>
+     </artifact-configuration>
+     ```
+
+   - The installer configuration, for request 2:
+
+     ```xml
+     <artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+       <zip-file>
+         <pe-file path="PlateVault_*_x64-setup.exe"><authenticode-sign/></pe-file>
+         <msi-file path="PlateVault_*_x64_en-US.msi"><authenticode-sign/></msi-file>
+       </zip-file>
+     </artifact-configuration>
+     ```
+
+   SignPath Foundation adds its own metadata restrictions to these, such as
+   the product name and version.
 3. Set repo secrets/variables (names only — no values invented here):
    - Secret `SIGNPATH_API_TOKEN`
    - Actions variable `SIGNPATH_ORGANIZATION_ID`
    - Actions variable `SIGNPATH_PROJECT_SLUG`
    - Actions variable `SIGNPATH_SIGNING_POLICY_SLUG`
-   - Actions variable `SIGNPATH_ARTIFACT_CONFIGURATION_SLUG`
-4. Flip it on: set the Actions variable `ENABLE_WINDOWS_SIGNING` to `true`.
-5. Verify on the next tagged release: the `sign-windows` job should run after
-   `build`, the release's `.exe`/`.msi` assets should carry a valid
-   Authenticode signature (`signtool verify /pa`) from SignPath Foundation,
-   and `updater-manifest` should publish `latest.json`. It only does so when
-   the re-made minisign signatures verify against those signed files.
+   - Actions variable `SIGNPATH_APP_ARTIFACT_CONFIGURATION_SLUG`
+   - Actions variable `SIGNPATH_INSTALLER_ARTIFACT_CONFIGURATION_SLUG`
+4. Check the action version. The submit steps pin the commit that
+   `signpath/github-action-submit-signing-request`'s `v2` and `v2.3` tags
+   point at, 2.3.0, the newest release in
+   [SignPath's changelog](https://docs.signpath.io/changelog) on 2026-10-16.
+   SignPath's GitHub connector page already shows `@v3`, which changes the
+   default connector URL, but v3 had no release or changelog entry yet. If v3
+   has been released by then, move both steps to it, pinned by commit SHA.
+5. Flip it on: set the Actions variable `ENABLE_WINDOWS_SIGNING` to `true`.
+6. Verify on the next tagged release:
+   - Approve both signing requests in SignPath, each within the hour.
+   - The Windows leg's **Bundle the installers around the signed
+     executables** and **Check the signed installers** steps pass. Both accept
+     only a valid signature by SignPath Foundation, so a test-signing policy
+     fails the first of them, before any installer is built (see
+     [Known limits](#known-limits)).
+   - `updater-manifest` publishes `latest.json`. It only does so when the
+     minisign signatures verify against the signed installers.
+   - On a Windows machine, `Get-AuthenticodeSignature` reports `Valid`, signed
+     by SignPath Foundation, for the release's `setup.exe` and `.msi`. After
+     you install each one, it reports the same for the installed
+     `desktop_shell.exe` and `platevault-library.exe`: under
+     `%LOCALAPPDATA%\PlateVault` for the NSIS installer and
+     `C:\Program Files\PlateVault` for the MSI. `uninstall.exe` in the NSIS
+     install folder stays unsigned (see [Known limits](#known-limits)).
 
 ## macOS signing (state and path)
 
