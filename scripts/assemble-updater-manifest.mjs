@@ -121,11 +121,12 @@ function keyIdHex(keyId) {
  *     takes prehashed `ED` signatures only;
  *   - tauri-plugin-updater 2.10 and 2.13 in 0.5.x and 0.6.x installs
  *     (`verify_signature`) also accept the legacy `Ed` form.
- * Both then run the signed-version check, the plugin with
- * `requireSignedVersion` off, which is PlateVault's setting. `tauri build`
- * only writes `ED` signatures, so requiring `ED` here rejects nothing the
- * release pipeline makes. Returns null when the signature holds, or the
- * reason it does not.
+ * Both then run the signed-version check. The services-crate client also
+ * refuses a signature that names no version, so the gate requires the field
+ * (`tauri build` and `tauri signer sign --app-version` in CLI 2.12 and later
+ * write it). `tauri build` only writes `ED` signatures, so requiring `ED`
+ * here rejects nothing the release pipeline makes. Returns null when the
+ * signature holds, or the reason it does not.
  */
 export function verifySignature(data, base64Signature, publicKey, version) {
   let lines;
@@ -163,15 +164,20 @@ export function verifySignature(data, base64Signature, publicKey, version) {
     return 'has a trusted comment that does not verify';
   }
   // Tauri CLI 2.12 and later record the version they signed for as a
-  // `version:` field of the trusted comment. The plugin rejects an update whose
-  // signed version differs from latest.json's `version`, whatever
-  // requireSignedVersion says; that setting only decides whether a signature
-  // without the field is rejected. Older signatures carry none and are accepted.
+  // `version:` field of the trusted comment. latest.json is not signed, so
+  // the field is what ties its `version` to the payload: the in-app updater
+  // refuses a signature without it, and one made for another version, so an
+  // older signed payload cannot be announced as a newer release. The
+  // tauri-plugin-updater 2.13 in 0.5.x/0.6.x installs refuses the mismatch
+  // too and accepts either with or without the field.
   const signedVersion = comment
     .split('\t')
     .find((field) => field.startsWith(SIGNED_VERSION_FIELD))
     ?.slice(SIGNED_VERSION_FIELD.length);
-  if (signedVersion !== undefined && signedVersion.replace(/^v/, '') !== version.replace(/^v/, '')) {
+  if (signedVersion === undefined) {
+    return 'does not name the version it was signed for (sign with `tauri signer sign --app-version`)';
+  }
+  if (signedVersion.replace(/^v/, '') !== version.replace(/^v/, '')) {
     return `was signed for version ${signedVersion}, but latest.json announces ${version}`;
   }
   return null;

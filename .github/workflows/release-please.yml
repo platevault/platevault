@@ -477,9 +477,9 @@ jobs:
       # key. `--app-version` records the release version in the trusted comment,
       # as the bundler does for its own signatures, and it is read from the same
       # tauri.conf.json the updater-manifest job announces in latest.json.
-      # The in-app updater rejects an update whose signed version differs
-      # from latest.json's, and with `requireSignedVersion` on it also rejects a
-      # signature that carries no version.
+      # The in-app updater refuses an update whose signed version differs
+      # from latest.json's, or whose signature carries no version, and the
+      # updater-manifest job refuses to publish either.
       - name: Sign the signed bundles for the updater
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}

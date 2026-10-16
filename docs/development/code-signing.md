@@ -121,17 +121,23 @@ The `updater-manifest` job writes that file once per release, after every
   leg cannot be silently left out;
 - every signature verifies against the bytes on the release, using the public
   key in `apps/desktop/src-tauri/tauri.conf.json`;
-- every signature whose trusted comment records a version (Tauri CLI 2.12 and
-  later write a `version:` field) was made for the manifest's `version`,
-  ignoring a leading `v`. A signature without the field is accepted.
+- every signature's trusted comment records the version it was made for (the
+  `version:` field that `tauri build` and `tauri signer sign --app-version`
+  write from Tauri CLI 2.12 on), and that version is the manifest's
+  `version`, ignoring a leading `v`.
 
 Together these are the checks the in-app updater runs before it installs an
-update (`crates/desktop/services/src/update/signature.rs`; tauri-plugin-updater
-2.13 in 0.6.x installs runs the same ones) with `requireSignedVersion` off,
-PlateVault's setting. The in-app updater accepts prehashed `ED` signatures
-only, which `tauri build` writes, so the gate rejects the legacy `Ed` form. A
-signed version that differs from the manifest is rejected whatever that
-setting says; it only decides whether a signature without one is rejected.
+update (`crates/desktop/services/src/update/signature.rs`). `latest.json` is
+not signed, so the signed version is the only thing that ties the version it
+announces to the payload. The in-app updater therefore refuses a signature
+without one: an older release's signature could otherwise be announced as a
+newer release and installed as a rollback. The releases up to v0.6.1 were
+built with Tauri CLI 2.11 and carry no field, but the in-app updater is only
+ever offered releases newer than itself. tauri-plugin-updater 2.13 in 0.6.x
+installs runs the same checks with `requireSignedVersion` off, so it also
+accepts a signature without the field. The in-app updater accepts prehashed
+`ED` signatures only, which `tauri build` writes, so the gate rejects the
+legacy `Ed` form.
 
 If any check fails, the run is red and the new release has no `latest.json`,
 so clients' update checks fail until the failed jobs are re-run. Before this
