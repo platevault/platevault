@@ -66,9 +66,9 @@ use crate::errors::db_err;
 use crate::protection::{self, CleanupPlanItem, GeneratePlanRequest};
 use domain_core::ids::new_id;
 
-/// Take the tail of a project-relative path (the file name) for display.
+/// Take the native file name from a recorded path for display.
 fn file_name(path: &str) -> &str {
-    path.rsplit(['/', '\\']).next().unwrap_or(path)
+    std::path::Path::new(path).file_name().and_then(std::ffi::OsStr::to_str).unwrap_or(path)
 }
 
 /// Materialise a reviewable whole-project archive plan (spec 017 US2, WP-B).
@@ -370,9 +370,9 @@ pub(crate) async fn generate_restore_generic(
 mod tests {
     use super::*;
     use persistence_core::Database;
-    use persistence_plans::repositories::artifacts::{insert_artifact_if_absent, InsertArtifact};
+    use persistence_plans::repositories::artifacts::{InsertArtifact, insert_artifact_if_absent};
     use persistence_plans::repositories::plans as plans_repo;
-    use persistence_plans::repositories::projects::{insert_project, InsertProject};
+    use persistence_plans::repositories::projects::{InsertProject, insert_project};
 
     async fn setup() -> Database {
         let db = Database::in_memory().await.expect("in-memory DB");
@@ -452,6 +452,38 @@ mod tests {
         let items = plans_repo::list_plan_items(db.pool(), &resp.plan_id).await.unwrap();
         assert_eq!(items.len(), 3);
         assert!(items.iter().all(|i| i.action == "archive"));
+    }
+
+    /// A backslash belongs to a native file name on Unix and must survive
+    /// plan generation unchanged, including display text supplied by the caller.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn generate_keeps_backslash_in_native_artifact_name() {
+        let db = setup().await;
+        seed_project(&db, "p-backslash", "completed").await;
+        seed_artifact(
+            &db,
+            "a-backslash",
+            "p-backslash",
+            "calibrated/light\\one.xisf",
+            "intermediate",
+            1000,
+        )
+        .await;
+
+        let title = "Archive: light\\one.xisf";
+        let resp = generate(db.pool(), "p-backslash", Some(title)).await.unwrap();
+        let plan = plans_repo::get_plan(db.pool(), &resp.plan_id, false).await.unwrap();
+        assert_eq!(plan.title, title);
+        let items = plans_repo::list_plan_items(db.pool(), &resp.plan_id).await.unwrap();
+        assert_eq!(items[0].name, "light\\one.xisf");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn file_name_uses_windows_separators() {
+        assert_eq!(file_name(r"calibrated\light.xisf"), "light.xisf");
+        assert_eq!(file_name("calibrated/light.xisf"), "light.xisf");
     }
 
     /// Regression test (spec 037 Journey 6/7 bugfix): before

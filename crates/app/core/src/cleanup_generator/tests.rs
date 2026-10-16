@@ -18,9 +18,9 @@ use contracts_core::protection::{
     PlanProtectionCheckRequest, ProtectionLevel, SourceProtectionSetRequest,
 };
 use persistence_core::Database;
-use persistence_plans::repositories::artifacts::{insert_artifact_if_absent, InsertArtifact};
+use persistence_plans::repositories::artifacts::{InsertArtifact, insert_artifact_if_absent};
 use persistence_plans::repositories::plans as plans_repo;
-use persistence_plans::repositories::projects::{insert_project, InsertProject};
+use persistence_plans::repositories::projects::{InsertProject, insert_project};
 use sqlx::SqlitePool;
 
 async fn setup() -> (Database, EventBus, std::sync::MutexGuard<'static, ()>) {
@@ -297,6 +297,49 @@ async fn generate_creates_plan_with_items() {
     // the sum of the two archive-action item sizes (1000 + 2000).
     let plan = plans_repo::get_plan(db.pool(), &resp.plan_id, false).await.unwrap();
     assert_eq!(plan.total_bytes_required, 3000);
+}
+
+/// On Unix, a backslash is part of a native file name, not a path separator.
+#[cfg(unix)]
+#[tokio::test]
+async fn generate_keeps_backslash_in_native_artifact_name() {
+    let (db, _bus, _lock) = setup().await;
+    seed_project(&db, "p-backslash").await;
+    seed_artifact(
+        &db,
+        "a-backslash",
+        "p-backslash",
+        "calibrated/light\\one.xisf",
+        "intermediate",
+        1000,
+    )
+    .await;
+    set_policy(
+        db.pool(),
+        &CleanupPolicy {
+            entries: vec![CleanupPolicyEntry {
+                data_type: "intermediate".to_owned(),
+                action: CleanupAction::Archive,
+            }],
+            auto_on_completion: false,
+        },
+    )
+    .await
+    .unwrap();
+
+    let title = "Cleanup: light\\one.xisf";
+    let resp = generate(db.pool(), "p-backslash", Some(title), None).await.unwrap();
+    let plan = plans_repo::get_plan(db.pool(), &resp.plan_id, false).await.unwrap();
+    assert_eq!(plan.title, title);
+    let items = plans_repo::list_plan_items(db.pool(), &resp.plan_id).await.unwrap();
+    assert_eq!(items[0].name, "light\\one.xisf");
+}
+
+#[cfg(windows)]
+#[test]
+fn file_name_uses_windows_separators() {
+    assert_eq!(super::file_name(r"calibrated\light.xisf"), "light.xisf");
+    assert_eq!(super::file_name("calibrated/light.xisf"), "light.xisf");
 }
 
 #[tokio::test]
