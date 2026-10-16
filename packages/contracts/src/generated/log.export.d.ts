@@ -69,7 +69,7 @@ export interface LogExport {
  */
 export interface Error {
   /**
-   * Source mapping: path.write.denied (crates/app/core/src/log_stream.rs:59), path.parent.missing (log_stream.rs:60), range.invalid (log_stream.rs:61), format.unsupported (log_stream.rs:62), database.error (log_stream.rs:64-86), serialise.error (log_stream.rs:65, 88-90), io.error (log_stream.rs:66, 91-93), export.unfinished_file (log_stream.rs:67, 94-96). Command-level failures originate in apps/desktop/src-tauri/src/commands/log.rs:99-132; shared wire names are defined in crates/contracts/core/src/error_code.rs:467-486.
+   * The first four codes reject the request. database.error, serialise.error and io.error report a failure reading the log or writing the file. export.unfinished_file means the write failed part-way and left the export's own incomplete file at the destination; details.path names it.
    */
   code:
     | "path.write.denied"
@@ -83,7 +83,7 @@ export interface Error {
   message: string;
   details?: {
     /**
-     * For export.unfinished_file, absolute path of the unfinished export (crates/app/errors/src/lib.rs:174-176).
+     * For export.unfinished_file: the absolute path of the incomplete file left at the destination.
      */
     path?: string;
     [k: string]: unknown;
