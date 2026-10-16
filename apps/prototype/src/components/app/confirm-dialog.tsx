@@ -175,15 +175,17 @@ export function FileTable({ label, rows: files, onNavigate }: FileTableProps) {
   const m = useMessages()
   const rows: IndexedRow[] = files.map((row, index) => ({ ...row, key: String(index) }))
   const destination = (row: FileRow) => row.to ?? actionWord(m, row.action)
-  // Narrower than a page table's 18rem cut, so File · From · To · Size · Status fit the 42rem dialog; a cut path shows in full on hover (T2).
+  // Narrower than a page table's 18rem cut, so File · From · To · Size · SHA-256 · Status fit the 42rem dialog; a cut path or digest shows in full on hover (T2).
+  // The file name is the identity, so its cut is the widest; a destination that is only an action word ("Trash", "Stays") is never cut.
+  const moves = rows.some((row) => row.to !== undefined)
   const columns: Column<IndexedRow>[] = [
-    { id: "file", header: m.dialog_col_file(), cell: (row) => row.file, sortValue: (row) => row.file, rowHeader: true, truncate: true, className: "max-w-48" },
-    { id: "from", header: m.dialog_col_from(), cell: (row) => row.from, sortValue: (row) => row.from, truncate: true, className: "max-w-40" },
-    { id: "to", header: m.dialog_col_to(), cell: destination, sortValue: destination, truncate: true, className: "max-w-40" },
+    { id: "file", header: m.dialog_col_file(), cell: (row) => row.file, sortValue: (row) => row.file, rowHeader: true, truncate: true, className: "max-w-60" },
+    { id: "from", header: m.dialog_col_from(), cell: (row) => row.from, sortValue: (row) => row.from, truncate: true, className: "max-w-36" },
+    { id: "to", header: m.dialog_col_to(), cell: destination, sortValue: destination, ...(moves ? { truncate: true, className: "max-w-36" } : {}) },
     { id: "size", header: m.dialog_col_size(), cell: (row) => formatBytes(row.size), sortValue: (row) => row.size, align: "right" },
   ]
   if (rows.some((row) => row.sha256)) {
-    columns.push({ id: "sha256", header: m.storage_sha256(), cell: (row) => <span className="font-mono">{row.sha256 ?? "–"}</span>, sortValue: (row) => row.sha256 ?? null, truncate: true, className: "max-w-40" })
+    columns.push({ id: "sha256", header: m.storage_sha256(), cell: (row) => <span className="font-mono">{row.sha256 ?? "–"}</span>, sortValue: (row) => row.sha256 ?? null, truncate: true, className: "max-w-28" })
   }
   if (rows.some((row) => row.status)) {
     columns.push({

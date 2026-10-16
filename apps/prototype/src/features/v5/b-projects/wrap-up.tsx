@@ -291,7 +291,7 @@ function OfferTable({ label, rows, select, empty }: { label: string; rows: Offer
     { id: "detail", header: m.wrapup_col_detail(), cell: (r) => r.detail ?? "–", sortValue: (r) => r.detail, truncate: true },
     { id: "from", header: m.dialog_col_from(), cell: (r) => (r.path ? folderOf(r.path) : "–"), sortValue: (r) => r.path, truncate: true },
     { id: "size", header: m.dialog_col_size(), cell: (r) => (r.status || r.size === 0 ? "–" : formatBytes(r.size)), sortValue: (r) => r.size, align: "right" },
-    { id: "status", header: m.dialog_col_status(), cell: (r) => <StatusCell status={r.status} />, sortValue: (r) => r.status?.label ?? null, truncate: true },
+    { id: "status", header: m.dialog_col_status(), cell: (r) => <StatusCell status={r.status} />, sortValue: (r) => r.status?.label ?? null },
   ]
   return (
     <DataTable
