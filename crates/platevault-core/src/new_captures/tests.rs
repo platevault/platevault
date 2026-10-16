@@ -1088,6 +1088,7 @@ async fn a_root_is_named_from_the_start_of_its_watch_until_it_leaves() {
         location_id: location.id,
         root: root.clone(),
         volume_kind: location.volume_kind,
+        folder: inventory::root_stamp(&root).and_then(RootStamp::folder),
     }];
 
     // The first walk still lists the volume, so nothing is counted, but the

@@ -103,7 +103,7 @@ use tokio::task::JoinHandle;
 use tokio::time::{interval, interval_at, Instant, MissedTickBehavior};
 use uuid::Uuid;
 
-use crate::inventory::{self, Entry, Listing, RootRefusal, RootStamp};
+use crate::inventory::{self, Entry, FolderId, Listing, RootRefusal, RootStamp};
 use crate::library::{blocking, Library};
 use crate::{
     LibraryError, Location, LocationLifecycle, LocationRole, NativePath, PathIdentity,
@@ -143,6 +143,12 @@ pub struct WatchedRoot {
     pub location_id: Uuid,
     pub root: PathBuf,
     pub volume_kind: VolumeKind,
+    /// The root folder's ID when discovery started watching it, which the
+    /// folder at `root` keeps while it is the same folder; `None` on a
+    /// platform that reports none. A handle held for the root (the Windows
+    /// removal notices) is bound to the folder with this ID, never to
+    /// another one that took its path.
+    pub folder: Option<FolderId>,
 }
 
 /// Discovery of new captures in every online Captures location of a
@@ -1403,6 +1409,7 @@ impl Run {
                 location_id: watched.location.id,
                 root: watched.root.clone(),
                 volume_kind: watched.location.volume_kind,
+                folder: watched.stamp.folder(),
             })
             .collect();
         roots.sort_by_key(|root| root.location_id);

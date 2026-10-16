@@ -18,7 +18,6 @@ use std::io;
 use std::mem;
 use std::os::windows::fs::OpenOptionsExt;
 use std::os::windows::io::AsRawHandle;
-use std::path::{Path, PathBuf};
 use std::ptr;
 use std::sync::mpsc;
 use std::thread;
@@ -27,7 +26,10 @@ use std::time::Duration;
 use windows_sys::Win32::Foundation::{
     ERROR_CLASS_ALREADY_EXISTS, HWND, LPARAM, LRESULT, TRUE, WPARAM,
 };
-use windows_sys::Win32::Storage::FileSystem::FILE_FLAG_BACKUP_SEMANTICS;
+use windows_sys::Win32::Storage::FileSystem::{
+    GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION, FILE_ATTRIBUTE_DIRECTORY,
+    FILE_ATTRIBUTE_REPARSE_POINT, FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT,
+};
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetMessageW, KillTimer,
@@ -39,7 +41,7 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
 };
 
 use crate::registrations::{Notice, Registrations};
-use crate::Removal;
+use crate::{FolderId, Removal, Root};
 
 /// Posted once new roots are queued.
 const ROOTS: u32 = WM_APP;
@@ -66,7 +68,9 @@ const NOTIFICATION_END: usize =
     mem::offset_of!(DEV_BROADCAST_HANDLE, dbch_hdevnotify) + mem::size_of::<HDEVNOTIFY>();
 
 /// A message-only window on its own thread, registered for the removal
-/// notices of the volume holding each root its [`Roots`] give it. A root
+/// notices of the volume holding each root its [`Roots`] give it. A root is
+/// registered only while the folder at its path is the one its
+/// [`FolderId`] names, opened without following a reparse point. A root
 /// that could not be opened or registered, or was not reopened after a
 /// refused removal, is tried again every 30 s until it registers or leaves.
 ///
@@ -80,7 +84,7 @@ pub struct RemovalNotices<K> {
 /// Gives a [`RemovalNotices`] window the roots to register.
 #[derive(Clone)]
 pub struct Roots<K> {
-    queue: mpsc::Sender<HashMap<K, PathBuf>>,
+    queue: mpsc::Sender<HashMap<K, Root>>,
     /// The window's handle as an address, since an `HWND` cannot cross
     /// threads. It only goes back to `PostMessageW`.
     window: usize,
@@ -142,7 +146,7 @@ impl<K> Roots<K> {
     /// Have the window register exactly `roots`, by key, in place of the last
     /// ones. `false` once the window is gone.
     #[must_use = "`false` means the window is gone"]
-    pub fn watch(&self, roots: HashMap<K, PathBuf>) -> bool {
+    pub fn watch(&self, roots: HashMap<K, Root>) -> bool {
         // The queue closes before the window is destroyed, so nothing posts to
         // a window handle Windows may have reused.
         self.queue.send(roots).is_ok() && post(self.window, ROOTS)
@@ -161,7 +165,7 @@ fn post(window: usize, message: u32) -> bool {
 /// The window thread: create the window, report it, then serve its messages
 /// until asked to stop. Unregistered roots are retried every `retry` ms.
 fn run<K: Clone + Eq + Hash + 'static>(
-    queued: mpsc::Receiver<HashMap<K, PathBuf>>,
+    queued: mpsc::Receiver<HashMap<K, Root>>,
     removal: Box<dyn FnMut(&K, Removal) + Send>,
     retry: u32,
     created: &mpsc::SyncSender<io::Result<usize>>,
@@ -267,11 +271,56 @@ fn create_window() -> io::Result<HWND> {
     }
 }
 
-/// Open a root folder for its volume's notices. A folder opens only with
-/// backup semantics; the default share mode leaves every other process free
-/// to read, write and delete in it.
-fn open_root(root: &Path) -> io::Result<File> {
-    OpenOptions::new().read(true).custom_flags(FILE_FLAG_BACKUP_SEMANTICS).open(root)
+/// Open a root folder for its volume's notices, refusing anything but the
+/// folder `root.folder` names. The folder opens with backup semantics and
+/// without following a reparse point, so a link, junction or mounted folder
+/// put in its place is opened itself, seen and refused; a real folder that
+/// took its path is refused by its folder ID. The default share mode leaves
+/// every other process free to read, write and delete in it.
+fn open_root(root: &Root) -> io::Result<File> {
+    let handle = OpenOptions::new()
+        .read(true)
+        .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
+        .open(&root.path)?;
+    let info = information(&handle)?;
+    if info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "a link, junction or mounted folder is in the root's place",
+        ));
+    }
+    if info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY == 0 {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "the root is not a folder"));
+    }
+    if folder_id(&info) != root.folder {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "another folder is in the root's place",
+        ));
+    }
+    Ok(handle)
+}
+
+/// `GetFileInformationByHandle` for an open handle.
+fn information(handle: &File) -> io::Result<BY_HANDLE_FILE_INFORMATION> {
+    let mut info = BY_HANDLE_FILE_INFORMATION::default();
+    // SAFETY: `handle` stays open across the call, and `info` is a
+    // BY_HANDLE_FILE_INFORMATION for it to fill in.
+    #[allow(unsafe_code)]
+    let read = unsafe { GetFileInformationByHandle(handle.as_raw_handle(), &raw mut info) };
+    if read == 0 {
+        Err(io::Error::last_os_error())
+    } else {
+        Ok(info)
+    }
+}
+
+/// The folder ID a handle's information names.
+fn folder_id(info: &BY_HANDLE_FILE_INFORMATION) -> FolderId {
+    FolderId {
+        volume: u64::from(info.dwVolumeSerialNumber),
+        index: (u64::from(info.nFileIndexHigh) << 32) | u64::from(info.nFileIndexLow),
+    }
 }
 
 /// A volume notice registration, ended on drop.
@@ -416,10 +465,10 @@ fn with_handler(apply: impl FnOnce(&mut dyn Handle)) {
 
 struct Handler<K> {
     window: HWND,
-    registrations: Registrations<K, Notification>,
-    queued: mpsc::Receiver<HashMap<K, PathBuf>>,
+    registrations: Registrations<K, Root, Notification>,
+    queued: mpsc::Receiver<HashMap<K, Root>>,
     /// The roots last given, which a retry follows again.
-    roots: HashMap<K, PathBuf>,
+    roots: HashMap<K, Root>,
     removal: Box<dyn FnMut(&K, Removal) + Send>,
     /// The retry timer's period, in milliseconds.
     retry: u32,
@@ -482,6 +531,7 @@ impl<K: Clone + Eq + Hash> Handle for Handler<K> {
 /// tests send as Windows sends them; only a real device removal is left out.
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
     use std::time::Instant;
 
     use windows_sys::Win32::UI::WindowsAndMessaging::SendMessageW;
@@ -533,6 +583,27 @@ mod tests {
             .is_err()
     }
 
+    /// The root at `path`, bound to the folder there now.
+    fn root_at(path: &Path) -> Root {
+        let handle = OpenOptions::new()
+            .read(true)
+            .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
+            .open(path)
+            .unwrap();
+        Root { path: path.to_path_buf(), folder: folder_id(&information(&handle).unwrap()) }
+    }
+
+    /// Put a directory junction to `target` at `link`, with the `mklink /J`
+    /// shell builtin (a junction needs no privilege, unlike a symlink), as
+    /// the repository's other junction tests do.
+    fn junction(link: &Path, target: &Path) {
+        let status = std::process::Command::new("cmd")
+            .args(["/C", "mklink", "/J", link.to_str().unwrap(), target.to_str().unwrap()])
+            .status()
+            .expect("mklink invocation failed");
+        assert!(status.success(), "mklink /J failed to create the test junction");
+    }
+
     #[test]
     fn a_requested_removal_closes_the_root_before_it_is_granted() {
         let dir = tempfile::tempdir().unwrap();
@@ -546,7 +617,7 @@ mod tests {
         drop(RemovalNotices::<&str>::start(|_, _| {}).unwrap());
         let window = notices.roots.window;
 
-        assert!(notices.roots().watch(HashMap::from([("card", root.clone())])));
+        assert!(notices.roots().watch(HashMap::from([("card", root_at(&root))])));
         let [id] = registered(window, 1)[..] else { panic!("one registration") };
         assert!(held(&root), "the registration holds the root open");
 
@@ -578,7 +649,7 @@ mod tests {
         })
         .unwrap();
         let window = notices.roots.window;
-        assert!(notices.roots().watch(HashMap::from([("card", dir.path().to_path_buf())])));
+        assert!(notices.roots().watch(HashMap::from([("card", root_at(dir.path()))])));
         let [id] = registered(window, 1)[..] else { panic!("one registration") };
 
         let requested = thread::spawn(move || notify(window, DBT_DEVICEQUERYREMOVE, id));
@@ -607,20 +678,27 @@ mod tests {
     }
 
     /// Nothing gives the window its roots again, yet a root that could not
-    /// be opened registers at a retry tick once it can.
+    /// be opened registers at a retry tick once it can: its folder was moved
+    /// away and is back.
     #[test]
     fn a_root_that_could_not_be_opened_registers_at_a_retry() {
         let dir = tempfile::tempdir().unwrap();
         let (card, late) = (dir.path().join("card"), dir.path().join("late"));
         std::fs::create_dir(&card).unwrap();
+        std::fs::create_dir(&late).unwrap();
+        let late_root = root_at(&late);
+        let away = dir.path().join("away");
+        std::fs::rename(&late, &away).unwrap();
         let (notices, _reports) = retrying();
         let window = notices.roots.window;
 
-        assert!(notices.roots().watch(HashMap::from([("card", card), ("late", late.clone())])));
+        assert!(notices
+            .roots()
+            .watch(HashMap::from([("card", root_at(&card)), ("late", late_root)])));
         // Both were followed: the one that opened is registered.
         assert_eq!(registered(window, 1).len(), 1);
         assert!(!late.exists(), "it cannot be opened yet");
-        std::fs::create_dir(&late).unwrap();
+        std::fs::rename(&away, &late).unwrap();
         assert_eq!(registered(window, 2).len(), 2, "registered at a retry tick");
         assert!(held(&late), "its registration holds it open");
     }
@@ -630,21 +708,71 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path().join("card");
         std::fs::create_dir(&root).unwrap();
+        let away = dir.path().join("away");
         let (notices, reports) = retrying();
         let window = notices.roots.window;
-        assert!(notices.roots().watch(HashMap::from([("card", root.clone())])));
+        assert!(notices.roots().watch(HashMap::from([("card", root_at(&root))])));
         let [id] = registered(window, 1)[..] else { panic!("one registration") };
 
         // The root cannot be opened again when the removal is refused.
         assert_eq!(notify(window, DBT_DEVICEQUERYREMOVE, id), GRANT);
-        std::fs::remove_dir(&root).unwrap();
+        std::fs::rename(&root, &away).unwrap();
         assert_eq!(notify(window, DBT_DEVICEQUERYREMOVEFAILED, id), GRANT);
         assert_eq!(reports.try_recv(), Ok(("card", Removal::Requested)));
         assert_eq!(reports.try_recv(), Ok(("card", Removal::Refused)));
         assert_eq!(registered(window, 0), [] as [usize; 0], "its registration ended");
 
-        std::fs::create_dir(&root).unwrap();
+        std::fs::rename(&away, &root).unwrap();
         assert_eq!(registered(window, 1).len(), 1, "registered again at a retry tick");
         assert!(held(&root), "its registration holds it open");
+    }
+
+    /// A junction put in the root's place is refused, though it points at
+    /// the root's own folder, moved away: the root opens without following
+    /// it. A root beside it registers, which shows both were followed.
+    #[test]
+    fn a_junction_in_the_roots_place_is_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        let (card, moved, other) =
+            (dir.path().join("card"), dir.path().join("moved"), dir.path().join("other"));
+        std::fs::create_dir(&card).unwrap();
+        std::fs::create_dir(&other).unwrap();
+        let card_root = root_at(&card);
+        std::fs::rename(&card, &moved).unwrap();
+        junction(&card, &moved);
+        let (notices, _reports) = retrying();
+        let window = notices.roots.window;
+
+        assert!(notices
+            .roots()
+            .watch(HashMap::from([("card", card_root), ("other", root_at(&other))])));
+        assert_eq!(registered(window, 1).len(), 1, "registered through the junction");
+        assert!(held(&other), "the root beside it is registered");
+        assert!(!held(&moved), "a registration holds the folder the junction points at");
+        // Retry ticks refuse it too.
+        thread::sleep(Duration::from_millis(200));
+        assert_eq!(registered(window, 1).len(), 1, "registered through the junction at a retry");
+    }
+
+    /// A real folder that took the root's path is another folder, refused by
+    /// its folder ID.
+    #[test]
+    fn another_folder_in_the_roots_place_is_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        let (card, other) = (dir.path().join("card"), dir.path().join("other"));
+        std::fs::create_dir(&card).unwrap();
+        std::fs::create_dir(&other).unwrap();
+        let card_root = root_at(&card);
+        std::fs::rename(&card, dir.path().join("moved")).unwrap();
+        std::fs::create_dir(&card).unwrap();
+        let (notices, _reports) = retrying();
+        let window = notices.roots.window;
+
+        assert!(notices
+            .roots()
+            .watch(HashMap::from([("card", card_root), ("other", root_at(&other))])));
+        assert_eq!(registered(window, 1).len(), 1, "registered the folder that took its path");
+        assert!(held(&other), "the root beside it is registered");
+        assert!(!held(&card), "a registration holds the folder that took its path");
     }
 }

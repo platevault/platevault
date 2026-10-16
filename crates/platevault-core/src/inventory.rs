@@ -50,6 +50,7 @@ use crate::{
     ScanProgress, ScanState, VolumeIdentity, VolumeKind,
 };
 
+pub use identity::FolderId;
 #[cfg(test)]
 pub(crate) use identity::Probed;
 use identity::Stamp;
@@ -208,14 +209,21 @@ pub(crate) fn probe_fingerprint_in(
 /// keeps it, while an unmounted, remounted or replaced root does not.
 ///
 /// Besides the root's [`Stamp`], which the walker compares its folders
-/// against, it holds the root's folder ID ([`identity::FolderId`]). On
-/// Windows the stamp holds only the creation time, which a replacement
-/// folder can share (NTFS can carry it over to a folder created under a
-/// name that was just renamed away), so the folder ID tells the two apart.
+/// against, it holds the root's [`FolderId`]. On Windows the stamp holds only
+/// the creation time, which a replacement folder can share (NTFS can carry
+/// it over to a folder created under a name that was just renamed away), so
+/// the folder ID tells the two apart.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct RootStamp {
     stamp: Stamp,
-    folder: Option<identity::FolderId>,
+    folder: Option<FolderId>,
+}
+
+impl RootStamp {
+    /// The root's folder ID; `None` on a platform that reports none.
+    pub(crate) const fn folder(self) -> Option<FolderId> {
+        self.folder
+    }
 }
 
 /// The stamp of the real folder at `root`, or `None` when it is absent,

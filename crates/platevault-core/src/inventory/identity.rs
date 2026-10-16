@@ -186,13 +186,14 @@ pub(super) fn stamp(meta: &Metadata) -> Stamp {
 }
 
 /// A folder's identity on its mounted volume: the device and inode numbers on
-/// Unix, and on Windows the volume serial and file index of a handle on the
-/// folder itself, which `Metadata` does not expose there. Same-session
-/// continuity evidence like [`Stamp`], never persisted.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) struct FolderId {
-    pub(super) volume: u64,
-    pub(super) index: u64,
+/// Unix, and on Windows the volume serial number and the 64-bit file index
+/// that `GetFileInformationByHandle` reports for a handle on the folder
+/// itself, which `Metadata` does not expose there. Same-session continuity
+/// evidence like [`Stamp`], never persisted.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct FolderId {
+    pub volume: u64,
+    pub index: u64,
 }
 
 /// The [`FolderId`] of the folder at `path`, whose no-follow metadata is

@@ -10,10 +10,13 @@
 //! notice to the watch: `release` when a removal is requested, `reattach` when
 //! it was refused and `gone` once the volume is removed. A USB disk counts as
 //! a fixed one (`DriveType` 3) and still ejects, so no local volume is left
-//! out; one that never ejects simply never sends a notice. It holds no
-//! watcher state: [`CaptureWatch::subscribe_roots`] names a root from the
-//! start of its watch, and a location that is removed, retired, remapped or
-//! offline leaves it. macOS and Linux need none of this.
+//! out; one that never ejects simply never sends a notice. Each root goes to
+//! the window with the folder ID discovery recorded for it, so the window
+//! holds a handle only on that folder, never on a link, junction or other
+//! folder that took its path. It holds no watcher state:
+//! [`CaptureWatch::subscribe_roots`] names a root from the start of its
+//! watch, and a location that is removed, retired, remapped or offline
+//! leaves it. macOS and Linux need none of this.
 //!
 //! [`CaptureWatch`]: platevault_core::new_captures::CaptureWatch
 //! [`CaptureWatch::subscribe_roots`]: platevault_core::new_captures::CaptureWatch::subscribe_roots
@@ -21,6 +24,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+use platevault_core::inventory::FolderId;
 use platevault_core::new_captures::WatchedRoot;
 use platevault_core::VolumeKind;
 use uuid::Uuid;
@@ -28,13 +32,15 @@ use uuid::Uuid;
 #[cfg(windows)]
 pub use notices::EjectNotices;
 
-/// The roots to register, by location: every watched one but those on a
-/// network share, which Windows never ejects.
-pub fn ejectable_roots(roots: &[WatchedRoot]) -> HashMap<Uuid, PathBuf> {
+/// The roots to register, by location, each with the folder ID the folder at
+/// its path must still have: every watched one but those on a network share,
+/// which Windows never ejects, and those with no folder ID, which no handle
+/// could be checked against.
+pub fn ejectable_roots(roots: &[WatchedRoot]) -> HashMap<Uuid, (PathBuf, FolderId)> {
     roots
         .iter()
         .filter(|root| root.volume_kind != VolumeKind::Network)
-        .map(|root| (root.location_id, root.root.clone()))
+        .filter_map(|root| Some((root.location_id, (root.root.clone(), root.folder?))))
         .collect()
 }
 
@@ -42,7 +48,7 @@ pub fn ejectable_roots(roots: &[WatchedRoot]) -> HashMap<Uuid, PathBuf> {
 #[cfg(windows)]
 mod notices {
     use platevault_core::new_captures::{CaptureWatch, WatchedRoot};
-    use platevault_eject_windows::{Removal, RemovalNotices, Roots};
+    use platevault_eject_windows::{FolderId, Removal, RemovalNotices, Root, Roots};
     use tauri::{AppHandle, Manager, Runtime};
     use tokio::sync::watch;
     use uuid::Uuid;
@@ -107,12 +113,18 @@ mod notices {
         }
     }
 
-    /// Keep the registrations on the ejectable roots discovery follows. Ends
-    /// with discovery or the window.
+    /// Keep the registrations on the ejectable roots discovery follows, each
+    /// bound to its folder ID. Ends with discovery or the window.
     async fn follow(mut watched: watch::Receiver<Vec<WatchedRoot>>, window: Roots<Uuid>) {
         loop {
             // Its own statement, so the read guard is gone before the await.
-            let wanted = ejectable_roots(&watched.borrow_and_update());
+            let wanted = ejectable_roots(&watched.borrow_and_update())
+                .into_iter()
+                .map(|(location, (path, folder))| {
+                    let folder = FolderId { volume: folder.volume, index: folder.index };
+                    (location, Root { path, folder })
+                })
+                .collect();
             if !window.watch(wanted) || watched.changed().await.is_err() {
                 return;
             }
@@ -124,22 +136,32 @@ mod notices {
 mod tests {
     use super::*;
 
-    fn root(volume_kind: VolumeKind, root: &str) -> WatchedRoot {
-        WatchedRoot { location_id: Uuid::new_v4(), root: PathBuf::from(root), volume_kind }
+    fn root(volume_kind: VolumeKind, root: &str, index: u64) -> WatchedRoot {
+        WatchedRoot {
+            location_id: Uuid::new_v4(),
+            root: PathBuf::from(root),
+            volume_kind,
+            folder: Some(FolderId { volume: 7, index }),
+        }
     }
 
     #[test]
-    fn registers_every_watched_root_but_network_shares() {
-        let card = root(VolumeKind::Removable, "E:\\Captures");
+    fn registers_every_watched_root_but_network_shares_and_unidentified_folders() {
+        let card = root(VolumeKind::Removable, "E:\\Captures", 1);
         // A USB SSD reports itself as a fixed disk.
-        let ssd = root(VolumeKind::Local, "F:\\Captures");
-        let share = root(VolumeKind::Network, "Z:\\Captures");
+        let ssd = root(VolumeKind::Local, "F:\\Captures", 2);
+        let share = root(VolumeKind::Network, "Z:\\Captures", 3);
+        let unidentified =
+            WatchedRoot { folder: None, ..root(VolumeKind::Local, "G:\\Captures", 4) };
 
-        let roots = ejectable_roots(&[card.clone(), ssd.clone(), share]);
+        let roots = ejectable_roots(&[card.clone(), ssd.clone(), share, unidentified]);
 
         assert_eq!(
             roots,
-            HashMap::from([(card.location_id, card.root), (ssd.location_id, ssd.root)])
+            HashMap::from([
+                (card.location_id, (card.root, card.folder.unwrap())),
+                (ssd.location_id, (ssd.root, ssd.folder.unwrap())),
+            ])
         );
     }
 

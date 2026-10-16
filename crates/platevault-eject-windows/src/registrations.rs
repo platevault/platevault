@@ -10,10 +10,10 @@
 //! once the volume is going or gone.
 
 use std::collections::{HashMap, HashSet};
+use std::fmt::Debug;
 use std::fs::File;
 use std::hash::Hash;
 use std::io;
-use std::path::{Path, PathBuf};
 
 use crate::Removal;
 
@@ -30,24 +30,26 @@ pub enum Notice {
 }
 
 /// The registrations of the given roots, by the id Windows names each one
-/// with in its notices.
-pub struct Registrations<K, N> {
-    entries: HashMap<usize, Entry<K, N>>,
-    open: fn(&Path) -> io::Result<File>,
+/// with in its notices. A root `R` is whatever `open` needs to open the
+/// handle, and refuse a folder other than the root's.
+pub struct Registrations<K, R, N> {
+    entries: HashMap<usize, Entry<K, R, N>>,
+    open: fn(&R) -> io::Result<File>,
 }
 
-struct Entry<K, N> {
+struct Entry<K, R, N> {
     key: K,
-    root: PathBuf,
+    root: R,
     /// Open unless a requested removal is still undecided.
     handle: Option<File>,
     /// Ends the registration when dropped.
     _notification: N,
 }
 
-impl<K: Clone + Eq + Hash, N> Registrations<K, N> {
-    /// No registrations yet; `open` opens a root's handle.
-    pub fn new(open: fn(&Path) -> io::Result<File>) -> Self {
+impl<K: Clone + Eq + Hash, R: Clone + Debug + Eq, N> Registrations<K, R, N> {
+    /// No registrations yet; `open` opens a root's handle, and refuses one
+    /// that is not the root's folder.
+    pub fn new(open: fn(&R) -> io::Result<File>) -> Self {
         Self { entries: HashMap::new(), open }
     }
 
@@ -60,7 +62,7 @@ impl<K: Clone + Eq + Hash, N> Registrations<K, N> {
     /// the caller to make.
     pub fn follow(
         &mut self,
-        roots: &HashMap<K, PathBuf>,
+        roots: &HashMap<K, R>,
         mut register: impl FnMut(&File) -> io::Result<(usize, N)>,
     ) {
         self.entries.retain(|_, entry| roots.get(&entry.key) == Some(&entry.root));
@@ -80,7 +82,7 @@ impl<K: Clone + Eq + Hash, N> Registrations<K, N> {
                     self.entries.insert(id, entry);
                 }
                 Err(error) => tracing::warn!(
-                    root = %root.display(),
+                    root = ?root,
                     %error,
                     "removal notices: root not registered"
                 ),
@@ -113,7 +115,7 @@ impl<K: Clone + Eq + Hash, N> Registrations<K, N> {
                         // next request, so it ends, and the root is left
                         // uncovered for a later `follow` to register again.
                         tracing::warn!(
-                            root = %entry.root.display(),
+                            root = ?entry.root,
                             %error,
                             "removal notices: root not reopened after a refused removal"
                         );
@@ -128,7 +130,7 @@ impl<K: Clone + Eq + Hash, N> Registrations<K, N> {
     /// Whether every one of `roots` has a registration: `false` while one
     /// could not be opened or registered, or was not reopened after a refused
     /// removal, and a later [`follow`](Self::follow) should try again.
-    pub fn covers(&self, roots: &HashMap<K, PathBuf>) -> bool {
+    pub fn covers(&self, roots: &HashMap<K, R>) -> bool {
         roots.iter().all(|(key, root)| {
             self.entries.values().any(|entry| entry.key == *key && entry.root == *root)
         })
@@ -144,6 +146,7 @@ impl<K: Clone + Eq + Hash, N> Registrations<K, N> {
 #[cfg(test)]
 mod tests {
     use std::cell::RefCell;
+    use std::path::{Path, PathBuf};
     use std::rc::Rc;
 
     use super::*;
@@ -163,7 +166,7 @@ mod tests {
     /// Registrations over plain files standing in for root folders, which
     /// open the same way on every platform.
     struct Harness {
-        registrations: Registrations<&'static str, Notification>,
+        registrations: Registrations<&'static str, PathBuf, Notification>,
         next: usize,
         ended: Rc<RefCell<Vec<usize>>>,
         dir: tempfile::TempDir,
