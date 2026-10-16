@@ -12,7 +12,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{Equipment, LibraryError, Revision};
+use crate::{comparison_key as filter_key, Equipment, LibraryError, Revision};
 
 /// Whether a camera captures through a colour filter array.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -104,12 +104,6 @@ pub struct RigFilterValues {
     pub equipment_id: Uuid,
     pub rig_name: String,
     pub values: Vec<RigFilterValue>,
-}
-
-/// Comparison key of a FILTER value: trimmed, NFC and lowercase.
-fn filter_key(value: &str) -> String {
-    use unicode_normalization::UnicodeNormalization;
-    value.trim().nfc().collect::<String>().to_lowercase()
 }
 
 /// Validate a filter list for saving and return it normalized: names and

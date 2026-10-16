@@ -57,6 +57,78 @@ pub use archive::*;
 mod trash_moves;
 pub use trash_moves::*;
 
+// The F4 Project model (D-W93 to D-W116): canonical types and invariants the
+// persistence schema and every F4 unit share.
+mod workflow_settings;
+pub use workflow_settings::*;
+mod rig_version;
+pub use rig_version::*;
+mod session_calibration;
+pub use session_calibration::*;
+mod session_intake;
+pub use session_intake::*;
+mod project_inputs;
+pub use project_inputs::*;
+mod project_view;
+pub use project_view::*;
+mod project_lifecycle;
+pub use project_lifecycle::*;
+mod project_output;
+pub use project_output::*;
+
+time::serde::format_description!(pub(crate) iso_date, Date, "[year]-[month]-[day]");
+
+/// Comparison key of user text such as a FILTER value, a group name or a
+/// camera alias: trimmed, NFC and lowercase.
+pub(crate) fn comparison_key(value: &str) -> String {
+    use unicode_normalization::UnicodeNormalization;
+    value.trim().nfc().collect::<String>().to_lowercase()
+}
+
+/// Refuse a `field` that is not a SHA-256 digest in lowercase hex.
+pub(crate) fn require_sha256(field: &str, value: &str) -> Result<(), LibraryError> {
+    let hex =
+        value.len() == 64 && value.bytes().all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'));
+    if hex {
+        Ok(())
+    } else {
+        Err(LibraryError::InvalidInput(format!("{field} is not a lowercase SHA-256 digest")))
+    }
+}
+
+/// The parts of a path relative to a folder `PlateVault` owns, refusing an
+/// empty path, an absolute one and parent traversal.
+pub(crate) fn relative_parts(field: &str, path: &NativePath) -> Result<Vec<String>, LibraryError> {
+    let relative = path.relative_path()?;
+    let parts: Vec<String> = relative
+        .components()
+        .filter_map(|part| match part {
+            Component::Normal(name) => Some(name.to_string_lossy().into_owned()),
+            _ => None,
+        })
+        .collect();
+    if parts.is_empty() {
+        return Err(LibraryError::InvalidInput(format!("{field} is empty")));
+    }
+    Ok(parts)
+}
+
+/// A logical capture's key and copies (D16): at least one copy, each once in
+/// asset id order, the key the smallest.
+pub(crate) fn validate_copies(key: Uuid, copies: &[CopyBasis]) -> Result<(), LibraryError> {
+    let invalid = |message: String| Err(LibraryError::InvalidInput(message));
+    let Some(first) = copies.first() else {
+        return invalid(format!("capture {key} names no copy"));
+    };
+    if first.asset_id != key {
+        return invalid(format!("capture {key} is keyed by its smallest copy"));
+    }
+    if copies.windows(2).any(|pair| pair[0].asset_id >= pair[1].asset_id) {
+        return invalid(format!("capture {key} lists its copies once, in order"));
+    }
+    Ok(())
+}
+
 pub type Revision = u64;
 
 #[derive(Debug, thiserror::Error)]
