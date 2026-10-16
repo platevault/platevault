@@ -1,6 +1,6 @@
 ---
 id: J39
-title: Clean up duplicate copies found by the automatic scan
+title: Clean up duplicate copies found through the Duplicates filter in Wrap up
 version: 5
 status: draft
 last_reviewed: 2026-10-12
@@ -15,11 +15,11 @@ trace: [HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#round-5, HA
 The user frees space taken by byte-identical extra copies of library frames.
 The user finds byte-identical extra copies through Sessions' Duplicates filter and the Duplicates review. Only copies in registered locations are counted, so a connected capture card never appears. The review identifies duplicate copies but does not authorize their removal. In the open Project's Wrap up, the user reviews the Trash step's duplicate-copy offer, which names the kept copy, and moves eligible extras to the OS Trash. A copy put back from the OS Trash appears again after its location is rescanned. Done means:
 
-- After S1 the ⚠ issue reads `6 duplicate copies · 313 MB` and the review lists 5 groups, each with its keeper preselected by the rule: the copy in the earliest-registered location, even where another copy's file is older.
+- After S1 Sessions' Duplicates filter lists the four affected sessions, which hold 6 extra copies (313 MB) in all, and each affected row carries its duplicates issue. Wrap up's Trash step names each frame's kept copy by the rule: the copy in the earliest-registered location, even where another copy's file is older.
 - The connected capture card `Card-3`, which holds byte-identical copies of 2 library frames, adds nothing to any scan result and is never listed.
 - Every copy that was moved is in the OS Trash with its original bytes. Every kept copy and every refused copy is unchanged, and nothing is permanently deleted.
 - Each frame retains its named kept copy. Moving duplicate copies does not change session frame counts or mark the frame record Trashed.
-- After a copy is put back and its location is rescanned, the Sessions Duplicates filter and review show it again. There is no issue dismissal or Issues hub.
+- After a copy is put back and its location is rescanned, the Sessions Duplicates filter and review show it again. There is no Issues hub: each duplicates issue sits on its session row, with a row-level Dismiss.
 
 ## Preconditions
 
@@ -46,15 +46,16 @@ The user finds byte-identical extra copies through Sessions' Duplicates filter a
 - P4: Before S1, `Spare/Captures` is not registered. The P2 copies on `Cold-1` and `Scratch` are already indexed.
 - P5: The isolated account's OS Trash is empty. Manifests (relative path, size, SHA-256) of every file on `Astro-T7`, `Cold-1`, `Scratch`, `Spare` and `Card-3`, and the frame count of every session, were recorded outside PlateVault before S1.
 - P6: Removable volume `Card-3` (ASIAIR layout, has an OS Trash) is connected before S1 and stays connected to S7. It is not a registered location. Under `Autorun/Light/` it holds byte-identical copies of M-2 and S-1 (2 files, 104,382,720 bytes), as a capture card left uncleared after a Copy import would. None of its files is new to the library.
+- P7: Project `NGC 7000 HOO` is open with subjects NGC 7000 and M 33 and holds the `4 Oct M 33`, `18 Sep`, `12 Sep` and `30 Sep` sessions, so every P2 frame is one of its frames. Its View is applied, no change is pending and no PlateVault operation runs on it, so its Wrap up opens at Clean up (PRJ-FR-14).
 
 ## Steps
 
 ### S1 — Index a folder and find duplicate sessions {#S1}
 
 - **Do:** Register `Spare/Captures` as a Captures location named `Spare captures` (Add existing library folder) and let it index. In Sessions, select Duplicates.
-- **Expect:** Sessions lists the affected sessions with duplicate-copy badges. The M-1, M-2, N-1, C-1 and S-1 copies contribute `6 duplicate copies · 313 MB`. Activity records the completed index.
-- **Expect (negative):** No copy moves, and no issue is raised or listed in an Issues hub. Every session's frame count matches P5. `Card-3` is unregistered and its two copies add nothing to the Duplicates filter.
-- **Trace:** LIB-FR-22; LIB-FR-03; FR-032
+- **Expect:** Sessions' Duplicates filter lists exactly four sessions with duplicate-copy badges: `4 Oct M 33` and `18 Sep` each read `2 copies · 104 MB`, and `12 Sep` and `30 Sep` each read one copy of 52 MB. Together they are the 6 extra copies (313 MB) of M-1, M-2, N-1, C-1 and S-1. Each affected row carries its duplicates issue with a row-level Dismiss (×), and the status bar's ⚠ counter counts those issues and opens Sessions filtered to the affected rows. Activity records the completed index.
+- **Expect (negative):** No copy moves, and no Issues hub lists the issues. Every session's frame count matches P5. `Card-3` is unregistered and its two copies add nothing to the Duplicates filter.
+- **Trace:** LIB-FR-22; LIB-FR-03; FR-032 · D-W92
 
 ### S2 — Open the Duplicates review {#S2}
 
@@ -87,9 +88,9 @@ The user finds byte-identical extra copies through Sessions' Duplicates filter a
 ### S5a — Review the refused duplicate again {#S5a}
 
 - **Do:** In Sessions, select Duplicates and open the S-1 row's Duplicates review.
-- **Expect:** The review still shows the refused `Scratch` copy. The row identifies the duplicate session; no dismissed issue or Restore action is shown.
+- **Expect:** The `30 Sep` row still carries its duplicates badge and its duplicates issue, with a row-level Dismiss (×), and its review still shows the refused `Scratch` copy. Nothing was dismissed, so Show dismissed lists no duplicates issue.
 - **Expect (negative):** Reopening the review moves, trashes or writes no file.
-- **Trace:** LIB-FR-22; STO-FR-16; FR-032
+- **Trace:** LIB-FR-22; STO-FR-16; FR-032 · D-W92
 
 ### S6 — Put one copy back {#S6}
 
@@ -100,7 +101,7 @@ The user finds byte-identical extra copies through Sessions' Duplicates filter a
 
 ### S6a — Read the kept copy for a tie inside one location {#S6a}
 
-- **Do:** Outside PlateVault, copy `Astro-T7/Captures/M33/2026-10-04/` to `Astro-T7/Captures/M33/2026-10-04 copy/` and set the copies' file creation and modification times to 2026-09-01 00:00 local, so they are older than the originals. In Settings › Locations, rescan `Astro-T7 captures`. Reopen the Trash step of `NGC 7000 HOO`'s Wrap up from the step strip and read the duplicate-copy group for M-1 and M-2. Leave the step without confirming.
+- **Do:** Outside PlateVault, copy only the M-1 and M-2 files from `Astro-T7/Captures/M33/2026-10-04/` to a new folder `Astro-T7/Captures/M33/2026-10-04 copy/` and set the two copies' file creation and modification times to 2026-09-01 00:00 local, so they are older than the originals. In Settings › Locations, rescan `Astro-T7 captures`. Reopen the Trash step of `NGC 7000 HOO`'s Wrap up from the step strip and read the duplicate-copy group for M-1 and M-2. Leave the step without confirming.
 - **Expect:** M-1 and M-2 each have two copies in `Astro-T7 captures`, the earliest-registered location, so they tie for the kept copy. For each, the original under `M33/2026-10-04/`, which PlateVault catalogued first, is preselected as the kept copy, and the `2026-10-04 copy/` file is offered as an extra copy, although its file is older. M-1's put-back `Spare` copy is offered as well.
 - **Expect (negative):** No file moves, because the user confirmed nothing. The older file times do not make a copy the kept copy.
 - **Trace:** PRJ-FR-15; STO-FR-16; STO-AC-28 · D-W74, D-W116
@@ -117,7 +118,7 @@ The user finds byte-identical extra copies through Sessions' Duplicates filter a
 
 ## Success criteria
 
-- SC1: S1 lists the five affected sessions through the Sessions Duplicates filter, and S6 shows the restored M-1 copy after rescan. Neither result is presented through an Issues hub.
+- SC1: S1 lists the four affected sessions through the Sessions Duplicates filter, and S6 shows the restored M-1 copy after rescan. Neither result is presented through an Issues hub.
 - SC2: The indexed library starts with 6 extra copies. After S4, one copy is in the OS Trash; after S5, five are in the OS Trash and the unsupported `Scratch` copy is refused; after S6, putting M-1 back restores its duplicate badge.
 - SC3: The Wrap up offer names the kept copy for each duplicate under PRJ-FR-15: four are in `Astro-T7 captures` and C-1 is in `Cold-1 captures`.
 - SC4: Exactly 5 copies reach the OS Trash across S4 and S5, 1 copy is refused with its reason, and 1 is put back. At S7 the OS Trash holds 4 files.
@@ -129,11 +130,11 @@ The user finds byte-identical extra copies through Sessions' Duplicates filter a
 ## Known gaps
 
 - G1: Not validated. The Duplicates filter and review follow LIB-FR-22; Project duplicate-copy offers follow PRJ-FR-15 and STO-FR-16. No implementation has been validated against this journey.
-- G2: Unresolved implementation qualification: P1 to P4 need a seeded catalog with indexed copies on `Cold-1` and `Scratch` and no scan recorded after them. No fixture builder exists. Blocks readiness.
+- G2: Unresolved implementation qualification: P1 to P4 and P7 need a seeded catalog with indexed copies on `Cold-1` and `Scratch` and an open Project holding the P2 sessions. No fixture builder exists. Blocks readiness.
 - G3: (dissolved 2026-10-12): answered by Round 6 "The duplicate scan covers registered library locations only"; S1, S2, S6 and S7 now assert that the connected capture card `Card-3` (P6), holding byte-identical copies of M-2 and S-1, is never counted, listed or trashed.
-- G4: (dissolved 2026-10-12): answered by Round 6 "The keeper is the copy in the earliest-registered location"; S2 now asserts it with a fixture where the oldest file (the `Spare` copy of N-1, P2) is in the last-registered location and is not the keeper.
-- G5: Out of scope for this journey: a copy whose bytes change between the scan and the move (D-W74 rehashes each copy before it moves), a copy on an offline volume, and a scan canceled from the status bar. Each needs fault injection or pacing. Blocks readiness until covered by a step or a journey.
-- G6: No separate duplicate-copy keeper choice is specified for the Duplicates review; removal and the kept-copy rule are specified for the Project's Wrap up Trash offer by PRJ-FR-15 and STO-FR-16.
+- G4: (dissolved 2026-10-12): answered by Round 6 "The keeper is the copy in the earliest-registered location"; S2 now asserts it with a fixture where the oldest file (the `Spare` copy of N-1, P2) is in the last-registered location and is not the keeper. Since 2026-10-15 S3 reads the kept copy in Wrap up's Trash step instead, because the Duplicates review names no keeper (LIB-FR-22, PRJ-FR-15).
+- G5: Out of scope for this journey: a copy whose bytes change between the scan and the move (D-W74 rehashes each copy before it moves), a copy on an offline volume, and a duplicate scan canceled while it runs. Each needs fault injection or pacing. Blocks readiness until covered by a step or a journey.
+- G6: (dissolved 2026-10-15): S3 to S6a now review the duplicate-copy offer in `NGC 7000 HOO`'s own Wrap up (PRJ-FR-15, STO-FR-16), so J34 no longer has to cover it here. The Duplicates review names no keeper and offers no removal (LIB-FR-22).
 - G7: (dissolved 2026-10-16): answered by the owner's answer of 2026-10-15/16 (D-W116). When copies in the same earliest-registered location tie for the kept copy, the copy PlateVault catalogued first is preselected. Nothing is removed without review. S6a and SC8 now assert it with copies whose files are older than the originals.
 
 ## Delta log
@@ -142,8 +143,11 @@ The user finds byte-identical extra copies through Sessions' Duplicates filter a
   The duplicate scan covers registered library locations only: a connected capture card with byte-identical copies is never counted, listed or trashed.
   The keeper is the copy in the earliest-registered location, not the oldest file; the fixture now makes the `Spare` copy of N-1 the oldest file and asserts it is not kept.
   Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 6 (user, 2026-10-10) "The duplicate scan covers registered library locations only" (apps/prototype/design/ on ui-harness-v5 @ 4f470775); user answers to the PR #1788 journey questions · by: JourneysV5.R6G (intent-gated)
+- **Δ3** 2026-10-12 · +S5a, S6 · behavior-change
+  P-ISS1: the user dismisses the remaining duplicates issue (×), which moves no file and lists it under `Dismissed (1)` with Restore. The put-back copy changes its count and bytes, so the issue comes back by itself.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 8 (user, 2026-10-12) P-ISS1 (apps/prototype/design/ on ui-harness-v5) · by: R8JourneysDocs (intent-gated)
 - **Δ4** 2026-10-15 · S1, S2, S3, S4, S5, S5a, S6 · behavior-change
-  Duplicate copies are found through Sessions' Duplicates filter and review; disposal is offered in the Project's Wrap up Trash step, which names the kept copy and refuses unsupported moves.
+  Duplicate copies are found through Sessions' Duplicates filter and review; disposal is offered in the Project's Wrap up Trash step, which names the kept copy and refuses unsupported moves. P7 gives that Project every P2 session. Each duplicates issue sits on its session row with Dismiss (D-W92), and G6 is dissolved.
   Evidence: D-W93 to D-W106 in specs/063-clean-rebuild-contract/workflow-decisions.md, LIB-FR-22, PRJ-FR-14, PRJ-FR-15, STO-FR-16 · by: SpecF4Writer2 (intent-gated)
 - **Δ5** 2026-10-16 · +S6a, S7 · behavior-change
   A tie for the kept copy inside one location preselects the copy PlateVault catalogued first, never the oldest file; S6a reads it without moving anything.

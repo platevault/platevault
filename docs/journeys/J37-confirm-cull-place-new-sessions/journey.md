@@ -15,7 +15,7 @@ trace: [063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 06
 After import, the user resolves Target and rig associations, reviews new sessions through intake, and explicitly adds Ready sessions with settled calibration to a Project. Home and Sessions show Project suggestions, which are never added automatically. OBJECT remains a label, and confirming a Target changes catalog metadata but never moves imported files. Done means:
 
 - The Needs a Target filter reads 0. The pending-work rows and Sessions filters distinguish sessions that need review, need calibration, or are not held by a Project.
-- All 10 light sessions have a confirmed Target and rig. The reviewed `2 Oct Ha`, `2 Oct OIII` and `4 Oct Ha` sessions are Ready with settled calibration before they are added.
+- Each of the 10 light sessions has a Target and a rig, Confirmed by the user or Associated from its pointing and optics keywords. The reviewed `2 Oct Ha`, `2 Oct OIII` and `4 Oct Ha` sessions are Ready with settled calibration before they are added.
 - `2 Oct Ha` reads 32 Usable and 3 Unusable frames, and `4 Oct Ha` reads 12 Picked, with every mark at library scope.
 - `NGC 7000 HOO` holds only the sessions the user added, has rigs `RedCat` and `Esprit`, and shows unadded matching Ready sessions as suggestions.
 - Every file under the registered locations is byte-identical to the pre-run manifest; confirming Targets, confirming rigs, reviewing frames, creating a Project and adding sessions move no file.
@@ -41,19 +41,19 @@ After import, the user resolves Target and rig associations, reviews new session
 
 ### S1 — Start from the status bar {#S1}
 
-- **Do:** Read the status bar. Open its ⚠ counter and its ℹ counter, then follow `1 needs a Target` to Sessions.
-- **Expect:** The status bar shows the ⚠ warnings and ℹ info counters and no ⛔ errors counter. Each counter opens the owning Sessions page filtered to the affected rows, not a list of issues. Following `1 needs a Target` opens Sessions filtered to **Needs a Target**. The filters read All 10, Needs a Target 1, Not in any Project 9 and Trashed 0, and the list shows exactly `4 Oct Ha`. No calibration process waits for Stack; each light session's calibration is already settled.
-- **Expect (negative):** Opening a popout or following an issue changes no session, Target, rig or Project. Neither `2 Oct Ha` nor `2 Oct OIII` is listed under Needs a Target, because their Targets were confirmed at import.
+- **Do:** Read the status bar. Choose its ℹ counter and read where it leads, then return and choose its ⚠ counter.
+- **Expect:** The status bar shows the ⚠ warnings and ℹ info counters and no ⛔ errors counter. Each counter opens the owning Sessions page filtered to the affected rows, not a list of issues: the ℹ counter reads 9 and opens Sessions filtered to **Not in any Project**, and the ⚠ counter reads 1 and opens Sessions filtered to **Needs a Target**. The filters read All 10, Needs a Target 1, Not in any Project 9 and Trashed 0, and Needs a Target lists exactly `4 Oct Ha`. No calibration process waits for Stack; each light session's calibration is already settled.
+- **Expect (negative):** Choosing a counter changes no session, Target, rig or Project. Neither `2 Oct Ha` nor `2 Oct OIII` is listed under Needs a Target, because their Targets were confirmed at import.
 - **Trace:** LIB-FR-17, LIB-FR-23, PRJ-FR-17 · D-W92, D-W105
 
-### S2 — Read Home's Sessions box {#S2}
+### S2 — Read Home's Pending work {#S2}
 
-- **Do:** Open Home and read its Sessions box.
+- **Do:** Open Home and read its Pending work section.
 - **Expect:** Home's Pending work section includes one session needing a Target, `4 Oct Ha`, with `OBJECT NGC7000` shown only as a label. It also lists sessions not held by a Project. Home has no Sessions summary box or Ready to add group.
 - **Expect (negative):** `4 Oct Ha` is not offered `Confirm NGC 7000` or any other Target suggested from its OBJECT. Home shows no issues strip or top line.
 - **Trace:** LIB-FR-17 · PRJ-FR-17, PRJ-FR-19 · D-W89, D-W96
 
-### S3 — File the Unclassified session under its Target with one reviewed move {#S3}
+### S3 — Confirm a Target and rig for the Unclassified session {#S3}
 
 - **Do:** On `4 Oct Ha`, click **Choose Target**. In its Target box, choose NGC 7000 and click **Confirm Target**. Confirm its rig as `RedCat` using the session's equipment evidence.
 - **Expect:**
@@ -74,7 +74,7 @@ After import, the user resolves Target and rig associations, reviews new session
 ### S5 — Confirm the pointing association of a session indexed in place {#S5}
 
 - **Do:** Open `30 Sep`. Read its Target and Rig boxes and its Project membership. Confirm the preselected NGC 7000 Target.
-- **Expect:** Before confirming, the Target box reads NGC 7000 Associated. Its evidence lists the pointing as `<angle> from NGC 7000 centre`, and the header line shows `OBJECT NGC 7000` as a label. The Rig box reads `RedCat` Confirmed (J19/S10). The Target picker preselects NGC 7000 from the pointing. The session is not held by a Project. After confirming, the Target box reads NGC 7000 Confirmed; if Ready and matching a Project's rig list, it is suggested there but is not added automatically.
+- **Expect:** Before confirming, the Target box reads NGC 7000 Associated. Its evidence lists the pointing as `<angle> from NGC 7000 centre`, and the header line shows `OBJECT NGC 7000` as a label. The Rig box reads `RedCat` Confirmed (J19/S10). The Target picker preselects NGC 7000 from the pointing. The session is not held by a Project. After confirming, the Target box reads NGC 7000 Confirmed.
 - **Expect (negative):** Confirming an Associated Target changes no filter count and no Project suggestion. No evidence list names OBJECT. No mismatch warning appears, because the pointing lies within NGC 7000's footprint. The session's 48 frames stay at their J19 paths, and no move is offered.
 - **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 5 (association uses pointing within the Target's footprint and the user's confirmation only), §Round 6 (Confirming a Target the pointing disagrees with shows a mismatch warning) · HARNESS-V5-IA.md §Screens S12 · LIB-FR-05
 
@@ -91,13 +91,13 @@ After import, the user resolves Target and rig associations, reviews new session
 
 ### S7 — Create a Project prefilled from a session {#S7}
 
-- **Do:** On the `2 Oct Ha` detail, point at **Create Project**, then click it. Name the Project `NGC 7000 HOO`, keep the prefilled subject and rig, choose the HOO goal template and click **Create Project**. Open the Project page, then the `2 Oct Ha` detail.
+- **Do:** On the `2 Oct Ha` detail, point at **Create Project**, then click it. Name the Project `NGC 7000 HOO`, keep the prefilled subject and rig, choose the HOO goal template and click **Create Project**. Read the Project page's Sessions step, then choose **Add to Project** on `2 Oct Ha`. Open the `2 Oct Ha` detail, then Sessions' Not in any Project filter.
 - **Expect:**
   - The button's tooltip reads `Prefilled with this Target and rig`, and the New Project sheet opens with subject NGC 7000 and rig `RedCat`.
   - The Project's Sessions step lists Ready RedCat sessions with confirmed Target NGC 7000 as suggestions. `2 Oct Ha` is suggested, not held automatically.
-  - The Project initially holds no sessions. After the user chooses **Add to Project** on `2 Oct Ha`, that session appears in its group. No other suggestion joins without the user adding it.
+  - The Project initially holds no sessions. After **Add to Project** on `2 Oct Ha`, that session appears in its group. No other suggestion joins without the user adding it.
   - The `2 Oct Ha` detail lists `NGC 7000 HOO` as a Project that holds the session.
-  - Sessions' Not in any Project filter reads 1 and lists only the other-camera session.
+  - Sessions' Not in any Project filter reads 9 and lists every light session except `2 Oct Ha`.
 - **Expect (negative):** Creating the Project adds no session automatically. No session's frames, marks or files change when the Project is created or the Ready session is added.
 - **Trace:** LIB-FR-17 · PRJ-FR-01, PRJ-FR-02, PRJ-FR-08, PRJ-FR-09, PRJ-FR-12 · D-W94, D-W96, D-W105
 
@@ -109,7 +109,7 @@ After import, the user resolves Target and rig associations, reviews new session
   - The preview, titled `Add <session> to NGC 7000 HOO?`, lists `Adds rig Esprit` and the session it adds. It lists no subject change, because NGC 7000 is already a subject.
   - After **Add session**, a notice reads `Added <session> to NGC 7000 HOO`, with `Also adds the rig Esprit to NGC 7000 HOO.`
   - The Project's rigs are `RedCat` and `Esprit`. It holds the sessions the user added, while matching Ready sessions it does not hold remain suggestions.
-  - Not in any Project reads 0 and shows `All in a Project`. The status bar's ℹ popout no longer lists a not-in-a-Project issue.
+  - Not in any Project reads 8. The status bar's ℹ counter reads 8 and still opens Sessions filtered to Not in any Project.
 - **Expect (negative):** Adding a session changes no source file and never adds a subject unless the Project lacks that Target. The session joins only after the user chooses Add to Project.
 - **Trace:** LIB-FR-17 · PRJ-FR-02, PRJ-FR-08 · D-W59, D-W94, D-W96, D-W105
 
@@ -123,7 +123,7 @@ After import, the user resolves Target and rig associations, reviews new session
 ### S10 — Add the other Ready sessions explicitly {#S10}
 
 - **Do:** In Project `NGC 7000 HOO`'s Sessions step, choose **Add sessions…** and add `2 Oct OIII` and `4 Oct Ha`.
-- **Expect:** Both sessions are Ready, have settled calibration, and are offered in the Project's suggestions. After the user adds them, the Project holds the four explicitly added sessions and still lists other matching Ready sessions as suggestions.
+- **Expect:** Both sessions are Ready, have settled calibration, and are offered in the Project's suggestions. After the user adds them, the Project holds the four explicitly added sessions and still lists other matching Ready sessions as suggestions. Not in any Project reads 6.
 - **Expect (negative):** Opening the suggestions adds no session. Sessions join only after the user adds them.
 - **Trace:** LIB-FR-20, LIB-FR-23 · PRJ-FR-08, PRJ-FR-09 · VSEL-FR-03 · D-W94, D-W96, D-W105
 
@@ -136,13 +136,13 @@ After import, the user resolves Target and rig associations, reviews new session
 
 ## Success criteria
 
-- SC1: At S1 the filters read exactly All 10, Needs a Target 1, Not in any Project 9 and Trashed 0, and the ⚠ popout lists exactly 1 issue, `1 needs a Target`.
+- SC1: At S1 the filters read exactly All 10, Needs a Target 1, Not in any Project 9 and Trashed 0, and the ⚠ counter reads 1 and opens Sessions filtered to Needs a Target, not a list of issues.
 - SC2: After S3, Needs a Target reads 0, and confirming the Target and rig changes zero source paths. 0 Targets were taken from an OBJECT label: `4 Oct Ha`'s picker opened with no Target chosen (S3), and no evidence list named OBJECT (S3, S5).
 - SC3: After S6, `2 Oct Ha` reads 32 Usable, 3 Unusable and 0 Unreviewed frames, still 35 frames in all, and the Trashed filter reads 0.
 - SC4: After S7, the Project holds only the Ready session the user explicitly added. After S8 and S10, it holds exactly four user-added sessions, lists rigs `RedCat` and `Esprit`, and keeps unadded matching Ready sessions as suggestions.
 - SC5: After S9, `4 Oct Ha` reads 12 Picked frames and Ready. Both ⌘A marks (32 frames at S6, 12 at S9) asked first, and 0 frames changed before the confirmation.
 - SC6: At S10, both Ready sessions with settled calibration are added only after the user's action, and other matching Ready sessions remain suggestions.
-- SC7: The S11 manifest equals P5 for 100% of files, apart from the 12 `4 Oct Ha` paths that S3 moved, whose sizes and SHA-256 are unchanged.
+- SC7: The S11 manifest equals P5 for 100% of files.
 
 ## Known gaps
 
@@ -150,16 +150,17 @@ After import, the user resolves Target and rig associations, reviews new session
 - G2: Unresolved implementation qualification: P1 chains J19 through S14 and J31 through S9, so it inherits their fixture tooling gaps (J19 G3, G5 and G9; J31 G2). No seeded-catalog builder exists that could reach P2 directly. Blocks readiness.
 - G3: Unresolved implementation qualification: P2 assumes that the RedCat optics keywords of `2 Oct Ha` and `4 Oct Ha` associate rig `RedCat` without user action (LIB-FR-05). The v5 design does not state the equipment-matching rule for a session whose TELESCOP and FOCALLEN match an existing rig. Blocks readiness.
 - G4: Out of scope for this journey, covered elsewhere: reopening a Ready session's Review and its labelled pending changes on open Projects (J22), moving Unusable frames to Trash during Wrap up (J44, J34), status-bar counters opening their owning pages (J38), Home's Open work and Next action (J32), creating rigs and filter lists (J15), first Apply and later View changes (J21, J24, J25), and a failed catalog write while confirming (J19/S11).
-- G5: Out of scope for this journey: a Trashed session (Sessions' Trashed filter), reviewing a session whose location is offline, a confirmation made stale by a concurrent edit, Create Project from a session with no Target, which opens unprefilled, and canceling the S3 move review. Blocks readiness until covered by a step or a journey.
+- G5: Out of scope for this journey: a Trashed session (Sessions' Trashed filter), reviewing a session whose location is offline, a confirmation made stale by a concurrent edit, and Create Project from a session with no Target, which opens unprefilled. Blocks readiness until covered by a step or a journey.
 - G6: Unresolved product question, shared with J22 G8: Round 6 asks for confirmation on large bulk marks ("Mark 120 frames Unusable?") but sets no size. S6 (32 frames) and S9 (12 frames) assert a confirmation, which holds under option (a) or (c). Options: (a, recommended) every mark on a ⌘A selection asks, whatever its count; (b) a fixed count, which may leave S9's 12 frames unconfirmed; (c) every mark on more than one frame. Single-frame marks never ask. Blocks readiness.
-- G7: (dissolved 2026-10-15): Confirming a Target changes the session's catalog association only. Imported files stay at the paths listed in the Import preview; this journey verifies that P5 remains unchanged (LIB-FR-12, STO-IMP-FR-02).
+- G7: (dissolved 2026-10-15): D-W94 and LIB-FR-12 make confirming a Target a change to the session's catalog association only, so no move review follows it. Imported files stay at the paths listed in the Import preview; this journey verifies that P5 remains unchanged (LIB-FR-12, STO-IMP-FR-02).
+- G8: Rests on provisional F4 items, pending the owner's confirmation in PR #1804: D-W96's matching rule, which makes Ready RedCat sessions with Target NGC 7000 suggestions of `NGC 7000 HOO` (S7, S10), and D-W94's rig list that only decides suggestions (S8). If the owner changes one, the steps that cite it change.
 
 ## Delta log
 
 - **Δ2** 2026-10-12 · S1, S2, S3, S4, S5, S6, S9, S11 · behavior-change
   Imports confirm Targets in the preview, so only `4 Oct Ha` arrives Unclassified. S3 files it under NGC 7000 with one reviewed move, S4 confirms only `2 Oct OIII`'s rig, and S5 confirms the association of `30 Sep`, which was indexed in place. `2 Oct Ha` arrives Confirmed.
-  X marks a frame Unusable in the library and leaves its file on disk. Session review is intake; Finish review makes a fully reviewed session Ready. Adds the calibration-settlement prerequisite and no-move Target confirmation.
+  X marks a frame Unusable in the library and leaves its file on disk. ⌘A marks ask `Mark N frames Usable?` (S6, S9). Adds G6 and G7.
   Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 6 (user, 2026-10-10) "P-IMP2: confirm Targets in the Import preview", "Confirming a Target the pointing disagrees with", "Reject is library-wide by default", "Large bulk marks need confirmation" (apps/prototype/design/ on ui-harness-v5 @ 4f470775); user answers to the PR #1788 journey questions · by: JourneysV5.R6A (intent-gated)
 - **Δ3** 2026-10-15 · S1, S2, S3, S4, S5, S6, S7, S8, S9, S10, S11 · behavior-change
-  Import never waits for calibration: only Ready sessions with settled calibration can be added. Frame review is the session intake step, and Finish review makes a fully reviewed session Ready. Project membership is explicit, matching sessions remain suggestions, and confirming a Target never moves imported files.
-  Evidence: D-W93 to D-W106 (F4 Project model, owner's answers of 2026-10-14) in PR #1804, 064 LIB-FR-17, LIB-FR-20, LIB-FR-23, LIB-FR-24, 065 PRJ-FR-08, PRJ-FR-09, 066 VSEL-FR-03, 067 PIX-FR-18, 068 CAL-FR-02, CAL-FR-09 · by: SpecF4Writer2 (intent-gated)
+  Import never waits for calibration: only Ready sessions with settled calibration can be added. Frame review is the session intake step, and Finish review makes a fully reviewed session Ready. Project membership is explicit, matching sessions remain suggestions, and confirming a Target never moves imported files, so S3 confirms a Target and rig with no move and SC7 expects no changed path. The status bar counters open their Sessions filters, S2 reads Home's Pending work, and Not in any Project reads 9, 8 and 6 as the user adds sessions at S7, S8 and S10.
+  Evidence: D-W89, D-W92, D-W93 to D-W106 (F4 Project model, owner's answers of 2026-10-14) in PR #1804, 064 LIB-FR-17, LIB-FR-20, LIB-FR-23, LIB-FR-24, 065 PRJ-FR-08, PRJ-FR-09, 066 VSEL-FR-03, 067 PIX-FR-18, 068 CAL-FR-02, CAL-FR-09 · by: SpecF4Writer2 (intent-gated)
