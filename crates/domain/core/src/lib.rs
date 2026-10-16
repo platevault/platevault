@@ -103,7 +103,6 @@ impl Confidence {
     ) -> Self {
         Self { score, level, evidence_refs: Vec::new(), explanation: explanation.into() }
     }
-
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
