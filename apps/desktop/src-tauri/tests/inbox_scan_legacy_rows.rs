@@ -28,14 +28,26 @@ use tauri::Manager;
 
 /// A FITS file the scan reads: a master when `stack_count` is set.
 fn write_fits(dir: &Path, name: &str, imagetyp: &str, stack_count: Option<u32>) {
+    write_fits_with(dir, name, imagetyp, stack_count, "Ha", "300.0");
+}
+
+/// [`write_fits`] with the given `FILTER` and `EXPTIME`.
+fn write_fits_with(
+    dir: &Path,
+    name: &str,
+    imagetyp: &str,
+    stack_count: Option<u32>,
+    filter: &str,
+    exptime: &str,
+) {
     let mut cards = vec![
         "SIMPLE  =                    T".to_owned(),
         "BITPIX  =                    8".to_owned(),
         "NAXIS   =                    2".to_owned(),
         "NAXIS1  =                    1".to_owned(),
         "NAXIS2  =                    1".to_owned(),
-        "EXPTIME =                300.0".to_owned(),
-        "FILTER  = 'Ha'".to_owned(),
+        format!("EXPTIME = {exptime:>20}"),
+        format!("FILTER  = '{filter}'"),
         format!("IMAGETYP= '{imagetyp}'"),
     ];
     if let Some(count) = stack_count {
@@ -459,4 +471,94 @@ async fn a_real_nested_master_beside_a_backslash_master_is_planned() {
             .await
             .unwrap();
     assert_eq!(links, 1);
+}
+
+/// A master row: path, id, state, master type, filter and exposure.
+type MasterRow = (String, String, String, Option<String>, Option<String>, Option<f64>);
+
+/// The old scan read both the master `a\b.fits` and a nested master
+/// `a/b.fits` and wrote both to the one `a/b.fits` row with `INSERT OR
+/// IGNORE`, the root-level file first, so the row holds `a\b.fits`'s master
+/// type, filter and exposure. A plan made before the update links the row.
+/// The scan keeps the row as the nested master's own and rewrites those
+/// fields from the nested master, because the plan listener registers the
+/// master from them when the plan applies.
+#[tokio::test]
+async fn a_master_row_the_old_scan_shared_takes_the_nested_masters_fields() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    write_fits_with(root, "a\\b.fits", "DARK", Some(30), "Ha", "300.0");
+    write_fits_with(&root.join("a"), "b.fits", "FLAT", Some(30), "L", "2.5");
+
+    let db = Database::in_memory().await.expect("in-memory database");
+    db.migrate().await.expect("run migrations");
+    let pool = db.pool().clone();
+    sqlx::query(
+        "INSERT INTO registered_sources (id, path, kind, scan_depth, created_at, created_via) \
+         VALUES ('root-1', ?, 'inbox', 'recursive', '2026-01-01T00:00:00Z', 'first_run')",
+    )
+    .bind(root.to_str().unwrap())
+    .execute(&pool)
+    .await
+    .unwrap();
+    repo::insert_inbox_item(
+        &pool,
+        &repo::InsertInboxItem {
+            id: "old-master",
+            root_id: "root-1",
+            relative_path: "a/b.fits",
+            file_count: 1,
+            content_signature: Some("sig-old"),
+            lane: "fits",
+        },
+    )
+    .await
+    .unwrap();
+    sqlx::query(
+        "UPDATE inbox_items SET is_master_item = 1, master_frame_type = 'dark', \
+         master_filter = 'Ha', master_exposure_s = 300.0 WHERE id = 'old-master'",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let plan = persistence_plans::repositories::plans::InsertPlan {
+        id: "plan-old",
+        title: "Inbox confirm",
+        origin: "inbox",
+        origin_path: None,
+        plan_type: "split",
+        destructive_destination: "archive",
+        parent_plan_id: None,
+        total_bytes_required: 0,
+    };
+    persistence_plans::repositories::plans::insert_plan(&pool, &plan).await.unwrap();
+    repo::insert_plan_link(&pool, "old-master", "plan-old").await.unwrap();
+    repo::update_inbox_item_state(&pool, "old-master", "plan_open").await.unwrap();
+
+    scan(&pool, root).await;
+
+    let masters: Vec<MasterRow> = sqlx::query_as(
+        "SELECT relative_path, id, state, master_frame_type, master_filter, master_exposure_s \
+         FROM inbox_items WHERE is_master_item = 1 ORDER BY relative_path",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(masters.len(), 2, "{masters:?}");
+    let (path, id, state, frame_type, filter, exposure) = &masters[0];
+    assert_eq!(
+        (path.as_str(), id.as_str(), state.as_str()),
+        ("a/b.fits", "old-master", "plan_open")
+    );
+    assert_eq!(
+        (frame_type.as_deref(), filter.as_deref(), *exposure),
+        (Some("flat"), Some("L"), Some(2.5)),
+        "the kept row describes the nested master"
+    );
+    let (path, _, _, frame_type, filter, exposure) = &masters[1];
+    assert_eq!(path, "a\\b.fits");
+    assert_eq!(
+        (frame_type.as_deref(), filter.as_deref(), *exposure),
+        (Some("dark"), Some("Ha"), Some(300.0))
+    );
 }

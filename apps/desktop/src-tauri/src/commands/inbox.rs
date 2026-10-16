@@ -49,7 +49,7 @@ use persistence_inbox::repositories::inbox::{
 };
 use persistence_lifecycle::repositories::first_run::get_source_organization_state;
 use persistence_targets::repositories::q_desktop::{
-    get_inbox_master_item_row, insert_inbox_master_item,
+    get_inbox_master_item_row, insert_inbox_master_item, refresh_inbox_master_fields,
 };
 use sqlx::SqlitePool;
 use std::path::PathBuf;
@@ -436,9 +436,15 @@ pub async fn inbox_scan_folder(
         .map_err(|e| ContractError::internal(e.to_string()))?;
         // ── A. Individual rows for detected calibration masters ────────────────
         for master in &scanned_item.masters {
-            if let Some(summary) =
-                persist_master_item(&mut tx, &req.root_id, scanned_item.lane.as_str(), master)
-                    .await?
+            let refresh = legacy_rows.masters_to_refresh.contains(&master.relative_path);
+            if let Some(summary) = persist_master_item(
+                &mut tx,
+                &req.root_id,
+                scanned_item.lane.as_str(),
+                master,
+                refresh,
+            )
+            .await?
             {
                 items.push(summary);
             }
@@ -476,12 +482,17 @@ pub async fn inbox_scan_folder(
 /// Insert (or reuse) the individual `inbox_items` row for a single detected
 /// calibration master and return its summary, if the row is present.
 ///
+/// With `refresh`, a reused row's master type, filter and exposure are
+/// rewritten from `master`: an earlier scan may have filled them from another
+/// file with the same text (`LegacyRows::masters_to_refresh`).
+///
 /// Operates on `tx` so insert and read-back are within the same transaction.
 async fn persist_master_item(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     root_id: &str,
     lane: &str,
     master: &ScannedMasterFile,
+    refresh: bool,
 ) -> Result<Option<InboxItemSummary>, ContractError> {
     let master_item_id = Uuid::new_v4().to_string();
     let frame_type_str = format!("{:?}", master.detection.frame_type).to_ascii_lowercase();
@@ -500,6 +511,18 @@ async fn persist_master_item(
     )
     .await
     .map_err(|e| ContractError::internal(e.to_string()))?;
+    if refresh {
+        refresh_inbox_master_fields(
+            &mut **tx,
+            root_id,
+            &master.relative_path,
+            &frame_type_str,
+            master.filter.as_deref(),
+            master.exposure_s,
+        )
+        .await
+        .map_err(|e| ContractError::internal(e.to_string()))?;
+    }
 
     // Fetch authoritative row within the same transaction (may have existed
     // from a prior scan, written by INSERT OR IGNORE above).

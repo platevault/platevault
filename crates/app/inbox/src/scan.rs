@@ -990,7 +990,9 @@ mod tests {
     /// rows that name nothing, or that would make a master row classify a
     /// different frame. It leaves out a nested entry's own row, and any old
     /// text whose path runs through a link, which may be a drive that is not
-    /// mounted. Deleting the listed rows is covered by `persistence_inbox`'s
+    /// mounted. A nested master's own row is listed for a refresh of its
+    /// master fields when a master with the backslash text is beside it.
+    /// Deleting the listed rows is covered by `persistence_inbox`'s
     /// `deleting_unconfirmed_old_rows_*` tests and by `desktop_shell`'s
     /// `inbox_scan_legacy_rows` test.
     #[cfg(unix)]
@@ -1025,6 +1027,7 @@ mod tests {
             crate::legacy_rows::LegacyRows {
                 folders: ["../z", "./w", "/v", "c/d"].map(str::to_owned).to_vec(),
                 masters: ["a/b.fits", "n/o.fits"].map(str::to_owned).to_vec(),
+                masters_to_refresh: vec!["k/m.fits".to_owned()],
             }
         );
     }
@@ -1051,6 +1054,41 @@ mod tests {
             crate::legacy_rows::LegacyRows {
                 folders: vec!["c/d".to_owned()],
                 masters: vec!["a/b.fits".to_owned()],
+                ..Default::default()
+            }
+        );
+    }
+
+    /// A backslash folder name next to something that is not a folder at its
+    /// old text: the folder `c\d` beside the regular file `d` in the folder
+    /// `c`. A folder row stored for `c/d` could only plan sources below a
+    /// file, so it is listed. Kept: `e/f`, where a link sits (a link is never
+    /// proof of anything), and `g/h.fits`, which this scan stores as a master,
+    /// because deleting a folder row also deletes the items of every source
+    /// group at its path.
+    #[cfg(unix)]
+    #[test]
+    fn scan_lists_an_old_folder_row_whose_path_names_a_file() {
+        let tmp = tmpdir();
+        let root = tmp.path();
+        for name in ["c\\d", "e\\f", "g\\h.fits"] {
+            let folder = root.join(name);
+            fs::create_dir_all(&folder).unwrap();
+            write_realistic_fits(&folder, "x.fits", Some("LIGHT"), None);
+        }
+        fs::create_dir_all(root.join("c")).unwrap();
+        write_file(&root.join("c"), "d", b"a regular file");
+        fs::create_dir_all(root.join("e")).unwrap();
+        std::os::unix::fs::symlink(root.join("c").join("d"), root.join("e").join("f")).unwrap();
+        fs::create_dir_all(root.join("g")).unwrap();
+        write_realistic_fits(&root.join("g"), "h.fits", Some("DARK"), Some(("STACKCNT", 30)));
+
+        let scanned = scan_root(root, &ScanOptions::default()).unwrap();
+        assert_eq!(
+            scanned.legacy_rows,
+            crate::legacy_rows::LegacyRows {
+                folders: vec!["c/d".to_owned()],
+                ..Default::default()
             }
         );
     }

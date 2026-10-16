@@ -58,6 +58,45 @@ where
     Ok(())
 }
 
+/// Overwrite the master type, filter and exposure of the master row stored
+/// for `relative_path` under `root_id` with the values the scan just read.
+///
+/// [`insert_inbox_master_item`] keeps an existing row as it is. That is
+/// wrong for a row an earlier scan filled from another file with the same
+/// text (bd astro-plan-3pvvc), and the plan listener registers the master
+/// from these fields.
+///
+/// Accepts any [`sqlx::Executor`] so callers can write within the scan's
+/// transaction.
+///
+/// # Errors
+/// Returns `persistence_core::DbError::Database` on query failure.
+pub async fn refresh_inbox_master_fields<'e, E>(
+    executor: E,
+    root_id: &str,
+    relative_path: &str,
+    frame_type: &str,
+    filter: Option<&str>,
+    exposure_s: Option<f64>,
+) -> DbResult<()>
+where
+    E: Executor<'e, Database = Sqlite>,
+{
+    sqlx::query(
+        "UPDATE inbox_items
+         SET master_frame_type = ?, master_filter = ?, master_exposure_s = ?
+         WHERE root_id = ? AND relative_path = ? AND is_master_item = 1",
+    )
+    .bind(frame_type)
+    .bind(filter)
+    .bind(exposure_s)
+    .bind(root_id)
+    .bind(relative_path)
+    .execute(executor)
+    .await?;
+    Ok(())
+}
+
 /// Individual master-item `inbox_items` row shape, scoped by `(root_id,
 /// relative_path)`.
 #[derive(Debug, Clone, sqlx::FromRow)]
