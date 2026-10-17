@@ -141,10 +141,18 @@ function reportRawColorsInExpression(expression, report) {
             mode = 'normal';
             continue;
           }
-          if (mode === 'variable-name') {
+          if (mode === 'dynamic-var-argument' || mode === 'variable-name') {
             const boundary = text.slice(cursor).search(/[),]/);
             if (boundary < 0) return;
-            cursor += boundary + 1;
+            const delimiter = text[cursor + boundary];
+            if (delimiter === ',') {
+              const close = text.indexOf(')', cursor + boundary + 1);
+              const fallbackEnd = close < 0 ? text.length : close;
+              if (isRawColor(text.slice(cursor + boundary + 1, fallbackEnd))) report();
+              cursor = close < 0 ? text.length : close + 1;
+            } else {
+              cursor += boundary + 1;
+            }
             mode = 'normal';
             continue;
           }
@@ -164,6 +172,8 @@ function reportRawColorsInExpression(expression, report) {
             if (nameStart >= 0 && text.slice(cursor + nameStart).startsWith('--')) {
               cursor += nameStart + 2;
               mode = 'variable-name';
+            } else {
+              mode = 'dynamic-var-argument';
             }
           } else {
             report();
@@ -177,7 +187,7 @@ function reportRawColorsInExpression(expression, report) {
         scanText(quasi);
         if (index < expression.expressions.length) {
           let interpolationHandled = false;
-          if (mode === 'variable-name') {
+          if (mode === 'variable-name' || mode === 'dynamic-var-argument') {
             const source = expression.expressions[index];
             const branches = source.type === 'ConditionalExpression'
               ? [source.consequent, source.alternate]
@@ -187,17 +197,19 @@ function reportRawColorsInExpression(expression, report) {
                 ? branch.value
                 : '',
             );
+            interpolationHandled = true;
             if (values.some((value) => value.includes(','))) {
-              interpolationHandled = true;
               mode = 'normal';
               for (const value of values) {
                 const comma = value.indexOf(',');
                 if (comma >= 0 && isRawColor(value.slice(comma + 1))) report();
               }
             }
-          } else if (mode === 'normal' && /#\s*$/.test(quasi)) report();
+          }
+          const skipInterpolation = interpolationHandled || mode !== 'normal';
+          if (mode === 'normal' && /#\s*$/.test(quasi)) report();
           if (mode === 'normal' && /#[0-9a-f]+$/i.test(quasi)) report();
-          if (mode === 'normal' && !interpolationHandled) {
+          if (!skipInterpolation) {
             reportRawColorsInExpression(expression.expressions[index], report);
             scanText('x');
           }
