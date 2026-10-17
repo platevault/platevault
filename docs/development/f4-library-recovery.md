@@ -1,6 +1,6 @@
 # F4 library recovery after a stop
 
-This note traces recovery through the rebuilt library backend. Its source citations do not establish whether a desktop Project or Home screen uses these commands. (`apps/desktop/src-tauri/src/library_shell.rs:54-250`; `apps/desktop/src-tauri/src/commands/project_apply.rs:4-12`; `apps/desktop/src-tauri/src/commands/home.rs:4-8`)
+This note traces recovery behavior in the rebuilt library backend. The Home and Project command handlers register in the library shell. (`apps/desktop/src-tauri/src/library_shell.rs:145-148,237-239`)
 
 ## Apply journals
 
@@ -9,12 +9,12 @@ This note traces recovery through the rebuilt library backend. Its source citati
 Before Apply touches the folder tree, the catalog validates the request revision and basis. The transaction reserves the Project's sole active operation and creates a manifest generation with a `building` manifest. (`crates/persistence/library/src/project_view.rs:1047-1095`; `crates/persistence/library/src/project_operations.rs:69-119`)
 
 The journal stores operation and Project ids, manifest generation, phase, outcome, settled phase, folder identities, and error. (`crates/platevault-model/src/project_view.rs:429-443`)
-Its phases include source verification, build verification, swapping, manifest commit, foreign-file transfer, retirement, and `Settled`. (`crates/platevault-model/src/project_view.rs:353-400`)
+Its phases include source verification, build verification, swap, manifest commit, foreign-file transfer, retirement, and `Settled`. (`crates/platevault-model/src/project_view.rs:353-400`)
 The core records each phase before its filesystem effect. (`crates/platevault-core/src/apply.rs:806-820,1017-1033,1123-1172`)
 
 The expected tree stores identities for the Project root and `View/`, `View (building)/`, and `View (previous)/`. Recovery treats names alone as insufficient proof of ownership. (`crates/platevault-model/src/project_view.rs:416-427`; `crates/platevault-core/src/apply.rs:740-756`)
 
-`Catalog::unsettled_applies` selects journal rows whose phase is not `settled`. (`crates/persistence/library/src/project_view.rs:312-327`)
+`Catalog::unsettled_applies` selects journal rows whose phase is not `settled`. (`crates/persistence/library/src/project_view.rs:316-327`)
 `Catalog::latest_apply_journal` returns the highest-generation journal, whether settled or not. It returns `None` if the Project has no Apply history. (`crates/persistence/library/src/project_view.rs:339-361`)
 
 ### A normal Failed or Canceled Apply
@@ -24,35 +24,34 @@ Both a failure and cancellation leave the old View active. For cancellation, `Ru
 
 When the user cancels, `Run::end` clears the staging tree before it records the outcome. It removes links, partial files, and files that match recorded digests. It leaves unreadable or unproven files on disk. (`crates/platevault-core/src/apply.rs:852-863`; `crates/platevault-core/src/apply/files.rs:232-260`)
 
-Persistence records entries built so far, marks the manifest `discarded`, and settles both the journal and Project operation. The journal retains the outcome and error. (`crates/persistence/library/src/project_view.rs:172-207,1155-1172`; `crates/persistence/library/src/project_operations.rs:122-139`)
+Persistence records entries built so far, marks the manifest `discarded`, and settles both the journal and Project operation. The journal retains the outcome and error. (`crates/persistence/library/src/project_view.rs:179-207,1162-1172`; `crates/persistence/library/src/project_operations.rs:122-139`)
 
 `Run::end` clears `View (building)/` for a canceled Apply. A failed Apply leaves that folder on disk. (`crates/platevault-core/src/apply.rs:847-863`)
 The next explicit Apply creates a new operation and generation. It first clears leftover staging files, but refuses if it cannot prove ownership of every entry. (`crates/persistence/library/src/project_view.rs:1047-1095`; `crates/platevault-core/src/apply.rs:884-901`; `crates/platevault-core/src/apply/files.rs:232-260`)
 
 ### A process stop during Apply
 
-`Library::open` runs Apply reconciliation before it returns. (`crates/platevault-core/src/library.rs:127-161`)
-Reconciliation reads each unsettled Apply and attempts recovery. If recovery cannot finish, reconciliation leaves the journal unsettled for the next start. (`crates/platevault-core/src/apply.rs:327-334`)
-
+`Library::open` runs Apply reconciliation before it returns. (`crates/platevault-core/src/library.rs:130-166`)
+Reconciliation reads each unsettled Apply and attempts recovery. If recovery cannot finish, it leaves the journal unsettled for the next start. (`crates/platevault-core/src/apply.rs:327-334`)
 Recovery compares the journal phase and the current folder identities. (`crates/platevault-core/src/apply.rs:293-323,740-783`)
 
 When the journal phase precedes `BuildVerified`, recovery determines that it did not install the new View. It settles the Apply as `Failed`. (`crates/platevault-core/src/apply.rs:314-323,740-783`)
-Starting at `BuildVerified`, recovery installs `View (building)/` only if it matches the recorded identity. If the journal records that the old View moved aside but the new one did not install, recovery restores the old folder using its identity. (`crates/platevault-core/src/apply.rs:740-783`)
+Starting at `BuildVerified`, recovery installs `View (building)/` only if it matches the recorded identity. (`crates/platevault-core/src/apply.rs:740-783`)
 If folder identities cannot establish a safe result, Apply returns an identity conflict and keeps the journal unsettled. (`crates/platevault-core/src/apply.rs:314-323`)
 After recovery proves it installed the new View, Apply commits the manifest and resumes foreign-file transfer. It then retires the old View and settles as `Applied`. (`crates/platevault-core/src/apply.rs:314-323,1123-1172`)
 
 ### What the Home backend derives from journals
 
-Home reads each Project's latest Apply journal. (`crates/platevault-core/src/home.rs:177-205`)
+Home reads each Project's latest Apply journal. (`crates/platevault-core/src/home.rs:177-206`)
 
-When the latest journal outcome is `Failed` or `Canceled`, rule 2 adds an `ApplyNotFinished` wait. (`crates/platevault-core/src/home.rs:303-332`)
+When the latest journal outcome is `Failed` or `Canceled`, rule 2 adds an `ApplyNotFinished` wait. (`crates/platevault-core/src/home.rs:304-336`)
 
 That wait opens at the View step. An unsettled journal with no outcome does not create this wait. (`crates/platevault-model/src/home.rs:44-66`)
 
 ## Wrap up recovery
 
-At startup, the shell spawns `recover_wrap_up` with a host `SystemTrash`. The asynchronous task may continue while the event loop runs. (`apps/desktop/src-tauri/src/library_shell.rs:306-322`)
-On success, the shell logs how many archives it settled. On error, it logs a stop and retries at the next start. (`apps/desktop/src-tauri/src/library_shell.rs:315-319`)
+At startup, the shell spawns `recover_wrap_up` with a host `SystemTrash`. The asynchronous task may continue while the event loop runs. (`apps/desktop/src-tauri/src/library_shell.rs:315-331`)
+On success, the shell logs how many archives it settled. On error, it logs a stop and retries at the next start. (`apps/desktop/src-tauri/src/library_shell.rs:324-328`)
 Recovery releases the Project operation for each interrupted Clean up, but leaves the step unfinished. (`crates/platevault-core/src/wrap_up.rs:102-108`; `crates/persistence/library/src/project_wrap_up.rs:565-587`)
 Recovery resumes active Wrap up Trash journals through the host Trash. After settlement, it records the Trash step as finished. (`crates/platevault-core/src/wrap_up.rs:109-117`; `crates/persistence/library/src/project_wrap_up.rs:556-562`)
 
@@ -65,7 +64,7 @@ The shell logs that stop and retries on the next start. A stopped archive keeps 
 
 ## OutputWatch start and stop
 
-The rebuilt shell starts `OutputWatch` on the Tauri runtime. Its task first resumes unfinished Copy to Output operations. (`apps/desktop/src-tauri/src/library_shell.rs:323-332`; `crates/platevault-core/src/project_output/watch.rs:98-115,167-171`; `crates/platevault-core/src/project_output.rs:433-447`)
+The rebuilt shell starts `OutputWatch` on the Tauri runtime. Its task first resumes unfinished Copy to Output operations. (`apps/desktop/src-tauri/src/library_shell.rs:332-335`; `crates/platevault-core/src/project_output/watch.rs:98-115,167-171`; `crates/platevault-core/src/project_output.rs:433-447`)
 `OutputWatch` then sweeps and follows each open Project that has a processing location. (`crates/platevault-core/src/project_output/watch.rs:200-221`)
 
 During recovery, the watcher lists a copy only after it verifies. An unverified copy settles without a listing. (`crates/platevault-core/src/project_output.rs:433-483`)
@@ -74,18 +73,28 @@ Each pass walks `Output/` and `Processing/`. (`crates/platevault-core/src/projec
 The watcher responds to folder changes and files that remain unsettled. It also sweeps Projects on a timer to find files added while PlateVault was closed. (`crates/platevault-core/src/project_output/watch.rs:4-24,71-80,223-233`)
 A pass waits while Copy to Output runs. (`crates/platevault-core/src/project_output/watch.rs:350-388`)
 
-When Tauri emits `RunEvent::Exit`, the shell calls `OutputWatch::shutdown`. (`apps/desktop/src-tauri/src/library_shell.rs:329-332`)
-Shutdown closes the task's command channel and waits through its grace period. If the task has not finished, shutdown aborts it. Dropping the watcher also aborts its task. (`crates/platevault-core/src/project_output/watch.rs:71-80,139-158`)
+At `RunEvent::Exit`, the shell first shuts down `OutputWatch`. It then stops `CaptureWatch` and drops Windows eject notices. (`apps/desktop/src-tauri/src/library_shell.rs:354-363`)
+`OutputWatch::shutdown` closes its command channel, waits through its grace period, and aborts the task if needed. Dropping it also aborts the task. (`crates/platevault-core/src/project_output/watch.rs:71-80,139-158`)
+
+## CaptureWatch and eject notices
+
+The shell starts `CaptureWatch` after `OutputWatch`. It walks online Captures locations and starts a live folder watcher for each. (`apps/desktop/src-tauri/src/library_shell.rs:336-345`; `crates/platevault-core/src/new_captures.rs:4-15,195-201`)
+
+CaptureWatch handles online Captures roots while the app runs. Its shutdown stops its watchers within a grace period. If filesystem work blocks longer, it cancels the task. (`crates/platevault-core/src/new_captures.rs:39-44,104-112,320-344`; `apps/desktop/src-tauri/src/library_shell.rs:354-363`)
+
+On Windows, the shell starts optional `EjectNotices` after it manages CaptureWatch. The notices forward drive-removal events to CaptureWatch so it can release root handles. Startup continues if the notices cannot start. (`apps/desktop/src-tauri/src/library_shell.rs:346-353`; `apps/desktop/src-tauri/src/eject.rs:68-110`)
+
+The shell stops CaptureWatch before dropping EjectNotices. Pending removal requests can then return without delaying app exit. (`apps/desktop/src-tauri/src/library_shell.rs:354-363`; `apps/desktop/src-tauri/src/eject.rs:68-74`)
 
 ## What the library exposes
 
 The Apply command returns an `ApplyReport` when a build fails or is canceled. (`apps/desktop/src-tauri/src/commands/project_apply.rs:39-55`)
 
-The shell returns command errors as `ErrorResponse` values with kind, identity, scope, retry action, and message. (`apps/desktop/src-tauri/src/commands/library.rs:32-51`; `crates/platevault-model/src/lib.rs:203-213,229-270`)
+The shell returns command errors as `ErrorResponse` values with kind, identity, scope, retry action, and message. (`apps/desktop/src-tauri/src/commands/library.rs:32-53`; `crates/platevault-model/src/lib.rs:203-213,229-270`)
 
-After reviewing the new frames, if rule 2 has waits, Home returns `NextAction::WaitsOnUser`. (`crates/platevault-core/src/home.rs:267-280`; `crates/platevault-model/src/home.rs:70-91`)
-The waits include calibration-blocked suggestions, the latest failed or canceled Apply, and pending files in `View (previous)/`. (`crates/platevault-core/src/home.rs:303-332`)
+After reviewing new frames, when rule 2 has waits Home returns `NextAction::WaitsOnUser`. (`crates/platevault-core/src/home.rs:268-281`; `crates/platevault-model/src/home.rs:70-91`)
+The waits include calibration-blocked suggestions, the latest failed or canceled Apply, and pending files in `View (previous)/`. (`crates/platevault-core/src/home.rs:304-336`)
 
-The first wait selects Sessions or View. (`crates/platevault-model/src/home.rs:44-66`)
+The first wait selects the Sessions or View step. (`crates/platevault-model/src/home.rs:59-66`)
 
-The rebuilt shell registers Home and Project Apply handlers. The command modules do not establish that any frontend consumes or renders these F4 surfaces. (`apps/desktop/src-tauri/src/library_shell.rs:54-250`; `apps/desktop/src-tauri/src/commands/home.rs:4-8`; `apps/desktop/src-tauri/src/commands/project_apply.rs:4-12`)
+The rebuilt shell registers Apply and Home handlers. This note documents their backend command results and the `NextAction` data model. (`apps/desktop/src-tauri/src/library_shell.rs:146-147,238`; `apps/desktop/src-tauri/src/commands/home.rs:4-8`; `apps/desktop/src-tauri/src/commands/project_apply.rs:4-12`; `crates/platevault-model/src/home.rs:70-91`)
