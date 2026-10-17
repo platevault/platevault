@@ -543,6 +543,7 @@ export function ReviewWorkspace({ context, onFinished }: ReviewWorkspaceProps) {
         batchActions={(ids) => marksFor(frames.filter((f) => ids.includes(f.asset.id)))}
         empty={emptyList}
         scroll="fill"
+        stickyFirstColumn
       />
     ) : (
       <FrameThumbnails
