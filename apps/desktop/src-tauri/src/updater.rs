@@ -24,7 +24,7 @@
 use desktop_services::notifications::Notifier;
 use desktop_services::update::offer::{self, Offers};
 use desktop_services::update::{
-    Package, Platform, QuitDecision, UpdateHost, Updater, UpdaterConfig,
+    LaunchedApp, Package, Platform, QuitDecision, UpdateHost, Updater, UpdaterConfig,
 };
 use desktop_services::AppIdentity;
 use semver::Version;
@@ -64,16 +64,17 @@ impl<R: Runtime> UpdateHost for TauriHost<R> {
 
 /// Build the updater and its offer, manage both, and start pushing their
 /// state to the webview. `notifier` shows what an install at quit must tell
-/// the user once the window is gone, and the offer posts under `identity`. A
-/// configuration the updater cannot use is logged, and the app runs without
-/// updates.
+/// the user once the window is gone, the offer posts under `identity`, and
+/// an install replaces the app `launched` names or nothing. A configuration
+/// the updater cannot use is logged, and the app runs without updates.
 pub fn register<R: Runtime>(
     app: &AppHandle<R>,
     notifier: Notifier,
     locale: desktop_services::locale::ActiveLocale,
     identity: &AppIdentity,
+    launched: LaunchedApp,
 ) {
-    let config = match updater_config(app.config(), current_version(app)) {
+    let config = match updater_config(app.config(), current_version(app), launched) {
         Ok(config) => config,
         Err(error) => {
             tracing::error!(%error, "updates are off: plugins.updater in tauri.conf.json is unusable");
@@ -150,10 +151,12 @@ fn current_version<R: Runtime>(app: &AppHandle<R>) -> Version {
 }
 
 /// The updater settings in `config` (`plugins.updater.pubkey` and
-/// `.endpoints`), for the package this binary was bundled as.
+/// `.endpoints`), for the package this binary was bundled as, launched from
+/// where `launched` says.
 fn updater_config(
     config: &tauri::Config,
     current_version: Version,
+    launched: LaunchedApp,
 ) -> Result<UpdaterConfig, String> {
     let updater = config.plugins.0.get("updater").ok_or("plugins.updater is missing")?;
     let public_key = updater
@@ -172,6 +175,7 @@ fn updater_config(
         endpoints,
         public_key: public_key.to_owned(),
         platform: Platform::current(package(bundle_type())),
+        launched,
     })
 }
 
@@ -204,8 +208,8 @@ mod tests {
     fn the_shipped_config_builds_an_updater() {
         let config: tauri::Config =
             serde_json::from_str(include_str!("../tauri.conf.json")).expect("tauri.conf.json");
-        let updater_config =
-            updater_config(&config, Version::new(0, 6, 0)).expect("plugins.updater");
+        let updater_config = updater_config(&config, Version::new(0, 6, 0), LaunchedApp::record())
+            .expect("plugins.updater");
         assert_eq!(
             updater_config.endpoints,
             ["https://github.com/platevault/platevault/releases/latest/download/latest.json"]

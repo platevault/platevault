@@ -763,7 +763,13 @@ pub(crate) mod tests {
         };
         plans::insert_plan(db.pool(), &plan).await.unwrap();
 
-        inbox_repo::insert_plan_link(db.pool(), item_id, plan_id).await.unwrap();
+        inbox_repo::insert_plan_link_conn(
+            db.pool().acquire().await.unwrap().as_mut(),
+            item_id,
+            plan_id,
+        )
+        .await
+        .unwrap();
     }
 
     #[tokio::test]
@@ -1085,7 +1091,13 @@ pub(crate) mod tests {
             .await
             .unwrap();
 
-        inbox_repo::insert_plan_link(db.pool(), item_id, plan_id).await.unwrap();
+        inbox_repo::insert_plan_link_conn(
+            db.pool().acquire().await.unwrap().as_mut(),
+            item_id,
+            plan_id,
+        )
+        .await
+        .unwrap();
         (root_id, rel)
     }
 

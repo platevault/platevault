@@ -166,7 +166,9 @@ mod tests {
             plans::update_plan_state(pool, plan_id, state).await.unwrap();
         }
 
-        inbox_repo::insert_plan_link(pool, item_id, plan_id).await.unwrap();
+        inbox_repo::insert_plan_link_conn(pool.acquire().await.unwrap().as_mut(), item_id, plan_id)
+            .await
+            .unwrap();
     }
 
     async fn state_of(db: &Database, item_id: &str) -> String {

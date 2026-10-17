@@ -1,40 +1,38 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! The locales the app ships and their message catalogues
-//! (`apps/desktop/messages`, the frontend's Paraglide catalogues), for text
-//! the backend shows itself, outside the webview: the updater's
-//! administrator prompt and notifications. The webview sends its active
-//! locale's tag; a backend feature reads the messages it needs by key with
-//! [`ShippedLocale::messages`] and fills their `{name}` placeholders with
-//! [`fill`].
-
-use std::sync::{Arc, OnceLock, RwLock};
+//! The shipped locale tags and embedded frontend message catalogues.
+//! The webview and backend share an active locale. Features deserialize only
+//! the catalogue messages they own with [`ShippedLocale::messages`]; the
+//! [`ShippedMessages`] cache assigns each shipped locale its own parsed slot,
+//! and [`fill`] interpolates named placeholders.
 
 use serde::de::DeserializeOwned;
-use serde::Deserialize;
+use std::sync::{Arc, OnceLock, RwLock};
 
 /// A shipped locale and its embedded catalogue.
 #[derive(Debug)]
 pub struct ShippedLocale {
+    pub(crate) index: usize,
     /// The locale's tag as `project.inlang/settings.json` lists it.
     pub tag: &'static str,
     /// The catalogue: one JSON object of message keys and their texts.
     pub catalogue: &'static str,
 }
-
 /// Every locale in `project.inlang/settings.json`, the base locale first.
-pub static SHIPPED_LOCALES: [ShippedLocale; 2] = [
+pub const SHIPPED_LOCALE_COUNT: usize = 2;
+pub static SHIPPED_LOCALES: [ShippedLocale; SHIPPED_LOCALE_COUNT] = [
     ShippedLocale {
+        index: 0,
         tag: "en-GB",
         catalogue: include_str!("../../../../apps/desktop/messages/en-GB.json"),
     },
     ShippedLocale {
+        index: 1,
         tag: "pt-BR",
         catalogue: include_str!("../../../../apps/desktop/messages/pt-BR.json"),
     },
 ];
-
 /// The base locale, which the frontend also falls back to.
 #[must_use]
 pub fn base() -> &'static ShippedLocale {
@@ -77,64 +75,37 @@ impl ActiveLocale {
     }
 }
 
-/// Parsed strings shared between notifications and the updater.
-#[derive(Debug, Deserialize)]
-pub struct NotificationMessages {
-    #[serde(rename = "notification_target_resolution_title")]
-    pub target_resolution_title: String,
-    #[serde(rename = "notification_target_resolution_body")]
-    pub target_resolution_body: String,
-    #[serde(rename = "notification_target_resolution_body_singular")]
-    pub target_resolution_body_singular: String,
-    #[serde(rename = "notification_plan_apply_title")]
-    pub plan_apply_title: String,
-    #[serde(rename = "notification_plan_applied_body")]
-    pub plan_state_applied: String,
-    #[serde(rename = "notification_plan_applied_body_singular")]
-    pub plan_state_applied_singular: String,
-    #[serde(rename = "notification_plan_partially_applied_body")]
-    pub plan_state_partially_applied: String,
-    #[serde(rename = "notification_plan_partially_applied_body_singular")]
-    pub plan_state_partially_applied_singular: String,
-    #[serde(rename = "notification_plan_failed_body")]
-    pub plan_state_failed: String,
-    #[serde(rename = "notification_plan_failed_body_singular")]
-    pub plan_state_failed_singular: String,
-    #[serde(rename = "notification_plan_cancelled_body")]
-    pub plan_state_cancelled: String,
-    #[serde(rename = "notification_plan_cancelled_body_singular")]
-    pub plan_state_cancelled_singular: String,
-    #[serde(rename = "notification_workflow_run_title")]
-    pub workflow_run_title: String,
-    #[serde(rename = "notification_workflow_run_body")]
-    pub workflow_run_body: String,
-    #[serde(rename = "notification_workflow_run_body_singular")]
-    pub workflow_run_body_singular: String,
-    #[serde(rename = "update_admin_prompt")]
-    pub update_admin_prompt: String,
-    #[serde(rename = "update_notification_install_failed_title")]
-    pub install_failed_title: String,
-    #[serde(rename = "settings_advanced_updates_installfailed")]
-    pub install_failed: String,
-    #[serde(rename = "update_error_previous_app_not_restored")]
-    pub previous_app_not_restored: String,
+/// One cache slot per shipped locale.
+pub struct ShippedMessages<T> {
+    entries: [OnceLock<T>; SHIPPED_LOCALE_COUNT],
 }
 
-static EN_GB_NOTIFICATION_MESSAGES: OnceLock<NotificationMessages> = OnceLock::new();
-static PT_BR_NOTIFICATION_MESSAGES: OnceLock<NotificationMessages> = OnceLock::new();
-/// Return parsed notification and updater messages, initializing each shipped cache once.
-#[must_use]
-pub fn notification_messages(locale: &'static ShippedLocale) -> &'static NotificationMessages {
-    let cache = match locale.tag {
-        "en-GB" => &EN_GB_NOTIFICATION_MESSAGES,
-        "pt-BR" => &PT_BR_NOTIFICATION_MESSAGES,
-        _ => unreachable!("shipped_or_base returns a shipped locale"),
-    };
-    cache.get_or_init(|| {
-        locale
-            .messages::<NotificationMessages>()
-            .expect("shipped notification catalogue is complete")
-    })
+impl<T> ShippedMessages<T> {
+    #[must_use]
+    pub const fn new() -> Self {
+        Self { entries: [const { OnceLock::new() }; SHIPPED_LOCALE_COUNT] }
+    }
+}
+
+impl<T> Default for ShippedMessages<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<T: DeserializeOwned> ShippedMessages<T> {
+    /// Return the cached messages for a shipped locale.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the embedded catalogue does not contain the complete message set.
+    pub fn get(&'static self, locale: &'static ShippedLocale) -> &'static T {
+        self.entries[locale.index].get_or_init(|| {
+            locale.messages::<T>().unwrap_or_else(|error| {
+                panic!("shipped {} message catalogue is incomplete: {error}", locale.tag)
+            })
+        })
+    }
 }
 
 impl ShippedLocale {

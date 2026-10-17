@@ -14,10 +14,12 @@
 //! installed. One client serves every OS (decision astro-plan-eub2i):
 //!
 //! - **Windows**: the NSIS or MSI installer runs, and the app exits for it.
-//! - **macOS**: the new `.app` replaces the installed one, but only when it
-//!   satisfies the installed app's designated requirement. That check is
-//!   skipped while the installed copy is ad-hoc signed, which has no stable
-//!   identity to pin, so the move to the self-signed identity can happen.
+//! - **macOS**: the new `.app` replaces the installed one, but only while the
+//!   installed one is still the app this process was launched from
+//!   ([`LaunchedApp`]), and only when the new one satisfies its designated
+//!   requirement. That check is skipped while the installed copy is ad-hoc
+//!   signed, which has no stable identity to pin, so the move to the
+//!   self-signed identity can happen.
 //! - **Linux**: an `AppImage` replaces itself; a deb or rpm is installed with
 //!   `pkexec`, so the polkit prompt appears only after the user chose Install.
 //!
@@ -32,9 +34,8 @@
 //! quit. A check never downloads, and the startup check runs only while
 //! "Check for updates automatically" is on.
 //!
-//! What the updater says outside the webview, the macOS administrator prompt
-//! and the notification an install at quit raises, follows the webview's
-//! locale ([`Updater::set_locale`]).
+//! Text the updater shows outside the webview is read from its feature-owned
+//! message cache for the shared [`ActiveLocale`].
 
 mod http;
 mod install;
@@ -43,6 +44,7 @@ pub mod offer;
 mod signature;
 #[cfg(test)]
 mod tests;
+mod wording;
 use std::fmt;
 use std::future::Future;
 use std::io;
@@ -57,12 +59,14 @@ use semver::Version;
 use tokio::sync::watch;
 
 use self::http::{Http, Source};
+pub use self::install::LaunchedApp;
 use self::install::{InstallMode, Installed, Installer, OsInstaller};
 use self::manifest::Release;
 use self::signature::{Staged, TrustedKey};
+pub(super) use self::wording::Wording;
 use crate::channels::Latest;
 use crate::locale::{ActiveLocale, ShippedLocale};
-use crate::notifications::{Notice, Wording};
+use crate::notifications::Notice;
 
 /// The longest an install at quit may hold the quit. Long enough for the
 /// slowest legitimate case, a deb or rpm install waiting on its polkit
@@ -165,6 +169,8 @@ pub struct UpdaterConfig {
     /// minisign public key file, as `tauri.conf.json` stores it.
     pub public_key: String,
     pub platform: Platform,
+    /// Where this process was launched from, read at startup.
+    pub launched: LaunchedApp,
 }
 
 /// The host side of an install: the updater asks, the host owns the process.
@@ -223,6 +229,9 @@ pub enum UpdateError {
     /// The new macOS bundle does not satisfy the installed app's designated
     /// requirement.
     Identity(String),
+    /// The macOS app at the path this process was launched from is no longer
+    /// the one launched: it was moved or replaced since.
+    AppReplaced(String),
     /// The OS refused an install step its permission, or the user did not
     /// give it.
     Permission(String),
@@ -248,6 +257,7 @@ impl UpdateError {
             Self::Manifest(_) => UpdateFailure::Manifest,
             Self::Signature(_) => UpdateFailure::Signature,
             Self::Identity(_) => UpdateFailure::Identity,
+            Self::AppReplaced(_) => UpdateFailure::AppReplaced,
             Self::Permission(_) => UpdateFailure::Permission,
             Self::Install(_) => UpdateFailure::Install,
             Self::PreviousAppNotRestored { kept, .. } => {
@@ -269,6 +279,7 @@ impl fmt::Display for UpdateError {
             | Self::Manifest(message)
             | Self::Signature(message)
             | Self::Identity(message)
+            | Self::AppReplaced(message)
             | Self::Permission(message)
             | Self::Install(message)
             | Self::Unsupported(message) => f.write_str(message),
@@ -451,7 +462,7 @@ impl Updater {
             current_version: config.current_version,
             endpoints,
             key: TrustedKey::from_config(&config.public_key)?,
-            installer: Box::new(OsInstaller::new(config.platform.package)),
+            installer: Box::new(OsInstaller::new(config.platform.package, config.launched)),
             platform: config.platform,
             source: Box::new(source),
             host: Box::new(host),
@@ -486,8 +497,8 @@ impl Updater {
         self.inner.locale.get()
     }
 
-    fn wording(&self) -> Wording {
-        Wording::from_active(&self.inner.locale)
+    fn wording(&self) -> &'static Wording {
+        Wording::for_active(&self.inner.locale)
     }
 
     /// The status the UI should show now.

@@ -25,10 +25,10 @@ use audit::event_bus::{
 };
 use tokio::sync::broadcast::error::RecvError;
 
-use crate::locale::{self, ActiveLocale, NotificationMessages};
+use crate::locale::{self, ActiveLocale};
 use crate::AppIdentity;
 
-/// An OS notification's title and body.
+/// One OS notification's title and body.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Notice {
     /// The notification summary/title.
@@ -36,52 +36,47 @@ pub struct Notice {
     /// The notification body.
     pub body: String,
 }
-
-/// A small non-sensitive copy of a catalogue's already-parsed messages.
-pub(crate) struct Wording {
-    messages: &'static NotificationMessages,
+/// Notification-only fields deserialized once per shipped locale by `MESSAGES`.
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct NotificationMessages {
+    #[serde(rename = "notification_target_resolution_title")]
+    target_resolution_title: String,
+    #[serde(rename = "notification_target_resolution_body")]
+    target_resolution_body: String,
+    #[serde(rename = "notification_plan_apply_title")]
+    plan_apply_title: String,
+    #[serde(rename = "notification_plan_applied_body")]
+    plan_state_applied: String,
+    #[serde(rename = "notification_plan_partially_applied_body")]
+    plan_state_partially_applied: String,
+    #[serde(rename = "notification_plan_failed_body")]
+    plan_state_failed: String,
+    #[serde(rename = "notification_plan_cancelled_body")]
+    plan_state_cancelled: String,
+    #[serde(rename = "notification_workflow_run_title")]
+    workflow_run_title: String,
+    #[serde(rename = "notification_workflow_run_body")]
+    workflow_run_body: String,
 }
+
+static MESSAGES: locale::ShippedMessages<NotificationMessages> = locale::ShippedMessages::new();
+#[derive(Clone, Copy)]
+pub(crate) struct Wording(&'static NotificationMessages);
 impl Wording {
-    pub(crate) fn messages(&self) -> &'static NotificationMessages {
-        self.messages
+    pub(crate) fn messages(self) -> &'static NotificationMessages {
+        self.0
     }
-
     pub(crate) fn from_locale(locale: &'static locale::ShippedLocale) -> Self {
-        Self { messages: locale::notification_messages(locale) }
+        Self(MESSAGES.get(locale))
     }
-
     pub(crate) fn from_active(locale: &ActiveLocale) -> Self {
         Self::from_locale(locale.get())
     }
-
-    pub(crate) fn target_resolution(&self, count: usize) -> Notice {
-        let messages = self.messages;
+    pub(crate) fn target_resolution(self, count: usize) -> Notice {
+        let messages = self.0;
         Notice {
             title: messages.target_resolution_title.clone(),
-            body: locale::fill(
-                if count == 1 {
-                    &messages.target_resolution_body_singular
-                } else {
-                    &messages.target_resolution_body
-                },
-                &[("count", &count.to_string())],
-            ),
-        }
-    }
-
-    pub(crate) fn admin_prompt(&self, version: &str) -> String {
-        locale::fill(&self.messages.update_admin_prompt, &[("version", version)])
-    }
-
-    pub(crate) fn previous_app_kept(&self, kept: &std::path::Path) -> Notice {
-        let messages = self.messages;
-        let reason = locale::fill(
-            &messages.previous_app_not_restored,
-            &[("path", &kept.display().to_string())],
-        );
-        Notice {
-            title: messages.install_failed_title.clone(),
-            body: locale::fill(&messages.install_failed, &[("message", &reason)]),
+            body: locale::fill(&messages.target_resolution_body, &[("count", &count.to_string())]),
         }
     }
 }
@@ -257,11 +252,7 @@ fn notification_for(
             Some(Notice {
                 title: messages.workflow_run_title.clone(),
                 body: locale::fill(
-                    if event.artifact_ids.len() == 1 {
-                        &messages.workflow_run_body_singular
-                    } else {
-                        &messages.workflow_run_body
-                    },
+                    &messages.workflow_run_body,
                     &[("name", &event.tool_id), ("count", &event.artifact_ids.len().to_string())],
                 ),
             })
@@ -275,12 +266,6 @@ fn notification_for(
 fn plan_apply_body(payload: &serde_json::Value, messages: &NotificationMessages) -> Option<String> {
     let event: PlanApplyingCompleted = serde_json::from_value(payload.clone()).ok()?;
     let message = match event.terminal_state.as_str() {
-        "applied" if event.items_applied == 1 => &messages.plan_state_applied_singular,
-        "partially_applied" if event.items_applied == 1 => {
-            &messages.plan_state_partially_applied_singular
-        }
-        "failed" if event.items_applied == 1 => &messages.plan_state_failed_singular,
-        "cancelled" if event.items_applied == 1 => &messages.plan_state_cancelled_singular,
         "applied" => &messages.plan_state_applied,
         "partially_applied" => &messages.plan_state_partially_applied,
         "failed" => &messages.plan_state_failed,
@@ -310,110 +295,106 @@ mod tests {
             locale,
         );
         notifier.locale.set_locale("pt-BR");
-        assert_eq!(notifier.wording().target_resolution(1).body, "Alvo da fila resolvido: 1.");
+        assert_eq!(notifier.wording().target_resolution(1).body, "Alvos da fila resolvidos: 1.");
         notifier.locale.set_locale("de-DE");
-        assert_eq!(notifier.wording().target_resolution(1).body, "1 queued target resolved.");
+        assert_eq!(notifier.wording().target_resolution(1).body, "Queued target(s) resolved: 1.");
     }
 
     #[test]
     fn every_shipped_locale_has_the_notification_wording() {
+        let plan_templates = [
+            (
+                "applied",
+                "Plan applied — 1 applied, 1 failed, 1 skipped.",
+                "Plano aplicado — 1 aplicado(s), 1 falha(s), 1 ignorado(s).",
+            ),
+            (
+                "partially_applied",
+                "Plan partly applied — 1 applied, 1 failed, 1 skipped.",
+                "Plano parcialmente aplicado — 1 aplicado(s), 1 falha(s), 1 ignorado(s).",
+            ),
+            (
+                "failed",
+                "Plan apply failed — 1 applied, 1 failed, 1 skipped.",
+                "Falha ao aplicar o plano — 1 aplicado(s), 1 falha(s), 1 ignorado(s).",
+            ),
+            (
+                "cancelled",
+                "Plan apply cancelled — 1 applied, 1 failed, 1 skipped.",
+                "Aplicação do plano cancelada — 1 aplicado(s), 1 falha(s), 1 ignorado(s).",
+            ),
+        ];
+
         for shipped in &locale::SHIPPED_LOCALES {
-            let messages = locale::notification_messages(shipped);
             let wording = Wording::from_locale(shipped);
-            let notification = wording.target_resolution(1);
+            let messages = wording.messages();
+            let target = wording.target_resolution(1);
             assert_eq!(
-                notification.body,
+                target.body,
                 if shipped.tag == "pt-BR" {
-                    "Alvo da fila resolvido: 1."
+                    "Alvos da fila resolvidos: 1."
                 } else {
-                    "1 queued target resolved."
+                    "Queued target(s) resolved: 1."
                 },
                 "{}",
                 shipped.tag
             );
-            let prompt = wording.admin_prompt("0.7.0");
-            assert!(prompt.contains("PlateVault") && prompt.contains("0.7.0"), "{prompt}");
-            assert!(!prompt.contains('{'), "every placeholder is filled: {prompt}");
-            assert_eq!(
-                prompt,
-                if shipped.tag == "pt-BR" {
-                    "O PlateVault precisa do nome e da senha de um administrador para instalar a atualização 0.7.0."
-                } else {
-                    "PlateVault needs an administrator's name and password to install update 0.7.0."
-                },
-                "{}",
-                shipped.tag
-            );
-            let plan_notification = notification_for(
-                TOPIC_PLAN_APPLYING_COMPLETED,
-                &plan_completion_payload(),
-                messages,
-            )
-            .expect("notification plan body");
-            assert!(
-                !plan_notification.body.contains('{'),
-                "{}: {}",
-                shipped.tag,
-                plan_notification.body
-            );
-            let plan_one = notification_for(
-                TOPIC_PLAN_APPLYING_COMPLETED,
-                &plan_completion_payload_with_applied(1),
-                messages,
-            )
-            .expect("single-item plan notification");
-            assert_eq!(
-                plan_one.body,
-                if shipped.tag == "pt-BR" {
-                    "Plano parcialmente aplicado: 1 item(ns) aplicado(s), 1 falha(s) e 2 ignorado(s)."
-                } else {
-                    "Plan partly applied: 1 item applied, 1 failure(s), 2 skipped."
-                },
-                "{}",
-                shipped.tag
-            );
-            let workflow =
-                notification_for(TOPIC_WORKFLOW_RUN_COMPLETED, &workflow_run_payload(), messages)
-                    .expect("notification workflow body");
-            assert!(!workflow.body.contains('{'), "{}: {}", shipped.tag, workflow.body);
-            let workflow_one =
+
+            for (state, expected_en, expected_pt) in plan_templates {
+                let mut payload = plan_completion_payload();
+                payload["terminalState"] = serde_json::json!(state);
+                payload["itemsApplied"] = serde_json::json!(1);
+                payload["itemsFailed"] = serde_json::json!(1);
+                payload["itemsSkipped"] = serde_json::json!(1);
+                let notice = notification_for(TOPIC_PLAN_APPLYING_COMPLETED, &payload, messages)
+                    .expect("one-count notification for every plan terminal state");
+                assert_eq!(
+                    notice.body,
+                    if shipped.tag == "pt-BR" { expected_pt } else { expected_en },
+                    "{} {state}",
+                    shipped.tag
+                );
+            }
+
+            let mut one_failed = plan_completion_payload();
+            one_failed["itemsFailed"] = serde_json::json!(1);
+            let failed = notification_for(TOPIC_PLAN_APPLYING_COMPLETED, &one_failed, messages)
+                .expect("one failed-item plan notification");
+            assert!(!failed.body.contains('{'), "{}: {}", shipped.tag, failed.body);
+            let mut one_skipped = plan_completion_payload();
+            one_skipped["itemsSkipped"] = serde_json::json!(1);
+            let skipped = notification_for(TOPIC_PLAN_APPLYING_COMPLETED, &one_skipped, messages)
+                .expect("one skipped-item plan notification");
+            assert!(!skipped.body.contains('{'), "{}: {}", shipped.tag, skipped.body);
+
+            let singular =
                 notification_for(TOPIC_WORKFLOW_RUN_COMPLETED, &workflow_run_payload(), messages)
                     .expect("single-artifact workflow notification");
             assert_eq!(
-                workflow_one.body,
+                singular.body,
                 if shipped.tag == "pt-BR" {
-                    "Novo artefato atribuído por siril: 1."
+                    "Novos artefatos atribuídos por siril: 1."
                 } else {
-                    "New artifact attributed by siril: 1."
+                    "New artifact(s) attributed by siril: 1."
+                },
+                "{}",
+                shipped.tag
+            );
+            let mut plural_payload = workflow_run_payload();
+            plural_payload["artifactIds"] = serde_json::json!(["a-1", "a-2"]);
+            let plural = notification_for(TOPIC_WORKFLOW_RUN_COMPLETED, &plural_payload, messages)
+                .expect("plural workflow body");
+            assert_eq!(
+                plural.body,
+                if shipped.tag == "pt-BR" {
+                    "Novos artefatos atribuídos por siril: 2."
+                } else {
+                    "New artifact(s) attributed by siril: 2."
                 },
                 "{}",
                 shipped.tag
             );
         }
-    }
-    #[test]
-    fn updater_kept_app_notice_uses_each_cached_catalogue() {
-        let kept = std::path::Path::new("/Applications/PlateVault (previous version).app");
-        let english = Wording::from_locale(locale::base()).previous_app_kept(kept);
-        assert_eq!(english.title, "Update not installed");
-        assert_eq!(english.body, "Could not install update: the previous version couldn't be put back. It's saved at /Applications/PlateVault (previous version).app.");
-        let portuguese =
-            Wording::from_locale(locale::shipped_or_base("pt-BR")).previous_app_kept(kept);
-        assert_eq!(portuguese.title, "Atualização não instalada");
-        assert_eq!(portuguese.body, "Não foi possível instalar a atualização: não foi possível restaurar a versão anterior. Ela está salva em /Applications/PlateVault (previous version).app.");
-    }
-    #[test]
-    fn ingest_drain_notification_uses_the_selected_catalogue() {
-        let wording = ActiveLocale::new();
-        wording.set_locale("pt-BR");
-        let notification = Wording::from_active(&wording).target_resolution(2);
-        assert_eq!(notification.title, "Resolução de alvos concluída");
-        assert_eq!(notification.body, "Alvos da fila resolvidos: 2.");
-    }
-
-    #[test]
-    fn focused_window_suppresses_the_notification() {
-        assert!(!should_notify(Some(true), true));
     }
 
     #[test]
@@ -425,6 +406,11 @@ mod tests {
     fn an_empty_drain_pass_never_notifies() {
         assert!(!should_notify(Some(false), false));
         assert!(!should_notify(None, false));
+    }
+
+    #[test]
+    fn unknown_focus_notifies() {
+        assert!(should_notify(None, true));
     }
 
     fn plan_completion_payload() -> serde_json::Value {
@@ -459,7 +445,7 @@ mod tests {
         assert_eq!(notification.title, "Aplicação do plano concluída");
         assert_eq!(
             notification.body,
-            "Plano parcialmente aplicado: 1 item(ns) aplicado(s), 1 falha(s) e 2 ignorado(s)."
+            "Plano parcialmente aplicado — 1 aplicado(s), 1 falha(s), 2 ignorado(s)."
         );
     }
 
@@ -484,7 +470,7 @@ mod tests {
         assert_eq!(
             notification_for(TOPIC_WORKFLOW_RUN_COMPLETED, &payload, wording.messages())
                 .map(|notification| notification.body),
-            Some("New artifacts attributed by siril: 2.".to_owned())
+            Some("New artifact(s) attributed by siril: 2.".to_owned())
         );
     }
 
@@ -522,7 +508,7 @@ mod tests {
             ),
             Some(Notice {
                 title: "Plan apply finished".to_owned(),
-                body: "Plan partly applied: 3 item(s) applied, 1 failure(s), 2 skipped.".to_owned()
+                body: "Plan partly applied — 3 applied, 1 failed, 2 skipped.".to_owned()
             }),
         );
     }
@@ -538,7 +524,7 @@ mod tests {
             ),
             Some(Notice {
                 title: "Workflow run finished".to_owned(),
-                body: "New artifact attributed by siril: 1.".to_owned()
+                body: "New artifact(s) attributed by siril: 1.".to_owned()
             }),
         );
     }

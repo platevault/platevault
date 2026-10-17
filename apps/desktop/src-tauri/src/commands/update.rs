@@ -14,7 +14,17 @@ use contracts_core::updates::{UpdateOffer, UpdateStatus};
 use contracts_core::ContractError;
 use desktop_services::update::offer::Offers;
 use desktop_services::update::{UpdatePort as _, Updater};
-use tauri::{AppHandle, Manager, Runtime};
+use tauri::Manager;
+use tauri::State;
+#[cfg(test)]
+use tauri::{
+    http::HeaderMap,
+    ipc::{CallbackFn, InvokeBody},
+    test::{self, INVOKE_KEY},
+    utils::config::WebviewUrl,
+    webview::{InvokeRequest, WebviewWindowBuilder},
+};
+use tauri::{AppHandle, Runtime};
 
 fn unavailable() -> ContractError {
     ContractError::internal("updates are unavailable in this build")
@@ -118,33 +128,45 @@ pub async fn update_install_on_quit(app: AppHandle) -> Result<(), ContractError>
 #[tauri::command]
 #[specta::specta]
 #[allow(clippy::needless_pass_by_value)] // Tauri injects arguments by value
-pub fn update_set_locale(app: AppHandle, locale: String) -> Result<(), ContractError> {
-    set_active_locale(app.try_state::<ActiveLocale>().as_deref(), &locale);
+pub fn update_set_locale(
+    active_locale: State<'_, ActiveLocale>,
+    locale: String,
+) -> Result<(), ContractError> {
+    active_locale.set_locale(&locale);
     Ok(())
-}
-
-fn set_active_locale(locale: Option<&ActiveLocale>, locale_tag: &str) {
-    if let Some(locale) = locale {
-        locale.set_locale(locale_tag);
-    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::set_active_locale;
-    use desktop_services::locale::ActiveLocale;
-
-    fn update_locale(locale: Option<&ActiveLocale>, tag: &str) {
-        set_active_locale(locale, tag);
-    }
+    use super::*;
 
     #[test]
-    fn update_locale_command_seam_changes_the_managed_locale() {
-        let shared = ActiveLocale::new();
-        let managed = shared.clone();
-        update_locale(Some(&managed), "pt-BR");
-        assert_eq!(shared.get().tag, "pt-BR");
-        update_locale(Some(&managed), "de-DE");
-        assert_eq!(shared.get().tag, "en-GB");
+    fn update_set_locale_changes_the_managed_locale_through_ipc() {
+        let app = test::mock_builder()
+            .invoke_handler(tauri::generate_handler![update_set_locale])
+            .build(test::mock_context(test::noop_assets()))
+            .expect("build mock app");
+        let shared_locale = ActiveLocale::new();
+        app.manage(shared_locale.clone());
+        let webview = WebviewWindowBuilder::new(&app, "main", WebviewUrl::default())
+            .build()
+            .expect("build mock webview");
+
+        for (tag, expected) in [("pt-BR", "pt-BR"), ("de-DE", "en-GB")] {
+            test::get_ipc_response(
+                &webview,
+                InvokeRequest {
+                    cmd: "update_set_locale".to_owned(),
+                    callback: CallbackFn(0),
+                    error: CallbackFn(1),
+                    url: "tauri://localhost".parse().expect("IPC URL"),
+                    body: InvokeBody::Json(serde_json::json!({ "locale": tag })),
+                    headers: HeaderMap::default(),
+                    invoke_key: INVOKE_KEY.to_owned(),
+                },
+            )
+            .expect("update locale command response");
+            assert_eq!(shared_locale.get().tag, expected);
+        }
     }
 }

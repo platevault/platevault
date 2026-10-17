@@ -128,7 +128,7 @@ mod tests {
     use flate2::Compression;
 
     use super::{probe_bundle as bundle, CodeSigning, Codesign, Identity};
-    use crate::update::install::bundle::install_bundle;
+    use crate::update::install::bundle::{install_bundle, LaunchedBundle};
     use crate::update::{Package, UpdateError};
 
     /// The designated requirement of Apple's `/usr/bin/true`.
@@ -210,7 +210,8 @@ mod tests {
         let update = bundle(release.path(), Some("dev.example.update"));
         let staged = staged_archive(&update).await;
 
-        install_bundle(&installed, &mut staged.reverify().expect("verified"), &Codesign, "")
+        let launched = LaunchedBundle::at(installed.clone()).expect("launch");
+        install_bundle(&launched, &mut staged.reverify().expect("verified"), &Codesign, "")
             .expect("install");
 
         assert_eq!(marker(&installed), "dev.example.update");
@@ -233,8 +234,9 @@ mod tests {
         let update = bundle(release.path(), Some("com.apple.true"));
         let staged = staged_archive(&update).await;
 
+        let launched = LaunchedBundle::at(installed.clone()).expect("launch");
         let error =
-            install_bundle(&installed, &mut staged.reverify().expect("verified"), &Codesign, "")
+            install_bundle(&launched, &mut staged.reverify().expect("verified"), &Codesign, "")
                 .expect_err("refused");
 
         assert!(

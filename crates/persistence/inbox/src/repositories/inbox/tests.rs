@@ -120,7 +120,9 @@ async fn plan_link_insert_and_get() {
     };
     persistence_plans::repositories::plans::insert_plan(db.pool(), &plan_insert).await.unwrap();
 
-    insert_plan_link(db.pool(), "item-6", "plan-inbox-1").await.unwrap();
+    insert_plan_link_conn(db.pool().acquire().await.unwrap().as_mut(), "item-6", "plan-inbox-1")
+        .await
+        .unwrap();
     let link = get_plan_link(db.pool(), "item-6").await.unwrap().unwrap();
     assert_eq!(link.plan_id, "plan-inbox-1");
 }
@@ -142,9 +144,16 @@ async fn duplicate_plan_link_fails() {
     };
     persistence_plans::repositories::plans::insert_plan(db.pool(), &plan_insert).await.unwrap();
 
-    insert_plan_link(db.pool(), "item-7", "plan-inbox-2").await.unwrap();
+    insert_plan_link_conn(db.pool().acquire().await.unwrap().as_mut(), "item-7", "plan-inbox-2")
+        .await
+        .unwrap();
     // Second insert must fail (PK constraint)
-    let err = insert_plan_link(db.pool(), "item-7", "plan-inbox-2").await;
+    let err = insert_plan_link_conn(
+        db.pool().acquire().await.unwrap().as_mut(),
+        "item-7",
+        "plan-inbox-2",
+    )
+    .await;
     assert!(err.is_err());
 }
 
@@ -2300,7 +2309,9 @@ async fn seed_old_rows(pool: &SqlitePool) {
         seed_classified_children(pool, id, path).await;
         set_overrides(pool, id, path, None, Some("Ha"), None, None).await.unwrap();
     }
-    insert_plan_link(pool, "m-linked", "plan-open").await.unwrap();
+    insert_plan_link_conn(pool.acquire().await.unwrap().as_mut(), "m-linked", "plan-open")
+        .await
+        .unwrap();
     update_inbox_item_state(pool, "m-done", "resolved").await.unwrap();
 
     for (group, path) in [("g-cd", "c/d"), ("g-ef", "e/f"), ("g-jk", "j/k")] {
@@ -2340,7 +2351,9 @@ async fn seed_old_rows(pool: &SqlitePool) {
         upsert_inbox_sub_item(pool, &sub).await.unwrap();
         seed_classified_children(pool, id, &format!("{path}/{id}.fits")).await;
     }
-    insert_plan_link(pool, "ef-light", "plan-open").await.unwrap();
+    insert_plan_link_conn(pool.acquire().await.unwrap().as_mut(), "ef-light", "plan-open")
+        .await
+        .unwrap();
     update_inbox_item_state(pool, "ef-light", "plan_open").await.unwrap();
 }
 
@@ -2450,7 +2463,9 @@ async fn deleting_old_folder_rows_at_a_master_path_keeps_the_master() {
         seed_classified_children(pool, id, path).await;
     }
     set_overrides(pool, "m-gh", "g/h.fits", None, Some("Ha"), None, None).await.unwrap();
-    insert_plan_link(pool, "m-gh", "plan-open").await.unwrap();
+    insert_plan_link_conn(pool.acquire().await.unwrap().as_mut(), "m-gh", "plan-open")
+        .await
+        .unwrap();
     update_inbox_item_state(pool, "m-gh", "plan_open").await.unwrap();
     let folder_group = UpsertSourceGroup {
         id: "g-pq",
@@ -2556,7 +2571,9 @@ async fn deleting_an_old_master_row_at_a_folder_keeps_the_folders_group() {
     for (id, path) in [("m-ab", "a/b.fits"), ("m-pq", "p/q.fits")] {
         set_overrides(pool, id, path, None, Some("Ha"), None, None).await.unwrap();
     }
-    insert_plan_link(pool, "m-pq", "plan-open").await.unwrap();
+    insert_plan_link_conn(pool.acquire().await.unwrap().as_mut(), "m-pq", "plan-open")
+        .await
+        .unwrap();
     update_inbox_item_state(pool, "m-pq", "plan_open").await.unwrap();
     for (group, path) in [("g-ab", "a/b.fits"), ("g-pq", "p/q.fits"), ("g-rs", "r/s.fits")] {
         let row = UpsertSourceGroup {

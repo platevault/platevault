@@ -4,6 +4,7 @@
 // Hide the Windows console window on release builds; harmless elsewhere.
 #![cfg_attr(all(not(debug_assertions), target_os = "windows"), windows_subsystem = "windows")]
 
+use desktop_services::update::LaunchedApp;
 use desktop_services::{AppIdentity, Config, Services};
 use desktop_shell::{build_app, run_app};
 
@@ -11,6 +12,11 @@ use tauri::Manager;
 
 #[tokio::main]
 async fn main() {
+    // astro-plan-uyguq: before anything else, where this process was launched
+    // from. An update replaces that app or nothing, so one swapped in at its
+    // path from here on is refused instead of being updated.
+    let launched = LaunchedApp::record();
+
     // Build the Tauri app first so we can access the platform path resolver
     // (needed to locate the log directory before initialising tracing, and
     // the SQLite database path below). The event loop is NOT started yet —
@@ -73,5 +79,5 @@ async fn main() {
     // during `app.run()` rather than `.build()`, so doing that work here left
     // a long migration with no window on screen at all — not a blank window,
     // no window.
-    run_app(app, db_url, data_dir, services);
+    run_app(app, db_url, data_dir, services, launched);
 }

@@ -382,12 +382,14 @@ fn apply_dev_url_override(context: &mut tauri::Context) {
 /// finished — so a long migration is visible instead of being a windowless
 /// pause, and the UI still cannot reach an unmigrated database.
 ///
-/// `services` lives until the exit hook shuts it down.
+/// `services` lives until the exit hook shuts it down. `launched` is where
+/// this process was launched from, which the updater replaces or nothing.
 pub fn run_app(
     app: tauri::App,
     db_url: String,
     data_dir: std::path::PathBuf,
     services: desktop_services::Services,
+    launched: desktop_services::update::LaunchedApp,
 ) {
     // Developer diagnostics call buffer (spec 021).
     // Always managed so the type is available; only populated when dev-tools
@@ -423,6 +425,7 @@ pub fn run_app(
         services.notifier().clone(),
         services.active_locale().clone(),
         services.identity(),
+        launched,
     );
 
     app.run(move |handle, event| {
