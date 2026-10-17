@@ -321,8 +321,9 @@ one release, pass the previous release's config as `--pubkey-conf`, e.g.
      was observed on another project's signature. `WixUIWixca` must carry a
      valid signature from `WiX Toolset (.NET Foundation)` issued by `.NET
      Foundation Projects Code Signing CA2`. The five NSIS plugins must match
-     their pinned SHA-256 in `release-please.yml`. A test-signing policy fails
-     before bundle creation (see [Known limits](#known-limits)).
+     their pinned SHA-256 in `scripts/release/check-signed-installers.ps1`. A
+     test-signing policy fails before bundle creation (see
+     [Known limits](#known-limits)).
    - `updater-manifest` publishes `latest.json`. It only does so when the
      minisign signatures verify against the signed installers.
    - On a Windows machine, `Get-AuthenticodeSignature` reports `Valid`, signed
