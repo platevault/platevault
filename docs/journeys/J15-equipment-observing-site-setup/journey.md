@@ -30,7 +30,7 @@ added and removed with the Default pill moving as stated, and Backyard and
 
 - P1: A clean development build of the rebuilt PlateVault (D17). Onboarding is complete with one disposable Captures location `Filter-test/Captures`, registered and indexed while empty. Outside it, the folder `Filter-test/Incoming/Halpha-test` holds one session `Halpha-test` of 10 mono 300 s lights captured on 2026-10-02 with OBJECT `NGC 7000`, INSTRUME `ZWO ASI2600MM Pro`, TELESCOP `RedCat 51`, FOCALLEN `250` and FILTER `Halpha`; S3b copies it into the location. No camera, telescope, rig or observing site is saved or detected yet.
 - P2: The equipment datasheet values: ASI2600MM is mono with 6248 × 4176 pixels of 3.76 µm; ASI533MC is OSC with 3008 × 3008 pixels of 3.76 µm; RedCat 51 has a 250 mm focal length; Esprit 100 has a 550 mm focal length.
-- P3: Backyard's coordinates and IANA time zone are the ones the J19/P2 fixture headers carry. `Remote site` uses the J19/P3 coordinates, at least 15° of longitude and one time zone away from Backyard (J20/P2).
+- P3: Backyard's coordinates are 52.09° N, 5.12° E and its IANA time zone is `Europe/Amsterdam`, the values in the J19/P2 fixture headers. Its minimum altitude is 25° and darkness is astronomical (prototype seed.ts:805 at a2ec1297). `Remote site` uses the J19/P3 coordinates, at least 15° of longitude and one time zone away from Backyard (J20/P2).
 - P4: A fault control that makes the next save of a rig's filter list fail until it is disarmed (G5).
 - P5: A SHA-256 of every `Halpha-test` file is recorded before S3b.
 - P6: A network control that takes the machine offline and back online, for the map-unavailable check in S6.
