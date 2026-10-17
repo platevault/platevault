@@ -17,7 +17,11 @@ use std::sync::Arc;
 use desktop_shell::commands::project_wrap_up::WrapUpTrash;
 use platevault_core::custody::trash::OsTrash;
 use platevault_core::library::Library;
-use platevault_core::{LibraryErrorCode, TrashSupport, TrashUnsupported};
+use platevault_core::targets::TargetQuery;
+use platevault_core::{
+    AssociationState, ColorKind, Equipment, LibraryErrorCode, LocationRole, NativePath,
+    ProjectInput, Provenance, SubjectInput, TrashSupport, TrashUnsupported,
+};
 use serde_json::{json, Value};
 use tauri::ipc::{CallbackFn, InvokeBody};
 use tauri::test::{get_ipc_response, mock_builder, mock_context, noop_assets, MockRuntime};
@@ -91,6 +95,11 @@ impl Shell {
                 desktop_shell::commands::sessions_archive::sessions_archive,
                 desktop_shell::commands::view_previous::project_previous_items,
                 desktop_shell::commands::view_previous::project_review_previous_item,
+                desktop_shell::commands::project_wrap_up::project_clean_up_review,
+                desktop_shell::commands::project_wrap_up::project_clean_up,
+                desktop_shell::commands::project_wrap_up::project_trash_review,
+                desktop_shell::commands::project_wrap_up::project_wrap_up_trash,
+                desktop_shell::commands::project_wrap_up::project_wrap_up_archive_review,
             ])
             .build(mock_context(noop_assets()))
             .expect("build mock app");
@@ -127,10 +136,81 @@ impl Shell {
         assert_eq!(error["identity"], json!(identity), "{cmd}: {error}");
         assert!(error.get("message").is_none(), "{cmd} sent English text: {error}");
     }
+
+    /// The library the handlers run on, to arrange what a test calls on.
+    fn library(&self) -> Arc<Library> {
+        Arc::clone(self.webview.state::<Arc<Library>>().inner())
+    }
+
+    /// An open Project on a saved seed Target and rig, holding no session.
+    fn open_project(&self) -> Uuid {
+        let library = self.library();
+        tauri::async_runtime::block_on(async move {
+            let rig = Equipment {
+                id: Uuid::new_v4(),
+                name: "RedCat 51 + ASI2600MM".into(),
+                camera: Some("ASI2600MM".into()),
+                telescope: Some("RedCat 51".into()),
+                focal_length_mm: Some(250.0),
+                pixel_size_um: Some(3.76),
+                sensor_width_px: Some(6248),
+                sensor_height_px: Some(4176),
+                color_kind: Some(ColorKind::Mono),
+                decision_revision: 0,
+                state: AssociationState::Confirmed,
+                provenance: Provenance::User,
+            };
+            let rig = library.catalog().save_equipment(&rig, None).await.expect("rig").id;
+            let query = TargetQuery { text: Some("NGC 7000".into()), cone: None, limit: 1 };
+            let target =
+                library.search_targets(&query).await.expect("seed search").remove(0).candidate;
+            library.catalog().record_seed_target(&target).await.expect("save the Target");
+            let input = ProjectInput {
+                name: "NGC 7000 HOO".into(),
+                notes: None,
+                subjects: vec![SubjectInput { target_id: target.id, name: None }],
+                rig_ids: vec![rig],
+                goals: Vec::new(),
+            };
+            library.catalog().create_project(&input).await.expect("create the Project").id
+        })
+    }
+
+    /// `root` registered as an active Captures location, an archive destination.
+    fn destination(&self, root: &Path) -> Uuid {
+        let library = self.library();
+        let root = NativePath::from_path(&std::fs::canonicalize(root).expect("canonical root"));
+        tauri::async_runtime::block_on(async move {
+            library
+                .register_location(root, "Archive".into(), LocationRole::Captures)
+                .await
+                .expect("register the destination")
+                .id
+        })
+    }
 }
 
 fn unix_path(path: &str) -> Value {
     json!({ "encoding": "unix-bytes", "payload": path.as_bytes() })
+}
+
+/// Review Clean up and confirm it with nothing selected, as the review's
+/// revisions say; returns the review and the report.
+fn clean_up_nothing(shell: &Shell, project: Uuid) -> (Value, Value) {
+    let review =
+        shell.invoke("project_clean_up_review", &json!({ "projectId": project })).expect("review");
+    let report = shell
+        .invoke(
+            "project_clean_up",
+            &json!({ "request": {
+                "projectId": project,
+                "desiredRevision": review["desiredRevision"],
+                "generation": review["generation"],
+                "selected": [],
+            } }),
+        )
+        .expect("clean up");
+    (review, report)
 }
 
 /// Every refusal below: the request names a record the catalog doesn't hold.
@@ -455,4 +535,99 @@ fn view_previous_family_lists_leftovers_and_takes_a_resolution() {
     let pending =
         shell.invoke("project_review_previous_item", &review("pending")).expect_err("pending");
     assert!(pending.is_string(), "Tauri refuses a pending review itself: {pending}");
+}
+
+#[test]
+fn clean_up_family_reviews_and_records_the_step() {
+    let shell = Shell::new();
+    let unknown = Uuid::new_v4();
+    shell.refuses(
+        "project_clean_up_review",
+        &json!({ "projectId": unknown }),
+        "not_found",
+        unknown,
+    );
+    shell.refuses(
+        "project_clean_up",
+        &json!({ "request": {
+            "projectId": unknown,
+            "desiredRevision": 1,
+            "generation": null,
+            "selected": [unix_path("View/Lights/frame.fits")],
+        } }),
+        "not_found",
+        unknown,
+    );
+
+    let project = shell.open_project();
+    let (review, report) = clean_up_nothing(&shell, project);
+    assert_eq!(review["projectId"], json!(project), "{review}");
+    assert_eq!(review["entries"], json!([]), "a Project with no View offers nothing: {review}");
+    assert_eq!(report["record"]["step"], "clean_up", "{report}");
+    assert_eq!(report["record"]["outcome"], "finished", "nothing was offered: {report}");
+    assert_eq!((&report["results"], &report["viewRemoved"]), (&json!([]), &json!(false)));
+}
+
+#[test]
+fn trash_family_reviews_and_records_the_step() {
+    let shell = Shell::new();
+    let unknown = Uuid::new_v4();
+    shell.refuses("project_trash_review", &json!({ "projectId": unknown }), "not_found", unknown);
+    let trash = |project: Uuid, digest: &Value| {
+        json!({ "request": {
+            "projectId": project,
+            "digest": digest,
+            "ticked": ["processing_files"],
+        } })
+    };
+    let stale = json!("0".repeat(64));
+    shell.refuses("project_wrap_up_trash", &trash(unknown, &stale), "not_found", unknown);
+
+    let project = shell.open_project();
+    clean_up_nothing(&shell, project);
+    let review =
+        shell.invoke("project_trash_review", &json!({ "projectId": project })).expect("review");
+    let groups: Vec<&Value> =
+        review["groups"].as_array().expect("rows").iter().map(|row| &row["group"]).collect();
+    assert_eq!(groups, ["rejected_frames", "processing_files", "duplicate_copies"], "{review}");
+    // The digest is the proof the user saw this sheet.
+    shell.refuses("project_wrap_up_trash", &trash(project, &stale), "conflict", project);
+    let report =
+        shell.invoke("project_wrap_up_trash", &trash(project, &review["digest"])).expect("trash");
+    assert_eq!(report["record"]["step"], "trash", "{report}");
+    assert_eq!(report["record"]["outcome"], "finished", "nothing was offered: {report}");
+    assert_eq!((&report["moved"], &report["refused"]), (&json!([]), &json!([])));
+}
+
+#[test]
+fn wrap_up_archive_review_family_lays_out_for_a_destination() {
+    let shell = Shell::new();
+    let archive = tempfile::tempdir().expect("archive root");
+    let destination = shell.destination(archive.path());
+    let unknown = Uuid::new_v4();
+    let asked = |project: Uuid, at: Uuid| json!({ "projectId": project, "destination": at });
+    shell.refuses(
+        "project_wrap_up_archive_review",
+        &asked(unknown, destination),
+        "not_found",
+        unknown,
+    );
+
+    let project = shell.open_project();
+    // An unknown destination also names the Project the review was for.
+    shell.refuses(
+        "project_wrap_up_archive_review",
+        &asked(project, Uuid::new_v4()),
+        "not_found",
+        project,
+    );
+    let review = shell
+        .invoke("project_wrap_up_archive_review", &asked(project, destination))
+        .expect("review");
+    assert_eq!(
+        (&review["projectId"], &review["destination"]),
+        (&json!(project), &json!(destination))
+    );
+    assert_eq!(review["sessions"], json!([]), "the Project holds no session: {review}");
+    assert!(review["digest"].as_str().is_some_and(|digest| digest.len() == 64), "{review}");
 }

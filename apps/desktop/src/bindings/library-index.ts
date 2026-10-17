@@ -488,7 +488,8 @@ export const commands = {
 	 * 
 	 *  # Errors
 	 *  `Conflict` for a stale revision; `NotFound` for an unknown Project or
-	 *  application profile; `InvalidInput` for a Project that isn't open.
+	 *  application profile; `InvalidInput` for a Project that isn't open or a
+	 *  relative processing location, which is not stored.
 	 */
 	projectSetViewSettings: (projectId: string, expectedRevision: number, settings: ProjectViewSettings_Deserialize) => typedError<ProjectDesired_Serialize, ErrorResponse>(__TAURI_INVOKE("project_set_view_settings", { projectId, expectedRevision, settings })),
 	/**
@@ -584,6 +585,63 @@ export const commands = {
 	basis: ProjectBasis_Serialize,
 	goals: GoalProgress[],
 } | null, ErrorResponse>(__TAURI_INVOKE("project_closed_snapshot", { projectId })),
+	/**
+	 *  Clean up as it opens (STO-FR-01): every entry still in the installed
+	 *  View, Copies ticked and Symlinks unticked, and every file
+	 *  `View (previous)/` still holds, unticked. Read-only; it hashes nothing.
+	 * 
+	 *  # Errors
+	 *  `InvalidInput` for a Project that is not open; `NotFound` for an unknown
+	 *  Project.
+	 */
+	projectCleanUpReview: (projectId: string) => typedError<CleanUpReview, ErrorResponse>(__TAURI_INVOKE("project_clean_up_review", { projectId })),
+	/**
+	 *  Clean up the rows the user confirmed (STO-FR-04/05), echoing the
+	 *  review's revisions: a placed link is deleted, a copy or leftover goes to
+	 *  the OS Trash, each once it re-verifies, and anything else stays, named.
+	 *  Records the step: Finished, or Skipped when nothing was selected though
+	 *  something was offered.
+	 * 
+	 *  # Errors
+	 *  `Conflict` when the Project or its View moved since the review;
+	 *  `InvalidInput` for a row the review doesn't offer, while Wrap up doesn't
+	 *  open or out of order; `NotFound` for an unknown Project.
+	 */
+	projectCleanUp: (request: CleanUpRequest) => typedError<CleanUpReport, ErrorResponse>(__TAURI_INVOKE("project_clean_up", { request })),
+	/**
+	 *  The Trash step as it opens (PRJ-FR-15, STO-FR-14): its three rows with
+	 *  what each moves, keeps and refuses, the OS Trash's refusals included, and
+	 *  the digest Trash echoes. It hashes the `Processing/` files; it moves and
+	 *  records nothing.
+	 * 
+	 *  # Errors
+	 *  `InvalidInput` for a Project that is not open; `NotFound` for an unknown
+	 *  Project.
+	 */
+	projectTrashReview: (projectId: string) => typedError<TrashReview, ErrorResponse>(__TAURI_INVOKE("project_trash_review", { projectId })),
+	/**
+	 *  Move the rows the user ticked to the OS Trash (D-W43: an unticked row
+	 *  moves nothing), each copy re-verified first, and record the step:
+	 *  Finished, or Skipped when nothing was ticked though something was
+	 *  offered. Returns what moved and every approved item that stayed.
+	 * 
+	 *  # Errors
+	 *  `Conflict` when the review moved since the user saw it; `InvalidInput`
+	 *  while Wrap up doesn't open or before Clean up is recorded; `NotFound` for
+	 *  an unknown Project; journal and catalog failures.
+	 */
+	projectWrapUpTrash: (request: TrashRequest) => typedError<TrashReport, ErrorResponse>(__TAURI_INVOKE("project_wrap_up_trash", { request })),
+	/**
+	 *  Archive's review of the Project's sessions for `destination`
+	 *  (STO-FR-06/13): every file's from and to path, the sessions other open
+	 *  Projects keep, and the kept-View links the archive repoints. Close
+	 *  project…'s archive selection echoes its digest. Read-only.
+	 * 
+	 *  # Errors
+	 *  `InvalidInput` for a Project that is not open or a retired destination;
+	 *  `NotFound` for an unknown Project or destination.
+	 */
+	projectWrapUpArchiveReview: (projectId: string, destination: string) => typedError<ArchiveReview, ErrorResponse>(__TAURI_INVOKE("project_wrap_up_archive_review", { projectId, destination })),
 	/**
 	 *  Archive's review of the selected sessions for `destination`. Read-only.
 	 * 
@@ -2342,6 +2400,65 @@ export type Classification = {
 	kind: InputKind,
 	/**  `None` for a raw frame. */
 	master: MasterEvidence | null,
+};
+
+/**  One Clean up row (STO-FR-01/02). */
+export type CleanUpEntry = {
+	/**  Relative to the Project folder: below `View/` or `View (previous)/`. */
+	path: NativePathWire,
+	kind: CleanUpEntryKind,
+	/**  A link's size is never a promised reclaim. */
+	sizeBytes: number,
+	/**  Copies are ticked; Symlinks and leftovers are not. */
+	preselected: boolean,
+};
+
+/**  What one Clean up row is. */
+export type CleanUpEntryKind = 
+/**  An entry Apply placed in `View/`, by its manifest seq. */
+{ kind: "placed"; seq: number; placement: EntryPlacement } | 
+/**  A file `View (previous)/` still holds. */
+{ kind: "leftover"; reason: PreviousItemReason };
+
+export type CleanUpOutcome = 
+/**  A link `PlateVault` placed, deleted after its no-follow check. */
+{ outcome: "deleted" } | 
+/**  A copy or leftover that went to the OS Trash. */
+{ outcome: "trashed" } | 
+/**  Left in place, naming why. */
+{ outcome: "kept"; reason: ItemReason };
+
+export type CleanUpReport = {
+	record: WrapUpRecord,
+	/**  One result per selected row. */
+	results: CleanUpResult[],
+	/**  `View/` held nothing more, so it was removed and its manifest retired. */
+	viewRemoved: boolean,
+};
+
+/**  The rows the user confirmed, by path; anything else stays. */
+export type CleanUpRequest = {
+	projectId: string,
+	desiredRevision: number,
+	generation: number | null,
+	selected: NativePathWire[],
+};
+
+export type CleanUpResult = {
+	path: NativePathWire,
+	outcome: CleanUpOutcome,
+};
+
+/**
+ *  The Clean up step as it opens. `Processing/`, `Output/`, originals and
+ *  library frames are never listed.
+ */
+export type CleanUpReview = {
+	projectId: string,
+	desiredRevision: number,
+	/**  The installed View's generation, if there is one. */
+	generation: number | null,
+	entries: CleanUpEntry[],
 };
 
 export type CloseReport = CloseReport_Serialize | CloseReport_Deserialize;
@@ -7277,6 +7394,20 @@ export type Tonight_Serialize = {
 	unavailableReason: PlanningUnknownReason | null,
 };
 
+/**  One item a Trash row moves under its approval. */
+export type TrashCandidate = {
+	/**
+	 *  The frame's capture key, or the duplicate copy's asset id; `None` for
+	 *  a `Processing/` file.
+	 */
+	id: string | null,
+	/**  The absolute paths it moves: every copy of a rejected frame, else one. */
+	files: NativePathWire[],
+	sizeBytes: number,
+	/**  The copy a duplicate keeps, named. */
+	kept: NativePathWire | null,
+};
+
 /**  One stay of a frame in the OS Trash. */
 export type TrashEpisode = {
 	assetId: string,
@@ -7286,6 +7417,66 @@ export type TrashEpisode = {
 	trashedAt: string,
 	/**  When a rescan found the recorded path again and the record left Trashed. */
 	putBackAt: string | null,
+};
+
+/**  The three rows of the Trash step (PRJ-FR-15). */
+export type TrashGroup = 
+/**
+ *  "Move N rejected frames to Trash (size)": every copy of each
+ *  library-Unusable frame, or none.
+ */
+"rejected_frames" | 
+/**  "Move N processing files to Trash (size)": `Processing/` files. */
+"processing_files" | 
+/**  "Move N duplicate copies to Trash (size)": extra byte-identical copies. */
+"duplicate_copies";
+
+/**  One Trash row: what it moves, its size and what it refuses. */
+export type TrashGroupOffer = {
+	group: TrashGroup,
+	items: TrashCandidate[],
+	/**  The expected reclaim. */
+	sizeBytes: number,
+	refused: TrashRefusal[],
+	/**  The recommended rows are preselected; none of these is. */
+	preselected: boolean,
+};
+
+/**  An item a row lists as not selectable, with its reason. */
+export type TrashRefusal = {
+	id: string | null,
+	path: NativePathWire,
+	reason: ItemReason,
+};
+
+export type TrashReport = {
+	record: WrapUpRecord,
+	/**  The files that reached the OS Trash. */
+	moved: NativePathWire[],
+	/**  Every approved item that stayed, with its reason. */
+	refused: TrashRefusal[],
+};
+
+/**  The rows the user ticked (D-W43): an unticked row moves nothing. */
+export type TrashRequest = {
+	projectId: string,
+	digest: string,
+	ticked: TrashGroup[],
+};
+
+/**  The Trash step as it opens. */
+export type TrashReview = {
+	projectId: string,
+	desiredRevision: number,
+	/**  SHA-256 of the offers; Trash refuses a sheet that no longer matches. */
+	digest: string,
+	/**  One row per [`TrashGroup`], in order. */
+	groups: TrashGroupOffer[],
+	/**
+	 *  Masters `Processing/` offered that stay protected; adopt one first
+	 *  (CAL-FR-06).
+	 */
+	protectedMasters: NativePathWire[],
 };
 
 /**  A Trashed frame as the Sessions "Trashed" filter lists it. */

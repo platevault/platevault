@@ -9,14 +9,14 @@
 //! under its `project inputs` block. Every write names the expected Project
 //! revision and returns the Project's desired state after its transaction
 //! commits. No command touches a file or the View: each change reads as
-//! pending until Apply. Adding sessions and making, splitting, renaming or
-//! marking a group run the core rules (placement, distinct group folders);
-//! removing or moving sessions, removing an empty group, frame choices and the
-//! View step's settings are the catalog's own edits. Group names arrive as
-//! text and the core builds the validated [`platevault_core::GroupName`];
-//! keyword names deserialize through their validating constructor. Failures
-//! follow the library [`platevault_core::ErrorResponse`] conventions, naming
-//! the Project.
+//! pending until Apply. Adding sessions, making, splitting, renaming or
+//! marking a group and the View step's settings run the core rules
+//! (placement, distinct group folders, an absolute processing location);
+//! removing or moving sessions, removing an empty group and frame choices are
+//! the catalog's own edits. Group names arrive as text and the core builds the
+//! validated [`platevault_core::GroupName`]; keyword names deserialize through
+//! their validating constructor. Failures follow the library
+//! [`platevault_core::ErrorResponse`] conventions, naming the Project.
 
 use std::sync::Arc;
 
@@ -247,7 +247,8 @@ pub async fn project_remove_group(
 ///
 /// # Errors
 /// `Conflict` for a stale revision; `NotFound` for an unknown Project or
-/// application profile; `InvalidInput` for a Project that isn't open.
+/// application profile; `InvalidInput` for a Project that isn't open or a
+/// relative processing location, which is not stored.
 #[tauri::command]
 #[specta::specta]
 pub async fn project_set_view_settings(
@@ -257,7 +258,6 @@ pub async fn project_set_view_settings(
     settings: ProjectViewSettings,
 ) -> Reply<ProjectDesired> {
     library
-        .catalog()
         .set_project_view_settings(project_id, expected_revision, &settings)
         .await
         .map_err(fail(Some(project_id)))

@@ -155,6 +155,11 @@ macro_rules! library_commands {
             crate::commands::project_wrap_up::project_duplicate,
             crate::commands::project_wrap_up::project_reopen_wrap_up_step,
             crate::commands::project_wrap_up::project_closed_snapshot,
+            crate::commands::project_wrap_up::project_clean_up_review,
+            crate::commands::project_wrap_up::project_clean_up,
+            crate::commands::project_wrap_up::project_trash_review,
+            crate::commands::project_wrap_up::project_wrap_up_trash,
+            crate::commands::project_wrap_up::project_wrap_up_archive_review,
             // sessions archive (064 LIB-FR-17, 071 STO-FR-13)
             crate::commands::sessions_archive::sessions_archive_review,
             crate::commands::sessions_archive::sessions_archive,

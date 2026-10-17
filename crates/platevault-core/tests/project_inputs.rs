@@ -469,7 +469,7 @@ async fn manual_groups_names_panels_and_keywords_hold() {
     let mut settings = marked.settings.clone();
     settings.keywords = Some(GroupKeywords::new("SET", "TILE").unwrap());
     let keyed = world
-        .catalog()
+        .library
         .set_project_view_settings(world.project, marked.revision, &settings)
         .await
         .unwrap();
@@ -519,6 +519,36 @@ async fn manual_groups_names_panels_and_keywords_hold() {
         .unwrap();
     let member = moved.sessions.iter().find(|member| member.session_id == gain.id).unwrap();
     assert_eq!((member.group_id, member.placement), (user.id, SessionPlacement::User));
+}
+
+/// PRJ-FR-28, PREP-FR-06 (astro-plan-27zo7): the View step refuses a relative
+/// processing location where the user chose it, naming it, and stores
+/// nothing; an absolute one saves.
+#[tokio::test]
+async fn a_relative_processing_location_is_refused_and_an_absolute_one_saves() {
+    let world = world().await;
+    let before = desired(&world).await;
+    let mut settings = before.settings.clone();
+    settings.parent = Some(NativePath::from_path(std::path::Path::new("Work/Elsewhere")));
+    let error = world
+        .library
+        .set_project_view_settings(world.project, before.revision, &settings)
+        .await
+        .unwrap_err();
+    assert!(refusal(&error).contains("processing location Work/Elsewhere"), "{error}");
+    let after = desired(&world).await;
+    assert_eq!(after.revision, before.revision, "a refusal commits no revision");
+    assert_eq!(after.settings, before.settings, "and stores nothing");
+
+    let elsewhere = world.temp.path().join("Elsewhere");
+    settings.parent = Some(NativePath::from_path(&elsewhere));
+    let saved = world
+        .library
+        .set_project_view_settings(world.project, before.revision, &settings)
+        .await
+        .unwrap();
+    assert_eq!(saved.revision, before.revision + 1);
+    assert_eq!(desired(&world).await.settings, settings, "the absolute location is stored");
 }
 
 // ── Goals and counts ─────────────────────────────────────────────────────────
@@ -662,7 +692,7 @@ async fn edits_never_touch_the_view_and_read_as_pending_changes_by_source() {
     let mut settings = state.settings.clone();
     settings.mode = ViewMode::Copies;
     world
-        .catalog()
+        .library
         .set_project_view_settings(world.project, state.revision, &settings)
         .await
         .unwrap();
@@ -862,7 +892,7 @@ async fn discard_reverts_only_the_projects_own_edits() {
     settings.mode = ViewMode::Copies;
     settings.keywords = Some(GroupKeywords::new("SET", "TILE").unwrap());
     let state = world
-        .catalog()
+        .library
         .set_project_view_settings(world.project, state.revision, &settings)
         .await
         .unwrap();
