@@ -96,12 +96,12 @@ describe('svg/no-raw-svg-colour', () => {
     expect(diagnostics[0]?.message).toContain('"fill"');
   });
 
-  it('flags raw colors in template substitutions but allows nested theme choices', () => {
+  it('allows paint server IDs in templates with conditional color-name parts', () => {
     const diagnostics = lint(
       "const svg = <svg fill={`url(#paint-${active ? '#fff' : 'red'})`} stroke={`url(#${active ? 'currentColor' : 'var(--pv-accent)'})`} />;",
     );
 
-    expect(diagnostics).toHaveLength(2);
+    expect(diagnostics).toHaveLength(0);
   });
 
   it('allows conditionals selecting theme values and currentColor', () => {
@@ -173,6 +173,19 @@ describe('svg/no-raw-svg-colour', () => {
 
   it('flags color on foreignObject inside SVG', () => {
     const diagnostics = lint('<svg><foreignObject color="red" /></svg>');
+
+    expect(diagnostics).toHaveLength(1);
+  });
+  it('allows color-named values in paint-server URL substitutions', () => {
+    const diagnostics = lint(
+      "const svg = <svg fill={`url(#${dark ? 'red' : 'blue'})`} />;",
+    );
+
+    expect(diagnostics).toHaveLength(0);
+  });
+
+  it('flags a raw hex color assembled in a template substitution', () => {
+    const diagnostics = lint('const svg = <svg fill={`#${hex}`} />;');
 
     expect(diagnostics).toHaveLength(1);
   });

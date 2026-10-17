@@ -102,8 +102,11 @@ function reportRawColorsInExpression(expression, report) {
           report();
         }
       }
-      for (const interpolation of expression.expressions) {
-        reportRawColorsInExpression(interpolation, report);
+      for (let index = 0; index < expression.expressions.length; index += 1) {
+        const priorText = expression.quasis[index]?.value.cooked ?? expression.quasis[index]?.value.raw ?? '';
+        if (!/url\([^)]*$/i.test(priorText)) {
+          reportRawColorsInExpression(expression.expressions[index], report);
+        }
       }
       return;
     case 'ChainExpression':
