@@ -223,7 +223,7 @@
       "flowStep": "E4",
       "owner": "069-application-handoff",
       "journeyStep": "J23/S10, J23/S11, J24/S14, J24/S16",
-      "spec": "069-application-handoff PREP-FR-08, PREP-FR-09, PREP-AC-06; 064-library-inventory LIB-FR-12; D-W93, D-W98, D-W100; HARNESS-V5-FEEDBACK-R1.md Round 9 C15 (PREP-FR-03 conflicts, J23/G9)",
+      "spec": "069-application-handoff PREP-FR-03, PREP-FR-08, PREP-FR-09, PREP-AC-06; 064-library-inventory LIB-FR-12, LIB-FR-20; D-W93, D-W98, D-W100, D-W122; HARNESS-V5-FEEDBACK-R1.md Round 9 C15",
       "action": "Open the Apply sheet and read its Corrected values section, which lists the corrections the held sessions recorded at ingestion, then Apply the reviewed View.",
       "expect": "The Apply sheet gives the count of corrected values (\"N corrected values\") and lists each with its session, field, header value and corrected value, naming whether the application reads them through its configuration or as isolated patched copies. Apply delivers every already-recorded correction by that route.",
       "negative": "Apply offers no per-value choice and creates or changes no catalog correction. No original or symlink target is patched, and no correction is claimed as delivered while the tool reads the original value."
@@ -439,7 +439,7 @@
       "flowStep": "Session intake: Target → Rig → Review, Finish review (D-W78)",
       "owner": "064-library-inventory",
       "journeyStep": "J19/S8, J19/S9, J19/S10, J31/S3, J31/S5a, J31/S7, J37/S6",
-      "spec": "064-library-inventory LIB-FR-05, LIB-FR-12, LIB-FR-20, LIB-FR-23, LIB-FR-24; 067-frame-review PIX-FR-18; D-W78, D-W101, D-W105; HARNESS-V5-FEEDBACK-R1.md Round 9 C15",
+      "spec": "064-library-inventory LIB-FR-05, LIB-FR-12, LIB-FR-20, LIB-FR-23, LIB-FR-24; 067-frame-review PIX-FR-18; D-W78, D-W101, D-W105, D-W122; HARNESS-V5-FEEDBACK-R1.md Round 9 C15",
       "action": "Import or open a session, confirm its Target and rig, read the recorded and corrected values on those steps, review its frames, then Finish review.",
       "expect": "The intake proceeds Target → Rig → Review. The Target and Rig steps show a Corrections table (Field, Recorded, Corrected; provisional copy, from the prototype) for each value that differs from the recorded one. Finish review is available only when no Unreviewed frame remains; it marks the session Ready, and only Ready sessions can be suggested or added to a Project.",
       "negative": "No session becomes Ready with unresolved Target, rig or Unreviewed frames, and no Project Review step exists. Metadata corrections are not decided in Apply."
