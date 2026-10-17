@@ -43,6 +43,19 @@ pub fn ejectable_roots(roots: &[WatchedRoot]) -> HashMap<Uuid, (PathBuf, FolderI
         .filter_map(|root| Some((root.location_id, (root.root.clone(), root.folder?))))
         .collect()
 }
+#[cfg(any(windows, test))]
+fn start_optional<T>(start: impl FnOnce() -> Result<T, String>) -> Option<T> {
+    start()
+        .inspect_err(|error| {
+            tracing::error!(
+                %error,
+                "removal notices did not start; PlateVault runs without them, so safely \
+                 removing a Captures drive no longer releases the new-captures watcher on \
+                 it, and Windows reports the drive in use until PlateVault is closed"
+            );
+        })
+        .ok()
+}
 
 /// The notice window and the forwarding to discovery, on Windows only.
 #[cfg(windows)]
@@ -73,33 +86,37 @@ mod notices {
         /// removed is lost.
         #[must_use = "dropping it ends the removal notices"]
         pub fn start<R: Runtime>(app: &AppHandle<R>) -> Option<Self> {
-            Self::try_start(app)
-                .inspect_err(|error| {
-                    tracing::error!(
-                        %error,
-                        "removal notices did not start; PlateVault runs without them, so safely \
-                         removing a Captures drive no longer releases the new-captures watcher on \
-                         it, and Windows reports the drive in use until PlateVault is closed"
-                    );
-                })
-                .ok()
+            Self::start_with(app, RemovalNotices::start)
         }
 
-        fn try_start<R: Runtime>(app: &AppHandle<R>) -> Result<Self, String> {
+        fn start_with<R: Runtime>(
+            app: &AppHandle<R>,
+            start_notices: impl FnOnce(
+                Box<dyn FnMut(&Uuid, Removal) + Send>,
+            ) -> std::io::Result<RemovalNotices<Uuid>>,
+        ) -> Option<Self> {
+            start_optional(|| Self::try_start_with(app, start_notices))
+        }
+
+        fn try_start_with<R: Runtime>(
+            app: &AppHandle<R>,
+            start_notices: impl FnOnce(
+                Box<dyn FnMut(&Uuid, Removal) + Send>,
+            ) -> std::io::Result<RemovalNotices<Uuid>>,
+        ) -> Result<Self, String> {
             let roots = app
                 .try_state::<CaptureWatch>()
                 .ok_or("removal notices start once the capture watch is managed")?
                 .subscribe_roots();
             let handle = app.clone();
-            let notices = RemovalNotices::start(move |location: &Uuid, removal| {
+            let notices = start_notices(Box::new(move |location: &Uuid, removal| {
                 forward(&handle, *location, removal);
-            })
+            }))
             .map_err(|error| format!("cannot start removal notices: {error}"))?;
             tauri::async_runtime::spawn(follow(roots, notices.roots()));
             Ok(Self { _notices: notices })
         }
     }
-
     /// Tell discovery what Windows reported. A requested removal returns once
     /// discovery holds no handle on the location's volume, or once discovery
     /// is asked to stop.
@@ -165,17 +182,22 @@ mod tests {
         );
     }
 
-    /// Start-up goes on when the removal notices cannot start: `start` logs
-    /// why and gives the shell nothing to hold, instead of an error that
-    /// would end `run`. No capture watch is managed here, which fails the
-    /// start before any window exists, as a refused window does after.
-    #[cfg(windows)]
     #[test]
-    fn start_up_goes_on_when_removal_notices_cannot_start() {
-        let app = tauri::test::mock_builder()
-            .build(tauri::test::mock_context(tauri::test::noop_assets()))
-            .expect("build mock app");
+    fn failed_notice_start_is_logged_and_optional() {
+        use std::io;
+        use std::sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        };
 
-        assert!(EjectNotices::start(app.handle()).is_none());
+        let attempts = Arc::new(AtomicUsize::new(0));
+        let attempted = Arc::clone(&attempts);
+        let notices = start_optional(move || {
+            attempted.fetch_add(1, Ordering::SeqCst);
+            Err::<(), _>(io::Error::other("injected notice-window creation failure").to_string())
+        });
+
+        assert!(notices.is_none(), "startup continues without failed notices");
+        assert_eq!(attempts.load(Ordering::SeqCst), 1, "creation is attempted only once");
     }
 }

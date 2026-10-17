@@ -112,7 +112,6 @@ impl<K: Clone + Eq + Hash + Send + 'static> RemovalNotices<K> {
         let (queue, queued) = mpsc::channel();
         let (created, window) = mpsc::sync_channel(1);
         let removal: Box<dyn FnMut(&K, Removal) + Send> = Box::new(removal);
-        let retry = u32::try_from(retry.as_millis()).unwrap_or(u32::MAX);
         let thread = thread::Builder::new()
             .name("removal-notices".into())
             .spawn(move || run(queued, removal, retry, &created))?;
