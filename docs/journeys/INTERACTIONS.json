@@ -223,10 +223,10 @@
       "flowStep": "E4",
       "owner": "069-application-handoff",
       "journeyStep": "J23/S10, J23/S11, J24/S14, J24/S16",
-      "spec": "069-application-handoff PREP-FR-03, PREP-FR-08, PREP-FR-09, PREP-AC-06; 064-library-inventory LIB-FR-12, LIB-FR-20; D-W93, D-W98, D-W100, D-W122; HARNESS-V5-FEEDBACK-R1.md Round 9 C15",
-      "action": "Open the Apply sheet and read its Corrected values section, which lists the corrections the held sessions recorded at ingestion, then Apply the reviewed View.",
-      "expect": "The Apply sheet gives the count of corrected values (\"N corrected values\") and lists each with its session, field, header value and corrected value, naming whether the application reads them through its configuration or as isolated patched copies. Apply delivers every already-recorded correction by that route.",
-      "negative": "Apply offers no per-value choice and creates or changes no catalog correction. No original or symlink target is patched, and no correction is claimed as delivered while the tool reads the original value."
+      "spec": "069-application-handoff PREP-FR-03, PREP-FR-08, PREP-FR-09, PREP-FR-20, PREP-FR-21, PREP-AC-06, PREP-AC-39; 064-library-inventory LIB-FR-12, LIB-FR-20; D-W93, D-W98, D-W100, D-W122, D-W123; HARNESS-V5-FEEDBACK-R1.md Round 9 C15",
+      "action": "Open the Apply sheet and read its Corrected values section, which lists corrections recorded at intake, then Apply the reviewed View.",
+      "expect": "The Apply sheet gives the corrected-value count and lists each session, field, header value, corrected value and route. J23/S11 reads the patched FITS copy through PlateVault's metadata reader; this verifies the copy, not whether the selected tool consumes the value. Whether Apply may report delivery to a generic application without per-tool capability evidence remains open (D-W123).",
+      "negative": "Apply offers no per-value choice and creates or changes no catalog correction. No original or symlink target is patched. Under PREP-FR-03, a correction is not reported as delivered while the tool still reads the source value."
     },
     {
       "flowStep": "F1",
