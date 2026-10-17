@@ -102,7 +102,7 @@ function zColumns(m: Messages): Column<[token: string, use: string]>[] {
   return [
     { id: "token", header: m.ds_token_column(), rowHeader: true, sortValue: ([token]) => token, cell: ([token]) => <span className="font-mono">{token}</span> },
     { id: "value", header: m.ds_value_column(), align: "right", sortValue: ([token]) => Number.parseFloat(rootToken(token)), cell: ([token]) => rootToken(token) },
-    { id: "use", header: m.ds_use_column(), sortValue: ([, use]) => use, cell: ([, use]) => use },
+    { id: "use", header: m.ds_use_column(), truncate: true, sortValue: ([, use]) => use, cell: ([, use]) => use },
   ]
 }
 

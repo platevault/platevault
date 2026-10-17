@@ -5536,6 +5536,7 @@
   "catalogue_pickers_state_lookup_off": "consulta desligada",
   "catalogue_pickers_night_other": "outra noite (Hoje ativado)",
   "catalogue_pickers_night_week": "passo de uma semana",
+  "catalogue_pickers_night_week_jumps": "passos de uma noite + saltos de uma semana",
   "catalogue_pickers_site_missing": "local salvo não existe mais",
   "catalogue_pickers_targets_columns": "Escolha de colunas de Alvos",
   "catalogue_pickers_review_display": "revisão de frames",

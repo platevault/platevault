@@ -40,6 +40,7 @@ function NightPickers() {
   const [night, setNight] = useState(today)
   const [other, setOther] = useState(shiftNight(today, 3))
   const [week, setWeek] = useState(today)
+  const [jump, setJump] = useState(today)
   return (
     <ComponentSection components={["NightPicker"]} description={m.catalogue_pickers_night_desc()} level={3}>
       <div className="space-y-3">
@@ -51,6 +52,9 @@ function NightPickers() {
         </Specimen>
         <Specimen caption={m.catalogue_pickers_night_week()}>
           <NightPicker value={week} onChange={setWeek} today={today} weekStep />
+        </Specimen>
+        <Specimen caption={m.catalogue_pickers_night_week_jumps()}>
+          <NightPicker value={jump} onChange={setJump} today={today} weekJumps />
         </Specimen>
         <Specimen caption={m.catalogue_pickers_state_disabled()}>
           <NightPicker value={other} onChange={setOther} today={today} disabled />

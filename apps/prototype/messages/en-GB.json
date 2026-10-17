@@ -5156,6 +5156,7 @@
   "catalogue_pickers_state_lookup_off": "lookup off",
   "catalogue_pickers_night_other": "another night (Today enabled)",
   "catalogue_pickers_night_week": "week step",
+  "catalogue_pickers_night_week_jumps": "night steps + week jumps",
   "catalogue_pickers_site_missing": "saved site no longer exists",
   "catalogue_pickers_targets_columns": "Targets column choice",
   "catalogue_pickers_review_display": "frame review",
