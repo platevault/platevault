@@ -21,8 +21,8 @@
 //! Mirrors `ingest_sessions_integration.rs`'s harness (`support::setup()`,
 //! `build_applied_plan`, `publish_applied`) — this test's only addition is
 //! seeding `plans.chosen_framing_id` before publishing the apply-completed
-//! event, simulating what `inbox.confirm` + `attribution::apply_chosen_
-//! attribution` already wrote at confirm time.
+//! event, simulating what `inbox.confirm` (`attribution::PendingAttribution::
+//! write`) already wrote at confirm time.
 
 use std::io::Write;
 use std::path::Path;
@@ -125,7 +125,7 @@ async fn build_applied_plan_with_chosen_framing(
         .await
         .unwrap();
 
-    // Simulates what `inbox.confirm` + `attribution::apply_chosen_attribution`
+    // Simulates what `inbox.confirm` (`attribution::PendingAttribution::write`)
     // already wrote at confirm time (F-Framing-10), the two-phase carrier this
     // test proves the apply side of: the pick is recorded on the plan well
     // before any session exists, and only takes effect once the plan applies.

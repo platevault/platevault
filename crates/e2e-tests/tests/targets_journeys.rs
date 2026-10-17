@@ -993,8 +993,10 @@ async fn targets_ui_identity_columns_stay_pinned_while_table_scrolls() -> anyhow
 
 /// Reads the app's REAL persisted `detailDock` entry for one dock, straight
 /// out of `localStorage` — the bytes, not a React value. Returns
-/// `(placement, width)`.
-async fn read_dock_pref(app: &E2eApp, dock_id: &str) -> anyhow::Result<(String, i64)> {
+/// `(placement, width)`, or `None` when no entry for `dock_id` is stored at
+/// all. Only that `None` says anything about persistence; an `Err` means the
+/// read itself failed or the entry is malformed.
+async fn read_dock_pref(app: &E2eApp, dock_id: &str) -> anyhow::Result<Option<(String, i64)>> {
     let script = format!(
         "var raw = localStorage.getItem('alm-preferences');\
          if (!raw) {{ return null; }}\
@@ -1008,7 +1010,9 @@ async fn read_dock_pref(app: &E2eApp, dock_id: &str) -> anyhow::Result<(String, 
         .context("failed to read the persisted detailDock preference")?
         .convert()
         .context("the detailDock preference did not deserialise")?;
-    anyhow::ensure!(!v.is_null(), "no persisted detailDock entry for {dock_id:?} at all");
+    if v.is_null() {
+        return Ok(None);
+    }
     let placement =
         v.get(0).and_then(Value::as_str).context("persisted placement was not a string")?;
     // Deliberately NOT `Number(dock.width)` on the JS side and NOT a lossy
@@ -1022,7 +1026,7 @@ async fn read_dock_pref(app: &E2eApp, dock_id: &str) -> anyhow::Result<(String, 
     let width = v.get(1).and_then(Value::as_i64).with_context(|| {
         format!("persisted width for {dock_id:?} was null or not a number: {v:?}")
     })?;
-    Ok((placement.to_string(), width))
+    Ok(Some((placement.to_string(), width)))
 }
 
 /// The rendered width of the side dock, as the browser actually lays it out.
@@ -1120,7 +1124,40 @@ async fn pin_and_widen_dock(app: &E2eApp) -> anyhow::Result<(String, i64)> {
         "the dock resize handle disappeared before the drag could be dispatched"
     );
 
-    read_dock_pref(app, "targets").await
+    read_dock_pref(app, "targets")
+        .await
+        .context("reading the dock preference before the restart failed")?
+        .context("the dock preference was never written to localStorage before the restart")
+}
+
+/// The `detailDock` entry for `dock_id` exactly as it sits in the raw
+/// `alm-preferences` value — e.g. `"targets":{"placement":"side","width":560}`
+/// — so the on-disk probe can look for the bytes a restart must preserve.
+/// Fails unless re-serialising the parsed entry reproduces a slice of the raw
+/// value, which is what makes the fragment a valid search key.
+async fn persisted_dock_fragment(app: &E2eApp, dock_id: &str) -> anyhow::Result<String> {
+    let script = format!(
+        "var raw = localStorage.getItem('alm-preferences');\
+         if (!raw) {{ return null; }}\
+         var dock = (JSON.parse(raw).detailDock || {{}})['{dock_id}'];\
+         if (!dock) {{ return null; }}\
+         var fragment = JSON.stringify('{dock_id}') + ':' + JSON.stringify(dock);\
+         return [fragment, raw.indexOf(fragment) !== -1];"
+    );
+    let v: Option<(String, bool)> = app
+        .driver
+        .execute(&script, vec![])
+        .await
+        .context("failed to read the raw detailDock preference")?
+        .convert()
+        .context("the raw detailDock preference did not deserialise")?;
+    let (fragment, verbatim) = v.with_context(|| format!("no persisted {dock_id:?} dock entry"))?;
+    anyhow::ensure!(
+        verbatim,
+        "{fragment} is not a verbatim slice of the stored alm-preferences value, so it cannot \
+         be searched for on disk"
+    );
+    Ok(fragment)
 }
 
 /// How far to drag the resize handle. Must land the width clear of the 420px
@@ -1147,76 +1184,121 @@ const DRAG_PX: i64 = 140;
 /// something to render. That is fine here: the dock preference lives in
 /// `localStorage`, which is the thing under test.
 ///
-/// Prefixed `slow_`: two full app launches plus a graceful-shutdown +
-/// WebView2 storage-flush cycle, consistently 75-88s on Windows CI
-/// (5 measured runs: 74.2, 75.0, 75.9, 78.2, 88.0s). The `e2e.yml`
-/// shard filters pin each `slow_` test to a separate shard; see the
-/// comment block in that file for the convention and rebalance procedure.
+/// Prefixed `slow_`: two full app launches plus an orderly exit and a
+/// WebView2 storage-flush check. Before `graceful_shutdown` really closed
+/// the window it took a constant ~69s on Windows CI, ~60s of it the
+/// shutdown fallback deadline. The `e2e.yml` shard filters pin each `slow_`
+/// test to a separate shard; see the comment block in that file for the
+/// convention and rebalance procedure.
+///
+/// Each phase names itself on failure and carries that launch's
+/// `tauri-webdriver` CLI output, so a failing run says whether the dock
+/// preference was never written, never reached disk, or was lost across the
+/// restart — opposite bugs with opposite fixes.
 #[tokio::test]
 #[ignore = "Layer-2 real-UI journey: needs tauri-webdriver CLI + desktop_shell --features e2e + served frontend; run via e2e.yml (--run-ignored all)"]
 async fn slow_targets_ui_dock_pin_and_width_survive_a_real_restart() -> anyhow::Result<()> {
     const DEFAULT_WIDTH: i64 = 420;
 
-    let app = E2eApp::launch().await?;
-    app.wait_bridge_ready(Duration::from_secs(30)).await?;
-    complete_first_run(&app).await?;
-    app.set_viewport(1400, 900).await?;
+    let app = E2eApp::launch().await.context("phase failed: first launch")?;
+    let (placement, width, fragment) = app
+        .phase("before restart: pin, widen and persist the targets dock", async {
+            app.wait_bridge_ready(Duration::from_secs(30)).await?;
+            complete_first_run(&app).await?;
+            app.set_viewport(1400, 900).await?;
 
-    app.goto_route("/targets").await?;
-    app.wait_bridge_ready(Duration::from_secs(15)).await?;
-    add_target_via_ui(&app, "M 1").await?;
+            app.goto_route("/targets").await?;
+            app.wait_bridge_ready(Duration::from_secs(15)).await?;
+            add_target_via_ui(&app, "M 1").await?;
 
-    let (placement, width) = pin_and_widen_dock(&app).await?;
+            let (placement, width) = pin_and_widen_dock(&app).await?;
+            anyhow::ensure!(
+                placement == "side",
+                "the 'Right' placement option should have persisted placement=side, got \
+                 {placement:?}"
+            );
+            anyhow::ensure!(
+                width != DEFAULT_WIDTH,
+                "the drag must move the width OFF its {DEFAULT_WIDTH}px default, otherwise a \
+                 restore that never happened would still satisfy this journey — got {width}px. \
+                 Either the drag did not reach the handler, or clamping pinned it back to the \
+                 default."
+            );
+            let fragment = persisted_dock_fragment(&app, "targets").await?;
+            Ok((placement, width, fragment))
+        })
+        .await?;
+
+    // A real quit: WebView2 commits localStorage on an orderly close, not on a
+    // kill, and only an exit the app performs itself is a real restart.
+    let shutdown = app.graceful_shutdown().await?;
+    eprintln!("[dock-restart] shutdown: {shutdown}");
     anyhow::ensure!(
-        placement == "side",
-        "the 'Right' placement option should have persisted placement=side, got {placement:?}"
+        shutdown.orderly(),
+        "phase failed: shutdown — the app did not exit by itself once its window was closed: \
+         {shutdown}\n{}",
+        shutdown.cli_output()
     );
-    anyhow::ensure!(
-        width != DEFAULT_WIDTH,
-        "the drag must move the width OFF its {DEFAULT_WIDTH}px default, otherwise a restore \
-         that never happened would still satisfy this journey — got {width}px. Either the \
-         drag did not reach the handler, or clamping pinned it back to the default."
-    );
-
-    // Clean window close: WebView2 flushes localStorage here and not on a kill.
-    app.graceful_shutdown().await?;
 
     #[cfg(target_os = "windows")]
     {
-        // Wait for the WebView2 LevelDB store to both appear AND stabilise
-        // (size unchanged across 3 × 200 ms polls). The stability check
-        // lives inside wait_for_webview_storage_flush so this single call
-        // replaces the previous pattern of flush-wait + fixed 2 s sleep.
-        E2eApp::wait_for_webview_storage_flush().await?;
+        let flushed =
+            E2eApp::wait_for_local_storage_on_disk(&fragment).await.with_context(|| {
+                format!(
+                    "phase failed: shutdown — the dock preference was written before the \
+                     restart but was not confirmed on disk ({shutdown})\n{}",
+                    shutdown.cli_output()
+                )
+            })?;
+        eprintln!("[dock-restart] {fragment} found on disk {flushed:.1?} after the exit");
     }
 
     // Cold start: new process, empty module cache, storage read from disk.
-    let app = E2eApp::relaunch().await?;
-    app.wait_bridge_ready(Duration::from_secs(30)).await?;
-    complete_first_run(&app).await?;
-    app.set_viewport(1400, 900).await?;
+    let app = E2eApp::relaunch().await.with_context(|| {
+        format!(
+            "phase failed: relaunch — the app did not come back up after the restart; \
+             shutdown: {shutdown}\n--- first launch ---\n{}",
+            shutdown.cli_output()
+        )
+    })?;
+    app.phase("after restart: restore and lay out the targets dock", async {
+        app.wait_bridge_ready(Duration::from_secs(30)).await?;
+        complete_first_run(&app).await?;
+        app.set_viewport(1400, 900).await?;
 
-    let (restored_placement, restored_width) = read_dock_pref(&app, "targets").await?;
-    anyhow::ensure!(
-        restored_placement == placement && restored_width == width,
-        "the dock preference must survive a real restart exactly, but {placement}/{width}px \
-         came back as {restored_placement}/{restored_width}px. This is the assertion a \
-         remount cannot make: it would read the module-level cache instead of storage."
-    );
+        let (restored_placement, restored_width) = read_dock_pref(&app, "targets")
+            .await
+            .context("reading the dock preference after the restart failed")?
+            .with_context(|| {
+                format!(
+                    "the dock preference was written before the restart ({fragment}) but lost \
+                     across it; shutdown: {shutdown}\n--- first launch ---\n{}",
+                    shutdown.cli_output()
+                )
+            })?;
+        anyhow::ensure!(
+            restored_placement == placement && restored_width == width,
+            "the dock preference must survive a real restart exactly, but {placement}/{width}px \
+             came back as {restored_placement}/{restored_width}px. This is the assertion a \
+             remount cannot make: it would read the module-level cache instead of storage."
+        );
 
-    // Storage surviving is only half of it — the app must also READ it back on
-    // a cold boot and lay the dock out at that width.
-    app.goto_route("/targets").await?;
-    app.wait_bridge_ready(Duration::from_secs(15)).await?;
-    add_target_via_ui(&app, "M 1").await?;
+        // Storage surviving is only half of it — the app must also READ it back
+        // on a cold boot and lay the dock out at that width.
+        app.goto_route("/targets").await?;
+        app.wait_bridge_ready(Duration::from_secs(15)).await?;
+        add_target_via_ui(&app, "M 1").await?;
 
-    let laid_out = rendered_side_width(&app).await?;
-    anyhow::ensure!(
-        (laid_out - restored_width).abs() <= 2,
-        "after a real restart the side dock should render at its restored {restored_width}px \
-         (±2px for borders), but measured {laid_out}px. A -1 here means no side dock rendered \
-         at all, so the restored 'side' pin never reached the layout."
-    );
+        let laid_out = rendered_side_width(&app).await?;
+        anyhow::ensure!(
+            (laid_out - restored_width).abs() <= 2,
+            "after a real restart the side dock should render at its restored \
+             {restored_width}px (±2px for borders), but measured {laid_out}px. A -1 here means \
+             no side dock rendered at all, so the restored 'side' pin never reached the layout."
+        );
+        Ok(())
+    })
+    .await?;
 
     app.shutdown().await
 }

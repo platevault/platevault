@@ -333,6 +333,8 @@ export async function startUpdateSubscription(): Promise<void> {
     console.warn('[updateSubscription] subscribing failed:', err);
     return;
   }
+  if (!getPreferences().setupCompleted) return;
+
   await run('startup check', () =>
     commands.updateCheckOnStartup(getPreferences().checkUpdatesAutomatically),
   );

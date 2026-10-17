@@ -71,6 +71,9 @@ impl Catalog {
     /// Each record turns Trashed and opens an episode; nothing reads or moves a
     /// file. Recording a frame its own operation already trashed with the same
     /// digest changes nothing, so a resumed operation can record again.
+    /// Production callers record through `platevault_core`'s
+    /// `Library::record_trashed`, which also announces each location to
+    /// new-capture discovery; a frame then written at a Trashed path counts.
     ///
     /// # Errors
     /// `InvalidInput` for no frames, a repeated frame, a malformed digest, a copy

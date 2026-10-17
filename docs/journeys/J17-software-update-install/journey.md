@@ -1,7 +1,7 @@
 ---
 id: J17
 title: Learn about, install, and restart into a signed software update
-version: 4
+version: 5
 status: active
 last_reviewed: 2026-10-13
 actors: [astrophotographer]
@@ -98,7 +98,12 @@ install) leaves the previously running install completely untouched.
   relaunch; the currently running version keeps executing, completely
   unchanged, and no partial install is left on disk. If the update installs
   but the relaunch fails, the section reads "Update installed — restart the
-  app manually to finish." (#869), never "update failed".
+  app manually to finish." (#869), never "update failed". On macOS, should
+  another app have been put in PlateVault's place while it updated, an
+  install that refuses it reads "…moved or replaced after it was opened."
+  and names where it kept what it found there; one that installed all the
+  same shows a system notification saying where that app is saved before
+  the relaunch, or the exit when a quit was held.
 
 ### S3 — Install on quit {#S3}
 - **Do:** With "Update available" shown, choose **Install on quit**, keep
@@ -109,21 +114,26 @@ install) leaves the previously running install completely untouched.
   PlateVault." and still offer Install now. Nothing is installed and nothing
   asks for elevation while the app keeps running. On quit, the app installs
   the verified update and then exits; the next launch runs the new version.
-  While the install runs (for example during a deb/rpm password prompt),
-  further quit attempts are held so the install is not cut short; after
-  five minutes the app exits regardless.
+  On macOS, an install at quit, or one a quit held during Install now, that
+  lands with another app kept aside shows a system notification saying
+  where that app is saved, then exits. While the install runs (for example
+  during a deb/rpm password prompt), further quit attempts are held so the
+  install is not cut short; after five minutes the app exits regardless.
 - **Expect (negative):** A failed download or verification leaves nothing
   staged and reports the failure (S4). If the install at quit fails, the app
   still exits, the previous version stays installed, and the next launch's
-  check offers the update again. If the app does not start installing within
-  a few seconds of the quit, it exits without installing, and a second quit
-  before then exits at once. A quit from outside the app exits without
-  installing: the macOS Dock or app-switcher Quit, signing out or shutting
-  down on any OS (Windows `WM_ENDSESSION`, a Linux session's SIGTERM), a
-  force quit, or a crash. Nothing about the update, the Install on quit
-  choice or **Later** is saved between launches, so the next launch's
-  startup check shows the update notice again. It is never installed at
-  launch.
+  check offers the update again. On macOS, an install at quit refused
+  because the app was moved or replaced after it was opened shows a system
+  notification asking the user to restart PlateVault and install again,
+  naming where anything found in its place is saved. If the app does not
+  start installing within a few seconds of the quit, it exits without
+  installing, and a second quit before then exits at once. A quit from
+  outside the app exits without installing: the macOS Dock or app-switcher
+  Quit, signing out or shutting down on any OS (Windows `WM_ENDSESSION`, a
+  Linux session's SIGTERM), a force quit, or a crash. Nothing about the
+  update, the Install on quit choice or **Later** is saved between launches,
+  so the next launch's startup check shows the update notice again. It is
+  never installed at launch.
 
 ### S4 — Recover from a failed download or install {#S4}
 - **Do:** Choose Install now or Install on quit after the update endpoint
@@ -191,3 +201,8 @@ install) leaves the previously running install completely untouched.
   by default and persisted. Off skips the startup check; the new **Check for
   updates** action checks on request either way. S1 updated with the
   setting-off branch and the not-yet-checked status.
+- **Δ5** 2026-10-17 · S2, S3 · behavior-change
+  macOS: the install names where it kept another app found in PlateVault's
+  place, in the notice and Settings, or in a system notification before the
+  relaunch or exit; an install at quit refused over a replaced app notifies.
+  Evidence: astro-plan-un63z, PR #1846, Codex PRRT_kwDOSdTu0s6tbUCL on #1832 · by: agent (intent-gated)

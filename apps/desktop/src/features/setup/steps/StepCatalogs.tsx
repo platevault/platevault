@@ -18,6 +18,7 @@ import type { Density } from '@/bindings/types';
 import { commands } from '@/bindings/index';
 import { unwrap } from '@/api/ipc';
 import { updateSettings } from '@/data/settingsWrite';
+import { Toggle } from '@/ui';
 import { selectBase } from '@/styles/select.css';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -157,20 +158,39 @@ function ConfigOption({
   );
 }
 
+function AutomaticUpdateCheckControl() {
+  const [checkAutomatically, setCheckAutomatically] = usePreference(
+    'checkUpdatesAutomatically',
+  );
+  return (
+    <Toggle
+      aria-label={m.settings_advanced_updates_auto_check()}
+      checked={checkAutomatically}
+      onChange={setCheckAutomatically}
+    />
+  );
+}
+
 // ── StepCatalogs (Configuration) ──────────────────────────────────────────────
 
 /**
  * Configuration step.
  *
- * A few first-run defaults: online SIMBAD resolution, display density, default
- * source protection, and default scan depth. All are changeable later in
- * Settings; the step never blocks Finish.
+ * A few first-run defaults: online SIMBAD resolution, automatic update checks,
+ * display density, default source protection, and default scan depth. All are
+ * changeable later in Settings; the step never blocks Finish.
  */
 export function StepCatalogs(_props: StepCatalogsProps) {
   return (
-    <div className="pv-step-catalogs">
+    <div className="pv-step-catalogs" data-testid="step-catalogs">
       {/* Online SIMBAD resolution (label + toggle on one line, desc below). */}
       <ResolverSettingsControl compact />
+
+      <ConfigOption
+        title={m.settings_advanced_updates_auto_check()}
+        description={m.settings_advanced_updates_auto_check_info()}
+        control={<AutomaticUpdateCheckControl />}
+      />
 
       <ConfigOption
         title={m.settings_density_legend()}

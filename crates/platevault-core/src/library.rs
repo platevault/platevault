@@ -29,7 +29,7 @@ use crate::{
 };
 use persistence_library::{
     Catalog, CorrectionOutcome, CorrectionPreview, LocationReferences, LocationRegistration,
-    SessionDetail, SessionQuery, SuggestedAssociation,
+    SessionDetail, SessionQuery, SuggestedAssociation, TrashedAsset, TrashedFrame,
 };
 
 /// What [`AssetReferences::references_to`] returns.
@@ -58,6 +58,9 @@ pub struct Library {
     /// The id of each location whose registration, path or lifecycle changed
     /// through this library (register, reselect, remap, retire).
     location_changes: broadcast::Sender<Uuid>,
+    /// The id of each location holding a copy recorded Trashed through this
+    /// library ([`Library::record_trashed`]).
+    trashed: broadcast::Sender<Uuid>,
     references: tokio::sync::RwLock<Vec<Arc<dyn AssetReferences>>>,
     pub(crate) planning: Mutex<crate::observing_plans::PlanningRuntime>,
     frame_review: FrameReview,
@@ -136,6 +139,7 @@ impl Library {
         let provider = provider.map(SimbadTargetResolver::simbad).transpose()?;
         let (progress, _) = broadcast::channel(128);
         let (location_changes, _) = broadcast::channel(64);
+        let (trashed, _) = broadcast::channel(64);
         let planning =
             Mutex::new(crate::observing_plans::PlanningRuntime::new(Arc::clone(&catalog)));
         let projects: Arc<dyn AssetReferences> =
@@ -151,6 +155,7 @@ impl Library {
             saved_targets: Mutex::new(None),
             progress,
             location_changes,
+            trashed,
             planning,
             references: tokio::sync::RwLock::new(vec![projects, calibration]),
             frame_review,
@@ -194,6 +199,34 @@ impl Library {
     fn location_changed(&self, location: Location) -> Location {
         let _ = self.location_changes.send(location.id);
         location
+    }
+
+    /// The id of each location that holds a copy recorded Trashed from now on,
+    /// once per recording. A lagged receiver has missed some and re-reads
+    /// every location.
+    #[must_use]
+    pub fn subscribe_trashed(&self) -> broadcast::Receiver<Uuid> {
+        self.trashed.subscribe()
+    }
+
+    /// Record frames the storage custody moved to the OS Trash
+    /// ([`Catalog::record_trashed`]), then publish the location of each;
+    /// nobody listening is not an error.
+    ///
+    /// # Errors
+    /// As [`Catalog::record_trashed`].
+    pub(crate) async fn record_trashed(
+        &self,
+        storage_operation_id: Uuid,
+        frames: &[TrashedFrame],
+    ) -> Result<Vec<TrashedAsset>, LibraryError> {
+        let trashed = self.catalog.record_trashed(storage_operation_id, frames).await?;
+        let locations: BTreeSet<Uuid> =
+            trashed.iter().map(|trashed| trashed.asset.location_id).collect();
+        for location in locations {
+            let _ = self.trashed.send(location);
+        }
+        Ok(trashed)
     }
 
     #[must_use]

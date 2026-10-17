@@ -148,4 +148,20 @@ describe('UpdateBanner', () => {
       '0.7.0',
     );
   });
+
+  it('names where it kept what it found in place of a replaced app', () => {
+    mockGetUpdateSnapshot.mockReturnValue({
+      phase: 'install-failed',
+      version: '0.7.0',
+      error: {
+        code: 'app-replaced',
+        keptAt: ['/Applications/PlateVault (previous version).app'],
+      },
+    });
+    render(<UpdateBanner />);
+
+    expect(screen.getByTestId('update-banner-status')).toHaveTextContent(
+      'Could not install update: the PlateVault app was moved or replaced after it was opened. What was found in its place is saved at /Applications/PlateVault (previous version).app. Restart PlateVault, then try again.',
+    );
+  });
 });

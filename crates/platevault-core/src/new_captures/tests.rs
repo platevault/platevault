@@ -9,10 +9,12 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fs_inventory::artifact_watcher::{ArtifactEventKind, ArtifactFileEvent, TreeWatch};
+use persistence_library::TrashedFrame;
+use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use super::{
@@ -337,8 +339,8 @@ async fn files_copied_into_an_online_location_are_counted_without_a_rescan() {
     let counts = count_is(&watch, location.id, 3).await;
     assert_eq!(counts, [NewCaptureCount { location_id: location.id, new_files: 3, live: true }]);
     assert_eq!(walks(&watch), 1, "live events, no rescan");
-    let indexed = fx.library.catalog().location_asset_paths(location.id).await.unwrap();
-    assert_eq!(indexed, Vec::<NativePath>::new(), "discovery writes nothing to the catalog");
+    let indexed = fx.library.catalog().location_recorded_paths(location.id).await.unwrap();
+    assert!(indexed.is_empty(), "discovery writes nothing to the catalog");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -453,6 +455,177 @@ async fn indexed_files_leave_the_count() {
     count_is(&watch, location.id, 0).await;
     frame(&root.join("Ha_003.fits"));
     count_is(&watch, location.id, 1).await;
+}
+
+/// The frames whose records [`vacate_and_refill`] vacates: two the OS Trash
+/// takes, recorded Trashed, and two that leave the drive, recorded Missing.
+const TRASHED: [&str; 2] = ["Ha_001.fits", "Ha_002.fits"];
+const MISSING: [&str; 2] = ["Ha_003.fits", "Ha_004.fits"];
+
+/// A frame other than the one [`frame`] writes, written now.
+fn other_frame(path: &Path) {
+    fixtures::fits(
+        path,
+        &[("IMAGETYP", "'Light Frame'"), ("FILTER", "'OIII'"), ("EXPTIME", "120")],
+    )
+    .unwrap();
+}
+
+/// Move a file, which keeps its size and modification time, as the OS Trash
+/// does, and as putting it back does.
+fn move_file(from: &Path, to: &Path) {
+    fs::create_dir_all(to.parent().unwrap()).unwrap();
+    fs::rename(from, to).unwrap();
+}
+
+/// Where [`vacate`] moves [`TRASHED`] and [`MISSING`]: a stand-in OS Trash,
+/// and another drive.
+fn bin(fx: &Fixture) -> PathBuf {
+    fx.base.join("Trash")
+}
+
+fn aside(fx: &Fixture) -> PathBuf {
+    fx.base.join("aside")
+}
+
+/// Vacate the records of [`MISSING`] and the files of [`TRASHED`], frames
+/// indexed at `root`, the root of `location`: the first leave the drive and
+/// a scan records them Missing, and the others go to the OS Trash
+/// ([`bin`]). Returns the [`TRASHED`] frames as custody records them once
+/// the OS Trash took them.
+async fn vacate(fx: &Fixture, location: &Location, root: &Path) -> Vec<TrashedFrame> {
+    for name in MISSING {
+        move_file(&root.join(name), &aside(fx).join(name));
+    }
+    assert_eq!(scan_to_end(&fx.library, location.id).await.state, ScanState::Completed);
+    let assets = fx.library.catalog().location_assets(location.id).await.unwrap();
+    let mut trashed = Vec::new();
+    for name in TRASHED {
+        let relative = NativePath::from_path(Path::new(name));
+        let asset = assets.iter().find(|asset| asset.relative_path == relative).unwrap();
+        let sha256 = hex::encode(Sha256::digest(fs::read(root.join(name)).unwrap()));
+        move_file(&root.join(name), &bin(fx).join(name));
+        trashed.push(TrashedFrame { asset_id: asset.id, sha256 });
+    }
+    trashed
+}
+
+/// A frame at the path of a Missing or Trashed record is new unless it is
+/// the record's file put back, with the size and modification time the
+/// record last observed (bead astro-plan-0rfuw): the start-up walk counts
+/// the other frame at one path of each, not the originals put back at the
+/// others, and a scan, which returns all four records, leaves none.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_start_up_walk_counts_a_frame_at_a_vacated_path_unless_its_file_was_put_back() {
+    let fx = fixture().await;
+    let root = fx.base.join("Captures");
+    let location = captures(&fx.library, &root).await;
+    for name in TRASHED.iter().chain(&MISSING) {
+        frame(&root.join(name));
+    }
+    assert_eq!(scan_to_end(&fx.library, location.id).await.state, ScanState::Completed);
+    let trashed = vacate(&fx, &location, &root).await;
+    fx.library.record_trashed(Uuid::new_v4(), &trashed).await.unwrap();
+    other_frame(&root.join(TRASHED[0]));
+    other_frame(&root.join(MISSING[0]));
+    move_file(&bin(&fx).join(TRASHED[1]), &root.join(TRASHED[1]));
+    move_file(&aside(&fx).join(MISSING[1]), &root.join(MISSING[1]));
+
+    let watch = watch(&fx.library);
+    count_is(&watch, location.id, 2).await;
+    assert_eq!(scan_to_end(&fx.library, location.id).await.state, ScanState::Completed);
+    count_is(&watch, location.id, 0).await;
+}
+
+/// As [`the_start_up_walk_counts_a_frame_at_a_vacated_path_unless_its_file_was_put_back`],
+/// with every change made while discovery runs, which live events count.
+/// A frame written in place of a trashed one before custody recorded the
+/// trash is judged again once it did.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_live_event_counts_a_frame_at_a_vacated_path_unless_its_file_was_put_back() {
+    let fx = fixture().await;
+    let root = fx.base.join("Captures");
+    let location = captures(&fx.library, &root).await;
+    for name in TRASHED.iter().chain(&MISSING) {
+        frame(&root.join(name));
+    }
+    let watch = watch(&fx.library);
+    count_is(&watch, location.id, 4).await;
+    assert_eq!(scan_to_end(&fx.library, location.id).await.state, ScanState::Completed);
+    count_is(&watch, location.id, 0).await;
+
+    let trashed = vacate(&fx, &location, &root).await;
+    // Written before the trash is recorded: its path still holds a file the
+    // catalog holds. The frame at the Missing path, written after it, counts.
+    other_frame(&root.join(TRASHED[0]));
+    move_file(&aside(&fx).join(MISSING[1]), &root.join(MISSING[1]));
+    other_frame(&root.join(MISSING[0]));
+    count_is(&watch, location.id, 1).await;
+
+    fx.library.record_trashed(Uuid::new_v4(), &trashed).await.unwrap();
+    count_is(&watch, location.id, 2).await;
+    move_file(&bin(&fx).join(TRASHED[1]), &root.join(TRASHED[1]));
+    // Every event the changes raised was applied: the count stays.
+    after(&watch, drains, 3).await;
+    assert_eq!(new_files(&watch.counts(), location.id), Some(2));
+    assert_eq!(walks(&watch), 1, "live events, no rescan");
+    assert_eq!(scan_to_end(&fx.library, location.id).await.state, ScanState::Completed);
+    count_is(&watch, location.id, 0).await;
+}
+
+/// A frame at a Missing record's path that kept the record's modification
+/// time but not its size (the original grown by one FITS block, its time put
+/// back) is not the original: the start-up walk counts it.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_frame_at_a_vacated_path_with_its_time_but_not_its_size_counts() {
+    let fx = fixture().await;
+    let root = fx.base.join("Captures");
+    let location = captures(&fx.library, &root).await;
+    let path = root.join(MISSING[0]);
+    frame(&path);
+    assert_eq!(scan_to_end(&fx.library, location.id).await.state, ScanState::Completed);
+    let modified = fs::metadata(&path).unwrap().modified().unwrap();
+    let mut bytes = fs::read(&path).unwrap();
+    fs::remove_file(&path).unwrap();
+    assert_eq!(scan_to_end(&fx.library, location.id).await.state, ScanState::Completed);
+
+    bytes.extend([0_u8; 2880]);
+    fs::write(&path, &bytes).unwrap();
+    fs::File::options().write(true).open(&path).unwrap().set_modified(modified).unwrap();
+    let watch = watch(&fx.library);
+    count_is(&watch, location.id, 1).await;
+}
+
+/// A trash run recorded frame by frame reads the location's catalog paths
+/// once per debounce tick, not once per frame.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_trash_run_of_many_frames_is_recounted_once_per_tick() {
+    let fx = fixture().await;
+    let root = fx.base.join("Captures");
+    let location = captures(&fx.library, &root).await;
+    for n in 1..=10 {
+        frame(&root.join(format!("Ha_{n:03}.fits")));
+    }
+    assert_eq!(scan_to_end(&fx.library, location.id).await.state, ScanState::Completed);
+    // Ticks far enough apart that the run is recorded within one or two.
+    let slow = Settings { debounce: Duration::from_secs(2), ..FAST };
+    let watch = CaptureWatch::start_with(&fx.library, slow, Arc::new(OsProbe));
+    count_is(&watch, location.id, 0).await;
+    let recounts = || watch.observed().recounts.load(Ordering::SeqCst);
+    let before = recounts();
+
+    let assets = fx.library.catalog().location_assets(location.id).await.unwrap();
+    for asset in &assets {
+        let path = root.join(asset.relative_path.to_path_buf().unwrap());
+        let sha256 = hex::encode(Sha256::digest(fs::read(path).unwrap()));
+        let frame = TrashedFrame { asset_id: asset.id, sha256 };
+        fx.library.record_trashed(Uuid::new_v4(), &[frame]).await.unwrap();
+    }
+    eventually("the trash run was recounted", || recounts() > before).await;
+    after(&watch, drains, 1).await;
+    let recounted = recounts() - before;
+    assert!(recounted <= 2, "{recounted} recounts for {} trashed frames", assets.len());
+    assert_eq!(new_files(&watch.counts(), location.id), Some(0), "the originals are held");
 }
 
 /// A raw connection to the fixture's catalog, for failures no library
@@ -1173,6 +1346,40 @@ async fn a_release_waits_for_a_watcher_still_closing() {
     assert_eq!(watchers(&watch), 0);
 }
 
+/// A release waits for every call still in flight on its root's volume,
+/// whichever location it served: here the watcher a retired location let go
+/// of, beside the released root on the same volume. The released location
+/// holds no watcher, so it has nothing of its own to wait for.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_release_waits_for_a_watcher_another_location_closes_on_its_volume() {
+    let fx = fixture().await;
+    let (root_a, root_b) = (fx.base.join("A"), fx.base.join("B"));
+    let a = captures(&fx.library, &root_a).await;
+    let probe = Arc::new(Probe::default());
+    let watch = probed(&fx.library, &probe);
+    count_is(&watch, a.id, 0).await;
+    watchers_are(&watch, 1).await;
+    probe.failing.store(1000, Ordering::SeqCst);
+    let b = captures(&fx.library, &root_b).await;
+    count_is(&watch, b.id, 0).await;
+    assert_eq!(watchers(&watch), 1, "only A holds a watcher");
+
+    // A retires, and its watcher is slow to close.
+    let releases = &watch.observed().releases;
+    let _opens = Opens(releases);
+    releases.close();
+    let review = fx.library.review_retire_location(a.id).await.unwrap();
+    fx.library.retire_location(review.id, a.id, review.expected_revision).await.unwrap();
+    holding(releases).await;
+
+    let release = watch.release(b.id, &root_b);
+    tokio::pin!(release);
+    let early = tokio::time::timeout(Duration::from_millis(300), &mut release).await;
+    assert!(early.is_err(), "released while another location's watcher closed on its volume");
+    releases.open();
+    tokio::time::timeout(Duration::from_secs(5), release).await.expect("released once it closed");
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_root_is_named_from_the_start_of_its_watch_until_it_leaves() {
     let fx = fixture().await;
@@ -1251,6 +1458,44 @@ async fn a_retired_root_stays_named_until_its_walk_and_watcher_close_returned() 
         .await
         .expect("released once both returned");
     eventually("the root leaves once both returned", || roots().is_empty()).await;
+}
+
+/// A walk and a watcher close still in flight a sweep after their location
+/// retired, as on a share whose server went away, are each logged once, not
+/// before, while their root stays named.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_call_still_in_flight_a_sweep_after_it_was_let_go_is_logged_once() {
+    let fx = fixture().await;
+    let root = fx.base.join("Captures");
+    let location = captures(&fx.library, &root).await;
+    let probe = Arc::new(Probe::default());
+    let _lists = Opens(&probe.list_gate);
+    probe.list_gate.close();
+    let watch = probed(&fx.library, &probe);
+    let releases = &watch.observed().releases;
+    let _closes = Opens(releases);
+    releases.close();
+    holding(&probe.list_gate).await;
+    watchers_are(&watch, 1).await;
+    let stuck = || watch.observed().stuck.load(Ordering::SeqCst);
+
+    let retired = Instant::now();
+    let review = fx.library.review_retire_location(location.id).await.unwrap();
+    fx.library.retire_location(review.id, location.id, review.expected_revision).await.unwrap();
+    holding(releases).await;
+    eventually("the walk and the watcher close logged", || stuck() == 2).await;
+    assert!(retired.elapsed() >= FAST.sweep, "logged before a sweep passed");
+    after(&watch, sweeps, 2).await;
+    assert_eq!(stuck(), 2, "each logged once");
+    assert_eq!(watch.subscribe_roots().borrow().clone(), [named_root(&location, &root)]);
+
+    releases.open();
+    probe.list_gate.open();
+    eventually("the root leaves once both returned", || {
+        watch.subscribe_roots().borrow().is_empty()
+    })
+    .await;
+    assert_eq!(stuck(), 2);
 }
 
 /// A remapped location's old root stays named beside its new one while its
@@ -1415,11 +1660,13 @@ fn counted(location: Location, root: &Path) -> Watched {
         location,
         live: None,
         known: HashSet::new(),
+        vacated: HashMap::new(),
         new: HashMap::new(),
         walk: None,
         unlisted: Vec::new(),
         rescan: false,
         recount: false,
+        unreadable: false,
         listed: true,
         cataloged: true,
         released: false,
@@ -1711,11 +1958,11 @@ async fn a_frame_in_place_of_a_counted_folder_forgets_the_frames_below_it() {
     let location = captures(&fx.library, &root).await;
     let mut watched = counted(location, &root);
     let folder = Path::new("M31.fits");
-    watched.recheck(&folder.join("Ha_001.fits"), Entry::Frame);
-    watched.recheck(&folder.join("Ha_002.fits"), Entry::Frame);
+    watched.recheck(&folder.join("Ha_001.fits"), Entry::Frame, None);
+    watched.recheck(&folder.join("Ha_002.fits"), Entry::Frame, None);
     assert_eq!(watched.count().new_files, 2);
 
-    watched.recheck(folder, Entry::Frame);
+    watched.recheck(folder, Entry::Frame, None);
     assert_eq!(watched.new.into_values().collect::<Vec<_>>(), [folder.to_path_buf()]);
 }
 
@@ -1732,8 +1979,8 @@ async fn a_case_only_rename_keeps_its_frame_counted_once() {
     (volume.case, volume.normalization) =
         (PathSensitivity::Insensitive, PathSensitivity::Insensitive);
     let (old, new) = (PathBuf::from("ha_001.fits"), PathBuf::from("Ha_001.fits"));
-    watched.recheck(&old, Entry::Frame);
+    watched.recheck(&old, Entry::Frame, None);
 
-    watched.recheck_all(&[(new.clone(), Entry::Frame), (old, Entry::Other)]);
+    watched.recheck_all(&[(new.clone(), Entry::Frame, None), (old, Entry::Other, None)]);
     assert_eq!(watched.new.into_values().collect::<Vec<_>>(), [new]);
 }

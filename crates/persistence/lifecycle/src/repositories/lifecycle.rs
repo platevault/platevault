@@ -14,6 +14,7 @@ use domain_core::ids::{AuditId, EntityId, Timestamp};
 use domain_core::lifecycle::data_asset::EntityType;
 use domain_core::lifecycle::provenance::{ProvenanceTag, ProvenancedValue};
 use serde_json::Value;
+use sqlx::SqliteConnection;
 use uuid::Uuid;
 
 use crate::repositories::provenance::load_provenance;
@@ -299,6 +300,93 @@ impl SqliteLifecycleRepository {
     }
 }
 
+/// The write behind [`LifecycleRepository::record_transition`], on the
+/// caller's connection: the compare-and-swap on the entity's state column
+/// and the `applied` audit row, so the transition commits or rolls back with
+/// the caller's own writes. It publishes nothing; the caller publishes
+/// `lifecycle.transition.applied` once its transaction commits.
+///
+/// The caller handles the same-state noop: this always writes.
+///
+/// # Errors
+///
+/// Returns [`DbError::invalid_state`] when the entity is not in `from_state`
+/// (the compare-and-swap lost), and `DbError::Database` on query failure.
+pub async fn record_transition_conn(
+    conn: &mut SqliteConnection,
+    transition: TransitionRequest,
+) -> DbResult<TransitionRecord> {
+    let table = table_for(transition.entity_type);
+    let state_col = state_column_for(transition.entity_type);
+    let id_str = transition.entity_id.as_uuid().to_string();
+    let audit_id = AuditId::new();
+    let applied_at = Timestamp::now_utc();
+
+    let applied_at_str = applied_at.to_iso();
+
+    // Atomic CAS: update only if current state matches expected from_state.
+    // AssertSqlSafe: table and state_col are static strings from internal helper functions.
+    let rows_affected = sqlx::query(sqlx::AssertSqlSafe(format!(
+        "UPDATE {table} SET {state_col} = ? WHERE id = ? AND {state_col} = ?",
+    )))
+    .bind(&transition.to_state)
+    .bind(&id_str)
+    .bind(&transition.from_state)
+    .execute(&mut *conn)
+    .await?
+    .rows_affected();
+
+    if rows_affected == 0 {
+        return Err(DbError::invalid_state(format!(
+            "{:?} {} not in state '{}' (CAS failed)",
+            transition.entity_type, transition.entity_id, transition.from_state
+        )));
+    }
+
+    // FR-020 / T053: when a Project entity transitions OUT of "blocked",
+    // clear the blocked_reason_kind/note columns in the same transaction
+    // so stale reason data is never visible after an unblock.
+    if transition.entity_type == EntityType::Project && transition.from_state == "blocked" {
+        sqlx::query(
+            "UPDATE projects SET blocked_reason_kind = NULL, blocked_reason_note = NULL \
+             WHERE id = ?",
+        )
+        .bind(&id_str)
+        .execute(&mut *conn)
+        .await?;
+    }
+
+    // Insert audit log entry.
+    let audit_id_str = audit_id.as_uuid().to_string();
+    let request_id_str = transition.request_id.as_uuid().to_string();
+    sqlx::query(
+        "INSERT INTO audit_log_entry \
+         (audit_id, entity_type, entity_id, from_state, to_state, trigger, actor, \
+          outcome, severity, request_id, at, payload) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'applied', 'workflow', ?, ?, NULL)",
+    )
+    .bind(&audit_id_str)
+    .bind(transition.entity_type.as_str())
+    .bind(&id_str)
+    .bind(&transition.from_state)
+    .bind(&transition.to_state)
+    .bind(&transition.trigger)
+    .bind(&transition.actor)
+    .bind(&request_id_str)
+    .bind(&applied_at_str)
+    .execute(&mut *conn)
+    .await?;
+
+    Ok(TransitionRecord {
+        audit_id,
+        entity_id: transition.entity_id,
+        entity_type: transition.entity_type,
+        from_state: transition.from_state,
+        to_state: transition.to_state,
+        applied_at,
+    })
+}
+
 impl LifecycleRepository for SqliteLifecycleRepository {
     async fn load_asset_detail(
         &self,
@@ -442,97 +530,34 @@ impl LifecycleRepository for SqliteLifecycleRepository {
             });
         }
 
-        let table = table_for(transition.entity_type);
-        let state_col = state_column_for(transition.entity_type);
-        let id_str = transition.entity_id.as_uuid().to_string();
-        let audit_id = AuditId::new();
-        let applied_at = Timestamp::now_utc();
-
-        let applied_at_str = applied_at.to_iso();
-
-        // Atomic CAS: update only if current state matches expected from_state.
+        // The event below needs the actor after the write takes the request.
+        let actor = transition.actor.clone();
         let mut tx = self.pool.begin().await?;
-
-        // AssertSqlSafe: table and state_col are static strings from internal helper functions.
-        let rows_affected = sqlx::query(sqlx::AssertSqlSafe(format!(
-            "UPDATE {table} SET {state_col} = ? WHERE id = ? AND {state_col} = ?",
-        )))
-        .bind(&transition.to_state)
-        .bind(&id_str)
-        .bind(&transition.from_state)
-        .execute(&mut *tx)
-        .await?
-        .rows_affected();
-
-        if rows_affected == 0 {
-            tx.rollback().await?;
-            return Err(DbError::invalid_state(format!(
-                "{:?} {} not in state '{}' (CAS failed)",
-                transition.entity_type, transition.entity_id, transition.from_state
-            )));
-        }
-
-        // FR-020 / T053: when a Project entity transitions OUT of "blocked",
-        // clear the blocked_reason_kind/note columns in the same transaction
-        // so stale reason data is never visible after an unblock.
-        if transition.entity_type == EntityType::Project && transition.from_state == "blocked" {
-            sqlx::query(
-                "UPDATE projects SET blocked_reason_kind = NULL, blocked_reason_note = NULL \
-                 WHERE id = ?",
-            )
-            .bind(&id_str)
-            .execute(&mut *tx)
-            .await?;
-        }
-
-        // Insert audit log entry.
-        let audit_id_str = audit_id.as_uuid().to_string();
-        let request_id_str = transition.request_id.as_uuid().to_string();
-        sqlx::query(
-            "INSERT INTO audit_log_entry \
-             (audit_id, entity_type, entity_id, from_state, to_state, trigger, actor, \
-              outcome, severity, request_id, at, payload) \
-             VALUES (?, ?, ?, ?, ?, ?, ?, 'applied', 'workflow', ?, ?, NULL)",
-        )
-        .bind(&audit_id_str)
-        .bind(transition.entity_type.as_str())
-        .bind(&id_str)
-        .bind(&transition.from_state)
-        .bind(&transition.to_state)
-        .bind(&transition.trigger)
-        .bind(&transition.actor)
-        .bind(&request_id_str)
-        .bind(&applied_at_str)
-        .execute(&mut *tx)
-        .await?;
-
+        let record = record_transition_conn(&mut tx, transition).await?;
         tx.commit().await?;
 
-        let project_id =
-            resolve_transition_project_id(&self.pool, transition.entity_type, &id_str).await;
+        let project_id = resolve_transition_project_id(
+            &self.pool,
+            record.entity_type,
+            &record.entity_id.as_uuid().to_string(),
+        )
+        .await;
 
         // Publish event after successful commit (fire-and-forget — publish
         // failure must never roll back or fail an already-committed transition).
         let event_payload = serde_json::to_value(LifecycleTransitionApplied {
-            entity_type: transition.entity_type,
-            entity_id: transition.entity_id.to_string(),
-            from_state: transition.from_state.clone(),
-            to_state: transition.to_state.clone(),
-            actor: transition.actor.clone(),
-            at: applied_at,
+            entity_type: record.entity_type,
+            entity_id: record.entity_id.to_string(),
+            from_state: record.from_state.clone(),
+            to_state: record.to_state.clone(),
+            actor,
+            at: record.applied_at,
             project_id,
         })
         .unwrap_or(Value::Null);
         self.bus.publish(TOPIC_LIFECYCLE_TRANSITION_APPLIED, Source::System, event_payload).await;
 
-        Ok(TransitionRecord {
-            audit_id,
-            entity_id: transition.entity_id,
-            entity_type: transition.entity_type,
-            from_state: transition.from_state,
-            to_state: transition.to_state,
-            applied_at,
-        })
+        Ok(record)
     }
 
     async fn record_refused_transition(

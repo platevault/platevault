@@ -6,6 +6,8 @@
 #![allow(dead_code)]
 
 use std::collections::VecDeque;
+use std::fmt;
+use std::future::Future;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -21,11 +23,12 @@ use super::boot::{
     instance_env, pick_port_pair, LAUNCH_TIMEOUT, SCRIPT_TIMEOUT, SCRIPT_TIMEOUT_PAGE_LOAD,
 };
 use super::helpers::{
-    app_binary_path, blocking_session_delete, drain_into, kill_driver_proc, preflight,
-    reset_database, reset_webview_storage, reset_window_state, spawn_tauri_webdriver, ProcLog,
+    app_binary_path, blocking_session_delete, clean_shutdown_marker, drain_into, kill_driver_proc,
+    port_accepts, preflight, reset_database, reset_webview_storage, reset_window_state,
+    spawn_tauri_webdriver, ProcLog,
 };
 #[cfg(target_os = "windows")]
-use super::helpers::{find_leveldb_dir, leveldb_data_size};
+use super::helpers::{describe_stores, local_storage_dirs, local_storage_on_disk_contains};
 
 // ---------------------------------------------------------------------------
 // Private deserialization target for invoke() responses
@@ -80,7 +83,35 @@ pub struct E2eApp {
     /// left the only Windows-side evidence of a broken webview session
     /// unreachable exactly when a bridge wait timed out.
     proc_log: ProcLog,
+    /// Port the app's embedded WebDriver plugin listens on. The app process
+    /// owns that listener, so [`Self::graceful_shutdown`] reads "nothing
+    /// accepts here any more" as "the app process is gone".
+    native_port: u16,
 }
+
+/// Label of the app's main window: the `WebDriver` handle the session binds to
+/// and the window [`E2eApp::graceful_shutdown`] closes.
+const MAIN_WINDOW_LABEL: &str = "main";
+
+/// How long [`E2eApp::graceful_shutdown`] waits for the app to exit on its
+/// own before falling back to a kill. Only a failed close consumes it.
+const GRACEFUL_EXIT_DEADLINE: Duration =
+    if cfg!(target_os = "windows") { Duration::from_secs(60) } else { Duration::from_secs(10) };
+
+/// Bound on a single WebDriver probe of a window that may be closing.
+const PAGE_PROBE_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// The page's answer when the close request left it.
+const CLOSE_REQUESTED: &str = "requested";
+
+/// The page's answer when it had no IPC bridge to send the close through —
+/// the one answer that proves no close was sent.
+const NO_BRIDGE: &str = "no window.__PV_E2E__ bridge to send the close through";
+
+/// How long [`E2eApp::wait_for_local_storage_on_disk`] waits for a value to
+/// reach WebView2's on-disk store after the app has exited.
+#[cfg(target_os = "windows")]
+const LOCAL_STORAGE_FLUSH_TIMEOUT: Duration = Duration::from_secs(15);
 
 /// How much persisted state [`E2eApp::launch_with`] wipes before spawning
 /// the app process. See [`E2eApp::launch`] vs [`E2eApp::relaunch`].
@@ -344,7 +375,13 @@ impl E2eApp {
                 return Err(e).context(proc_log.dump());
             }
 
-            return Ok(Self { driver, driver_proc: Some(driver_proc), proxy_port, proc_log });
+            return Ok(Self {
+                driver,
+                driver_proc: Some(driver_proc),
+                proxy_port,
+                proc_log,
+                native_port,
+            });
         }
 
         Err(last_err.unwrap_or_else(|| {
@@ -359,7 +396,7 @@ impl E2eApp {
     /// position.
     async fn switch_to_main_window(driver: &WebDriver, deadline: Instant) -> Result<()> {
         let deadline = deadline.max(Instant::now() + Duration::from_secs(60));
-        let main = WindowHandle::from("main");
+        let main = WindowHandle::from(MAIN_WINDOW_LABEL);
         loop {
             let handles = driver.windows().await.unwrap_or_default();
             if handles.contains(&main) {
@@ -751,6 +788,17 @@ impl E2eApp {
         let ret =
             self.driver.execute(script, vec![]).await.context("bridge_ready script failed")?;
         ret.convert::<bool>().context("failed to deserialise bridge_ready result")
+    }
+
+    /// Run one named phase of a journey; a failure names the phase and
+    /// carries this instance's CLI output.
+    ///
+    /// Without it only a failed launch or bridge wait printed that output, so
+    /// a journey failing anywhere else left no trace of what the app process
+    /// did — not even the CLI's `tauri-webdriver running on port …` banner,
+    /// which tells a journey's first launch from its second.
+    pub async fn phase<T>(&self, name: &str, step: impl Future<Output = Result<T>>) -> Result<T> {
+        step.await.with_context(|| format!("phase failed: {name}\n{}", self.proc_log.dump()))
     }
 
     /// Page state captured when a wait times out (#1204, #1272).
@@ -1707,10 +1755,9 @@ impl E2eApp {
             .with_context(|| format!("is_selected() on aria-label={label:?} failed"))
     }
 
-    /// Close the app's window gracefully (round 3, fix-464-theme) before
-    /// falling through to the ordinary [`Self::shutdown`] teardown, so a
-    /// value written to `localStorage` right before this call actually
-    /// survives a following [`Self::relaunch`].
+    /// Close the app's main window the way a user does, then wait until the
+    /// app has observably exited, so a value written to `localStorage` right
+    /// before this call can survive a following [`Self::relaunch`].
     ///
     /// [`Self::shutdown`]'s `driver.quit()` makes the `tauri-webdriver` CLI
     /// force-kill the app process — the CLI's only handle on the app's
@@ -1719,139 +1766,178 @@ impl E2eApp {
     /// delay) shows this reliably loses a `localStorage` write on Windows:
     /// the raw value read back after a relaunch was `null`, not merely
     /// stale — WebView2 commits `localStorage` to its on-disk LevelDB-backed
-    /// store on a graceful shutdown, not on a timer, so a delay before an
-    /// abrupt kill cannot save it.
+    /// store on its own schedule or on an orderly close, so a short delay
+    /// before an abrupt kill cannot save it.
     ///
-    /// Triggers a REAL native window close — `@tauri-apps/api/window`'s
-    /// `getCurrentWindow().close()` (dynamically imported the same way
-    /// `apps/desktop/src/data/theme.ts`'s `syncNativeWindowTheme` already
-    /// does), not DOM's bare `window.close()` (a no-op for a top-level
-    /// window in most engines). This app has no `on_window_event`/
-    /// `CloseRequested` handler (`apps/desktop/src-tauri/src/lib.rs`), so
-    /// closing the only window exits the process the same way the native
-    /// Quit menu item's `app.exit(0)` does (`lib.rs`'s `on_menu_event`) —
-    /// real-user fidelity, not a synthetic teardown path.
+    /// The close is the real window-close command, `plugin:window|close` —
+    /// exactly what `getCurrentWindow().close()` in `@tauri-apps/api/window`
+    /// invokes — sent over the app's own IPC bridge, `window.__PV_E2E__`. It
+    /// must NOT `import('@tauri-apps/api/window')`: a script injected through
+    /// WebDriver is not part of Vite's bundle, so that bare specifier never
+    /// resolves, the import rejects, and no window closes. The previous
+    /// version did exactly that, so every run polled a still-open window for
+    /// the whole deadline before the forced kill (the Windows dock-restart
+    /// journey took a constant ~69s, e.g. main E2E runs 38446399243 and
+    /// 38889705175). This app has no `CloseRequested` handler except a staged
+    /// updater install (`updater::on_run_event`), so closing the only window
+    /// exits the process the way the Quit menu's `app.exit(0)` does.
     ///
-    /// Polls for the `__PV_E2E__` bridge to actually disappear (proof the
-    /// window/process tore down) rather than trusting the `close()` promise
-    /// resolved before the OS finished reaping the process, then hands off
-    /// to [`Self::shutdown`] — by then the app is normally already gone, so
-    /// that call is just cleaning up the (already-dead) CLI session and
-    /// freeing its proxy port, not the thing that kills the app.
+    /// The exit is observed outside the webview, never by polling the
+    /// closing window over WebDriver (a script against a half-destroyed
+    /// webview can block for the whole [`SCRIPT_TIMEOUT`]):
+    /// - the clean-shutdown marker, which the app writes from its final
+    ///   `RunEvent::Exit` hook (`apps/desktop/src-tauri/src/clean_shutdown.rs`),
+    ///   shows the exit ran its orderly path rather than crashing;
+    /// - the embedded WebDriver plugin's port refusing connections shows the
+    ///   process itself has ended.
     ///
-    /// Falls back to [`Self::shutdown`]'s abrupt kill if the graceful close
-    /// doesn't complete within the deadline (e.g. the dynamic import fails
-    /// outside a real Tauri runtime) — best-effort, never hangs a journey.
-    pub async fn graceful_shutdown(self) -> Result<()> {
-        let script = r#"
-            var callback = arguments[arguments.length - 1];
-            import('@tauri-apps/api/window').then(function (mod) {
-                return mod.getCurrentWindow().close();
-            }).then(function () {
-                callback(true);
-            }).catch(function () {
-                callback(false);
-            });
-        "#;
-        let _: bool = self
-            .driver
-            .execute_async(script, vec![])
-            .await
-            .ok()
-            .and_then(|ret| ret.convert::<bool>().ok())
-            .unwrap_or(false);
+    /// Bounded by [`GRACEFUL_EXIT_DEADLINE`]: if the process has not ended by
+    /// then, or the close could not be requested at all, this falls back to
+    /// [`Self::shutdown`]'s kill and says so in the returned
+    /// [`ShutdownReport`]. It never hangs a journey; whether a non-orderly
+    /// exit fails the journey is the caller's call.
+    pub async fn graceful_shutdown(self) -> Result<ShutdownReport> {
+        let marker = clean_shutdown_marker(&instance_env().vars);
+        // Boot consumes the marker long before a journey gets here; removing a
+        // leftover anyway stops a stale one from vouching for this exit.
+        if let Some(marker) = &marker {
+            let _ = std::fs::remove_file(marker);
+        }
 
-        // Proof the window/process actually tore down: once it has, WebDriver
-        // commands against the now-gone window/session fail — treat any
-        // error the same as an explicit "bridge gone" (`Ok(false)`).
-        let shutdown_timeout = if cfg!(target_os = "windows") {
-            Duration::from_secs(60)
-        } else {
-            Duration::from_secs(10)
+        let started = Instant::now();
+        let (close_request, may_be_closing) = self.request_main_window_close().await;
+        let mut report = ShutdownReport {
+            close_request,
+            deadline: GRACEFUL_EXIT_DEADLINE,
+            watched: may_be_closing,
+            exit_hook_after: None,
+            process_gone_after: None,
+            close_outcome: None,
+            cli_output: String::new(),
         };
-        let deadline = Instant::now() + shutdown_timeout;
-        loop {
-            match self.bridge_ready().await {
-                Ok(false) | Err(_) => break,
-                Ok(true) if Instant::now() >= deadline => break,
-                Ok(true) => tokio::time::sleep(Duration::from_millis(100)).await,
+        if report.watched {
+            let deadline = started + GRACEFUL_EXIT_DEADLINE;
+            loop {
+                // Port first: the exit hook runs before the process ends, so a
+                // marker still absent once the port is gone never appears.
+                let gone = !port_accepts(self.native_port);
+                if report.exit_hook_after.is_none() && marker.as_ref().is_some_and(|m| m.exists()) {
+                    report.exit_hook_after = Some(started.elapsed());
+                }
+                if gone {
+                    report.process_gone_after = Some(started.elapsed());
+                    break;
+                }
+                if Instant::now() >= deadline {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(100)).await;
             }
         }
-        // Small extra margin for the OS to finish reaping the process right
-        // after the window/webview teardown completes.
-        tokio::time::sleep(Duration::from_millis(200)).await;
+        if report.process_gone_after.is_none() {
+            // The window may still be open; ask it what became of the request.
+            report.close_outcome = Some(self.read_close_outcome().await);
+        }
+        report.cli_output = self.proc_log.dump();
 
-        self.shutdown().await
+        self.shutdown().await?;
+        Ok(report)
     }
 
+    /// Ask the main window to close, without waiting for it to do so. Returns
+    /// the page's answer and whether the window may now be closing: `false`
+    /// only when the page itself answered that it sent nothing (no bridge).
+    ///
+    /// The close is deferred by a task so the script's own result is
+    /// normally delivered before the window starts tearing down. That is not
+    /// guaranteed: the timer can fire, and the window close, before WebDriver
+    /// returns the result, which then surfaces as a script or transport error
+    /// or as no answer within [`PAGE_PROBE_TIMEOUT`]. Every such outcome is
+    /// ambiguous, so the caller watches the external exit signals instead of
+    /// assuming the request never left the page — a wrong "not closing"
+    /// would make it kill an app that is exiting on its own and lose the
+    /// very flush the exit is for. Watching costs at most the bounded
+    /// [`GRACEFUL_EXIT_DEADLINE`] when the app really is still running.
+    async fn request_main_window_close(&self) -> (String, bool) {
+        let script = format!(
+            r"
+            var bridge = window.__PV_E2E__;
+            if (!bridge || typeof bridge.invoke !== 'function') {{
+                return '{NO_BRIDGE}';
+            }}
+            window.__pvE2eCloseOutcome = 'pending';
+            setTimeout(function () {{
+                bridge.invoke('plugin:window|close', {{ label: '{MAIN_WINDOW_LABEL}' }}).then(
+                    function () {{ window.__pvE2eCloseOutcome = 'resolved'; }},
+                    function (e) {{ window.__pvE2eCloseOutcome = 'rejected: ' + e; }}
+                );
+            }}, 0);
+            return '{CLOSE_REQUESTED}';
+            "
+        );
+        match tokio::time::timeout(PAGE_PROBE_TIMEOUT, self.driver.execute(&script, vec![])).await {
+            Ok(Ok(ret)) => match ret.convert::<String>() {
+                Ok(answer) => {
+                    let may_be_closing = answer != NO_BRIDGE;
+                    (answer, may_be_closing)
+                }
+                Err(e) => (format!("<undeserialisable close answer: {e}>"), true),
+            },
+            Ok(Err(e)) => (format!("<close request script failed: {e}>"), true),
+            Err(_) => (format!("<close request unanswered within {PAGE_PROBE_TIMEOUT:?}>"), true),
+        }
+    }
+
+    /// What became of [`Self::request_main_window_close`]'s request, read
+    /// back from a window that did not go away. Never fails: it only feeds a
+    /// [`ShutdownReport`].
+    async fn read_close_outcome(&self) -> String {
+        let probe = "return String(window.__pvE2eCloseOutcome);";
+        match tokio::time::timeout(PAGE_PROBE_TIMEOUT, self.driver.execute(probe, vec![])).await {
+            Ok(Ok(ret)) => {
+                ret.convert::<String>().unwrap_or_else(|e| format!("<undeserialisable: {e}>"))
+            }
+            Ok(Err(e)) => format!("<page unreachable: {e}>"),
+            Err(_) => format!("<page unanswered within {PAGE_PROBE_TIMEOUT:?}>"),
+        }
+    }
+
+    /// Wait until WebView2 has written `fragment` — a verbatim slice of a
+    /// `localStorage` value — into this instance's on-disk `localStorage`
+    /// store, and return how long that took.
+    ///
+    /// This checks for the value itself. LevelDB's structural files appear
+    /// before any content, and data files appear for any write at all, so
+    /// their presence (what this probe used to accept, in any `leveldb`
+    /// directory of the profile) proves nothing about the value under test.
+    /// See [`local_storage_on_disk_contains`] for what is searched.
     #[cfg(target_os = "windows")]
-    pub async fn wait_for_webview_storage_flush() -> Result<()> {
+    pub async fn wait_for_local_storage_on_disk(fragment: &str) -> Result<Duration> {
         use super::helpers::lookup;
-        let dir = lookup(&instance_env().vars, "WEBVIEW2_USER_DATA_FOLDER")
+        let profile = lookup(&instance_env().vars, "WEBVIEW2_USER_DATA_FOLDER")
             .map(PathBuf::from)
             .context("WEBVIEW2_USER_DATA_FOLDER was not configured")?;
-        let deadline = Instant::now() + Duration::from_secs(15);
+        let started = Instant::now();
         loop {
-            if let Some(leveldb) = find_leveldb_dir(&dir) {
-                // Wait for a DATA file (.ldb) or a write-ahead log (.log with
-                // non-zero size). Structural files (LOCK, CURRENT, MANIFEST-*)
-                // appear before localStorage content is committed, so checking
-                // "any file exists" is insufficient — that's what caused the
-                // TRY-1-only "no persisted detailDock entry" on loaded runners
-                // (bead astro-plan-msdw).
-                if std::fs::read_dir(&leveldb).ok().is_some_and(|entries| {
-                    entries.flatten().any(|entry| {
-                        let path = entry.path();
-                        if !path.is_file() {
-                            return false;
-                        }
-                        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
-                        if ext == "ldb" {
-                            return true;
-                        }
-                        // LevelDB .log files are the WAL — a non-empty one
-                        // means data has been written (even if not yet
-                        // compacted into .ldb).
-                        if ext == "log" {
-                            return path.metadata().map_or(false, |m| m.len() > 0);
-                        }
-                        false
-                    })
-                }) {
-                    // Data files appeared: wait until their total size has
-                    // been stable across 3 consecutive 200 ms polls before
-                    // returning.  WebView2's LevelDB commit is asynchronous —
-                    // the file can be present but still growing while the WAL
-                    // is being flushed.  A fixed 2 s sleep (the previous
-                    // approach at the call site) over-waits on fast runners
-                    // and could theoretically under-wait on a very slow one.
-                    // Three stable readings at 200 ms each cap the stability
-                    // window at 600 ms; the 15 s overall deadline still
-                    // bounds the worst case.
-                    let mut stable_count = 0u8;
-                    let mut prev_size = leveldb_data_size(&leveldb);
-                    while Instant::now() < deadline {
-                        tokio::time::sleep(Duration::from_millis(200)).await;
-                        let cur_size = leveldb_data_size(&leveldb);
-                        if cur_size == prev_size {
-                            stable_count += 1;
-                            if stable_count >= 3 {
-                                return Ok(());
-                            }
-                        } else {
-                            stable_count = 0;
-                            prev_size = cur_size;
-                        }
-                    }
-                    // Deadline exceeded while waiting for stability; proceed
-                    // anyway — data files are present and the caller will read
-                    // them now.
-                    return Ok(());
-                }
+            let stores = local_storage_dirs(&profile);
+            let search = local_storage_on_disk_contains(&stores, fragment);
+            if search.found {
+                return Ok(started.elapsed());
             }
-            if Instant::now() >= deadline {
+            if started.elapsed() >= LOCAL_STORAGE_FLUSH_TIMEOUT {
+                let verdict = if search.read_errors.is_empty() {
+                    "never reached".to_owned()
+                } else {
+                    format!(
+                        "could not be confirmed in (unreadable on the last poll: {})",
+                        search.read_errors.join("; ")
+                    )
+                };
                 anyhow::bail!(
-                    "WebView2 profile did not expose persisted LevelDB data files within 15s"
+                    "{fragment} {verdict} WebView2's on-disk localStorage within \
+                     {LOCAL_STORAGE_FLUSH_TIMEOUT:?}; stores under {}: {}",
+                    profile.display(),
+                    describe_stores(&stores)
                 );
             }
             tokio::time::sleep(Duration::from_millis(200)).await;
@@ -1869,6 +1955,75 @@ impl E2eApp {
         let _ = self.driver.clone().quit().await;
         if let Some(mut child) = self.driver_proc.take() {
             kill_driver_proc(&mut child);
+        }
+        Ok(())
+    }
+}
+
+/// What [`E2eApp::graceful_shutdown`] observed between its close request and
+/// its teardown. `Display` gives the one-line verdict.
+pub struct ShutdownReport {
+    /// The page's answer to the close request.
+    close_request: String,
+    deadline: Duration,
+    /// Whether the exit signals were watched at all: `false` only when the
+    /// page answered that it sent no close.
+    watched: bool,
+    /// Close request to the exit hook's clean-shutdown marker.
+    exit_hook_after: Option<Duration>,
+    /// Close request to the app's WebDriver plugin port refusing connections.
+    process_gone_after: Option<Duration>,
+    /// The close request's fate, read back when the process did not end.
+    close_outcome: Option<String>,
+    /// The closed app's CLI output, captured before teardown.
+    cli_output: String,
+}
+
+impl ShutdownReport {
+    /// The app ran its exit hook and its process ended on its own within the
+    /// deadline: no kill was needed.
+    pub fn orderly(&self) -> bool {
+        self.exit_hook_after.is_some() && self.process_gone_after.is_some()
+    }
+
+    /// The closed app's `tauri-webdriver` CLI output, captured after it
+    /// exited (or at the deadline) and before teardown.
+    pub fn cli_output(&self) -> &str {
+        &self.cli_output
+    }
+}
+
+impl fmt::Display for ShutdownReport {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Both observed is exactly `orderly()`.
+        if let (Some(hook), Some(gone)) = (self.exit_hook_after, self.process_gone_after) {
+            return write!(
+                f,
+                "orderly exit {gone:.1?} after the close request (exit hook by {hook:.1?}; \
+                 fallback deadline {:?} unused)",
+                self.deadline
+            );
+        }
+        write!(f, "NO orderly exit: close request answered {:?}; ", self.close_request)?;
+        if self.watched {
+            let hook = self
+                .exit_hook_after
+                .map_or_else(|| "never seen".to_owned(), |t| format!("seen by {t:.1?}"));
+            let process = self.process_gone_after.map_or_else(
+                || {
+                    format!(
+                        "still serving its WebDriver port after {:?}, then killed",
+                        self.deadline
+                    )
+                },
+                |t| format!("gone by {t:.1?}"),
+            );
+            write!(f, "exit hook (clean-shutdown marker) {hook}; app process {process}")?;
+        } else {
+            write!(f, "exit not watched (close never sent); killed")?;
+        }
+        if let Some(outcome) = &self.close_outcome {
+            write!(f, "; close request outcome in the page: {outcome}")?;
         }
         Ok(())
     }

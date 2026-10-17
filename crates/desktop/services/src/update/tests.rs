@@ -25,6 +25,7 @@ use super::{
     manifest, LaunchedApp, Package, Parts, Platform, QuitDecision, UpdateError, UpdateFailure,
     UpdateHost, UpdatePhase, UpdatePort, Updater, UpdaterConfig,
 };
+use crate::locale::ActiveLocale;
 
 const RUNNING: &str = "0.6.0";
 const RELEASE: &str = "0.7.0";
@@ -195,7 +196,11 @@ impl Installer for Arc<FakeInstaller> {
         if let Some(gate) = gate {
             let _ = gate.recv();
         }
-        self.results.lock().expect("results").pop_front().unwrap_or(Ok(Installed::Relaunch))
+        self.results
+            .lock()
+            .expect("results")
+            .pop_front()
+            .unwrap_or_else(|| Ok(Installed::relaunch()))
     }
 }
 
@@ -250,6 +255,7 @@ fn test_platform(package: Option<Package>) -> Platform {
 
 struct Rig {
     updater: Updater,
+    locale: ActiveLocale,
     host: mpsc::Receiver<HostCall>,
 }
 
@@ -278,6 +284,7 @@ impl Rig {
         notify_delay: Duration,
     ) -> Self {
         let (calls, host) = mpsc::channel();
+        let locale = ActiveLocale::new();
         let updater = Updater::assemble(Parts {
             current_version: Version::parse(RUNNING).expect("version"),
             endpoints: vec![Url::parse("https://example.test/latest.json").expect("url")],
@@ -287,9 +294,9 @@ impl Rig {
             installer,
             host: Box::new(FakeHost { calls: Mutex::new(calls), notify_delay }),
             quit_install_ceiling,
-            wording: super::wording::Wording::in_locale("en-GB").expect("en-GB wording"),
+            locale: locale.clone(),
         });
-        Self { updater, host }
+        Self { updater, locale, host }
     }
 
     fn phase(&self) -> UpdatePhase {
@@ -676,7 +683,7 @@ async fn a_failed_install_keeps_the_verified_payload_for_a_retry() {
     let source = FakeSource::release(&signer, b"new AppImage");
     let installer = FakeInstaller::answering(vec![
         Err(UpdateError::Install("disk full".to_owned())),
-        Ok(Installed::Relaunch),
+        Ok(Installed::relaunch()),
     ]);
     let rig = Rig::new(&signer, &source, Box::new(Arc::clone(&installer)));
     rig.updater.check().await;
@@ -730,7 +737,7 @@ async fn a_quit_during_install_now_exits_once_a_failed_install_is_over() {
 
 #[tokio::test]
 async fn a_quit_during_install_now_exits_instead_of_relaunching() {
-    let (rig, release_install, install) = install_now_blocked(Ok(Installed::Relaunch)).await;
+    let (rig, release_install, install) = install_now_blocked(Ok(Installed::relaunch())).await;
 
     assert_eq!(rig.updater.on_quit_requested(), QuitDecision::Defer);
     release_install.send(()).expect("release the install");
@@ -878,12 +885,90 @@ fn previous_app_not_restored() -> UpdateError {
     }
 }
 
+/// The macOS app this process was launched from, in [`replaced_app`].
+const APP: &str = "/Applications/PlateVault.app";
+
+/// The install refused because the app at [`APP`] was moved or replaced
+/// after launch; it kept what it found there at `kept`.
+fn replaced_app(kept: &[&str]) -> UpdateError {
+    UpdateError::AppReplaced {
+        app: std::path::PathBuf::from(APP),
+        kept: kept.iter().map(std::path::PathBuf::from).collect(),
+    }
+}
+
+fn replaced_app_notice_en_gb() -> HostCall {
+    HostCall::Notify {
+        title: "Update not installed".to_owned(),
+        body: "Could not install update: the PlateVault app was moved or replaced after it was opened. Restart PlateVault, then try again.".to_owned(),
+    }
+}
+
+fn kept_aside_notice_en_gb() -> HostCall {
+    HostCall::Notify {
+        title: "Update installed".to_owned(),
+        body: format!(
+            "PlateVault found another app in its place while updating. It's saved at {KEPT}."
+        ),
+    }
+}
+
 fn kept_notice_en_gb() -> HostCall {
     HostCall::Notify {
         title: "Update not installed".to_owned(),
         body: format!(
             "Could not install update: the previous version couldn't be put back. It's saved at {KEPT}."
         ),
+    }
+}
+
+#[test]
+fn updater_wording_is_cached_from_every_shipped_locale() {
+    let kept = std::path::Path::new(KEPT);
+    for shipped in &crate::locale::SHIPPED_LOCALES {
+        let wording = super::wording::Wording::from_locale(shipped);
+        let prompt = wording.admin_prompt("0.7.0");
+        let expected_prompt = if shipped.tag == "pt-BR" {
+            "O PlateVault precisa do nome e da senha de um administrador para instalar a atualização 0.7.0."
+        } else {
+            "PlateVault needs an administrator's name and password to install update 0.7.0."
+        };
+        assert_eq!(prompt, expected_prompt);
+        assert!(!prompt.contains('{'), "{}: {prompt}", shipped.tag);
+
+        let expected_failed = if shipped.tag == "pt-BR" {
+            "Atualização não instalada"
+        } else {
+            "Update not installed"
+        };
+        let expected_installed =
+            if shipped.tag == "pt-BR" { "Atualização instalada" } else { "Update installed" };
+        for (notice, title, names_kept) in [
+            (wording.previous_app_kept(kept), expected_failed, true),
+            (wording.app_replaced(&[]), expected_failed, false),
+            (wording.app_replaced(&[kept.to_path_buf()]), expected_failed, true),
+            (wording.installed_kept_aside(&[kept.to_path_buf()]), expected_installed, true),
+        ] {
+            assert_eq!(notice.title, title, "{}", shipped.tag);
+            assert!(!notice.body.contains('{'), "{}: {}", shipped.tag, notice.body);
+            assert_eq!(
+                notice.body.contains(&kept.display().to_string()),
+                names_kept,
+                "{}: {}",
+                shipped.tag,
+                notice.body
+            );
+        }
+    }
+}
+
+#[test]
+fn every_kept_path_is_named() {
+    let wording = super::wording::Wording::from_locale(crate::locale::base());
+    let kept = ["/Applications/A.app", "/Users/me/B.app"].map(std::path::PathBuf::from);
+
+    for notice in [wording.app_replaced(&kept), wording.installed_kept_aside(&kept)] {
+        assert!(notice.body.contains("/Applications/A.app, /Users/me/B.app"), "{}", notice.body);
     }
 }
 
@@ -934,7 +1019,7 @@ async fn the_watchdog_waits_for_the_notice_of_a_kept_previous_app() {
 async fn a_quit_held_during_install_now_says_where_the_previous_app_was_kept() {
     let (rig, release_install, install) =
         install_now_blocked(Err(previous_app_not_restored())).await;
-    rig.updater.set_locale("pt-BR");
+    rig.locale.set_locale("pt-BR");
 
     assert_eq!(rig.updater.on_quit_requested(), QuitDecision::Defer);
     release_install.send(()).expect("release the install");
@@ -984,6 +1069,113 @@ async fn any_other_failed_install_at_quit_exits_without_a_notice() {
     assert_eq!(rig.host_calls(), vec![HostCall::Exit], "the installed app is as it was");
 }
 
+/// An install at quit over an app replaced after launch installs nothing,
+/// and the next launch would run whatever is there now: the notice asks the
+/// user to restart and install again (Codex `PRRT_kwDOSdTu0s6tbUCL`).
+#[tokio::test]
+async fn an_install_at_quit_over_a_replaced_app_asks_for_a_restart_before_exiting() {
+    let signer = Signer::new();
+    let source = FakeSource::release(&signer, b"new AppImage");
+    let installer = FakeInstaller::answering(vec![Err(replaced_app(&[]))]);
+    let rig = Rig::new(&signer, &source, Box::new(Arc::clone(&installer)));
+    rig.updater.check().await;
+    rig.updater.install_on_quit().await;
+
+    assert_eq!(rig.updater.on_quit_requested(), QuitDecision::Defer);
+
+    assert_eq!(rig.next_host_call(), replaced_app_notice_en_gb(), "the notice comes first");
+    assert_eq!(rig.next_host_call(), HostCall::Exit);
+}
+
+#[tokio::test]
+async fn a_quit_held_during_install_now_over_a_replaced_app_says_where_what_was_found_is_kept() {
+    let (rig, release_install, install) = install_now_blocked(Err(replaced_app(&[KEPT]))).await;
+    rig.locale.set_locale("pt-BR");
+
+    assert_eq!(rig.updater.on_quit_requested(), QuitDecision::Defer);
+    release_install.send(()).expect("release the install");
+    install.await.expect("install task");
+
+    assert_eq!(
+        rig.host_calls(),
+        vec![
+            HostCall::Notify {
+                title: "Atualização não instalada".to_owned(),
+                body: format!(
+                    "Não foi possível instalar a atualização: o aplicativo PlateVault foi movido ou substituído depois de ser aberto. O que estava no lugar dele está salvo em {KEPT}. Reinicie o PlateVault e tente novamente."
+                ),
+            },
+            HostCall::Exit,
+        ]
+    );
+}
+
+/// The update is in place, but the install kept aside another app it found
+/// in the app's place: the user is told where before the restart, which
+/// leaves no window to say it in.
+#[tokio::test]
+async fn an_install_that_kept_another_app_aside_says_where_before_relaunching() {
+    let signer = Signer::new();
+    let source = FakeSource::release(&signer, b"new AppImage");
+    let kept_aside = vec![std::path::PathBuf::from(KEPT)];
+    let installer = FakeInstaller::answering(vec![Ok(Installed::Relaunch { kept_aside })]);
+    let rig = Rig::new(&signer, &source, Box::new(Arc::clone(&installer)));
+    rig.updater.check().await;
+
+    rig.updater.install_now().await;
+
+    assert_eq!(rig.host_calls(), vec![kept_aside_notice_en_gb(), HostCall::Relaunch]);
+}
+
+#[tokio::test]
+async fn an_install_at_quit_that_kept_another_app_aside_says_where_before_exiting() {
+    let signer = Signer::new();
+    let source = FakeSource::release(&signer, b"new AppImage");
+    let kept_aside = vec![std::path::PathBuf::from(KEPT)];
+    let installer = FakeInstaller::answering(vec![Ok(Installed::Relaunch { kept_aside })]);
+    let rig = Rig::new(&signer, &source, Box::new(Arc::clone(&installer)));
+    rig.updater.check().await;
+    rig.updater.install_on_quit().await;
+
+    assert_eq!(rig.updater.on_quit_requested(), QuitDecision::Defer);
+
+    assert_eq!(rig.next_host_call(), kept_aside_notice_en_gb(), "the notice comes first");
+    assert_eq!(rig.next_host_call(), HostCall::Exit);
+}
+
+/// A quit held during Install now wins over the relaunch: the install that
+/// kept another app aside says where, then exits.
+#[tokio::test]
+async fn a_quit_held_during_install_now_that_kept_another_app_aside_says_where_then_exits() {
+    let kept_aside = vec![KEPT.into()];
+    let (rig, release_install, install) =
+        install_now_blocked(Ok(Installed::Relaunch { kept_aside })).await;
+
+    assert_eq!(rig.updater.on_quit_requested(), QuitDecision::Defer);
+    release_install.send(()).expect("release the install");
+    install.await.expect("install task");
+
+    assert_eq!(rig.host_calls(), vec![kept_aside_notice_en_gb(), HostCall::Exit], "no relaunch");
+}
+
+/// Without a quit, the window stays and shows the kept path itself.
+#[tokio::test]
+async fn install_now_over_a_replaced_app_shows_the_kept_path_in_the_app() {
+    let signer = Signer::new();
+    let source = FakeSource::release(&signer, b"new AppImage");
+    let installer = FakeInstaller::answering(vec![Err(replaced_app(&[KEPT]))]);
+    let rig = Rig::new(&signer, &source, Box::new(Arc::clone(&installer)));
+    rig.updater.check().await;
+
+    rig.updater.install_now().await;
+
+    assert!(rig.host_calls().is_empty(), "no notification, relaunch or exit");
+    assert_eq!(
+        rig.updater.current_status().error,
+        Some(UpdateFailure::AppReplaced { kept_at: vec![KEPT.to_owned()] })
+    );
+}
+
 #[tokio::test]
 async fn each_install_asks_for_administrator_rights_in_the_active_language() {
     let signer = Signer::new();
@@ -993,8 +1185,8 @@ async fn each_install_asks_for_administrator_rights_in_the_active_language() {
     rig.updater.check().await;
     rig.updater.install_now().await;
 
-    rig.updater.set_locale("pt-BR");
-    assert_eq!(rig.updater.locale().tag, "pt-BR");
+    rig.locale.set_locale("pt-BR");
+    assert_eq!(rig.locale.get().tag, "pt-BR");
     rig.updater.install_on_quit().await;
     assert_eq!(rig.updater.on_quit_requested(), QuitDecision::Defer);
     assert_eq!(rig.next_host_call(), HostCall::Exit);
@@ -1017,9 +1209,9 @@ fn a_locale_that_is_not_shipped_speaks_the_base_language() {
     let signer = Signer::new();
     let source = FakeSource::release(&signer, b"new AppImage");
     let rig = Rig::new(&signer, &source, Box::new(FakeInstaller::answering(vec![])));
-    rig.updater.set_locale("pt-BR");
-    rig.updater.set_locale("de-DE");
-    assert_eq!(rig.updater.locale().tag, "en-GB");
+    rig.locale.set_locale("pt-BR");
+    rig.locale.set_locale("de-DE");
+    assert_eq!(rig.locale.get().tag, "en-GB");
 }
 
 #[tokio::test]
@@ -1079,7 +1271,7 @@ fn every_error_reaches_the_ui_as_a_code() {
         (UpdateError::Manifest(String::new()), UpdateFailure::Manifest),
         (UpdateError::Signature(String::new()), UpdateFailure::Signature),
         (UpdateError::Identity(String::new()), UpdateFailure::Identity),
-        (UpdateError::AppReplaced(String::new()), UpdateFailure::AppReplaced),
+        (replaced_app(&[]), UpdateFailure::AppReplaced { kept_at: Vec::new() }),
         (UpdateError::Permission(String::new()), UpdateFailure::Permission),
         (UpdateError::Install(String::new()), UpdateFailure::Install),
         (io(std::io::ErrorKind::PermissionDenied), UpdateFailure::Permission),
@@ -1109,6 +1301,20 @@ fn a_previous_app_that_was_not_put_back_is_named_to_the_ui() {
 }
 
 #[test]
+fn what_was_kept_from_a_replaced_app_is_named_to_the_ui() {
+    let error = replaced_app(&[KEPT]);
+    assert_eq!(error.failure(), UpdateFailure::AppReplaced { kept_at: vec![KEPT.to_owned()] });
+    assert_eq!(
+        error.to_string(),
+        format!("{APP} is no longer the app PlateVault was launched from, so nothing was installed; what could not be put back is kept at {KEPT}")
+    );
+    assert_eq!(
+        replaced_app(&[]).to_string(),
+        format!("{APP} is no longer the app PlateVault was launched from, so nothing was installed; a restart launches what is there now")
+    );
+}
+
+#[test]
 fn the_status_serializes_its_failure_as_a_tagged_code() {
     let status = super::UpdateStatus {
         error: Some(UpdateFailure::PreviousAppNotRestored { kept_at: "/tmp/x.app".to_owned() }),
@@ -1123,6 +1329,14 @@ fn the_status_serializes_its_failure_as_a_tagged_code() {
     assert_eq!(
         serde_json::to_value(&network).expect("json")["error"],
         json!({ "code": "network" })
+    );
+    let replaced = super::UpdateStatus {
+        error: Some(UpdateFailure::AppReplaced { kept_at: vec!["/tmp/x.app".to_owned()] }),
+        ..super::UpdateStatus::idle()
+    };
+    assert_eq!(
+        serde_json::to_value(&replaced).expect("json")["error"],
+        json!({ "code": "app-replaced", "keptAt": ["/tmp/x.app"] })
     );
 }
 
@@ -1148,19 +1362,25 @@ fn config(endpoint: &str, public_key: String) -> UpdaterConfig {
 
 #[test]
 fn an_endpoint_that_is_not_https_is_rejected() {
-    let error =
-        Updater::new(config("http://example.test/latest.json", Signer::new().public_key()), NoHost)
-            .err()
-            .expect("rejected");
+    let error = Updater::new(
+        config("http://example.test/latest.json", Signer::new().public_key()),
+        NoHost,
+        ActiveLocale::new(),
+    )
+    .err()
+    .expect("rejected");
     assert!(matches!(error, UpdateError::Config(_)), "{error}");
 }
 
 #[test]
 fn a_public_key_that_is_not_minisign_is_rejected() {
-    let error =
-        Updater::new(config("https://example.test/latest.json", base64("not a key")), NoHost)
-            .err()
-            .expect("rejected");
+    let error = Updater::new(
+        config("https://example.test/latest.json", base64("not a key")),
+        NoHost,
+        ActiveLocale::new(),
+    )
+    .err()
+    .expect("rejected");
     assert!(matches!(error, UpdateError::Config(_)), "{error}");
 }
 
@@ -1312,6 +1532,12 @@ mod bundle {
         installed.with_file_name("Launched.app")
     }
 
+    /// What the UI is told of an app replaced after launch that the install
+    /// refused before moving anything.
+    fn nothing_kept() -> UpdateFailure {
+        UpdateFailure::AppReplaced { kept_at: Vec::new() }
+    }
+
     #[tokio::test]
     async fn an_update_that_satisfies_the_designated_requirement_installs() {
         let signing = FakeSigning::new(Identity::Designated(REQUIREMENT.to_owned()), REQUIREMENT);
@@ -1396,7 +1622,7 @@ mod bundle {
             assert_eq!(marker(&launched_app_moved(&installed)), "old", "{identity:?}");
             let status = rig.updater.current_status();
             assert_eq!(status.phase, UpdatePhase::InstallFailed, "{identity:?}");
-            assert_eq!(status.error, Some(UpdateFailure::AppReplaced), "{identity:?}");
+            assert_eq!(status.error, Some(nothing_kept()), "{identity:?}");
             assert!(
                 rig.updater.error_text().expect("detail").contains("launched from"),
                 "{identity:?}"
@@ -1425,7 +1651,7 @@ mod bundle {
         assert_eq!(marker(&launched_app_moved(&installed)), "old");
         let status = rig.updater.current_status();
         assert_eq!(status.phase, UpdatePhase::InstallFailed);
-        assert_eq!(status.error, Some(UpdateFailure::AppReplaced));
+        assert_eq!(status.error, Some(nothing_kept()));
         assert!(rig.host_calls().is_empty(), "no relaunch");
     }
 
@@ -1441,7 +1667,7 @@ mod bundle {
 
         assert!(std::fs::symlink_metadata(&installed).is_err(), "nothing is installed there");
         assert_eq!(marker(&launched_app_moved(&installed)), "old");
-        assert_eq!(rig.updater.current_status().error, Some(UpdateFailure::AppReplaced));
+        assert_eq!(rig.updater.current_status().error, Some(nothing_kept()));
         assert!(!signing.consulted(), "refused before any identity is read");
         assert!(rig.host_calls().is_empty(), "no relaunch");
     }
@@ -1460,7 +1686,7 @@ mod bundle {
         .await;
 
         assert_eq!(marker(&moved_folder(&installed).join("PlateVault.app")), "old");
-        assert_eq!(rig.updater.current_status().error, Some(UpdateFailure::AppReplaced));
+        assert_eq!(rig.updater.current_status().error, Some(nothing_kept()));
         assert!(!signing.consulted(), "refused before any identity is read");
         assert!(rig.host_calls().is_empty(), "no relaunch");
     }

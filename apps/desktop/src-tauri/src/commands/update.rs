@@ -8,11 +8,23 @@
 //! release was made as `update:offer` events
 //! (`crate::updater::UPDATE_OFFER_EVENT`, astro-plan-c72oo).
 
+use desktop_services::locale::ActiveLocale;
+
 use contracts_core::updates::{UpdateOffer, UpdateStatus};
 use contracts_core::ContractError;
 use desktop_services::update::offer::Offers;
 use desktop_services::update::{UpdatePort as _, Updater};
-use tauri::{AppHandle, Manager, Runtime};
+use tauri::Manager;
+use tauri::State;
+#[cfg(test)]
+use tauri::{
+    http::HeaderMap,
+    ipc::{CallbackFn, InvokeBody},
+    test::{self, INVOKE_KEY},
+    utils::config::WebviewUrl,
+    webview::{InvokeRequest, WebviewWindowBuilder},
+};
+use tauri::{AppHandle, Runtime};
 
 fn unavailable() -> ContractError {
     ContractError::internal("updates are unavailable in this build")
@@ -105,20 +117,61 @@ pub async fn update_install_on_quit(app: AppHandle) -> Result<(), ContractError>
 }
 
 /// `update.set_locale` — the webview's active locale, sent at startup and on
-/// every locale change, for the text the updater shows outside the webview:
-/// the macOS administrator prompt and the notification an install at quit
-/// raises. A tag that is not a shipped locale means the base locale. Without
-/// an updater there is nothing to tell, which is not an error.
+/// every locale change, for text the updater and desktop notifications show
+/// outside the webview: the macOS administrator prompt, update notices and OS
+/// completion notices. A tag that is not a shipped locale means the base locale.
 ///
 /// # Errors
 ///
-/// Never; the `Result` keeps the shape every update command has.
+/// The command itself never fails; the `Result` keeps the shape every update
+/// command has. The locale is managed state, so in an app that does not manage
+/// an [`ActiveLocale`] the call is an IPC error before the command runs.
 #[tauri::command]
 #[specta::specta]
 #[allow(clippy::needless_pass_by_value)] // Tauri injects arguments by value
-pub fn update_set_locale(app: AppHandle, locale: String) -> Result<(), ContractError> {
-    if let Some(updater) = app.try_state::<Updater>() {
-        updater.set_locale(&locale);
-    }
+pub fn update_set_locale(
+    active_locale: State<'_, ActiveLocale>,
+    locale: String,
+) -> Result<(), ContractError> {
+    active_locale.set_locale(&locale);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn update_set_locale_changes_the_managed_locale_through_ipc() {
+        let app = test::mock_builder()
+            .invoke_handler(tauri::generate_handler![update_set_locale])
+            .build(test::mock_context(test::noop_assets()))
+            .expect("build mock app");
+        let shared_locale = ActiveLocale::new();
+        app.manage(shared_locale.clone());
+        let webview = WebviewWindowBuilder::new(&app, "main", WebviewUrl::default())
+            .build()
+            .expect("build mock webview");
+        // The origin a real webview invokes from is the app URL it loaded:
+        // `tauri://localhost` on macOS and Linux, `http://tauri.localhost` on
+        // Windows. Any other origin is remote, which the ACL refuses.
+        let origin = webview.url().expect("mock webview URL");
+
+        for (tag, expected) in [("pt-BR", "pt-BR"), ("de-DE", "en-GB")] {
+            test::get_ipc_response(
+                &webview,
+                InvokeRequest {
+                    cmd: "update_set_locale".to_owned(),
+                    callback: CallbackFn(0),
+                    error: CallbackFn(1),
+                    url: origin.clone(),
+                    body: InvokeBody::Json(serde_json::json!({ "locale": tag })),
+                    headers: HeaderMap::default(),
+                    invoke_key: INVOKE_KEY.to_owned(),
+                },
+            )
+            .expect("update locale command response");
+            assert_eq!(shared_locale.get().tag, expected);
+        }
+    }
 }

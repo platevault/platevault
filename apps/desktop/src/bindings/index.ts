@@ -906,14 +906,15 @@ export const commands = {
 	updateInstallOnQuit: () => typedError<null, ContractError_Serialize>(__TAURI_INVOKE("update_install_on_quit")),
 	/**
 	 *  `update.set_locale` — the webview's active locale, sent at startup and on
-	 *  every locale change, for the text the updater shows outside the webview:
-	 *  the macOS administrator prompt and the notification an install at quit
-	 *  raises. A tag that is not a shipped locale means the base locale. Without
-	 *  an updater there is nothing to tell, which is not an error.
+	 *  every locale change, for text the updater and desktop notifications show
+	 *  outside the webview: the macOS administrator prompt, update notices and OS
+	 *  completion notices. A tag that is not a shipped locale means the base locale.
 	 * 
 	 *  # Errors
 	 * 
-	 *  Never; the `Result` keeps the shape every update command has.
+	 *  The command itself never fails; the `Result` keeps the shape every update
+	 *  command has. The locale is managed state, so in an app that does not manage
+	 *  an [`ActiveLocale`] the call is an IPC error before the command runs.
 	 */
 	updateSetLocale: (locale: string) => typedError<null, ContractError_Serialize>(__TAURI_INVOKE("update_set_locale", { locale })),
 	/**
@@ -10780,9 +10781,11 @@ export type UpdateFailure =
 { code: "identity" } | 
 /**
  *  The macOS app was moved or replaced after it was launched, so nothing
- *  was installed; a restart launches what is there now.
+ *  was installed; a restart launches what is there now. What the install
+ *  found in the app's place and could not put back is kept at `kept_at`
+ *  instead of being deleted; empty when nothing was.
  */
-{ code: "app-replaced" } | 
+{ code: "app-replaced"; keptAt: string[] } | 
 /**  Permission to install was refused or not given. */
 { code: "permission" } | 
 /**  The install step failed. */
