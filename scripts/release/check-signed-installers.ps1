@@ -58,8 +58,9 @@ function Expand-With7Zip([string] $Archive, [string] $Destination, [string[]] $O
 }
 
 function Test-SignPathSignatures([string] $InputDirectory, [string] $OutputDirectory, [string] $ExpectedIssuer = $AuthenticodeIssuer) {
-  foreach ($installer in Get-ChildItem -File $InputDirectory) {
-    $signed = Join-Path $OutputDirectory $installer.Name
+  foreach ($installer in Get-ChildItem -Recurse -File $InputDirectory) {
+    $relative = [System.IO.Path]::GetRelativePath((Resolve-Path $InputDirectory).Path, $installer.FullName)
+    $signed = Join-Path $OutputDirectory $relative
     if (-not (Test-Path -LiteralPath $signed -PathType Leaf)) { throw "SignPath returned no $signed. The artifact configuration must keep each file at its path." }
     $identity = Get-Identity $signed
     if ($identity.Status -ne 'Valid' -or $identity.Signer -cne $AuthenticodeSigner -or $identity.Issuer -cne $ExpectedIssuer) {
@@ -85,7 +86,7 @@ function Check-InstallerContents(
 
   $signedFor = @{}
   foreach ($bundle in 'nsis', 'msi') {
-    $signedFor[$bundle] = @(Get-ChildItem -File (Join-Path $AppSignedDirectory $bundle)) + @(Get-ChildItem -File -Filter '*.exe' $AppSignedDirectory)
+    $signedFor[$bundle] = @(Get-ChildItem -Recurse -File (Join-Path $AppSignedDirectory $bundle)) + @(Get-ChildItem -File -Filter '*.exe' $AppSignedDirectory)
     foreach ($file in $signedFor[$bundle]) {
       $packed = @(Get-ChildItem -Recurse -File -Filter $file.Name (Join-Path $UnpackedDirectory $bundle))
       if ($packed.Count -ne 1) { throw "expected one $($file.Name) in the $bundle installer, found $($packed.Count)" }
@@ -163,11 +164,17 @@ if ($Mode -eq 'Mutate') {
         $mutated = [regex]::Replace($lock, $pattern, '$1$2-rehearsal', 1)
         if ($mutated -ceq $lock) { throw 'CLI lockfile mutation did not apply' }
         $temp = Join-Path ([System.IO.Path]::GetTempPath()) ([guid]::NewGuid().ToString() + '-pnpm-lock.yaml')
-        try { [System.IO.File]::WriteAllText($temp, $mutated); Assert-TauriCliVersion $temp }
-        finally { if (Test-Path -LiteralPath $temp) { Remove-Item -LiteralPath $temp -Force } }
+        try {
+          [System.IO.File]::WriteAllText($temp, $mutated)
+          Assert-TauriCliVersion $temp
+        } finally { if (Test-Path -LiteralPath $temp) { Remove-Item -LiteralPath $temp -Force } }
       } 'Tauri CLI 2\.12\.2.*resolves 2\.12\.2-rehearsal'
     }
-    'WrongSignPathIssuer' { Invoke-ExpectedFailure 'SignPath issuer' { Test-SignPathSignatures $InstallersToSignDirectory $InstallersSignedDirectory 'Unexpected CA' } 'issued by' }
+    'WrongSignPathIssuer' {
+      Invoke-ExpectedFailure 'SignPath issuer' {
+        Test-SignPathSignatures $InstallersToSignDirectory $InstallersSignedDirectory 'Unexpected CA'
+      } 'issued by Unexpected CA'
+    }
     'WrongPin' { Invoke-ExpectedFailure 'NSIS hash pin' { Check-InstallerContents '0000000000000000000000000000000000000000000000000000000000000000' $WixSigner $WixIssuer -SkipExtract } 'SHA-256 .* did not match the reviewed pin' }
     'WrongPublisher' { Invoke-ExpectedFailure 'WiX publisher' { Check-InstallerContents $NsDialogsPin 'NOT-WIX-TOOLSET' $WixIssuer -SkipExtract } 'by NOT-WIX-TOOLSET issued by' }
     'WrongWiXIssuer' { Invoke-ExpectedFailure 'WiX issuer' { Check-InstallerContents $NsDialogsPin $WixSigner 'Unexpected CA' -SkipExtract } 'issued by Unexpected CA' }

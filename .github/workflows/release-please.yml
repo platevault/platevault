@@ -387,6 +387,7 @@ jobs:
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
           pwsh -NoProfile -File scripts/release/check-signed-installers.ps1 -Mode CliGuard -Lockfile (Join-Path (Get-Location).Path 'pnpm-lock.yaml')
+          pnpm --dir apps/desktop exec tauri build --no-bundle
 
           # The bin targets Tauri packs into both installers: every bin of the
           # desktop_shell package that needs no feature, with default-run as the app.
@@ -481,8 +482,8 @@ jobs:
           AUTHENTICODE_SIGNER: &authenticode-signer SignPath Foundation
           AUTHENTICODE_ISSUER: &authenticode-issuer GlobalSign GCC R45 CodeSigning CA 2020
         run: |
-          pwsh -NoProfile -File scripts/release/check-signed-installers.ps1 -Mode SignatureSet -SignatureBaseDirectory 'app-to-sign' -SignatureOutputDirectory 'app-signed'
-
+          $PSNativeCommandUseErrorActionPreference = $true
+          pwsh -NoProfile -File scripts/release/check-signed-installers.ps1 -Mode SignatureSet -SignatureBaseDirectory 'app-to-sign' -SignatureOutputDirectory 'app-signed' -AuthenticodeSigner $env:AUTHENTICODE_SIGNER -AuthenticodeIssuer $env:AUTHENTICODE_ISSUER
           Get-ChildItem -File -Filter '*.exe' app-signed | Copy-Item -Destination $env:RELEASE_DIR -Force
           foreach ($bundle in 'nsis', 'msi') {
             Copy-Item -LiteralPath "app-signed/$bundle/$env:MAIN_BINARY.exe" -Destination $env:RELEASE_DIR -Force
