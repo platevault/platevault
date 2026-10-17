@@ -126,4 +126,13 @@ describe('svg/no-raw-svg-colour', () => {
 
     expect(diagnostics).toHaveLength(0);
   });
+
+  it('flags raw flood colors on standalone camel-case SVG filter primitives', () => {
+    const diagnostics = lint(
+      'function F() { return <feFlood floodColor="#f00" />; }',
+    );
+
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]?.message).toContain('"floodColor"');
+  });
 });
