@@ -8,6 +8,7 @@ import jsxA11y from 'eslint-plugin-jsx-a11y';
 import alm from './eslint-rules/no-user-string.js';
 import noVacuousWaitFor from './eslint-rules/no-vacuous-waitfor.js';
 import requireRootTestid from './eslint-rules/require-root-testid.js';
+import noRawSvgColour from './eslint-rules/no-raw-svg-colour.js';
 
 // ESLint is the SECOND lint layer, after Biome (`pnpm lint` runs
 // `biome check` first). Biome owns the syntactic layer (core JS recommended +
@@ -251,6 +252,18 @@ export default tseslint.config(
     rules: {
       'no-restricted-syntax': 'off',
       '@typescript-eslint/no-unnecessary-type-assertion': 'off',
+    },
+  },
+
+  {
+    files: ['src/**/*.tsx'],
+    plugins: {
+      svg: {
+        rules: noRawSvgColour.rules,
+      },
+    },
+    rules: {
+      'svg/no-raw-svg-colour': 'error',
     },
   },
 

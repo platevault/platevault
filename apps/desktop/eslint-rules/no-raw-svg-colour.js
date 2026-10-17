@@ -1,0 +1,121 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
+const PRESENTATION_ATTRIBUTES = new Set([
+  'fill',
+  'stroke',
+  'stop-color',
+  'stopColor',
+  'flood-color',
+  'floodColor',
+  'lighting-color',
+  'lightingColor',
+  'color',
+]);
+
+const NAMED_COLORS = new Set(
+  'aliceblue antiquewhite aqua aquamarine azure beige bisque black blanchedalmond blue blueviolet brown burlywood cadetblue chartreuse chocolate coral cornflowerblue cornsilk crimson cyan darkblue darkcyan darkgoldenrod darkgray darkgreen darkgrey darkkhaki darkmagenta darkolivegreen darkorange darkorchid darkred darksalmon darkseagreen darkslateblue darkslategray darkslategrey darkturquoise darkviolet deeppink deepskyblue dimgray dimgrey dodgerblue firebrick floralwhite forestgreen fuchsia gainsboro ghostwhite gold goldenrod gray green greenyellow grey honeydew hotpink indianred indigo ivory khaki lavender lavenderblush lawngreen lemonchiffon lightblue lightcoral lightcyan lightgoldenrodyellow lightgray lightgreen lightgrey lightpink lightsalmon lightseagreen lightskyblue lightslategray lightslategrey lightsteelblue lightyellow lime limegreen linen magenta maroon mediumaquamarine mediumblue mediumorchid mediumpurple mediumseagreen mediumslateblue mediumspringgreen mediumturquoise mediumvioletred midnightblue mintcream mistyrose moccasin navajowhite navy oldlace olive olivedrab orange orangered orchid palegoldenrod palegreen paleturquoise palevioletred papayawhip peachpuff peru pink plum powderblue purple rebeccapurple red rosybrown royalblue saddlebrown salmon sandybrown seagreen seashell sienna silver skyblue slateblue slategray slategrey snow springgreen steelblue tan teal thistle tomato turquoise violet wheat white whitesmoke yellow yellowgreen'.split(
+    ' ',
+  ),
+);
+
+const SYSTEM_COLORS = new Set(
+  'accentcolor accentcolortext activetext buttonborder buttonface buttontext canvas canvastext field fieldtext graytext highlight highlighttext linktext mark marktext selecteditem selecteditemtext visitedtext activeborder activecaption appworkspace background buttonhighlight buttonshadow captiontext inactiveborder inactivecaption inactivecaptiontext infobackground infotext menu menutext scrollbar threeddarkshadow threedface threedhighlight threedlightshadow threedshadow window windowframe windowtext'.split(
+    ' ',
+  ),
+);
+
+const COLOR_FUNCTION =
+  /(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color|color-mix|light-dark|device-cmyk)\s*\(/i;
+const HEX_COLOR = /#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})\b/i;
+const ALLOWED_WORDS = new Set(['currentcolor', 'none', 'inherit', 'transparent']);
+
+function isRawColor(value) {
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/url\([^)]*\)/gi, ' ')
+    .replace(/var\(\s*--[a-z0-9_-]+\s*\)/gi, ' ');
+  if (!normalized) return false;
+  if (HEX_COLOR.test(normalized) || COLOR_FUNCTION.test(normalized)) return true;
+
+  const words = normalized.match(/(?<![a-z0-9_-])[a-z][a-z0-9-]*(?![a-z0-9_-])/g) ?? [];
+  return words.some(
+    (word) =>
+      !ALLOWED_WORDS.has(word) &&
+      (NAMED_COLORS.has(word) || SYSTEM_COLORS.has(word)),
+  );
+}
+
+function isInsideSvg(node) {
+  let ancestor = node.parent;
+  while (ancestor) {
+    if (
+      ancestor.type === 'JSXElement' &&
+      ancestor.openingElement.name.type === 'JSXIdentifier' &&
+      ancestor.openingElement.name.name.toLowerCase() === 'svg'
+    ) {
+      return true;
+    }
+    ancestor = ancestor.parent;
+  }
+  return false;
+}
+
+function staticAttributeValue(value) {
+  if (value.type === 'Literal' && typeof value.value === 'string') {
+    return value.value;
+  }
+  if (value.type !== 'JSXExpressionContainer') return null;
+
+  const expression = value.expression;
+  if (expression.type === 'Literal' && typeof expression.value === 'string') {
+    return expression.value;
+  }
+  if (expression.type === 'TemplateLiteral') {
+    return expression.quasis.map((part) => part.value.cooked ?? '').join(' ');
+  }
+  return null;
+}
+
+const rule = {
+  meta: {
+    type: 'problem',
+    docs: {
+      description:
+        'Disallow raw colours in SVG presentation attributes; use theme variables.',
+    },
+    schema: [],
+    messages: {
+      rawColor:
+        'Raw colour in SVG presentation attribute "{{name}}". Use a theme variable.',
+    },
+  },
+  create(context) {
+    return {
+      JSXAttribute(node) {
+        const name = node.name.name;
+        if (
+          typeof name !== 'string' ||
+          !PRESENTATION_ATTRIBUTES.has(name) ||
+          !isInsideSvg(node)
+        ) {
+          return;
+        }
+
+        const value = node.value;
+        if (!value) return;
+        const staticValue = staticAttributeValue(value);
+        if (staticValue !== null && isRawColor(staticValue)) {
+          context.report({ node, messageId: 'rawColor', data: { name } });
+        }
+      },
+    };
+  },
+};
+
+export default {
+  rules: {
+    'no-raw-svg-colour': rule,
+  },
+};
