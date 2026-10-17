@@ -1847,12 +1847,18 @@ impl E2eApp {
 
     /// Ask the main window to close, without waiting for it to do so. Returns
     /// the page's answer and whether the window may now be closing: `false`
-    /// only when the request certainly never left the page.
+    /// only when the page itself answered that it sent nothing (no bridge).
     ///
     /// The close is deferred by a task so the script's own result is
-    /// delivered before the window starts tearing down, and the page answer is
-    /// bounded by [`PAGE_PROBE_TIMEOUT`] because, if it is not, the window may
-    /// already be gone — in which case the close is underway.
+    /// normally delivered before the window starts tearing down. That is not
+    /// guaranteed: the timer can fire, and the window close, before WebDriver
+    /// returns the result, which then surfaces as a script or transport error
+    /// or as no answer within [`PAGE_PROBE_TIMEOUT`]. Every such outcome is
+    /// ambiguous, so the caller watches the external exit signals instead of
+    /// assuming the request never left the page — a wrong "not closing"
+    /// would make it kill an app that is exiting on its own and lose the
+    /// very flush the exit is for. Watching costs at most the bounded
+    /// [`GRACEFUL_EXIT_DEADLINE`] when the app really is still running.
     async fn request_main_window_close(&self) -> (String, bool) {
         let script = format!(
             r"
@@ -1876,9 +1882,9 @@ impl E2eApp {
                     let sent = answer == CLOSE_REQUESTED;
                     (answer, sent)
                 }
-                Err(e) => (format!("<undeserialisable close answer: {e}>"), false),
+                Err(e) => (format!("<undeserialisable close answer: {e}>"), true),
             },
-            Ok(Err(e)) => (format!("<close request script failed: {e}>"), false),
+            Ok(Err(e)) => (format!("<close request script failed: {e}>"), true),
             Err(_) => (format!("<close request unanswered within {PAGE_PROBE_TIMEOUT:?}>"), true),
         }
     }
