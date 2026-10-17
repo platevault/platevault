@@ -84,4 +84,22 @@ describe("Project page on the F4 model", () => {
     expect(screen.queryByRole("button", { name: `${m.project_apply()}…` })).toBeNull()
     expect(screen.getAllByRole("button", { name: `${m.project_duplicate()}…` }).length).toBeGreaterThan(0)
   })
+
+  it("keeps focus on the stage tab Enter or Space activates, on the page that tab opens (WCAG 2.4.3)", async () => {
+    const router = renderProject("prj_cygnus")
+    const user = userEvent.setup()
+    const tabNamed = async (label: string) => (await screen.findAllByRole("tab")).find((tab) => tab.textContent?.startsWith(label))!
+    for (const [label, key, stage] of [
+      [m.project_tab_calibrate(), "{Enter}", "calibrate"],
+      [m.project_tab_view(), " ", "view"],
+      [m.wrapup_action(), "{Enter}", "wrap-up"],
+    ] as const) {
+      ;(await tabNamed(label)).focus()
+      await user.keyboard(key)
+      await waitFor(() => expect(router.state.location.search).toEqual({ stage }))
+      const selected = await tabNamed(label)
+      expect(selected).toHaveAttribute("aria-selected", "true")
+      expect(document.activeElement).toBe(selected)
+    }
+  })
 })

@@ -19,7 +19,7 @@
  */
 import { useNavigate, useParams, useSearch } from "@tanstack/react-router"
 import { Copy, Pencil, RefreshCw } from "lucide-react"
-import { type ReactNode, useEffect, useState } from "react"
+import { type ReactNode, useEffect, useRef, useState } from "react"
 import { MissingRecord } from "@/app/missing-record"
 import { useMessages } from "@/app/preferences"
 import { ActionButton } from "@/components/app/actions"
@@ -30,7 +30,7 @@ import type { PathItem } from "@/components/app/page"
 import { StatusBadge } from "@/components/app/status"
 import { DetailPage, type DetailSection } from "@/components/templates/detail-page"
 import type { ObjectMenu, PageViews } from "@/components/templates/parts"
-import { isLocked, PROJECT_STATUS_NAME } from "@/domain/derive"
+import { isLocked } from "@/domain/derive"
 import { PROJECT_TABS, type ProjectTabId, projectTabs } from "@/domain/project-view"
 import type { Project } from "@/domain/types"
 import { formatDateTime } from "@/lib/format"
@@ -69,7 +69,7 @@ export interface ProjectChrome {
   views: PageViews
 }
 
-function useProjectChrome(project: Project, tab: ProjectTabId, dialogs: { edit: () => void; duplicate: () => void }): ProjectChrome {
+function useProjectChrome(project: Project, tab: ProjectTabId, dialogs: { edit: () => void; duplicate: () => void; tabChosen: () => void }): ProjectChrome {
   const m = useMessages()
   const issueView = useIssues()
   const navigate = useNavigate()
@@ -100,7 +100,7 @@ function useProjectChrome(project: Project, tab: ProjectTabId, dialogs: { edit: 
   }
   return {
     path: [{ label: m.nav_projects(), link: { to: "/projects" } }],
-    status: <StatusBadge kind="project" value={project.state} label={say(m, PROJECT_STATUS_NAME[project.state])} />,
+    status: <StatusBadge kind="project" value={project.state} />,
     actions: locked ? [] : [apply],
     menu: { label: m.project_noun(), items: withIssueItems(m, [edit, duplicate], rowIssues(issueView, { kind: "project", id: project.id })) },
     notice: locked
@@ -114,16 +114,39 @@ function useProjectChrome(project: Project, tab: ProjectTabId, dialogs: { edit: 
       label: m.project_views(),
       value: tab,
       items: tabs.tabs.map((t) => ({ id: t.id, label: say(m, t.label), count: t.count ?? undefined })),
-      onChange: (id) => void navigate({ to: "/projects/$projectId", params: { projectId: project.id }, search: id === "sessions" ? {} : { stage: id } }),
+      onChange: (id) => {
+        dialogs.tabChosen()
+        void navigate({ to: "/projects/$projectId", params: { projectId: project.id }, search: id === "sessions" ? {} : { stage: id } })
+      },
     },
   }
+}
+
+/** The selected tab of the tab list named `label`. */
+function selectedTab(label: string): HTMLElement | null {
+  const list = [...document.querySelectorAll<HTMLElement>('[role="tablist"]')].find((l) => l.getAttribute("aria-label") === label)
+  return list?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]') ?? null
 }
 
 function ProjectView({ project, tab, step, duplicateLinked }: { project: Project; tab: ProjectTabId; step?: string; duplicateLinked: boolean }) {
   const navigate = useNavigate()
   const [editing, setEditing] = useState(false)
   const [duplicating, setDuplicating] = useState(false)
-  const chrome = useProjectChrome(project, tab, { edit: () => setEditing(true), duplicate: () => setDuplicating(true) })
+  const tabChosen = useRef(false)
+  const chrome = useProjectChrome(project, tab, {
+    edit: () => setEditing(true),
+    duplicate: () => setDuplicating(true),
+    tabChosen: () => {
+      tabChosen.current = true
+    },
+  })
+  // Each tab is its own page (a DetailPage, or the Wrap up StepPage), so a tab switch replaces the tab list the user
+  // just used; focus moves to the new list's selected tab, as a ListPage's tabs keep it (WCAG 2.4.3).
+  useEffect(() => {
+    if (!tabChosen.current) return
+    tabChosen.current = false
+    selectedTab(chrome.views.label)?.focus()
+  }, [tab])
   // `?duplicate=open` (the closed Edit…'s blocker link) opens Duplicate… once and leaves the URL, so a later Duplicate that
   // opens the new Project never lands back here.
   useEffect(() => {
