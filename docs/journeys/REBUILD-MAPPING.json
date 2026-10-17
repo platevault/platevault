@@ -101,7 +101,7 @@
   "readiness": {
     "common": {
       "goalObservableDone": "pass (all 28 rebuild journeys, per the authoring audit of each slice)",
-      "expectsFalsifiable": "pass for every journey except those where a blocker below leaves an Expect undecided or not yet observable: J19 (G10), J29 (G2) and J35 (G6)",
+      "expectsFalsifiable": "pass except where a blocker leaves an Expect undecided or not yet observable: J19 (G10), J23 (G10 generic-app consumption), J29 (G2), J35 (G6).",
       "successCriteriaConcrete": "pass (all 28; each SC has a count, value, or state)",
       "negativesAtTrustPoints": "pass (all 28; every mutation, deletion, transfer, trash, patch, and quality step has an Expect (negative))",
       "actorsSurfacesInterfacesTrace": "pass (all 28 fill actors, surfaces, interfaces and trace; README lists the rebuild and harness v5 surface keys and maps the v5 prototype paths)",
@@ -171,7 +171,8 @@
       {
         "id": "J23",
         "blocking": [
-          "G2 (implementation qualification) Siril profile capability probes (D04) must exist before S8 can show verified evidence."
+          "G2 (implementation qualification) Siril profile capability probes (D04) must exist before S8 can show verified evidence.",
+          "G10 (product question) D-W123's FITS mapping and fixed-format alias coverage, including FOCAL/FLENGTH, remain provisional. The owner must decide whether to patch TELESCOPE/INSTRUMENT as HIERARCH aliases, whether generic-app delivery needs per-tool evidence, which route to use for corrected non-FITS inputs, and how to handle values FITS cannot represent in printable-ASCII cards (header_patch.rs:261-280)."
         ]
       },
       {
