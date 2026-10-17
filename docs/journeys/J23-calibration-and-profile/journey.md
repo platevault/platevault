@@ -23,7 +23,7 @@ The user checks the pinned calibration for the sessions in Project `NGC 7000 HOO
 ## Preconditions
 
 - P1: J22's frame review is complete. Project `NGC 7000 HOO` holds 208 RedCat lights / 17h 20m in five sessions dated 18, 24, 26, 28 and 30 Sep, has settled calibration for every held session, and has an applied View. Its application is not yet selected in View.
-- P6: The five RedCat light sessions in the J19/P2 fixture, including the 24 and 28 Sep sessions used for corrected-value checks, are FITS files.
+- P6: The five RedCat light sessions in the J19/P2 fixture, including the 24 and 28 Sep sessions used for corrected-value checks, are FITS files. Each corrected 24 and 28 Sep primary header has blank cards after `END` within its header block for any added correction keyword. None has `CHECKSUM` or `DATASUM` cards.
 - P2: The raw sets of J36/P2 were indexed in `Astro-T7/Calibration`; J36 turns them into masters through their calibration processes. The flat age window is set to 30 nights. The Calibration library holds the imported masters in its structured storage:
   - `MasterDark_2026-09-20.xisf` and `MasterBias_2026-09-20.xisf`: camera, dimensions, binning, gain and offset match the J19/P2 RedCat lights, and the dark matches their 300 s exposure.
   - `MasterFlat_2026-09-18.xisf`: Ha, with RedCat optical-train evidence.
