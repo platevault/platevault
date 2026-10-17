@@ -81,10 +81,9 @@ function Check-InstallerContents(
     Expand-With7Zip $setup.FullName (Join-Path $UnpackedDirectory 'nsis')
     Expand-With7Zip $msi.FullName (Join-Path $UnpackedDirectory 'msi-streams') @('-tCompound')
     $target = Join-Path $UnpackedDirectory 'msi'
-    New-Item -ItemType Directory -Force $target | Out-Null
-    $arguments = @('/a', $msi.FullName, '/qn', "TARGETDIR=$target")
-    $admin = Start-Process msiexec.exe -Wait -PassThru -ArgumentList $arguments
-    if ($admin.ExitCode -ne 0) { throw "msiexec /a $($msi.Name) exited with $($admin.ExitCode)" }
+    $arguments = @('/a', $msi.FullName, '/qn', 'TARGETDIR=' + $target)
+    $process = Start-Process msiexec.exe -Wait -PassThru -ArgumentList $arguments
+    if ($process.ExitCode -ne 0) { throw "msiexec /a $($msi.Name) exited with $($process.ExitCode)" }
   }
 
   $signedFor = @{}
