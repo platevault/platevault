@@ -73,12 +73,12 @@ Done means:
 
 ### S3a — Move through a table with the keyboard {#S3a}
 
-- **Do:** On Sessions, with the search field empty, press Tab until a session row has focus. Press ↓ twice, then **End**, **Home**, **Page Down** and **Page Up**. Press Space, read the batch bar, and press Space again. Press **⇧F10**, read the menu, then press **Esc**. Press the Menu key, then **Esc**. Press Tab until focus leaves the table, then press Shift+Tab once.
+- **Do:** On Sessions, with the search field empty, press Tab until a session row has focus. Press ↓ twice, then **End**, **Home**, **Page Down** and **Page Up**. Press Space, read the batch bar, and press Space again. Press **⇧F10**, read the menu, then press **Esc**; on the `desktop-ui-macos` lane, press **fn** with it where the keyboard's top row is set to media keys. On the `desktop-ui` (Windows) lane only, press the Menu key, then **Esc**. Press Tab until focus leaves the table, then press Shift+Tab once.
 - **Expect:**
   - Tab lands on the table's current row, its first row on this first visit. The table header's select-all and sort controls each keep their own Tab stops.
   - ↓ moves one row each time, **End** to the last row and **Home** to the first, and **Page Down** and **Page Up** move by one screen of rows. Focus and the current row move together.
   - The first Space selects the focused row, and the batch bar replaces the toolbar with `1 selected`; the second Space clears it, and the toolbar returns.
-  - **⇧F10** and the Menu key each open the row's menu, named after the row. **Esc** closes it, and focus is back on the row.
+  - **⇧F10** opens the row's menu, named after the row, on both lanes, and on the `desktop-ui` lane the Menu key opens the same menu. **Esc** closes it, and focus is back on the row. On the `desktop-ui-macos` lane, **⇧F10** is the only key that opens the row's context menu; the row's `⋯`, reached with Tab, opens the same items with Enter or Space.
   - From the row, Tab reaches that row's own controls, its checkbox and `⋯`, and the next Tab leaves the table. Shift+Tab returns to the row's `⋯`.
 - **Expect (negative):** No row other than the current one takes a Tab stop. The table keeps native table semantics, with no ARIA grid role. No arrow, Home, End or Page key changes a selection or a record, and opening and closing the menu runs none of its items.
 - **Trace:** FR-026, FR-027, FR-031, FR-037 · D-W91, D-W121 · HARNESS-V5-FEEDBACK-R1.md "Tables and the keyboard" P-KBD1 (OWNER, 2026-10-16) · src/components/app/data-table.tsx (ui-harness-v5 @ d1e721af, astro-plan-2r9ld)
@@ -207,5 +207,5 @@ Done means:
   Each table is one Tab stop on its current row, followed by that row's own controls: ↑ ↓, Home and End and Page Up and Page Down move between rows, Space selects only while single-key shortcuts are on, Enter opens and ⇧F10 opens the row menu. New S3a walks the model on Sessions; S4 and S7 reach their rows with Tab and ↓, and S8 checks Space with the switch off. G4 and G5 follow the implementation, G6 is new, and G7 lists the provisional header Tab stops and previous-row focus.
   Evidence: D-W121 (owner's answer of 2026-10-16 to astro-plan-g3tx4, option B′) in PR #1804, FR-037; DataTable implementation astro-plan-2r9ld on ui-harness-v5 @ d1e721af · by: EncodeOwnerAnswers2 (intent-gated)
 - **Δ4** 2026-10-17 · S3a · behavior-change
-  The Menu key opens a row's menu as **⇧F10** does, and tables keep native semantics with no ARIA grid role. The header stops and previous-row focus are the owner's rules, so G7 is dissolved.
-  Evidence: HARNESS-V5-FEEDBACK-R1.md "Tables and the keyboard" P-KBD1 (OWNER, 2026-10-16; decision astro-plan-g3tx4) · D-W121 · by: JourneysR9c (intent-gated)
+  On the `desktop-ui` (Windows) lane the Menu key opens a row's menu as **⇧F10** does; Apple keyboards have no Menu key, so the `desktop-ui-macos` lane uses **⇧F10** (with **fn** where needed). Tables keep native semantics with no ARIA grid role. The header stops and previous-row focus are the owner's rules, so G7 is dissolved.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md "Tables and the keyboard" P-KBD1 (OWNER, 2026-10-16; decision astro-plan-g3tx4) · D-W121 · prototype row-actions.tsx openMenuFromKeyboard (ContextMenu key or Shift+F10) on ui-harness-v5 · by: JourneysR9c (intent-gated)

@@ -133,25 +133,25 @@ Light sessions are later matched to these masters at ingestion (J23). Done means
 
 ### S9 — Import master files and review their matches {#S9}
 
-- **Do:** In the Calibration library, click **Import masters**. In the native file dialog, open `Astro-T7/Stacked elsewhere/`, select `MasterFlat_OIII_2026-09-26.xisf`, `MasterFlat_OIII_Esprit.xisf` and `MasterDark_ASI294MM_300s.xisf` together, read the preview table and confirm. Then click **Import masters** again, select the same three files and read the preview.
+- **Do:** In the Calibration library, click **Import masters**. In the native file dialog, open `Astro-T7/Stacked elsewhere/`, select `MasterFlat_OIII_2026-09-26.xisf` and `MasterFlat_OIII_Esprit.xisf` together, read the preview table and confirm.
 - **Expect:**
   - The dialog picks files, several at once, not a folder, and filters to FITS and XISF files, so `notes.txt` is not offered.
-  - The first preview lists the three files, each with its kind, camera, gain and offset, temperature and exposure read from its headers, and each reads **New**, because no library master has its kind and settings. Nothing is imported before the confirmation.
-  - After the confirmation the import reads `3 masters imported`. Process gains three rows that read `Done`, one per file: `Flat · MasterFlat_OIII_2026-09-26.xisf`, `Flat · MasterFlat_OIII_Esprit.xisf` and `Dark · MasterDark_ASI294MM_300s.xisf`. In each, Stack reads Skipped, and no raw frame is involved.
-  - Each master is copied into its structured storage folder. The two flats go under `Astro-T7/Calibration/Flats/` in the filter and night folders `OIII/2026-09-26/` and `OIII/2026-09-22/`, as `MasterFlat_2026-09-26.xisf` and `MasterFlat_2026-09-22.xisf`. The dark goes under `Astro-T7/Calibration/Darks/ZWO ASI294MM Pro/` as `MasterDark_2026-09-12.xisf`.
-  - The second preview reads **Duplicate** for all three files, and its confirmation imports none.
-- **Expect (negative):** The three sources and `notes.txt` stay in `Astro-T7/Stacked elsewhere/` and match P6. The second import writes no copy and adds no process.
+  - The preview lists the two files, each with its kind, camera, gain and offset, temperature and exposure read from its headers, and each reads **New**, because no library master has its kind and settings. Nothing is imported before the confirmation.
+  - After the confirmation the import reads `2 masters imported`. Process gains two rows that read `Done`, one per file: `Flat · MasterFlat_OIII_2026-09-26.xisf` and `Flat · MasterFlat_OIII_Esprit.xisf`. In each, Stack reads Skipped, and no raw frame is involved.
+  - Each flat is copied into its structured storage folder under `Astro-T7/Calibration/Flats/`, in the filter and night folders `OIII/2026-09-26/` and `OIII/2026-09-22/`, as `MasterFlat_2026-09-26.xisf` and `MasterFlat_2026-09-22.xisf`.
+- **Expect (negative):** The two sources and `notes.txt` stay in `Astro-T7/Stacked elsewhere/` and match P6.
 - **Trace:** CAL-FR-13, CAL-AC-15 · D-W82, D-W103 · HARNESS-V5-FEEDBACK-R1.md §Round 1b P-CAL3 ("A stacked master from elsewhere imports directly"), Round 9 C9 (Import masters selects files, then a preview table with each file's match) · HARNESS-V5-IA.md §Screens S14 (Import masters)
 
-### S9a — Import a new version of the bias master {#S9a}
+### S9a — Import a mixed batch: New, New version and Duplicate {#S9a}
 
-- **Do:** Click **Import masters**, select `MasterBias_2026-06-15.xisf` in `Astro-T7/Stacked elsewhere/`, read the preview and confirm. Open the bias master's details.
+- **Do:** Click **Import masters** and select three files in `Astro-T7/Stacked elsewhere/` together: `MasterDark_ASI294MM_300s.xisf`, `MasterBias_2026-06-15.xisf` and `MasterFlat_OIII_2026-09-26.xisf`, which S9 imported. Read the preview, confirm, then open the bias master's details.
 - **Expect:**
-  - The preview reads **New version of** the S8 bias master, named by its kind and camera (`New version of {master}`, provisional copy), with the file's kind, camera, gain and offset and temperature read from its headers.
-  - After the confirmation, Process gains a `Bias · MasterBias_2026-06-15.xisf` row that reads `Done`, with Stack Skipped. The file is copied into the bias master's structured storage folder, `Astro-T7/Calibration/Bias/ASI2600MM/g100_o50/`.
-  - The bias master lists two dated versions, 15 Jun and 20 Sep, with no Latest mark. Masters still lists 7 masters, and Bias still lists 1.
-- **Expect (negative):** The import adds no master record and repoints no session's pinned bias. The source file stays in `Astro-T7/Stacked elsewhere/` and matches P6.
-- **Trace:** CAL-FR-13, CAL-FR-14, CAL-AC-15, CAL-AC-16 · D-W82, D-W103 · HARNESS-V5-FEEDBACK-R1.md Round 9 C9 · prototype calibration.ts masterImportMatch (ui-harness-v5)
+  - One preview lists all three files with the kind, camera, gain and offset, temperature and exposure read from their headers. The dark reads **New**, because no library master has its camera and settings. The bias reads **New version of** the S8 bias master, named by its kind and camera (`New version of {master}`, provisional copy). The flat reads **Duplicate**, because its bytes match the version S9 registered, and it cannot be selected for import.
+  - After the confirmation the import reads `2 masters imported` (provisional copy). Process gains two rows that read `Done`, with Stack Skipped: `Dark · MasterDark_ASI294MM_300s.xisf` and `Bias · MasterBias_2026-06-15.xisf`.
+  - The dark is copied under `Astro-T7/Calibration/Darks/ZWO ASI294MM Pro/` as `MasterDark_2026-09-12.xisf`, a new master. The bias file is copied into the bias master's structured storage folder, `Astro-T7/Calibration/Bias/ASI2600MM/g100_o50/`, and the bias master lists two dated versions, 15 Jun and 20 Sep, with no Latest mark.
+  - Masters lists 7 masters, and Bias still lists 1.
+- **Expect (negative):** The Duplicate flat is not imported: no copy is written for it and no Process row is added. The bias import adds no master record and repoints no session's pinned bias. The three sources stay in `Astro-T7/Stacked elsewhere/` and match P6.
+- **Trace:** CAL-FR-13, CAL-FR-14, CAL-AC-15, CAL-AC-16 · D-W82, D-W103 · HARNESS-V5-FEEDBACK-R1.md Round 9 C9 · prototype calibration.ts masterImportMatch, dialogs.tsx Import masters preview (Duplicate rows not importable) on ui-harness-v5
 
 ### S10 — Read the master library by its storage keys {#S10}
 
@@ -183,14 +183,14 @@ Light sessions are later matched to these masters at ingestion (J23). Done means
 
 ## Success criteria
 
-- SC1: After S9, Process lists 7 rows that read Done (4 stacked, 3 imported), and Masters lists exactly 7 masters: 4 flats, 2 darks and 1 bias (S10).
+- SC1: After S9a, Process lists 8 rows that read Done (4 stacked, 3 imported masters and 1 imported version), and Masters lists exactly 7 masters: 4 flats, 2 darks and 1 bias (S10).
 - SC2: 80 raw frames are in the OS Trash (20 darks, 30 Ha flats and 30 OIII flats), and the 50 raw bias frames stay in place. 0 raw frames moved before their master's Register read Done (S4 to S8).
 - SC3: 0 files are permanently deleted, and every trashed raw frame can be put back (S5 to S7).
-- SC4: Each refusal or failure registers 0 masters, moves 0 raw frames and names its reason: `Siril not set up` (S2), `Name taken` (S4) and `Tool output not found` (S6); in S9 the second preview reads Duplicate for 3 of 3 files and imports 0. Each failed process resumes at its failed step (S5, S6).
+- SC4: Each refusal or failure registers 0 masters, moves 0 raw frames and names its reason: `Siril not set up` (S2), `Name taken` (S4) and `Tool output not found` (S6). Each failed process resumes at its failed step (S5, S6).
 - SC5: The dark watch survives 1 relaunch (S3) and detects its master with 0 user actions (S4). The Ha flat watch registers its master with 0 user actions after Stack (S7).
 - SC6: The P3 sources, `notes.txt` and the S4 file keep their recorded SHA-256 (S4, S5, S9, S9a).
 - SC7: Hide and Restore change 0 bytes on disk. While the dark is hidden Masters lists 6 masters, and after Restore it lists 7 with the dark under Darks again (S12).
-- SC8: At S9a the preview reads New version of the bias master for 1 of 1 file, and the import adds 0 master records and 1 version, so the bias master holds 2 versions (S9a, S10).
+- SC8: The S9a preview holds 1 New, 1 New version and 1 Duplicate file. Confirming imports exactly the New and the New version, writes 0 copies for the Duplicate, adds 1 master record and 1 version, and leaves the bias master with 2 versions (S9a, S10).
 
 ## Known gaps
 
@@ -213,5 +213,5 @@ Light sessions are later matched to these masters at ingestion (J23). Done means
   A master is Hidden, not Dismissed, with Show hidden and Restore, and its details name the file it was imported from but record no inputs. Light sessions are matched to masters at ingestion instead of runs being assigned them.
   Evidence: D-W76, D-W93, D-W101, D-W106 (F4 Project model, owner's answers of 2026-10-14) in PR #1804, 068 CAL-FR-02, CAL-FR-16, CAL-FR-17 · by: SpecF4Writer2 (intent-gated)
 - **Δ4** 2026-10-17 · S1, S4, S5, S6, S8, S9, +S9a, S10, P3, +SC8 · behavior-change
-  Import masters picks master files, several at once with FITS and XISF filters, and shows a preview table with each file's match (New, New version of {master}, Duplicate) before anything is imported; a repeat import reads Duplicate instead of a refusal. New S9a imports P3's new bias file as a second version of the S8 bias master. With no Issues hub, S1, S4, S5, S6 and S8 read the state on the Calibration rows and in Activity.
+  Import masters picks master files, several at once with FITS and XISF filters, and shows a preview table with each file's match (New, New version of {master}, Duplicate) before anything is imported. S9 imports the two flats; new S9a imports one mixed batch, the ASI294MM dark as New, P3's new bias file as a second version of the S8 bias master and an S9 flat as a Duplicate that is skipped. With no Issues hub, S1, S4, S5, S6 and S8 read the state on the Calibration rows and in Activity.
   Evidence: HARNESS-V5-FEEDBACK-R1.md Round 9 C9 · D-W82, D-W92, D-W103 · CAL-FR-13, CAL-FR-14, CAL-AC-15, CAL-AC-16 · prototype calibration.ts masterImportMatch (ui-harness-v5) · by: JourneysR9c (intent-gated)

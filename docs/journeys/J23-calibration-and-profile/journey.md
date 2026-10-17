@@ -31,7 +31,7 @@ The user checks the pinned calibration for the sessions in Project `NGC 7000 HOO
   - `MasterFlat_2026-09-26.xisf`: OIII, imported in J36/S9 with no optical-train evidence.
 
   The 50 raw bias frames that J36/S8 kept stay indexed in `Astro-T7/Calibration/Raw/Bias/2026-09-20/`.
-- P3: The library also holds the two other masters J36/S9 imported: a master dark from a second camera (ZWO ASI294MM Pro) and an OIII master flat from a second optical train (Esprit 100). Neither is part of rig RedCat.
+- P3: The library also holds the two other masters J36/S9 and J36/S9a imported: a master dark from a second camera (ZWO ASI294MM Pro) and an OIII master flat from a second optical train (Esprit 100). Neither is part of rig RedCat. The bias master also holds the 15 Jun version that J36/S9a added, which is never the closest version for these sessions.
 - P4: Siril is installed at a known path and not yet configured in PlateVault.
 - P5: The J19/P5 manifest is available.
 
