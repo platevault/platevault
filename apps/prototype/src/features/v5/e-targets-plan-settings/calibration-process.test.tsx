@@ -1,11 +1,24 @@
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } from "@tanstack/react-router"
 import { render, screen } from "@testing-library/react"
-import { beforeEach, describe, expect, it } from "vitest"
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest"
 import { createSeed } from "@/domain/seed"
 import { m } from "@/lib/i18n"
 import { SCHEMA_VERSION, store } from "@/store/core"
 import { initialSliceStates, sliceVersions } from "@/store/slices"
 import { CalibrationProcessPage } from "./calibration-process"
+
+// The missing-record page is a DetailPage, whose dock measures its room; jsdom has no ResizeObserver.
+const original = globalThis.ResizeObserver
+beforeAll(() => {
+  globalThis.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof ResizeObserver
+})
+afterAll(() => {
+  globalThis.ResizeObserver = original
+})
 
 beforeEach(() => {
   store.replace({ ...createSeed("demo"), schemaVersion: SCHEMA_VERSION, sliceVersions: sliceVersions(), slices: initialSliceStates() })
