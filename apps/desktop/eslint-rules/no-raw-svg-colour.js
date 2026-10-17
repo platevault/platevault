@@ -47,15 +47,18 @@ function isRawColor(value) {
   );
 }
 
+const SVG_ELEMENTS = new Set(
+  'circle ellipse line path polygon polyline rect g text tspan textPath use symbol marker pattern mask clipPath defs stop linearGradient radialGradient filter feBlend feColorMatrix feComponentTransfer feComposite feConvolveMatrix feDiffuseLighting feDisplacementMap feDistantLight feFlood feFuncA feFuncB feFuncG feFuncR feGaussianBlur feImage feMerge feMergeNode feMorphology feOffset fePointLight feSpecularLighting feSpotLight feTile feTurbulence'.toLowerCase().split(
+    ' ',
+  ),
+);
+
 function isInsideSvg(node) {
   let ancestor = node.parent;
   while (ancestor) {
-    if (
-      ancestor.type === 'JSXElement' &&
-      ancestor.openingElement.name.type === 'JSXIdentifier' &&
-      ancestor.openingElement.name.name.toLowerCase() === 'svg'
-    ) {
-      return true;
+    if (ancestor.type === 'JSXElement' && ancestor.openingElement.name.type === 'JSXIdentifier') {
+      const name = ancestor.openingElement.name.name;
+      if (name === 'svg' || SVG_ELEMENTS.has(name.toLowerCase())) return true;
     }
     ancestor = ancestor.parent;
   }

@@ -103,4 +103,12 @@ describe('svg/no-raw-svg-colour', () => {
 
     expect(diagnostics).toHaveLength(0);
   });
+
+  it('flags standalone SVG fragments and skips capitalized components', () => {
+    const diagnostics = lint(
+      'function Dot() { return <circle fill="#f00" />; } function Badge() { return <Badge color="red" />; }',
+    );
+
+    expect(diagnostics).toHaveLength(1);
+  });
 });
