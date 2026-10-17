@@ -86,7 +86,7 @@ describe("Project groups, suggestions, Add sessions and the Closed menu (F4 P)",
     const labels = within(heading.closest<HTMLElement>("[data-chrome]")!)
       .getAllByRole("button")
       .map((button) => button.textContent!.trim())
-    expect(labels).toContain(m.project_suggestions_choose_calibration())
+    expect(labels).toContain(m.home_choose_calibration())
     for (const label of labels) expect(label.split(/\s+/).length, label).toBeLessThanOrEqual(3)
   })
 

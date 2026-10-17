@@ -523,8 +523,8 @@ export function useSuggestionsSection(project: Project): DetailSection | null {
   const actions: Action[] = [
     ...(addable.length > 0 ? [{ id: "add-all", label: m.project_add_suggested({ count: addable.length }), icon: Plus, run: () => addSessions(project.id, addable.map((r) => r.session.id)) }] : []),
     // Verbs only (W2): the table's Status cells show which sessions need calibration; the intake shows the frames to review.
-    ...(unsettled > 0 ? [{ id: "needs-calibration", label: m.project_suggestions_choose_calibration(), run: () => follow({ to: "/sessions", search: { filter: "needs-calibration" } }) }] : []),
-    ...(unreviewed > 0 && firstWaiting ? [{ id: "review", label: m.project_suggestions_review_frames(), run: () => follow(sessionIntakeLink(firstWaiting.session.id, "review")) }] : []),
+    ...(unsettled > 0 ? [{ id: "needs-calibration", label: m.home_choose_calibration(), run: () => follow({ to: "/sessions", search: { filter: "needs-calibration" } }) }] : []),
+    ...(unreviewed > 0 && firstWaiting ? [{ id: "review", label: m.session_review_frames(), run: () => follow(sessionIntakeLink(firstWaiting.session.id, "review")) }] : []),
   ]
 
   return {

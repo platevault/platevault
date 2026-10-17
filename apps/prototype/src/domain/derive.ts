@@ -52,7 +52,6 @@ import type {
   ProjectGroup,
   ProjectId,
   ProjectInput,
-  ProjectState,
   Session,
   SessionId,
   SimulationFaults,

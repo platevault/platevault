@@ -497,7 +497,7 @@ export function ReviewWorkspace({ context, onFinished }: ReviewWorkspaceProps) {
     ]
   }
 
-  const emptyTitle = frames.length === 0 || filter === "all" ? m.review_empty_none() : filter === "picked" ? m.review_empty_usable() : filter === "rejected" ? m.review_empty_unusable() : m.review_empty_unreviewed()
+  const emptyTitle = frames.length === 0 || filter === "all" ? m.review_empty_none() : filter === "picked" ? m.review_empty_usable() : filter === "rejected" ? m.sessions_empty_unusable() : m.review_empty_unreviewed()
   const emptyList = <EmptyState icon={ImageOff} title={emptyTitle} action={filter !== "all" ? <ActionButton action={{ id: "show-all", label: m.review_show_all(), run: () => setFilter("all") }} /> : null} />
 
   const selectByThreshold: Action = { id: "threshold", label: m.review_select_by_threshold_ellipsis(), opensDialog: true, run: () => setThreshold({ metric: "fwhm", direction: "above", value: null, add: false }) }
