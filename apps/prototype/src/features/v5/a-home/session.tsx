@@ -227,6 +227,7 @@ function SessionCalibrationChoices({ state, session, changeable }: { state: Prot
       onPick={(p) => pickCalibration(p.sessionId, p.kind, p.source, p.expectRevision)}
       onNo={setNoCalibration}
       onAddFiles={() => follow({ to: "/import" })}
+      boxed
     />
   )
 }
