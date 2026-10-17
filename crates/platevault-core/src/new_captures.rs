@@ -147,7 +147,9 @@ pub struct NewCaptureCount {
     pub new_files: u64,
     /// Whether a live folder watcher covers every folder and keeps the count
     /// current. `false` while it did not start or the OS refused a folder
-    /// that a walk can list, and every sweep starts it again, or while the
+    /// that a walk can list, and every sweep starts it again, while a walk
+    /// reconciles the count (as one does after every restart of the
+    /// watcher, which missed what changed while it was down), or while the
     /// location's volume is being removed ([`CaptureWatch::release`]). The
     /// count then rests on the last walk (and on the events of the folders
     /// that are watched).
@@ -791,7 +793,7 @@ impl Watched {
         NewCaptureCount {
             location_id: self.location.id,
             new_files: u64::try_from(self.new.len()).unwrap_or(u64::MAX),
-            live: self.live.as_ref().is_some_and(|live| live.complete),
+            live: self.walk.is_none() && self.live.as_ref().is_some_and(|live| live.complete),
         }
     }
 }

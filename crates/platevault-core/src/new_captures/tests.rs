@@ -94,6 +94,13 @@ async fn count_is(watch: &CaptureWatch, id: Uuid, expected: u64) -> Vec<NewCaptu
     until(watch, |counts| new_files(counts, id) == Some(expected)).await
 }
 
+/// Wait until the location's count is `new_files` and live: a walk that
+/// reconciles the count after a restart of its watcher has ended.
+async fn live_count_is(watch: &CaptureWatch, id: Uuid, new_files: u64) {
+    let live = [NewCaptureCount { location_id: id, new_files, live: true }];
+    until(watch, |counts| counts == live).await;
+}
+
 /// Wait until `holds`, checking every few milliseconds.
 async fn eventually(what: &str, holds: impl Fn() -> bool) {
     tokio::time::timeout(Duration::from_secs(10), async {
@@ -490,8 +497,7 @@ async fn an_unreadable_catalog_keeps_the_location_online_and_is_read_again() {
     // A later walk keeps counting from what the catalog held before.
     hide_assets(&mut catalog, true).await;
     frame(&root.join("2026-10-15/Ha_002.fits"));
-    let counts = count_is(&watch, location.id, 1).await;
-    assert_eq!(counts, [NewCaptureCount { location_id: location.id, new_files: 1, live: true }]);
+    live_count_is(&watch, location.id, 1).await;
     assert_eq!(walks(&watch), 2);
     // The new folder restarted the watcher; the old one closes off the
     // runtime.
@@ -549,8 +555,7 @@ async fn a_folder_created_while_the_watcher_starts_is_watched_after_the_walk() {
     // The start-up walk enters a folder the watcher did not list, so the
     // watcher starts again over it and the walk is redone.
     eventually("the watcher restarted", || probe.watches.load(Ordering::SeqCst) >= 2).await;
-    let counts = count_is(&watch, location.id, 1).await;
-    assert_eq!(counts, [NewCaptureCount { location_id: location.id, new_files: 1, live: true }]);
+    live_count_is(&watch, location.id, 1).await;
     frame(&root.join("2026-10-15/Ha_002.fits"));
     count_is(&watch, location.id, 2).await;
     // On macOS `FSEvents` may also report the folder's creation, made just
@@ -791,11 +796,10 @@ async fn watching_follows_a_reselected_location_to_its_new_path() {
         .unwrap();
 
     eventually("the new path walked", || walks(&watch) >= 2).await;
-    count_is(&watch, location.id, 1).await;
+    live_count_is(&watch, location.id, 1).await;
     let walked = walks(&watch);
     frame(&moved.join("Ha_002.fits"));
-    let counts = count_is(&watch, location.id, 2).await;
-    assert_eq!(counts, [NewCaptureCount { location_id: location.id, new_files: 2, live: true }]);
+    live_count_is(&watch, location.id, 2).await;
     assert_eq!(walks(&watch), walked, "counted live at the new path");
     watchers_are(&watch, 1).await;
 }
@@ -1332,8 +1336,9 @@ async fn a_link_in_place_of_a_counted_folder_forgets_the_frames_below_it() {
     let elsewhere = fx.base.join("elsewhere");
     fs::rename(root.join("night"), &elsewhere).unwrap();
     std::os::unix::fs::symlink(&elsewhere, root.join("night")).unwrap();
-    let counts = count_is(&watch, location.id, 0).await;
-    assert_eq!(counts, [NewCaptureCount { location_id: location.id, new_files: 0, live: true }]);
+    // The folder's path was watched, so the watcher restarts and walks: the
+    // count is live again once that walk reconciled it.
+    live_count_is(&watch, location.id, 0).await;
 }
 
 /// The root is replaced by a link to another tree while live events name it
@@ -1496,6 +1501,35 @@ async fn a_frame_whose_lookup_fails_stays_counted_and_is_walked_again() {
     probe.list_gate.open();
     count_is(&watch, location.id, 1).await;
     assert_eq!(walks(&watch), 2);
+}
+
+/// The watcher lost events while a frame arrived: it starts again at once,
+/// but the count it then publishes is not live until the walk that follows
+/// has reconciled it, finding the frame no event reported.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_count_is_not_live_until_the_walk_after_a_restart_reconciles_it() {
+    let fx = fixture().await;
+    let root = fx.base.join("Captures");
+    let location = captures(&fx.library, &root).await;
+    frame(&root.join("night/Ha_001.fits"));
+    let (events, fed) = tokio::sync::mpsc::channel(16);
+    let probe = Arc::new(Probe::default());
+    *probe.feed.lock().unwrap() = Some(fed);
+    let _opens = Opens(&probe.list_gate);
+    let watch = probed_without_sweeps(&fx.library, &probe);
+    live_count_is(&watch, location.id, 1).await;
+
+    frame(&root.join("night/Ha_002.fits"));
+    probe.list_gate.close();
+    events.try_send(named(root.clone(), ArtifactEventKind::NeedsRescan)).unwrap();
+    holding(&probe.list_gate).await;
+    assert_eq!(walks(&watch), 2, "the walk after the restart waits");
+    after(&watch, drains, 1).await;
+    let held = NewCaptureCount { location_id: location.id, new_files: 1, live: false };
+    assert_eq!(watch.counts(), [held], "live while the walk reconciles");
+    probe.list_gate.open();
+    live_count_is(&watch, location.id, 2).await;
+    assert_eq!(probe.watches.load(Ordering::SeqCst), 2, "the watcher restarted");
 }
 
 /// A folder above an event's path is swapped for a link to a folder outside
