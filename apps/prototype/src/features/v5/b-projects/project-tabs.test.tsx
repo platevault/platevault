@@ -102,4 +102,13 @@ describe("Project page on the F4 model", () => {
       expect(document.activeElement).toBe(selected)
     }
   })
+
+  it("shows a Project that is not in the catalogue under the standard page header, its path leading back to Projects", async () => {
+    renderProject("prj_gone")
+    const heading = await screen.findByRole("heading", { level: 1, name: m.project_missing_title() })
+    const header = heading.closest("header")
+    expect(header).not.toBeNull()
+    expect(within(header!).getByRole("link", { name: m.nav_projects() })).toHaveAttribute("href", "/projects")
+    expect(document.title).toContain(m.project_missing_title())
+  })
 })

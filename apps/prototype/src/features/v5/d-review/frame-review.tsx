@@ -479,7 +479,7 @@ export function ReviewWorkspace({ context, onFinished }: ReviewWorkspaceProps) {
   }, [])
 
   if (!scope) {
-    return context.kind === "session" ? <MissingRecord title={m.session_missing_title()} backTo="/sessions" backLabel={m.session_open_sessions()} /> : <MissingRecord title={m.project_missing_title()} backTo="/projects" backLabel={m.project_back_to_projects()} />
+    return context.kind === "session" ? <MissingRecord title={m.session_missing_title()} backTo="/sessions" backLabel={m.nav_sessions()} /> : <MissingRecord title={m.project_missing_title()} backTo="/projects" backLabel={m.nav_projects()} />
   }
   const session = scope.session
 

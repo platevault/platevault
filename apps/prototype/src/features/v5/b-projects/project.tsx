@@ -55,7 +55,7 @@ export function ProjectPage() {
   const search = useSearch({ strict: false }) as Record<string, string | undefined>
   const m = useMessages()
   const project = useStore((s) => s.catalog.projects[projectId])
-  if (!project) return <MissingRecord title={m.project_missing_title()} backTo="/projects" backLabel={m.project_back_to_projects()} />
+  if (!project) return <MissingRecord title={m.project_missing_title()} backTo="/projects" backLabel={m.nav_projects()} />
   return <ProjectView project={project} tab={tabOf(search.stage)} step={search.step} duplicateLinked={search.duplicate === "open"} />
 }
 

@@ -52,7 +52,7 @@ export function SessionPage() {
   const { sessionId = "" } = useParams({ strict: false }) as { sessionId?: string }
   const session = useStore((s) => s.catalog.sessions[sessionId])
   const m = useMessages()
-  if (!session) return <MissingRecord title={m.session_missing_title()} backTo="/sessions" backLabel={m.session_open_sessions()} />
+  if (!session) return <MissingRecord title={m.session_missing_title()} backTo="/sessions" backLabel={m.nav_sessions()} />
   return session.imageType === "light" ? <SessionDetail session={session} /> : <CalibrationSession session={session} />
 }
 
