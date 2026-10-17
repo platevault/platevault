@@ -272,9 +272,6 @@ export function subjectCentre(catalog: Catalog, subject: Subject): { ra: number;
 // Projects: state, suggestions and held sessions (D-W33, D-W37, PRJ-FR-08)
 // ---------------------------------------------------------------------------
 
-/** The header's StatusBadge word (PRJ-FR-14, PRJ-FR-25): Open, Closed, or Archived. */
-export const PROJECT_STATUS_NAME: Record<ProjectState, MessageRef> = { open: msg("status_open"), closed: msg("status_closed"), archived: msg("status_archived") }
-
 /**
  * Closed and Archived Projects are locked: no edits, no Apply, no incoming
  * pending changes (PRJ-FR-25). Provisional (decision record §2): there is no
