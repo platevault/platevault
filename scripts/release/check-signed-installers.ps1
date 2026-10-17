@@ -82,9 +82,13 @@ function Check-InstallerContents(
     Expand-With7Zip $msi.FullName (Join-Path $UnpackedDirectory 'msi-streams') @('-tCompound')
     $target = Join-Path (Resolve-Path $UnpackedDirectory).Path 'msi'
     New-Item -ItemType Directory -Force $target | Out-Null
-    $arguments = "/a `"$($msi.FullName)`" /qn TARGETDIR=`"$target`""
+    $log = Join-Path ([System.IO.Path]::GetTempPath()) 'platevault-msi-admin-extract.log'
+    $arguments = "/a `"$($msi.FullName)`" /qn TARGETDIR=`"$target`" /L*V `"$log`""
     $process = Start-Process msiexec.exe -Wait -PassThru -ArgumentList $arguments
-    if ($process.ExitCode -ne 0) { throw "msiexec /a $($msi.Name) exited with $($process.ExitCode)" }
+    if ($process.ExitCode -ne 0) {
+      $details = if (Test-Path -LiteralPath $log) { Get-Content -LiteralPath $log | Select-String -Pattern 'Return value 3|Error [0-9]+|Product:|TARGETDIR' | Select-Object -Last 12 } else { @() }
+      throw "msiexec /a $($msi.Name) exited with $($process.ExitCode). MSI log: $log`n$($details -join "`n")"
+    }
   }
 
   $signedFor = @{}
