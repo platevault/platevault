@@ -34,9 +34,8 @@
 //! quit. A check never downloads, and the startup check runs only while
 //! "Check for updates automatically" is on.
 //!
-//! What the updater says outside the webview, the macOS administrator prompt
-//! and the notification an install at quit raises, follows the webview's
-//! locale ([`Updater::set_locale`]).
+//! Text the updater shows outside the webview is read from its feature-owned
+//! message cache for the shared [`ActiveLocale`].
 
 mod http;
 mod install;
@@ -46,7 +45,6 @@ mod signature;
 #[cfg(test)]
 mod tests;
 mod wording;
-
 use std::fmt;
 use std::future::Future;
 use std::io;
@@ -65,9 +63,10 @@ pub use self::install::LaunchedApp;
 use self::install::{InstallMode, Installed, Installer, OsInstaller};
 use self::manifest::Release;
 use self::signature::{Staged, TrustedKey};
-use self::wording::{Notice, Wording};
+use self::wording::Wording;
 use crate::channels::Latest;
-use crate::locale::{self, ShippedLocale};
+use crate::locale::{ActiveLocale, ShippedLocale};
+use crate::notifications::Notice;
 
 /// The longest an install at quit may hold the quit. Long enough for the
 /// slowest legitimate case, a deb or rpm install waiting on its polkit
@@ -320,8 +319,7 @@ struct Inner {
     state: Mutex<State>,
     status: watch::Sender<UpdateStatus>,
     startup_checked: AtomicBool,
-    /// What the updater says outside the webview, in the webview's locale.
-    wording: Mutex<Wording>,
+    locale: ActiveLocale,
 }
 
 /// The update flow. Every transition happens under the state lock, so an
@@ -444,7 +442,11 @@ impl Updater {
     ///
     /// An endpoint that is not an HTTPS URL, a public key that is not a
     /// minisign key, or an HTTP client that cannot be built.
-    pub fn new(config: UpdaterConfig, host: impl UpdateHost) -> Result<Self, UpdateError> {
+    pub fn new(
+        config: UpdaterConfig,
+        host: impl UpdateHost,
+        locale: ActiveLocale,
+    ) -> Result<Self, UpdateError> {
         let endpoints = config
             .endpoints
             .iter()
@@ -465,7 +467,7 @@ impl Updater {
             source: Box::new(source),
             host: Box::new(host),
             quit_install_ceiling: QUIT_INSTALL_CEILING,
-            wording: Wording::in_locale(locale::base().tag).map_err(UpdateError::Config)?,
+            locale,
         }))
     }
 
@@ -484,31 +486,19 @@ impl Updater {
                 state: Mutex::new(State::Idle),
                 status,
                 startup_checked: AtomicBool::new(false),
-                wording: Mutex::new(parts.wording),
+                locale: parts.locale,
             }),
         }
     }
 
-    /// Speak the webview's locale, `tag`, outside it: in the macOS
-    /// administrator prompt and the notification an install at quit raises.
-    /// The webview sends its locale at start and on every change; a tag that
-    /// is not a shipped locale means the base locale.
-    pub fn set_locale(&self, tag: &str) {
-        match Wording::in_locale(tag) {
-            Ok(wording) => *self.wording() = wording,
-            Err(error) => tracing::warn!(%error, tag, "the updater keeps its previous language"),
-        }
-    }
-
-    /// The locale [`Self::set_locale`] last chose, for other text the backend
-    /// shows about updates.
+    /// The locale currently selected for all backend-visible text.
     #[must_use]
     pub fn locale(&self) -> &'static ShippedLocale {
-        self.wording().locale()
+        self.inner.locale.get()
     }
 
-    fn wording(&self) -> MutexGuard<'_, Wording> {
-        self.inner.wording.lock().unwrap_or_else(PoisonError::into_inner)
+    fn wording(&self) -> &'static Wording {
+        Wording::for_active(&self.inner.locale)
     }
 
     /// The status the UI should show now.
@@ -862,5 +852,5 @@ struct Parts {
     installer: Box<dyn Installer>,
     host: Box<dyn UpdateHost>,
     quit_install_ceiling: Duration,
-    wording: Wording,
+    locale: ActiveLocale,
 }

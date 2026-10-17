@@ -70,6 +70,7 @@ impl<R: Runtime> UpdateHost for TauriHost<R> {
 pub fn register<R: Runtime>(
     app: &AppHandle<R>,
     notifier: Notifier,
+    locale: desktop_services::locale::ActiveLocale,
     identity: &AppIdentity,
     launched: LaunchedApp,
 ) {
@@ -80,7 +81,7 @@ pub fn register<R: Runtime>(
             return;
         }
     };
-    let updater = match Updater::new(config, TauriHost { app: app.clone(), notifier }) {
+    let updater = match Updater::new(config, TauriHost { app: app.clone(), notifier }, locale) {
         Ok(updater) => updater,
         Err(error) => {
             tracing::error!(%error, "updates are off");
@@ -213,7 +214,12 @@ mod tests {
             updater_config.endpoints,
             ["https://github.com/platevault/platevault/releases/latest/download/latest.json"]
         );
-        assert!(Updater::new(updater_config, NoHost).is_ok());
+        assert!(Updater::new(
+            updater_config,
+            NoHost,
+            desktop_services::locale::ActiveLocale::new()
+        )
+        .is_ok());
     }
 
     #[test]
