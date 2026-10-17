@@ -41,8 +41,9 @@
 //! - Every move onto the app's path or onto a name a kept app takes is
 //!   exclusive (`RENAME_EXCL`, `RENAME_NOREPLACE`). A file system without
 //!   that rename gets a check that nothing is at the destination and then a
-//!   plain rename: an empty directory another process creates there in that
-//!   moment is replaced.
+//!   plain rename, which replaces what another process creates there in that
+//!   moment: an empty directory, or a file when what moves is a file or a
+//!   link.
 //!
 //! The swap is the one `tauri-plugin-updater` 2.13.3 made: the two bundles are
 //! exchanged in one step where the file system can (APFS), so the app path
@@ -52,7 +53,10 @@
 //! back or kept entry moves onto nothing, under the next free numbered name
 //! when one is taken. So does the update: an entry another process put at
 //! the app's path between the two moves is left alone, and the install
-//! refused ([`UpdateError::AppReplaced`]).
+//! refused. As that entry also keeps the launched app from moving back, the
+//! app is then usually kept aside, and the error is
+//! [`UpdateError::PreviousAppNotRestored`] with [`UpdateError::AppReplaced`]
+//! as its cause.
 //!
 //! An app the user may not rename is installed by [`PrivilegedInstall`], a
 //! root script that checks again, on its own copy, everything the user
@@ -459,8 +463,10 @@ enum SwapError {
     Occupied,
     /// What the swap moved out of the app's path was not the launched app but
     /// an entry swapped in after the last check, whose device and inode were
-    /// `found` (`None` when they could not be read). The swap was undone as
-    /// far as that worked; [`settle_not_launched`] tells what is where now.
+    /// `found` (`None` when they could not be read, or when nothing was at
+    /// the app's path to move: the launched app went away since the check).
+    /// The swap was undone as far as that worked; [`settle_not_launched`]
+    /// tells what is where now.
     NotLaunched {
         found: Option<(u64, u64)>,
     },
@@ -545,12 +551,19 @@ fn rename_noreplace(from: &Path, to: &Path) -> io::Result<()> {
 }
 
 /// Move `update` to the app `launched` names, keeping what was there in
-/// `backup` until that has succeeded. What the first move brought to `backup`
-/// must be the launched app; anything else is moved back, onto nothing. The
+/// `backup` until that has succeeded. The first move goes onto nothing, and
+/// what it brought to `backup` must be the launched app; anything else is
+/// moved back, onto nothing. Should nothing be at the app's path for it, the
+/// launched app moved away since the last check, or a folder above it became
+/// a file: that too is [`SwapError::NotLaunched`], with nothing found. The
 /// second move is [`move_update_in`].
 fn replace(launched: &LaunchedBundle, update: &Path, backup: &Path) -> Result<(), SwapError> {
     let installed = launched.path.as_path();
-    fs::rename(installed, backup)?;
+    if let Err(error) = rename_noreplace(installed, backup) {
+        let gone = matches!(error.kind(), io::ErrorKind::NotFound | io::ErrorKind::NotADirectory)
+            && matches!(still_at(installed, launched.id), Ok(false));
+        return Err(if gone { SwapError::NotLaunched { found: None } } else { error.into() });
+    }
     check_moved_out(launched, backup, || rename_noreplace(backup, installed))?;
     move_update_in(installed, update, backup)
 }
@@ -1330,6 +1343,84 @@ mod tests {
         assert_eq!(version(&installed), "foreign", "the other bundle is back");
         assert_eq!(version(&update), "new", "nothing was installed");
         assert!(!backup.exists());
+    }
+
+    /// The launched app moved away after the last check, before the swap, or
+    /// a folder above it became a file: the exchange and the first move find
+    /// nothing at the app's path. That is a replaced app, which asks for a
+    /// restart with nothing kept, not an error reading the file system.
+    #[test]
+    fn an_app_gone_before_the_swap_is_replaced() {
+        fn move_the_app(dir: &Path) {
+            fs::rename(dir.join("Applications/App.app"), dir.join("moved-away.app"))
+                .expect("move the launched app away");
+        }
+        fn file_for_its_folder(dir: &Path) {
+            move_the_app(dir);
+            fs::remove_dir(dir.join("Applications")).expect("its folder");
+            fs::write(dir.join("Applications"), "a file").expect("a file in its place");
+        }
+        let cases: [(&str, fn(&Path)); 2] =
+            [("moved", move_the_app), ("folder became a file", file_for_its_folder)];
+        for (case, gone) in cases {
+            let dir = tempfile::tempdir().expect("tempdir");
+            fs::create_dir(dir.path().join("Applications")).expect("Applications");
+            let installed = dir.path().join("Applications/App.app");
+            bundle(&installed, "old");
+            let launched = launched(&installed);
+            let staging = tempfile::tempdir_in(dir.path()).expect("staging");
+            let update = staging.path().join("App.app");
+            bundle(&update, "new");
+            let update_id = entry_id(&update).expect("update");
+            let backup = staging.path().join("previous.app");
+            gone(dir.path());
+
+            let swapped = swap(&launched, &update, &backup);
+
+            assert!(
+                matches!(swapped, Err(SwapError::NotLaunched { found: None })),
+                "{case}: {swapped:?}"
+            );
+            let outcome = settle_not_launched(
+                &installed,
+                staging,
+                [&update, &backup],
+                (update_id, None),
+                None,
+            );
+            assert!(
+                matches!(&outcome, Err(UpdateError::AppReplaced(detail)) if detail.ends_with("what is there now")),
+                "{case}: {outcome:?}"
+            );
+            assert_eq!(version(&dir.path().join("moved-away.app")), "old", "{case}");
+            assert!(!dir.path().join("Applications").join(KEPT_APP).exists(), "{case}");
+        }
+    }
+
+    /// The first move goes onto nothing too: an entry already at `backup`,
+    /// where only another process can have put it, stops it, and the
+    /// launched app stays where it is.
+    #[test]
+    fn the_first_move_does_not_replace_an_entry_in_staging() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let (installed, update, backup) =
+            (dir.path().join("App.app"), dir.path().join("update"), dir.path().join("backup"));
+        bundle(&installed, "old");
+        bundle(&update, "new");
+        let launched = launched(&installed);
+        fs::create_dir(&backup).expect("an empty directory at the backup's name");
+        let planted = entry_id(&backup).expect("planted");
+
+        let moved = replace(&launched, &update, &backup);
+
+        assert!(
+            matches!(&moved, Err(SwapError::Io(error)) if error.kind() == io::ErrorKind::AlreadyExists),
+            "{moved:?}"
+        );
+        assert_eq!(entry_id(&installed).ok(), Some(launched.id), "the launched app stays");
+        assert_eq!(version(&installed), "old");
+        assert_eq!(entry_id(&backup).ok(), Some(planted), "the planted entry is untouched");
+        assert_eq!(version(&update), "new", "nothing was installed");
     }
 
     /// Exchange the entries at `a` and `b`, as [`exchange`] does, by renames
