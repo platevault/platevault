@@ -235,14 +235,16 @@ pub async fn library_preview_metadata(
     library: State<'_, Arc<Library>>,
     expected: Vec<ExpectedAsset>,
     field: String,
-    value: serde_json::Value,
+    // `JsonAny` is `serde_json::Value` on the wire; the bindings can't type a
+    // bare `Value` argument (specta inlines its recursive shape forever).
+    value: contracts_core::JsonAny,
 ) -> Reply<CorrectionPreview> {
     let corrections = expected
         .iter()
         .map(|asset| CorrectionInput {
             asset_id: asset.asset_id,
             field: field.clone(),
-            value: value.clone(),
+            value: value.0.clone(),
         })
         .collect::<Vec<_>>();
     library.preview_correction(&expected, &corrections).await.map_err(fail(None))

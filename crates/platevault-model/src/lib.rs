@@ -990,7 +990,23 @@ pub struct Association {
 pub struct CorrectionInput {
     pub asset_id: Uuid,
     pub field: String,
+    #[cfg_attr(feature = "wire", specta(type = JsonValueWire))]
     pub value: serde_json::Value,
+}
+
+/// Any JSON value as a named type: the bindings reference it rather than
+/// inline `serde_json::Value`'s self-referential shape, which specta refuses.
+#[cfg(feature = "wire")]
+#[derive(specta::Type, schemars::JsonSchema)]
+#[serde(rename = "JsonValue", untagged)]
+#[allow(dead_code, reason = "only the IPC type derives read it")]
+enum JsonValueWire {
+    Null(()),
+    Bool(bool),
+    Number(f64),
+    String(String),
+    Array(Vec<JsonValueWire>),
+    Object(BTreeMap<String, JsonValueWire>),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
