@@ -12,8 +12,9 @@
 //! 2. Save the Target and the rig, and confirm both on the light session.
 //! 3. Reassign its darks, flats and bias to the scanned raw sets.
 //! 4. Mark its frames Usable and finish its review.
-//! 5. Create the Project, add the session and Apply it in Copies mode, which
-//!    needs no symlink privilege on any platform.
+//! 5. Create the Project, add the session, choose Copies and the processing
+//!    location, and Apply it. Copies needs no symlink privilege on any
+//!    platform.
 //!
 //! The first life runs in a child process of this test binary. A mock app
 //! never drops the state it manages, so only the process exit drops its app
@@ -22,28 +23,22 @@
 //! - the Project, its membership and the installed View manifest survived;
 //! - Home reads "Open in {app}";
 //! - Apply has nothing to change.
-//!
-//! One setup write has no shell command on this base: choosing Copies and
-//! the processing location. It goes through the managed Library and is marked
-//! `WIRE-S3a: swap to IPC`.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use desktop_shell::library_shell::CATALOG_FILE;
 use fits_fixtures::FitsFixture;
 use platevault_core::library::Library;
-use platevault_core::{NativePath, ProjectViewSettings, ViewMode};
+use platevault_core::NativePath;
 use serde_json::{json, Value};
 use tauri::ipc::{CallbackFn, InvokeBody};
 use tauri::test::{get_ipc_response, mock_builder, mock_context, noop_assets, MockRuntime};
 use tauri::webview::InvokeRequest;
 use tauri::{Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
-use uuid::Uuid;
 
 /// The test the child process runs: its first life.
 const TEST: &str = "an_applied_project_survives_a_restart_and_apply_has_nothing_to_change";
@@ -61,7 +56,7 @@ const PATIENCE: Duration = Duration::from_secs(300);
 /// registered.
 struct Shell {
     webview: WebviewWindow<MockRuntime>,
-    app: tauri::App<MockRuntime>,
+    _app: tauri::App<MockRuntime>,
 }
 
 impl Shell {
@@ -91,6 +86,7 @@ impl Shell {
                 desktop_shell::commands::project_goals::project_list,
                 desktop_shell::commands::project_inputs::project_inputs,
                 desktop_shell::commands::project_inputs::project_add_sessions,
+                desktop_shell::commands::project_inputs::project_set_view_settings,
                 desktop_shell::commands::project_apply::project_apply_preview,
                 desktop_shell::commands::project_apply::project_apply,
                 desktop_shell::commands::home::home_dashboard,
@@ -101,7 +97,7 @@ impl Shell {
         let webview = WebviewWindowBuilder::new(&app, "library", WebviewUrl::default())
             .build()
             .expect("library window");
-        Self { webview, app }
+        Self { webview, _app: app }
     }
 
     fn invoke(&self, cmd: &str, args: &Value) -> Result<Value, Value> {
@@ -515,22 +511,20 @@ fn first_life(layout: &Layout) -> Value {
     let members = added["sessions"].as_array().expect("members");
     assert!(members.iter().any(|member| member["sessionId"] == session), "{added:#}");
 
-    // WIRE-S3a: swap to IPC (no shell command sets the View settings yet).
-    {
-        let library = Arc::clone(&shell.app.state::<Arc<Library>>());
-        let id: Uuid = serde_json::from_value(project.clone()).expect("Project id");
-        let revision = added["revision"].as_u64().expect("Project revision");
-        let settings = ProjectViewSettings {
-            mode: ViewMode::Copies,
-            keywords: None,
-            profile_id: None,
-            parent: Some(NativePath::from_path(&layout.processing)),
-        };
-        tauri::async_runtime::block_on(
-            library.catalog().set_project_view_settings(id, revision, &settings),
-        )
-        .expect("Copies and the processing location");
-    }
+    let chosen = shell.call(
+        "project_set_view_settings",
+        &json!({
+            "projectId": project,
+            "expectedRevision": added["revision"],
+            "settings": {
+                "mode": "copies",
+                "keywords": null,
+                "profileId": null,
+                "parent": native(&layout.processing),
+            },
+        }),
+    );
+    assert_eq!(chosen["settings"]["mode"], "copies", "{chosen:#}");
     let before = shell.home(&project);
     assert_eq!(before["pendingChanges"], 0, "{before:#}");
     assert_eq!(before["next"], json!({ "kind": "add_sessions" }), "no View yet: {before:#}");
