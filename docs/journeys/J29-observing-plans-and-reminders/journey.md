@@ -1,7 +1,7 @@
 ---
 id: J29
 title: Plan nights on the Targets page's Planned view, opt into default-site reminders, see Tonight on Home, and export every planned night to a calendar
-version: 7
+version: 8
 status: draft
 last_reviewed: 2026-10-03
 actors: [primary-user]
@@ -49,8 +49,9 @@ starts no indexing.
 
 ### S2 — Grade filters with the per-filter Moon curve {#S2}
 
-- **Do:** On the Planned view, expand NGC 7000's Per filter sub-rows. Set the header date picker to **2026-10-25** and choose Backyard in the site picker. Switch to the All view, choose **Add to plan** for NGC 7000 on the 2026-10-25 night, and return to the Planned view. Open **Moon limits**, choose OIII in the Filter field, raise its **Separation at full Moon** by 30° from 60° to 90°, leave **Width** at 7 days, and save. Read the recalculated OIII row, then return the date picker to tonight.
-- **Expect:** On fixture night 2026-10-25 at Backyard (52.09° N, 5.12° E), the seeded NGC 7000 position (RA 314.75°, Dec 44.53°) has a Moon-up reading at 100% illumination and 64.74° separation, between the 60° and 90° full-Moon thresholds. The prototype computes OIII as Good with a 440-minute window from 2026-10-25 18:20 to 2026-10-26 01:40 UTC before the edit, then Poor with no OIII window after it. At the reading's Moon age (14.306 days), the old 60°/7-day curve requires 59.74° separation and the raised 90°/7-day curve requires 89.61°; 44 Moon-up samples on the 10-minute darkness grid lie between the curves. These are computed by `domain/planning.ts` `skyNight` (489–509), `nightImaging` (605–646), and `requiredMoonSeparationDeg` (455–457), with the seeded Backyard site in `domain/seed.ts` (805) and the NGC 7000 catalogue position in `domain/sky.ts` (59). Each saved rig's R, G, B, Ha and OIII bands appears as a Per filter sub-row with its grade and Moon-clear windows. Each band follows its own Moon-avoidance curve. The separation the curve requires from the Moon is greatest at full Moon and shrinks as the Moon dims; a sample counts when the Moon is below the horizon or at least that far away.
+- **Do:** Set the header date picker to **2026-10-25** and choose Backyard in the site picker. In All, choose **Add to plan** for NGC 7000 on that night. Return to the plan view and expand its Per filter sub-rows. Open **Moon limits**, choose OIII, raise **Separation at full Moon** from 60° to 90°, and leave **Width** at 7 days. Save. Read the OIII row. In All, choose **Remove from plan** for NGC 7000 on 2026-10-25. Return to the plan view.
+- **Expect:** On fixture night 2026-10-25 at Backyard (52.09° N, 5.12° E), the seeded NGC 7000 position (RA 314.75°, Dec 44.53°) has a Moon-up reading at 100% illumination, 64.74° separation, and Moon age 14.306 days. Its separation is between the 60° and 90° full-Moon thresholds. At this age, the 60°/7-day OIII curve requires 59.74°, and the raised 90°/7-day curve requires 89.61°. Before the edit, the prototype computes Good with a 440-minute OIII window from 2026-10-25 18:20 to 2026-10-26 01:40 UTC. After the edit, OIII is Poor with no window. Forty-four Moon-up samples on the 10-minute darkness grid lie between the curves. `domain/planning.ts` computes these values with `skyNight` (lines 489 to 509), `nightImaging` (lines 605 to 646), and `requiredMoonSeparationDeg` (lines 455 to 457). Seeded coordinates are in `domain/seed.ts` (line 805) and `domain/sky.ts` (line 59). Each saved rig's R, G, B, Ha and OIII bands appears as a Per filter sub-row with its grade and Moon-clear windows. Each band follows its own Moon-avoidance curve. The required separation is greatest at full Moon and shrinks as the Moon dims. A sample counts when the Moon is below the horizon or at least that far away.
+- **Expect:** After removal, the 2026-10-25 plan view reads `Plan list empty` and NGC 7000 offers **Add to plan**. Only the original tonight and following-night plans remain.
 - **Expect (negative):** The R, G, B and Ha curve definitions are unchanged; on this full-Moon night their grade/windows may also change under their stricter curves. The dialog offers no separate maximum-illumination limit. Editing OIII's curve changes no rig filter list or Project goal.
 - **Trace:** flow K · PLAN-FR-02 · PLAN-TGT-FR-06 · PLAN-TGT-AC-18 · D-W88 · HARNESS-V5-FEEDBACK-R1.md Round 9 C6 · prototype `domain/planning.ts` (`skyNight`, `nightImaging`, `requiredMoonSeparationDeg`), `domain/seed.ts`, `domain/sky.ts` and `moon-limits.tsx` on ui-harness-v5
 
@@ -165,7 +166,7 @@ starts no indexing.
 - SC6: Exactly 1 notification is delivered for the S7a target/site/window identity across S7a and S8.
 - SC7: M 31 is planned with 0 Projects created or chosen (S11), and the Project page plans exactly 1 subject, NGC 7000 (S12).
 - SC8: Tonight lists exactly 2 Targets with a window, NGC 7000 and M 31, at `Remote site`, and each best window equals the Planned view's best `Remote site` window for that Target (S13).
-- SC9: Per filter shows exactly 5 bands for NGC 7000; on 2026-10-25 at Backyard, OIII changes from Good/440 Img minutes with a 440-minute window to Poor/0 Img minutes with no window when its full-Moon separation rises from 60° to 90° (S2). Returning the date picker to tonight restores 100% of the S3 values (S3a).
+- SC9: Per filter shows five NGC 7000 bands. On 2026-10-25 at Backyard, raising the full-Moon separation for OIII from 60° to 90° changes its grade from Good to Poor and Img time from 440 minutes to 0 (S2). S2 removes that temporary plan, leaving the two-night scope for S7 and S9. Returning the picker to tonight restores the S3 values (S3a).
 - SC10: Making `Remote site` the default asks first and, when cancelled, moves 0 defaults and 0 reminders (S14).
 - SC11: Tomorrow's plan holds 0 Targets before the S3a add and exactly 1, NGC 7000, after it; tonight's plan holds exactly NGC 7000 throughout S3a, and adding M 31 at S11 leaves tomorrow's plan at exactly 1.
 
@@ -194,6 +195,6 @@ starts no indexing.
 - **Δ5** 2026-10-15 · S1, S3 · behavior-change
   The Project holds sessions directly, with no processing run, and a mosaic is a Project with panel groups whose goals Tonight grades from the subject's window.
   Evidence: D-W93 to D-W106 (F4 Project model, owner's answers of 2026-10-14) in PR #1804, 065 PRJ-FR-29, 072 PLAN-AC-01, PLAN-FR-02, PLAN-FR-11 · by: SpecF4Writer2 (intent-gated)
-- **Δ7** 2026-10-17 · S2 · behavior-change
-  S2 uses a fixed moonlit NGC 7000 night at Backyard and asserts OIII's computed Good/440 min → Poor/0 min result when its 60° full-Moon separation is raised to 90°.
-  Evidence: HARNESS-V5-FEEDBACK-R1.md Round 9 C6; prototype `domain/planning.ts` (`skyNight`, `nightImaging`, `requiredMoonSeparationDeg`), `domain/seed.ts`, `domain/sky.ts` and `moon-limits.tsx` on ui-harness-v5 · by: agent (intent-gated, user instruction)
+- **Δ8** 2026-10-17 · S2 · behavior-change
+  After checking the moonlit OIII recalculation, S2 removes its temporary 2026-10-25 NGC 7000 plan. Only tonight's and the following night's plans remain for reminders and calendar export.
+  Evidence: Codex PRRT_kwDOSdTu0s6tdUvD on PR #1841 (J29/S2 follow-up). Prototype `domain/planning.ts` `plannedNights` (lines 171 to 177) and Targets `planAction` (lines 103 to 108) · by: agent (intent-gated, user instruction)
