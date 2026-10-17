@@ -150,13 +150,14 @@ The user checks the pinned calibration for the sessions in Project `NGC 7000 HOO
 ## Known gaps
 
 - G1: The rebuilt application has not been validated against this journey. The journey follows specs 064, 066, 068 and 069 and D-W93 to D-W123.
+- G2: Unresolved implementation qualification: Siril profile capability probes (D04) must exist before S8 can show verified evidence. This journey does not test PixInsight/WBPP or SETI Astro Suite Pro. Blocks readiness.
 - G3: Out of scope for this journey: calibration across mosaic panel groups is covered by J33. The Project diagram and pinned-session rules are specified by CAL-FR-09 and CAL-FR-23.
 - G4: (dissolved 2026-10-12): answered by Round 6 "Calibration Off"; S7a now asserts that with **Auto-assign** off the 3 compatible masters read Suggested, none is assigned, and only an accepted one becomes a handoff input.
 - G5: (dissolved 2026-10-12): answered by Round 6 "Rename runs and Projects"; S7 now asserts that the run starts auto-named `NGC 7000 RedCat` and is renamed `24 Sep flat check` on the run header.
 - G6: (dissolved 2026-10-15): D-W101 matches calibration at ingestion and makes the Project's Calibrate step a read-only check, so no Calibrate row offers `Stack from <session>`. Raw sets wait as calibration processes in the Calibration library, which J36 stacks.
 - G7: (dissolved 2026-10-15): PREP-AC-11 (D-W81, D-W83) answers it: for a profile whose input-write behavior is unknown or write-prone, Symlinks is refused with the input-write risk named, and Copies is offered without a silent mode change. S9 asserts that refusal for a generic application.
-- G2: Unresolved implementation qualification: Siril profile capability probes (D04) must exist before S8 can show verified evidence. This journey does not test PixInsight/WBPP or SETI Astro Suite Pro. Blocks readiness.
 - G8: Rests on provisional F4 items pending owner confirmation in PR #1804: D-W106's Hide refusal for a master an open Project uses through its sessions (S7b, SC5), and D-W102's flat ranking (P2, S3). Changes to either decision may change those steps.
+- G9: (dissolved 2026-10-17): PREP-FR-20 and provisional D-W123 map Target and rig corrections to FITS header keywords, and S10, S11 and SC8 read back those values.
 - G10: Open owner question (D-W123): For a corrected XISF, DNG or camera RAW input whose selected profile lacks a configuration route, should Apply block, warn and continue, patch XISF FITSKeywords (which requires cited capability evidence), or convert? The owner has selected no behavior. PREP-FR-03 requires Apply to report a correction delivered only when it delivered it. This gap blocks readiness.
 ## Delta log
 
