@@ -125,7 +125,7 @@ The user checks the pinned calibration for the sessions in Project `NGC 7000 HOO
 
 - **Do:** With the S9 generic application selected in View and the View in Copies mode, open the Apply sheet and read its Corrected values section.
 - **Expect:** The section reads "2 corrected values", the two that held sessions recorded at ingestion in J19/S10. It lists each with its session, its field, the value in the header and the corrected value. 24 Sep's Target reads "–" in the header and NGC 7000 corrected, and 28 Sep's Equipment reads "–" in the header and `RedCat` corrected. Because the generic application reads no corrected values through its configuration, the section names the route as isolated patched copies in the Copies View. The sheet also shows the pending calibration change and the new View as a folder tree.
-- **Expect (negative):** The sheet offers no per-value choice: no accepting the source value and no excluding an input. No correction is made or changed in Apply.
+- **Expect (negative):** The sheet offers no per-value choice: no accepting the source value and no excluding an input. Apply creates or changes no catalog correction; it only delivers the ones already recorded.
 - **Trace:** PREP-FR-08, PREP-FR-16 · VSEL-FR-14 · LIB-FR-12 · D-W100 · HARNESS-V5-FEEDBACK-R1.md Round 9 C15 · PREP-FR-03 conflicts (G9)
 
 ### S11 — Apply the corrected values {#S11}

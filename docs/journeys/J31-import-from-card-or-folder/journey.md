@@ -44,8 +44,8 @@ folder is added in place. Done means:
 
 - P1: J19 completed through S14. `Astro-T7 captures` and `Cold-1 captures` are registered Captures locations and both are online. `Astro-T7 calibration` (`Astro-T7/Calibration`) is the registered Calibration location. The Target NGC 7000 exists (J19/S10). No Project exists. Settings › Naming holds the default templates: lights `{target}/{filter}/{date}/light/`, raw flats `Raw/Flats/{filter}/{date}/`, raw darks `Raw/Darks/{exposure}/{date}/` and master darks `Darks/{camera}/{exposure}_g{gain}_o{offset}_{set_temp}/`. Settings › Calibration › **Keep raw calibration frames** is off, the default.
 - P2: Removable volume `Card-1` supports the OS Trash and is connected. It holds an ASIAIR layout: its frames sit under `Autorun/`, beside a `Plan/` folder. For the night of 2026-10-02 it holds:
-  - 30 NGC 7000 Ha 300 s RedCat lights with OBJECT `NGC 7000` and pointing within NGC 7000's footprint. 12 of them have a DATE-OBS after local midnight on 3 Oct. Three of them, `Light_Ha_0005.fits`, `Light_Ha_0017.fits` and `Light_Ha_0023.fits`, are clouded (J37/S6).
-  - 6 OIII 300 s lights with no OBJECT, no pointing, and no TELESCOP or FOCALLEN.
+  - 30 NGC 7000 Ha 300 s RedCat lights with OBJECT `NGC 7000` and pointing within NGC 7000's footprint, the first starting at 20:30 local time. 12 of them have a DATE-OBS after local midnight on 3 Oct. Three of them, `Light_Ha_0005.fits`, `Light_Ha_0017.fits` and `Light_Ha_0023.fits`, are clouded (J37/S6).
+  - 6 OIII 300 s lights with no OBJECT, no pointing, and no TELESCOP or FOCALLEN, the first starting at 23:10 local time, after the first Ha light.
   - 10 Ha flats and 10 darks of 300 s.
   - 1 master dark stacked elsewhere, `dark-300s-stack.xisf`: IMAGETYP `Master Dark`, NCOMBINE 40, 300 s, INSTRUME `ASI2600MM`, gain 100, offset 50, CCD-TEMP −10 °C, DATE-OBS on the night of 2026-10-02.
   - 2 frames with no frame-type header.
@@ -136,7 +136,7 @@ folder is added in place. Done means:
 
 - **Do:** Read the finished import's actions and choose **Review sessions** (provisional copy, from the prototype), then go back to the import. Click **Show in Sessions**. Read the new sessions, then choose the **Needs a Target** filter. Open the Calibration library and then the 28 Sep session. Read the status bar after the duplicate scan settles.
 - **Expect:**
-  - The finished import offers **Review sessions** (provisional copy) first, before **Show in Sessions**. **Review sessions** opens the Review step of the first session in the Sessions **Needs review** filter, one of the two new light sessions.
+  - The finished import offers **Review sessions** (provisional copy) first, before **Show in Sessions**. **Review sessions** opens the first session of this import that the Sessions **Needs review** queue holds. The queue runs oldest night first, then by start time, and only this import's sessions are candidates, so sessions that earlier journeys left in the queue never come first. Both new sessions share the night of 2 Oct, and `2 Oct Ha` starts earlier (P2), so it opens `2 Oct Ha`. Its Target is confirmed and its rig associated, so it opens at its Review step.
   - Sessions opens with the import highlighted (`?import=<operation>`). A notice names the import and `2 sessions`.
   - The 2 Oct Ha session, 30 frames, and the 2 Oct OIII session, 6 frames, are listed first, each marked `New`, and each reads Target NGC 7000 Confirmed. Their frames sit under `NGC 7000/Ha/2026-10-02/light/` and `NGC 7000/OIII/2026-10-02/light/` in `Astro-T7 captures`.
   - **Needs a Target** lists neither new session. Every new frame reads Unreviewed.
@@ -248,6 +248,6 @@ folder is added in place. Done means:
 - **Δ6** 2026-10-16 · S3, S9 · behavior-change
   Lights with no pointing stay one session with no framing split: S3 and S9 now assert this for `2 Oct OIII` and `4 Oct Ha`. G10 is dissolved.
   Evidence: D-W107 as amended by the owner's second batch of 2026-10-16 in PR #1804, LIB-FR-04, LIB-FR-24, LIB-AC-34 · by: EncodeOwnerAnswers2 (intent-gated)
-- **Δ7** 2026-10-17 · S7 · behavior-change
-  The finished import leads with **Review sessions**, which opens the first session in the Needs review queue; Show in Sessions stays as the second action.
-  Evidence: HARNESS-V5-FEEDBACK-R1.md Round 9 C14 · D-W78 · LIB-FR-20, PIX-FR-18 · prototype import.tsx OutcomeStep (ui-harness-v5) · by: JourneysR9c (intent-gated)
+- **Δ7** 2026-10-17 · S7, P2 · behavior-change
+  The finished import leads with **Review sessions**, which opens this import's first session in the Needs review queue (oldest night, then start time), here `2 Oct Ha` at its Review step; Show in Sessions stays as the second action. P2 gives the 2 Oct lights their start times.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md Round 9 C14 · D-W78 · LIB-FR-20, PIX-FR-18 · prototype import.tsx OutcomeStep, derive.ts reviewQueue and importReviewLink (ui-harness-v5) · by: JourneysR9c (intent-gated)

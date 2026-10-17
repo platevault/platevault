@@ -225,8 +225,8 @@
       "journeyStep": "J23/S10, J23/S11, J24/S14, J24/S16",
       "spec": "069-application-handoff PREP-FR-08, PREP-FR-09, PREP-AC-06; 064-library-inventory LIB-FR-12; D-W93, D-W98, D-W100; HARNESS-V5-FEEDBACK-R1.md Round 9 C15 (PREP-FR-03 conflicts, J23/G9)",
       "action": "Open the Apply sheet and read its Corrected values section, which lists the corrections the held sessions recorded at ingestion, then Apply the reviewed View.",
-      "expect": "The Apply sheet gives the count of corrected values (\"N corrected values\") and lists each with its session, field, header value and corrected value, naming whether the application reads them through its configuration or as isolated patched copies. Apply applies every listed value.",
-      "negative": "Apply offers no per-value choice and makes no correction. No original or symlink target is patched, and no correction is claimed as delivered while the tool reads the original value."
+      "expect": "The Apply sheet gives the count of corrected values (\"N corrected values\") and lists each with its session, field, header value and corrected value, naming whether the application reads them through its configuration or as isolated patched copies. Apply delivers every already-recorded correction by that route.",
+      "negative": "Apply offers no per-value choice and creates or changes no catalog correction. No original or symlink target is patched, and no correction is claimed as delivered while the tool reads the original value."
     },
     {
       "flowStep": "F1",
