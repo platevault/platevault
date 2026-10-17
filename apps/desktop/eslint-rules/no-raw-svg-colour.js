@@ -108,6 +108,19 @@ function reportRawColorsInExpression(expression, report) {
       return;
     case 'TemplateLiteral':
       const quasis = expression.quasis.map((quasi) => quasi.value.cooked ?? quasi.value.raw);
+      const staticParts = expression.expressions.map((part) => {
+        if (part.type === 'Literal' && typeof part.value === 'string') return part.value;
+        if (part.type === 'StringLiteral') return part.value;
+        return '\u0000';
+      });
+      const staticText = quasis.reduce(
+        (text, quasi, index) => text + quasi + (staticParts[index] ?? ''),
+        '',
+      );
+      if (expression.expressions.every((part) => part.type === 'Literal' || part.type === 'StringLiteral')) {
+        if (isRawColor(staticText)) report();
+        return;
+      }
       let mode = 'normal';
       const opener = /url\s*\(|var\s*\(|(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\s*\(/ig;
       const scanText = (text) => {

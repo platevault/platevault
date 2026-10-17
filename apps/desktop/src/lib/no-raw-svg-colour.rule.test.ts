@@ -276,15 +276,6 @@ describe('svg/no-raw-svg-colour', () => {
     expect(urlSuffix).toHaveLength(0);
     expect(variableSuffix).toHaveLength(0);
   });
-  it('allows color-like template suffixes inside open URL and var names', () => {
-    const urlSuffix = lint('const svg = <svg fill={`url(#${id}red)`} />;');
-    const variableSuffix = lint(
-      'const svg = <svg color={`var(--pv-${variant}red)`} />;',
-    );
-
-    expect(urlSuffix).toHaveLength(0);
-    expect(variableSuffix).toHaveLength(0);
-  });
   it('checks raw colors on SVG roots re-entering inside foreignObject', () => {
     const diagnostics = lint(
       '<foreignObject><svg fill="red" /></foreignObject>',
@@ -297,5 +288,12 @@ describe('svg/no-raw-svg-colour', () => {
     const diagnostics = lint("const svg = <svg fill={`#ff${'00'}`} />;");
 
     expect(diagnostics).toHaveLength(1);
+  });
+  it('flags raw colors assembled from static template chunks', () => {
+    const namedColor = lint("const svg = <svg fill={`re${'d'}`} />;");
+    const colorFunction = lint("const svg = <svg fill={`r${'gb'}(1 2 3)`} />;");
+
+    expect(namedColor).toHaveLength(1);
+    expect(colorFunction).toHaveLength(1);
   });
 });
