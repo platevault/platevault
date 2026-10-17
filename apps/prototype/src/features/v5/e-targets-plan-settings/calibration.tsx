@@ -52,7 +52,7 @@ import { KeyValueList, type KeyValueItem } from "@/components/app/data"
 import { EmptyState, toast } from "@/components/app/feedback"
 import { CountBadge } from "@/components/app/pill"
 import { UsedByPreview } from "@/components/app/previews"
-import { StatusBadge, statusMeta } from "@/components/app/status"
+import { StatusBadge, StatusBadges, statusMeta } from "@/components/app/status"
 import type { PageDetail } from "@/components/templates/detail-panel"
 import { ListPage } from "@/components/templates/list-page"
 import type { ObjectMenu, PageViews } from "@/components/templates/parts"
@@ -122,11 +122,11 @@ function drifted(disk: Disk, master: CalibrationMaster): boolean {
 function MasterState({ master, old }: { master: CalibrationMaster; old: string | null }) {
   const disk = useStore((s) => s.disk)
   return (
-    <>
+    <StatusBadges>
       <StatusBadge kind="master" value={master.state} />
       {drifted(disk, master) ? <StatusBadge kind="content" value="drifted" /> : null}
       {old ? <StatusBadge kind="masterAge" value="old" label={old} /> : null}
-    </>
+    </StatusBadges>
   )
 }
 
