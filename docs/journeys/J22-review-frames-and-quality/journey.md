@@ -1,7 +1,7 @@
 ---
 id: J22
 title: Review session frames and record quality decisions
-version: 6
+version: 7
 status: draft
 last_reviewed: 2026-10-03
 actors: [primary-user]
@@ -103,10 +103,10 @@ moves or trashes no source file.
 
 ### S7a — Select by threshold {#S7a}
 
-- **Do:** Select frames with FWHM above 3.5", press **X**, read the confirmation and cancel it, then clear the selection.
+- **Do:** Use the Review step's **Select by threshold…** action to select frames with FWHM above 3.5", press **X**, read the confirmation and cancel it, then clear the selection.
 - **Expect:** Exactly the measured frames with FWHM above 3.5" are selected, and the plots highlight them. Any frame without an FWHM value is named Not measured and stays unselected. **X** on the threshold selection opens a confirmation that names the number of selected frames, whatever that number is. After **Cancel**, no frame's quality has changed.
 - **Expect (negative):** The threshold selection and the cancelled mark change no quality state and no membership.
-- **Trace:** flow D2 · PIX-FR-08, PIX-FR-14, PIX-FR-15 · PIX-AC-14, PIX-AC-21 · D-W13, D-W118
+- **Trace:** flow D2 · PIX-FR-08, PIX-FR-14, PIX-FR-15 · PIX-AC-14, PIX-AC-21 · D-W13, D-W118 · HARNESS-V5-FEEDBACK-R1.md Round 9 C10
 
 ### S7b — Inspect the corners at 1:1 {#S7b}
 
@@ -258,3 +258,6 @@ moves or trashes no source file.
 - **Δ6** 2026-10-16 · S7a, S10, +S9a · behavior-change
   A mark on a ⌘A or threshold selection asks first, whatever its count, and a single-frame or hand-picked mark never asks: S7a cancels a threshold mark, and new S9a marks two hand-picked frames with no confirmation. G8 is dissolved. S11 now checks that the Project's Ready sessions hold no Unreviewed frame, since a Ready session is fully reviewed (D-W78).
   Evidence: D-W118 (owner's second batch of 2026-10-16) in PR #1804, PIX-FR-14, PIX-FR-15, PIX-AC-21, FR-029; D-W78, LIB-FR-20 · by: EncodeOwnerAnswers2 (intent-gated)
+- **Δ7** 2026-10-17 · S7a · behavior-change
+  S7a selects the frames through the Review step's **Select by threshold…** action.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md Round 9 C10 · D-W78 · PIX-FR-08 · by: JourneysR9c (intent-gated)

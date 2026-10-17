@@ -1,7 +1,7 @@
 ---
 id: J19
 title: Index capture folders in place and inspect sessions on first use
-version: 6
+version: 7
 status: draft
 last_reviewed: 2026-10-03
 actors: [primary-user]
@@ -147,22 +147,23 @@ opens on Home, the control-panel dashboard. Done means:
 - **Expect (negative):** Neither filter assigns a session to a Project. No session is suggested to any Project, because no Project exists. Home shows no Sessions box, issues strip or summary line, and no counter opens a list of issues.
 - **Trace:** cross-flow "Missing OBJECT" · LIB-FR-17 · LIB-AC-18 · PRJ-FR-17, PRJ-FR-19 · PRJ-AC-20 · D-W33, D-W43, D-W78, D-W89, D-W92, D-W105 · HARNESS-V5-IA.md §Screens S12 · HARNESS-V5-FEEDBACK-R1.md §Round 5 (P-SB3, Home has no issues strip)
 
-### S9b — Name and complete the detected rigs {#S9b}
+### S9b — Edit detected rigs and enter missing camera data {#S9b}
 
-- **Do:** Open Settings › Equipment and read its rigs. On the rig detected from the RedCat lights choose **Rename**, enter `RedCat` and save. Rename the rig detected from the other-camera lights to `Esprit` the same way. Then choose **Edit…** on each rig's camera record, enter the pixel size 3.76 µm and save. Reopen the 30 Sep session detail.
+- **Do:** Open Settings › Equipment and read its rigs. On the rig detected from the RedCat lights choose **Edit…**, set its name to `RedCat` and save. Edit the rig detected from the other-camera lights the same way, setting its name to `Esprit`. Then choose **Edit…** on each rig's camera record, enter the pixel size 3.76 µm and save. Reopen the 30 Sep session detail.
 - **Expect:**
   - Before any change, Settings › Equipment lists exactly two rigs, each named from its TELESCOP and INSTRUME values. One has telescope `RedCat 51`, camera `ZWO ASI2600MM Pro` (Mono, 6248 × 4176) and 250 mm. The other has `Esprit 100`, `ZWO ASI533MC Pro` (OSC, 3008 × 3008) and 550 mm. Each reads `Field of view unknown`, because no light carries a pixel size.
-  - After the renames the rigs read `RedCat` and `Esprit`, each still with one rig version, because a rename changes no component (PLAN-EQ-FR-07). After the camera edits, `RedCat`'s field of view reads about 5.4° × 3.6° and `Esprit`'s about 1.2° × 1.2°.
+  - After the edits the rigs read `RedCat` and `Esprit`, each still with one rig version, because editing a name changes no component (PLAN-EQ-FR-07). After the camera edits, `RedCat`'s field of view reads about 5.4° × 3.6° and `Esprit`'s about 1.2° × 1.2°.
   - 30 Sep's rig evidence now names `RedCat`, still Associated and not Confirmed.
-- **Expect (negative):** Renaming and editing change no source byte (P5), no folder name and no session's Target, frame count or association status. No third rig appears, and 28 Sep's rig evidence still reads Needs review. No session's rig reads Confirmed before S10.
-- **Trace:** LIB-FR-05 · PLAN-EQ-FR-01, PLAN-EQ-FR-02, PLAN-EQ-FR-05, PLAN-EQ-FR-07 · D11, D-W87, D-W104 · HARNESS-V5-IA.md §Screens S16 (Equipment) · HARNESS-V5-FEEDBACK-R1.md §Round 6 "Rigs: detection plus manual add" (renaming and editing detected ones) · settings-equipment.tsx (Rename, Edit optics), indexing.ts trainFor, messages equipment_rename, equipment_edit_optics, domain_fov_unknown @ 4f470775
+- **Expect (negative):** Editing changes no source byte (P5), no folder name and no session's Target, frame count or association status. No third rig appears, and 28 Sep's rig evidence still reads Needs review. No session's rig reads Confirmed before S10.
+- **Trace:** LIB-FR-05 · PLAN-EQ-FR-01, PLAN-EQ-FR-02, PLAN-EQ-FR-05, PLAN-EQ-FR-07 · D11, D-W76, D-W87, D-W104 · HARNESS-V5-IA.md §Screens S16 (Equipment) · HARNESS-V5-FEEDBACK-R1.md §Round 6 "Rigs: detection plus manual add" · HARNESS-V5-FEEDBACK-R1.md Round 9 C2 (one Edit… verb)
 
 ### S10 — Confirm and correct associations in the catalog {#S10}
 
-- **Do:** In 24 Sep's Target box, choose NGC 7000 and click **Confirm Target**. Do the same for 26 Sep. Choose **Confirm rig** with rig `RedCat` for the six RedCat sessions: 12, 18, 24, 26, 28 and 30 Sep.
+- **Do:** In 24 Sep's Target box, choose NGC 7000 and click **Confirm Target**. Do the same for 26 Sep. Choose **Confirm rig** with rig `RedCat` for the six RedCat sessions: 12, 18, 24, 26, 28 and 30 Sep. Then open the intake Target and Rig steps of 24 Sep and 30 Sep.
 - **Expect:** 24 Sep's Target picker opens on `Choose a Target`, with no Target chosen. After each confirmation, the Target box reads NGC 7000 Confirmed next to the original evidence. 26 Sep still displays its `Cygnus field` label. Each of the six sessions reads rig `RedCat` Confirmed, including 28 Sep, whose rig read Needs review before. **Needs a Target** lists neither 24 nor 26 Sep, **Not in any Project** lists both, and 24 Sep's row carries no Needs a Target warning. Whether 12, 18, 28 and 30 Sep and the other-camera session, whose Target is still associated by pointing, read Needs a Target or Not in any Project depends on G11.
-- **Expect (negative):** Source bytes still match P5, including the 26 Sep OBJECT keyword and the absent 28 Sep optics keywords. Session boundaries and frame counts do not change. No picker offers or preselects a Target from an OBJECT label.
-- **Trace:** flow A3 · LIB-FR-05, LIB-FR-12, LIB-FR-17 · LIB-AC-06 · root FR-002 · D11, D15, D-W37 · HARNESS-V5-IA.md §Screens S12 (Confirm Target / Confirm rig) · S9b (names the rigs)
+- **Expect:** 24 Sep's Target step shows a Corrections table with the columns Field, Recorded and Corrected; its Target row reads "–" recorded and NGC 7000 corrected. 30 Sep's rig was already associated as `RedCat`, and its Target is still associated by pointing, so neither of its steps shows a Corrections table.
+- **Expect (negative):** Source bytes still match P5, including the 26 Sep OBJECT keyword and the absent 28 Sep optics keywords. Session boundaries and frame counts do not change. No picker offers or preselects a Target from an OBJECT label. A correction writes no header.
+- **Trace:** flow A3 · LIB-FR-05, LIB-FR-12, LIB-FR-17 · LIB-AC-06 · root FR-002 · D11, D15, D-W37 · HARNESS-V5-IA.md §Screens S12 (Confirm Target / Confirm rig) · S9b (names the rigs) · HARNESS-V5-FEEDBACK-R1.md Round 9 C15 (corrections recorded at ingestion)
 
 ### S10a — Confirm the suggested flats for 26 Sep {#S10a}
 
@@ -252,3 +253,7 @@ opens on Home, the control-panel dashboard. Done means:
 - **Δ6** 2026-10-16 · S7a, S9a, S10a · behavior-change
   Needs calibration lists every session whose calibration isn't settled, Ready or not, so it reads 5 at S9a and 4 after S10a. S7a names each session's calibration after indexing: 18 and 30 Sep are settled, the flats of 12, 24, 26 and 28 Sep are only suggested, and the other-camera session finds no calibration.
   Evidence: LIB-FR-17 as corrected in PR #1804 (commit 8660e090), CAL-FR-20, CAL-FR-21, D-W105, D-W114 · by: EncodeOwnerAnswers2 (intent-gated)
+- **Δ7** 2026-10-17 · S9b, S10 · behavior-change
+  One **Edit…** verb replaces Rename and Edit optics: S9b names the detected rigs and enters the camera's pixel size through **Edit…**.
+  Metadata corrections are recorded at ingestion: S10 reads 24 Sep's recorded and corrected Target in its intake Target step's Corrections table.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md Round 9 C2, C15 · D-W76 · PLAN-EQ-FR-07, LIB-FR-12 · prototype session-intake.tsx Corrections (ui-harness-v5) · by: JourneysR9c (intent-gated)

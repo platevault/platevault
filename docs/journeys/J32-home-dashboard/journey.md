@@ -1,7 +1,7 @@
 ---
 id: J32
 title: Work from the Home dashboard and follow each Project's Next action
-version: 5
+version: 6
 status: draft
 last_reviewed: 2026-10-06
 actors: [primary-user]
@@ -117,6 +117,13 @@ The user opens PlateVault and decides what to do next from Home. Home shows pend
 - **Expect (negative):** M 45 is not listed, because its Project is Closed and it is not ★. No window is listed for a Target without one tonight.
 - **Trace:** Home dashboard · HARNESS-V5-IA.md S1 Tonight · HARNESS-V5-FEEDBACK-R1.md Round 5 P-PLAN2 · PLAN-FR-11 · PLAN-AC-11 · PV-PLAN-SC-04 · D-W39, D-W60, D-W63
 
+### S7a — Inspect and open a calendar night {#S7a}
+
+- **Do:** Read Home's Calendar. Hover over, then keyboard-focus, a night that suits a goal and has a planned Target. Read its card, then choose the night.
+- **Expect:** The Calendar shows five weeks of nights starting this week. Each night shows its Moon phase, its hours of darkness, the number of unfinished goals it suits and the number of Targets planned for it. The card lists the night's dark window, the Moon's illumination, rise and set, the goals it suits best first, the goals the Moon rules out, and the planned Targets. Choosing the night opens Targets set to that night.
+- **Expect (negative):** Hovering, focusing or choosing a night creates no plan or reminder and changes no Project.
+- **Trace:** PRJ-FR-17 · PLAN-FR-12 · PLAN-AC-14 · D-W89 · HARNESS-V5-FEEDBACK-R1.md Round 9 C8
+
 ### S8 — Read goal progress in Open work {#S8}
 
 - **Do:** Read the goal progress on Home's Open work rows.
@@ -127,7 +134,7 @@ The user opens PlateVault and decides what to do next from Home. Home shows pend
 - **Expect (negative):** Home has no separate Goals section. IC 1396's goal is met in project, and `M 33` has no goals. No need is computed from "captured".
 - **Trace:** Home dashboard · HARNESS-V5-IA.md S1 Goals · PRJ-FR-04, PRJ-FR-17 · D-W36, D-W39
 
-### S9 - Confirm finished Projects are not in Open work {#S9}
+### S9 — Confirm finished Projects are not in Open work {#S9}
 
 - **Do:** Read Home's Open work and compare it with the Closed or Archived `Pleiades 2025` Project.
 - **Expect:** Open work lists the five open Projects and does not list `Pleiades 2025`, which is Closed or Archived.
@@ -158,6 +165,7 @@ The user opens PlateVault and decides what to do next from Home. Home shows pend
 - SC6: `Pleiades 2025` is Closed and never appears in Home's Open work (S2, S9).
 - SC7: The S11 manifest equals P5 for 100% of files.
 - SC8: At S2a one click on a Project row opens that Project's page, and S5 moves, trashes or archives 0 files.
+- SC9: The Calendar shows 5 weeks starting this week, and choosing a night opens Targets set to that night with no plan created (S7a).
 
 ## Known gaps
 
@@ -182,3 +190,6 @@ The user opens PlateVault and decides what to do next from Home. Home shows pend
 - **Δ5** 2026-10-16 · S4 · behavior-change
   S4 marks the 48 frames with ⌘A and P, and the mark asks `Mark 48 frames Usable?` before any frame changes. G6 is dissolved.
   Evidence: D-W118 (owner's second batch of 2026-10-16) in PR #1804, PIX-FR-14, PIX-AC-21 · by: EncodeOwnerAnswers2 (intent-gated)
+- **Δ6** 2026-10-17 · +S7a · behavior-change
+  Home's five-week Calendar is now asserted: each night's Moon phase, darkness, suited goals and planned Targets, the card on hover or focus, and choosing a night opens Targets set to that night.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md Round 9 C8 (decision astro-plan-b66vy) · D-W89 · PLAN-FR-12, PLAN-AC-14 · by: JourneysR9c (intent-gated)

@@ -1,7 +1,7 @@
 ---
 id: J18
 title: Get oriented after setup and make a first import, Project and View
-version: 7
+version: 8
 status: draft
 last_reviewed: 2026-07-19
 actors: [astrophotographer]
@@ -99,11 +99,11 @@ first Apply builds the Project's View from the original sessions.
 
 ### S9 — Import real captures and finish their review {#S9}
 
-- **Do:** From the Import navigation entry, choose **Choose folder…**, pick `Untyped/`, read the preview, then close the sheet without importing. Open Import again and choose `Card-1` as the source. Its destination is `Empty/Captures`, the only Captures location. In the preview, confirm NGC 7000 as the incoming session's Target, choosing it there if it is not prefilled. For the session's darks, flats and bias, which read not found, choose **No darks**, **No flats** and **No bias**. Choose **Copy** and click **Import 30 frames**. When the import finishes, open the session's intake Review step, choose **Mark rest usable**, confirming it if PlateVault asks, then choose **Finish review**. Open Home.
+- **Do:** From the Import navigation entry, choose **Choose folder…**, pick `Untyped/`, read the preview, then close the sheet without importing. Open Import again and choose `Card-1` as the source. Its destination is `Empty/Captures`, the only Captures location. In the preview, confirm NGC 7000 as the incoming session's Target, choosing it there if it is not prefilled. For the session's darks, flats and bias, which read not found, choose **No darks**, **No flats** and **No bias**. Choose **Copy** and click **Import 30 frames**. When the import finishes, choose **Review sessions**. On the Review step it opens, choose **Mark rest usable**, confirming it if PlateVault asks, then choose **Finish review**. Open Home.
 - **Expect:** For `Untyped/`, the preview holds both frames, the start button is unavailable, and the sheet reads `Only held files`. No session is created.
-- **Expect:** The Card-1 preview shows the session's darks, flats and bias as not found, then as No darks, No flats and No bias after the choices. The import's summary reads `30 frames · <size> · 1 session`, and the session lands with its 30 frames Unreviewed. After **Mark rest usable** all 30 frames read Usable, and **Finish review** makes the session Ready. Sessions then lists one Ready session with confirmed Target NGC 7000 and settled calibration, and it is in neither the Needs review nor the Needs calibration filter.
+- **Expect:** The Card-1 preview shows the session's darks, flats and bias as not found, then as No darks, No flats and No bias after the choices. The import's summary reads `30 frames · <size> · 1 session`, and the session lands with its 30 frames Unreviewed. The finished import offers **Review sessions**, which opens that session's Review step, the first session in the Sessions "Needs review" filter. After **Mark rest usable** all 30 frames read Usable, and **Finish review** makes the session Ready. Sessions then lists one Ready session with confirmed Target NGC 7000 and settled calibration, and it is in neither the Needs review nor the Needs calibration filter.
 - **Expect (negative):** Neither the held-only `Untyped/` source nor closing the sheet creates a session or changes Home. No Inbox and no later filing step appears. The session is not Ready before **Finish review**. No demo or sample session is created: the only frames are the user's own 30 imported ones.
-- **Trace:** STO-IMP-FR-02, STO-IMP-FR-06, STO-IMP-AC-11 · LIB-FR-16, LIB-FR-20, LIB-FR-23, LIB-FR-24 · CAL-FR-05 · PIX-FR-18 · D-W11, D-W24, D-W78, D-W105 · PRJ-FR-17, PRJ-FR-22
+- **Trace:** STO-IMP-FR-02, STO-IMP-FR-06, STO-IMP-AC-11 · LIB-FR-16, LIB-FR-20, LIB-FR-23, LIB-FR-24 · CAL-FR-05 · PIX-FR-18 · D-W11, D-W24, D-W78, D-W105 · PRJ-FR-17, PRJ-FR-22 · HARNESS-V5-FEEDBACK-R1.md Round 9 C10, C14
 
 ### S9a — Create a real Project {#S9a}
 
@@ -211,3 +211,6 @@ steps above were checked against it.
 - **Δ7** 2026-10-16 · S1, S2, S3, S5, +SC10 · behavior-change
   Setup hands over to Home, and every way out of setup, Set up later and Index later included, launches the walk once (S3 now takes those two exits). The walk has one stop per main navigation entry, with Home's stop last, and Settings › Help replays it. G4 is dissolved.
   Evidence: D-W117 (owner's second batch of 2026-10-16) in PR #1804, LIB-FR-21, LIB-FR-27, LIB-AC-35 · by: EncodeOwnerAnswers2 (intent-gated)
+- **Δ8** 2026-10-17 · S9 · behavior-change
+  The finished import offers **Review sessions**, which opens the imported session's Review step, the first in the Sessions "Needs review" queue, so S9 reviews the session there.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md Round 9 C14 · D-W78 · LIB-FR-20, PIX-FR-18 · by: JourneysR9c (intent-gated)

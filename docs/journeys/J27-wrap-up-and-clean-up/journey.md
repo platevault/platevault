@@ -132,14 +132,14 @@ The user wraps up the open Project `NGC 7000 HOO` through Clean up, Trash and Ar
 - **Expect (negative):** No file moves before confirmation. `Wrap-2` stays at its source path, and files in `Output/` are neither archived nor trashed.
 - **Trace:** PRJ-FR-14 · STO-FR-06, STO-FR-07, STO-FR-13 · STO-AC-17 · RES-FR-06 · D-W97, D-W98
 
-### S14a - Confirm the finished Project stays locked {#S14a}
+### S14a — Confirm the finished Project stays locked {#S14a}
 
 - **Do:** Open the Closed or Archived Project's menu and inspect its available actions.
 - **Expect:** The Project is read-only and has no Reopen action. **Duplicate…** is available as the route to continue working from its sessions and settings.
 - **Expect (negative):** Library or calibration changes do not edit the Closed or Archived Project, and it cannot be reopened.
 - **Trace:** PRJ-FR-25, PRJ-FR-30 · STO-FR-13 · D-W96, D-W97
 
-### S14b - Duplicate the finished Project without files {#S14b}
+### S14b — Duplicate the finished Project without files {#S14b}
 
 - **Do:** Choose **Duplicate…** from the Closed or Archived Project's menu and open the new Project.
 - **Expect:** The new open Project has the copied sessions, groups, overrides, goals, notes and settings, but no files. It has no link or "Duplicated from" note; its first Apply builds a new View from the originals.

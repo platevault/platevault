@@ -1,7 +1,7 @@
 ---
 id: J15
 title: Register rigs with their filter lists and observing sites in Settings
-version: 5
+version: 6
 status: draft
 last_reviewed: 2026-07-14
 actors: [primary-user]
@@ -148,12 +148,12 @@ added and removed with the Default pill moving as stated, and Backyard and
 - **Expect (negative):** Removing a site that is not the default moves no Default pill. No site is removed before its confirmation is accepted.
 - **Trace:** PLAN-FR-01 · domain/sites.ts removeSite, sites-page.tsx @ b5e813a5
 
-### S6 — Add the Backyard observing site {#S6}
+### S6 — Add the Backyard observing site with the map {#S6}
 
-- **Do:** In Settings → Observing sites, add Backyard with a name, the P3 latitude, longitude and IANA time zone, and no elevation, leaving **Make default** unchecked.
-- **Expect:** Backyard appears in the sites table with its formatted coordinates and time zone. It carries no Default pill, and the page shows "No default site".
-- **Expect (negative):** Latitude outside ±90°, longitude outside ±180°, or a non-numeric elevation is each rejected inline, and no site is saved.
-- **Trace:** baseline J15 v1/S6 · PLAN-FR-01 · PLAN-AC-04 · D-W16 · HARNESS-V5-IA.md S16
+- **Do:** In Settings → Observing sites, add Backyard with a name, the P3 latitude, longitude and IANA time zone, leaving **Make default** unchecked. Search for a place, try **Use my location**, inspect the map, then edit the latitude and longitude fields before saving. Repeat the map check with the map unavailable.
+- **Expect:** The map uses Leaflet and OpenStreetMap tiles; place search and **Use my location** can fill candidate coordinates, while the numeric latitude and longitude fields remain the source of truth for the saved site. When the map is unavailable, the editor reads "Map unavailable" and still allows numeric coordinate entry. Backyard appears in the sites table with its formatted coordinates and time zone. It carries no Default pill, and the page shows "No default site".
+- **Expect (negative):** Saving the first site does not make it the default. Saving does not override edited numeric coordinates. Latitude outside ±90°, longitude outside ±180°, or a non-numeric elevation is rejected inline.
+- **Trace:** baseline J15 v1/S6 · PLAN-FR-01 · PLAN-AC-04 · D-W16 · HARNESS-V5-IA.md S16 · HARNESS-V5-FEEDBACK-R1.md Round 9 C5
 
 ### S7 — Add a second site {#S7}
 
@@ -204,3 +204,6 @@ added and removed with the Default pill moving as stated, and Backyard and
 - **Δ5** 2026-10-15 · S2a, S3, S3b · behavior-change
   Two cameras of one model need distinct aliases, a camera can be set to Don't use darks or Don't use bias, and a rig starts at version 1. Which version `Halpha-test` records is left open (G12), because it was captured before `RedCat` existed.
   Evidence: D-W104 (F4 Project model, owner's answers of 2026-10-14) in PR #1804, 072 PLAN-EQ-FR-07, PLAN-EQ-FR-08, PLAN-EQ-AC-10, 064 LIB-FR-26 · by: SpecF4Writer2 (intent-gated)
+- **Δ6** 2026-10-17 · S6 · behavior-change
+  The observing-site editor includes a Leaflet/OpenStreetMap map, place search and **Use my location**, with numeric coordinates as source of truth and a map-unavailable fallback.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md Round 9 C5 · PLAN-FR-01 · by: JourneysR9 (intent-gated)

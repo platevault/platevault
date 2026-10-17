@@ -1,7 +1,7 @@
 ---
 id: J33
 title: Process a mosaic with Project panel groups
-version: 7
+version: 8
 status: draft
 last_reviewed: 2026-10-06
 actors: [primary-user]
@@ -63,8 +63,9 @@ The user organizes the seven in-scope Veil sessions in Project `Veil Mosaic HOO`
 
 ### S2 — Check panel goals and progress {#S2}
 - **Do:** Read each panel's Ha and OIII goals and progress on the Project page.
-- **Expect:** Each panel has its own goals and counts. The four panels contain 40, 30, 30 and 20 lights respectively, for 120 lights total. The subject's progress identifies the weakest panel.
-- **Trace:** PRJ-FR-03, PRJ-FR-24, PRJ-AC-13 · D-W90, D-W95
+- **Expect:** Each panel has its own goals and counts. The four panels contain 40, 30, 30 and 20 lights respectively, for 120 lights total. The subject's progress identifies the weakest panel, and the subject completes only when every panel meets its goals. Panel balance reads ±10 %, the default. A panel whose counted integration in a channel lies more than 10 % from the panels' mean carries a warning naming the panel, its deviation and the limit, in the form `{panel} {n}% below average · limit ±10%` (provisional copy).
+- **Expect (negative):** The balance warning never blocks completion and is not a goal.
+- **Trace:** PRJ-FR-03, PRJ-FR-24, PRJ-AC-13 · D-W90, D-W95 · HARNESS-V5-FEEDBACK-R1.md "Goals, grilling round 4" (mosaic coverage, mosaic panel balance)
 
 ### S2a — Read the panel map {#S2a}
 - **Do:** Open the linked sky-coverage view and read the panel map.
@@ -73,8 +74,9 @@ The user organizes the seven in-scope Veil sessions in Project `Veil Mosaic HOO`
 
 ### S3 — Read Project-level progress {#S3}
 - **Do:** Read the Project's panel progress and group list.
-- **Expect:** Progress is shown per panel and per panel goal. The panels are groups of one Project, and no whole-mosaic processing state exists.
-- **Trace:** PRJ-FR-03, PRJ-FR-07, PRJ-FR-27, PRJ-FR-29 · D-W94, D-W95
+- **Expect:** Progress is shown per panel and per panel goal. The panels are groups of one Project, and no whole-mosaic processing state exists. The Project page shows the subject's Ha to OIII ratio as counted next to the 1:1 ratio its HOO goals imply.
+- **Expect (negative):** Channel balance is not offered as a goal.
+- **Trace:** PRJ-FR-03, PRJ-FR-07, PRJ-FR-27, PRJ-FR-29 · D-W90, D-W94, D-W95 · HARNESS-V5-FEEDBACK-R1.md "Goals, grilling round 4" (channel balance dropped as a goal)
 
 ### S5 — Choose the application and View mode {#S5}
 - **Do:** On View, select PixInsight and Symlinks.
@@ -181,3 +183,6 @@ The user organizes the seven in-scope Veil sessions in Project `Veil Mosaic HOO`
 - **Δ7** 2026-10-16 · S8 · behavior-change
   Light folders end in their exposure, such as `Lights/Ha_300s/` (provisional), while flat folders keep the filter name.
   Evidence: D-W108 as amended by the owner's second batch of 2026-10-16 in PR #1804, PREP-FR-16, PREP-AC-32 · by: EncodeOwnerAnswers2 (intent-gated)
+- **Δ8** 2026-10-17 · S2, S3 · behavior-change
+  Panel balance (±10 % by default) warns on a panel outside the band without blocking completion (S2), and the Project page shows the subject's counted channel ratio next to the ratio its goals imply, with no channel-balance goal (S3).
+  Evidence: HARNESS-V5-FEEDBACK-R1.md Round 9 C7 and "Goals, grilling round 4" · D-W90 · PRJ-FR-03, PRJ-FR-24, PRJ-AC-13 · prototype messages domain_balance_below (ui-harness-v5) · by: JourneysR9c (intent-gated)

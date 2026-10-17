@@ -1,7 +1,7 @@
 ---
 id: J42
 title: Work from launch to an open Project's View with the keyboard only
-version: 3
+version: 4
 status: draft
 last_reviewed: 2026-10-12
 actors: [primary-user]
@@ -73,15 +73,15 @@ Done means:
 
 ### S3a — Move through a table with the keyboard {#S3a}
 
-- **Do:** On Sessions, with the search field empty, press Tab until a session row has focus. Press ↓ twice, then **End**, **Home**, **Page Down** and **Page Up**. Press Space, read the batch bar, and press Space again. Press **⇧F10**, read the menu, then press **Esc**. Press Tab until focus leaves the table, then press Shift+Tab once.
+- **Do:** On Sessions, with the search field empty, press Tab until a session row has focus. Press ↓ twice, then **End**, **Home**, **Page Down** and **Page Up**. Press Space, read the batch bar, and press Space again. Press **⇧F10**, read the menu, then press **Esc**. Press the Menu key, then **Esc**. Press Tab until focus leaves the table, then press Shift+Tab once.
 - **Expect:**
-  - Tab lands on the table's current row, its first row on this first visit. Provisional (G7): the table's header controls, its select-all and sort buttons, each keep their own Tab stop.
+  - Tab lands on the table's current row, its first row on this first visit. The table header's select-all and sort controls each keep their own Tab stops.
   - ↓ moves one row each time, **End** to the last row and **Home** to the first, and **Page Down** and **Page Up** move by one screen of rows. Focus and the current row move together.
   - The first Space selects the focused row, and the batch bar replaces the toolbar with `1 selected`; the second Space clears it, and the toolbar returns.
-  - **⇧F10** opens the row's menu, named after the row. **Esc** closes it, and focus is back on the row.
+  - **⇧F10** and the Menu key each open the row's menu, named after the row. **Esc** closes it, and focus is back on the row.
   - From the row, Tab reaches that row's own controls, its checkbox and `⋯`, and the next Tab leaves the table. Shift+Tab returns to the row's `⋯`.
-- **Expect (negative):** No row other than the current one takes a Tab stop. No arrow, Home, End or Page key changes a selection or a record, and opening and closing the menu runs none of its items.
-- **Trace:** FR-026, FR-027, FR-031, FR-037 · D-W91, D-W121 · src/components/app/data-table.tsx (ui-harness-v5 @ d1e721af, astro-plan-2r9ld)
+- **Expect (negative):** No row other than the current one takes a Tab stop. The table keeps native table semantics, with no ARIA grid role. No arrow, Home, End or Page key changes a selection or a record, and opening and closing the menu runs none of its items.
+- **Trace:** FR-026, FR-027, FR-031, FR-037 · D-W91, D-W121 · HARNESS-V5-FEEDBACK-R1.md "Tables and the keyboard" P-KBD1 (OWNER, 2026-10-16) · src/components/app/data-table.tsx (ui-harness-v5 @ d1e721af, astro-plan-2r9ld)
 
 ### S4 — Act on a row with Enter and its menu {#S4}
 
@@ -195,9 +195,9 @@ Done means:
 - G2: Unresolved implementation qualification: S7 needs a rescan that runs long enough to focus (P6). No pacing fixture exists. Blocks readiness.
 - G3: Unresolved implementation qualification: SC1 needs a driver that sends only key events and records any pointer event, on both interface profiles. No such driver is set up. Blocks readiness.
 - G4: Out of scope for this journey: frame review's keyboard. There Review's own handler keeps ↑/↓ and Space, and a frame row that takes focus through Home, End, Page Up or Page Down becomes the current frame. The filmstrip view, Compare (C), the review filters (⌥1 to ⌥4), Unreviewed (U), Pick (P, Shift+P), the review shortcuts sheet and palette actions such as theme and language are out of scope too. J22/S11a covers P, Shift+P and the filters with a pointer.
-- G5: Out of scope for this journey: the order in which Tab reaches each region (toolbar, source list, page, status bar), which the v5 design doesn't state, and the focus target after a row is removed. FR-037 sets that target after a confirmed action removes a row: the next row, or the previous one when the last row goes (provisional). No step here removes a row, because no keystroke in this journey trashes, moves or deletes anything.
+- G5: Out of scope for this journey: the order in which Tab reaches each region (toolbar, source list, page, status bar), which the v5 design doesn't state, and the focus target after a row is removed. FR-037 sets that target after a confirmed action removes a row: the next row, or the previous one when the last row goes (the owner's P-KBD1). No step here removes a row, because no keystroke in this journey trashes, moves or deletes anything.
 - G6: Unresolved implementation qualification: no screen-reader check (VoiceOver on macOS, NVDA on Windows) has confirmed how a table's current row, its selection and its row menu are announced. Blocks readiness.
-- G7: Rests on provisional items, pending the owner's confirmation in PR #1804. Under D-W121, a table's header controls (select-all and the sort buttons) keep their own Tab stops (S3a), and focus moves to the previous row after the last row is removed (G5, FR-037). Neither rule sets where the header stops fall in the Tab order. If the owner changes either rule, the steps that cite it change.
+- G7: (dissolved 2026-10-17): HARNESS-V5-FEEDBACK-R1.md "Tables and the keyboard" records both rules as the owner's (P-KBD1, OWNER, 2026-10-16): the header row keeps its stops (S3a), and after an action removes the last row focus moves to the previous one (G5, FR-037). The record does not say where the header stops fall in the Tab order, so S3a asserts only that they exist.
 
 ## Delta log
 - **Δ2** 2026-10-15 · S1, S5, S9, S10, S11, S12, S13, S14 · behavior-change
@@ -206,3 +206,6 @@ Done means:
 - **Δ3** 2026-10-16 · S1, +S3a, S4, S7, S8, +SC6 · behavior-change
   Each table is one Tab stop on its current row, followed by that row's own controls: ↑ ↓, Home and End and Page Up and Page Down move between rows, Space selects only while single-key shortcuts are on, Enter opens and ⇧F10 opens the row menu. New S3a walks the model on Sessions; S4 and S7 reach their rows with Tab and ↓, and S8 checks Space with the switch off. G4 and G5 follow the implementation, G6 is new, and G7 lists the provisional header Tab stops and previous-row focus.
   Evidence: D-W121 (owner's answer of 2026-10-16 to astro-plan-g3tx4, option B′) in PR #1804, FR-037; DataTable implementation astro-plan-2r9ld on ui-harness-v5 @ d1e721af · by: EncodeOwnerAnswers2 (intent-gated)
+- **Δ4** 2026-10-17 · S3a · behavior-change
+  The Menu key opens a row's menu as **⇧F10** does, and tables keep native semantics with no ARIA grid role. The header stops and previous-row focus are the owner's rules, so G7 is dissolved.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md "Tables and the keyboard" P-KBD1 (OWNER, 2026-10-16; decision astro-plan-g3tx4) · D-W121 · by: JourneysR9c (intent-gated)

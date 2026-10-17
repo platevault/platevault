@@ -1,7 +1,7 @@
 ---
 id: J29
 title: Plan nights on the Targets page's Planned view, opt into default-site reminders, see Tonight on Home, and export every planned night to a calendar
-version: 5
+version: 6
 status: draft
 last_reviewed: 2026-10-03
 actors: [primary-user]
@@ -47,12 +47,12 @@ starts no indexing.
 - **Expect (negative):** No window claims clear weather, telescope availability, or processing readiness. The goal lines never show "in project" above "captured". Adding NGC 7000 to the plan changes no ★, Project or session record.
 - **Trace:** flow K · PLAN-FR-02, PLAN-FR-05, PLAN-TGT-FR-14 · PRJ-FR-04, PRJ-FR-21 · root FR-023 · D07, D-W16, D-W36, D-W66 · HARNESS-V5-IA.md S10 (Target detail), S11 · Round 5 P-PLAN2 · Round 6 "Reminders and calendar export stay" (both in the Planned view header)
 
-### S2 — Grade the filters and edit a Moon limit {#S2}
+### S2 — Grade filters with the per-filter Moon curve {#S2}
 
-- **Do:** In the Planned view, expand NGC 7000's Per filter sub-rows. Open the Moon limits and raise OIII's minimum Moon separation by 30°.
-- **Expect:** Per filter shows one sub-row for each band the saved rigs capture, R, G, B, Ha and OIII, each graded Good, Marginal or Poor, with that band's Moon-clear windows. After the change OIII's sub-row recalculates, and every OIII window it lists keeps the Moon at least the new separation away or below the horizon.
-- **Expect (negative):** The R, G, B and Ha sub-rows are unchanged. Editing a Moon limit changes no rig filter list and no Project goal.
-- **Trace:** flow K · PLAN-FR-02 · HARNESS-V5-IA.md S10 (per-band good tonight with its Moon limits editable in place), S11 (Per filter, Moon limits) · HARNESS-V5-FEEDBACK-R1.md Domain and seed (Planning: per-filter Moon constraints) · Round 5 P-PLAN2
+- **Do:** In the Planned view, expand NGC 7000's Per filter sub-rows. Read the OIII and Ha sub-rows' grades, clear windows and Img time, and the Moon's illumination in the toolbar.
+- **Expect:** Per filter shows one sub-row for each band the saved rigs capture, R, G, B, Ha and OIII, each graded Good, Marginal or Poor with that band's Moon-clear windows. Each band follows its own Moon-avoidance curve: the separation it requires from the Moon is greatest at full Moon and shrinks as the Moon dims, and a sample counts when the Moon is below the horizon or at least that far away. A band's grade, windows and Img time all come from the same curve, so they agree.
+- **Expect (negative):** No separate minimum Moon separation or maximum illumination limit is offered. Reading the grades changes no rig filter list and no Project goal.
+- **Trace:** flow K · PLAN-FR-02 · PLAN-TGT-FR-06 · PLAN-TGT-AC-18 · D-W88 · HARNESS-V5-FEEDBACK-R1.md Round 9 C6
 
 ### S3 — Switch the planning site {#S3}
 
@@ -165,7 +165,7 @@ starts no indexing.
 - SC6: Exactly 1 notification is delivered for the S7a target/site/window identity across S7a and S8.
 - SC7: M 31 is planned with 0 Projects created or chosen (S11), and the Project page plans exactly 1 subject, NGC 7000 (S12).
 - SC8: Tonight lists exactly 2 Targets with a window, NGC 7000 and M 31, at `Remote site`, and each best window equals the Planned view's best `Remote site` window for that Target (S13).
-- SC9: Per filter shows exactly 5 bands for NGC 7000, and raising OIII's Moon separation changes 0 of the other 4 (S2). Returning the date picker to tonight restores 100% of the S3 values (S3a).
+- SC9: Per filter shows exactly 5 bands for NGC 7000, each graded from its own Moon-avoidance curve with no separate Moon limit (S2). Returning the date picker to tonight restores 100% of the S3 values (S3a).
 - SC10: Making `Remote site` the default asks first and, when cancelled, moves 0 defaults and 0 reminders (S14).
 - SC11: Tomorrow's plan holds 0 Targets before the S3a add and exactly 1, NGC 7000, after it; tonight's plan holds exactly NGC 7000 throughout S3a, and adding M 31 at S11 leaves tomorrow's plan at exactly 1.
 
@@ -194,3 +194,6 @@ starts no indexing.
 - **Δ5** 2026-10-15 · S1, S3 · behavior-change
   The Project holds sessions directly, with no processing run, and a mosaic is a Project with panel groups whose goals Tonight grades from the subject's window.
   Evidence: D-W93 to D-W106 (F4 Project model, owner's answers of 2026-10-14) in PR #1804, 065 PRJ-FR-29, 072 PLAN-AC-01, PLAN-FR-02, PLAN-FR-11 · by: SpecF4Writer2 (intent-gated)
+- **Δ6** 2026-10-17 · S2 · behavior-change
+  One Moon-avoidance curve per filter replaces the editable Moon limits: S2 reads each band's grade, windows and Img time from its curve and no longer raises OIII's Moon separation.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md Round 9 C6 · D-W88 · PLAN-FR-02, PLAN-TGT-FR-06, PLAN-TGT-AC-18 · by: JourneysR9c (intent-gated)
