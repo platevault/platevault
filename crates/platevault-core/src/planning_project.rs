@@ -42,6 +42,7 @@ pub struct ProjectPlanningQuery {
     pub project_id: Uuid,
     #[serde(default)]
     pub site_id: Option<Uuid>,
+    #[cfg_attr(feature = "wire", specta(type = String), schemars(with = "String"))]
     #[serde(with = "iso_date")]
     pub first_night: Date,
     pub nights: u32,

@@ -25,8 +25,10 @@ fn invalid(message: String) -> LibraryError {
 /// integer sums, so whether a goal is met never depends on floating-point
 /// summation. The wire carries seconds.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Ord, PartialOrd, Hash)]
-#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct Microseconds(pub u64);
+
+#[cfg(feature = "wire")]
+wire_as!(Microseconds => f64);
 
 impl Microseconds {
     pub const PER_SECOND: u64 = 1_000_000;

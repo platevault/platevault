@@ -32,6 +32,28 @@ fn invalid(message: String) -> LibraryError {
 /// numbers, NaN and the infinities are the strings `NaN`, `Infinity` and
 /// `-Infinity`.
 pub mod sample_number {
+    /// The wire shape [`serialize`] writes: a finite JSON number or the name
+    /// of a non-finite value. Exists only for the IPC type derives.
+    #[cfg(feature = "wire")]
+    #[derive(specta::Type, schemars::JsonSchema)]
+    #[serde(untagged)]
+    pub enum Wire {
+        Finite(f64),
+        NonFinite(NonFinite),
+    }
+
+    /// The strings [`serialize`] writes for NaN and the infinities.
+    #[cfg(feature = "wire")]
+    #[derive(specta::Type, schemars::JsonSchema)]
+    pub enum NonFinite {
+        #[serde(rename = "NaN")]
+        NaN,
+        #[serde(rename = "Infinity")]
+        Infinity,
+        #[serde(rename = "-Infinity")]
+        NegativeInfinity,
+    }
+
     use std::fmt;
 
     use serde::{de, Deserializer, Serializer};
@@ -97,11 +119,17 @@ pub mod sample_number {
 /// An `f64` carried in [`sample_number`] form.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
-pub struct SampleNumber(#[serde(with = "sample_number")] pub f64);
+pub struct SampleNumber(
+    #[cfg_attr(feature = "wire", specta(type = sample_number::Wire), schemars(with = "sample_number::Wire"))]
+    #[serde(with = "sample_number")]
+    pub f64,
+);
+
+#[cfg(feature = "wire")]
+wire_as!(StoredNumber => sample_number::Wire);
 
 /// A stored sample: integers stay JSON integers, floats use [`sample_number`].
 #[derive(Clone, Copy, Debug, PartialEq)]
-#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum StoredNumber {
     Integer(i64),
     Float(f64),
@@ -952,6 +980,7 @@ pub struct SampleValue {
     pub x: u32,
     pub y: u32,
     pub stored: StoredNumber,
+    #[cfg_attr(feature = "wire", specta(type = sample_number::Wire), schemars(with = "sample_number::Wire"))]
     #[serde(with = "sample_number")]
     pub value: f64,
     pub category: SampleCategory,

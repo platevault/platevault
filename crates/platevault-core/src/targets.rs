@@ -825,10 +825,32 @@ pub struct UserTargetInput {
     pub aliases: Vec<String>,
     #[serde(default)]
     pub common_name: Option<String>,
+    #[cfg_attr(feature = "wire", specta(type = ObjectTypeWire), schemars(with = "ObjectTypeWire"))]
     pub object_type: ObjectType,
     /// ICRS degrees; `None` keeps the position unknown.
     #[serde(default)]
     pub coordinates: Option<SkyCoordinates>,
+}
+
+/// The `snake_case` strings `simbad_resolver::ObjectType` (a foreign type the
+/// `wire` derives can't reach) serializes as; only those derives read it.
+#[cfg(feature = "wire")]
+#[derive(specta::Type, schemars::JsonSchema)]
+#[serde(rename = "ObjectType", rename_all = "snake_case")]
+#[allow(dead_code, reason = "only the IPC type derives read it")]
+enum ObjectTypeWire {
+    Galaxy,
+    PlanetaryNebula,
+    EmissionNebula,
+    ReflectionNebula,
+    DarkNebula,
+    OpenCluster,
+    GlobularCluster,
+    SupernovaRemnant,
+    GalaxyCluster,
+    DoubleStar,
+    Asterism,
+    Other,
 }
 
 /// Build an explicit user target with [`Provenance::User`].

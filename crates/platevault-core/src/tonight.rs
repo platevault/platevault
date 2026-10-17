@@ -32,6 +32,7 @@ time::serde::format_description!(iso_date, Date, "[year]-[month]-[day]");
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct TonightQuery {
+    #[cfg_attr(feature = "wire", specta(type = Option<String>), schemars(with = "Option<String>"))]
     #[serde(default, with = "iso_date::option")]
     pub night: Option<Date>,
     pub criteria: PlanCriteria,
@@ -62,6 +63,7 @@ pub struct TonightWindow {
 pub struct Tonight {
     pub site: Option<SiteBasis>,
     pub time_zone: Option<String>,
+    #[cfg_attr(feature = "wire", specta(type = Option<String>), schemars(with = "Option<String>"))]
     #[serde(default, with = "iso_date::option")]
     pub night: Option<Date>,
     pub criteria: PlanCriteria,

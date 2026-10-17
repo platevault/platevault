@@ -299,12 +299,14 @@ impl WindowQuery {
 /// Repeat suppression and calendar UIDs both use it. Its text form is
 /// `<target>/<site>/<YYYY-MM-DDTHH:MMZ>`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct WindowKey {
     target_id: Uuid,
     site_id: Uuid,
     start_utc: OffsetDateTime,
 }
+
+#[cfg(feature = "wire")]
+wire_as!(WindowKey => String);
 
 impl WindowKey {
     /// # Errors

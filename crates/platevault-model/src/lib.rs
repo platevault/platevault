@@ -12,6 +12,30 @@ use metadata_core::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+/// Gives a type with a hand-written `Serialize` the IPC type of the value it
+/// writes, for the `wire` derives (a derive would describe its fields instead).
+#[cfg(feature = "wire")]
+macro_rules! wire_as {
+    ($ty:ty => $wire:ty) => {
+        impl specta::Type for $ty {
+            fn definition(types: &mut specta::Types) -> specta::datatype::DataType {
+                <$wire as specta::Type>::definition(types)
+            }
+        }
+        impl schemars::JsonSchema for $ty {
+            fn inline_schema() -> bool {
+                <$wire as schemars::JsonSchema>::inline_schema()
+            }
+            fn schema_name() -> std::borrow::Cow<'static, str> {
+                <$wire as schemars::JsonSchema>::schema_name()
+            }
+            fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+                <$wire as schemars::JsonSchema>::json_schema(generator)
+            }
+        }
+    };
+}
+
 pub mod naming;
 pub use naming::*;
 pub mod rig;
@@ -265,11 +289,24 @@ impl From<serde_json::Error> for LibraryError {
 /// Native payload is authoritative; display text is never used for identity.
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Deserialize)]
 #[serde(tag = "encoding", content = "payload", rename_all = "kebab-case")]
-#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum NativePath {
     UnixBytes(Vec<u8>),
     WindowsUtf16(Vec<u16>),
 }
+
+/// The record [`NativePath`]'s `Serialize` writes: the native payload plus its
+/// display text. Deserialize never reads `display`.
+#[cfg(feature = "wire")]
+#[derive(specta::Type, schemars::JsonSchema)]
+#[serde(rename = "NativePath", tag = "encoding", rename_all = "kebab-case")]
+#[allow(dead_code, reason = "only the IPC type derives read it")]
+enum NativePathWire {
+    UnixBytes { payload: Vec<u8>, display: String },
+    WindowsUtf16 { payload: Vec<u16>, display: String },
+}
+
+#[cfg(feature = "wire")]
+wire_as!(NativePath => NativePathWire);
 
 impl Serialize for NativePath {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
