@@ -83,17 +83,23 @@
 //!   so the files it indexed leave the count.
 //! - Windows ejects a volume only once no process holds a handle on it, and
 //!   discovery's watcher holds one per folder. [`CaptureWatch::subscribe_roots`]
-//!   names every root discovery follows from the moment it starts watching
-//!   it, and the desktop shell forwards the eject notices for the volume of
-//!   each one that is not a network share: [`CaptureWatch::release`] when the
-//!   removal is requested (the watcher is closed, a walk in flight canceled,
-//!   and both, with any earlier watcher of the location still stopping,
-//!   awaited; nothing touches the root until the next notice),
-//!   [`CaptureWatch::reattach`] when the removal was refused, and
-//!   [`CaptureWatch::gone`] once the volume is removed, which takes the
-//!   location offline without waiting for a sweep. A release returns once
-//!   discovery is asked to stop, so app exit never waits on one. macOS and
-//!   Linux need none of this.
+//!   names every root discovery may hold such a handle through: from the
+//!   moment it starts watching it until its location stops following it,
+//!   and after that until the walk it canceled there stopped listing and the
+//!   watchers it let go of there closed. So the removal of a retired or
+//!   remapped location's old volume can still be waited for, and a remapped
+//!   location's old root is named beside its new one meanwhile. The desktop
+//!   shell forwards the eject notices for the volume of each one that is not
+//!   a network share, with that root: [`CaptureWatch::release`] when the
+//!   removal is requested (the location's watcher there is closed, its walk
+//!   in flight canceled, and both, with every watcher still closing and walk
+//!   still listing on that volume, awaited; nothing touches the root until
+//!   the next notice), [`CaptureWatch::reattach`] when the removal was
+//!   refused, and [`CaptureWatch::gone`] once the volume is removed, which
+//!   takes the location offline without waiting for a sweep. A notice about
+//!   a root its location no longer follows leaves the location alone. A
+//!   release returns once discovery is asked to stop, so app exit never
+//!   waits on one. macOS and Linux need none of this.
 //!
 //! [`CaptureWatch::shutdown`], or dropping the [`CaptureWatch`], stops every
 //! watcher. Shutdown waits a short grace at most. A `stat` of a network mount
@@ -156,8 +162,10 @@ pub struct NewCaptureCount {
     pub live: bool,
 }
 
-/// The root of a location discovery follows: it may hold handles on that
-/// root's volume, through a watcher or a walk, until the location leaves.
+/// A root discovery follows, or still holds handles through: through a
+/// watcher or a walk, it may hold handles on that root's volume until the
+/// location leaves and every watcher it closed there and walk it canceled
+/// there returned.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WatchedRoot {
     pub location_id: Uuid,
@@ -217,7 +225,7 @@ impl CaptureWatch {
             walked,
             publish,
             publish_roots,
-            teardowns: HashMap::new(),
+            draining: Draining::default(),
             next_walk: 0,
             #[cfg(test)]
             observed: Arc::clone(&observed),
@@ -250,33 +258,41 @@ impl CaptureWatch {
         self.counts.clone()
     }
 
-    /// The roots of every location discovery follows, by location id, now
-    /// and after each change. A root appears before its watcher starts and
-    /// stays while its volume is being removed ([`release`](Self::release)),
-    /// until the location stops being watched. The receiver closes when
-    /// discovery stops.
+    /// The roots discovery may hold handles through, by location id and
+    /// path, now and after each change. A root appears before its watcher
+    /// starts and stays while its volume is being removed
+    /// ([`release`](Self::release)) and after its location stops following
+    /// it (retired, removed, remapped or offline), until the watchers
+    /// discovery closed there and the walks it canceled there returned; it
+    /// leaves by the next debounce tick after they did. A remapped
+    /// location's old root is named beside its new one meanwhile. The
+    /// receiver closes when discovery stops.
     #[must_use]
     pub fn subscribe_roots(&self) -> watch::Receiver<Vec<WatchedRoot>> {
         self.roots.clone()
     }
 
-    /// The volume holding `location` is about to be removed (the desktop
-    /// shell forwards Windows' query to remove it): close its watcher and
-    /// cancel its walk, and return once discovery holds no handle on the
-    /// volume, a watcher of the location that is still stopping included, so
-    /// the removal can go ahead.
+    /// The volume holding `root`, a root of `location` that
+    /// [`subscribe_roots`](Self::subscribe_roots) names, is about to be
+    /// removed (the desktop shell forwards Windows' query to remove it):
+    /// close the location's watcher there and cancel its walk, and return
+    /// once discovery holds no handle on the volume, a watcher still closing
+    /// or a walk still listing that it let go of before included, whichever
+    /// location it served, so the removal can go ahead.
     ///
     /// Until [`reattach`](Self::reattach) or [`gone`](Self::gone), the
     /// location keeps the count it had, with `live: false`, and nothing
-    /// touches its root, a sweep included. For a location that is not
-    /// watched it returns once no watcher of it is still stopping. Discovery
-    /// handles one thing at a time, so this also waits out a file-system call
-    /// it is making. It returns at once when discovery stopped, and as soon
-    /// as it is asked to stop ([`shutdown`](Self::shutdown)), so app exit
-    /// never waits on a removal whose walk or watcher close hangs.
-    pub async fn release(&self, location: Uuid) {
+    /// touches its root, a sweep included. A location that no longer follows
+    /// `root` (a remapped location's old root) is left alone: this only
+    /// waits. Discovery handles one thing at a time, so this also waits out a
+    /// file-system call it is making. It returns at once when discovery
+    /// stopped, and as soon as it is asked to stop
+    /// ([`shutdown`](Self::shutdown)), so app exit never waits on a removal
+    /// whose walk or watcher close hangs.
+    pub async fn release(&self, location: Uuid, root: &Path) {
         let (released, done) = oneshot::channel();
-        if self.notices.send(Notice::Release { location, released }).is_err() {
+        let notice = Notice::Release { location, root: root.to_path_buf(), released };
+        if self.notices.send(notice).is_err() {
             // Closed: discovery stopped, which released everything.
             return;
         }
@@ -288,16 +304,17 @@ impl CaptureWatch {
     }
 
     /// The removal [`release`](Self::release) made way for did not happen:
-    /// watch `location` again and walk it for what arrived meanwhile.
-    pub fn reattach(&self, location: Uuid) {
-        let _ = self.notices.send(Notice::Reattach(location));
+    /// watch `location` again at `root`, if it still follows it there, and
+    /// walk it for what arrived meanwhile.
+    pub fn reattach(&self, location: Uuid, root: &Path) {
+        let _ = self.notices.send(Notice::Reattach { location, root: root.to_path_buf() });
     }
 
-    /// The volume holding `location` was removed: stop counting it now
-    /// rather than at the next sweep, which starts it again once its root is
-    /// back.
-    pub fn gone(&self, location: Uuid) {
-        let _ = self.notices.send(Notice::Gone(location));
+    /// The volume holding `root` was removed: stop counting `location` now,
+    /// if it follows `root`, rather than at the next sweep, which starts it
+    /// again once its root is back.
+    pub fn gone(&self, location: Uuid, root: &Path) {
+        let _ = self.notices.send(Notice::Gone { location, root: root.to_path_buf() });
     }
 
     /// Stop discovery and return once every watcher is closed, or once the
@@ -531,8 +548,9 @@ struct Walk {
     canceled: Arc<AtomicBool>,
     /// Paths live events named while it ran, checked again after it.
     touched: HashSet<PathBuf>,
-    /// Resolves, closed, once its listing made its last file-system call.
-    listed: Option<oneshot::Receiver<()>>,
+    /// Its listing, which may hold handles on the root's volume until it
+    /// returned.
+    listing: Call,
 }
 
 impl Drop for Walk {
@@ -550,16 +568,16 @@ struct Walked {
     listing: Result<Listing, LibraryError>,
 }
 
-/// What the desktop shell reports about the removable volume holding a
-/// location; see [`CaptureWatch::release`].
+/// What the desktop shell reports about the removable volume holding a root
+/// of a location; see [`CaptureWatch::release`].
 enum Notice {
     /// The volume is about to be removed: once nothing holds a handle on it,
     /// `released` is sent.
-    Release { location: Uuid, released: oneshot::Sender<()> },
+    Release { location: Uuid, root: PathBuf, released: oneshot::Sender<()> },
     /// The removal did not happen.
-    Reattach(Uuid),
+    Reattach { location: Uuid, root: PathBuf },
     /// The volume was removed.
-    Gone(Uuid),
+    Gone { location: Uuid, root: PathBuf },
 }
 
 /// An online Captures location being counted.
@@ -604,6 +622,16 @@ impl Watched {
 
     fn relative<'a>(&self, path: &'a Path) -> Option<&'a Path> {
         self.prefixes.iter().find_map(|prefix| path.strip_prefix(prefix).ok())
+    }
+
+    /// Its root, as [`CaptureWatch::subscribe_roots`] names it.
+    fn named(&self) -> WatchedRoot {
+        WatchedRoot {
+            location_id: self.location.id,
+            root: self.root.clone(),
+            volume_kind: self.location.volume_kind,
+            folder: self.stamp.folder(),
+        }
     }
 
     /// Take the catalog's paths a walk read. When only the catalog failed, the
@@ -815,13 +843,92 @@ fn same_root(a: &Location, b: &Location) -> bool {
 /// closing one can wait on the file system. `FSEvents` joins its thread,
 /// whose callback `stat`s the paths it reports, on a share that may be gone,
 /// and Windows waits for its thread to close every folder handle. Outside a
-/// runtime it closes here.
-fn close_off_runtime(live: Live) -> Option<JoinHandle<()>> {
+/// runtime it closes here. The close still in flight, if any, is returned.
+fn close_off_runtime(live: Live) -> Option<Call> {
     if let Ok(runtime) = tokio::runtime::Handle::try_current() {
-        Some(runtime.spawn_blocking(move || live.close()))
+        let (returns, close) = Call::start();
+        drop(runtime.spawn_blocking(move || {
+            live.close();
+            drop(returns);
+        }));
+        Some(close)
     } else {
         live.close();
         None
+    }
+}
+
+/// A blocking file-system call that may hold handles on a root's volume
+/// until it returns: a watcher's close or a walk's listing. Every clone sees
+/// it return.
+#[derive(Clone)]
+struct Call(watch::Receiver<()>);
+
+impl Call {
+    /// A call, and the guard it drops once it returned.
+    fn start() -> (watch::Sender<()>, Self) {
+        let (returns, call) = watch::channel(());
+        (returns, Self(call))
+    }
+
+    /// Whether it returned. Nothing is ever sent: the channel only closes,
+    /// once the guard is dropped.
+    fn returned(&self) -> bool {
+        self.0.has_changed().is_err()
+    }
+
+    /// Resolves once it returned.
+    async fn wait(mut self) {
+        while self.0.changed().await.is_ok() {}
+    }
+}
+
+/// The calls discovery let go of that may still hold handles on a root's
+/// volume: watchers it closed and walks it canceled, each with the root it
+/// ran on. That root stays named ([`CaptureWatch::subscribe_roots`]) until
+/// they returned, so a removal of its volume can still be followed and
+/// waited for ([`Run::release`]) once its location no longer follows it.
+#[derive(Default)]
+struct Draining {
+    /// Watcher closes, which shutdown waits for as well.
+    closing: Vec<(WatchedRoot, Call)>,
+    /// Listings of canceled walks, which stop at their next folder.
+    listing: Vec<(WatchedRoot, Call)>,
+}
+
+impl Draining {
+    /// Close `watched`'s watcher off the runtime ([`close_off_runtime`]) and
+    /// cancel its walk, keeping each until it returned.
+    fn let_go(&mut self, watched: &mut Watched) {
+        if let Some(close) = watched.live.take().and_then(close_off_runtime) {
+            self.closing.push((watched.named(), close));
+        }
+        // Dropping the walk cancels it.
+        if let Some(walk) = watched.walk.take() {
+            self.listing.push((watched.named(), walk.listing.clone()));
+        }
+    }
+
+    /// Forget the calls that returned.
+    fn prune(&mut self) {
+        self.closing.retain(|(_, call)| !call.returned());
+        self.listing.retain(|(_, call)| !call.returned());
+    }
+
+    /// The roots calls still run on, once per call.
+    fn roots(&self) -> impl Iterator<Item = &WatchedRoot> {
+        self.closing.iter().chain(&self.listing).map(|(root, _)| root)
+    }
+
+    /// The calls in flight on a root that `accepts` accepts.
+    fn on(&self, accepts: impl Fn(&WatchedRoot) -> bool) -> Vec<Call> {
+        let calls = self.closing.iter().chain(&self.listing);
+        calls.filter(|(root, _)| accepts(root)).map(|(_, call)| call.clone()).collect()
+    }
+
+    /// Take every watcher close in flight.
+    fn closes(&mut self) -> Vec<Call> {
+        self.closing.drain(..).map(|(_, close)| close).collect()
     }
 }
 
@@ -840,8 +947,9 @@ struct Run {
     walked: mpsc::UnboundedSender<Walked>,
     publish: watch::Sender<Vec<NewCaptureCount>>,
     publish_roots: watch::Sender<Vec<WatchedRoot>>,
-    /// Watchers of each location still closing, which a release waits for.
-    teardowns: HashMap<Uuid, Vec<JoinHandle<()>>>,
+    /// The watchers discovery closed and the walks it canceled, until they
+    /// returned.
+    draining: Draining,
     next_walk: u64,
     #[cfg(test)]
     observed: Arc<Observed>,
@@ -898,17 +1006,13 @@ impl Run {
 
     /// Close every watcher off the runtime and wait for each still closing.
     /// A close that hangs holds no runtime worker, so the shutdown grace
-    /// still runs out.
+    /// still runs out. A canceled walk still listing is not waited for.
     async fn close_all(&mut self) {
-        let lives: Vec<(Uuid, Option<Live>)> =
-            self.locations.iter_mut().map(|(id, watched)| (*id, watched.live.take())).collect();
-        for (id, live) in lives {
-            self.unwatch(id, live);
+        for watched in self.locations.values_mut() {
+            self.draining.let_go(watched);
         }
-        let closing: Vec<JoinHandle<()>> =
-            self.teardowns.drain().flat_map(|(_, closing)| closing).collect();
-        for teardown in closing {
-            let _ = teardown.await;
+        for close in self.draining.closes() {
+            close.wait().await;
         }
     }
 
@@ -949,14 +1053,10 @@ impl Run {
         };
         // Removed, retired and re-roled locations stop; reselected and
         // remapped ones start again at their new root.
-        let stopped: Vec<(Uuid, Watched)> = self
-            .locations
-            .extract_if(|id, watched| {
-                !wanted.get(id).is_some_and(|location| same_root(location, &watched.location))
-            })
-            .collect();
-        for (id, mut watched) in stopped {
-            self.unwatch(id, watched.live.take());
+        for (_, mut watched) in self.locations.extract_if(|id, watched| {
+            !wanted.get(id).is_some_and(|location| same_root(location, &watched.location))
+        }) {
+            self.draining.let_go(&mut watched);
         }
         self.offline.retain(|id, offline| {
             wanted.get(id).is_some_and(|location| same_root(location, &offline.location))
@@ -1132,7 +1232,7 @@ impl Run {
     /// Stop counting a location whose root went away, releasing its watch.
     fn go_offline(&mut self, id: Uuid) {
         if let Some(mut watched) = self.locations.remove(&id) {
-            self.unwatch(id, watched.live.take());
+            self.draining.let_go(&mut watched);
             tracing::info!(location = %id, "new captures: root went away; watch released");
             self.offline.insert(id, Offline { location: watched.location, refused: None });
         }
@@ -1141,48 +1241,46 @@ impl Run {
     /// Apply what the desktop shell reported about a location's volume.
     async fn noticed(&mut self, notice: Notice) {
         match notice {
-            Notice::Release { location, released } => self.release(location, released),
-            Notice::Reattach(location) => self.reattach(location).await,
-            Notice::Gone(location) => self.go_offline(location),
+            Notice::Release { location, root, released } => {
+                self.release(location, &root, released);
+            }
+            Notice::Reattach { location, root } => self.reattach(location, &root).await,
+            Notice::Gone { location, root } => {
+                if self.locations.get(&location).is_some_and(|watched| watched.root == root) {
+                    self.go_offline(location);
+                }
+            }
         }
     }
 
-    /// Close `id`'s watcher off the runtime ([`close_off_runtime`]), keeping
-    /// its teardown until it ends so a release of the location waits for it.
-    fn unwatch(&mut self, id: Uuid, live: Option<Live>) {
-        self.teardowns.retain(|_, closing| {
-            closing.retain(|teardown| !teardown.is_finished());
-            !closing.is_empty()
+    /// Release every handle discovery holds on the volume of `root`, a root
+    /// of `id`: close the location's watcher and cancel its walk when it
+    /// follows `root`, then send `released` once every watcher discovery
+    /// closed and walk it canceled on that volume returned, whichever
+    /// location it served. The volume is the one in the root's folder ID; a
+    /// root with none waits only for what ran on it. Discovery's other
+    /// file-system calls are awaited where they are made, so none is in
+    /// flight here.
+    fn release(&mut self, id: Uuid, root: &Path, released: oneshot::Sender<()>) {
+        let mut folder = None;
+        if let Some(watched) = self.locations.get_mut(&id).filter(|watched| watched.root == root) {
+            tracing::info!(location = %id, "new captures: volume to be removed; watch released");
+            watched.released = true;
+            watched.rescan = false;
+            folder = watched.stamp.folder();
+            self.draining.let_go(watched);
+        }
+        let at_root = |named: &WatchedRoot| named.location_id == id && named.root == root;
+        let volume = folder
+            .or_else(|| self.draining.roots().find(|&named| at_root(named))?.folder)
+            .map(|folder| folder.volume);
+        let in_flight = self.draining.on(|named| match volume {
+            Some(volume) => named.folder.is_some_and(|folder| folder.volume == volume),
+            None => at_root(named),
         });
-        if let Some(teardown) = live.and_then(close_off_runtime) {
-            self.teardowns.entry(id).or_default().push(teardown);
-        }
-    }
-
-    /// Release every handle discovery holds on `id`'s volume, its watcher,
-    /// any earlier watcher still closing and its walk in flight, then send
-    /// `released`. Discovery's other file-system calls are awaited where they
-    /// are made, so none is in flight here.
-    fn release(&mut self, id: Uuid, released: oneshot::Sender<()>) {
-        let (live, listed) = match self.locations.get_mut(&id) {
-            Some(watched) => {
-                tracing::info!(location = %id, "new captures: volume to be removed; watch released");
-                watched.released = true;
-                watched.rescan = false;
-                // Dropping the walk cancels it: its listing stops at the next
-                // folder.
-                (watched.live.take(), watched.walk.take().and_then(|mut walk| walk.listed.take()))
-            }
-            None => (None, None),
-        };
-        self.unwatch(id, live);
-        let closing = self.teardowns.remove(&id).unwrap_or_default();
         tokio::spawn(async move {
-            if let Some(listed) = listed {
-                let _ = listed.await;
-            }
-            for teardown in closing {
-                let _ = teardown.await;
+            for call in in_flight {
+                call.wait().await;
             }
             let _ = released.send(());
         });
@@ -1190,8 +1288,10 @@ impl Run {
 
     /// The removal a release made way for did not happen: watch the location
     /// again and walk it.
-    async fn reattach(&mut self, id: Uuid) {
-        let Some(watched) = self.locations.get_mut(&id).filter(|watched| watched.released) else {
+    async fn reattach(&mut self, id: Uuid, root: &Path) {
+        let Some(watched) =
+            self.locations.get_mut(&id).filter(|watched| watched.released && watched.root == root)
+        else {
             return;
         };
         watched.released = false;
@@ -1273,12 +1373,12 @@ impl Run {
         self.next_walk += 1;
         let walk = self.next_walk;
         let canceled = Arc::new(AtomicBool::new(false));
-        let (ends, listed) = oneshot::channel::<()>();
+        let (returns, call) = Call::start();
         watched.walk = Some(Walk {
             id: walk,
             canceled: Arc::clone(&canceled),
             touched: HashSet::new(),
-            listed: Some(listed),
+            listing: call,
         });
         watched.rescan = false;
         watched.recount = false;
@@ -1291,8 +1391,9 @@ impl Run {
         tokio::spawn(async move {
             let known = library.catalog().location_asset_paths(id).await;
             let listing = blocking(move || {
-                // Dropped once the listing returned, which closes `listed`.
-                let _ends = ends;
+                // Dropped once the listing returned, which `Walk::listing`
+                // sees.
+                let _returns = returns;
                 probe.list(&root, stamp, &canceled)
             })
             .await;
@@ -1424,13 +1525,13 @@ impl Run {
             self.go_offline(id);
             return;
         }
-        let Some(live) = self.locations.get_mut(&id).map(|watched| watched.live.take()) else {
+        let Some(watched) = self.locations.get_mut(&id) else {
             return;
         };
         // The old OS watch closes, off the runtime, as the new folder set
         // registers. The count is not live from here on, and says so before
         // the new watcher starts, which can take long on a slow tree.
-        self.unwatch(id, live);
+        self.draining.let_go(watched);
         self.publish();
         let Some((root, stamp)) =
             self.locations.get(&id).map(|watched| (watched.root.clone(), watched.stamp))
@@ -1482,8 +1583,8 @@ impl Run {
         }
     }
 
-    /// Publish the counts and the watched roots, each only when it changed.
-    fn publish(&self) {
+    /// Publish the counts and the named roots, each only when it changed.
+    fn publish(&mut self) {
         let mut counts: Vec<NewCaptureCount> = self
             .locations
             .values()
@@ -1495,19 +1596,25 @@ impl Run {
         self.publish_roots();
     }
 
-    /// Publish the roots of every followed location when they changed.
-    fn publish_roots(&self) {
+    /// Publish, when they changed, the root of every followed location and
+    /// every root a watcher discovery closed, or a walk it canceled, still
+    /// runs on, once per location and path: a root a location follows again
+    /// stands for its earlier calls there, and carries the folder ID of the
+    /// folder at its path now.
+    fn publish_roots(&mut self) {
+        self.draining.prune();
+        // Followed roots come first, and the stable sort keeps them ahead of
+        // the earlier calls' at their path, which `dedup_by` then drops.
         let mut roots: Vec<WatchedRoot> = self
             .locations
             .values()
-            .map(|watched| WatchedRoot {
-                location_id: watched.location.id,
-                root: watched.root.clone(),
-                volume_kind: watched.location.volume_kind,
-                folder: watched.stamp.folder(),
-            })
+            .map(Watched::named)
+            .chain(self.draining.roots().cloned())
             .collect();
-        roots.sort_by_key(|root| root.location_id);
+        roots.sort_by(|a, b| (a.location_id, &a.root).cmp(&(b.location_id, &b.root)));
+        roots.dedup_by(|later, earlier| {
+            later.location_id == earlier.location_id && later.root == earlier.root
+        });
         self.publish_roots.send_if_modified(|current| replace_changed(current, roots));
     }
 }

@@ -753,17 +753,8 @@ async fn watching_follows_a_remapped_location_to_its_new_root() {
     frame(&old.join("Ha_old.fits"));
     count_is(&watch, location.id, 1).await;
 
-    let copy = fx.base.join("Captures copy");
-    fs::create_dir_all(&copy).unwrap();
-    fs::copy(old.join("Ha_001.fits"), copy.join("Ha_001.fits")).unwrap();
-    let current = fx.library.catalog().location(location.id).await.unwrap();
-    let review = fx
-        .library
-        .review_remap(location.id, current.decision_revision, NativePath::from_path(&copy))
-        .await
-        .unwrap();
-    assert!(review.blocked.is_empty(), "{:?}", review.blocked);
-    fx.library.apply_remap(review.id, current.decision_revision).await.unwrap();
+    let copy = copy_of(&old, &fx.base.join("Captures copy"));
+    remap(&fx.library, location.id, &copy).await;
 
     // The walk of the new root starts it again from what the catalog holds.
     eventually("the new root walked", || walks(&watch) >= 2).await;
@@ -772,6 +763,24 @@ async fn watching_follows_a_remapped_location_to_its_new_root() {
     frame(&copy.join("Ha_003.fits"));
     count_is(&watch, location.id, 2).await;
     watchers_are(&watch, 1).await;
+}
+
+/// A copy at `to` of the frame `Ha_001.fits` that `from` holds.
+fn copy_of(from: &Path, to: &Path) -> PathBuf {
+    fs::create_dir_all(to).unwrap();
+    fs::copy(from.join("Ha_001.fits"), to.join("Ha_001.fits")).unwrap();
+    to.to_path_buf()
+}
+
+/// Remap `location` to `to`, which holds what the catalog holds there.
+async fn remap(library: &Arc<Library>, location: Uuid, to: &Path) {
+    let current = library.catalog().location(location).await.unwrap();
+    let review = library
+        .review_remap(location, current.decision_revision, NativePath::from_path(to))
+        .await
+        .unwrap();
+    assert!(review.blocked.is_empty(), "{:?}", review.blocked);
+    library.apply_remap(review.id, current.decision_revision).await.unwrap();
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -1064,7 +1073,7 @@ async fn a_released_location_touches_its_volume_no_more_until_reattached() {
     count_is(&watch, location.id, 1).await;
 
     // Its drive is about to be ejected: released before this returns.
-    watch.release(location.id).await;
+    watch.release(location.id, &root).await;
     assert_eq!(watchers(&watch), 0, "no watcher holds the volume");
     let counts = until(&watch, |counts| counts.iter().all(|count| !count.live)).await;
     assert_eq!(counts, [NewCaptureCount { location_id: location.id, new_files: 1, live: false }]);
@@ -1078,7 +1087,7 @@ async fn a_released_location_touches_its_volume_no_more_until_reattached() {
     assert_eq!(new_files(&watch.counts(), location.id), Some(1));
 
     // The eject was refused: watched again, with what arrived meanwhile.
-    watch.reattach(location.id);
+    watch.reattach(location.id, &root);
     let counts = count_is(&watch, location.id, 2).await;
     assert_eq!(counts, [NewCaptureCount { location_id: location.id, new_files: 2, live: true }]);
     watchers_are(&watch, 1).await;
@@ -1089,7 +1098,8 @@ async fn a_released_location_touches_its_volume_no_more_until_reattached() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_release_returns_once_the_walk_in_flight_ended() {
     let fx = fixture().await;
-    let location = captures(&fx.library, &fx.base.join("Captures")).await;
+    let root = fx.base.join("Captures");
+    let location = captures(&fx.library, &root).await;
     let probe = Arc::new(Probe::default());
     let _opens = Opens(&probe.list_gate);
     probe.list_gate.close();
@@ -1097,7 +1107,7 @@ async fn a_release_returns_once_the_walk_in_flight_ended() {
     holding(&probe.list_gate).await;
 
     // The start-up walk still lists the volume: the release waits for it.
-    let release = watch.release(location.id);
+    let release = watch.release(location.id, &root);
     tokio::pin!(release);
     let early = tokio::time::timeout(Duration::from_millis(300), &mut release).await;
     assert!(early.is_err(), "released while a walk still listed the volume");
@@ -1114,13 +1124,14 @@ async fn a_release_returns_once_the_walk_in_flight_ended() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_release_held_by_a_hung_walk_returns_once_discovery_stops() {
     let fx = fixture().await;
-    let location = captures(&fx.library, &fx.base.join("Captures")).await;
+    let root = fx.base.join("Captures");
+    let location = captures(&fx.library, &root).await;
     let probe = Arc::new(Probe::default());
     let _opens = Opens(&probe.list_gate);
     probe.list_gate.close();
     let watch = probed(&fx.library, &probe);
     holding(&probe.list_gate).await;
-    let release = watch.release(location.id);
+    let release = watch.release(location.id, &root);
     tokio::pin!(release);
     let early = tokio::time::timeout(Duration::from_millis(300), &mut release).await;
     assert!(early.is_err(), "released while a walk still listed the volume");
@@ -1153,7 +1164,7 @@ async fn a_release_waits_for_a_watcher_still_closing() {
     holding(releases).await;
 
     // Only the closing watcher holds the volume, and the release waits for it.
-    let release = watch.release(location.id);
+    let release = watch.release(location.id, &root);
     tokio::pin!(release);
     let early = tokio::time::timeout(Duration::from_millis(300), &mut release).await;
     assert!(early.is_err(), "released while a closing watcher still held the volume");
@@ -1172,12 +1183,7 @@ async fn a_root_is_named_from_the_start_of_its_watch_until_it_leaves() {
     probe.list_gate.close();
     let watch = probed(&fx.library, &probe);
     let roots = || watch.subscribe_roots().borrow().clone();
-    let named = [WatchedRoot {
-        location_id: location.id,
-        root: root.clone(),
-        volume_kind: location.volume_kind,
-        folder: inventory::root_stamp(&root).and_then(RootStamp::folder),
-    }];
+    let named = [named_root(&location, &root)];
 
     // The first walk still lists the volume, so nothing is counted, but the
     // root is named: a removal of its volume can be followed.
@@ -1188,10 +1194,110 @@ async fn a_root_is_named_from_the_start_of_its_watch_until_it_leaves() {
     count_is(&watch, location.id, 0).await;
 
     // Named while its volume is being removed, and no longer once it is.
-    watch.release(location.id).await;
+    watch.release(location.id, &root).await;
     assert_eq!(roots(), named);
-    watch.gone(location.id);
+    watch.gone(location.id, &root);
     eventually("the root leaves with its location", || roots().is_empty()).await;
+}
+
+/// How [`CaptureWatch::subscribe_roots`] names `root`, a root of `location`.
+fn named_root(location: &Location, root: &Path) -> WatchedRoot {
+    WatchedRoot {
+        location_id: location.id,
+        root: root.to_path_buf(),
+        volume_kind: location.volume_kind,
+        folder: inventory::root_stamp(root).and_then(RootStamp::folder),
+    }
+}
+
+/// A location retired while its walk still lists and its watcher still
+/// closes, as on a slow volume: its root stays named until both returned, so
+/// a removal of its volume is still followed, and a release waits for both.
+/// The root leaves once they returned.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_retired_root_stays_named_until_its_walk_and_watcher_close_returned() {
+    let fx = fixture().await;
+    let root = fx.base.join("Captures");
+    let location = captures(&fx.library, &root).await;
+    let probe = Arc::new(Probe::default());
+    let _lists = Opens(&probe.list_gate);
+    probe.list_gate.close();
+    let watch = probed(&fx.library, &probe);
+    let releases = &watch.observed().releases;
+    let _closes = Opens(releases);
+    releases.close();
+    let roots = || watch.subscribe_roots().borrow().clone();
+    let named = [named_root(&location, &root)];
+    holding(&probe.list_gate).await;
+    watchers_are(&watch, 1).await;
+
+    let review = fx.library.review_retire_location(location.id).await.unwrap();
+    fx.library.retire_location(review.id, location.id, review.expected_revision).await.unwrap();
+    holding(releases).await;
+    let release = watch.release(location.id, &root);
+    tokio::pin!(release);
+    let early = tokio::time::timeout(Duration::from_millis(300), &mut release).await;
+    assert!(early.is_err(), "released while its walk listed and its watcher closed");
+    assert_eq!(roots(), named, "unnamed while its walk listed and its watcher closed");
+
+    releases.open();
+    watchers_are(&watch, 0).await;
+    let early = tokio::time::timeout(Duration::from_millis(300), &mut release).await;
+    assert!(early.is_err(), "released while its walk still listed");
+    assert_eq!(roots(), named, "unnamed while its walk still listed");
+
+    probe.list_gate.open();
+    tokio::time::timeout(Duration::from_secs(5), release)
+        .await
+        .expect("released once both returned");
+    eventually("the root leaves once both returned", || roots().is_empty()).await;
+}
+
+/// A remapped location's old root stays named beside its new one while its
+/// watcher still closes. A removal of the old root's volume waits for that
+/// close and leaves the new root's watch alone, a completed removal
+/// included; the old root leaves once its watcher closed.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_remapped_location_names_its_old_root_until_its_watcher_closed() {
+    let fx = fixture().await;
+    let old = fx.base.join("Captures");
+    let location = captures(&fx.library, &old).await;
+    frame(&old.join("Ha_001.fits"));
+    assert_eq!(scan_to_end(&fx.library, location.id).await.state, ScanState::Completed);
+    let watch = watch(&fx.library);
+    live_count_is(&watch, location.id, 0).await;
+    let releases = &watch.observed().releases;
+    let _opens = Opens(releases);
+    releases.close();
+    let roots = || watch.subscribe_roots().borrow().clone();
+
+    let copy = copy_of(&old, &fx.base.join("Captures copy"));
+    remap(&fx.library, location.id, &copy).await;
+    holding(releases).await;
+    eventually("the new root walked", || walks(&watch) >= 2).await;
+    live_count_is(&watch, location.id, 0).await;
+    let remapped = fx.library.catalog().location(location.id).await.unwrap();
+    assert_eq!(roots(), [named_root(&location, &old), named_root(&remapped, &copy)]);
+
+    // The old root's volume is to be removed: the release waits for its
+    // watcher's close, and the new root stays watched.
+    let release = watch.release(location.id, &old);
+    tokio::pin!(release);
+    let early = tokio::time::timeout(Duration::from_millis(300), &mut release).await;
+    assert!(early.is_err(), "released while the old root's watcher still closed");
+    let live = [NewCaptureCount { location_id: location.id, new_files: 0, live: true }];
+    assert_eq!(watch.counts(), live, "the new root was released for the old one");
+    releases.open();
+    tokio::time::timeout(Duration::from_secs(5), release).await.expect("released once it closed");
+    eventually("the old root leaves once its watcher closed", || {
+        roots() == [named_root(&remapped, &copy)]
+    })
+    .await;
+
+    // The old root's volume is gone: the new root is still counted, live.
+    watch.gone(location.id, &old);
+    frame(&copy.join("Ha_002.fits"));
+    live_count_is(&watch, location.id, 1).await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -1204,8 +1310,8 @@ async fn a_removed_volume_goes_offline_at_once_and_returns_at_a_sweep() {
 
     // Ejected: gone without waiting for a sweep to find the root missing,
     // even though the root is still there.
-    watch.release(location.id).await;
-    watch.gone(location.id);
+    watch.release(location.id, &root).await;
+    watch.gone(location.id, &root);
     until(&watch, <[NewCaptureCount]>::is_empty).await;
     assert_eq!(watchers(&watch), 0);
     // Plugged back in: the next sweep starts it again.

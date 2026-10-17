@@ -15,8 +15,11 @@
 //! holds a handle only on that folder, never on a link, junction or other
 //! folder that took its path. It holds no watcher state:
 //! [`CaptureWatch::subscribe_roots`] names a root from the start of its
-//! watch, and a location that is removed, retired, remapped or offline
-//! leaves it. macOS and Linux need none of this.
+//! watch until discovery holds no handle through it any more, a while after
+//! its location is removed, retired, remapped or goes offline. A remapped
+//! location's old root is named beside its new one meanwhile, so each
+//! registration is keyed by its location and root, and each notice names
+//! both. macOS and Linux need none of this.
 //!
 //! [`CaptureWatch`]: platevault_core::new_captures::CaptureWatch
 //! [`CaptureWatch::subscribe_roots`]: platevault_core::new_captures::CaptureWatch::subscribe_roots
@@ -32,28 +35,35 @@ use uuid::Uuid;
 #[cfg(windows)]
 pub use notices::EjectNotices;
 
-/// The roots to register, by location, each with the folder ID the folder at
-/// its path must still have: every watched one but those on a network share,
-/// which Windows never ejects, and those with no folder ID, which no handle
-/// could be checked against.
-pub fn ejectable_roots(roots: &[WatchedRoot]) -> HashMap<Uuid, (PathBuf, FolderId)> {
+/// A registration's key: a location and one of its roots. A remapped
+/// location's old root is named beside its new one while discovery still
+/// holds a handle through it, and each needs its own registration.
+pub type RootKey = (Uuid, PathBuf);
+
+/// The roots to register, by location and root, each with the folder ID the
+/// folder at its path must still have: every named one but those on a
+/// network share, which Windows never ejects, and those with no folder ID,
+/// which no handle could be checked against.
+pub fn ejectable_roots(roots: &[WatchedRoot]) -> HashMap<RootKey, FolderId> {
     roots
         .iter()
         .filter(|root| root.volume_kind != VolumeKind::Network)
-        .filter_map(|root| Some((root.location_id, (root.root.clone(), root.folder?))))
+        .filter_map(|root| Some(((root.location_id, root.root.clone()), root.folder?)))
         .collect()
 }
 
 /// The notice window and the forwarding to discovery, on Windows only.
 #[cfg(windows)]
 mod notices {
+    use std::path::Path;
+
     use platevault_core::new_captures::{CaptureWatch, WatchedRoot};
     use platevault_eject_windows::{FolderId, Removal, RemovalNotices, Root, Roots};
     use tauri::{AppHandle, Manager, Runtime};
     use tokio::sync::watch;
     use uuid::Uuid;
 
-    use super::ejectable_roots;
+    use super::{ejectable_roots, RootKey};
 
     /// Forwards removal notices to the managed [`CaptureWatch`] until dropped.
     /// Drop it after the watch shut down: a removal request that waits on
@@ -61,7 +71,7 @@ mod notices {
     pub struct EjectNotices {
         /// Held for its drop, which ends every registration and the window
         /// thread.
-        _notices: RemovalNotices<Uuid>,
+        _notices: RemovalNotices<RootKey>,
     }
 
     impl EjectNotices {
@@ -91,8 +101,8 @@ mod notices {
                 .ok_or("removal notices start once the capture watch is managed")?
                 .subscribe_roots();
             let handle = app.clone();
-            let notices = RemovalNotices::start(move |location: &Uuid, removal| {
-                forward(&handle, *location, removal);
+            let notices = RemovalNotices::start(move |(location, root): &RootKey, removal| {
+                forward(&handle, *location, root, removal);
             })
             .map_err(|error| format!("cannot start removal notices: {error}"))?;
             tauri::async_runtime::spawn(follow(roots, notices.roots()));
@@ -100,29 +110,30 @@ mod notices {
         }
     }
 
-    /// Tell discovery what Windows reported. A requested removal returns once
-    /// discovery holds no handle on the location's volume, or once discovery
-    /// is asked to stop.
-    fn forward<R: Runtime>(app: &AppHandle<R>, location: Uuid, removal: Removal) {
+    /// Tell discovery what Windows reported about the volume holding `root`,
+    /// a root of `location`. A requested removal returns once discovery holds
+    /// no handle on that volume, or once discovery is asked to stop.
+    fn forward<R: Runtime>(app: &AppHandle<R>, location: Uuid, root: &Path, removal: Removal) {
         // `start` found it managed, and managed state stays.
         let captures = app.state::<CaptureWatch>();
         match removal {
-            Removal::Requested => tauri::async_runtime::block_on(captures.release(location)),
-            Removal::Refused => captures.reattach(location),
-            Removal::Removed => captures.gone(location),
+            Removal::Requested => tauri::async_runtime::block_on(captures.release(location, root)),
+            Removal::Refused => captures.reattach(location, root),
+            Removal::Removed => captures.gone(location, root),
         }
     }
 
-    /// Keep the registrations on the ejectable roots discovery follows, each
+    /// Keep the registrations on the ejectable roots discovery names, each
     /// bound to its folder ID. Ends with discovery or the window.
-    async fn follow(mut watched: watch::Receiver<Vec<WatchedRoot>>, window: Roots<Uuid>) {
+    async fn follow(mut watched: watch::Receiver<Vec<WatchedRoot>>, window: Roots<RootKey>) {
         loop {
             // Its own statement, so the read guard is gone before the await.
             let wanted = ejectable_roots(&watched.borrow_and_update())
                 .into_iter()
-                .map(|(location, (path, folder))| {
+                .map(|(key, folder)| {
                     let folder = FolderId { volume: folder.volume, index: folder.index };
-                    (location, Root { path, folder })
+                    let root = Root { path: key.1.clone(), folder };
+                    (key, root)
                 })
                 .collect();
             if !window.watch(wanted) || watched.changed().await.is_err() {
@@ -159,8 +170,30 @@ mod tests {
         assert_eq!(
             roots,
             HashMap::from([
-                (card.location_id, (card.root, card.folder.unwrap())),
-                (ssd.location_id, (ssd.root, ssd.folder.unwrap())),
+                ((card.location_id, card.root), card.folder.unwrap()),
+                ((ssd.location_id, ssd.root), ssd.folder.unwrap()),
+            ])
+        );
+    }
+
+    /// A remapped location names its old root beside its new one while
+    /// discovery still holds a handle through it: each gets a registration.
+    #[test]
+    fn registers_each_named_root_of_a_location() {
+        let new = root(VolumeKind::Removable, "F:\\Captures", 2);
+        let old = WatchedRoot {
+            root: PathBuf::from("E:\\Captures"),
+            folder: Some(FolderId { volume: 8, index: 1 }),
+            ..new
+        };
+
+        let roots = ejectable_roots(&[old.clone(), new.clone()]);
+
+        assert_eq!(
+            roots,
+            HashMap::from([
+                ((old.location_id, old.root), old.folder.unwrap()),
+                ((new.location_id, new.root), new.folder.unwrap()),
             ])
         );
     }
