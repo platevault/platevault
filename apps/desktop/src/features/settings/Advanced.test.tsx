@@ -315,7 +315,7 @@ describe('Advanced — Software Update section', () => {
     mockGetUpdateSnapshot.mockReturnValue({
       phase: 'install-failed',
       version: '0.7.0',
-      error: { code: 'app-replaced' },
+      error: { code: 'app-replaced', keptAt: [] },
     });
     render(<Advanced save={vi.fn()} />);
 

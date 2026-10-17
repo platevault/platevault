@@ -26,6 +26,7 @@ mod windows;
 
 use std::fs::File;
 use std::io::{Read as _, Seek as _};
+use std::path::PathBuf;
 
 #[cfg(all(test, unix))]
 pub use self::bundle::{install_bundle, BundleInstaller, CodeSigning, Identity, LaunchedBundle};
@@ -42,14 +43,25 @@ pub enum InstallMode {
 }
 
 /// What the host does once an install succeeded.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Installed {
-    /// The new version is in place; restart into it.
+    /// The new version is in place; restart into it. `kept_aside` is where
+    /// the macOS install kept what it found in the app's place, other than
+    /// the launched app, rather than delete it; the user is told before the
+    /// app relaunches or exits.
     #[cfg_attr(windows, allow(dead_code))]
-    Relaunch,
+    Relaunch { kept_aside: Vec<PathBuf> },
     /// An installer process took over and needs the app to exit.
     #[cfg_attr(not(windows), allow(dead_code))]
     Handoff,
+}
+
+impl Installed {
+    /// [`Self::Relaunch`] with nothing kept aside.
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+    pub const fn relaunch() -> Self {
+        Self::Relaunch { kept_aside: Vec::new() }
+    }
 }
 
 /// The OS side of the updater: the platform installer in the app, a fake in

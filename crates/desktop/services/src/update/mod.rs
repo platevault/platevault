@@ -229,9 +229,14 @@ pub enum UpdateError {
     /// The new macOS bundle does not satisfy the installed app's designated
     /// requirement.
     Identity(String),
-    /// The macOS app at the path this process was launched from is no longer
-    /// the one launched: it was moved or replaced since.
-    AppReplaced(String),
+    /// The macOS app at `app`, the path this process was launched from, is
+    /// no longer the one launched: it was moved or replaced since, and
+    /// nothing was installed. What the install found in its place and could
+    /// not put back is kept at `kept`.
+    AppReplaced {
+        app: PathBuf,
+        kept: Vec<PathBuf>,
+    },
     /// The OS refused an install step its permission, or the user did not
     /// give it.
     Permission(String),
@@ -257,7 +262,9 @@ impl UpdateError {
             Self::Manifest(_) => UpdateFailure::Manifest,
             Self::Signature(_) => UpdateFailure::Signature,
             Self::Identity(_) => UpdateFailure::Identity,
-            Self::AppReplaced(_) => UpdateFailure::AppReplaced,
+            Self::AppReplaced { kept, .. } => UpdateFailure::AppReplaced {
+                kept_at: kept.iter().map(|kept| kept.display().to_string()).collect(),
+            },
             Self::Permission(_) => UpdateFailure::Permission,
             Self::Install(_) => UpdateFailure::Install,
             Self::PreviousAppNotRestored { kept, .. } => {
@@ -279,10 +286,27 @@ impl fmt::Display for UpdateError {
             | Self::Manifest(message)
             | Self::Signature(message)
             | Self::Identity(message)
-            | Self::AppReplaced(message)
             | Self::Permission(message)
             | Self::Install(message)
             | Self::Unsupported(message) => f.write_str(message),
+            Self::AppReplaced { app, kept } => {
+                write!(
+                    f,
+                    "{} is no longer the app PlateVault was launched from, so nothing was installed",
+                    app.display()
+                )?;
+                if kept.is_empty() {
+                    return f.write_str("; a restart launches what is there now");
+                }
+                f.write_str("; what could not be put back is kept at ")?;
+                for (index, kept) in kept.iter().enumerate() {
+                    if index > 0 {
+                        f.write_str(", ")?;
+                    }
+                    write!(f, "{}", kept.display())?;
+                }
+                Ok(())
+            }
             Self::PreviousAppNotRestored { kept, cause } => write!(
                 f,
                 "{cause}; the previous app could not be put back and is kept at {}",
@@ -700,15 +724,13 @@ impl Updater {
                 tracing::warn!(version = %release.version_text, %error, quit_held, "update install failed");
             }
         }
-        // A held quit leaves no window to show the error in.
-        let notice = installed
-            .as_ref()
-            .err()
-            .filter(|_| quit_held)
-            .and_then(|error| self.notice_for_quit(error));
-        let relaunch = match installed {
-            Ok(installed) => installed == Installed::Relaunch && !quit_held,
-            Err(_) if quit_held => false,
+        let (notice, relaunch) = match installed {
+            Ok(installed) => (
+                self.notice_for_installed(&installed),
+                matches!(installed, Installed::Relaunch { .. }) && !quit_held,
+            ),
+            // A held quit leaves no window to show the error in.
+            Err(error) if quit_held => (self.notice_for_quit(&error), false),
             Err(error) => {
                 self.set(&mut state, State::InstallFailed { release, staged, error });
                 return;
@@ -732,17 +754,35 @@ impl Updater {
         }
     }
 
+    /// What an install that succeeded must tell the user, as the app
+    /// relaunches or exits right after it: where the macOS install kept what
+    /// it found in the app's place, which no window is left to say.
+    fn notice_for_installed(&self, installed: &Installed) -> Option<Notice> {
+        match installed {
+            Installed::Relaunch { kept_aside } if !kept_aside.is_empty() => {
+                Some(self.wording().installed_kept_aside(kept_aside))
+            }
+            _ => None,
+        }
+    }
+
     /// What a failed install must tell the user when the app exits right
-    /// after it, which leaves no window to show the error in: only a previous
-    /// app that could not be put back, since nothing is then at the installed
-    /// path, and the notice says where it is (astro-plan-gffqm). Any other
+    /// after it, which leaves no window to show the error in. A previous app
+    /// that could not be put back left nothing at the installed path, and the
+    /// notice says where it is (astro-plan-gffqm). An app replaced after
+    /// launch got nothing installed, and the next launch would run whatever
+    /// is there now: the notice asks for a restart and another install, and
+    /// names where what was found in the app's place is kept. Any other
     /// failure left the installed app as it was, and the next launch offers
     /// the update again.
     fn notice_for_quit(&self, error: &UpdateError) -> Option<Notice> {
-        let UpdateError::PreviousAppNotRestored { kept, .. } = error else {
-            return None;
-        };
-        Some(self.wording().previous_app_kept(kept))
+        match error {
+            UpdateError::PreviousAppNotRestored { kept, .. } => {
+                Some(self.wording().previous_app_kept(kept))
+            }
+            UpdateError::AppReplaced { kept, .. } => Some(self.wording().app_replaced(kept)),
+            _ => None,
+        }
     }
 
     /// Run the install at quit on its own thread, asking for administrator
@@ -755,10 +795,13 @@ impl Updater {
                 let installed = staged.reverify().and_then(|payload| {
                     installing.inner.installer.install(payload, InstallMode::OnQuit, &admin_prompt)
                 });
-                let notice = installed.err().and_then(|error| {
-                    tracing::warn!(%error, "update install at quit failed; the next launch offers the update again");
-                    installing.notice_for_quit(&error)
-                });
+                let notice = match installed {
+                    Ok(installed) => installing.notice_for_installed(&installed),
+                    Err(error) => {
+                        tracing::warn!(%error, "update install at quit failed; the next launch offers the update again");
+                        installing.notice_for_quit(&error)
+                    }
+                };
                 installing.exit_after_quit_install(notice.as_ref());
             },
         );

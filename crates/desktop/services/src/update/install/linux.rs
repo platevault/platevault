@@ -63,7 +63,7 @@ pub(super) fn replace_appimage(payload: &mut File) -> Result<Installed, UpdateEr
         )
     })?;
     replace_file(&target, payload)?;
-    Ok(Installed::Relaunch)
+    Ok(Installed::relaunch())
 }
 
 /// Write `payload` next to `target` and rename it over `target`, with
@@ -126,7 +126,7 @@ pub(super) fn package_command(package: Package, sha256: &str, size: u64) -> Comm
 /// What the `pkexec` run's `status` means for the install.
 fn package_outcome(status: ExitStatus) -> Result<Installed, UpdateError> {
     match status.code() {
-        Some(0) => Ok(Installed::Relaunch),
+        Some(0) => Ok(Installed::relaunch()),
         Some(code) if PKEXEC_NOT_AUTHORIZED.contains(&code) => Err(UpdateError::Permission(
             format!("{PKEXEC} was not authorized to install the update ({status})"),
         )),
@@ -203,7 +203,7 @@ mod tests {
     #[test]
     fn each_pkexec_status_maps_to_its_outcome() {
         let status = |code: i32| ExitStatus::from_raw(code << 8);
-        assert!(matches!(package_outcome(status(0)), Ok(Installed::Relaunch)));
+        assert!(matches!(package_outcome(status(0)), Ok(Installed::Relaunch { .. })));
         for not_authorized in [126, 127] {
             assert!(
                 matches!(package_outcome(status(not_authorized)), Err(UpdateError::Permission(_))),
@@ -434,7 +434,7 @@ mod tests {
 
             let installed = run_package(command, &mut payload);
 
-            assert!(matches!(installed, Ok(Installed::Relaunch)), "{installed:?}");
+            assert!(matches!(installed, Ok(Installed::Relaunch { .. })), "{installed:?}");
             assert_eq!(fs::read(dir.path().join("installed")).expect("installed"), PACKAGE);
         }
     }

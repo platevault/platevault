@@ -48,8 +48,10 @@ pub enum UpdateFailure {
     /// The new macOS app is not signed by the identity of the installed one.
     Identity,
     /// The macOS app was moved or replaced after it was launched, so nothing
-    /// was installed; a restart launches what is there now.
-    AppReplaced,
+    /// was installed; a restart launches what is there now. What the install
+    /// found in the app's place and could not put back is kept at `kept_at`
+    /// instead of being deleted; empty when nothing was.
+    AppReplaced { kept_at: Vec<String> },
     /// Permission to install was refused or not given.
     Permission,
     /// The install step failed.

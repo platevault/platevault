@@ -36,7 +36,9 @@ export function updateFailureMessage(failure: UpdateFailure | null): string {
     case 'identity':
       return m.update_error_identity();
     case 'app-replaced':
-      return m.update_error_app_replaced();
+      return failure.keptAt.length === 0
+        ? m.update_error_app_replaced()
+        : m.update_error_app_replaced_kept({ path: failure.keptAt.join(', ') });
     case 'permission':
       return m.update_error_permission();
     case 'install':
