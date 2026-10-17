@@ -147,4 +147,4 @@ Use the [root vocabulary](../063-clean-rebuild-contract/spec.md#key-entities). F
   - the order of the parts and the exposure part that ends every light folder;
   - flat folders with no exposure part, which take their lights' gain and offset;
   - dark and bias folders only when gain or offset mixes.
-- Workflow decision D-W122 (Round 9 C15, owner, 2026-10-12, recorded 2026-10-17) moves metadata corrections to session intake. Apply delivers the recorded corrections and shows "N corrected values", with no per-value choice. Provisional: an isolated patched copy beside the links in Symlinks mode.
+- Workflow decision D-W122 (Round 9 C15, owner, 2026-10-12, recorded 2026-10-17) moves metadata corrections to session intake. Apply delivers the recorded corrections and shows "N corrected values", with no per-value choice. Provisional: an isolated patched copy beside the links in Symlinks mode, its footprint copy, and a correction on a held session arriving as a pending change. Open: a correction that re-splits a held session (D-W100).
