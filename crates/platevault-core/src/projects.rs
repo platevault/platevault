@@ -7,11 +7,12 @@
 //! A Project's inputs are edited through the catalog under the Project
 //! revision (`persistence_library::project_inputs`). The edits here add the
 //! core rules: where an added session goes and what a new group is called
-//! ([`crate::project_groups`]), and that no two groups share a folder. The
-//! catalog's own edits (remove or move sessions, frame choices, View
-//! settings, an empty group's removal) need no core rule and are called
-//! directly. No edit touches the View: once it exists, each reads as a
-//! pending change until Apply (D-W100).
+//! ([`crate::project_groups`]), that no two groups share a folder, and that
+//! the View step's processing location is absolute ([`crate::layout`]). The
+//! catalog's own edits (remove or move sessions, frame choices, an empty
+//! group's removal) need no core rule and are called directly. No edit
+//! touches the View: once it exists, each reads as a pending change until
+//! Apply (D-W100).
 
 use std::collections::BTreeSet;
 use std::sync::Arc;
@@ -20,6 +21,7 @@ use persistence_library::{Catalog, NewGroup, SessionAdd};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::layout;
 use crate::library::{AssetReferences, Library, ReferencesFuture};
 use crate::project_groups::{
     group_folders, panel_name, place_sessions, require_distinct_folders, split_name, PlacementPlan,
@@ -28,7 +30,7 @@ use crate::project_groups::{
 use crate::{
     AdmissionBasis, AdmissionRefusal, FramingEvidence, GroupKeywords, GroupName, GroupOrigin,
     LibraryError, OpticsSignature, PendingChange, ProjectDesired, ProjectGroup, ProjectSuggestion,
-    ReferenceKind, Revision, SessionPlacement,
+    ProjectViewSettings, ReferenceKind, Revision, SessionPlacement,
 };
 
 /// One session to add, at the admission basis the user saw (`None` takes
@@ -263,6 +265,27 @@ impl Library {
             require_renamed_folders(&desired, group_id, name)?;
         }
         catalog.set_project_group_panel(id, expected, group_id, panel, name.as_ref()).await
+    }
+
+    /// The View step's settings (VSEL-FR-16, PREP-FR-04/06, PRJ-FR-28). The
+    /// processing location must be absolute, as the Project folder is made in
+    /// it; a relative one is refused here, where the user chose it, and
+    /// nothing is stored.
+    ///
+    /// # Errors
+    /// `InvalidInput` naming the processing location when it is relative, or
+    /// for one that is not a path of this operating system; otherwise as
+    /// `Catalog::set_project_view_settings`.
+    pub async fn set_project_view_settings(
+        &self,
+        id: Uuid,
+        expected: Revision,
+        settings: &ProjectViewSettings,
+    ) -> Result<ProjectDesired, LibraryError> {
+        if let Some(parent) = &settings.parent {
+            layout::require_absolute_processing_location(&parent.to_path_buf()?)?;
+        }
+        self.catalog().set_project_view_settings(id, expected, settings).await
     }
 
     async fn keywords_of(&self, desired: &ProjectDesired) -> Result<GroupKeywords, LibraryError> {

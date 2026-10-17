@@ -48,16 +48,27 @@ pub fn component_len(name: &str) -> usize {
 /// up work in.
 ///
 /// # Errors
-/// `InvalidInput` for a relative `parent` or a Project name [`segment`]
-/// refuses.
+/// `InvalidInput` for a relative `parent` ([`require_absolute_processing_location`])
+/// or a Project name [`segment`] refuses.
 pub fn project_folder(parent: &Path, project: &str) -> Result<PathBuf, LibraryError> {
-    if !parent.is_absolute() {
-        return Err(LibraryError::InvalidInput(format!(
+    require_absolute_processing_location(parent)?;
+    Ok(parent.join(segment("Project", project)?))
+}
+
+/// A processing location the Project folder can be made in: an absolute
+/// path, since there is no assumed root to resolve a relative one against.
+///
+/// # Errors
+/// `InvalidInput` naming the processing location when it is relative.
+pub fn require_absolute_processing_location(parent: &Path) -> Result<(), LibraryError> {
+    if parent.is_absolute() {
+        Ok(())
+    } else {
+        Err(LibraryError::InvalidInput(format!(
             "the processing location {} is not an absolute path",
             parent.display()
-        )));
+        )))
     }
-    Ok(parent.join(segment("Project", project)?))
 }
 
 /// A group name's folder token (decision record §2 and §8): spaces become
