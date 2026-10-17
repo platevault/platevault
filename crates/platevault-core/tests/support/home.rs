@@ -3,28 +3,27 @@
 
 //! Shared fixtures for the Home tests (spec 065 PRJ-FR-17..19): indexed light
 //! sessions in every new-sessions group with two Projects, and helpers over
-//! the PREP world (`support/prepare.rs`) that review its frames, hold its Ha
-//! session, set goals and a default site, block a run each way and start one
-//! Running operation of each kind. Included with `#[path =
-//! "support/home.rs"] mod home_support;` beside `prepare_support` and
-//! `membership_support`.
+//! the F4 Apply world (`support/apply.rs`) that quiet its candidates, set a
+//! goal and a default site and start one Running operation of each kind.
+//! Included with `#[path = "support/home.rs"] mod home_support;` beside
+//! `apply_support` and `membership_support`.
 #![allow(dead_code)]
 
 use std::fs;
 use std::sync::Arc;
 use std::time::Duration;
 
-use persistence_library::{NewPreparation, NewPreparedEntry, SessionQuery};
+use persistence_library::SessionQuery;
 use platevault_core::import::ImportCheck;
-use platevault_core::library::{InventoryProbe, Library};
+use platevault_core::library::Library;
 use platevault_core::tonight::TonightQuery;
 use platevault_core::*;
 use time::macros::date;
 use time::Date;
 use uuid::Uuid;
 
+use crate::apply_support::{World, AT, HA_GAIN_0};
 use crate::membership_support;
-use crate::prepare_support::{World, HA_LIGHTS, OIII_LIGHTS};
 use crate::support;
 
 /// A night NGC 7000 is well up at Backyard (52.09 N, 5.12 E).
@@ -178,7 +177,7 @@ pub async fn indexed() -> Indexed {
     let project = |name: &str, target_id: Uuid| ProjectInput {
         name: name.into(),
         notes: None,
-        subjects: vec![SubjectInput { target_id, name: None, mosaic: false, panels: Vec::new() }],
+        subjects: vec![SubjectInput { target_id, name: None }],
         rig_ids: vec![redcat.id],
         goals: Vec::new(),
     };
@@ -210,149 +209,35 @@ pub async fn indexed() -> Indexed {
     }
 }
 
-/// The Project holds the PREP world's Ha session through the membership
-/// writer, reviewed and settled.
-pub async fn hold_ha(world: &World) {
-    let light = light(world, HA_LIGHTS[0]).await.id;
-    let sessions = world.catalog().list_sessions(&SessionQuery::default()).await.unwrap();
-    let ha = sessions
-        .into_iter()
-        .map(|summary| summary.session)
-        .find(|session| session.asset_ids.contains(&light))
-        .unwrap()
-        .id;
-    membership_support::hold(&world.library, project(world).await.id, ha).await;
+/// Mark the Apply world's unheld gain 0 session Usable without finishing
+/// its review: no candidate frame reads Unreviewed and nothing is suggested.
+pub async fn quiet(world: &World) {
+    let session = world.session_of(&world.captures, HA_GAIN_0).await;
+    world.mark(&session, Quality::Usable).await;
 }
 
-/// The PREP world's Project.
-pub async fn project(world: &World) -> Project {
-    let project = world.view().await.project_id;
-    world.catalog().project(project).await.unwrap()
-}
-
-/// The world's light at `path` below its Captures location.
-pub async fn light(world: &World, path: &str) -> Asset {
-    world
-        .catalog()
-        .location_assets(world.captures.id)
-        .await
-        .unwrap()
-        .into_iter()
-        .find(|asset| asset.relative_path.display() == path)
-        .unwrap()
-}
-
-/// Mark every light of the world Usable: no candidate frame reads Unreviewed.
-pub async fn review_all(world: &World) {
-    let mut expected = Vec::new();
-    for path in HA_LIGHTS.iter().chain(OIII_LIGHTS.iter()) {
-        let asset = light(world, path).await;
-        expected.push(ExpectedAsset {
-            asset_id: asset.id,
-            decision_revision: asset.decision_revision,
-            fingerprint: asset.fingerprint,
-        });
-    }
-    world
-        .catalog()
-        .set_quality(&expected, Quality::Usable, InventoryProbe::default())
-        .await
-        .unwrap();
-}
-
-/// One frame-count goal on the Ha channel of the world's subject.
+/// One frame-count goal on the Ha channel of the Apply world's subject.
 pub async fn ha_goal(world: &World, goal_frames: u64) {
-    let project = project(world).await;
+    let project = world.catalog().project(world.project).await.unwrap();
     let goals = [GoalInput {
         target_id: project.subjects[0].target_id,
-        panel: None,
         group_id: None,
         goal: GoalSpec::FrameCount { channel: Some("Ha".into()), goal_frames },
     }];
     world.catalog().set_project_goals(project.id, project.revision, &goals).await.unwrap();
 }
 
-/// A second run on the world's subject and rig, saved with every candidate
-/// and moved to `stage` without running its automatic calibration match:
-/// every light group still awaits an acceptance.
-pub async fn unmatched_run(world: &World, stage: RunStage) -> Uuid {
-    let view = world.view().await;
-    let record = world
-        .catalog()
-        .create_view(&NewView {
-            project_id: view.project_id,
-            subject_id: view.subject_id,
-            rig_id: view.rig_id,
-            name: "Calibration check".into(),
-        })
-        .await
-        .unwrap();
-    let id = record.view.id;
-    world.catalog().save_view(id, 0, 1).await.unwrap();
-    world.catalog().set_view_stage(id, stage).await.unwrap();
-    id
-}
-
-/// Record a preparation revision of the world's run Running, as Prepare
-/// records it before writing any entry; nothing is written to disk and
-/// nothing settles, so no entry carries a basis.
-pub async fn running_preparation(world: &World) -> PreparationRevision {
-    let profile = world.siril("exit 0").await;
-    let request = world.request(&profile, InputMode::Copy, None);
-    let review = world.library.review_preparation(world.run, &request).await.unwrap();
-    let location = review.location.clone().unwrap();
-    let entries = review
-        .entries
-        .iter()
-        .map(|entry| NewPreparedEntry {
-            member_key: entry.member_key,
-            asset_id: entry.asset_id,
-            master_id: entry.master_id,
-            input: entry.input,
-            kind: entry.kind,
-            path: entry.path.clone(),
-            source: Some(entry.source.clone()),
-            size_bytes: entry.size_bytes,
-            basis: None,
-            header_changes: Vec::new(),
-            blocked: None,
-        })
-        .collect();
-    let input = NewPreparation {
-        view_id: world.run,
-        n: review.preparation_number,
-        membership_revision: review.membership_revision,
-        profile_id: profile.id,
-        mode: review.mode,
-        link: review.link,
-        output: location.output,
-        folder: location.folder,
-        results_folder: location.results,
-        canonical_folder: None,
-        canonical_results: None,
-        entries,
-    };
-    world.catalog().start_preparation(&input).await.unwrap().revision
-}
-
-/// A preparation revision of the world's run that ended Failed.
-pub async fn failed_preparation(world: &World) -> PreparationRevision {
-    let running = running_preparation(world).await;
+/// A Copy to Output the Apply world's Project reserved and never settled.
+pub async fn running_project_operation(world: &World) -> Uuid {
+    let id = Uuid::new_v4();
     world
-        .catalog()
-        .finish_preparation(running.id, PreparationState::Failed, Some("the profile crashed"))
-        .await
-        .unwrap()
-        .revision
-}
-
-/// Take the world's Captures location offline: its root is renamed and a scan
-/// finds it gone, so every light reads Offline.
-pub async fn captures_offline(world: &World) {
-    let root = world.captures.path.to_path_buf().unwrap();
-    fs::rename(&root, root.with_file_name("Captures unplugged")).unwrap();
-    let scan = world.library.start_scan(world.captures.id, None).await.unwrap();
-    assert_eq!(terminal(&world.library, scan.id).await.state, ScanState::Failed);
+        .sql(
+            "INSERT INTO project_operations (id, project_id, kind, state, reserved_at) \
+             VALUES (?1, ?2, 'copy_to_output', 'active', ?3)",
+            &[&id.to_string(), &world.project.to_string(), AT],
+        )
+        .await;
+    id
 }
 
 /// A previewed import of one light from a card folder, started: Running

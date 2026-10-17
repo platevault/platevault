@@ -1,19 +1,19 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Pure calibration rules (spec 068): classification, exact D13 criteria,
-//! candidate order, preselection and R13 applicability.
+//! Pure calibration rules (spec 068): classification, the exact D13
+//! criteria and the exposure mismatch the F4 session matcher's hard checks
+//! give.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
-use platevault_core::calibration::Rules;
+use platevault_core::calibration::{self, Rules};
 use platevault_core::{
-    Availability, CalibrationDecision, CalibrationPlan, CalibrationRules, CalibrationViewBasis,
-    CandidateRef, CaptureEvidence, CaptureMetadata, CriterionId, CriterionResult, EvidenceId,
-    FileIdentity, InputCandidate, InputEvidence, InputForm, InputKind, InputRef, InputState,
-    LightBasis, LightEvidence, MasterBasis, NativePath, ObservationFingerprint, PathSensitivity,
-    RequirementState, Resolution, Tolerance, UnresolvedReason, Verdict, VolumeIdentity,
+    CalibrationRules, CaptureEvidence, CaptureMetadata, CriterionId, CriterionResult, EvidenceField,
+    EvidenceId, InputEvidence, InputForm, InputKind, InputRef, LightEvidence, MasterBasis,
+    MatchCamera, NativePath, SessionInput, SessionLight, Tolerance, Verdict, WorkflowSettings,
 };
+use time::macros::date;
 use uuid::Uuid;
 
 fn path(text: &str) -> NativePath {
@@ -66,10 +66,6 @@ fn input(kind: InputKind, meta: &CaptureMetadata) -> InputEvidence {
 
 fn criterion(rows: &[CriterionResult], id: CriterionId) -> &CriterionResult {
     rows.iter().find(|row| row.criterion == id).unwrap_or_else(|| panic!("no {id:?} row"))
-}
-
-fn verdicts(rows: &[CriterionResult]) -> BTreeMap<CriterionId, Verdict> {
-    rows.iter().map(|row| (row.criterion, row.verdict)).collect()
 }
 
 // ── classify ─────────────────────────────────────────────────────────────────
@@ -286,465 +282,90 @@ fn camera_identity_needs_the_model_and_compares_body_ids_only_when_both_record_o
     assert_eq!(camera(&light_meta, &other_model).verdict, Verdict::Incompatible);
 }
 
-// ── plan ─────────────────────────────────────────────────────────────────────
+// ── exposure mismatch ────────────────────────────────────────────────────────
 
-fn fingerprint() -> ObservationFingerprint {
-    ObservationFingerprint {
-        identity: FileIdentity {
-            volume: VolumeIdentity {
-                filesystem: "apfs".into(),
-                stable_id: Some("vol".into()),
-                file_ids_stable: true,
-                case: PathSensitivity::Sensitive,
-                normalization: PathSensitivity::Sensitive,
-            },
-            file_id: Some("7".into()),
-        },
-        size_bytes: 2880,
-        modified_ns: 1,
-        content_sha256: Some("cd".repeat(32)),
+/// The light session of the quickstart rig, taken on 18 Sep 2026.
+fn session_light(meta: &CaptureMetadata) -> SessionLight {
+    SessionLight {
+        session_id: Uuid::from_u128(1),
+        capture: evidence(meta, None, None),
+        night: Some(date!(2026 - 09 - 18)),
+        camera: MatchCamera::Unlinked,
+        rig: None,
+        rotator_deg: None,
     }
 }
 
-fn available(members: u64) -> InputState {
-    InputState {
-        availability: Availability::Available,
-        members,
-        available_members: members,
-        excluded_members: 0,
-        superseded: false,
-        drifted: false,
-    }
-}
-
-fn light_basis(session: u128, meta: &CaptureMetadata, night: &str) -> LightBasis {
-    LightBasis {
-        evidence: LightEvidence {
-            session_id: Uuid::from_u128(session),
-            grouping_revision: 1,
-            capture: evidence(meta, Some(night), None),
-        },
-        included_assets: [Uuid::from_u128(session * 1000), Uuid::from_u128(session * 1000 + 1)]
-            .into(),
-        light_type_known: true,
-        product: false,
-    }
-}
-
-fn raw_set(
-    session: u128,
-    kind: InputKind,
-    meta: &CaptureMetadata,
-    night: Option<&str>,
-) -> InputCandidate {
-    InputCandidate {
-        candidate: CandidateRef::RawSet {
-            session_id: Uuid::from_u128(session),
-            grouping_revision: 1,
-        },
-        evidence: InputEvidence {
-            kind,
-            form: InputForm::RawSet,
-            capture: evidence(meta, night, None),
-        },
-        state: available(20),
-        master: None,
-        origin: None,
-    }
-}
-
-fn master(id: u128, kind: InputKind, meta: &CaptureMetadata) -> InputCandidate {
-    InputCandidate {
-        candidate: CandidateRef::Master { master_id: Uuid::from_u128(id), revision: 1 },
-        evidence: InputEvidence {
-            kind,
-            form: InputForm::Master,
-            capture: evidence(meta, None, None),
-        },
-        state: available(1),
-        master: None,
-        origin: None,
-    }
-}
-
-fn basis(
-    lights: Vec<LightBasis>,
-    candidates: Vec<InputCandidate>,
-    kinds: Vec<InputKind>,
-) -> CalibrationViewBasis {
-    CalibrationViewBasis {
-        view_id: Uuid::from_u128(500),
-        view_revision: 1,
-        plan: CalibrationPlan {
-            required_kinds: kinds,
-            ..CalibrationPlan::unplanned(Uuid::from_u128(500))
-        },
-        lights,
-        candidates,
-        decisions: Vec::new(),
-    }
-}
-
-#[test]
-fn each_requirement_preselects_one_available_compatible_candidate_in_r10_order() {
-    let rules = Rules;
-    let light_meta = capture("Light");
-    let dark = capture("Dark");
-    let far = raw_set(20, InputKind::Dark, &dark, Some("2026-09-28@date-loc-noon"));
-    let near_b = raw_set(22, InputKind::Dark, &dark, Some("2026-09-17@date-loc-noon"));
-    let near_a = raw_set(21, InputKind::Dark, &dark, Some("2026-09-19@date-loc-noon"));
-    let unknown_night = raw_set(19, InputKind::Dark, &dark, None);
-    let short = raw_set(
-        18,
-        InputKind::Dark,
-        &CaptureMetadata { exposure_seconds: Some(120.0), ..dark.clone() },
-        Some("2026-09-18@date-loc-noon"),
-    );
-    let plan = rules.plan(&basis(
-        vec![light_basis(1, &light_meta, "2026-09-18@date-loc-noon")],
-        vec![far, near_b, unknown_night, short, near_a],
-        vec![InputKind::Dark],
-    ));
-    assert_eq!((plan.view_id, plan.plan_revision), (Uuid::from_u128(500), 0));
-    let [requirement] = plan.requirements.as_slice() else { panic!("{plan:#?}") };
-    let order: Vec<Uuid> = requirement.candidates.iter().map(|c| c.candidate.id()).collect();
-    assert_eq!(
-        order,
-        [21, 22, 20, 19, 18].map(Uuid::from_u128),
-        "night distance, unknown nights last, list order by ID; incompatible after compatible"
-    );
-    assert_eq!(requirement.candidates[0].night_distance_days, Some(1));
-    assert_eq!(requirement.candidates[3].night_distance_days, None);
-    // D-W5: 21 and 22 rank equal (one day each, both raw sets): no single top input.
-    assert_eq!(requirement.state, RequirementState::NeedsReview);
-    assert_eq!(requirement.reason, Some(UnresolvedReason::RankingTie));
-    assert_eq!(requirement.preselected, None);
-    assert_eq!(requirement.automatic, None);
-    assert!(requirement.candidates.iter().all(|c| !c.preselected));
-    assert!(requirement.effective.is_none());
-    assert_eq!(plan.handoff().assignments.len(), 0);
-
-    // Without the tie the nearest night is the single top input.
-    let single = rules.plan(&basis(
-        vec![light_basis(1, &light_meta, "2026-09-18@date-loc-noon")],
-        vec![
-            raw_set(21, InputKind::Dark, &dark, Some("2026-09-19@date-loc-noon")),
-            raw_set(20, InputKind::Dark, &dark, Some("2026-09-28@date-loc-noon")),
-        ],
-        vec![InputKind::Dark],
-    ));
-    let requirement = &single.requirements[0];
-    assert_eq!(requirement.state, RequirementState::Suggested);
-    assert_eq!(
-        requirement.preselected,
-        Some(CandidateRef::RawSet { session_id: Uuid::from_u128(21), grouping_revision: 1 })
-    );
-    assert_eq!(requirement.candidates.iter().filter(|c| c.preselected).count(), 1);
-    assert!(requirement.effective.is_none(), "a suggestion is never accepted");
-
-    // Ties put adopted masters before raw sets: both nights unknown.
-    let tie = rules.plan(&basis(
-        vec![light_basis(1, &light_meta, "2026-09-18@date-loc-noon")],
-        vec![raw_set(5, InputKind::Dark, &dark, None), master(9, InputKind::Dark, &dark)],
-        vec![InputKind::Dark],
-    ));
-    assert_eq!(tie.requirements[0].candidates[0].candidate.form(), InputForm::Master);
-    assert_eq!(tie.requirements[0].preselected.unwrap().id(), Uuid::from_u128(9));
-}
-
-#[test]
-fn unavailable_and_unadopted_candidates_are_never_preselected() {
-    let rules = Rules;
-    let light_meta = capture("Light");
-    let dark = capture("Dark");
-    let mut offline = raw_set(21, InputKind::Dark, &dark, Some("2026-09-18@date-loc-noon"));
-    offline.state.availability = Availability::Offline;
-    let mut partial = raw_set(22, InputKind::Dark, &dark, Some("2026-09-18@date-loc-noon"));
-    partial.state.available_members = 19;
-    partial.state.availability = Availability::Missing;
-    let candidate = InputCandidate {
-        candidate: CandidateRef::Candidate { asset_id: Uuid::from_u128(23) },
-        evidence: InputEvidence {
-            kind: InputKind::Dark,
-            form: InputForm::Candidate,
-            capture: evidence(&dark, Some("2026-09-18@date-loc-noon"), None),
-        },
-        state: available(1),
-        master: None,
-        origin: None,
-    };
-    let plan = rules.plan(&basis(
-        vec![light_basis(1, &light_meta, "2026-09-18@date-loc-noon")],
-        vec![
-            offline,
-            partial,
-            candidate,
-            raw_set(30, InputKind::Dark, &dark, Some("2026-10-30@date-loc-noon")),
-        ],
-        vec![InputKind::Dark],
-    ));
-    let requirement = &plan.requirements[0];
-    assert_eq!(
-        requirement.preselected.unwrap().id(),
-        Uuid::from_u128(30),
-        "the only available one"
-    );
-    assert_eq!(requirement.unadopted.len(), 1);
-    assert_eq!(requirement.unadopted[0].evaluation.verdict, Verdict::Compatible);
-    assert!(!requirement.unadopted[0].preselected);
-    assert!(requirement.candidates.iter().all(|c| c.candidate.form() != InputForm::Candidate));
-
-    let only_offline = rules.plan(&basis(
-        vec![light_basis(1, &light_meta, "2026-09-18@date-loc-noon")],
-        vec![{
-            let mut c = raw_set(21, InputKind::Dark, &dark, None);
-            c.state.availability = Availability::Offline;
-            c.state.available_members = 0;
-            c
-        }],
-        vec![InputKind::Dark],
-    ));
-    assert_eq!(only_offline.requirements[0].state, RequirementState::NeedsReview);
-    assert_eq!(only_offline.requirements[0].reason, Some(UnresolvedReason::InputUnavailable));
-}
-
-#[test]
-fn unresolved_reasons_name_what_blocks_each_requirement() {
-    let rules = Rules;
-    let light_meta = capture("Light");
-    let bare_flat = CaptureMetadata { telescope: None, focal_length_mm: None, ..capture("Flat") };
-    let mut unknown_light = light_basis(
-        2,
-        &CaptureMetadata { image_type: None, ..light_meta.clone() },
-        "2026-09-24@date-loc-noon",
-    );
-    unknown_light.light_type_known = false;
-    let mut product = light_basis(3, &light_meta, "2026-09-24@date-loc-noon");
-    product.product = true;
-    let plan = rules.plan(&basis(
-        vec![light_basis(1, &light_meta, "2026-09-24@date-loc-noon"), unknown_light, product],
-        vec![raw_set(40, InputKind::Flat, &bare_flat, Some("2026-09-26@date-loc-noon"))],
-        vec![InputKind::Dark, InputKind::Flat],
-    ));
-    let states: Vec<_> = plan
-        .requirements
-        .iter()
-        .map(|r| (r.light_session_ids[0].as_u128(), r.kind, r.state, r.reason))
-        .collect();
-    assert_eq!(
-        states,
-        [
-            (
-                2,
-                InputKind::Dark,
-                RequirementState::NeedsReview,
-                Some(UnresolvedReason::LightTypeUnknown)
-            ),
-            (
-                2,
-                InputKind::Flat,
-                RequirementState::NeedsReview,
-                Some(UnresolvedReason::LightTypeUnknown)
-            ),
-            (
-                1,
-                InputKind::Dark,
-                RequirementState::NeedsReview,
-                Some(UnresolvedReason::NoCandidate)
-            ),
-            (
-                1,
-                InputKind::Flat,
-                RequirementState::NeedsReview,
-                Some(UnresolvedReason::CriterionUnknown)
-            ),
-        ],
-        "an unknown-type light is its own light group; a product makes no requirement"
-    );
-    let flat = &plan.requirements[3];
-    assert_eq!(flat.preselected, None);
-    assert_eq!(flat.candidates[0].evaluation.blocking(), [CriterionId::OpticalTrain]);
-
-    let incompatible = rules.plan(&basis(
-        vec![light_basis(1, &light_meta, "2026-09-24@date-loc-noon")],
-        vec![raw_set(
-            41,
-            InputKind::Flat,
-            &CaptureMetadata { filter: Some("OIII".into()), ..capture("Flat") },
-            None,
-        )],
-        vec![InputKind::Flat],
-    ));
-    assert_eq!(incompatible.requirements[0].reason, Some(UnresolvedReason::CriterionIncompatible));
-
-    let none = rules.plan(&basis(
-        vec![light_basis(1, &light_meta, "2026-09-24@date-loc-noon")],
-        Vec::new(),
-        Vec::new(),
-    ));
-    assert!(none.requirements.is_empty(), "an empty required-kinds set makes no requirement");
-    assert!(none.handoff().ready);
-}
-
-fn decision(
-    light: &LightBasis,
-    kind: InputKind,
-    resolution: Resolution,
-    input: InputRef,
-    criteria: Vec<CriterionResult>,
-    reason: Option<&str>,
-) -> CalibrationDecision {
-    CalibrationDecision {
-        id: Uuid::from_u128(900),
-        view_id: Uuid::from_u128(500),
-        view_revision: 1,
-        light_group: platevault_core::LightGroupKey::of(light),
-        light_session_ids: [light.evidence.session_id].into(),
-        light_asset_ids: light.included_assets.clone(),
+/// A raw set of `kind` taken two days after the lights.
+fn session_input(session: u128, kind: InputKind, meta: &CaptureMetadata) -> SessionInput {
+    SessionInput {
+        input: InputRef::RawSet { session_id: Uuid::from_u128(session), grouping_revision: 1 },
         kind,
-        resolution,
-        input: Some(input),
-        inputs: vec![platevault_core::CalibrationInputFile {
-            asset_id: Some(Uuid::from_u128(901)),
-            master_id: None,
-            location_id: Uuid::from_u128(5),
-            relative_path: path("darks/dark_001.fits"),
-            fingerprint: fingerprint(),
-        }],
-        criteria,
-        reason: reason.map(str::to_owned),
-        plan_revision: 1,
-        decided_at: "2026-10-05T10:00:00Z".into(),
+        capture: evidence(meta, None, None),
+        captured: Some(date!(2026 - 09 - 20)),
+        camera: MatchCamera::Unlinked,
+        rig_version_id: None,
+        rotator_deg: vec![None],
+        files: Vec::new(),
+        available: true,
     }
 }
 
-/// A plan at View revision 2 holding `decision` made at revision 1.
-fn at_revision_two(
-    lights: Vec<LightBasis>,
-    candidates: Vec<InputCandidate>,
-    kind: InputKind,
-    decision: CalibrationDecision,
-) -> platevault_core::CalibrationViewPlan {
-    let mut basis = basis(lights, candidates, vec![kind]);
-    basis.view_revision = 2;
-    basis.decisions = vec![decision];
-    Rules.plan(&basis)
+fn dark_of(exposure: f64) -> CaptureMetadata {
+    CaptureMetadata { exposure_seconds: Some(exposure), ..capture("Dark") }
 }
 
+/// The canonical exposure text evidence records for `meta`.
+fn exposure_text(meta: &CaptureMetadata) -> String {
+    evidence(meta, None, None).get(EvidenceField::Exposure).unwrap().value.clone()
+}
+
+/// PRJ-FR-11 (record §7 line 165: matching moves to ingestion): when every
+/// dark fails the hard checks on exposure alone, the warning names the
+/// light's channel and both exposures. The session matcher shares those hard
+/// checks, so it offers none of these darks.
 #[test]
-fn decisions_apply_to_a_later_revision_only_while_their_basis_holds() {
-    let rules = Rules;
+fn darks_differing_only_in_exposure_are_an_exposure_mismatch() {
+    let settings = WorkflowSettings::default();
     let light_meta = capture("Light");
-    let dark = capture("Dark");
-    let lights = vec![light_basis(1, &light_meta, "2026-09-18@date-loc-noon")];
-    let candidate = raw_set(20, InputKind::Dark, &dark, Some("2026-09-18@date-loc-noon"));
-    let input = candidate.candidate.input().unwrap();
-    let current = rules.evaluate(InputKind::Dark, &lights[0].evidence, &candidate.evidence);
-    let at_revision_two = |lights, candidates, decision| {
-        at_revision_two(lights, candidates, InputKind::Dark, decision)
-    };
-    let accepted =
-        decision(&lights[0], InputKind::Dark, Resolution::Accepted, input, current.criteria, None);
+    let light = session_light(&light_meta);
+    let darks = [
+        session_input(20, InputKind::Dark, &dark_of(120.0)),
+        session_input(21, InputKind::Dark, &dark_of(600.0)),
+    ];
 
-    let applies = at_revision_two(lights.clone(), vec![candidate.clone()], accepted.clone());
-    let requirement = &applies.requirements[0];
-    assert_eq!(requirement.state, RequirementState::Accepted);
-    let effective = requirement.effective.as_ref().unwrap();
-    assert!(effective.applicable);
-    assert_eq!(effective.decided_at_revision, 1);
-    let handoff = applies.handoff();
-    assert!(handoff.ready);
-    assert_eq!(handoff.assignments[0].inputs.len(), 1);
+    let mismatch = calibration::exposure_mismatch(&light, &darks, &settings).unwrap();
 
-    let mut changed = lights.clone();
-    changed[0].included_assets.remove(&Uuid::from_u128(1001));
-    let membership = at_revision_two(changed, vec![candidate.clone()], accepted.clone());
-    assert_eq!(membership.requirements[0].state, RequirementState::NeedsReview);
-    assert_eq!(membership.requirements[0].reason, Some(UnresolvedReason::LightMembershipChanged));
-    assert!(!membership.requirements[0].effective.as_ref().unwrap().applicable);
-    assert!(!membership.handoff().ready);
-
-    let mut drifted = candidate.clone();
-    drifted.evidence.capture = evidence(&CaptureMetadata { gain: None, ..dark }, None, None);
-    let verdict_changed = at_revision_two(lights.clone(), vec![drifted], accepted.clone());
+    assert_eq!(mismatch.channel.as_deref(), Some("Ha"));
+    assert_eq!(mismatch.light_exposures, [exposure_text(&light_meta)].into());
     assert_eq!(
-        verdict_changed.requirements[0].reason,
-        Some(UnresolvedReason::InputEvidenceChanged)
+        mismatch.dark_exposures,
+        [exposure_text(&dark_of(120.0)), exposure_text(&dark_of(600.0))].into()
     );
-
-    let mut superseded = candidate.clone();
-    superseded.state.superseded = true;
-    let superseded = at_revision_two(lights.clone(), vec![superseded], accepted.clone());
-    assert_eq!(superseded.requirements[0].reason, Some(UnresolvedReason::InputEvidenceChanged));
-
-    let gone = at_revision_two(lights.clone(), Vec::new(), accepted.clone());
-    assert_eq!(gone.requirements[0].reason, Some(UnresolvedReason::InputUnavailable));
-
-    // A withdrawal ends the effective decision: the suggestion is back.
-    let withdrawn = CalibrationDecision {
-        resolution: Resolution::Withdrawn,
-        input: None,
-        inputs: Vec::new(),
-        criteria: Vec::new(),
-        ..accepted
-    };
-    let after = at_revision_two(lights, vec![candidate], withdrawn);
-    assert_eq!(after.requirements[0].state, RequirementState::Suggested);
-    assert!(after.requirements[0].effective.is_none());
-    assert_eq!(after.handoff().unresolved[0].reason, UnresolvedReason::SuggestionUnaccepted);
+    let offered = Rules.match_session(InputKind::Dark, &light, &darks, &settings);
+    assert_eq!(offered.offers, [], "a dark of another exposure is never offered");
 }
 
+/// PRJ-FR-11: a dark of the lights' exposure clears the warning; a dark that
+/// differs in anything besides exposure, and every flat or bias, never
+/// counts; with no such dark there is no mismatch.
 #[test]
-fn an_exception_keeps_its_snapshot_criteria_and_reason() {
-    let rules = Rules;
-    let lights = vec![light_basis(1, &capture("Light"), "2026-09-24@date-loc-noon")];
-    let bare_flat = CaptureMetadata { telescope: None, focal_length_mm: None, ..capture("Flat") };
-    let flat = raw_set(30, InputKind::Flat, &bare_flat, Some("2026-09-26@date-loc-noon"));
-    let flat_eval = rules.evaluate(InputKind::Flat, &lights[0].evidence, &flat.evidence);
-    assert_eq!(flat_eval.verdict, Verdict::Unknown);
-    let exception = decision(
-        &lights[0],
-        InputKind::Flat,
-        Resolution::Exception,
-        flat.candidate.input().unwrap(),
-        flat_eval.criteria,
-        Some("Same rotation as 26 Sep; train not changed"),
-    );
-    let excepted = at_revision_two(lights, vec![flat], InputKind::Flat, exception.clone());
-    let requirement = &excepted.requirements[0];
-    assert_eq!(requirement.state, RequirementState::Excepted);
-    let effective = requirement.effective.as_ref().unwrap();
-    assert_eq!(effective.decision.criteria, exception.criteria);
-    assert_eq!(effective.decision.reason, exception.reason);
-    assert_eq!(
-        verdicts(&effective.decision.criteria)[&CriterionId::OpticalTrain],
-        Verdict::Unknown
-    );
-    let handoff = excepted.handoff();
-    assert!(handoff.ready);
-    assert_eq!(
-        handoff.assignments[0].reason.as_deref(),
-        Some("Same rotation as 26 Sep; train not changed")
-    );
-}
+fn exposure_mismatch_needs_every_otherwise_compatible_dark_to_differ() {
+    let settings = WorkflowSettings::default();
+    let light = session_light(&capture("Light"));
+    let other = session_input(20, InputKind::Dark, &dark_of(120.0));
+    let same = session_input(21, InputKind::Dark, &dark_of(300.0));
+    let gain = CaptureMetadata { gain: Some(0.0), ..dark_of(120.0) };
+    let flat = CaptureMetadata { exposure_seconds: Some(2.0), ..capture("Flat") };
+    let bias = CaptureMetadata { exposure_seconds: Some(0.001), ..capture("Bias") };
+    let mismatch =
+        |darks: &[SessionInput]| calibration::exposure_mismatch(&light, darks, &settings);
 
-#[test]
-fn availability_and_quality_are_evidence_beside_the_criteria() {
-    let rules = Rules;
-    let light_meta = capture("Light");
-    let mut candidate =
-        raw_set(20, InputKind::Dark, &capture("Dark"), Some("2026-09-20@date-loc-noon"));
-    candidate.state.excluded_members = 2;
-    let plan = rules.plan(&basis(
-        vec![light_basis(1, &light_meta, "2026-09-18@date-loc-noon")],
-        vec![candidate],
-        vec![InputKind::Dark],
-    ));
-    let rows = &plan.requirements[0].candidates[0].evaluation.evidence;
-    let ids: BTreeSet<EvidenceId> = rows.iter().map(|row| row.evidence).collect();
-    for id in [EvidenceId::NightDistance, EvidenceId::Availability, EvidenceId::Quality] {
-        assert!(ids.contains(&id), "{id:?} in {rows:#?}");
-    }
-    let night = rows.iter().find(|row| row.evidence == EvidenceId::NightDistance).unwrap();
-    assert!(night.note.as_deref().unwrap().contains('2'), "{night:?}");
+    assert_eq!(mismatch(&[other.clone(), same]), None, "a 300 s dark matches");
+    assert_eq!(mismatch(&[session_input(22, InputKind::Dark, &gain)]), None, "gain differs too");
+    let flat_and_bias =
+        [session_input(23, InputKind::Flat, &flat), session_input(24, InputKind::Bias, &bias)];
+    assert_eq!(mismatch(&flat_and_bias), None, "only darks count");
+    assert_eq!(mismatch(&[]), None);
+    assert!(mismatch(&[other, session_input(25, InputKind::Dark, &gain)]).is_some());
 }
