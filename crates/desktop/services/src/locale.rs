@@ -78,25 +78,38 @@ impl ActiveLocale {
 }
 
 /// Parsed strings shared between notifications and the updater.
+#[derive(Debug, Deserialize)]
 pub struct NotificationMessages {
     #[serde(rename = "notification_target_resolution_title")]
     pub target_resolution_title: String,
     #[serde(rename = "notification_target_resolution_body")]
     pub target_resolution_body: String,
+    #[serde(rename = "notification_target_resolution_body_singular")]
+    pub target_resolution_body_singular: String,
     #[serde(rename = "notification_plan_apply_title")]
     pub plan_apply_title: String,
     #[serde(rename = "notification_plan_applied_body")]
     pub plan_state_applied: String,
+    #[serde(rename = "notification_plan_applied_body_singular")]
+    pub plan_state_applied_singular: String,
     #[serde(rename = "notification_plan_partially_applied_body")]
     pub plan_state_partially_applied: String,
+    #[serde(rename = "notification_plan_partially_applied_body_singular")]
+    pub plan_state_partially_applied_singular: String,
     #[serde(rename = "notification_plan_failed_body")]
     pub plan_state_failed: String,
+    #[serde(rename = "notification_plan_failed_body_singular")]
+    pub plan_state_failed_singular: String,
     #[serde(rename = "notification_plan_cancelled_body")]
     pub plan_state_cancelled: String,
+    #[serde(rename = "notification_plan_cancelled_body_singular")]
+    pub plan_state_cancelled_singular: String,
     #[serde(rename = "notification_workflow_run_title")]
     pub workflow_run_title: String,
     #[serde(rename = "notification_workflow_run_body")]
     pub workflow_run_body: String,
+    #[serde(rename = "notification_workflow_run_body_singular")]
+    pub workflow_run_body_singular: String,
     #[serde(rename = "update_admin_prompt")]
     pub update_admin_prompt: String,
     #[serde(rename = "update_notification_install_failed_title")]

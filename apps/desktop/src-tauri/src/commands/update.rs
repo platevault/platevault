@@ -118,8 +118,8 @@ pub async fn update_install_on_quit(app: AppHandle) -> Result<(), ContractError>
 #[tauri::command]
 #[specta::specta]
 #[allow(clippy::needless_pass_by_value)] // Tauri injects arguments by value
-pub fn update_set_locale(app: AppHandle, locale_tag: String) -> Result<(), ContractError> {
-    set_active_locale(app.try_state::<ActiveLocale>().as_deref(), &locale_tag);
+pub fn update_set_locale(app: AppHandle, locale: String) -> Result<(), ContractError> {
+    set_active_locale(app.try_state::<ActiveLocale>().as_deref(), &locale);
     Ok(())
 }
 
@@ -140,10 +140,11 @@ mod tests {
 
     #[test]
     fn update_locale_command_seam_changes_the_managed_locale() {
-        let locale = ActiveLocale::new();
-        update_locale(Some(&locale), "pt-BR");
-        assert_eq!(locale.get().tag, "pt-BR");
-        update_locale(Some(&locale), "de-DE");
-        assert_eq!(locale.get().tag, "en-GB");
+        let shared = ActiveLocale::new();
+        let managed = shared.clone();
+        update_locale(Some(&managed), "pt-BR");
+        assert_eq!(shared.get().tag, "pt-BR");
+        update_locale(Some(&managed), "de-DE");
+        assert_eq!(shared.get().tag, "en-GB");
     }
 }

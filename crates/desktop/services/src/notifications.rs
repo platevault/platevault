@@ -58,7 +58,14 @@ impl Wording {
         let messages = self.messages;
         Notice {
             title: messages.target_resolution_title.clone(),
-            body: locale::fill(&messages.target_resolution_body, &[("count", &count.to_string())]),
+            body: locale::fill(
+                if count == 1 {
+                    &messages.target_resolution_body_singular
+                } else {
+                    &messages.target_resolution_body
+                },
+                &[("count", &count.to_string())],
+            ),
         }
     }
 
@@ -250,7 +257,11 @@ fn notification_for(
             Some(Notice {
                 title: messages.workflow_run_title.clone(),
                 body: locale::fill(
-                    &messages.workflow_run_body,
+                    if event.artifact_ids.len() == 1 {
+                        &messages.workflow_run_body_singular
+                    } else {
+                        &messages.workflow_run_body
+                    },
                     &[("name", &event.tool_id), ("count", &event.artifact_ids.len().to_string())],
                 ),
             })
@@ -264,6 +275,12 @@ fn notification_for(
 fn plan_apply_body(payload: &serde_json::Value, messages: &NotificationMessages) -> Option<String> {
     let event: PlanApplyingCompleted = serde_json::from_value(payload.clone()).ok()?;
     let message = match event.terminal_state.as_str() {
+        "applied" if event.items_applied == 1 => &messages.plan_state_applied_singular,
+        "partially_applied" if event.items_applied == 1 => {
+            &messages.plan_state_partially_applied_singular
+        }
+        "failed" if event.items_applied == 1 => &messages.plan_state_failed_singular,
+        "cancelled" if event.items_applied == 1 => &messages.plan_state_cancelled_singular,
         "applied" => &messages.plan_state_applied,
         "partially_applied" => &messages.plan_state_partially_applied,
         "failed" => &messages.plan_state_failed,
@@ -293,9 +310,9 @@ mod tests {
             locale,
         );
         notifier.locale.set_locale("pt-BR");
-        assert_eq!(notifier.wording().target_resolution(1).body, "Alvos da fila resolvidos: 1.");
+        assert_eq!(notifier.wording().target_resolution(1).body, "Alvo da fila resolvido: 1.");
         notifier.locale.set_locale("de-DE");
-        assert_eq!(notifier.wording().target_resolution(1).body, "Queued target(s) resolved: 1.");
+        assert_eq!(notifier.wording().target_resolution(1).body, "1 queued target resolved.");
     }
 
     #[test]
@@ -304,7 +321,16 @@ mod tests {
             let messages = locale::notification_messages(shipped);
             let wording = Wording::from_locale(shipped);
             let notification = wording.target_resolution(1);
-            assert!(!notification.body.contains('{'), "{}", shipped.tag);
+            assert_eq!(
+                notification.body,
+                if shipped.tag == "pt-BR" {
+                    "Alvo da fila resolvido: 1."
+                } else {
+                    "1 queued target resolved."
+                },
+                "{}",
+                shipped.tag
+            );
             let prompt = wording.admin_prompt("0.7.0");
             assert!(prompt.contains("PlateVault") && prompt.contains("0.7.0"), "{prompt}");
             assert!(!prompt.contains('{'), "every placeholder is filled: {prompt}");
@@ -330,10 +356,39 @@ mod tests {
                 shipped.tag,
                 plan_notification.body
             );
+            let plan_one = notification_for(
+                TOPIC_PLAN_APPLYING_COMPLETED,
+                &plan_completion_payload_with_applied(1),
+                messages,
+            )
+            .expect("single-item plan notification");
+            assert_eq!(
+                plan_one.body,
+                if shipped.tag == "pt-BR" {
+                    "Plano parcialmente aplicado: 1 item(ns) aplicado(s), 1 falha(s) e 2 ignorado(s)."
+                } else {
+                    "Plan partly applied: 1 item applied, 1 failure(s), 2 skipped."
+                },
+                "{}",
+                shipped.tag
+            );
             let workflow =
                 notification_for(TOPIC_WORKFLOW_RUN_COMPLETED, &workflow_run_payload(), messages)
                     .expect("notification workflow body");
             assert!(!workflow.body.contains('{'), "{}: {}", shipped.tag, workflow.body);
+            let workflow_one =
+                notification_for(TOPIC_WORKFLOW_RUN_COMPLETED, &workflow_run_payload(), messages)
+                    .expect("single-artifact workflow notification");
+            assert_eq!(
+                workflow_one.body,
+                if shipped.tag == "pt-BR" {
+                    "Novo artefato atribuído por siril: 1."
+                } else {
+                    "New artifact attributed by siril: 1."
+                },
+                "{}",
+                shipped.tag
+            );
         }
     }
     #[test]
@@ -384,6 +439,11 @@ mod tests {
             "at": "2026-08-20T00:00:00Z",
         })
     }
+    fn plan_completion_payload_with_applied(applied: usize) -> serde_json::Value {
+        let mut payload = plan_completion_payload();
+        payload["itemsApplied"] = serde_json::json!(applied);
+        payload
+    }
 
     #[test]
     fn plan_notification_renders_in_portuguese() {
@@ -392,14 +452,14 @@ mod tests {
         let wording = Wording::from_active(&locale);
         let notification = notification_for(
             TOPIC_PLAN_APPLYING_COMPLETED,
-            &plan_completion_payload(),
+            &plan_completion_payload_with_applied(1),
             wording.messages(),
         )
         .expect("plan notification");
         assert_eq!(notification.title, "Aplicação do plano concluída");
         assert_eq!(
             notification.body,
-            "Plano parcialmente aplicado: 3 item(ns) aplicado(s), 1 falha(s) e 2 ignorado(s)."
+            "Plano parcialmente aplicado: 1 item(ns) aplicado(s), 1 falha(s) e 2 ignorado(s)."
         );
     }
 
@@ -445,9 +505,9 @@ mod tests {
         serde_json::json!({
             "projectId": "prj-1",
             "toolId": "siril",
+            "artifactIds": ["a-1"],
             "toolLaunchId": "tl-1",
             "completedAt": "2026-08-20T00:00:00Z",
-            "artifactIds": ["a-1"],
         })
     }
 
@@ -478,7 +538,7 @@ mod tests {
             ),
             Some(Notice {
                 title: "Workflow run finished".to_owned(),
-                body: "New artifacts attributed by siril: 1.".to_owned()
+                body: "New artifact attributed by siril: 1.".to_owned()
             }),
         );
     }
