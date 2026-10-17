@@ -8,7 +8,7 @@ import {
   fixtureShell,
   fixtureStart,
   sharedFocusRing,
-} from './focusRingFixture.css';
+} from './__tests__/focusRingFixture.css';
 
 function FocusRingFixture() {
   return (
