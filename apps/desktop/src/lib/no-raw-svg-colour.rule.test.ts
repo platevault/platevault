@@ -1,7 +1,11 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { describe, it, expect } from 'vitest';
 import { Linter } from 'eslint';
 import tseslint from 'typescript-eslint';
 import plugin from '../../eslint-rules/no-raw-svg-colour.js';
+// The local ESLint rule forbidding raw SVG presentation-attribute colours.
 const tsParser = tseslint.parser;
 
 function lint(code: string) {
@@ -232,5 +236,27 @@ describe('svg/no-raw-svg-colour', () => {
     );
 
     expect(diagnostics).toHaveLength(1);
+  });
+
+  it('unwraps TypeScript as assertions and satisfies expressions', () => {
+    const assertion = lint("const svg = <svg fill={'#fff' as string} />;");
+    const satisfies = lint(
+      "const svg = <svg fill={'#fff' satisfies string} />;",
+    );
+
+    expect(assertion).toHaveLength(1);
+    expect(satisfies).toHaveLength(1);
+  });
+
+  it('unwraps parenthesized and optional-chain paint expressions', () => {
+    const parenthesized = lint(
+      "const svg = <svg fill={(dark ? '#fff' : token)} />;",
+    );
+    const optionalChain = lint(
+      "const svg = <svg fill={theme?.raw ?? '#fff'} />;",
+    );
+
+    expect(parenthesized).toHaveLength(1);
+    expect(optionalChain).toHaveLength(1);
   });
 });

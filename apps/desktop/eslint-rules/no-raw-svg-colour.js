@@ -62,20 +62,17 @@ function isSvgPresentationElement(node) {
     return false;
   }
 
+  const isIntrinsic = (name) => /^[a-z]/.test(name);
   const name = element.openingElement.name.name;
-  if (!/^[a-z]/.test(name)) return false;
+  if (!isIntrinsic(name)) return false;
   const normalizedName = name.toLowerCase();
   if (normalizedName === 'svg' || SVG_ELEMENTS.has(normalizedName)) return true;
 
   let ancestor = element.parent;
   while (ancestor) {
-    if (ancestor.type === 'JSXExpressionContainer') {
-      ancestor = ancestor.parent;
-      continue;
-    }
     if (ancestor.type === 'JSXElement') {
       const ancestorName = ancestor.openingElement.name;
-      if (ancestorName.type !== 'JSXIdentifier' || !/^[a-z]/.test(ancestorName.name)) {
+      if (ancestorName.type !== 'JSXIdentifier' || !isIntrinsic(ancestorName.name)) {
         return false;
       }
       const normalizedAncestorName = ancestorName.name.toLowerCase();
@@ -136,6 +133,11 @@ function reportRawColorsInExpression(expression, report) {
         }
       }
       return;
+    case 'ChainExpression':
+    case 'ParenthesizedExpression':
+    case 'TSAsExpression':
+    case 'TSSatisfiesExpression':
+    case 'TypeCastExpression':
     case 'TSNonNullExpression':
       reportRawColorsInExpression(expression.expression, report);
       return;
