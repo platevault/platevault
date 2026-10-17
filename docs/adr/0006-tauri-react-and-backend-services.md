@@ -46,4 +46,4 @@ The research considered OS-native UI libraries behind a per-OS abstraction, Flut
 
 ## Consequences
 
-The UI composition rebuild remains in React. The services crate keeps a later switch possible.
+The UI composition rebuild remains in React. The services crate keeps a later switch possible. crates/desktop/services holds the desktop backend services that need no UI framework, and the desktop shell only adapts them. No Tauri framework crate, flutter_rust_bridge or raw-window-handle may enter the services crate's dependency graph, which crates/desktop/services/tests/dependency_boundary.rs enforces (docs/architecture/scaffold.md:32-37, crates/desktop/services/src/lib.rs:4-15).
