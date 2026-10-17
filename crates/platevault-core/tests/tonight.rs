@@ -4,10 +4,9 @@
 //! Tonight over the library facade (spec 072 PLAN-FR-11, PLAN-AC-11/12,
 //! PV-PLAN-SC-04, D-W39, D-W63): the best window tonight of each ★ favourite
 //! and each open-Project subject at the default site, each equal to the Plan
-//! area's best window, the Moon and the darkness window naming the site and
-//! zone, Targets without a window left out, a mosaic planned at its subject
-//! Target, and no windows with "Add an observing site in Settings" without a
-//! default site.
+//! zone, Targets without a window left out, a subject with panel groups planned
+//! at its Target, and no windows with "Add an observing site in Settings"
+//! without a default site.
 
 use std::path::Path;
 use std::sync::Arc;
@@ -16,6 +15,7 @@ use platevault_core::library::Library;
 use platevault_core::targets::{user_target, ObjectType, TargetQuery, UserTargetInput, ICRS_FRAME};
 use platevault_core::tonight::{Tonight, TonightQuery, TonightWindow};
 use platevault_core::*;
+use persistence_library::NewGroup;
 use time::macros::date;
 use time::Date;
 use uuid::Uuid;
@@ -112,7 +112,7 @@ async fn project(library: &Library, name: &str, subjects: Vec<SubjectInput>) -> 
 }
 
 fn subject(target_id: Uuid) -> SubjectInput {
-    SubjectInput { target_id, name: None, mosaic: false, panels: Vec::new() }
+    SubjectInput { target_id, name: None }
 }
 
 /// The Plan area's best window tonight: the longest, then the highest peak.
@@ -224,30 +224,34 @@ async fn tonight_omits_targets_without_window() {
     assert!(!tonight.has_window(south) && !tonight.has_window(unknown));
 }
 
-/// PLAN-FR-11, D-W63: a mosaic subject's window uses the mosaic's centre, the
-/// subject Target's position, not its panels: with both panels far below the
-/// horizon, NGC 7000 is listed once with the Plan area's best window of its
-/// Target.
+/// with a Project panel group once, without making a separate row for the group.
 #[tokio::test]
-async fn mosaic_uses_centre() {
+async fn subject_uses_target_position_once() {
     let temp = tempfile::tempdir().unwrap();
     let library = open(&temp.path().join("library.sqlite")).await;
     let backyard = default_site(&library, "Backyard").await;
     let ngc7000 = seed(&library, "NGC 7000").await;
     library.catalog().record_seed_target(&ngc7000).await.unwrap();
-    let panels = (1..=2)
-        .map(|number| PanelInput {
-            number,
-            ra_deg: 84.0 + f64::from(number),
-            dec_deg: -75.0,
-            rotation_deg: None,
-        })
-        .collect();
-    let mosaic = SubjectInput { target_id: ngc7000.id, name: None, mosaic: true, panels };
-    project(&library, "Cygnus mosaic", vec![mosaic]).await;
-
+    let project = project(&library, "Cygnus", vec![subject(ngc7000.id)]).await;
+    let group = NewGroup {
+        id: Uuid::new_v4(),
+        rig_id: project.rig_ids[0],
+        name: GroupName::new("Panel 1").unwrap(),
+        origin: GroupOrigin::User,
+        optics: OpticsSignature::new(None, Some(550.0), None).unwrap(),
+        framing: None,
+    };
+    let catalog = library.catalog();
+    let desired = catalog.project_desired(project.id).await.unwrap();
+    let grouped = catalog.create_project_group(project.id, desired.revision, &group, &[]).await.unwrap();
+    library
+        .set_project_group_panel(project.id, grouped.revision, group.id, true, None)
+        .await
+        .unwrap();
     let tonight = library.tonight(&query()).await.unwrap();
-    assert_eq!(ids(&tonight), [ngc7000.id], "one window for the mosaic, none per panel");
+    assert_eq!(ids(&tonight), [ngc7000.id], "one window per Project subject, not panel");
+    let outline = library.project_inputs(project.id).await.unwrap();
+    assert!(outline.desired.groups.iter().any(|candidate| candidate.panel && candidate.id == group.id));
     assert_eq!(
         window(&tonight, ngc7000.id).window,
         plan_area_best(&library, ngc7000.id, backyard).await

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! Session-intake Finish/reopen Review entry points (spec 064 LIB-FR-17/20/23/24,
-//! 067 PIX-FR-18; D-W78, D-W97, D-W100).
+//! 067 PIX-FR-18; D-W78, D-W97, D-W100). Marks update library quality only.
 
 #![cfg(unix)]
 
@@ -117,12 +117,7 @@ impl World {
             .create_project(&ProjectInput {
                 name: "Session review intake".into(),
                 notes: None,
-                subjects: vec![SubjectInput {
-                    target_id: target,
-                    name: None,
-                    mosaic: false,
-                    panels: Vec::new(),
-                }],
+                subjects: vec![SubjectInput { target_id: target, name: None }],
                 rig_ids: vec![rig.id],
                 goals: Vec::new(),
             })
@@ -140,7 +135,7 @@ impl World {
 }
 
 #[tokio::test]
-async fn session_intake_marks_finish_and_reopen_use_durable_quality_not_run_drafts() {
+async fn session_intake_marks_update_library_quality_and_finish_reopens() {
     let world = World::new().await;
     let session = world.catalog().session(world.session).await.unwrap().summary.session;
     let refused =
@@ -166,7 +161,7 @@ async fn session_intake_marks_finish_and_reopen_use_durable_quality_not_run_draf
         .review()
         .session_review_mark(
             world.session,
-            &ReviewMark::Library {
+            &ReviewMark {
                 asset: ExpectedAsset {
                     asset_id: listed.asset.id,
                     decision_revision: listed.asset.decision_revision,
@@ -177,11 +172,8 @@ async fn session_intake_marks_finish_and_reopen_use_durable_quality_not_run_draf
         )
         .await
         .unwrap();
-    assert!(
-        marked.member.is_none(),
-        "session intake quality mark must not edit a legacy run draft"
-    );
-    assert!(marked.draft_revision.is_none());
+    assert_eq!(marked.asset.id, listed.asset.id);
+    assert_eq!(marked.asset.quality, Quality::Usable);
     assert_eq!(
         world.review().session_intake(world.session).await.unwrap().intake.unreviewed_frames,
         0
@@ -231,7 +223,7 @@ async fn session_review_finish_reopens_without_project_state() {
         .review()
         .session_review_mark(
             world.session,
-            &ReviewMark::Library {
+            &ReviewMark {
                 asset: ExpectedAsset {
                     asset_id: frame.asset.id,
                     decision_revision: frame.asset.decision_revision,

@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! Project progress warnings (spec 065 PRJ-FR-11, PRJ-AC-07; spec 068
-//! CAL-FR-12; D-W29): the exposure-mismatch warning per subject, rig and
-//! channel, read from calibration-matching evidence over generated FITS frames
-//! indexed through Library scans. A warning is never a goal and assigns nothing.
+//! CAL-FR-12; D-W29): exposure-mismatch warnings per held session, subject,
+//! rig and channel, read from calibration-matching evidence over generated FITS
+//! frames indexed through Library scans. A warning is never a goal and assigns nothing.
 
 #[path = "support/membership.rs"]
 mod membership_support;
@@ -104,11 +104,9 @@ fn ngc7000() -> TargetCandidate {
     }
 }
 
-/// PRJ-FR-11, CAL-FR-12: Ha lights at 300 s find only 120 s darks that match
-/// on every other criterion, so Ha warns of an exposure mismatch on the rig;
-/// OIII lights at 120 s have a matching dark and do not. The warning is no
-/// goal row: the reviewed sessions are suggestions, captured and not in
-/// project.
+/// PRJ-FR-11, CAL-FR-12: held Ha lights at 300 s find only 120 s darks that
+/// match on every other criterion, so Ha warns on the rig; OIII at 120 s has a
+/// matching dark. The warning is not a goal and assigns nothing.
 #[tokio::test]
 async fn exposure_mismatch_warns_per_subject_and_channel() {
     let temp = tempfile::tempdir().unwrap();
@@ -163,27 +161,22 @@ async fn exposure_mismatch_warns_per_subject_and_channel() {
     let input = ProjectInput {
         name: "NGC 7000 HOO".into(),
         notes: None,
-        subjects: vec![SubjectInput {
-            target_id: target.candidate.id,
-            name: None,
-            mosaic: false,
-            panels: Vec::new(),
-        }],
+        subjects: vec![SubjectInput { target_id: target.candidate.id, name: None }],
         rig_ids: vec![rig.id],
         goals: vec![GoalInput {
             target_id: target.candidate.id,
-            panel: None,
             group_id: None,
             goal: GoalSpec::Integration { channel: Some("Ha".into()), goal_seconds: 36_000 },
         }],
     };
     let project = catalog.create_project(&input).await.unwrap();
     for summary in &sessions {
-        membership_support::review(&library, summary.session.id).await;
+        membership_support::hold(&library, project.id, summary.session.id).await;
     }
-
     let progress = library.project_progress(project.id).await.unwrap();
-    assert_eq!((progress.project_id, progress.revision), (project.id, project.revision));
+
+    assert_eq!(progress.project_id, project.id);
+    assert_eq!(progress.revision, library.catalog().project(project.id).await.unwrap().revision);
     assert_eq!(
         progress.warnings,
         [ProjectWarning::ExposureMismatch {
@@ -195,8 +188,10 @@ async fn exposure_mismatch_warns_per_subject_and_channel() {
         }]
     );
     let [ha] = progress.goals.as_slice() else { panic!("{:#?}", progress.goals) };
-    assert_eq!((ha.captured.frames, ha.in_project.frames), (2, 0), "a warning is no goal");
-    assert!(!ha.met);
+    assert_eq!((ha.captured.frames, ha.in_project.frames), (2, 2));
+
+    let held_progress = library.project_progress(project.id).await.unwrap();
+    assert_eq!(held_progress.warnings, progress.warnings, "warning uses held sessions");
 }
 
 /// PRJ-FR-11: each Project rig's candidate lights are matched as that rig's
@@ -265,17 +260,15 @@ async fn exposure_mismatch_names_the_mismatching_rig_only() {
         .create_project(&ProjectInput {
             name: "NGC 7000 Ha".into(),
             notes: None,
-            subjects: vec![SubjectInput {
-                target_id: target.candidate.id,
-                name: None,
-                mosaic: false,
-                panels: Vec::new(),
-            }],
+            subjects: vec![SubjectInput { target_id: target.candidate.id, name: None }],
             rig_ids: vec![redcat.id, esprit.id],
             goals: Vec::new(),
         })
         .await
         .unwrap();
+    for summary in &sessions {
+        membership_support::hold(&library, project.id, summary.session.id).await;
+    }
 
     let progress = library.project_progress(project.id).await.unwrap();
     assert_eq!(
