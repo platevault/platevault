@@ -196,12 +196,6 @@ export function AddSessionsDialog({ project, open, onOpenChange }: { project: Pr
     setFilters(NO_FILTERS)
   }
 
-  // What adding the ticked sessions also changes, said before saving (PRJ-FR-02).
-  const notes = [
-    ...distinct(chosen.filter((r) => r.addsSubject).map((r) => r.target)).map((name) => m.project_note_adds_subject({ name, project: project.name })),
-    ...distinct(chosen.filter((r) => r.addsRig).map((r) => r.rig)).map((rig) => m.store_note_adds_rig({ rig, project: project.name })),
-  ]
-
   function add(): CommitResult {
     const suggested = chosen.filter((r) => r.suggested).map((r) => r.session.id)
     if (suggested.length > 0) {
@@ -214,7 +208,7 @@ export function AddSessionsDialog({ project, open, onOpenChange }: { project: Pr
     }
     return { ok: true }
   }
-  const addLabel = chosen.length > 0 ? m.project_add_suggested({ count: chosen.length }) : m.catalogue_templates_add_sessions()
+  const addLabel = chosen.length > 0 ? m.project_add_suggested({ count: chosen.length }) : m.project_add_sessions()
 
   return (
     <FormDialog
@@ -270,7 +264,6 @@ export function AddSessionsDialog({ project, open, onOpenChange }: { project: Pr
         }}
         empty={rows.length === 0 ? m.project_add_none() : m.project_add_no_match()}
       />
-      {notes.length > 0 ? <Notice tone="info" title={notes.join(" ")} /> : null}
     </FormDialog>
   )
 }

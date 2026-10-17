@@ -243,18 +243,12 @@ export function WrapUpPage({ project, chrome, step }: { project: Project; chrome
   const body = settled ? (
     <StepRecord project={project} step={viewing} summary={viewed?.summary ?? null} />
   ) : viewing === "cleanup" ? (
-    <>
-      <p>{m.wrapup_cleanup_hint()}</p>
-      <OfferTable label={m.wrapup_cleanup_view_title()} rows={cleanup} select={select("cleanup")} empty={<EmptyState icon={CheckCheck} title={m.flow_nothing_to_clean_up()} action={null} />} />
-    </>
+    <OfferTable label={m.wrapup_cleanup_view_title()} rows={cleanup} select={select("cleanup")} empty={<EmptyState icon={CheckCheck} title={m.flow_nothing_to_clean_up()} action={null} />} />
   ) : viewing === "trash" ? (
-    <>
-      <p>{m.wrapup_trash_hint()}</p>
-      <OfferTable label={m.trash_title()} rows={trash} select={select("trash")} empty={<EmptyState icon={Trash2} title={m.wrapup_nothing_to_trash()} action={null} />} />
-    </>
+    <OfferTable label={m.trash_title()} rows={trash} select={select("trash")} empty={<EmptyState icon={Trash2} title={m.wrapup_nothing_to_trash()} action={null} />} />
   ) : (
     <>
-      {project.state === "open" ? <Notice tone="info" title={m.wrapup_close_for_good()}>{m.wrapup_close_for_good_hint()}</Notice> : null}
+      {project.state === "open" ? <Notice tone="info" title={m.wrapup_close_for_good()} /> : null}
       <ArchiveTable project={project} rows={archive.rows} blocked={archive.blocked} select={select("archive")} editable={editable} />
     </>
   )

@@ -98,7 +98,7 @@ describe("Project groups, suggestions, Add sessions and the Closed menu (F4 P)",
     const p = cygnus()
     const user = renderProject(p.id)
     await screen.findByRole("table", { name: m.common_sessions_of({ name: p.name }) })
-    await user.click(screen.getByRole("button", { name: `${m.catalogue_templates_add_sessions()}…` }))
+    await user.click(screen.getByRole("button", { name: `${m.project_add_sessions()}…` }))
     const dialog = await screen.findByRole("dialog", { name: m.project_add_sessions_title({ name: p.name }) })
     const blocked = projectSuggestions(store.getState().catalog, p).find((s) => s.blocked !== null)!
     expect(within(dialog).getByRole("checkbox", { name: m.table_select_row({ name: heldLabel(p, blocked.session.id) }) })).toHaveAttribute("aria-disabled", "true")
@@ -106,7 +106,9 @@ describe("Project groups, suggestions, Add sessions and the Closed menu (F4 P)",
       .getAllByRole("checkbox", { name: /^Select IC 5070/ })
       .find((c) => c.getAttribute("aria-disabled") !== "true")!
     await user.click(other)
-    expect(within(dialog).getByText(m.project_note_adds_subject({ name: "IC 5070", project: p.name }))).toBeInTheDocument()
+    // The row's Match cell says what it also adds, before saving (PRJ-FR-02).
+    const adds = m.session_adds_subject({ name: "IC 5070" }).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    expect(within(dialog).getAllByText(new RegExp(adds)).length).toBeGreaterThan(0)
     await user.click(within(dialog).getByRole("button", { name: m.project_add_suggested({ count: 1 }) }))
     await waitFor(() => expect(cygnus().inputs).toHaveLength(p.inputs.length + 1))
     expect(cygnus().subjects.map((s) => s.targetId)).toContain(store.getState().catalog.sessions[cygnus().inputs.at(-1)!.sessionId]!.target.value)
@@ -134,7 +136,7 @@ describe("Project groups, suggestions, Add sessions and the Closed menu (F4 P)",
     await screen.findByRole("heading", { level: 1, name: p.name })
     expect(screen.queryByRole("table", { name: m.project_suggestions_of({ name: p.name }) })).toBeNull()
     expect(screen.queryByRole("button", { name: `${m.project_apply()}…` })).toBeNull()
-    expect(screen.queryByRole("button", { name: `${m.catalogue_templates_add_sessions()}…` })).toBeNull()
+    expect(screen.queryByRole("button", { name: `${m.project_add_sessions()}…` })).toBeNull()
     await user.click(screen.getByRole("button", { name: m.project_noun() }))
     const menu = await screen.findByRole("menu", { name: m.project_noun() })
     expect(within(menu).getByRole("menuitem", { name: new RegExp(`^${m.project_edit()}…`) })).toHaveAttribute("aria-disabled", "true")
