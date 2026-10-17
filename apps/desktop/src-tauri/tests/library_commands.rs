@@ -11,11 +11,12 @@
 //! with a plain string, which these tests tell apart, so each call proves the
 //! command's argument names and shapes.
 
+mod support;
+
 use std::path::Path;
 use std::sync::Arc;
 
-use desktop_shell::commands::project_apply::ApplyRuns;
-use desktop_shell::commands::project_wrap_up::{CloseRuns, WrapUpTrash};
+use desktop_shell::commands::project_wrap_up::WrapUpTrash;
 use platevault_core::custody::trash::OsTrash;
 use platevault_core::library::Library;
 use platevault_core::targets::TargetQuery;
@@ -24,9 +25,8 @@ use platevault_core::{
     ProjectInput, Provenance, SubjectInput, TrashSupport, TrashUnsupported,
 };
 use serde_json::{json, Value};
-use tauri::ipc::{CallbackFn, InvokeBody};
-use tauri::test::{get_ipc_response, mock_builder, mock_context, noop_assets, MockRuntime};
-use tauri::webview::InvokeRequest;
+use support::{Ipc, NOT_FOUND};
+use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime};
 use tauri::{Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 use uuid::Uuid;
 
@@ -106,38 +106,11 @@ impl Shell {
             .expect("build mock app");
         app.manage(library);
         app.manage(WrapUpTrash::new(Arc::new(NoTrash)));
-        app.manage(ApplyRuns::emitting(app.handle().clone()));
-        app.manage(CloseRuns::default());
+        support::manage_runs(&app);
         let webview = WebviewWindowBuilder::new(&app, "library", WebviewUrl::default())
             .build()
             .expect("library window");
         Self { webview, _app: app, _dir: dir }
-    }
-
-    fn invoke(&self, cmd: &str, args: &Value) -> Result<Value, Value> {
-        get_ipc_response(
-            &self.webview,
-            InvokeRequest {
-                cmd: cmd.into(),
-                callback: CallbackFn(0),
-                error: CallbackFn(1),
-                url: "tauri://localhost".parse().expect("webview url"),
-                body: InvokeBody::Json(args.clone()),
-                headers: tauri::http::HeaderMap::default(),
-                invoke_key: tauri::test::INVOKE_KEY.into(),
-            },
-        )
-        .map(|body| body.deserialize::<Value>().expect("JSON reply"))
-    }
-
-    /// The command ran and refused with a library `ErrorResponse` of `code`
-    /// naming `identity`, and sent no English text.
-    fn refuses(&self, cmd: &str, args: &Value, code: LibraryErrorCode, identity: Uuid) {
-        let error = self.invoke(cmd, args).expect_err(cmd);
-        assert!(error.is_object(), "{cmd} reached its handler: {error}");
-        assert_eq!(error["code"], json!(code), "{cmd}: {error}");
-        assert_eq!(error["identity"], json!(identity), "{cmd}: {error}");
-        assert!(error.get("message").is_none(), "{cmd} sent English text: {error}");
     }
 
     /// The library the handlers run on, to arrange what a test calls on.
@@ -193,6 +166,12 @@ impl Shell {
     }
 }
 
+impl Ipc for Shell {
+    fn webview(&self) -> &WebviewWindow<MockRuntime> {
+        &self.webview
+    }
+}
+
 fn unix_path(path: &str) -> Value {
     json!({ "encoding": "unix-bytes", "payload": path.as_bytes() })
 }
@@ -215,9 +194,6 @@ fn clean_up_nothing(shell: &Shell, project: Uuid) -> (Value, Value) {
         .expect("clean up");
     (review, report)
 }
-
-/// The refusal for a request that names a record the catalog doesn't hold.
-const NOT_FOUND: LibraryErrorCode = LibraryErrorCode::NotFound;
 
 #[test]
 fn project_inputs_family_takes_its_arguments() {

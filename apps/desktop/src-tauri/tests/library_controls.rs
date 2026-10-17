@@ -18,6 +18,7 @@
 mod apply_support;
 #[path = "../../../../crates/platevault-core/tests/support/cleanup.rs"]
 mod cleanup_support;
+mod support;
 
 use std::fs;
 use std::path::Path;
@@ -28,22 +29,21 @@ use std::time::Duration;
 
 use apply_support::{catalogued, world, World};
 use cleanup_support::ScopedTrash;
-use desktop_shell::commands::project_apply::{ApplyRuns, APPLY_WAITING_EVENT};
-use desktop_shell::commands::project_wrap_up::{CloseRuns, WrapUpTrash};
+use desktop_shell::commands::project_apply::APPLY_WAITING_EVENT;
+use desktop_shell::commands::project_wrap_up::WrapUpTrash;
 use platevault_core::apply::pacing::HeldFolder;
 use platevault_core::custody::trash::OsTrash;
 use platevault_core::library::Library;
 use platevault_core::project_output::OutputWatch;
 use platevault_core::{
     ApplyOutcome, ApplyPhase, ApplyReport, ArchiveMoveOutcome, ArchiveSelection, CleanUpRequest,
-    CloseReport, CloseRequest, LibraryErrorCode, LocationRole, NativePath, OutputObservation,
-    ProjectLifecycle, TrashRequest, TrashSupport, ViewMode, WrapUpStatus,
+    CloseReport, CloseRequest, LocationRole, NativePath, OutputObservation, ProjectLifecycle,
+    TrashRequest, TrashSupport, ViewMode, WrapUpStatus,
 };
 use serde_json::{json, Value};
+use support::{Ipc, NOT_FOUND};
 use tauri::async_runtime::block_on;
-use tauri::ipc::{CallbackFn, InvokeBody};
-use tauri::test::{get_ipc_response, mock_builder, mock_context, noop_assets, MockRuntime};
-use tauri::webview::InvokeRequest;
+use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime};
 use tauri::{Listener, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 use uuid::Uuid;
 
@@ -75,26 +75,11 @@ impl Shell {
             .expect("build mock app");
         app.manage(Arc::clone(library));
         app.manage(WrapUpTrash::new(trash));
-        app.manage(ApplyRuns::emitting(app.handle().clone()));
-        app.manage(CloseRuns::default());
+        support::manage_runs(&app);
         let webview = WebviewWindowBuilder::new(&app, "library", WebviewUrl::default())
             .build()
             .expect("library window");
         Self { webview, app }
-    }
-
-    fn invoke(&self, cmd: &str, args: &Value) -> Result<Value, Value> {
-        invoke(&self.webview, cmd, args)
-    }
-
-    /// The command ran and refused with a library `ErrorResponse` of `code`
-    /// naming `identity`, and sent no English text.
-    fn refuses(&self, cmd: &str, args: &Value, code: LibraryErrorCode, identity: Uuid) {
-        let error = self.invoke(cmd, args).expect_err(cmd);
-        assert!(error.is_object(), "{cmd} reached its handler: {error}");
-        assert_eq!(error["code"], json!(code), "{cmd}: {error}");
-        assert_eq!(error["identity"], json!(identity), "{cmd}: {error}");
-        assert!(error.get("message").is_none(), "{cmd} sent English text: {error}");
     }
 
     /// Every `project_apply_waiting` payload from now on, in order.
@@ -121,20 +106,10 @@ impl Shell {
     }
 }
 
-fn invoke(webview: &WebviewWindow<MockRuntime>, cmd: &str, args: &Value) -> Result<Value, Value> {
-    get_ipc_response(
-        webview,
-        InvokeRequest {
-            cmd: cmd.into(),
-            callback: CallbackFn(0),
-            error: CallbackFn(1),
-            url: "tauri://localhost".parse().expect("webview url"),
-            body: InvokeBody::Json(args.clone()),
-            headers: tauri::http::HeaderMap::default(),
-            invoke_key: tauri::test::INVOKE_KEY.into(),
-        },
-    )
-    .map(|body| body.deserialize::<Value>().expect("JSON reply"))
+impl Ipc for Shell {
+    fn webview(&self) -> &WebviewWindow<MockRuntime> {
+        &self.webview
+    }
 }
 
 fn from<T: serde::de::DeserializeOwned>(value: Value) -> T {
@@ -171,7 +146,7 @@ fn a_held_apply_reports_its_wait_and_continues_once_released() {
     let report: ApplyReport = thread::scope(|scope| {
         let held = HeldFolder::hold(&world.view());
         let webview = &shell.webview;
-        let applying = scope.spawn(move || invoke(webview, "project_apply", &request));
+        let applying = scope.spawn(move || support::invoke(webview, "project_apply", &request));
         let started = waits.recv_timeout(PATIENCE).expect("Apply waits for the tool");
         assert_eq!(started["projectId"], json!(world.project), "{started}");
         assert_eq!(started["held"], held_view, "it names the View a tool holds a file in");
@@ -211,7 +186,7 @@ fn cancel_stops_a_held_apply_and_its_journal_ends_canceled() {
         // before the scope joins it.
         let _held = HeldFolder::hold(&world.view());
         let webview = &shell.webview;
-        let applying = scope.spawn(move || invoke(webview, "project_apply", &request));
+        let applying = scope.spawn(move || support::invoke(webview, "project_apply", &request));
         let started = waits.recv_timeout(PATIENCE).expect("Apply waits for the tool");
         let operation = started["operationId"].clone();
         let canceled = shell.invoke("project_apply_cancel", &json!({ "operationId": operation }));
@@ -234,7 +209,7 @@ fn cancel_stops_a_held_apply_and_its_journal_ends_canceled() {
     shell.refuses(
         "project_apply_cancel",
         &json!({ "operationId": report.operation_id }),
-        LibraryErrorCode::NotFound,
+        NOT_FOUND,
         report.operation_id,
     );
 }
@@ -323,7 +298,7 @@ fn close_stop_leaves_a_resumable_closing_project() {
     let report: CloseReport = thread::scope(|scope| {
         let webview = &shell.webview;
         let args = json!({ "request": request });
-        let closing = scope.spawn(move || invoke(webview, "project_close", &args));
+        let closing = scope.spawn(move || support::invoke(webview, "project_close", &args));
         gate_arrival.recv_timeout(PATIENCE).expect("the archive retires its first original");
         assert_eq!(shell.invoke("project_close_stop", &project), Ok(Value::Null));
         let_go.send(()).unwrap();
@@ -339,7 +314,7 @@ fn close_stop_leaves_a_resumable_closing_project() {
     let status: WrapUpStatus =
         from(shell.invoke("project_wrap_up_status", &project).expect("status"));
     assert_eq!(status.lifecycle, ProjectLifecycle::Closing);
-    shell.refuses("project_close_stop", &project, LibraryErrorCode::NotFound, world.project);
+    shell.refuses("project_close_stop", &project, NOT_FOUND, world.project);
 
     drop(shell);
     let settled = block_on(async {
@@ -376,11 +351,6 @@ fn rescan_reports_a_new_output_file() {
     assert_eq!(paths, ["NGC7000_final.xisf"], "{after:#?}");
 
     let unknown = Uuid::new_v4();
-    shell.refuses(
-        "project_output_rescan",
-        &json!({ "projectId": unknown }),
-        LibraryErrorCode::NotFound,
-        unknown,
-    );
+    shell.refuses("project_output_rescan", &json!({ "projectId": unknown }), NOT_FOUND, unknown);
     block_on(shell.app.state::<OutputWatch>().shutdown());
 }

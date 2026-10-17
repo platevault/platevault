@@ -24,22 +24,21 @@
 //! - Home reads "Open in {app}";
 //! - Apply has nothing to change.
 
+mod support;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, Instant};
 
-use desktop_shell::commands::project_apply::ApplyRuns;
-use desktop_shell::commands::project_wrap_up::CloseRuns;
 use desktop_shell::library_shell::CATALOG_FILE;
 use fits_fixtures::FitsFixture;
 use platevault_core::library::Library;
 use platevault_core::NativePath;
 use serde_json::{json, Value};
-use tauri::ipc::{CallbackFn, InvokeBody};
-use tauri::test::{get_ipc_response, mock_builder, mock_context, noop_assets, MockRuntime};
-use tauri::webview::InvokeRequest;
+use support::Ipc;
+use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime};
 use tauri::{Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 /// The test the child process runs: its first life.
@@ -96,33 +95,11 @@ impl Shell {
             .build(mock_context(noop_assets()))
             .expect("build mock app");
         app.manage(library);
-        app.manage(ApplyRuns::emitting(app.handle().clone()));
-        app.manage(CloseRuns::default());
+        support::manage_runs(&app);
         let webview = WebviewWindowBuilder::new(&app, "library", WebviewUrl::default())
             .build()
             .expect("library window");
         Self { webview, _app: app }
-    }
-
-    fn invoke(&self, cmd: &str, args: &Value) -> Result<Value, Value> {
-        get_ipc_response(
-            &self.webview,
-            InvokeRequest {
-                cmd: cmd.into(),
-                callback: CallbackFn(0),
-                error: CallbackFn(1),
-                url: "tauri://localhost".parse().expect("webview url"),
-                body: InvokeBody::Json(args.clone()),
-                headers: tauri::http::HeaderMap::default(),
-                invoke_key: tauri::test::INVOKE_KEY.into(),
-            },
-        )
-        .map(|body| body.deserialize::<Value>().expect("JSON reply"))
-    }
-
-    /// The command's reply; a refusal fails the test with what it said.
-    fn call(&self, cmd: &str, args: &Value) -> Value {
-        self.invoke(cmd, args).unwrap_or_else(|error| panic!("{cmd} {args} refused: {error}"))
     }
 
     fn register(&self, root: &Path, name: &str, role: &str) -> Value {
@@ -227,6 +204,12 @@ impl Shell {
         let [row] = projects.as_slice() else { panic!("one open Project on Home: {home:#}") };
         assert_eq!(row["project"]["id"], *project, "{row:#}");
         row.clone()
+    }
+}
+
+impl Ipc for Shell {
+    fn webview(&self) -> &WebviewWindow<MockRuntime> {
+        &self.webview
     }
 }
 
