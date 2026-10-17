@@ -189,4 +189,18 @@ describe('svg/no-raw-svg-colour', () => {
 
     expect(diagnostics).toHaveLength(1);
   });
+
+  it('allows named colors in later substitutions inside an open paint URL', () => {
+    const diagnostics = lint(
+      "const svg = <svg fill={`url(#${prefix}-${dark ? 'red' : 'blue'})`} />;",
+    );
+
+    expect(diagnostics).toHaveLength(0);
+  });
+
+  it('flags a raw RGB function opened before a template substitution', () => {
+    const diagnostics = lint('const svg = <svg fill={`rgb(${r}, 0, 0)`} />;');
+
+    expect(diagnostics).toHaveLength(1);
+  });
 });

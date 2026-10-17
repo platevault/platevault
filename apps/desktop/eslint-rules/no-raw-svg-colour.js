@@ -90,20 +90,23 @@ function reportRawColorsInExpression(expression, report) {
       reportRawColorsInExpression(expression.right, report);
       return;
     case 'TemplateLiteral':
+      let accumulatedText = '';
       for (let index = 0; index < expression.quasis.length; index += 1) {
         const quasi = expression.quasis[index];
         const text = quasi.value.cooked ?? quasi.value.raw;
+        accumulatedText += text;
         if (
           isRawColor(text) ||
           (index < expression.expressions.length &&
-            !/url\([^)]*$/i.test(text) &&
-            /(?:#|(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\()\s*$/i.test(text))
+            !/url\([^)]*$/i.test(accumulatedText) &&
+            /(?:#|(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\()\s*$/i.test(accumulatedText))
         ) {
           report();
         }
+        if (index < expression.expressions.length) accumulatedText += ' '; // Keep substitutions from closing url().
       }
       for (let index = 0; index < expression.expressions.length; index += 1) {
-        const priorText = expression.quasis[index]?.value.cooked ?? expression.quasis[index]?.value.raw ?? '';
+        const priorText = expression.quasis.slice(0, index + 1).map((part) => part.value.cooked ?? part.value.raw).join(' ');
         if (!/url\([^)]*$/i.test(priorText)) {
           reportRawColorsInExpression(expression.expressions[index], report);
         }
