@@ -29,5 +29,5 @@ The owner rejected the Night, Month, and Progress concepts because they showed g
 
 ## Consequences
 
-On Home, offer one-click buttons only for actions that need no further input and can be undone. Each button shows an Undo notice. Source: specs/065-project-goals/spec.md:126.
+On Home, offer one-click buttons only for actions that need no further input and can be undone. Each button shows an Undo notice. Source: specs/065-project-goals/spec.md:126. Pending ingestions needs desktop startup scans and capture-folder watching. This adds file-system activity and offline-drive states. The concepts route and its message keys are removed. Units that reused those keys need their own.
 Amended: D-W92 in specs/063-clean-rebuild-contract/workflow-decisions.md:107 routes duplicates through the Sessions Duplicates filter and shows drift on affected rows.
