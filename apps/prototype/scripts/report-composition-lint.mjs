@@ -22,18 +22,18 @@ import { readFileSync } from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { ESLint } from "eslint"
-import { COMPOSITION_SYNTAX } from "../eslint-rules/composition.js"
+import composition, { COMPOSITION_SYNTAX } from "../eslint-rules/composition.js"
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..")
 const BASELINE = path.join(root, "design", "R10-CENSUS-BASELINE.json")
 const AREAS = ["features", "app", "components"]
 const TAG = /\[([LI]\d+)\]/
-/** The layer and area import rules (eslint.config.js, eslint-rules/composition.js), after the syntax rules. */
-const IMPORT_IDS = ["I1", "I2", "I3", "I4", "I5", "I6"]
 
-/** Rule ids in rule order, so a rule that reports nothing still shows as 0. */
+/** Rule ids in rule order (L1…L11, then I1…I6), so a rule that reports nothing still shows as 0. */
 function ruleIds() {
-  return [...new Set([...COMPOSITION_SYNTAX.map((rule) => rule.message.match(TAG)?.[1] ?? ""), ...IMPORT_IDS])]
+  const messages = [...COMPOSITION_SYNTAX.map((rule) => rule.message), ...Object.values(composition.rules).flatMap((rule) => Object.values(rule.meta.messages))]
+  const ids = [...new Set(messages.map((message) => message.match(TAG)?.[1] ?? ""))]
+  return ids.sort((a, b) => b[0].localeCompare(a[0]) || Number(a.slice(1)) - Number(b.slice(1)))
 }
 
 function areaOf(filePath) {

@@ -390,7 +390,7 @@ export function useHeldSection(project: Project): DetailSection {
   const splitError = splitting && !splitting.name.trim() ? m.settings_name_required() : undefined
   const splitConfirm = m.project_split_confirm()
   const moveTarget = moving ? project.groups.find((g) => g.id === moving.groupId) : undefined
-  const moveConfirm = m.project_label_move_sessions({ count: moving?.sessionIds.length ?? 0, group: moveTarget?.name ?? "" })
+  const moveConfirm = m.project_move_confirm({ group: moveTarget?.name ?? "" })
   return {
     id: "sessions",
     title: m.nav_sessions(),

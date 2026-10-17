@@ -1581,8 +1581,8 @@
   "targets_deadline": "Deadline",
   "targets_fit_rig": "Fit · {rig}",
   "targets_in_my_targets": "In My targets",
-  "targets_my_add": "Add to My targets",
-  "targets_my_remove": "Remove from My targets",
+  "targets_my_add": "Star target",
+  "targets_my_remove": "Unstar target",
   "targets_details": "Details",
   "targets_preset_none": "No preset",
   "targets_planning_for": "Planning {name}",
@@ -2471,8 +2471,8 @@
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Index {n} new location",
-        "countPlural=*": "Index {n} new locations"
+        "countPlural=one": "Index {n} location",
+        "countPlural=*": "Index {n} locations"
       }
     }
   ],
@@ -3018,8 +3018,8 @@
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Import {count} matched row",
-        "countPlural=*": "Import {count} matched rows"
+        "countPlural=one": "Import {count} row",
+        "countPlural=*": "Import {count} rows"
       }
     }
   ],
@@ -4127,8 +4127,8 @@
   "calibration_restored_master": "Restored {name}",
   "duplicates_scanned": "Scanned {date}",
   "duplicates_keep_copy": "Keep this copy",
-  "duplicates_move_others": "Move others to Trash",
-  "duplicates_move_all": "Move all to Trash",
+  "duplicates_move_others": "Trash others",
+  "duplicates_move_all": "Trash all",
   "duplicates_review_title": "Duplicate copies",
   "duplicates_confirm_title": [
     {
@@ -5583,7 +5583,7 @@
   "project_apply_waiting": "Waiting for a tool to release a file in View",
   "project_change_application": "Application changed",
   "project_change_calibration": "{kind} changed for {session}",
-  "project_change_fix_at_source": "Open where it's fixed",
+  "project_change_fix_at_source": "Fix at source",
   "project_change_frames_excluded": "Left out {frames} of {session}",
   "project_change_frames_included": "Took back {frames} of {session}",
   "project_change_frames_rejected": "Rejected {frames} of {session}",
@@ -5642,14 +5642,14 @@
   "project_goal_needs_subject": "Add a subject first",
   "project_group_framing_n": "{rig} · Framing {n}",
   "project_group_kind_group": "Group",
-  "project_group_mark_panel": "Mark as mosaic panel",
+  "project_group_mark_panel": "Mark as panel",
   "project_group_missing": "a group no longer in the Project",
   "project_group_new": "New group",
   "project_group_remove": "Remove group",
   "project_group_remove_title": "Remove the group {name}?",
   "project_group_rename": "Rename",
   "project_group_split_n": "{name} · {n}",
-  "project_group_unmark_panel": "Not a mosaic panel",
+  "project_group_unmark_panel": "Unmark panel",
   "project_groups": "Groups",
   "project_groups_of": "Groups of {name}",
   "project_label_create_group": "Create group {name}",
@@ -5720,6 +5720,7 @@
       }
     }
   ],
+  "project_move_confirm": "Move to {group}",
   "project_label_rename_group": "Rename group",
   "project_label_split_group": "Split {name}",
   "project_label_use_unusable": [
@@ -5793,7 +5794,7 @@
   ],
   "project_reason_group_name_taken": "Another group is already called {name}",
   "project_saved_duplicated": "Duplicated {name} as {copy}",
-  "project_split_group": "Split into a new group",
+  "project_split_group": "Split group",
   "project_suggestions": "Suggestions",
   "project_suggestions_of": "Suggestions for {name}",
   "project_tab_calibrate": "Calibrate",
@@ -6105,7 +6106,7 @@
   "calibration_choice_waiting": "Waiting",
   "calibration_link_camera": "Link camera",
   "calibration_linked_camera": "Linked camera",
-  "calibration_match_by_model": "Match by camera model",
+  "calibration_match_by_model": "Match by model",
   "calibration_sessions_need_again": [
     {
       "declarations": [
@@ -6188,6 +6189,7 @@
   "equipment_factor": "Factor",
   "equipment_filter_twin": "Two filters named {name}",
   "equipment_add_value_to_rig": "Add {value} to {rig}",
+  "equipment_add_value": "Add {value}",
   "equipment_filter_value": "FILTER value",
   "equipment_unknown_filters": "Unknown filters",
   "equipment_calibration_defaults": "Calibration defaults",
@@ -6752,10 +6754,11 @@
   "output_saved_at": "Saved",
   "output_settled": "Settled",
   "output_source_file": "File in Processing",
-  "project_use_copies": "Use copies for this Project",
+  "project_use_copies": "Use copies",
   "view_applied_at": "Applied",
   "view_applied_title": "View on disk",
   "view_blocker_reassign": "Reassign {kind} on {name}",
+  "view_reassign_kind": "Reassign {kind}",
   "view_blocker_unsettled": "Settle the calibration of {name}",
   "view_changed_copies": "Copies a tool changed",
   "view_col_corrected": "Corrected",

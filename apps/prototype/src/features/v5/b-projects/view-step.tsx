@@ -520,7 +520,7 @@ function ApplySheetDialog({ project, sheet }: { project: Project; sheet: ApplySh
             scroll="none"
             rowLabel={(p) => say(m, sessionLongRef(p.session))}
             onRowClick={(p) => follow(sessionLink(p.session.id))}
-            rowActions={(p) => [{ id: "reassign", label: m.view_blocker_reassign({ kind: say(m, KIND_NAME[p.kind]), name: say(m, sessionLongRef(p.session)) }), icon: Eye, run: () => follow(sessionLink(p.session.id)) }]}
+            rowActions={(p) => [{ id: "reassign", label: m.view_reassign_kind({ kind: say(m, KIND_NAME[p.kind]) }), icon: Eye, run: () => follow(sessionLink(p.session.id)) }]}
           />
         </Section>
       ) : null}

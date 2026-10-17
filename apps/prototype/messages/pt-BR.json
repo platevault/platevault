@@ -2658,9 +2658,9 @@
         "countPlural"
       ],
       "match": {
-        "count=0, countPlural=*": "Indexar {n} novos locais",
-        "count=*, countPlural=one": "Indexar {n} novo local",
-        "count=*, countPlural=*": "Indexar {n} novos locais"
+        "count=0, countPlural=*": "Indexar {n} locais",
+        "count=*, countPlural=one": "Indexar {n} local",
+        "count=*, countPlural=*": "Indexar {n} locais"
       }
     }
   ],
@@ -3239,9 +3239,9 @@
         "countPlural"
       ],
       "match": {
-        "count=0, countPlural=*": "Importar {count} linhas correspondentes",
-        "count=*, countPlural=one": "Importar {count} linha correspondente",
-        "count=*, countPlural=*": "Importar {count} linhas correspondentes"
+        "count=0, countPlural=*": "Importar {count} linhas",
+        "count=*, countPlural=one": "Importar {count} linha",
+        "count=*, countPlural=*": "Importar {count} linhas"
       }
     }
   ],
@@ -6048,14 +6048,14 @@
   "project_goal_needs_subject": "Adicione um objeto primeiro",
   "project_group_framing_n": "{rig} · Enquadramento {n}",
   "project_group_kind_group": "Grupo",
-  "project_group_mark_panel": "Marcar como painel de mosaico",
+  "project_group_mark_panel": "Marcar como painel",
   "project_group_missing": "um grupo que não está mais no projeto",
   "project_group_new": "Novo grupo",
   "project_group_remove": "Remover grupo",
   "project_group_remove_title": "Remover o grupo {name}?",
   "project_group_rename": "Renomear",
   "project_group_split_n": "{name} · {n}",
-  "project_group_unmark_panel": "Não é painel de mosaico",
+  "project_group_unmark_panel": "Desmarcar painel",
   "project_groups": "Grupos",
   "project_groups_of": "Grupos de {name}",
   "project_label_create_group": "Criar grupo {name}",
@@ -6134,6 +6134,7 @@
       }
     }
   ],
+  "project_move_confirm": "Mover para {group}",
   "project_label_rename_group": "Renomear grupo",
   "project_label_split_group": "Separar {name}",
   "project_label_use_unusable": [
@@ -6213,7 +6214,7 @@
   ],
   "project_reason_group_name_taken": "Outro grupo já se chama {name}",
   "project_saved_duplicated": "{name} duplicado como {copy}",
-  "project_split_group": "Separar em um novo grupo",
+  "project_split_group": "Separar grupo",
   "project_suggestions": "Sugestões",
   "project_suggestions_of": "Sugestões para {name}",
   "project_tab_calibrate": "Calibrar",
@@ -6551,7 +6552,7 @@
   "calibration_choice_waiting": "Aguardando",
   "calibration_link_camera": "Vincular câmera",
   "calibration_linked_camera": "Câmera vinculada",
-  "calibration_match_by_model": "Corresponder pelo modelo da câmera",
+  "calibration_match_by_model": "Corresponder pelo modelo",
   "calibration_sessions_need_again": [
     {
       "declarations": [
@@ -6642,6 +6643,7 @@
   "equipment_factor": "Fator",
   "equipment_filter_twin": "Dois filtros chamados {name}",
   "equipment_add_value_to_rig": "Adicionar {value} a {rig}",
+  "equipment_add_value": "Adicionar {value}",
   "equipment_filter_value": "Valor de FILTER",
   "equipment_unknown_filters": "Filtros desconhecidos",
   "equipment_calibration_defaults": "Padrões de calibração",
@@ -7244,10 +7246,11 @@
   "output_saved_at": "Salvo",
   "output_settled": "Gravado",
   "output_source_file": "Arquivo em Processing",
-  "project_use_copies": "Usar cópias neste projeto",
+  "project_use_copies": "Usar cópias",
   "view_applied_at": "Aplicada em",
   "view_applied_title": "View no disco",
   "view_blocker_reassign": "Reatribuir {kind} em {name}",
+  "view_reassign_kind": "Reatribuir {kind}",
   "view_blocker_unsettled": "Resolver a calibração de {name}",
   "view_changed_copies": "Cópias alteradas por uma ferramenta",
   "view_col_corrected": "Corrigido",
