@@ -159,9 +159,9 @@ opens on Home, the control-panel dashboard. Done means:
 
 ### S10 — Confirm and correct associations in the catalog {#S10}
 
-- **Do:** In 24 Sep's Target box, choose NGC 7000 and click **Confirm Target**. Do the same for 26 Sep. Choose **Confirm rig** with rig `RedCat` for the six RedCat sessions: 12, 18, 24, 26, 28 and 30 Sep. Then open the intake Target and Rig steps of 24 Sep and 30 Sep.
+- **Do:** In 24 Sep's Target box, choose NGC 7000 and click **Confirm Target**. Do the same for 26 Sep. Choose **Confirm rig** with rig `RedCat` for the six RedCat sessions: 12, 18, 24, 26, 28 and 30 Sep. Then open the intake Target and Rig steps of 24 Sep, 28 Sep and 30 Sep.
 - **Expect:** 24 Sep's Target picker opens on `Choose a Target`, with no Target chosen. After each confirmation, the Target box reads NGC 7000 Confirmed next to the original evidence. 26 Sep still displays its `Cygnus field` label. Each of the six sessions reads rig `RedCat` Confirmed, including 28 Sep, whose rig read Needs review before. **Needs a Target** lists neither 24 nor 26 Sep, **Not in any Project** lists both, and 24 Sep's row carries no Needs a Target warning. Whether 12, 18, 28 and 30 Sep and the other-camera session, whose Target is still associated by pointing, read Needs a Target or Not in any Project depends on G11.
-- **Expect:** 24 Sep's Target step shows a Corrections table with the columns Field, Recorded and Corrected; its Target row reads "–" recorded and NGC 7000 corrected. 30 Sep's rig was already associated as `RedCat`, and its Target is still associated by pointing, so neither of its steps shows a Corrections table.
+- **Expect:** 24 Sep's Target step shows a Corrections table with the columns Field, Recorded and Corrected (provisional copy, from the prototype). Its Target row reads "–" recorded and NGC 7000 corrected. 28 Sep's Rig step shows the same table with one Equipment row, "–" recorded and `RedCat` corrected, because its rig had no associated value. 30 Sep's rig was already associated as `RedCat`, and its Target is still associated by pointing, so neither of its steps shows a Corrections table.
 - **Expect (negative):** Source bytes still match P5, including the 26 Sep OBJECT keyword and the absent 28 Sep optics keywords. Session boundaries and frame counts do not change. No picker offers or preselects a Target from an OBJECT label. A correction writes no header.
 - **Trace:** flow A3 · LIB-FR-05, LIB-FR-12, LIB-FR-17 · LIB-AC-06 · root FR-002 · D11, D15, D-W37 · HARNESS-V5-IA.md §Screens S12 (Confirm Target / Confirm rig) · S9b (names the rigs) · HARNESS-V5-FEEDBACK-R1.md Round 9 C15 (corrections recorded at ingestion)
 
@@ -224,7 +224,7 @@ opens on Home, the control-panel dashboard. Done means:
 ## Known gaps
 
 - G1: Not validated. The rebuilt application does not exist. Product behavior follows specs 064, 068 and 072, the defaults that the authorized autonomous run set in decisions D01, D08, D11, D15, and D18, D-W94 and D-W101 to D-W105 in the F4 workflow decisions, and the harness v5 design (HARNESS-V5-IA.md and HARNESS-V5-FEEDBACK-R1.md through Round 5, `apps/prototype/` on ui-harness-v5 @ b5e813a5, and HARNESS-V5-FEEDBACK-R1.md Round 6 @ 4f470775). No implementation has been validated against them.
-- G2: (dissolved 2026-10-12): answered by Round 6 "Rigs: detection plus manual add"; S9 and S9b now assert that indexing detects one rig per camera and telescope pair, which the user renames `RedCat` and `Esprit` and completes with Edit optics before S10 and S11 confirm them. The unanswered locate/remap remainder moves unchanged to G9.
+- G2: (dissolved 2026-10-12): answered by Round 6 "Rigs: detection plus manual add"; S9 and S9b now assert that indexing detects one rig per camera and telescope pair, which the user names `RedCat` and `Esprit` and completes with **Edit…** (Round 9 C2) before S10 and S11 confirm them. The unanswered locate/remap remainder moves unchanged to G9.
 - G3: Unresolved implementation qualification: no fault-injection mechanism exists yet for the S11 catalog-write failure (P6). Blocks readiness.
 - G5: Unresolved implementation qualification: S6 needs indexing to run long enough to observe. Fixture sizing or a slow volume is unspecified. Blocks readiness.
 - G6: Out of scope for this journey: the P2 fixture has no single night holding both Ha and OIII 300 s lights, so the same-night channel split of LIB-AC-03 is not exercised. Blocks readiness until covered by a step or a journey.
@@ -253,7 +253,7 @@ opens on Home, the control-panel dashboard. Done means:
 - **Δ6** 2026-10-16 · S7a, S9a, S10a · behavior-change
   Needs calibration lists every session whose calibration isn't settled, Ready or not, so it reads 5 at S9a and 4 after S10a. S7a names each session's calibration after indexing: 18 and 30 Sep are settled, the flats of 12, 24, 26 and 28 Sep are only suggested, and the other-camera session finds no calibration.
   Evidence: LIB-FR-17 as corrected in PR #1804 (commit 8660e090), CAL-FR-20, CAL-FR-21, D-W105, D-W114 · by: EncodeOwnerAnswers2 (intent-gated)
-- **Δ7** 2026-10-17 · S9b, S10 · behavior-change
+- **Δ7** 2026-10-17 · S9b, S10, G2 · behavior-change
   One **Edit…** verb replaces Rename and Edit optics: S9b names the detected rigs and enters the camera's pixel size through **Edit…**.
-  Metadata corrections are recorded at ingestion: S10 reads 24 Sep's recorded and corrected Target in its intake Target step's Corrections table.
+  Metadata corrections are recorded at ingestion: S10 reads 24 Sep's Target and 28 Sep's rig in the Corrections tables of their intake steps.
   Evidence: HARNESS-V5-FEEDBACK-R1.md Round 9 C2, C15 · D-W76 · PLAN-EQ-FR-07, LIB-FR-12 · prototype session-intake.tsx Corrections (ui-harness-v5) · by: JourneysR9c (intent-gated)

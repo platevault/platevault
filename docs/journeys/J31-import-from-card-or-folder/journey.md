@@ -134,9 +134,9 @@ folder is added in place. Done means:
 
 ### S7 — See where the files landed {#S7}
 
-- **Do:** Read the finished import's actions and choose **Review sessions**, then go back to the import. Click **Show in Sessions**. Read the new sessions, then choose the **Needs a Target** filter. Open the Calibration library and then the 28 Sep session. Read the status bar after the duplicate scan settles.
+- **Do:** Read the finished import's actions and choose **Review sessions** (provisional copy, from the prototype), then go back to the import. Click **Show in Sessions**. Read the new sessions, then choose the **Needs a Target** filter. Open the Calibration library and then the 28 Sep session. Read the status bar after the duplicate scan settles.
 - **Expect:**
-  - The finished import offers **Review sessions** first, before **Show in Sessions**. **Review sessions** opens the Review step of the first session in the Sessions **Needs review** filter, one of the two new light sessions.
+  - The finished import offers **Review sessions** (provisional copy) first, before **Show in Sessions**. **Review sessions** opens the Review step of the first session in the Sessions **Needs review** filter, one of the two new light sessions.
   - Sessions opens with the import highlighted (`?import=<operation>`). A notice names the import and `2 sessions`.
   - The 2 Oct Ha session, 30 frames, and the 2 Oct OIII session, 6 frames, are listed first, each marked `New`, and each reads Target NGC 7000 Confirmed. Their frames sit under `NGC 7000/Ha/2026-10-02/light/` and `NGC 7000/OIII/2026-10-02/light/` in `Astro-T7 captures`.
   - **Needs a Target** lists neither new session. Every new frame reads Unreviewed.

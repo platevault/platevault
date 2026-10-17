@@ -441,7 +441,7 @@
       "journeyStep": "J19/S8, J19/S9, J19/S10, J31/S3, J31/S5a, J31/S7, J37/S6",
       "spec": "064-library-inventory LIB-FR-05, LIB-FR-12, LIB-FR-20, LIB-FR-23, LIB-FR-24; 067-frame-review PIX-FR-18; D-W78, D-W101, D-W105; HARNESS-V5-FEEDBACK-R1.md Round 9 C15",
       "action": "Import or open a session, confirm its Target and rig, read the recorded and corrected values on those steps, review its frames, then Finish review.",
-      "expect": "The intake proceeds Target → Rig → Review. The Target and Rig steps show a Corrections table (Field, Recorded, Corrected) for each value that differs from the recorded one. Finish review is available only when no Unreviewed frame remains; it marks the session Ready, and only Ready sessions can be suggested or added to a Project.",
+      "expect": "The intake proceeds Target → Rig → Review. The Target and Rig steps show a Corrections table (Field, Recorded, Corrected; provisional copy, from the prototype) for each value that differs from the recorded one. Finish review is available only when no Unreviewed frame remains; it marks the session Ready, and only Ready sessions can be suggested or added to a Project.",
       "negative": "No session becomes Ready with unresolved Target, rig or Unreviewed frames, and no Project Review step exists. Metadata corrections are not decided in Apply."
     },
     {
@@ -450,7 +450,7 @@
       "journeyStep": "J31/S6, J31/S7",
       "spec": "064-library-inventory LIB-FR-09, LIB-FR-16, LIB-FR-17, LIB-FR-20, LIB-FR-23, LIB-AC-17; 071-storage-custody STO-IMP-FR-08, STO-IMP-AC-10; D-W24, D-W78, D-W101, D-W105; HARNESS-V5-FEEDBACK-R1.md Round 9 C14",
       "action": "After an Import, read its actions and choose Review sessions, then open Sessions, Needs a Target and the Calibration library; inspect the new light session's calibration state.",
-      "expect": "The finished import offers Review sessions first, which opens the first session in Needs review. Imported lights appear as sessions and calibration frames as calibration-library records. Import review reports pinned, suggested or not-found calibration for each light session, and unsettled sessions appear in Needs calibration.",
+      "expect": "The finished import offers Review sessions (provisional copy, from the prototype) first, which opens the first session in Needs review. Imported lights appear as sessions and calibration frames as calibration-library records. Import review reports pinned, suggested or not-found calibration for each light session, and unsettled sessions appear in Needs calibration.",
       "negative": "No Inbox or later confirm-and-file step appears. Calibration frames do not appear in Sessions, and held, duplicate, still-growing or left-out files are absent from the catalog."
     },
     {
@@ -612,7 +612,7 @@
       "journeyStep": "J22/S1, J22/S2, J22/S3, J22/S4, J22/S7a, J22/S15a, J22/S15b, J31/S7, J37/S6, J37/S9",
       "spec": "067-frame-review PIX-FR-01, PIX-FR-06, PIX-FR-08, PIX-FR-10, PIX-FR-18; 064-library-inventory LIB-FR-17, LIB-FR-20; D-W78, D-W79, D-W97; HARNESS-V5-FEEDBACK-R1.md Round 9 C10, C14",
       "action": "Open Review for a session in Needs review, from Import's Review sessions or the Sessions filter, select by threshold, finish review with no Unreviewed frames, and reopen Review on a Ready session.",
-      "expect": "Review shows only the session's frames and offers Mark rest usable and Select by threshold…. Import's Review sessions opens the first session in Needs review, and Finish review advances to the next one. The session becomes Ready when every frame is Usable or Unusable; a later review mark reaches each open Project holding it as a labelled pending change.",
+      "expect": "Review shows only the session's frames and offers Mark rest usable and Select by threshold…. Import's Review sessions (provisional copy, from the prototype) opens the first session in Needs review, and Finish review advances to the next one. The session becomes Ready when every frame is Usable or Unusable; a later review mark reaches each open Project holding it as a labelled pending change.",
       "negative": "No Project Review step or cross-panel Review all exists. Review never changes a Closed or Archived Project, and calibration or group state does not bypass Finish review."
     },
     {

@@ -49,10 +49,10 @@ starts no indexing.
 
 ### S2 — Grade filters with the per-filter Moon curve {#S2}
 
-- **Do:** In the Planned view, expand NGC 7000's Per filter sub-rows. Read the OIII and Ha sub-rows' grades, clear windows and Img time, and the Moon's illumination in the toolbar.
-- **Expect:** Per filter shows one sub-row for each band the saved rigs capture, R, G, B, Ha and OIII, each graded Good, Marginal or Poor with that band's Moon-clear windows. Each band follows its own Moon-avoidance curve: the separation it requires from the Moon is greatest at full Moon and shrinks as the Moon dims, and a sample counts when the Moon is below the horizon or at least that far away. A band's grade, windows and Img time all come from the same curve, so they agree.
-- **Expect (negative):** No separate minimum Moon separation or maximum illumination limit is offered. Reading the grades changes no rig filter list and no Project goal.
-- **Trace:** flow K · PLAN-FR-02 · PLAN-TGT-FR-06 · PLAN-TGT-AC-18 · D-W88 · HARNESS-V5-FEEDBACK-R1.md Round 9 C6
+- **Do:** In the Planned view, expand NGC 7000's Per filter sub-rows. Open **Moon limits**, choose OIII in the Filter field, raise its **Separation at full Moon** by 30°, leave **Width** unchanged, and save.
+- **Expect:** Per filter shows one sub-row for each band the saved rigs capture, R, G, B, Ha and OIII, each graded Good, Marginal or Poor with that band's Moon-clear windows. Each band follows its own Moon-avoidance curve. The separation the curve requires from the Moon is greatest at full Moon and shrinks as the Moon dims, and a sample counts when the Moon is below the horizon or at least that far away. After the save, OIII's sub-row recalculates: its grade, windows and Img time come from the raised curve, so every OIII window keeps the Moon below the horizon or at least the new required separation away.
+- **Expect (negative):** The R, G, B and Ha sub-rows are unchanged. The dialog offers no separate maximum-illumination limit. Editing OIII's curve changes no rig filter list and no Project goal.
+- **Trace:** flow K · PLAN-FR-02 · PLAN-TGT-FR-06 · PLAN-TGT-AC-18 · D-W88 · HARNESS-V5-FEEDBACK-R1.md Round 9 C6 · prototype moon-limits.tsx (Separation at full Moon, Width; setMoonAvoidance) on ui-harness-v5
 
 ### S3 — Switch the planning site {#S3}
 
@@ -165,7 +165,7 @@ starts no indexing.
 - SC6: Exactly 1 notification is delivered for the S7a target/site/window identity across S7a and S8.
 - SC7: M 31 is planned with 0 Projects created or chosen (S11), and the Project page plans exactly 1 subject, NGC 7000 (S12).
 - SC8: Tonight lists exactly 2 Targets with a window, NGC 7000 and M 31, at `Remote site`, and each best window equals the Planned view's best `Remote site` window for that Target (S13).
-- SC9: Per filter shows exactly 5 bands for NGC 7000, each graded from its own Moon-avoidance curve with no separate Moon limit (S2). Returning the date picker to tonight restores 100% of the S3 values (S3a).
+- SC9: Per filter shows exactly 5 bands for NGC 7000, and raising OIII's separation at full Moon changes 0 of the other 4 (S2). Returning the date picker to tonight restores 100% of the S3 values (S3a).
 - SC10: Making `Remote site` the default asks first and, when cancelled, moves 0 defaults and 0 reminders (S14).
 - SC11: Tomorrow's plan holds 0 Targets before the S3a add and exactly 1, NGC 7000, after it; tonight's plan holds exactly NGC 7000 throughout S3a, and adding M 31 at S11 leaves tomorrow's plan at exactly 1.
 
@@ -195,5 +195,5 @@ starts no indexing.
   The Project holds sessions directly, with no processing run, and a mosaic is a Project with panel groups whose goals Tonight grades from the subject's window.
   Evidence: D-W93 to D-W106 (F4 Project model, owner's answers of 2026-10-14) in PR #1804, 065 PRJ-FR-29, 072 PLAN-AC-01, PLAN-FR-02, PLAN-FR-11 · by: SpecF4Writer2 (intent-gated)
 - **Δ6** 2026-10-17 · S2 · behavior-change
-  One Moon-avoidance curve per filter replaces the editable Moon limits: S2 reads each band's grade, windows and Img time from its curve and no longer raises OIII's Moon separation.
-  Evidence: HARNESS-V5-FEEDBACK-R1.md Round 9 C6 · D-W88 · PLAN-FR-02, PLAN-TGT-FR-06, PLAN-TGT-AC-18 · by: JourneysR9c (intent-gated)
+  One Moon-avoidance curve per filter replaces the separate Moon limits. S2's **Moon limits** edit now raises OIII's separation at full Moon, and only OIII's grade, windows and Img time recalculate.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md Round 9 C6 · D-W88 · PLAN-FR-02, PLAN-TGT-FR-06, PLAN-TGT-AC-18 · prototype moon-limits.tsx (ui-harness-v5) · by: JourneysR9c (intent-gated)

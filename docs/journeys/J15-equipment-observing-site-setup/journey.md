@@ -33,6 +33,7 @@ added and removed with the Default pill moving as stated, and Backyard and
 - P3: Backyard's coordinates and IANA time zone are the ones the J19/P2 fixture headers carry. `Remote site` uses the J19/P3 coordinates, at least 15° of longitude and one time zone away from Backyard (J20/P2).
 - P4: A fault control that makes the next save of a rig's filter list fail until it is disarmed (G5).
 - P5: A SHA-256 of every `Halpha-test` file is recorded before S3b.
+- P6: A network control that takes the machine offline and back online, for the map-unavailable check in S6.
 
 ## Steps
 
@@ -150,9 +151,9 @@ added and removed with the Default pill moving as stated, and Backyard and
 
 ### S6 — Add the Backyard observing site with the map {#S6}
 
-- **Do:** In Settings → Observing sites, add Backyard with a name, the P3 latitude, longitude and IANA time zone, leaving **Make default** unchecked. Search for a place, try **Use my location**, inspect the map, then edit the latitude and longitude fields before saving. Repeat the map check with the map unavailable.
-- **Expect:** The map uses Leaflet and OpenStreetMap tiles; place search and **Use my location** can fill candidate coordinates, while the numeric latitude and longitude fields remain the source of truth for the saved site. When the map is unavailable, the editor reads "Map unavailable" and still allows numeric coordinate entry. Backyard appears in the sites table with its formatted coordinates and time zone. It carries no Default pill, and the page shows "No default site".
-- **Expect (negative):** Saving the first site does not make it the default. Saving does not override edited numeric coordinates. Latitude outside ±90°, longitude outside ±180°, or a non-numeric elevation is rejected inline.
+- **Do:** In Settings → Observing sites, start adding Backyard with a name, its P3 IANA time zone and no elevation, leaving **Make default** unchecked. Search for a place and choose a result, inspect the map, then choose **Use my location**. Then re-enter the P3 latitude and longitude and save. Take the machine offline (P6), open the site editor again, read it and cancel. Bring the machine back online.
+- **Expect:** The map uses Leaflet and OpenStreetMap tiles, and its marker follows the latitude and longitude fields. Choosing a search result and **Use my location** each fill the latitude and longitude fields, and the fields are the record. Backyard appears in the sites table with the P3 coordinates, formatted, and its time zone, not the searched or located ones. It carries no Default pill, and the page shows "No default site". Offline, "Map unavailable" replaces the map and the place search, and the latitude and longitude fields still accept numbers.
+- **Expect (negative):** Saving Backyard does not make it the default. Latitude outside ±90°, longitude outside ±180°, or a non-numeric elevation is each rejected inline, and no site is saved.
 - **Trace:** baseline J15 v1/S6 · PLAN-FR-01 · PLAN-AC-04 · D-W16 · HARNESS-V5-IA.md S16 · HARNESS-V5-FEEDBACK-R1.md Round 9 C5
 
 ### S7 — Add a second site {#S7}
@@ -204,6 +205,6 @@ added and removed with the Default pill moving as stated, and Backyard and
 - **Δ5** 2026-10-15 · S2a, S3, S3b · behavior-change
   Two cameras of one model need distinct aliases, a camera can be set to Don't use darks or Don't use bias, and a rig starts at version 1. Which version `Halpha-test` records is left open (G12), because it was captured before `RedCat` existed.
   Evidence: D-W104 (F4 Project model, owner's answers of 2026-10-14) in PR #1804, 072 PLAN-EQ-FR-07, PLAN-EQ-FR-08, PLAN-EQ-AC-10, 064 LIB-FR-26 · by: SpecF4Writer2 (intent-gated)
-- **Δ6** 2026-10-17 · S6 · behavior-change
-  The observing-site editor includes a Leaflet/OpenStreetMap map, place search and **Use my location**, with numeric coordinates as source of truth and a map-unavailable fallback.
-  Evidence: HARNESS-V5-FEEDBACK-R1.md Round 9 C5 · PLAN-FR-01 · by: JourneysR9 (intent-gated)
+- **Δ6** 2026-10-17 · S6, +P6 · behavior-change
+  The observing-site editor has a Leaflet and OpenStreetMap map, place search and **Use my location**, which fill the latitude and longitude fields; the fields are the record. Offline (new P6), "Map unavailable" replaces the map and the search.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md Round 9 C5 · PLAN-FR-01 · prototype pickers (picker_map_unavailable, catalogue_pickers_location_desc) on ui-harness-v5 · by: JourneysR9c (intent-gated)

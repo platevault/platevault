@@ -123,15 +123,15 @@ The user checks the pinned calibration for the sessions in Project `NGC 7000 HOO
 
 ### S10 — Read the corrected values in Apply {#S10}
 
-- **Do:** Open the Apply sheet and read its Corrected values section.
-- **Expect:** The section gives the count of corrected values the held sessions recorded at ingestion ("N corrected values") and lists each with its session, its field, the value in the header and the corrected value. 24 Sep's Target, corrected in J19/S10, reads "–" in the header and NGC 7000 corrected. The section names how the application receives the values: read by Siril through its configuration, or as isolated patched copies. The sheet also shows the pending calibration change and the new View as a folder tree.
+- **Do:** With the S9 generic application selected in View and the View in Copies mode, open the Apply sheet and read its Corrected values section.
+- **Expect:** The section reads "2 corrected values", the two that held sessions recorded at ingestion in J19/S10. It lists each with its session, its field, the value in the header and the corrected value. 24 Sep's Target reads "–" in the header and NGC 7000 corrected, and 28 Sep's Equipment reads "–" in the header and `RedCat` corrected. Because the generic application reads no corrected values through its configuration, the section names the route as isolated patched copies in the Copies View. The sheet also shows the pending calibration change and the new View as a folder tree.
 - **Expect (negative):** The sheet offers no per-value choice: no accepting the source value and no excluding an input. No correction is made or changed in Apply.
 - **Trace:** PREP-FR-08, PREP-FR-16 · VSEL-FR-14 · LIB-FR-12 · D-W100 · HARNESS-V5-FEEDBACK-R1.md Round 9 C15 · PREP-FR-03 conflicts (G9)
 
 ### S11 — Apply the corrected values {#S11}
 
 - **Do:** Apply the reviewed View changes.
-- **Expect:** Apply builds the View from the originals, applies every listed corrected value and swaps the View in.
+- **Expect:** Apply builds the View from the originals, writes the two corrected values into isolated patched copies of the 24 Sep and 28 Sep frames in the Copies View, and swaps the View in.
 - **Expect (negative):** No original or link target is patched, and no correction is reported as delivered while the application still reads the original value.
 - **Trace:** PREP-FR-06, PREP-FR-09 · D-W100 · HARNESS-V5-FEEDBACK-R1.md Round 9 C15 · PREP-FR-03 conflicts (G9)
 
@@ -143,7 +143,7 @@ The user checks the pinned calibration for the sessions in Project `NGC 7000 HOO
 - SC4: Dated versions are shown with no Latest label or Update notice, and the 148-day-old dark has `Old · 148 d` while flats have no badge (S7a).
 - SC5: Hiding a master pinned on the Project is refused with the Project named; hiding and restoring an unused master changes no file bytes (S7b, S7c).
 - SC6: Siril and the input mode are chosen in View; an unknown or write-prone profile cannot use Symlinks without a refusal and explicit mode choice (S8, S9).
-- SC7: The Apply sheet lists the corrected values recorded at ingestion with their count and offers no per-value choice; Apply applies them without patching any original (S10, S11).
+- SC7: The Apply sheet reads "2 corrected values" with the route isolated patched copies and offers 0 per-value choices; Apply patches 0 originals (S10, S11).
 
 ## Known gaps
 
@@ -177,5 +177,5 @@ The user checks the pinned calibration for the sessions in Project `NGC 7000 HOO
   Calibration is pinned on sessions at ingestion; Project Calibrate is a read-only diagram, and profile and input-mode choices are in View. Dated versions have no Latest or Update notice, and darks and bias use the Old badge. S9 refuses Symlinks for a profile with unknown input-write behavior, which dissolves G7; G6 is dissolved because Calibrate has no rows to offer Stack, and G8 is new.
   Evidence: D-W93 to D-W106 (F4 Project model, owner's answers of 2026-10-14) in PR #1804, LIB-FR-23 to LIB-FR-26, CAL-FR-02 to CAL-FR-09, CAL-FR-13 to CAL-FR-23, PREP-FR-01, PREP-FR-03, PREP-FR-04, PREP-FR-06, PREP-FR-08, PREP-FR-09, PREP-AC-11 · by: SpecF4Writer2 (intent-gated)
 - **Δ7** 2026-10-17 · S10, S11 · behavior-change
-  Corrections are recorded at session ingestion, so Apply lists the corrected values with their count and applies all of them; the per-value choice (accept the source value, exclude the input) is gone. G9 records the conflict with 069 PREP-FR-03.
+  Corrections are recorded at session ingestion, so Apply lists the corrected values with their count ("2 corrected values" from J19/S10) and applies all of them, here as isolated patched copies for the S9 generic application. The per-value choice (accept the source value, exclude the input) is gone. G9 records the conflict with 069 PREP-FR-03.
   Evidence: HARNESS-V5-FEEDBACK-R1.md Round 9 C15 · prototype view-step.tsx Corrected values section (ui-harness-v5) · by: JourneysR9c (intent-gated)

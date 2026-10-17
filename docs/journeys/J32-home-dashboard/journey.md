@@ -42,7 +42,7 @@ The user opens PlateVault and decides what to do next from Home. Home shows pend
   - `3 Oct` (OBJECT `Cygnus field`, conflicting pointing) and `5 Oct` (no OBJECT, no pointing): no confirmed Target.
 
   `NGC 7000 HOO` holds the worked example's Ha sessions `18 Sep` and `28 Sep` (111 frames). Its other matching Ready sessions are suggestions until the user adds them. No session joins a Project automatically, and `2 Oct OIII` cannot be added before review and settled calibration.
-- P4: My targets holds ★ M 33. M 45 is not ★.
+- P4: My targets holds ★ M 33. M 45 is not ★. Tomorrow's plan at Backyard, the night of 7 Oct, holds NGC 7000, and no other night has a planned Target.
 - P5: A manifest (relative path, size, SHA-256) of every file under the registered locations, recorded outside PlateVault before S1.
 - P6: No two files under the registered locations are byte-identical, so a duplicate scan finds no duplicate copies.
 
@@ -119,8 +119,8 @@ The user opens PlateVault and decides what to do next from Home. Home shows pend
 
 ### S7a — Inspect and open a calendar night {#S7a}
 
-- **Do:** Read Home's Calendar. Hover over, then keyboard-focus, a night that suits a goal and has a planned Target. Read its card, then choose the night.
-- **Expect:** The Calendar shows five weeks of nights starting this week. Each night shows its Moon phase, its hours of darkness, the number of unfinished goals it suits and the number of Targets planned for it. The card lists the night's dark window, the Moon's illumination, rise and set, the goals it suits best first, the goals the Moon rules out, and the planned Targets. Choosing the night opens Targets set to that night.
+- **Do:** Read Home's Calendar. Hover over the night of 7 Oct, then keyboard-focus it. Read its card, then choose the night.
+- **Expect:** The Calendar shows five weeks of nights, starting with the week of 6 Oct. Each night shows its Moon phase, its hours of darkness, the number of unfinished goals it suits and the number of Targets planned for it. The night of 7 Oct counts 1 planned Target, and every other night counts 0. The card for 7 Oct lists its dark window, the Moon's illumination, rise and set, the goals it suits best first, the goals the Moon rules out, and NGC 7000 as its planned Target. Choosing the night opens Targets set to 7 Oct.
 - **Expect (negative):** Hovering, focusing or choosing a night creates no plan or reminder and changes no Project.
 - **Trace:** PRJ-FR-17 · PLAN-FR-12 · PLAN-AC-14 · D-W89 · HARNESS-V5-FEEDBACK-R1.md Round 9 C8
 
@@ -165,7 +165,7 @@ The user opens PlateVault and decides what to do next from Home. Home shows pend
 - SC6: `Pleiades 2025` is Closed and never appears in Home's Open work (S2, S9).
 - SC7: The S11 manifest equals P5 for 100% of files.
 - SC8: At S2a one click on a Project row opens that Project's page, and S5 moves, trashes or archives 0 files.
-- SC9: The Calendar shows 5 weeks starting this week, and choosing a night opens Targets set to that night with no plan created (S7a).
+- SC9: The Calendar shows 5 weeks starting with the week of 6 Oct. Exactly 1 night, 7 Oct, counts a planned Target (P4), and choosing it opens Targets set to 7 Oct with 0 plans created (S7a).
 
 ## Known gaps
 
@@ -190,6 +190,6 @@ The user opens PlateVault and decides what to do next from Home. Home shows pend
 - **Δ5** 2026-10-16 · S4 · behavior-change
   S4 marks the 48 frames with ⌘A and P, and the mark asks `Mark 48 frames Usable?` before any frame changes. G6 is dissolved.
   Evidence: D-W118 (owner's second batch of 2026-10-16) in PR #1804, PIX-FR-14, PIX-AC-21 · by: EncodeOwnerAnswers2 (intent-gated)
-- **Δ6** 2026-10-17 · +S7a · behavior-change
-  Home's five-week Calendar is now asserted: each night's Moon phase, darkness, suited goals and planned Targets, the card on hover or focus, and choosing a night opens Targets set to that night.
+- **Δ6** 2026-10-17 · +S7a, +SC9, P4 · behavior-change
+  New S7a checks Home's five-week Calendar: each night's Moon phase, darkness, suited goals and planned Targets, and the card on hover or focus. Choosing a night opens Targets set to that night. P4 now plans NGC 7000 for 7 Oct, so that night counts one planned Target.
   Evidence: HARNESS-V5-FEEDBACK-R1.md Round 9 C8 (decision astro-plan-b66vy) · D-W89 · PLAN-FR-12, PLAN-AC-14 · by: JourneysR9c (intent-gated)
