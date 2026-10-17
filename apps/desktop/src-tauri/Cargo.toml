@@ -98,6 +98,9 @@ tempfile = { workspace = true }
 # runner with no interactive desktop. Dev-only, so no shipping build can reach
 # it.
 fs_executor = { path = "../../../crates/fs/executor", features = ["e2e-trash-fake"] }
+# The workspace's FITS fixture builder: `tests/library_restart.rs` scans real
+# FITS files through the library shell.
+fits_fixtures = { path = "../../../crates/testing/fits-fixtures" }
 
 [features]
 # Developer-mode surface (spec 021). Release binaries MUST NOT enable this.
