@@ -105,9 +105,7 @@ describe('svg/no-raw-svg-colour', () => {
       "const svg = <svg fill={`url(#paint-${active ? '#fff' : 'red'})`} stroke={`url(#${active ? 'currentColor' : 'var(--pv-accent)'})`} />;",
     );
 
-    expect(
-      diagnostics.map((diagnostic) => [diagnostic.message, diagnostic.column]),
-    ).toEqual([]);
+    expect(diagnostics).toHaveLength(0);
   });
 
   it('allows conditionals selecting theme values and currentColor', () => {
@@ -351,6 +349,22 @@ describe('svg/no-raw-svg-colour', () => {
   });
   it('flags raw colors assembled through nested static templates', () => {
     const diagnostics = lint('const svg = <svg fill={`re${`d`}`} />;');
+
+    expect(diagnostics).toHaveLength(1);
+  });
+  it('allows URL color-like suffixes in a var fallback', () => {
+    const diagnostics = lint(
+      'const svg = <svg fill={`var(--pv-fill, url(#${id}red))`} />;',
+    );
+
+    expect(
+      diagnostics.map((diagnostic) => [diagnostic.message, diagnostic.column]),
+    ).toEqual([]);
+  });
+  it('checks a raw fallback after a URL is closed by interpolation', () => {
+    const diagnostics = lint(
+      "const svg = <svg fill={`url(#paint${useFallback ? ') red' : ')'}`} />;",
+    );
 
     expect(diagnostics).toHaveLength(1);
   });

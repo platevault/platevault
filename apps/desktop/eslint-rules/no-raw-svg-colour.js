@@ -92,6 +92,17 @@ function isSvgPresentationElement(node) {
 
   return ownName.toLowerCase() === 'svg' || SVG_ELEMENTS.has(ownName.toLowerCase());
 }
+function findUrlClose(value) {
+  let nestedParens = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    if (value[index] === '(') nestedParens += 1;
+    else if (value[index] === ')') {
+      if (nestedParens === 0) return index;
+      nestedParens -= 1;
+    }
+  }
+  return -1;
+}
 function getStaticString(expression) {
   if ((expression.type === 'Literal' || expression.type === 'StringLiteral') && typeof expression.value === 'string') {
     return expression.value;
@@ -132,6 +143,23 @@ function collectStringLiterals(expression, values) {
     collectStringLiterals(expression.expressions.at(-1), values);
   }
 }
+function isAllowedPaintExpression(expression) {
+  if (expression.type === 'Literal' || expression.type === 'StringLiteral') {
+    return typeof expression.value === 'string' && !isRawColor(expression.value);
+  }
+  if (expression.type === 'LogicalExpression') {
+    return expression.operator === '&&'
+      ? isAllowedPaintExpression(expression.right)
+      : expression.operator === '||' || expression.operator === '??'
+        ? isAllowedPaintExpression(expression.left) && isAllowedPaintExpression(expression.right)
+        : false;
+  }
+  if (expression.type === 'ConditionalExpression') {
+    return isAllowedPaintExpression(expression.consequent) && isAllowedPaintExpression(expression.alternate);
+  }
+  if (expression.type === 'SequenceExpression') return isAllowedPaintExpression(expression.expressions.at(-1));
+  return false;
+}
 
 
 function reportRawColorsInExpression(expression, report) {
@@ -161,12 +189,12 @@ function reportRawColorsInExpression(expression, report) {
       return;
     case 'TemplateLiteral':
       const quasis = expression.quasis.map((quasi) => quasi.value.cooked ?? quasi.value.raw);
-      const staticParts = expression.expressions.map((part) => getStaticString(part) ?? '\u0000');
+      const staticParts = expression.expressions.map((part) => getStaticString(part));
       const staticText = quasis.reduce(
         (text, quasi, index) => text + quasi + (staticParts[index] ?? ''),
         '',
       );
-      if (staticParts.every((part) => part !== '\u0000')) {
+      if (staticParts.every((part) => part !== null)) {
         if (isRawColor(staticText)) report();
         return;
       }
@@ -175,7 +203,22 @@ function reportRawColorsInExpression(expression, report) {
       const scanText = (text) => {
         let cursor = 0;
         while (cursor < text.length) {
-          if (mode === 'url' || mode === 'color-function') {
+          if (mode === 'url') {
+            let nestedParens = 0;
+            let close = -1;
+            for (let index = cursor; index < text.length; index += 1) {
+              if (text[index] === '(') nestedParens += 1;
+              else if (text[index] === ')') {
+                if (nestedParens === 0) { close = index; break; }
+                nestedParens -= 1;
+              }
+            }
+            if (close < 0) return;
+            cursor = close + 1;
+            mode = 'normal';
+            continue;
+          }
+          if (mode === 'color-function') {
             const close = text.indexOf(')', cursor);
             if (close < 0) return;
             cursor = close + 1;
@@ -183,18 +226,29 @@ function reportRawColorsInExpression(expression, report) {
             continue;
           }
           if (mode === 'dynamic-var-argument' || mode === 'variable-name') {
-            const boundary = text.slice(cursor).search(/[),]/);
-            if (boundary < 0) return;
-            const delimiter = text[cursor + boundary];
-            if (delimiter === ',') {
-              const close = text.indexOf(')', cursor + boundary + 1);
-              const fallbackEnd = close < 0 ? text.length : close;
-              if (isRawColor(text.slice(cursor + boundary + 1, fallbackEnd))) report();
-              cursor = close < 0 ? text.length : close + 1;
-            } else {
-              cursor += boundary + 1;
+            let depth = 0;
+            let boundary = -1;
+            let delimiter = '';
+            for (let index = cursor; index < text.length; index += 1) {
+              if (text[index] === '(') depth += 1;
+              else if (text[index] === ')') {
+                if (depth === 0) { boundary = index - cursor; delimiter = ')'; break; }
+                depth -= 1;
+              } else if (text[index] === ',' && depth === 0) {
+                boundary = index - cursor; delimiter = ','; break;
+              }
             }
-            mode = 'normal';
+            if (boundary < 0) return;
+            const boundaryIndex = cursor + boundary;
+            if (delimiter === ',') {
+              mode = 'normal';
+              const fallback = text.slice(boundaryIndex + 1);
+              scanText(fallback);
+              cursor = text.length;
+            } else {
+              cursor = boundaryIndex + 1;
+              mode = 'normal';
+            }
             continue;
           }
 
@@ -203,7 +257,6 @@ function reportRawColorsInExpression(expression, report) {
           const end = match ? match.index : text.length;
           if (isRawColor(text.slice(cursor, end))) report();
           if (!match) return;
-
           const functionName = match[0].trim().slice(0, -1).toLowerCase();
           cursor = opener.lastIndex;
           if (functionName === 'url') {
@@ -228,17 +281,41 @@ function reportRawColorsInExpression(expression, report) {
         scanText(quasi);
         if (index < expression.expressions.length) {
           let interpolationHandled = false;
-          if (mode === 'variable-name' || mode === 'dynamic-var-argument') {
+          if (mode === 'url') {
+            interpolationHandled = true;
+            const values = [];
+            collectStringLiterals(expression.expressions[index], values);
+            if (values.some((value) => findUrlClose(value) >= 0)) {
+              mode = 'normal';
+              for (const value of values) {
+                const close = findUrlClose(value);
+                if (close >= 0 && value.slice(close + 1)) scanText(value.slice(close + 1));
+              }
+            }
+          }
+          if (!interpolationHandled && (mode === 'variable-name' || mode === 'dynamic-var-argument')) {
             const values = [];
             collectStringLiterals(expression.expressions[index], values);
             interpolationHandled = true;
+            const nestedUrlFallback = values.some((value) => {
+              const comma = value.indexOf(',');
+              return comma >= 0 && /url\s*\(/i.test(value.slice(comma + 1));
+            });
             if (values.some((value) => value.includes(','))) {
               mode = 'normal';
               for (const value of values) {
                 const comma = value.indexOf(',');
-                if (comma >= 0 && isRawColor(value.slice(comma + 1))) report();
+                if (comma >= 0) {
+                  const before = value.slice(0, comma + 1);
+                  const after = value.slice(comma + 1);
+                  if (!nestedUrlFallback) scanText(before);
+                  if (after) scanText(after);
+                }
               }
             }
+          }
+          if (mode === 'normal' && expression.expressions[index].type === 'LogicalExpression' && isAllowedPaintExpression(expression.expressions[index])) {
+            interpolationHandled = true;
           }
           const skipInterpolation = interpolationHandled || mode !== 'normal';
           if (mode === 'normal' && /#\s*$/.test(quasi)) report();
