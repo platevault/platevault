@@ -167,15 +167,15 @@ export function plannedFootprint(disk: Disk, plan: Pick<ApplyPlan, "plan" | "mod
 
 /** "Linked · 0 B", "18 frames copied · 3.4 GB (cloned)", or both parts when Symlinks carries isolated patched copies. */
 export function footprintText(m: Messages, fp: Footprint): string {
-  const linked = fp.links > 0 ? m.view_footprint_linked({ count: fp.links, n: formatCount(fp.links) }) : null
+  const linked = fp.links > 0 ? m.view_footprint_linked({ count: fp.links, n: fp.links }) : null
   if (fp.copies === 0) return m.view_footprint_links_only()
-  const cloned = fp.cloned === 0 ? "" : fp.cloned === fp.copies ? ` ${m.view_footprint_cloned()}` : ` ${m.view_footprint_some_cloned({ count: fp.cloned, n: formatCount(fp.cloned) })}`
-  const copied = `${m.view_footprint_copied({ count: fp.copies, n: formatCount(fp.copies) })} · ${formatBytes(fp.bytes)}${cloned}`
+  const cloned = fp.cloned === 0 ? "" : fp.cloned === fp.copies ? ` ${m.view_footprint_cloned()}` : ` ${m.view_footprint_some_cloned({ count: fp.cloned, n: fp.cloned })}`
+  const copied = `${m.view_footprint_copied({ count: fp.copies, n: fp.copies })} · ${formatBytes(fp.bytes)}${cloned}`
   return linked ? `${linked} · ${copied}` : copied
 }
 
 function entriesText(m: Messages, fp: Footprint): string {
-  return m.view_entries_split({ lights: formatCount(fp.lights), calibration: formatCount(fp.calibration) })
+  return m.view_entries_split({ lights: fp.lights, calibration: fp.calibration })
 }
 
 /** Free space on the volume holding `path`, and that volume's name; null while it is not mounted. */
@@ -199,7 +199,7 @@ export function openRefusal(m: Messages, state: Pick<PrototypeState, "catalog" |
   if (!view) return m.project_view_not_built()
   if (!freeOn(state.disk, view.folderPath)) return m.view_offline()
   const changed = view.entries.filter((e) => !entryVerified(state.disk, view.folderPath, e)).length
-  return changed > 0 ? m.view_open_entries_changed({ count: changed, n: formatCount(changed) }) : null
+  return changed > 0 ? m.view_open_entries_changed({ count: changed, n: changed }) : null
 }
 
 function blocked(m: Messages, label: string, reason: string | null): Action["unavailable"] {
@@ -223,13 +223,13 @@ export function toolNotes(m: Messages, application: ApplicationKind | null, appN
       ...(layout.groupLevel ? [m.view_note_wbpp_group({ keyword: groupKeyword }), m.view_note_wbpp_reference({ keyword: groupKeyword })] : []),
       m.view_note_wbpp_output({ path: "Processing/WBPP/" }),
     ]
-  if (application === "siril") return [m.view_note_siril_sets({ count: plan.siril?.length ?? 0, n: formatCount(plan.siril?.length ?? 0) }), m.view_note_siril_links()]
+  if (application === "siril") return [m.view_note_siril_sets({ count: plan.siril?.length ?? 0, n: plan.siril?.length ?? 0 }), m.view_note_siril_links()]
   if (application === "seti-astro") return [m.view_note_add_view({ name: appName }), ...(mixedVersions ? [m.view_note_saspro_two_passes()] : [])]
   return appName ? [m.view_note_add_view({ name: appName })] : []
 }
 
 function sirilCounts(m: Messages, set: SirilSet): string {
-  const count = (folder: SirilSet["links"][number]["folder"]) => formatCount(set.links.filter((l) => l.folder === folder).length)
+  const count = (folder: SirilSet["links"][number]["folder"]) => set.links.filter((l) => l.folder === folder).length
   return m.view_siril_set_counts({ lights: count("lights"), flats: count("flats"), darks: count("darks"), biases: count("biases") })
 }
 
@@ -535,7 +535,7 @@ function ApplySheetDialog({ project, sheet }: { project: Project; sheet: ApplySh
           </Section>
         ) : null}
         {plan.corrections.values.length > 0 ? (
-          <Section level={3} id="apply-corrections" title={m.apps_corrected_values()} description={patched > 0 ? m.view_corrections_patched({ count: patched, n: formatCount(patched) }) : m.view_corrections_configuration({ name: profile?.name ?? "" })}>
+          <Section level={3} id="apply-corrections" title={m.apps_corrected_values()} description={patched > 0 ? m.view_corrections_patched({ count: patched, n: patched }) : m.view_corrections_configuration({ name: profile?.name ?? "" })}>
             <DataTable label={m.apps_corrected_values()} rows={plan.corrections.values} columns={correctionColumns} getRowId={(c) => `${c.session.id}:${c.field}`} scroll="none" />
           </Section>
         ) : null}

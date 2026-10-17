@@ -256,7 +256,7 @@ function planOver(state: World, sessions: Session[], destinationFor: (session: S
   let block = blocked
   if (!block && volume && !volume.mounted) block = msg("wrapup_refusal_not_mounted", { name: volume.name })
   if (!block && volume && !volume.writable) block = msg("wrapup_refusal_not_writable", { name: volume.name })
-  if (!block && volume && sizeBytes > free) block = msg("wrapup_refusal_space", { name: volume.name, free: formatBytes(free), size: formatBytes(sizeBytes) })
+  if (!block && volume && sizeBytes > free) block = msg("wrapup_refusal_space", { name: volume.name, free: { bytes: free }, size: { bytes: sizeBytes } })
   return { destination, volume, freeBytes: free, rows, refused, sizeBytes, blocked: block }
 }
 

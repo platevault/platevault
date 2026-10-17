@@ -17,7 +17,7 @@
  */
 import { m as generated } from "@/paraglide/messages"
 import type { Locale } from "@/paraglide/runtime"
-import { formatNight } from "./format"
+import { formatBytes, formatCount, formatNight } from "./format"
 
 export { baseLocale as DEFAULT_LOCALE, getLocale, isLocale, locales as LOCALES, type Locale } from "@/paraglide/runtime"
 
@@ -54,10 +54,10 @@ interface KeyedRef {
  * carry instead of a finished string, so a language switch re-words them.
  * A param may itself be a ref (a step name, a rig), worded first. `text` is
  * data shown as-is (names, paths), never English; `night` is an observing
- * night (`YYYY-MM-DD`), formatted in the reader's locale; `list` joins
- * finished pieces with punctuation only.
+ * night (`YYYY-MM-DD`), and `count` and `bytes` retain numeric values so they
+ * format in the reader's locale; `list` joins finished pieces with punctuation only.
  */
-export type MessageRef = KeyedRef | { text: string } | { night: string } | { list: MessageRef[]; separator: string }
+export type MessageRef = KeyedRef | { text: string } | { night: string } | { count: number } | { bytes: number } | { list: MessageRef[]; separator: string }
 
 type ParamArgs<K extends MessageKey> = {} extends MessageInputs<K> ? [params?: MessageInputs<K>] : [params: MessageInputs<K>]
 
@@ -82,17 +82,18 @@ export function joinRefs(list: MessageRef[], separator: string): MessageRef {
 }
 
 function isRef(value: unknown): value is MessageRef {
-  return typeof value === "object" && value !== null && ("key" in value || "text" in value || "night" in value || "list" in value)
+  return typeof value === "object" && value !== null && ("key" in value || "text" in value || "night" in value || "count" in value || "bytes" in value || "list" in value)
 }
 
 /** Word a ref with the caller's catalogue (`useMessages()` in a component, so it re-renders on a language switch). */
 export function say(m: Messages, ref: MessageRef): string {
   if ("text" in ref) return ref.text
   if ("night" in ref) return formatNight(ref.night)
+  if ("count" in ref) return formatCount(ref.count)
+  if ("bytes" in ref) return formatBytes(ref.bytes)
   if ("list" in ref) return ref.list.map((item) => say(m, item)).join(ref.separator)
   const params: Record<string, unknown> = {}
   for (const [name, value] of Object.entries(ref.params)) params[name] = isRef(value) ? say(m, value) : value
-  // A key a later build renamed reads as the key, as Paraglide renders a missing variant, rather than crashing the page.
   const word = m[ref.key] as unknown
   return typeof word === "function" ? (word as (inputs: Record<string, unknown>) => string)(params) : ref.key
 }

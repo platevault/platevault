@@ -50,7 +50,7 @@ import { pointingAgainst, targetAtPointing } from "@/domain/indexing"
 import { sessionLongLabel } from "@/domain/membership"
 import { matchesQuery } from "@/domain/sky"
 import type { CorrectionField, OpticalTrainId, Session, Target, TargetId } from "@/domain/types"
-import { formatBytes, formatCount } from "@/lib/format"
+import { formatBytes } from "@/lib/format"
 import { type Messages, say } from "@/lib/i18n"
 import { sessionIntake } from "@/store/actions/flows"
 import { confirmRig, confirmTarget, filedUnclassified, fileIntoTarget, filingMoves } from "@/store/actions/library"
@@ -168,7 +168,7 @@ function fileIntoConfirm(m: Messages, state: PrototypeState, session: Session, t
   const size = moves.reduce((n, mv) => n + mv.sizeBytes, 0)
   const folder = (path: string) => path.slice(0, path.lastIndexOf("/"))
   return {
-    title: m.session_file_into_title({ count: moves.length, n: formatCount(moves.length), name: targetName }),
+    title: m.session_file_into_title({ count: moves.length, n: moves.length, name: targetName }),
     summary: formatBytes(size),
     groups: [{ label: m.session_confirms_target({ name: targetName }), rows: moves.map((mv) => ({ file: mv.to.slice(mv.to.lastIndexOf("/") + 1), from: folder(mv.from.path), to: folder(mv.to), action: "move", size: mv.sizeBytes })) }],
     confirm: { label: m.session_file_into({ name: targetName }) },

@@ -21,7 +21,6 @@ import { unitCount } from "@/domain/labels"
 import type { ProjectTabId } from "@/domain/project-view"
 import { runningDuplicateScan } from "@/domain/storage"
 import type { ActivityEvent, LocationId, Operation, OperationId, OperationItem, OperationKind, OperationScope, OperationStatus, OperationUnit, SettledStatus } from "@/domain/types"
-import { formatCount } from "@/lib/format"
 import { joinRefs, type MessageRef, msg, verbatim } from "@/lib/i18n"
 import { nowIso, type PrototypeState, store } from "./core"
 
@@ -141,7 +140,7 @@ function scanAfter(state: PrototypeState, op: Operation, status: SettledStatus):
 /** Settle an operation and record its outcome in Activity. */
 export function settleOperation(state: PrototypeState, id: OperationId, status: SettledStatus, summary: MessageRef, href: string | null = null): PrototypeState {
   const op = state.operations[id]
-  if (!op) return state
+  if (!op || isSettled(op.status)) return state
   const now = nowIso()
   const event: ActivityEvent = { id: `act_${id}`, at: now, kind: "operation", title: op.title, detail: summary, status, operationId: id, href }
   const settled: PrototypeState = {
@@ -289,7 +288,7 @@ function startNextLocation(state: PrototypeState, op: Operation, payload: IndexP
     const items = op.items.map((item): OperationItem => {
       if (item.id !== locationId) return item
       if (listing.offline) return { ...item, status: "blocked", detail: msg("op_index_offline") }
-      return { ...item, status: "running", detail: msg("op_index_files_to_read", { count: listing.readable.length, n: formatCount(listing.readable.length) }) }
+      return { ...item, status: "running", detail: msg("op_index_files_to_read", { count: listing.readable.length, n: { count: listing.readable.length } }) }
     })
     next = patchOperation(next, op.id, { items })
     if (listing.offline) continue
@@ -348,7 +347,7 @@ const indexHandler: OperationHandler = {
         if (!volumeMounted) return { ...item, status: "blocked", detail: msg("op_index_went_offline", { files: unitCount("files", observed.length) }) }
         if (settled.access === "denied") return { ...item, status: "blocked", detail: msg("op_index_access_denied") }
         if (settled.scanScope === "incomplete") return { ...item, status: "uncertain", detail: msg("op_index_incomplete", { count: settled.unreadablePaths.length }) }
-        return { ...item, status: "done", detail: msg("op_index_files_read", { count: observed.length, n: formatCount(observed.length) }) }
+        return { ...item, status: "done", detail: msg("op_index_files_read", { count: observed.length, n: { count: observed.length } }) }
       })
       next = patchOperation(next, op.id, { items })
       payload = { ...payload, current: null }
@@ -368,7 +367,7 @@ function finishIndex(state: PrototypeState, id: OperationId, payload: IndexPaylo
   const blocked = op.items.filter((i) => i.status === "blocked" || i.status === "uncertain").length
   const { read, unsupported, unreadableFolders } = payload.counts
   const parts = [
-    msg("op_index_files_read", { count: read, n: formatCount(read) }),
+    msg("op_index_files_read", { count: read, n: { count: read } }),
     unsupported ? msg("op_index_unsupported", { count: unsupported }) : null,
     unreadableFolders ? msg("op_index_unreadable_folders", { count: unreadableFolders }) : null,
     blocked

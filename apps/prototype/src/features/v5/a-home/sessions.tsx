@@ -223,7 +223,7 @@ function trashUnusableAction(m: Messages, state: PrototypeState, scope: SessionR
     run: () => {
       moveToOsTrash({
         kind: "rejected-frames",
-        title: msg("wrapup_offer_rejected", { count: offer.count, n: formatCount(offer.count), size: formatBytes(offer.sizeBytes) }),
+        title: msg("wrapup_offer_rejected", { count: offer.count, n: { count: offer.count }, size: { bytes: offer.sizeBytes } }),
         projectId: null,
         items: offer.items,
         href: "/sessions?filter=unusable",

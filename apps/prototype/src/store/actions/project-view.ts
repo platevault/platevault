@@ -48,7 +48,7 @@ import {
   viewDrift,
 } from "@/domain/project-view"
 import type { DiskFile, InputMode, Operation, OperationId, OutputKind, PreviousLeftover, Project, ProjectId, ViewEntry, ViewLayout, VolumeId } from "@/domain/types"
-import { fileName, formatCount } from "@/lib/format"
+import { fileName } from "@/lib/format"
 import { joinRefs, type MessageRef, msg, verbatim } from "@/lib/i18n"
 import { type CommitResult, commit, nowIso, type PrototypeState, store, withCatalog } from "@/store/core"
 import { addOperation, ensureTicker, type OperationHandler, patchOperation, settleOperation } from "@/store/operations"
@@ -298,7 +298,7 @@ function swap(state: PrototypeState, op: Operation, payload: ApplyPayload): Prot
   }
   next = patchOperation(next, op.id, { payload: { ...payload, phase: "swapping" } as unknown as Record<string, unknown>, progress: { ...op.progress, done: op.progress.total } })
   const left = leftovers.length - kept.length
-  const summary = joinRefs([msg("op_apply_swapped", { entries: unitCount("entries", payload.placed.length) }), ...(left > 0 ? [msg("op_apply_left_previous", { count: left, n: formatCount(left) })] : [])], " · ")
+  const summary = joinRefs([msg("op_apply_swapped", { entries: unitCount("entries", payload.placed.length) }), ...(left > 0 ? [msg("op_apply_left_previous", { count: left, n: { count: left } })] : [])], " · ")
   return settleOperation(next, op.id, "succeeded", summary, viewHref(project.id))
 }
 

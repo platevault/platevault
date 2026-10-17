@@ -608,7 +608,7 @@ export function panelBalance(channel: GoalChannel, unit: GoalUnit, counted: Arra
   const pct = numberText(tolerancePct)
   const line = !furthest
     ? msg("domain_balance_within", { pct })
-    : msg(furthest.deviationPct < 0 ? "domain_balance_below" : "domain_balance_above", { panel: groupRef(furthest.panel), deviation: formatCount(Math.round(Math.abs(furthest.deviationPct))), pct })
+    : msg(furthest.deviationPct < 0 ? "domain_balance_below" : "domain_balance_above", { panel: groupRef(furthest.panel), deviation: Math.round(Math.abs(furthest.deviationPct)), pct })
   return { channel, unit, tolerancePct, mean, panels, balanced, furthest, line }
 }
 

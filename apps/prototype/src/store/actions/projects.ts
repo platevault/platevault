@@ -51,7 +51,6 @@ import type {
   WrapUpStepId,
   WrapUpStepRecord,
 } from "@/domain/types"
-import { formatCount } from "@/lib/format"
 import { joinRefs, m, type MessageRef, msg } from "@/lib/i18n"
 import { type CommitResult, commit, nowIso, type PrototypeState, store } from "@/store/core"
 import type { OperationHandler } from "@/store/operations"
@@ -312,7 +311,7 @@ export function addSessions(projectId: ProjectId, sessionIds: SessionId[], group
   const state = store.getState()
   const project = state.catalog.projects[projectId]
   if (!project) return MISSING
-  const label = msg("store_label_add_sessions", { count: sessionIds.length, n: formatCount(sessionIds.length) })
+  const label = msg("store_label_add_sessions", { count: sessionIds.length, n: { count: sessionIds.length } })
   if (groupId && !project.groups.some((g) => g.id === groupId)) return MISSING
   const blocked = sessionIds.flatMap((id) => {
     const session = state.catalog.sessions[id]
@@ -329,7 +328,7 @@ export function removeSessions(projectId: ProjectId, sessionIds: SessionId[]): C
   const project = current(projectId)
   if (!isProject(project)) return project
   const gone = new Set(sessionIds)
-  return editProject(projectId, msg("store_label_remove_sessions", { count: sessionIds.length, n: formatCount(sessionIds.length) }), project.revision, (p) => ({ ...p, inputs: p.inputs.filter((i) => !gone.has(i.sessionId)) }))
+  return editProject(projectId, msg("store_label_remove_sessions", { count: sessionIds.length, n: { count: sessionIds.length } }), project.revision, (p) => ({ ...p, inputs: p.inputs.filter((i) => !gone.has(i.sessionId)) }))
 }
 
 /** Move whole sessions into another group (PRJ-FR-27); the folder they sit in changes on the next Apply. */
@@ -433,7 +432,7 @@ export function setFramesExcluded(projectId: ProjectId, sessionId: SessionId, as
   const project = current(projectId)
   if (!isProject(project)) return project
   const ids = new Set(assetIds)
-  const label = excluded ? msg("project_label_exclude_frames", { count: ids.size, n: formatCount(ids.size) }) : msg("project_label_include_frames", { count: ids.size, n: formatCount(ids.size) })
+  const label = excluded ? msg("project_label_exclude_frames", { count: ids.size, n: { count: ids.size } }) : msg("project_label_include_frames", { count: ids.size, n: { count: ids.size } })
   return editProject(projectId, label, project.revision, (p) =>
     withInput(p, sessionId, (i) => ({ ...i, excluded: excluded ? [...new Set([...i.excluded, ...ids])] : i.excluded.filter((id) => !ids.has(id)) })),
   )
@@ -444,7 +443,7 @@ export function setUnusableIncluded(projectId: ProjectId, sessionId: SessionId, 
   const project = current(projectId)
   if (!isProject(project)) return project
   const ids = new Set(assetIds)
-  const label = included ? msg("project_label_use_unusable", { count: ids.size, n: formatCount(ids.size) }) : msg("project_label_drop_unusable", { count: ids.size, n: formatCount(ids.size) })
+  const label = included ? msg("project_label_use_unusable", { count: ids.size, n: { count: ids.size } }) : msg("project_label_drop_unusable", { count: ids.size, n: { count: ids.size } })
   return editProject(projectId, label, project.revision, (p) =>
     withInput(p, sessionId, (i) => ({ ...i, included: included ? [...new Set([...i.included, ...ids])] : i.included.filter((id) => !ids.has(id)) })),
   )

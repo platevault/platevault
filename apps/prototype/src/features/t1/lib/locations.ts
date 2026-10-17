@@ -313,7 +313,7 @@ export function retireLocation(review: RetireReview, href: string): CommitResult
     {
       label: msg("store_label_retirement_of", { name: review.displayName }),
       saved: msg("store_saved_retired", { name: review.displayName }),
-      detail: msg("store_location_retired_detail", { count: review.frames, n: formatCount(review.frames), path: review.path }),
+      detail: msg("store_location_retired_detail", { count: review.frames, n: { count: review.frames }, path: review.path }),
       href,
     },
     (s) =>

@@ -1,9 +1,10 @@
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } from "@tanstack/react-router"
-import { render, screen, waitFor } from "@testing-library/react"
+import { act, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest"
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest"
+import { setLocale } from "@/app/preferences"
 import { createSeed } from "@/domain/seed"
-import { m } from "@/lib/i18n"
+import { DEFAULT_LOCALE, m, msg, say } from "@/lib/i18n"
 import { SCHEMA_VERSION, store } from "@/store/core"
 import { initialSliceStates, sliceVersions } from "@/store/slices"
 import { ActivityPage, openLabel } from "./activity"
@@ -25,6 +26,7 @@ beforeAll(() => {
 afterAll(() => {
   globalThis.ResizeObserver = original
 })
+afterEach(() => setLocale(DEFAULT_LOCALE))
 
 function renderActivity() {
   const root = createRootRoute()
@@ -42,6 +44,22 @@ describe("Activity", () => {
     await user.click(await screen.findByRole("button", { name: m.actions_for({ name: "Apply Cygnus HOO 2026" }) }))
     await user.click(await screen.findByRole("menuitem", { name: "Open View" }))
     await waitFor(() => expect(window.location.hash).toBe("#/projects/prj_cygnus?stage=view"))
+  })
+
+  it("reformats saved activity and operation titles after a locale switch", async () => {
+    store.setState((current) => ({
+      ...current,
+      activity: [
+        { id: "act_locale", at: "2026-10-01T12:00:00.000Z", kind: "saved", title: msg("op_archive_sessions_archived", { count: 1820, n: { count: 1820 } }), detail: null, operationId: null, href: null },
+      ],
+      operations: { ...current.operations, locale: { id: "locale", kind: "import", title: msg("wrapup_offer_rejected", { count: 1820, n: { count: 1820 }, size: { bytes: 1_200_000_000 } }), status: "running", scope: {}, progress: { done: 0, total: 1820, unit: "frames" }, items: [], summary: null, canPause: false, canCancel: false, payload: {}, createdAt: "2026-10-01T12:00:00.000Z", updatedAt: "2026-10-01T12:00:00.000Z", settledAt: null } },
+    }))
+    renderActivity()
+    expect(await screen.findByText(m.op_archive_sessions_archived({ count: 1820, n: "1,820" }))).toBeInTheDocument()
+
+    act(() => setLocale("pt-BR"))
+    expect(screen.getByText(m.op_archive_sessions_archived({ count: 1820, n: "1.820" }))).toBeInTheDocument()
+    expect(say(m, store.getState().operations.locale!.title)).toBe("Mover 1.820 frames inutilizáveis para a Lixeira (1,2 GB)")
   })
 
   it("names the Open item after the surface it opens, and plain Open for a page with no name", () => {

@@ -217,13 +217,13 @@ export function ReviewWorkspace({ context, onFinished }: ReviewWorkspaceProps) {
     const byMark = new Map<QualityValue, ReviewFrame[]>()
     for (const f of list) byMark.set(MARK_OF[f.bucket], [...(byMark.get(MARK_OF[f.bucket]) ?? []), f])
     return {
-      message: m.store_saved_frames_marked({ count: list.length, n: formatCount(list.length), quality: markLabel[value] }),
+      message: m.store_saved_frames_marked({ count: list.length, n: list.length, quality: markLabel[value] }),
       run: () => (scope ? [...byMark].map(([was, frames]) => markLibrary(scope, frames, was)).find((result) => !result.ok) : undefined),
     }
   }
   function markAction(value: QualityValue, list: ReviewFrame[], always = false): Action {
     // The STATUS words (Usable, Unusable, Unreviewed), as the buttons that ask read.
-    const said = { count: list.length, n: formatCount(list.length), quality: markLabel[value] }
+    const said = { count: list.length, n: list.length, quality: markLabel[value] }
     const bulk = list.length > BULK_MARK_CONFIRM_OVER
     return {
       id: `mark-${value}`,
@@ -505,12 +505,12 @@ export function ReviewWorkspace({ context, onFinished }: ReviewWorkspaceProps) {
   const restUnreviewed = (): QuickUndo => {
     const ids = session ? unreviewedAssetIds(store.getState().catalog, session) : []
     return {
-      message: m.store_saved_frames_marked({ count: ids.length, n: formatCount(ids.length), quality: markLabel.usable }),
+      message: m.store_saved_frames_marked({ count: ids.length, n: ids.length, quality: markLabel.usable }),
       run: () => markFrames(ids, "unreviewed", scope.href),
     }
   }
   // The owner's "Mark rest usable" (C10); its confirm reads as every bulk mark's ("Mark 120 frames Unusable?").
-  const restSaid = { count: unreviewed, n: formatCount(unreviewed), quality: markLabel.usable }
+  const restSaid = { count: unreviewed, n: unreviewed, quality: markLabel.usable }
   const markRest: Action = {
     id: "mark-rest-usable",
     label: m.review_mark_rest_usable(),

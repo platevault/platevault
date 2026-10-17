@@ -20,7 +20,6 @@ import { fileAt, writeFiles } from "@/domain/disk"
 import { bundledTarget } from "@/domain/indexing"
 import { unitCount } from "@/domain/labels"
 import type { ImageType, ImportSource, ImportSourceId, LocationId, OperationId, OperationItem, SessionId, VolumeId } from "@/domain/types"
-import { formatBytes, formatCount } from "@/lib/format"
 import { joinRefs, m, type MessageRef, msg, verbatim } from "@/lib/i18n"
 import { sessionWithTarget } from "@/store/actions/library"
 import { moveToOsTrash } from "@/store/actions/trash"
@@ -179,13 +178,12 @@ function summary(state: PrototypeState, payload: ImportPayload): MessageRef {
   const bytes = payload.copied.reduce((n, c) => n + c.sizeBytes, 0)
   const routes = { sessions: 0, stack: 0, masters: 0 }
   for (const c of payload.copied) routes[routeFor(c.type)] += 1
-  const parts = [unitCount("frames", payload.copied.length), verbatim(formatBytes(bytes))]
+  const parts = [unitCount("frames", payload.copied.length), { bytes }]
   if (routes.sessions > 0) parts.push(unitCount("sessions", payload.sessionIds.filter((id) => state.catalog.sessions[id]?.imageType === "light").length))
   if (routes.stack > 0) parts.push(msg("op_import_to_stack", { count: routes.stack }))
-  if (routes.masters > 0) parts.push(msg("op_import_masters", { count: routes.masters, n: formatCount(routes.masters) }))
+  if (routes.masters > 0) parts.push(msg("op_import_masters", { count: routes.masters, n: { count: routes.masters } }))
   const s = payload.skipped
-  if (s.duplicate > 0) parts.push(msg("op_import_duplicates_skipped", { count: s.duplicate, n: formatCount(s.duplicate) }))
-  if (s.imported > 0) parts.push(msg("import_imported_before", { count: s.imported }))
+  if (s.duplicate > 0) parts.push(msg("op_import_duplicates_skipped", { count: s.duplicate, n: { count: s.duplicate } }))
   if (s.held > 0) parts.push(msg("op_import_held", { count: s.held }))
   if (payload.failed.length > 0) parts.push(msg("op_import_failed_kept", { count: payload.failed.length }))
   if (payload.mode === "move") parts.push(payload.copied.length > 0 ? msg("op_import_sources_to_trash") : msg("op_import_no_source_moved"))
@@ -209,6 +207,8 @@ function requestTrash(opId: OperationId, payload: ImportPayload) {
   if (trashScheduled.has(opId)) return
   trashScheduled.add(opId)
   window.setTimeout(() => {
+    const operation = store.getState().operations[opId]
+    if (!operation || operation.status !== "running") return
     const trashOperationId = moveToOsTrash({
       kind: "import-move",
       title: msg("op_import_move_sources_title"),
@@ -218,7 +218,7 @@ function requestTrash(opId: OperationId, payload: ImportPayload) {
     })
     store.setState((s) => {
       const op = s.operations[opId]
-      if (!op) return s
+      if (!op || op.status !== "running") return s
       const next = { ...(op.payload as unknown as ImportPayload), trashOperationId }
       return finish(patchOperation(s, opId, { payload: next as unknown as Record<string, unknown> }), opId, next)
     })
@@ -281,7 +281,7 @@ export function startImport(plan: ImportPlan, draft: ImportDraft): OperationId {
     path: g.items[0]!.destFolder,
     status: "pending",
     phase: null,
-    detail: msg("op_import_frames_to_copy", { count: g.items.length, n: formatCount(g.items.length) }),
+    detail: msg("op_import_frames_to_copy", { count: g.items.length, n: { count: g.items.length } })
   }))
   const id = startOperation({
     kind: "import",

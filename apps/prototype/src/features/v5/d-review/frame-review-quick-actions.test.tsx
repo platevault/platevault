@@ -4,7 +4,6 @@ import userEvent from "@testing-library/user-event"
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest"
 import { Toaster } from "@/components/ui/toast"
 import { createSeed } from "@/domain/seed"
-import { formatCount } from "@/lib/format"
 import { m } from "@/lib/i18n"
 import { SCHEMA_VERSION, store } from "@/store/core"
 import { setFault } from "@/store/simulation"
@@ -19,7 +18,7 @@ const CONTEXT = { kind: "session", sessionId: SESSION } as const
 const frames = () => reviewScope(store.getState(), CONTEXT)!.frames
 const buckets = (): Record<string, ReviewBucket> => Object.fromEntries(frames().map((f) => [f.asset.id, f.bucket]))
 const count = (bucket: ReviewBucket) => frames().filter((f) => f.bucket === bucket).length
-const frameCount = (n: number) => ({ count: n, n: formatCount(n) })
+const frameCount = (n: number) => ({ count: n, n: n })
 
 function renderReview() {
   const root = createRootRoute({

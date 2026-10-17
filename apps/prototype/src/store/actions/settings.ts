@@ -149,7 +149,7 @@ export function locateExecutable(profileId: ProfileId, path: string): CommitResu
 
 export function checkExecutable(profileId: ProfileId): CommitResult {
   const profile = store.getState().catalog.profiles[profileId]
-  if (!profile) return { ok: true }
+  if (!profile) return MISSING
   return patchProfile(profileId, msg("store_label_check_named", { name: profile.name }), { executableState: observeExecutable(profile.executablePath) })
 }
 
