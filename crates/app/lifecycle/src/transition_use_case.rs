@@ -449,9 +449,15 @@ pub fn preview_transition(request: TransitionRequest) -> TransitionResponse {
 ///
 /// Runs the gates [`preview_transition`] runs (noop, edge, actor=system,
 /// plan-required), then writes the transition and its audit row on `conn`
-/// through [`transition_lifecycle_conn`]. Nothing is published: publish the
+/// through `transition_lifecycle_conn`. Nothing is published: publish the
 /// returned [`StagedTransition`] once the transaction commits. Returns
 /// `Ok(None)` for a same-state noop.
+///
+/// Takes Project transitions only. The event a staged transition publishes
+/// names the owning project only for a Project, because this path cannot
+/// read the owning project of another entity; [`apply_transition`] publishes
+/// that resolved project id, so a Projection or PreparedSource transition
+/// goes through it instead.
 ///
 /// Unlike [`apply_transition`], a refusal records no `refused` audit row:
 /// the caller rolls its transaction back with the refusal, and the row with
@@ -467,6 +473,12 @@ pub async fn apply_transition_conn(
     request: TransitionRequest,
 ) -> Result<Option<StagedTransition>, TransitionError> {
     let ParsedRequest { command, .. } = parse_request(request).map_err(refused)?;
+    if command.entity_type != EntityType::Project {
+        return Err(refused(format!(
+            "{} transitions do not run inside a caller's transaction; only project transitions do",
+            command.entity_type
+        )));
+    }
     if command.from_state == command.to_state {
         return Ok(None);
     }
@@ -1040,6 +1052,38 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(lifecycle, "completed");
+        let audit_rows: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM audit_log_entry")
+            .fetch_one(db.pool())
+            .await
+            .unwrap();
+        assert_eq!(audit_rows, 0);
+    }
+
+    /// A non-Project transition is refused on the transaction path, whose
+    /// event could not name the entity's owning project, and writes nothing.
+    #[tokio::test]
+    async fn apply_transition_conn_refuses_a_non_project_entity() {
+        let db = persistence_core::Database::in_memory().await.unwrap();
+        db.migrate().await.unwrap();
+
+        let mut tx = db.pool().begin().await.unwrap();
+        let err = apply_transition_conn(
+            &mut tx,
+            TransitionRequest::Projection(contracts_core::lifecycle::ProjectionTransitionRequest {
+                contract_version: "2.0.0".to_owned(),
+                request_id: Uuid::new_v4(),
+                entity_id: Uuid::new_v4(),
+                current_state: contracts_core::lifecycle::ProjectionState::Current,
+                next_state: contracts_core::lifecycle::ProjectionState::Stale,
+                action_label: None,
+                actor: TransitionActor::User,
+            }),
+        )
+        .await
+        .expect_err("a projection transition must not run on the transaction path");
+        tx.commit().await.unwrap();
+
+        assert_eq!(err.code, TransitionErrorCode::TransitionRefused);
         let audit_rows: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM audit_log_entry")
             .fetch_one(db.pool())
             .await

@@ -4026,7 +4026,7 @@ mod tests {
             .await
             .unwrap();
 
-            confirm(
+            let err = confirm(
                 db.pool(),
                 &make_bus(&db),
                 ConfirmRequest {
@@ -4041,7 +4041,17 @@ mod tests {
             .await
             .expect_err("a failed plan link must fail the confirm");
 
+            assert!(
+                err.message.starts_with("insert plan link"),
+                "{pick:?}: the plan link is what failed, not {}",
+                err.message
+            );
             assert_eq!(count_plans_in_state(db.pool(), "ready_for_review").await, 0);
+            assert_eq!(
+                count_plans_in_state(db.pool(), "draft").await,
+                1,
+                "{pick:?}: the plan stays a draft, which plans.approve refuses"
+            );
             assert_no_attribution_left(&db, pick).await;
         }
     }
@@ -4130,13 +4140,18 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(reopens, [("completed".to_owned(), "processing".to_owned())]);
-        let topics: Vec<String> = sqlx::query_scalar(
-            "SELECT DISTINCT topic FROM events \
-             WHERE topic IN ('attribution.applied', 'lifecycle.transition.applied') ORDER BY topic",
+        let topics: Vec<(String, i64)> = sqlx::query_as(
+            "SELECT topic, COUNT(*) FROM events \
+             WHERE topic IN ('attribution.applied', 'lifecycle.transition.applied') \
+             GROUP BY topic ORDER BY topic",
         )
         .fetch_all(db.pool())
         .await
         .unwrap();
-        assert_eq!(topics, ["attribution.applied", "lifecycle.transition.applied"]);
+        assert_eq!(
+            topics,
+            [("attribution.applied".to_owned(), 1), ("lifecycle.transition.applied".to_owned(), 1)],
+            "one event each, published once the plan commits"
+        );
     }
 }

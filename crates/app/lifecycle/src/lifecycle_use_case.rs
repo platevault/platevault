@@ -118,7 +118,7 @@ where
 /// # Errors
 /// `LifecycleError::Persistence` on a write failure, including the CAS
 /// rejecting a stale `from_state`.
-pub async fn transition_lifecycle_conn(
+pub(crate) async fn transition_lifecycle_conn(
     conn: &mut SqliteConnection,
     cmd: TransitionCommand,
 ) -> Result<Option<StagedTransition>, LifecycleError> {
@@ -142,8 +142,8 @@ pub async fn transition_lifecycle_conn(
     Ok(Some(StagedTransition { record, actor }))
 }
 
-/// A transition [`transition_lifecycle_conn`] wrote inside a transaction that
-/// has not committed yet. Its event waits for [`Self::publish`].
+/// A transition written by `transition_lifecycle_conn` inside a transaction
+/// that has not committed yet. Its event waits for [`Self::publish`].
 #[derive(Debug)]
 #[must_use = "publish the transition once its transaction commits"]
 pub struct StagedTransition {
@@ -181,11 +181,13 @@ async fn publish_transition_applied(
     actor: String,
     at: Timestamp,
 ) {
-    // FR-003 (#713): trivial project_id resolution — this primitive has no
-    // pool access to look up a non-Project entity's owning project (that
-    // lookup lives in `SqliteLifecycleRepository::record_transition`, which
-    // publishes its own `lifecycle.transition.applied` with the fully
-    // resolved value); `None` here is a StalePropagator no-op, not a bug.
+    // FR-003 (#713): trivial project_id resolution: this has no pool access
+    // to look up a non-Project entity's owning project. On the pool path
+    // (`transition_lifecycle`), `SqliteLifecycleRepository::record_transition`
+    // publishes its own `lifecycle.transition.applied` with the resolved
+    // value, so `None` here is a StalePropagator no-op. The transaction path
+    // (`StagedTransition::publish`) has no second event to carry it, which is
+    // why `apply_transition_conn` takes Project transitions only.
     let project_id = (entity_type == EntityType::Project).then(|| entity_id.to_string());
 
     let _ = bus
