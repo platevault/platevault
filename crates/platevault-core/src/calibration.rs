@@ -2,14 +2,15 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! Pure calibration semantics (spec 068): classification, exact D13 criterion
-//! evaluation, candidate order, preselection and R13 applicability.
+//! evaluation, and each light session's matching at ingestion (CAL-FR-19 to
+//! CAL-FR-22): the offers of every kind, best first.
 //!
 //! Nothing here reads storage, the clock or settings. The catalog receives
 //! [`Rules`] as a [`CalibrationRules`] trait object and evaluates inside its
 //! own snapshot, the way it receives the grouping callback.
 
 use std::cmp::Ordering;
-use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 use std::sync::LazyLock;
 
 use calibration_master_detect::{detect_master, DetectInput};
@@ -18,14 +19,11 @@ use time::macros::format_description;
 use time::Date;
 
 use crate::{
-    canonical_decimal, light_groups, CalibrationDecision, CalibrationPolicy, CalibrationRules,
-    CalibrationViewBasis, CalibrationViewPlan, CandidateEvaluation, CandidateRef, CaptureEvidence,
-    CaptureMetadata, Classification, CriterionId, CriterionResult, EffectiveDecision, Evaluation,
-    EvidenceField, EvidenceId, EvidenceRow, FlatRules, InputCandidate, InputEvidence, InputForm,
-    InputKind, KindMatch, LightEvidence, LightGroup, MasterBasis, MasterEvidence, MatchCamera,
-    MatchCaution, MatchOffer, NativePath, PinTarget, Requirement, RequirementState, Resolution,
-    RigVersion, RotatorPresence, SessionInput, SessionLight, Tolerance, UnresolvedReason, Verdict,
-    WorkflowSettings,
+    canonical_decimal, CalibrationRules, CaptureEvidence, CaptureMetadata, Classification,
+    CriterionId, CriterionResult, Evaluation, EvidenceField, EvidenceId, EvidenceRow, FlatRules,
+    InputEvidence, InputForm, InputKind, KindMatch, LightEvidence, MasterBasis, MasterEvidence,
+    MatchCamera, MatchCaution, MatchOffer, NativePath, PinTarget, RigVersion, RotatorPresence,
+    SessionInput, SessionLight, Tolerance, Verdict, WorkflowSettings,
 };
 
 /// The calibration rules the product uses.
@@ -48,10 +46,6 @@ impl CalibrationRules for Rules {
         input: &InputEvidence,
     ) -> Evaluation {
         evaluate(kind, light, input)
-    }
-
-    fn plan(&self, basis: &CalibrationViewBasis) -> CalibrationViewPlan {
-        plan(basis)
     }
 
     fn match_session(
@@ -403,14 +397,24 @@ fn session_rank(left: &Ranked, right: &Ranked) -> Ordering {
         })
 }
 
-/// The criteria of one input against the session; `None` when a hard check
-/// fails, which is never offered.
-fn session_offer(
+/// Known distances first, nearest first.
+fn distance_order(left: Option<u32>, right: Option<u32>) -> Ordering {
+    match (left, right) {
+        (Some(a), Some(b)) => a.cmp(&b),
+        (Some(_), None) => Ordering::Less,
+        (None, Some(_)) => Ordering::Greater,
+        (None, None) => Ordering::Equal,
+    }
+}
+
+/// The hard-check rows of one input against the session, the rows that are
+/// only shown, and for flats the largest rotation difference.
+fn hard_checks(
     kind: InputKind,
     light: &SessionLight,
     input: &SessionInput,
     settings: &WorkflowSettings,
-) -> Option<Ranked> {
+) -> (Vec<CriterionResult>, Vec<EvidenceRow>, Option<f64>) {
     let (lights, other) = (&light.capture, &input.capture);
     let evidence =
         InputEvidence { kind: input.kind, form: input.input.form(), capture: other.clone() };
@@ -463,6 +467,18 @@ fn session_offer(
             EvidenceField::MeasuredTemperature,
         ));
     }
+    (criteria, shown_rows, rotation)
+}
+
+/// The criteria of one input against the session; `None` when a hard check
+/// fails, which is never offered.
+fn session_offer(
+    kind: InputKind,
+    light: &SessionLight,
+    input: &SessionInput,
+    settings: &WorkflowSettings,
+) -> Option<Ranked> {
+    let (criteria, mut shown_rows, rotation) = hard_checks(kind, light, input, settings);
     if criteria.iter().any(|row| row.verdict == Verdict::Incompatible) {
         return None;
     }
@@ -501,6 +517,49 @@ fn session_offer(
         days,
         rotation,
         offer: MatchOffer { target, cautions },
+    })
+}
+
+/// One light session's exposure mismatch (PRJ-FR-11): its channel, and the
+/// light's and the darks' exposures, canonical text.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct ExposureMismatch {
+    /// The light's filter; `None` when its header records none.
+    pub channel: Option<String>,
+    pub light_exposures: BTreeSet<String>,
+    pub dark_exposures: BTreeSet<String>,
+}
+
+/// Exposure mismatch (PRJ-FR-11): among `darks` with no incompatible
+/// criterion other than exposure there is at least one, and every one of
+/// them has another exposure than the session's lights. `None` otherwise.
+/// It is a warning only: it assigns nothing and never blocks Apply.
+#[must_use]
+pub fn exposure_mismatch(
+    light: &SessionLight,
+    darks: &[SessionInput],
+    settings: &WorkflowSettings,
+) -> Option<ExposureMismatch> {
+    let rows: Vec<CriterionResult> = darks
+        .iter()
+        .filter(|input| input.kind == InputKind::Dark)
+        .filter_map(|input| {
+            let (criteria, _, _) = hard_checks(InputKind::Dark, light, input, settings);
+            let only_exposure = criteria.iter().all(|row| {
+                row.criterion == CriterionId::Exposure || row.verdict != Verdict::Incompatible
+            });
+            only_exposure
+                .then(|| criteria.into_iter().find(|row| row.criterion == CriterionId::Exposure))
+                .flatten()
+        })
+        .collect();
+    if rows.is_empty() || rows.iter().any(|row| row.verdict != Verdict::Incompatible) {
+        return None;
+    }
+    Some(ExposureMismatch {
+        channel: light.capture.get(EvidenceField::Filter).map(|value| value.value.clone()),
+        light_exposures: rows.iter().filter_map(|row| row.light_value.clone()).collect(),
+        dark_exposures: rows.iter().filter_map(|row| row.input_value.clone()).collect(),
     })
 }
 
@@ -677,326 +736,4 @@ fn age_row(
         input_value: input.map(|date| date.to_string()),
         note: Some(note),
     }
-}
-
-// ── Plan (R10 to R13, D-W5, D-W37) ───────────────────────────────────────────
-
-fn plan(basis: &CalibrationViewBasis) -> CalibrationViewPlan {
-    let mut requirements = Vec::new();
-    for group in light_groups(&basis.lights) {
-        for &kind in &basis.plan.required_kinds {
-            requirements.push(requirement(basis, &group, kind));
-        }
-    }
-    CalibrationViewPlan {
-        view_id: basis.view_id,
-        view_revision: basis.view_revision,
-        plan_revision: basis.plan.revision,
-        policy: basis.plan.policy,
-        required_kinds: basis.plan.required_kinds.clone(),
-        requirements,
-    }
-}
-
-/// Distinct values of one side across the group's sessions, joined.
-fn merged(values: &mut Vec<String>, value: Option<&String>) {
-    if let Some(value) = value {
-        if !values.contains(value) {
-            values.push(value.clone());
-        }
-    }
-}
-
-/// Every criterion of `input` across the group's sessions: a row reads its
-/// worst verdict, so it is compatible only when it is for every session.
-fn group_evaluation(kind: InputKind, group: &LightGroup<'_>, input: &InputEvidence) -> Evaluation {
-    let evaluations: Vec<Evaluation> =
-        group.lights.iter().map(|light| evaluate(kind, &light.evidence, input)).collect();
-    let Some((first, rest)) = evaluations.split_first() else {
-        return Evaluation::new(Vec::new(), Vec::new());
-    };
-    let mut criteria = first.criteria.clone();
-    for row in &mut criteria {
-        let mut values = Vec::new();
-        merged(&mut values, row.light_value.as_ref());
-        for other in
-            rest.iter().flat_map(|e| e.criteria.iter()).filter(|o| o.criterion == row.criterion)
-        {
-            if verdict_rank(other.verdict) > verdict_rank(row.verdict) {
-                row.verdict = other.verdict;
-                row.note.clone_from(&other.note);
-            }
-            merged(&mut values, other.light_value.as_ref());
-        }
-        if values.len() > 1 {
-            row.light_value = Some(values.join(", "));
-        }
-    }
-    Evaluation::new(criteria, first.evidence.clone())
-}
-
-/// The largest night distance to any session of the group; unknown when any is.
-fn group_night_distance(group: &LightGroup<'_>, input: &CaptureEvidence) -> Option<u32> {
-    group
-        .lights
-        .iter()
-        .map(|light| night_distance(&light.evidence.capture, input))
-        .try_fold(0, |widest, days| days.map(|days| widest.max(days)))
-}
-
-fn candidate_evaluation(
-    kind: InputKind,
-    group: &LightGroup<'_>,
-    candidate: &InputCandidate,
-) -> CandidateEvaluation {
-    let mut evaluation = group_evaluation(kind, group, &candidate.evidence);
-    let state = &candidate.state;
-    let note = match (state.superseded, state.drifted) {
-        (true, _) => Some("superseded".to_owned()),
-        (false, true) => Some("drifted from its adoption digest".to_owned()),
-        (false, false) => None,
-    };
-    evaluation.evidence.push(EvidenceRow {
-        evidence: EvidenceId::Availability,
-        light_value: None,
-        input_value: Some(format!(
-            "{} of {} available ({:?})",
-            state.available_members, state.members, state.availability
-        )),
-        note,
-    });
-    evaluation.evidence.push(EvidenceRow {
-        evidence: EvidenceId::Quality,
-        light_value: None,
-        input_value: Some(format!("{} Library-Unusable excluded", state.excluded_members)),
-        note: None,
-    });
-    CandidateEvaluation {
-        candidate: candidate.candidate,
-        kind,
-        night_distance_days: group_night_distance(group, &candidate.evidence.capture),
-        evaluation,
-        state: candidate.state.clone(),
-        preselected: false,
-        master: candidate.master.clone(),
-        origin: candidate.origin.clone(),
-    }
-}
-
-const fn verdict_rank(verdict: Verdict) -> u8 {
-    match verdict {
-        Verdict::Compatible => 0,
-        Verdict::Unknown => 1,
-        Verdict::Incompatible => 2,
-    }
-}
-
-fn form_rank(candidate: &CandidateEvaluation) -> u8 {
-    u8::from(candidate.candidate.form() != InputForm::Master)
-}
-
-fn distance_order(left: Option<u32>, right: Option<u32>) -> Ordering {
-    match (left, right) {
-        (Some(a), Some(b)) => a.cmp(&b),
-        (Some(_), None) => Ordering::Less,
-        (None, Some(_)) => Ordering::Greater,
-        (None, None) => Ordering::Equal,
-    }
-}
-
-/// R10: compatible first, then absolute night distance with unknown nights
-/// last, then adopted masters before raw sets; ascending ID only orders the
-/// list and never breaks a ranking tie.
-fn r10_order(left: &CandidateEvaluation, right: &CandidateEvaluation) -> Ordering {
-    rank_order(left, right).then_with(|| left.candidate.id().cmp(&right.candidate.id()))
-}
-
-fn rank_order(left: &CandidateEvaluation, right: &CandidateEvaluation) -> Ordering {
-    verdict_rank(left.evaluation.verdict)
-        .cmp(&verdict_rank(right.evaluation.verdict))
-        .then_with(|| distance_order(left.night_distance_days, right.night_distance_days))
-        .then_with(|| form_rank(left).cmp(&form_rank(right)))
-}
-
-/// Fully compatible, readable now and not drifted: what may be assigned.
-fn eligible(candidate: &CandidateEvaluation) -> bool {
-    candidate.evaluation.verdict == Verdict::Compatible
-        && candidate.state.available()
-        && !candidate.state.drifted
-}
-
-fn camera_incompatible(candidate: &CandidateEvaluation) -> bool {
-    candidate
-        .evaluation
-        .criteria
-        .iter()
-        .any(|row| row.criterion == CriterionId::Camera && row.verdict == Verdict::Incompatible)
-}
-
-fn requirement(
-    basis: &CalibrationViewBasis,
-    group: &LightGroup<'_>,
-    kind: InputKind,
-) -> Requirement {
-    let mut requirement = Requirement {
-        light_group: group.key.clone(),
-        light_session_ids: group.session_ids(),
-        light_asset_ids: group.asset_ids(),
-        kind,
-        state: RequirementState::NeedsReview,
-        reason: None,
-        preselected: None,
-        automatic: None,
-        candidates: Vec::new(),
-        unadopted: Vec::new(),
-        effective: None,
-    };
-    if !group.key.light_type_known {
-        requirement.reason = Some(UnresolvedReason::LightTypeUnknown);
-        return requirement;
-    }
-    for candidate in basis.candidates.iter().filter(|c| c.evidence.kind == kind) {
-        let evaluated = candidate_evaluation(kind, group, candidate);
-        // A run uses one rig: another camera's inputs are never candidates (CAL-FR-10).
-        if camera_incompatible(&evaluated) {
-            continue;
-        }
-        if candidate.candidate.input().is_some() {
-            requirement.candidates.push(evaluated);
-        } else {
-            requirement.unadopted.push(evaluated);
-        }
-    }
-    requirement.candidates.sort_by(r10_order);
-    requirement.unadopted.sort_by(r10_order);
-    let assignable: Vec<usize> = (0..requirement.candidates.len())
-        .filter(|&i| eligible(&requirement.candidates[i]))
-        .collect();
-    let tie = match assignable.as_slice() {
-        [first, second, ..] => {
-            rank_order(&requirement.candidates[*first], &requirement.candidates[*second])
-                == Ordering::Equal
-        }
-        _ => false,
-    };
-    if let (false, Some(&top)) = (tie, assignable.first()) {
-        requirement.candidates[top].preselected = true;
-        requirement.preselected = Some(requirement.candidates[top].candidate);
-    }
-    let automatic = basis.plan.policy == CalibrationPolicy::Automatic;
-
-    let decision = basis.decisions.iter().find(|d| d.light_group == group.key && d.kind == kind);
-    match decision {
-        Some(decision) if decision.resolution != Resolution::Withdrawn => {
-            let blocked = applicability(basis, group, kind, decision, &requirement);
-            requirement.effective = Some(EffectiveDecision {
-                decision: decision.clone(),
-                decided_at_revision: decision.view_revision,
-                applicable: blocked.is_none(),
-            });
-            match blocked {
-                None => resolved(&mut requirement, decision),
-                Some(reason) => {
-                    requirement.reason = Some(reason);
-                    // Only a changed light group is matched again; a decision
-                    // that still holds its members is never overridden.
-                    if reason == UnresolvedReason::LightMembershipChanged && automatic {
-                        requirement.automatic = requirement.preselected.and_then(|c| c.input());
-                    }
-                }
-            }
-            requirement
-        }
-        Some(withdrawn) if withdrawn.light_asset_ids == requirement.light_asset_ids => {
-            open(requirement, tie, false)
-        }
-        _ => open(requirement, tie, automatic),
-    }
-}
-
-/// The state an applicable decision gives. A user's choice with a criterion
-/// that is not compatible still needs review until an exception (CAL-AC-02).
-fn resolved(requirement: &mut Requirement, decision: &CalibrationDecision) {
-    requirement.state = match decision.resolution {
-        Resolution::Automatic => RequirementState::Automatic,
-        Resolution::Exception => RequirementState::Excepted,
-        Resolution::Excluded => RequirementState::Excluded,
-        Resolution::Accepted | Resolution::Withdrawn => {
-            let verdicts = decision.criteria.iter().map(|row| row.verdict);
-            if verdicts.clone().any(|verdict| verdict == Verdict::Incompatible) {
-                requirement.reason = Some(UnresolvedReason::CriterionIncompatible);
-                RequirementState::NeedsReview
-            } else if verdicts.clone().all(|verdict| verdict == Verdict::Compatible) {
-                RequirementState::Accepted
-            } else {
-                requirement.reason = Some(UnresolvedReason::CriterionUnknown);
-                RequirementState::NeedsReview
-            }
-        }
-    };
-}
-
-/// A requirement no decision holds: the single top input is a suggestion,
-/// named for automatic assignment while `automatic`; anything else needs
-/// review with what blocks it.
-fn open(mut requirement: Requirement, tie: bool, automatic: bool) -> Requirement {
-    if let Some(top) = requirement.preselected {
-        requirement.state = RequirementState::Suggested;
-        if automatic {
-            requirement.automatic = top.input();
-        }
-        return requirement;
-    }
-    let has = |test: &dyn Fn(&CandidateEvaluation) -> bool| requirement.candidates.iter().any(test);
-    let compatible = |c: &CandidateEvaluation| c.evaluation.verdict == Verdict::Compatible;
-    requirement.reason = Some(if tie {
-        UnresolvedReason::RankingTie
-    } else if requirement.candidates.is_empty() {
-        UnresolvedReason::NoCandidate
-    } else if has(&|c| compatible(c) && c.state.available() && c.state.drifted) {
-        UnresolvedReason::MasterDrifted
-    } else if has(&compatible) {
-        UnresolvedReason::InputUnavailable
-    } else if has(&|c| c.evaluation.verdict == Verdict::Unknown) {
-        UnresolvedReason::CriterionUnknown
-    } else {
-        UnresolvedReason::CriterionIncompatible
-    });
-    requirement
-}
-
-/// R13: a decision applies while the light group's included assets are
-/// unchanged, and its input is current, not drifted, available, and its
-/// verdicts equal the snapshot. An exclusion needs only the members.
-fn applicability(
-    basis: &CalibrationViewBasis,
-    group: &LightGroup<'_>,
-    kind: InputKind,
-    decision: &CalibrationDecision,
-    requirement: &Requirement,
-) -> Option<UnresolvedReason> {
-    if decision.light_asset_ids != requirement.light_asset_ids {
-        return Some(UnresolvedReason::LightMembershipChanged);
-    }
-    let input = decision.input.map(CandidateRef::from)?;
-    let Some(candidate) = basis.candidates.iter().find(|c| c.candidate == input) else {
-        return Some(UnresolvedReason::InputUnavailable);
-    };
-    if candidate.state.superseded {
-        return Some(UnresolvedReason::InputEvidenceChanged);
-    }
-    if candidate.state.drifted {
-        return Some(UnresolvedReason::MasterDrifted);
-    }
-    let verdicts = |rows: &[CriterionResult]| -> BTreeMap<CriterionId, Verdict> {
-        rows.iter().map(|row| (row.criterion, row.verdict)).collect()
-    };
-    let current = group_evaluation(kind, group, &candidate.evidence);
-    if verdicts(&current.criteria) != verdicts(&decision.criteria) {
-        return Some(UnresolvedReason::InputEvidenceChanged);
-    }
-    if !candidate.state.available() {
-        return Some(UnresolvedReason::InputUnavailable);
-    }
-    None
 }

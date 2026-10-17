@@ -36,6 +36,7 @@ use super::{
 pub use adoption::recover_adoptions;
 pub use sessions::{
     calibration_arrived, master_adopted, read_health, rig_recorded, session_ingested, session_needs,
+    HeldLight, ProjectDarkBasis,
 };
 
 // ---------------------------------------------------------------------------

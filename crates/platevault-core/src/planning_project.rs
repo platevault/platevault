@@ -5,12 +5,14 @@
 //! on the [`Library`] facade. A Project owns no windows: its page lists the
 //! windows of its own subjects, each from the same Target planning as the
 //! Plan area at the active planning site, with each subject's per-channel
-//! goal gap and, for a mosaic, each panel with its own gap. It also names the
-//! "Open in Planner" context: the Targets page limited to the Project's
-//! subjects with the rig selector on "this Project's rigs". A Target's Plan
-//! area reads the same gaps for every open Project that has the Target as a
-//! subject. Each gap names its "in project" and "captured" amounts with those
-//! labels, read from the Project's goal progress (PRJ-FR-04). Read-only.
+//! goal gap and, for a mosaic, each panel group with its own gap (decision
+//! record §2: marking a group as a panel makes the Project a mosaic). It also
+//! names the "Open in Planner" context: the Targets page limited to the
+//! Project's subjects with the rig selector on "this Project's rigs". A
+//! Target's Plan area reads the same gaps for every open Project that has the
+//! Target as a subject. Each gap names its "in project" and "captured"
+//! amounts with those labels, read from the Project's goal progress
+//! (PRJ-FR-04). Read-only.
 
 use std::collections::BTreeMap;
 
@@ -22,9 +24,10 @@ use uuid::Uuid;
 use crate::library::{blocking, Library};
 use crate::planning;
 use crate::{
-    GoalProgress, GoalSpec, GoalTally, LibraryError, MeasurementMethod, Microseconds,
-    ObservingSite, PlanCriteria, PlanningUnknownReason, Project, ProjectGoal, ProjectQuery,
-    ProjectState, ProjectSubject, Revision, SiteBasis, WindowQuery, WindowSet,
+    FramingEvidence, GoalProgress, GoalSpec, GoalTally, GroupName, LibraryError,
+    MeasurementMethod, Microseconds, ObservingSite, PlanCriteria, PlanningUnknownReason, Project,
+    ProjectDesired, ProjectGoal, ProjectQuery, ProjectSubject, Revision, SiteBasis, WindowQuery,
+    WindowSet,
 };
 
 time::serde::format_description!(iso_date, Date, "[year]-[month]-[day]");
@@ -44,13 +47,14 @@ pub struct ProjectPlanningQuery {
     pub criteria: PlanCriteria,
 }
 
-/// The label a gap amount carries (D-W36). The UI never says "not in a run".
+/// The label a gap amount carries (D-W36).
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
 pub enum GapLabel {
-    /// The frames of the Project's runs: they count toward the goal.
+    /// The frames of the Project's own sessions its next View places: they
+    /// count toward the goal.
     #[serde(rename = "in project")]
     InProject,
-    /// Every candidate frame plus the run members.
+    /// The frames the Project holds, placed or not, plus its suggestions'.
     #[serde(rename = "captured")]
     Captured,
 }
@@ -95,20 +99,20 @@ pub struct GoalGap {
     pub met: bool,
 }
 
-/// A mosaic panel by its centre and rotation, with its own goals' gaps.
+/// A mosaic panel group, by its framing, with its own goals' gaps.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PanelGaps {
-    pub panel_id: Uuid,
-    pub number: u32,
-    pub ra_deg: f64,
-    pub dec_deg: f64,
-    pub rotation_deg: Option<f64>,
+    pub group_id: Uuid,
+    pub name: GroupName,
+    /// The panel's anchor framing; `None` reads "Framing unknown".
+    pub framing: Option<FramingEvidence>,
     pub gaps: Vec<GoalGap>,
 }
 
 /// One subject's gaps: the subject-level goals and, for a mosaic, every
-/// panel by number, each with its panel goals.
+/// panel group that holds the subject's sessions or has its goals, in group
+/// order, each with its panel goals.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SubjectGaps {
@@ -249,12 +253,9 @@ impl Library {
     ) -> Result<Vec<ProjectGaps>, LibraryError> {
         self.catalog().target(target_id).await?;
         let query =
-            ProjectQuery { target_id: Some(target_id), show_done: false, offset: 0, limit: 0 };
+            ProjectQuery { target_id: Some(target_id), include_closed: false, offset: 0, limit: 0 };
         let mut found = Vec::new();
         for summary in self.catalog().list_projects(&query).await? {
-            if summary.state != ProjectState::Open {
-                continue;
-            }
             let (project, subjects) = self.project_gaps(summary.id).await?;
             found.extend(
                 subjects.into_iter().filter(|subject| subject.target_id == target_id).map(
@@ -274,51 +275,62 @@ impl Library {
     /// Project's revision.
     async fn project_gaps(&self, id: Uuid) -> Result<(Project, Vec<SubjectGaps>), LibraryError> {
         let project = self.catalog().project(id).await?;
+        let desired = self.catalog().project_desired(id).await?;
         let method = MeasurementMethod::new(measure::METHOD.name, measure::METHOD.version);
         let basis = self.catalog().project_progress_basis(id, &method).await?;
-        if basis.revision != project.revision {
-            return Err(LibraryError::Conflict {
-                id,
-                current: basis.revision,
-                successors: Vec::new(),
-            });
+        for revision in [desired.revision, basis.revision] {
+            if revision != project.revision {
+                return Err(LibraryError::Conflict {
+                    id,
+                    current: revision,
+                    successors: Vec::new(),
+                });
+            }
         }
         let mut by_owner: BTreeMap<(Uuid, Option<Uuid>), Vec<GoalGap>> = BTreeMap::new();
         for progress in basis.goals {
-            let owner = (progress.goal.subject_id, progress.goal.panel_id);
+            let owner = (progress.goal.subject_id, progress.goal.group_id);
             if let Some(gap) = gap(progress) {
                 by_owner.entry(owner).or_default().push(gap);
             }
         }
-        let subjects =
-            project.subjects.iter().map(|subject| subject_gaps(subject, &mut by_owner)).collect();
+        let subjects = project
+            .subjects
+            .iter()
+            .map(|subject| subject_gaps(subject, &desired, &mut by_owner))
+            .collect();
         Ok((project, subjects))
     }
 }
 
 fn subject_gaps(
     subject: &ProjectSubject,
+    desired: &ProjectDesired,
     by_owner: &mut BTreeMap<(Uuid, Option<Uuid>), Vec<GoalGap>>,
 ) -> SubjectGaps {
-    let panels = if subject.mosaic { subject.panels.as_slice() } else { &[] };
+    let mut panels = Vec::new();
+    for group in desired.groups.iter().filter(|group| group.panel) {
+        let goals = by_owner.remove(&(subject.id, Some(group.id)));
+        let holds = desired.sessions.iter().any(|member| {
+            member.group_id == group.id && member.target_id == subject.target_id
+        });
+        if goals.is_some() || holds {
+            panels.push(PanelGaps {
+                group_id: group.id,
+                name: group.name.clone(),
+                framing: group.framing,
+                gaps: goals.unwrap_or_default(),
+            });
+        }
+    }
     SubjectGaps {
         subject_id: subject.id,
         target_id: subject.target_id,
         designation: subject.designation.clone(),
         name: subject.name.clone(),
-        mosaic: subject.mosaic,
+        mosaic: desired.groups.iter().any(|group| group.panel),
         gaps: by_owner.remove(&(subject.id, None)).unwrap_or_default(),
-        panels: panels
-            .iter()
-            .map(|panel| PanelGaps {
-                panel_id: panel.id,
-                number: panel.number,
-                ra_deg: panel.ra_deg,
-                dec_deg: panel.dec_deg,
-                rotation_deg: panel.rotation_deg,
-                gaps: by_owner.remove(&(subject.id, Some(panel.id))).unwrap_or_default(),
-            })
-            .collect(),
+        panels,
     }
 }
 

@@ -59,6 +59,25 @@ const DATE: &[time::format_description::BorrowedFormatItem<'static>] =
 /// Digests hashed for matching, by asset, with the observation they hashed.
 type Digests = HashMap<Uuid, (String, ObservationFingerprint)>;
 
+/// One light session a Project holds, with the subject it joined on and its
+/// group's rig.
+#[derive(Clone, Debug)]
+pub struct HeldLight {
+    pub subject_id: Uuid,
+    pub rig_id: Uuid,
+    pub light: SessionLight,
+}
+
+/// What a Project's exposure-mismatch warning reads (PRJ-FR-11), in one
+/// snapshot: each light session it holds, by subject, rig and add order, and
+/// every dark one may use.
+#[derive(Clone, Debug)]
+pub struct ProjectDarkBasis {
+    pub settings: WorkflowSettings,
+    pub lights: Vec<HeldLight>,
+    pub darks: Vec<SessionInput>,
+}
+
 impl Catalog {
     /// Match every session whose calibration matching is pending: each kind
     /// still waiting gets its best match, pinned automatically when it has no
@@ -123,6 +142,52 @@ impl Catalog {
         }
         snapshot.rollback().await?;
         Ok(queue)
+    }
+
+    /// The light sessions Project `project_id` holds and every dark they may
+    /// use, for its exposure-mismatch warning (PRJ-FR-11). Nothing is hashed:
+    /// a dark frame without a recorded digest reads an empty one. Read-only.
+    ///
+    /// # Errors
+    /// `NotFound` for an unknown Project; `PersistenceFailure` for a corrupt
+    /// record.
+    pub async fn project_dark_basis<R: CalibrationRules + ?Sized>(
+        &self,
+        project_id: Uuid,
+        rules: &R,
+    ) -> Result<ProjectDarkBasis> {
+        let mut conn = self.reader().await?;
+        let mut snapshot = conn.begin().await?;
+        crate::projects::require_project(&mut snapshot, project_id).await?;
+        let (settings, _) = read_workflow_settings(&mut snapshot).await?;
+        let cameras = load_cameras(&mut snapshot).await?;
+        let rows = sqlx::query(
+            "SELECT ps.session_id, s.id AS subject_id, g.rig_id FROM project_sessions ps \
+             JOIN project_subjects s ON s.project_id = ps.project_id AND s.target_id = ps.target_id \
+             JOIN project_groups g ON g.project_id = ps.project_id AND g.id = ps.group_id \
+             LEFT JOIN project_rigs r ON r.project_id = ps.project_id AND r.equipment_id = g.rig_id \
+             WHERE ps.project_id = ?1 \
+             ORDER BY s.position, r.position, ps.added_at, ps.session_id",
+        )
+        .bind(project_id.to_string())
+        .fetch_all(&mut *snapshot)
+        .await?;
+        let mut lights = Vec::with_capacity(rows.len());
+        for row in &rows {
+            let session_id = parse_uuid(&row.try_get::<String, _>("session_id")?)?;
+            let Some(light) = session_light(&mut snapshot, session_id, &cameras).await? else {
+                continue;
+            };
+            lights.push(HeldLight {
+                subject_id: parse_uuid(&row.try_get::<String, _>("subject_id")?)?,
+                rig_id: parse_uuid(&row.try_get::<String, _>("rig_id")?)?,
+                light,
+            });
+        }
+        let mut darks = session_inputs(&mut snapshot, rules, &cameras, &Digests::new()).await?;
+        darks.retain(|input| input.kind == InputKind::Dark);
+        snapshot.rollback().await?;
+        Ok(ProjectDarkBasis { settings, lights, darks })
     }
 
     /// Confirm a kind's suggestion: it is pinned as the user confirmed it,

@@ -133,7 +133,8 @@ pub use planning::{DeliveryClaim, DeliveryOutcome, SubscriptionWrite, PLANNING_S
 mod calibration;
 
 pub use calibration::{
-    CalibrationInputDetail, CalibrationInputSummary, InputCopy, InputGroup, InputMember, InputQuery,
+    CalibrationInputDetail, CalibrationInputSummary, HeldLight, InputCopy, InputGroup, InputMember,
+    InputQuery, ProjectDarkBasis,
 };
 mod trash;
 pub use trash::{TrashEpisode, TrashedAsset, TrashedFrame, TrashedQuery};

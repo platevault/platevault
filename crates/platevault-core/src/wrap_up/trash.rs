@@ -174,7 +174,7 @@ impl Library {
             }
             recorded.push(item.seq);
             if let (Some(asset_id), Some(sha256)) = (item.asset_id, step.source.sha256.clone()) {
-                trashed.push(TrashedFrame { asset_id, sha256, complete_view_ids: Vec::new() });
+                trashed.push(TrashedFrame { asset_id, sha256 });
             }
         }
         if !trashed.is_empty() {
