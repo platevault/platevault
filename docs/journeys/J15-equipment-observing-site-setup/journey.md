@@ -1,7 +1,7 @@
 ---
 id: J15
 title: Register rigs with their filter lists and observing sites in Settings
-version: 6
+version: 7
 status: draft
 last_reviewed: 2026-07-14
 actors: [primary-user]
@@ -152,8 +152,8 @@ added and removed with the Default pill moving as stated, and Backyard and
 
 ### S6 — Add the Backyard observing site with the map {#S6}
 
-- **Do:** In Settings → Observing sites, start adding Backyard with a name, its P3 IANA time zone and no elevation, leaving **Make default** unchecked. Search for a place and choose a result, inspect the map, then choose **Use my location** (P7). Then re-enter the P3 latitude and longitude and save. Take the machine offline (P6), open the site editor again, read it and cancel. Bring the machine back online.
-- **Expect:** The map uses Leaflet and OpenStreetMap tiles, and its marker follows the latitude and longitude fields. Choosing a search result fills the latitude and longitude fields with that place, and **Use my location** fills them with the P7 location, the `Remote site` coordinates; the fields are the record. Backyard appears in the sites table with the P3 coordinates, formatted, and its time zone, not the searched or located ones. It carries no Default pill, and the page shows "No default site". Offline, "Map unavailable" replaces the map and the place search, and the latitude and longitude fields still accept numbers.
+- **Do:** In Settings → Observing sites, start adding Backyard with a name, its P3 IANA time zone and no elevation, leaving **Make default** unchecked. Search for a place and choose a result, inspect the map, then choose **Use my location** (P7). Then re-enter the P3 latitude and longitude and save. Take the machine offline (P6), open the site editor again, change both latitude and longitude fields to different valid numbers, verify both edits are accepted, and cancel without saving. Bring the machine back online.
+- **Expect:** The map uses Leaflet and OpenStreetMap tiles, and its marker follows the latitude and longitude fields. Choosing a search result fills the latitude and longitude fields with that place, and **Use my location** fills them with the P7 location, the `Remote site` coordinates; the fields are the record. Backyard appears in the sites table with the P3 coordinates, formatted, and its time zone, not the searched or located ones. It carries no Default pill, and the page shows "No default site". Offline, "Map unavailable" replaces the map and the place search; both latitude and longitude fields still accept edited numbers before cancellation.
 - **Expect (negative):** Saving Backyard does not make it the default. Latitude outside ±90°, longitude outside ±180°, or a non-numeric elevation is each rejected inline, and no site is saved.
 - **Trace:** baseline J15 v1/S6 · PLAN-FR-01 · PLAN-AC-04 · D-W16 · HARNESS-V5-IA.md S16 · HARNESS-V5-FEEDBACK-R1.md Round 9 C5
 
@@ -209,3 +209,6 @@ added and removed with the Default pill moving as stated, and Backyard and
 - **Δ6** 2026-10-17 · S6, +P6, +P7 · behavior-change
   The observing-site editor has a Leaflet and OpenStreetMap map, place search and **Use my location**, which fill the latitude and longitude fields; the fields are the record. New P7 grants location permission with a fixed test location. Offline (new P6), "Map unavailable" replaces the map and the search.
   Evidence: HARNESS-V5-FEEDBACK-R1.md Round 9 C5 · PLAN-FR-01 · prototype pickers (picker_map_unavailable, catalogue_pickers_location_desc) on ui-harness-v5 · by: JourneysR9c (intent-gated)
+- **Δ7** 2026-10-17 · S6 · behavior-change
+  Offline map unavailability leaves both coordinate fields editable; the user changes latitude and longitude before cancelling the unsaved edits.
+  Evidence: Codex PRRT_kwDOSdTu0s6tchRW on PR #1836 (J15/S6 follow-up); HARNESS-V5-FEEDBACK-R1.md Round 9 C5 · by: agent (intent-gated, user instruction)

@@ -1,7 +1,7 @@
 ---
 id: J29
 title: Plan nights on the Targets page's Planned view, opt into default-site reminders, see Tonight on Home, and export every planned night to a calendar
-version: 6
+version: 7
 status: draft
 last_reviewed: 2026-10-03
 actors: [primary-user]
@@ -49,10 +49,10 @@ starts no indexing.
 
 ### S2 — Grade filters with the per-filter Moon curve {#S2}
 
-- **Do:** In the Planned view, expand NGC 7000's Per filter sub-rows. Open **Moon limits**, choose OIII in the Filter field, raise its **Separation at full Moon** by 30°, leave **Width** unchanged, and save.
-- **Expect:** Per filter shows one sub-row for each band the saved rigs capture, R, G, B, Ha and OIII, each graded Good, Marginal or Poor with that band's Moon-clear windows. Each band follows its own Moon-avoidance curve. The separation the curve requires from the Moon is greatest at full Moon and shrinks as the Moon dims, and a sample counts when the Moon is below the horizon or at least that far away. After the save, OIII's sub-row recalculates: its grade, windows and Img time come from the raised curve, so every OIII window keeps the Moon below the horizon or at least the new required separation away.
+- **Do:** On the Planned view, expand NGC 7000's Per filter sub-rows. Set the header date picker to **2026-10-25** and choose Backyard in the site picker. Open **Moon limits**, choose OIII in the Filter field, raise its **Separation at full Moon** by 30° from 60° to 90°, leave **Width** at 7 days, and save. Read the recalculated OIII row, then return the date picker to tonight.
+- **Expect:** On fixture night 2026-10-25 at Backyard (52.09° N, 5.12° E), the seeded NGC 7000 position (RA 314.75°, Dec 44.53°) has a Moon-up reading at 100% illumination and 64.74° separation, between the 60° and 90° full-Moon thresholds. The prototype computes OIII as Good with a 440-minute window from 2026-10-25 18:20 to 2026-10-26 01:40 UTC before the edit, then Poor with no OIII window after it. At the reading's Moon age (14.306 days), the old 60°/7-day curve requires 59.74° separation and the raised 90°/7-day curve requires 89.61°; 44 Moon-up samples on the 10-minute darkness grid lie between the curves. These are computed by `domain/planning.ts` `skyNight` (489–509), `nightImaging` (605–646), and `requiredMoonSeparationDeg` (455–457), with the seeded Backyard site in `domain/seed.ts` (805), and the NGC 7000 catalogue position in `domain/sky.ts` (59). Per filter shows one sub-row for each band the saved rigs capture, R, G, B, Ha and OIII, each graded Good, Marginal or Poor with that band's Moon-clear windows. Each band follows its own Moon-avoidance curve. The separation the curve requires from the Moon is greatest at full Moon and shrinks as the Moon dims, and a sample counts when the Moon is below the horizon or at least that far away.
 - **Expect (negative):** The R, G, B and Ha sub-rows are unchanged. The dialog offers no separate maximum-illumination limit. Editing OIII's curve changes no rig filter list and no Project goal.
-- **Trace:** flow K · PLAN-FR-02 · PLAN-TGT-FR-06 · PLAN-TGT-AC-18 · D-W88 · HARNESS-V5-FEEDBACK-R1.md Round 9 C6 · prototype moon-limits.tsx (Separation at full Moon, Width; setMoonAvoidance) on ui-harness-v5
+- **Trace:** flow K · PLAN-FR-02 · PLAN-TGT-FR-06 · PLAN-TGT-AC-18 · D-W88 · HARNESS-V5-FEEDBACK-R1.md Round 9 C6 · prototype `domain/planning.ts` (`skyNight`, `nightImaging`, `requiredMoonSeparationDeg`), `domain/seed.ts`, `domain/sky.ts` and `moon-limits.tsx` on ui-harness-v5
 
 ### S3 — Switch the planning site {#S3}
 
@@ -165,7 +165,7 @@ starts no indexing.
 - SC6: Exactly 1 notification is delivered for the S7a target/site/window identity across S7a and S8.
 - SC7: M 31 is planned with 0 Projects created or chosen (S11), and the Project page plans exactly 1 subject, NGC 7000 (S12).
 - SC8: Tonight lists exactly 2 Targets with a window, NGC 7000 and M 31, at `Remote site`, and each best window equals the Planned view's best `Remote site` window for that Target (S13).
-- SC9: Per filter shows exactly 5 bands for NGC 7000, and raising OIII's separation at full Moon changes 0 of the other 4 (S2). Returning the date picker to tonight restores 100% of the S3 values (S3a).
+- SC9: Per filter shows exactly 5 bands for NGC 7000; on 2026-10-25 at Backyard, raising OIII's separation at full Moon from 60° to 90° changes OIII from Good/440 Img minutes with a 440-minute window to Poor/0 Img minutes with no window, and changes 0 of the other 4 bands (S2). Returning the date picker to tonight restores 100% of the S3 values (S3a).
 - SC10: Making `Remote site` the default asks first and, when cancelled, moves 0 defaults and 0 reminders (S14).
 - SC11: Tomorrow's plan holds 0 Targets before the S3a add and exactly 1, NGC 7000, after it; tonight's plan holds exactly NGC 7000 throughout S3a, and adding M 31 at S11 leaves tomorrow's plan at exactly 1.
 
@@ -194,6 +194,6 @@ starts no indexing.
 - **Δ5** 2026-10-15 · S1, S3 · behavior-change
   The Project holds sessions directly, with no processing run, and a mosaic is a Project with panel groups whose goals Tonight grades from the subject's window.
   Evidence: D-W93 to D-W106 (F4 Project model, owner's answers of 2026-10-14) in PR #1804, 065 PRJ-FR-29, 072 PLAN-AC-01, PLAN-FR-02, PLAN-FR-11 · by: SpecF4Writer2 (intent-gated)
-- **Δ6** 2026-10-17 · S2 · behavior-change
-  One Moon-avoidance curve per filter replaces the separate Moon limits. S2's **Moon limits** edit now raises OIII's separation at full Moon, and only OIII's grade, windows and Img time recalculate.
-  Evidence: HARNESS-V5-FEEDBACK-R1.md Round 9 C6 · D-W88 · PLAN-FR-02, PLAN-TGT-FR-06, PLAN-TGT-AC-18 · prototype moon-limits.tsx (ui-harness-v5) · by: JourneysR9c (intent-gated)
+- **Δ7** 2026-10-17 · S2 · behavior-change
+  S2 uses a fixed moonlit NGC 7000 night at Backyard and asserts OIII's computed Good/440 min → Poor/0 min result when its 60° full-Moon separation is raised to 90°.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md Round 9 C6; prototype `domain/planning.ts` (`skyNight`, `nightImaging`, `requiredMoonSeparationDeg`), `domain/seed.ts`, `domain/sky.ts` and `moon-limits.tsx` on ui-harness-v5 · by: agent (intent-gated, user instruction)
