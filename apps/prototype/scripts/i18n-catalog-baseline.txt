@@ -15,6 +15,5 @@ dup-value	actions_for,run_actions_for
 # pt-BR differs by position: a sentence-initial toggle label ('Sem local de observação') vs a mid-sentence fragment ('nenhum local de observação').
 dup-value	project_no_site,simulation_no_site
 # status_* belong to the STATUS registry (components/app/status.tsx, process and masterMatch kinds); the feature copies go when wave B moves Calibration, Session and Home onto StatusBadge (W5, W8: one status word, patterns own their keys).
-dup-value	calibration_status_to_stack,status_to_stack
 dup-value	session_process_trashing,status_trashing_raws
 dup-value	status_not_a_master,store_cal_not_a_master

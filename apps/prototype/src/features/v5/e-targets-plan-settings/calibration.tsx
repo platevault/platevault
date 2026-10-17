@@ -50,9 +50,9 @@ import { Box } from "@/components/app/box"
 import type { Action, Column, Facet, MenuItem } from "@/components/app/contracts"
 import { KeyValueList, type KeyValueItem } from "@/components/app/data"
 import { EmptyState, toast } from "@/components/app/feedback"
-import { CountBadge, Pill } from "@/components/app/pill"
+import { CountBadge } from "@/components/app/pill"
 import { UsedByPreview } from "@/components/app/previews"
-import { StatusBadge } from "@/components/app/status"
+import { StatusBadge, statusMeta } from "@/components/app/status"
 import type { PageDetail } from "@/components/templates/detail-panel"
 import { ListPage } from "@/components/templates/list-page"
 import type { ObjectMenu, PageViews } from "@/components/templates/parts"
@@ -79,7 +79,6 @@ import {
   masterCandidates,
   masterLabel,
   masterNight,
-  PROCESS_STATUS,
   type RawSet,
   rawSetName,
   rawSets,
@@ -109,13 +108,9 @@ function pinnedSessions(pins: readonly MasterPin[]): Session[] {
   return [...new Map(pins.map((p) => [p.session.id, p.session])).values()]
 }
 
-/** "3 sessions" with the sessions in its preview, each linked to its page; plain text when no session pins it. */
-function UsedBy({ sessions }: { sessions: Session[] }) {
-  const m = useMessages()
-  const label = m.session_count({ count: sessions.length })
-  const first = sessions[0]
-  if (!first) return label
-  return <UsedByPreview label={label} link={sessionLink(first.id)} items={sessions.map((s) => ({ label: sessionLabel(m, s), link: sessionLink(s.id) }))} />
+/** "3 sessions ▸" with the sessions in its preview, each linked to its page; "–" when no session pins it. */
+function usedBy(m: Messages, sessions: Session[]) {
+  return <UsedByPreview label={m.session_count({ count: sessions.length })} items={sessions.map((s) => ({ label: sessionLabel(m, s), link: sessionLink(s.id) }))} />
 }
 
 /** A master's drift: a version's bytes no longer match what the library verified (CAL-FR-08). */
@@ -130,7 +125,7 @@ function MasterState({ master, old }: { master: CalibrationMaster; old: string |
     <>
       <StatusBadge kind="master" value={master.state} />
       {drifted(disk, master) ? <StatusBadge kind="content" value="drifted" /> : null}
-      {old ? <Pill tone="warning">{old}</Pill> : null}
+      {old ? <StatusBadge kind="masterAge" value="old" label={old} /> : null}
     </>
   )
 }
@@ -378,7 +373,7 @@ export function CalibrationPage() {
             stickyFirstColumn: true,
             empty:
               raws.length === 0 ? (
-                <EmptyState icon={Layers} title={m.calibration_no_raw_sets()} description={m.calibration_no_raw_sets_help()} action={<ActionButton action={{ id: "open-import", label: m.import_open(), run: () => follow({ to: "/import" }) }} />} />
+                <EmptyState icon={Layers} title={m.calibration_no_raw_sets()} action={<ActionButton action={{ id: "open-import", label: m.import_open(), run: () => follow({ to: "/import" }) }} />} />
               ) : (
                 noMatch
               ),
@@ -446,7 +441,6 @@ export function CalibrationPage() {
                 <EmptyState
                   icon={Sparkles}
                   title={m.calibration_no_candidates()}
-                  description={m.calibration_no_candidates_help()}
                   action={<ActionButton action={{ id: "open-projects", label: m.nav_projects(), run: () => follow({ to: "/projects" }) }} />}
                 />
               ) : (
@@ -487,7 +481,7 @@ export function CalibrationPage() {
             rowActions,
             empty:
               processes.length === 0 ? (
-                <EmptyState icon={Layers} title={m.calibration_no_raw_sessions()} description={m.calibration_no_processes_help()} action={<ActionButton action={{ id: "open-import", label: m.import_open(), run: () => follow({ to: "/import" }) }} />} />
+                <EmptyState icon={Layers} title={m.calibration_no_raw_sessions()} action={<ActionButton action={{ id: "open-import", label: m.import_open(), run: () => follow({ to: "/import" }) }} />} />
               ) : (
                 noMatch
               ),
@@ -612,14 +606,14 @@ function masterColumns(m: Messages, catalog: Catalog, pins: ReadonlyMap<MasterId
     { id: "temp", header: m.calibration_key_temp(), cell: temperature, sortValue: (master) => master.ccdTempC, align: "right" },
     { id: "versions", header: m.calibration_versions(), hideable: true, defaultHidden: true, cell: (master) => formatCount(master.versions.length), sortValue: (master) => master.versions.length, align: "right" },
     { id: "night", header: m.calibration_newest_version(), truncate: true, cell: (master) => formatNight(night(master), true), sortValue: night },
-    { id: "used-by", header: m.calibration_used_by(), cell: (master) => <UsedBy sessions={users(master)} />, sortValue: (master) => users(master).length },
+    { id: "used-by", header: m.calibration_used_by(), cell: (master) => usedBy(m, users(master)), sortValue: (master) => users(master).length },
     { id: "state", header: m.calibration_state(), cell: (master) => <MasterState master={master} old={oldLabel(master)} />, sortValue: (master) => `${oldLabel(master) ? 0 : 1}${master.state}` },
   ]
 }
 
 function rawSetColumns(m: Messages, catalog: Catalog): Column<RawSet>[] {
   const name = (set: RawSet) => rawSetName(m, set)
-  const stacking = (set: RawSet) => (set.process ? say(m, PROCESS_STATUS[set.process.status].word) : "–")
+  const stacking = (set: RawSet) => (set.process ? statusMeta("process", set.process.status).label : "–")
   return [
     { id: "set", header: m.calibration_raw_set(), cell: name, sortValue: name, rowHeader: true, truncate: true },
     { id: "camera", header: m.calibration_key_camera(), cell: (set) => rawSetCamera(catalog, set), sortValue: (set) => rawSetCamera(catalog, set), truncate: true },
@@ -629,11 +623,11 @@ function rawSetColumns(m: Messages, catalog: Catalog): Column<RawSet>[] {
     { id: "temp", header: m.calibration_key_temp(), cell: (set) => temperature(set.source), sortValue: (set) => set.source.ccdTempC, align: "right" },
     { id: "frames", header: m.calibration_frames(), cell: (set) => formatCount(set.source.frameCount ?? 0), sortValue: (set) => set.source.frameCount, align: "right" },
     { id: "night", header: m.tonight_night(), cell: (set) => formatNight(set.session.night, true), sortValue: (set) => set.session.night },
-    { id: "used-by", header: m.calibration_used_by(), cell: (set) => <UsedBy sessions={set.pinnedOn} />, sortValue: (set) => set.pinnedOn.length },
+    { id: "used-by", header: m.calibration_used_by(), cell: (set) => usedBy(m, set.pinnedOn), sortValue: (set) => set.pinnedOn.length },
     {
       id: "stacking",
       header: m.calibration_status_stacking(),
-      cell: (set) => (set.process ? <Pill tone={PROCESS_STATUS[set.process.status].tone}>{stacking(set)}</Pill> : "–"),
+      cell: (set) => (set.process ? <StatusBadge kind="process" value={set.process.status} /> : "–"),
       sortValue: stacking,
     },
   ]
@@ -642,7 +636,7 @@ function rawSetColumns(m: Messages, catalog: Catalog): Column<RawSet>[] {
 function candidateColumns(m: Messages): Column<MasterCandidate>[] {
   const file = (c: MasterCandidate) => c.master.file
   const header = <T,>(c: MasterCandidate, read: (h: NonNullable<DiskFile["header"]>) => T, none: T) => (file(c).header ? read(file(c).header!) : none)
-  const offer = (c: MasterCandidate) => (c.master.offer?.state === "hidden" ? m.calibration_offer_declined() : m.calibration_offer_offered())
+  const offer = (c: MasterCandidate) => (c.master.offer?.state === "hidden" ? "hidden" : "offered")
   return [
     { id: "file", header: m.dialog_col_file(), cell: (c) => fileName(file(c).path), sortValue: (c) => fileName(file(c).path), rowHeader: true, truncate: true },
     { id: "kind", header: m.run_col_kind(), cell: (c) => candidateKind(m, file(c)), sortValue: (c) => candidateKind(m, file(c)) },
@@ -651,7 +645,7 @@ function candidateColumns(m: Messages): Column<MasterCandidate>[] {
     { id: "gain", header: m.session_gain_offset(), cell: (c) => header(c, gainOffset, "–"), sortValue: (c) => header(c, (h) => h.gain, null), align: "right" },
     { id: "temp", header: m.calibration_key_temp(), cell: (c) => header(c, temperature, "–"), sortValue: (c) => header(c, (h) => h.ccdTempC, null), align: "right" },
     { id: "captured", header: m.coverage_captured(), cell: (c) => header(c, (h) => formatNight(nightOf(h.dateObs), true), "–"), sortValue: (c) => header(c, (h) => h.dateObs, null) },
-    { id: "offer", header: m.calibration_output_offer(), cell: (c) => <Pill tone={c.master.offer?.state === "hidden" ? "muted" : "info"}>{offer(c)}</Pill>, sortValue: offer },
+    { id: "offer", header: m.calibration_output_offer(), cell: (c) => <StatusBadge kind="offer" value={offer(c)} />, sortValue: (c) => statusMeta("offer", offer(c)).label },
   ]
 }
 
@@ -670,8 +664,8 @@ function processColumns(m: Messages, catalog: Catalog): Column<ProcessView>[] {
     {
       id: "state",
       header: m.calibration_state(),
-      cell: (p) => <Pill tone={PROCESS_STATUS[p.status].tone}>{say(m, PROCESS_STATUS[p.status].word)}</Pill>,
-      sortValue: (p) => say(m, PROCESS_STATUS[p.status].word),
+      cell: (p) => <StatusBadge kind="process" value={p.status} />,
+      sortValue: (p) => statusMeta("process", p.status).label,
     },
   ]
 }
@@ -701,7 +695,7 @@ function masterFacts(m: Messages, catalog: Catalog, master: CalibrationMaster, s
     { label: m.domain_criterion_temperature(), value: temperature(master) },
     { label: m.domain_criterion_binning(), value: `${master.binning}×${master.binning}` },
     { label: m.calibration_age(), value: old ?? (ageDays === null ? none : m.calibration_age_days({ n: ageDays })) },
-    { label: m.calibration_used_by(), value: <UsedBy sessions={sessions} /> },
+    { label: m.calibration_used_by(), value: usedBy(m, sessions) },
   ]
   if (master.hiddenAt) items.push({ label: m.calibration_hidden_on(), value: formatDateTime(master.hiddenAt) })
   return items
@@ -717,6 +711,6 @@ function versionFacts(m: Messages, catalog: Catalog, version: MasterVersion, ses
     { label: m.calibration_frames(), value: version.frameCount === null ? "–" : formatCount(version.frameCount) },
     { label: m.calibration_stored(), value: version.path, mono: true },
     { label: m.storage_sha256(), value: version.adoption?.verifiedSha256 ?? version.sha256, mono: true },
-    { label: m.calibration_used_by(), value: <UsedBy sessions={sessions} /> },
+    { label: m.calibration_used_by(), value: usedBy(m, sessions) },
   ]
 }

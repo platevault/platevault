@@ -75,7 +75,7 @@ function TemplateDialog({ draft, onClose, taken }: { draft: Draft | null; onClos
   const unset = values.values.filter((v) => goalKindsError(m, v) !== undefined).map((v) => v.channel)
   const balance = values.panelBalancePct
   const errors: FieldErrors<keyof TemplateForm> = {
-    name: !name ? m.settings_name_required() : taken.some((t) => t.toLowerCase() === name.toLowerCase()) ? m.import_name_taken() : undefined,
+    name: !name ? m.settings_name_required() : taken.some((t) => t.toLowerCase() === name.toLowerCase()) ? m.settings_name_taken() : undefined,
     values: values.values.length === 0 ? m.template_add_channel() : unset.length > 0 ? m.template_hours_or_frames({ channels: unset.join(", ") }) : undefined,
     panelBalancePct:
       balance !== null && balance >= PANEL_BALANCE_LIMITS.minPct && balance <= PANEL_BALANCE_LIMITS.maxPct ? undefined : m.template_balance_range({ min: String(PANEL_BALANCE_LIMITS.minPct), max: String(PANEL_BALANCE_LIMITS.maxPct) }),

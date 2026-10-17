@@ -2,10 +2,10 @@
  * S10 Targets (`/targets`, slice E): the planning list on a ListPage
  * (P-PLAN2, R9 composition §7.4).
  *
- * - Header: the night (NightPicker; default tonight, `?night=`) and the
- *   planning site (SitePicker) beside the title, with the night's darkness
- *   and Moon; every planning value follows them. Actions: Moon limits…, and
- *   on Planned, Reminders… and Export calendar….
+ * - Header: the night (NightPicker: « a week, ‹ a night, Today; default
+ *   tonight, `?night=`) and the planning site (SitePicker) beside the title,
+ *   with the night's darkness and Moon; every planning value follows them.
+ *   Actions: Moon limits…, and on Planned, Reminders… and Export calendar….
  * - Views (tabs): My targets (favourites and open-Project subjects, the
  *   default), Browse catalogues (`?mode=browse`) and Planned (`?view=planned`,
  *   the chosen night's plan).
@@ -15,7 +15,8 @@
  *   the Presets ▾ menu (built-in, saved, Save current…, Delete).
  * - Suitable filters column: one badge per grade, good then marginal, poor
  *   hidden (Q36). It sorts by its grade points, or with picked filters by
- *   their longest Moon-clear time.
+ *   their longest Moon-clear time. Img time reads "0h · Too low" when zero:
+ *   the reason is a value, never a tooltip (T10).
  * - Order: Planning's (C7, `planningPriorities`): Targets whose Project
  *   window closes soonest first, so a subject rises as its deadline nears;
  *   then by designation. Every column sorts; the Planned view keeps the
@@ -44,7 +45,7 @@ import { GradeBadges } from "@/components/domain/grade-badges"
 import { AltitudeSpark, DarkLine, MoonLine } from "@/components/domain/sky-lines"
 import type { PageDetail } from "@/components/templates/detail-panel"
 import { ListPage } from "@/components/templates/list-page"
-import { formatHours, goalProgress } from "@/domain/derive"
+import { goalProgress } from "@/domain/derive"
 import { objectTypeRef } from "@/domain/labels"
 import { nightPlan } from "@/domain/planning"
 import { CATALOGUES, type CatalogueId } from "@/domain/sky"
@@ -64,6 +65,7 @@ import {
   fitValue,
   GOOD_TONIGHT_SORT,
   goodFor,
+  imgTimeText,
   movePlanned,
   myTargetRows,
   panelRows,
@@ -85,8 +87,6 @@ import {
   selectionBands,
   sessionCountsByTarget,
   sortValue,
-  zeroReasonText,
-  zeroReasonWord,
 } from "./targets-model"
 import { deletePreset, savedPresetUnavailable, savePreset, VIEW_KEYS } from "./targets-presets"
 
@@ -236,8 +236,6 @@ export function TargetsPage() {
   const noSite = m.project_no_site()
   const skyCell = (v: RowView, render: (sky: SkyOk, ctx: SkyContext) => ReactNode) =>
     v.sky.status === "no-site" || !ctx ? noSite : v.sky.status === "no-coordinates" ? m.tonight_no_coordinates() : render(v.sky, ctx)
-  const imgCell = (sky: SkyOk) => (sky.imgTimeS > 0 ? formatHours(sky.imgTimeS) : `${m.tonight_zero_hours()}${sky.zeroReason ? ` · ${zeroReasonWord(sky.zeroReason)}` : ""}`)
-  const noWindow = (sky: SkyOk) => (sky.zeroReason ? zeroReasonText(sky.zeroReason) : m.tonight_no_window())
   const okSort = (column: Parameters<typeof sortValue>[1]) => (v: RowView) => sortValue(v, column, activeGood)
 
   // ------------------------------------------------------------------
@@ -250,12 +248,12 @@ export function TargetsPage() {
     sortValue: okSort("maxAlt"),
     cell: (v) => skyCell(v, (sky, c) => <AltitudeSpark night={c.grid} sky={sky} darkness={c.summary.darkness} minAltitudeDeg={c.criteria.minAltitudeDeg} timeZone={c.site.timeZone} />),
   }
-  const img: Column<RowView> = { id: "img", header: m.tonight_img_time(), align: "right", truncate: true, sortValue: okSort("img"), cell: (v) => skyCell(v, imgCell) }
+  const img: Column<RowView> = { id: "img", header: m.tonight_img_time(), align: "right", sortValue: okSort("img"), cell: (v) => skyCell(v, imgTimeText) }
   const filters: Column<RowView> = {
     id: "tonight",
     header: activeGood.length > 0 ? m.targets_filters_band({ band: activeGood.join(", ") }) : m.domain_suitable_filters(),
     sortValue: okSort("tonight"),
-    cell: (v) => skyCell(v, (sky) => <GradeBadges grades={v.tonight} empty={noWindow(sky)} byGrade />),
+    cell: (v) => skyCell(v, () => <GradeBadges grades={v.tonight} byGrade />),
   }
   const priority: Column<RowView> = { id: "priority", header: m.targets_deadline(), truncate: true, sortValue: okSort("priority"), cell: (v) => (v.priority ? say(m, v.priority.window.line) : "–") }
   const fits: Column<RowView>[] = rigIds.map((rigId, index) => ({
@@ -273,7 +271,7 @@ export function TargetsPage() {
           id: "window",
           header: m.tonight_window(),
           static: true,
-          cell: (v) => skyCell(v, (sky, c) => (sky.windows.length > 0 ? sky.windows.map((w) => clockRange(w.start, w.end, c.site.timeZone)).join(", ") : noWindow(sky))),
+          cell: (v) => skyCell(v, (sky, c) => (sky.windows.length > 0 ? sky.windows.map((w) => clockRange(w.start, w.end, c.site.timeZone)).join(", ") : "–")),
         },
         img,
         filters,
@@ -365,8 +363,8 @@ export function TargetsPage() {
                     ? [
                         { label: m.tonight_altitude(), value: <AltitudeSpark night={ctx.grid} sky={sky} darkness={ctx.summary.darkness} minAltitudeDeg={ctx.criteria.minAltitudeDeg} timeZone={ctx.site.timeZone} /> },
                         { label: m.tonight_best(), value: sky.best ? clockRange(sky.best.start, sky.best.end, ctx.site.timeZone) : m.target_best_none() },
-                        { label: m.tonight_img_time(), value: imgCell(sky) },
-                        { label: m.domain_suitable_filters(), value: <GradeBadges grades={openView.tonight} empty={noWindow(sky)} wrap /> },
+                        { label: m.tonight_img_time(), value: imgTimeText(sky) },
+                        { label: m.domain_suitable_filters(), value: <GradeBadges grades={openView.tonight} wrap /> },
                         { label: m.tonight_lunar(), value: `${Math.round(sky.lunarDeg)}°` },
                       ]
                     : []),
@@ -460,7 +458,7 @@ export function TargetsPage() {
   const manageSites = () => void navigate({ to: "/settings/sites", search: { return: "/targets" } } as never)
   const context = (
     <>
-      {ctx ? <NightPicker value={ctx.grid.night} today={ctx.tonight} onChange={(n) => setParams({ night: n === ctx.tonight ? undefined : n })} /> : null}
+      {ctx ? <NightPicker value={ctx.grid.night} today={ctx.tonight} onChange={(n) => setParams({ night: n === ctx.tonight ? undefined : n })} weekJumps /> : null}
       <SitePicker
         value={planningSiteId}
         onChange={(siteId) => siteRunner.run({ id: "planning-site", label: m.plan_site(), run: (): CommitResult => choosePlanningSite(siteId) })}
@@ -574,8 +572,8 @@ function PanelTable({ parent, ctx, inputs }: { parent: RowView; ctx: SkyContext 
   const columns: Column<RowView>[] = [
     { id: "panel", header: m.targets_panel(), rowHeader: true, sortValue: (v) => v.row.designation, cell: (v) => v.row.designation },
     { id: "maxAlt", header: m.tonight_altitude(), sortValue: (v) => sky(v)?.peakDeg ?? null, cell: (v) => (sky(v) && ctx ? <AltitudeSpark night={ctx.grid} sky={sky(v)!} darkness={ctx.summary.darkness} minAltitudeDeg={ctx.criteria.minAltitudeDeg} timeZone={ctx.site.timeZone} /> : "–") },
-    { id: "img", header: m.tonight_img_time(), align: "right", sortValue: (v) => sky(v)?.imgTimeS ?? null, cell: (v) => (sky(v) ? formatHours(sky(v)!.imgTimeS) : "–") },
-    { id: "tonight", header: m.domain_suitable_filters(), sortValue: (v) => sortValue(v, "tonight"), cell: (v) => <GradeBadges grades={v.tonight} empty={m.tonight_no_window()} byGrade /> },
+    { id: "img", header: m.tonight_img_time(), align: "right", sortValue: (v) => sky(v)?.imgTimeS ?? null, cell: (v) => (sky(v) ? imgTimeText(sky(v)!) : "–") },
+    { id: "tonight", header: m.domain_suitable_filters(), sortValue: (v) => sortValue(v, "tonight"), cell: (v) => <GradeBadges grades={v.tonight} byGrade /> },
   ]
   return <DataTable label={m.rungroup_panels_label({ name: parent.row.designation })} rows={panels} columns={columns} getRowId={(v) => v.row.key} scroll="none" />
 }

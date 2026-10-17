@@ -48,7 +48,7 @@ function ProfileDetails({ profile }: { profile: ApplicationProfile }) {
     <KeyValueList
       items={[
         { label: m.apps_launch_arguments(), value: profile.launchArgs || "–", mono: profile.launchArgs !== "" },
-        { label: m.apps_corrected_values(), value: `${c.correctedMetadata === "configuration" ? m.apps_corrected_through() : m.apps_corrected_not_through()} · ${m.apps_rename_note()}` },
+        { label: m.apps_corrected_values(), value: c.correctedMetadata === "configuration" ? m.apps_corrected_through() : m.apps_corrected_not_through() },
       ]}
     />
   )
@@ -93,7 +93,7 @@ function LocateDialog({ profile, onClose }: { profile: ApplicationProfile | null
     id: "locate",
     label,
     kind: "primary",
-    unavailable: path ? undefined : { action: label, reason: m.apps_not_located(), blockers: [] },
+    unavailable: path ? undefined : { action: m.actions_blocked({ action: label }), reason: m.apps_not_located(), blockers: [] },
     run: () => (profile ? locateExecutable(profile.id, path) : undefined),
   }
   return (
@@ -251,7 +251,7 @@ export function SettingsApplicationsPage() {
           options={INPUT_MODES.map((value) => ({ value, label: say(m, MODE_NAME[value]) }))}
           onChange={(value) => save(() => setDefaultInputMode(value))}
         />
-        <SettingsRow label={m.settings_label_group_keywords()} help={m.apps_keywords_help()}>
+        <SettingsRow label={m.settings_label_group_keywords()}>
           <code>{`${keywords.group} · ${keywords.panel}`}</code>
           <ActionButton action={{ id: "edit-keywords", label: m.settings_edit(), icon: Pencil, opensDialog: true, run: () => setEditingKeywords(true) }} />
         </SettingsRow>

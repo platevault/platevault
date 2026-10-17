@@ -97,9 +97,9 @@ describe("Settings › Equipment: rig versions (PLAN-EQ-FR-07)", () => {
     const rig = store.getState().catalog.opticalTrains[ESPRIT]!
     await rowAction(user, rig.name, m.settings_edit())
     const dialog = await screen.findByRole("dialog")
-    // The night picker is named and described by its field, the provisional undated rule included.
+    // The night picker is named and described by its field: the night the current version began.
     const night = within(dialog).getByRole("group", { name: m.equipment_version_from() })
-    expect(night).toHaveAccessibleDescription(`${m.equipment_version_from_help({ night: formatNight(rig.versionFrom, true) })} ${m.equipment_version_undated_help()}`)
+    expect(night).toHaveAccessibleDescription(m.equipment_version_from_help({ night: formatNight(rig.versionFrom, true) }))
     await user.click(within(dialog).getByRole("switch", { name: m.equipment_rotator() }))
     await user.click(save(dialog, m.settings_save()))
 

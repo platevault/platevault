@@ -2,6 +2,7 @@ import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } fr
 import { render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
+import { statusMeta } from "@/components/app/status"
 import { masterPins } from "@/domain/calibration-library"
 import { fakeSha256, fileAt, makeFile, writeFiles } from "@/domain/disk"
 import { createSeed } from "@/domain/seed"
@@ -84,9 +85,9 @@ describe("Import masters: Files → Preview (CAL-AC-15)", () => {
     await user.click(dialog.getByRole("button", { name: m.stepflow_proceed() }))
 
     const row = (name: string) => within(dialog.getByRole("rowheader", { name }).closest("tr")!)
-    expect(row("dark-300-copy.xisf").getByText(m.flow_match_duplicate())).toBeDefined()
-    expect(row("light.xisf").getByText(m.store_cal_not_a_master())).toBeDefined()
-    expect(row("bias-0C.xisf").getByText(m.flow_match_new())).toBeDefined()
+    expect(row("dark-300-copy.xisf").getByText(statusMeta("masterMatch", "duplicate").label)).toBeDefined()
+    expect(row("light.xisf").getByText(statusMeta("masterMatch", "not-master").label)).toBeDefined()
+    expect(row("bias-0C.xisf").getByText(statusMeta("masterMatch", "new").label)).toBeDefined()
     // Two cameras share the model: Import waits for the camera of each selected file.
     expect(dialog.getByRole("button", { name: m.stepflow_import() }).getAttribute("aria-disabled")).toBe("true")
     expect(dialog.getByRole("button", { name: new RegExp(m.calibration_import_cameras_needed({ count: 2 })) })).toBeDefined()

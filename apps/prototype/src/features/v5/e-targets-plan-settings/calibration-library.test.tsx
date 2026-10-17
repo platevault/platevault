@@ -2,6 +2,7 @@ import { createMemoryHistory, createRootRoute, createRoute, createRouter, Router
 import { render, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest"
+import { statusMeta } from "@/components/app/status"
 import { masterPins, masterProjects } from "@/domain/calibration-library"
 import { sessionLabel } from "@/domain/membership"
 import { createSeed } from "@/domain/seed"
@@ -140,7 +141,7 @@ describe("Calibration library: Hide, Restore and Move to Trash", () => {
 })
 
 describe("Calibration library: raw sets and candidates", () => {
-  it("lists every raw dark, flat and bias set with its sessions and stacking state (CAL-FR-01)", async () => {
+  it("lists every raw dark, flat and bias set with its sessions and stacking state (CAL-FR-01); a set no session pins reads –, not 0 sessions", async () => {
     const user = userEvent.setup()
     renderPage()
 
@@ -151,7 +152,8 @@ describe("Calibration library: raw sets and candidates", () => {
     expect(sets.length).toBeGreaterThan(0)
     for (const set of sets) {
       const row = within(table.getByRole("rowheader", { name: rawSetName(m, set) }).closest("tr")!)
-      expect(row.getByText(m.session_count({ count: set.pinnedOn.length }))).toBeDefined()
+      if (set.pinnedOn.length > 0) expect(row.getByText(m.session_count({ count: set.pinnedOn.length }))).toBeDefined()
+      else expect(row.queryByText(m.session_count({ count: 0 }))).toBeNull()
     }
   })
 
@@ -163,7 +165,7 @@ describe("Calibration library: raw sets and candidates", () => {
 
     await user.click(await screen.findByRole("tab", { name: new RegExp(`^${m.calibration_candidates()}`) }))
     const row = within((await screen.findByRole("rowheader", { name })).closest("tr")!)
-    expect(row.getByText(m.calibration_offer_declined())).toBeDefined()
+    expect(row.getByText(statusMeta("offer", "hidden").label)).toBeDefined()
     await user.click(row.getByRole("button", { name: new RegExp(`^${m.project_output_adopt()}`) }))
     const dialog = within(await screen.findByRole("alertdialog", { name: m.project_output_adopt_title({ name }) }))
     await user.click(dialog.getByRole("button", { name: m.project_output_adopt() }))
