@@ -25,8 +25,8 @@ export interface InfoTipProps {
 /**
  * Small ⓘ affordance that reveals help text on hover/focus — the de-vibe
  * replacement for always-on help prose under form rows (settings mock).
- * Token-only styling lives in components/primitives.css under `.pv-info-tip`,
- * alongside `.pv-lock`, with which it shares one `:focus-visible` rule.
+ * Token-only styling lives in the component's Vanilla Extract stylesheet
+ * (`InfoTip.css.ts`).
  *
  * Uses the shared base-ui `Tooltip`; the tip text is also mirrored into
  * `aria-label` so screen readers get it without a hover. The trigger is

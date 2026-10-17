@@ -31,8 +31,8 @@
 //! moved-by-another-tool scenario spec 048 exists to detect).
 //!
 //! Run (CI): `cargo nextest run -p e2e_tests --profile e2e --run-ignored all`
-//! (serial, `.config/nextest.toml`). See `crates/e2e-tests/tests/journeys.rs`
-//! module docs and `README.md` for the full local run procedure.
+//! (serial, `.config/nextest.toml`). See `README.md` for the full local run
+//! procedure.
 
 mod common;
 

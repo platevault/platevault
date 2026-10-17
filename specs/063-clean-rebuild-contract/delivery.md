@@ -8,7 +8,7 @@ Scope: all PRs produced by this rebuild
 
 Only one feature specification enters product implementation at a time. Draft specifications and unresolved decisions may be prepared ahead of it. Clarification and analysis artifacts must be complete before implementation; the user's 2026-10-04 authorization resolves every human-approval gate without signoff.
 
-The lead selects the next eligible feature from actual artifact dependencies. The first user-visible path is library indexing, session inspection, a Project with one subject and one rig, a processing run's selection inside it, and exact external-tool handoff (D-W1). No empty application shell is an independently accepted milestone.
+The lead selects the next eligible feature from actual artifact dependencies. The first user-visible path is library indexing, session inspection, a Project with one group of sessions, its View, and exact external-tool handoff (D-W1, D-W94). No empty application shell is an independently accepted milestone.
 
 ## Workflow redesign sequencing
 

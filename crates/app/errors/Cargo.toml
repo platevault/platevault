@@ -13,6 +13,13 @@ contracts_core = { path = "../../contracts/core" }
 persistence_core = { path = "../../persistence/core" }
 anyhow = { workspace = true }
 sqlx.workspace = true
+serde_json.workspace = true
+fs_pathsafe = { path = "../../fs/pathsafe" }
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+# The mapping test constructs the filesystem-owned unfinished-file value; the
+# `test-fixture` feature keeps that constructor out of release builds.
+fs_pathsafe = { path = "../../fs/pathsafe", features = ["test-fixture"] }

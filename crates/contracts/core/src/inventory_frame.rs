@@ -118,6 +118,17 @@ pub struct InventoryReconcileRunResponse {
     pub newly_missing: u32,
     pub recovered: u32,
     pub size_backfilled: u32,
+    /// Recorded frames at or below an unreadable path, so their presence is
+    /// unknown. The pass leaves their records, events and session membership
+    /// unchanged.
+    pub unknown: u32,
+    /// The walk could not read part of the root; `unreadable_paths` names it.
+    pub incomplete: bool,
+    /// Root-relative, forward-slash paths the walk could not read, sorted;
+    /// `""` is the root itself. Each is a folder it could not list in full or
+    /// an entry whose metadata it could not read, and covers everything below
+    /// it. Empty exactly when `incomplete` is `false`.
+    pub unreadable_paths: Vec<String>,
     pub progress_pct: u8,
 }
 

@@ -12,8 +12,9 @@
 //! `plan-review-approve-apply` and `plan-review-confirm-destructive` had
 //! zero hits anywhere under `crates/e2e-tests/tests/` (confirmed by grep
 //! while authoring this file — the only "plan-review" strings there were
-//! prose in doc comments). `journeys.rs::cleanup_plan_review` drives cleanup
-//! scan/generate/approve/apply entirely through the bridge and explicitly
+//! prose in doc comments). `cleanup_plan_review` (now a backend journey in
+//! `apps/desktop/src-tauri/tests/backend_journeys.rs`) drives cleanup
+//! scan/generate/approve/apply entirely through commands, with no UI, and explicitly
 //! sets the project's protection override to `"unprotected"` so it never
 //! exercises a protected item at all — it proves the backend pipeline works,
 //! never that a protected item actually blocks a real button click, nor that
@@ -109,8 +110,8 @@ async fn satisfy_firstrun_sources(
 async fn cleanup_ui_protected_item_blocks_apply_cleanable_item_deletes() -> anyhow::Result<()> {
     let app = E2eApp::launch().await?;
     app.wait_bridge_ready(Duration::from_secs(30)).await?;
-    // See `journeys.rs::first_run_resolve_create_project` for why this poll
-    // (not an immediate URL check) is required — the index route's first-run
+    // See `common::settle_first_run_redirect` for why this poll (not an
+    // immediate URL check) is required — the index route's first-run
     // redirect is asynchronous.
     app.wait_url_contains("/setup", Duration::from_secs(15))
         .await
@@ -132,7 +133,7 @@ async fn cleanup_ui_protected_item_blocks_apply_cleanable_item_deletes() -> anyh
     // The real project whose artifacts get scanned for cleanup. The
     // artifact watcher's attach-time reconciliation pass requires the
     // project's output folder to already exist on disk (mirrors
-    // `journeys.rs::cleanup_plan_review`).
+    // `backend_journeys.rs::cleanup_plan_review`).
     let project_dir = tempfile::tempdir()?;
     let create: serde_json::Value = app
         .invoke(

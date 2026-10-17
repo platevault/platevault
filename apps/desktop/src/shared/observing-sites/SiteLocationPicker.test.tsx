@@ -4,17 +4,18 @@
 /// <reference types="@testing-library/jest-dom" />
 /**
  * SiteLocationPicker tests (issue #491) — shared map picker for the
- * Observing Site step and the Settings site form. Leaflet requires a real
- * DOM+canvas, which jsdom doesn't provide, so the module is mocked at the
- * boundary with a fake L object that records calls the way the real Leaflet
- * API would be driven.
+ * Observing Site step and the Settings site form — and SiteMapSection, which
+ * keeps the map (and its OpenStreetMap tiles) behind "Show map"
+ * (astro-plan-pil2e). Leaflet requires a real DOM+canvas, which jsdom doesn't
+ * provide, so the module is mocked at the boundary with a fake L object that
+ * records calls the way the real Leaflet API would be driven.
  *
  * Leaflet's LatLng normalizes longitudes and clamps latitudes silently rather
  * than throwing — the isValidLatLon guard in the component prevents us from
  * ever calling panTo with out-of-range values, which this suite regression-
  * guards against.
  */
-import { render, screen, act } from '@testing-library/react';
+import { render, screen, act, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // ── Mock construction ─────────────────────────────────────────────────────────
@@ -114,6 +115,8 @@ vi.mock('leaflet/dist/leaflet.css', () => ({}));
 
 // Import AFTER mocks are registered.
 import { SiteLocationPicker } from './SiteLocationPicker';
+import { SiteMapSection } from './SiteMapSection';
+import { m } from '@/lib/i18n';
 
 beforeEach(() => {
   MockMap.instances.length = 0;
@@ -218,6 +221,8 @@ describe('SiteLocationPicker', () => {
 
     expect(screen.queryByTestId('site-location-map')).not.toBeInTheDocument();
     expect(screen.getByText(/map unavailable/i)).toBeInTheDocument();
+    // Focus lands on the notice, not the page body (the map never mounted).
+    expect(screen.getByText(/map unavailable/i)).toHaveFocus();
   });
 
   it('degrades gracefully when tiles fail to load (offline / provider outage)', () => {
@@ -248,6 +253,36 @@ describe('SiteLocationPicker', () => {
     // At threshold — degrade to unavailable notice.
     expect(screen.queryByTestId('site-location-map')).not.toBeInTheDocument();
     expect(screen.getByText(/map unavailable/i)).toBeInTheDocument();
+    // The notice replaced the focused map; focus moves to it, not the body.
+    expect(screen.getByText(/map unavailable/i)).toHaveFocus();
+  });
+
+  it('leaves focus on a field the user moved to when tiles fail', () => {
+    // The user types coordinates while the map loads offline: the third
+    // tileerror swaps in the notice, but must not pull focus off the field.
+    render(
+      <>
+        <SiteLocationPicker
+          latitudeDeg={null}
+          longitudeDeg={null}
+          onPick={vi.fn()}
+        />
+        <input aria-label="Latitude" />
+      </>,
+    );
+    const latitude = screen.getByLabelText('Latitude');
+    latitude.focus();
+
+    const tiles = MockTileLayer.instances[0];
+    act(() => {
+      tiles.emit('tileerror', {});
+      tiles.emit('tileerror', {});
+      tiles.emit('tileerror', {});
+    });
+
+    expect(screen.getByText(/map unavailable/i)).toBeInTheDocument();
+    expect(latitude).toHaveFocus();
+    expect(screen.getByText(/map unavailable/i)).not.toHaveFocus();
   });
 
   it('does not degrade when a tileload resets the error count', () => {
@@ -273,5 +308,66 @@ describe('SiteLocationPicker', () => {
 
     expect(screen.getByTestId('site-location-map')).toBeInTheDocument();
     expect(screen.queryByText(/map unavailable/i)).not.toBeInTheDocument();
+  });
+});
+
+describe('SiteMapSection', () => {
+  it('adds no tile layer until the user asks for the map', async () => {
+    const onPick = vi.fn();
+    render(
+      <SiteMapSection latitudeDeg={52.37} longitudeDeg={4.9} onPick={onPick} />,
+    );
+
+    // Before the action: no map, no OpenStreetMap tile layer.
+    expect(MockMap.instances).toHaveLength(0);
+    expect(MockTileLayer.instances).toHaveLength(0);
+    expect(screen.queryByTestId('site-location-map')).not.toBeInTheDocument();
+    expect(screen.getByText(m.setup_site_map_notice())).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole('button', { name: m.setup_site_map_show() }),
+    );
+
+    // After the action: the lazily loaded picker mounts with one tile layer.
+    const mapEl = await screen.findByTestId('site-location-map');
+    expect(MockMap.instances).toHaveLength(1);
+    expect(MockTileLayer.instances).toHaveLength(1);
+    expect(
+      screen.queryByRole('button', { name: m.setup_site_map_show() }),
+    ).not.toBeInTheDocument();
+
+    act(() => {
+      MockMap.instances[0].emit('click', { latlng: { lat: 51.5, lng: -0.12 } });
+    });
+    expect(onPick).toHaveBeenCalledWith(51.5, -0.12);
+    expect(mapEl).toBeInTheDocument();
+  });
+
+  it('starts without the map again on every new mount', async () => {
+    const { unmount } = render(
+      <SiteMapSection
+        latitudeDeg={null}
+        longitudeDeg={null}
+        onPick={vi.fn()}
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: m.setup_site_map_show() }),
+    );
+    await screen.findByTestId('site-location-map');
+    unmount();
+
+    render(
+      <SiteMapSection
+        latitudeDeg={null}
+        longitudeDeg={null}
+        onPick={vi.fn()}
+      />,
+    );
+    expect(screen.queryByTestId('site-location-map')).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: m.setup_site_map_show() }),
+    ).toBeInTheDocument();
+    expect(MockTileLayer.instances).toHaveLength(1);
   });
 });

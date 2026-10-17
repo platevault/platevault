@@ -421,32 +421,51 @@ impl VolumeIdentity {
     }
 }
 
+/// A path as a volume tells names apart: two paths are the same file name on
+/// that volume exactly when their identities are equal. The native payload is
+/// folded only where the volume's recorded capabilities are both known: Unicode
+/// NFC where it is normalization-insensitive, lowercase where it is
+/// case-insensitive. Otherwise, and for a payload that is not valid text, the
+/// identity is the native payload itself.
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+pub struct PathIdentity(PathIdentityKey);
+
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+enum PathIdentityKey {
+    Native(NativePath),
+    Folded(String),
+}
+
 impl NativePath {
-    /// Compare paths only using recorded filesystem capabilities.
+    /// This path's identity on `volume`; see [`PathIdentity`].
     #[must_use]
-    pub fn same_on(&self, other: &Self, volume: &VolumeIdentity) -> bool {
+    pub fn identity_on(&self, volume: &VolumeIdentity) -> PathIdentity {
         if volume.case == PathSensitivity::Unknown
             || volume.normalization == PathSensitivity::Unknown
         {
-            return self == other;
+            return PathIdentity(PathIdentityKey::Native(self.clone()));
         }
-        let text = |path: &Self| match path {
+        let text = match self {
             Self::UnixBytes(bytes) => std::str::from_utf8(bytes).ok().map(str::to_owned),
             Self::WindowsUtf16(units) => String::from_utf16(units).ok(),
         };
-        let (Some(mut left), Some(mut right)) = (text(self), text(other)) else {
-            return self == other;
+        let Some(mut text) = text else {
+            return PathIdentity(PathIdentityKey::Native(self.clone()));
         };
         if volume.normalization == PathSensitivity::Insensitive {
             use unicode_normalization::UnicodeNormalization;
-            left = left.nfc().collect();
-            right = right.nfc().collect();
+            text = text.nfc().collect();
         }
         if volume.case == PathSensitivity::Insensitive {
-            left = left.to_lowercase();
-            right = right.to_lowercase();
+            text = text.to_lowercase();
         }
-        left == right
+        PathIdentity(PathIdentityKey::Folded(text))
+    }
+
+    /// Compare paths only using recorded filesystem capabilities.
+    #[must_use]
+    pub fn same_on(&self, other: &Self, volume: &VolumeIdentity) -> bool {
+        self.identity_on(volume) == other.identity_on(volume)
     }
 }
 
@@ -595,7 +614,8 @@ pub struct Location {
     pub availability: Availability,
     pub last_observed_at: Option<String>,
     pub lifecycle: LocationLifecycle,
-    /// The kind of volume the root was registered on (LIB-FR-01).
+    /// The kind of volume the root is on, as observed when it was registered
+    /// or last remapped (LIB-FR-01).
     pub volume_kind: VolumeKind,
 }
 
@@ -1270,6 +1290,9 @@ pub struct RemapReview {
     pub expected_revision: Revision,
     pub proposed_root: NativePath,
     pub proposed_identity: FileIdentity,
+    /// The kind of volume the proposed root was observed on, which applying
+    /// the review records for the location.
+    pub proposed_volume_kind: VolumeKind,
     pub items: Vec<RemapItem>,
     pub blocked: Vec<RemapBlock>,
 }

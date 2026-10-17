@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS catalog_meta (
     value INTEGER NOT NULL
 ) STRICT;
 
-INSERT OR IGNORE INTO catalog_meta (key, value) VALUES ('schema_version', 17);
+INSERT OR IGNORE INTO catalog_meta (key, value) VALUES ('schema_version', 18);
 INSERT OR IGNORE INTO catalog_meta (key, value) VALUES ('grouping_revision', 0);
 INSERT OR IGNORE INTO catalog_meta (key, value) VALUES ('scan_sequence', 0);
 INSERT OR IGNORE INTO catalog_meta (key, value) VALUES ('target_generation', 0);
@@ -300,6 +300,8 @@ CREATE TABLE IF NOT EXISTS remap_reviews (
     expected_revision INTEGER NOT NULL,
     proposed_root BLOB NOT NULL,
     proposed_identity TEXT NOT NULL,
+    proposed_volume_kind TEXT NOT NULL
+        CHECK (proposed_volume_kind IN ('local', 'removable', 'network')),
     items TEXT NOT NULL,
     blocked TEXT NOT NULL,
     state TEXT NOT NULL CHECK (state IN ('reviewed', 'applied')),

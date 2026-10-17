@@ -7,6 +7,8 @@ use persistence_lifecycle::repositories::audit::{
     count_audit_entries, list_audit_entries, AuditLogFilter,
 };
 use persistence_plans::repositories::plans as repo;
+use std::time::Duration;
+use tokio::sync::mpsc::UnboundedReceiver;
 use uuid::Uuid;
 
 async fn setup() -> (Database, EventBus) {
@@ -17,6 +19,17 @@ async fn setup() -> (Database, EventBus) {
 }
 
 async fn insert_approved_plan_with_items(db: &Database, plan_id: &str, item_count: usize) {
+    insert_approved_plan_with_items_at(db, plan_id, plan_id, item_count).await;
+}
+
+/// [`insert_approved_plan_with_items`] with the item paths under `path_prefix`
+/// instead of the plan id, so a test can give two plans the same paths.
+async fn insert_approved_plan_with_items_at(
+    db: &Database,
+    plan_id: &str,
+    path_prefix: &str,
+    item_count: usize,
+) {
     repo::insert_plan(
         db.pool(),
         &repo::InsertPlan {
@@ -43,13 +56,13 @@ async fn insert_approved_plan_with_items(db: &Database, plan_id: &str, item_coun
                 name: "file.fits",
                 action: "move",
                 from_root_id: None,
-                // Plan-scoped paths: tests share the process-global
+                // Plan-scoped paths by default: tests share the process-global
                 // ACTIVE_RUNS registry and run in parallel, so identical
                 // relative paths across tests would trip the FR-017
                 // overlap guard non-deterministically.
-                from_relative_path: &format!("{plan_id}/raw/file-{i}.fits"),
+                from_relative_path: &format!("{path_prefix}/raw/file-{i}.fits"),
                 to_root_id: None,
-                to_relative_path: &format!("{plan_id}/archive/file-{i}.fits"),
+                to_relative_path: &format!("{path_prefix}/archive/file-{i}.fits"),
                 reason: "test",
                 protection: "normal",
                 linked_entity: None,
@@ -65,6 +78,43 @@ async fn insert_approved_plan_with_items(db: &Database, plan_id: &str, item_coun
 
     repo::update_plan_state(db.pool(), plan_id, "ready_for_review").await.unwrap();
     repo::set_approved(db.pool(), plan_id, "2026-06-01T00:00:00Z", "test-token").await.unwrap();
+}
+
+/// A long-op sink that forwards every event to the returned receiver.
+fn channel_sink() -> (OperationEventSink, UnboundedReceiver<OperationEvent>) {
+    let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+    let sink: OperationEventSink = Arc::new(move |event: OperationEvent| {
+        // A send fails only once the test has dropped the receiver, when no
+        // one is left to read the event.
+        let _ = tx.send(event);
+    });
+    (sink, rx)
+}
+
+/// Receive a run's long-op events up to and including its terminal
+/// `Completed`/`Failed` event, which `terminal::handle_completed` emits after
+/// its state, audit and bus writes. Panics if that event does not arrive
+/// within 10 s.
+async fn recv_until_terminal(
+    events: &mut UnboundedReceiver<OperationEvent>,
+) -> Vec<OperationEvent> {
+    let received = async {
+        let mut received = Vec::new();
+        while let Some(event) = events.recv().await {
+            let terminal = matches!(
+                event.event_type,
+                OperationEventType::Completed | OperationEventType::Failed
+            );
+            received.push(event);
+            if terminal {
+                return received;
+            }
+        }
+        panic!("the long-op sink was dropped before the run's terminal event");
+    };
+    tokio::time::timeout(Duration::from_secs(10), received)
+        .await
+        .expect("the run emitted no terminal long-op event within 10 s")
 }
 
 #[tokio::test]
@@ -271,24 +321,15 @@ async fn apply_plan_starts_successfully() {
 /// (asserted separately) — the sink is an additive live projection (§II).
 #[tokio::test]
 async fn apply_plan_streams_operation_events() {
-    use std::sync::Mutex;
-
     let (db, bus) = setup().await;
     insert_approved_plan_with_items(&db, "p-evt", 1).await;
 
-    let captured: Arc<Mutex<Vec<OperationEvent>>> = Arc::new(Mutex::new(Vec::new()));
-    let sink_store = captured.clone();
-    let sink: OperationEventSink = Arc::new(move |event: OperationEvent| {
-        sink_store.lock().unwrap().push(event);
-    });
-
+    let (sink, mut received) = channel_sink();
     let resp = apply_plan(db.pool(), &bus, "p-evt", "test-token", Some(sink)).await.unwrap();
 
-    // Let the background executor run to completion.
-    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-
-    let events = captured.lock().unwrap().clone();
-    assert!(!events.is_empty(), "sink must receive long-op events");
+    // Wait for the run's terminal event itself rather than a fixed delay, which
+    // a slow terminal write outlasts (astro-plan-o82vv).
+    let events = recv_until_terminal(&mut received).await;
 
     // First event is the Started projection carrying a Running handle.
     let first = &events[0];
@@ -301,14 +342,12 @@ async fn apply_plan_streams_operation_events() {
         assert!(window[1].sequence > window[0].sequence, "sequence must be monotonic");
     }
 
-    // The run terminates with a Completed (or Failed) event carrying a
-    // terminal handle.
-    let last = events.last().unwrap();
-    assert!(
-        matches!(last.event_type, OperationEventType::Completed | OperationEventType::Failed),
-        "last event must be a terminal Completed/Failed, got {:?}",
-        last.event_type
-    );
+    // The run terminates with its Completed (or Failed) event: nothing follows
+    // it before the finished run drops the sink.
+    let after = tokio::time::timeout(Duration::from_secs(10), received.recv())
+        .await
+        .expect("the finished run dropped its sink within 10 s");
+    assert!(after.is_none(), "no event may follow the terminal one, got {after:?}");
 
     // Durable audit trail is retained: the DB still holds run events.
     let plan = repo::get_plan(db.pool(), "p-evt", false).await.unwrap();
@@ -1885,6 +1924,14 @@ fn dummy_active_run() -> ActiveRun {
     }
 }
 
+/// A run's path claim for a terminal handler called directly, registered in a
+/// registry of its own so it cannot overlap a concurrently running test's runs.
+fn unshared_claim(plan_id: &str) -> ActiveRunGuard {
+    let registry = Arc::new(DashMap::new());
+    registry.insert(plan_id.to_owned(), dummy_active_run());
+    ActiveRunGuard { registry, plan_id: plan_id.to_owned() }
+}
+
 /// FR-017: on a *normal* scope exit the guard's `Drop` removes the entry
 /// exactly once. This is the Completed / Cancelled / Paused path.
 #[test]
@@ -1996,6 +2043,101 @@ async fn apply_plan_allows_disjoint_active_plan() {
     // Let the background executor finish so the run's own registry entry
     // is dropped before other tests run.
     tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+}
+
+/// Apply `first`, hold its run's task at its terminal long-op event, and return
+/// the state `first` reads there with the result of applying `second` while
+/// the task is held.
+///
+/// The terminal handlers emit that event after the terminal state commits, so
+/// `second` cannot be accepted merely because the first task went on to
+/// finish. With `cancel_first`, the first run's token is cancelled from its
+/// `Started` event, which `apply_plan` emits before it spawns the executor, so
+/// the run stops at its first item boundary and ends `Cancelled`.
+async fn apply_overlapping_plan_while_first_is_held(
+    db: &Database,
+    bus: &EventBus,
+    first: &str,
+    second: &str,
+    cancel_first: bool,
+) -> (String, Result<PlanApplyResponse, ContractError>) {
+    let (finished_tx, finished_rx) = tokio::sync::oneshot::channel::<()>();
+    let (release_tx, release_rx) = std::sync::mpsc::channel::<()>();
+    let finished_tx = std::sync::Mutex::new(Some(finished_tx));
+    let release_rx = std::sync::Mutex::new(release_rx);
+    let first_id = first.to_owned();
+    let sink: OperationEventSink = Arc::new(move |event: OperationEvent| match event.event_type {
+        OperationEventType::ItemStarted if cancel_first => {
+            active_runs().get(&first_id).expect("the run is registered").cancel_token.cancel();
+        }
+        OperationEventType::Completed | OperationEventType::Failed => {
+            if let Some(tx) = finished_tx.lock().unwrap().take() {
+                let _ = tx.send(());
+            }
+            // The deadline lets the task go on if the test fails before it
+            // releases the task, instead of holding a worker thread forever.
+            let _ = release_rx.lock().unwrap().recv_timeout(Duration::from_secs(10));
+        }
+        _ => {}
+    });
+
+    apply_plan(db.pool(), bus, first, "test-token", Some(sink)).await.unwrap();
+    tokio::time::timeout(Duration::from_secs(10), finished_rx)
+        .await
+        .expect("the first run emitted its terminal event within 10 s")
+        .expect("the first run's sink signalled its terminal event");
+
+    let first_state = repo::get_plan(db.pool(), first, false).await.unwrap().state;
+    let second = apply_plan(db.pool(), bus, second, "test-token", None).await;
+    release_tx.send(()).unwrap();
+    (first_state, second)
+}
+
+/// FR-017 (astro-plan-4bk7e): once a plan reads finished, its run no longer
+/// claims the plan's paths, so a plan over the same paths is accepted from that
+/// moment, as a plan over a paused run's paths already was.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn an_overlapping_plan_is_accepted_once_the_first_plan_reads_finished() {
+    let (db, bus) = setup().await;
+    insert_approved_plan_with_items(&db, "p-claim-first", 1).await;
+    // The same item paths as the first plan, so the two path sets overlap.
+    insert_approved_plan_with_items_at(&db, "p-claim-second", "p-claim-first", 1).await;
+
+    let (first_state, second) = apply_overlapping_plan_while_first_is_held(
+        &db,
+        &bus,
+        "p-claim-first",
+        "p-claim-second",
+        false,
+    )
+    .await;
+
+    assert_ne!(first_state, "applying", "the first plan reads finished at this point");
+    let second = second.expect("a plan over a finished plan's paths must be accepted");
+    assert_eq!(second.new_state, "applying");
+}
+
+/// The Cancelled counterpart (astro-plan-4bk7e): a cancelled run frees the
+/// plan's paths before the plan reads `cancelled`.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn an_overlapping_plan_is_accepted_once_the_first_plan_reads_cancelled() {
+    let (db, bus) = setup().await;
+    insert_approved_plan_with_items(&db, "p-claim-cancel-first", 1).await;
+    insert_approved_plan_with_items_at(&db, "p-claim-cancel-second", "p-claim-cancel-first", 1)
+        .await;
+
+    let (first_state, second) = apply_overlapping_plan_while_first_is_held(
+        &db,
+        &bus,
+        "p-claim-cancel-first",
+        "p-claim-cancel-second",
+        true,
+    )
+    .await;
+
+    assert_eq!(first_state, "cancelled", "the first run took the Cancelled path");
+    let second = second.expect("a plan over a cancelled plan's paths must be accepted");
+    assert_eq!(second.new_state, "applying");
 }
 
 /// FR-017: the claimed path set resolves item paths against the root map
@@ -2384,6 +2526,41 @@ async fn gf5_cancel_paused_plan_transitions_db_directly() {
     assert_eq!(row.state, "cancelled", "paused plan must transition to cancelled in DB");
 }
 
+/// astro-plan-1fhmq: cancelling a paused plan records its plan-level
+/// `paused -> cancelled` transition once, on the paused run, as every other
+/// plan transition is recorded.
+#[tokio::test]
+async fn cancelling_a_paused_plan_appends_one_paused_to_cancelled_row() {
+    let (db, bus) = setup().await;
+    let plan_id = "p-cancel-audit";
+    insert_approved_plan_with_items(&db, plan_id, 2).await;
+    apply_repo::cas_approved_to_applying(
+        db.pool(),
+        plan_id,
+        "run-cancel-audit",
+        "test-token",
+        2,
+        2,
+    )
+    .await
+    .unwrap();
+    apply_repo::pause_run(db.pool(), plan_id, "run-cancel-audit", "disk.full", 0, 0, 0, 0, 2)
+        .await
+        .unwrap();
+
+    cancel_plan(db.pool(), &bus, plan_id).await.unwrap();
+
+    let rows: Vec<(String,)> = sqlx::query_as(
+        "SELECT run_id FROM plan_apply_events \
+         WHERE plan_id = ? AND item_id IS NULL AND prior_state = 'paused' AND new_state = 'cancelled'",
+    )
+    .bind(plan_id)
+    .fetch_all(db.pool())
+    .await
+    .unwrap();
+    assert_eq!(rows, vec![("run-cancel-audit".to_owned(),)]);
+}
+
 // ── GF-29: skip_plan_item rejects when no active run ─────────────────────────
 
 /// GF-29 regression: skip_plan_item on a plan that is "applying" in DB but
@@ -2456,6 +2633,7 @@ async fn gfd2_completed_path_sweeps_orphaned_applying_items() {
         None,
         None,
         TerminalCounts { succeeded: 1, failed: 0, skipped: 0, cancelled: 0 },
+        unshared_claim(plan_id),
     )
     .await;
 
@@ -2655,6 +2833,7 @@ async fn a_pause_records_the_items_still_to_run_not_the_settled_ones() {
         "item.stale",
         None,
         TerminalCounts { succeeded: 1, ..TerminalCounts::default() },
+        unshared_claim("p-pause-count"),
     )
     .await;
 
@@ -2708,6 +2887,7 @@ async fn a_pause_that_cannot_be_written_is_not_reported_as_paused() {
         "disk.full",
         Some(&emitter),
         TerminalCounts::default(),
+        unshared_claim("p-pause-fail"),
     )
     .await;
 
@@ -2865,6 +3045,7 @@ async fn a_cancelled_run_whose_terminal_write_fails_is_not_reported_as_cancelled
         "run-cancel-write",
         Some(&emitter),
         TerminalCounts::default(),
+        unshared_claim("p-cancel-write"),
     )
     .await;
 
@@ -2937,6 +3118,7 @@ async fn a_completed_run_whose_terminal_write_fails_is_not_reported_as_terminal(
         None,
         Some(&emitter),
         TerminalCounts { succeeded: 1, ..TerminalCounts::default() },
+        unshared_claim("p-complete-write"),
     )
     .await;
 
@@ -2950,6 +3132,133 @@ async fn a_completed_run_whose_terminal_write_fails_is_not_reported_as_terminal(
         .await
         .unwrap();
     assert_eq!(state, "applying");
+}
+
+/// Records the fields of every `ERROR` event emitted while it is the default
+/// subscriber, each field rendered as text.
+struct ErrorFieldCapture(Arc<std::sync::Mutex<Vec<HashMap<String, String>>>>);
+
+impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for ErrorFieldCapture {
+    fn on_event(
+        &self,
+        event: &tracing::Event<'_>,
+        _ctx: tracing_subscriber::layer::Context<'_, S>,
+    ) {
+        struct Fields<'a>(&'a mut HashMap<String, String>);
+        impl tracing::field::Visit for Fields<'_> {
+            fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
+                self.0.insert(field.name().to_owned(), value.to_owned());
+            }
+            fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+                self.0.insert(field.name().to_owned(), format!("{value:?}"));
+            }
+        }
+
+        if *event.metadata().level() != tracing::Level::ERROR {
+            return;
+        }
+        let mut fields = HashMap::new();
+        event.record(&mut Fields(&mut fields));
+        self.0.lock().unwrap().push(fields);
+    }
+}
+
+/// The `(prior_state, new_state)` of every captured error that names this plan
+/// and run, in emission order.
+fn logged_transitions(
+    errors: &std::sync::Mutex<Vec<HashMap<String, String>>>,
+    plan_id: &str,
+    run_id: &str,
+) -> Vec<(String, String)> {
+    errors
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|f| {
+            f.get("plan_id").map(String::as_str) == Some(plan_id)
+                && f.get("run_id").map(String::as_str) == Some(run_id)
+        })
+        .filter_map(|f| Some((f.get("prior_state")?.clone(), f.get("new_state")?.clone())))
+        .collect()
+}
+
+/// Reject every plan-level `plan_apply_events` insert, leaving item rows alone.
+async fn reject_plan_level_audit_rows(db: &Database) {
+    sqlx::query(
+        "CREATE TRIGGER reject_plan_level_rows BEFORE INSERT ON plan_apply_events \
+         WHEN NEW.item_id IS NULL BEGIN SELECT RAISE(ABORT, 'audit writer unavailable'); END",
+    )
+    .execute(db.pool())
+    .await
+    .unwrap();
+}
+
+/// astro-plan-fjhq6: a plan-level audit row that cannot be written is logged
+/// with its plan, run and transition, and the apply still reaches its terminal
+/// state. The row is Tier 2 and may lag or be lost (constitution §II, §V), but
+/// not without trace.
+#[tokio::test]
+async fn a_lost_plan_level_audit_row_is_logged_and_the_apply_still_finishes() {
+    use tracing_subscriber::layer::SubscriberExt as _;
+
+    let (db, bus) = setup().await;
+    let plan_id = "p-audit-lost";
+    insert_approved_plan_with_items(&db, plan_id, 1).await;
+    reject_plan_level_audit_rows(&db).await;
+
+    // The current-thread test runtime runs the spawned executor on this
+    // thread, so the thread-local subscriber sees its events too.
+    let errors = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let _subscriber = tracing::subscriber::set_default(
+        tracing_subscriber::registry().with(ErrorFieldCapture(errors.clone())),
+    );
+
+    let (sink, mut received) = channel_sink();
+    let resp = apply_plan(db.pool(), &bus, plan_id, "test-token", Some(sink))
+        .await
+        .expect("a lost audit row must not fail the apply");
+    recv_until_terminal(&mut received).await;
+
+    let plan = repo::get_plan(db.pool(), plan_id, false).await.unwrap();
+    assert_ne!(plan.state, "applying", "the run reached its terminal state");
+    assert_eq!(
+        logged_transitions(&errors, plan_id, &resp.run_id),
+        vec![("approved".to_owned(), "applying".to_owned()), ("applying".to_owned(), plan.state)],
+    );
+}
+
+/// astro-plan-fjhq6 on the paused-cancel path: the user's cancel stands when its
+/// `paused -> cancelled` row cannot be written, and the loss is logged.
+#[tokio::test]
+async fn a_paused_cancel_whose_audit_row_is_lost_is_logged_and_still_cancels() {
+    use tracing_subscriber::layer::SubscriberExt as _;
+
+    let (db, bus) = setup().await;
+    let plan_id = "p-cancel-audit-lost";
+    insert_approved_plan_with_items(&db, plan_id, 1).await;
+    apply_repo::cas_approved_to_applying(db.pool(), plan_id, "run-cancel-lost", "test-token", 1, 1)
+        .await
+        .unwrap();
+    apply_repo::pause_run(db.pool(), plan_id, "run-cancel-lost", "disk.full", 0, 0, 0, 0, 1)
+        .await
+        .unwrap();
+    reject_plan_level_audit_rows(&db).await;
+
+    let errors = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let _subscriber = tracing::subscriber::set_default(
+        tracing_subscriber::registry().with(ErrorFieldCapture(errors.clone())),
+    );
+
+    cancel_plan(db.pool(), &bus, plan_id)
+        .await
+        .expect("a lost audit row must not refuse the cancel");
+
+    let plan = repo::get_plan(db.pool(), plan_id, false).await.unwrap();
+    assert_eq!(plan.state, "cancelled");
+    assert_eq!(
+        logged_transitions(&errors, plan_id, "run-cancel-lost"),
+        vec![("paused".to_owned(), "cancelled".to_owned())],
+    );
 }
 
 /// The pause record counts the item rows still `pending`, so a skip the run
@@ -2987,6 +3296,7 @@ async fn a_pause_after_a_skip_counts_the_rows_not_the_lagging_plan_counter() {
         "disk.full",
         None,
         TerminalCounts::default(),
+        unshared_claim("p-pause-skip"),
     )
     .await;
 
@@ -3060,6 +3370,7 @@ async fn completed_view_generation_apply_prepares_the_project() {
         Some(&project_id),
         None,
         TerminalCounts { succeeded: 1, failed: 0, skipped: 0, cancelled: 0 },
+        unshared_claim(plan_id),
     )
     .await;
 
@@ -3122,6 +3433,7 @@ async fn partially_applied_view_generation_leaves_lifecycle_ready() {
         Some(&project_id),
         None,
         TerminalCounts { succeeded: 1, failed: 1, skipped: 0, cancelled: 0 },
+        unshared_claim(plan_id),
     )
     .await;
 

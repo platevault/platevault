@@ -4,13 +4,15 @@
 //! The native application menu (spec 051 US5).
 //!
 //! Every label comes from the frontend message catalogue
-//! (`apps/desktop/messages`), embedded so the menu has labels before the
-//! webview loads. Start-up builds the menu behind the splash, in the locale
-//! saved in the settings DB ([`install_native_menu`]); the frontend then calls
-//! [`native_menu_set_labels`] with the active locale's labels at startup and on
-//! every locale change.
+//! (`apps/desktop/messages`), embedded by `desktop_services::locale` so the
+//! menu has labels before the webview loads. Start-up builds the menu behind
+//! the splash, in the locale saved in the settings DB
+//! ([`install_native_menu`]); the frontend then calls
+//! [`native_menu_set_labels`] with the active locale's labels at startup and
+//! on every locale change.
 
 use contracts_core::ContractError;
+use desktop_services::locale::{ShippedLocale, SHIPPED_LOCALES};
 use serde::Deserialize;
 use tauri::menu::{IsMenuItem, Menu, MenuItem, MenuItemKind, PredefinedMenuItem, Submenu};
 use tauri::{AppHandle, Manager, Runtime, Wry};
@@ -20,25 +22,13 @@ pub const MENU_ID_SETTINGS: &str = "menu-settings";
 
 /// Menu id for the app's own Quit item. `PredefinedMenuItem::quit` is not
 /// used: on macOS it sends `terminate:` and on Windows it posts
-/// `PostQuitMessage`, and neither reaches `RunEvent::ExitRequested`, so the
-/// install-on-quit gate (`update_exit_gate`) would never see it.
+/// `PostQuitMessage`, and neither reaches `RunEvent::ExitRequested`, so a
+/// staged "Install on quit" (`crate::updater`) would never see it.
 /// `on_menu_event` answers this id with `app.exit(0)`, which does.
 pub const MENU_ID_QUIT: &str = "menu-quit";
 
 /// The App submenu's title: the app name, a proper noun no locale translates.
 const APP_NAME: &str = "PlateVault";
-
-/// A shipped locale and its embedded catalogue.
-struct ShippedLocale {
-    tag: &'static str,
-    catalogue: &'static str,
-}
-
-/// Every locale in `project.inlang/settings.json`, the base locale first.
-static SHIPPED_LOCALES: [ShippedLocale; 2] = [
-    ShippedLocale { tag: "en-GB", catalogue: include_str!("../../../messages/en-GB.json") },
-    ShippedLocale { tag: "pt-BR", catalogue: include_str!("../../../messages/pt-BR.json") },
-];
 
 /// The locale the menu starts in, resolved as the frontend's Paraglide
 /// strategy chain resolves its own (`custom-almSettings`, `preferredLanguage`,

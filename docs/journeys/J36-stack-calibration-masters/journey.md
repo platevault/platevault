@@ -1,7 +1,7 @@
 ---
 id: J36
 title: Stack raw calibration frames into masters and keep the master library
-version: 2
+version: 4
 status: draft
 last_reviewed: 2026-10-12
 actors: [primary-user]
@@ -16,11 +16,13 @@ Indexing found raw darks, bias and flats in the Calibration location. The user
 turns each raw session into a master through its calibration process. Stack
 hands the raw frames to a stacking application, and PlateVault watches the
 application's output folder. It detects the master, imports it into structured
-calibration storage and registers it with lineage to its raw session. It then
+calibration storage and registers it with the file it came from, recording no
+inputs (D-W93). It then
 moves the raw frames to the OS Trash unless the user keeps them. Masters
-stacked elsewhere are imported straight into storage. The user reads the
-master library, opens a master's details, and dismisses and restores one.
-Runs are later assigned these masters only (J23). Done means:
+stacked elsewhere are picked as files, checked in a match preview and imported
+into storage. The user reads the master library, opens a master's details, and
+hides and restores one.
+Light sessions are later matched to these masters at ingestion (J23). Done means:
 - Each of the four raw sessions has a registered master in its structured storage folder, and three masters stacked elsewhere are imported, so the library holds 7 masters.
 - Every raw frame either went to the OS Trash after its master registered, or stayed in place because the user kept it.
 - Every refusal and failure named its reason, and each failed process resumed from the step where it stopped.
@@ -28,16 +30,17 @@ Runs are later assigned these masters only (J23). Done means:
 
 ## Preconditions
 
-- P1: J19 completed, and nothing after it: no Project or run exists, and no run has chosen an output folder. `Astro-T7/Calibration` is the registered Calibration location, and J19/S7a made each P2 raw session a calibration process awaiting Stack. Settings › Calibration › **Keep raw calibration frames** is off, the default.
+- P1: J19 completed, and nothing after it: no Project exists. `Astro-T7/Calibration` is the registered Calibration location, and J19/S7a made each P2 raw session a calibration process awaiting Stack. Settings › Calibration › **Keep raw calibration frames** is off, the default.
 - P2: The raw calibration fixture that J19 indexed in `Astro-T7/Calibration` (J19/P4, J23/P2). Every frame has INSTRUME `ZWO ASI2600MM Pro`, the J15 alias of camera ASI2600MM, so the `{camera}` folder token reads `ASI2600MM` as in J31. Every frame also has the dimensions, 1x1 binning, gain, offset and set temperature of the J19/P2 RedCat lights. This fixture fixes those values as gain 100, offset 50 and −10 °C:
   - `Raw/Darks/300s/2026-09-20/`: 20 darks of 300 s.
   - `Raw/Bias/2026-09-20/`: 50 bias frames.
   - `Raw/Flats/Ha/2026-09-18/`: 30 Ha flats with TELESCOP `RedCat 51`, the RedCat optical-train evidence.
   - `Raw/Flats/OIII/2026-09-30/`: 30 OIII flats with TELESCOP `RedCat 51`.
-- P3: `Astro-T7/Stacked elsewhere/`, outside every registered location, holds a plain-text `notes.txt` and three masters stacked in another application, each with IMAGETYP master and NCOMBINE:
+- P3: `Astro-T7/Stacked elsewhere/`, outside every registered location, holds a plain-text `notes.txt` and four masters stacked in another application, each with IMAGETYP master and NCOMBINE:
   - `MasterFlat_OIII_2026-09-26.xisf`: an OIII flat of the night of 2026-09-26, NCOMBINE 25, with INSTRUME `ZWO ASI2600MM Pro` and the P2 dimensions, binning, gain and offset. It has no TELESCOP, so it carries no optical-train evidence.
   - `MasterFlat_OIII_Esprit.xisf`: an OIII flat of the night of 2026-09-22, NCOMBINE 20, with INSTRUME `ZWO ASI2600MM Pro`, the P2 dimensions, binning, gain and offset, and TELESCOP `Esprit 100`, the optical train of rig Esprit.
   - `MasterDark_ASI294MM_300s.xisf`: a 300 s dark of the night of 2026-09-12, NCOMBINE 30, with INSTRUME `ZWO ASI294MM Pro`, a camera on no rig.
+  - `MasterBias_2026-06-15.xisf`: a bias master of the night of 2026-06-15, NCOMBINE 40, with INSTRUME `ZWO ASI2600MM Pro` and the P2 dimensions, 1x1 binning, gain 100, offset 50 and −10 °C. Its kind and settings match the bias master that S8 registers, and its bytes differ. Its night is further from every J19 and J33 session than 20 Sep, so it is never the closest version for them.
 - P4: Settings › Applications holds the PixInsight and Siril profiles, and both can stack masters. PixInsight's executable reads found, located as in J41. Siril is installed, but its executable is not located, as J23/P4 needs.
 - P5: A stand-in for PixInsight (G2). On demand, it writes into a given folder the master that PixInsight's WBPP writes for a raw session. The master has IMAGETYP master of the session's kind and NCOMBINE equal to its raw frame count. It keeps the raw frames' camera, dimensions, gain, offset, binning, filter and telescope, and has a WBPP name such as `masterDark_BIN-1_EXPOSURE-300.00s.xisf`.
 - P6: A manifest (relative path, size, SHA-256) of `Astro-T7/Calibration/` and `Astro-T7/Stacked elsewhere/`, recorded outside PlateVault before S1.
@@ -46,14 +49,13 @@ Runs are later assigned these masters only (J23). Done means:
 
 ### S1 — Find the raw sessions waiting to stack {#S1}
 
-- **Do:** Open the Issues hub and follow its calibration issue. Read the Calibration library.
+- **Do:** Open the Calibration library and read it.
 - **Expect:**
-  - The Issues hub lists the info issue `4 to stack` (J38 covers the hub), and its action opens the Calibration library.
   - Process lists four rows, one per raw session, each with its frame count: `Dark 300 s · 20 Sep` (20), `Bias · 20 Sep` (50), `Flat Ha · 18 Sep` (30) and `Flat OIII · 30 Sep` (30).
   - Each row reads `To stack` and offers a Tool picker and **Stack**. Its steps Stack → Detect → Import → Register → Raws each read `To do`, and Stack is current.
   - Masters reads `No masters`.
-- **Expect (negative):** No raw session is listed as a master, and none appears in Sessions. Every file under `Astro-T7/Calibration/` still matches P6.
-- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 1b P-CAL3 steps 1–2 · HARNESS-V5-IA.md §Screens S12, S14 and §Round 2b foundation (routing, issue `calibration-waiting`) · CAL-FR-01
+- **Expect (negative):** No raw session is listed as a master, and none appears in Sessions. Every file under `Astro-T7/Calibration/` still matches P6. The waiting state shows on the Process rows themselves, with no Issues hub to visit.
+- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 1b P-CAL3 steps 1–2 · HARNESS-V5-IA.md §Screens S14 and §Round 2b foundation (routing) · CAL-FR-01 · D-W92 (no Issues hub; problems show on their row)
 
 ### S2 — Stack with an application that is not set up {#S2}
 
@@ -80,7 +82,7 @@ Runs are later assigned these masters only (J23). Done means:
 - **Expect:**
   - Detect reads Done with no user action, and the row's ① note reads Detected `masterDark_BIN-1_EXPOSURE-300.00s.xisf · NCOMBINE 20`.
   - Import reads Failed. The row reads Failed, shows `Import failed · Name taken` and offers **Retry**.
-  - The Issues hub lists the error issue `Dark 300 s · 20 Sep failed`. Activity records the stack as failed with `Name taken at Import.`
+  - Activity records the stack as failed with `Name taken at Import.`
 - **Expect (negative):**
   - Register and Raws stay To do: no master is registered or listed.
   - All 20 raw darks stay in `Raw/Darks/300s/2026-09-20/`, and nothing is in the OS Trash.
@@ -94,16 +96,16 @@ Runs are later assigned these masters only (J23). Done means:
   - Import, Register and Raws read Done in that order, and the row reads `Done`. The Raws step's tooltip reads Trashed.
   - The master is stored at `Astro-T7/Calibration/Darks/ASI2600MM/300s_g100_o50_-10C/MasterDark_2026-09-20.xisf` with the detected master's SHA-256. Masters lists it under Darks with 20 frames.
   - The 20 raw darks are in the OS Trash, and Activity records `Trash raws of Dark 300 s · 20 Sep`.
-  - The error issue is gone, and the info issue reads `3 to stack`.
+  - The row shows `Done` in place of `Import failed · Name taken`, and the three other Process rows still read `To stack`.
 - **Expect (negative):** No raw dark reached the OS Trash before Register read Done. None is permanently deleted: each can be put back from the OS Trash. The moved S4 file keeps its SHA-256.
-- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 1b P-CAL3 steps 4–6 · HARNESS-V5-IA.md §Screens S14 (Retry) and §Round 2b foundation (`importMaster`, Raws)
+- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 1b P-CAL3 steps 4–6 · HARNESS-V5-IA.md §Screens S14 (Retry) and §Round 2b foundation (`importMaster`, Raws) · D-W92 (problems show on their row)
 
 ### S6 — Detect before the application has written {#S6}
 
 - **Do:** On `Flat OIII · 30 Sep`, keep PixInsight, click **Stack** and then at once **Detect now**. Then make the P5 stand-in write the OIII flat master into that process's output folder, and click **Retry**.
 - **Expect:**
   - Detect now fails. The row reads Failed and shows `Detect failed · Tool output not found`, with the output folder `Flat OIII 30 Sep` as its blocker.
-  - The Tool picker shows again, and the row menu offers **Retry** and **Stack again**. The Issues hub lists `Flat OIII · 30 Sep failed`, and the watch is no longer running work.
+  - The Tool picker shows again, and the row menu offers **Retry** and **Stack again**. The watch is no longer running work.
   - After Retry, Detect, Import, Register and Raws read Done. The master is stored under `Astro-T7/Calibration/Flats/`, in the RedCat train's folder, as `OIII/2026-09-30/MasterFlat_2026-09-30.xisf`. The 30 raw OIII flats are in the OS Trash.
 - **Expect (negative):** While Detect read Failed, no master was registered and no raw flat moved. Retry does not hand the raws to PixInsight again: Stack keeps the time of its first Done.
 - **Trace:** HARNESS-V5-IA.md §Screens S14 (Detect now, Retry, failure as a terse Refusal) and §Round 2b foundation (`detectMasters`: "Tool output not found") · HARNESS-V5-FEEDBACK-R1.md §Round 1b P-CAL3
@@ -125,19 +127,31 @@ Runs are later assigned these masters only (J23). Done means:
 - **Expect:**
   - Settings › Calibration first shows the switch off, with the ⓘ help `Off: raws go to the OS Trash once their master registers.` It names the Calibration location, the master layout templates and the stacking tools, linked to Locations, Naming and Applications.
   - The bias master is stored at `Astro-T7/Calibration/Bias/ASI2600MM/g100_o50/MasterBias_2026-09-20.xisf` and listed under Bias with 50 frames. Raws reads Done with `Kept`, and the row offers **Trash raws**.
-  - With the setting off again, Raws still reads Kept and **Trash raws** is still offered. The Issues hub lists no calibration issue.
+  - With the setting off again, Raws still reads Kept and **Trash raws** is still offered.
 - **Expect (negative):** The 50 raw bias frames stay in `Raw/Bias/2026-09-20/`, also after the setting is turned off, and nothing goes to the OS Trash.
 - **Trace:** HARNESS-V5-IA.md §Screens S16 (Calibration: Keep raw calibration frames, off by default) and §Round 2b foundation (`setKeepRawCalibration`, `keepRaws`) · HARNESS-V5-FEEDBACK-R1.md §Round 1b P-CAL3 step 6
 
-### S9 — Import masters stacked elsewhere {#S9}
+### S9 — Import master files and review their matches {#S9}
 
-- **Do:** Click **Import masters** and choose `Astro-T7/Stacked elsewhere/`. Then click **Import masters** again and choose the same folder.
+- **Do:** In the Calibration library, click **Import masters**. In the native file dialog, open `Astro-T7/Stacked elsewhere/`, select `MasterFlat_OIII_2026-09-26.xisf` and `MasterFlat_OIII_Esprit.xisf` together, read the preview table and confirm.
 - **Expect:**
-  - The first import reads `3 masters imported`. Process gains three rows that read `Done`, one per file: `Flat · MasterFlat_OIII_2026-09-26.xisf`, `Flat · MasterFlat_OIII_Esprit.xisf` and `Dark · MasterDark_ASI294MM_300s.xisf`. In each, Stack reads Skipped, and no raw frame is involved.
-  - Each master is copied into its structured storage folder. The two flats go under `Astro-T7/Calibration/Flats/` in the filter and night folders `OIII/2026-09-26/` and `OIII/2026-09-22/`, as `MasterFlat_2026-09-26.xisf` and `MasterFlat_2026-09-22.xisf`. The dark goes under `Astro-T7/Calibration/Darks/ZWO ASI294MM Pro/` as `MasterDark_2026-09-12.xisf`.
-  - The second import shows the refusal `Import blocked · 3 already in the library`, with the three file names in its disclosure.
-- **Expect (negative):** The three sources and `notes.txt` stay in `Astro-T7/Stacked elsewhere/` and match P6. `notes.txt` is neither imported nor listed. The second import writes no copy and adds no process.
-- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 1b P-CAL3 ("A stacked master from elsewhere imports directly") · HARNESS-V5-IA.md §Screens S14 (Import masters) and §Round 2b foundation (`importMasterFile`)
+  - The dialog picks files, several at once, not a folder, and filters to FITS and XISF files, so `notes.txt` is not offered.
+  - The preview lists the two files, each with its kind, camera, gain and offset, temperature and exposure read from its headers, and each reads **New**, because no library master has its kind and settings. Nothing is imported before the confirmation.
+  - After the confirmation the import reads `2 masters imported`. Process gains two rows that read `Done`, one per file: `Flat · MasterFlat_OIII_2026-09-26.xisf` and `Flat · MasterFlat_OIII_Esprit.xisf`. In each, Stack reads Skipped, and no raw frame is involved.
+  - Each flat is copied into its structured storage folder under `Astro-T7/Calibration/Flats/`, in the filter and night folders `OIII/2026-09-26/` and `OIII/2026-09-22/`, as `MasterFlat_2026-09-26.xisf` and `MasterFlat_2026-09-22.xisf`.
+- **Expect (negative):** The two sources and `notes.txt` stay in `Astro-T7/Stacked elsewhere/` and match P6.
+- **Trace:** CAL-FR-13, CAL-AC-15 · D-W82, D-W103 · HARNESS-V5-FEEDBACK-R1.md §Round 1b P-CAL3 ("A stacked master from elsewhere imports directly"), Round 9 C9 (Import masters selects files, then a preview table with each file's match) · HARNESS-V5-IA.md §Screens S14 (Import masters)
+
+### S9a — Import a mixed batch: New, New version and Duplicate {#S9a}
+
+- **Do:** Click **Import masters** and select three files in `Astro-T7/Stacked elsewhere/` together: `MasterDark_ASI294MM_300s.xisf`, `MasterBias_2026-06-15.xisf` and `MasterFlat_OIII_2026-09-26.xisf`, which S9 imported. Read the preview, confirm, then open the bias master's details.
+- **Expect:**
+  - One preview lists all three files with the kind, camera, gain and offset, temperature and exposure read from their headers. The dark reads **New**, because no library master has its camera and settings. The bias reads **New version of** the S8 bias master, named by its kind and camera (`New version of {master}`, provisional copy). The flat reads **Duplicate**, because its bytes match the version S9 registered, and it cannot be selected for import.
+  - After the confirmation the import reads `2 masters imported` (provisional copy). Process gains two rows that read `Done`, with Stack Skipped: `Dark · MasterDark_ASI294MM_300s.xisf` and `Bias · MasterBias_2026-06-15.xisf`.
+  - The dark is copied under `Astro-T7/Calibration/Darks/ZWO ASI294MM Pro/` as `MasterDark_2026-09-12.xisf`, a new master. The bias file is copied into the bias master's structured storage folder, `Astro-T7/Calibration/Bias/ASI2600MM/g100_o50/`, and the bias master lists two dated versions, 15 Jun and 20 Sep, with no Latest mark.
+  - Masters lists 7 masters, and Bias still lists 1.
+- **Expect (negative):** The Duplicate flat is not imported: no copy is written for it and no Process row is added. The bias import adds no master record and repoints no session's pinned bias. The three sources stay in `Astro-T7/Stacked elsewhere/` and match P6.
+- **Trace:** CAL-FR-13, CAL-FR-14, CAL-AC-15, CAL-AC-16 · D-W82, D-W103 · HARNESS-V5-FEEDBACK-R1.md Round 9 C9 · prototype calibration.ts masterImportMatch, dialogs.tsx Import masters preview (Duplicate rows not importable) on ui-harness-v5
 
 ### S10 — Read the master library by its storage keys {#S10}
 
@@ -145,7 +159,7 @@ Runs are later assigned these masters only (J23). Done means:
 - **Expect:**
   - Flats lists 4 masters by train, filter and night: RedCat Ha 18 Sep (30 frames), RedCat OIII 30 Sep (30), Esprit OIII 22 Sep (20), and OIII 26 Sep with its train `–` (25).
   - Darks lists 2 masters by camera, exposure, gain, offset and temperature: ASI2600MM 300 s, gain 100, offset 50, −10 °C (20 frames), and ZWO ASI294MM Pro 300 s (30).
-  - Bias lists 1 master by camera, gain and offset: ASI2600MM, gain 100, offset 50 (50 frames).
+  - Bias lists 1 master by camera, gain and offset: ASI2600MM, gain 100, offset 50, with its 20 Sep version of 50 frames and its 15 Jun version from S9a.
 - **Expect (negative):** No raw frame or raw session is listed among the masters, including the 50 kept raw bias frames. No master is listed twice.
 - **Trace:** HARNESS-V5-IA.md §Screens S14 (masters grouped by kind in their structured-storage keys) · HARNESS-V5-FEEDBACK-R1.md §Round 1b P-CAL3 step 4
 
@@ -153,39 +167,51 @@ Runs are later assigned these masters only (J23). Done means:
 
 - **Do:** Open the details of the master dark `MasterDark_2026-09-20.xisf`, then those of the imported OIII flat `MasterFlat_2026-09-26.xisf`.
 - **Expect:**
-  - The dark's details read: kind Dark, camera ASI2600MM, optical train –, filter –, exposure 300 s, gain 100 / offset 50, temperature −10 °C, binning 1x1 and frame count 20. They also show its created date, the source (stacked from `Dark 300 s · 20 Sep`), its storage path and the SHA-256 recorded in S5. Used by counts no run (J23/S7b reads it with runs), and the panel offers **Dismiss**.
+  - The dark's details read: kind Dark, camera ASI2600MM, optical train and filter absent (each an en dash), exposure 300 s, gain 100 / offset 50, temperature −10 °C, binning 1x1 and frame count 20. They also show its created date, the file it was imported from in the application's output folder, its storage path and the SHA-256 recorded in S5. Used by counts no session (J23 reads it with sessions), and the panel offers **Hide**.
   - The OIII flat's details read optical train –, filter OIII and frame count 25, with the source imported from `Astro-T7/Stacked elsewhere/MasterFlat_OIII_2026-09-26.xisf`.
 - **Expect (negative):** Opening details changes no master and no file, and Used by never expands the master row.
 - **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 5 Calibration (master details panel; Used by is a popover)
 
-### S12 — Dismiss a master and restore it {#S12}
+### S12 — Hide a master and restore it {#S12}
 
-- **Do:** Open the details of the ZWO ASI294MM Pro master dark `MasterDark_2026-09-12.xisf`, read its Used by, and click **Dismiss**. Read Masters with the All filter, then open the Dismissed filter and click **Restore** on the dark. Read Masters with the All filter again.
+- **Do:** Open the details of the ZWO ASI294MM Pro master dark `MasterDark_2026-09-12.xisf`, read its Used by, and click **Hide**. Read Masters with the All filter, then turn on **Show hidden** and click **Restore** on the dark. Read Masters with the All filter again.
 - **Expect:**
-  - Its Used by names no run, so Dismiss is accepted. The dark leaves the master list: with the All filter, Darks lists only the ASI2600MM 300 s master and Masters lists 6 masters. The Dismissed filter lists the dark with **Restore**.
-  - After Restore the dark is listed under Darks again with its storage path, SHA-256 and frame count 30, Masters lists 7 masters as in S10, and the Dismissed filter lists no master.
-- **Expect (negative):** Neither action moves, renames or deletes the master's file. It keeps its storage path and its SHA-256, and nothing goes to the OS Trash. No other master changes, and no confirmation or refusal names a run.
-- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Domain and seed P-CAL2 (dismiss is reversible), §Round 5 Calibration (Dismiss and Restore) and §Round 6 Calibration ("A dismissed master is never matched; Restore brings it back") · HARNESS-V5-IA.md §Screens S14 (Dismissed filter with Restore)
+  - Its Used by names no session, so Hide is accepted. The dark leaves the master list: with the All filter, Darks lists only the ASI2600MM 300 s master and Masters lists 6 masters. **Show hidden** lists the dark with **Restore**.
+  - After Restore the dark is listed under Darks again with its storage path, SHA-256 and frame count 30, Masters lists 7 masters as in S10, and **Show hidden** lists no master.
+- **Expect (negative):** Neither action moves, renames or deletes the master's file. It keeps its storage path and its SHA-256, and nothing goes to the OS Trash. No other master changes, and no confirmation or refusal names a Project.
+- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Domain and seed P-CAL2 (dismiss is reversible), §Round 5 Calibration (Dismiss and Restore) and §Round 6 Calibration ("A dismissed master is never matched; Restore brings it back") · HARNESS-V5-IA.md §Screens S14 (Dismissed filter with Restore) · CAL-FR-16, CAL-FR-17 · D-W76 (Dismiss becomes Hide, with Show hidden), D-W106
 
 ## Success criteria
 
-- SC1: After S9, Process lists 7 rows that read Done (4 stacked, 3 imported), and Masters lists exactly 7 masters: 4 flats, 2 darks and 1 bias (S10).
+- SC1: After S9a, Process lists 8 rows that read Done (4 stacked, 3 imported masters and 1 imported version), and Masters lists exactly 7 masters: 4 flats, 2 darks and 1 bias (S10).
 - SC2: 80 raw frames are in the OS Trash (20 darks, 30 Ha flats and 30 OIII flats), and the 50 raw bias frames stay in place. 0 raw frames moved before their master's Register read Done (S4 to S8).
 - SC3: 0 files are permanently deleted, and every trashed raw frame can be put back (S5 to S7).
-- SC4: Each refusal or failure registers 0 masters, moves 0 raw frames and names its reason: `Siril not set up` (S2), `Name taken` (S4), `Tool output not found` (S6) and `3 already in the library` (S9). Each failed process resumes at its failed step (S5, S6).
+- SC4: Each refusal or failure registers 0 masters, moves 0 raw frames and names its reason: `Siril not set up` (S2), `Name taken` (S4) and `Tool output not found` (S6). Each failed process resumes at its failed step (S5, S6).
 - SC5: The dark watch survives 1 relaunch (S3) and detects its master with 0 user actions (S4). The Ha flat watch registers its master with 0 user actions after Stack (S7).
-- SC6: The P3 sources, `notes.txt` and the S4 file keep their recorded SHA-256 (S4, S5, S9).
-- SC7: Dismiss and Restore change 0 bytes on disk. While the dark is dismissed Masters lists 6 masters, and after Restore it lists 7 with the dark under Darks again (S12).
+- SC6: The P3 sources, `notes.txt` and the S4 file keep their recorded SHA-256 (S4, S5, S9, S9a).
+- SC7: Hide and Restore change 0 bytes on disk. While the dark is hidden Masters lists 6 masters, and after Restore it lists 7 with the dark under Darks again (S12).
+- SC8: The S9a preview holds 1 New, 1 New version and 1 Duplicate file. Confirming imports exactly the New and the New version, writes 0 copies for the Duplicate, adds 1 master record and 1 version, and leaves the bias master with 2 versions (S9a, S10).
 
 ## Known gaps
 
 - G1: Not validated: the rebuilt application does not exist. Behavior follows the harness v5 design, which the user instructed on 2026-10-12 that journeys describe. Its sources are `HARNESS-V5-IA.md` §Screens S14 and S16 and §Round 2b foundation, and `HARNESS-V5-FEEDBACK-R1.md` §Round 1b P-CAL3, §Domain and seed P-CAL2 and §Round 5 Calibration (apps/prototype/design/ on ui-harness-v5 @ b5e813a5), §Round 6 (@ 4f470775, not yet implemented in the prototype), plus the prototype's calibration process. No implementation has been validated against them.
 - G2: Unresolved implementation qualification: the P5 stand-in does not exist. The design also does not say how PlateVault hands raw frames to a profile (a script, launch arguments or a watched folder), so S3 asserts only the output folder and the running watch. A real PixInsight or Siril stack is not exercised. Blocks readiness.
-- G3: (dissolved 2026-10-12): answered by Round 6 "Dismiss is refused while a run uses the master"; S12 now asserts that a master no run uses dismisses, leaves the master list (6 masters) and returns with Restore (7). No run exists in this journey, so J23/S7c asserts the refusal `Can't dismiss · used by 2 runs ▸`, and J26/S9c asserts that a dismissed master is not matched until restored.
-- G4: Out of scope for this journey: dark flats; Import routing raw calibration frames into a process awaiting Stack (J31); a run's `Stack from <session>` offer and the `?process=` highlight it opens (J23/G6); Import failures for offline storage, `Copy did not verify` and `Write permission removed`; a Raws failure that keeps refused frames; **Trash raws** on kept raws; and a profile that cannot stack. Blocks readiness until covered by a step or a journey.
+- G3: (dissolved 2026-10-12): answered by Round 6 "Dismiss is refused while a run uses the master", now Hide (D-W76); S12 asserts that a master no session uses hides, leaves the master list (6 masters) and returns with Restore (7). Hide and Move to Trash are refused while an open or finished Project (Closed or Archived) uses the master through its sessions (CAL-FR-17, provisional); no Project exists in this journey, so no step exercises that refusal.
+- G4: Out of scope for this journey, and blocks readiness until covered by a step or a journey (dark flats are not on this list, because PlateVault never matches, suggests or assigns them):
+  - Import routing raw calibration frames into a process awaiting Stack (J31);
+  - Import failures for offline storage, `Copy did not verify` and `Write permission removed`;
+  - a Raws failure that keeps refused frames;
+  - **Trash raws** on kept raws;
+  - a profile that cannot stack.
 
 ## Delta log
 
 - **Δ2** 2026-10-12 · S12 · behavior-change
   Dismissing a master no run uses takes it out of the master list until Restore brings it back; a master that runs use cannot be dismissed (exercised in J23 and J26).
   Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 6 (user, 2026-10-10) "Dismiss is refused while a run uses the master" (apps/prototype/design/ on ui-harness-v5 @ 4f470775); user answers to the PR #1788 journey questions · by: JourneysV5.R6D (intent-gated)
+- **Δ3** 2026-10-15 · S11, S12 · behavior-change
+  A master is Hidden, not Dismissed, with Show hidden and Restore, and its details name the file it was imported from but record no inputs. Light sessions are matched to masters at ingestion instead of runs being assigned them.
+  Evidence: D-W76, D-W93, D-W101, D-W106 (F4 Project model, owner's answers of 2026-10-14) in PR #1804, 068 CAL-FR-02, CAL-FR-16, CAL-FR-17 · by: SpecF4Writer2 (intent-gated)
+- **Δ4** 2026-10-17 · S1, S4, S5, S6, S8, S9, +S9a, S10, P3, +SC8 · behavior-change
+  Import masters picks master files, several at once with FITS and XISF filters, and shows a preview table with each file's match (New, New version of {master}, Duplicate) before anything is imported. S9 imports the two flats; new S9a imports one mixed batch, the ASI294MM dark as New, P3's new bias file as a second version of the S8 bias master and an S9 flat as a Duplicate that is skipped. With no Issues hub, S1, S4, S5, S6 and S8 read the state on the Calibration rows and in Activity.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md Round 9 C9 · D-W82, D-W92, D-W103 · CAL-FR-13, CAL-FR-14, CAL-AC-15, CAL-AC-16 · prototype calibration.ts masterImportMatch (ui-harness-v5) · by: JourneysR9c (intent-gated)

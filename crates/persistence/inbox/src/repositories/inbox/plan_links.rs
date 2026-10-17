@@ -6,7 +6,7 @@
 
 use domain_core::ids::Timestamp;
 use serde::{Deserialize, Serialize};
-use sqlx::SqlitePool;
+use sqlx::{SqliteConnection, SqlitePool};
 
 use persistence_core::DbResult;
 
@@ -20,14 +20,15 @@ pub struct InboxPlanLinkRow {
 
 // ── SourceGroup CRUD ──────────────────────────────────────────────────────────
 
-/// Insert a plan link, establishing the "open plan" invariant.
+/// Insert a plan link, establishing the "open plan" invariant, on `conn`:
+/// confirm writes it in the transaction that opens the plan.
 ///
 /// Fails with `persistence_core::DbError::Database` if a link already exists (PK conflict).
 ///
 /// # Errors
 /// Returns `persistence_core::DbError::Database` on constraint or connection failure.
-pub async fn insert_plan_link(
-    pool: &SqlitePool,
+pub async fn insert_plan_link_conn(
+    conn: &mut SqliteConnection,
     inbox_item_id: &str,
     plan_id: &str,
 ) -> DbResult<()> {
@@ -39,7 +40,7 @@ pub async fn insert_plan_link(
     .bind(inbox_item_id)
     .bind(plan_id)
     .bind(&now)
-    .execute(pool)
+    .execute(&mut *conn)
     .await?;
     Ok(())
 }

@@ -158,9 +158,20 @@ struct ActiveRun {
 /// duration of `execute_plan` makes removal run during the unwind instead.
 ///
 /// The guard is constructed at the same point the entry is inserted and owned
-/// by the spawned task scope, so its `Drop` is the single removal site for the
+/// by the spawned task, so its `Drop` is the single removal site for the
 /// non-panic outcomes too (Completed / Cancelled / Paused) — removal happens
 /// exactly once, regardless of how the task scope exits.
+///
+/// For those outcomes the task hands the guard to the outcome's `terminal`
+/// handler. `handle_completed` and `handle_cancelled` drop it immediately
+/// before the write that takes the plan out of `applying`, so their finalizers
+/// and item cancels (a project manifest write, view rows) still run under the
+/// claim. `handle_paused` drops it on entry: a paused run has no work left to
+/// protect, and a skip accepted while it reads the pending items would skew the
+/// pause record. Either way a plan that reads finished or paused claims
+/// nothing: a plan over the same paths is not refused as overlapping, and a
+/// resume or cancel of a paused plan finds no run left to signal
+/// (astro-plan-4bk7e).
 struct ActiveRunGuard {
     registry: Arc<DashMap<String, ActiveRun>>,
     plan_id: String,
@@ -189,6 +200,41 @@ fn db_err(e: DbError) -> ContractError {
             ContractError::new(ErrorCode::PlanApprovalStale, msg, ErrorSeverity::Blocking, false)
         }
         other => crate::errors::db_err(other),
+    }
+}
+
+/// Append the plan-level `prior_state -> new_state` row to `plan_apply_events`.
+///
+/// The row is Tier 2 (constitution §II, §V): it may lag the plan state it
+/// records, and losing it does not undo the transition, so a failed write never
+/// fails the caller. It is logged with the plan, run and transition instead,
+/// leaving the gap in the audit trail visible (astro-plan-fjhq6).
+async fn append_plan_transition(
+    pool: &SqlitePool,
+    plan_id: &str,
+    run_id: &str,
+    prior_state: &str,
+    new_state: &str,
+    at: &str,
+) {
+    if let Err(error) = apply_repo::append_event(
+        pool,
+        &new_id(),
+        run_id,
+        plan_id,
+        None,
+        prior_state,
+        new_state,
+        at,
+        None,
+        None,
+    )
+    .await
+    {
+        tracing::error!(
+            plan_id, run_id, prior_state, new_state, %error,
+            "plan-level audit row was not written; the transition stands without it"
+        );
     }
 }
 

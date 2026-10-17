@@ -351,6 +351,32 @@ describe('AuditLog', () => {
     );
   });
 
+  it('names the incomplete file at the path the backend wrote, not the chosen one', async () => {
+    // The dialog returns /tmp/audit-export.ndjson; the backend writes under the
+    // canonicalized parent, which a symlinked /tmp resolves elsewhere.
+    mockExport.mockResolvedValue({
+      status: 'error',
+      error: {
+        code: 'export.unfinished_file',
+        message: 'backend diagnostic',
+        severity: 'blocking',
+        retryable: false,
+        details: { path: '/private/tmp/audit-export.ndjson' },
+      },
+    });
+
+    render(<AuditLog />, { wrapper });
+    const exportBtn = await screen.findByRole('button', {
+      name: 'Export audit events to a file',
+    });
+    await waitFor(() => expect(exportBtn).toBeEnabled());
+    fireEvent.click(exportBtn);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Could not export: An incomplete export file remains at /private/tmp/audit-export.ndjson. Delete it before exporting again.',
+    );
+  });
+
   it('renders the state-change column (#749)', async () => {
     render(<AuditLog />, { wrapper });
     await waitFor(() => expect(mockList).toHaveBeenCalled());

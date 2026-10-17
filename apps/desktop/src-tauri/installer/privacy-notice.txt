@@ -1,0 +1,20 @@
+PlateVault privacy notice
+
+PlateVault keeps your library on your computer. It has no accounts and sends nothing to the maintainer. It contains no analytics, telemetry, crash reporting or advertising.
+
+The app connects to the internet for three features. You can turn off or avoid each one.
+
+1. Update checks (GitHub)
+Each time PlateVault starts, it asks github.com whether a newer release exists. It asks again whenever you click Check for updates. The request carries the updater's name and version and your IP address. It carries nothing about your library or your files. To stop the check at startup, switch off Settings > Advanced > Software Update > Check for updates automatically.
+
+2. Target lookups (CDS SIMBAD, Strasbourg)
+PlateVault can look up a target at simbad.cds.unistra.fr and cds.unistra.fr. It does this when you type in a target search box, apply an Inbox plan, or view an Inbox target suggestion. It sends the text you typed, a target name or a sky position, and CDS sees your IP address. To turn this off, switch off Online SIMBAD resolution. The switch is in the Configuration step of first-run setup and in Settings > Target Resolution.
+
+3. Observing-site map (OpenStreetMap)
+The Observing Site step of first-run setup and the observing-site form can show a map from tile.openstreetmap.org. The map stays hidden until you click Show map; you can type your coordinates instead. Once it is shown, OpenStreetMap sees your IP address, and if you have entered coordinates the tiles show roughly where your site is.
+
+During installation
+If Microsoft Edge WebView2 is missing, this installer downloads Microsoft's WebView2 installer and runs it. PlateVault's own code does not contact Microsoft.
+
+The full privacy statement, with links to the privacy policies of GitHub, CDS and OpenStreetMap:
+https://github.com/platevault/platevault/blob/main/docs/manual/11-privacy.md

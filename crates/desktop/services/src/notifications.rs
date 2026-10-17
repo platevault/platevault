@@ -14,6 +14,9 @@
 //! notification daemon at all, and none of those may disturb the task being
 //! reported on (FR-025).
 
+use std::sync::mpsc;
+use std::time::Duration;
+
 use app_core::ingest_resolution::DrainSummary;
 use audit::bus::EventBus;
 use audit::event_bus::{
@@ -23,6 +26,11 @@ use audit::event_bus::{
 use tokio::sync::broadcast::error::RecvError;
 
 use crate::AppIdentity;
+
+/// How long [`Notifier::notify_before_exit`] waits for the OS to take a
+/// notification: a D-Bus daemon or the Windows toast service answers in
+/// milliseconds, and the app is on its way out.
+const BEFORE_EXIT_WAIT: Duration = Duration::from_secs(2);
 
 /// One OS notification.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -75,12 +83,29 @@ impl Notifier {
         }
     }
 
-    /// Show `notification` from a thread of its own: the Linux D-Bus call
-    /// blocks until the daemon answers.
-    #[cfg_attr(not(any(target_os = "macos", windows)), allow(clippy::unused_self))]
+    /// Show `summary` and `body` now, whatever the window focus, and wait up
+    /// to [`BEFORE_EXIT_WAIT`] until the OS has them: for an outcome the user
+    /// must hear about when the app exits next, which would otherwise end the
+    /// delivery thread first.
+    pub fn notify_before_exit(&self, summary: &str, body: &str) {
+        if let Some(shown) = self.show(summary, body) {
+            if shown.recv_timeout(BEFORE_EXIT_WAIT).is_err() {
+                tracing::debug!("OS notification not confirmed before exit");
+            }
+        }
+    }
+
     fn deliver(&self, notification: &Notification) {
+        drop(self.show(notification.title, &notification.body));
+    }
+
+    /// Hand `summary` and `body` to the OS from a thread of its own: the
+    /// Linux D-Bus call blocks until the daemon answers. The receiver hears
+    /// once that call returned; `None` when no thread could start.
+    #[cfg_attr(not(any(target_os = "macos", windows)), allow(clippy::unused_self))]
+    fn show(&self, summary: &str, body: &str) -> Option<mpsc::Receiver<()>> {
         let mut toast = notify_rust::Notification::new();
-        toast.summary(notification.title).body(&notification.body).auto_icon();
+        toast.summary(summary).body(body).auto_icon();
         #[cfg(windows)]
         if let Some(app_id) = &self.app_id {
             toast.app_id(app_id);
@@ -90,14 +115,20 @@ impl Notifier {
         #[cfg(target_os = "macos")]
         let _ = notify_rust::set_application(&self.bundle_id);
 
-        let shown =
+        let (done, shown) = mpsc::channel();
+        let spawned =
             std::thread::Builder::new().name("os-notification".to_owned()).spawn(move || {
                 if let Err(error) = toast.show() {
                     tracing::debug!("OS notification not delivered: {error}");
                 }
+                let _ = done.send(());
             });
-        if let Err(error) = shown {
-            tracing::debug!("OS notification not delivered: {error}");
+        match spawned {
+            Ok(_) => Some(shown),
+            Err(error) => {
+                tracing::debug!("OS notification not delivered: {error}");
+                None
+            }
         }
     }
 }

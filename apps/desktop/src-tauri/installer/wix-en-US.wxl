@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  PlateVault MSI strings for en-US, wired in through
+  bundle > windows > wix > language in tauri.conf.json.
+
+  The MSI shows bundle > licenseFile (installer/privacy-notice.txt, set in
+  tauri.windows.conf.json) on WixUI's license dialog. These strings override
+  WixUI's own, so that dialog reads as a privacy notice the user has read,
+  not a licence agreement (SignPath condition b, astro-plan-vmxcu).
+  installer/nsis-hooks.nsh does the same for the NSIS setup.exe. Keep
+  privacy-notice.txt in step with docs/manual/11-privacy.md.
+
+  WixUI's license dialog needs RTF. Tauri writes it from the same .txt at
+  build time (tauri-bundler 2.10.2, msi/mod.rs:576-596): it wraps the text
+  in an RTF header with code page 1252 and turns each line break into \par,
+  with no escaping. NSIS shows the .txt itself. So privacy-notice.txt stays
+  plain ASCII with no backslash or curly braces, and it must not be renamed
+  to .rtf, which Tauri would pass to WiX unconverted.
+
+  At build time Tauri appends its own default strings (LaunchApp,
+  DowngradeErrorMessage and the rest) to this file. It skips any default
+  whose Id attribute, written as Id="...", appears anywhere in this file,
+  comments included. So this file lists only the strings PlateVault changes,
+  and its comments never quote a Tauri string id in that form.
+-->
+<WixLocalization Culture="en-us" xmlns="http://schemas.microsoft.com/wix/2006/localization">
+  <String Id="LicenseAgreementDlgTitle">{\WixUI_Font_Title}Privacy notice</String>
+  <String Id="LicenseAgreementDlgDescription">What PlateVault sends over the internet, and how to turn it off</String>
+  <String Id="LicenseAgreementDlgLicenseAcceptedCheckBox">I have &amp;read the privacy notice</String>
+</WixLocalization>

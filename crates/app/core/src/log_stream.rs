@@ -44,6 +44,10 @@ pub enum LogError {
     Export { code: LogExportErrorCode, message: String },
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
+    /// The export failed and left its own unfinished file under its canonical
+    /// destination parent (`ExportWriteError::LeftUnfinished`).
+    #[error("{0}")]
+    UnfinishedExport(fs_pathsafe::export_dest::UnfinishedFile),
 }
 
 impl LogError {
@@ -59,6 +63,7 @@ impl LogError {
             Self::Database(_) => "database.error",
             Self::Serialise(_) => "serialise.error",
             Self::Io(_) => "io.error",
+            Self::UnfinishedExport { .. } => "export.unfinished_file",
         }
     }
 }
@@ -85,6 +90,7 @@ impl From<LogError> for ContractError {
             LogError::Io(e) => {
                 Self::new(ErrorCode::IoError, e.to_string(), ErrorSeverity::Fatal, false)
             }
+            LogError::UnfinishedExport(file) => crate::errors::export_unfinished_file(file),
         }
     }
 }
@@ -272,6 +278,8 @@ pub struct ExportOptions {
 ///
 /// # Errors
 /// Returns `LogError::Export` for filesystem / format problems.
+/// Returns `LogError::UnfinishedExport` when the write failed and left its own
+/// unfinished file at the destination.
 /// Returns `LogError::Database` on query failure.
 pub async fn export_entries(
     pool: &SqlitePool,
@@ -321,6 +329,7 @@ pub async fn export_entries(
                 message: format!("{}: {}", rejected.message(), dest.display()),
             },
             ExportWriteError::Io(e) => LogError::Io(e),
+            ExportWriteError::LeftUnfinished(file) => LogError::UnfinishedExport(file),
         })?;
 
     Ok((validated.path().to_string_lossy().into_owned(), count, bytes))
@@ -685,5 +694,27 @@ mod tests {
 
         assert!(matches!(err, LogError::Export { code: LogExportErrorCode::PathWriteDenied, .. }));
         assert_eq!(std::fs::read(&outside).expect("read"), b"outside");
+    }
+
+    /// The UI names the leftover file from `details.path` and adds the
+    /// delete-before-retry advice for this code, so the code stays distinct
+    /// from a plain I/O error and the canonical path reaches the details.
+    #[test]
+    fn an_unfinished_export_carries_its_code_and_canonical_path() {
+        let file = fs_pathsafe::export_dest::UnfinishedFile::for_test(
+            std::path::PathBuf::from("/private/tmp/real/log.json"),
+            std::io::Error::other("write failed"),
+            true,
+        );
+        let err = ContractError::from(LogError::UnfinishedExport(file));
+
+        assert_eq!(err.code, ErrorCode::ExportUnfinishedFile);
+        assert!(err.message.contains("/private/tmp/real/log.json"), "{}", err.message);
+        assert_eq!(
+            err.details,
+            contracts_core::JsonAny::from(serde_json::json!({
+                "path": "/private/tmp/real/log.json"
+            }))
+        );
     }
 }

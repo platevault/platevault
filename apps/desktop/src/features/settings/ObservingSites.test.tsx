@@ -44,6 +44,14 @@ vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn().mockRejectedValue(new Error('no tauri in tests')),
 }));
 
+// The real picker adds the OpenStreetMap tile layer on mount; this stand-in
+// marks where the map (and so a tile request) would be on screen.
+vi.mock('@/shared/observing-sites/SiteLocationPicker', () => ({
+  SiteLocationPicker: () => (
+    <div data-testid="site-location-map" role="application" />
+  ),
+}));
+
 import { ObservingSites } from './ObservingSites';
 import { __setObservingStateForTest } from '@/shared/observing-sites/site-store';
 import type { ObserverSite } from '@/shared/observing-sites/observer-site';
@@ -123,6 +131,12 @@ describe('ObservingSites', () => {
         target: { value: '4.9' },
       },
     );
+    // Typed coordinates need no map: it stays behind "Show map", so the form
+    // makes no OpenStreetMap request (astro-plan-pil2e).
+    expect(
+      screen.getByRole('button', { name: m.setup_site_map_show() }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('application')).not.toBeInTheDocument();
 
     await act(async () => {
       fireEvent.click(screen.getByText(m.common_save()));
@@ -214,6 +228,41 @@ describe('ObservingSites', () => {
     // Default/active pointers are unchanged by an edit.
     expect(values['observingDefaultSiteId']).toBe(HOME.id);
     expect(values['observingActiveSiteId']).toBe(HOME.id);
+  });
+
+  // astro-plan-pil2e regression: Edit and "+ Add site" stay clickable while a
+  // form is open. Switching the form must hide the map again, or the shown
+  // map would pan to (and request tiles around) the newly selected site with
+  // no Show map click in that form.
+  it('hides the map again when the open form switches to another site', async () => {
+    __setObservingStateForTest({
+      sites: [HOME, DARK_SKY],
+      defaultSiteId: HOME.id,
+      activeSiteId: HOME.id,
+    });
+    render(<ObservingSites />);
+    const showMap = () =>
+      screen.getByRole('button', { name: m.setup_site_map_show() });
+
+    fireEvent.click(screen.getAllByText(m.common_edit())[0]);
+    fireEvent.click(showMap());
+    expect(await screen.findByTestId('site-location-map')).toBeInTheDocument();
+
+    // Edit → Edit on another site.
+    fireEvent.click(screen.getAllByText(m.common_edit())[1]);
+    expect(
+      screen.getByLabelText(m.settings_observing_sites_field_name()),
+    ).toHaveValue(DARK_SKY.name);
+    expect(screen.queryByTestId('site-location-map')).not.toBeInTheDocument();
+    expect(showMap()).toBeInTheDocument();
+
+    // Add → Add: form.id stays null, the map must still hide again.
+    fireEvent.click(screen.getByText(m.settings_observing_sites_add()));
+    fireEvent.click(showMap());
+    expect(await screen.findByTestId('site-location-map')).toBeInTheDocument();
+    fireEvent.click(screen.getByText(m.settings_observing_sites_add()));
+    expect(screen.queryByTestId('site-location-map')).not.toBeInTheDocument();
+    expect(showMap()).toBeInTheDocument();
   });
 
   it('switches the active site without touching the default', async () => {

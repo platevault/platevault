@@ -3,13 +3,14 @@
 
 // Observing Site: interactive map picker (spec 044 journey-1, issue #491).
 //
-// Shared by the first-run wizard (StepSite) and the Settings site form
-// (ObservingSites). Leaflet replaces maplibre-gl: same click-to-pick
-// semantics, ~5× smaller chunk (~240 KB raw vs ~1.1 MB), no WebGL required.
+// Mounted only by SiteMapSection, after the user clicks "Show map", so no
+// OpenStreetMap tile request happens before that (astro-plan-pil2e). Leaflet
+// replaces maplibre-gl: same click-to-pick semantics, ~5× smaller chunk
+// (~240 KB raw vs ~1.1 MB), no WebGL required.
 //
-// Top-level Leaflet import is intentional — React.lazy in StepSite and
-// ObservingSites splits this whole module (and Leaflet) into a separate chunk
-// that loads only when the map section mounts.
+// Top-level Leaflet import is intentional — React.lazy in SiteMapSection
+// splits this whole module (and Leaflet) into a separate chunk that loads
+// only when the user asks for the map.
 //
 // The numeric lat/lon fields remain the source of truth — this component
 // translates between them and the map: a click fires `onPick`, and a prop
@@ -86,6 +87,7 @@ export function SiteLocationPicker({
   const mapRef = useRef<L.Map | null>(null);
   const markerRef = useRef<L.Marker | null>(null);
   const onPickRef = useRef(onPick);
+  const unavailableRef = useRef<HTMLParagraphElement | null>(null);
   const [unavailable, setUnavailable] = useState(false);
 
   // Keep callback ref current without triggering map re-init effects.
@@ -155,6 +157,10 @@ export function SiteLocationPicker({
     });
 
     mapRef.current = map;
+    // The map mounts in response to "Show map", which unmounts that button;
+    // move focus to the map (Leaflet makes its container focusable) so
+    // keyboard and screen-reader users are not dropped to the page body.
+    containerRef.current.focus({ preventScroll: true });
 
     return () => {
       map.remove();
@@ -187,9 +193,25 @@ export function SiteLocationPicker({
     }
   }, [latitudeDeg, longitudeDeg]);
 
+  // The picker only mounts after "Show map", and the notice replaces either
+  // the focused map container (tile failures) or a map that never mounted
+  // (Leaflet threw). When that leaves focus on the page body, move it to the
+  // notice so keyboard and screen-reader users are not stranded. Focus the
+  // user has since moved elsewhere (e.g. typing in Latitude while tiles fail)
+  // stays where it is.
+  useEffect(() => {
+    if (!unavailable) return;
+    const active = document.activeElement;
+    if (active === null || active === document.body) {
+      unavailableRef.current?.focus({ preventScroll: true });
+    }
+  }, [unavailable]);
+
   if (unavailable) {
     return (
       <p
+        ref={unavailableRef}
+        tabIndex={-1}
         className="pv-step-site__map-unavailable"
         data-testid="site-location-picker"
       >

@@ -2,8 +2,8 @@
 
 This is the code signing policy for PlateVault. It is written to meet the
 [SignPath Foundation conditions for open-source projects](https://signpath.org/terms.html).
-PlateVault does not meet all of them yet; [Open conditions](#open-conditions)
-lists what must be done before the project applies.
+One of them is not met yet; [Open conditions](#open-conditions) says what
+must be done before the project applies.
 
 ## Status
 
@@ -28,11 +28,16 @@ is expected, and does not mean the file came from somewhere else.
 
 With the SignPath Foundation certificate, these Windows files will be signed:
 
+- the application, `desktop_shell.exe`, and the rebuilt Library shell,
+  `platevault-library.exe`, which both installers put on disk;
 - the NSIS installer, `PlateVault_<version>_x64-setup.exe`;
 - the MSI installer, `PlateVault_<version>_x64_en-US.msi`.
 
-The application inside them, `desktop_shell.exe`, stays unsigned until the
-release workflow signs it before it builds the installers.
+The release workflow signs the two programs first and then builds the
+installers around the signed copies, so the programs you install are the
+copies SignPath signed. One installed file stays unsigned: the
+`uninstall.exe` that the NSIS installer writes into the install folder while
+it installs. The MSI has no such file; Windows uninstalls it.
 
 Only files built from this repository's source are signed. Third-party
 binaries bundled with PlateVault are never signed with this certificate.
@@ -87,21 +92,31 @@ how to turn off or avoid each one.
 
 ## Open conditions
 
-These SignPath conditions are not met yet. Each one blocks the application:
+This SignPath condition is not met yet. It blocks the application:
 
-- **Privacy policy shown during installation.** Neither Windows installer
-  shows the privacy statement yet.
-- **Option to disable the observing-site map.** The map requests
-  OpenStreetMap tiles as soon as its form opens. It needs to load tiles only
-  when you ask for them. Target lookups to CDS already have an off switch,
-  **Online SIMBAD resolution**.
+- **Installation option for the update check.** SignPath asks for options at
+  installation to turn off requests to systems you did not choose. First-run
+  setup does not offer **Check for updates automatically** yet. The first
+  automatic check runs as soon as setup finishes, before you can reach the
+  switch in Settings. The Configuration step of first-run setup needs that
+  switch, next to **Online SIMBAD resolution**.
 
 These SignPath conditions are met:
 
+- **Privacy policy shown during installation.** The NSIS setup.exe and the
+  MSI show a privacy notice
+  ([`apps/desktop/src-tauri/installer/privacy-notice.txt`](../../apps/desktop/src-tauri/installer/privacy-notice.txt))
+  before any file is installed. It summarises
+  [Privacy and network access](../manual/11-privacy.md) and links to it.
 - **Option to disable the update check.** The automatic update check at
   startup can be turned off with **Settings → Advanced → Software Update →
   Check for updates automatically**. With it off, PlateVault contacts GitHub
   for updates only when you click **Check for updates**.
+- **Option to disable the observing-site map.** The map requests no
+  OpenStreetMap tiles until you click **Show map** in the step or form that
+  shows it. Without that click, the coordinate fields work on their own.
+  Target lookups to CDS have their own off switch, **Online SIMBAD
+  resolution**.
 
 ## Uninstalling
 

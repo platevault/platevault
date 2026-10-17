@@ -19,6 +19,10 @@ see `specs/037-e2e-integration-testing/contracts/coverage-matrix.md`'s
 "Layer-2-only flows" section for the exhaustive list of what a mock
 structurally cannot prove.
 
+Which path-safety behaviour (links, junctions, reserved names, case and
+Unicode handling, prefixes) has a test on each OS, and what still needs a real
+Windows or Linux machine, is tracked in `path-safety-matrix.md`.
+
 ## Running each layer locally
 
 ### Layer 1 — integration (all OS)

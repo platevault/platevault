@@ -8,6 +8,7 @@ pub mod audit;
 pub mod calibration;
 pub mod calibration_match;
 pub mod calibration_tolerances;
+pub mod captures;
 pub mod cleanup;
 pub mod cone_search;
 pub mod dev;
@@ -42,6 +43,7 @@ pub mod source_view_verify;
 pub mod status;
 pub mod targets;
 pub mod tools;
+pub mod updates;
 
 // ── Re-exported domain-owned stored types (spec 042 T254) ─────────────────
 //

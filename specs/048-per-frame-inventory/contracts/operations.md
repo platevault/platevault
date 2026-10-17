@@ -15,8 +15,9 @@ List per-frame inventory entries for a session or root, for surfaces and cleanup
 ### `inventory.reconcile.run`
 Run a reconciliation pass over a root (on-demand trigger; also invoked internally by live/scheduled/on-open triggers).
 - **Request**: `{ root_id, reason: 'on_demand'|'on_open'|'scheduled'|'live_event' }`
-- **Response (long-running)**: operation-status stream/handle → `{ scanned, present, newly_missing, recovered, size_backfilled, progress_pct }` then terminal summary.
+- **Response (long-running)**: operation-status stream/handle → `{ scanned, present, newly_missing, recovered, size_backfilled, unknown, incomplete, unreadable_paths, progress_pct }` then terminal summary.
 - **Errors**: `root.unavailable` (e.g., removable drive absent) → frames reported unavailable, NOT deleted. No filesystem mutation under any outcome.
+- **Partial access**: a folder the pass cannot list in full makes the scan `incomplete`. So does an entry whose metadata it cannot read. `unreadable_paths` lists those root-relative paths. Each frame at or below one counts in `unknown` and keeps its record and session membership. It emits no `frame.missing`.
 
 ### `inventory.frame.relink`
 User-initiated relink of a surfaced missing frame to a candidate file under the same root, confirmed by sha256.

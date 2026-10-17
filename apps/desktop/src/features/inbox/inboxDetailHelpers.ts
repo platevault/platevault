@@ -13,9 +13,21 @@ import type { PillVariant } from '@/ui';
 // callers of this module keep working without changes. resolveRevealPath
 // replaces the former resolveInboxRevealPath; basename, parentSegment, and
 // formatExposureSeconds move to lib/ as the single source of truth.
-import { resolveRevealPath, basename, parentSegment } from '@/lib/path';
+// `basename`/`parentSegment` take native paths (source roots);
+// `wireBasename` takes the backend's root-relative paths.
+import {
+  resolveRevealPath,
+  basename,
+  parentSegment,
+  wireBasename,
+} from '@/lib/path';
 import { formatExposureSeconds } from '@/lib/format';
-export { resolveRevealPath as resolveInboxRevealPath, basename, parentSegment };
+export {
+  resolveRevealPath as resolveInboxRevealPath,
+  basename,
+  parentSegment,
+  wireBasename,
+};
 export { formatExposureSeconds };
 
 /** "exposureS" → "exposure S" (best-effort label for a registry key with no i18n entry). */

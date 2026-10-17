@@ -240,6 +240,11 @@ export const commands = {
 	 */
 	libraryListOperations: (locationId: string | null, offset: number, limit: number) => typedError<ScanOperation[], ErrorResponse>(__TAURI_INVOKE("library_list_operations", { locationId, offset, limit })),
 	/**
+	 *  New files per online Captures location, the same payload the
+	 *  `library_new_captures` event carries after every change.
+	 */
+	libraryNewCaptures: () => __TAURI_INVOKE<NewCaptures>("library_new_captures"),
+	/**
 	 *  The "Needs a Target", "Not in any Project" and "Needs calibration" list
 	 *  lengths, which Home's top line reports. Read-only.
 	 * 
@@ -3995,7 +4000,10 @@ export type Location = {
 	availability: Availability,
 	lastObservedAt: string | null,
 	lifecycle: LocationLifecycle,
-	/**  The kind of volume the root was registered on (LIB-FR-01). */
+	/**
+	 *  The kind of volume the root is on, as observed when it was registered
+	 *  or last remapped (LIB-FR-01).
+	 */
 	volumeKind: VolumeKind,
 };
 
@@ -4226,6 +4234,28 @@ export type NamingTemplate = {
  *  display text. Deserialize never reads `display`.
  */
 export type NativePathWire = { encoding: "unix-bytes"; payload: number[]; display: string } | { encoding: "windows-utf16"; payload: number[]; display: string };
+
+/**  The new files of one online Captures location. */
+export type NewCaptureCount = {
+	locationId: string,
+	/**
+	 *  Supported frames below the location that the library does not hold
+	 *  yet: arrived since its last index, until indexing adds them.
+	 */
+	newFiles: number,
+	/**
+	 *  Whether a live folder watcher keeps the count current. `false` while
+	 *  the count may lag: the watcher did not start or misses some folders,
+	 *  and every sweep retries it, or the location's removable drive is being
+	 *  ejected.
+	 */
+	live: boolean,
+};
+
+/**  The new files of every counted Captures location, by location id. */
+export type NewCaptures = {
+	locations: NewCaptureCount[],
+};
 
 /**  Home's new-sessions section (PRJ-FR-17 section 3), in group order. */
 export type NewSessions = {
@@ -5440,6 +5470,11 @@ export type RemapReview_Deserialize = {
 	expectedRevision: number,
 	proposedRoot: NativePathWire,
 	proposedIdentity: FileIdentity,
+	/**
+	 *  The kind of volume the proposed root was observed on, which applying
+	 *  the review records for the location.
+	 */
+	proposedVolumeKind: VolumeKind,
 	items: RemapItem_Deserialize[],
 	blocked: RemapBlock[],
 };
@@ -5450,6 +5485,11 @@ export type RemapReview_Serialize = {
 	expectedRevision: number,
 	proposedRoot: NativePathWire,
 	proposedIdentity: FileIdentity,
+	/**
+	 *  The kind of volume the proposed root was observed on, which applying
+	 *  the review records for the location.
+	 */
+	proposedVolumeKind: VolumeKind,
 	items: RemapItem_Serialize[],
 	blocked: RemapBlock[],
 };

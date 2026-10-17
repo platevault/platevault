@@ -1,0 +1,55 @@
+[package]
+name = "platevault_eject_windows"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+# astro-plan-ef440: the Windows volume removal notices behind a safe API.
+# Windows ejects a volume only once no process holds a handle on it, so the
+# desktop shell releases discovery's watcher on a removable Captures drive when
+# a removal is requested. Besides `platevault_notify_macos`, this is the one
+# crate whose lint table allows `unsafe`, and only at the FFI call sites; the
+# application crates keep the workspace `forbid`.
+[dependencies]
+tracing = { workspace = true }
+
+# Owner-approved direct dependency (astro-plan-ef440): the message-only window
+# (`Win32_UI_WindowsAndMessaging`, whose class registration needs
+# `Win32_Graphics_Gdi`, and `Win32_System_LibraryLoader` for its module), the
+# handle notice registration and the backup-semantics flag a folder handle needs
+# (`Win32_Storage_FileSystem`).
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_Storage_FileSystem",
+    "Win32_System_LibraryLoader",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+# Test builds only: a test drops the backup privilege from its own process
+# token (`Win32_Security`, and `Win32_System_Threading` for the token).
+[target.'cfg(windows)'.dev-dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_Security", "Win32_System_Threading"] }
+
+# The workspace table with `unsafe_code` at `deny` instead of `forbid`, so the
+# FFI call sites can allow it one at a time. Keep the rest in step with the
+# workspace `[workspace.lints]`.
+[lints.rust]
+unsafe_code = "deny"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+disallowed_methods = "allow"
+use_self = "warn"
+redundant_pub_crate = "warn"
+derive_partial_eq_without_eq = "warn"
+redundant_clone = "warn"
+needless_collect = "warn"
+significant_drop_tightening = "warn"
+or_fun_call = "warn"
+cognitive_complexity = "warn"

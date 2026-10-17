@@ -109,10 +109,18 @@ impl WatcherService {
     /// single `RecursiveMode::Recursive` watch per path (the OS watcher may
     /// then follow links under it).
     ///
+    /// The paths register through
+    /// [`register_watch_paths`](crate::notify_bridge::register_watch_paths),
+    /// as the Captures tree watcher (astro-plan-ef440) made it: every path in
+    /// one batch, a listing that leaves out a folder swapped for a link or
+    /// junction while it lists, and an error for a path that probes as a
+    /// real folder yet lists no folders.
+    ///
     /// # Errors
     ///
-    /// Returns an error string if the platform watcher cannot be created or a
-    /// path cannot be watched.
+    /// Returns an error string if the platform watcher cannot be created, a
+    /// path cannot be watched, or a path lists no folders once it probed
+    /// fine.
     pub fn start(&mut self, paths: &[Utf8PathBuf], follow_symlinks: bool) -> Result<(), String> {
         // Stop existing watcher if running.
         self.watcher = None;
