@@ -51,7 +51,7 @@ pub use metadata::{
 };
 pub use plan_links::{
     delete_plan_link, find_orphaned_plan_links, get_plan_link, get_plan_link_by_plan_id,
-    insert_plan_link, InboxPlanLinkRow,
+    insert_plan_link_conn, InboxPlanLinkRow,
 };
 pub use projections::{
     count_distinct_inbox_folders, format_exposure_label, grouping_keys_for_items, inbox_stats,

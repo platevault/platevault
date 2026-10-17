@@ -182,7 +182,13 @@ async fn seed_old_rows(pool: &SqlitePool) {
         total_bytes_required: 0,
     };
     persistence_plans::repositories::plans::insert_plan(pool, &plan).await.unwrap();
-    repo::insert_plan_link(pool, "old-ef-light", "plan-open").await.unwrap();
+    repo::insert_plan_link_conn(
+        pool.acquire().await.unwrap().as_mut(),
+        "old-ef-light",
+        "plan-open",
+    )
+    .await
+    .unwrap();
     repo::update_inbox_item_state(pool, "old-ef-light", "plan_open").await.unwrap();
 }
 
@@ -677,7 +683,9 @@ async fn seed_shared_old_master(root: &Path) -> SqlitePool {
         total_bytes_required: 0,
     };
     persistence_plans::repositories::plans::insert_plan(&pool, &plan).await.unwrap();
-    repo::insert_plan_link(&pool, "old-master", "plan-old").await.unwrap();
+    repo::insert_plan_link_conn(pool.acquire().await.unwrap().as_mut(), "old-master", "plan-old")
+        .await
+        .unwrap();
     repo::update_inbox_item_state(&pool, "old-master", "plan_open").await.unwrap();
     pool
 }
@@ -845,7 +853,9 @@ async fn an_old_folder_row_at_a_masters_path_goes_and_the_master_stays() {
         total_bytes_required: 0,
     };
     persistence_plans::repositories::plans::insert_plan(&pool, &plan).await.unwrap();
-    repo::insert_plan_link(&pool, "master-gh", "plan-master").await.unwrap();
+    repo::insert_plan_link_conn(pool.acquire().await.unwrap().as_mut(), "master-gh", "plan-master")
+        .await
+        .unwrap();
     repo::update_inbox_item_state(&pool, "master-gh", "plan_open").await.unwrap();
     seed_old_folder(&pool, "old-gh", "old-gh-light", "g/h.fits").await;
 
