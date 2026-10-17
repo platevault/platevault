@@ -350,20 +350,16 @@ fn calibration_pin_family_takes_confirm_and_no_arguments() {
     shell.refuses(
         "calibration_confirm",
         &json!({ "sessionId": session, "kind": "flat", "expectedGeneration": 1 }),
-        "not_found",
+        NOT_FOUND,
         session,
     );
-    // No runs over many sessions at once, so the refusal names the session
-    // it couldn't find in its message rather than as the request's identity.
-    let error = shell
-        .invoke("calibration_decline", &json!({ "sessions": [[session, 1]], "kind": "bias" }))
-        .expect_err("unknown session");
-    assert!(error.is_object(), "calibration_decline reached its handler: {error}");
-    assert_eq!(error["kind"], "not_found", "{error}");
-    assert!(error["identity"].is_null(), "{error}");
-    assert!(
-        error["message"].as_str().is_some_and(|text| text.contains(&session.to_string())),
-        "{error}"
+    // No runs over many sessions in one transaction; the refusal names the
+    // session it couldn't find as its identity.
+    shell.refuses(
+        "calibration_decline",
+        &json!({ "sessions": [[session, 1]], "kind": "bias" }),
+        NOT_FOUND,
+        session,
     );
 }
 
@@ -374,7 +370,7 @@ fn project_group_removal_and_view_settings_take_their_arguments() {
     shell.refuses(
         "project_remove_group",
         &json!({ "projectId": project, "expectedRevision": 1, "groupId": Uuid::new_v4() }),
-        "not_found",
+        NOT_FOUND,
         project,
     );
     let settings = |group: &str, panel: &str| {
@@ -389,7 +385,7 @@ fn project_group_removal_and_view_settings_take_their_arguments() {
             },
         })
     };
-    shell.refuses("project_set_view_settings", &settings("GROUP", "PANEL"), "not_found", project);
+    shell.refuses("project_set_view_settings", &settings("GROUP", "PANEL"), NOT_FOUND, project);
     // Keywords arrive through their validating constructor: two that read the
     // same never reach the handler.
     let same = shell
@@ -405,7 +401,7 @@ fn wrap_up_record_family_reopens_a_step_and_reads_the_closed_snapshot() {
     shell.refuses(
         "project_reopen_wrap_up_step",
         &json!({ "projectId": project, "step": "trash" }),
-        "not_found",
+        NOT_FOUND,
         project,
     );
     assert_eq!(
@@ -423,7 +419,7 @@ fn sessions_archive_family_takes_its_arguments() {
     shell.refuses(
         "sessions_archive_review",
         &json!({ "sessions": [session], "destination": destination }),
-        "not_found",
+        NOT_FOUND,
         destination,
     );
     shell.refuses(
@@ -433,7 +429,7 @@ fn sessions_archive_family_takes_its_arguments() {
             "sessions": [session],
             "digest": "0".repeat(64),
         } }),
-        "not_found",
+        NOT_FOUND,
         destination,
     );
 }
@@ -454,7 +450,7 @@ fn view_previous_family_lists_leftovers_and_takes_a_resolution() {
             "resolution": resolution,
         })
     };
-    shell.refuses("project_review_previous_item", &review("kept"), "not_found", project);
+    shell.refuses("project_review_previous_item", &review("kept"), NOT_FOUND, project);
     // Pending is the state the catalog records a leftover in; no client sets it.
     let pending =
         shell.invoke("project_review_previous_item", &review("pending")).expect_err("pending");

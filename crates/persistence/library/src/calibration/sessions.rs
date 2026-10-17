@@ -219,11 +219,13 @@ impl Catalog {
     }
 
     /// No darks, No flats or No bias on each session, against the generation
-    /// the user saw; the choice needs no reason (CAL-FR-05, CAL-AC-19).
+    /// the user saw; the choice needs no reason (CAL-FR-05, CAL-AC-19). One
+    /// transaction: every session takes the No or none does.
     ///
     /// # Errors
     /// `NotFound` for an unknown session; `Conflict` (with successors for a
-    /// superseded session) for a generation other than the expected one.
+    /// superseded session) for a generation other than the expected one. The
+    /// refusal's identity is the session it refused.
     pub async fn decline_calibration(
         &self,
         sessions: &[(Uuid, Revision)],
@@ -231,14 +233,12 @@ impl Catalog {
     ) -> Result<Vec<SessionCalibration>> {
         let declined = write_txn!(self, |conn| {
             let at = now()?;
-            let state = PinState::Declined { origin: DeclineOrigin::User };
             let mut declined = Vec::with_capacity(sessions.len());
-            for (session_id, expected) in sessions {
-                let calibration = require_generation(conn, *session_id, *expected).await?;
-                if *calibration.kind(kind) != state {
-                    write_kind(conn, *session_id, kind, &state, &at).await?;
-                }
-                declined.push(read_calibration(conn, *session_id).await?);
+            for &(session_id, expected) in sessions {
+                let calibration = decline_kind(conn, session_id, expected, kind, &at)
+                    .await
+                    .map_err(|error| error.concerning(session_id))?;
+                declined.push(calibration);
             }
             declined
         });
@@ -991,6 +991,23 @@ async fn master_side(
 }
 
 // ── Writes ───────────────────────────────────────────────────────────────────
+
+/// One session's No for `kind` at the generation the user saw; its
+/// calibration afterwards. A kind already declined by the user is left as is.
+async fn decline_kind(
+    conn: &mut SqliteConnection,
+    session_id: Uuid,
+    expected: Revision,
+    kind: InputKind,
+    at: &str,
+) -> Result<SessionCalibration> {
+    let state = PinState::Declined { origin: DeclineOrigin::User };
+    let calibration = require_generation(conn, session_id, expected).await?;
+    if *calibration.kind(kind) != state {
+        write_kind(conn, session_id, kind, &state, at).await?;
+    }
+    read_calibration(conn, session_id).await
+}
 
 /// The session's calibration when its generation is `expected`.
 async fn require_generation(

@@ -1661,7 +1661,7 @@ async fn observe_source(path: &NativePath) -> Result<(PathBuf, FileIdentity), Li
             error: Box::new(LibraryError::SourceUnavailable(format!(
                 "the import source is {availability:?}; PlateVault mounts nothing"
             ))),
-            scope: path.clone(),
+            scope: Some(path.clone()),
             identity: None,
         }),
     }

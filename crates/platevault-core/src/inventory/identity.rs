@@ -306,7 +306,7 @@ pub(super) fn file_id_error(path: &Path, error: &std::io::Error) -> LibraryError
 pub(super) fn scoped(error: LibraryError, path: &Path) -> LibraryError {
     LibraryError::Context {
         error: Box::new(error),
-        scope: NativePath::from_path(path),
+        scope: Some(NativePath::from_path(path)),
         identity: None,
     }
 }

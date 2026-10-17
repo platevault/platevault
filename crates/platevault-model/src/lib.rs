@@ -190,8 +190,10 @@ pub enum LibraryError {
     SymlinksUnavailable(String),
     #[error("operation canceled")]
     Canceled,
+    /// `error` concerning the record `identity`, the native path `scope`, or
+    /// both; the innermost context that names one wins.
     #[error("{error}")]
-    Context { error: Box<Self>, scope: NativePath, identity: Option<Uuid> },
+    Context { error: Box<Self>, scope: Option<NativePath>, identity: Option<Uuid> },
 }
 
 /// The stable machine code of a [`LibraryError`]: what the client switches on
@@ -301,7 +303,28 @@ impl LibraryError {
             std::io::ErrorKind::NotFound => Self::NotFound(message),
             _ => Self::SourceUnavailable(message),
         };
-        Self::Context { error: Box::new(error), scope: NativePath::from_path(path), identity: None }
+        Self::Context {
+            error: Box::new(error),
+            scope: Some(NativePath::from_path(path)),
+            identity: None,
+        }
+    }
+
+    /// This failure naming `identity` as the record it concerns, unless it
+    /// names one already: a conflict names its own record and a context keeps
+    /// its identity. A request over many records uses it to say which failed.
+    #[must_use]
+    pub fn concerning(self, identity: Uuid) -> Self {
+        match self {
+            Self::Context { error, scope, identity: None } => {
+                Self::Context { error, scope, identity: Some(identity) }
+            }
+            error
+            @ (Self::Context { .. } | Self::Conflict { .. } | Self::WindowConflict { .. }) => error,
+            error => {
+                Self::Context { error: Box::new(error), scope: None, identity: Some(identity) }
+            }
+        }
     }
 
     /// The stable code the client words this failure by; a [`Self::Context`]
@@ -330,7 +353,7 @@ impl LibraryError {
     #[must_use]
     pub fn response(&self, identity: Option<Uuid>, scope: Option<NativePath>) -> ErrorResponse {
         if let Self::Context { error, scope: stored_scope, identity: stored_identity } = self {
-            return error.response(stored_identity.or(identity), Some(stored_scope.clone()));
+            return error.response(stored_identity.or(identity), stored_scope.clone().or(scope));
         }
         let (identity, current_revision, successors, window) = match self {
             Self::Conflict { id, current, successors } => {

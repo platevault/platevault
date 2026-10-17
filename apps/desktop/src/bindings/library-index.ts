@@ -937,9 +937,9 @@ export const commands = {
 	 *  each session's calibration in request order.
 	 * 
 	 *  # Errors
-	 *  `NotFound` for an unknown session; `Conflict` (identifying the session,
-	 *  with successors for a superseded one) for another generation. The request
-	 *  names many sessions, so a refusal names its session in the message.
+	 *  `NotFound` for an unknown session; `Conflict` (with successors for a
+	 *  superseded session) for another generation. The refusal's identity is the
+	 *  session it refused.
 	 */
 	calibrationDecline: (sessions: ([string, number])[], kind: InputKind) => typedError<SessionCalibration_Serialize[], ErrorResponse>(__TAURI_INVOKE("calibration_decline", { sessions, kind })),
 	/**

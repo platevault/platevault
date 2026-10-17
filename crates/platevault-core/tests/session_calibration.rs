@@ -398,6 +398,31 @@ async fn calibration_imported_later_fills_only_kinds_still_waiting() {
     );
 }
 
+/// CAL-FR-05: a No over many sessions is one transaction. A session it can't
+/// take names itself as the refusal's identity, and no session takes the No.
+#[tokio::test]
+async fn a_no_over_many_sessions_names_the_session_it_refuses_and_declines_none() {
+    let world = world(false).await;
+    world.ingest(false, &lights()).await;
+    world.confirm_rig().await;
+    world.library.match_pending_calibration().await.unwrap();
+    let before = world.status().await.calibration;
+    let light = world.light().await.id;
+    let unknown = Uuid::new_v4();
+    let refused = world
+        .catalog()
+        .decline_calibration(&[(light, before.generation), (unknown, 1)], InputKind::Bias)
+        .await
+        .unwrap_err();
+    let response = refused.response(None, None);
+    assert_eq!(
+        (response.code, response.identity),
+        (LibraryErrorCode::NotFound, Some(unknown)),
+        "{refused}"
+    );
+    assert_eq!(world.status().await.calibration, before, "the known session took no No");
+}
+
 #[tokio::test]
 async fn opening_the_library_matches_what_a_crash_left_pending() {
     let world = world(false).await;

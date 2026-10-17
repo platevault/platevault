@@ -44,7 +44,7 @@ fn every_variant() -> Vec<LibraryError> {
         LibraryError::Canceled,
         LibraryError::Context {
             error: Box::new(LibraryError::SourceUnavailable(text())),
-            scope: NativePath::from_path(Path::new("/night/light_001.fits")),
+            scope: Some(NativePath::from_path(Path::new("/night/light_001.fits"))),
             identity: Some(id),
         },
     ];

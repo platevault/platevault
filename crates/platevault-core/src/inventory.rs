@@ -642,7 +642,7 @@ fn locate(error: LibraryError, location: &Location) -> LibraryError {
         error @ LibraryError::Context { .. } => error,
         error => LibraryError::Context {
             error: Box::new(error),
-            scope: location.path.clone(),
+            scope: Some(location.path.clone()),
             identity: Some(location.id),
         },
     }

@@ -2538,7 +2538,7 @@ fn scoped(error: LibraryError, scope: NativePath, identity: Option<Uuid>) -> Lib
     if matches!(error, LibraryError::Context { .. } | LibraryError::Conflict { .. }) {
         return error;
     }
-    LibraryError::Context { error: Box::new(error), scope, identity }
+    LibraryError::Context { error: Box::new(error), scope: Some(scope), identity }
 }
 
 /// Refuse what a retired location never takes again, naming the location.
