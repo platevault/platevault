@@ -3,7 +3,7 @@
 
 //! Updater-owned catalogue text, independent from OS completion notifications.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
@@ -20,6 +20,14 @@ pub struct Wording {
     install_failed: String,
     #[serde(rename = "update_error_previous_app_not_restored")]
     previous_app_not_restored: String,
+    #[serde(rename = "update_error_app_replaced")]
+    app_replaced: String,
+    #[serde(rename = "update_error_app_replaced_kept")]
+    app_replaced_kept: String,
+    #[serde(rename = "update_notification_installed_title")]
+    installed_title: String,
+    #[serde(rename = "update_notification_installed_kept_body")]
+    installed_kept: String,
 }
 
 static WORDING_BY_LOCALE: ShippedMessages<Wording> = ShippedMessages::new();
@@ -42,12 +50,44 @@ impl Wording {
         locale::fill(&self.admin_prompt, &[("version", version)])
     }
 
+    /// The notice of an install that failed and kept the previous app at
+    /// `kept`.
     pub(super) fn previous_app_kept(&self, kept: &Path) -> Notice {
-        let reason =
-            locale::fill(&self.previous_app_not_restored, &[("path", &kept.display().to_string())]);
+        self.install_failed(&locale::fill(
+            &self.previous_app_not_restored,
+            &[("path", &kept.display().to_string())],
+        ))
+    }
+
+    /// The notice of an install refused because the app was moved or
+    /// replaced after launch, which kept what it found in the app's place at
+    /// `kept`.
+    pub(super) fn app_replaced(&self, kept: &[PathBuf]) -> Notice {
+        self.install_failed(&if kept.is_empty() {
+            self.app_replaced.clone()
+        } else {
+            locale::fill(&self.app_replaced_kept, &[("path", &paths(kept))])
+        })
+    }
+
+    /// The notice of an install that put the update in place but kept what
+    /// it found in the app's place at `kept`.
+    pub(super) fn installed_kept_aside(&self, kept: &[PathBuf]) -> Notice {
         Notice {
-            title: self.install_failed_title.clone(),
-            body: locale::fill(&self.install_failed, &[("message", &reason)]),
+            title: self.installed_title.clone(),
+            body: locale::fill(&self.installed_kept, &[("path", &paths(kept))]),
         }
     }
+
+    fn install_failed(&self, reason: &str) -> Notice {
+        Notice {
+            title: self.install_failed_title.clone(),
+            body: locale::fill(&self.install_failed, &[("message", reason)]),
+        }
+    }
+}
+
+/// `kept` as one `{path}` value, as the UI joins them.
+fn paths(kept: &[PathBuf]) -> String {
+    kept.iter().map(|kept| kept.display().to_string()).collect::<Vec<_>>().join(", ")
 }

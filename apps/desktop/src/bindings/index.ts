@@ -10781,9 +10781,11 @@ export type UpdateFailure =
 { code: "identity" } | 
 /**
  *  The macOS app was moved or replaced after it was launched, so nothing
- *  was installed; a restart launches what is there now.
+ *  was installed; a restart launches what is there now. What the install
+ *  found in the app's place and could not put back is kept at `kept_at`
+ *  instead of being deleted; empty when nothing was.
  */
-{ code: "app-replaced" } | 
+{ code: "app-replaced"; keptAt: string[] } | 
 /**  Permission to install was refused or not given. */
 { code: "permission" } | 
 /**  The install step failed. */

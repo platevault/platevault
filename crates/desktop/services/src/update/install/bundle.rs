@@ -24,7 +24,8 @@
 //! is or replaced. What that undo did is told by device and inode too, not
 //! by its result: anything it leaves in the staging dir but the update is
 //! kept aside, never deleted with it, and the update found at the app's path
-//! after all counts as installed.
+//! after all counts as installed. Either way the user is told where what was
+//! kept aside is ([`UpdateError::AppReplaced`], [`Installed::Relaunch`]).
 //!
 //! Residual risks, which no device and inode can tell apart:
 //!
@@ -72,8 +73,9 @@ use std::path::{Path, PathBuf};
 
 use flate2::read::GzDecoder;
 
+use super::Installed;
 #[cfg(test)]
-use super::{InstallMode, Installed, Installer};
+use super::{InstallMode, Installer};
 use crate::update::signature::Payload;
 use crate::update::UpdateError;
 
@@ -106,9 +108,8 @@ pub(super) fn install_launched_app(
     launched: &LaunchedBundle,
     payload: &mut Payload<'_>,
     admin_prompt: &str,
-) -> Result<super::Installed, UpdateError> {
-    install_bundle(launched, payload, &super::codesign::Codesign, admin_prompt)?;
-    Ok(super::Installed::Relaunch)
+) -> Result<Installed, UpdateError> {
+    install_bundle(launched, payload, &super::codesign::Codesign, admin_prompt)
 }
 
 /// An app bundle this process was launched from, and the device and inode it
@@ -158,7 +159,7 @@ impl LaunchedBundle {
         if still_at(&self.path, self.id)? {
             Ok(())
         } else {
-            Err(app_replaced(&self.path, &[]))
+            Err(app_replaced(&self.path, Vec::new()))
         }
     }
 }
@@ -181,17 +182,8 @@ fn still_at(path: &Path, id: (u64, u64)) -> io::Result<bool> {
 /// The error for an `installed` path that no longer holds the app this
 /// process was launched from; `kept` is where what came out of its place and
 /// could not be put back is kept.
-fn app_replaced(installed: &Path, kept: &[PathBuf]) -> UpdateError {
-    let replaced = format!(
-        "{} is no longer the app PlateVault was launched from, so nothing was installed",
-        installed.display()
-    );
-    UpdateError::AppReplaced(if kept.is_empty() {
-        format!("{replaced}; a restart launches what is there now")
-    } else {
-        let kept: Vec<String> = kept.iter().map(|kept| kept.display().to_string()).collect();
-        format!("{replaced}; what could not be put back is kept at {}", kept.join(", "))
-    })
+fn app_replaced(installed: &Path, kept: Vec<PathBuf>) -> UpdateError {
+    UpdateError::AppReplaced { app: installed.to_path_buf(), kept }
 }
 
 /// Replace the app `launched` names with the bundle in the `.app.tar.gz`
@@ -204,12 +196,29 @@ fn app_replaced(installed: &Path, kept: &[PathBuf]) -> UpdateError {
 /// says. Another bundle found at the app's path is refused
 /// ([`UpdateError::AppReplaced`]) and left there; should the swap have moved
 /// it, it is put back, and kept aside as a previous app is if it cannot be.
+/// Should the update be in place all the same, it is installed, and
+/// [`Installed::Relaunch`] says where that bundle is kept.
 pub fn install_bundle(
     launched: &LaunchedBundle,
     payload: &mut Payload<'_>,
     signing: &dyn CodeSigning,
     admin_prompt: &str,
-) -> Result<(), UpdateError> {
+) -> Result<Installed, UpdateError> {
+    install_bundle_swapping(launched, payload, signing, admin_prompt, swap)
+}
+
+/// How [`move_into_place`] puts the update at the app's path: [`swap`],
+/// which tests replace to race it.
+type Swap = fn(&LaunchedBundle, &Path, &Path) -> Result<(), SwapError>;
+
+/// [`install_bundle`], moving the update into place with `swap`.
+fn install_bundle_swapping(
+    launched: &LaunchedBundle,
+    payload: &mut Payload<'_>,
+    signing: &dyn CodeSigning,
+    admin_prompt: &str,
+    swap: Swap,
+) -> Result<Installed, UpdateError> {
     let installed = launched.path.as_path();
     let identity = identify_launched(launched, signing)?;
     let staging = staging_dir(installed)?;
@@ -219,17 +228,20 @@ pub fn install_bundle(
     // The unpack and the identity check can take seconds, in which another
     // process of the user's could swap another bundle in.
     launched.check_in_place()?;
-    move_into_place(launched, payload, &update, staging, &identity, admin_prompt)?;
+    let kept_aside =
+        move_into_place(launched, payload, &update, staging, &identity, admin_prompt, swap)?;
     #[cfg(target_os = "macos")]
     {
         // A fresh modification date makes Launch Services re-read the bundle.
         let _ = std::process::Command::new("/usr/bin/touch").arg(installed).status();
     }
-    Ok(())
+    Ok(Installed::Relaunch { kept_aside })
 }
 
 /// Put `update`, the verified bundle unpacked into `staging`, in place of the
-/// app `launched` names, as [`install_bundle`] says.
+/// app `launched` names with `swap`, as [`install_bundle`] says. Where what
+/// was found in the app's place is kept when the update is in place all the
+/// same ([`settle_not_launched`]); empty otherwise.
 #[cfg_attr(not(target_os = "macos"), allow(unused_variables))]
 fn move_into_place(
     launched: &LaunchedBundle,
@@ -238,7 +250,8 @@ fn move_into_place(
     staging: tempfile::TempDir,
     identity: &Identity,
     admin_prompt: &str,
-) -> Result<(), UpdateError> {
+    swap: Swap,
+) -> Result<Vec<PathBuf>, UpdateError> {
     let installed = launched.path.as_path();
     // What tells the update apart from anything another process brings into
     // staging or to the app's path while it is moved.
@@ -248,21 +261,21 @@ fn move_into_place(
     // Only a permission error, which neither the exchange nor the moves get
     // past, needs the administrator.
     let error = match swap(launched, update, &backup) {
-        Ok(()) => return Ok(()),
+        Ok(()) => return Ok(Vec::new()),
         #[cfg(target_os = "macos")]
         Err(SwapError::Io(error)) if error.kind() == io::ErrorKind::PermissionDenied => {
             tracing::debug!(%error, "this user cannot move the app; asking for administrator rights");
             match PrivilegedInstall::new(launched, payload, update, identity)
                 .and_then(|install| install.run(admin_prompt))
             {
-                Ok(()) => return Ok(()),
+                Ok(()) => return Ok(Vec::new()),
                 Err(error) => error,
             }
         }
         Err(SwapError::Io(error)) => error.into(),
         // Another process filled the app's path after the launched app moved
         // out; what it put there is left alone.
-        Err(SwapError::Occupied) => app_replaced(installed, &[]),
+        Err(SwapError::Occupied) => app_replaced(installed, Vec::new()),
         Err(SwapError::NotLaunched { found }) => {
             return settle_not_launched(
                 installed,
@@ -309,9 +322,9 @@ fn failed_swap(
 ///   `staging`: the other bundle, should the undo have failed, or whatever
 ///   the undo brought in instead, the launched app included.
 /// - The update at the app's path is an install: it is the verified bundle
-///   and nothing was deleted, so this succeeds, and what was kept is logged.
-///   No failure would be true, for each one the UI shows says that the
-///   update could not be installed.
+///   and nothing was deleted, so this succeeds with where those entries are
+///   kept, which the updater tells the user. No failure would be true, for
+///   each one the UI shows says that the update could not be installed.
 /// - Anything else there means that nothing was installed.
 fn settle_not_launched(
     installed: &Path,
@@ -319,17 +332,17 @@ fn settle_not_launched(
     left: [&Path; 2],
     (update_id, found): ((u64, u64), Option<(u64, u64)>),
     fallback_dir: Option<&Path>,
-) -> Result<(), UpdateError> {
+) -> Result<Vec<PathBuf>, UpdateError> {
     let kept = keep_all_but(installed, staging, left, update_id, fallback_dir);
     let now = entry_id(installed).ok();
     if now == Some(update_id) {
         tracing::error!(?kept, "the update is in place, but what the swap moved out of the app's path was not the launched app and could not be put back");
-        return Ok(());
+        return Ok(kept);
     }
     if now != found {
         tracing::warn!(app = %installed.display(), "the app's path holds neither the update nor what the swap found there");
     }
-    Err(app_replaced(installed, &kept))
+    Err(app_replaced(installed, kept))
 }
 
 /// Keep aside, with [`move_aside`], each of `entries` in `staging` that is
@@ -832,7 +845,7 @@ impl PrivilegedInstall {
         identity: &Identity,
     ) -> Result<Self, UpdateError> {
         if !still_at(installed, pinned)? {
-            return Err(app_replaced(installed, &[]));
+            return Err(app_replaced(installed, Vec::new()));
         }
         let (parent, name) = resolved_location(installed)?;
         let (archive_dir, archive) = resolved_location(archive)?;
@@ -933,7 +946,9 @@ impl PrivilegedInstall {
             // Should the message not parse, the installed app's directory is
             // where the script's directory is.
             Some(KEPT_IN_WORK_DIR) => not_restored(kept_in_work.unwrap_or_else(|| self.parent.clone())),
-            Some(APP_CHANGED) => app_replaced(&self.parent.join(&self.name), kept_in_work.as_slice()),
+            Some(APP_CHANGED) => {
+                app_replaced(&self.parent.join(&self.name), kept_in_work.into_iter().collect())
+            }
             Some(OUTCOME_UNKNOWN) => UpdateError::Install(format!(
                 "whether the update was moved into place with administrator rights could not be told{}",
                 kept_in_work.map_or_else(String::new, |kept| format!(
@@ -1080,8 +1095,7 @@ impl<C: CodeSigning> Installer for BundleInstaller<C> {
         _mode: InstallMode,
         admin_prompt: &str,
     ) -> Result<Installed, UpdateError> {
-        install_bundle(&self.launched, &mut payload, &self.signing, admin_prompt)?;
-        Ok(Installed::Relaunch)
+        install_bundle(&self.launched, &mut payload, &self.signing, admin_prompt)
     }
 }
 
@@ -1097,13 +1111,16 @@ mod tests {
     use std::os::unix::fs::MetadataExt as _;
     use std::path::{Path, PathBuf};
 
+    use flate2::write::GzEncoder;
+    use flate2::Compression;
+
     use super::{
         app_replaced, check_moved_out, entry_id, exchange, failed_swap, identify_launched,
-        keep_backup_if_not_restored, move_aside, move_update_in, rename_noreplace, replace,
-        settle_not_launched, staging_dir_among, swap, CodeSigning, Identity, LaunchedBundle,
-        SwapError,
+        install_bundle_swapping, keep_backup_if_not_restored, move_aside, move_update_in,
+        rename_noreplace, replace, settle_not_launched, staging_dir_among, swap, CodeSigning,
+        Identity, Installed, LaunchedBundle, SwapError,
     };
-    use crate::update::UpdateError;
+    use crate::update::{Package, UpdateError};
 
     /// A bundle directory at `path` holding a `version` file.
     fn bundle(path: &Path, version: &str) {
@@ -1113,6 +1130,13 @@ mod tests {
 
     fn version(path: &Path) -> String {
         fs::read_to_string(path.join("version")).expect("version")
+    }
+
+    /// `app` as a `.app.tar.gz` holding it as `name`.
+    fn archive_of(app: &Path, name: &str) -> Vec<u8> {
+        let mut builder = tar::Builder::new(GzEncoder::new(Vec::new(), Compression::fast()));
+        builder.append_dir_all(name, app).expect("archive the bundle");
+        builder.into_inner().expect("tar").finish().expect("gzip")
     }
 
     /// The bundle at `path`, as launched now.
@@ -1218,7 +1242,7 @@ mod tests {
 
         let error = launched.check_in_place().expect_err("replaced");
 
-        assert!(matches!(error, UpdateError::AppReplaced(_)), "{error}");
+        assert!(matches!(error, UpdateError::AppReplaced { .. }), "{error}");
     }
 
     #[test]
@@ -1389,7 +1413,7 @@ mod tests {
                 None,
             );
             assert!(
-                matches!(&outcome, Err(UpdateError::AppReplaced(detail)) if detail.ends_with("what is there now")),
+                matches!(&outcome, Err(UpdateError::AppReplaced { kept, .. }) if kept.is_empty()),
                 "{case}: {outcome:?}"
             );
             assert_eq!(version(&dir.path().join("moved-away.app")), "old", "{case}");
@@ -1465,7 +1489,10 @@ mod tests {
         }
 
         /// What `swap` makes of it when its exchange back is `move_back`.
-        fn put_back(self, move_back: impl FnOnce() -> io::Result<()>) -> Result<(), UpdateError> {
+        fn put_back(
+            self,
+            move_back: impl FnOnce() -> io::Result<()>,
+        ) -> Result<Vec<PathBuf>, UpdateError> {
             let Err(SwapError::NotLaunched { found }) =
                 check_moved_out(&self.launched, &self.update, move_back)
             else {
@@ -1494,9 +1521,10 @@ mod tests {
 
         let outcome = exchanged.put_back(|| Err(io::Error::other("the exchange back failed")));
 
-        assert!(outcome.is_ok(), "the update is in place, yet: {outcome:?}");
+        let kept = dir.path().join(KEPT_APP);
+        assert_eq!(outcome.ok(), Some(vec![kept.clone()]), "the update is in place");
         assert_eq!(version(&installed), "new");
-        assert_eq!(version(&dir.path().join(KEPT_APP)), "foreign", "the other bundle is kept");
+        assert_eq!(version(&kept), "foreign", "the other bundle is kept");
         assert_eq!(version(&dir.path().join("moved-away.app")), "old");
     }
 
@@ -1521,7 +1549,7 @@ mod tests {
         assert!(kept.exists(), "the launched app was deleted with staging: {outcome:?}");
         assert_eq!(version(&kept), "old");
         assert!(
-            matches!(&outcome, Err(UpdateError::AppReplaced(detail)) if detail.ends_with(&kept.display().to_string())),
+            matches!(&outcome, Err(UpdateError::AppReplaced { kept: at, .. }) if *at == std::slice::from_ref(&kept)),
             "{outcome:?}"
         );
         assert_eq!(version(&installed), "foreign");
@@ -1543,12 +1571,104 @@ mod tests {
         });
 
         assert!(
-            matches!(&outcome, Err(UpdateError::AppReplaced(detail)) if detail.ends_with("what is there now")),
+            matches!(&outcome, Err(UpdateError::AppReplaced { kept, .. }) if kept.is_empty()),
             "{outcome:?}"
         );
         assert_eq!(version(&installed), "foreign");
         assert!(!dir.path().join(KEPT_APP).exists(), "nothing is kept");
         assert!(!update.exists(), "the update went with staging");
+    }
+
+    /// The moves alone: the first move brought another bundle out of the
+    /// app's path, and before it moves back another process puts an empty
+    /// directory there, so the exclusive move back fails. The other bundle
+    /// is kept aside, not deleted with staging, the planted directory is left
+    /// alone, and nothing was installed.
+    #[test]
+    fn a_failed_move_back_keeps_the_other_bundle_aside_and_installs_nothing() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let installed = dir.path().join("App.app");
+        bundle(&installed, "old");
+        let launched = launched(&installed);
+        let staging = tempfile::tempdir_in(dir.path()).expect("staging");
+        let (update, backup) =
+            (staging.path().join("App.app"), staging.path().join("previous.app"));
+        bundle(&update, "new");
+        let update_id = entry_id(&update).expect("update");
+        replace_installed(dir.path(), &installed);
+        rename_noreplace(&installed, &backup).expect("the first move");
+
+        let Err(SwapError::NotLaunched { found }) = check_moved_out(&launched, &backup, || {
+            fs::create_dir(&installed).expect("an empty directory at the app's path");
+            rename_noreplace(&backup, &installed)
+        }) else {
+            panic!("not refused");
+        };
+        let outcome =
+            settle_not_launched(&installed, staging, [&update, &backup], (update_id, found), None);
+
+        let kept = dir.path().join(KEPT_APP);
+        assert!(
+            matches!(&outcome, Err(UpdateError::AppReplaced { kept: at, .. }) if *at == [kept.clone()]),
+            "{outcome:?}"
+        );
+        assert_eq!(version(&kept), "foreign", "the other bundle is kept, not deleted with staging");
+        assert_eq!(fs::read_dir(&installed).expect("planted").count(), 0, "left alone");
+        assert_eq!(version(&dir.path().join("moved-away.app")), "old");
+    }
+
+    /// Signing that reads every app as unsigned, so no requirement is checked.
+    struct NoSignature;
+
+    impl CodeSigning for NoSignature {
+        fn identity(&self, _bundle: &Path) -> Result<Identity, UpdateError> {
+            Ok(Identity::Unsigned)
+        }
+
+        fn satisfies(&self, _bundle: &Path, _requirement: &str) -> Result<bool, UpdateError> {
+            unreachable!("an unsigned app pins no requirement")
+        }
+    }
+
+    /// A swap raced as [`Exchanged`] is: another bundle is swapped in at the
+    /// app's path just before the exchange, and the exchange back fails.
+    fn exchange_over_another_bundle_and_fail_back(
+        launched: &LaunchedBundle,
+        update: &Path,
+        _backup: &Path,
+    ) -> Result<(), SwapError> {
+        let dir = launched.path.parent().expect("the app's directory");
+        replace_installed(dir, &launched.path);
+        exchange_by_renames(&launched.path, update, dir);
+        check_moved_out(launched, update, || Err(io::Error::other("the exchange back failed")))
+    }
+
+    /// The whole install over that race: the update is in place all the
+    /// same, so it is installed, and the relaunch names where the other
+    /// bundle is kept, which only the log said before.
+    #[tokio::test]
+    async fn an_install_with_the_update_in_place_after_a_failed_put_back_names_what_was_kept() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let installed = dir.path().join("App.app");
+        bundle(&installed, "old");
+        let source = tempfile::tempdir().expect("source");
+        let new = source.path().join("App.app");
+        bundle(&new, "new");
+        let staged = crate::update::tests::stage(Package::App, &archive_of(&new, "App.app")).await;
+
+        let outcome = install_bundle_swapping(
+            &launched(&installed),
+            &mut staged.reverify().expect("verified"),
+            &NoSignature,
+            "",
+            exchange_over_another_bundle_and_fail_back,
+        );
+
+        let kept = dir.path().join(KEPT_APP);
+        assert_eq!(outcome.ok(), Some(Installed::Relaunch { kept_aside: vec![kept.clone()] }));
+        assert_eq!(version(&installed), "new");
+        assert_eq!(version(&kept), "foreign", "the other bundle is kept, not deleted with staging");
+        assert_eq!(version(&dir.path().join("moved-away.app")), "old");
     }
 
     /// The two-moves undo moves onto nothing: an empty directory another
@@ -1619,8 +1739,6 @@ mod tests {
         use std::path::{Path, PathBuf};
         use std::process::Command;
 
-        use flate2::write::GzEncoder;
-        use flate2::Compression;
         use sha2::{Digest as _, Sha256};
 
         use super::super::super::codesign::probe_bundle;
@@ -1628,7 +1746,7 @@ mod tests {
             administrator_script, applescript_string, entry_id, osascript, Identity,
             PrivilegedInstall, COPY_SECONDS, RENAME_JXA,
         };
-        use super::{bundle, owner, replace_installed, version};
+        use super::{archive_of, bundle, owner, replace_installed, version};
         use crate::update::UpdateError;
 
         /// Names `sh` and `AppleScript` would both misread unquoted.
@@ -1643,13 +1761,6 @@ mod tests {
                 .prefix("it's \"a\" \\ $(touch pwned) `dir`\n")
                 .tempdir()
                 .expect("tempdir")
-        }
-
-        /// `app` as a `.app.tar.gz` holding it as `name`.
-        fn archive_of(app: &Path, name: &str) -> Vec<u8> {
-            let mut builder = tar::Builder::new(GzEncoder::new(Vec::new(), Compression::fast()));
-            builder.append_dir_all(name, app).expect("archive the bundle");
-            builder.into_inner().expect("tar").finish().expect("gzip")
         }
 
         fn sha256(bytes: &[u8]) -> String {
@@ -2019,7 +2130,7 @@ function run(argv) {{
             let message = "0:1: execution error: The command exited with a non-zero status. (69)";
             assert!(matches!(
                 install.failure(message),
-                UpdateError::AppReplaced(detail) if detail.contains("nothing was installed")
+                UpdateError::AppReplaced { kept, .. } if kept.is_empty()
             ));
         }
 
@@ -2072,8 +2183,8 @@ function run(argv) {{
             );
 
             match refused {
-                Err(UpdateError::AppReplaced(detail)) => {
-                    assert!(detail.contains("nothing was installed"), "{detail}");
+                Err(UpdateError::AppReplaced { kept, .. }) => {
+                    assert!(kept.is_empty(), "{kept:?}");
                 }
                 other => panic!("not refused: {other:?}"),
             }
@@ -2133,13 +2244,11 @@ function run(argv) {{
 
             let message = String::from_utf8_lossy(&output.stderr);
             assert!(message.trim_end().ends_with("(69)"), "{message}");
-            let UpdateError::AppReplaced(detail) = install.failure(message.trim()) else {
+            let UpdateError::AppReplaced { kept, .. } = install.failure(message.trim()) else {
                 panic!("{message}");
             };
-            let kept = PathBuf::from(
-                detail.split_once("kept at ").unwrap_or_else(|| panic!("{detail}")).1,
-            );
-            assert_eq!(version(&kept), "foreign", "the other bundle is kept, not deleted");
+            let [kept] = kept.as_slice() else { panic!("{kept:?}") };
+            assert_eq!(version(kept), "foreign", "the other bundle is kept, not deleted");
             assert_eq!(version(&dir.path().join("moved-away.app")), "old");
             assert_eq!(version(&installed), "new");
         }
@@ -2428,7 +2537,7 @@ function run(argv) {{
                     UpdateError::Permission(_) => "permission",
                     UpdateError::Signature(_) => "signature",
                     UpdateError::Identity(_) => "identity",
-                    UpdateError::AppReplaced(_) => "app-replaced",
+                    UpdateError::AppReplaced { .. } => "app-replaced",
                     UpdateError::Install(_) => "install",
                     _ => "other",
                 })
@@ -2631,13 +2740,13 @@ function run(argv) {{
         assert_eq!(entry_id(&installed).ok(), Some(planted), "the planted directory is untouched");
         assert_eq!(fs::read_dir(&installed).expect("planted").count(), 0, "and still empty");
         assert!(matches!(second_move, Err(SwapError::Occupied)), "{second_move:?}");
-        let outcome = moves.fail(app_replaced(&installed, &[]));
+        let outcome = moves.fail(app_replaced(&installed, Vec::new()));
         let kept = dir.path().join(KEPT_APP);
         assert!(
             matches!(
                 &outcome,
                 UpdateError::PreviousAppNotRestored { kept: at, cause }
-                    if *at == kept && matches!(**cause, UpdateError::AppReplaced(_))
+                    if *at == kept && matches!(**cause, UpdateError::AppReplaced { .. })
             ),
             "{outcome}"
         );
