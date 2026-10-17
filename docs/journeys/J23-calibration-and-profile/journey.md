@@ -132,7 +132,7 @@ The user checks the pinned calibration for the sessions in Project `NGC 7000 HOO
 ### S11 — Apply the corrected values {#S11}
 
 - **Do:** Apply the reviewed View changes.
-- **Expect:** Apply patches all 20 corrected 24 Sep FITS lights and all 56 corrected 28 Sep FITS lights in the new Copies View. PlateVault's FITS reader returns `object = "NGC 7000"` for every reopened 24 Sep copy, and all 20 original digests are unchanged. For every reopened 28 Sep copy, it returns `telescope = "RedCat 51"`, `instrument = "ZWO ASI2600MM Pro"`, `focalLengthMm = 250`, `FOCALLEN = 250`, `FOCAL = 250`, and `FLENGTH = 0.25` meters. All 56 original digests are unchanged. J19/P2 gives the 20/56 counts and 28 Sep keywords; J15/P2 and J15/S3 give RedCat's 250 mm focal length; PREP-FR-21 gives `FLENGTH` units. S11 verifies FITS copy metadata, not tool consumption.
+- **Expect:** Apply patches all 20 corrected 24 Sep FITS lights and all 56 corrected 28 Sep FITS lights in the new Copies View. PlateVault's FITS reader returns `object = "NGC 7000"` for every reopened 24 Sep copy, and all 20 original digests are unchanged. For every reopened 28 Sep copy, it returns `telescope = "RedCat 51"`, `instrument = "ZWO ASI2600MM Pro"`, and `FOCALLEN = 250` millimetres. A source `FOCAL` card reads back as `FOCAL = 250` millimetres; a source `FLENGTH` card reads back as `FLENGTH = 0.25` metres. All 56 original digests are unchanged. J19/P2 lines 34 and 41 give the frame count and state that 28 Sep lacks `TELESCOP` and `FOCALLEN`; no `FOCAL` or `FLENGTH` is specified. J15/P2 and J15/S3 give RedCat's 250 mm focal length. S11 verifies FITS copy metadata, not tool consumption.
 - **Expect (negative):** No original or link target is patched, and no correction is reported as delivered while the application still reads the original value.
 - **Trace:** PREP-FR-03, PREP-FR-06, PREP-FR-09, PREP-FR-20, PREP-AC-06, PREP-AC-39 · VSEL-FR-14 · LIB-FR-12, LIB-FR-20 · D-W100, D-W122, D-W123 · J19/P2, J15/S3 · HARNESS-V5-FEEDBACK-R1.md Round 9 C15
 
@@ -145,7 +145,7 @@ The user checks the pinned calibration for the sessions in Project `NGC 7000 HOO
 - SC5: Hiding a master pinned on the Project is refused with the Project named; hiding and restoring an unused master changes no file bytes (S7b, S7c).
 - SC6: Siril and the input mode are chosen in View; an unknown or write-prone profile cannot use Symlinks without a refusal and explicit mode choice (S8, S9).
 - SC7: Apply patches all 20 corrected 24 Sep FITS lights with `OBJECT = 'NGC 7000'`. PlateVault's FITS reader returns that object value from every patched copy, and all 20 original digests remain unchanged (S10, S11).
-- SC8: Apply patches all 56 corrected 28 Sep FITS lights with the RedCat rig values from J19/P2 and J15/S3. PlateVault's reader returns `TELESCOP = 'RedCat 51'`, `INSTRUME = 'ZWO ASI2600MM Pro'`, `FOCALLEN = 250 mm`, `FOCAL = 250 mm` and `FLENGTH = 0.25 m` from every patched copy. All 56 original digests remain unchanged (S10, S11).
+- SC8: Apply patches all 56 corrected 28 Sep FITS lights with the RedCat rig values from J19/P2 and J15/S3. PlateVault's reader returns `TELESCOP = 'RedCat 51'`, `INSTRUME = 'ZWO ASI2600MM Pro'` and `FOCALLEN = 250 mm` from every patched copy. Where a source frame contains `FOCAL`, the patched value is 250 mm; where it contains `FLENGTH`, the patched value is 0.25 m. All 56 original digests remain unchanged (S10, S11).
 
 ## Known gaps
 
