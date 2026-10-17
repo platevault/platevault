@@ -98,6 +98,9 @@ function reportRawColorsInExpression(expression, report) {
   }
 
   switch (expression.type) {
+    case 'SequenceExpression':
+      reportRawColorsInExpression(expression.expressions.at(-1), report);
+      return;
     case 'ConditionalExpression':
       reportRawColorsInExpression(expression.consequent, report);
       reportRawColorsInExpression(expression.alternate, report);
@@ -109,15 +112,18 @@ function reportRawColorsInExpression(expression, report) {
     case 'TemplateLiteral':
       const quasis = expression.quasis.map((quasi) => quasi.value.cooked ?? quasi.value.raw);
       const staticParts = expression.expressions.map((part) => {
-        if (part.type === 'Literal' && typeof part.value === 'string') return part.value;
-        if (part.type === 'StringLiteral') return part.value;
+        let literal = part;
+        while (
+          ['ChainExpression', 'ParenthesizedExpression', 'TSAsExpression', 'TSSatisfiesExpression', 'TSNonNullExpression', 'TypeCastExpression'].includes(literal.type)
+        ) literal = literal.expression;
+        if ((literal.type === 'Literal' || literal.type === 'StringLiteral') && typeof literal.value === 'string') return literal.value;
         return '\u0000';
       });
       const staticText = quasis.reduce(
         (text, quasi, index) => text + quasi + (staticParts[index] ?? ''),
         '',
       );
-      if (expression.expressions.every((part) => part.type === 'Literal' || part.type === 'StringLiteral')) {
+      if (staticParts.every((part) => part !== '\u0000')) {
         if (isRawColor(staticText)) report();
         return;
       }
@@ -170,9 +176,28 @@ function reportRawColorsInExpression(expression, report) {
         const quasi = quasis[index] ?? '';
         scanText(quasi);
         if (index < expression.expressions.length) {
-          if (mode === 'normal' && /#\s*$/.test(quasi)) report();
+          let interpolationHandled = false;
+          if (mode === 'variable-name') {
+            const source = expression.expressions[index];
+            const branches = source.type === 'ConditionalExpression'
+              ? [source.consequent, source.alternate]
+              : [source];
+            const values = branches.map((branch) =>
+              (branch.type === 'Literal' || branch.type === 'StringLiteral') && typeof branch.value === 'string'
+                ? branch.value
+                : '',
+            );
+            if (values.some((value) => value.includes(','))) {
+              interpolationHandled = true;
+              mode = 'normal';
+              for (const value of values) {
+                const comma = value.indexOf(',');
+                if (comma >= 0 && isRawColor(value.slice(comma + 1))) report();
+              }
+            }
+          } else if (mode === 'normal' && /#\s*$/.test(quasi)) report();
           if (mode === 'normal' && /#[0-9a-f]+$/i.test(quasi)) report();
-          if (mode === 'normal') {
+          if (mode === 'normal' && !interpolationHandled) {
             reportRawColorsInExpression(expression.expressions[index], report);
             scanText('x');
           }

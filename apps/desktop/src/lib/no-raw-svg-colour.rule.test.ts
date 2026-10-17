@@ -296,4 +296,23 @@ describe('svg/no-raw-svg-colour', () => {
     expect(namedColor).toHaveLength(1);
     expect(colorFunction).toHaveLength(1);
   });
+  it('flags static template colors and sequence-expression paint values', () => {
+    const wrappedTemplate = lint(
+      "const svg = <svg fill={`re${'d' as const}`} />;",
+    );
+    const sequence = lint(
+      "const svg = <svg fill={(recordMetric(), '#fff')} />;",
+    );
+
+    expect(wrappedTemplate).toHaveLength(1);
+    expect(sequence).toHaveLength(1);
+  });
+
+  it('checks fallback text introduced by a var-name interpolation', () => {
+    const diagnostics = lint(
+      "const svg = <svg fill={`var(--pv-accent${enabled ? ', red' : ''})`} />;",
+    );
+
+    expect(diagnostics).toHaveLength(1);
+  });
 });
