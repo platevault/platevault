@@ -70,6 +70,7 @@ pub struct NamingTemplate {
 /// token's fallback. `date` is the ISO observing-night local date.
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct NamingMetadata {
     pub target: Option<String>,
     pub filter: Option<String>,
@@ -95,6 +96,7 @@ pub struct NamingFallback {
 /// every fallback used, in template order.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct NamingResolution {
     pub template: String,
     pub relative_path: String,

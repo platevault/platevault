@@ -100,7 +100,7 @@ pub struct GroupKeywords {
 }
 
 #[derive(Deserialize)]
-#[cfg_attr(feature = "wire", derive(schemars::JsonSchema))]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 struct KeywordNames {
     group: GroupKeyword,
     panel: GroupKeyword,

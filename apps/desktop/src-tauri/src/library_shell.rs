@@ -237,7 +237,14 @@ macro_rules! library_commands {
 #[must_use]
 pub fn library_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
     use tauri_specta::collect_commands;
-    tauri_specta::Builder::<tauri::Wry>::new().commands(library_commands!(collect_commands))
+    tauri_specta::Builder::<tauri::Wry>::new()
+        // As in the legacy builder: `serde_json::Value` is registered as a
+        // named type so its self-referential shape is emitted once rather than
+        // inlined forever, and 64-bit integers (sizes, counts, revisions) are
+        // JSON numbers on this wire, so they export as `number`.
+        .dangerously_cast_bigints_to_number()
+        .typ::<serde_json::Value>()
+        .commands(library_commands!(collect_commands))
 }
 
 /// Build the shell, open its catalog and run the event loop.
