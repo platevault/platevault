@@ -111,10 +111,11 @@ function reportRawColorsInExpression(expression, report) {
         const quasi = expression.quasis[index];
         const text = quasi.value.cooked ?? quasi.value.raw;
         accumulatedText += text;
+        const insideUrl = /url\([^)]*$/i.test(accumulatedText);
         if (
-          isRawColor(text) ||
+          (!insideUrl && isRawColor(text)) ||
           (index < expression.expressions.length &&
-            !/url\([^)]*$/i.test(accumulatedText) &&
+            !insideUrl &&
             /(?:#|(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\()\s*$/i.test(accumulatedText))
         ) {
           report();
