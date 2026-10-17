@@ -6,7 +6,7 @@ import { createSeed } from "@/domain/seed"
 import { m, say } from "@/lib/i18n"
 import { SCHEMA_VERSION, store } from "@/store/core"
 import { initialSliceStates, sliceVersions } from "@/store/slices"
-import { ActivityPage, destinationLabel } from "./activity"
+import { ActivityPage, openLabel } from "./activity"
 
 beforeEach(() => {
   store.replace({ ...createSeed("demo"), schemaVersion: SCHEMA_VERSION, sliceVersions: sliceVersions(), slices: initialSliceStates() })
@@ -41,7 +41,13 @@ describe("Activity", () => {
     renderActivity()
 
     await user.click(await screen.findByRole("button", { name: m.actions_for({ name: say(m, event!.title) }) }))
-    await user.click(await screen.findByRole("menuitem", { name: m.activity_open_destination({ name: destinationLabel(event!.href!) }) }))
+    await user.click(await screen.findByRole("menuitem", { name: openLabel(event!.href!) }))
     await waitFor(() => expect(window.location.hash).toBe(`#${event!.href}`))
+  })
+
+  it("names the Open item after the surface it opens, and plain Open for a page with no name", () => {
+    expect(openLabel("/settings/equipment")).toBe(m.activity_open_destination({ name: m.settings_equipment() }))
+    expect(openLabel("/sessions/ses_1")).toBe(m.activity_open_destination({ name: m.activity_destination_session() }))
+    expect(openLabel("/no-such-surface")).toBe(m.verb_open())
   })
 })

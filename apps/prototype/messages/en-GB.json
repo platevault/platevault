@@ -112,9 +112,8 @@
   "palette_single_key_on": "Single-key shortcuts: On",
   "shortcuts_title": "Keyboard shortcuts",
   "shortcuts_show": "Show keyboard shortcuts",
-  "shortcuts_description": "Shortcuts are off while you type in a field.",
   "shortcuts_single_key": "Single-key shortcuts",
-  "shortcuts_single_key_hint": "?, /, [, G sequences and Space on a table row. Turn off if you use speech input or press keys by accident; {mod}K and {escape} stay on.",
+  "shortcuts_single_key_hint": "?, /, [, G sequences and Space on a table row · {mod}K and {escape} stay on",
   "shortcuts_search": "Search or jump to anything",
   "shortcuts_focus_search": "Focus the page search or filter",
   "shortcuts_toggle_sidebar": "Collapse or expand the sidebar",
@@ -859,10 +858,7 @@
   "import_nothing_new": "Nothing new",
   "import_move_blocked": "Move: {reason}",
   "session_open_sessions": "Open Sessions",
-  "session_process_stacking": "Stacking",
-  "session_process_importing": "Importing master",
   "session_process_trashing": "Trashing raws",
-  "session_process_done": "Master registered",
   "session_open_calibration": "Open Calibration",
   "session_step_failed": "{step} failed",
   "session_in_os_trash": "In the OS Trash",
@@ -878,13 +874,12 @@
   "session_column_copies": "Copies",
   "session_column_sha": "SHA-256",
   "session_copy_path": "Copy path",
-  "session_source_of": "Source of {value}",
   "session_header_source": "Header {keyword}",
   "session_observing_night": "Observing night",
   "session_started": "Started",
   "session_ended": "Ended",
   "session_frame_type": "Frame type",
-  "session_typed_at_import": "Typed at import; the header has none",
+  "session_typed_at_import": "Typed at import",
   "session_filter": "Filter",
   "session_camera": "Camera",
   "session_telescope": "Telescope",
@@ -912,7 +907,7 @@
   "import_cant_import": "Can't import",
   "import_choose_source": "Choose a source",
   "import_move": "Move",
-  "import_verifies_copies": "Verifies each copy (SHA-256)",
+  "import_verifies_copies": "SHA-256 verified",
   "import_selected": "Selected",
   "import_new": "Import new",
   "import_all": "Import all",
@@ -926,7 +921,6 @@
   "import_choose_folder_description": "Device, folder or mounted share",
   "import_from_verb": "Import from",
   "import_column_folder": "Folder",
-  "import_fallback_used": "No value for {tokens}: its fallback is used",
   "import_fallback": "Fallback",
   "import_column_type": "Type",
   "import_type_typed": "{type} (typed)",
@@ -996,57 +990,8 @@
       }
     }
   ],
-  "import_copies_into": [
-    {
-      "declarations": [
-        "input count",
-        "input frames",
-        "input size",
-        "input locations",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Copies {frames} frame ({size}) into {locations}",
-        "countPlural=*": "Copies {frames} frames ({size}) into {locations}"
-      }
-    }
-  ],
-  "import_sends_to_trash": [
-    {
-      "declarations": [
-        "input count",
-        "input sources",
-        "input volume",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Sends {sources} verified source on {volume} to the OS Trash",
-        "countPlural=*": "Sends {sources} verified sources on {volume} to the OS Trash"
-      }
-    }
-  ],
-  "import_sends_source_to_trash": [
-    {
-      "declarations": [
-        "input count",
-        "input sources",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Sends {sources} verified source on the source to the OS Trash",
-        "countPlural=*": "Sends {sources} verified sources on the source to the OS Trash"
-      }
-    }
-  ],
+  "import_copies_into": "{size} → {locations}",
+  "import_sends_to_trash": "sources on {volume} → OS Trash",
   "import_file_count": [
     {
       "declarations": [
@@ -1068,12 +1013,10 @@
   "import_duplicates": "Duplicates",
   "import_match_sha": "SHA-256 of a library frame",
   "import_name_taken": "Name taken",
-  "import_name_taken_detail": "holds different bytes; nothing is overwritten",
+  "import_name_taken_detail": "Different bytes",
   "import_library_frames": "Library frames · {count}",
   "import_copy_or_move": "Copy or Move",
   "import_copy": "Copy",
-  "import_copy_detail": "verified by SHA-256; the source stays",
-  "import_move_detail": "verified by SHA-256, then the source goes to the OS Trash",
   "import_imported": "Imported",
   "import_more": "Import more",
   "import_show_in_calibration": "Show in Calibration",
@@ -1790,14 +1733,13 @@
   "activity_empty_operations": "No operations",
   "activity_filter_refusals": "Refusals",
   "activity_empty_refusals": "No refusals",
-  "activity_empty_not_saved": "No not saved",
-  "activity_empty_saved": "No saved",
+  "activity_empty_not_saved": "No failed saves",
+  "activity_empty_saved": "No saves",
   "activity_destination_setup": "Setup",
   "activity_destination_target": "Target",
   "activity_destination_session": "Session",
   "activity_destination_project": "Project",
   "activity_destination_about": "About",
-  "activity_destination_page": "page",
   "activity_recorded": "Recorded",
   "activity_refused": "Refused",
   "activity_open_destination": "Open {name}",
@@ -3646,7 +3588,6 @@
       }
     }
   ],
-  "store_library_scope_detail": "Library scope: every run and Target sees this decision.",
   "store_catalog_only_detail": "{name}. Catalog only; source headers unchanged.",
   "store_label_add_to_my_targets": "Add {name} to My targets",
   "store_label_remove_from_my_targets": "Remove {name} from My targets",
@@ -4459,8 +4400,8 @@
       }
     }
   ],
-  "sessions_none_need_target": "No selected session needs a Target",
-  "sessions_none_need_rig": "No selected session needs a rig",
+  "sessions_none_need_target": "None needs a Target",
+  "sessions_none_need_rig": "None needs a rig",
   "sessions_review_duplicates": "Review duplicates",
   "session_source_used": "Used",
   "session_target_sources": "Target sources for {name}",
@@ -4603,9 +4544,6 @@
   "shell_quit_app": "Quit PlateVault",
   "onboarding_walk_sources_title": "Sources",
   "onboarding_walk_sources": "Home · Projects · Targets · Library",
-  "onboarding_walk_issues": "Everything that needs attention",
-  "onboarding_walk_next_title": "Next",
-  "onboarding_walk_next": "Next step per Project",
   "onboarding_walk_status_title": "Status",
   "onboarding_walk_status": "Work · Issues · Notifications",
   "onboarding_walk_targets": "Targets · Catalogues · Plan",
@@ -4630,8 +4568,6 @@
   "domain_mode_symlink": "Symlinks",
   "settings_default_input_mode": "Default View mode",
   "settings_developer_mode": "Windows Developer Mode",
-  "settings_developer_mode_on": "On",
-  "settings_developer_mode_off": "Off",
   "settings_open_windows_settings": "Open Windows settings",
   "onboarding_check_developer_mode": "Turn on Windows Developer Mode",
   "onboarding_check_apply": "Apply your first Project",
@@ -6043,20 +5979,18 @@
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} frame has no RA/DEC, so it stays in this session",
-        "countPlural=*": "{count} frames have no RA/DEC, so they stay in this session"
+        "countPlural=one": "{count} frame · kept in this session",
+        "countPlural=*": "{count} frames · kept in this session"
       }
     }
   ],
   "import_in_this_import": "in this import",
   "import_add_calibration_files_ellipsis": "Add calibration files…",
   "import_reset_calibration": "Reset choices",
-  "import_calibration_description": "Import doesn't wait for calibration. A kind left for later waits in Needs calibration.",
   "import_added_folders": "Folders added to this import",
   "import_remove_folder": "Remove folder",
   "import_calibration_of_sessions": "Calibration of the new sessions",
   "import_add_calibration_title": "Add calibration files",
-  "import_add_calibration_description": "Choose a folder of darks, flats, bias or masters: its files join this import.",
   "import_needs_calibration_count": "Needs calibration · {count}",
   "session_associated_counts": "From pointing, counts as confirmed",
   "calibration_summary_suggested": "{kind} suggested",
@@ -6129,7 +6063,7 @@
       }
     }
   ],
-  "sessions_no_choice_none": "Every selected session has this kind settled",
+  "sessions_no_choice_none": "Already settled",
   "sessions_set_no_title": [
     {
       "declarations": [
@@ -6145,7 +6079,6 @@
       }
     }
   ],
-  "sessions_set_no_summary": "Each counts as settled without it, and no reason is asked. Choose ▸ on a session pins one later.",
   "intake_review_held_title": [
     {
       "declarations": [
@@ -6161,8 +6094,8 @@
       }
     }
   ],
-  "intake_review_held_open": "Open Projects get your marks as pending changes until their next Apply: {names}.",
-  "intake_review_held_closed": "Closed Projects keep their Close snapshot: {names}.",
+  "intake_review_held_open": "Pending changes: {names}",
+  "intake_review_held_closed": "Close snapshot kept: {names}",
   "home_pending_group": "{group} · {count}",
   "home_choose_calibration": "Choose calibration",
   "help_tip_marks_library": "P, X and U mark the frame in the library, so every Project reads the same mark: an open Project gets it as a pending change, a Closed one keeps its snapshot.",

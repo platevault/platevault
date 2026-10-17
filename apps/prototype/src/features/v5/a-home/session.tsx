@@ -23,16 +23,15 @@ import { useFollowLink } from "@/components/app/links"
 import { rowIssues, withIssueItems } from "@/components/app/issue-actions"
 import { BoxTable } from "@/components/app/box"
 import type { Action, Column, MenuItem } from "@/components/app/contracts"
-import { KeyValueList, PathText } from "@/components/app/data"
+import { type KeyValueItem, KeyValueList, PathText } from "@/components/app/data"
 import type { PageNotice } from "@/components/app/feedback"
 import { Pill } from "@/components/app/pill"
 import { StatusBadge } from "@/components/app/status"
-import { NoteMarker } from "@/components/app/tips"
 import { CalibrationChoices, calibrationChoiceRows } from "@/components/domain/calibration-choices"
 import { DuplicatesBadge } from "@/components/domain/duplicates-badge"
 import { DetailPage } from "@/components/templates/detail-page"
 import { CHOICE_STATE_NAME, KIND_NAME, NO_KIND_NAME, PIN_KINDS, sessionPinProblems } from "@/domain/calibration"
-import { CALIBRATION_STEP_NAME, processForSession, processView, type ProcessStatus } from "@/domain/calibration-process"
+import { CALIBRATION_STEP_NAME, processForSession, processView } from "@/domain/calibration-process"
 import { findGroup, findInput, formatHours, isLocked, sessionIntakeEntry, sessionIntakeLink, type SessionReadiness, sessionRigId, sessionTargetId } from "@/domain/derive"
 import { sessionRigVersion } from "@/domain/indexing"
 import { assetAvailability, captureSite, qualityApplicability } from "@/domain/library"
@@ -57,15 +56,6 @@ export function SessionPage() {
   return session.imageType === "light" ? <SessionDetail session={session} /> : <CalibrationSession session={session} />
 }
 
-const PROCESS_STATUS: Record<ProcessStatus, { label: (m: Messages) => string; tone: "info" | "danger" | "success" }> = {
-  "awaiting-stack": { label: (m) => m.import_route_stack(), tone: "info" },
-  stacking: { label: (m) => m.session_process_stacking(), tone: "info" },
-  importing: { label: (m) => m.session_process_importing(), tone: "info" },
-  "trashing-raws": { label: (m) => m.session_process_trashing(), tone: "info" },
-  failed: { label: (m) => m.status_failed(), tone: "danger" },
-  done: { label: (m) => m.session_process_done(), tone: "success" },
-}
-
 /** Raw calibration frames are input to a calibration process, never a library session (P-CAL3). */
 function CalibrationSession({ session }: { session: Session }) {
   const m = useMessages()
@@ -74,7 +64,6 @@ function CalibrationSession({ session }: { session: Session }) {
     const process = processForSession(s.catalog, session.id)
     return process ? processView(s.catalog, process) : null
   })
-  const status = view ? PROCESS_STATUS[view.status] : null
   const items = [
     { label: m.session_observing_night(), value: formatNight(session.night, true) },
     { label: m.session_frame_type(), value: typeLabel(m, session.imageType) },
@@ -86,7 +75,7 @@ function CalibrationSession({ session }: { session: Session }) {
     <DetailPage
       path={[{ label: m.nav_sessions(), link: { to: "/sessions" } }]}
       title={sessionLongLabel(m, session)}
-      status={status ? <Pill tone={status.tone}>{status.label(m)}</Pill> : <Pill tone="muted">{m.status_role_calibration()}</Pill>}
+      status={view ? <StatusBadge kind="process" value={view.status} /> : <StatusBadge kind="role" value="calibration" />}
       actions={[{ id: "open-calibration", label: m.session_open_calibration(), run: () => void navigate({ to: "/calibration" }) }]}
       sections={[{ id: "calibration", title: m.status_role_calibration(), content: <KeyValueList items={items} columns={2} /> }]}
     />
@@ -151,7 +140,7 @@ export function AssociatedTargetNote() {
   const m = useMessages()
   return (
     <>
-      <StatusBadge kind="association" value="associated" label={m.session_associated_counts()} /> <Pill tone="muted">{m.status_provisional()}</Pill>
+      <StatusBadge kind="association" value="associated" label={m.session_associated_counts()} /> <StatusBadge kind="rule" value="provisional" />
     </>
   )
 }
@@ -321,7 +310,7 @@ function FramesTable({ state, assets, session, reviewable }: { state: PrototypeS
   return <BoxTable label={m.sessions_column_frames()} rows={assets} columns={columns} getRowId={(a) => a.id} rowLabel={(a) => a.fileName} rowActions={items} initialSort={{ columnId: "file", direction: "asc" }} />
 }
 
-/** Header values; where each came from sits in its note. */
+/** Header values. The section says where they come from; a frame type set at import says so beside it. */
 function Metadata({ state, session, hours }: { state: PrototypeState; session: Session; hours: string }) {
   const { catalog } = state
   const m = useMessages()
@@ -329,27 +318,21 @@ function Metadata({ state, session, hours }: { state: PrototypeState; session: S
   const header = first?.observed
   const site = captureSite(catalog, session)
   const locations = [...new Set(session.assetIds.flatMap((id) => catalog.assets[id]?.copies.map((c) => c.locationId) ?? []))].map((id) => catalog.locations[id]?.displayName ?? id)
-  const sourced = (value: string, source: string) => (
-    <>
-      {value} <NoteMarker label={m.session_source_of({ value })} rows={[{ label: m.evidence_column_source(), value: source }]} />
-    </>
-  )
-  const fromHeader = (keyword: string) => m.session_header_source({ keyword })
   const typedAtImport = first && first.imageType !== first.observed.imageType
-  const items = [
+  const items: KeyValueItem[] = [
     { label: m.session_observing_night(), value: formatNight(session.night, true) },
     // OBJECT is a label and filter, never Target evidence.
-    { label: m.session_header_label(), value: sourced(session.objectLabel ?? m.session_none(), fromHeader("OBJECT")) },
-    { label: m.session_started(), value: sourced(formatDateTime(session.startedAt), fromHeader("DATE-OBS")) },
+    { label: m.session_header_label(), value: session.objectLabel ?? m.session_none() },
+    { label: m.session_started(), value: formatDateTime(session.startedAt) },
     { label: m.session_ended(), value: formatDateTime(session.endedAt) },
-    { label: m.session_frame_type(), value: typedAtImport ? sourced(typeLabel(m, first.imageType), m.session_typed_at_import()) : sourced(typeLabel(m, session.imageType), fromHeader("IMAGETYP")) },
-    { label: m.session_filter(), value: sourced(session.channel ?? m.session_none(), fromHeader("FILTER")) },
-    { label: m.session_column_exposure(), value: sourced(formatExposure(session.exposureS), fromHeader("EXPTIME")) },
+    typedAtImport ? { label: m.session_frame_type(), value: typeLabel(m, first.imageType), source: m.session_typed_at_import() } : { label: m.session_frame_type(), value: typeLabel(m, session.imageType) },
+    { label: m.session_filter(), value: session.channel ?? m.session_none() },
+    { label: m.session_column_exposure(), value: formatExposure(session.exposureS) },
     { label: m.session_integration(), value: hours },
-    { label: m.session_camera(), value: sourced(session.cameraName ?? m.status_unknown(), fromHeader("INSTRUME")) },
-    { label: m.session_telescope(), value: sourced(session.telescopeName ?? m.status_unknown(), fromHeader("TELESCOP")) },
+    { label: m.session_camera(), value: session.cameraName ?? m.status_unknown() },
+    { label: m.session_telescope(), value: session.telescopeName ?? m.status_unknown() },
     { label: m.session_gain_offset(), value: `${session.gain ?? "–"} · ${session.offset ?? "–"}` },
-    { label: m.session_sensor_temperature(), value: sourced(session.ccdTempC === null ? m.status_unknown() : `${session.ccdTempC} °C`, fromHeader("CCD-TEMP")) },
+    { label: m.session_sensor_temperature(), value: session.ccdTempC === null ? m.status_unknown() : `${session.ccdTempC} °C` },
     { label: m.evidence_source_pointing(), value: header?.ra != null && header.dec != null ? `${formatRa(header.ra)} ${formatDec(header.dec)}` : "–" },
     { label: m.session_capture_site(), value: site ? site.name : m.status_unknown() },
     { label: m.common_locations(), value: locations.join(", ") || m.session_none() },

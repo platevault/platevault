@@ -116,9 +116,8 @@
   "palette_single_key_on": "Atalhos de uma tecla: ligados",
   "shortcuts_title": "Atalhos de teclado",
   "shortcuts_show": "Mostrar atalhos de teclado",
-  "shortcuts_description": "Os atalhos ficam desligados enquanto você digita em um campo.",
   "shortcuts_single_key": "Atalhos de uma tecla",
-  "shortcuts_single_key_hint": "?, /, [, sequências com G e Espaço numa linha de tabela. Desligue se você usa entrada por voz ou pressiona teclas sem querer; {mod}K e {escape} continuam ligados.",
+  "shortcuts_single_key_hint": "?, /, [, sequências com G e Espaço numa linha de tabela · {mod}K e {escape} continuam ligados",
   "shortcuts_search": "Buscar ou ir para qualquer lugar",
   "shortcuts_focus_search": "Focar a busca ou o filtro da página",
   "shortcuts_toggle_sidebar": "Recolher ou expandir a barra lateral",
@@ -913,10 +912,7 @@
   "import_nothing_new": "Nada novo",
   "import_move_blocked": "Mover: {reason}",
   "session_open_sessions": "Abrir Sessões",
-  "session_process_stacking": "Empilhando",
-  "session_process_importing": "Importando master",
   "session_process_trashing": "Movendo brutos para a Lixeira",
-  "session_process_done": "Master registrado",
   "session_open_calibration": "Abrir Calibração",
   "session_step_failed": "{step} falhou",
   "session_in_os_trash": "Na Lixeira do sistema",
@@ -932,13 +928,12 @@
   "session_column_copies": "Cópias",
   "session_column_sha": "SHA-256",
   "session_copy_path": "Copiar caminho",
-  "session_source_of": "Origem de {value}",
   "session_header_source": "Cabeçalho {keyword}",
   "session_observing_night": "Noite de observação",
   "session_started": "Início",
   "session_ended": "Fim",
   "session_frame_type": "Tipo de frame",
-  "session_typed_at_import": "Tipo definido na importação; o cabeçalho não tem",
+  "session_typed_at_import": "Tipo definido na importação",
   "session_filter": "Filtro",
   "session_camera": "Câmera",
   "session_telescope": "Telescópio",
@@ -968,7 +963,7 @@
   "import_cant_import": "Não é possível importar",
   "import_choose_source": "Escolha uma origem",
   "import_move": "Mover",
-  "import_verifies_copies": "Verifica cada cópia (SHA-256)",
+  "import_verifies_copies": "SHA-256 verificado",
   "import_selected": "Selecionado",
   "import_new": "Importar novos",
   "import_all": "Importar todos",
@@ -982,7 +977,6 @@
   "import_choose_folder_description": "Dispositivo, pasta ou compartilhamento montado",
   "import_from_verb": "Importar de",
   "import_column_folder": "Pasta",
-  "import_fallback_used": "Sem valor para {tokens}: usa o valor alternativo",
   "import_fallback": "Alternativo",
   "import_column_type": "Tipo",
   "import_type_typed": "{type} (definido)",
@@ -1058,63 +1052,8 @@
       }
     }
   ],
-  "import_copies_into": [
-    {
-      "declarations": [
-        "input count",
-        "input frames",
-        "input size",
-        "input locations",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "count",
-        "countPlural"
-      ],
-      "match": {
-        "count=0, countPlural=*": "Copia {frames} frames ({size}) para {locations}",
-        "count=*, countPlural=one": "Copia {frames} frame ({size}) para {locations}",
-        "count=*, countPlural=*": "Copia {frames} frames ({size}) para {locations}"
-      }
-    }
-  ],
-  "import_sends_to_trash": [
-    {
-      "declarations": [
-        "input count",
-        "input sources",
-        "input volume",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "count",
-        "countPlural"
-      ],
-      "match": {
-        "count=0, countPlural=*": "Envia {sources} originais verificados em {volume} para a Lixeira do sistema",
-        "count=*, countPlural=one": "Envia {sources} original verificado em {volume} para a Lixeira do sistema",
-        "count=*, countPlural=*": "Envia {sources} originais verificados em {volume} para a Lixeira do sistema"
-      }
-    }
-  ],
-  "import_sends_source_to_trash": [
-    {
-      "declarations": [
-        "input count",
-        "input sources",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "count",
-        "countPlural"
-      ],
-      "match": {
-        "count=0, countPlural=*": "Envia {sources} originais verificados na origem para a Lixeira do sistema",
-        "count=*, countPlural=one": "Envia {sources} original verificado na origem para a Lixeira do sistema",
-        "count=*, countPlural=*": "Envia {sources} originais verificados na origem para a Lixeira do sistema"
-      }
-    }
-  ],
+  "import_copies_into": "{size} → {locations}",
+  "import_sends_to_trash": "origens em {volume} → Lixeira do sistema",
   "import_file_count": [
     {
       "declarations": [
@@ -1154,12 +1093,10 @@
   "import_duplicates": "Duplicados",
   "import_match_sha": "SHA-256 de um frame da biblioteca",
   "import_name_taken": "Nome em uso",
-  "import_name_taken_detail": "tem bytes diferentes; nada é sobrescrito",
+  "import_name_taken_detail": "Bytes diferentes",
   "import_library_frames": "Frames da biblioteca · {count}",
   "import_copy_or_move": "Copiar ou Mover",
   "import_copy": "Copiar",
-  "import_copy_detail": "verificado por SHA-256; o original fica",
-  "import_move_detail": "verificado por SHA-256; depois o original vai para a Lixeira do sistema",
   "import_imported": "Importados",
   "import_more": "Importar mais",
   "import_show_in_calibration": "Mostrar em Calibração",
@@ -1932,14 +1869,13 @@
   "activity_empty_operations": "Nenhuma operação",
   "activity_filter_refusals": "Recusas",
   "activity_empty_refusals": "Nenhuma recusa",
-  "activity_empty_not_saved": "Nenhum não salvo",
-  "activity_empty_saved": "Nenhum salvo",
+  "activity_empty_not_saved": "Nenhuma falha ao salvar",
+  "activity_empty_saved": "Nenhum salvamento",
   "activity_destination_setup": "Configuração inicial",
   "activity_destination_target": "Alvo",
   "activity_destination_session": "Sessão",
   "activity_destination_project": "Projeto",
   "activity_destination_about": "Sobre",
-  "activity_destination_page": "página",
   "activity_recorded": "Registrado",
   "activity_refused": "Recusado",
   "activity_open_destination": "Abrir {name}",
@@ -3922,7 +3858,6 @@
       }
     }
   ],
-  "store_library_scope_detail": "Escopo da biblioteca: todas as execuções e Alvos veem esta decisão.",
   "store_catalog_only_detail": "{name}. Somente o catálogo; cabeçalhos de origem inalterados.",
   "store_label_add_to_my_targets": "Adicionar {name} a Meus alvos",
   "store_label_remove_from_my_targets": "Remover {name} de Meus alvos",
@@ -4807,8 +4742,8 @@
       }
     }
   ],
-  "sessions_none_need_target": "Nenhuma sessão selecionada precisa de Alvo",
-  "sessions_none_need_rig": "Nenhuma sessão selecionada precisa de setup",
+  "sessions_none_need_target": "Nenhuma precisa de Alvo",
+  "sessions_none_need_rig": "Nenhuma precisa de setup",
   "sessions_review_duplicates": "Revisar duplicatas",
   "session_source_used": "Em uso",
   "session_target_sources": "Origens do Alvo de {name}",
@@ -4963,9 +4898,6 @@
   "shell_quit_app": "Sair do PlateVault",
   "onboarding_walk_sources_title": "Navegação",
   "onboarding_walk_sources": "Início · Projetos · Alvos · Biblioteca",
-  "onboarding_walk_issues": "Tudo o que precisa de atenção",
-  "onboarding_walk_next_title": "Próximo",
-  "onboarding_walk_next": "Próximo passo de cada Projeto",
   "onboarding_walk_status_title": "Status",
   "onboarding_walk_status": "Trabalho · Problemas · Notificações",
   "onboarding_walk_targets": "Alvos · Catálogos · Plano",
@@ -4990,8 +4922,6 @@
   "domain_mode_symlink": "Links simbólicos",
   "settings_default_input_mode": "Modo padrão da View",
   "settings_developer_mode": "Modo de Desenvolvedor do Windows",
-  "settings_developer_mode_on": "Ligado",
-  "settings_developer_mode_off": "Desligado",
   "settings_open_windows_settings": "Abrir configurações do Windows",
   "onboarding_check_developer_mode": "Ative o Modo de Desenvolvedor do Windows",
   "onboarding_check_apply": "Aplique seu primeiro Projeto",
@@ -6484,21 +6414,19 @@
         "countPlural"
       ],
       "match": {
-        "count=0, countPlural=*": "{count} frames sem RA/DEC ficam nesta sessão",
-        "count=*, countPlural=one": "{count} frame sem RA/DEC fica nesta sessão",
-        "count=*, countPlural=*": "{count} frames sem RA/DEC ficam nesta sessão"
+        "count=0, countPlural=*": "{count} frames · ficam nesta sessão",
+        "count=*, countPlural=one": "{count} frame · fica nesta sessão",
+        "count=*, countPlural=*": "{count} frames · ficam nesta sessão"
       }
     }
   ],
   "import_in_this_import": "nesta importação",
   "import_add_calibration_files_ellipsis": "Adicionar arquivos de calibração…",
   "import_reset_calibration": "Redefinir escolhas",
-  "import_calibration_description": "A importação não espera pela calibração. Um tipo deixado para depois aguarda em Calibração pendente.",
   "import_added_folders": "Pastas adicionadas a esta importação",
   "import_remove_folder": "Remover pasta",
   "import_calibration_of_sessions": "Calibração das novas sessões",
   "import_add_calibration_title": "Adicionar arquivos de calibração",
-  "import_add_calibration_description": "Escolha uma pasta de darks, flats, bias ou masters: os arquivos dela entram nesta importação.",
   "import_needs_calibration_count": "Calibração pendente · {count}",
   "session_associated_counts": "Pelo apontamento, conta como confirmado",
   "calibration_summary_suggested": "{kind} sugerido",
@@ -6579,7 +6507,7 @@
       }
     }
   ],
-  "sessions_no_choice_none": "Todas as sessões selecionadas já têm este tipo resolvido",
+  "sessions_no_choice_none": "Já resolvido",
   "sessions_set_no_title": [
     {
       "declarations": [
@@ -6597,7 +6525,6 @@
       }
     }
   ],
-  "sessions_set_no_summary": "Cada uma conta como resolvida sem ele, sem pedir motivo. Escolher ▸ numa sessão fixa um depois.",
   "intake_review_held_title": [
     {
       "declarations": [
@@ -6615,8 +6542,8 @@
       }
     }
   ],
-  "intake_review_held_open": "Projetos abertos recebem suas marcações como alterações pendentes até o próximo Aplicar: {names}.",
-  "intake_review_held_closed": "Projetos fechados mantêm o instantâneo do fechamento: {names}.",
+  "intake_review_held_open": "Alterações pendentes: {names}",
+  "intake_review_held_closed": "Instantâneo do fechamento mantido: {names}",
   "home_pending_group": "{group} · {count}",
   "home_choose_calibration": "Escolher calibração",
   "help_tip_marks_library": "P, X e U marcam o frame na biblioteca, e todo Projeto lê a mesma marcação: um Projeto aberto a recebe como alteração pendente, um fechado mantém o seu instantâneo.",

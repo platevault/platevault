@@ -2,12 +2,11 @@
  * Onboarding after setup (Round 6, spec 056): the orientation walk and the
  * Getting started checklist.
  *
- * - The walk (`OrientationWalk`): five steps anchored to the source list,
- *   the toolbar's Issues, Home's Next, the status bar and Targets, on the
- *   modal `CoachWalk`. Setup's end makes it due once
- *   (`settings.onboarding.walk`); Done or Skip marks it done, and Settings ›
- *   Help restarts it. A step whose anchor is not on screen (a narrow window
- *   has no source list) is passed over.
+ * - The walk (`OrientationWalk`): three steps anchored to the source list,
+ *   the status bar and Targets, on the modal `CoachWalk`. Setup's end makes
+ *   it due once (`settings.onboarding.walk`); Done or Skip marks it done,
+ *   and Settings › Help restarts it. A step whose anchor is not on screen (a
+ *   narrow window has no source list) is passed over.
  * - The checklist (`GettingStartedRing`): a ChecklistRing in the sidebar
  *   footer, above Activity and Settings (C OB7). Set up locations, first
  *   import, confirm Targets, first Project, its first Apply and, on Windows, turn
@@ -15,7 +14,7 @@
  *   library's state or the last check. It goes once every step is done or
  *   the user dismisses it.
  */
-import { useNavigate, useRouterState } from "@tanstack/react-router"
+import { useNavigate } from "@tanstack/react-router"
 import { type ChecklistItem, ChecklistRing } from "@/components/app/checklist"
 import { type CoachStep, CoachWalk } from "@/components/app/walk"
 import { setOnboarding } from "@/features/t1/lib/writes"
@@ -35,15 +34,8 @@ export function restartWalk() {
 
 function useWalkSteps(): CoachStep[] {
   const m = useMessages()
-  const navigate = useNavigate()
-  const pathname = useRouterState({ select: (s) => s.location.pathname })
-  const toHome = () => {
-    if (pathname !== "/") void navigate({ to: "/" })
-  }
   return [
     { id: "sources", title: m.onboarding_walk_sources_title(), body: m.onboarding_walk_sources(), anchors: ["[data-frame-nav]"] },
-    { id: "issues", title: m.issues_title(), body: m.onboarding_walk_issues(), anchors: ["[data-issues]"] },
-    { id: "next", title: m.onboarding_walk_next_title(), body: m.onboarding_walk_next(), anchors: ["[data-next]", "#home-projects"], onEnter: toHome },
     { id: "status", title: m.onboarding_walk_status_title(), body: m.onboarding_walk_status(), anchors: ["[data-status-bar]"] },
     { id: "targets", title: m.nav_targets(), body: m.onboarding_walk_targets(), anchors: ['[data-frame-nav] a[href$="/targets"]'] },
   ]

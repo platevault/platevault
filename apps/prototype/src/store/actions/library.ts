@@ -47,7 +47,7 @@ export function markFrames(assetIds: AssetId[], value: QualityValue, href: strin
       }),
     { href },
   )
-  if (result.ok) recordSaved(msg("store_saved_frames_marked", { count, n: formatCount(count), quality: QUALITY_NAME[value] }), msg("store_library_scope_detail"), href)
+  if (result.ok) recordSaved(msg("store_saved_frames_marked", { count, n: formatCount(count), quality: QUALITY_NAME[value] }), null, href)
   return result
 }
 
