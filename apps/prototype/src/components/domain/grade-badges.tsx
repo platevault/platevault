@@ -28,8 +28,6 @@ export interface GradeBadge {
 export interface GradeBadgesProps {
   /** One badge per filter, in strip order; null when the night gives no verdict. */
   grades: readonly GradeBadge[] | null
-  /** @deprecated No effect: the "–" carries no tooltip (§6.2) and the row already shows why. Removed after wave B. */
-  empty?: string
   /** Let the strip wrap onto more lines in a narrow place (a detail panel); a table row keeps it on one line. */
   wrap?: boolean
   /** One badge per grade with its filters, poor filters hidden (a table column). */

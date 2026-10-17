@@ -14,8 +14,5 @@ dup-value	measure_frames_action,op_measure_title
 dup-value	actions_for,run_actions_for
 # pt-BR differs by position: a sentence-initial toggle label ('Sem local de observação') vs a mid-sentence fragment ('nenhum local de observação').
 dup-value	project_no_site,simulation_no_site
-# status_* belong to the STATUS registry (components/app/status.tsx, process and masterMatch kinds); the feature copies go when wave B moves Calibration, Session and Home onto StatusBadge (W5, W8: one status word, patterns own their keys).
-dup-value	session_process_trashing,status_trashing_raws
+# A store refusal reason (store/actions/calibration.ts) reads the same as the masterMatch status word (components/app/status.tsx): two patterns, each owning its key (W8).
 dup-value	status_not_a_master,store_cal_not_a_master
-# The Project page owns 'Add sessions' (W8); the design-system Templates example keeps its own copy until the catalogue points at project_add_sessions (wave B, R9bShared owns src/app/catalogue).
-dup-value	catalogue_templates_add_sessions,project_add_sessions

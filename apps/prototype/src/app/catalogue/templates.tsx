@@ -441,7 +441,7 @@ function DetailDemo() {
       title: m.nav_sessions(),
       count: sessions.length,
       flush: true,
-      actions: [{ id: "add-sessions", label: m.catalogue_templates_add_sessions(), opensDialog: true, run: ran(m.catalogue_templates_add_sessions()) }],
+      actions: [{ id: "add-sessions", label: m.project_add_sessions(), opensDialog: true, run: ran(m.project_add_sessions()) }],
       content: (
         <BoxTable
           label={m.nav_sessions()}
