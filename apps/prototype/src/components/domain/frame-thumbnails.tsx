@@ -24,7 +24,7 @@ import { RowContextMenu } from "@/components/app/row-actions"
 import type { AssetId, DiskFile } from "@/domain/types"
 import { useSize } from "@/lib/use-size"
 import { cn } from "@/lib/utils"
-import { useThumbnail } from "./thumbnails"
+import { type Thumb as Thumbnail, useThumbnail } from "./thumbnails"
 
 export type ThumbnailActivation = "set" | "toggle" | "range"
 
@@ -89,21 +89,24 @@ function useFollowFocus(activeId: AssetId | null) {
   return box
 }
 
-function Thumb({ item }: { item: FrameThumbnail }) {
+/** The frame's pixels, else what stands in for them: Pending while it decodes, the reason it has none ("Offline", "No pixel data"). */
+function Thumb({ thumb }: { thumb: Thumbnail }) {
   const m = useMessages()
-  const thumb = useThumbnail(item.id, item.file, item.unreadable)
   if (thumb.state === "ready") return <img src={thumb.url} alt="" className="block size-full rounded-sm bg-plate object-contain" draggable={false} />
   return (
     <span className="flex size-full flex-col items-center justify-center gap-1 rounded-sm bg-plate px-1 text-center text-xs text-white/70">
       {thumb.state === "pending" ? <Loader aria-hidden="true" className="size-3.5 animate-spin" /> : <ImageOff aria-hidden="true" className="size-3.5" />}
-      <span>{thumb.state === "pending" ? m.status_pending() : m.status_unreadable()}</span>
+      <span>{thumb.state === "pending" ? m.status_pending() : thumb.reason}</span>
     </span>
   )
 }
 
 function ThumbItem({ item, props, tabbable }: { item: FrameThumbnail; props: FrameThumbnailsProps; tabbable: boolean }) {
+  const thumb = useThumbnail(item.id, item.file, item.unreadable)
   const active = props.activeId === item.id
   const selected = props.selected.has(item.id)
+  // The name says what the tile shows: the frame, its quality and, without pixels, why.
+  const label = [item.name, item.statusText, thumb.state === "unreadable" ? thumb.reason : null].filter(Boolean).join(", ")
   const button = (
     <button
       type="button"
@@ -112,7 +115,7 @@ function ThumbItem({ item, props, tabbable }: { item: FrameThumbnail; props: Fra
       tabIndex={tabbable ? 0 : -1}
       aria-current={active ? "true" : undefined}
       aria-pressed={selected}
-      aria-label={`${item.name}, ${item.statusText}`}
+      aria-label={label}
       onClick={(event) => props.onActivate(item.id, modeOf(event))}
       className={cn(
         "block w-full rounded-md p-1 text-left outline-none hover:bg-foreground/5 focus-visible:ring-2 focus-visible:ring-ring",
@@ -121,7 +124,7 @@ function ThumbItem({ item, props, tabbable }: { item: FrameThumbnail; props: Fra
       )}
     >
       <span className={cn("relative block aspect-[3/2] w-full", item.dimmed && "opacity-45")}>
-        <Thumb item={item} />
+        <Thumb thumb={thumb} />
       </span>
       <span aria-hidden="true" className="mt-1 flex min-w-0 text-xs">
         {/* Middle truncation: the frame number at the end stays visible. */}
