@@ -565,6 +565,60 @@ pub async fn list_file_overrides_for_group(
     .await?)
 }
 
+/// The distinct file paths that have at least one override in
+/// `source_group_id`, in path order.
+///
+/// # Errors
+/// Returns [`persistence_core::DbError::Database`] on connection failure.
+pub async fn list_file_override_paths_conn(
+    conn: &mut SqliteConnection,
+    source_group_id: &str,
+) -> DbResult<Vec<String>> {
+    Ok(sqlx::query_scalar(
+        "SELECT DISTINCT relative_file_path FROM inbox_file_overrides
+         WHERE source_group_id = ?
+         ORDER BY relative_file_path",
+    )
+    .bind(source_group_id)
+    .fetch_all(&mut *conn)
+    .await?)
+}
+
+/// Move every override of the file `from` in `source_group_id` to the file
+/// `to`, with its value, recorded file identity, staleness flag and set time.
+///
+/// Where `to` already has an override for the same property, that one is kept
+/// and the one for `from` is deleted. The caller moves overrides an earlier
+/// version stored under a file's old text to its current text (bd
+/// astro-plan-3pvvc), so an override under the current text was set later.
+///
+/// # Errors
+/// Returns [`persistence_core::DbError::Database`] on connection failure.
+pub async fn rekey_file_overrides_conn(
+    conn: &mut SqliteConnection,
+    source_group_id: &str,
+    from: &str,
+    to: &str,
+) -> DbResult<()> {
+    sqlx::query(
+        "UPDATE OR IGNORE inbox_file_overrides SET relative_file_path = ?3
+         WHERE source_group_id = ?1 AND relative_file_path = ?2",
+    )
+    .bind(source_group_id)
+    .bind(from)
+    .bind(to)
+    .execute(&mut *conn)
+    .await?;
+    sqlx::query(
+        "DELETE FROM inbox_file_overrides WHERE source_group_id = ? AND relative_file_path = ?",
+    )
+    .bind(source_group_id)
+    .bind(from)
+    .execute(&mut *conn)
+    .await?;
+    Ok(())
+}
+
 /// Data for one row in a batch upsert of `inbox_classifications`.
 pub struct UpsertClassificationRow<'a> {
     pub inbox_item_id: &'a str,

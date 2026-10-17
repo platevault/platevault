@@ -20,8 +20,6 @@ use crate::errors::db_err;
 use crate::frame_inventory;
 use crate::protection::{self, CleanupPlanItem, GenerateCleanupPlanRequest};
 
-use super::file_name;
-
 // ── Raw sub-frame candidates (spec 048 US3 T027-T031) ───────────────────────
 
 /// Protection category a raw sub-frame resolves under, keyed by its own
@@ -246,7 +244,7 @@ pub async fn generate_raw_frame_plan(
 
         items.push(CleanupPlanItem {
             id: format!("{plan_id}-item-{}", items.len()),
-            name: file_name(&row.relative_path).to_owned(),
+            name: fs_pathsafe::wire_file_name(&row.relative_path).to_owned(),
             action: "archive".to_owned(),
             source_id,
             category: raw_frame_protection_category(frame_type).to_owned(),

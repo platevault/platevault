@@ -190,6 +190,20 @@ describe('PlanPanel (aggregate surface)', { timeout: 15_000 }, () => {
     expect(screen.getByText('/dest/lights/ngc1234.fits')).toBeInTheDocument();
   });
 
+  // bd astro-plan-3pvvc: on macOS and Linux a backslash is part of a name in
+  // a wire path, so the row shows the whole file name.
+  it('shows a file name containing a backslash whole', () => {
+    const plans = [
+      makePlan({
+        inboxItemId: 'item-bs',
+        actions: [makeAction({ fromPath: 'lights/a\\b.fits' })],
+      }),
+    ];
+    renderPanel(plans);
+    fireEvent.click(screen.getByTestId('plan-group-toggle-item-bs'));
+    expect(screen.getByText('a\\b.fits')).toBeInTheDocument();
+  });
+
   // #606: the collapsed group header (the default view — no expand needed)
   // must show source (the ingestion name) AND destination together in the
   // SAME row, without requiring the reviewer to expand file rows.

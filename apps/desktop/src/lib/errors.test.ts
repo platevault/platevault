@@ -61,8 +61,8 @@ describe('errMessage for an export that left its own incomplete file', () => {
     expect(msg).toContain('/Volumes/STICK/real/log.json');
   });
 
-  it('falls back to the path-free wording when details carry no path', () => {
-    for (const details of [undefined, null, {}, { path: 42 }]) {
+  it('falls back to the path-free wording when details carry no usable path', () => {
+    for (const details of [undefined, null, {}, { path: 42 }, { path: '' }]) {
       expect(errMessage(unfinished(details))).toBe(
         m.err_export_unfinished_file(),
       );

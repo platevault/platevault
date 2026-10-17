@@ -12,6 +12,7 @@
 use app_core::inbox::attribution::suggest_candidates;
 use app_core::inbox::classify::{classify, classify_source_group, ClassifyRequest};
 use app_core::inbox::confirm::{confirm, ConfirmRequest};
+use app_core::inbox::legacy_rows::retire as retire_legacy_rows;
 use app_core::inbox::metadata::get_inbox_item_metadata;
 use app_core::inbox::property_registry::property_registry as get_property_registry;
 use app_core::inbox::reclassify::{
@@ -48,7 +49,7 @@ use persistence_inbox::repositories::inbox::{
 };
 use persistence_lifecycle::repositories::first_run::get_source_organization_state;
 use persistence_targets::repositories::q_desktop::{
-    get_inbox_master_item_row, insert_inbox_master_item,
+    get_inbox_master_item_row, insert_inbox_master_item, refresh_inbox_master_fields,
 };
 use sqlx::SqlitePool;
 use std::path::PathBuf;
@@ -378,6 +379,7 @@ pub async fn inbox_scan_folder(
         .map_err(|e| ContractError::internal(e.to_string()))?
         .map_err(ContractError::internal)?;
     let scanned = scan_out.items;
+    let legacy_rows = scan_out.legacy_rows;
     let scan_warnings: Vec<ScanDirWarning> = scan_out
         .warnings
         .into_iter()
@@ -401,6 +403,16 @@ pub async fn inbox_scan_folder(
     // Wrap all upserts in a single transaction: one WAL commit instead of
     // one per leaf folder (N autocommits → 1).
     let mut tx = pool.begin().await.map_err(|e| ContractError::internal(e.to_string()))?;
+
+    // Rows an earlier scan stored under the old backslash text for an entry
+    // this scan stores under its own text (bd astro-plan-3pvvc). They go
+    // first: an old row can hold the key a master row of this scan needs, as
+    // a folder placeholder at `g/h.fits` (group key `''`, like a master's) does
+    // for the real master `g/h.fits`, and `INSERT OR IGNORE` would then skip
+    // the master.
+    retire_legacy_rows(&mut tx, &req.root_id, &legacy_rows)
+        .await
+        .map_err(|e| ContractError::internal(e.to_string()))?;
 
     for scanned_item in &scanned {
         // ── Source-group upsert (T065, R-10/R-12) ────────────────────────────
@@ -434,9 +446,15 @@ pub async fn inbox_scan_folder(
         .map_err(|e| ContractError::internal(e.to_string()))?;
         // ── A. Individual rows for detected calibration masters ────────────────
         for master in &scanned_item.masters {
-            if let Some(summary) =
-                persist_master_item(&mut tx, &req.root_id, scanned_item.lane.as_str(), master)
-                    .await?
+            let refresh = legacy_rows.masters_to_refresh.contains(&master.relative_path);
+            if let Some(summary) = persist_master_item(
+                &mut tx,
+                &req.root_id,
+                scanned_item.lane.as_str(),
+                master,
+                refresh,
+            )
+            .await?
             {
                 items.push(summary);
             }
@@ -468,12 +486,17 @@ pub async fn inbox_scan_folder(
 /// Insert (or reuse) the individual `inbox_items` row for a single detected
 /// calibration master and return its summary, if the row is present.
 ///
+/// With `refresh`, a reused row's master type, filter and exposure are
+/// rewritten from `master`: an earlier scan may have filled them from another
+/// file with the same text (`LegacyRows::masters_to_refresh`).
+///
 /// Operates on `tx` so insert and read-back are within the same transaction.
 async fn persist_master_item(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     root_id: &str,
     lane: &str,
     master: &ScannedMasterFile,
+    refresh: bool,
 ) -> Result<Option<InboxItemSummary>, ContractError> {
     let master_item_id = Uuid::new_v4().to_string();
     let frame_type_str = format!("{:?}", master.detection.frame_type).to_ascii_lowercase();
@@ -492,6 +515,18 @@ async fn persist_master_item(
     )
     .await
     .map_err(|e| ContractError::internal(e.to_string()))?;
+    if refresh {
+        refresh_inbox_master_fields(
+            &mut **tx,
+            root_id,
+            &master.relative_path,
+            &frame_type_str,
+            master.filter.as_deref(),
+            master.exposure_s,
+        )
+        .await
+        .map_err(|e| ContractError::internal(e.to_string()))?;
+    }
 
     // Fetch authoritative row within the same transaction (may have existed
     // from a prior scan, written by INSERT OR IGNORE above).
