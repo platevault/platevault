@@ -1,6 +1,7 @@
 import { beforeAll, beforeEach, describe, expect, it } from "vitest"
 import { canJoinProject, calibrationQueue } from "@/domain/derive"
 import { createSeed } from "@/domain/seed"
+import { m } from "@/lib/i18n"
 import { type PrototypeState, SCHEMA_VERSION, store } from "@/store/core"
 import { isSettled } from "@/store/operations"
 import { initialSliceStates, sliceVersions } from "@/store/slices"
@@ -29,7 +30,7 @@ function lightsOf(plan: ImportPlan, filter: string): DestinationGroup[] {
 
 /** Start the import and run its handler tick by tick until it settles. */
 function runImport(draft: ImportDraft) {
-  const plan = planImport(store.getState(), draft)!
+  const plan = planImport(m, store.getState(), draft)!
   expect(plan.blockers).toEqual([])
   const id = startImport(plan, draft)
   for (let i = 0; i < 300 && !isSettled(store.getState().operations[id]!.status); i++) store.setState((s) => importHandler.step(s, s.operations[id]!))
@@ -43,20 +44,20 @@ function importedOiii() {
 describe("Import review: sessions split by framing, merge and re-split (LIB-AC-31)", () => {
   it("shows the re-pointed frames as framing 2; Merge shows one session, Re-split the two again, and nothing is written", () => {
     const state = store.getState()
-    const split = lightsOf(planImport(state, card())!, "OIII")
+    const split = lightsOf(planImport(m, state, card())!, "OIII")
     expect(split.map((g) => [g.session!.framing, g.items.length])).toEqual([
       [1, 8],
       [2, 4],
     ])
     const captureKey = split[0]!.session!.captureKey
-    const merged = lightsOf(planImport(state, card({ merged: [captureKey] }))!, "OIII")
+    const merged = lightsOf(planImport(m, state, card({ merged: [captureKey] }))!, "OIII")
     expect(merged.map((g) => [g.session!.framing, g.session!.merged, g.session!.framings, g.items.length])).toEqual([[1, true, 2, 12]])
-    expect(lightsOf(planImport(state, card({ merged: [] }))!, "OIII")).toHaveLength(2)
+    expect(lightsOf(planImport(m, state, card({ merged: [] }))!, "OIII")).toHaveLength(2)
     expect(store.getState().catalog).toBe(state.catalog)
   })
 
   it("imports a merged capture as one session, and a split one as two", () => {
-    const captureKey = lightsOf(planImport(store.getState(), card())!, "OIII")[0]!.session!.captureKey
+    const captureKey = lightsOf(planImport(m, store.getState(), card())!, "OIII")[0]!.session!.captureKey
     runImport(card({ merged: [captureKey] }))
     expect(importedOiii().map((s) => s.assetIds.length)).toEqual([12])
     store.replace(structuredClone(demo))
@@ -73,7 +74,7 @@ describe("Import review: calibration of the new sessions (LIB-AC-25, LIB-AC-26)"
   it("reads each new session's darks, flats and bias as ingestion leaves them, and what the batch's flats calibrate", () => {
     const state = store.getState()
     const draft = card()
-    const plan = planImport(state, draft)!
+    const plan = planImport(m, state, draft)!
     const preview = previewImport(state, plan, draft, AT)
     const session = (g: DestinationGroup) => preview.world.catalog.sessions[preview.sessionOf.get(g.session!.key)!]!
     const ha = session(lightsOf(plan, "Ha")[0]!)
@@ -101,7 +102,7 @@ describe("Import review: calibration of the new sessions (LIB-AC-25, LIB-AC-26)"
   })
 
   it("applies No flats chosen in review to the imported session, which is then settled", () => {
-    const first = lightsOf(planImport(store.getState(), card())!, "OIII")[0]!.session!
+    const first = lightsOf(planImport(m, store.getState(), card())!, "OIII")[0]!.session!
     runImport(card({ calibration: { [first.key]: { flat: { state: "none" } } } }))
     const [eight, four] = importedOiii().sort((a, b) => b.assetIds.length - a.assetIds.length)
     expect(eight!.calibration!.flat).toMatchObject({ state: "none", by: "user" })
