@@ -31,6 +31,10 @@
 //! once. A removed file leaves the set, so a rename is a removal plus an
 //! addition. A supported file the index then refuses (an unreadable header)
 //! stays counted: it is still not in the library, and the scan names why.
+//! A path the catalog records counts as held whatever its record's
+//! availability: a new frame written at the path of a Missing or Trashed
+//! record is not counted, and only a scan, which refreshes that record in
+//! place, brings it in (bead astro-plan-0rfuw).
 //!
 //! Lifecycle:
 //! - An Active Captures location is watched while its root is online: the
