@@ -79,4 +79,28 @@ describe('svg/no-raw-svg-colour', () => {
 
     expect(diagnostics).toHaveLength(2);
   });
+
+  it('flags raw colors in conditional and logical expressions', () => {
+    const diagnostics = lint(
+      "const svg = <svg fill={active ? '#fff' : 'red'} stroke={enabled && '#abc'} color={theme ?? 'Canvas'} />;",
+    );
+
+    expect(diagnostics).toHaveLength(4);
+  });
+
+  it('flags raw colors in template substitutions but allows nested theme choices', () => {
+    const diagnostics = lint(
+      "const svg = <svg fill={`url(#paint-${active ? '#fff' : 'red'})`} stroke={`url(#${active ? 'currentColor' : 'var(--pv-accent)'})`} />;",
+    );
+
+    expect(diagnostics).toHaveLength(2);
+  });
+
+  it('allows conditionals selecting theme values and currentColor', () => {
+    const diagnostics = lint(
+      "const svg = <svg fill={active ? 'var(--pv-accent)' : 'currentColor'} stroke={enabled ? 'none' : 'inherit'} />;",
+    );
+
+    expect(diagnostics).toHaveLength(0);
+  });
 });

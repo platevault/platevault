@@ -62,20 +62,40 @@ function isInsideSvg(node) {
   return false;
 }
 
-function staticAttributeValue(value) {
-  if (value.type === 'Literal' && typeof value.value === 'string') {
-    return value.value;
+function reportRawColorsInExpression(expression, report) {
+  if (
+    (expression.type === 'Literal' || expression.type === 'StringLiteral') &&
+    typeof expression.value === 'string'
+  ) {
+    if (isRawColor(expression.value)) report();
+    return;
   }
-  if (value.type !== 'JSXExpressionContainer') return null;
 
-  const expression = value.expression;
-  if (expression.type === 'Literal' && typeof expression.value === 'string') {
-    return expression.value;
+  switch (expression.type) {
+    case 'ConditionalExpression':
+      reportRawColorsInExpression(expression.consequent, report);
+      reportRawColorsInExpression(expression.alternate, report);
+      return;
+    case 'LogicalExpression':
+      reportRawColorsInExpression(expression.left, report);
+      reportRawColorsInExpression(expression.right, report);
+      return;
+    case 'TemplateLiteral':
+      for (const quasi of expression.quasis) {
+        if (isRawColor(quasi.value.cooked ?? quasi.value.raw)) report();
+      }
+      for (const interpolation of expression.expressions) {
+        reportRawColorsInExpression(interpolation, report);
+      }
+      return;
+    case 'ChainExpression':
+    case 'ParenthesizedExpression':
+    case 'TSAsExpression':
+    case 'TSSatisfiesExpression':
+    case 'TypeCastExpression':
+      reportRawColorsInExpression(expression.expression, report);
+      return;
   }
-  if (expression.type === 'TemplateLiteral') {
-    return expression.quasis.map((part) => part.value.cooked ?? '').join(' ');
-  }
-  return null;
 }
 
 const rule = {
@@ -103,11 +123,17 @@ const rule = {
           return;
         }
 
-        const value = node.value;
-        if (!value) return;
-        const staticValue = staticAttributeValue(value);
-        if (staticValue !== null && isRawColor(staticValue)) {
+        if (!node.value) return;
+        const report = () =>
           context.report({ node, messageId: 'rawColor', data: { name } });
+
+        if (node.value.type === 'Literal' && typeof node.value.value === 'string') {
+          if (isRawColor(node.value.value)) report();
+          return;
+        }
+
+        if (node.value.type === 'JSXExpressionContainer') {
+          reportRawColorsInExpression(node.value.expression, report);
         }
       },
     };
