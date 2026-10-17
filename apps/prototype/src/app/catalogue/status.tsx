@@ -1,13 +1,14 @@
 /**
  * Catalogue entry (R9-COMPOSITION-PLAN §8.3): P10 display-only status.
  * StatusBadge for the kinds that absorb GateLabel and T4Badge (the full
- * registry renders on the design-system page), the inert Pill in every tone,
- * and CountBadge. Captions are reviewer labels.
+ * registry renders on the design-system page), StatusBadges for several
+ * statuses side by side, the inert Pill in every tone, and CountBadge.
+ * Captions are reviewer labels.
  */
 import { Radio } from "lucide-react"
 import { useMessages } from "@/app/preferences"
 import { CountBadge, Pill } from "@/components/app/pill"
-import { STATUS, type StatusKind, StatusBadge, type StatusValue, type Tone } from "@/components/app/status"
+import { STATUS, type StatusKind, StatusBadge, StatusBadges, type StatusValue, type Tone } from "@/components/app/status"
 import { PROJECT_TAB_NAME } from "@/domain/project-view"
 import { say } from "@/lib/i18n"
 import { ComponentSection, Specimen } from "./specimen"
@@ -32,6 +33,17 @@ export function StatusCatalogue() {
             <StatusBadge kind="gate" value="blocked" label={m.home_blocked_at({ step: say(m, PROJECT_TAB_NAME.calibrate) })} />
           </Specimen>
         </div>
+      </ComponentSection>
+
+      <ComponentSection components={["StatusBadges"]} description={m.catalogue_status_badges_desc()}>
+        <Specimen caption={m.catalogue_status_badges_wrap()}>
+          <span className="flex w-28">
+            <StatusBadges>
+              <StatusBadge kind="gate" value="blocked" />
+              <StatusBadge kind="availability" value="offline" />
+            </StatusBadges>
+          </span>
+        </Specimen>
       </ComponentSection>
 
       <ComponentSection components={["Pill"]} description={m.catalogue_status_pill_desc()}>

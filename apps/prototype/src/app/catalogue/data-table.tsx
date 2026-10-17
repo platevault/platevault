@@ -249,7 +249,6 @@ export function DataTableCatalogue() {
                       {m.filters_clear()}
                     </Button>
                   }
-                  className="border-0"
                 />
               }
               stickyFirstColumn={wide}

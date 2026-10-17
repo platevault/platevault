@@ -188,17 +188,12 @@ export interface ListDetailProps {
 
 /**
  * List + detail pattern: the list stays visible while the detail changes.
- * At 1024 px the list keeps 18rem and the detail takes the rest. Below
- * 768 px the panes stack and scroll with the page (WCAG 1.4.10).
+ * From 768 px the list keeps 18rem at every width and the detail takes the
+ * rest. Below 768 px the panes stack and scroll with the page (WCAG 1.4.10).
  */
 export function ListDetail({ list, detail, className }: ListDetailProps) {
   return (
-    <div
-      className={cn(
-        "grid min-h-0 flex-1 grid-cols-[18rem_minmax(0,1fr)] max-md:flex-none max-md:grid-cols-1 xl:grid-cols-[22rem_minmax(0,1fr)]",
-        className,
-      )}
-    >
+    <div className={cn("grid min-h-0 flex-1 grid-cols-[18rem_minmax(0,1fr)] max-md:flex-none max-md:grid-cols-1", className)}>
       <div className="min-h-0 overflow-y-auto border-r max-md:border-r-0 max-md:border-b">{list}</div>
       <div className="flex min-h-0 min-w-0 flex-col overflow-y-auto">{detail}</div>
     </div>

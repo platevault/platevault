@@ -147,9 +147,16 @@ function MetricPlot({ series, count, activeId, selected, threshold, onSelect }: 
   )
 }
 
-/** One plot per series side by side, and the legend under them. */
+/** One plot per series side by side, and the legend under them. A session with no measured value says so once, not once per plot. */
 export function SessionPlots({ series, threshold = null, ...props }: SessionPlotsProps) {
   const m = useMessages()
+  if (series.every((s) => s.points.length === 0)) {
+    return (
+      <section aria-label={m.review_plots_label()} className="flex h-full min-h-0 items-center justify-center text-xs text-muted-foreground" data-plots-empty="">
+        {m.status_not_measured()}
+      </section>
+    )
+  }
   return (
     <section aria-label={m.review_plots_label()} className="flex h-full min-h-0 flex-col gap-1">
       <div className="grid min-h-0 flex-1 auto-cols-fr grid-flow-col grid-rows-[auto_minmax(0,1fr)] gap-x-2">

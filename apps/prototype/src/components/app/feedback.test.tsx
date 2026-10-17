@@ -1,9 +1,11 @@
-import { render, screen } from "@testing-library/react"
+import { render, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
+import { Inbox } from "lucide-react"
 import { describe, expect, it, vi } from "vitest"
 import { m } from "@/lib/i18n"
 import type { CommitResult } from "@/store/core"
-import { useSaveState } from "./feedback"
+import { DataTable } from "./data-table"
+import { EmptyState, useSaveState } from "./feedback"
 
 /** A section with one control that saves through `write`, and the section's indicator. */
 function Section({ write }: { write: () => CommitResult | void }) {
@@ -50,5 +52,24 @@ describe("useSaveState", () => {
     expect(screen.getByTestId("indicator")).toHaveTextContent(m.status_changed_elsewhere())
     expect(screen.getByText("Changed elsewhere first")).toBeInTheDocument()
     expect(screen.queryByRole("button", { name: m.verb_retry() })).not.toBeInTheDocument()
+  })
+})
+
+describe("EmptyState", () => {
+  const empty = <EmptyState icon={Inbox} title="No sessions match" action={<button type="button">Clear filters</button>} />
+
+  it("draws its dashed frame on a page, and none in a table cell, where the table is the frame", () => {
+    render(
+      <>
+        <section aria-label="Page">{empty}</section>
+        <DataTable label="Sessions" rows={[] as { id: string }[]} columns={[{ id: "name", header: "Name", cell: (r) => r.id, static: true }]} getRowId={(r) => r.id} empty={empty} />
+      </>,
+    )
+    const onPage = within(screen.getByRole("region", { name: "Page" })).getByText("No sessions match").closest<HTMLElement>("[data-slot=empty]")!
+    const inTable = within(screen.getByRole("table", { name: "Sessions" })).getByText("No sessions match").closest<HTMLElement>("[data-slot=empty]")!
+    expect(onPage).toHaveClass("border", "border-dashed")
+    expect(inTable.closest("td")).not.toBeNull()
+    // Tailwind's `td &` variant: the class compiles to a rule that applies only under a table cell.
+    expect(inTable).toHaveClass("[td_&]:border-0")
   })
 })

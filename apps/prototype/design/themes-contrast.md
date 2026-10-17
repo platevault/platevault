@@ -10,7 +10,7 @@ Surfaces: `--background`, `--card`, `--popover`, `--secondary`, `--muted`, `--ac
 
 | Theme | Scheme | Min text | Min fill text | Min tint text | Min UI glyph | Passes | Adjusted from the palette |
 |---|---|---|---|---|---|---|---|
-| PlateVault Dark | dark | 5.04 | 5.13 | 4.58 | 3.30 | yes | `--accent`, `--destructive`, `--destructive-foreground` |
+| PlateVault Dark | dark | 5.04 | 5.13 | 4.58 | 3.88 | yes | `--accent`, `--destructive`, `--destructive-foreground` |
 | PlateVault Light | light | 4.80 | 5.59 | 4.57 | 3.67 | yes | `--destructive`, `--destructive-foreground`, `--success`, `--warning`, `--info`, `--sidebar-accent` |
 | Gruvbox Dark | dark | 4.57 | 6.09 | 4.57 | 3.10 | yes | `--muted-foreground`, `--link`, `--destructive`, `--success`, `--info`, `--input` |
 | Gruvbox Light | light | 4.57 | 5.82 | 4.57 | 3.07 | yes | `--muted-foreground`, `--link`, `--success`, `--warning`, `--info`, `--input` |
@@ -42,7 +42,7 @@ Fill text: `--primary-foreground` on `--primary` 5.13; `--selected-foreground` o
 
 Tint text (minimum per tone): `--success` 5.05; `--warning` 5.60; `--info` 4.83; `--destructive` 4.59; `--destructive-foreground` 4.58.
 
-UI glyphs: `--input` on `--background` 3.99; `--input` on `--card` 3.74; `--input` on `--popover` 3.30; `--ring` on `--background` 6.93; `--ring` on `--card` 6.48; `--ring` on `--popover` 5.72; `--ring` on `--sidebar` 6.48; `--ring` on `--chrome` 6.10.
+UI glyphs: `--input` on `--background` 4.70; `--input` on `--card` 4.39; `--input` on `--popover` 3.88; `--ring` on `--background` 6.93; `--ring` on `--card` 6.48; `--ring` on `--popover` 5.72; `--ring` on `--sidebar` 6.48; `--ring` on `--chrome` 6.10.
 
 Adjusted: `--accent` oklch(0.33 0.008 255) → oklch(0.342 0.008 255); `--destructive` oklch(0.72 0.17 25) → oklch(0.756 0.146 25); `--destructive-foreground` oklch(0.82 0.1 25) → oklch(0.828 0.095 25).
 

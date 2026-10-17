@@ -160,4 +160,16 @@ describe("CalibrationChoices", () => {
     await userEvent.setup().click(await screen.findByRole("button", { name: m.verb_retry() }))
     expect(onRetry).toHaveBeenCalledOnce()
   })
+
+  it("boxed: draws no frame of its own inside a flush Box, and its own frame elsewhere", async () => {
+    const rows = calibrationChoiceRows(seed, [PINNED])
+    const { unmount } = inRouter(<CalibrationChoices label="Calibration" rows={rows} boxed onConfirm={vi.fn()} onPick={vi.fn()} onNo={vi.fn()} />)
+    const boxed = (await screen.findByRole("table", { name: "Calibration" })).parentElement!
+    expect(boxed).toHaveClass("border-0", "rounded-none")
+    unmount()
+    renderChoices(rows)
+    const framed = (await screen.findByRole("table", { name: "Calibration" })).parentElement!
+    expect(framed).toHaveClass("border", "rounded-md")
+    expect(framed).not.toHaveClass("border-0")
+  })
 })

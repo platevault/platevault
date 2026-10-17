@@ -12,7 +12,7 @@
  *   `PageNotice` in the template's notice slot, rendered by `NoticeSlot`.
  * Nothing is inserted above a list.
  */
-import { CircleAlert, CircleHelp, Info, type LucideIcon, OctagonX, RotateCw, TriangleAlert, Unplug } from "lucide-react"
+import { CircleAlert, CircleHelp, Info, type LucideIcon, RotateCw, TriangleAlert, Unplug } from "lucide-react"
 import { type ReactNode, useEffect, useRef, useState } from "react"
 import { useMessages } from "@/app/preferences"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -77,9 +77,10 @@ export interface EmptyStateProps {
   titleAs?: "h1" | "h2" | "h3"
 }
 
+/** One line plus one action, in a dashed frame; inside a table cell the table is the frame, so it draws none of its own. */
 export function EmptyState({ icon: Icon, title, description, action, className, titleAs: Title = "h3" }: EmptyStateProps) {
   return (
-    <Empty className={cn("border border-dashed border-border py-8", className)}>
+    <Empty className={cn("border border-dashed border-border py-8 [td_&]:border-0", className)}>
       <EmptyHeader>
         <EmptyMedia variant="icon">
           <Icon aria-hidden="true" />
@@ -92,15 +93,14 @@ export function EmptyState({ icon: Icon, title, description, action, className, 
   )
 }
 
-/** `refusal` is deprecated (W4 removes it): a refused action shows a `Refusal` beside its control, never a notice. */
-export type NoticeTone = "info" | "offline" | "warning" | "refusal"
+/** A notice is standing state only: a refused action shows a `Refusal` beside its control, never a notice. */
+export type NoticeTone = "info" | "offline" | "warning"
 
 // Harness v4: an inline info bar (as in Xcode or Mail), tinted by tone, hairline edge, 5 px radius.
-const NOTICE: Record<NoticeTone, { icon: LucideIcon; className: string; role: "status" | "alert" }> = {
-  info: { icon: Info, className: "border-border bg-foreground/[0.035] [&>svg]:text-info", role: "status" },
-  offline: { icon: Unplug, className: "border-warning/30 bg-warning/[0.07] [&>svg]:text-warning", role: "status" },
-  warning: { icon: TriangleAlert, className: "border-warning/30 bg-warning/[0.07] [&>svg]:text-warning", role: "status" },
-  refusal: { icon: OctagonX, className: "border-destructive/40 bg-destructive/[0.07] [&>svg]:text-destructive", role: "alert" },
+const NOTICE: Record<NoticeTone, { icon: LucideIcon; className: string }> = {
+  info: { icon: Info, className: "border-border bg-foreground/[0.035] [&>svg]:text-info" },
+  offline: { icon: Unplug, className: "border-warning/30 bg-warning/[0.07] [&>svg]:text-warning" },
+  warning: { icon: TriangleAlert, className: "border-warning/30 bg-warning/[0.07] [&>svg]:text-warning" },
 }
 
 export interface NoticeProps {
@@ -112,15 +112,12 @@ export interface NoticeProps {
   className?: string
 }
 
-/**
- * Inline callout for offline, uncertain, partial and refused states. A
- * refusal names what was refused, why, and the supported alternatives.
- */
+/** Inline callout for an offline, uncertain or partial state, with its recovery or alternative actions. */
 export function Notice({ tone, title, children, actions, className }: NoticeProps) {
   const meta = NOTICE[tone]
   const Icon = meta.icon
   return (
-    <Alert role={meta.role} className={cn("rounded-md px-3 py-2", meta.className, className)}>
+    <Alert role="status" className={cn("rounded-md px-3 py-2", meta.className, className)}>
       <Icon aria-hidden="true" />
       <AlertTitle>{title}</AlertTitle>
       {children ? <AlertDescription>{children}</AlertDescription> : null}
@@ -130,16 +127,13 @@ export function Notice({ tone, title, children, actions, className }: NoticeProp
   )
 }
 
-/** The standing tones a page notice may take. */
-export type PageNoticeTone = Exclude<NoticeTone, "refusal">
-
 /**
  * The template notice slot's contract: one standing page state, fixed under
  * the header (P7). Never the outcome of a click (toast), a refusal (Refusal)
  * or a field error (ActionError).
  */
 export interface PageNotice {
-  tone: PageNoticeTone
+  tone: NoticeTone
   /** "Location offline". */
   title: string
   detail?: ReactNode

@@ -1,13 +1,16 @@
 import { render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { describe, expect, it, vi } from "vitest"
+import { m } from "@/lib/i18n"
 import { ActionButton, ActionMenu } from "./actions"
-import type { Action, MenuItem } from "./contracts"
+import type { Action, ConfirmSpec, MenuItem } from "./contracts"
 
 const ITEMS: MenuItem[] = [
   { id: "start", label: "Start", run: vi.fn() },
   { id: "stop", label: "Stop", run: vi.fn() },
 ]
+
+const TRASH_CONFIRM: ConfirmSpec = { title: "Move 3 files to Trash?", confirm: { label: "Move", kind: "destructive" } }
 
 describe("ActionMenu", () => {
   it.each(["{Enter}", "{ArrowDown}"])("opens on %s and returns focus to its trigger on Escape", async (key) => {
@@ -50,5 +53,34 @@ describe("ActionButton", () => {
     expect(button).toHaveFocus()
     expect(button).not.toHaveAttribute("aria-disabled", "true")
     expect(button).not.toHaveAttribute("aria-describedby")
+  })
+
+  it("keeps its ConfirmDialog open and busy until an async run settles", async () => {
+    const user = userEvent.setup()
+    let finish: (result: { ok: true }) => void = () => undefined
+    const run = vi.fn(() => new Promise<{ ok: true }>((resolve) => (finish = resolve)))
+    render(<ActionButton action={{ id: "trash", label: "Move to Trash", kind: "destructive", run, confirm: TRASH_CONFIRM }} />)
+
+    await user.click(screen.getByRole("button", { name: "Move to Trash…" }))
+    const dialog = await screen.findByRole("alertdialog", { name: "Move 3 files to Trash?" })
+    await user.click(within(dialog).getByRole("button", { name: "Move" }))
+    expect(run).toHaveBeenCalledOnce()
+    expect(screen.getByRole("alertdialog")).toBe(dialog)
+    expect(within(dialog).getByRole("button", { name: "Move" })).toHaveAttribute("aria-busy", "true")
+
+    finish({ ok: true })
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument())
+  })
+
+  it("keeps its ConfirmDialog open with Retry when an async run fails", async () => {
+    const user = userEvent.setup()
+    const run = vi.fn(async () => ({ ok: false as const, reason: "write-failed" as const, message: "Cold-1 is offline" }))
+    render(<ActionButton action={{ id: "trash", label: "Move to Trash", kind: "destructive", run, confirm: TRASH_CONFIRM }} />)
+
+    await user.click(screen.getByRole("button", { name: "Move to Trash…" }))
+    const dialog = await screen.findByRole("alertdialog", { name: "Move 3 files to Trash?" })
+    await user.click(within(dialog).getByRole("button", { name: "Move" }))
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("Cold-1 is offline")
+    expect(within(dialog).getByRole("button", { name: m.verb_retry() })).toBeInTheDocument()
   })
 })

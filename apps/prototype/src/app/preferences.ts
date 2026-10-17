@@ -144,14 +144,23 @@ export function usePreferences(): Preferences {
   return useSyncExternalStore(subscribe, () => current)
 }
 
+/** One catalogue object per locale: `m` changes identity with the language, as a hook's value should. */
+const catalogues = new Map<Locale, typeof m>()
+
 /**
  * The message catalogue for a component: `const m = useMessages()`, then
  * `m.nav_home()`. The caller re-renders when the language changes, which a
- * bare `m` import does not do.
+ * bare `m` import does not do, and gets that language's own object, so a
+ * memo or effect that lists `m` as a dependency re-runs and re-words its copy.
  */
 export function useMessages(): typeof m {
-  useSyncExternalStore(subscribe, () => current.locale)
-  return m
+  const locale = useSyncExternalStore(subscribe, () => current.locale)
+  let catalogue = catalogues.get(locale)
+  if (!catalogue) {
+    catalogue = { ...m }
+    catalogues.set(locale, catalogue)
+  }
+  return catalogue
 }
 
 apply()

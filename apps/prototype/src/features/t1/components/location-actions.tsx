@@ -18,6 +18,7 @@ import { ConfirmDialog, type ConfirmGroup } from "@/components/app/confirm-dialo
 import type { Action, FileRow } from "@/components/app/contracts"
 import { ActionError, Notice, toast } from "@/components/app/feedback"
 import { FolderPicker } from "@/components/app/folder-picker"
+import { Refusal } from "@/components/app/refusal"
 import type { Catalog, Location, LocationId, OperationId } from "@/domain/types"
 import { formatCount } from "@/lib/format"
 import type { Messages } from "@/lib/i18n"
@@ -148,8 +149,10 @@ export function useLocationActions({ href, onIndexStarted, notify = "row" }: Loc
     const value = feedback.value
     if (value.tone === "error") return <ActionError message={value.message} onRetry={value.retry} />
     const action = followUp(location, value)
+    const actions = action ? <ActionButton action={action} /> : undefined
+    if (value.tone === "refusal") return <Refusal action={value.title} reason={value.message} blockers={[]} actions={actions} />
     return (
-      <Notice tone={value.tone === "done" ? "info" : "refusal"} title={value.tone === "done" ? m.location_remap_saved() : value.title} actions={action ? <ActionButton action={action} /> : undefined}>
+      <Notice tone="info" title={m.location_remap_saved()} actions={actions}>
         {value.message}
       </Notice>
     )

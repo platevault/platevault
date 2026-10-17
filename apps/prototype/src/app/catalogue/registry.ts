@@ -6,6 +6,8 @@
 import type { ComponentType } from "react"
 import { ActionsCatalogue } from "./actions"
 import { AppFrameCatalogue } from "./app-frame"
+import { ControlsCatalogue } from "./controls"
+import { DataCatalogue } from "./data"
 import { DataTableCatalogue } from "./data-table"
 import { DialogsCatalogue } from "./dialogs"
 import { DomainCatalogue } from "./domain"
@@ -14,6 +16,8 @@ import { FeedbackCatalogue } from "./feedback"
 import { FieldsCatalogue } from "./fields"
 import { GoalFieldsCatalogue } from "./goal-fields"
 import { GradeBadgesCatalogue } from "./grade-badges"
+import { OperationCatalogue } from "./operation"
+import { PageCatalogue } from "./page"
 import { PaletteCatalogue } from "./palette"
 import { PickersCatalogue } from "./pickers"
 import { PreviewsCatalogue } from "./previews"
@@ -39,12 +43,16 @@ export const CATALOGUE: CatalogueEntry[] = [
     components: ["ActionBar", "ActionButton", "ActionMenu", "MenuItems", "IconButton", "RowActions", "RowContextMenu", "Button"],
     Entry: ActionsCatalogue,
   },
+  { id: "controls", components: ["Button", "Spinner", "ToggleGroup", "ToggleGroupItem", "Toggle"], Entry: ControlsCatalogue },
   {
     id: "feedback",
-    components: ["Refusal", "ActionError", "Notice", "PageNotice", "NoticeSlot", "Toaster", "EmptyState", "SaveState"],
+    components: ["Refusal", "ActionError", "Notice", "PageNotice", "NoticeSlot", "Toaster", "EmptyState", "SaveState", "UnknownValue", "TableSkeleton", "DetailSkeleton"],
     Entry: FeedbackCatalogue,
   },
-  { id: "status", components: ["StatusBadge", "Pill", "Tag", "CountBadge"], Entry: StatusCatalogue },
+  { id: "status", components: ["StatusBadge", "StatusBadges", "Pill", "Tag", "CountBadge"], Entry: StatusCatalogue },
+  { id: "data", components: ["KeyValueList", "Stat", "PathText", "ChannelCoverage", "FilterChips", "EvidenceList", "UnknownValue"], Entry: DataCatalogue },
+  { id: "operation", components: ["OperationPanel", "Label", "Select", "SelectContent", "SelectItem", "SelectTrigger", "SelectValue"], Entry: OperationCatalogue },
+  { id: "page", components: ["PageBody", "Section"], Entry: PageCatalogue },
   { id: "previews", components: ["HoverCard", "HoverCardTrigger", "HoverCardContent", "Preview", "BlockersPreview", "Blockable", "UsedByPreview", "MasterPreview"], Entry: PreviewsCatalogue },
   { id: "dialogs", components: ["ConfirmDialog", "FileTable", "FormDialog", "DialogFooter"], Entry: DialogsCatalogue },
   { id: "pickers", components: ["NightPicker", "SitePicker", "SiteLocationField", "TargetPicker", "DisplayMenu"], Entry: PickersCatalogue },

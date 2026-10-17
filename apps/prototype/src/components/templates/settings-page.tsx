@@ -15,6 +15,7 @@ import type { Action } from "@/components/app/contracts"
 import { DataTable, type DataTableProps } from "@/components/app/data-table"
 import type { PageNotice } from "@/components/app/feedback"
 import { PageBody, PageHeader, Section } from "@/components/app/page"
+import { headerBar } from "./parts"
 
 export interface SettingsPageProps {
   title: string
@@ -26,7 +27,7 @@ export interface SettingsPageProps {
 export function SettingsPage({ title, notice, children }: SettingsPageProps) {
   return (
     <div data-template="settings">
-      <PageHeader level={2} title={title} notice={notice} />
+      <PageHeader level={2} title={title} notice={notice} className={headerBar(2)} />
       <PageBody className="space-y-6">{children}</PageBody>
     </div>
   )

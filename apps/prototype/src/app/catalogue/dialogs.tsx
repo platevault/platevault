@@ -2,7 +2,8 @@
  * Catalogue entry for the dialogs (design/R9-COMPOSITION-PLAN.md P8, §8.3):
  * ConfirmDialog default, destructive, busy, error, title only and file
  * groups folded and unfolded; FormDialog default, disabled with a reason,
- * busy, error and an optional step with Skip. DialogFooter renders inside
+ * busy and error (its `steps`, with an optional step's Skip, are in the
+ * step-flow entry). DialogFooter renders inside
  * each. The demo actions write nothing to the store: failures come back as
  * results, so every state can be opened here. Every visible string comes
  * from the message catalogue (catalogue_dialogs_* for reviewer captions).
@@ -140,25 +141,6 @@ function RenameSpecimen({ caption, name, run, startEmpty = false }: { caption: s
   )
 }
 
-function SkipSpecimen({ name }: { name: string }) {
-  const m = useMessages()
-  const [value, setValue] = useState(name)
-  const proceed: Action = { id: "proceed", label: m.catalogue_dialogs_proceed(), kind: "primary", run: done }
-  const skip: Action = { id: "skip", label: m.wrapup_skip(), run: done }
-  return (
-    <Specimen caption={m.catalogue_dialogs_state_skip()}>
-      <FormDialog
-        title={m.common_rename_title({ name })}
-        confirm={proceed}
-        skip={skip}
-        trigger={<Button variant="outline" size="sm">{opener(proceed.label)}</Button>}
-      >
-        <TextField label={m.equipment_rig_name()} value={value} onChange={setValue} />
-      </FormDialog>
-    </Specimen>
-  )
-}
-
 function FormSpecimens({ rigName }: { rigName: string }) {
   const m = useMessages()
   return (
@@ -168,7 +150,6 @@ function FormSpecimens({ rigName }: { rigName: string }) {
         <RenameSpecimen caption={m.catalogue_dialogs_state_unavailable()} name={rigName} run={done} startEmpty />
         <RenameSpecimen caption={m.catalogue_dialogs_state_busy()} name={rigName} run={slowly} />
         <RenameSpecimen caption={m.catalogue_dialogs_state_error()} name={rigName} run={failing(m)} />
-        <SkipSpecimen name={rigName} />
       </div>
     </ComponentSection>
   )

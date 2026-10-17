@@ -230,12 +230,6 @@ interface FormDialogBaseProps extends DialogCommitOptions {
 interface FormDialogActionProps {
   /** The dialog's action. Its `run` commits the fields: a failure keeps the dialog open with the error. */
   confirm: Action
-  /** @deprecated Removed in W4: pass `steps`, which renders the StepStrip. */
-  strip?: ReactNode
-  /** @deprecated Removed in W4: pass `steps`, whose optional steps show Skip. */
-  skip?: Action
-  /** @deprecated Removed in W4: pass `steps`, where only the last step's Proceed closes the dialog. */
-  closeOnConfirm?: boolean
   steps?: never
   /** The fields (components/app/fields.tsx). */
   children: ReactNode
@@ -258,9 +252,6 @@ interface FormDialogStepsProps {
    */
   steps: StepFlow
   confirm?: never
-  strip?: never
-  skip?: never
-  closeOnConfirm?: never
   /** The fields of the step on screen, read-only while `editable` is false. */
   children: (view: DialogStepView) => ReactNode
 }

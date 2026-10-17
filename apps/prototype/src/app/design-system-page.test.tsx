@@ -30,12 +30,13 @@ afterEach(() => {
 })
 
 describe("Design system page copy (F4: no Run)", () => {
-  it.each(["en-GB", "pt-BR"] as const)("shows the disabled Apply and the Developer Mode refusal in F4 words in %s", async (locale) => {
+  it.each(["en-GB", "pt-BR"] as const)("shows the disabled Apply and the Developer Mode warning in F4 words in %s", async (locale) => {
     setLocale(locale)
     const router = createRouter({ routeTree: createRootRoute({ component: DesignSystemPage }), history: createMemoryHistory({ initialEntries: ["/"] }) })
     render(<RouterProvider router={router} />)
     expect(await screen.findByRole("button", { name: m.project_apply({}, { locale }) })).toBeDisabled()
-    expect(screen.getByText(m.view_refused_developer_mode({}, { locale }))).toBeInTheDocument()
+    // Standing state, not a refusal: a status notice whose recovery is Use copies.
+    expect(screen.getByText(m.view_developer_mode_off({}, { locale })).closest("[role=status]")).not.toBeNull()
     expect(screen.getByRole("button", { name: m.project_use_copies({}, { locale }) })).toBeInTheDocument()
     const runEra = locale === "en-GB" ? /Use copies for this run|Can't prepare|Prepare View/ : /Usar cópias nesta execução|Não é possível preparar|Preparar visualização/
     expect(screen.queryByText(runEra)).toBeNull()
