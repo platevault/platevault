@@ -312,8 +312,6 @@ pub async fn catalogued(mode: ViewMode) -> World {
             subjects: vec![SubjectInput {
                 target_id: ngc.candidate.id,
                 name: None,
-                mosaic: false,
-                panels: Vec::new(),
             }],
             rig_ids: vec![redcat.id],
             goals: Vec::new(),
