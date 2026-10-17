@@ -25,8 +25,9 @@ The user asked for a better flow across all product work and said to keep it con
 
 ## Alternatives
 
-Use one Edit… verb rather than separate Rename, Edit details, and Edit optics verbs.
+The user asked for one consistent flow across product work, rather than separate skip and mark-done controls.
 
 ## Consequences
 
+Round 9 records decisions C1 to C15. The open Home and goal-condition parts have separate decision beads, astro-plan-b66vy and astro-plan-so89f.
 Amended: D-W76 in specs/063-clean-rebuild-contract/workflow-decisions.md:91 sets one Edit… verb in place of Rename…, Edit details…, and Edit optics.

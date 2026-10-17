@@ -25,7 +25,7 @@ The user dropped channel balance as a goal because per-channel goals set the rat
 
 ## Alternatives
 
-Goals may omit the quality bar and measure time or frames alone.
+Channel balance as a separate goal was not chosen. The per-channel goals set the ratio, and the Project page shows it.
 
 ## Consequences
 
