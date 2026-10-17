@@ -632,7 +632,13 @@ function TonightTable({ ctx, goals, nextGood, anyGoal }: { ctx: HomeContext; goa
         // Targets › Planned for tonight (an absent night), with the Target's panel and its Add to Plan open.
         openPage: { link: { to: "/targets", search: { view: "planned", open: target.id } } },
       },
-      run: () => addToPlan(target.id, tonight),
+      // Planned, the row loses its Add to Plan; focus stays on the row rather than falling to the page (WCAG 2.4.3).
+      run: () => {
+        const row = document.querySelector<HTMLElement>(`tr[data-row="${CSS.escape(g.progress.goal.id)}"]`)
+        const result = addToPlan(target.id, tonight)
+        if (result.ok) row?.focus()
+        return result
+      },
     }
   }
   return (
