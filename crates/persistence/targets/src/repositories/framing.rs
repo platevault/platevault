@@ -70,11 +70,15 @@ pub struct InsertFraming<'a> {
 // ── framing CRUD ──────────────────────────────────────────────────────────────
 
 /// Insert a new framing row. Returns the `created_at`/`updated_at` timestamp.
+/// Takes any executor, so a caller can insert inside its own transaction.
 ///
 /// # Errors
 /// Returns `persistence_core::DbError::Database` on constraint violation (e.g. unknown
 /// `project_id`/`target_id`) or query failure.
-pub async fn insert_framing(pool: &SqlitePool, data: &InsertFraming<'_>) -> DbResult<String> {
+pub async fn insert_framing<'e, E>(executor: E, data: &InsertFraming<'_>) -> DbResult<String>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
+{
     let now = Timestamp::now_iso();
     sqlx::query(
         "INSERT INTO framing (
@@ -96,7 +100,7 @@ pub async fn insert_framing(pool: &SqlitePool, data: &InsertFraming<'_>) -> DbRe
     .bind(data.clustering)
     .bind(&now)
     .bind(&now)
-    .execute(pool)
+    .execute(executor)
     .await?;
     Ok(now)
 }

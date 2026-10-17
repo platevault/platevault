@@ -239,9 +239,12 @@ explicit, reviewed plan, and the action is visible in the audit history.
   plan.
 - **Expect (negative):** No option is preselected, and no plan is created
   while the list is on screen. Membership is written only for the option
-  the user picked.
+  the user picked. A confirm that fails, or is refused because the plan
+  can no longer be opened, creates no framing or project and reopens no
+  completed project.
 - **Trace:** `crates/app/inbox/src/attribution.rs`
-  (`suggest_candidates`, `apply_chosen_attribution`),
+  (`suggest_candidates`, `resolve_chosen_attribution`,
+  `PendingAttribution::write`),
   `apps/desktop/src-tauri/src/commands/inbox.rs`
   (`inbox_attribution_suggest`),
   `apps/desktop/src/features/inbox/AttributionPicker.tsx`,

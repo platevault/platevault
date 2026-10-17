@@ -11,7 +11,7 @@ use crate::repositories::plans::{self, InsertPlan, InsertPlanItem};
 use persistence_core::DbResult;
 
 use super::channels::insert_project_channel_conn;
-use super::crud::insert_project_conn;
+use super::crud::insert_project;
 use super::sources::insert_project_source_conn;
 use super::{InsertProject, InsertProjectSource};
 
@@ -53,7 +53,7 @@ pub struct CreateProjectInput<'a> {
 pub async fn create_project_tx(pool: &SqlitePool, input: &CreateProjectInput<'_>) -> DbResult<()> {
     let mut tx = pool.begin().await?;
 
-    insert_project_conn(&mut tx, &input.project).await?;
+    insert_project(&mut *tx, &input.project).await?;
 
     for source in input.sources {
         insert_project_source_conn(&mut tx, source).await?;
