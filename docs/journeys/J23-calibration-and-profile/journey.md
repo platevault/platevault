@@ -126,14 +126,14 @@ The user checks the pinned calibration for the sessions in Project `NGC 7000 HOO
 - **Do:** With the S9 generic application selected in View and the View in Copies mode, open the Apply sheet and read its Corrected values section.
 - **Expect:** The section reads "2 corrected values", the two that held sessions recorded at ingestion in J19/S10. It lists each with its session, its field, the value in the header and the corrected value. 24 Sep's Target reads "–" in the header and NGC 7000 corrected, and 28 Sep's Equipment reads "–" in the header and `RedCat` corrected. Because the generic application reads no corrected values through its configuration, the section names the route as isolated patched copies in the Copies View. The sheet also shows the pending calibration change and the new View as a folder tree.
 - **Expect (negative):** The sheet offers no per-value choice: no accepting the source value and no excluding an input. Apply creates or changes no catalog correction; it only delivers the ones already recorded.
-- **Trace:** PREP-FR-08, PREP-FR-16 · VSEL-FR-14 · LIB-FR-12 · D-W100 · HARNESS-V5-FEEDBACK-R1.md Round 9 C15 · PREP-FR-03 conflicts (G9)
+- **Trace:** PREP-FR-03, PREP-FR-08, PREP-FR-16, PREP-AC-06 · VSEL-FR-14 · LIB-FR-12, LIB-FR-20 · D-W100, D-W122 · HARNESS-V5-FEEDBACK-R1.md Round 9 C15
 
 ### S11 — Apply the corrected values {#S11}
 
 - **Do:** Apply the reviewed View changes.
 - **Expect:** Apply builds the View from the originals, writes the two corrected values into isolated patched copies of the 24 Sep and 28 Sep frames in the Copies View, and swaps the View in.
 - **Expect (negative):** No original or link target is patched, and no correction is reported as delivered while the application still reads the original value.
-- **Trace:** PREP-FR-06, PREP-FR-09 · D-W100 · HARNESS-V5-FEEDBACK-R1.md Round 9 C15 · PREP-FR-03 conflicts (G9)
+- **Trace:** PREP-FR-03, PREP-FR-06, PREP-FR-09, PREP-AC-06 · D-W100, D-W122 · HARNESS-V5-FEEDBACK-R1.md Round 9 C15
 
 ## Success criteria
 
@@ -155,7 +155,7 @@ The user checks the pinned calibration for the sessions in Project `NGC 7000 HOO
 - G6: (dissolved 2026-10-15): D-W101 matches calibration at ingestion and makes the Project's Calibrate step a read-only check, so no Calibrate row offers `Stack from <session>`. Raw sets wait as calibration processes in the Calibration library, which J36 stacks.
 - G7: (dissolved 2026-10-15): PREP-AC-11 (D-W81, D-W83) answers it: for a profile whose input-write behavior is unknown or write-prone, Symlinks is refused with the input-write risk named, and Copies is offered without a silent mode change. S9 asserts that refusal for a generic application.
 - G8: Rests on provisional F4 items, pending the owner's confirmation in PR #1804: D-W106's refusal of Hide on a master an open Project uses through its sessions (S7b, SC5), and D-W102's ranking, which makes the 30 Sep master the best fully compatible flat for 24 Sep (P2, S3). If the owner changes one, the steps that cite it change.
-- G9: Contract conflict: 069 PREP-FR-03 still has the Apply sheet offer a choice per corrected value (application configuration, isolated patched copies, accepting the source value or excluding the input). Round 9 C15 moves corrections to session ingestion review and has Apply show "N corrected values", so S10 and S11 follow C15. Until PREP-FR-03 is amended, how each corrected value reaches the application rests on the prototype: through the profile's configuration, else as an isolated patched copy. Blocks readiness.
+- G9: Unresolved implementation qualification: D-W122 records Round 9 C15, and 069 PREP-FR-03 and PREP-AC-06 follow it, so the per-value choice is gone and S10 follows the contract. PREP-AC-06 tests a FILTER correction only. No requirement maps a Target or rig association, such as NGC 7000 or `RedCat`, to header keywords and values. S11 therefore can't say which keywords its patched copies write, or show that the application reads them. Blocks readiness until a requirement defines that mapping and a scenario tests it (astro-plan-ysy9m).
 
 ## Delta log
 

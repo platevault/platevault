@@ -4,13 +4,13 @@
 
 **Created**: 2026-10-03
 
-**Amended**: 2026-10-16, to the owner's answers of 2026-10-15/16, D-W107 to D-W116, and to the owner's second batch of 2026-10-16, D-W117 to D-W121, which also amends D-W107, D-W108, D-W110 and D-W113 in place.
+**Amended**: 2026-10-16, to the owner's answers of 2026-10-15/16, D-W107 to D-W116, and to the owner's second batch of 2026-10-16, D-W117 to D-W121, which also amends D-W107, D-W108, D-W110 and D-W113 in place, and on 2026-10-17 to Round 9 C15, D-W122.
 
 **Status**: Draft; conservative product decisions and all human-approval gate waivers are authorized. Requirements analysis and implementation verification remain required.
 
 **Input**: Rebuild PlateVault cleanly, preserve the old code as a recoverable reference, and reuse code where it satisfies the agreed product contract.
 
-The [product flow](../../docs/reviews/2026-10-03-product-flow-and-journeys.md) supplies the interaction details and worked example. The [workflow redesign](decisions.md#workflow-redesign-2026-10-06) of 2026-10-06 and its later rounds (decisions D-W1 through D-W121) amend it: the Project is the processing unit, with its sessions in groups and one input folder, its View, and Home is a dashboard rather than the Targets list. Where the product flow and a D-W decision disagree, the decision governs. This specification defines shared behavior and feature ownership. It does not authorize product implementation or claim that the redesigned flows run.
+The [product flow](../../docs/reviews/2026-10-03-product-flow-and-journeys.md) supplies the interaction details and worked example. The [workflow redesign](decisions.md#workflow-redesign-2026-10-06) of 2026-10-06 and its later rounds (decisions D-W1 through D-W122) amend it: the Project is the processing unit, with its sessions in groups and one input folder, its View, and Home is a dashboard rather than the Targets list. Where the product flow and a D-W decision disagree, the decision governs. This specification defines shared behavior and feature ownership. It does not authorize product implementation or claim that the redesigned flows run.
 
 ## User Scenarios & Testing
 
@@ -278,6 +278,7 @@ The user authorized conservative product defaults and, on 2026-10-04, waived eve
 | F4 Project model, 2026-10-14 (D-W93 to D-W106) | All feature owners |
 | F4 owner's answers, 2026-10-15/16 (D-W107 to D-W116) | All feature owners |
 | Owner's second batch, 2026-10-16 (D-W117 to D-W121, and D-W107, D-W108, D-W110 and D-W113 amended in place) | All feature owners |
+| Round 9 C15, recorded 2026-10-17 (D-W122) | PV-LIB, PV-PREP |
 
 The existing constitution prohibits debayering. A raw/CFA review specification must define supported read-only channel handling or seek an explicit constitutional amendment before adding debayered preview behavior.
 
