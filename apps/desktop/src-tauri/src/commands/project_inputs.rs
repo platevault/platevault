@@ -11,16 +11,18 @@
 //! commits. No command touches a file or the View: each change reads as
 //! pending until Apply. Adding sessions and making, splitting, renaming or
 //! marking a group run the core rules (placement, distinct group folders);
-//! removing or moving sessions and frame choices are the catalog's own edits.
-//! Group names arrive as text and the core builds the validated
-//! [`platevault_core::GroupName`]. Failures follow the library
-//! [`platevault_core::ErrorResponse`] conventions, naming the Project.
+//! removing or moving sessions, removing an empty group, frame choices and the
+//! View step's settings are the catalog's own edits. Group names arrive as
+//! text and the core builds the validated [`platevault_core::GroupName`];
+//! keyword names deserialize through their validating constructor. Failures
+//! follow the library [`platevault_core::ErrorResponse`] conventions, naming
+//! the Project.
 
 use std::sync::Arc;
 
 use platevault_core::library::Library;
 use platevault_core::projects::{ProjectInputs, SessionToAdd};
-use platevault_core::{FrameChoice, ProjectDesired, Revision};
+use platevault_core::{FrameChoice, ProjectDesired, ProjectViewSettings, Revision};
 use tauri::State;
 use uuid::Uuid;
 
@@ -213,6 +215,50 @@ pub async fn project_set_frames(
     library
         .catalog()
         .set_project_frames(project_id, expected_revision, &capture_keys, choice)
+        .await
+        .map_err(fail(Some(project_id)))
+}
+
+/// Remove an empty group.
+///
+/// # Errors
+/// `InvalidInput` for a Project that isn't open, or a group that still holds
+/// sessions or goals; `Conflict` for a stale revision; `NotFound` for an
+/// unknown Project or group.
+#[tauri::command]
+#[specta::specta]
+pub async fn project_remove_group(
+    library: State<'_, Arc<Library>>,
+    project_id: Uuid,
+    expected_revision: Revision,
+    group_id: Uuid,
+) -> Reply<ProjectDesired> {
+    library
+        .catalog()
+        .remove_project_group(project_id, expected_revision, group_id)
+        .await
+        .map_err(fail(Some(project_id)))
+}
+
+/// The View step's settings: the input mode, this Project's keyword names
+/// (`null` uses the Settings defaults), the application the View is handed
+/// to and the processing location. A mode switch reaches the View only
+/// through Apply.
+///
+/// # Errors
+/// `Conflict` for a stale revision; `NotFound` for an unknown Project or
+/// application profile; `InvalidInput` for a Project that isn't open.
+#[tauri::command]
+#[specta::specta]
+pub async fn project_set_view_settings(
+    library: State<'_, Arc<Library>>,
+    project_id: Uuid,
+    expected_revision: Revision,
+    settings: ProjectViewSettings,
+) -> Reply<ProjectDesired> {
+    library
+        .catalog()
+        .set_project_view_settings(project_id, expected_revision, &settings)
         .await
         .map_err(fail(Some(project_id)))
 }

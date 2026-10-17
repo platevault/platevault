@@ -18,6 +18,9 @@ path = "src/bin/schema-agreement-test.rs"
 [dependencies]
 calibration_core = { path = "../../calibration/core" }
 domain_core = { path = "../../domain/core" }
+# The library-shell request DTOs (`library_requests`) convert into these
+# model types.
+platevault_model = { path = "../../platevault-model" }
 schemars.workspace = true
 serde.workspace = true
 serde_json.workspace = true

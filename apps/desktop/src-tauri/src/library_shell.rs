@@ -142,6 +142,8 @@ macro_rules! library_commands {
             crate::commands::project_inputs::project_rename_group,
             crate::commands::project_inputs::project_set_group_panel,
             crate::commands::project_inputs::project_set_frames,
+            crate::commands::project_inputs::project_remove_group,
+            crate::commands::project_inputs::project_set_view_settings,
             // apply (066 VSEL-FR-14, 069)
             crate::commands::project_apply::project_apply_preview,
             crate::commands::project_apply::project_apply,
@@ -151,6 +153,14 @@ macro_rules! library_commands {
             crate::commands::project_wrap_up::project_wrap_up_status,
             crate::commands::project_wrap_up::project_close,
             crate::commands::project_wrap_up::project_duplicate,
+            crate::commands::project_wrap_up::project_reopen_wrap_up_step,
+            crate::commands::project_wrap_up::project_closed_snapshot,
+            // sessions archive (064 LIB-FR-17, 071 STO-FR-13)
+            crate::commands::sessions_archive::sessions_archive_review,
+            crate::commands::sessions_archive::sessions_archive,
+            // view previous (066, 071 STO-FR-10; D-W110)
+            crate::commands::view_previous::project_previous_items,
+            crate::commands::view_previous::project_review_previous_item,
             // frame review
             crate::commands::frame_review::pix_review_frames,
             crate::commands::frame_review::pix_start_measurement,
@@ -187,6 +197,8 @@ macro_rules! library_commands {
             crate::commands::calibration_inputs::calibration_custody_facts,
             crate::commands::session_calibration::calibration_needs,
             crate::commands::session_calibration::calibration_reassign,
+            crate::commands::session_calibration::calibration_confirm,
+            crate::commands::session_calibration::calibration_decline,
             // profiles
             crate::commands::profiles::prepare_profiles,
             crate::commands::profiles::prepare_profile_create,
