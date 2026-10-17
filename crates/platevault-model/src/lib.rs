@@ -1005,7 +1005,10 @@ enum JsonValueWire {
     Bool(bool),
     Number(f64),
     String(String),
+    // The derives expand into nested items, where `Self` doesn't resolve.
+    #[allow(clippy::use_self)]
     Array(Vec<JsonValueWire>),
+    #[allow(clippy::use_self)]
     Object(BTreeMap<String, JsonValueWire>),
 }
 
