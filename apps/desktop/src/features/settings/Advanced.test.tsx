@@ -311,6 +311,19 @@ describe('Advanced — Software Update section', () => {
     );
   });
 
+  it('asks for a restart when the app was replaced after it was opened', async () => {
+    mockGetUpdateSnapshot.mockReturnValue({
+      phase: 'install-failed',
+      version: '0.7.0',
+      error: { code: 'app-replaced' },
+    });
+    render(<Advanced save={vi.fn()} />);
+
+    expect(await screen.findByTestId('update-status')).toHaveTextContent(
+      'Could not install update: the PlateVault app was moved or replaced after it was opened. Restart PlateVault, then try again.',
+    );
+  });
+
   it('offers Install now and Install on quit for an available update, without starting either', async () => {
     mockGetUpdateSnapshot.mockReturnValue({
       phase: 'available',

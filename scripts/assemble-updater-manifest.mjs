@@ -13,7 +13,7 @@
  *   - v0.6.0's macOS leg failed, so the published manifest had no `darwin-*`
  *     key. Every 0.5.0 Mac got `TargetsNotFound`, and nothing stopped the
  *     release. Now a missing platform is an error, so no manifest is published.
- *   - Authenticode signing (`sign-windows`) rewrites the `.exe` and `.msi`, and
+ *   - Authenticode signing on Windows rewrites the `.exe` and `.msi`, and
  *     those files are the Windows updater payloads. A minisign signature made
  *     before that no longer matches the bytes clients download, so every
  *     Windows update would fail. Now each signature is verified, as the

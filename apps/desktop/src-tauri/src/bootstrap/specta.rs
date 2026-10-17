@@ -145,7 +145,7 @@ use crate::commands::tools::{
 };
 use crate::commands::update::{
     update_check, update_check_on_startup, update_install_now, update_install_on_quit,
-    update_status,
+    update_offer, update_set_locale, update_status,
 };
 
 /// Shared base for specta builder — chain common config and all production
@@ -185,6 +185,27 @@ fn base_builder() -> Builder<tauri::Wry> {
         .typ::<contracts_core::targets::ResolverSettingsGetRequest>()
         .typ::<contracts_core::targets::ResolverSettingsUpdateRequest>()
         .typ::<contracts_core::targets::ResolverSettingsResponse>()
+        // astro-plan-ef440 — the rebuilt shell's `library_new_captures`
+        // query reply and event payload (`contracts_core::captures`). The
+        // rebuilt shell registers its commands outside this builder, so the
+        // type is registered on its own.
+        .typ::<contracts_core::captures::NewCaptures>()
+        // astro-plan-c72oo: how long the backend waits for the OS to accept
+        // the update offer's notification, so the webview's in-app notice
+        // knows when to stop waiting for the backend's offer.
+        .constant(
+            "UPDATE_OFFER_DEADLINE_MS",
+            u32::try_from(desktop_services::update::offer::OFFER_DEADLINE.as_millis())
+                .expect("the offer deadline fits in u32 milliseconds"),
+        )
+        // astro-plan-c72oo: how long a notification that stays on screen
+        // carries the offer before the backend offers it in-app too, so the
+        // webview reads the offer again should that event be lost.
+        .constant(
+            "UPDATE_PERSISTENT_OFFER_TIMEOUT_MS",
+            u32::try_from(desktop_services::update::offer::PERSISTENT_OFFER_TIMEOUT.as_millis())
+                .expect("the persistent offer timeout fits in u32 milliseconds"),
+        )
 }
 
 // `collect_commands!` uses `$b:ident $(:: …)*` patterns — it cannot accept a
@@ -309,10 +330,13 @@ macro_rules! app_commands {
             recovery_status,
             // signed updater (astro-plan-5wcib)
             update_status,
+            // update offer in the system notification (astro-plan-c72oo)
+            update_offer,
             update_check_on_startup,
             update_check,
             update_install_now,
             update_install_on_quit,
+            update_set_locale,
             // audit
             audit_list,
             audit_export,

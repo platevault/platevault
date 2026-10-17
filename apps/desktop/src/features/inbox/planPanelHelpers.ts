@@ -11,8 +11,8 @@
 
 import type { InboxPlanAction } from './store';
 import { m } from '@/lib/i18n';
-import { basename } from '@/lib/path';
-export { basename };
+import { nativeWithSlashes, wireBasename } from '@/lib/path';
+export { wireBasename };
 
 function actionLabel(kind: string): string {
   switch (kind) {
@@ -81,30 +81,45 @@ function normalizeFrameTypeHint(raw: string): string {
   }
 }
 
-/** Normalise a path's separators and split into lowercase segments. */
+/**
+ * Where an action's file lands, with `/` as the only separator: the absolute
+ * destination captured from the confirm response (a native path) when there
+ * is one, else the action's root-relative preview (wire text). Under a
+ * Windows path every `\` becomes `/`; wire text and macOS or Linux paths keep
+ * a `\` as part of a name, so `folder/a\b.fits` lands in `folder`.
+ */
+export function actionDestination(
+  action: InboxPlanAction,
+  absoluteByFromPath?: Record<string, string>,
+): string {
+  const absolute = absoluteByFromPath?.[action.fromPath];
+  return absolute !== undefined
+    ? nativeWithSlashes(absolute)
+    : action.destinationPreview;
+}
+
+/** Split a `/`-separated path into lowercase segments. */
 function pathSegments(path: string): string[] {
   return path
-    .replace(/\\/g, '/')
     .split('/')
     .filter(Boolean)
     .map((s) => s.toLowerCase());
 }
 
-/** Directory portion of a destination (drops the trailing file name). */
+/** Directory portion of a `/`-separated destination (drops the file name). */
 function destinationDir(path: string): string {
-  const norm = path.replace(/\\/g, '/');
-  const idx = norm.lastIndexOf('/');
-  return idx > 0 ? norm.slice(0, idx) : norm;
+  const idx = path.lastIndexOf('/');
+  return idx > 0 ? path.slice(0, idx) : path;
 }
 
 /**
- * Shorten a long destination to a readable tail — keep the last two path
- * segments so the summary shows where files land without overflowing the row.
+ * Shorten a long `/`-separated destination to a readable tail — keep the
+ * last two path segments so the summary shows where files land without
+ * overflowing the row.
  */
 function shortDestination(path: string): string {
-  const norm = path.replace(/\\/g, '/');
-  const parts = norm.split('/').filter(Boolean);
-  if (parts.length <= 2) return norm;
+  const parts = path.split('/').filter(Boolean);
+  if (parts.length <= 2) return path;
   return `…/${parts.slice(-2).join('/')}`;
 }
 
@@ -117,6 +132,9 @@ function shortDestination(path: string): string {
  *      (`itemFrameType` — e.g. a single-type catalogue folder of darks whose
  *      in-place destination carries no frame keyword), then
  *   4. the action kind (e.g. "catalogue") as a last resort.
+ *
+ * `destination` is the action's {@link actionDestination}; `action.fromPath`
+ * is wire text. Both split on `/` only.
  */
 export function frameTypeLabel(
   action: InboxPlanAction,
@@ -137,7 +155,7 @@ export function frameTypeLabel(
   // Match a frame keyword INSIDE the file name (e.g. "bias_001.fits",
   // "master_dark_300s.fits") so per-file rows of an in-place mixed folder get
   // their real type instead of the folder's dominant hint.
-  const base = basename(action.fromPath).toLowerCase();
+  const base = wireBasename(action.fromPath).toLowerCase();
   for (const [token, singular] of FRAME_TYPE_KEYWORDS) {
     if (base.includes(token)) return singular;
   }
@@ -210,7 +228,7 @@ export function buildGroupSummary(
     { count: number; frameType: string; destinationFull: string }
   >();
   for (const a of actions) {
-    const dest = absoluteByFromPath?.[a.fromPath] ?? a.destinationPreview;
+    const dest = actionDestination(a, absoluteByFromPath);
     const frameType = frameTypeLabel(a, dest, itemFrameType);
     const destDir = destinationDir(dest);
     const key = `${frameType}${destDir}`;
@@ -252,7 +270,7 @@ export function buildBreakdownFromActions(
 ): Array<{ kind: string; count: number }> {
   const buckets = new Map<string, number>();
   for (const a of actions) {
-    const dest = absoluteByFromPath?.[a.fromPath] ?? a.destinationPreview;
+    const dest = actionDestination(a, absoluteByFromPath);
     const frameType = frameTypeLabel(a, dest, itemFrameType);
     buckets.set(frameType, (buckets.get(frameType) ?? 0) + 1);
   }
@@ -305,8 +323,7 @@ export function breakdownDestination(
 ): { short: string; full: string } {
   const dirs = new Set<string>();
   for (const a of actions) {
-    const dest = absoluteByFromPath?.[a.fromPath] ?? a.destinationPreview;
-    dirs.add(destinationDir(dest));
+    dirs.add(destinationDir(actionDestination(a, absoluteByFromPath)));
   }
   if (dirs.size === 1) {
     const full = [...dirs][0] || itemName || '(root)';

@@ -1,184 +1,161 @@
 ---
 id: J23
-title: Calibrate a processing run automatically, resolve an exception and choose an application profile
-version: 5
+title: Review Project calibration and configure its View
+version: 7
 status: draft
 last_reviewed: 2026-10-03
 actors: [primary-user]
-surfaces: [calibration, view-review, preparation, projects, applications]
+surfaces: [calibration, projects, view-review, applications]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 068-calibration-inputs, 069-application-handoff, D04, D13, D15, D19, D-W3, D-W5, D-W37, D-W49, D-W50, D-W55, specs/063-clean-rebuild-contract/decisions.md, specs/063-clean-rebuild-contract/workflow-decisions.md, specs/068-calibration-inputs/spec.md, specs/069-application-handoff/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-e-choose-calibration-and-application-preparation, HARNESS-V5-IA.md#S5, HARNESS-V5-IA.md#S14, HARNESS-V5-IA.md#S16, HARNESS-V5-IA.md#round-2b-foundation-status-bar-and-p-cal3-2026-10-09, HARNESS-V5-FEEDBACK-R1.md#round-1b-decisions-user-2026-10-09, HARNESS-V5-FEEDBACK-R1.md#round-5-user-2026-10-10, P-CAL3, apps/prototype/src/features/v5/c-runs/calibrate-step.tsx, apps/prototype/src/features/v5/c-runs/prepare-step.tsx, apps/prototype/src/domain/calibration.ts, apps/prototype/messages/en-GB.json, J36, HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#round-7, P-PREP3]
+trace: [063-clean-rebuild-contract, 068-calibration-inputs, 069-application-handoff, D04, D13, D15, D19, D-W3, D-W5, D-W95, D-W94, D-W101, specs/063-clean-rebuild-contract/decisions.md, specs/063-clean-rebuild-contract/workflow-decisions.md, specs/068-calibration-inputs/spec.md, specs/069-application-handoff/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-e-choose-calibration-and-application-preparation, HARNESS-V5-IA.md#S5, HARNESS-V5-IA.md#S14, HARNESS-V5-IA.md#S16, HARNESS-V5-IA.md#round-2b-foundation-status-bar-and-p-cal3-2026-10-09, HARNESS-V5-FEEDBACK-R1.md#round-1b-decisions-user-2026-10-09, HARNESS-V5-FEEDBACK-R1.md#round-5-user-2026-10-10, P-CAL3, apps/prototype/src/domain/calibration.ts, apps/prototype/messages/en-GB.json, J36, HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#round-7, P-PREP3, 064-library-inventory, 065-project-goals, 066-view-selection, D-W93, D-W96, D-W97, D-W98, D-W99, D-W100, D-W102, D-W103, D-W104, D-W105, D-W106, specs/063-clean-rebuild-contract/spec.md, specs/064-library-inventory/spec.md, specs/065-project-goals/spec.md, specs/066-view-selection/spec.md]
 ---
 
 ## Goal
 
-When the reviewed processing run reaches Calibrate, PlateVault assigns every
-fully compatible master from the Calibration library without user action.
-Runs are assigned masters only. The readiness line reports the result per
-calibration kind, and Matches explains each assignment. The user defers one
-automatic flat, then uses a master whose optical-train evidence is unknown
-under a scoped exception with a reason. The user checks which runs use each
-master, picks a maintained application profile, and decides how a catalog
-correction reaches the application. Done means:
-- Every requirement (one light session and one calibration kind) is Automatic, Accepted or Exception with its reason.
-- Every calibration input is a registered master, and no raw calibration frame is an input.
-- The Siril profile is chosen and its capability evidence is shown.
-- The review names the effective value Siril will read for the corrected session.
-- No calibration or source file is created or changed.
+The user checks the pinned calibration for the sessions in Project `NGC 7000 HOO`, confirms a suggested flat on its session, and chooses an application profile and input mode in the Project's View. Done means:
+- The Project's Calibrate step shows the calibration pinned on each group and night, without an assignment control or Proceed gate.
+- Every session held by the Project has settled calibration: each kind is pinned or explicitly set to No.
+- Confirming the suggested flat records its unknown optical-train evidence without changing the master or another session's assignment.
+- Reassigning calibration on a session appears as a pending change on the open Project and does not change the existing View before Apply.
+- Siril and an input mode are selected in View, and the Apply sheet reports the corrected values recorded at ingestion, which Apply applies with no per-value choice.
+- Calibration masters and original source files remain unchanged.
 
 ## Preconditions
 
-- P1: J22 completed, on a library where J36 ran right after J19 (J20 to J22 read no calibration). Run `NGC7000-HOO-Siril` in Project `NGC 7000 HOO` (subject NGC 7000, rig RedCat) has a saved membership of 208 lights / 17h 20m in five sessions (18, 24, 26, 28 and 30 Sep) and stands at its Review step. Its calibration policy is the default, with **Auto-assign** on.
-- P2: The calibration fixture: the raw sets of J36/P2, which J19 indexed in `Astro-T7/Calibration` and J36 stacked into masters. The Calibration library holds these masters in their structured storage folders:
+- P1: J22's frame review is complete. Project `NGC 7000 HOO` holds 208 RedCat lights / 17h 20m in five sessions dated 18, 24, 26, 28 and 30 Sep, has settled calibration for every held session, and has an applied View. Its application is not yet selected in View.
+- P2: The raw sets of J36/P2 were indexed in `Astro-T7/Calibration`; J36 turns them into masters through their calibration processes. The flat age window is set to 30 nights. The Calibration library holds the imported masters in its structured storage:
   - `MasterDark_2026-09-20.xisf` and `MasterBias_2026-09-20.xisf`: camera, dimensions, binning, gain and offset match the J19/P2 RedCat lights, and the dark matches their 300 s exposure.
   - `MasterFlat_2026-09-18.xisf`: Ha, with RedCat optical-train evidence.
-  - `MasterFlat_2026-09-30.xisf`: OIII, with RedCat optical-train evidence. For 24 Sep it matches every flat criterion and is the top-ranked compatible master.
+  - `MasterFlat_2026-09-30.xisf`: OIII, with RedCat optical-train evidence. For 24 Sep it passes the configured flat checks and is the best fully compatible flat; it was captured six nights after the lights.
+  - `MasterDark_ASI294MM_300s.xisf`: a dark from the second camera, captured 148 days before 15 Oct 2026, for checking the old-master badge.
   - `MasterFlat_2026-09-26.xisf`: OIII, imported in J36/S9 with no optical-train evidence.
 
   The 50 raw bias frames that J36/S8 kept stay indexed in `Astro-T7/Calibration/Raw/Bias/2026-09-20/`.
-- P3: The library also holds the two other masters J36/S9 imported: a master dark from a second camera (ZWO ASI294MM Pro) and an OIII master flat from a second optical train (Esprit 100). Neither is part of rig RedCat.
+- P3: The library also holds the two other masters J36/S9 and J36/S9a imported: a master dark from a second camera (ZWO ASI294MM Pro) and an OIII master flat from a second optical train (Esprit 100). Neither is part of rig RedCat. The bias master also holds the 15 Jun version that J36/S9a added, which is never the closest version for these sessions.
 - P4: Siril is installed at a known path and not yet configured in PlateVault.
 - P5: The J19/P5 manifest is available.
 
 ## Steps
 
-### S1 — Reach Calibrate {#S1}
+### S1 — Read Project calibration {#S1}
 
-- **Do:** In `NGC7000-HOO-Siril`, move from Review to the Calibrate step.
-- **Expect:** Without any user action, the readiness line reads Dark ✓, Flat ✓ and Bias ✓, with nothing to review and **Auto-assign** on. Each requirement is assigned a master automatically: one per light session and calibration kind, 15 in all (5 sessions × dark, flat and bias). The light sessions are grouped by channel, rig, dimensions, binning and gain/offset.
-- **Expect (negative):** No master with an unknown or incompatible criterion is assigned automatically. PlateVault writes no file.
-- **Trace:** flow E1 · CAL-FR-02, CAL-FR-09 · CAL-AC-01 · D-W5 · HARNESS-V5-IA.md §Screens S5 (Calibrate: readiness line, automatic policy)
+- **Do:** Open Project `NGC 7000 HOO` and select **Calibrate**.
+- **Expect:** Calibrate shows a read-only diagram of the calibration pinned on the Project's groups and nights. It includes the five sessions' dark, flat and bias assignments with the relevant version and date, or the explicit No choice.
+- **Expect (negative):** Calibrate has no assignment control, Matches table or Proceed gate. Opening it does not rematch or change a session.
+- **Trace:** CAL-FR-02, CAL-FR-09, LIB-FR-23 · D-W101, D-W105
 
-### S2 — Open Matches {#S2}
+### S2 — Inspect the calibration diagram {#S2}
 
-- **Do:** Open **Matches** with **Show**.
-- **Expect:** Matches lists one row per light session and calibration kind, 15 rows in two groups (Ha and OIII). Each row shows its light session, its state `Automatic`, the assigned master's file name with its SHA-256, and its criteria. The rig and camera that every group shares appear once in the table title, not as a grouping level.
-- **Expect (negative):** The P3 master dark from the second camera is not listed as a candidate. The P3 Esprit master flat is listed only as incompatible on its rig (optical train) and is never assigned.
-- **Trace:** flow E1 · CAL-FR-01, CAL-FR-09, CAL-FR-10 · CAL-AC-14 · D-W37 · HARNESS-V5-IA.md §Screens S5 (Review matches)
+- **Do:** Expand the RedCat group's nights and inspect the calibration entries for 18, 24, 26, 28 and 30 Sep.
+- **Expect:** Each night shows the pinned calibration its lights receive. Different pinned versions appear on the nights that use them, and a night mixing versions with the same settings is marked as such.
+- **Expect (negative):** The diagram offers no action to assign or replace calibration and does not report unresolved calibration for a session already held by the Project.
+- **Trace:** CAL-FR-09, CAL-FR-22, CAL-FR-23 · PREP-FR-16 · D-W101, D-W104
 
-### S3 — Ask why a master was assigned {#S3}
+### S3 — Read why a session has its calibration {#S3}
 
-- **Do:** Open the criteria of the automatic Ha flat assignment for 18 Sep.
-- **Expect:** The criteria read `All 8 criteria compatible`. They list camera, dimensions, binning, gain, offset, image type, channel and rig (optical train), each with the light's value, the master's value and Compatible, Incompatible or Unknown. They stay available after assignment.
-- **Expect (negative):** No temperature tolerance is applied unless it is shown.
-- **Trace:** flow E1 · CAL-FR-03 · D13
+- **Do:** Open the details for the 24 Sep OIII session and read **Why this match** for its dark and pinned flat.
+- **Expect:** Each pinned or suggested assignment shows compatible, incompatible and unknown criteria, along with the capture dates for the light and calibration. The session records the rig version it was captured with.
+- **Expect (negative):** An unknown optical-train value is shown as unknown; it is not inferred from a filename or another session.
+- **Trace:** CAL-FR-03, CAL-FR-21 · LIB-FR-26 · D-W102, D-W103, D-W104
 
-### S4a — See that every input is a master {#S4a}
+### S4a — Review the calibration inputs {#S4a}
 
-- **Do:** In Matches, read every row's master, and open the row menu of the 18 Sep bias row.
-- **Expect:** Every assigned input is a master file from the Calibration library, shown with its SHA-256: `MasterDark_2026-09-20.xisf`, `MasterBias_2026-09-20.xisf`, `MasterFlat_2026-09-18.xisf` or `MasterFlat_2026-09-30.xisf`. The row menu offers masters only, as `Use MasterBias_2026-09-20.xisf`. A master with an unknown or incompatible criterion is offered only as `Use <file name> as exception…`.
-- **Expect (negative):** The 50 raw bias frames kept in J36/S8 are not listed as an input or a candidate anywhere in the run, and no raw calibration session can be chosen as an input. PlateVault writes no master file.
-- **Trace:** flow E1 · CAL-FR-02, CAL-FR-08 · HARNESS-V5-FEEDBACK-R1.md §Round 1b P-CAL3 (runs are assigned masters only) · HARNESS-V5-IA.md §Round 2b foundation (P-CAL3: masters only)
+- **Do:** In the session details, inspect the calibration kinds and the files pinned for the 18 Sep Ha session.
+- **Expect:** Session details distinguish pinned raw calibration from a pinned master version. When both raw flats and a matching master flat are present, the Project's View uses the master flat unless the session is switched to its raw flats. The 50 raw bias frames remain raw files and create no master record.
+- **Expect (negative):** The Project's Calibrate diagram does not offer a row menu for selecting a master or a raw set.
+- **Trace:** CAL-FR-04, CAL-FR-08, CAL-FR-09 · LIB-FR-23 · D-W101, D-W102
 
-### S5 — Defer 24 Sep's flat {#S5}
+### S5 — Review a suggested flat {#S5}
 
-- **Do:** In Matches, open the criteria of 24 Sep's automatic flat `MasterFlat_2026-09-30.xisf` and of `MasterFlat_2026-09-26.xisf`. From 24 Sep's flat row menu, choose `Use MasterFlat_2026-09-26.xisf as exception…` and cancel the dialog. Then choose **Defer** and open the Prepare step.
-- **Expect:**
-  - The 30 Sep master reads `All 8 criteria compatible`. The 26 Sep master lists its rig (optical train) as Unknown.
-  - Cancelling the dialog leaves the row Automatic with the 30 Sep master.
-  - After Defer the row reads Deferred with no master. The readiness line reads Flat 4/5 and `1 to review`.
-  - Prepare's calibration check reads `1 requirement to review` and blocks preparation.
-  - The row menu offers `Use MasterFlat_2026-09-30.xisf`, the 26 Sep master as an exception, `Process without flat…` and **Use automatic**.
-- **Expect (negative):** The 26 Sep master is not shown as compatible, and the deferred flat is not counted as a handoff input. The 30 Sep master is not reassigned automatically while the deferral stands. Cancelling the dialog records nothing.
-- **Trace:** flow E2 · CAL-FR-03, CAL-FR-05, CAL-FR-08, CAL-FR-09 · CAL-AC-02, CAL-AC-06 · D-W5
+- **Do:** In the 24 Sep session details, read the suggested `MasterFlat_2026-09-26.xisf` and its **Why this match** evidence.
+- **Expect:** The 26 Sep flat is a suggestion because its optical-train evidence is unknown. The pinned 30 Sep flat remains unchanged while the suggestion is only being inspected.
+- **Expect (negative):** The unknown train is not described as compatible, and inspecting the suggestion changes neither the master evidence nor the pinned assignment.
+- **Trace:** CAL-FR-03, CAL-FR-05, CAL-FR-19, CAL-FR-20 · CAL-AC-03 · D-W102
 
-### S6 — Record a scoped exception {#S6}
+### S6 — Confirm the suggested flat on its session {#S6}
 
-- **Do:** From 24 Sep's flat row menu, choose `Use MasterFlat_2026-09-26.xisf as exception…`. Enter the reason `Same rotation as 26 Sep; train not changed` and click **Record exception**.
-- **Expect:**
-  - The dialog reads `this run only`.
-  - 24 Sep's flat row reads Exception with the 26 Sep master. Its criteria read `Rig unknown`, and its note reads `Exception · Same rotation as 26 Sep; train not changed`.
-  - The readiness line reads Dark ✓, Flat 5/5 and Bias ✓, with nothing to review. Prepare's calibration check passes with `5 masters`.
-  - The row menu still offers `Use MasterFlat_2026-09-30.xisf` as a compatible alternative.
-- **Expect (negative):** In the Calibration library, the 26 Sep master's own evidence still reads optical train unknown. The exception makes it compatible nowhere else.
-- **Trace:** flow E2 · CAL-FR-05, CAL-FR-09 · CAL-AC-03 · D-W5
+- **Do:** On the 24 Sep session, choose **Reassign…** for flats and confirm `MasterFlat_2026-09-26.xisf` despite its unknown optical-train evidence.
+- **Expect:** The 24 Sep session now has the 26 Sep flat pinned, with the unknown criterion recorded on the confirmation. The Calibration library still shows the flat's optical train as unknown, and other sessions keep their own assignments.
+- **Expect (negative):** PlateVault asks for no exception reason, does not make the master universally compatible, and does not change the flat pinned on another session.
+- **Trace:** CAL-FR-05, LIB-FR-23, LIB-FR-25 · CAL-AC-03 · D-W102, D-W106
 
-### S7 — Confirm the exception is run-scoped {#S7}
+### S7 — Review the pending Project change {#S7}
 
-- **Do:** In Project `NGC 7000 HOO`, click **Start run…**, choose subject NGC 7000 and rig RedCat, leave **Profile (optional)** at None, and start the run. On the run header choose **Rename** and enter `24 Sep flat check`. The session picker starts with every candidate selected. Leave only 24 Sep selected, save the run, and move to Calibrate.
-- **Expect:**
-  - The run opens at Select, and its header reads the automatic name `NGC 7000 RedCat` with subject NGC 7000 and rig RedCat. After Rename the run header and the Project's Runs table read `24 Sep flat check`.
-  - The readiness line reads Dark ✓, Flat ✓ and Bias ✓. The 24 Sep flat row reads Automatic with `MasterFlat_2026-09-30.xisf`. Its row menu offers the 26 Sep master only as `Use MasterFlat_2026-09-26.xisf as exception…`, with its rig unknown and no exception attached.
-- **Expect (negative):** Start run asks for no run name. Rename changes neither the run's subject, rig nor session selection. The S6 exception does not appear in this run.
-- **Trace:** flow E2 · VSEL-FR-03 · CAL-FR-02, CAL-FR-05 · CAL-AC-01, CAL-AC-03 · D-W49, D-W50
+- **Do:** Return to Project `NGC 7000 HOO` and inspect Calibrate and the pending changes after the session reassignment.
+- **Expect:** The Project labels the calibration reassignment as a pending change from the session. Calibrate still has no assignment control. The existing View stays unchanged until Apply.
+- **Expect (negative):** A session reassignment does not silently rewrite the View or change a Closed or Archived Project.
+- **Trace:** CAL-FR-09 · LIB-FR-25 · VSEL-FR-12 · D-W100, D-W106
 
-### S7a — Turn automatic assignment off {#S7a}
+### S7a — Inspect dated master versions and age {#S7a}
 
-- **Do:** In `24 Sep flat check`, turn **Auto-assign** off. Read Matches, then accept the suggested `MasterFlat_2026-09-30.xisf` for 24 Sep's flat. Open the Prepare step and read its calibration check.
-- **Expect:**
-  - With **Auto-assign** off, each of the 3 requirements of 24 Sep reads Suggested with the master automatic assignment would choose: `MasterDark_2026-09-20.xisf`, `MasterFlat_2026-09-30.xisf` and `MasterBias_2026-09-20.xisf`. None is assigned, and the readiness line counts the 3 suggestions to review.
-  - After acceptance the flat row reads Accepted, distinct from Automatic and Suggested, its criteria stay available, and the readiness line counts 2 to review.
-  - Prepare's calibration check counts the dark and the bias as waiting for acceptance.
-- **Expect (negative):** No row reads Automatic while **Auto-assign** is off, and the 26 Sep master is not suggested. No suggestion is treated as a handoff input before it is accepted: Prepare lists neither the dark nor the bias suggestion as a calibration input.
-- **Trace:** flow E1 · CAL-FR-02, CAL-FR-08, CAL-FR-09 · CAL-AC-11 · D-W5, D-W55 · HARNESS-V5-FEEDBACK-R1.md §Round 6 Calibration ("Calibration Off")
+- **Do:** Open the Calibration library and inspect the RedCat dark master and `MasterDark_ASI294MM_300s.xisf`.
+- **Expect:** The RedCat dark's dated versions are shown without a Latest label. The ASI294MM dark shows `Old · 148 d`; flats have no age badge.
+- **Expect (negative):** Adding a version does not move a session to it, create an Update notice or bulk-update pinned assignments.
+- **Trace:** CAL-FR-14, CAL-FR-15 · D-W103
 
-### S7b — See which runs use each master {#S7b}
+### S7b — Try to hide a master pinned on this Project {#S7b}
 
-- **Do:** In `24 Sep flat check`, turn **Auto-assign** back on. Open the Calibration library. Open the details of `MasterFlat_2026-09-30.xisf` and its Used by, then those of `MasterFlat_2026-09-26.xisf` and of the two P3 masters.
-- **Expect:**
-  - `MasterFlat_2026-09-30.xisf` reads `Used by 2 runs`. Its popover lists `NGC7000-HOO-Siril` and `24 Sep flat check`, each with its Project, and each entry opens that run's Calibrate step.
-  - `MasterFlat_2026-09-26.xisf` reads `Used by 1 run`, which is `NGC7000-HOO-Siril`.
-  - The two P3 masters name no run.
-- **Expect (negative):** Opening Used by does not expand the master row, and reading it changes no assignment.
-- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 5 Calibration (master details; Used by is a popover) · HARNESS-V5-IA.md §Screens S14 · CAL-FR-08
+- **Do:** Choose **Hide** on `MasterFlat_2026-09-26.xisf` after it is pinned on the 24 Sep session.
+- **Expect:** Hide is refused and names Project `NGC 7000 HOO`, which uses the master through its session.
+- **Expect (negative):** The master and its versions remain in the Calibration library, the session keeps its pinned assignment, and no file moves.
+- **Trace:** CAL-FR-16 · LIB-FR-23 · D-W106
 
-### S7c — Try to dismiss a master that runs use {#S7c}
+### S7c — Hide and restore an unused master {#S7c}
 
-- **Do:** In the Calibration library, open the details of `MasterFlat_2026-09-30.xisf` and click **Dismiss**. Open the refusal's disclosure.
-- **Expect:** Dismiss is refused with `Can't dismiss · used by 2 runs ▸`. Its disclosure names `NGC7000-HOO-Siril` and `24 Sep flat check`, and each entry opens that run's Calibrate step.
-- **Expect (negative):** The master stays listed under Flats with its storage path and SHA-256, and the Dismissed filter does not list it. Both runs keep their assignment of it, and no file moves.
-- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 6 Calibration ("Dismiss is refused while a run uses the master") · P-CAL2 · HARNESS-V5-IA.md §Screens S14
+- **Do:** Choose **Hide** on the unused ASI294MM dark, open **Show hidden**, and choose **Restore**.
+- **Expect:** The unused master leaves the active Calibration list and is absent from matching and offers while hidden. Show hidden lists it with Restore; after restoration it returns to the active list.
+- **Expect (negative):** Hide and Restore do not move, rename or delete the master file.
+- **Trace:** CAL-FR-16 · D-W76, D-W106
 
-### S8 — Choose the Siril profile {#S8}
+### S8 — Choose Siril in the Project's View {#S8}
 
-- **Do:** In the Prepare step of `NGC7000-HOO-Siril`, choose **Siril** under Application. Its executable state reads not found, so locate the executable in Settings › Applications (J41) and return.
-- **Expect:** The Siril card shows `Verified` or `Not verified` and its input-write behavior: `Read-only`, `Write-prone` or `Writes unknown`. Behind its ① it shows the installed or documented capability evidence: supported input, layout, configuration and product-input kinds. Unsupported configuration is named.
-- **Expect (negative):** No capability is claimed as verified without that evidence. The profile does not claim that renaming files overrides headers. Siril is not launched.
-- **Trace:** flow E3 · PREP-FR-01 · D04 · G2 · HARNESS-V5-IA.md §Screens S5 (Prepare: profile) and S16 (Applications)
+- **Do:** Open Project `NGC 7000 HOO`'s **View** step and choose **Siril** under Application. If its executable is not found, locate it in Settings › Applications and return to View.
+- **Expect:** View lists the configured application and its supported input, layout and configuration evidence. Unsupported configuration is named, and no capability is claimed as verified without evidence.
+- **Expect (negative):** Profile selection does not launch Siril or start processing.
+- **Trace:** PREP-FR-01, PREP-FR-02 · D-W83, D-W100
 
-### S9 — See the generic alternative {#S9}
+### S9 — Choose an input mode in View {#S9}
 
-- **Do:** In the Prepare step of `24 Sep flat check`, choose **Other app** under Application.
-- **Expect:** It reads `Not verified` and `Writes unknown`, and its executable and launch arguments are set in Settings › Applications (J41). Run view reads **Symlinks**, the Settings default, and offers **Copies**.
-- **Expect (negative):** Run view offers no third mode: no file list, hard link or junction.
-- **Trace:** flow E3 alternative · PREP-FR-02, PREP-FR-04 · PREP-AC-11 · D04 · HARNESS-V5-IA.md §Screens S5 (Prepare: mode) · HARNESS-V5-FEEDBACK-R1.md §Round 7 P-PREP3 · G7
+- **Do:** Configure a generic application in Settings › Applications, select it in View, and inspect **Symlinks** and **Copies**.
+- **Expect:** View offers only Symlinks and Copies. When the profile's input-write behavior is unknown or write-prone, the Symlinks risk is named and Symlinks is refused; Copies is offered.
+- **Expect (negative):** PlateVault does not silently change the mode or offer a third mode.
+- **Trace:** PREP-FR-01, PREP-FR-02, PREP-FR-04, PREP-AC-11 · D-W81, D-W83, D-W100
 
-### S10 — See a corrected value {#S10}
+### S10 — Read the corrected values in Apply {#S10}
 
-- **Do:** In `NGC7000-HOO-Siril`, open **Review preparation** and open the 28 Sep entry.
-- **Expect:** The review shows the catalog's effective focal length from the confirmed equipment (J19/S10) next to the value Siril will read from the header (absent). The options are: supported application configuration, patched copies (Copies run view), accept the source-header value, or exclude the inputs.
-- **Trace:** flow E4 · PREP-FR-03 · D15
+- **Do:** With the S9 generic application selected in View and the View in Copies mode, open the Apply sheet and read its Corrected values section.
+- **Expect:** The section reads "2 corrected values", the two that held sessions recorded at ingestion in J19/S10. It lists each with its session, its field, the value in the header and the corrected value. 24 Sep's Target reads "–" in the header and NGC 7000 corrected, and 28 Sep's Equipment reads "–" in the header and `RedCat` corrected. Because the generic application reads no corrected values through its configuration, the section names the route as isolated patched copies in the Copies View. The sheet also shows the pending calibration change and the new View as a folder tree.
+- **Expect (negative):** The sheet offers no per-value choice: no accepting the source value and no excluding an input. Apply creates or changes no catalog correction; it only delivers the ones already recorded.
+- **Trace:** PREP-FR-03, PREP-FR-08, PREP-FR-16, PREP-AC-06 · VSEL-FR-14 · LIB-FR-12, LIB-FR-20 · D-W100, D-W122 · HARNESS-V5-FEEDBACK-R1.md Round 9 C15
 
-### S11 — Accept the source value for this handoff {#S11}
+### S11 — Apply the corrected values {#S11}
 
-- **Do:** Choose **accept the source-header value** for 28 Sep.
-- **Expect:** The review names the header value as the effective handoff value, with materialization mode not patched.
-- **Expect (negative):** The correction is not claimed as delivered. No original is patched, and the manifest still equals P5.
-- **Trace:** flow E4 · PREP-FR-03 · PREP-AC-06 · D15
+- **Do:** Apply the reviewed View changes.
+- **Expect:** Apply builds the View from the originals, writes the two corrected values into isolated patched copies of the 24 Sep and 28 Sep frames in the Copies View, and swaps the View in.
+- **Expect (negative):** No original or link target is patched, and no correction is reported as delivered while the application still reads the original value.
+- **Trace:** PREP-FR-03, PREP-FR-06, PREP-FR-09, PREP-AC-06 · D-W100, D-W122 · HARNESS-V5-FEEDBACK-R1.md Round 9 C15
 
 ## Success criteria
 
-- SC1: At S1 all 15 requirements read Automatic with 0 user actions. No assignment with an unknown or incompatible criterion is ever Automatic (S1, S5).
-- SC2: 24 Sep's flat reads Deferred from S5 until S6. Its exception record shows both the unknown criterion and the reason. The 30 Sep master is reassigned 0 times without the user's choice.
-- SC3: The 26 Sep master's evidence is unchanged, and `24 Sep flat check`, which starts as `NGC 7000 RedCat` until it is renamed, shows it with its rig unknown and no exception (S7).
-- SC4: With **Auto-assign** off, 3 requirements read Suggested and 0 masters are assigned until one is accepted; after acceptance 2 still wait (S7a).
-- SC5: The P3 masters are assigned 0 times (S2), and they are used by 0 runs (S7b).
-- SC6: 100% of calibration inputs are masters, and the kept raw bias frames are listed as an input or candidate 0 times (S4a).
-- SC7: `MasterFlat_2026-09-30.xisf` is used by exactly 2 runs and `MasterFlat_2026-09-26.xisf` by exactly 1 (S7b).
-- SC8: PlateVault creates 0 calibration files, and the manifest equals P5 at S11.
-- SC9: The Siril profile shows its capability evidence (S8). **Other app** reads Not verified, with Run view offering exactly **Symlinks** (preselected) and **Copies** (S9).
-- SC10: For 28 Sep the review names the header value as effective and claims no delivered correction (S11).
-- SC11: Dismissing a master that 2 runs use is refused with both runs named, and 0 assignments change (S7c).
+- SC1: All 15 session-kind assignments in the five-session fixture are pinned or explicit No choices, and Calibrate displays them without an assignment control or Proceed gate (S1, S2).
+- SC2: The 26 Sep flat's unknown optical-train criterion is visible before confirmation and recorded when pinned to 24 Sep; its library evidence and other sessions' assignments remain unchanged (S5, S6).
+- SC3: The reassignment appears as a pending Project change, and the existing View does not change before Apply (S7).
+- SC4: Dated versions are shown with no Latest label or Update notice, and the 148-day-old dark has `Old · 148 d` while flats have no badge (S7a).
+- SC5: Hiding a master pinned on the Project is refused with the Project named; hiding and restoring an unused master changes no file bytes (S7b, S7c).
+- SC6: Siril and the input mode are chosen in View; an unknown or write-prone profile cannot use Symlinks without a refusal and explicit mode choice (S8, S9).
+- SC7: The Apply sheet reads "2 corrected values" with the route isolated patched copies and offers 0 per-value choices; Apply patches 0 originals (S10, S11).
 
 ## Known gaps
 
-- G1: Not validated: the rebuilt application does not exist. Product behavior follows the harness v5 design, which the user instructed on 2026-10-12 that journeys describe: `HARNESS-V5-IA.md` §Screens S5, S14 and S16 and §Round 2b foundation, and `HARNESS-V5-FEEDBACK-R1.md` §Round 1b P-CAL3 and §Round 5 (apps/prototype/design/ on ui-harness-v5 @ b5e813a5), §Round 6 (@ 4f470775) and §Round 7 P-PREP3 (@ 12638a7c); the prototype does not implement Round 6 or P-PREP3 yet. It also follows the specs, the decisions D04, D13, D15 and D19 set by the authorized autonomous run, and the workflow decisions D-W3 to D-W55 cited above. No implementation has been validated against them.
+- G1: Not validated: the rebuilt application has not been validated against this journey. This journey follows the current contracts in specs 064, 066, 068 and 069 and D-W93 to D-W116.
 - G2: Unresolved implementation qualification: Siril profile capability probes (D04) must exist before S8 can show verified evidence. The PixInsight/WBPP and SETI Astro Suite Pro profiles are not exercised in this journey. Blocks readiness.
-- G3: Out of scope for this journey: per-panel calibration in a mosaic run group (CAL-FR-11, CAL-AC-13) is covered by J33/S7.
+- G3: Out of scope for this journey: calibration across mosaic panel groups is covered by J33. The Project diagram and pinned-session rules are specified by CAL-FR-09 and CAL-FR-23.
 - G4: (dissolved 2026-10-12): answered by Round 6 "Calibration Off"; S7a now asserts that with **Auto-assign** off the 3 compatible masters read Suggested, none is assigned, and only an accepted one becomes a handoff input.
 - G5: (dissolved 2026-10-12): answered by Round 6 "Rename runs and Projects"; S7 now asserts that the run starts auto-named `NGC 7000 RedCat` and is renamed `24 Sep flat check` on the run header.
-- G6: Out of scope for this journey: when no master matches a requirement and a raw session that would stack into one awaits Stack, the row offers `Stack from <session>`, which opens that calibration process at `/calibration?process=` (P-CAL3; prototype `stackOffers`). No J36 fixture leaves a requirement without a master. Blocks readiness until covered by a step or a journey.
-- G7: Unresolved product question: P-PREP3 makes **Symlinks** the default run view. It does not say whether Symlinks stays allowed for a profile whose input-write behavior is unknown or write-prone, as PREP-AC-11 and D04 blocked linked modes. Runs take FITS, XISF, DNG and camera RAW only, which RUN-VIEWS-OPTIONS.md finds Siril, WBPP and DSS never write. The question therefore applies to a profile such as **Other app** whose write behavior is unknown. S9 asserts only that Symlinks is preselected for **Other app**, not whether preparing with it is refused. Blocks readiness.
+- G6: (dissolved 2026-10-15): D-W101 matches calibration at ingestion and makes the Project's Calibrate step a read-only check, so no Calibrate row offers `Stack from <session>`. Raw sets wait as calibration processes in the Calibration library, which J36 stacks.
+- G7: (dissolved 2026-10-15): PREP-AC-11 (D-W81, D-W83) answers it: for a profile whose input-write behavior is unknown or write-prone, Symlinks is refused with the input-write risk named, and Copies is offered without a silent mode change. S9 asserts that refusal for a generic application.
+- G8: Rests on provisional F4 items, pending the owner's confirmation in PR #1804: D-W106's refusal of Hide on a master an open Project uses through its sessions (S7b, SC5), and D-W102's ranking, which makes the 30 Sep master the best fully compatible flat for 24 Sep (P2, S3). If the owner changes one, the steps that cite it change.
+- G9: Unresolved implementation qualification: D-W122 records Round 9 C15, and 069 PREP-FR-03 and PREP-AC-06 follow it, so the per-value choice is gone and S10 follows the contract. PREP-AC-06 tests a FILTER correction only. No requirement maps a Target or rig association, such as NGC 7000 or `RedCat`, to header keywords and values. S11 therefore can't say which keywords its patched copies write, or show that the application reads them. Blocks readiness until a requirement defines that mapping and a scenario tests it (astro-plan-ysy9m).
 
 ## Delta log
 
@@ -196,3 +173,9 @@ correction reaches the application. Done means:
 - **Δ5** 2026-10-12 · S9, S10 · behavior-change
   Prepare's Run view offers **Symlinks** (the Settings default) and **Copies**; the Automatic, file-list and linked-originals modes are gone. A patched correction reaches the application through Copies.
   Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 7 (user, 2026-10-12) P-PREP3 (apps/prototype/design/ on ui-harness-v5 @ 12638a7c; research RUN-VIEWS-OPTIONS.md) · by: JourneysV5.R7Prep3 (intent-gated)
+- **Δ6** 2026-10-15 · S1, S2, S3, S4a, S5, S6, S7, S7a, S7b, S7c, S8, S9, S10, S11 · behavior-change
+  Calibration is pinned on sessions at ingestion; Project Calibrate is a read-only diagram, and profile and input-mode choices are in View. Dated versions have no Latest or Update notice, and darks and bias use the Old badge. S9 refuses Symlinks for a profile with unknown input-write behavior, which dissolves G7; G6 is dissolved because Calibrate has no rows to offer Stack, and G8 is new.
+  Evidence: D-W93 to D-W106 (F4 Project model, owner's answers of 2026-10-14) in PR #1804, LIB-FR-23 to LIB-FR-26, CAL-FR-02 to CAL-FR-09, CAL-FR-13 to CAL-FR-23, PREP-FR-01, PREP-FR-03, PREP-FR-04, PREP-FR-06, PREP-FR-08, PREP-FR-09, PREP-AC-11 · by: SpecF4Writer2 (intent-gated)
+- **Δ7** 2026-10-17 · S10, S11 · behavior-change
+  Corrections are recorded at session ingestion, so Apply lists the corrected values with their count ("2 corrected values" from J19/S10) and applies all of them, here as isolated patched copies for the S9 generic application. The per-value choice (accept the source value, exclude the input) is gone. G9 records the conflict with 069 PREP-FR-03.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md Round 9 C15 · prototype view-step.tsx Corrected values section (ui-harness-v5) · by: JourneysR9c (intent-gated)

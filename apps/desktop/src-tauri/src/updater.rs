@@ -7,9 +7,12 @@
 //! adapts it to Tauri: it builds the [`Updater`] from `tauri.conf.json`
 //! (`plugins.updater`, which the bundler also reads to sign the release
 //! artifacts), pushes every status change to the webview as
-//! [`UPDATE_STATUS_EVENT`], relaunches or exits when an install asks to, and
-//! routes quits through [`Updater::on_quit_requested`] so a staged "Install
-//! on quit" runs first. The commands are in `commands::update`.
+//! [`UPDATE_STATUS_EVENT`], starts the update offer in the system
+//! notification ([`Offers`], astro-plan-c72oo) and pushes where each offer
+//! was made as [`UPDATE_OFFER_EVENT`], relaunches or exits when an install
+//! asks to, and routes quits through [`Updater::on_quit_requested`] so a
+//! staged "Install on quit" runs first. The commands are in
+//! `commands::update`.
 //!
 //! A quit from outside the app never reaches `ExitRequested` or the main
 //! window's `CloseRequested`: the macOS Dock or app-switcher Quit
@@ -18,9 +21,12 @@
 //! a quit exits without installing, and the next launch's check offers the
 //! update again.
 
+use desktop_services::notifications::Notifier;
+use desktop_services::update::offer::{self, Offers};
 use desktop_services::update::{
-    Package, Platform, QuitDecision, UpdateHost, Updater, UpdaterConfig,
+    LaunchedApp, Package, Platform, QuitDecision, UpdateHost, Updater, UpdaterConfig,
 };
+use desktop_services::AppIdentity;
 use semver::Version;
 use tauri::utils::config::BundleType;
 use tauri::utils::platform::bundle_type;
@@ -31,33 +37,51 @@ use crate::MAIN_WINDOW_LABEL;
 /// Backend → webview: the current `UpdateStatus`, on every change.
 pub const UPDATE_STATUS_EVENT: &str = "update:status";
 
+/// Backend → webview: the current `UpdateOffer`, on every change.
+pub const UPDATE_OFFER_EVENT: &str = "update:offer";
+
 /// Hands installs back to the Tauri app.
-struct TauriHost<R: Runtime>(AppHandle<R>);
+struct TauriHost<R: Runtime> {
+    app: AppHandle<R>,
+    notifier: Notifier,
+}
 
 impl<R: Runtime> UpdateHost for TauriHost<R> {
     fn relaunch(&self) {
         // Through `ExitRequested` and `Exit`, so the clean-shutdown marker is
         // written and the log flushed before the new version starts.
-        self.0.request_restart();
+        self.app.request_restart();
     }
 
     fn exit(&self) {
-        self.0.exit(0);
+        self.app.exit(0);
+    }
+
+    fn notify(&self, title: &str, body: &str) {
+        self.notifier.notify_before_exit(title, body);
     }
 }
 
-/// Build the updater, manage it, and start pushing its status to the
-/// webview. A configuration the updater cannot use is logged, and the app
-/// runs without updates.
-pub fn register<R: Runtime>(app: &AppHandle<R>) {
-    let config = match updater_config(app.config(), current_version(app)) {
+/// Build the updater and its offer, manage both, and start pushing their
+/// state to the webview. `notifier` shows what an install at quit must tell
+/// the user once the window is gone, the offer posts under `identity`, and
+/// an install replaces the app `launched` names or nothing. A configuration
+/// the updater cannot use is logged, and the app runs without updates.
+pub fn register<R: Runtime>(
+    app: &AppHandle<R>,
+    notifier: Notifier,
+    locale: desktop_services::locale::ActiveLocale,
+    identity: &AppIdentity,
+    launched: LaunchedApp,
+) {
+    let config = match updater_config(app.config(), current_version(app), launched) {
         Ok(config) => config,
         Err(error) => {
             tracing::error!(%error, "updates are off: plugins.updater in tauri.conf.json is unusable");
             return;
         }
     };
-    let updater = match Updater::new(config, TauriHost(app.clone())) {
+    let updater = match Updater::new(config, TauriHost { app: app.clone(), notifier }, locale) {
         Ok(updater) => updater,
         Err(error) => {
             tracing::error!(%error, "updates are off");
@@ -70,6 +94,21 @@ pub fn register<R: Runtime>(app: &AppHandle<R>) {
         desktop_services::update::UpdatePort::status(&updater),
         |status, error| tracing::debug!(phase = ?status.phase, %error, "update status event not delivered"),
     ));
+    let speaker = updater.clone();
+    let (offers, offer_task) =
+        Offers::new(updater.clone(), offer::platform(identity), move || speaker.locale());
+    // On Tauri's runtime, as the feed forwards are; the port operations a
+    // button runs are spawned from this task, so they run there too.
+    tauri::async_runtime::spawn(offer_task);
+    tauri::async_runtime::spawn(crate::bootstrap::feeds::forward(
+        app.clone(),
+        UPDATE_OFFER_EVENT,
+        offers.feed(),
+        // At warn: the webview falls back to its in-app notice only once
+        // the offer has gone unanswered past its deadline.
+        |offer, error| tracing::warn!(channel = ?offer.channel, %error, "update offer event not delivered"),
+    ));
+    app.manage(offers);
     app.manage(updater);
 }
 
@@ -112,10 +151,12 @@ fn current_version<R: Runtime>(app: &AppHandle<R>) -> Version {
 }
 
 /// The updater settings in `config` (`plugins.updater.pubkey` and
-/// `.endpoints`), for the package this binary was bundled as.
+/// `.endpoints`), for the package this binary was bundled as, launched from
+/// where `launched` says.
 fn updater_config(
     config: &tauri::Config,
     current_version: Version,
+    launched: LaunchedApp,
 ) -> Result<UpdaterConfig, String> {
     let updater = config.plugins.0.get("updater").ok_or("plugins.updater is missing")?;
     let public_key = updater
@@ -134,6 +175,7 @@ fn updater_config(
         endpoints,
         public_key: public_key.to_owned(),
         platform: Platform::current(package(bundle_type())),
+        launched,
     })
 }
 
@@ -159,19 +201,25 @@ mod tests {
     impl UpdateHost for NoHost {
         fn relaunch(&self) {}
         fn exit(&self) {}
+        fn notify(&self, _title: &str, _body: &str) {}
     }
 
     #[test]
     fn the_shipped_config_builds_an_updater() {
         let config: tauri::Config =
             serde_json::from_str(include_str!("../tauri.conf.json")).expect("tauri.conf.json");
-        let updater_config =
-            updater_config(&config, Version::new(0, 6, 0)).expect("plugins.updater");
+        let updater_config = updater_config(&config, Version::new(0, 6, 0), LaunchedApp::record())
+            .expect("plugins.updater");
         assert_eq!(
             updater_config.endpoints,
             ["https://github.com/platevault/platevault/releases/latest/download/latest.json"]
         );
-        assert!(Updater::new(updater_config, NoHost).is_ok());
+        assert!(Updater::new(
+            updater_config,
+            NoHost,
+            desktop_services::locale::ActiveLocale::new()
+        )
+        .is_ok());
     }
 
     #[test]

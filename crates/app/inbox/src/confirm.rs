@@ -53,6 +53,7 @@ use contracts_core::plans::ProvenanceEntry;
 use contracts_core::settings::PatternPart as ContractPatternPart;
 use metadata_core::v1_normalization_table;
 use patterns::{classify_frame, resolve_pattern_str, FrameTypeClass, MetadataBundle, PatternPart};
+use persistence_core::DbError;
 use persistence_inbox::repositories::inbox::{self as inbox_repo};
 use persistence_lifecycle::repositories::first_run as first_run_repo;
 use persistence_lifecycle::repositories::settings as settings_repo;
@@ -138,7 +139,10 @@ pub struct ResolvedDestination {
 ///
 /// # Errors
 ///
-/// - `inbox.item.not_found` — item does not exist or has no classification.
+/// - `inbox.item.not_found` — item does not exist or has no classification,
+///   is a master row an earlier scan stored under an old path that names a
+///   different frame (the row is removed), or is gone by the time its plan is
+///   opened. No plan is left in the last two cases.
 /// - `inbox.has.open.plan` — an open plan already exists.
 /// - `classification.ambiguous` — action/classification mismatch or no classified files.
 /// - `classification.stale` — signature drift detected.
@@ -148,6 +152,9 @@ pub struct ResolvedDestination {
 ///   non-light item (spec 008 Q27 F-Framing-10).
 /// - `attribution.geometry_unavailable` — `chosen_attribution` requires
 ///   creating a new framing, but this item has no staged pointing/rotation.
+/// - `plan.invalid_state` — the draft plan left `draft` (the user discarded
+///   it) before confirm opened it for review; it stays as it is and the item
+///   stays unconfirmed.
 #[allow(clippy::too_many_lines)]
 pub async fn confirm(
     pool: &SqlitePool,
@@ -163,6 +170,22 @@ pub async fn confirm(
             false,
         )
     })?;
+
+    // bd astro-plan-3pvvc: a master row an earlier scan stored under the old
+    // backslash text, whose path names a frame that is not a master, would
+    // plan that other frame. The scan retires such a row unless a plan links
+    // it, and the link can go away later (cancel, discard, a failed apply), so
+    // check again here, at the step that plans. A scan can still make the row
+    // stale after this check, so `open_plan_for_review` checks once more in
+    // the transaction that links the plan; checking here as well spares the
+    // work and the attribution writes below for a row already stale.
+    if item.is_master_item != 0
+        && crate::legacy_rows::retire_stale_master(pool, &item.id)
+            .await
+            .map_err(|e| db_internal_ctx(e, "retire stale old-text master"))?
+    {
+        return Err(stale_master_removed(&item.id));
+    }
 
     // Master metadata carry-to-apply (spec 041 US4/T031): the calibration
     // master fields (`is_master_item`, `master_frame_type`, `master_exposure_s`,
@@ -334,9 +357,9 @@ pub async fn confirm(
     // session is created. Creates the framing/project the kind requires and
     // honors the F-Framing-6 completed-project reopen.
     //
-    // Ordered before the three writes below, not after: frame-to-framing
+    // Ordered before `open_plan_for_review` below, not after: frame-to-framing
     // attribution is a Tier-1 record (Constitution V) that the filesystem cannot
-    // re-derive, and those writes are what leave the plan ready to apply. Running them
+    // re-derive, and that step is what leaves the plan ready to apply. Running it
     // first left a `ready_for_review` plan on a failed attribution, so the frames
     // could move with the user's decision missing. The plan stays in `draft` on
     // failure, which `plans.approve` refuses.
@@ -347,22 +370,9 @@ pub async fn confirm(
         _ => None,
     };
 
-    // 13. Transition plan to ready_for_review
-    plans_repo::update_plan_state(pool, &plan_id, PlanState::ReadyForReview.as_str())
-        .await
-        .map_err(|e| db_internal_ctx(e, "transition plan to ready_for_review"))?;
-
-    // 14. Create plan link and update item state
-    inbox_repo::insert_plan_link(pool, &req.inbox_item_id, &plan_id)
-        .await
-        .map_err(|e| db_internal_ctx(e, "insert plan link"))?;
-
-    // Load-bearing (#1101): the plan and its link were just committed above, so
-    // an item left off `plan_open` contradicts them — same class as the two
-    // propagating writes it follows.
-    inbox_repo::update_inbox_item_state(pool, &req.inbox_item_id, "plan_open")
-        .await
-        .map_err(|e| db_internal_ctx(e, "mark inbox item plan_open"))?;
+    // 13–14. Move the plan to ready_for_review, link it and mark the item
+    // `plan_open`, in the transaction that checks the item can still be planned.
+    open_plan_for_review(pool, &item, &plan_id).await?;
 
     // 15. Publish `inventory.confirmed` (best-effort; durable writes above already
     //     succeeded — a bus failure must not surface as Fatal).
@@ -385,6 +395,102 @@ pub async fn confirm(
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+/// The refusal for a master row an earlier scan stored under the old
+/// backslash text, whose path names a frame that is not a master: the row
+/// has just been removed (bd astro-plan-3pvvc).
+fn stale_master_removed(inbox_item_id: &str) -> ContractError {
+    ContractError::new(
+        ErrorCode::InboxItemNotFound,
+        format!(
+            "InboxItem {inbox_item_id} was stored under an old path that names a different \
+             frame; it has been removed"
+        ),
+        ErrorSeverity::Blocking,
+        false,
+    )
+}
+
+/// Steps 13–14: move the draft plan `plan_id` to `ready_for_review`, link
+/// `item` to it and mark the item `plan_open`, in one write transaction, so
+/// an item is never left off `plan_open` while its plan and link stand
+/// (#1101).
+///
+/// bd astro-plan-br8hr: the stale-master check at the top of [`confirm`]
+/// commits on its own, and a scan can commit between it and this step. The
+/// scan stores the master row under the file's own backslash text, which
+/// makes the old-text row stale, and when it reads the frame at the old path
+/// it deletes that row itself. So this transaction runs the check again, and
+/// needs the item's row to still be there, before it opens the plan. When
+/// either fails it deletes the draft plan with its items, and confirm is
+/// refused: no plan is left for a row that is stale or gone. Once the link
+/// commits, neither the scan nor the check deletes the row.
+///
+/// The plan itself may have left `draft` meanwhile: the user can discard the
+/// draft from the plan list. It moves to `ready_for_review` only from
+/// `draft`; otherwise the transaction rolls back, so the item stays
+/// unconfirmed and the discarded plan stays discarded, and confirm is refused.
+///
+/// `BEGIN IMMEDIATE` takes the write lock before the first statement, so a
+/// scan or the plan listener holding it makes this wait for `busy_timeout`
+/// instead of failing on a read snapshot it cannot upgrade. Every statement
+/// runs on the transaction's own connection, so it never waits on the lock
+/// it holds.
+async fn open_plan_for_review(
+    pool: &SqlitePool,
+    item: &inbox_repo::InboxItemRow,
+    plan_id: &str,
+) -> Result<(), ContractError> {
+    let mut tx = pool
+        .begin_with("BEGIN IMMEDIATE")
+        .await
+        .map_err(|e| db_internal_ctx(e, "begin opening the plan"))?;
+    let refusal = if item.is_master_item != 0
+        && crate::legacy_rows::retire_stale_master_conn(&mut tx, &item.id)
+            .await
+            .map_err(|e| db_internal_ctx(e, "retire stale old-text master"))?
+    {
+        Some(stale_master_removed(&item.id))
+    } else {
+        match inbox_repo::update_inbox_item_state_conn(&mut tx, &item.id, "plan_open").await {
+            Ok(()) => None,
+            Err(DbError::NotFound(_)) => Some(ContractError::new(
+                ErrorCode::InboxItemNotFound,
+                format!("InboxItem {} was removed while it was being confirmed", item.id),
+                ErrorSeverity::Blocking,
+                false,
+            )),
+            Err(e) => return Err(db_internal_ctx(e, "mark inbox item plan_open")),
+        }
+    };
+    if let Some(err) = refusal {
+        plans_repo::delete_draft_plan_conn(&mut tx, plan_id)
+            .await
+            .map_err(|e| db_internal_ctx(e, "delete the refused draft plan"))?;
+        tx.commit().await.map_err(|e| db_internal_ctx(e, "commit the refused plan"))?;
+        return Err(err);
+    }
+    if !plans_repo::set_ready_for_review_conn(&mut tx, plan_id)
+        .await
+        .map_err(|e| db_internal_ctx(e, "transition plan to ready_for_review"))?
+    {
+        tx.rollback().await.map_err(|e| db_internal_ctx(e, "roll back opening the plan"))?;
+        return Err(ContractError::new(
+            ErrorCode::PlanInvalidState,
+            format!(
+                "Plan {plan_id} left draft while InboxItem {} was being confirmed; \
+                 it was not opened for review",
+                item.id
+            ),
+            ErrorSeverity::Blocking,
+            false,
+        ));
+    }
+    inbox_repo::insert_plan_link_conn(&mut tx, &item.id, plan_id)
+        .await
+        .map_err(|e| db_internal_ctx(e, "insert plan link"))?;
+    tx.commit().await.map_err(|e| db_internal_ctx(e, "commit the opened plan"))
+}
 
 /// Context threaded through [`resolve_per_file_plan_items`] to avoid a
 /// >7-argument signature.
@@ -3497,5 +3603,176 @@ mod tests {
         let rescanned = read_item_provenance(&db, &second.plan_id).await;
         assert_eq!(prov(&rescanned, "target").as_deref(), Some("NGC7000"));
         assert_eq!(prov(&rescanned, "filter").as_deref(), Some("Oiii"));
+    }
+
+    // ── bd astro-plan-br8hr: a scan between the stale-master check and the plan ──
+
+    /// Confirm the master row `a/b.fits` an earlier scan stored under the old
+    /// text of the file `a\b.fits`, classified on the light frame now at
+    /// `a/b.fits`, while a scan commits between the stale-master check at the
+    /// top of `confirm` and the plan. No row for `a\b.fits` is there when
+    /// confirm starts, so that check finds nothing stale. A trigger on the plan
+    /// insert writes what the scan writes: the master row for `a\b.fits` under
+    /// its own text and, with `scan_reads_old_path`, the deletion of the old
+    /// row, which the scan retires when it reads the light frame at `a/b.fits`.
+    /// Either way no plan may be made from the old row.
+    #[cfg(not(windows))]
+    async fn assert_no_plan_when_a_scan_lands_mid_confirm(scan_reads_old_path: bool) {
+        let tmp = tempfile::tempdir().unwrap();
+        let nested = tmp.path().join("a");
+        std::fs::create_dir(&nested).unwrap();
+        write_fits(
+            &nested,
+            "b.fits",
+            "Light Frame",
+            Some("M42"),
+            Some("Ha"),
+            Some("2025-10-10T22:00:00"),
+        );
+        let db = test_db().await;
+        setup_classified_item(
+            &db,
+            "old-master",
+            "classified",
+            Some("light"),
+            "sig-old",
+            &["a/b.fits"],
+        )
+        .await;
+        sqlx::query(
+            "UPDATE inbox_items SET relative_path = 'a/b.fits', is_master_item = 1
+             WHERE id = 'old-master'",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+        sqlx::query(
+            r"CREATE TRIGGER scan_stores_backslash_row AFTER INSERT ON plans BEGIN
+                INSERT INTO inbox_items
+                    (id, root_id, relative_path, file_count, discovered_at, last_scanned_at,
+                     content_signature, state, lane, format, is_master_item, master_frame_type)
+                VALUES ('new-master', 'root-1', 'a\b.fits', 1, datetime('now'), datetime('now'),
+                        '', 'pending_classification', 'fits', 'fits', 1, 'dark');
+            END",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+        if scan_reads_old_path {
+            sqlx::query(
+                "CREATE TRIGGER scan_retires_old_row AFTER INSERT ON plans BEGIN
+                    DELETE FROM inbox_items WHERE id = 'old-master';
+                END",
+            )
+            .execute(db.pool())
+            .await
+            .unwrap();
+        }
+
+        let result = confirm(
+            db.pool(),
+            &make_bus(&db),
+            ConfirmRequest {
+                inbox_item_id: "old-master".to_owned(),
+                content_signature: "sig-old".to_owned(),
+                destructive_destination: None,
+                root_absolute_path: tmp.path().to_owned(),
+                root_id: None,
+                chosen_attribution: None,
+            },
+        )
+        .await;
+
+        let err = result.expect_err("no plan may be made from the stale old-text row");
+        assert_eq!(err.code, ErrorCode::InboxItemNotFound);
+        let count = |sql: &'static str| {
+            let pool = db.pool().clone();
+            async move { sqlx::query_scalar::<_, i64>(sql).fetch_one(&pool).await.unwrap() }
+        };
+        assert_eq!(count("SELECT COUNT(*) FROM plans").await, 0, "no plan is left behind");
+        assert_eq!(count("SELECT COUNT(*) FROM plan_items").await, 0);
+        assert_eq!(count("SELECT COUNT(*) FROM inbox_plan_links").await, 0);
+        let paths: Vec<String> =
+            sqlx::query_scalar("SELECT relative_path FROM inbox_items ORDER BY relative_path")
+                .fetch_all(db.pool())
+                .await
+                .unwrap();
+        assert_eq!(paths, ["a\\b.fits"], "the old row is gone; the scan's own row stays");
+    }
+
+    /// A scan that cannot read the light frame at `a/b.fits` keeps the old row
+    /// and stores the master row for `a\b.fits`. The database alone then shows
+    /// the old row is stale.
+    #[cfg(not(windows))]
+    #[tokio::test]
+    async fn a_scan_storing_the_backslash_row_mid_confirm_stops_the_plan() {
+        assert_no_plan_when_a_scan_lands_mid_confirm(false).await;
+    }
+
+    /// A scan that reads the light frame at `a/b.fits` deletes the old row in
+    /// the transaction that stores the master row for `a\b.fits`.
+    #[cfg(not(windows))]
+    #[tokio::test]
+    async fn a_scan_retiring_the_old_row_mid_confirm_stops_the_plan() {
+        assert_no_plan_when_a_scan_lands_mid_confirm(true).await;
+    }
+
+    /// The user discards the draft plan from the plan list while confirm is
+    /// still writing it: a trigger on the plan item insert does what
+    /// `plans.discard` does. Confirm must not bring the plan back as
+    /// `ready_for_review` with `discarded_at` set, nor link the item to it.
+    #[tokio::test]
+    async fn a_draft_discarded_mid_confirm_is_not_opened_for_review() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_fits(
+            tmp.path(),
+            "light_001.fits",
+            "Light Frame",
+            Some("M42"),
+            Some("Ha"),
+            Some("2025-10-10T22:00:00"),
+        );
+        let db = test_db().await;
+        setup_classified_item(
+            &db,
+            "item-discarded",
+            "classified",
+            Some("light"),
+            "sig-discarded",
+            &["light_001.fits"],
+        )
+        .await;
+        sqlx::query(
+            "CREATE TRIGGER user_discards_the_draft AFTER INSERT ON plan_items BEGIN
+                UPDATE plans SET state = 'discarded', discarded_at = '2026-01-01T00:00:00Z'
+                WHERE id = NEW.plan_id;
+            END",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        let err = confirm(
+            db.pool(),
+            &make_bus(&db),
+            ConfirmRequest {
+                inbox_item_id: "item-discarded".to_owned(),
+                content_signature: "sig-discarded".to_owned(),
+                destructive_destination: None,
+                root_absolute_path: tmp.path().to_owned(),
+                root_id: None,
+                chosen_attribution: None,
+            },
+        )
+        .await
+        .expect_err("a discarded draft must not be opened for review");
+
+        assert_eq!(err.code, ErrorCode::PlanInvalidState);
+        let states: Vec<String> =
+            sqlx::query_scalar("SELECT state FROM plans").fetch_all(db.pool()).await.unwrap();
+        assert_eq!(states, ["discarded"], "the discarded plan stays discarded");
+        assert!(inbox_repo::get_plan_link(db.pool(), "item-discarded").await.unwrap().is_none());
+        let item = inbox_repo::get_inbox_item(db.pool(), "item-discarded").await.unwrap();
+        assert_ne!(item.state, "plan_open", "the item stays unconfirmed");
     }
 }

@@ -1,4 +1,4 @@
-# Feature Specification: Results, reuse, and completion
+# Feature Specification: Results in Output/, Copy to Output and the master offer
 
 **Feature Branch**: `063-clean-rebuild-contract`
 
@@ -6,15 +6,17 @@
 
 **Created**: 2026-10-03
 
+**Amended**: 2026-10-14, to the F4 Project model, D-W93 to D-W106.
+
 **Status**: Draft; product defaults and all human-approval gate waivers follow the root autonomous objective. Requirements analysis, implementation and verification remain required.
 
 **Input**: Clean rebuild with selective reuse of verified code and the agreed PlateVault product flow.
 
 ## User Scenarios & Testing
 
-### User Story 1 - Results, reuse, and completion (Priority: P1)
+### User Story 1 - Results in Output/, Copy to Output and the master offer (Priority: P1)
 
-Discover outputs in a processing run (View)'s Results folder, and attach others through a visible secondary action. Keep honest lineage, and accept final and reusable products. Pick them as inputs when another run is created, and return an optional mosaic assembly as a group Result. Mark a run Complete independently of acceptance and cleanup, or move a run that is no longer wanted to the Project's Trash, restore it, or empty it from the Trash.
+A Project's Results are the files in its `Output/` folder. The user saves finished images there from their tool, or uses Copy to Output on a file in `Processing/`, such as a WBPP master. Tools never write into `Output/`, so a rerun can't overwrite a Result, and no Result needs accepting. A mosaic keeps each panel's result in `Output/Panels/` and the finished mosaic in `Output/`. PlateVault records no lineage, and a Result is never an input to a Project. The Output step also offers once, for adoption, a generated master found in `Processing/` (D-W93, D-W98).
 
 **Why this priority**: This feature owns the workflow steps listed below without imposing unrelated product features.
 
@@ -22,67 +24,74 @@ Discover outputs in a processing run (View)'s Results folder, and attach others 
 
 **Acceptance Scenarios**:
 
-- **RES-AC-01**: Given the run's Results folder holds registered intermediates, a stacked file, and a file still being written, when Results opens, then the intermediates are listed separately, the stack is an unaccepted candidate, and the growing file is Pending. (D-W4, D-W51)
-- **RES-AC-02**: Given a file outside the Results folder, the user attaches it to a chosen run as a Linear integration with the Attach Result action shown on the Results step. It is then listed beside the discovered candidates and labeled attached. Its run association is User-linked, and its actual input-frame lineage remains Unknown unless stronger evidence exists. (D-W4)
-- **RES-AC-03**: Given a product is accepted, then its lineage is not upgraded to Tool-recorded and nothing claims that all 208 planned frames were used.
-- **RES-AC-04**: Given accepted Ha and OIII linear products from two runs, the user creates the run 'NGC7000 HOO combine' in the Project and picks both under Results in its input filters. The run then lists two product inputs with their originating runs and adds no raw session integration. (D-W4)
-- **RES-AC-05**: Given a profile without product-input support, then preparing the product run is refused and named unsupported, with no silent conversion. (D-W3)
-- **RES-AC-06**: Given no accepted Result, when the user marks processing complete, then the run is Complete, no file is removed, and cleanup has not started. (D-W3)
-- **RES-AC-07**: Given an app-owned preparation or storage mutation affecting this run is Running, when Mark Complete is requested, then it is blocked with that operation; otherwise Complete needs neither a Result nor evidence that an external job stopped. An unrelated run's operation does not block it. (D-W3)
-- **RES-AC-08**: Given a Complete run, when creating a new membership or preparation revision is requested, including through its 'Add N new sessions' prompt (VSEL-FR-17), then explicit Reopen is required. Reviewed cleanup, identity-preserving archive reference repair, verified remap, notes and Result acceptance do not reopen the run or change membership. (D-W3, D-W11, D-W34)
-- **RES-AC-09**: Given an accepted product replaced in place with its size and mtime preserved, when its product run is reopened or the result picker opens, then its rehash differs from its acceptance digest. The product reads drifted and requires review. Its acceptance and lineage remain as history for the earlier bytes, and the picker does not offer it for reuse. Restoring the accepted bytes makes it available again with no new acceptance. (D-W3)
-- **RES-AC-10**: Given three inspected products, when one is replaced in place with its size and mtime preserved before Accept Result, then that product's acceptance is refused with the change named. The other two are accepted, and the changed product can be accepted after it is inspected again.
-- **RES-AC-11**: Given a mosaic run group whose four panel runs were prepared under `<output>/NGC7000 Cygnus/Cygnus Wall/Panel 1/` through `Panel 4/`. Each panel run wrote its stacks to its own `Cygnus Wall Results/Panel N/` folder, one Panel 2 stack carries a header naming Panel 3, and an assembled image was saved to `<output>/NGC7000 Cygnus/Cygnus Wall Results/Assembled/`. When Results opens, then nothing is discovered inside the prepared group folder `Cygnus Wall/`. Each panel run lists exactly the candidates in its own `Cygnus Wall Results/Panel N/` folder, so the Panel 2 stack is listed under Panel 2 only. The group lists the assembled image as a group Result candidate of kind Assembled mosaic. Accepting it records it on the run group, the Project and the mosaic subject with lineage Unknown unless tool evidence names the panel products. Every panel run's status, membership and revision stay unchanged. (D-W38, D-W51, D-W73)
-- **RES-AC-12**: Given a mosaic run group with no assembled image, when each panel run is marked Complete, then every panel run is Complete with its own panel Results. No group Result is required or shown as missing. (D-W38)
-- **RES-AC-13**: Given an accepted Ha linear product from a run in Project A, the user creates a run in Project B and opens its input filters. Results then offers that product with its originating run and Project. The new run records it as a product input. The product stays with its run in Project A, and Project B's members and goal progress gain no sessions from it. (D-W4, D-W8)
-- **RES-AC-14**: Given an accepted OIII linear product from a run on rig Esprit. When a run on rig RedCat in the same Project opens its input filters, then Results lists the product labeled with rig Esprit. Picking it adds a product input and no raw Esprit session. (D-W56)
-- **RES-AC-15**: Given a run's Results folder gains a generated master dark. When the run's Results step opens, then the master is listed as a candidate, and the once-only Add to calibration library offer of CAL-FR-06 appears there. (D-W55)
-- **RES-AC-16**: Given run NGC7000-HOO-Siril was prepared twice and both revisions wrote to NGC7000-HOO-Siril Results/, when Results opens, then every candidate lists the prepared revision it came from. (D-W67)
+- **RES-AC-01**: Given the Project's `Output/` holds a final image and a file still being written, when the Output step opens, then both are listed, the final image as a Result with no Accept action, and the growing file reads "Still being written". (D-W85, D-W98)
+- **RES-AC-02**: Given a WBPP master light in `Processing/WBPP/master/`, when the user chooses Copy to Output… and picks it, then a verified copy lands in `Output/` and joins the table, and the file in `Processing/` is unchanged. (D-W98)
+- **RES-AC-03**: Withdrawn (D-W93). There is no acceptance and no lineage to upgrade; RES-AC-28 covers a tool rerun that leaves `Output/` unchanged.
+- **RES-AC-04**: Withdrawn (D-W93). A Result is never a Project input.
+- **RES-AC-05**: Withdrawn (D-W93). There are no product inputs, so no profile needs product-input support.
+- **RES-AC-06**: Given an empty `Output/`, when the user closes the Project, then it closes; no Result is required and no file is removed from `Output/`. (D-W97, D-W98)
+- **RES-AC-07**: Given Apply running on the Project, when the user opens Wrap up, then it is refused and names the running Apply. This rule is provisional, like the Wrap up gate. Otherwise closing needs neither a Result nor evidence that an external job stopped. (D-W97, D-W100)
+- **RES-AC-08**: Withdrawn (D-W94, D-W97). There is no Finished run to reopen, and Closed or Archived Projects have no Reopen (provisional).
+- **RES-AC-09**: Withdrawn (D-W93, D-W98). No Result is accepted or reused, so no acceptance digest exists.
+- **RES-AC-10**: Withdrawn (D-W98). A Result needs no acceptance.
+- **RES-AC-11**: Given a mosaic Project with the panel groups Panel 1 to Panel 4. The user saves each panel's stack in its folder, `Output/Panels/Panel-1/` to `Output/Panels/Panel-4/`, and the assembled image in `Output/`. Then the Output step lists each panel's result under its panel and the assembled image as the mosaic. PlateVault infers no panel from a header or file name. (D-W95, D-W98)
+- **RES-AC-12**: Given a mosaic Project with no assembled image, when the user closes it, then no mosaic Result is required or shown as missing. (D-W95)
+- **RES-AC-13**: Withdrawn (D-W93). A Result is never an input to another Project.
+- **RES-AC-14**: Withdrawn (D-W93). A Result is never an input, from any rig.
+- **RES-AC-15**: Given the Project's `Processing/` gains a generated master dark, when the Output step opens, then the once-only Add to calibration library offer of CAL-FR-06 appears there. (D-W55, D-W98)
+- **RES-AC-16**: Withdrawn (D-W94). There are no prepared revisions.
 - **RES-AC-17**: Withdrawn (D-W72).
 - **RES-AC-18**: Withdrawn (D-W72).
-- **RES-AC-19**: Given run R at Prepare with prepared folders `<Run>/` and `<Run> (rev 2)/`, and a Results folder holding one accepted Result that no other run uses. When the user chooses Move run to Trash, then no file moves. R leaves the stage rail, run lists, Home and every picker, and the Project's Trash list shows it at Prepare. No Results picker offers its accepted Result. Its members stop counting "in project" and "captured" unless they are still candidates, and no library frame or quality decision changes. (D-W72)
-- **RES-AC-20**: Given an app-owned preparation affecting run A is Running, and an accepted Result of run B is an input to runs C and D. When the user requests Move run to Trash on A and then on B, then both are refused and nothing changes. A's refusal names the running preparation, and B's refusal names C and D. (D-W72)
-- **RES-AC-21**: Given run R of RES-AC-19 in the Project's Trash, when the user chooses Restore, then R is back on the stage rail at Prepare. It has the same membership revisions, both preparation revisions and the same Results folder, and its accepted Result is offered again as an input. The goal numbers read as they did before the move, and no file moved. (D-W72)
-- **RES-AC-22**: Given run R of RES-AC-19 in the Project's Trash, when the user chooses Empty Trash for R, then the review lists the run record, both prepared folders and the Results folder, which is unticked. After the user confirms without ticking it, both prepared folders are in the OS Trash and the Results folder stays at its path. R leaves the Trash list and nothing offers to restore it, and no library frame or quality decision changes. Nothing is permanently deleted. Putting a prepared folder back from the OS Trash restores the files but not the run. (D-W72)
+- **RES-AC-19**: Withdrawn (D-W94). There is no run to move to the Project's Trash.
+- **RES-AC-20**: Withdrawn (D-W94).
+- **RES-AC-21**: Withdrawn (D-W94).
+- **RES-AC-22**: Withdrawn (D-W94).
+- **RES-AC-23**: Given the user saves an image into `Output/` from their tool, then it appears in the table without a scan, with the State "Still being written" until it settles. Rescan is in the step's More menu. (D-W85, D-W98)
+- **RES-AC-24**: Given three files in `Output/`, when the user changes one's Kind and Channel with their dropdowns, then the row keeps the new values, and nothing asks for acceptance. (D-W85, D-W98)
+- **RES-AC-25**: Given the user chooses Copy to Output…, then the native file dialog opens in `Processing/` with image-file filters, and a file with the same name already in `Output/` is never overwritten. (D-W98)
+- **RES-AC-26**: Reserved. It was drafted and withdrawn (D-W97) within PR #1804 and never reached main; Wrap up's Trash step offers the files in `Processing/` (PRJ-FR-15).
+- **RES-AC-27**: Given the user keeps `final/` and `drafts/` subfolders inside `Output/`, then the table lists each file with its path relative to `Output/`, and PlateVault creates, renames and moves no folder inside it. (D-W85, D-W98)
+- **RES-AC-28**: Given the user reruns WBPP and it overwrites `Processing/WBPP/master/`, then the copy in `Output/` is unchanged and the Output step lists the same Results. (D-W93, D-W98)
 
 ### Edge Cases
 
 The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody, uncertainty, exact membership, failed writes, and independent lifecycle decisions. Each acceptance scenario tests observable outcomes; no mock acknowledgment counts as terminal success.
 
+- A file the user removes from `Output/` outside PlateVault leaves the table at the next watch event, and nothing keeps it as a Result. (D-W98)
+
 ## Requirements
 
 ### Functional Requirements
 
-- **RES-FR-01**: Results lists candidates from the run's Results folder (PREP-FR-07) with type, path, availability, and processing state where known. The folder is shared by every prepared revision of the run, and each discovered Result records the prepared revision it came from. Files still being written show Pending. Recognized intermediates are kept separate from candidates. They reach the OS Trash only through the Project's Done / Archive sheet (STO-FR-16), or with the Results folder of a run emptied from the Project's Trash when the user ticks it (RES-FR-10). A file appearing in the folder is never treated as accepted or as proof that it came from the full selection. A generated calibration master found there is passed to CAL, which offers it once in this Results step (CAL-FR-06). (D-W4, D-W51, D-W55, D-W67, D-W70, D-W72)
-- **RES-FR-02**: Attach Result is a visible secondary action on the Results step, shown beside the discovered list and not inside a menu. A file saved elsewhere can also be dropped there. The user chooses its kind (Final image, Linear integration, Channel product, Mosaic panel, Assembled mosaic for a run group, or another explicit reusable kind) and its run or run group. Attached products are labeled attached in the list. (D-W4, D-W38)
-- **RES-FR-03**: Provenance distinguishes run association from actual input-frame lineage. Manual attach records a User-linked run association unless stronger tool evidence exists; absent input-frame evidence remains Unknown and never claims all planned frames were used. (D-W3)
-- **RES-FR-04**: Accept one or more products after inspecting them. Inspection records each product's identity and SHA-256, and acceptance requires the current bytes to still match it (D19); a product changed since inspection is refused and needs inspecting again. Acceptance records each product's SHA-256 with its observation fingerprint. Accepted products appear on the run, Project, and Target, stay protected Keep, and are never listed by a run's Clean up (PREP-FR-14). Acceptance never fabricates provenance or claims every planned frame was used. (D-W3, D-W26)
-- **RES-FR-05**: When a run is created, its input filters include Results beside sessions, and Add accepted results opens the same picker later. The picker offers accepted products from runs in any Project, grouped by originating Project and run, and shows kind, subject, rig, path, availability, and lineage. Products from runs on another rig may be inputs and show their rig; the one-rig rule applies to raw frames only (VSEL-FR-05). A run whose accepted Result is an input to another run cannot be moved to the Project's Trash, and the picker offers no product of a run in the Trash (RES-FR-10). Reuse across Projects goes only through this picker; a run never joins a second Project. The new run records product identities and originating runs and shows products apart from raw sessions, without counting integration twice. Product inputs add no members to the run's Project and no integration to its goals. The profile must support product inputs; mixed raw and product inputs need profile support, otherwise separate runs are used. Raw calibration controls never imply recalibration. Before a product is offered, added or prepared, PlateVault rehashes it against its acceptance digest; until that finishes it reads verifying and is not offered. Equal size and mtime never stand in for that check. A mismatch is reference drift: the product stays protected Keep with its acceptance and lineage as history, and requires review. It is not reused until the accepted bytes return or the current bytes are explicitly accepted. (D-W4, D-W8, D-W56, D-W72)
-- **RES-FR-06**: Mark processing complete records completion even with no accepted Result. It removes nothing, does not infer that the external job stopped or succeeded, and offers Clean up as a separate action. (D-W26)
-- **RES-FR-07**: Complete is blocked only by a Running app-owned preparation or storage mutation affecting this run, and the same operation blocks Move run to Trash (RES-FR-10). Creating a new membership/preparation revision requires explicit Reopen, and the 'Add N new sessions' prompt of a Complete run asks for Reopen first (VSEL-FR-17). Reviewed cleanup, identity-preserving reference repair/remap, annotations and Result acceptance remain available on a Complete run without reopening. External launch/exit is never a completion or success signal. (D-W3, D-W34, D-W72)
-- **RES-FR-08**: In a mosaic run group, each panel run discovers its Results in its own folder `<output>/<Project>/<Mosaic> Results/Panel N/` (PREP-FR-07), never inside the prepared group folder `<Mosaic>/` or a later group folder. A candidate belongs to the panel whose folder it was written to; PlateVault infers no panel from a header or file name. Each panel run accepts its own panel Results under RES-FR-01 through RES-FR-04. Assembly is optional and happens in the processing application; PlateVault does not assemble panels, and there is no whole-mosaic run. The group discovers group Result candidates of kind Assembled mosaic only in `<output>/<Project>/<Mosaic> Results/Assembled/`, and the user can also attach one to the group. A group Result belongs to the run group and appears on the Project and the mosaic subject. Its lineage to panel Results stays Unknown unless tool evidence names them. Accepting it follows RES-FR-04 and changes no panel run's status, membership or revision. A group with no group Result is not incomplete, and each panel run completes on its own under RES-FR-06. (D-W38, D-W51, D-W73)
+- **RES-FR-01**: The Output step lists the files in the Project's `Output/` folder in a table with the columns File, Kind, Channel and State, with availability where known. PlateVault watches the folder and adds files as they are written, with no manual scan; Rescan stays in the step's More menu. A file still being written reads "Still being written" in its State. The user keeps any layout inside `Output/`: PlateVault prescribes only `Output/Panels/` in a mosaic (RES-FR-08), watches every subfolder and records each file's path relative to the folder. Every file in `Output/` is a Result, with no acceptance step. Kind and Channel are dropdowns in each row: Kind (Final image, Linear integration, Channel product, Mosaic panel, Assembled mosaic, or another explicit kind) may be prefilled from evidence, and the user can change it. Files in `Output/` stay protected: Clean up and Trash never list them, and Close keeps them (RES-FR-06). (D-W85, D-W98)
+- **RES-FR-02**: **Copy to Output…** is a visible toolbar action on the Output step. It picks a file through the native file dialog, opening in the Project's `Processing/` folder (provisional), and copies it into `Output/` with verified transfer (STO-FR-07): the copy is re-read and compared with the source's SHA-256 before it is listed. An existing file at the destination is never overwritten; the user picks another name. Tools never write into `Output/`, so a tool rerun that overwrites files in `Processing/` never changes a Result. (D-W93, D-W98)
+- **RES-FR-03**: Withdrawn (D-W93). Result lineage and provenance are out of scope: PlateVault doesn't record which inputs produced which output.
+- **RES-FR-04**: Withdrawn (D-W98). No Result needs accepting; every file in `Output/` is a Result.
+- **RES-FR-05**: Withdrawn (D-W93). Results are never inputs to a Project, so there is no Results picker, no product input and no composition rule.
+- **RES-FR-06**: Close project… keeps `Output/`. PlateVault never moves or deletes a file in it, and neither Clean up nor Trash lists it (PRJ-FR-14, STO-FR-01). Closing needs no Result and never infers that an external job stopped or succeeded. (D-W26, D-W97, D-W98)
+- **RES-FR-07**: Provisional: one PlateVault operation runs per Project at a time (PREP-FR-19). Copy to Output and the master offer change no Project input, and a Closed or Archived Project's Output step is read-only. External launch or exit is never a completion or success signal. (D-W97, D-W100)
+- **RES-FR-08**: In a mosaic, `Output/Panels/` holds a folder for each panel group for that panel's result, and the finished mosaic goes in `Output/` itself. Provisional: the folder takes the group's name under the folder-name rule of PRJ-FR-27, with no `PANEL_` token, so the group "Panel 1" gets `Output/Panels/Panel-1/`. A file belongs to the panel whose folder it was saved in; PlateVault infers no panel from a header or file name. The user assembles the mosaic in their tool; PlateVault assembles nothing, and a mosaic with no assembled image is not incomplete. (D-W95, D-W98, D-W114)
 - **RES-FR-09**: Withdrawn (D-W72).
-- **RES-FR-10**: Move run to Trash puts a run that is no longer wanted, at any stage, in its Project's Trash (soft delete). It is refused while an app-owned preparation or storage mutation affecting the run is Running, and while one of its accepted Results is an input to another run. The refusal names each blocker: each blocking operation and each run that uses one of its Results. Moving a run to Trash moves no file. A run in the Project's Trash is hidden everywhere except the Project's Trash list (PRJ-FR-20): run lists, the stage rail, Home, pickers, Results inputs, goals and totals. Its members stop counting "in project" and "captured" unless they are still candidates (PRJ-FR-04). Restore brings the run back exactly as it was: its membership revisions, prepared revisions, Results and stage. Empty Trash, for one run or for every run in the Project's Trash, is the only step that removes a run. Its review shows what goes: the run record, each prepared folder, which goes to the OS Trash, and the Results folder, which goes to the OS Trash only when the user ticks it. PV-STO moves the files under STO-FR-17. Library frames, their quality decisions and other runs never change. After Empty Trash, Put back in the OS Trash restores files only, never the run. (D-W72)
+- **RES-FR-10**: Withdrawn (D-W94). There are no runs, so there is no Move run to Trash, Restore or Empty Trash.
+- **RES-FR-11**: PlateVault watches the Project's `Processing/` folder for generated calibration masters and passes each one it newly finds to CAL, which offers it once on the Output step (CAL-FR-06, provisional). The Output step lists no other `Processing/` file, and a tool rerun may overwrite them (D-W93). (D-W98)
 
 ### Owned interaction steps
 
 - H1
 - H2
 - H3
-- H3a
+- H3a: Withdrawn (D-W93). Results are never inputs to a Project.
 - I1
-- Cross-flow: Completion with no Result
-- Results surface
-- Run group Results: per-panel Results folders and the optional group Result
-- Move run to Trash, Restore and Empty Trash
+- Cross-flow: Closing with no Result
+- Output step: Results, Copy to Output and the master offer
+- Mosaic outputs in `Output/Panels/`
 
 ### Key Entities
 
 Use the [root vocabulary](../063-clean-rebuild-contract/spec.md#key-entities). Feature-specific evidence and decisions retain their input identity, scope, and revision. This feature adds:
 
-- **Processing run (View)**: the UI name for a View; it belongs to exactly one Project and has one subject and one rig. This spec calls it a run. A run ends Complete, and Reopen returns it to the stage it was in. A run that is no longer wanted is moved to the Project's Trash, from which Restore returns it unchanged and Empty Trash removes it (RES-FR-10). (D-W72)
-- **Run group**: the panel runs created for one mosaic subject, one per panel, sharing one setup.
-- **Group Result**: an Assembled mosaic product owned by a run group rather than by one panel run.
+- **Result**: a file in the Project's `Output/` folder. It needs no acceptance, has no recorded lineage and is never an input. (D-W93, D-W98)
+- **Output folder**: `<Project>/Output/`, which tools never write into and which Close keeps. (D-W98)
 
 ## Success Criteria
 
@@ -91,6 +100,7 @@ Use the [root vocabulary](../063-clean-rebuild-contract/spec.md#key-entities). F
 - **PV-RES-SC-01**: Every acceptance scenario produces its stated outcome and refusal behavior.
 - **PV-RES-SC-02**: Every owned interaction step has a requirement and independently observable acceptance evidence.
 - **PV-RES-SC-03**: Original inputs remain unchanged except through separately reviewed and approved filesystem operations.
+- **PV-RES-SC-04**: In the rerun fixture, a tool rerun that overwrites `Processing/` changes zero files in `Output/`. (D-W98)
 
 ## Assumptions
 
@@ -100,6 +110,9 @@ Use the [root vocabulary](../063-clean-rebuild-contract/spec.md#key-entities). F
 
 ## Decisions before feature approval
 
-- Root decisions D04 and D09 define qualified product-input support and explicit reopening/revision semantics. Complete without a Result remains supported and never infers external processing success.
-- Root decision D19 binds Result acceptance and reuse to re-verified content.
-- Workflow decisions D-W3, D-W4, D-W8, D-W26, D-W34, D-W38, D-W51, D-W55, D-W56, D-W67 and D-W70 (settled 2026-10-06) and D-W72 and D-W73 (answered 2026-10-07) set the run terminology and Results-folder discovery with a visible Attach Result. They also set reuse through run input filters, including products from another rig, Clean up after Complete, and the Project's Trash for a run that is no longer wanted, with Restore and Empty Trash. A Complete run asks for Reopen before 'Add N new sessions'. The once-only master offer sits in the Results step. The shared Results folder records each Result's revision, each panel run has its own Results folder, and a mosaic can return an optional group Result.
+- Root decision D04 defines qualified profile support. Closing without a Result remains supported and never infers external processing success; D09's reopening and revisions are withdrawn (D-W94, D-W97).
+- Root decision D19 binds Copy to Output and the master offer to re-verified content.
+- Workflow decisions D-W4, D-W56, D-W67 and D-W73 (the Results folder, attach, reuse as inputs and group Results) are superseded by D-W93, D-W94 and D-W98, and D-W72's run Trash is withdrawn with runs.
+- Workflow decisions D-W76 and D-W81 renamed Complete to Finish run; with runs gone, Close project keeps `Output/` and Clean up removes the View (D-W97).
+- Workflow decision D-W85 (Round 9, 2026-10-12) sets the table, the watcher with Rescan in More, and the Kind and Channel dropdowns, which the Output step keeps. Its Accept and Ignore, Attach…, Revision column, Finish run gate and reuse of accepted Results are superseded by D-W93 and D-W98.
+- Workflow decisions D-W93 and D-W98 (the F4 Project model, owner, 2026-10-14) make `Output/` the Project's Results with Copy to Output, keep tools out of it, drop lineage, acceptance and outputs as inputs, and move the master offer to `Processing/`. Provisional: the master offer from `Processing/`, the Copy to Output dialog opening in `Processing/`, one PlateVault operation per Project (D-W100) and the name of each panel's folder in `Output/Panels/`.

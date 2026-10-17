@@ -22,6 +22,7 @@
 
 mod support;
 
+use audit::event_bus::{TOPIC_PLAN_APPLYING_COMPLETED, TOPIC_PLAN_APPLYING_PAUSED};
 use persistence_plans::repositories::plan_apply as apply_repo;
 use persistence_plans::repositories::plans as plans_repo;
 use uuid::Uuid;
@@ -184,10 +185,13 @@ async fn resume_refused_while_item_still_stale() {
     .await
     .expect("update_item_fs_snapshot");
 
+    // The pause's audit row lands after the paused state does, so `events_before`
+    // is read only once `plan.applying.paused` has been published.
+    let mut bus_events = bus.subscribe();
     app_core::plan_apply::apply_plan(db.pool(), &bus, &plan_id, "tok-test-fixed", None)
         .await
         .expect("apply_plan should start");
-    support::wait_plan_terminal(db.pool(), &plan_id).await;
+    support::wait_plan_event(&mut bus_events, TOPIC_PLAN_APPLYING_PAUSED, &plan_id).await;
 
     let plan_row = plans_repo::get_plan(db.pool(), &plan_id, false).await.expect("get_plan");
     assert_eq!(plan_row.state, "paused", "run must have paused on the stale item");
@@ -265,12 +269,17 @@ async fn resume_succeeds_after_stale_item_resolved_and_drains_remaining_pending(
     .await
     .expect("update_item_fs_snapshot to resolve staleness");
 
+    // Subscribed before resuming, so the completion event cannot be published
+    // before the subscription exists. The terminal audit row is appended after the
+    // terminal state commits, so the trail is read only once
+    // `plan.applying.completed` has been published.
+    let mut bus_events = bus.subscribe();
     let resp = app_core::plan_apply::resume_plan(db.pool(), &bus, &plan_id, &run_row.id)
         .await
         .expect("resume must succeed once the stale condition is resolved");
     assert_eq!(resp.plan_id, plan_id);
 
-    support::wait_plan_terminal(db.pool(), &plan_id).await;
+    support::wait_plan_event(&mut bus_events, TOPIC_PLAN_APPLYING_COMPLETED, &plan_id).await;
 
     assert!(!src1.exists(), "item 1's source should have been moved by the resumed run");
     assert!(dst1.exists(), "item 1's destination should exist after the resumed run");

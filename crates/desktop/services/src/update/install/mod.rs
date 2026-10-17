@@ -5,7 +5,13 @@
 //!
 //! Every step here receives a [`Payload`], which [`Staged::reverify`] checked
 //! against its minisign signature just before, so nothing unverified reaches
-//! an installer. Every program an install runs is named by absolute path.
+//! an installer. Every program an install runs is named by absolute path. A
+//! step that runs as root checks the payload again once it holds those rights
+//! (astro-plan-ryj83): the deb/rpm and macOS root scripts against
+//! [`Payload`]'s size and SHA-256. The Windows installers are not re-checked
+//! after the UAC prompt; they inherit the verified handle, which keeps
+//! ordinary writers out until they exit but not code running as the user
+//! (`windows::launch_installer`).
 //!
 //! [`Staged::reverify`]: super::signature::Staged::reverify
 
@@ -22,7 +28,7 @@ use std::fs::File;
 use std::io::{Read as _, Seek as _};
 
 #[cfg(all(test, unix))]
-pub use self::bundle::{install_bundle, BundleInstaller, CodeSigning, Identity};
+pub use self::bundle::{install_bundle, BundleInstaller, CodeSigning, Identity, LaunchedBundle};
 use super::signature::Payload;
 use super::{Package, UpdateError};
 
@@ -49,26 +55,67 @@ pub enum Installed {
 /// The OS side of the updater: the platform installer in the app, a fake in
 /// tests.
 pub trait Installer: Send + Sync {
-    fn install(&self, payload: Payload<'_>, mode: InstallMode) -> Result<Installed, UpdateError>;
+    /// Install `payload`. `admin_prompt` is the text of the administrator
+    /// prompt an install that needs more rights shows, where the OS lets the
+    /// app word it (macOS); in the user's language.
+    fn install(
+        &self,
+        payload: Payload<'_>,
+        mode: InstallMode,
+        admin_prompt: &str,
+    ) -> Result<Installed, UpdateError>;
+}
+
+/// The app this process was launched from, read at startup. The macOS
+/// install replaces that app or nothing (astro-plan-uyguq); elsewhere it
+/// holds nothing.
+#[derive(Clone, Debug)]
+pub struct LaunchedApp {
+    /// The bundle holding the running executable, or the English detail of
+    /// why there is none, which a macOS install then fails with.
+    #[cfg(target_os = "macos")]
+    bundle: Result<bundle::LaunchedBundle, String>,
+}
+
+impl LaunchedApp {
+    /// Read where this process was launched from. Call it first at startup:
+    /// the app an update replaces must still be the one this read found.
+    #[must_use]
+    pub fn record() -> Self {
+        Self {
+            #[cfg(target_os = "macos")]
+            bundle: bundle::LaunchedBundle::running().map_err(|error| error.to_string()),
+        }
+    }
+
+    /// The launched bundle a macOS install replaces.
+    #[cfg(target_os = "macos")]
+    fn bundle(&self) -> Result<&bundle::LaunchedBundle, UpdateError> {
+        self.bundle.as_ref().map_err(|reason| UpdateError::Install(reason.clone()))
+    }
 }
 
 /// The installer for the package this copy was installed from.
 pub struct OsInstaller {
     package: Option<Package>,
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+    launched: LaunchedApp,
 }
 
 impl OsInstaller {
-    pub const fn new(package: Option<Package>) -> Self {
-        Self { package }
+    pub const fn new(package: Option<Package>, launched: LaunchedApp) -> Self {
+        Self { package, launched }
     }
 }
 
 impl Installer for OsInstaller {
     #[cfg_attr(not(windows), allow(unused_variables))]
+    #[cfg_attr(not(target_os = "macos"), allow(unused_variables))]
     fn install(
         &self,
         mut payload: Payload<'_>,
         mode: InstallMode,
+        admin_prompt: &str,
     ) -> Result<Installed, UpdateError> {
         let Some(package) = self.package else {
             return Err(UpdateError::Unsupported(
@@ -78,13 +125,15 @@ impl Installer for OsInstaller {
         check_format(payload.reader(), package)?;
         match package {
             #[cfg(windows)]
-            Package::Nsis | Package::Msi => windows::launch_installer(&payload, package, mode),
+            Package::Nsis | Package::Msi => windows::launch_installer(&mut payload, package, mode),
             #[cfg(target_os = "macos")]
-            Package::App => bundle::install_running_app(payload.reader()),
+            Package::App => {
+                bundle::install_launched_app(self.launched.bundle()?, &mut payload, admin_prompt)
+            }
             #[cfg(target_os = "linux")]
             Package::AppImage => linux::replace_appimage(payload.reader()),
             #[cfg(target_os = "linux")]
-            Package::Deb | Package::Rpm => linux::install_package(payload.path(), package),
+            Package::Deb | Package::Rpm => linux::install_package(&mut payload, package),
             other => Err(UpdateError::Unsupported(format!(
                 "a {} update cannot be installed on this operating system",
                 other.manifest_name()
@@ -123,7 +172,7 @@ fn check_format(file: &mut File, package: Package) -> Result<(), UpdateError> {
 mod tests {
     use std::io::{Read as _, Write as _};
 
-    use super::{check_format, InstallMode, Installer as _, OsInstaller};
+    use super::{check_format, InstallMode, Installer as _, LaunchedApp, OsInstaller};
     use crate::update::{Package, UpdateError};
 
     const PACKAGES: [(Package, &[u8]); 6] = [
@@ -181,8 +230,8 @@ mod tests {
     #[tokio::test]
     async fn a_build_without_a_package_cannot_install() {
         let staged = staged(Package::AppImage, b"\x7fELF").await;
-        let error = OsInstaller::new(None)
-            .install(staged.reverify().expect("verified"), InstallMode::Now)
+        let error = OsInstaller::new(None, LaunchedApp::record())
+            .install(staged.reverify().expect("verified"), InstallMode::Now, "")
             .expect_err("no package");
         assert!(matches!(error, UpdateError::Unsupported(_)), "{error}");
     }
@@ -192,8 +241,8 @@ mod tests {
         let foreign = if cfg!(windows) { Package::Deb } else { Package::Msi };
         let bytes = PACKAGES.iter().find(|(package, _)| *package == foreign).expect("bytes").1;
         let staged = staged(foreign, bytes).await;
-        let error = OsInstaller::new(Some(foreign))
-            .install(staged.reverify().expect("verified"), InstallMode::Now)
+        let error = OsInstaller::new(Some(foreign), LaunchedApp::record())
+            .install(staged.reverify().expect("verified"), InstallMode::Now, "")
             .expect_err("foreign package");
         assert!(
             matches!(&error, UpdateError::Unsupported(message) if message.contains(foreign.manifest_name())),
@@ -201,15 +250,15 @@ mod tests {
         );
     }
 
-    /// A test binary is not inside an `.app`, so the macOS install refuses to
-    /// guess what to replace.
+    /// A test binary is not inside an `.app`, so its launch record says so,
+    /// and the macOS install refuses to guess what to replace.
     #[cfg(target_os = "macos")]
     #[tokio::test]
     async fn the_macos_install_needs_to_run_from_an_app_bundle() {
         let bytes = PACKAGES[0].1;
         let staged = staged(Package::App, bytes).await;
-        let error = OsInstaller::new(Some(Package::App))
-            .install(staged.reverify().expect("verified"), InstallMode::Now)
+        let error = OsInstaller::new(Some(Package::App), LaunchedApp::record())
+            .install(staged.reverify().expect("verified"), InstallMode::Now, "")
             .expect_err("not in a bundle");
         assert!(
             matches!(&error, UpdateError::Install(message) if message.contains("not inside an app bundle")),

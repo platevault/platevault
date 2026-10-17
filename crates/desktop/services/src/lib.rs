@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! Desktop backend services that need no UI framework: OS notifications,
-//! process logging, the log viewer stream and job-progress feeds.
+//! process logging, the log viewer stream, job-progress feeds, the updater,
+//! the shipped locales' catalogues for text the backend shows itself and the
+//! new-captures feed.
 //!
 //! The host owns the event loop and the windows and adapts these services to
 //! its UI. It starts [`Services`] once, passes window state in as plain values
@@ -12,8 +14,10 @@
 //! `raw-window-handle` may appear in this crate's dependency graph
 //! (`tests/dependency_boundary.rs`).
 
+pub mod captures;
 pub mod channels;
 pub mod jobs;
+pub mod locale;
 pub mod log_stream;
 mod logging;
 pub mod notifications;
@@ -26,6 +30,7 @@ use audit::bus::EventBus;
 use tokio::task::AbortHandle;
 use tracing_appender::non_blocking::WorkerGuard;
 
+use crate::locale::ActiveLocale;
 use crate::notifications::Notifier;
 
 /// Bundle id macOS attributes a development build's notifications to.
@@ -75,7 +80,9 @@ pub struct Config {
 
 /// The running services of one process.
 pub struct Services {
+    identity: AppIdentity,
     notifier: Notifier,
+    locale: ActiveLocale,
     /// Flushes the log file when dropped; `None` when an earlier start in this
     /// process installed the logging.
     log: Mutex<Option<WorkerGuard>>,
@@ -91,16 +98,31 @@ impl Services {
     /// bridge.
     #[must_use]
     pub fn start(config: &Config) -> Self {
+        let locale = ActiveLocale::new();
         Self {
-            notifier: Notifier::new(&config.identity),
+            identity: config.identity.clone(),
+            locale: locale.clone(),
+            notifier: Notifier::new(&config.identity, locale),
             log: Mutex::new(logging::init(&config.log_dir)),
             tasks: Mutex::default(),
         }
     }
 
+    /// The identity the OS attributes this application's notifications to.
+    #[must_use]
+    pub const fn identity(&self) -> &AppIdentity {
+        &self.identity
+    }
+
     #[must_use]
     pub const fn notifier(&self) -> &Notifier {
         &self.notifier
+    }
+
+    /// The single selected locale used by notifications and updates.
+    #[must_use]
+    pub const fn active_locale(&self) -> &ActiveLocale {
+        &self.locale
     }
 
     /// Raise an OS notification for each completed plan apply and workflow

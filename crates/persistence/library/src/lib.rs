@@ -80,7 +80,7 @@ const SCHEMA: &str = schema_modules![
 /// The one version of the whole [`SCHEMA`] list, recorded by `schema.sql`'s
 /// `catalog_meta` row. There are no migrations: a catalog recording any other
 /// version is refused before any module's DDL runs.
-pub const SCHEMA_VERSION: i64 = 16;
+pub const SCHEMA_VERSION: i64 = 17;
 const BUSY_TIMEOUT: Duration = Duration::from_secs(10);
 const READER_CONNECTIONS: u32 = 4;
 const MAX_PAGE: u32 = 1000;
@@ -1130,6 +1130,22 @@ impl Catalog {
         location_assets(&mut conn, location_id).await
     }
 
+    /// The relative path of every asset the catalog records in `location_id`,
+    /// whatever its availability (Missing, Trashed and Retired included): the
+    /// files it already holds there, without reading their records.
+    ///
+    /// # Errors
+    /// `PersistenceFailure` when the catalog cannot be read.
+    pub async fn location_asset_paths(&self, location_id: Uuid) -> Result<Vec<NativePath>> {
+        let mut conn = self.reader().await?;
+        let keys: Vec<Vec<u8>> =
+            sqlx::query_scalar("SELECT path_key FROM assets WHERE location_id = ?1")
+                .bind(location_id.to_string())
+                .fetch_all(&mut *conn)
+                .await?;
+        keys.iter().map(|key| path_from_key(key)).collect()
+    }
+
     /// Sessions in list order (see [`SessionQuery`]): without a filter each
     /// summary covers the session's live frames, under [`SessionFilter::Trashed`]
     /// its Trashed frames alone.
@@ -2042,6 +2058,7 @@ impl Catalog {
         expected_revision: Revision,
         proposed_root: &NativePath,
         proposed_identity: &FileIdentity,
+        proposed_volume_kind: VolumeKind,
         probe: P,
     ) -> Result<RemapReview>
     where
@@ -2067,6 +2084,7 @@ impl Catalog {
             expected_revision,
             proposed_root: proposed_root.clone(),
             proposed_identity: proposed_identity.clone(),
+            proposed_volume_kind,
             items,
             blocked,
         };
@@ -6466,14 +6484,15 @@ fn require_same_assets(review: &RemapReview, assets: &[Asset]) -> Result<()> {
 async fn insert_review(conn: &mut SqliteConnection, review: &RemapReview) -> Result<()> {
     sqlx::query(
         "INSERT INTO remap_reviews (id, location_id, expected_revision, proposed_root, \
-         proposed_identity, items, blocked, state, created_at) \
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 'reviewed', ?8)",
+         proposed_identity, proposed_volume_kind, items, blocked, state, created_at) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'reviewed', ?9)",
     )
     .bind(review.id.to_string())
     .bind(review.location_id.to_string())
     .bind(db_revision(review.expected_revision)?)
     .bind(path_key(&review.proposed_root))
     .bind(to_json(&review.proposed_identity)?)
+    .bind(to_text(&review.proposed_volume_kind)?)
     .bind(to_json(&review.items)?)
     .bind(to_json(&review.blocked)?)
     .bind(now()?)
@@ -6494,6 +6513,7 @@ async fn load_review(conn: &mut SqliteConnection, id: Uuid) -> Result<(RemapRevi
         expected_revision: revision(row.try_get("expected_revision")?)?,
         proposed_root: path_from_key(&row.try_get::<Vec<u8>, _>("proposed_root")?)?,
         proposed_identity: from_json(&row.try_get::<String, _>("proposed_identity")?)?,
+        proposed_volume_kind: from_text(&row.try_get::<String, _>("proposed_volume_kind")?)?,
         items: from_json(&row.try_get::<String, _>("items")?)?,
         blocked: from_json(&row.try_get::<String, _>("blocked")?)?,
     };
@@ -6513,13 +6533,15 @@ async fn apply_remap_rows(
     }
     sqlx::query(
         "UPDATE locations SET path_key = ?1, identity = ?2, volume_filesystem = ?3, \
-         volume_stable_id = ?4, availability = 'available', unavailable_reason = NULL, \
-         unavailable_at = NULL, decision_revision = decision_revision + 1 WHERE id = ?5",
+         volume_stable_id = ?4, volume_kind = ?5, availability = 'available', \
+         unavailable_reason = NULL, unavailable_at = NULL, \
+         decision_revision = decision_revision + 1 WHERE id = ?6",
     )
     .bind(path_key(&review.proposed_root))
     .bind(to_json(&review.proposed_identity)?)
     .bind(review.proposed_identity.volume.filesystem.as_str())
     .bind(review.proposed_identity.volume.stable_id.as_deref())
+    .bind(to_text(&review.proposed_volume_kind)?)
     .bind(review.location_id.to_string())
     .execute(&mut *conn)
     .await?;

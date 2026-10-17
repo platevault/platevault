@@ -59,6 +59,7 @@ export type PvTokenName =
   | 'pv-rule'
   | 'pv-rule2'
   | 'pv-selected-bg'
+  | 'pv-shadow-inset'
   | 'pv-shadow-lg'
   | 'pv-shadow-sm'
   | 'pv-sidebar-collapsed'

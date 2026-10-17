@@ -860,6 +860,16 @@ export const commands = {
 	 */
 	updateStatus: () => typedError<UpdateStatus, ContractError_Serialize>(__TAURI_INVOKE("update_status")),
 	/**
+	 *  `update.offer` — where the Install now and Install on quit offer for the
+	 *  release the last check found was made: the system notification, or the
+	 *  in-app notice. Later changes arrive as `update:offer` events.
+	 * 
+	 *  # Errors
+	 * 
+	 *  `InternalError` when the build has no usable updater configuration.
+	 */
+	updateOffer: () => typedError<UpdateOffer, ContractError_Serialize>(__TAURI_INVOKE("update_offer")),
+	/**
 	 *  `update.check_on_startup` — the check at app start, run once per process
 	 *  and only when `automatic` ("Check for updates automatically") is on.
 	 * 
@@ -894,6 +904,19 @@ export const commands = {
 	 *  `InternalError` when the build has no usable updater configuration.
 	 */
 	updateInstallOnQuit: () => typedError<null, ContractError_Serialize>(__TAURI_INVOKE("update_install_on_quit")),
+	/**
+	 *  `update.set_locale` — the webview's active locale, sent at startup and on
+	 *  every locale change, for text the updater and desktop notifications show
+	 *  outside the webview: the macOS administrator prompt, update notices and OS
+	 *  completion notices. A tag that is not a shipped locale means the base locale.
+	 * 
+	 *  # Errors
+	 * 
+	 *  The command itself never fails; the `Result` keeps the shape every update
+	 *  command has. The locale is managed state, so in an app that does not manage
+	 *  an [`ActiveLocale`] the call is an IPC error before the command runs.
+	 */
+	updateSetLocale: (locale: string) => typedError<null, ContractError_Serialize>(__TAURI_INVOKE("update_set_locale", { locale })),
 	/**
 	 *  `audit.list` — returns paginated audit entries read from `audit_log_entry`.
 	 * 
@@ -2182,6 +2205,11 @@ export const commands = {
 	 */
 	devSchemaGet: (request: DevSchemaGetRequest) => typedError<DevSchemaGetResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("dev_schema_get", { request })),
 };
+
+/* Constants */
+export const UPDATE_OFFER_DEADLINE_MS = 30000 as const;
+
+export const UPDATE_PERSISTENT_OFFER_TIMEOUT_MS = 300000 as const;
 
 /* Types */
 /**
@@ -4044,6 +4072,13 @@ export type ErrorCode = "validation.request_envelope_invalid" | "dev_mode.disabl
  *  Included per task instruction.
  */
 "launch.failed" | "macos.quarantine.detected" | "filters.invalid" | "os.command_failed" | "picker.unavailable" | "format.unsupported" | "range.invalid" | "path.write.denied" | "path.parent.missing" | "database.error" | "serialise.error" | "io.error" | 
+/**
+ *  An export failed after claiming its destination and its own
+ *  unfinished file remains there; the user deletes it before retrying.
+ *  `details.path` names that file, under the destination's canonicalized
+ *  parent.
+ */
+"export.unfinished_file" | 
 /**
  *  A root's storage is unavailable (e.g. a removable drive is
  *  disconnected). Frames under it are reported unavailable/missing —
@@ -7105,11 +7140,60 @@ export type NativeMenuLabels = {
 	closeWindow: string,
 };
 
+/**  The new files of one online Captures location. */
+export type NewCaptureCount = {
+	locationId: string,
+	/**
+	 *  Supported frames below the location that the library does not hold
+	 *  yet: arrived since its last index, until indexing adds them.
+	 */
+	newFiles: number,
+	/**
+	 *  Whether a live folder watcher keeps the count current. `false` while
+	 *  the count may lag: the watcher did not start or misses some folders,
+	 *  and every sweep retries it, or the location's removable drive is being
+	 *  ejected.
+	 */
+	live: boolean,
+};
+
+/**  The new files of every counted Captures location, by location id. */
+export type NewCaptures = {
+	locations: NewCaptureCount[],
+};
+
 /**  Summary of items that do NOT require acknowledgement (R-CheckScope, FR-008). */
 export type NonBlockingSummary = {
 	normalCount: number,
 	unprotectedCount: number,
 };
+
+/**
+ *  Where the Install now and Install on quit offer for a release is made
+ *  (astro-plan-c72oo).
+ */
+export type OfferChannel = 
+/**
+ *  A system notification with both buttons is outstanding that stays on
+ *  screen until the user answers it, for a bounded time: on macOS, the
+ *  Alert notification style, unless it was presented while the app was
+ *  frontmost, which shows it as a banner. A Focus may send even an alert
+ *  unseen to Notification Center, which the app cannot read, so after
+ *  that time the in-app notice offers the update too. Elsewhere the
+ *  notification is only a heads-up beside the in-app notice.
+ */
+"system" | 
+/**
+ *  The in-app notice carries them: the notification is a heads-up that
+ *  may leave the screen unanswered (a macOS banner, including any
+ *  notification presented while the app is frontmost, a Windows toast, a
+ *  freedesktop notification), a notification that stays on screen went
+ *  unanswered for that bounded time, notification permission was
+ *  denied, the notification system shows no buttons, the notification
+ *  could not be shown or was not accepted in time, or the user answered
+ *  or closed it, or it was withdrawn.
+ */
+"in-app";
 
 /**  Section-level flags (`onboarding_flags` singleton). */
 export type OnboardingFlagsDto = {
@@ -10695,6 +10779,11 @@ export type UpdateFailure =
 { code: "signature" } | 
 /**  The new macOS app is not signed by the identity of the installed one. */
 { code: "identity" } | 
+/**
+ *  The macOS app was moved or replaced after it was launched, so nothing
+ *  was installed; a restart launches what is there now.
+ */
+{ code: "app-replaced" } | 
 /**  Permission to install was refused or not given. */
 { code: "permission" } | 
 /**  The install step failed. */
@@ -10729,6 +10818,13 @@ export type UpdateIngestionSettings = {
 	exposureGroupingToleranceS: number | null,
 	temperatureGroupingToleranceC: number | null,
 	defaultFilter: string | null,
+};
+
+/**  Where the offer for the release the last check found stands. */
+export type UpdateOffer = {
+	/**  The release offered; `None` until a check has found one. */
+	version: string | null,
+	channel: OfferChannel,
 };
 
 export type UpdateOpticalTrain = {

@@ -21,7 +21,7 @@
 //! `crates/app/inbox/src/confirm.rs`). This journey never calls
 //! `sources.set_organization_state`, so the fixture FITS file stays at its
 //! original path — real, but simpler to reason about than the move variant
-//! the existing `plan_review_apply_with_audit` journey already covers.
+//! the inbox UI journeys and `backend_journeys.rs::ingestion_sessions_search` cover.
 //!
 //! RESOLVED FINDING (#1218): `projects.source.add` and `projects.create`'s
 //! `initialSources` path (`crates/app/projects/src/project_setup.rs`) used to
@@ -45,8 +45,8 @@
 //! (`missing_exposure_metadata_keeps_the_real_filter`), which is the right
 //! layer for it now that Layer 3 cannot construct it.
 //!
-//! KNOWN GAP (documented, not faked — mirrors `cleanup_plan_review` in
-//! `journeys.rs`): materializing the real symlink/junction on disk requires
+//! KNOWN GAP (documented, not faked — as `cleanup_plan_review` once did
+//! before `plans.apply.direct`): materializing the real symlink/junction on disk requires
 //! `plans.apply_real`, whose `tauri::ipc::Channel` argument only the product
 //! frontend's `applyPlan` helper (`apps/desktop/src/features/plans/
 //! planApply.ts`) constructs today, via `usePlanApplyProgress` →
@@ -67,8 +67,8 @@
 //! UI Apply button exists to click.
 //!
 //! Run (CI): `cargo nextest run -p e2e_tests --profile e2e --run-ignored all`
-//! (serial, `.config/nextest.toml`). See `crates/e2e-tests/tests/journeys.rs`
-//! module docs and `README.md` for the full local run procedure.
+//! (serial, `.config/nextest.toml`). See `README.md` for the full local run
+//! procedure.
 
 mod common;
 

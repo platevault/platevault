@@ -47,6 +47,9 @@ pub enum UpdateFailure {
     Signature,
     /// The new macOS app is not signed by the identity of the installed one.
     Identity,
+    /// The macOS app was moved or replaced after it was launched, so nothing
+    /// was installed; a restart launches what is there now.
+    AppReplaced,
     /// Permission to install was refused or not given.
     Permission,
     /// The install step failed.
@@ -79,5 +82,46 @@ impl UpdateStatus {
     #[must_use]
     pub const fn idle() -> Self {
         Self { phase: UpdatePhase::Idle, version: None, body: None, error: None }
+    }
+}
+
+/// Where the Install now and Install on quit offer for a release is made
+/// (astro-plan-c72oo).
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "kebab-case")]
+pub enum OfferChannel {
+    /// A system notification with both buttons is outstanding that stays on
+    /// screen until the user answers it, for a bounded time: on macOS, the
+    /// Alert notification style, unless it was presented while the app was
+    /// frontmost, which shows it as a banner. A Focus may send even an alert
+    /// unseen to Notification Center, which the app cannot read, so after
+    /// that time the in-app notice offers the update too. Elsewhere the
+    /// notification is only a heads-up beside the in-app notice.
+    System,
+    /// The in-app notice carries them: the notification is a heads-up that
+    /// may leave the screen unanswered (a macOS banner, including any
+    /// notification presented while the app is frontmost, a Windows toast, a
+    /// freedesktop notification), a notification that stays on screen went
+    /// unanswered for that bounded time, notification permission was
+    /// denied, the notification system shows no buttons, the notification
+    /// could not be shown or was not accepted in time, or the user answered
+    /// or closed it, or it was withdrawn.
+    InApp,
+}
+
+/// Where the offer for the release the last check found stands.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateOffer {
+    /// The release offered; `None` until a check has found one.
+    pub version: Option<String>,
+    pub channel: OfferChannel,
+}
+
+impl UpdateOffer {
+    /// No offer made yet.
+    #[must_use]
+    pub const fn none() -> Self {
+        Self { version: None, channel: OfferChannel::InApp }
     }
 }

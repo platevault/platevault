@@ -103,12 +103,6 @@ impl Confidence {
     ) -> Self {
         Self { score, level, evidence_refs: Vec::new(), explanation: explanation.into() }
     }
-
-    #[must_use]
-    pub fn with_evidence(mut self, evidence: EvidenceRef) -> Self {
-        self.evidence_refs.push(evidence);
-        self
-    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]

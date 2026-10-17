@@ -31,18 +31,28 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 sqlx = { workspace = true }
 tempfile = { workspace = true }
-tokio = { workspace = true }
+tokio = { workspace = true, features = ["time"] }
 tracing = { workspace = true }
 tracing-appender = { workspace = true }
 tracing-subscriber = { workspace = true }
 uuid = { workspace = true }
 
+# The privileged deb, rpm and macOS installs check root's own copy of the
+# payload against the SHA-256 of the bytes `Staged::reverify` verified
+# (astro-plan-ryj83). sha2 is the workspace's digest crate; Windows locks the
+# payload instead and needs none.
+[target.'cfg(unix)'.dependencies]
+sha2 = { workspace = true }
+
 # The macOS update unpacks the `.app.tar.gz` and exchanges the bundles with
 # rustix's `renameat_with(EXCHANGE)`, as platevault_core does for its links.
 # The swap's tests run on every Unix, so other Unix targets get the three
-# crates for tests only.
+# crates for tests only. The update offer's notification buttons
+# (`src/update/offer`) go through platevault_notify_macos, the workspace's
+# UNUserNotificationCenter bindings.
 [target.'cfg(target_os = "macos")'.dependencies]
 flate2 = "1.1.9"
+platevault_notify_macos = { path = "../../platevault-notify-macos" }
 rustix = { version = "1.1", features = ["fs"] }
 tar = "0.4.46"
 
@@ -57,7 +67,7 @@ minisign = { workspace = true }
 persistence_core = { path = "../../persistence/core" }
 # Real FITS frames for the measurement feed tests.
 platevault_pixels = { path = "../../platevault-pixels", features = ["fixtures"] }
-tokio = { workspace = true, features = ["time", "net", "io-util"] }
+tokio = { workspace = true, features = ["time", "net", "io-util", "test-util"] }
 
 [lints]
 workspace = true

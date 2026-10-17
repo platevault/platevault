@@ -11,9 +11,17 @@
  * choices to the `update_*` commands. Nothing downloads until the user
  * chooses Install now or Install on quit.
  *
- * - `startUpdateSubscription()` listens first, reads the current status,
- *   then asks for the startup check. The backend runs that check once per
- *   process, and only while "Check for updates automatically" is on
+ * It also mirrors where the backend offered a found release
+ * (`update:offer` events, astro-plan-c72oo): while the system notification
+ * carries Install now and Install on quit, or the backend is still deciding
+ * whether it can, the in-app notice leaves the `available` phase to it
+ * (`offerHolder`). Each wait is bounded, should an offer event be lost: the
+ * in-app notice offers a release the backend never decided, and the offer is
+ * read again once the system notification's time is up.
+ *
+ * - `startUpdateSubscription()` listens first, reads the current status and
+ *   offer, then asks for the startup check. The backend runs that check once
+ *   per process, and only while "Check for updates automatically" is on
  *   (AppPreferences `checkUpdatesAutomatically`, astro-plan-bzzbp).
  * - `checkForUpdate()` is the manual check; it works with the setting off.
  * - `installUpdateNow()` downloads, verifies, installs and relaunches (on
@@ -21,12 +29,15 @@
  *   downloads and verifies now; the backend installs when the app quits.
  *
  * In mock/test mode (VITE_USE_MOCKS=true) there is no backend: every action
- * is a no-op and the phase stays 'idle'.
+ * is a no-op, the phase stays 'idle' and the offer stays in-app.
  */
 
 import { type IpcResult, unwrap } from '@/api/ipc';
 import {
   commands,
+  UPDATE_OFFER_DEADLINE_MS,
+  UPDATE_PERSISTENT_OFFER_TIMEOUT_MS,
+  type UpdateOffer,
   type UpdatePhase,
   type UpdateStatus,
 } from '@/bindings/index';
@@ -36,6 +47,16 @@ const IS_MOCK = import.meta.env.VITE_USE_MOCKS === 'true';
 
 /** Backend → webview status pushes. Mirrors `updater::UPDATE_STATUS_EVENT`. */
 const STATUS_EVENT = 'update:status';
+
+/** Backend → webview offer pushes. Mirrors `updater::UPDATE_OFFER_EVENT`. */
+const OFFER_EVENT = 'update:offer';
+
+/**
+ * How much longer than each of the backend's own time limits the webview
+ * waits for the offer event that follows it, so the event has time to
+ * arrive.
+ */
+const EVENT_MARGIN_MS = 5_000;
 
 // E2E test-injection seam: a journey spec can set this before navigation to
 // seed a specific update phase without a backend updater. Only consulted in
@@ -49,7 +70,7 @@ declare global {
   }
 }
 
-export type { UpdatePhase };
+export type { UpdateOffer, UpdatePhase };
 export type UpdateState = UpdateStatus;
 
 /** Phases from which the user may choose Install now or Install on quit. */
@@ -65,6 +86,28 @@ export function canInstall(state: UpdateState): boolean {
   return INSTALLABLE.has(state.phase);
 }
 
+/**
+ * Who offers Install now and Install on quit for `state`'s release:
+ * - `system`: the system notification carries both buttons, for at most the
+ *   backend's `UPDATE_PERSISTENT_OFFER_TIMEOUT_MS`;
+ * - `in-app`: the in-app notice does, because the backend could not offer the
+ *   release in a notification, the notification was answered, closed or
+ *   withdrawn, or the phase is past the offer;
+ * - `deciding`: the backend has not yet decided for this release. It does so
+ *   once the system post is accepted, refused or timed out, so the in-app
+ *   choices wait for that.
+ */
+export type OfferHolder = 'system' | 'in-app' | 'deciding';
+
+export function offerHolder(
+  state: UpdateState,
+  offer: UpdateOffer,
+): OfferHolder {
+  if (state.phase !== 'available') return 'in-app';
+  if (offer.version !== state.version) return 'deciding';
+  return offer.channel === 'system' ? 'system' : 'in-app';
+}
+
 type Listener = () => void;
 
 const IDLE_STATE: UpdateState = {
@@ -74,26 +117,129 @@ const IDLE_STATE: UpdateState = {
   error: null,
 };
 
+const NO_OFFER: UpdateOffer = { version: null, channel: 'in-app' };
+
 let current: UpdateState = IDLE_STATE;
+let currentOffer: UpdateOffer = NO_OFFER;
 const listeners = new Set<Listener>();
 let subscribed = false;
 /**
  * Bumped by every start and stop. A start that resumes after a later start
  * or a stop (React StrictMode runs setup → cleanup → setup) sees its token
- * is stale and removes its own listener instead of keeping it.
+ * is stale and removes its own listeners instead of keeping them.
  */
 let generation = 0;
 let unlisten: (() => void) | null = null;
 
+/**
+ * The release whose offer the backend is deciding, and the timer after
+ * which the in-app notice offers it anyway: the backend may never publish,
+ * should its offer task have ended or an `update:offer` event been lost.
+ */
+let decidingFor: string | null = null;
+let decidingTimer: ReturnType<typeof setTimeout> | null = null;
+
+function clearDeciding(): void {
+  if (decidingTimer !== null) clearTimeout(decidingTimer);
+  decidingTimer = null;
+  decidingFor = null;
+}
+
+/** Start or stop waiting for the backend's offer, after every change. */
+function watchDeciding(): void {
+  const version =
+    offerHolder(current, currentOffer) === 'deciding' ? current.version : null;
+  if (version === decidingFor) return;
+  clearDeciding();
+  if (version === null) return;
+  decidingFor = version;
+  decidingTimer = setTimeout(() => {
+    decidingTimer = null;
+    console.warn(
+      `[updateSubscription] no offer for ${version} arrived; the in-app notice offers it`,
+    );
+    setOffer({ version, channel: 'in-app' });
+  }, UPDATE_OFFER_DEADLINE_MS + EVENT_MARGIN_MS);
+}
+
+/**
+ * The release the system notification carries, and the timer after which
+ * the offer is read again: the backend offers it in-app once the
+ * notification has gone unanswered for its timeout, and that `update:offer`
+ * event may be lost.
+ */
+let carriedFor: string | null = null;
+let carriedTimer: ReturnType<typeof setTimeout> | null = null;
+
+function clearCarried(): void {
+  if (carriedTimer !== null) clearTimeout(carriedTimer);
+  carriedTimer = null;
+  carriedFor = null;
+}
+
+/** Start or stop timing the system notification, after every change. */
+function watchCarried(): void {
+  const version =
+    offerHolder(current, currentOffer) === 'system' ? current.version : null;
+  if (version === carriedFor) return;
+  clearCarried();
+  if (version === null) return;
+  carriedFor = version;
+  carriedTimer = setTimeout(() => {
+    carriedTimer = null;
+    // Timed afresh by the next change, should the read still say `system`.
+    carriedFor = null;
+    void readCarriedOffer(version);
+  }, UPDATE_PERSISTENT_OFFER_TIMEOUT_MS + EVENT_MARGIN_MS);
+}
+
+/**
+ * Read the offer for `version` again; the in-app notice offers it if the
+ * read fails. A stop, or an offer event during the read, is newer and wins.
+ */
+async function readCarriedOffer(version: string): Promise<void> {
+  const token = generation;
+  const before = currentOffer;
+  let offer: UpdateOffer;
+  try {
+    offer = unwrap(await commands.updateOffer());
+  } catch (err) {
+    console.warn(
+      `[updateSubscription] reading the offer for ${version} failed; the in-app notice offers it:`,
+      err,
+    );
+    offer = { version, channel: 'in-app' };
+  }
+  if (token !== generation || currentOffer !== before) return;
+  setOffer(offer);
+}
+
+function notify(): void {
+  watchDeciding();
+  watchCarried();
+  for (const listener of listeners) listener();
+}
+
 function setState(next: UpdateState): void {
   current = next;
-  for (const listener of listeners) listener();
+  notify();
+}
+
+function setOffer(next: UpdateOffer): void {
+  currentOffer = next;
+  notify();
 }
 
 export function getUpdateSnapshot(): UpdateState {
   return current;
 }
 
+/** Where the backend offered the release the last check found. */
+export function getUpdateOfferSnapshot(): UpdateOffer {
+  return currentOffer;
+}
+
+/** Called on every status and offer change. */
 export function subscribeUpdate(listener: Listener): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
@@ -128,8 +274,8 @@ export async function installUpdateOnQuit(): Promise<void> {
 }
 
 /**
- * Start mirroring the backend's update status (idempotent), then ask for the
- * startup check, which honours "Check for updates automatically".
+ * Start mirroring the backend's update status and offer (idempotent), then
+ * ask for the startup check, which honours "Check for updates automatically".
  */
 export async function startUpdateSubscription(): Promise<void> {
   if (subscribed) return;
@@ -137,26 +283,53 @@ export async function startUpdateSubscription(): Promise<void> {
   const token = ++generation;
 
   if (typeof window !== 'undefined' && window.__PV_TEST__?.updateState) {
-    setState(window.__PV_TEST__.updateState);
+    const seeded = window.__PV_TEST__.updateState;
+    setState(seeded);
+    // No backend makes a system offer, so the in-app notice holds it.
+    setOffer({ version: seeded.version, channel: 'in-app' });
     return;
   }
   if (IS_MOCK) return;
 
+  const stops: Array<() => void> = [];
+  const stop = () => {
+    for (const stopOne of stops.splice(0)) stopOne();
+  };
   try {
-    // Listen before reading, so no change between the two is lost.
+    // Listen before reading, so no change between the two is lost. Each
+    // listener marks that its event arrived, so a snapshot read before the
+    // event does not replace it: every change is pushed, so the last event
+    // is the newest value.
     const { listen } = await import('@tauri-apps/api/event');
-    const stop = await listen<UpdateState>(STATUS_EVENT, (event) => {
-      setState(event.payload);
-    });
+    let statusPushed = false;
+    let offerPushed = false;
+    stops.push(
+      await listen<UpdateState>(STATUS_EVENT, (event) => {
+        statusPushed = true;
+        setState(event.payload);
+      }),
+    );
+    if (token === generation) {
+      stops.push(
+        await listen<UpdateOffer>(OFFER_EVENT, (event) => {
+          offerPushed = true;
+          setOffer(event.payload);
+        }),
+      );
+    }
     if (token !== generation) {
       stop();
       return;
     }
     unlisten = stop;
     const status = unwrap(await commands.updateStatus());
+    const offer = unwrap(await commands.updateOffer());
     if (token !== generation) return;
-    setState(status);
+    if (!statusPushed) setState(status);
+    if (!offerPushed) setOffer(offer);
   } catch (err) {
+    // A listener whose sibling failed to register is not kept half-wired.
+    if (unlisten !== stop) stop();
     console.warn('[updateSubscription] subscribing failed:', err);
     return;
   }
@@ -171,6 +344,7 @@ export function stopUpdateSubscription(): void {
   generation += 1;
   unlisten?.();
   unlisten = null;
+  currentOffer = NO_OFFER;
   setState(IDLE_STATE);
 }
 

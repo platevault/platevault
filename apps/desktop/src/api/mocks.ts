@@ -1415,6 +1415,9 @@ const mockHandlers = {
   update_status: async () => {
     return { phase: 'idle', version: null, body: null, error: null };
   },
+  update_offer: async () => {
+    return { version: null, channel: 'in-app' };
+  },
   update_check_on_startup: async () => {
     return null;
   },
@@ -1425,6 +1428,9 @@ const mockHandlers = {
     return null;
   },
   update_install_on_quit: async () => {
+    return null;
+  },
+  update_set_locale: async () => {
     return null;
   },
   native_menu_set_labels: async () => {

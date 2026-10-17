@@ -6,16 +6,21 @@
  *
  * Shown in the shell once the startup check finds an update: version, release
  * notes, and the owner-decided choice of Install now or Install on quit.
- * Nothing downloads until one of those is clicked. It follows the download,
- * install and failure phases afterwards, and "Later" hides it for that version
- * for the rest of the session (Settings > Advanced keeps the same actions).
+ * Nothing downloads until one of those is clicked. While the system
+ * notification carries both buttons for that release (astro-plan-c72oo), or
+ * the backend is still deciding whether it can, the notice holds back; it
+ * shows as the fallback. It follows the download, install and failure phases
+ * afterwards, and "Later" hides it for that version for the rest of the
+ * session (Settings > Advanced keeps the same actions).
  */
 
 import { useState, useSyncExternalStore } from 'react';
 import { Banner, Btn } from '@/ui';
 import { m } from '@/lib/i18n';
 import {
+  getUpdateOfferSnapshot,
   getUpdateSnapshot,
+  offerHolder,
   subscribeUpdate,
   type UpdatePhase,
 } from '@/data/updateSubscription';
@@ -34,10 +39,17 @@ const SHOWN: ReadonlySet<UpdatePhase> = new Set([
 
 export function UpdateBanner() {
   const state = useSyncExternalStore(subscribeUpdate, getUpdateSnapshot);
+  const offer = useSyncExternalStore(subscribeUpdate, getUpdateOfferSnapshot);
   const [dismissedVersion, setDismissedVersion] = useState<string | null>(null);
 
   const version = state.version ?? '';
-  if (!SHOWN.has(state.phase) || version === dismissedVersion) return null;
+  if (
+    !SHOWN.has(state.phase) ||
+    version === dismissedVersion ||
+    offerHolder(state, offer) !== 'in-app'
+  ) {
+    return null;
+  }
 
   return (
     <Banner

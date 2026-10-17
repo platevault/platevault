@@ -5,23 +5,24 @@ desktop app.
 
 ## Status
 
-**Real journeys, wired against the real backend (2026-07-04, spec 037 WP-C).**
+**Real journeys, wired against the real app (spec 037 WP-C).**
 
-Six journeys run against the real app + real SQLite + real filesystem:
-`first_run_resolve_create_project`, `plan_review_apply_with_audit`,
-`ingestion_sessions_search`, `lifecycle_integrity`, `cleanup_plan_review`
-(`tests/journeys.rs`), and `all_top_level_screens_load`
-(`tests/smoke.rs`). All six are `#[ignore]`d in-source purely so the
-Layer-1 `cargo test --workspace` job (ci.yml) — which has no
-`tauri-webdriver` CLI, no e2e-feature app build, and no served frontend —
-skips them; the e2e workflow opts back in with `--run-ignored all`.
-Durable-record proofs use
-`plans.apply.status` (`plan_apply_events`) and `lifecycle.ledger.list` — the
-read paths closest to the mutations being proved. (`audit.list`/
-`audit.export` were stubs when these were authored; PR #388 wired them to
-the real `audit_log_entry` table, #401 adds entity-filtered reads — they're
-now available as complementary assertion surfaces.) See each journey's doc
-comment for exactly which real commands it drives and why.
+Every journey here launches the real app + real SQLite + real filesystem and
+drives or reads the real UI (`tests/*.rs`, one binary per file). All are
+`#[ignore]`d in-source purely so the Layer-1 `cargo test --workspace` job
+(ci.yml) — which has no `tauri-webdriver` CLI, no e2e-feature app build, and
+no served frontend — skips them; the e2e workflow opts back in with
+`--run-ignored all`. See each journey's doc comment for exactly which real
+commands and UI surfaces it exercises and why.
+
+A journey that reads no DOM does not belong here: it pays for a full app boot
+to prove only backend behaviour. The five IPC-only journeys that used to live
+in `tests/journeys.rs` and `tests/archive_journeys.rs` moved to
+`apps/desktop/src-tauri/tests/backend_journeys.rs` (#1227), which calls the
+same commands against a real backend without a webview;
+`plan_review_apply_with_audit` was deleted because
+`inbox_ui_journeys.rs::inbox_ui_confirm_does_not_move_then_apply_moves_to_shown_destination`
+drives the same chain through the UI.
 
 Cannot run in the WSL dev sandbox (no webview/display) — CI (`e2e.yml`, 3-OS
 matrix) is the first real verification point; iterate there.
