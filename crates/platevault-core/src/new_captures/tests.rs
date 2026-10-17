@@ -573,6 +573,61 @@ async fn a_live_event_counts_a_frame_at_a_vacated_path_unless_its_file_was_put_b
     count_is(&watch, location.id, 0).await;
 }
 
+/// A frame at a Missing record's path that kept the record's modification
+/// time but not its size (the original grown by one FITS block, its time put
+/// back) is not the original: the start-up walk counts it.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_frame_at_a_vacated_path_with_its_time_but_not_its_size_counts() {
+    let fx = fixture().await;
+    let root = fx.base.join("Captures");
+    let location = captures(&fx.library, &root).await;
+    let path = root.join(MISSING[0]);
+    frame(&path);
+    assert_eq!(scan_to_end(&fx.library, location.id).await.state, ScanState::Completed);
+    let modified = fs::metadata(&path).unwrap().modified().unwrap();
+    let mut bytes = fs::read(&path).unwrap();
+    fs::remove_file(&path).unwrap();
+    assert_eq!(scan_to_end(&fx.library, location.id).await.state, ScanState::Completed);
+
+    bytes.extend([0_u8; 2880]);
+    fs::write(&path, &bytes).unwrap();
+    fs::File::options().write(true).open(&path).unwrap().set_modified(modified).unwrap();
+    let watch = watch(&fx.library);
+    count_is(&watch, location.id, 1).await;
+}
+
+/// A trash run recorded frame by frame reads the location's catalog paths
+/// once per debounce tick, not once per frame.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_trash_run_of_many_frames_is_recounted_once_per_tick() {
+    let fx = fixture().await;
+    let root = fx.base.join("Captures");
+    let location = captures(&fx.library, &root).await;
+    for n in 1..=10 {
+        frame(&root.join(format!("Ha_{n:03}.fits")));
+    }
+    assert_eq!(scan_to_end(&fx.library, location.id).await.state, ScanState::Completed);
+    // Ticks far enough apart that the run is recorded within one or two.
+    let slow = Settings { debounce: Duration::from_secs(2), ..FAST };
+    let watch = CaptureWatch::start_with(&fx.library, slow, Arc::new(OsProbe));
+    count_is(&watch, location.id, 0).await;
+    let recounts = || watch.observed().recounts.load(Ordering::SeqCst);
+    let before = recounts();
+
+    let assets = fx.library.catalog().location_assets(location.id).await.unwrap();
+    for asset in &assets {
+        let path = root.join(asset.relative_path.to_path_buf().unwrap());
+        let sha256 = hex::encode(Sha256::digest(fs::read(path).unwrap()));
+        let frame = TrashedFrame { asset_id: asset.id, sha256, complete_view_ids: Vec::new() };
+        fx.library.record_trashed(Uuid::new_v4(), &[frame]).await.unwrap();
+    }
+    eventually("the trash run was recounted", || recounts() > before).await;
+    after(&watch, drains, 1).await;
+    let recounted = recounts() - before;
+    assert!(recounted <= 2, "{recounted} recounts for {} trashed frames", assets.len());
+    assert_eq!(new_files(&watch.counts(), location.id), Some(0), "the originals are held");
+}
+
 /// A raw connection to the fixture's catalog, for failures no library
 /// command causes.
 async fn raw_catalog(fx: &Fixture) -> sqlx::SqliteConnection {
@@ -1611,6 +1666,7 @@ fn counted(location: Location, root: &Path) -> Watched {
         unlisted: Vec::new(),
         rescan: false,
         recount: false,
+        unreadable: false,
         listed: true,
         cataloged: true,
         released: false,

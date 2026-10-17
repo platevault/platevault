@@ -36,7 +36,10 @@
 //! size and modification time the record last observed, as the original put
 //! back (from the OS Trash, or onto the drive again) has, which a scan
 //! returns to its record. Those are read off the runtime from the no-follow
-//! metadata of the frames the walk lists or a live event finds there.
+//! metadata of the frames the walk lists or a live event finds there. A
+//! different file with that same size and modification time is taken for
+//! the original until a scan reads it: discovery reads no file's contents,
+//! and a new capture that matches both, to the nanosecond, is unlikely.
 //!
 //! Lifecycle:
 //! - An Active Captures location is watched while its root is online: the
@@ -465,6 +468,8 @@ pub(crate) struct Observed {
     /// Watcher closes and walk listings logged as still in flight a sweep
     /// after discovery let go of them.
     pub(crate) stuck: std::sync::atomic::AtomicUsize,
+    /// Recounts started: reads of a location's catalog paths outside a walk.
+    pub(crate) recounts: std::sync::atomic::AtomicUsize,
     /// Releasing a watcher waits here while it is closed, as stopping an
     /// `FSEvents` watcher waits on its callback's `stat` of a dead share.
     pub(crate) releases: Gate,
@@ -596,14 +601,14 @@ enum Notice {
 }
 
 /// A path below a root a live event named, relative to the root: what is
-/// there now and, for a frame at a path the catalog records, its size and
-/// time.
+/// there now and, for a frame at the path of a Missing or Trashed record,
+/// its size and time.
 type Found = (PathBuf, Entry, Option<SizeAndTime>);
 
 /// An online Captures location being counted.
 #[expect(
     clippy::struct_excessive_bools,
-    reason = "independent flags: two kinds of pending work, the two halves of a known count, and a released volume"
+    reason = "independent flags: two kinds of pending work, the two halves of a known count, an unreadable catalog, and a released volume"
 )]
 struct Watched {
     location: Location,
@@ -628,9 +633,12 @@ struct Watched {
     unlisted: Vec<PathBuf>,
     /// Restart the watcher and walk again once the walk in flight ends.
     rescan: bool,
-    /// Read the catalog's paths again: once the walk in flight ends, and at
-    /// every debounce tick while the catalog cannot be read.
+    /// Read the catalog's paths again once no walk is in flight: at the
+    /// next debounce tick, or once the walk in flight ends, and at every
+    /// debounce tick while the catalog cannot be read.
     recount: bool,
+    /// The last read of the catalog's paths failed, and was logged.
+    unreadable: bool,
     /// A walk finished.
     listed: bool,
     /// The catalog's paths were read: with `listed`, the count is known.
@@ -666,7 +674,10 @@ impl Watched {
         match known {
             Ok(known) => self.know(&known),
             Err(error) => {
-                tracing::warn!(location = %self.location.id, %error, "new captures: indexed paths unreadable; read again at the next tick");
+                if !self.unreadable {
+                    tracing::warn!(location = %self.location.id, %error, "new captures: indexed paths unreadable; read again at the next tick");
+                }
+                self.unreadable = true;
                 self.recount = true;
             }
         }
@@ -694,6 +705,7 @@ impl Watched {
         let known = &self.known;
         self.new.retain(|key, _| !known.contains(key));
         self.cataloged = true;
+        self.unreadable = false;
     }
 
     /// Whether the frame at the path whose identity is `key`, whose size and
@@ -703,10 +715,10 @@ impl Watched {
         self.known.contains(key) || file.is_some_and(|file| self.vacated.get(key) == Some(&file))
     }
 
-    /// Whether the catalog, as last read, records the path `relative`.
-    fn records(&self, relative: &Path) -> bool {
-        let key = self.identity(relative);
-        self.known.contains(&key) || self.vacated.contains_key(&key)
+    /// Whether the catalog, as last read, records a Missing or Trashed
+    /// record at the path `relative`.
+    fn vacated_at(&self, relative: &Path) -> bool {
+        self.vacated.contains_key(&self.identity(relative))
     }
 
     /// The paths of the Missing and Trashed records among `recorded` whose
@@ -804,10 +816,10 @@ impl Watched {
     }
 
     /// Bring the count up to date for one path a live event named, from the
-    /// entry found there now and, for a frame at a path the catalog records,
-    /// its size and time (`file`). An entry that could not be observed keeps
-    /// what was counted at and below it, and the location is walked again,
-    /// which finds what is there.
+    /// entry found there now and, for a frame at the path of a Missing or
+    /// Trashed record, its size and time (`file`). An entry that could not
+    /// be observed keeps what was counted at and below it, and the location
+    /// is walked again, which finds what is there.
     ///
     /// A folder the watcher watches that is no longer a folder at its path
     /// (removed, or renamed away, out of the location as well) restarts the
@@ -1037,6 +1049,7 @@ struct Indexing {
 }
 
 /// Whose paths to read again.
+#[derive(Clone, Copy)]
 enum Reread {
     Location(Uuid),
     /// Changes were missed.
@@ -1126,7 +1139,7 @@ impl Run {
                     Ok(_) | Err(RecvError::Lagged(_)) => self.reconcile(false).await,
                     Err(RecvError::Closed) => break,
                 },
-                reread = indexing.next() => if !self.reread(reread).await {
+                reread = indexing.next() => if !self.reread(reread) {
                     break;
                 },
                 _ = debounce.tick() => self.drain().await,
@@ -1151,10 +1164,10 @@ impl Run {
 
     /// Read the catalog's paths again as `reread` asks; `false` once the
     /// catalog's changes can no longer be followed.
-    async fn reread(&mut self, reread: Option<Reread>) -> bool {
+    fn reread(&mut self, reread: Option<Reread>) -> bool {
         match reread {
-            Some(Reread::Location(id)) => self.indexed(id).await,
-            Some(Reread::Every) => self.recount_all().await,
+            Some(Reread::Location(id)) => self.indexed(id),
+            Some(Reread::Every) => self.recount_all(),
             None => return false,
         }
         true
@@ -1307,6 +1320,7 @@ impl Run {
                 unlisted: Vec::new(),
                 rescan: false,
                 recount: false,
+                unreadable: false,
                 listed: false,
                 cataloged: false,
                 released: false,
@@ -1614,8 +1628,9 @@ impl Run {
     /// ([`Entry::Unobserved`]), are redone by a walk, as events the OS lost
     /// are.
     ///
-    /// A frame at a path the catalog records is read for its size and time
-    /// as well ([`Watched::holds`]).
+    /// A frame at the path of a Missing or Trashed record is read for its
+    /// size and time as well ([`Watched::holds`]); one at a path whose file
+    /// the catalog holds is held as it is.
     async fn recheck(&mut self, id: Uuid, touched: HashSet<PathBuf>) {
         if touched.is_empty() {
             return;
@@ -1623,8 +1638,8 @@ impl Run {
         let Some(watched) = self.locations.get(&id) else {
             return;
         };
-        let recorded: HashSet<PathBuf> =
-            touched.iter().filter(|relative| watched.records(relative)).cloned().collect();
+        let vacated: HashSet<PathBuf> =
+            touched.iter().filter(|relative| watched.vacated_at(relative)).cloned().collect();
         let (root, stamp) = (watched.root.clone(), watched.stamp);
         let probe = Arc::clone(&self.probe);
         let found = tokio::task::spawn_blocking(move || {
@@ -1633,7 +1648,7 @@ impl Run {
                     .into_iter()
                     .map(|relative| {
                         let entry = probe.entry(&root, stamp, &relative);
-                        let file = if entry == Entry::Frame && recorded.contains(&relative) {
+                        let file = if entry == Entry::Frame && vacated.contains(&relative) {
                             inventory::frame_file(&root, stamp, &relative)
                         } else {
                             None
@@ -1692,12 +1707,14 @@ impl Run {
         self.walk(id);
     }
 
-    /// A scan of `id` finished: what it indexed leaves the count.
-    async fn indexed(&mut self, id: Uuid) {
-        match self.locations.get_mut(&id) {
-            Some(watched) if watched.walk.is_some() => watched.recount = true,
-            Some(_) => self.recount(id).await,
-            None => {}
+    /// The catalog changed in `id` outside discovery (a scan ended, or
+    /// frames were recorded Trashed there): its paths are read again once no
+    /// walk is in flight, at the next debounce tick at the latest, so what a
+    /// scan indexed leaves the count. Changes that arrive between two ticks,
+    /// such as a trash run of many frames, are read once.
+    fn indexed(&mut self, id: Uuid) {
+        if let Some(watched) = self.locations.get_mut(&id) {
+            watched.recount = true;
         }
     }
 
@@ -1708,6 +1725,8 @@ impl Run {
     /// is being removed: a frame there was judged held, as the frame written
     /// in place of a trashed one before the trash was recorded was.
     async fn recount(&mut self, id: Uuid) {
+        #[cfg(test)]
+        self.observed.recounts.fetch_add(1, Ordering::SeqCst);
         let read = self.library.catalog().location_recorded_paths(id).await;
         let Some(watched) = self.locations.get_mut(&id) else {
             return;
@@ -1720,9 +1739,10 @@ impl Run {
                 left
             }
             Err(error) => {
-                if !watched.recount {
+                if !watched.unreadable {
                     tracing::warn!(location = %id, %error, "new captures: indexed paths unreadable; read again at the next tick");
                 }
+                watched.unreadable = true;
                 watched.recount = true;
                 return;
             }
@@ -1732,11 +1752,11 @@ impl Run {
         }
     }
 
-    /// Scan snapshots were missed: re-read every location's indexed paths.
-    async fn recount_all(&mut self) {
-        let ids: Vec<Uuid> = self.locations.keys().copied().collect();
-        for id in ids {
-            self.indexed(id).await;
+    /// Catalog changes were missed (scan snapshots or trash announcements
+    /// lagged): read every location's paths again.
+    fn recount_all(&mut self) {
+        for watched in self.locations.values_mut() {
+            watched.recount = true;
         }
     }
 
