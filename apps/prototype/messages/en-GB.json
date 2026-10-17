@@ -5832,6 +5832,8 @@
   "project_split_group": "Split into a new group",
   "project_suggestions": "Suggestions",
   "project_suggestions_of": "Suggestions for {name}",
+  "project_suggestions_choose_calibration": "Choose calibration",
+  "project_suggestions_review_frames": "Review frames",
   "project_tab_calibrate": "Calibrate",
   "project_tab_output": "Output",
   "project_tab_sessions": "Sessions",

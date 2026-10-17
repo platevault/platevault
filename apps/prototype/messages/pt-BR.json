@@ -6256,6 +6256,8 @@
   "project_split_group": "Separar em um novo grupo",
   "project_suggestions": "Sugestões",
   "project_suggestions_of": "Sugestões para {name}",
+  "project_suggestions_choose_calibration": "Escolher calibração",
+  "project_suggestions_review_frames": "Revisar frames",
   "project_tab_calibrate": "Calibrar",
   "project_tab_output": "Output",
   "project_tab_sessions": "Sessões",
