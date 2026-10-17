@@ -285,4 +285,17 @@ describe('svg/no-raw-svg-colour', () => {
     expect(urlSuffix).toHaveLength(0);
     expect(variableSuffix).toHaveLength(0);
   });
+  it('checks raw colors on SVG roots re-entering inside foreignObject', () => {
+    const diagnostics = lint(
+      '<foreignObject><svg fill="red" /></foreignObject>',
+    );
+
+    expect(diagnostics).toHaveLength(1);
+  });
+
+  it('flags a partial hex prefix completed by a template substitution', () => {
+    const diagnostics = lint("const svg = <svg fill={`#ff${'00'}`} />;");
+
+    expect(diagnostics).toHaveLength(1);
+  });
 });

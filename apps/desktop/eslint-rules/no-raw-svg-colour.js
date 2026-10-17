@@ -65,8 +65,8 @@ function isSvgPresentationElement(node) {
   const isIntrinsic = (name) => /^[a-z]/.test(name);
   const ownName = element.openingElement.name.name;
   if (!isIntrinsic(ownName)) return false;
-
   let ancestor = element.parent;
+  if (ownName.toLowerCase() === 'svg') return true;
   while (ancestor) {
     if (ancestor.type === 'JSXExpressionContainer') {
       ancestor = ancestor.parent;
@@ -158,6 +158,7 @@ function reportRawColorsInExpression(expression, report) {
         scanText(quasi);
         if (index < expression.expressions.length) {
           if (mode === 'normal' && /#\s*$/.test(quasi)) report();
+          if (mode === 'normal' && /#[0-9a-f]+$/i.test(quasi)) report();
           if (mode === 'normal') {
             reportRawColorsInExpression(expression.expressions[index], report);
             scanText('x');
