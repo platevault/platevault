@@ -1,5 +1,6 @@
 name: Release Please
 
+# Maintains a release PR from Conventional Commits (feat/fix/...), updates
 # CHANGELOG.md, bumps the desktop app version in three synced files
 # (apps/desktop/src-tauri/tauri.conf.json, apps/desktop/package.json,
 # apps/desktop/src-tauri/Cargo.toml), and tags a plain `v{version}` release on
@@ -370,11 +371,11 @@ jobs:
       # such as platevault-library, which the bundler packs unstamped.
       #
       # This copies Tauri CLI 2.12.2's bundler: marker, NSS/MSI stamp codes,
-      # and get_binaries' rule. The CLI guard also documents the five NSIS
-      # plugin pins and WiX publisher/issuer a CLI bump must recheck. It reads
-      # the apps/desktop resolution before this build and rejects unchecked
-      # bundler codes and installer identities, including five third-party NSIS
-      # pins and the WiX publisher and issuer.
+      # and get_binaries' rule. The CLI guard reads the apps/desktop lockfile
+      # resolution before the build and rejects only a CLI version mismatch.
+      # The Check step verifies installer signatures, the five NSIS plugin
+      # pins, and the WiX publisher/issuer against the reviewed identities.
+      # Recheck those when upgrading the CLI.
       #
       # The command is the one tauri-action runs on the other legs, `tauri
       # build` in apps/desktop with no extra arguments, with --no-bundle
@@ -527,9 +528,10 @@ jobs:
       # executables inside them match what SignPath signed, both ways round:
       # each installer carries every signed copy meant for it, byte for byte,
       # and every PE file (executable or DLL) found in an installer is one of
-      # those copies or a third-party file the list below names, with the
-      # reason it ships without this project's signature. A bin target,
-      # sidecar or resource added later fails here until it is signed or listed.
+      # those copies or a third-party file listed in
+      # scripts/release/check-signed-installers.ps1, and a reason for shipping
+      # it without this project's signature. A bin target, sidecar or resource
+      # added later fails here until it is signed or listed.
       # So does a list entry neither installer carries any more, and an
       # unpacked tree with no PE file in it, which means the unpacking failed
       # quietly and the scan proved nothing.
@@ -552,6 +554,7 @@ jobs:
           AUTHENTICODE_SIGNER: *authenticode-signer
           AUTHENTICODE_ISSUER: *authenticode-issuer
         run: |
+          $PSNativeCommandUseErrorActionPreference = $true
           pwsh -NoProfile -File scripts/release/check-signed-installers.ps1 -Mode Check -Lockfile (Join-Path (Get-Location).Path 'pnpm-lock.yaml') -InstallersToSignDirectory 'installers-to-sign' -InstallersSignedDirectory 'installers-signed' -AppSignedDirectory 'app-signed' -UnpackedDirectory 'unpacked'
 
       # minisign over the final bytes, which SignPath just rewrote: the same

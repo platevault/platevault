@@ -142,7 +142,7 @@ function Check-InstallerContents(
     "unpacked/${tree}: $scanned PE files"
     if ($scanned -eq 0) { $problems += "unpacked/$tree holds no PE file, so its unpacking failed and nothing in it was checked" }
   }
-  foreach ($entry in $thirdParty.Keys | Where-Object { $_ -notin $listed }) { $problems += "$entry is on the third-party list but in neither installer; remove it from release-please.yml" }
+  foreach ($entry in $thirdParty.Keys | Where-Object { $_ -notin $listed }) { $problems += "$entry is on the third-party list but in neither installer; review scripts/release/check-signed-installers.ps1" }
   if ($problems) { throw "the installers failed the check:`n$($problems -join "`n")" }
 }
 

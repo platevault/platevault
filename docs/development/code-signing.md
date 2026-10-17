@@ -56,12 +56,14 @@ SignPath also sets, such as the code signing policy, team roles, MFA and
 privacy, are tracked under
 [Code signing policy → Open conditions](../release/code-signing-policy.md#open-conditions).
 
-The certificate is issued to SignPath Foundation itself. Its publisher name is
-observed on the valid WiX signature in run 38963983864. The expected SignPath
-issuer `GlobalSign GCC R45 CodeSigning CA 2020` is not confirmed from this
-project's certificate; it was observed on the signed
-[`vim-win32-installer`](https://github.com/vim-win32-installer) v9.2.1202 setup
-(read 2026-10-16). Verify both publisher and issuer on the next tagged release.
+The SignPath publisher and issuer for this project are unconfirmed. Windows
+is expected to show `SignPath Foundation`, not `PlateVault`, as publisher; this
+is based on the SignPath Foundation certificate described by SignPath, not on
+this project's certificate. Its issuer `GlobalSign GCC R45 CodeSigning CA 2020`
+is likewise unconfirmed from this project's certificate. That issuer was
+observed on the signed [`vim-win32-installer`](https://github.com/vim/vim-win32-installer)
+v9.2.1202 setup (read 2026-10-16). Verify both publisher and issuer on the next
+tagged release.
 
 ## How SignPath integrates with GitHub Actions / Tauri
 
@@ -145,13 +147,14 @@ the `build` job):
 Step 2 copies Tauri CLI 2.12.2's bundler: the marker, `NSS` and `MSI` codes,
 and which bin targets it packs. The workflow reads the resolved CLI version
 from the `apps/desktop` importer in `pnpm-lock.yaml` before the build and fails
-unless it is exactly 2.12.2. A CLI upgrade therefore requires reviewing the
-bundler's marker behavior, NSS/MSI codes, executable selection rule, five NSIS
-hash pins, and WiX publisher/issuer before updating the guard; the lockfile
-cannot silently advance past the version whose behavior was checked. Step 6
-also fails a release whose installers pack an executable step 2 did not send.
-`tauri-action` runs on the other legs, `tauri build` in `apps/desktop` with no
-extra arguments, plus `--no-bundle`.
+unless it is exactly 2.12.2. The CLI guard rejects only a version mismatch;
+the Check step verifies installer identities against the recorded pins and
+signers. A CLI upgrade therefore requires reviewing the bundler's marker
+behavior, NSS/MSI codes, executable selection rule, five NSIS hash pins, and
+WiX publisher/issuer before updating the guard. Step 6 also fails a release
+whose installers pack an executable step 2 did not send. Step 1 runs the
+command that `tauri-action` runs on the other legs: `tauri build` in `apps/desktop`
+with no extra arguments, plus `--no-bundle`.
 
 Each request waits up to an hour for its approval
 (`wait-for-completion-timeout-in-seconds: 3600`; the action's default, 600 s,
