@@ -1,31 +1,32 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Home (spec 065 PRJ-FR-17, PRJ-FR-18, PRJ-FR-19, PRJ-AC-18/19/20/22/23,
-//! PV-PRJ-SC-05, root FR-020, LIB-AC-09; D-W27, D-W35, D-W39, D-W48) on the
-//! [`Library`] facade: the top line and the six sections in order, composed
-//! from each feature's own reads. The top line is the Sessions filters'
-//! counts, so it always equals them. A Project's Next action is the first
-//! rule of PRJ-FR-18 that applies; rule 2 gathers a run's [`RunBlocker`]s
-//! from VSEL's unresolved inputs, CAL's readiness line and PREP's latest
-//! revision, unchanged. Everything is read from the local catalog: no
-//! account, no network and no image file. Read-only.
+//! Home (spec 065 PRJ-FR-17, PRJ-FR-18, PRJ-FR-19, PRJ-FR-32, PRJ-AC-18/19/
+//! 20/22/23, PV-PRJ-SC-05, root FR-020, LIB-AC-09; D-W27, D-W35, D-W39,
+//! D-W48, D-W96, D-W100) on the [`Library`] facade: the top line and the six
+//! sections in order, composed from each feature's own reads. The top line is
+//! the Sessions filters' counts, so it always equals them. Home lists the open
+//! Projects only, each with its pending changes and its Next action, the first
+//! rule of PRJ-FR-18 that applies. Rule 2 names what keeps the Project waiting
+//! on the user, in [`ProjectWait`] order: a suggestion that needs calibration,
+//! the latest Apply ending Failed or Canceled, and leftovers in
+//! `View (previous)/` still waiting for review. Everything is read from the
+//! local catalog: no account, no network and no image file. Read-only.
 
 use std::collections::BTreeMap;
 
-use persistence_library::{RunningStorage, SessionFilter, SessionQuery, SessionSummary};
+use persistence_library::{SessionFilter, SessionQuery, SessionSummary};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::library::Library;
 use crate::tonight::{Tonight, TonightQuery};
 use crate::{
-    ArchiveState, CleanupState, GoalProgress, GoalShortfall, HomeAction, HomeProject, ImportState,
-    LibraryError, NextAction, OpenChoiceKind, PreparationState, Project, ProjectCandidate,
-    ProjectQuery, ProjectState, ProjectSuggestion, QualityLabel, ReadyToAdd, ReviewContext,
-    ReviewFilter, RunBlocker, RunCompletion, RunStage, RunState, RunningWork, ScanState,
-    SessionAction, SessionFilterCounts, StorageOperationState, TargetStatus, UnmetGoal,
-    UnreviewedSession, ViewListing, ViewQuery,
+    AdmissionBlocker, ApplyJournal, ApplyOutcome, GoalProgress, GoalShortfall, HomeAction,
+    HomeProject, ImportState, LibraryError, NextAction, PreviousItemReview, Project,
+    ProjectCandidate, ProjectQuery, ProjectSuggestion, ProjectWait, QualityLabel, ReadyToAdd,
+    ReviewContext, ReviewFilter, RunState, RunningWork, ScanState, SessionAction,
+    SessionFilterCounts, StorageOperationState, TargetStatus, UnmetGoal, UnreviewedSession,
 };
 
 /// Home (PRJ-FR-17, root FR-020): the top line, then its six sections in
@@ -37,7 +38,7 @@ pub struct HomeDashboard {
     pub top_line: SessionFilterCounts,
     /// 1. Import, New Project and Plan tonight.
     pub actions: Vec<HomeAction>,
-    /// 2. The open Projects by name, and the Done ones under "Show done".
+    /// 2. The open Projects by name (PRJ-FR-32).
     pub projects: Vec<HomeProject>,
     /// 3. New sessions needing work.
     pub new_sessions: NewSessions,
@@ -45,10 +46,9 @@ pub struct HomeDashboard {
     pub tonight: Tonight,
     /// 5. Every Target with an unmet goal in an open Project, by designation.
     pub target_status: Vec<TargetStatus>,
-    /// 6. Running scans, measurement runs, preparations, Prepare all of run
-    ///    groups, imports, run Clean ups and Empty Trashes, archive transfers,
-    ///    Done / Archive trash moves and other storage operations, in that
-    ///    order.
+    /// 6. Running scans, measurement runs, imports, each Project's one
+    ///    operation (Apply, Copy to Output or a Wrap up step) and the storage
+    ///    operations no Project operation carries, in that order.
     pub running_work: Vec<RunningWork>,
 }
 
@@ -62,7 +62,7 @@ pub struct NewSessions {
     pub not_in_project: Vec<HomeSession>,
     /// Candidates of open Projects with Unreviewed frames, by Project.
     pub unreviewed: Vec<UnreviewedSession>,
-    /// Candidates of open Projects that are no member of their runs.
+    /// Sessions open Projects suggest and don't hold, by Project.
     pub ready_to_add: Vec<ReadyToAdd>,
 }
 
@@ -74,27 +74,44 @@ pub struct HomeSession {
     pub actions: Vec<SessionAction>,
 }
 
-/// One Project's reads that Home composes.
+/// One open Project's reads that Home composes.
 struct ProjectReads {
     project: Project,
     goals: Vec<GoalProgress>,
-    runs: Vec<ViewListing>,
     candidates: Vec<ProjectCandidate>,
     /// Unreviewed frames per candidate session.
     unreviewed: BTreeMap<Uuid, u64>,
+    suggestions: Vec<ProjectSuggestion>,
+    pending_changes: u64,
+    /// The latest Apply, settled or not; `None` before the first.
+    latest_apply: Option<ApplyJournal>,
+    /// Leftovers in `View (previous)/` still waiting for review.
+    unreviewed_leftovers: u64,
+}
+
+impl ProjectReads {
+    /// Whether the Project has a View: an Apply installed one, or the
+    /// latest Apply found one in place when it started.
+    fn view_exists(&self) -> bool {
+        self.latest_apply.as_ref().is_some_and(|journal| {
+            journal.outcome == Some(ApplyOutcome::Applied) || journal.expected.view.is_some()
+        })
+    }
+}
+
+fn count(items: usize) -> u64 {
+    u64::try_from(items).unwrap_or(u64::MAX)
 }
 
 impl Library {
-    /// Home: the top line, then Actions, Projects (Done ones only with
-    /// `show_done`), New sessions, Tonight for `tonight`, Target status and
-    /// Running work. Read-only.
+    /// Home: the top line, then Actions, the open Projects, New sessions,
+    /// Tonight for `tonight`, Target status and Running work. Read-only.
     ///
     /// # Errors
     /// `InvalidInput` for invalid Tonight criteria; `PersistenceFailure` when
     /// the catalog cannot be read.
     pub async fn home_dashboard(
         &self,
-        show_done: bool,
         tonight: &TonightQuery,
     ) -> Result<HomeDashboard, LibraryError> {
         let catalog = self.catalog();
@@ -108,27 +125,22 @@ impl Library {
             )
             .await?;
         let tonight = self.tonight(tonight).await?;
-        let query = ProjectQuery { target_id: None, show_done, offset: 0, limit: 0 };
         let mut projects = Vec::new();
         let mut unreviewed = Vec::new();
         let mut ready_to_add = Vec::new();
         let mut status: BTreeMap<(String, Uuid), Vec<UnmetGoal>> = BTreeMap::new();
-        for summary in catalog.list_projects(&query).await? {
+        for summary in catalog.list_projects(&ProjectQuery::default()).await? {
             let reads = self.project_reads(summary.id).await?;
-            let next = self.next_action(&reads, &tonight).await?;
-            if reads.project.state == ProjectState::Open {
-                unreviewed.extend(unreviewed_sessions(&reads));
-                let suggestions = catalog.project_suggestions(summary.id).await?;
-                ready_to_add.extend(ready_to_add_sessions(&reads, &suggestions));
-                for (target, goal) in unmet_goals(&reads) {
-                    status.entry(target).or_default().push(goal);
-                }
+            unreviewed.extend(unreviewed_sessions(&reads));
+            ready_to_add.extend(ready_to_add_sessions(&reads));
+            for (target, goal) in unmet_goals(&reads) {
+                status.entry(target).or_default().push(goal);
             }
             projects.push(HomeProject {
                 project: summary,
+                pending_changes: reads.pending_changes,
+                next: next_action(&reads, &tonight),
                 goals: reads.goals,
-                stages: reads.runs,
-                next,
             });
         }
         let target_status = status
@@ -144,42 +156,6 @@ impl Library {
             target_status,
             running_work: self.running_work().await?,
         })
-    }
-
-    /// What keeps run `id` waiting on the user (PRJ-FR-18 rule 2): its
-    /// unresolved inputs, its calibration needing review once it reached
-    /// Calibrate, and its failed preparation, in that order. A run in the
-    /// Project's Trash or marked Complete is never blocked. Read-only.
-    ///
-    /// # Errors
-    /// `NotFound` for an unknown run; `PersistenceFailure` when the catalog
-    /// cannot be read.
-    pub async fn run_blockers(&self, id: Uuid) -> Result<Vec<RunBlocker>, LibraryError> {
-        let view = self.catalog().view(id).await?.view;
-        if view.trashed_at.is_some() || view.completion == RunCompletion::Complete {
-            return Ok(Vec::new());
-        }
-        let mut blockers = Vec::new();
-        let unresolved = self
-            .view_detail(id)
-            .await?
-            .open_choices
-            .iter()
-            .find(|choice| choice.kind == OpenChoiceKind::UnresolvedMembers)
-            .map_or(0, |choice| choice.count);
-        if unresolved > 0 {
-            blockers.push(RunBlocker::UnresolvedInputs { view_id: id, members: unresolved });
-        }
-        if view.revision > 0 && reached_calibrate(view.stage) {
-            let readiness = self.calibration_readiness(id, view.revision).await?;
-            if let Some(blocker) = readiness.needs_review_blocker() {
-                blockers.push(RunBlocker::CalibrationNeedsReview(blocker));
-            }
-        }
-        if let Some(blocker) = self.preparation_blocker(id).await? {
-            blockers.push(RunBlocker::PreparationFailed(blocker));
-        }
-        Ok(blockers)
     }
 
     async fn home_sessions(
@@ -199,65 +175,36 @@ impl Library {
         let catalog = self.catalog();
         let project = catalog.project(id).await?;
         let goals = self.project_progress(id).await?.goals;
-        let runs =
-            catalog.list_views(&ViewQuery { project_id: Some(id), offset: 0, limit: 0 }).await?;
         let candidates = catalog.project_candidates(id).await?;
         let basis =
             catalog.review_basis(ReviewContext::ProjectCandidates { project_id: id }).await?;
         let mut unreviewed = BTreeMap::new();
         for capture in &basis.captures {
-            if QualityLabel::of(&capture.quality, capture.project_rejected)
-                == QualityLabel::Unreviewed
-            {
+            if QualityLabel::of(&capture.quality) == QualityLabel::Unreviewed {
                 *unreviewed.entry(capture.session_id).or_default() += 1;
             }
         }
-        Ok(ProjectReads { project, goals, runs, candidates, unreviewed })
-    }
-
-    /// The first rule of PRJ-FR-18 that applies to the Project.
-    async fn next_action(
-        &self,
-        reads: &ProjectReads,
-        tonight: &Tonight,
-    ) -> Result<NextAction, LibraryError> {
-        let frames: u64 = reads.unreviewed.values().sum();
-        if frames > 0 {
-            return Ok(NextAction::ReviewNewFrames {
-                frames,
-                context: ReviewContext::ProjectCandidates { project_id: reads.project.id },
-                filter: ReviewFilter::Unreviewed,
-            });
-        }
-        for run in &reads.runs {
-            let blockers = self.run_blockers(run.id).await?;
-            if let Some(first) = blockers.first() {
-                return Ok(NextAction::OpenBlockedRun {
-                    view_id: run.id,
-                    name: run.name.clone(),
-                    stage: first.stage(),
-                    blockers,
-                });
-            }
-        }
-        let target_ids: Vec<Uuid> = reads
-            .project
-            .subjects
-            .iter()
-            .filter(|subject| {
-                reads.goals.iter().any(|goal| goal.goal.subject_id == subject.id && !goal.met)
-                    && tonight.has_window(subject.target_id)
-            })
-            .map(|subject| subject.target_id)
-            .collect();
-        if !target_ids.is_empty() {
-            return Ok(NextAction::PlanTonight { target_ids });
-        }
-        Ok(NextAction::StartRun)
+        let suggestions = catalog.project_suggestions(id).await?;
+        let pending_changes = count(catalog.project_pending_changes(id).await?.len());
+        let latest_apply = catalog.latest_apply_journal(id).await?;
+        let leftovers = catalog.previous_items(id).await?;
+        let unreviewed_leftovers =
+            count(leftovers.iter().filter(|item| item.review == PreviousItemReview::Pending).count());
+        Ok(ProjectReads {
+            project,
+            goals,
+            candidates,
+            unreviewed,
+            suggestions,
+            pending_changes,
+            latest_apply,
+            unreviewed_leftovers,
+        })
     }
 
     /// Every Running operation, each kind through its feature's own read; one
-    /// that ended since the snapshot is left out.
+    /// that ended since the snapshot is left out. A Project's operation is
+    /// listed once, with the storage operation it carries.
     async fn running_work(&self) -> Result<Vec<RunningWork>, LibraryError> {
         let catalog = self.catalog();
         let running = catalog.running_operations().await?;
@@ -283,30 +230,6 @@ impl Library {
                 });
             }
         }
-        for id in running.preparations {
-            let revision = catalog.preparation(id).await?.revision;
-            if revision.state == PreparationState::Running {
-                work.push(RunningWork::Prepare {
-                    preparation_id: revision.id,
-                    view_id: revision.view_id,
-                    number: revision.n,
-                    folder: revision.folder,
-                    started_at: revision.started_at,
-                });
-            }
-        }
-        for id in running.group_preparations {
-            let preparation = catalog.group_preparation(id).await?.preparation;
-            if preparation.outcome == PreparationState::Running {
-                work.push(RunningWork::PrepareAll {
-                    group_preparation_id: preparation.id,
-                    group_id: preparation.group_id,
-                    number: preparation.n,
-                    folder: preparation.folder,
-                    started_at: preparation.started_at,
-                });
-            }
-        }
         for id in running.imports {
             let import = catalog.import_record(id).await?;
             if import.state == ImportState::Running {
@@ -317,59 +240,13 @@ impl Library {
                 });
             }
         }
-        self.storage_work(running.storage, &mut work).await?;
-        Ok(work)
-    }
-
-    /// Running run Clean ups and Empty Trashes, archive transfers, trash
-    /// moves, then every other Running storage operation, each listed once.
-    async fn storage_work(
-        &self,
-        running: RunningStorage,
-        work: &mut Vec<RunningWork>,
-    ) -> Result<(), LibraryError> {
-        let catalog = self.catalog();
-        let count = |items: usize| u64::try_from(items).unwrap_or(u64::MAX);
-        for id in running.cleanups {
-            let cleanup = catalog.run_cleanup(id).await?;
-            if cleanup.state == CleanupState::Running {
-                work.push(RunningWork::Cleanup {
-                    cleanup_id: cleanup.id,
-                    action: cleanup.kind,
-                    view_id: cleanup.view_id,
-                    run_name: cleanup.run_name,
-                    operation_id: cleanup.operation_id,
-                    reviewed_at: cleanup.created_at,
-                });
-            }
+        for running in running.projects {
+            work.push(RunningWork::Project {
+                operation: running.operation,
+                project_name: running.project_name,
+            });
         }
-        for id in running.archives {
-            let transfer = catalog.archive_record(id).await?.transfer;
-            if transfer.state == ArchiveState::Running {
-                work.push(RunningWork::Archive {
-                    transfer_id: transfer.id,
-                    action: transfer.kind,
-                    project_id: transfer.project.id,
-                    operation_id: transfer.storage_operation_id,
-                    items: count(transfer.items.len()),
-                    updated_at: transfer.updated_at,
-                });
-            }
-        }
-        for id in running.trash_moves {
-            let operation = catalog.storage_operation(id).await?;
-            let moved = catalog.trash_move(id).await?;
-            if operation.state == StorageOperationState::Running && !moved.settled {
-                work.push(RunningWork::TrashMove {
-                    operation_id: operation.id,
-                    offer: moved.offer,
-                    project_id: moved.project_id,
-                    items: count(moved.items.len()),
-                    updated_at: operation.updated_at,
-                });
-            }
-        }
-        for id in running.operations {
+        for id in running.storage {
             let operation = catalog.storage_operation(id).await?;
             if operation.state == StorageOperationState::Running {
                 work.push(RunningWork::Storage {
@@ -380,14 +257,76 @@ impl Library {
                 });
             }
         }
-        Ok(())
+        Ok(work)
     }
 }
 
-/// Calibration waits on the user once the run reached Calibrate: before that
-/// the Calibrate step has not run its automatic match.
-const fn reached_calibrate(stage: RunStage) -> bool {
-    !matches!(stage, RunStage::Select | RunStage::Review)
+/// The first rule of PRJ-FR-18 that applies to the open Project.
+fn next_action(reads: &ProjectReads, tonight: &Tonight) -> NextAction {
+    let frames: u64 = reads.unreviewed.values().sum();
+    if frames > 0 {
+        return NextAction::ReviewNewFrames {
+            frames,
+            context: ReviewContext::ProjectCandidates { project_id: reads.project.id },
+            filter: ReviewFilter::Unreviewed,
+        };
+    }
+    let waits = project_waits(reads);
+    if let Some(first) = waits.first() {
+        return NextAction::WaitsOnUser { step: first.step(), waits };
+    }
+    let target_ids: Vec<Uuid> = reads
+        .project
+        .subjects
+        .iter()
+        .filter(|subject| {
+            reads.goals.iter().any(|goal| goal.goal.subject_id == subject.id && !goal.met)
+                && tonight.has_window(subject.target_id)
+        })
+        .map(|subject| subject.target_id)
+        .collect();
+    if !target_ids.is_empty() {
+        return NextAction::PlanTonight { target_ids };
+    }
+    if reads.pending_changes > 0 {
+        NextAction::ApplyChanges { changes: reads.pending_changes }
+    } else if reads.view_exists() {
+        NextAction::OpenView
+    } else {
+        NextAction::AddSessions
+    }
+}
+
+/// What keeps the Project waiting on the user (PRJ-FR-18 rule 2), in rule
+/// order: each suggestion whose calibration isn't settled or drifted, the
+/// latest Apply when it ended Failed or Canceled, and the leftovers in
+/// `View (previous)/` the user hasn't reviewed.
+fn project_waits(reads: &ProjectReads) -> Vec<ProjectWait> {
+    let mut waits: Vec<ProjectWait> = reads
+        .suggestions
+        .iter()
+        .filter(|suggestion| {
+            suggestion.blockers.iter().any(|blocker| {
+                matches!(
+                    blocker,
+                    AdmissionBlocker::CalibrationUnsettled { .. }
+                        | AdmissionBlocker::CalibrationDrifted { .. }
+                )
+            })
+        })
+        .map(|suggestion| ProjectWait::SuggestionNeedsCalibration {
+            session_id: suggestion.session_id,
+        })
+        .collect();
+    if let Some(journal) = &reads.latest_apply {
+        if let Some(outcome @ (ApplyOutcome::Failed | ApplyOutcome::Canceled)) = journal.outcome {
+            waits.push(ProjectWait::ApplyNotFinished { operation_id: journal.operation_id, outcome });
+        }
+    }
+    if reads.unreviewed_leftovers > 0 {
+        waits.push(ProjectWait::PreviousViewHolds { files: reads.unreviewed_leftovers });
+    }
+    waits
 }
 
 /// The Project's candidate sessions with Unreviewed frames, in candidate
@@ -416,24 +355,15 @@ fn unreviewed_sessions(reads: &ProjectReads) -> Vec<UnreviewedSession> {
 /// The Project's suggestions (PRJ-FR-09, PRJ-FR-19): Ready sessions it
 /// doesn't hold, each offered as opening the Project's suggestions with what
 /// keeps it out for now. A suggestion is never added by itself.
-fn ready_to_add_sessions(
-    reads: &ProjectReads,
-    suggestions: &[ProjectSuggestion],
-) -> Vec<ReadyToAdd> {
+fn ready_to_add_sessions(reads: &ProjectReads) -> Vec<ReadyToAdd> {
     let project_id = reads.project.id;
-    suggestions
+    reads
+        .suggestions
         .iter()
-        .filter_map(|suggestion| {
-            let candidate = reads
-                .candidates
-                .iter()
-                .find(|candidate| candidate.session_id == suggestion.session_id)?;
-            Some(ReadyToAdd {
-                project_id,
-                candidate: candidate.clone(),
-                blockers: suggestion.blockers.clone(),
-                actions: vec![SessionAction::OpenSuggestions { project_id }],
-            })
+        .map(|suggestion| ReadyToAdd {
+            project_id,
+            suggestion: suggestion.clone(),
+            actions: vec![SessionAction::OpenSuggestions { project_id }],
         })
         .collect()
 }
