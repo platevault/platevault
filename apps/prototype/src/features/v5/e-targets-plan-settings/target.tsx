@@ -121,8 +121,15 @@ function TargetDetail({ targetId }: { targetId: string }) {
           { label: m.tonight_lunar(), value: `${Math.round(sky.lunarDeg)}°` },
           { label: m.domain_suitable_filters(), value: <GradeBadges grades={view.tonight} wrap /> },
           { label: m.tonight_opposition(), value: view.opposition ? formatNight(view.opposition, true) : "–" },
-          { label: m.plan_dark(), value: <DarkLine darkness={ctx.summary.darkness} timeZone={ctx.site.timeZone} /> },
-          { label: m.tonight_moon(), value: <MoonLine moon={ctx.summary.moon} timeZone={ctx.site.timeZone} /> },
+          {
+            // The lines name themselves ("Dark …", "Moon …"), so the row's term is the night they describe.
+            label: m.tonight_night(),
+            value: (
+              <>
+                <DarkLine darkness={ctx.summary.darkness} timeZone={ctx.site.timeZone} /> <MoonLine moon={ctx.summary.moon} timeZone={ctx.site.timeZone} />
+              </>
+            ),
+          },
           { label: m.plan_site(), value: `${ctx.site.name} · ${ctx.site.timeZone}` },
           { label: m.tonight_criteria(), value: criteriaText(m, ctx.criteria) },
         ]}
