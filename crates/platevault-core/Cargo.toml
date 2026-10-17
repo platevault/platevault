@@ -58,6 +58,10 @@ wire = [
   "platevault_model/wire",
   "persistence_library/wire",
 ]
+# Lets a test hold a real Apply where a tool holding a file in View would
+# (`apply::pacing`, the shell's IPC tests). Off by default and enabled only on
+# `[dev-dependencies]` edges, so no release binary can stall a real Apply.
+test-pacing = []
 
 [target.'cfg(windows)'.dependencies]
 winapi-util = "0.1.11"

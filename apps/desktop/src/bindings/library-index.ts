@@ -483,7 +483,7 @@ export const commands = {
 	/**
 	 *  Apply the reviewed sheet: the request echoes the sheet's Project revision
 	 *  and basis digest, and names the foreign files that move into the new View.
-	 *  A build that fails reports that outcome in the report.
+	 *  A build that fails or is canceled reports that outcome in the report.
 	 * 
 	 *  # Errors
 	 *  `Conflict` when the Project or the Library moved since the sheet;
@@ -492,6 +492,15 @@ export const commands = {
 	 *  install and restoring the old View failed; catalog errors.
 	 */
 	projectApply: (request: ApplyRequest) => typedError<ApplyReport_Serialize, ErrorResponse>(__TAURI_INVOKE("project_apply", { request })),
+	/**
+	 *  Cancel the running Apply `operation_id`: it stops where it is safe and
+	 *  keeps the old View, or, once the new View is being installed, finishes.
+	 *  `project_apply` reports how it ended.
+	 * 
+	 *  # Errors
+	 *  `NotFound` when no Apply with that operation runs in this shell.
+	 */
+	projectApplyCancel: (operationId: string) => typedError<null, ErrorResponse>(__TAURI_INVOKE("project_apply_cancel", { operationId })),
 	/**
 	 *  Copy to Output…: copy the regular file at `source` into the Project's
 	 *  `Output/` as `name`, a path relative to it, and return it listed as Copied
@@ -506,6 +515,16 @@ export const commands = {
 	 */
 	projectCopyToOutput: (projectId: string, source: NativePathWire, name: NativePathWire) => typedError<OutputObservation_Serialize, ErrorResponse>(__TAURI_INVOKE("project_copy_to_output", { projectId, source, name })),
 	/**
+	 *  Rescan, in the Output step's More menu: walk the Project's `Output/` now
+	 *  and return its Output step as recorded, a file saved since included.
+	 * 
+	 *  # Errors
+	 *  `InvalidInput` for a Project that is not open or has no processing
+	 *  location, or once the watcher stopped; `NotFound` for an unknown Project;
+	 *  catalog errors.
+	 */
+	projectOutputRescan: (projectId: string) => typedError<OutputObservation_Serialize[], ErrorResponse>(__TAURI_INVOKE("project_output_rescan", { projectId })),
+	/**
 	 *  Where the Project's Wrap up stands: its recorded steps, the current one,
 	 *  and why it doesn't open (pending changes, a running operation or a locked
 	 *  Project). Read-only.
@@ -517,7 +536,7 @@ export const commands = {
 	/**
 	 *  Close project…, Archive's Proceed: with no session selected the Project
 	 *  closes with no archive. Returns the lifecycle it reached, its Closed
-	 *  snapshot and the archive's progress.
+	 *  snapshot and the archive's progress: Closing, unsettled, after a stop.
 	 * 
 	 *  # Errors
 	 *  `Conflict` when the Project or the archive review moved since the user saw
@@ -525,6 +544,16 @@ export const commands = {
 	 *  for a session that can't move; catalog and journal failures.
 	 */
 	projectClose: (request: CloseRequest) => typedError<CloseReport_Serialize, ErrorResponse>(__TAURI_INVOKE("project_close", { request })),
+	/**
+	 *  Stop the running Close of `project_id` before its archive's next durable
+	 *  step (STO-FR-08). The Project stays Closing and locked, `project_close`
+	 *  reports the archive's progress, and the next start resumes it from what
+	 *  it recorded.
+	 * 
+	 *  # Errors
+	 *  `NotFound` when no Close of that Project runs in this shell.
+	 */
+	projectCloseStop: (projectId: string) => typedError<null, ErrorResponse>(__TAURI_INVOKE("project_close_stop", { projectId })),
 	/**
 	 *  Duplicate…: a new open Project with what the user kept ticked, its
 	 *  sessions on their current calibration pins, no files and no link to the
@@ -1619,6 +1648,18 @@ export type ApplyRequest = {
 	basisDigest: string,
 	/**  The foreign files, relative to `View/`, that move into the new View. */
 	ticked?: NativePathWire[],
+};
+
+/**
+ *  The `project_apply_waiting` event: Apply `operationId` of `projectId`
+ *  waits for a tool that holds a file in `held`, its `View/` folder, or with
+ *  `held` null no longer waits. It continues by itself once the file is
+ *  released; `project_apply_cancel` keeps the old View.
+ */
+export type ApplyWaiting = {
+	operationId: string,
+	projectId: string,
+	held: NativePathWire | null,
 };
 
 /**  One file an archive moves: from its path to the templated one. */

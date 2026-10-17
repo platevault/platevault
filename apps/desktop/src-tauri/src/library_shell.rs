@@ -8,14 +8,18 @@
 //! below, with the catalog in its own data directory. The dialog and opener
 //! plugins serve the planning handlers' Rust calls, and the platform reminder
 //! notifier with the system clock is attached before any command runs. At
-//! start the shell also resumes Wrap up through the host Trash, starts the
-//! Output watcher, and starts [`CaptureWatch`], which counts new captures in
+//! start the shell also resumes Wrap up through the host Trash (the headless
+//! double in an `e2e` build), starts the Output watcher, which Rescan reaches
+//! as managed state, and starts [`CaptureWatch`], which counts new captures in
 //! every online Captures location (a start-up walk and a live folder watcher
-//! each). Both watchers stop in the exit step. On Windows the removal notices
-//! of each watched volume that is not a network share reach the capture
-//! watcher, so the drive can eject, and they end after it stops. The one
-//! window is labelled `library`, so it holds `capabilities/library.json` (plus
-//! the dev bridge grant with `dev-tools`) and none of the legacy `default.json`.
+//! each). It manages the running Applies, which Cancel stops and whose waits
+//! for a tool it emits as `project_apply_waiting`, and the running Closes,
+//! which Stop interrupts. Both watchers stop in the exit step. On Windows the
+//! removal notices of each watched volume that is not a network share reach
+//! the capture watcher, so the drive can eject, and they end after it stops.
+//! The one window is labelled `library`, so it holds
+//! `capabilities/library.json` (plus the dev bridge grant with `dev-tools`) and
+//! none of the legacy `default.json`.
 //! Nothing from the legacy composition root runs here: no `AppState`, legacy
 //! database, bootstrap job, legacy watcher or legacy command registration. The
 //! legacy code stays archivable and is never booted by this binary.
@@ -45,7 +49,6 @@ use std::sync::Arc;
 use contracts_core::captures::NEW_CAPTURES_EVENT;
 use desktop_services::captures::NewCapturesFeed;
 use desktop_services::jobs::{MeasurementProgressFeed, ScanProgressFeed};
-use platevault_core::custody::trash::SystemTrash;
 use platevault_core::library::Library;
 use platevault_core::new_captures::CaptureWatch;
 use platevault_core::project_output::OutputWatch;
@@ -53,7 +56,8 @@ use platevault_core::targets::SimbadConfig;
 use tauri::{Manager, RunEvent};
 
 use crate::commands::library as ipc;
-use crate::commands::project_wrap_up::WrapUpTrash;
+use crate::commands::project_apply::ApplyRuns;
+use crate::commands::project_wrap_up::{CloseRuns, WrapUpTrash};
 
 /// Catalog directory override, used verbatim.
 pub const DATA_DIR_ENV: &str = "PV_LIBRARY_DATA_DIR";
@@ -142,14 +146,17 @@ macro_rules! library_commands {
             crate::commands::project_inputs::project_rename_group,
             crate::commands::project_inputs::project_set_group_panel,
             crate::commands::project_inputs::project_set_frames,
-            // apply (066 VSEL-FR-14, 069)
+            // apply (066 VSEL-FR-14, 069 PREP-FR-18)
             crate::commands::project_apply::project_apply_preview,
             crate::commands::project_apply::project_apply,
-            // output
+            crate::commands::project_apply::project_apply_cancel,
+            // output (070 RES-FR-01/02)
             crate::commands::project_output::project_copy_to_output,
+            crate::commands::project_output::project_output_rescan,
             // wrap up (065 PRJ-FR-14/25/30, 071)
             crate::commands::project_wrap_up::project_wrap_up_status,
             crate::commands::project_wrap_up::project_close,
+            crate::commands::project_wrap_up::project_close_stop,
             crate::commands::project_wrap_up::project_duplicate,
             // frame review
             crate::commands::frame_review::pix_review_frames,
@@ -252,6 +259,9 @@ pub fn library_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         // JSON numbers on this wire, so they export as `number`.
         .dangerously_cast_bigints_to_number()
         .typ::<serde_json::Value>()
+        // Events are named by Rust constants, not tauri-specta events, so a
+        // payload no command returns is registered on its own.
+        .typ::<crate::commands::project_apply::ApplyWaiting>()
         .commands(library_commands!(collect_commands))
 }
 
@@ -313,10 +323,11 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         },
     ));
     // CLOSE (071): settle what a stop left of Wrap up (an interrupted Clean
-    // up, a Trash step, every unsettled archive) through the host Trash. It
-    // can move whole archives, so it runs beside the event loop; until it
-    // settles them, a Closing Project stays locked and its operation reserved.
-    let trash = WrapUpTrash::new(Arc::new(SystemTrash::default()));
+    // up, a Trash step, every unsettled archive) through the host Trash (the
+    // headless double in an `e2e` build). It can move whole archives, so it
+    // runs beside the event loop; until it settles them, a Closing Project
+    // stays locked and its operation reserved.
+    let trash = WrapUpTrash::host();
     tauri::async_runtime::spawn({
         let library = Arc::clone(&library);
         let trash = trash.get();
@@ -331,7 +342,8 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     });
     // OUTPUT (RES-FR-01): follow every open Project's `Output/` and
     // `Processing/` while the app runs; its first pass finishes interrupted
-    // Copy to Output. It spawns on the runtime, so it starts inside it.
+    // Copy to Output. It spawns on the runtime, so it starts inside it; Rescan
+    // reaches it as managed state, and the exit step below stops it.
     let output_watch = tauri::async_runtime::block_on(async { OutputWatch::start(&library) });
     // New captures in every online Captures location: a start-up walk and a
     // live watcher each (astro-plan-ef440). The task runs on the async
@@ -345,7 +357,12 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     ));
     app.manage(library);
     app.manage(trash);
+    app.manage(output_watch);
     app.manage(captures);
+    // Apply's Cancel and its waiting event, and Close's Stop (069 PREP-FR-18,
+    // 071 STO-FR-08).
+    app.manage(ApplyRuns::emitting(app.handle().clone()));
+    app.manage(CloseRuns::default());
     // Windows ejects a Captures drive only once discovery's watcher lets go
     // of it (astro-plan-ef440). Without the notices, which `start` logs, the
     // app still starts; only that release is lost.
@@ -354,7 +371,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     app.run(move |handle, event| {
         // No watcher outlives the app: every OS watch is released before exit.
         if let RunEvent::Exit = event {
-            tauri::async_runtime::block_on(output_watch.shutdown());
+            tauri::async_runtime::block_on(handle.state::<OutputWatch>().shutdown());
             tauri::async_runtime::block_on(handle.state::<CaptureWatch>().shutdown());
             // Once discovery is stopping, a removal request that waited on it
             // has returned, so dropping the notices never waits on one.
