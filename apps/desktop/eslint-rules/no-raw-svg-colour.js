@@ -74,9 +74,11 @@ function isSvgPresentationElement(node) {
     }
     if (ancestor.type === 'JSXElement') {
       const ancestorName = ancestor.openingElement.name;
-      if (ancestorName.type !== 'JSXIdentifier' || !isIntrinsic(ancestorName.name)) {
-        return false;
+      if (ancestorName.type === 'JSXIdentifier' && /^[A-Z]/.test(ancestorName.name)) {
+        ancestor = ancestor.parent;
+        continue;
       }
+      if (ancestorName.type !== 'JSXIdentifier' || !isIntrinsic(ancestorName.name)) continue;
       const normalizedAncestorName = ancestorName.name.toLowerCase();
       if (normalizedAncestorName === 'foreignobject') return false;
       if (normalizedAncestorName === 'svg') return true;
@@ -162,8 +164,6 @@ function reportRawColorsInExpression(expression, report) {
             if (nameStart >= 0 && text.slice(cursor + nameStart).startsWith('--')) {
               cursor += nameStart + 2;
               mode = 'variable-name';
-            } else {
-              mode = 'color-function';
             }
           } else {
             report();

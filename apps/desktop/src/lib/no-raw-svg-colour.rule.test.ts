@@ -315,4 +315,17 @@ describe('svg/no-raw-svg-colour', () => {
 
     expect(diagnostics).toHaveLength(1);
   });
+  it('keeps SVG context through capitalized child wrappers', () => {
+    const diagnostics = lint('<svg><Group><rect fill="red" /></Group></svg>');
+
+    expect(diagnostics).toHaveLength(1);
+  });
+
+  it('checks static var fallback after a dynamic token name', () => {
+    const diagnostics = lint(
+      'const svg = <svg fill={`var(${token}, red)`} />;',
+    );
+
+    expect(diagnostics).toHaveLength(1);
+  });
 });
