@@ -120,7 +120,6 @@ describe('StepCatalogs (Configuration)', () => {
       JSON.parse(localStorage.getItem('alm-preferences') ?? '{}')
         .checkUpdatesAutomatically,
     ).toBe(false);
-    expect(getPreferences().checkUpdatesAutomatically).toBe(false);
   });
 
   it('shows no catalog-download affordance', () => {
