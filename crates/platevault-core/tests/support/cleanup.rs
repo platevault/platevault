@@ -4,6 +4,7 @@
 //! Shared fixture for F4 Wrap up Clean up and Trash (spec 065 PRJ-FR-15/16,
 //! 071 STO-FR-01..05/10/17): an OS Trash stand-in. Included with
 //! `#[path = "support/cleanup.rs"] mod cleanup_support;`.
+#![allow(dead_code)]
 
 use std::fs;
 use std::path::{Path, PathBuf};

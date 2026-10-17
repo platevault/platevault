@@ -4,49 +4,53 @@
 //! Home (spec 065 PRJ-FR-17/18/19, PRJ-AC-18/19/20/22/23, PV-PRJ-SC-05, root
 //! FR-020, LIB-AC-09 backend) on the composed library over real files, with
 //! no account and no network: the six sections in order, the top line equal
-//! to the Sessions filters, each Next rule as the first that applies, a
-//! trashed run never blocked, Done Projects only under "Show done", and the
-//! running work of every kind. Projects hold sessions through the membership
-//! writer; a suggestion holds nothing.
+//! to the Sessions filters, each F4 Next rule as the first that applies, open
+//! Projects only, and the running work of every kind. Projects hold sessions
+//! through the membership writer or the Apply world; a suggestion holds
+//! nothing.
 #![cfg(unix)]
 
+#[path = "support/apply.rs"]
+mod apply_support;
 #[path = "support/cleanup.rs"]
 mod cleanup_support;
-#[path = "support/prepare_group.rs"]
-mod group_support;
 #[path = "support/home.rs"]
 mod home_support;
 #[path = "support/membership.rs"]
 mod membership_support;
-#[path = "support/prepare.rs"]
-mod prepare_support;
 mod support;
 
+use std::sync::atomic::Ordering;
+
+use apply_support::{world, Recorder, World, DARKS, HA, HA_GAIN_0};
+use cleanup_support::ScopedTrash;
 use home_support::{
-    captures_offline, default_site, failed_preparation, ha_goal, hold_ha, indexed, project,
-    review_all, running_import, running_preparation, running_storage, tonight, unmatched_run,
+    default_site, ha_goal, indexed, quiet, running_import, running_project_operation,
+    running_storage, tonight,
 };
 use persistence_library::{SessionFilter, SessionQuery};
+use platevault_core::apply::Unattended;
 use platevault_core::home::HomeDashboard;
+use platevault_core::library::Library;
 use platevault_core::*;
-use prepare_support::{world, World};
 use uuid::Uuid;
 
-async fn dashboard(library: &platevault_core::library::Library, show_done: bool) -> HomeDashboard {
-    library.home_dashboard(show_done, &tonight()).await.unwrap()
+async fn dashboard(library: &Library) -> HomeDashboard {
+    library.home_dashboard(&tonight()).await.unwrap()
 }
 
-async fn next(world: &World) -> NextAction {
-    let mut home = dashboard(&world.library, false).await;
-    assert_eq!(home.projects.len(), 1);
-    home.projects.remove(0).next
+/// The Apply world's one Project on Home.
+async fn home_project(world: &World) -> HomeProject {
+    let mut home = dashboard(&world.library).await;
+    assert_eq!(home.projects.len(), 1, "{:#?}", home.projects);
+    home.projects.remove(0)
 }
 
 /// Each key's first position in `json`, which must increase.
 fn in_order(json: &str, keys: &[&str]) {
     let positions: Vec<usize> = keys
         .iter()
-        .map(|key| json.find(&format!("\"{key}\":")).unwrap_or_else(|| panic!("no {key}")))
+        .map(|key| json.find(&format!("\"{key}\"")).unwrap_or_else(|| panic!("no {key}")))
         .collect();
     assert!(positions.is_sorted(), "{keys:?} out of order at {positions:?}");
 }
@@ -59,7 +63,7 @@ fn in_order(json: &str, keys: &[&str]) {
 #[tokio::test]
 async fn six_sections_in_order() {
     let indexed = indexed().await;
-    let home = dashboard(&indexed.library, false).await;
+    let home = dashboard(&indexed.library).await;
     let json = serde_json::to_string(&home).unwrap();
     in_order(
         &json,
@@ -89,8 +93,8 @@ async fn six_sections_in_order() {
     assert!(sessions.ready_to_add.iter().all(|row| !row.actions.is_empty()));
     assert_eq!(sessions.unreviewed[0].session_id, indexed.unreviewed);
     let [ready] = sessions.ready_to_add.as_slice() else { panic!("{sessions:#?}") };
-    assert_eq!(ready.candidate.session_id, indexed.suggested);
-    assert!(ready.blockers.is_empty(), "settled, so it can be added");
+    assert_eq!(ready.suggestion.session_id, indexed.suggested);
+    assert!(ready.suggestion.blockers.is_empty(), "settled, so it can be added");
     assert_eq!(ready.actions, [SessionAction::OpenSuggestions { project_id: indexed.nebulae.id }]);
 }
 
@@ -112,7 +116,7 @@ async fn top_line_counts_match_session_filters() {
         counts,
         SessionFilterCounts { needs_target: 3, not_in_any_project: 4, needs_calibration }
     );
-    let home = dashboard(&indexed.library, false).await;
+    let home = dashboard(&indexed.library).await;
     assert_eq!(home.top_line, counts);
     for (filter, rows, expected) in [
         (SessionFilter::NeedsTarget, &home.new_sessions.needs_target, &indexed.needs_target),
@@ -151,281 +155,218 @@ async fn top_line_counts_match_session_filters() {
         .all(|row| row.actions == [SessionAction::CreateProject, SessionAction::AddToProject]));
 }
 
-/// PRJ-AC-19, PRJ-FR-18 rule 1: Unreviewed candidate frames win over a
-/// blocked run and an unmet goal with a window: "Review N new frames",
-/// opening frame review on the candidates filtered to Unreviewed.
+/// PRJ-AC-19, PRJ-FR-18 rule 1: a candidate session with Unreviewed frames
+/// wins over every later rule: "Review N new frames", opening frame review
+/// on the candidates filtered to Unreviewed. A Project with no candidate,
+/// nothing pending and no View reads "Add sessions" (rule 4).
 #[tokio::test]
-async fn next_rule1_review_n_new_frames() {
-    let world = world().await;
-    default_site(&world.library).await;
-    ha_goal(&world, 50).await;
-    unmatched_run(&world, RunStage::Calibrate).await;
-    let project = project(&world).await;
-    let review = |frames| NextAction::ReviewNewFrames {
-        frames,
-        context: ReviewContext::ProjectCandidates { project_id: project.id },
-        filter: ReviewFilter::Unreviewed,
-    };
-    assert_eq!(next(&world).await, review(4));
-    let asset = home_support::light(&world, prepare_support::HA_LIGHTS[0]).await;
-    let expected = ExpectedAsset {
-        asset_id: asset.id,
-        decision_revision: asset.decision_revision,
-        fingerprint: asset.fingerprint,
-    };
-    world
-        .catalog()
-        .set_quality(
-            &[expected],
-            Quality::Usable,
-            platevault_core::library::InventoryProbe::default(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(next(&world).await, review(3));
-}
-
-fn blocked(next: &NextAction) -> (Uuid, RunStage, Vec<RunBlocker>) {
-    match next {
-        NextAction::OpenBlockedRun { view_id, stage, blockers, .. } => {
-            (*view_id, *stage, blockers.clone())
-        }
-        other => panic!("expected a blocked run, got {other:?}"),
-    }
-}
-
-/// PRJ-AC-23, PRJ-FR-18 rule 2: with no Unreviewed candidate frames, a run
-/// with unresolved inputs opens at Select, one whose calibration needs review
-/// at Calibrate, and one whose preparation failed at Prepare.
-#[tokio::test]
-async fn next_rule2_blocked_run_unresolved_calibration_or_failed_prep() {
-    let calibrate = world().await;
-    review_all(&calibrate).await;
-    let early = unmatched_run(&calibrate, RunStage::Review).await;
-    assert!(calibrate.library.run_blockers(early).await.unwrap().is_empty(), "not at Calibrate");
-    calibrate.catalog().set_view_stage(early, RunStage::Calibrate).await.unwrap();
-    let (run, stage, blockers) = blocked(&next(&calibrate).await);
-    assert_eq!((run, stage), (early, RunStage::Calibrate));
-    assert!(
-        matches!(blockers[..], [RunBlocker::CalibrationNeedsReview(b)] if b.view_id == early),
-        "{blockers:?}"
-    );
-
-    let failed = world().await;
-    review_all(&failed).await;
-    let revision = failed_preparation(&failed).await;
-    let (run, stage, blockers) = blocked(&next(&failed).await);
-    assert_eq!((run, stage), (failed.run, RunStage::Prepare));
-    assert!(
-        matches!(blockers[..], [RunBlocker::PreparationFailed(b)]
-            if b.preparation_id == revision.id && b.state == PreparationState::Failed),
-        "{blockers:?}"
-    );
-
-    let offline = world().await;
-    review_all(&offline).await;
-    captures_offline(&offline).await;
-    let (run, stage, blockers) = blocked(&next(&offline).await);
-    assert_eq!((run, stage), (offline.run, RunStage::Select));
-    assert_eq!(blockers, [RunBlocker::UnresolvedInputs { view_id: offline.run, members: 4 }]);
-}
-
-/// PRJ-FR-18 rule 2: a run in the Project's Trash is never blocked, and
-/// Restore brings its blocker back.
-#[tokio::test]
-async fn trashed_run_never_blocked() {
-    let world = world().await;
-    review_all(&world).await;
-    failed_preparation(&world).await;
-    assert_eq!(blocked(&next(&world).await).0, world.run);
-    world.library.move_view_to_trash(world.run).await.unwrap();
-    assert_eq!(
-        world.library.run_blockers(world.run).await.unwrap(),
-        [] as [platevault_core::RunBlocker; 0]
-    );
-    assert_eq!(next(&world).await, NextAction::StartRun);
-    world.catalog().restore_view(world.run).await.unwrap();
-    assert_eq!(blocked(&next(&world).await).0, world.run);
-}
-
-/// PRJ-FR-18 rule 3: nothing to review or unblock, a goal unmet in project
-/// and a window tonight for its subject: "Plan tonight".
-#[tokio::test]
-async fn next_rule3_plan_tonight_when_goal_unmet_and_window() {
-    let world = world().await;
-    review_all(&world).await;
-    hold_ha(&world).await;
-    default_site(&world.library).await;
-    ha_goal(&world, 50).await;
-    let target = project(&world).await.subjects[0].target_id;
-    let home = dashboard(&world.library, false).await;
-    assert!(home.tonight.has_window(target));
-    assert_eq!(home.projects[0].next, NextAction::PlanTonight { target_ids: vec![target] });
-    let status = &home.target_status;
-    assert_eq!(status.len(), 1);
-    assert_eq!(status[0].target_id, target);
-    assert_eq!(status[0].goals[0].still_needed, GoalShortfall::FrameCount { frames: 48 });
-}
-
-/// PRJ-FR-18 rule 4: with every goal met in project, or an unmet goal and
-/// no window tonight, Next is the last rule (its F4 copy, "Apply N changes",
-/// "Open in {app}" or "Add sessions", is not built yet; it reads "Start a
-/// processing run").
-#[tokio::test]
-async fn next_rule4_start_run() {
-    let world = world().await;
-    review_all(&world).await;
-    hold_ha(&world).await;
-    ha_goal(&world, 50).await;
-    let home = dashboard(&world.library, false).await;
-    assert!(home.tonight.windows.is_empty(), "no default site");
-    assert_eq!(home.projects[0].next, NextAction::StartRun);
-
-    default_site(&world.library).await;
-    ha_goal(&world, 2).await;
-    let home = dashboard(&world.library, false).await;
-    assert!(home.projects[0].goals.iter().all(|goal| goal.met), "{:?}", home.projects[0].goals);
-    assert_eq!(home.projects[0].next, NextAction::StartRun);
-    assert_eq!(home.target_status, [] as [platevault_core::TargetStatus; 0]);
-}
-
-/// PRJ-AC-22: with one open and one Done Project, Home lists only the open
-/// one until "Show done" is on.
-#[tokio::test]
-async fn done_hidden_unless_show_done() {
+async fn next_rule1_review_new_frames_and_rule4_add_sessions() {
     let indexed = indexed().await;
-    let galaxies = &indexed.galaxies;
-    indexed.library.catalog().mark_project_done(galaxies.id, galaxies.revision).await.unwrap();
-    let names = |home: &HomeDashboard| -> Vec<(String, ProjectState)> {
-        home.projects.iter().map(|p| (p.project.name.clone(), p.project.state)).collect()
-    };
-    let open = dashboard(&indexed.library, false).await;
-    assert_eq!(names(&open), [("Summer nebulae".to_owned(), ProjectState::Open)]);
-    let all = dashboard(&indexed.library, true).await;
+    let home = dashboard(&indexed.library).await;
+    let next: Vec<(&str, &NextAction)> =
+        home.projects.iter().map(|p| (p.project.name.as_str(), &p.next)).collect();
     assert_eq!(
-        names(&all),
+        next,
         [
-            ("Andromeda".to_owned(), ProjectState::Done),
-            ("Summer nebulae".to_owned(), ProjectState::Open)
+            ("Andromeda", &NextAction::AddSessions),
+            (
+                "Summer nebulae",
+                &NextAction::ReviewNewFrames {
+                    frames: 1,
+                    context: ReviewContext::ProjectCandidates { project_id: indexed.nebulae.id },
+                    filter: ReviewFilter::Unreviewed,
+                }
+            ),
         ]
     );
 }
 
-/// PRJ-FR-17 section 6: a Running scan, measurement run, preparation, import
-/// and storage operation are each listed, in that order; one that ends
-/// leaves the list.
+/// PRJ-FR-18 rule 2 (provisional, spec 065 PRJ-FR-18), PRJ-AC-23: a
+/// suggestion whose calibration isn't settled keeps the Project waiting at
+/// Sessions ("Choose its flats first"), before the Apply that was canceled,
+/// which alone opens the View step.
 #[tokio::test]
-async fn running_work_lists_scan_measurement_prepare_import_storage() {
-    let world = world().await;
+async fn next_rule2_waits_on_calibration_then_an_unfinished_apply() {
+    let world = world(ViewMode::Copies).await;
+    let canceled = Recorder::default();
+    canceled.cancel.store(true, Ordering::SeqCst);
+    let preview = world.preview().await;
+    let report = world.library.apply(&World::request(&preview), &canceled).await.unwrap();
+    assert_eq!(report.outcome, Some(ApplyOutcome::Canceled));
+    let unfinished = ProjectWait::ApplyNotFinished {
+        operation_id: report.operation_id,
+        outcome: ApplyOutcome::Canceled,
+    };
+    quiet(&world).await;
+    assert_eq!(
+        home_project(&world).await.next,
+        NextAction::WaitsOnUser { step: ProjectStep::View, waits: vec![unfinished] }
+    );
+
+    let suggested = world.session_of(&world.captures, HA_GAIN_0).await;
+    world.catalog().finish_session_review(suggested.id, suggested.grouping_revision).await.unwrap();
+    let home = dashboard(&world.library).await;
+    let [ready] = home.new_sessions.ready_to_add.as_slice() else {
+        panic!("{:#?}", home.new_sessions)
+    };
+    assert_eq!(ready.suggestion.session_id, suggested.id);
+    assert!(
+        ready.suggestion.blockers.iter().any(|blocker| matches!(
+            blocker,
+            AdmissionBlocker::CalibrationUnsettled { .. }
+        )),
+        "{:#?}",
+        ready.suggestion.blockers
+    );
+    assert_eq!(
+        home.projects[0].next,
+        NextAction::WaitsOnUser {
+            step: ProjectStep::Sessions,
+            waits: vec![
+                ProjectWait::SuggestionNeedsCalibration { session_id: suggested.id },
+                unfinished,
+            ],
+        }
+    );
+}
+
+/// PRJ-FR-18 rule 4 and rule 2, D-W110: before the first Apply a Project has
+/// no View and no pending change ("Add sessions"); once the View exists and
+/// nothing is pending it reads "Open in {app}", and a mode switch reads
+/// "Apply N changes". A leftover in `View (previous)/` the user hasn't
+/// reviewed then keeps the Project waiting at the View step.
+#[tokio::test]
+async fn rule4_add_open_or_apply_then_rule2_previous_view_holds() {
+    let world = world(ViewMode::Symlinks).await;
+    quiet(&world).await;
+    let project = home_project(&world).await;
+    assert_eq!((project.pending_changes, project.next), (0, NextAction::AddSessions));
+    world.apply().await;
+    let project = home_project(&world).await;
+    assert_eq!((project.pending_changes, project.next), (0, NextAction::OpenView));
+
+    // A regular file where a dark's link was stays behind when the View
+    // switches to copies.
+    let tree = World::tree(&world.view());
+    let replaced = tree.iter().find(|path| path.starts_with("Darks/")).unwrap();
+    std::fs::remove_file(world.view().join(replaced)).unwrap();
+    std::fs::write(world.view().join(replaced), DARKS[0]).unwrap();
+    world
+        .sql(
+            "UPDATE projects SET view_mode = 'copies' WHERE id = ?1",
+            &[&world.project.to_string()],
+        )
+        .await;
+    world.bump().await;
+    let project = home_project(&world).await;
+    assert!(project.pending_changes > 0, "the mode switch is pending");
+    assert_eq!(project.next, NextAction::ApplyChanges { changes: project.pending_changes });
+    assert_eq!(world.apply().await.leftovers.len(), 1);
+
+    assert_eq!(
+        home_project(&world).await.next,
+        NextAction::WaitsOnUser {
+            step: ProjectStep::View,
+            waits: vec![ProjectWait::PreviousViewHolds { files: 1 }],
+        }
+    );
+}
+
+/// PRJ-FR-18 rule 3: nothing to review or wait on, a goal unmet in project
+/// and a window tonight for its subject: "Plan tonight". Without a window,
+/// rule 4 applies.
+#[tokio::test]
+async fn next_rule3_plan_tonight_when_goal_unmet_and_window() {
+    let world = world(ViewMode::Symlinks).await;
+    quiet(&world).await;
+    world.apply().await;
+    ha_goal(&world, 50).await;
+    assert_eq!(home_project(&world).await.next, NextAction::OpenView, "no default site");
+
+    default_site(&world.library).await;
+    let home = dashboard(&world.library).await;
+    let target = world.catalog().project(world.project).await.unwrap().subjects[0].target_id;
+    assert!(home.tonight.has_window(target));
+    assert_eq!(home.projects[0].next, NextAction::PlanTonight { target_ids: vec![target] });
+    let [status] = home.target_status.as_slice() else { panic!("{:#?}", home.target_status) };
+    assert_eq!(status.target_id, target);
+    assert_eq!(status.goals[0].still_needed, GoalShortfall::FrameCount { frames: 48 });
+}
+
+/// PRJ-AC-22: Home lists open Projects only; a Closed one leaves the list.
+#[tokio::test]
+async fn closed_projects_are_not_listed() {
+    let world = world(ViewMode::Symlinks).await;
+    world.apply().await;
+    assert_eq!(dashboard(&world.library).await.projects.len(), 1);
+    let trash = ScopedTrash::new(&world.temp.path().join("bin"));
+    let review = world.library.clean_up_review(world.project).await.unwrap();
+    let request = CleanUpRequest {
+        project_id: world.project,
+        desired_revision: review.desired_revision,
+        generation: review.generation,
+        selected: Vec::new(),
+    };
+    world.library.clean_up(&request, trash.dyn_trash()).await.unwrap();
+    let review = world.library.trash_review(world.project, trash.dyn_trash()).await.unwrap();
+    let request =
+        TrashRequest { project_id: world.project, digest: review.digest, ticked: Vec::new() };
+    world.library.wrap_up_trash(&request, trash.dyn_trash()).await.unwrap();
+    let desired_revision =
+        world.library.wrap_up_status(world.project).await.unwrap().desired_revision;
+    let close = CloseRequest { project_id: world.project, desired_revision, archive: None };
+    let report = world.library.close_project(&close, trash.dyn_trash(), &Unattended).await.unwrap();
+    assert_eq!(report.lifecycle, ProjectLifecycle::Closed);
+
+    assert_eq!(dashboard(&world.library).await.projects, []);
+}
+
+/// PRJ-FR-17 section 6: a Running scan, measurement run, import, a
+/// Project's operation and a storage operation are each listed once, in that
+/// order; the Project's operation carries its Project's name.
+#[tokio::test]
+async fn running_work_lists_scan_measurement_import_project_storage() {
+    let world = world(ViewMode::Symlinks).await;
     let catalog = world.catalog();
     let scan = catalog.begin_scan(world.calibration.id, None).await.unwrap();
-    let asset = home_support::light(&world, prepare_support::HA_LIGHTS[0]).await;
+    let asset = world.asset_at(&world.captures, HA[0]).await;
     let method = MeasurementMethod::new("fixture", 1);
     let measurement = catalog.begin_measurement_run(&method, &[asset.id], 0).await.unwrap();
-    let preparation = running_preparation(&world).await;
     let import = running_import(&world).await;
     assert_eq!(import.state, ImportState::Running);
+    let operation = running_project_operation(&world).await;
     let storage = running_storage(&world).await;
 
-    let listed = |home: &HomeDashboard| -> Vec<(&'static str, Uuid)> {
-        home.running_work
-            .iter()
-            .map(|work| match work {
-                RunningWork::Scan { operation_id, .. } => ("scan", *operation_id),
-                RunningWork::Measurement { operation_id, .. } => ("measurement", *operation_id),
-                RunningWork::Prepare { preparation_id, .. } => ("prepare", *preparation_id),
-                RunningWork::PrepareAll { group_preparation_id, .. } => {
-                    ("prepare_all", *group_preparation_id)
-                }
-                RunningWork::Import { import_id, .. } => ("import", *import_id),
-                RunningWork::Cleanup { cleanup_id, .. } => ("cleanup", *cleanup_id),
-                RunningWork::Archive { transfer_id, .. } => ("archive", *transfer_id),
-                RunningWork::TrashMove { operation_id, .. } => ("trash_move", *operation_id),
-                RunningWork::Storage { operation_id, .. } => ("storage", *operation_id),
-            })
-            .collect()
-    };
-    let home = dashboard(&world.library, false).await;
+    let home = dashboard(&world.library).await;
+
+    let listed: Vec<(&str, Uuid)> = home
+        .running_work
+        .iter()
+        .map(|work| match work {
+            RunningWork::Scan { operation_id, .. } => ("scan", *operation_id),
+            RunningWork::Measurement { operation_id, .. } => ("measurement", *operation_id),
+            RunningWork::Import { import_id, .. } => ("import", *import_id),
+            RunningWork::Project { operation, .. } => ("project", operation.id),
+            RunningWork::Storage { operation_id, .. } => ("storage", *operation_id),
+        })
+        .collect();
     assert_eq!(
-        listed(&home),
+        listed,
         [
             ("scan", scan.id),
             ("measurement", measurement.operation_id),
-            ("prepare", preparation.id),
             ("import", import.id),
+            ("project", operation),
             ("storage", storage.id),
         ]
     );
-    catalog.finish_preparation(preparation.id, PreparationState::Canceled, None).await.unwrap();
-    let home = dashboard(&world.library, false).await;
-    assert!(!listed(&home).contains(&("prepare", preparation.id)));
-    assert_eq!(listed(&home).len(), 4);
-}
-
-/// PRJ-FR-17 section 6, STO-FR-01: a Running Clean up is listed once, as the
-/// run's Clean up with its storage operation, never again as that bare
-/// storage operation, and leaves the list once it settles.
-#[tokio::test]
-async fn running_work_lists_a_clean_up_once() {
-    let world = world().await;
-    let profile = world.siril("exit 0").await;
-    let request = world.request(&profile, InputMode::Copy, None);
-    let outcome = world.prepare(&request, &prepare_support::Watch::quiet()).await;
-    assert_eq!(outcome.revision.state, PreparationState::Prepared, "{outcome:#?}");
-    world.library.mark_view_complete(world.run).await.unwrap();
-    let trash = cleanup_support::ScopedTrash::new(&world.temp.path().join("OS Trash"));
-    let clean_up =
-        CleanupRequest::CleanUp { view_id: world.run, selection: CleanupSelection::default() };
-    let review = world.library.review_cleanup(&clean_up, trash.dyn_trash()).await.unwrap();
-    let id = review.id.expect("Clean up records a review");
-    let catalog = world.catalog();
-    let started = catalog.start_run_cleanup(id).await.unwrap();
-    let operation = started.operation_id.expect("its entries move through the journal");
-    catalog.start_storage_operation(operation).await.unwrap();
-
-    let home = dashboard(&world.library, false).await;
-    let [RunningWork::Cleanup { cleanup_id, action, view_id, operation_id, .. }] =
-        home.running_work.as_slice()
+    let Some(RunningWork::Project { operation, project_name }) =
+        home.running_work.iter().find(|work| matches!(work, RunningWork::Project { .. }))
     else {
-        panic!("one Clean up and no bare storage operation: {:#?}", home.running_work);
+        unreachable!()
     };
     assert_eq!(
-        (*cleanup_id, *action, *view_id, *operation_id),
-        (id, CleanupKind::CleanUp, world.run, Some(operation))
+        (operation.kind, project_name.as_str()),
+        (ProjectOperationKind::CopyToOutput, apply_support::PROJECT)
     );
-    let outcome = world.library.run_cleanup(id, trash.dyn_trash()).await.unwrap();
-    assert_eq!(outcome.state, CleanupState::Settled, "{outcome:#?}");
-    let home = dashboard(&world.library, false).await;
-    assert!(home.running_work.is_empty(), "{:#?}", home.running_work);
-}
-
-/// PRJ-FR-17 section 6, PREP-FR-12: a Running Prepare all is listed once,
-/// never once per panel run, and leaves the list when it ends.
-#[tokio::test]
-async fn running_work_lists_prepare_all_once() {
-    let world = group_support::group_world().await;
-    let profile = world.wbpp("exit 0").await;
-    let request = world.setup(&profile, InputMode::Copy).await;
-    let input = world.running_input(&profile, &request).await;
-    let running = world.catalog().start_group_preparation(&input).await.unwrap().preparation;
-    assert_eq!(running.outcome, PreparationState::Running);
-
-    let home = dashboard(&world.library, false).await;
-    let [RunningWork::PrepareAll { group_preparation_id, group_id, number, folder, started_at }] =
-        home.running_work.as_slice()
-    else {
-        panic!("one Prepare all and no panel run's own Prepare: {:#?}", home.running_work);
-    };
-    assert_eq!(*group_preparation_id, running.id);
-    assert_eq!(*group_id, world.group);
-    assert_eq!(*number, 1);
-    assert_eq!(folder, &running.folder);
-    assert_eq!(started_at, &running.started_at);
-    world
-        .catalog()
-        .finish_group_preparation(running.id, PreparationState::Canceled, None)
-        .await
-        .unwrap();
-    let home = dashboard(&world.library, false).await;
-    assert!(home.running_work.is_empty(), "{:#?}", home.running_work);
 }
