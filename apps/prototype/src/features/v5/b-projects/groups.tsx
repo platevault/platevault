@@ -204,7 +204,8 @@ export function useGroupsSection(project: Project): DetailSection {
   const title = !draft || draft.mode === "new" ? m.project_group_new() : draft.mode === "rename" ? m.common_rename_title({ name: editing?.name ?? "" }) : m.project_group_mark_panel_title({ name: editing?.name ?? "" })
   const saveLabel = !draft || draft.mode === "new" ? m.project_group_new() : draft.mode === "rename" ? m.settings_save() : m.project_group_mark_panel()
   const nameError = draft && !draft.name.trim() ? m.settings_name_required() : undefined
-  const nameHint = !draft ? undefined : draft.mode === "rename" ? m.project_group_rename_hint() : draft.mode === "panel" ? (isMosaic(project) ? m.project_group_panel_goals() : m.project_group_panel_first()) : undefined
+  // Marking the first panel turns the Project into a mosaic: the one consequence the dialog names.
+  const panelFirst = draft?.panel && draft.mode !== "rename" && !isMosaic(project) ? m.project_group_panel_first() : undefined
   return {
     id: "groups",
     title: m.project_groups(),
@@ -223,8 +224,8 @@ export function useGroupsSection(project: Project): DetailSection {
         >
           {draft ? (
             <>
-              <TextField label={m.newproject_field_name()} value={draft.name} onChange={(name) => setDraft({ ...draft, name })} description={nameHint} error={nameError} required autoFocus />
-              {draft.mode === "new" ? <SwitchField label={m.common_mosaic_panel()} description={m.project_group_panel_hint()} checked={draft.panel} onChange={(panel) => setDraft({ ...draft, panel })} /> : null}
+              <TextField label={m.newproject_field_name()} value={draft.name} onChange={(name) => setDraft({ ...draft, name })} description={draft.mode === "panel" ? panelFirst : undefined} error={nameError} required autoFocus />
+              {draft.mode === "new" ? <SwitchField label={m.common_mosaic_panel()} description={panelFirst} checked={draft.panel} onChange={(panel) => setDraft({ ...draft, panel })} /> : null}
             </>
           ) : null}
         </FormDialog>
@@ -357,7 +358,7 @@ export function useHeldSection(project: Project): DetailSection {
   const selectFirst = m.project_select_sessions_first()
   const actions: Action[] = open
     ? [
-        { id: "add-sessions", label: m.catalogue_templates_add_sessions(), icon: Plus, opensDialog: true, run: () => setAdding(true) },
+        { id: "add-sessions", label: m.project_add_sessions(), icon: Plus, opensDialog: true, run: () => setAdding(true) },
         {
           id: "move-selected",
           label: moveLabel,
@@ -408,7 +409,7 @@ export function useHeldSection(project: Project): DetailSection {
           selection={open && rows.length > 0 ? { selected: chosen, onChange: setSelected, rowLabel: label } : undefined}
           rowLabel={label}
           rowActions={rowActions}
-          empty={!open ? m.run_cal_no_sessions() : suggested ? m.project_no_sessions() : m.project_no_sessions_add()}
+          empty={!open ? m.project_sessions_none() : suggested ? m.project_no_sessions() : m.project_no_sessions_add()}
         />
         <AddSessionsDialog project={project} open={adding} onOpenChange={setAdding} />
         <FormDialog
@@ -446,13 +447,7 @@ export function useHeldSection(project: Project): DetailSection {
           confirm={{ id: "move-save", label: moveConfirm, kind: "primary", run: () => (moving ? done(moveSessions(project.id, moving.sessionIds, moving.groupId), moving.sessionIds) : undefined) }}
         >
           {moving ? (
-            <SelectField
-              label={m.project_col_group()}
-              value={moving.groupId}
-              options={project.groups.map((g) => ({ value: g.id, label: g.name }))}
-              onChange={(groupId) => setMoving({ ...moving, groupId })}
-              description={m.project_move_whole()}
-            />
+            <SelectField label={m.project_col_group()} value={moving.groupId} options={project.groups.map((g) => ({ value: g.id, label: g.name }))} onChange={(groupId) => setMoving({ ...moving, groupId })} />
           ) : null}
         </FormDialog>
       </>

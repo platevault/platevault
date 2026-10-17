@@ -93,12 +93,7 @@ export function useCalibrateSections(project: Project): DetailSection[] {
       id: "calibration-layout",
       title: m.calibrate_layout_title(),
       content: (
-        <KeyValueList
-          items={[
-            { label: m.calibrate_mixed_parts(), value: mixed.join(" · "), mono: true },
-            { label: m.status_provisional(), value: m.calibrate_mixed_settings_hint() },
-          ]}
-        />
+        <KeyValueList items={[{ label: m.calibrate_mixed_parts(), value: mixed.join(" · "), mono: true }]} />
       ),
     })
   sections.push({ id: "calibration", title: m.calibrate_check_title(), content: <CalibrationDiagram groups={groups} level={3} /> })

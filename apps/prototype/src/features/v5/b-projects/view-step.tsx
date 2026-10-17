@@ -325,7 +325,7 @@ function ViewSettingsSummary({ project }: { project: Project }) {
     <KeyValueList
       items={[
         { label: m.apps_col_application(), value: profile ? say(m, profileRef(profile)) : m.project_view_no_application() },
-        { label: m.project_view_mode(), value: `${say(m, MODE_NAME[settings.mode])} · ${settings.mode === "symlink" ? m.view_mode_symlink_hint() : m.view_mode_copy_hint()}` },
+        { label: m.project_view_mode(), value: say(m, MODE_NAME[settings.mode]) },
         ...(paths
           ? [
               { label: m.view_project_folder(), value: project.folderPath ? paths.root : holdsFiles ? m.view_folder_exists({ path: paths.root }) : m.view_folder_new({ path: paths.root }), mono: true },
@@ -360,13 +360,7 @@ function ViewSettingsDialog({ project, onClose }: { project: Project; onClose: (
   return (
     <FormDialog open onOpenChange={(next) => !next && onClose()} title={m.project_view_settings()} size="md" confirm={{ id: "view-settings-save", label: m.settings_save(), kind: "primary", run: save }}>
       <SelectField label={m.apps_col_application()} value={profileId} options={profileOptions} description={profiles.length === 0 ? m.view_no_applications() : undefined} onChange={setProfileId} />
-      <SelectField
-        label={m.project_view_mode()}
-        value={mode}
-        options={modes.map((value) => ({ value, label: say(m, MODE_NAME[value]) }))}
-        description={mode === "symlink" ? m.view_mode_symlink_hint() : m.view_mode_copy_hint()}
-        onChange={setMode}
-      />
+      <SelectField label={m.project_view_mode()} value={mode} options={modes.map((value) => ({ value, label: say(m, MODE_NAME[value]) }))} onChange={setMode} />
       <PathField
         mode="folder"
         label={m.project_view_location()}
@@ -502,28 +496,24 @@ function ApplySheetDialog({ project, sheet }: { project: Project; sheet: ApplySh
               </>
             }
           >
-            {application === "siril" ? m.view_siril_needs_links() : m.view_use_copies_provisional()}
+            {application === "siril" ? m.view_siril_needs_links() : null}
           </Notice>
         ) : null}
-        {noLinks ? (
-          <Notice tone="refusal" title={say(m, applyRefusalRef(noLinks))}>
-            {m.view_choose_location_provisional()}
-          </Notice>
-        ) : null}
+        {noLinks ? <Notice tone="refusal" title={say(m, applyRefusalRef(noLinks))} /> : null}
         {leftovers.length > 0 ? (
-          <Section level={3} id="apply-previous" title={m.view_review_previous_first()} description={m.view_review_previous_hint()}>
+          <Section level={3} id="apply-previous" title={m.view_review_previous_first()}>
             <LeftoverTable project={project} leftovers={leftovers} label={m.view_review_previous_first()} />
           </Section>
         ) : null}
         <KeyValueList items={facts} columns={2} />
-        {plan.layoutChanged.length > 0 ? <Notice tone="warning" title={m.project_apply_readd_view()}>{m.view_provisional_copy()}</Notice> : null}
+        {plan.layoutChanged.length > 0 ? <Notice tone="warning" title={m.project_apply_readd_view()} /> : null}
         {offline && offline.kind === "offline" ? (
-          <Section level={3} id="apply-offline" title={say(m, applyRefusalRef(offline))} description={m.view_offline_hint()}>
+          <Section level={3} id="apply-offline" title={say(m, applyRefusalRef(offline))}>
             <KeyValueList items={offline.paths.map((path) => ({ label: m.view_offline_original(), value: path, mono: true }))} />
           </Section>
         ) : null}
       {drift && drift.kind === "pin-drift" ? (
-        <Section level={3} id="apply-drift" title={say(m, applyRefusalRef(drift))} description={m.view_pin_drift_hint()}>
+        <Section level={3} id="apply-drift" title={say(m, applyRefusalRef(drift))}>
           <DataTable
             label={say(m, applyRefusalRef(drift))}
             rows={drift.problems}
@@ -542,7 +532,7 @@ function ApplySheetDialog({ project, sheet }: { project: Project; sheet: ApplySh
           </Section>
         ) : null}
         {plan.drift.changed.length > 0 ? (
-          <Section level={3} id="apply-changed-copies" title={m.view_changed_copies()} description={m.view_changed_copies_hint()}>
+          <Section level={3} id="apply-changed-copies" title={m.view_changed_copies()}>
             <DataTable label={m.view_changed_copies()} rows={plan.drift.changed} columns={changedColumns} getRowId={(c) => c.entry.path} scroll="none" />
           </Section>
         ) : null}
@@ -555,7 +545,7 @@ function ApplySheetDialog({ project, sheet }: { project: Project; sheet: ApplySh
           <ViewFolderTree tree={plan.tree} mode={plan.mode} label={m.view_tree_of({ name: project.name })} />
         </Section>
         {plan.drift.unplaced.length > 0 ? (
-          <Section level={3} id="apply-unplaced" title={m.project_apply_unplaced()} description={m.project_apply_unplaced_hint()}>
+          <Section level={3} id="apply-unplaced" title={m.project_apply_unplaced()}>
             <DataTable
               label={m.project_apply_unplaced()}
               rows={plan.drift.unplaced}
@@ -590,9 +580,9 @@ function RunningApply({ operationId }: { operationId: string }) {
     const op = s.operations[operationId]
     return op ? applyPhase(op) : null
   })
-  // The phase names the section; waiting carries its hint (PREP-FR-18).
+  // The phase names the section (PREP-FR-18).
   return (
-    <Section level={3} title={phase === "waiting" ? m.project_apply_waiting() : phase ? PHASE_TEXT[phase](m) : m.project_apply()} description={phase === "waiting" ? m.view_waiting_hint() : undefined}>
+    <Section level={3} title={phase === "waiting" ? m.project_apply_waiting() : phase ? PHASE_TEXT[phase](m) : m.project_apply()}>
       <OperationPanel operationId={operationId} />
     </Section>
   )
@@ -604,7 +594,7 @@ function AppliedView({ project }: { project: Project }) {
   const view = project.view
   if (!view) return null
   const free = freeOn(disk, view.folderPath)
-  if (!free) return <Notice tone="offline" title={m.view_offline()}>{m.view_offline_footprint()}</Notice>
+  if (!free) return <Notice tone="offline" title={m.view_offline()} />
   const footprint = appliedFootprint(disk, view.entries, view.folderPath)
   const previous = project.previous ? project.previous.leftovers.reduce((n, l) => n + l.sizeBytes, 0) : null
   return (

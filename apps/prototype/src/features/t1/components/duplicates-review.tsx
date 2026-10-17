@@ -87,9 +87,10 @@ export function DuplicatesReview({ open, onClose }: { open: boolean; onClose: ()
   function review(chosen: DuplicateGroup[]): ConfirmSpec {
     const paths = chosen.flatMap((g) => leaving(g).map((c) => c.path))
     const kept = keptViewLinks(links, paths).length
+    const size = formatBytes(chosen.reduce((n, g) => n + leaving(g).length * g.sizeBytes, 0))
     return {
-      title: m.wrapup_offer_duplicates({ count: paths.length, n: formatCount(paths.length), size: formatBytes(chosen.reduce((n, g) => n + leaving(g).length * g.sizeBytes, 0)) }),
-      summary: [m.duplicates_frames_keep_copy({ count: chosen.length, n: formatCount(chosen.length) }), ...(kept > 0 ? [m.trash_also_removes_links({ count: kept })] : [])].join(" · "),
+      title: m.duplicates_confirm_title({ count: paths.length, n: formatCount(paths.length) }),
+      summary: [size, m.duplicates_frames_keep_copy({ count: chosen.length, n: formatCount(chosen.length) }), ...(kept > 0 ? [m.trash_also_removes_links({ count: kept })] : [])].join(" · "),
       groups: chosen.map((g) => ({
         label: g.fileName,
         rows: trashFileRows(
@@ -141,19 +142,23 @@ export function DuplicatesReview({ open, onClose }: { open: boolean; onClose: ()
     run: () => move(movable),
   }
 
+  // Before any scan, or with nothing found, the empty state alone says so and offers Scan again.
+  const empty = groups.length === 0 && !scanning
   return (
-    <FormDialog open={open} onOpenChange={(next) => !next && onClose()} title={m.storage_duplicates()} size="lg" confirm={moveAll}>
-      <KeyValueList
-        items={[
-          { label: m.duplicates_found(), value: findings ? m.issue_duplicates({ count: findings.copies, bytes: formatBytes(findings.bytes) }) : m.storage_not_scanned() },
-          { label: m.duplicates_scan(), value: findings ? m.duplicates_scanned({ date: formatDateTime(findings.scan.settledAt ?? findings.scan.createdAt) }) : m.storage_not_scanned() },
-          { label: m.duplicates_movable(), value: m.location_copies_count({ count: movableCopies, n: formatCount(movableCopies) }) },
-        ]}
-      />
-      <ActionBar actions={[scanAgain]} overflow={withIssueItems(m, [], pageIssues(issueView, "/sessions"))} />
+    <FormDialog open={open} onOpenChange={(next) => !next && onClose()} title={m.duplicates_review_title()} size="lg" confirm={moveAll}>
+      {findings ? (
+        <KeyValueList
+          items={[
+            { label: m.duplicates_found(), value: m.issue_duplicates({ count: findings.copies, bytes: formatBytes(findings.bytes) }) },
+            { label: m.duplicates_scan(), value: m.duplicates_scanned({ date: formatDateTime(findings.scan.settledAt ?? findings.scan.createdAt) }) },
+            { label: m.duplicates_movable(), value: m.location_copies_count({ count: movableCopies, n: formatCount(movableCopies) }) },
+          ]}
+        />
+      ) : null}
+      {empty ? null : <ActionBar actions={[scanAgain]} overflow={withIssueItems(m, [], pageIssues(issueView, "/sessions"))} />}
       {scanning ? <OperationPanel operationId={scanning.id} itemLimit={0} /> : null}
       {groups.length === 0 ? (
-        scanning ? null : <EmptyState icon={Copy} title={findings ? m.storage_no_duplicates() : m.storage_not_scanned()} action={<ActionButton action={scanAgain} />} />
+        empty ? <EmptyState icon={Copy} title={findings ? m.storage_no_duplicates() : m.storage_not_scanned()} action={<ActionButton action={scanAgain} />} /> : null
       ) : (
         <DataTable<CopyRow>
           label={m.storage_duplicates()}

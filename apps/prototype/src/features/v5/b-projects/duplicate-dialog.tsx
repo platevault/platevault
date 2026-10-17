@@ -38,7 +38,7 @@ export function DuplicateProjectDialog({ project, open, onOpenChange }: { projec
     notes: m.project_duplicate_part_notes(),
     settings: m.project_view_settings(),
   }
-  const description = isLocked(project) ? `${m.project_duplicate_no_files()} ${m.project_duplicate_current_pins()}` : m.project_duplicate_no_files()
+  const description = isLocked(project) ? `${m.project_duplicate_no_files()} · ${m.project_duplicate_current_pins()}` : m.project_duplicate_no_files()
   const nameError = draft.name.trim() ? undefined : m.settings_name_required()
   const label = m.project_duplicate()
   const run = () => {

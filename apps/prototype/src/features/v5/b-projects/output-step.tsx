@@ -99,14 +99,13 @@ function CopyDialog({ project, onClose }: { project: Project; onClose: () => voi
         value={source}
         filters={OUTPUT_IMAGE_FILTERS}
         initialPath={processing}
-        description={m.output_source_hint()}
         error={refusal ? say(m, refusal) : undefined}
         onChange={(path) => {
           setSource(path)
           setName(fileName(path))
         }}
       />
-      <TextField label={m.output_name_in_output()} value={name} onChange={setName} description={m.output_never_overwrites()} />
+      <TextField label={m.output_name_in_output()} value={name} onChange={setName} />
     </FormDialog>
   )
 }

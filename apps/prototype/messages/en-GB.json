@@ -1318,17 +1318,18 @@
   "project_planner": "Planner",
   "project_no_windows": "No windows",
   "project_no_site": "no observing site",
-  "project_no_groups": "No groups yet. Adding a session creates its group.",
+  "project_no_groups": "No groups yet",
   "project_no_pending_changes": "No pending changes",
-  "project_no_sessions": "No sessions yet. Add one from the suggestions.",
+  "project_no_sessions": "No sessions yet · pick from Suggestions",
   "project_no_suggestions": "No matching sessions to add",
-  "project_no_sessions_add": "No sessions yet. Use Add sessions… to choose some.",
+  "project_no_sessions_add": "No sessions added",
+  "project_sessions_none": "No sessions held",
   "project_none_tonight": "None tonight",
   "project_archived_of": "Archived sessions of {name}",
   "project_col_archive_path": "Archive path",
   "project_remove_named": "Remove {name}",
   "project_remove_session": "Remove from Project",
-  "project_remove_session_summary": "Its frames leave the View on the next Apply. Files, the library and other Projects don't change.",
+  "project_remove_session_summary": "Leaves the View on the next Apply · files stay",
   "newproject_new_target": "New Target",
   "newproject_field_name": "Name",
   "newproject_nothing_prefilled": "Nothing prefilled · no confirmed Target",
@@ -1952,17 +1953,17 @@
   "location_error_name_empty": "Display name: enter a name, for example Astro-T7 captures.",
   "location_error_name_taken": "Display name: {name} is already used by another location.",
   "location_error_path_registered": "Folder: {path} is already registered as {name}.",
-  "location_error_path_inside": "Folder: inside {name}, which already indexes this folder. Choose a folder outside registered locations.",
-  "location_error_path_contains": "Folder: contains {name}. Choose a folder that does not hold a registered location.",
+  "location_error_path_inside": "Folder: inside {name}",
+  "location_error_path_contains": "Folder: contains {name}",
   "location_error_unknown_volume": "Folder: {path} is not on a known volume.",
-  "location_retire_stale": "{name} is no longer registered as reviewed. Nothing was retired.",
-  "location_retire_availability_changed": "Retire location refused: {name} reads {now} now, but this review was made while it read {then}. Nothing was retired. Close this review and choose Retire location again for a new review.",
-  "location_retire_busy": "Retire location refused: {title} is not finished. Nothing was retired.",
-  "location_remap_same_folder": "{path} is the folder {name} already uses. Choose a different folder, or use Rescan to read it again.",
-  "location_remap_overlaps": "{path} overlaps {name}. Choose a folder outside other registered locations.",
-  "location_remap_no_frames": "{name} holds no indexed frames, so there is nothing to remap. Use Choose folder again to point it at another folder.",
-  "location_remap_no_match": "Remap refused: no indexed frame in {name} has the same bytes in {path}. Matching names are not enough. Nothing changed.",
-  "location_remap_unavailable": "Remap not saved: the location or volume is no longer available.",
+  "location_retire_stale": "Can't retire · {name} changed since this review",
+  "location_retire_availability_changed": "Can't retire · {name} now reads {now}, not {then}",
+  "location_retire_busy": "Can't retire · {title} isn't finished",
+  "location_remap_same_folder": "{path} is already {name}'s folder",
+  "location_remap_overlaps": "{path} overlaps {name}",
+  "location_remap_no_frames": "{name} holds no indexed frames",
+  "location_remap_no_match": "No frame in {name} has the same bytes in {path}",
+  "location_remap_unavailable": "Remap not saved · location or volume unavailable",
   "location_remap_hash_failed": [
     {
       "declarations": [
@@ -1974,8 +1975,8 @@
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Remap not saved: hash verification of {count} file on {volume} failed. Nothing changed; choose Retry.",
-        "countPlural=*": "Remap not saved: hash verification of {count} files on {volume} failed. Nothing changed; choose Retry."
+        "countPlural=one": "Remap not saved · hash check failed for {count} file on {volume}",
+        "countPlural=*": "Remap not saved · hash check failed for {count} files on {volume}"
       }
     }
   ],
@@ -2320,10 +2321,10 @@
   "site_reminders_change": "Reminders: {from} → {to}",
   "site_previous": "previous site",
   "settings_lookup_simbad_only": "SIMBAD only",
-  "settings_lookup_resolved": "Resolved by {provider}.",
-  "settings_lookup_not_found": "{provider} returned no object named {query}.",
-  "settings_lookup_failed": "{provider} did not respond: the lookup failed as if offline. No Target was changed; local Targets and indexed sessions stay usable.",
-  "settings_lookup_off": "Online lookup is off, so nothing was sent. Local Targets and the bundled catalog still search offline.",
+  "settings_lookup_resolved": "Resolved by {provider}",
+  "settings_lookup_not_found": "{provider}: no object named {query}",
+  "settings_lookup_failed": "{provider} didn't respond · nothing changed",
+  "settings_lookup_off": "Online lookup is off · nothing sent",
   "settings_lookup_query_empty": "Name to look up: enter a Target name or alias, for example NGC 7000.",
   "settings_lookup_local": "Local search",
   "settings_lookup_targets": [
@@ -2415,9 +2416,9 @@
   "setup_deferred": "Not set · later",
   "setup_continue_reason": "Add a capture location",
   "setup_continue_short": "Continue",
-  "setup_footer_running": "Indexing · sessions read so far are in the library",
-  "setup_footer_interrupted": "Interrupted · resume it above",
-  "setup_footer_canceled": "Cancelled · sessions read so far are kept",
+  "setup_footer_running": "Indexing",
+  "setup_footer_interrupted": "Interrupted",
+  "setup_footer_canceled": "Cancelled",
   "setup_footer_unindexed": [
     {
       "declarations": [
@@ -2442,11 +2443,11 @@
   "setup_stat_discovered": "Files discovered",
   "setup_stat_read": "Metadata read",
   "setup_stat_unsupported": "Unsupported",
-  "setup_stat_unsupported_hint": "Skipped, left as they are",
+  "setup_stat_unsupported_hint": "Skipped",
   "setup_stat_unreadable": "Unreadable folders",
-  "setup_stat_unreadable_hint": "Read Unknown, never missing",
+  "setup_stat_unreadable_hint": "Read as Unknown",
   "setup_stat_complete_value": "{done} of {total}",
-  "setup_library_so_far": "Library so far: {sessions} · {frames} (lights and calibration)",
+  "setup_library_so_far": "Library so far: {sessions} · {frames}",
   "setup_library_covers": " · covers {names}",
   "setup_locations_to_index": [
     {
@@ -2804,8 +2805,8 @@
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} frame with {metric} above {value} selected. Quality is unchanged until you mark it.",
-        "countPlural=*": "{count} frames with {metric} above {value} selected. Quality is unchanged until you mark them."
+        "countPlural=one": "{count} frame with {metric} above {value} selected",
+        "countPlural=*": "{count} frames with {metric} above {value} selected"
       }
     }
   ],
@@ -2821,8 +2822,8 @@
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} frame with {metric} below {value} selected. Quality is unchanged until you mark it.",
-        "countPlural=*": "{count} frames with {metric} below {value} selected. Quality is unchanged until you mark them."
+        "countPlural=one": "{count} frame with {metric} below {value} selected",
+        "countPlural=*": "{count} frames with {metric} below {value} selected"
       }
     }
   ],
@@ -2929,8 +2930,8 @@
   "frame_cutout_observed": "Observed",
   "frame_fitted": "Fitted",
   "frame_cutout_residual": "Residual",
-  "frame_warning_saturated": "Saturated: the core is clipped at 65,535 ADU, so the PSF fit failed",
-  "frame_warning_near_edge": "Near the frame edge: part of the profile may be cut off",
+  "frame_warning_saturated": "Saturated · PSF fit failed",
+  "frame_warning_near_edge": "Near the edge · profile may be cut off",
   "frame_no_fit": "No fit",
   "frame_cutout_label": "{kind} cutout of star {id}",
   "frame_location": "Location",
@@ -2943,7 +2944,7 @@
   "frame_input_current": "SHA-256 {hash}… (current)",
   "frame_input_earlier": "SHA-256 {hash}… (earlier)",
   "frame_does_not_apply": "Does not apply",
-  "frame_metrics_caption": "Measurements of the current frame, with their sources",
+  "frame_metrics_caption": "Frame values",
   "frame_col_metric": "Metric",
   "frame_builtin_source": "Built-in source",
   "frame_col_imported": "Imported",
@@ -4054,8 +4055,8 @@
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Also removes {count} link in kept run views",
-        "countPlural=*": "Also removes {count} links in kept run views"
+        "countPlural=one": "Also removes {count} link in kept Views",
+        "countPlural=*": "Also removes {count} links in kept Views"
       }
     }
   ],
@@ -4137,6 +4138,23 @@
   "duplicates_keep_copy": "Keep this copy",
   "duplicates_move_others": "Move others to Trash",
   "duplicates_move_all": "Move all to Trash",
+  "duplicates_review_title": "Duplicate copies",
+  "duplicates_confirm_title": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Move {n} duplicate copy to the Trash?",
+        "countPlural=*": "Move {n} duplicate copies to the Trash?"
+      }
+    }
+  ],
   "duplicates_frames_keep_copy": [
     {
       "declarations": [
@@ -5602,7 +5620,6 @@
   "project_apply_space": "Space needed",
   "project_apply_space_two_views": "{size} · room for two full Views while it runs",
   "project_apply_unplaced": "Files PlateVault didn't place",
-  "project_apply_unplaced_hint": "Ticked files move into the new View. The rest stay in View (previous)/.",
   "project_apply_waiting": "Waiting for a tool to release a file in View",
   "project_change_application": "Application changed",
   "project_change_calibration": "{kind} changed for {session}",
@@ -5655,7 +5672,7 @@
   ],
   "project_duplicate": "Duplicate",
   "project_duplicate_name": "{name} (copy)",
-  "project_duplicate_no_files": "No files are copied. The new Project builds its own View on its first Apply.",
+  "project_duplicate_no_files": "No files copied",
   "project_duplicate_part_goals": "Goals",
   "project_duplicate_part_groups": "Groups and their names",
   "project_duplicate_part_notes": "Notes",
@@ -5668,7 +5685,6 @@
   "project_group_mark_panel": "Mark as mosaic panel",
   "project_group_missing": "a group no longer in the Project",
   "project_group_new": "New group",
-  "project_group_panel_hint": "A panel's folder uses the PANEL keyword. Marking one makes the Project a mosaic.",
   "project_group_remove": "Remove group",
   "project_group_remove_title": "Remove the group {name}?",
   "project_group_rename": "Rename",
@@ -5782,7 +5798,7 @@
   "project_output_adopt_own_copy_title": "Move PlateVault's copy at the destination to the Trash and add again?",
   "project_output_adopt_title": "Add {name} to the calibration library?",
   "project_output_adopt_trash_copy": "Move to Trash and add",
-  "project_output_empty": "Nothing in Output yet. Save finished images there, or use Copy to Output.",
+  "project_output_empty": "Nothing in Output yet",
   "project_output_hide_offer": "Hide",
   "project_output_masters": "Masters found in Processing",
   "project_output_of": "Output of {name}",
@@ -5810,8 +5826,8 @@
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "The group holds {count} session: move or remove it first",
-        "countPlural=*": "The group holds {count} sessions: move or remove them first"
+        "countPlural=one": "Holds {count} session",
+        "countPlural=*": "Holds {count} sessions"
       }
     }
   ],
@@ -5828,7 +5844,7 @@
   "project_view_location_fixed": "Fixed by the first Apply",
   "project_view_mode": "Input mode",
   "project_view_no_application": "Not chosen",
-  "project_view_not_built": "No View yet. The first Apply builds it.",
+  "project_view_not_built": "No View yet",
   "project_view_settings": "View settings",
   "wrapup_archive_moves": "Archive moves",
   "wrapup_cleanup_summary": "{links} links · {copies} copies · {size}",
@@ -6765,7 +6781,6 @@
   "calibration_open_output": "Open {project} Output",
   "calibration_newest_version": "Newest version",
   "calibrate_check_title": "Calibration check",
-  "calibrate_mixed_settings_hint": "Provisional: the order of the parts, the exposure part and the flats' gain follow the lights they calibrate.",
   "calibrate_problems_of": "Sessions to fix in {name}",
   "calibrate_problems_title": "Sessions to fix before Apply",
   "output_choose_file_first": "Choose a file in Processing first",
@@ -6773,23 +6788,20 @@
   "output_kind_channel": "Kind and channel",
   "output_kind_channel_title": "Kind and channel of {name}",
   "output_name_in_output": "Name in Output",
-  "output_never_overwrites": "A file Output already holds is never overwritten: choose another name.",
-  "output_no_folder": "No Project folder yet. The first Apply makes Output.",
+  "output_no_folder": "No Project folder yet",
   "output_saved_at": "Saved",
   "output_settled": "Settled",
   "output_source_file": "File in Processing",
-  "output_source_hint": "The chooser opens in Processing and lists image files. The source stays where it is; the copy is verified.",
   "project_use_copies": "Use copies for this Project",
   "view_applied_at": "Applied",
   "view_applied_title": "View on disk",
   "view_blocker_reassign": "Reassign {kind} on {name}",
   "view_blocker_unsettled": "Settle the calibration of {name}",
   "view_changed_copies": "Copies a tool changed",
-  "view_changed_copies_hint": "The new View gets fresh copies from the originals; these stay in View (previous)/ for review.",
   "view_col_corrected": "Corrected",
   "view_col_field": "Field",
   "view_col_recorded": "In the header",
-  "view_corrections_configuration": "{name} reads the corrected values from its configuration. Originals and links are never patched.",
+  "view_corrections_configuration": "Read by {name}",
   "view_corrections_patched": [
     {
       "declarations": [
@@ -6801,8 +6813,8 @@
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} frame gets its own copy with the corrected header, because the application can't read corrections. Originals and links are never patched.",
-        "countPlural=*": "{n} frames get their own copy with the corrected header, because the application can't read corrections. Originals and links are never patched."
+        "countPlural=one": "{n} patched copy",
+        "countPlural=*": "{n} patched copies"
       }
     }
   ],
@@ -6866,10 +6878,8 @@
   "view_layout_output": "Results (Output/)",
   "view_layout_tool": "{name}'s working folder",
   "view_layout_view": "View folder",
-  "view_mode_copy_hint": "Independent copies made from the originals, cloned where the volume can. Each counts its full size.",
-  "view_mode_symlink_hint": "Links to the originals, so the View holds 0 B. Nothing is copied.",
   "view_new_view": "The new View",
-  "view_no_applications": "No application is located yet: add one in Settings › Applications.",
+  "view_no_applications": "None located · Settings › Applications",
   "view_note_add_view": "Add View/ in {name}",
   "view_note_saspro_two_passes": "The Project mixes dark versions with the same settings: process it in two passes in SASpro, one per version.",
   "view_note_siril_links": "The sets are symlinks in either input mode.",
@@ -6895,8 +6905,6 @@
   "view_note_wbpp_reference": "Set the registration reference to \"auto by {keyword}\"",
   "view_notes_for": "Notes for {name}",
   "view_offline": "The Project folder's volume isn't connected",
-  "view_offline_footprint": "The footprint and free space show once it is back.",
-  "view_offline_hint": "Nothing in View or View (previous)/ changes until each original is back online.",
   "view_offline_original": "Offline original",
   "view_open_entries_changed": [
     {
@@ -6921,32 +6929,23 @@
   "view_phase_building": "Building View (building)/ from the originals",
   "view_phase_swapping": "Swapping the new View in",
   "view_phase_verifying": "Verifying every entry and its original",
-  "view_pin_drift_hint": "The pin stays and nothing else is placed by itself. Reassign it on the session, or restore the file.",
   "view_previous_empty": "Nothing left in View (previous)",
   "view_project_folder": "Project folder",
-  "view_provisional_copy": "Provisional wording.",
   "view_refused_developer_mode": "Can't apply · symlinks need Windows Developer Mode",
   "view_reveal": "Reveal View",
   "view_reveal_previous": "Reveal View (previous)",
   "view_review_previous_first": "Review View (previous) first",
-  "view_review_previous_hint": "Keep each file, move it into View or move it to the Trash. Apply waits until each is reviewed; a kept file isn't asked about again.",
   "view_sheet_refresh": "Show the latest",
   "view_sheet_stale": "The Project changed since this opened",
-  "view_siril_needs_links": "Provisional: Siril's sets in Processing/Siril/ are symlinks in either mode, so Copies doesn't help.",
+  "view_siril_needs_links": "Siril sets always use symlinks",
   "view_siril_set_counts": "{lights} lights · {flats} flats · {darks} darks · {biases} biases",
   "view_tree_of": "New View of {name}",
-  "view_use_copies_provisional": "Provisional: Use copies for this Project switches the mode as a pending change.",
-  "view_waiting_hint": "Apply continues by itself once the file is released. Cancel keeps the current View.",
   "view_your_tool": "your tool",
-  "wrapup_cleanup_hint": "Copies are ticked and go to the OS Trash; links stay unless you tick them. What View (previous)/ still holds is ticked too (provisional). Output is never offered.",
   "wrapup_close_for_good": "Close project is for good",
-  "wrapup_close_for_good_hint": "A Closed Project can't be reopened, edited or applied again. Its View stays and still opens; Duplicate continues the work.",
-  "wrapup_trash_hint": "Unusable frames, files in Processing and duplicate copies, each with its exact files. Output is never offered.",
   "view_edit_settings": "Edit View settings",
   "calibrate_layout_title": "Folder names",
   "calibrate_mixed_parts": "Mixed settings in folder names",
   "apply_refused_no_symlinks": "{name} can't hold symlinks: choose another processing location",
-  "view_choose_location_provisional": "Provisional: choose another processing location in Edit View settings. No junction or copied layout is tried instead.",
   "project_pending_with_source": "{change} ({source})",
   "project_pending_added": "Added",
   "project_pending_moved": "Moved from {group}",
@@ -6971,15 +6970,13 @@
   "project_group_no_folder": "No group folder",
   "project_col_folder": "Folder",
   "project_group_unmark_title": "Stop using {name} as a mosaic panel?",
-  "project_group_unmark_last": "The Project is no longer a mosaic: its panel goals become goals for the whole subject.",
+  "project_group_unmark_last": "No longer a mosaic · panel goals become subject goals",
   "project_group_unmark_goals": "Its panel goals are removed.",
   "project_group_mark_panel_title": "Mark {name} as a mosaic panel",
-  "project_group_rename_hint": "Its folder is renamed on the next Apply.",
-  "project_group_panel_goals": "The panel gets its own goals, and its folder uses the PANEL keyword.",
-  "project_group_panel_first": "The Project becomes a mosaic: panel folders use the PANEL keyword, each panel gets its own goals, the page shows a panel map and Output/Panels/ holds each panel's result.",
+  "project_group_panel_first": "Makes the Project a mosaic",
   "project_col_framing": "Framing",
   "project_select_sessions_first": "Select sessions first",
-  "project_move_needs_group": "The Project has one group: split or create another first",
+  "project_move_needs_group": "Only one group",
   "project_split_one_group": "Select sessions of one group",
   "project_remove_sessions_title": [
     {
@@ -7008,12 +7005,11 @@
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} session moves into the new group with all its frames. The folder appears on the next Apply.",
-        "countPlural=*": "{count} sessions move into the new group with all their frames. The folder appears on the next Apply."
+        "countPlural=one": "Moves {count} session",
+        "countPlural=*": "Moves {count} sessions"
       }
     }
   ],
-  "project_move_whole": "Sessions move whole, with all their frames. Their folder changes on the next Apply.",
   "project_panel_map": "Panel map",
   "project_col_match": "Match",
   "project_framing_unknown": "Framing unknown",
@@ -7022,8 +7018,8 @@
   "project_joins_new_group": "New group {name}",
   "project_col_joins": "Joins",
   "project_add_other": "Other Target or rig",
-  "project_note_adds_subject": "Also adds the subject {name} to {project}, with the Project's goals.",
   "project_add_sessions_title": "Add sessions to {name}",
+  "project_add_sessions": "Add sessions",
   "project_add_waiting_review": [
     {
       "declarations": [
@@ -7042,7 +7038,7 @@
   "project_add_none": "No Ready sessions to add",
   "project_add_no_match": "No sessions match the filters",
   "project_duplicate_part_count": "{part} ({count})",
-  "project_duplicate_current_pins": "Each session brings its calibration as it is now, not as frozen at Close.",
+  "project_duplicate_current_pins": "Calibration as it is now, not as at Close",
   "project_sessions_need_calibration": [
     {
       "declarations": [

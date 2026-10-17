@@ -52,6 +52,6 @@ describe("Settings › Locations (cmvgf)", () => {
   it("holds no Duplicates review: its issue opens Sessions › Duplicates (F5, F7)", async () => {
     renderAt("/?duplicates=review")
     expect(await screen.findByRole("table", { name: m.common_locations() })).toBeInTheDocument()
-    expect(screen.queryByRole("dialog", { name: m.storage_duplicates() })).toBeNull()
+    expect(screen.queryByRole("dialog", { name: m.duplicates_review_title() })).toBeNull()
   })
 })
