@@ -1,15 +1,15 @@
-// Copyright (C) 2024-2026 Sjors Robroek
-// SPDX-License-Identifier: AGPL-3.0-only
 import { describe, it, expect } from 'vitest';
 import { Linter } from 'eslint';
-// The local ESLint rule forbidding raw SVG presentation-attribute colours.
+import tseslint from 'typescript-eslint';
 import plugin from '../../eslint-rules/no-raw-svg-colour.js';
+const tsParser = tseslint.parser;
 
 function lint(code: string) {
   const linter = new Linter();
   const messages = linter.verify(code, {
     plugins: { svg: plugin },
     languageOptions: {
+      parser: tsParser,
       parserOptions: {
         ecmaFeatures: { jsx: true },
         ecmaVersion: 'latest',
@@ -200,6 +200,36 @@ describe('svg/no-raw-svg-colour', () => {
 
   it('flags a raw RGB function opened before a template substitution', () => {
     const diagnostics = lint('const svg = <svg fill={`rgb(${r}, 0, 0)`} />;');
+
+    expect(diagnostics).toHaveLength(1);
+  });
+
+  it('allows dynamic variable names but checks interpolated var fallbacks', () => {
+    const dynamicName = lint(
+      "const svg = <svg color={`var(--pv-${dark ? 'red' : 'blue'})`} />;",
+    );
+    const fallback = lint(
+      "const svg = <svg fill={`var(--pv-accent, ${dark ? '#fff' : '#000'})`} />;",
+    );
+
+    expect(dynamicName).toHaveLength(0);
+    expect(fallback).toHaveLength(2);
+  });
+
+  it('checks only intrinsic attributes even below an SVG ancestor', () => {
+    const widget = lint('<svg><Widget color="red" /></svg>');
+    const member = lint('<svg><Foo.Bar color="red" /></svg>');
+    const rectangle = lint('<svg><rect fill="#fff" /></svg>');
+
+    expect(widget).toHaveLength(0);
+    expect(member).toHaveLength(0);
+    expect(rectangle).toHaveLength(1);
+  });
+
+  it('unwraps TypeScript non-null assertions around paint expressions', () => {
+    const diagnostics = lint(
+      "const svg = <svg fill={(enabled ? '#fff' : token)!} />;",
+    );
 
     expect(diagnostics).toHaveLength(1);
   });

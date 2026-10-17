@@ -53,24 +53,43 @@ const SVG_ELEMENTS = new Set(
   ),
 );
 
-function isInsideSvg(node) {
-  let ancestor = node.parent?.parent;
-  const ownElement = ancestor;
+function isSvgPresentationElement(node) {
+  const element = node.parent?.parent;
+  if (
+    element?.type !== 'JSXElement' ||
+    element.openingElement.name.type !== 'JSXIdentifier'
+  ) {
+    return false;
+  }
+
+  const name = element.openingElement.name.name;
+  if (!/^[a-z]/.test(name)) return false;
+  const normalizedName = name.toLowerCase();
+  if (normalizedName === 'svg' || SVG_ELEMENTS.has(normalizedName)) return true;
+
+  let ancestor = element.parent;
   while (ancestor) {
-    if (
-      ancestor.type === 'JSXElement' &&
-      ancestor.openingElement.name.type === 'JSXIdentifier'
-    ) {
-      const name = ancestor.openingElement.name.name;
-      if (name === 'foreignObject') return ancestor === ownElement;
-      if (name === 'svg' || (/^[a-z]/.test(name) && SVG_ELEMENTS.has(name.toLowerCase()))) {
+    if (ancestor.type === 'JSXExpressionContainer') {
+      ancestor = ancestor.parent;
+      continue;
+    }
+    if (ancestor.type === 'JSXElement') {
+      const ancestorName = ancestor.openingElement.name;
+      if (ancestorName.type !== 'JSXIdentifier' || !/^[a-z]/.test(ancestorName.name)) {
+        return false;
+      }
+      const normalizedAncestorName = ancestorName.name.toLowerCase();
+      if (normalizedAncestorName === 'foreignobject') return false;
+      if (normalizedAncestorName === 'svg' || SVG_ELEMENTS.has(normalizedAncestorName)) {
         return true;
       }
+      return false;
     }
     ancestor = ancestor.parent;
   }
   return false;
 }
+
 function reportRawColorsInExpression(expression, report) {
   if (
     (expression.type === 'Literal' || expression.type === 'StringLiteral') &&
@@ -106,17 +125,18 @@ function reportRawColorsInExpression(expression, report) {
         if (index < expression.expressions.length) accumulatedText += ' '; // Keep substitutions from closing url().
       }
       for (let index = 0; index < expression.expressions.length; index += 1) {
-        const priorText = expression.quasis.slice(0, index + 1).map((part) => part.value.cooked ?? part.value.raw).join(' ');
-        if (!/url\([^)]*$/i.test(priorText)) {
+        const priorText = expression.quasis
+          .slice(0, index + 1)
+          .map((part) => part.value.cooked ?? part.value.raw)
+          .join(' ');
+        const insideUrl = /url\([^)]*$/i.test(priorText);
+        const insideVariableName = /var\(\s*--[\w-]*$/i.test(priorText);
+        if (!insideUrl && !insideVariableName) {
           reportRawColorsInExpression(expression.expressions[index], report);
         }
       }
       return;
-    case 'ChainExpression':
-    case 'ParenthesizedExpression':
-    case 'TSAsExpression':
-    case 'TSSatisfiesExpression':
-    case 'TypeCastExpression':
+    case 'TSNonNullExpression':
       reportRawColorsInExpression(expression.expression, report);
       return;
   }
@@ -139,10 +159,13 @@ const rule = {
     return {
       JSXAttribute(node) {
         const name = node.name.name;
+        const elementName = node.parent?.name;
         if (
           typeof name !== 'string' ||
           !PRESENTATION_ATTRIBUTES.has(name) ||
-          !isInsideSvg(node)
+          elementName?.type !== 'JSXIdentifier' ||
+          !/^[a-z]/.test(elementName.name) ||
+          !isSvgPresentationElement(node)
         ) {
           return;
         }
