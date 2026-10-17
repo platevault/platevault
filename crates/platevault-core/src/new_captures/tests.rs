@@ -24,9 +24,9 @@ use super::{
 use crate::inventory::{self, Entry, Listing, RootRefusal, RootStamp};
 use crate::library::{fixtures, Library};
 use crate::{
-    EntryEvidence, EntryKind, LibraryError, Location, LocationRole, NativePath,
-    ObservationFingerprint, PathSensitivity, ScanOperation, ScanState, StorageItemDraft,
-    TransferDestination,
+    ArchiveMoveOutcome, EntryEvidence, EntryKind, ItemReason, LibraryError, Location, LocationRole,
+    NativePath, ObservationFingerprint, PathSensitivity, ReasonCode, ScanOperation, ScanState,
+    StorageItemDraft, TransferDestination,
 };
 
 /// Ticks short enough for tests; the OS watcher, walks and shutdown grace are
@@ -623,8 +623,13 @@ async fn a_record_moved_away_is_counted_where_it_left_and_not_where_it_went() {
 /// Journal Sessions > Archive of the frame at `name` in `location` to the
 /// same path in `archive`, and move its record to the copy there, as the
 /// archive does once the copy verified. The move stays unsettled: its
-/// original waits at its path to be retired.
-async fn archive_in_flight(fx: &Fixture, location: &Location, archive: &Location, name: &str) {
+/// original waits at its path to be retired. Returns the storage operation.
+async fn archive_in_flight(
+    fx: &Fixture,
+    location: &Location,
+    archive: &Location,
+    name: &str,
+) -> Uuid {
     let catalog = fx.library.catalog();
     let relative = NativePath::from_path(Path::new(name));
     let assets = catalog.location_assets(location.id).await.unwrap();
@@ -659,6 +664,7 @@ async fn archive_in_flight(fx: &Fixture, location: &Location, archive: &Location
     let storage = catalog.begin_sessions_archive(&[draft]).await.unwrap();
     let copy = ObservationFingerprint { content_sha256: Some(sha256), ..asset.fingerprint };
     catalog.record_archive_repoint(storage, 0, &copy).await.unwrap();
+    storage
 }
 
 /// An archive moves a frame's record to the verified copy before it retires
@@ -699,6 +705,60 @@ async fn an_original_its_archive_has_not_retired_yet_stays_held() {
         (Some(1), Some(1)),
         "(recount, walk): the original waiting at its path is held, the new frame counts"
     );
+}
+
+/// Once an archive move settles, the source no longer records the path its
+/// record left. An original the archive kept beside its copy (source
+/// retained, as on a volume with no OS Trash) is then a file the library
+/// doesn't hold there and counts once the settle is announced, with no walk;
+/// an original the archive retired leaves nothing new to count.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_settled_archive_counts_the_original_it_kept_and_not_one_it_retired() {
+    for retired in [false, true] {
+        let fx = fixture().await;
+        let root = fx.base.join("Captures");
+        let location = captures(&fx.library, &root).await;
+        let archive_root = fx.base.join("Archive");
+        let archive = captures(&fx.library, &archive_root).await;
+        let name = TRASHED[0];
+        frame(&root.join(name));
+        assert_eq!(scan_to_end(&fx.library, location.id).await.state, ScanState::Completed);
+        let watch = watch(&fx.library);
+        count_is(&watch, location.id, 0).await;
+
+        fs::copy(root.join(name), archive_root.join(name)).unwrap();
+        let storage = archive_in_flight(&fx, &location, &archive, name).await;
+        // A new frame, counted once the events before it were applied.
+        other_frame(&root.join(MISSING[0]));
+        count_is(&watch, location.id, 1).await;
+        let recounts = || watch.observed().recounts.load(Ordering::SeqCst);
+        let before = recounts();
+        fx.library.recorded_paths_changed(location.id);
+        eventually("the source was recounted", || recounts() > before).await;
+        after(&watch, drains, 1).await;
+        assert_eq!(new_files(&watch.counts(), location.id), Some(1), "held while in flight");
+
+        let (outcome, reason) = if retired {
+            move_file(&root.join(name), &bin(&fx).join(name));
+            (ArchiveMoveOutcome::Archived, None)
+        } else {
+            let kept = ItemReason::new(ReasonCode::TrashUnsupported, "the volume has no Trash");
+            (ArchiveMoveOutcome::SourceRetained, Some(kept))
+        };
+        let catalog = fx.library.catalog();
+        catalog.settle_archive_move(storage, 0, outcome, reason.as_ref()).await.unwrap();
+        let before = recounts();
+        fx.library.recorded_paths_changed(location.id);
+        if retired {
+            eventually("the source was recounted", || recounts() > before).await;
+            after(&watch, drains, 1).await;
+            assert_eq!(new_files(&watch.counts(), location.id), Some(1), "the original is gone");
+        } else {
+            count_is(&watch, location.id, 2).await;
+        }
+        assert_eq!(walks(&watch), 2, "the start-up walks only: no rescan");
+        watch.shutdown().await;
+    }
 }
 
 /// A frame at a Missing record's path that kept the record's modification

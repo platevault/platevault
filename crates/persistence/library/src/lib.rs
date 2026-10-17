@@ -278,6 +278,15 @@ pub struct SizeAndTime {
     pub modified_ns: i128,
 }
 
+/// [`Catalog::location_recorded_paths`]: a location's assets, then the paths
+/// the records of its unsettled archive moves left (`archive_moves_in_flight`).
+const RECORDED_PATHS: &str =
+    "SELECT path_key, availability IN ('missing', 'trashed') AS vacated, size_bytes, \
+     modified_ns FROM assets WHERE location_id = ?1 \
+     UNION ALL SELECT from_path, 1, json_extract(from_fingerprint, '$.sizeBytes'), \
+     json_extract(from_fingerprint, '$.modifiedNs') FROM archive_moves \
+     WHERE from_location_id = ?1 AND repointed_at IS NOT NULL AND outcome IS NULL";
+
 /// A Sessions filter (LIB-FR-17, LIB-FR-18).
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -1181,25 +1190,17 @@ impl Catalog {
     /// without reading their records. A Missing or Trashed record's path
     /// carries the size and modification time its file had when last
     /// observed ([`RecordedPath::vacated`]); every other record's file,
-    /// Retired ones included, the catalog holds at its path. So does the
-    /// path an archive move left once its record moved to the verified copy
-    /// and until the move settles, with the size and time the move started
-    /// from: until then the original stays there, waiting to be retired.
+    /// Retired ones included, the catalog holds at its path. The path an
+    /// archive move's record left carries them too, from the observation the
+    /// move started from, until the move settles: the original stays there
+    /// meanwhile, waiting to be retired.
     ///
     /// # Errors
     /// `PersistenceFailure` when the catalog cannot be read.
     pub async fn location_recorded_paths(&self, location_id: Uuid) -> Result<Vec<RecordedPath>> {
         let mut conn = self.reader().await?;
-        let rows = sqlx::query(
-            "SELECT path_key, availability IN ('missing', 'trashed') AS vacated, size_bytes, \
-             modified_ns FROM assets WHERE location_id = ?1 \
-             UNION ALL SELECT from_path, 1, json_extract(from_fingerprint, '$.sizeBytes'), \
-             json_extract(from_fingerprint, '$.modifiedNs') FROM archive_moves \
-             WHERE from_location_id = ?1 AND repointed_at IS NOT NULL AND outcome IS NULL",
-        )
-        .bind(location_id.to_string())
-        .fetch_all(&mut *conn)
-        .await?;
+        let rows =
+            sqlx::query(RECORDED_PATHS).bind(location_id.to_string()).fetch_all(&mut *conn).await?;
         rows.iter()
             .map(|row| {
                 let path = path_from_key(&row.try_get::<Vec<u8>, _>("path_key")?)?;
@@ -7774,6 +7775,29 @@ mod tests {
                 "{sql}\n{plan:#?}"
             );
         }
+    }
+
+    /// New-capture discovery's read of a location's recorded paths seeks both
+    /// tables: its assets by location, and only the unsettled archive moves
+    /// out of it, through their partial index. Neither table is scanned, so
+    /// the kept rows of settled archives cost nothing.
+    #[tokio::test]
+    async fn recorded_paths_seek_assets_and_in_flight_archive_moves() {
+        let dir = tempfile::tempdir().unwrap();
+        let catalog = Catalog::open(&dir.path().join("catalog.sqlite")).await.unwrap();
+        let mut conn = catalog.reader().await.unwrap();
+        let plan: Vec<String> =
+            sqlx::query(sqlx::AssertSqlSafe(format!("EXPLAIN QUERY PLAN {RECORDED_PATHS}")))
+                .bind("location")
+                .fetch_all(&mut *conn)
+                .await
+                .unwrap()
+                .iter()
+                .map(|row| row.try_get::<String, _>("detail").unwrap())
+                .collect();
+        let seek = "INDEX archive_moves_in_flight (from_location_id=?)";
+        assert!(plan.iter().any(|detail| detail.contains(seek)), "{plan:#?}");
+        assert!(!plan.iter().any(|detail| detail.starts_with("SCAN")), "{plan:#?}");
     }
 
     /// An older catalog is refused with the documented error before any DDL of

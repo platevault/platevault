@@ -626,12 +626,13 @@ struct Watched {
     /// Each path is kept so that it is looked up again once the catalog no
     /// longer holds it ([`Watched::know`]).
     known: HashMap<PathIdentity, NativePath>,
-    /// Identities of the paths of the location's Missing and Trashed
-    /// records, and of the paths an archive's record left while its original
-    /// waits there to be retired, each with the size and modification time
-    /// its file had when last observed: a frame there is that file, held,
-    /// only while it still has them.
-    vacated: HashMap<PathIdentity, SizeAndTime>,
+    /// The paths of the location's Missing and Trashed records, and the
+    /// paths an archive's record left while its original waits there to be
+    /// retired, by identity, each with the size and modification time its
+    /// file had when last observed: a frame there is that file, held, only
+    /// while it still has them. Each path is kept so that it is looked up
+    /// again once the catalog no longer records it ([`Watched::know`]).
+    vacated: HashMap<PathIdentity, (NativePath, SizeAndTime)>,
     /// The new files: identity to relative path.
     new: HashMap<PathIdentity, PathBuf>,
     walk: Option<Walk>,
@@ -694,21 +695,23 @@ impl Watched {
     }
 
     /// Take the paths the catalog records, and return those whose file it
-    /// held when last read and no longer holds: recorded Missing or Trashed
-    /// since, or no longer recorded there, as when an archive moved the
-    /// record. A frame counted at the path of a Missing or Trashed record
-    /// keeps the judgement made when it was found: such a record keeps the
-    /// size and time it last observed while its file is gone, and a change of
-    /// the frame raises an event that judges it again.
+    /// held when last read and no longer holds, and that may now hold a frame
+    /// it took for its own: a path it held recorded Missing or Trashed since
+    /// or no longer recorded there, as when an archive moved the record, and
+    /// a vacated path it no longer records at all, as when an archive kept
+    /// the original its record left. A frame counted at the path of a Missing
+    /// or Trashed record keeps the judgement made when it was found: such a
+    /// record keeps the size and time it last observed while its file is
+    /// gone, and a change of the frame raises an event that judges it again.
     fn know(&mut self, recorded: Vec<RecordedPath>) -> HashSet<PathBuf> {
         let volume = &self.location.identity.volume;
         let mut known = HashMap::with_capacity(recorded.len());
-        self.vacated.clear();
+        let mut vacated = HashMap::new();
         for record in recorded {
             let key = record.path.identity_on(volume);
             match record.vacated {
                 Some(file) => {
-                    self.vacated.insert(key, file);
+                    vacated.insert(key, (record.path, file));
                 }
                 None => {
                     known.insert(key, record.path);
@@ -716,14 +719,17 @@ impl Watched {
             }
         }
         let held = std::mem::replace(&mut self.known, known);
+        let was_vacated = std::mem::replace(&mut self.vacated, vacated);
         let known = &self.known;
         self.new.retain(|key, _| !known.contains_key(key));
         self.cataloged = true;
         self.unreadable = false;
-        held.into_iter()
-            .filter(|(key, _)| !self.known.contains_key(key))
-            .filter_map(|(_, path)| path.to_path_buf().ok())
-            .collect()
+        let left_known = held.into_iter().filter(|(key, _)| !self.known.contains_key(key));
+        let left_vacated = was_vacated
+            .into_iter()
+            .filter(|(key, _)| !self.known.contains_key(key) && !self.vacated.contains_key(key))
+            .map(|(key, (path, _))| (key, path));
+        left_known.chain(left_vacated).filter_map(|(_, path)| path.to_path_buf().ok()).collect()
     }
 
     /// Whether the frame at the path whose identity is `key`, whose size and
@@ -731,11 +737,11 @@ impl Watched {
     /// at that path, or the path's record left it and `file` is that file.
     fn holds(&self, key: &PathIdentity, file: Option<SizeAndTime>) -> bool {
         self.known.contains_key(key)
-            || file.is_some_and(|file| self.vacated.get(key) == Some(&file))
+            || file.is_some_and(|file| self.vacated.get(key).map(|(_, held)| held) == Some(&file))
     }
 
-    /// Whether the catalog, as last read, records a Missing or Trashed
-    /// record at the path `relative`.
+    /// Whether the catalog, as last read, reports the path `relative`
+    /// vacated: a Missing or Trashed record's, or one an archive's record left.
     fn vacated_at(&self, relative: &Path) -> bool {
         self.vacated.contains_key(&self.identity(relative))
     }
@@ -1729,10 +1735,12 @@ impl Run {
     /// Read the catalog's paths in `id` again; while the catalog cannot be
     /// read, every debounce tick tries again. Each path whose file the
     /// catalog held when last read and that it no longer holds (its record
-    /// recorded Missing by a scan, Trashed, or moved away by an archive) is
-    /// looked up again, unless its volume is being removed: a frame there was
-    /// judged held, as the frame written in place of a trashed or archived
-    /// one before its record changed was.
+    /// recorded Missing by a scan, Trashed, or moved away by an archive), and
+    /// each vacated path it no longer records (an archive kept the original
+    /// its record left), is looked up again, unless its volume is being
+    /// removed: a frame there was judged held, as the frame written in place
+    /// of a trashed or archived one before its record changed, or the kept
+    /// original, was.
     async fn recount(&mut self, id: Uuid) {
         #[cfg(test)]
         self.observed.recounts.fetch_add(1, Ordering::SeqCst);

@@ -104,6 +104,11 @@ CREATE TABLE IF NOT EXISTS archive_moves (
 ) STRICT;
 CREATE INDEX IF NOT EXISTS archive_moves_project_operation
     ON archive_moves (project_operation_id) WHERE project_operation_id IS NOT NULL;
+-- The moves whose record left its source and whose original waits there to
+-- be retired: new-capture discovery reads them per source location
+-- (`Catalog::location_recorded_paths`). Settled rows, which are kept, stay out.
+CREATE INDEX IF NOT EXISTS archive_moves_in_flight
+    ON archive_moves (from_location_id) WHERE repointed_at IS NOT NULL AND outcome IS NULL;
 
 CREATE TRIGGER IF NOT EXISTS archive_moves_settle_once
 BEFORE UPDATE ON archive_moves
