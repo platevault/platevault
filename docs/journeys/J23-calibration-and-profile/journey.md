@@ -131,9 +131,9 @@ The user checks the pinned calibration for the sessions in Project `NGC 7000 HOO
 ### S11 — Apply the corrected values {#S11}
 
 - **Do:** Apply the reviewed View changes.
-- **Expect:** Apply writes isolated patched copies for the 24 Sep and 28 Sep FITS frames and swaps in the new Copies View. The 24 Sep copy has `OBJECT = 'NGC 7000'`. When PlateVault reopens the copy, its FITS reader returns `object = "NGC 7000"`. The 28 Sep Equipment correction uses the FITS keywords in PREP-FR-20. The profile keyword behavior is described in PREP-FR-21.
+- **Expect:** Apply writes isolated patched copies for the 24 Sep and 28 Sep FITS frames and swaps in the new Copies View. The 24 Sep copy has `OBJECT = 'NGC 7000'`; PlateVault's FITS reader returns `object = "NGC 7000"` after reopening it. The J19/P2 fixture specifies the 28 Sep rig keywords: `INSTRUME = 'ZWO ASI2600MM Pro'`, `TELESCOP = 'RedCat 51'` and `FOCALLEN = 250`. J15/S3 defines `RedCat` with telescope RedCat 51, camera alias ZWO ASI2600MM Pro and focal length 250 mm. After reopening the 28 Sep copy, PlateVault's reader returns `telescope = "RedCat 51"`, `instrument = "ZWO ASI2600MM Pro"` and `focalLengthMm = 250`. The original digest remains unchanged. S11 verifies FITS only; PREP-FR-21 records profile evidence and its limits.
 - **Expect (negative):** No original or link target is patched, and no correction is reported as delivered while the application still reads the original value.
-- **Trace:** PREP-FR-03, PREP-FR-06, PREP-FR-09, PREP-FR-20, PREP-AC-06, PREP-AC-39 · D-W100, D-W122 · HARNESS-V5-FEEDBACK-R1.md Round 9 C15
+- **Trace:** PREP-FR-03, PREP-FR-06, PREP-FR-09, PREP-FR-20, PREP-AC-06, PREP-AC-39 · VSEL-FR-14 · LIB-FR-12, LIB-FR-20 · D-W100, D-W122, D-W123 · J19/P2, J15/S3 · HARNESS-V5-FEEDBACK-R1.md Round 9 C15
 
 ## Success criteria
 
@@ -143,11 +143,12 @@ The user checks the pinned calibration for the sessions in Project `NGC 7000 HOO
 - SC4: Dated versions are shown with no Latest label or Update notice, and the 148-day-old dark has `Old · 148 d` while flats have no badge (S7a).
 - SC5: Hiding a master pinned on the Project is refused with the Project named; hiding and restoring an unused master changes no file bytes (S7b, S7c).
 - SC6: Siril and the input mode are chosen in View; an unknown or write-prone profile cannot use Symlinks without a refusal and explicit mode choice (S8, S9).
-- SC7: The 24 Sep Target correction is applied as `OBJECT = 'NGC 7000'` in an isolated FITS copy, PlateVault's FITS reader returns the corrected object value when that copy is reopened, and the original digest stays unchanged (S10, S11).
+- SC7: The 24 Sep Target correction is applied as `OBJECT = 'NGC 7000'` in an isolated FITS copy. PlateVault's FITS reader returns the corrected object when the copy is reopened, and the original digest stays unchanged (S10, S11).
+- SC8: The 28 Sep corrected rig reads back from its patched FITS copy as telescope `RedCat 51`, instrument `ZWO ASI2600MM Pro` and focal length `250 mm`, matching J19/P2 and J15/S3. Its original digest stays unchanged (S10, S11).
 
 ## Known gaps
 
-- G1: Not validated: the rebuilt application has not been validated against this journey. This journey follows the current contracts in specs 064, 066, 068 and 069 and D-W93 to D-W122.
+- G1: The rebuilt application has not been validated against this journey. The journey follows specs 064, 066, 068 and 069 and D-W93 to D-W123.
 - G3: Out of scope for this journey: calibration across mosaic panel groups is covered by J33. The Project diagram and pinned-session rules are specified by CAL-FR-09 and CAL-FR-23.
 - G4: (dissolved 2026-10-12): answered by Round 6 "Calibration Off"; S7a now asserts that with **Auto-assign** off the 3 compatible masters read Suggested, none is assigned, and only an accepted one becomes a handoff input.
 - G5: (dissolved 2026-10-12): answered by Round 6 "Rename runs and Projects"; S7 now asserts that the run starts auto-named `NGC 7000 RedCat` and is renamed `24 Sep flat check` on the run header.
@@ -155,7 +156,7 @@ The user checks the pinned calibration for the sessions in Project `NGC 7000 HOO
 - G7: (dissolved 2026-10-15): PREP-AC-11 (D-W81, D-W83) answers it: for a profile whose input-write behavior is unknown or write-prone, Symlinks is refused with the input-write risk named, and Copies is offered without a silent mode change. S9 asserts that refusal for a generic application.
 - G2: Unresolved implementation qualification: Siril profile capability probes (D04) must exist before S8 can show verified evidence. This journey does not test PixInsight/WBPP or SETI Astro Suite Pro. Blocks readiness.
 - G8: Rests on provisional F4 items pending owner confirmation in PR #1804: D-W106's Hide refusal for a master an open Project uses through its sessions (S7b, SC5), and D-W102's flat ranking (P2, S3). Changes to either decision may change those steps.
-- G9: (dissolved 2026-10-17): PREP-FR-20 documents a provisional FITS keyword mapping, and PREP-AC-39 tests a Target association. S11 checks the patched `OBJECT` value through PlateVault's FITS reader. Owner confirmation remains pending for the proposed mapping and profile support.
+- G10: Open owner question (D-W123): For a corrected XISF, DNG or camera RAW input whose selected profile lacks a configuration route, should Apply block, warn and continue, patch XISF FITSKeywords (which requires cited capability evidence), or convert? The owner has selected no behavior. PREP-FR-03 requires Apply to report a correction delivered only when it delivered it. This gap blocks readiness.
 ## Delta log
 
 - **Δ2** 2026-10-06 · S1, S2, S3, S5, S6, S7, +S7a, S9 · behavior-change
@@ -179,5 +180,5 @@ The user checks the pinned calibration for the sessions in Project `NGC 7000 HOO
   Corrections are recorded at session ingestion, so Apply lists the corrected values with their count ("2 corrected values" from J19/S10) and applies all of them, here as isolated patched copies for the S9 generic application. The per-value choice (accept the source value, exclude the input) is gone. G9 records the conflict with 069 PREP-FR-03.
   Evidence: HARNESS-V5-FEEDBACK-R1.md Round 9 C15 · prototype view-step.tsx Corrected values section (ui-harness-v5) · by: JourneysR9c (intent-gated)
 - **Δ8** 2026-10-17 · S10, S11 · behavior-change
-  Apply maps corrected Target, equipment/rig, Filter and Exposure values to FITS keywords per the available profile evidence. S10 shows corrected Target and rig values. In S11, reopening the 24 Sep copy returns the NGC 7000 object value from its `OBJECT` card. G9 is dissolved. The proposed mapping and profile support await owner confirmation.
-  Evidence: PREP-FR-20, PREP-FR-21, PREP-AC-39. Code references: `crates/platevault-core/src/header_patch.rs:33-47` and `crates/metadata/fits/src/lib.rs:183-223`. Owner confirmation remains pending in astro-plan-ysy9m. · by: Spec069Keywords (intent-gated)
+  Apply maps corrected Target, equipment/rig, Filter and Exposure values to FITS keywords based on the available profile evidence. S10 shows corrected Target and rig values. S11 reads back Target and RedCat telescope, instrument and focal length from the patched copies; they match J19 and J15. G9 dissolves. The mapping and profile support remain provisional pending owner confirmation.
+  Evidence: PREP-FR-20, PREP-FR-21, PREP-AC-39, J19/P2, J15/S3. Code references: `crates/platevault-core/src/header_patch.rs:33-47` and `crates/metadata/fits/src/lib.rs:183-223`. Owner confirmation remains pending in astro-plan-ysy9m. · by: Spec069Keywords (intent-gated)
