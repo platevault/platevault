@@ -40,7 +40,7 @@ impl Catalog {
                 .await?;
         let rows = sqlx::query(
             "SELECT s.target_id, p.id, p.name FROM project_subjects s \
-             JOIN projects p ON p.id = s.project_id WHERE p.state = 'open' \
+             JOIN projects p ON p.id = s.project_id WHERE p.lifecycle = 'open' \
              ORDER BY s.target_id, p.name, p.id",
         )
         .fetch_all(&mut *snapshot)

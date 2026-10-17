@@ -22,7 +22,6 @@ use platevault_model::{
     NativePath, ReferenceKind, ReviewState,
 };
 use support::*;
-use uuid::Uuid;
 
 const ADOPTION_TABLES: [&str; 3] = ["adoption_reviews", "adoption_operations", "adopted_masters"];
 
@@ -128,9 +127,7 @@ async fn review_hashes_the_source_checks_the_destination_and_writes_no_file() {
     assert_eq!(review.classification.kind, InputKind::Flat);
     assert_eq!(review.classification.master.as_ref().unwrap().basis, MasterBasis::HeaderStackCount);
     assert_eq!(review.observed.stack_count, Some(30));
-    let MasterOrigin::Location { location_id, relative_path, .. } = &review.origin else {
-        panic!("an indexed source's origin is its location and path: {:?}", review.origin)
-    };
+    let MasterOrigin::Location { location_id, relative_path, .. } = &review.origin;
     assert_eq!((*location_id, relative_path.display()), (lib.results.id, MASTER.to_owned()));
     assert_eq!(review.destination, into(&lib.calibration, "masters/master_flat_Ha.fit"));
     assert_eq!(sources(lib.fx.temp.path()), before, "review writes no file");
@@ -177,13 +174,6 @@ async fn review_refuses_each_unadoptable_request_and_writes_nothing() {
     )
     .await;
     assert_eq!(kind(&not_master), "invalid_input", "{not_master}");
-    // Results discovery (070) records Result sources; an unknown one is not found.
-    let unknown_result = refuse(
-        AdoptionSource::Result { result_id: Uuid::new_v4() },
-        into(&lib.calibration, "masters/result.fit"),
-    )
-    .await;
-    assert_eq!(kind(&unknown_result), "not_found", "{unknown_result}");
 
     catalog
         .mark_location_unavailable(lib.calibration.id, Availability::Offline, "unplugged")

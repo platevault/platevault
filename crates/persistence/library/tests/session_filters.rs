@@ -5,8 +5,8 @@
 //! counts, Create Project prefill and Add to Project (LIB-FR-17, LIB-AC-18,
 //! PRJ-FR-19, PRJ-AC-20, D-W59). The filters derive from current
 //! associations and the sessions Projects hold; Add to Project adds the
-//! session through the membership writer, and nothing here assigns a run.
-//! Fixture files are real and only read.
+//! session through the membership writer, and nothing else here joins a
+//! session to a group. Fixture files are real and only read.
 #![cfg(unix)]
 
 #[path = "support/membership.rs"]
@@ -21,10 +21,9 @@ use persistence_library::{
     Catalog, SessionFilter, SessionQuery, SourceProbe, SuggestedAssociation,
 };
 use platevault_model::{
-    AdmissionBasis, AssociationKind, AssociationState, Equipment, EvidenceItem, Location,
-    Membership, NewView, Project, ProjectInput, ProjectQuery, Provenance, Quality, ScanFile,
-    ScanObservation, ScanProgress, ScanState, Session, SessionFilterCounts, SubjectInput,
-    TargetRecord,
+    AdmissionBasis, AssociationKind, AssociationState, Equipment, EvidenceItem, Location, Project,
+    ProjectInput, ProjectQuery, Provenance, Quality, ScanFile, ScanObservation, ScanProgress,
+    ScanState, Session, SessionFilterCounts, SubjectInput, TargetRecord,
 };
 use sqlx::sqlite::{SqliteConnectOptions, SqliteConnection};
 use sqlx::Connection;
@@ -58,15 +57,9 @@ const FRAMES: [Frame; 8] = [
     Frame { path: RC_G, filter: "G", camera: "ASI2600MM" },
 ];
 
-/// Every run table, in creation order.
-const RUN_TABLES: [&str; 6] = [
-    "views",
-    "view_refresh_reviews",
-    "view_revisions",
-    "view_session_choices",
-    "view_members",
-    "view_member_copies",
-];
+/// The Project membership tables, in creation order.
+const MEMBERSHIP_TABLES: [&str; 4] =
+    ["project_groups", "project_sessions", "project_captures", "project_capture_copies"];
 
 struct World {
     fx: Fixture,
@@ -148,27 +141,13 @@ impl World {
         self.catalog.create_project(&input).await.unwrap()
     }
 
-    /// A run on the Project's first subject and `rig`, saved as revision 1
-    /// with every candidate selected.
-    async fn saved_run(&self, project: &Project, rig: Uuid) -> Uuid {
-        let input = NewView {
-            project_id: project.id,
-            subject_id: project.subjects[0].id,
-            rig_id: rig,
-            name: "HOO".into(),
-        };
-        let id = self.catalog.create_view(&input).await.unwrap().view.id;
-        self.catalog.save_view(id, 0, 1).await.unwrap();
-        id
-    }
-
     async fn counts(&self) -> SessionFilterCounts {
         self.catalog.session_filter_counts().await.unwrap()
     }
 }
 
 fn subject(target: &TargetRecord) -> SubjectInput {
-    SubjectInput { target_id: target.candidate.id, name: None, mosaic: false, panels: Vec::new() }
+    SubjectInput { target_id: target.candidate.id, name: None }
 }
 
 fn rig(name: &str, camera: &str) -> Equipment {
@@ -458,7 +437,7 @@ async fn create_project_prefills_target_and_rig() {
     assert_eq!(prefill.name, "NGC 7000");
     assert_eq!(prefill.subjects.len(), 1);
     assert_eq!(prefill.subjects[0].target_id, world.ngc7000.candidate.id);
-    assert!(!prefill.subjects[0].mosaic && prefill.subjects[0].panels.is_empty());
+    assert_eq!(prefill.subjects[0].name, None);
     assert_eq!(prefill.rig_ids, vec![world.esprit.id]);
     assert_eq!(prefill.goals, [] as [platevault_model::GoalInput; 0]);
     let saved = catalog.list_projects(&ProjectQuery::default()).await.unwrap();
@@ -475,16 +454,17 @@ async fn create_project_prefills_target_and_rig() {
     world.catalog.close().await.unwrap();
 }
 
-/// LIB-FR-17, LIB-AC-18: listing, counting, previewing and Add to Project write
-/// no run row; a session Add to Project makes a candidate joins no run.
+/// LIB-FR-17, LIB-AC-18: listing, counting, prefill, preview and Add to
+/// Project join no session to a group: Add to Project makes the session a
+/// candidate, and only a membership add holds it.
 #[tokio::test]
-async fn filters_assign_nothing_to_runs() {
+async fn filters_and_add_to_project_join_no_group() {
     let world = world().await;
     let catalog = &world.catalog;
     let project = world.project("NGC 7000", &[&world.ngc7000], &[world.redcat.id]).await;
-    let run = world.saved_run(&project, world.redcat.id).await;
-    let runs = dump(&world.fx.db, &RUN_TABLES).await;
-    let membership = catalog.view_membership(run, Membership::Committed).await.unwrap();
+    let ha = world.id(RC_HA).await;
+    hold(catalog, project.id, ha, world.redcat.id).await;
+    let membership = dump(&world.fx.db, &MEMBERSHIP_TABLES).await;
 
     for filter in [SessionFilter::NeedsTarget, SessionFilter::NotInAnyProject] {
         world.listed(filter).await;
@@ -493,17 +473,13 @@ async fn filters_assign_nothing_to_runs() {
     let esprit_ha = world.id(ES_HA).await;
     catalog.project_prefill(esprit_ha).await.unwrap();
     let preview = catalog.preview_project_addition(esprit_ha, project.id).await.unwrap();
-    catalog.add_session_to_project(&preview.session, project.id, 1).await.unwrap();
+    let revision = catalog.project_desired(project.id).await.unwrap().revision;
+    catalog.add_session_to_project(&preview.session, project.id, revision).await.unwrap();
     let candidates = catalog.project_candidates(project.id).await.unwrap();
     assert!(candidates.iter().any(|c| c.session_id == esprit_ha), "a candidate now");
 
-    assert_eq!(dump(&world.fx.db, &RUN_TABLES).await, runs, "no run row changed");
-    let after = catalog.view_membership(run, Membership::Committed).await.unwrap();
-    let ids = |m: &persistence_library::MembershipBasis| {
-        m.sessions.iter().map(|s| s.choice.session_id).collect::<Vec<_>>()
-    };
-    assert_eq!(ids(&after), ids(&membership), "the run's membership is unchanged");
-    let members = catalog.project_members(project.id).await.unwrap();
-    assert!(members.iter().all(|m| m.session_id != esprit_ha), "and it is no member");
+    assert_eq!(dump(&world.fx.db, &MEMBERSHIP_TABLES).await, membership, "no membership row");
+    let held = catalog.project_desired(project.id).await.unwrap().sessions;
+    assert_eq!(held.iter().map(|m| m.session_id).collect::<Vec<_>>(), vec![ha], "no member");
     world.catalog.close().await.unwrap();
 }

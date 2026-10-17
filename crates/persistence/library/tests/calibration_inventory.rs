@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! Calibration inventory reads (spec 068): raw sets and detected candidates
-//! from indexed locations, one copy per logical capture, and matching without a
-//! View for the current light Sessions. Reads change no row and no file.
+//! from indexed locations, one copy per logical capture. Reads change no row
+//! and no file.
 #![cfg(unix)]
 
 #[path = "support/calibration.rs"]
@@ -17,7 +17,7 @@ use calibration_support::*;
 use persistence_library::{CalibrationInputSummary, Catalog, InputQuery, LocationReferences};
 use platevault_model::{
     Availability, CandidateRef, EvidenceField, InputForm, InputKind, Location, LocationRole,
-    MasterBasis, MasterOrigin, Quality, ReferenceKind, RequirementState, Session,
+    MasterBasis, MasterOrigin, Quality, ReferenceKind,
 };
 use support::*;
 use uuid::Uuid;
@@ -182,10 +182,7 @@ async fn raw_sets_and_candidates_list_grouped_with_their_missing_evidence() {
     );
     assert_eq!(siril.master.as_ref().unwrap().basis, MasterBasis::HeaderStackCount);
     assert!(!siril.reusable, "detection never makes a master reusable");
-    let MasterOrigin::Location { location_id, relative_path, .. } = siril.origin.clone().unwrap()
-    else {
-        panic!("an indexed candidate's origin is its location and path")
-    };
+    let MasterOrigin::Location { location_id, relative_path, .. } = siril.origin.clone().unwrap();
     assert_eq!(location_id, lib.calibration.id);
     assert_eq!(relative_path.display(), "flats/Ha/master_flat_Ha.fit");
     let pixinsight = row(&rows, &lib, "masters/MasterDark_300s.xisf");
@@ -315,65 +312,6 @@ async fn retired_copies_are_not_listed() {
         .unwrap();
     assert!(inputs(&lib, &bias).await.is_empty(), "a Retired location's copies are not listed");
     assert_eq!(inputs(&lib, &InputQuery::default()).await.len(), 6);
-}
-
-async fn session_of(catalog: &Catalog, asset: Uuid) -> Session {
-    let detail = catalog.asset(asset).await.unwrap();
-    let summaries =
-        catalog.list_sessions(&persistence_library::SessionQuery::default()).await.unwrap();
-    summaries.into_iter().find(|s| s.session.asset_ids.contains(&detail.id)).unwrap().session
-}
-
-/// Matching without a View (the evidence seam of CAL-FR-12) reads every listed
-/// input for the current members of the given light Sessions; a stale Session
-/// or a repeated kind is refused.
-#[tokio::test]
-async fn matching_without_a_view_reads_the_current_sessions_and_refuses_a_stale_one() {
-    let lib = indexed().await;
-    let catalog = &lib.catalog;
-    let light_a = asset_named(&lib, "lights/Ha_001.fits");
-    let light_b = asset_named(&lib, "lights/Ha_002.fits");
-    let session = session_of(catalog, light_a).await;
-    let rows_before = dump_tables(&lib.fx.db, &LIBRARY_TABLES).await;
-
-    let rules = TestRules::default();
-    let kinds = [InputKind::Flat, InputKind::Dark];
-    let matched =
-        catalog.calibration_match(&[expected_session(&session)], &kinds, &rules).await.unwrap();
-    let basis = rules.last_basis();
-    assert_eq!((basis.view_id, basis.view_revision), (Uuid::nil(), 0), "no View is read");
-    assert_eq!(basis.plan.required_kinds, [InputKind::Dark, InputKind::Flat]);
-    let [light] = basis.lights.as_slice() else { panic!("{:#?}", basis.lights) };
-    assert_eq!(light.evidence.session_id, session.id);
-    assert_eq!(light.included_assets, [light_a, light_b].into(), "every current member");
-    assert!(light.light_type_known && !light.product);
-    assert_eq!(
-        light.evidence.capture.get(EvidenceField::Night).unwrap().value,
-        "2026-09-18@date-loc-noon"
-    );
-    assert_eq!(basis.decisions, [] as [platevault_model::CalibrationDecision; 0]);
-    assert_eq!(basis.candidates.len(), 6, "every listed input, candidates included");
-    let states: Vec<_> = matched.iter().map(|r| (r.kind, r.state)).collect();
-    assert_eq!(
-        states,
-        [
-            (InputKind::Dark, RequirementState::Suggested),
-            (InputKind::Flat, RequirementState::Suggested)
-        ]
-    );
-    assert!(matched.iter().all(|r| r.preselected.unwrap().form() == InputForm::RawSet));
-
-    let mut stale = expected_session(&session);
-    stale.grouping_revision += 1;
-    let error = catalog.calibration_match(&[stale], &[InputKind::Dark], &rules).await.unwrap_err();
-    assert_eq!(kind(&error), "conflict");
-    let twice = [InputKind::Dark, InputKind::Dark];
-    let error =
-        catalog.calibration_match(&[expected_session(&session)], &twice, &rules).await.unwrap_err();
-    assert_eq!(kind(&error), "invalid_input");
-
-    // Reads start no rehash: verification state and every library row stay as they were.
-    unchanged(&lib, &rows_before).await;
 }
 
 /// A Trashed frame is never an input (LIB-FR-18): it leaves its raw set, and a

@@ -1,25 +1,28 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Projects in the clean catalog (spec 065, amended D-W1..D-W74): subjects, rigs,
-//! goals, goal templates, derived candidates and the Project-only reject. Every
-//! Project write is checked against the Project revision and the records it
-//! names, and changes no library row or source file; a Project-only reject
-//! checks only its own asset's decision. Fixture files are real and only read.
+//! Projects in the clean catalog (spec 065, amended D-W1..D-W74): subjects,
+//! rigs, goals on subjects and mosaic panel groups, goal templates and derived
+//! candidates. Every Project write is checked against the Project revision and
+//! the records it names, and changes no library row or source file. Fixture
+//! files are real and only read.
 #![cfg(unix)]
 
+#[path = "support/membership.rs"]
+mod membership_support;
 mod support;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
-use persistence_library::{Catalog, SessionQuery, SourceProbe, SuggestedAssociation};
+use membership_support::{hold, remove};
+use persistence_library::{Catalog, NewGroup, SessionQuery, SourceProbe, SuggestedAssociation};
 use platevault_model::{
     Asset, AssociationKind, AssociationState, Availability, Equipment, EvidenceItem, GoalInput,
-    GoalSpec, GoalTemplate, GoalTemplateInput, LibraryError, Location, PanelInput, Project,
-    ProjectCandidate, ProjectInput, ProjectQuery, ProjectState, ProjectSummary, Provenance,
-    Quality, QualityCriterion, RejectionMark, Revision, ScanFile, ScanObservation, ScanProgress,
-    ScanState, Session, SubjectInput, TargetRecord,
+    GoalSpec, GoalTemplate, GoalTemplateInput, GroupName, GroupOrigin, LibraryError, Location,
+    OpticsSignature, Project, ProjectCandidate, ProjectInput, ProjectLifecycle, ProjectQuery,
+    ProjectSummary, Provenance, Quality, QualityCriterion, ReferenceKind, Revision, ScanFile,
+    ScanObservation, ScanProgress, ScanState, Session, SubjectInput, TargetRecord,
 };
 use sqlx::sqlite::{SqliteConnectOptions, SqliteConnection};
 use sqlx::Connection;
@@ -68,15 +71,8 @@ const LIBRARY_TABLES: [&str; 9] = [
 ];
 
 /// Project tables, children first.
-const PROJECT_TABLES: [&str; 7] = [
-    "project_rejections",
-    "project_goals",
-    "subject_panels",
-    "project_subjects",
-    "project_rigs",
-    "goal_templates",
-    "projects",
-];
+const PROJECT_TABLES: [&str; 5] =
+    ["project_goals", "project_subjects", "project_rigs", "goal_templates", "projects"];
 
 struct World {
     fx: Fixture,
@@ -249,7 +245,7 @@ async fn world() -> World {
 }
 
 fn subject(target: &TargetRecord) -> SubjectInput {
-    SubjectInput { target_id: target.candidate.id, name: None, mosaic: false, panels: Vec::new() }
+    SubjectInput { target_id: target.candidate.id, name: None }
 }
 
 fn hoo(world: &World) -> ProjectInput {
@@ -264,28 +260,23 @@ fn hoo(world: &World) -> ProjectInput {
 
 fn integration(
     target: &TargetRecord,
-    panel: Option<u32>,
+    group: Option<Uuid>,
     channel: &str,
     seconds: u64,
 ) -> GoalInput {
     GoalInput {
         target_id: target.candidate.id,
-        panel,
-        group_id: None,
+        group_id: group,
         goal: GoalSpec::Integration { channel: Some(channel.into()), goal_seconds: seconds },
     }
 }
 
-fn panel(number: u32, ra_deg: f64, dec_deg: f64, rotation_deg: Option<f64>) -> PanelInput {
-    PanelInput { number, ra_deg, dec_deg, rotation_deg }
-}
-
-fn mark(asset: &Asset, expected_revision: Revision, rejected: bool) -> RejectionMark {
-    RejectionMark {
-        asset_id: asset.id,
-        fingerprint: asset.fingerprint.clone(),
-        expected_revision,
-        rejected,
+/// An `InvalidInput` refusal whose message names each of `needles`.
+fn refused(error: &LibraryError, needles: &[&str]) {
+    assert_eq!(kind(error), "invalid_input", "{error}");
+    let message = error.to_string();
+    for needle in needles {
+        assert!(message.contains(needle), "{needle:?} in {message}");
     }
 }
 
@@ -392,9 +383,6 @@ async fn candidates_require_confirmed_target_and_project_rig() {
         reasons(&candidates),
         vec![(redcat_ha.id, ngc, world.redcat.id), (redcat_l, m81, world.redcat.id)]
     );
-    let detail = catalog.project_detail(project.id).await.unwrap();
-    assert_eq!(detail.project, project);
-    assert_eq!(reasons(&detail.candidates), reasons(&candidates), "detail reads the same set");
     world.catalog.close().await.unwrap();
 }
 
@@ -455,7 +443,8 @@ async fn adding_rig_adds_its_sessions_as_candidates() {
     let candidates = catalog.project_candidates(project.id).await.unwrap();
     assert_eq!(reasons(&candidates), vec![(esprit_ha, ngc, world.esprit.id)], "removed rig leaves");
 
-    // Removing a subject no run uses takes its sessions out of the candidates too.
+    // Removing a subject no held session joined on takes its sessions out of
+    // the candidates too.
     let subjects = vec![subject(&world.m81)];
     let project = catalog.set_project_subjects(project.id, 3, &subjects).await.unwrap();
     assert!(catalog.project_candidates(project.id).await.unwrap().is_empty(), "M 81 is on RedCat");
@@ -485,7 +474,7 @@ async fn adding_rig_adds_its_sessions_as_candidates() {
 }
 
 /// PRJ-FR-09, PRJ-FR-16: Trashed frames are never candidates and a session whose
-/// frames are all Trashed is none; a Trashed frame takes no Project-only reject.
+/// frames are all Trashed is none.
 #[tokio::test]
 async fn trashed_frames_never_in_candidates() {
     let world = world().await;
@@ -496,17 +485,8 @@ async fn trashed_frames_never_in_candidates() {
     let candidates = world.catalog.project_candidates(project.id).await.unwrap();
     assert_eq!(candidates.len(), 1);
     assert_eq!(candidates[0].asset_ids, vec![kept.id], "the Trashed frame is left out");
-    let detail = world.catalog.project_detail(project.id).await.unwrap();
-    assert_eq!(detail.candidates[0].asset_ids, vec![kept.id]);
-
     let trashed = world.asset(RC_HA_2).await;
     assert_eq!(trashed.availability, Availability::Trashed);
-    let error = world.catalog.set_project_rejection(project.id, &[mark(&trashed, 0, true)]).await;
-    assert_eq!(kind(&error.unwrap_err()), "invalid_input", "a Trashed frame takes no reject");
-    assert_eq!(
-        world.catalog.project_detail(project.id).await.unwrap().rejections,
-        [] as [platevault_model::ProjectRejection; 0]
-    );
 
     let world = world.trash(&[RC_HA_1]).await;
     let candidates = world.catalog.project_candidates(project.id).await.unwrap();
@@ -643,130 +623,152 @@ async fn hoo_template_copies_goals_editable_and_rig_independent() {
     world.catalog.close().await.unwrap();
 }
 
-/// Goals of the mosaic NGC 7000 subject (panels 1 and 2) that are refused.
-async fn assert_goal_scope_refusals(world: &World, project: Uuid) {
+/// Goals of the NGC 7000 subject that are refused in `project`, which has the
+/// mosaic panel group `panel` and the plain group `plain`.
+async fn assert_goal_scope_refusals(world: &World, project: Uuid, panel: Uuid, plain: Uuid) {
+    let revision = world.catalog.project(project).await.unwrap().revision;
+    let ngc = &world.ngc7000;
     for (goals, expected, why) in [
-        (
-            vec![integration(&world.ngc7000, None, "Ha", 3600)],
-            "invalid_input",
-            "no panel on a mosaic",
-        ),
-        (vec![integration(&world.ngc7000, Some(3), "Ha", 3600)], "not_found", "an unknown panel"),
-        (vec![integration(&world.m81, None, "Ha", 3600)], "not_found", "not a subject"),
-        (vec![integration(&world.ngc7000, Some(1), "Ha", 0)], "invalid_input", "a zero goal"),
-        (vec![integration(&world.ngc7000, Some(1), " ", 3600)], "invalid_input", "a blank channel"),
+        (vec![integration(ngc, Some(plain), "Ha", 3600)], "invalid_input", "a plain group"),
+        (vec![integration(ngc, Some(Uuid::new_v4()), "Ha", 3600)], "not_found", "an unknown group"),
+        (vec![integration(&world.m81, Some(panel), "Ha", 3600)], "not_found", "not a subject"),
+        (vec![integration(ngc, Some(panel), "Ha", 0)], "invalid_input", "a zero goal"),
+        (vec![integration(ngc, Some(panel), " ", 3600)], "invalid_input", "a blank channel"),
         (
             vec![
-                integration(&world.ngc7000, Some(1), "Ha", 3600),
-                integration(&world.ngc7000, Some(1), "Ha", 7200),
+                integration(ngc, Some(panel), "Ha", 3600),
+                integration(ngc, Some(panel), "Ha", 7200),
             ],
             "invalid_input",
             "the same goal twice",
         ),
     ] {
-        let error = world.catalog.set_project_goals(project, 1, &goals).await.unwrap_err();
+        let error = world.catalog.set_project_goals(project, revision, &goals).await.unwrap_err();
         assert_eq!(kind(&error), expected, "{why}: {error}");
     }
 }
 
-/// PRJ-FR-01, PRJ-FR-03, PRJ-AC-13: a mosaic subject defines its panels by ICRS
-/// centre and rotation, an unknown rotation stays unknown (never zero), each
-/// panel takes its own goals, and an edit keeps each panel by its number.
+/// PRJ-FR-03, PRJ-FR-29, record §2 (mosaic is a panel group, not a subject
+/// mode): a group marked a mosaic panel takes its own goals beside the
+/// subject's; a goal on a plain or unknown group, or an invalid or repeated
+/// one, is refused and writes nothing; a template copies into a panel group
+/// only; a panel group with goals stays a panel.
 #[tokio::test]
-async fn mosaic_subject_panels_by_centre_and_rotation_unknown_rotation_allowed() {
+async fn panel_groups_take_their_own_goals() {
     let world = world().await;
     let catalog = &world.catalog;
-    let mosaic = |panels: Vec<PanelInput>| SubjectInput {
-        target_id: world.ngc7000.candidate.id,
-        name: Some("North America mosaic".into()),
-        mosaic: true,
-        panels,
+    let project = catalog.create_project(&hoo(&world)).await.unwrap();
+    let ha = world.session(RC_HA_1).await.id;
+    let desired = hold(catalog, project.id, ha, world.redcat.id).await;
+    let panel = desired.groups[0].id;
+    let name = GroupName::new("Panel 1").unwrap();
+    let desired = catalog
+        .set_project_group_panel(project.id, desired.revision, panel, true, Some(&name))
+        .await
+        .unwrap();
+    let plain = NewGroup {
+        id: Uuid::new_v4(),
+        rig_id: world.redcat.id,
+        name: GroupName::new("RedCat 51 · 2").unwrap(),
+        origin: GroupOrigin::User,
+        optics: OpticsSignature::new(None, Some(250.0), None).unwrap(),
+        framing: None,
     };
-    let two = vec![panel(1, 314.2, 44.1, Some(90.0)), panel(2, 315.6, 44.6, None)];
-    let input = ProjectInput {
-        subjects: vec![mosaic(two.clone())],
-        goals: vec![
-            integration(&world.ngc7000, Some(1), "Ha", 18_000),
-            integration(&world.ngc7000, Some(2), "Ha", 18_000),
-            GoalInput {
-                target_id: world.ngc7000.candidate.id,
-                panel: None,
-                group_id: None,
-                goal: GoalSpec::QualityBar {
-                    criterion: QualityCriterion::MaxFwhmMedian { max_px: 3.5 },
-                },
+    let desired =
+        catalog.create_project_group(project.id, desired.revision, &plain, &[]).await.unwrap();
+    let groups: Vec<_> = desired.groups.iter().map(|group| (group.id, group.panel)).collect();
+    assert_eq!(groups, vec![(panel, true), (plain.id, false)]);
+
+    let ngc = &world.ngc7000;
+    let goals = vec![
+        integration(ngc, Some(panel), "Ha", 18_000),
+        GoalInput {
+            target_id: ngc.candidate.id,
+            group_id: None,
+            goal: GoalSpec::QualityBar {
+                criterion: QualityCriterion::MaxFwhmMedian { max_px: 3.5 },
             },
-        ],
+        },
+    ];
+    let project = catalog.set_project_goals(project.id, desired.revision, &goals).await.unwrap();
+    let subject = project.subjects[0].id;
+    let scopes: Vec<_> =
+        project.goals.iter().map(|goal| (goal.subject_id, goal.group_id)).collect();
+    assert_eq!(scopes, vec![(subject, Some(panel)), (subject, None)]);
+
+    assert_goal_scope_refusals(&world, project.id, panel, plain.id).await;
+    assert_eq!(catalog.project(project.id).await.unwrap(), project, "refusals wrote nothing");
+
+    // A template copies into a panel group, never into a plain or unknown one.
+    let templates = catalog.goal_templates().await.unwrap();
+    let hoo_template = templates.iter().find(|template| template.name == "HOO").unwrap().id;
+    let revision = project.revision;
+    for (group, expected) in [(plain.id, "invalid_input"), (Uuid::new_v4(), "not_found")] {
+        let error = catalog
+            .apply_goal_template(project.id, revision, hoo_template, ngc.candidate.id, Some(group))
+            .await
+            .unwrap_err();
+        assert_eq!(kind(&error), expected, "{error}");
+    }
+    assert_eq!(catalog.project(project.id).await.unwrap(), project, "refusals wrote nothing");
+    let project = catalog
+        .apply_goal_template(project.id, revision, hoo_template, ngc.candidate.id, Some(panel))
+        .await
+        .unwrap();
+    assert_eq!(
+        integration_goals(&project),
+        vec![(Some("Ha".into()), 36_000), (Some("OIII".into()), 36_000)],
+        "HOO replaces the panel's Ha goal and adds OIII"
+    );
+    let panel_goals = project.goals.iter().filter(|goal| goal.group_id == Some(panel)).count();
+    assert_eq!(panel_goals, 2, "both copied goals belong to the panel");
+
+    let error = catalog
+        .set_project_group_panel(project.id, project.revision, panel, false, None)
+        .await
+        .unwrap_err();
+    assert_eq!(kind(&error), "invalid_input", "a panel group with goals stays a panel: {error}");
+    world.catalog.close().await.unwrap();
+}
+
+/// PRJ-AC-26, PRJ-FR-31 (the F4 form of D-W65): a subject a held session joined
+/// on, or a rig a group of the Project is on, is never removed; the refusal
+/// names it and writes nothing. Unused ones go, and so do these once the
+/// session leaves and its framing group with it.
+#[tokio::test]
+async fn removing_subject_or_rig_the_project_holds_is_refused_naming_it() {
+    let world = world().await;
+    let catalog = &world.catalog;
+    let input = ProjectInput {
+        subjects: vec![subject(&world.ngc7000), subject(&world.m81)],
+        rig_ids: vec![world.redcat.id, world.esprit.id],
         ..hoo(&world)
     };
     let project = catalog.create_project(&input).await.unwrap();
-    let stored = &project.subjects[0];
-    assert!(stored.mosaic);
-    assert_eq!(stored.designation, "NGC 7000");
-    assert_eq!(stored.name.as_deref(), Some("North America mosaic"));
-    let geometry: Vec<_> =
-        stored.panels.iter().map(|p| (p.number, p.ra_deg, p.dec_deg, p.rotation_deg)).collect();
-    assert_eq!(geometry, vec![(1, 314.2, 44.1, Some(90.0)), (2, 315.6, 44.6, None)]);
-    let panel_of = |number: u32| stored.panels.iter().find(|p| p.number == number).unwrap().id;
-    let goal_panels: Vec<_> = project.goals.iter().map(|goal| goal.panel_id).collect();
-    assert_eq!(goal_panels, vec![Some(panel_of(1)), Some(panel_of(2)), None]);
-    let candidates = catalog.project_candidates(project.id).await.unwrap();
-    assert_eq!(
-        reasons(&candidates),
-        vec![(world.session(RC_HA_1).await.id, stored.id, world.redcat.id)],
-        "a mosaic's candidates follow its Target and rig; panels come from pointing (VSEL)"
-    );
+    let ha = world.session(RC_HA_1).await.id;
+    let desired = hold(catalog, project.id, ha, world.redcat.id).await;
+    let project =
+        catalog.set_project_rigs(project.id, desired.revision, &[world.redcat.id]).await.unwrap();
+    let only_ngc = vec![subject(&world.ngc7000)];
+    let project =
+        catalog.set_project_subjects(project.id, project.revision, &only_ngc).await.unwrap();
 
-    // Refused geometry and goal scope write nothing.
-    let refusals: Vec<(Vec<SubjectInput>, &str)> = vec![
-        (vec![mosaic(vec![panel(1, 360.0, 44.0, None)])], "raDeg 360"),
-        (vec![mosaic(vec![panel(1, 314.0, 90.5, None)])], "decDeg above 90"),
-        (vec![mosaic(vec![panel(1, f64::NAN, 44.0, None)])], "raDeg NaN"),
-        (vec![mosaic(vec![panel(1, 314.0, 44.0, Some(360.0))])], "rotation 360"),
-        (vec![mosaic(vec![panel(1, 314.0, 44.0, Some(-1.0))])], "negative rotation"),
-        (vec![mosaic(vec![panel(0, 314.0, 44.0, None)])], "panel 0"),
-        (
-            vec![mosaic(vec![panel(1, 314.0, 44.0, None), panel(1, 315.0, 44.0, None)])],
-            "panel 1 twice",
-        ),
-        (vec![mosaic(Vec::new())], "a mosaic without panels"),
-        (
-            vec![SubjectInput { mosaic: false, ..mosaic(vec![panel(1, 314.0, 44.0, None)]) }],
-            "panels on a single-Target subject",
-        ),
-        (vec![subject(&world.ngc7000), subject(&world.ngc7000)], "one Target twice"),
-        (Vec::new(), "no subject"),
-        (vec![SubjectInput { name: Some("  ".into()), ..mosaic(two.clone()) }], "a blank name"),
-    ];
-    for (subjects, why) in refusals {
-        let error = catalog.set_project_subjects(project.id, 1, &subjects).await.unwrap_err();
-        assert_eq!(kind(&error), "invalid_input", "{why}: {error}");
-    }
-    let unsaved = SubjectInput { target_id: Uuid::new_v4(), ..subject(&world.m81) };
-    let error = catalog.set_project_subjects(project.id, 1, &[unsaved]).await.unwrap_err();
-    assert_eq!(kind(&error), "not_found", "an unsaved Target");
-    assert_goal_scope_refusals(&world, project.id).await;
+    let error = catalog.set_project_rigs(project.id, project.revision, &[world.esprit.id]).await;
+    refused(&error.unwrap_err(), &["rig RedCat 51", "Rig 1"]);
+    let m81 = vec![subject(&world.m81)];
+    let error = catalog.set_project_subjects(project.id, project.revision, &m81).await;
+    refused(&error.unwrap_err(), &["subject NGC 7000", "holds 1 session"]);
     assert_eq!(catalog.project(project.id).await.unwrap(), project, "refusals wrote nothing");
 
-    // An edit keeps panel 2 by its number with its new centre and rotation,
-    // removes panel 1 with its goal and adds panel 3.
-    let edited = vec![mosaic(vec![panel(2, 315.7, 44.7, Some(12.5)), panel(3, 316.9, 45.0, None)])];
-    let project = catalog.set_project_subjects(project.id, 1, &edited).await.unwrap();
-    let edited_subject = &project.subjects[0];
-    let kept = edited_subject.panels.iter().find(|p| p.number == 2).unwrap();
-    assert_eq!((kept.id, kept.ra_deg, kept.rotation_deg), (panel_of(2), 315.7, Some(12.5)));
-    assert_eq!(edited_subject.panels.iter().map(|p| p.number).collect::<Vec<_>>(), vec![2, 3]);
-    let goal_panels: Vec<_> = project.goals.iter().map(|goal| goal.panel_id).collect();
-    assert_eq!(goal_panels, vec![Some(panel_of(2)), None], "panel 1's goal left with it");
-
-    // A single-Target subject takes goals without a panel.
-    let single = vec![subject(&world.ngc7000)];
-    let project = catalog.set_project_subjects(project.id, 2, &single).await.unwrap();
-    assert_eq!(project.subjects[0].panels, [] as [platevault_model::SubjectPanel; 0]);
-    assert_eq!(project.goals.len(), 1, "only the subject-wide quality bar still fits");
-    let goals = vec![integration(&world.ngc7000, Some(1), "Ha", 3600)];
-    let error = catalog.set_project_goals(project.id, 3, &goals).await.unwrap_err();
-    assert_eq!(kind(&error), "invalid_input", "no panel on a single-Target subject");
+    let desired = remove(catalog, project.id, ha).await;
+    assert!(desired.groups.is_empty(), "the emptied framing group is dropped");
+    let project = catalog.set_project_subjects(project.id, desired.revision, &m81).await.unwrap();
+    let project =
+        catalog.set_project_rigs(project.id, project.revision, &[world.esprit.id]).await.unwrap();
+    assert_eq!(
+        (project.subjects[0].target_id, project.rig_ids.clone()),
+        (world.m81.candidate.id, vec![world.esprit.id])
+    );
     world.catalog.close().await.unwrap();
 }
 
@@ -786,8 +788,8 @@ async fn project_write_changes_no_file_quality_or_membership() {
     input.goals = vec![integration(&world.ngc7000, None, "Ha", 36_000)];
     let project = catalog.create_project(&input).await.unwrap();
     assert_eq!(
-        (project.revision, project.state, project.done_at.clone()),
-        (1, ProjectState::Open, None)
+        (project.revision, project.lifecycle, project.closed_at.clone()),
+        (1, ProjectLifecycle::Open, None)
     );
     let project = catalog.update_project(project.id, 1, "NGC 7000 bicolor", None).await.unwrap();
     assert_eq!((project.name.as_str(), project.notes.clone()), ("NGC 7000 bicolor", None));
@@ -800,13 +802,11 @@ async fn project_write_changes_no_file_quality_or_membership() {
         integration(&world.ngc7000, None, "Ha", 36_000),
         GoalInput {
             target_id: world.m81.candidate.id,
-            panel: None,
             group_id: None,
             goal: GoalSpec::FrameCount { channel: Some("L".into()), goal_frames: 120 },
         },
         GoalInput {
             target_id: world.m81.candidate.id,
-            panel: None,
             group_id: None,
             goal: GoalSpec::QualityBar { criterion: QualityCriterion::UsableOnly },
         },
@@ -817,11 +817,6 @@ async fn project_write_changes_no_file_quality_or_membership() {
     let project =
         catalog.apply_goal_template(project.id, 5, hoo_template, ngc, None).await.unwrap();
     assert_eq!(project.revision, 6, "each write adds exactly one revision");
-    let decisions = catalog.set_project_rejection(project.id, &[mark(&decided, 0, true)]).await;
-    catalog
-        .set_project_rejection(project.id, &[mark(&decided, decisions.unwrap()[0].revision, false)])
-        .await
-        .unwrap();
     let template = GoalTemplateInput {
         id: None,
         name: "Mine".into(),
@@ -884,104 +879,36 @@ async fn project_write_changes_no_file_quality_or_membership() {
     reopened.close().await.unwrap();
 }
 
-/// PRJ-FR-13, PRJ-AC-08: a Project-only reject leaves library quality, the
-/// candidates ("captured"), other Projects and the Project revision unchanged.
-/// Each mark checks only its own asset's latest decision, so rapid marks on
-/// different frames never conflict; decisions are append-only.
+/// Retire location review (R19) reads a Project through the copies of the
+/// captures it holds, at its Project revision; a suggestion holds nothing.
 #[tokio::test]
-async fn project_only_reject_keeps_library_quality() {
+async fn project_references_name_the_copies_a_project_holds() {
     let world = world().await;
     let catalog = &world.catalog;
-    let first = world.asset(RC_HA_1).await;
-    let second = world.asset(RC_HA_2).await;
-    let usable =
-        catalog.set_quality(&[expected(&first)], Quality::Usable, DiskProbe).await.unwrap();
-    let first = usable[0].clone();
     let project = catalog.create_project(&hoo(&world)).await.unwrap();
-    let other = catalog.create_project(&ProjectInput { name: "Other".into(), ..hoo(&world) }).await;
-    let other = other.unwrap();
-    let candidates = catalog.project_candidates(project.id).await.unwrap();
-
-    let decided =
-        catalog.set_project_rejection(project.id, &[mark(&first, 0, true)]).await.unwrap();
-    assert_eq!(
-        (decided[0].asset_id, decided[0].revision, decided[0].rejected),
-        (first.id, 1, true)
-    );
-    assert_eq!(decided[0].fingerprint, first.fingerprint);
-    // A rapid second mark on another frame needs no fresh Project revision.
-    let decided =
-        catalog.set_project_rejection(project.id, &[mark(&second, 0, true)]).await.unwrap();
-    assert_eq!(decided[0].revision, 1);
-
-    let library = catalog.asset(first.id).await.unwrap();
-    assert_eq!(
-        (library.quality, library.decision_revision),
-        (Quality::Usable, first.decision_revision),
-        "library quality is untouched"
-    );
-    assert_eq!(catalog.project(project.id).await.unwrap(), project, "the Project revision stays");
-    assert_eq!(
-        reasons(&catalog.project_candidates(project.id).await.unwrap()),
-        reasons(&candidates),
-        "captured is unchanged"
-    );
-    assert_eq!(catalog.project_candidates(project.id).await.unwrap()[0].asset_ids.len(), 2);
-    assert!(catalog.project_detail(other.id).await.unwrap().rejections.is_empty(), "other Project");
-
-    // The per-asset CAS: a stale mark is refused naming the asset's decision.
-    let stale = catalog.set_project_rejection(project.id, &[mark(&first, 0, false)]).await;
-    conflict_at(&stale.unwrap_err(), first.id, 1);
-    let withdrawn = catalog.set_project_rejection(project.id, &[mark(&first, 1, false)]).await;
-    let withdrawn = withdrawn.unwrap();
-    assert_eq!((withdrawn[0].revision, withdrawn[0].rejected), (2, false));
-    // All or nothing: one stale mark refuses the batch.
-    let batch = [mark(&second, 1, false), mark(&first, 1, true)];
-    conflict_at(&catalog.set_project_rejection(project.id, &batch).await.unwrap_err(), first.id, 2);
-    // The bytes the user saw changed: refused.
-    let mut changed = mark(&second, 1, false);
-    changed.fingerprint.size_bytes += 1;
-    let error = catalog.set_project_rejection(project.id, &[changed]).await.unwrap_err();
-    assert_eq!(kind(&error), "conflict", "{error}");
-    for (marks, expected) in [
-        (Vec::new(), "invalid_input"),
-        (vec![mark(&second, 1, false), mark(&second, 1, true)], "invalid_input"),
-        (vec![RejectionMark { asset_id: Uuid::new_v4(), ..mark(&second, 0, true) }], "not_found"),
-    ] {
-        let error = catalog.set_project_rejection(project.id, &marks).await.unwrap_err();
-        assert_eq!(kind(&error), expected, "{error}");
-    }
-    let unknown = catalog.set_project_rejection(Uuid::new_v4(), &[mark(&second, 1, false)]).await;
-    assert_eq!(kind(&unknown.unwrap_err()), "not_found");
-
-    let detail = catalog.project_detail(project.id).await.unwrap();
-    let mut latest: Vec<_> =
-        detail.rejections.iter().map(|r| (r.asset_id, r.revision, r.rejected)).collect();
-    latest.sort_unstable();
-    let mut expected_latest = vec![(first.id, 2, false), (second.id, 1, true)];
-    expected_latest.sort_unstable();
-    assert_eq!(latest, expected_latest, "the latest decision of each asset");
-    let mut conn = raw(&world.fx.db).await;
-    let history: Vec<(i64, i64)> = sqlx::query_as(
-        "SELECT revision, rejected FROM project_rejections WHERE project_id = ?1 AND asset_id = ?2 \
-         ORDER BY id",
-    )
-    .bind(project.id.to_string())
-    .bind(first.id.to_string())
-    .fetch_all(&mut conn)
-    .await
-    .unwrap();
-    conn.close().await.unwrap();
-    assert_eq!(history, vec![(1, 1), (2, 0)], "append-only decisions; the latest is effective");
-
-    // Retire review reads the Project through its effective rejections only.
-    let asked: BTreeSet<Uuid> = [first.id, second.id].into();
+    let (first, esprit) = (world.asset(RC_HA_1).await, world.asset(ES_HA).await);
+    let asked: BTreeSet<Uuid> = [first.id, esprit.id].into();
     let references = catalog.project_references(&asked).await.unwrap();
-    assert_eq!(references.len(), 1);
+    assert!(references.is_empty(), "a suggestion holds nothing: {references:?}");
+
+    hold(catalog, project.id, world.session(RC_HA_1).await.id, world.redcat.id).await;
+    let project = catalog.project(project.id).await.unwrap();
+    let references = catalog.project_references(&asked).await.unwrap();
+    let read: Vec<_> = references
+        .iter()
+        .map(|r| (r.kind, r.id, r.name.as_str(), r.revision, r.asset_ids.clone()))
+        .collect();
     assert_eq!(
-        (references[0].id, references[0].name.as_str(), references[0].asset_ids.clone()),
-        (project.id, "NGC 7000 HOO", vec![second.id])
+        read,
+        vec![(
+            ReferenceKind::Project,
+            project.id,
+            "NGC 7000 HOO",
+            project.revision,
+            vec![first.id]
+        )]
     );
+    assert!(catalog.project_references(&BTreeSet::new()).await.unwrap().is_empty());
     assert_eq!(tree(&world.fx.root), world.before, "no file changed");
     world.catalog.close().await.unwrap();
 }

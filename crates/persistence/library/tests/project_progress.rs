@@ -72,7 +72,6 @@ fn frames(frames: u64) -> GoalTally {
 fn integration(target: Uuid, channel: &str, goal_seconds: u64) -> GoalInput {
     GoalInput {
         target_id: target,
-        panel: None,
         group_id: None,
         goal: GoalSpec::Integration { channel: Some(channel.into()), goal_seconds },
     }
@@ -81,19 +80,13 @@ fn integration(target: Uuid, channel: &str, goal_seconds: u64) -> GoalInput {
 fn frame_count(target: Uuid, channel: &str, goal_frames: u64) -> GoalInput {
     GoalInput {
         target_id: target,
-        panel: None,
         group_id: None,
         goal: GoalSpec::FrameCount { channel: Some(channel.into()), goal_frames },
     }
 }
 
 fn bar(target: Uuid, criterion: QualityCriterion) -> GoalInput {
-    GoalInput {
-        target_id: target,
-        panel: None,
-        group_id: None,
-        goal: GoalSpec::QualityBar { criterion },
-    }
+    GoalInput { target_id: target, group_id: None, goal: GoalSpec::QualityBar { criterion } }
 }
 
 struct World {
@@ -212,12 +205,7 @@ impl World {
         let input = ProjectInput {
             name: "NGC 7000 HOO".into(),
             notes: None,
-            subjects: vec![SubjectInput {
-                target_id: self.ngc.candidate.id,
-                name: None,
-                mosaic: false,
-                panels: Vec::new(),
-            }],
+            subjects: vec![SubjectInput { target_id: self.ngc.candidate.id, name: None }],
             rig_ids: vec![self.redcat.id],
             goals,
         };
@@ -243,7 +231,7 @@ impl World {
         let bin = self.fx.temp.path().join("Trash");
         std::fs::create_dir_all(&bin).unwrap();
         std::fs::rename(&source, bin.join(name)).unwrap();
-        let frame = TrashedFrame { asset_id: asset.id, sha256, complete_view_ids: Vec::new() };
+        let frame = TrashedFrame { asset_id: asset.id, sha256 };
         self.catalog.record_trashed(Uuid::new_v4(), &[frame]).await.unwrap();
     }
 

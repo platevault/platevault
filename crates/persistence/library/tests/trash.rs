@@ -38,18 +38,14 @@ async fn trash(
     catalog: &Catalog,
     fx: &Fixture,
     operation: Uuid,
-    frames: &[(&Asset, &str, Vec<Uuid>)],
+    frames: &[(&Asset, &str)],
 ) -> Vec<TrashedAsset> {
     let mut recorded = Vec::new();
-    for (asset, name, complete_view_ids) in frames {
+    for (asset, name) in frames {
         let source = fx.root.join(name);
         let sha256 = sha_of(&source);
         std::fs::rename(&source, trash_bin(fx).join(name)).unwrap();
-        recorded.push(TrashedFrame {
-            asset_id: asset.id,
-            sha256,
-            complete_view_ids: complete_view_ids.clone(),
-        });
+        recorded.push(TrashedFrame { asset_id: asset.id, sha256 });
     }
     catalog.record_trashed(operation, &recorded).await.unwrap()
 }
@@ -150,7 +146,7 @@ async fn trashed_frame_is_absent_from_sessions_coverage_and_totals() {
     let before = catalog.target_coverage(saved.candidate.id).await.unwrap();
     assert!((captured(&before, "Ha") - 900.0).abs() < 1e-9, "{before:?}");
 
-    trash(&catalog, &fx, Uuid::new_v4(), &[(&rejected, "Ha_002.fits", Vec::new())]).await;
+    trash(&catalog, &fx, Uuid::new_v4(), &[(&rejected, "Ha_002.fits")]).await;
 
     let kept = ids(&[by_name(&assets, "Ha_001.fits"), by_name(&assets, "Ha_003.fits")]);
     for query in [
@@ -193,7 +189,7 @@ async fn rescan_never_reports_trashed_missing() {
     let assets = catalog.location_assets(location.id).await.unwrap();
     let rejected = unusable(&catalog, by_name(&assets, "Ha_002.fits")).await;
     let deleted = by_name(&assets, "Ha_003.fits").id;
-    trash(&catalog, &fx, Uuid::new_v4(), &[(&rejected, names[1], Vec::new())]).await;
+    trash(&catalog, &fx, Uuid::new_v4(), &[(&rejected, names[1])]).await;
     std::fs::remove_file(fx.root.join(names[2])).unwrap();
 
     let rescan = scan(&catalog, &fx, &location, &names[..1]).await;
@@ -234,7 +230,7 @@ async fn put_back_and_rescan_returns_unusable_and_keeps_episode() {
     let rejected = unusable(&catalog, by_name(&assets, "Ha_002.fits")).await;
     let sha256 = sha_of(&fx.root.join("Ha_002.fits"));
     let operation = Uuid::new_v4();
-    trash(&catalog, &fx, operation, &[(&rejected, "Ha_002.fits", Vec::new())]).await;
+    trash(&catalog, &fx, operation, &[(&rejected, "Ha_002.fits")]).await;
     scan(&catalog, &fx, &location, &["Ha_001.fits", "Ha_003.fits"]).await;
     assert_eq!(catalog.asset(rejected.id).await.unwrap().availability, Availability::Trashed);
 
@@ -276,7 +272,7 @@ async fn different_bytes_after_put_back_read_changed_content() {
     scan(&catalog, &fx, &location, &names).await;
     let assets = catalog.location_assets(location.id).await.unwrap();
     let rejected = unusable(&catalog, by_name(&assets, "Ha_002.fits")).await;
-    trash(&catalog, &fx, Uuid::new_v4(), &[(&rejected, "Ha_002.fits", Vec::new())]).await;
+    trash(&catalog, &fx, Uuid::new_v4(), &[(&rejected, "Ha_002.fits")]).await;
 
     fx.write("Ha_002.fits", b"another frame entirely at the trashed path");
     let rescan = scan(&catalog, &fx, &location, &names).await;
@@ -322,13 +318,8 @@ async fn session_with_all_frames_trashed_leaves_sessions() {
     let before = catalog.target_coverage(saved.candidate.id).await.unwrap();
     assert!((captured(&before, "OIII") - 600.0).abs() < 1e-9, "{before:?}");
 
-    trash(
-        &catalog,
-        &fx,
-        Uuid::new_v4(),
-        &[(&first, "OIII_001.fits", Vec::new()), (&second, "OIII_002.fits", Vec::new())],
-    )
-    .await;
+    trash(&catalog, &fx, Uuid::new_v4(), &[(&first, "OIII_001.fits"), (&second, "OIII_002.fits")])
+        .await;
 
     let ha = ids(&[by_name(&assets, "Ha_001.fits"), by_name(&assets, "Ha_002.fits")]);
     for query in [
@@ -353,7 +344,7 @@ async fn session_with_all_frames_trashed_leaves_sessions() {
 
 /// LIB-AC-19: the Trashed filter lists exactly the Trashed frames, with their
 /// last-observed metadata, the SHA-256 the custody verified and the operation
-/// that trashed them; the runs Complete at trash time stay recorded (D-W52).
+/// that trashed them.
 #[tokio::test]
 async fn sessions_trashed_filter_lists_last_observed_metadata_and_operation() {
     let fx = Fixture::new();
@@ -369,14 +360,9 @@ async fn sessions_trashed_filter_lists_last_observed_metadata_and_operation() {
     let first = unusable(&catalog, by_name(&assets, "Ha_001.fits")).await;
     let second = unusable(&catalog, by_name(&assets, "Ha_002.fits")).await;
     let shas = [sha_of(&fx.root.join("Ha_001.fits")), sha_of(&fx.root.join("Ha_002.fits"))];
-    let (operation, complete_run) = (Uuid::new_v4(), Uuid::new_v4());
-    let recorded = trash(
-        &catalog,
-        &fx,
-        operation,
-        &[(&first, "Ha_001.fits", vec![complete_run]), (&second, "Ha_002.fits", Vec::new())],
-    )
-    .await;
+    let operation = Uuid::new_v4();
+    let recorded =
+        trash(&catalog, &fx, operation, &[(&first, "Ha_001.fits"), (&second, "Ha_002.fits")]).await;
     assert_eq!(recorded.len(), 2);
 
     let listed = sessions(&catalog, &trashed_filter()).await;
@@ -390,9 +376,7 @@ async fn sessions_trashed_filter_lists_last_observed_metadata_and_operation() {
 
     let frames = catalog.trashed_assets(&TrashedQuery::default()).await.unwrap();
     assert_eq!(frames.len(), 2, "{frames:?}");
-    for (decided, sha256, views) in
-        [(&first, &shas[0], vec![complete_run]), (&second, &shas[1], Vec::new())]
-    {
+    for (decided, sha256) in [(&first, &shas[0]), (&second, &shas[1])] {
         let frame = frames.iter().find(|frame| frame.asset.id == decided.id).unwrap();
         assert_eq!(frame.asset.availability, Availability::Trashed);
         assert_eq!(frame.asset.observed, decided.observed, "last-observed metadata");
@@ -402,7 +386,6 @@ async fn sessions_trashed_filter_lists_last_observed_metadata_and_operation() {
         assert_eq!(frame.session_id, Some(session.id));
         assert_eq!(frame.episode.storage_operation_id, operation);
         assert_eq!(&frame.episode.sha256, sha256);
-        assert_eq!(frame.episode.complete_view_ids, views);
         assert_ne!(frame.episode.trashed_at, "");
         assert_eq!(frame.episode.put_back_at, None);
     }
@@ -477,7 +460,7 @@ async fn decisions_and_corrections_on_a_trashed_frame_are_refused() {
     scan(&catalog, &fx, &location, &names).await;
     let assets = catalog.location_assets(location.id).await.unwrap();
     let rejected = unusable(&catalog, by_name(&assets, "Ha_002.fits")).await;
-    trash(&catalog, &fx, Uuid::new_v4(), &[(&rejected, "Ha_002.fits", Vec::new())]).await;
+    trash(&catalog, &fx, Uuid::new_v4(), &[(&rejected, "Ha_002.fits")]).await;
     let record = catalog.asset(rejected.id).await.unwrap();
 
     let decision = catalog.set_quality(&[expected(&record)], Quality::Usable, DiskProbe).await;
@@ -531,7 +514,7 @@ async fn a_trashed_copy_never_joins_a_live_copy() {
     assert_eq!(copies, ids(&[&rejected, &copy]), "one logical capture before");
     assert_eq!(member.applicable_quality, ApplicableQuality::Unusable);
 
-    trash(&catalog, &fx, Uuid::new_v4(), &[(&rejected, "Ha_002.fits", Vec::new())]).await;
+    trash(&catalog, &fx, Uuid::new_v4(), &[(&rejected, "Ha_002.fits")]).await;
     let detail = catalog.session(session.id).await.unwrap();
     let member = detail.members.iter().find(|member| member.copies.contains(&copy.id)).unwrap();
     assert_eq!(member.copies, [copy.id]);
@@ -556,11 +539,7 @@ async fn record_trashed_is_atomic_and_idempotent_per_operation() {
     let assets = catalog.location_assets(location.id).await.unwrap();
     let first = unusable(&catalog, by_name(&assets, "Ha_001.fits")).await;
     let second = unusable(&catalog, by_name(&assets, "Ha_002.fits")).await;
-    let frame = |asset: &Asset, sha256: String| TrashedFrame {
-        asset_id: asset.id,
-        sha256,
-        complete_view_ids: Vec::new(),
-    };
+    let frame = |asset: &Asset, sha256: String| TrashedFrame { asset_id: asset.id, sha256 };
     let (good, wrong) = (sha_of(&fx.root.join("Ha_001.fits")), "0".repeat(64));
     let operation = Uuid::new_v4();
     let refused = catalog

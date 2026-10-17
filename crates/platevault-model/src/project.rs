@@ -507,7 +507,6 @@ pub struct ProjectCandidate {
     pub asset_ids: Vec<Uuid>,
 }
 
-
 /// A built-in or user goal template. Applying it copies its values.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -518,7 +517,6 @@ pub struct GoalTemplate {
     pub revision: Revision,
     pub goals: Vec<GoalSpec>,
 }
-
 
 // ---------------------------------------------------------------------------
 // Progress

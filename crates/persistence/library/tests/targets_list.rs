@@ -14,9 +14,10 @@ use std::path::Path;
 use persistence_library::{Catalog, SessionQuery};
 use platevault_model::{
     AssociationState, Availability, BuiltinPreset, Catalogue, ChannelIntegration, Equipment,
-    LibraryError, Location, PresetFilters, ProjectBadge, ProjectInput, Provenance, ScanFile,
-    ScanObservation, ScanProgress, ScanState, Session, SubjectInput, TargetActivity, TargetRecord,
-    TargetsColumn, TargetsShow, TargetsSort,
+    LibraryError, Location, MeasurementMethod, PresetFilters, ProjectBadge, ProjectInput,
+    Provenance, ScanFile, ScanObservation, ScanProgress, ScanState, Session, SubjectInput,
+    TargetActivity, TargetRecord, TargetsColumn, TargetsShow, TargetsSort, WrapUpOutcome,
+    WrapUpStep,
 };
 use sqlx::sqlite::{SqliteConnectOptions, SqliteConnection};
 use sqlx::Connection;
@@ -50,12 +51,7 @@ fn project(name: &str, subjects: &[&TargetRecord], rig: &Equipment) -> ProjectIn
         notes: None,
         subjects: subjects
             .iter()
-            .map(|target| SubjectInput {
-                target_id: target.candidate.id,
-                name: None,
-                mosaic: false,
-                panels: Vec::new(),
-            })
+            .map(|target| SubjectInput { target_id: target.candidate.id, name: None })
             .collect(),
         rig_ids: vec![rig.id],
         goals: Vec::new(),
@@ -67,8 +63,8 @@ async fn save(catalog: &Catalog, designation: &str) -> TargetRecord {
 }
 
 /// D-W60, PLAN-TGT-FR-01: My targets is the ★ favourites plus every subject of
-/// an open Project, each subject carrying its Project's badge; a Done Project
-/// adds nothing, and ★ never removes a subject.
+/// an open Project, each subject carrying its Project's badge; a Closed
+/// Project adds nothing, and ★ never removes a subject.
 #[tokio::test]
 async fn marks_hold_favourites_and_open_project_subjects_only() {
     let fx = Fixture::new();
@@ -86,17 +82,12 @@ async fn marks_hold_favourites_and_open_project_subjects_only() {
     let summer = summer.unwrap();
     let cygnus = catalog.create_project(&project("Cygnus", &[&ngc7000], &redcat)).await.unwrap();
     let old = catalog.create_project(&project("Old galaxies", &[&m81], &redcat)).await.unwrap();
-    catalog.close().await.unwrap();
-    let mut conn = raw(&fx.db).await;
-    sqlx::query(
-        "UPDATE projects SET state = 'done', done_at = '2026-10-01T00:00:00Z' WHERE id = ?1",
-    )
-    .bind(old.id.to_string())
-    .execute(&mut conn)
-    .await
-    .unwrap();
-    conn.close().await.unwrap();
-    let catalog = Catalog::open(&fx.db).await.unwrap();
+    let revision = catalog.wrap_up_status(old.id).await.unwrap().desired_revision;
+    for step in [WrapUpStep::CleanUp, WrapUpStep::Trash] {
+        catalog.record_wrap_up_step(old.id, revision, step, WrapUpOutcome::Skipped).await.unwrap();
+    }
+    let method = MeasurementMethod::new("platevault.stars", 1);
+    catalog.close_project(old.id, revision, &method, &[]).await.unwrap();
 
     let marks = catalog.my_target_marks().await.unwrap();
     assert_eq!(marks.favourites.iter().copied().collect::<Vec<_>>(), [m31.candidate.id]);
@@ -110,7 +101,7 @@ async fn marks_hold_favourites_and_open_project_subjects_only() {
         &[badge(cygnus.id, "Cygnus"), badge(summer.id, "Summer nebulae")],
         "badges follow Project name order"
     );
-    assert!(!marks.contains(m81.candidate.id), "a Done Project's subject is not in My targets");
+    assert!(!marks.contains(m81.candidate.id), "a Closed Project's subject is not in My targets");
     assert_eq!(marks.ids().len(), 3);
 
     // ★ on a subject and off again: the subject stays listed with its badge.
