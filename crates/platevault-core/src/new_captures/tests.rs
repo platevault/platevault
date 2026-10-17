@@ -1413,7 +1413,7 @@ async fn a_watched_folder_moved_out_of_the_location_restarts_the_watcher() {
     fs::rename(root.join("night"), fx.base.join("archive")).unwrap();
     events.try_send(named(root.join("night"), ArtifactEventKind::Modified)).unwrap();
     eventually("the watcher restarted", || probe.watches.load(Ordering::SeqCst) == 2).await;
-    count_is(&watch, location.id, 0).await;
+    live_count_is(&watch, location.id, 0).await;
     assert_eq!(walks(&watch), 2);
 }
 
@@ -1504,8 +1504,8 @@ async fn a_frame_whose_lookup_fails_stays_counted_and_is_walked_again() {
 }
 
 /// The watcher lost events while a frame arrived: it starts again at once,
-/// but the count it then publishes is not live until the walk that follows
-/// has reconciled it, finding the frame no event reported.
+/// but the count is not live while the new watcher starts, nor until the
+/// walk that follows has reconciled it, finding the frame no event reported.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_count_is_not_live_until_the_walk_after_a_restart_reconciles_it() {
     let fx = fixture().await;
@@ -1515,18 +1515,22 @@ async fn a_count_is_not_live_until_the_walk_after_a_restart_reconciles_it() {
     let (events, fed) = tokio::sync::mpsc::channel(16);
     let probe = Arc::new(Probe::default());
     *probe.feed.lock().unwrap() = Some(fed);
-    let _opens = Opens(&probe.list_gate);
+    let (_lists, _watches) = (Opens(&probe.list_gate), Opens(&probe.watch_gate));
     let watch = probed_without_sweeps(&fx.library, &probe);
     live_count_is(&watch, location.id, 1).await;
 
     frame(&root.join("night/Ha_002.fits"));
     probe.list_gate.close();
+    probe.watch_gate.close();
     events.try_send(named(root.clone(), ArtifactEventKind::NeedsRescan)).unwrap();
+    holding(&probe.watch_gate).await;
+    let held = [NewCaptureCount { location_id: location.id, new_files: 1, live: false }];
+    assert_eq!(watch.counts(), held, "live while the watcher restarts");
+    probe.watch_gate.open();
     holding(&probe.list_gate).await;
     assert_eq!(walks(&watch), 2, "the walk after the restart waits");
     after(&watch, drains, 1).await;
-    let held = NewCaptureCount { location_id: location.id, new_files: 1, live: false };
-    assert_eq!(watch.counts(), [held], "live while the walk reconciles");
+    assert_eq!(watch.counts(), held, "live while the walk reconciles");
     probe.list_gate.open();
     live_count_is(&watch, location.id, 2).await;
     assert_eq!(probe.watches.load(Ordering::SeqCst), 2, "the watcher restarted");

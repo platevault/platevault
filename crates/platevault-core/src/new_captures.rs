@@ -1428,8 +1428,10 @@ impl Run {
             return;
         };
         // The old OS watch closes, off the runtime, as the new folder set
-        // registers.
+        // registers. The count is not live from here on, and says so before
+        // the new watcher starts, which can take long on a slow tree.
         self.unwatch(id, live);
+        self.publish();
         let Some((root, stamp)) =
             self.locations.get(&id).map(|watched| (watched.root.clone(), watched.stamp))
         else {
