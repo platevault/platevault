@@ -15,7 +15,6 @@
 import { Camera as CameraIcon, Pencil, Telescope as TelescopeIcon, Trash2, Waypoints, ZoomIn } from "lucide-react"
 import { useState } from "react"
 import { useMessages } from "@/app/preferences"
-import { ActionButton } from "@/components/app/actions"
 import type { Action, Column, MenuItem } from "@/components/app/contracts"
 import { KeyValueList } from "@/components/app/data"
 import { DataTable } from "@/components/app/data-table"
@@ -287,7 +286,7 @@ export function CamerasSection() {
           initialSort: { columnId: "name", direction: "asc" },
           stickyFirstColumn: true,
           expand: { render: (c) => <CameraDetails camera={c} /> },
-          empty: <EmptyState icon={CameraIcon} title={m.equipment_no_cameras()} action={<ActionButton action={add} />} />,
+          empty: <EmptyState icon={CameraIcon} title={m.equipment_no_cameras()} action={null} />,
           rowActions: (c) => recordMenu(m, catalog, "camera", { id: c.id, name: cameraLabel(c) }, () => setEditing({ camera: c })),
         }}
       />
@@ -360,7 +359,7 @@ export function TelescopesSection() {
           getRowId: (t) => t.id,
           rowLabel: (t) => t.name,
           initialSort: { columnId: "name", direction: "asc" },
-          empty: <EmptyState icon={TelescopeIcon} title={m.equipment_no_telescopes()} action={<ActionButton action={add} />} />,
+          empty: <EmptyState icon={TelescopeIcon} title={m.equipment_no_telescopes()} action={null} />,
           rowActions: (t) => recordMenu(m, catalog, "telescope", t, () => setEditing({ telescope: t })),
         }}
       />
@@ -419,7 +418,7 @@ export function ReducersSection() {
           getRowId: (r) => r.id,
           rowLabel: (r) => r.name,
           initialSort: { columnId: "name", direction: "asc" },
-          empty: <EmptyState icon={ZoomIn} title={m.equipment_no_reducers()} action={<ActionButton action={add} />} />,
+          empty: <EmptyState icon={ZoomIn} title={m.equipment_no_reducers()} action={null} />,
           rowActions: (r) => recordMenu(m, catalog, "reducer", r, () => setEditing({ reducer: r })),
         }}
       />
@@ -665,7 +664,7 @@ export function RigsSection({ activeRigId, onSaved }: { activeRigId: string | nu
           initialSort: { columnId: "name", direction: "asc" },
           stickyFirstColumn: true,
           expand: { render: (r) => <RigVersions rig={r} /> },
-          empty: <EmptyState icon={Waypoints} title={m.equipment_no_rigs()} action={<ActionButton action={add} />} />,
+          empty: <EmptyState icon={Waypoints} title={m.equipment_no_rigs()} action={null} />,
           rowActions: (r) => recordMenu(m, catalog, "rig", r, () => setEditing({ rig: r })),
         }}
       />

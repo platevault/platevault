@@ -117,3 +117,21 @@ describe("Settings › Equipment: rig versions (PLAN-EQ-FR-07)", () => {
     expect(rows[2]).toHaveTextContent(m.equipment_version_first({ night: formatNight(rig.versionFrom, true) }))
   })
 })
+
+describe("Settings › Equipment: empty sections", () => {
+  it("names each empty record list once and leaves its Add… to the section header", async () => {
+    store.replace({ ...createSeed("empty"), schemaVersion: SCHEMA_VERSION, sliceVersions: sliceVersions(), slices: initialSliceStates() })
+    renderPage()
+    const sections = [
+      { empty: m.equipment_no_cameras(), add: m.equipment_add_camera() },
+      { empty: m.equipment_no_telescopes(), add: m.equipment_add_telescope() },
+      { empty: m.equipment_no_reducers(), add: m.equipment_add_reducer() },
+      { empty: m.tonight_no_filters(), add: m.equipment_add_filter() },
+      { empty: m.equipment_no_rigs(), add: m.project_add_rig() },
+    ]
+    for (const { empty, add } of sections) {
+      expect(await screen.findByText(empty)).toBeInTheDocument()
+      expect(screen.getAllByRole("button", { name: `${add}…` })).toHaveLength(1)
+    }
+  })
+})
