@@ -21,7 +21,7 @@ Stay on Tauri + React. Rebuild the UI composition in React. Keep a services crat
 
 ## Rationale
 
-The user chose this direction after considering the reports and spike evidence. The verdict was conditional.
+The research recommends staying on Tauri because no native toolkit meets the stated accessibility bar with shipped, tested code, migrating would discard a large tested frontend, and Tauri is already a thin, replaceable adapter. Source: docs/research/2026-08-17-gui-toolkit-evaluation.md:433-454.
 
 ## Alternatives
 
