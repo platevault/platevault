@@ -328,4 +328,11 @@ describe('svg/no-raw-svg-colour', () => {
 
     expect(diagnostics).toHaveLength(1);
   });
+  it('checks logical expressions that add a var fallback', () => {
+    const diagnostics = lint(
+      "const svg = <svg fill={`var(--pv-accent${enabled && ', red'})`} />;",
+    );
+
+    expect(diagnostics).toHaveLength(1);
+  });
 });

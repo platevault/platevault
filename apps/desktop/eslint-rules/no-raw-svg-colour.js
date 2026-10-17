@@ -89,6 +89,27 @@ function isSvgPresentationElement(node) {
 
   return ownName.toLowerCase() === 'svg' || SVG_ELEMENTS.has(ownName.toLowerCase());
 }
+function collectStringLiterals(expression, values) {
+  if ((expression.type === 'Literal' || expression.type === 'StringLiteral') && typeof expression.value === 'string') {
+    values.push(expression.value);
+    return;
+  }
+  if (expression.type === 'LogicalExpression') {
+    collectStringLiterals(expression.left, values);
+    collectStringLiterals(expression.right, values);
+  } else if (expression.type === 'ConditionalExpression') {
+    collectStringLiterals(expression.consequent, values);
+    collectStringLiterals(expression.alternate, values);
+  } else if (expression.type === 'SequenceExpression') {
+    collectStringLiterals(expression.expressions.at(-1), values);
+  } else if (
+    expression.type === 'ChainExpression' || expression.type === 'ParenthesizedExpression' ||
+    expression.type === 'TSAsExpression' || expression.type === 'TSSatisfiesExpression' ||
+    expression.type === 'TSNonNullExpression' || expression.type === 'TypeCastExpression'
+  ) {
+    collectStringLiterals(expression.expression, values);
+  }
+}
 
 function reportRawColorsInExpression(expression, report) {
   if (
@@ -188,15 +209,8 @@ function reportRawColorsInExpression(expression, report) {
         if (index < expression.expressions.length) {
           let interpolationHandled = false;
           if (mode === 'variable-name' || mode === 'dynamic-var-argument') {
-            const source = expression.expressions[index];
-            const branches = source.type === 'ConditionalExpression'
-              ? [source.consequent, source.alternate]
-              : [source];
-            const values = branches.map((branch) =>
-              (branch.type === 'Literal' || branch.type === 'StringLiteral') && typeof branch.value === 'string'
-                ? branch.value
-                : '',
-            );
+            const values = [];
+            collectStringLiterals(expression.expressions[index], values);
             interpolationHandled = true;
             if (values.some((value) => value.includes(','))) {
               mode = 'normal';
