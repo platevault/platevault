@@ -3,15 +3,14 @@
  * library, its process pages, its dialogs and Settings › Naming's preview.
  * Nothing here writes state.
  */
-import type { Tone } from "@/components/app/status"
 import { type CalSource, camerasOfModel, KIND_NAME, KINDS, masterRecordRef, newestVersion, PIN_KINDS, rawSource } from "@/domain/calibration"
-import { type ProcessStatus, type ProcessView, processForSession, processView } from "@/domain/calibration-process"
+import { type ProcessView, processForSession, processView } from "@/domain/calibration-process"
 import type { World } from "@/domain/derive"
 import { nightOf } from "@/domain/indexing"
 import { generatedMasters, type ProcessingMaster } from "@/domain/project-view"
 import type { CalibrationMaster, Camera, Catalog, Disk, MasterVersion, Project, Session, SessionId } from "@/domain/types"
 import { formatExposure, formatNight } from "@/lib/format"
-import { type MessageRef, type Messages, msg, say } from "@/lib/i18n"
+import { type Messages, say } from "@/lib/i18n"
 
 /** The observing night of a master version: its raw session's, else the night of its capture time (CAL-FR-21). */
 export function versionNight(catalog: Catalog, version: MasterVersion): string {
@@ -97,14 +96,4 @@ export interface MasterCandidate {
 /** Every Project's candidates, offered on its Output step or hidden there; adopting one is still possible here. */
 export function masterCandidates(world: Pick<World, "catalog" | "disk" | "settings">): MasterCandidate[] {
   return Object.values(world.catalog.projects).flatMap((project) => generatedMasters(world, project).map((master) => ({ project, master })))
-}
-
-/** A calibration process's state as a display tag: its word and tone. */
-export const PROCESS_STATUS: Record<ProcessStatus, { tone: Tone; word: MessageRef }> = {
-  "awaiting-stack": { tone: "info", word: msg("calibration_status_to_stack") },
-  stacking: { tone: "info", word: msg("calibration_status_stacking") },
-  importing: { tone: "info", word: msg("calibration_status_importing") },
-  "trashing-raws": { tone: "info", word: msg("session_process_trashing") },
-  failed: { tone: "danger", word: msg("status_failed") },
-  done: { tone: "success", word: msg("status_done") },
 }

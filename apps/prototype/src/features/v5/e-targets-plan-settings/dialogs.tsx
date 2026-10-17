@@ -1,6 +1,5 @@
 /**
  * Dialogs of slice E, each a FormDialog (plan §3.3 P8, §4b):
- * - NameDialog: name a thing (save or rename a preset, rename a rig).
  * - ImportMastersDialog: Files → Preview (CAL-FR-13). The user picks several
  *   FITS or XISF files at once; the preview reads each file's headers and
  *   shows its match (New / New version of {master} / Duplicate, or Not a
@@ -15,16 +14,16 @@
  *   which darks and bias read "Old · {n} d" (CAL-FR-15), a reminder that is
  *   not the matching window.
  */
+import { FileX } from "lucide-react"
 import { useState } from "react"
 import { useMessages } from "@/app/preferences"
 import type { Action, Column, FlowStep, StepFlow } from "@/components/app/contracts"
 import { KeyValueList } from "@/components/app/data"
 import { DataTable } from "@/components/app/data-table"
-import { Notice, toast } from "@/components/app/feedback"
-import { FilesField, NumberField, PathField, SelectField, SwitchField, TextField } from "@/components/app/fields"
+import { EmptyState, toast } from "@/components/app/feedback"
+import { FilesField, NumberField, PathField, SelectField, SwitchField } from "@/components/app/fields"
 import { FormDialog } from "@/components/app/form-dialog"
-import { Pill } from "@/components/app/pill"
-import type { Tone } from "@/components/app/status"
+import { StatusBadge } from "@/components/app/status"
 import { importCameraRefusal, KIND_NAME, type MasterMatch, masterImportMatch, masterKindOf, masterMatchRef, masterRecordRef, newestVersion, versionsNewestFirst } from "@/domain/calibration"
 import { fileAt } from "@/domain/disk"
 import { nightOf } from "@/domain/indexing"
@@ -49,59 +48,14 @@ function useOnOpen(open: boolean, reset: () => void) {
 }
 
 // ---------------------------------------------------------------------------
-// NameDialog
-// ---------------------------------------------------------------------------
-
-export interface NameDialogProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  title: string
-  description: string
-  label: string
-  initial: string
-  confirmLabel: string
-  /** Returns an error message to keep the dialog open, or null when done. */
-  onSubmit: (name: string) => string | null
-  /** Names already taken (compared case-insensitively). */
-  taken?: string[]
-}
-
-export function NameDialog({ open, onOpenChange, title, description, label, initial, confirmLabel, onSubmit, taken = [] }: NameDialogProps) {
-  const m = useMessages()
-  const [name, setName] = useState(initial)
-  useOnOpen(open, () => setName(initial))
-  const trimmed = name.trim()
-  const clash = trimmed !== "" && taken.some((t) => t.toLowerCase() === trimmed.toLowerCase()) ? m.targets_name_taken({ label, name: trimmed }) : null
-  const blocked = trimmed === "" ? m.targets_name_empty({ label }) : clash
-  const confirm: Action = {
-    id: "name-confirm",
-    label: confirmLabel,
-    kind: "primary",
-    unavailable: blocked ? { action: m.actions_blocked({ action: confirmLabel }), reason: blocked, blockers: [] } : undefined,
-    run: (): CommitResult => {
-      const failure = onSubmit(trimmed)
-      return failure ? { ok: false, reason: "write-failed", message: failure } : { ok: true }
-    },
-  }
-  return (
-    <FormDialog open={open} onOpenChange={onOpenChange} title={title} size="sm" confirm={confirm}>
-      <TextField label={label} description={description} value={name} onChange={setName} autoFocus error={clash ?? undefined} />
-    </FormDialog>
-  )
-}
-
-// ---------------------------------------------------------------------------
 // A master file's header facts and match (CAL-FR-13)
 // ---------------------------------------------------------------------------
 
-const MATCH_TONE: Record<MasterMatch["kind"], Tone> = { new: "success", version: "info", duplicate: "muted" }
-
-/** The preview's Match cell: New, New version of {master}, Duplicate, or Not a master. */
-function MatchPill({ match }: { match: MasterMatch | null }) {
+/** The preview's Match cell from the status registry: New, New version of {master}, Duplicate, or Not a master. */
+function MatchBadge({ match }: { match: MasterMatch | null }) {
   const m = useMessages()
   const catalog = useStore((s) => s.catalog)
-  if (!match) return <Pill tone="muted">{m.store_cal_not_a_master()}</Pill>
-  return <Pill tone={MATCH_TONE[match.kind]}>{say(m, masterMatchRef(catalog, match))}</Pill>
+  return <StatusBadge kind="masterMatch" value={match?.kind ?? "not-master"} label={match?.kind === "version" ? say(m, masterMatchRef(catalog, match)) : undefined} />
 }
 
 /** "Dark 300 s", "Flat 1.5 s", "Bias": the header's kind with the exposure darks and flats depend on. */
@@ -197,7 +151,7 @@ function previewColumns(m: Messages, editable: boolean, selected: readonly strin
   }
   return [
     { id: "file", header: m.dialog_col_file(), cell: (r) => fileName(r.path), sortValue: (r) => fileName(r.path), rowHeader: true, truncate: true },
-    { id: "match", header: m.import_match(), cell: (r) => <MatchPill match={r.match} />, sortValue: (r) => r.match?.kind ?? "" },
+    { id: "match", header: m.import_match(), cell: (r) => <MatchBadge match={r.match} />, sortValue: (r) => r.match?.kind ?? "" },
     { id: "kind", header: m.run_col_kind(), cell: (r) => header(r, (f) => headerKind(m, f)), sortValue: (r) => header(r, (f) => headerKind(m, f)) },
     {
       id: "camera",
@@ -297,7 +251,7 @@ export function ImportMastersDialog({ open, onOpenChange }: ImportMastersDialogP
             columns={previewColumns(m, editable, selected, (path, cameraId) => setCameras((current) => ({ ...current, [path]: cameraId })))}
             getRowId={(r) => r.path}
             selection={editable ? { selected, onChange: setSelected, rowLabel: (r) => fileName(r.path), isSelectable: importable, countLabel: (count) => m.calibration_files_selected({ count }) } : undefined}
-            empty={<Notice tone="info" title={m.calibration_import_no_files()} />}
+            empty={<EmptyState icon={FileX} title={m.calibration_import_no_files()} action={null} />}
             stickyFirstColumn
           />
         )
@@ -377,21 +331,18 @@ export function AddMasterVersionDialog({ master, onOpenChange }: AddMasterVersio
             disabled={!editable}
           />
         ) : (
-          <>
-            <KeyValueList
-              items={[
-                { label: m.dialog_col_file(), value: path ?? "–", mono: true },
-                { label: m.import_match(), value: refusal ? say(m, refusal) : <MatchPill match={match} /> },
-                { label: m.run_col_kind(), value: file ? headerKind(m, file) : "–" },
-                { label: m.calibration_key_camera(), value: masterCamera(catalog, master) ?? "–" },
-                { label: m.session_gain_offset(), value: file ? gainOffset(file) : "–" },
-                { label: m.calibration_key_temp(), value: file ? temperature(file) : "–" },
-                { label: m.coverage_captured(), value: file ? captured(file) : "–" },
-                { label: m.calibration_versions(), value: versions },
-              ]}
-            />
-            <Notice tone="info" title={m.calibration_add_version_moves_none()} />
-          </>
+          <KeyValueList
+            items={[
+              { label: m.dialog_col_file(), value: path ?? "–", mono: true },
+              { label: m.import_match(), value: refusal ? say(m, refusal) : <MatchBadge match={match} /> },
+              { label: m.run_col_kind(), value: file ? headerKind(m, file) : "–" },
+              { label: m.calibration_key_camera(), value: masterCamera(catalog, master) ?? "–" },
+              { label: m.session_gain_offset(), value: file ? gainOffset(file) : "–" },
+              { label: m.calibration_key_temp(), value: file ? temperature(file) : "–" },
+              { label: m.coverage_captured(), value: file ? captured(file) : "–" },
+              { label: m.calibration_versions(), value: versions },
+            ]}
+          />
         )
       }
     </FormDialog>

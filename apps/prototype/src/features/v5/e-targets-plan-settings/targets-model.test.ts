@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest"
 import { planningPriorities } from "@/domain/derive"
 import { createSeed } from "@/domain/seed"
-import { prioritiesByTarget, priorityOrder, type RowView, sortValue } from "./targets-model"
+import { m } from "@/lib/i18n"
+import { imgTimeText, prioritiesByTarget, priorityOrder, type RowView, sortValue } from "./targets-model"
 
 const NIGHT = "2026-10-13"
 
@@ -43,5 +44,14 @@ describe("Suitable filters sort", () => {
     expect(sortValue(a, "tonight", ["Ha", "OIII"])).toBe(300)
     expect(sortValue(b, "tonight", ["Ha", "OIII"])).toBe(400)
     expect(sortValue(a, "tonight", ["L"])).toBeNull()
+  })
+})
+
+describe("Img time (T10): the reason it is zero is a short value beside 0h, never a sentence", () => {
+  it("reads the hours when there is time, and 0h with its reason label when there is none", () => {
+    expect(imgTimeText({ imgTimeS: 7800, zeroReason: null })).not.toContain(m.tonight_zero_hours())
+    expect(imgTimeText({ imgTimeS: 0, zeroReason: "low" })).toBe(`${m.tonight_zero_hours()} · ${m.tonight_zero_low()}`)
+    expect(imgTimeText({ imgTimeS: 0, zeroReason: "darkness" })).toBe(`${m.tonight_zero_hours()} · ${m.tonight_zero_darkness()}`)
+    expect(imgTimeText({ imgTimeS: 0, zeroReason: null })).toBe(m.tonight_zero_hours())
   })
 })

@@ -13,7 +13,7 @@
  * deadline or season window carry their planning priority
  * (`planningPriorities`, C7), which rises as the window's last night nears.
  */
-import { bandUnion, liveLightSessions, myTargets, panelGroups, planningPriorities, rigRef, type SubjectPriority, sessionTargetId, targetFit, type Fit, fitsNicely, isMosaicCandidate } from "@/domain/derive"
+import { bandUnion, formatHours, liveLightSessions, myTargets, panelGroups, planningPriorities, rigRef, type SubjectPriority, sessionTargetId, targetFit, type Fit, fitsNicely, isMosaicCandidate } from "@/domain/derive"
 import { BANDS, DEFAULT_MOON_AVOIDANCE, NARROW_BANDS } from "@/domain/labels"
 import { targetCoverage } from "@/domain/library"
 import type { MoonAvoidance, Stretch, Tonight } from "@/domain/planning"
@@ -176,12 +176,8 @@ export function searchRows(rows: TargetRow[], query: string, simbadSearched: boo
 // Tonight per row
 // ---------------------------------------------------------------------------
 
-/** Why Img time is zero tonight (PLAN-TGT-FR-05); `zeroReasonText` words it. */
-export type ZeroReason =
-  | { kind: "darkness"; sunLimitDeg: number }
-  | { kind: "low"; minAltitudeDeg: number }
-  | { kind: "moon" }
-  | { kind: "short"; minAltitudeDeg: number; minDurationMin: number }
+/** Why Img time is zero tonight (PLAN-TGT-FR-05): no darkness, too low in it, every filter's Moon curve refuses the dark window, or the window is too short. */
+export type ZeroReason = "darkness" | "low" | "moon" | "short"
 
 export type RowSky =
   | { status: "no-site" }
@@ -198,7 +194,7 @@ export type RowSky =
       windows: Stretch[]
       /** The longest of them. */
       best: Stretch | null
-      /** Why Img time is zero: altitude, Moon or darkness (PLAN-TGT-FR-05). */
+      /** Why Img time is zero (PLAN-TGT-FR-05). */
       zeroReason: ZeroReason | null
       /** Moon above the horizon during the best window; null without a window. */
       moonUp: boolean | null
@@ -207,23 +203,24 @@ export type RowSky =
       chips: ImagingChip[] | null
     }
 
-/** "Altitude: stays below 30° in darkness": the full reason, for a tooltip. */
-export function zeroReasonText(reason: ZeroReason): string {
-  switch (reason.kind) {
+/** "Too low": the label beside "0h" (T10). */
+function zeroReasonLabel(reason: ZeroReason): string {
+  switch (reason) {
     case "darkness":
-      return m.tonight_zero_darkness({ sun: reason.sunLimitDeg })
+      return m.tonight_zero_darkness()
     case "low":
-      return m.tonight_zero_low({ altitude: reason.minAltitudeDeg })
+      return m.tonight_zero_low()
     case "moon":
       return m.tonight_zero_moon()
     case "short":
-      return m.tonight_zero_short({ altitude: reason.minAltitudeDeg, minutes: reason.minDurationMin })
+      return m.tonight_zero_short()
   }
 }
 
-/** The one word beside "0h": darkness, altitude or moon. */
-export function zeroReasonWord(reason: ZeroReason): string {
-  return reason.kind === "darkness" ? m.tonight_zero_word_darkness() : reason.kind === "moon" ? m.tonight_zero_word_moon() : m.tonight_zero_word_altitude()
+/** Img time as one value: "2h10", or "0h · Too low" with the reason it is zero. */
+export function imgTimeText(sky: Pick<Extract<RowSky, { status: "ok" }>, "imgTimeS" | "zeroReason">): string {
+  if (sky.imgTimeS > 0) return formatHours(sky.imgTimeS)
+  return sky.zeroReason ? `${m.tonight_zero_hours()} · ${zeroReasonLabel(sky.zeroReason)}` : m.tonight_zero_hours()
 }
 
 /** The night the Targets page plans for (`?night=`, else tonight) at the planning site. */
@@ -259,12 +256,11 @@ export function nightSky(ctx: SkyContext | null, ra: number | null, dec: number 
   const best = imaging.windows.reduce<Stretch | null>((top, w) => (top === null || w.minutes > top.minutes ? w : top), null)
   let zeroReason: ZeroReason | null = null
   if (imaging.imgTimeS === 0) {
-    const min = ctx.criteria.minAltitudeDeg
-    if (!ctx.summary.darkness) zeroReason = { kind: "darkness", sunLimitDeg: ctx.grid.sunLimit }
-    else if (sky.peakDarkDeg === null || sky.peakDarkDeg < min) zeroReason = { kind: "low", minAltitudeDeg: min }
+    if (!ctx.summary.darkness) zeroReason = "darkness"
+    else if (sky.peakDarkDeg === null || sky.peakDarkDeg < ctx.criteria.minAltitudeDeg) zeroReason = "low"
     // A dark window of the minimum duration exists, and every filter's Moon curve refuses it.
-    else if (imaging.chips) zeroReason = { kind: "moon" }
-    else zeroReason = { kind: "short", minAltitudeDeg: min, minDurationMin: ctx.criteria.minDurationMin }
+    else if (imaging.chips) zeroReason = "moon"
+    else zeroReason = "short"
   }
   const mid = best ? new Date((Date.parse(best.start) + Date.parse(best.end)) / 2).toISOString() : null
   return {

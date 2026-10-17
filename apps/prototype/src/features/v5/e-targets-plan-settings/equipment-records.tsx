@@ -26,7 +26,7 @@ import { NightPicker } from "@/components/app/pickers"
 import { UsedByPreview } from "@/components/app/previews"
 import { StatusBadge } from "@/components/app/status"
 import { ListSection } from "@/components/templates/settings-page"
-import { rigFieldOfView, rigFilters, type StepLink } from "@/domain/derive"
+import { rigFieldOfView, rigFilters } from "@/domain/derive"
 import { nightOf, rigVersions } from "@/domain/indexing"
 import { shiftNight } from "@/domain/planning"
 import { fieldOfView } from "@/domain/sky"
@@ -73,19 +73,12 @@ function formatFactor(factor: number): string {
 
 const positive = (v: number | null, whole = false): v is number => v !== null && !Number.isNaN(v) && v > 0 && (!whole || Number.isInteger(v))
 
-/** "Used by 2 rigs ▸": the users, each linked to its place; "–" without one. */
-function UsedBy({ label, items }: { label: string; items: { label: string; link: StepLink }[] }) {
-  const first = items[0]
-  if (!first) return "–"
-  return <UsedByPreview label={label} link={first.link} items={items} />
-}
-
 /** The rigs a camera, telescope, reducer or filter is on, as a Used by preview; the column's header says "Rigs", so the count names them. */
 export function RigsUsing({ kind, id }: { kind: Exclude<EquipmentKind, "rig">; id: string }) {
   const m = useMessages()
   const catalog = useStore((s) => s.catalog)
   const users = equipmentUsers(catalog, kind, id)
-  return <UsedBy label={m.project_rigs_count({ count: users.length })} items={users.map((u) => ({ label: say(m, u.label), link: u.link }))} />
+  return <UsedByPreview label={m.project_rigs_count({ count: users.length })} items={users.map((u) => ({ label: say(m, u.label), link: u.link }))} />
 }
 
 /** Edit…, the one editor of a record. */
@@ -174,7 +167,7 @@ function CameraDialog({ open, camera, onClose }: { open: boolean; camera: Camera
     return alias.trim() ? aliasError(twin.id, twin.name, alias) : m.settings_camera_alias_needed({ name: twin.name })
   }
   const errors: FieldErrors<keyof CameraForm> = {
-    name: model ? undefined : m.targets_name_empty({ label: m.equipment_name() }),
+    name: model ? undefined : m.settings_name_required(),
     width: positive(values.width, true) ? undefined : m.equipment_error_whole_pixels(),
     height: positive(values.height, true) ? undefined : m.equipment_error_whole_pixels(),
     pixel: positive(values.pixel) ? undefined : m.equipment_error_microns(),
@@ -219,7 +212,7 @@ function CameraDialog({ open, camera, onClose }: { open: boolean; camera: Camera
         <NumberField label={m.equipment_sensor_height()} value={values.height} min={1} step={1} onChange={(height) => set({ height })} error={shown(errors, "height")} />
         <NumberField label={m.equipment_pixel_size()} value={values.pixel} min={0.1} step={0.01} onChange={(pixel) => set({ pixel })} error={shown(errors, "pixel")} />
       </FieldGroup>
-      <TextField label={m.equipment_camera_alias()} description={m.equipment_camera_alias_help()} value={values.alias} onChange={(alias) => set({ alias })} error={shown(errors, "alias")} />
+      <TextField label={m.equipment_camera_alias()} value={values.alias} onChange={(alias) => set({ alias })} error={shown(errors, "alias")} />
       {twins.map((twin) => (
         <TextField
           key={twin.id}
@@ -230,8 +223,8 @@ function CameraDialog({ open, camera, onClose }: { open: boolean; camera: Camera
           error={twin.id in values.twinAliases ? twinError(twin) : undefined}
         />
       ))}
-      {/* The calibration defaults, one switch per line so each label and its help read in full. */}
-      <SwitchField label={m.equipment_no_darks()} description={m.equipment_no_calibration_help()} checked={values.noDarks} onChange={(noDarks) => set({ noDarks })} />
+      {/* The calibration defaults, one switch per line so each label reads in full. */}
+      <SwitchField label={m.equipment_no_darks()} checked={values.noDarks} onChange={(noDarks) => set({ noDarks })} />
       <SwitchField label={m.equipment_no_bias()} checked={values.noBias} onChange={(noBias) => set({ noBias })} />
     </FormDialog>
   )
@@ -318,7 +311,7 @@ function TelescopeDialog({ open, telescope, onClose }: { open: boolean; telescop
   const m = useMessages()
   const { values, set, shown } = useDialogForm<TelescopeForm>(open, () => ({ name: telescope?.name ?? "", focal: telescope?.focalLengthMm ?? null, aperture: telescope?.apertureMm ?? null }))
   const errors: FieldErrors<keyof TelescopeForm> = {
-    name: values.name.trim() ? undefined : m.targets_name_empty({ label: m.equipment_name() }),
+    name: values.name.trim() ? undefined : m.settings_name_required(),
     focal: positive(values.focal) ? undefined : m.equipment_error_mm(),
     aperture: values.aperture === null || positive(values.aperture) ? undefined : m.equipment_error_mm(),
   }
@@ -390,7 +383,7 @@ function ReducerDialog({ open, reducer, onClose }: { open: boolean; reducer: Red
   const m = useMessages()
   const { values, set, shown } = useDialogForm<ReducerForm>(open, () => ({ name: reducer?.name ?? "", factor: reducer?.factor ?? null }))
   const errors: FieldErrors<keyof ReducerForm> = {
-    name: values.name.trim() ? undefined : m.targets_name_empty({ label: m.equipment_name() }),
+    name: values.name.trim() ? undefined : m.settings_name_required(),
     factor: values.factor !== null && values.factor >= REDUCER_LIMITS.min && values.factor <= REDUCER_LIMITS.max ? undefined : m.equipment_error_reducer(),
   }
   const label = reducer ? m.settings_save() : m.equipment_add_reducer()
@@ -468,8 +461,8 @@ export function rigFiltersLine(m: Messages, catalog: Catalog, rig: OpticalTrain)
 /** The earliest first night a rig added by hand can take, so its calendar has an end; its first version also covers the nights before it (provisional). */
 const FIRST_NIGHT_FLOOR = "2000-01-01"
 
-/** A night as a form field: the Field's label and description name the NightPicker's group, and the picker, Today included, keeps the night on or after `min`. */
-function NightField({ label, description, value, onChange, today, min }: { label: string; description: string; value: string; onChange: (night: string) => void; today: string; min: string }) {
+/** A night as a form field: the Field's label (and description, when given) name the NightPicker's group, and the picker, Today included, keeps the night on or after `min`. */
+function NightField({ label, description, value, onChange, today, min }: { label: string; description?: string; value: string; onChange: (night: string) => void; today: string; min: string }) {
   return (
     <Field label={label} description={description}>
       {(control) => <NightPicker id={control.id} aria-labelledby={control["aria-labelledby"]} aria-describedby={control["aria-describedby"]} value={value} onChange={onChange} today={today < min ? min : today} min={min} />}
@@ -517,7 +510,7 @@ function RigDialog({ open, rig, onClose, onSaved }: { open: boolean; rig: Optica
   const picked = values.filterIds.flatMap((id) => catalog.filters[id] ?? [])
   const twin = picked.find((f, i) => picked.findIndex((g) => g.name.toLowerCase() === f.name.toLowerCase()) !== i)
   const errors: FieldErrors<keyof RigForm> = {
-    name: !trimmed ? m.targets_name_empty({ label: m.equipment_rig_name() }) : taken ? m.targets_name_taken({ label: m.equipment_rig_name(), name: trimmed }) : undefined,
+    name: !trimmed ? m.settings_name_required() : taken ? m.settings_name_taken() : undefined,
     cameraId: camera ? undefined : m.equipment_error_choose(),
     telescopeId: telescope ? undefined : m.equipment_error_choose(),
     filterIds: twin ? m.equipment_filter_twin({ name: twin.name }) : undefined,
@@ -548,7 +541,7 @@ function RigDialog({ open, rig, onClose, onSaved }: { open: boolean; rig: Optica
         options={[{ value: NO_REDUCER, label: m.equipment_no_reducer() }, ...reducers.map((r) => ({ value: r.id, label: `${r.name} · ${formatFactor(r.factor)}` }))]}
         onChange={(next) => set({ reducerId: next })}
       />
-      <SwitchField label={m.equipment_rotator()} description={m.equipment_rotator_help()} checked={values.rotator} onChange={(rotator) => set({ rotator })} />
+      <SwitchField label={m.equipment_rotator()} checked={values.rotator} onChange={(rotator) => set({ rotator })} />
       <KeyValueList
         columns={2}
         items={[
@@ -566,7 +559,7 @@ function RigDialog({ open, rig, onClose, onSaved }: { open: boolean; rig: Optica
       />
       <NightField
         label={rig ? m.equipment_version_from() : m.equipment_first_night()}
-        description={rig ? `${m.equipment_version_from_help({ night: formatNight(rig.versionFrom, true) })} ${m.equipment_version_undated_help()}` : m.equipment_first_night_help()}
+        description={rig ? m.equipment_version_from_help({ night: formatNight(rig.versionFrom, true) }) : undefined}
         value={values.from}
         onChange={(from) => set({ from })}
         today={nightOf(nowIso())}
@@ -652,7 +645,7 @@ export function RigsSection({ activeRigId, onSaved }: { activeRigId: string | nu
       id: "projects",
       header: m.calibration_used_by(),
       sortValue: (r) => projectsOf(r).length,
-      cell: (r) => <UsedBy label={m.projects_count({ count: projectsOf(r).length })} items={projectsOf(r).map((p) => ({ label: p.name, link: { to: "/projects/$projectId", params: { projectId: p.id } } }))} />,
+      cell: (r) => <UsedByPreview label={m.projects_count({ count: projectsOf(r).length })} items={projectsOf(r).map((p) => ({ label: p.name, link: { to: "/projects/$projectId", params: { projectId: p.id } } }))} />,
     },
     { id: "source", header: m.equipment_source(), hideable: true, defaultHidden: true, sortValue: (r) => r.source, cell: (r) => <StatusBadge kind="source" value={r.source} /> },
   ]

@@ -6,7 +6,7 @@
  * Skip keeps them). Each step's region shows what the step works on, and the
  * page follows the flow when a step settles.
  */
-import { Link, useParams } from "@tanstack/react-router"
+import { useParams } from "@tanstack/react-router"
 import { SearchX } from "lucide-react"
 import { type ReactNode, useEffect, useRef, useState } from "react"
 import { useMessages } from "@/app/preferences"
@@ -19,7 +19,8 @@ import { EmptyState } from "@/components/app/feedback"
 import { SelectField } from "@/components/app/fields"
 import { OperationLine } from "@/components/app/operation-panel"
 import { PageHeader, Section } from "@/components/app/page"
-import { Pill } from "@/components/app/pill"
+import { PlaceLink } from "@/components/app/previews"
+import { StatusBadge } from "@/components/app/status"
 import { StepPage } from "@/components/templates/step-page"
 import { masterVersion } from "@/domain/calibration"
 import { CALIBRATION_STEP_NAME, CALIBRATION_STEPS, processView, stackOutputFolder, stackProfiles } from "@/domain/calibration-process"
@@ -29,7 +30,7 @@ import { say } from "@/lib/i18n"
 import { startStack } from "@/store/actions/calibration"
 import { calibrationFlow } from "@/store/actions/flows"
 import { useStore } from "@/store/core"
-import { masterLabel, PROCESS_STATUS } from "./calibration-model"
+import { masterLabel } from "./calibration-model"
 
 const LIBRARY = { to: "/calibration" }
 const PROCESSES = { to: "/calibration", search: { view: "processes" } }
@@ -53,7 +54,7 @@ function ProcessMissing() {
   return (
     <>
       <PageHeader title={m.calibration_process_title()} path={[{ label: m.nav_calibration(), link: LIBRARY }]} />
-      <EmptyState icon={SearchX} title={m.calibration_process_gone()} description={m.store_cal_process_missing()} action={<ActionButton action={back} />} titleAs="h2" />
+      <EmptyState icon={SearchX} title={m.calibration_process_gone()} action={<ActionButton action={back} />} titleAs="h2" />
     </>
   )
 }
@@ -82,7 +83,6 @@ function ProcessFlow({ process, viewing }: { process: CalibrationProcess; viewin
   const menu: MenuItem[] = []
   if (view.session) menu.push({ id: "open-session", label: m.calibration_open_raw_session(), run: () => follow({ to: "/sessions/$sessionId", params: { sessionId: view.session!.id } }) })
   if (view.master) menu.push({ id: "open-master", label: m.calibration_open_master(), run: () => follow({ to: "/calibration", search: { master: view.master!.id } }) })
-  const status = PROCESS_STATUS[view.status]
 
   return (
     <StepPage
@@ -91,7 +91,7 @@ function ProcessFlow({ process, viewing }: { process: CalibrationProcess; viewin
         { label: m.calibration_processes(), link: PROCESSES },
       ]}
       title={name}
-      status={<Pill tone={status.tone}>{say(m, status.word)}</Pill>}
+      status={<StatusBadge kind="process" value={view.status} />}
       menu={{ label: m.calibration_process_title(), items: menu }}
       flow={flow}
       viewing={shown}
@@ -127,13 +127,7 @@ function StepBody({ process, step, editable, profileId, onPickProfile }: StepBod
     stack: [
       {
         label: m.calibration_session(),
-        value: session ? (
-          <Link to="/sessions/$sessionId" params={{ sessionId: session.id }} className="text-link hover:underline">
-            {formatNight(session.night, true)}
-          </Link>
-        ) : (
-          none
-        ),
+        value: session ? <PlaceLink link={{ to: "/sessions/$sessionId", params: { sessionId: session.id } }}>{formatNight(session.night, true)}</PlaceLink> : none,
       },
       { label: m.calibration_frames(), value: formatCount(view.frames) },
       { label: m.calibration_output(), value: output ?? none, mono: true },
@@ -151,13 +145,7 @@ function StepBody({ process, step, editable, profileId, onPickProfile }: StepBod
       { label: m.calibration_stored(), value: process.storagePath ?? none, mono: true },
       {
         label: m.calibration_master(),
-        value: view.master ? (
-          <Link to="/calibration" search={{ master: view.master.id }} className="text-link hover:underline">
-            {registered ? fileName(registered.path) : masterLabel(m, state.catalog, view.master)}
-          </Link>
-        ) : (
-          none
-        ),
+        value: view.master ? <PlaceLink link={{ to: "/calibration", search: { master: view.master.id } }}>{registered ? fileName(registered.path) : masterLabel(m, state.catalog, view.master)}</PlaceLink> : none,
       },
     ],
     raws: [

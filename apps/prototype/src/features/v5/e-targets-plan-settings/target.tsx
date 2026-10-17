@@ -40,7 +40,7 @@ import type { SearchParams } from "@/routes"
 import { useStore } from "@/store/core"
 import { useIssues } from "@/store/issues"
 import { addToProjectMenu, clockRange, criteriaText, fitText, keepSearch, myTargetsAction, newProjectAction, planAction, planNight, useSkyContext } from "./parts"
-import { allRows, prioritiesByTarget, type RigFit, rowView, sessionCountsByTarget, type TargetRow, zeroReasonWord } from "./targets-model"
+import { allRows, imgTimeText, prioritiesByTarget, type RigFit, rowView, sessionCountsByTarget, type TargetRow } from "./targets-model"
 
 /** Integration as "2h 10m"; "–" for none. */
 function hoursOrDash(seconds: number): string {
@@ -117,9 +117,9 @@ function TargetDetail({ targetId }: { targetId: string }) {
         items={[
           { label: m.tonight_altitude(), value: <AltitudeSpark night={ctx.grid} sky={sky} darkness={ctx.summary.darkness} minAltitudeDeg={ctx.criteria.minAltitudeDeg} timeZone={ctx.site.timeZone} /> },
           { label: m.tonight_best(), value: sky.best ? clockRange(sky.best.start, sky.best.end, ctx.site.timeZone) : m.target_best_none() },
-          { label: m.tonight_img_time(), value: sky.imgTimeS > 0 ? formatHours(sky.imgTimeS) : `${m.tonight_zero_hours()}${sky.zeroReason ? ` · ${zeroReasonWord(sky.zeroReason)}` : ""}` },
+          { label: m.tonight_img_time(), value: imgTimeText(sky) },
           { label: m.tonight_lunar(), value: `${Math.round(sky.lunarDeg)}°` },
-          { label: m.domain_suitable_filters(), value: <GradeBadges grades={view.tonight} empty={m.tonight_no_window()} wrap /> },
+          { label: m.domain_suitable_filters(), value: <GradeBadges grades={view.tonight} wrap /> },
           { label: m.tonight_opposition(), value: view.opposition ? formatNight(view.opposition, true) : "–" },
           { label: m.plan_dark(), value: <DarkLine darkness={ctx.summary.darkness} timeZone={ctx.site.timeZone} /> },
           { label: m.tonight_moon(), value: <MoonLine moon={ctx.summary.moon} timeZone={ctx.site.timeZone} /> },
@@ -179,7 +179,7 @@ function TargetDetail({ targetId }: { targetId: string }) {
       },
     },
     { id: "channel", header: m.target_channel(), sortValue: (s) => s.channel, cell: (s) => s.channel ?? "–" },
-    { id: "frames", header: m.calibration_frames(), align: "right", sortValue: (s) => frames(s), cell: (s) => frames(s) },
+    { id: "frames", header: m.target_frames(), align: "right", sortValue: (s) => frames(s), cell: (s) => frames(s) },
     { id: "rig", header: m.targets_rig(), truncate: true, sortValue: (s) => rigName(m, catalog, sessionRigId(s)), cell: (s) => rigName(m, catalog, sessionRigId(s)) },
     { id: "site", header: m.session_capture_site(), truncate: true, sortValue: (s) => captureSite(catalog, s)?.name ?? null, cell: (s) => captureSite(catalog, s)?.name ?? "–" },
   ]
@@ -291,7 +291,7 @@ function TargetDetail({ targetId }: { targetId: string }) {
           rowLabel={(s) => formatNight(s.night, true)}
           onRowClick={openSession}
           rowActions={(s) => withIssueItems(m, [{ id: "open-session", label: m.project_open_session(), run: () => openSession(s) }], rowIssues(issueView, { kind: "session", id: s.id }))}
-          empty={<EmptyState icon={MapPin} title={m.run_cal_no_sessions()} action={null} />}
+          empty={<EmptyState icon={MapPin} title={m.target_no_sessions()} action={null} />}
         />
       ),
     },
