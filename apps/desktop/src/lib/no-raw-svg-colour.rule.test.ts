@@ -104,11 +104,26 @@ describe('svg/no-raw-svg-colour', () => {
     expect(diagnostics).toHaveLength(0);
   });
 
-  it('flags standalone SVG fragments and skips capitalized components', () => {
+  it('flags a raw color on a standalone intrinsic SVG element', () => {
     const diagnostics = lint(
-      'function Dot() { return <circle fill="#f00" />; } function Badge() { return <Badge color="red" />; }',
+      'function Dot() { return <circle fill="#f00" />; }',
     );
 
     expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]?.message).toContain('"fill"');
+  });
+
+  it('skips capitalized component props that resemble SVG elements', () => {
+    const diagnostics = lint(
+      'function Card() { return <Badge color="red" />; }',
+    );
+
+    expect(diagnostics).toHaveLength(0);
+  });
+
+  it('skips capitalized Text components even when they share an SVG tag name', () => {
+    const diagnostics = lint('function T() { return <Text color="red" />; }');
+
+    expect(diagnostics).toHaveLength(0);
   });
 });

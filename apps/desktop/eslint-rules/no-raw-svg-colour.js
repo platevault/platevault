@@ -58,7 +58,7 @@ function isInsideSvg(node) {
   while (ancestor) {
     if (ancestor.type === 'JSXElement' && ancestor.openingElement.name.type === 'JSXIdentifier') {
       const name = ancestor.openingElement.name.name;
-      if (name === 'svg' || SVG_ELEMENTS.has(name.toLowerCase())) return true;
+      if (name === 'svg' || (/^[a-z]/.test(name) && SVG_ELEMENTS.has(name))) return true;
     }
     ancestor = ancestor.parent;
   }
