@@ -50,6 +50,7 @@ import {
   Unplug,
   Wrench,
 } from "lucide-react"
+import type { ReactNode } from "react"
 import { useMessages } from "@/app/preferences"
 import { Badge } from "@/components/ui/badge"
 import { m } from "@/lib/i18n"
@@ -289,12 +290,10 @@ export type StatusValue<K extends StatusKind> = keyof (typeof STATUS)[K] & strin
  * Harness v4: a status reads as a native status label, a tinted glyph and its
  * word, never a filled pill. Tone colours are text colours that meet 4.5:1 on
  * every surface; info keeps foreground text with an accent glyph.
- * @deprecated as a public export (private in W4): render `StatusBadge`, whose kinds now cover T4Badge.
  */
-export const STATUS_CLASS = "h-auto min-h-5 gap-1 rounded-none border-0 bg-transparent px-0 py-0 text-[0.75rem] font-medium [&>svg]:size-3.5!"
+const STATUS_CLASS = "h-auto min-h-5 gap-1 rounded-none border-0 bg-transparent px-0 py-0 text-[0.75rem] font-medium [&>svg]:size-3.5!"
 
-/** @deprecated as a public export (private in W4): render `StatusBadge`. */
-export const TONE_CLASS: Record<Tone, string> = {
+const TONE_CLASS: Record<Tone, string> = {
   neutral: "text-foreground [&>svg]:text-muted-foreground",
   muted: "text-muted-foreground",
   info: "text-foreground [&>svg]:text-info",
@@ -327,4 +326,9 @@ export function StatusBadge<K extends StatusKind>({ kind, value, label, classNam
       {label ?? meta.label}
     </Badge>
   )
+}
+
+/** Several statuses of one object side by side, 8 px apart; they wrap onto the next line when the row runs out of room. */
+export function StatusBadges({ children }: { children: ReactNode }) {
+  return <span className="inline-flex flex-wrap items-center gap-2">{children}</span>
 }

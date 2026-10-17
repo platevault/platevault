@@ -421,7 +421,6 @@ function ApplySheetDialog({ project, sheet }: { project: Project; sheet: ApplySh
   const offline = refusals.find((r) => r.kind === "offline")
   const drift = refusals.find((r) => r.kind === "pin-drift")
   const developer = refusals.some((r) => r.kind === "developer-mode")
-  const noLinks = refusals.find((r) => r.kind === "no-symlinks")
   const space = plan.space.twoViews && !plan.first ? m.project_apply_space_two_views({ size: formatBytes(plan.space.neededBytes) }) : formatBytes(plan.space.neededBytes)
 
   const facts = [
@@ -487,8 +486,8 @@ function ApplySheetDialog({ project, sheet }: { project: Project; sheet: ApplySh
       {stale ? <Notice tone="warning" title={m.view_sheet_stale()} actions={<ActionButton action={{ id: "refresh", label: m.view_sheet_refresh(), run: () => openApplySheet(project.id) }} />} /> : null}
         {developer ? (
           <Notice
-            tone="refusal"
-            title={m.view_refused_developer_mode()}
+            tone="warning"
+            title={m.view_developer_mode_off()}
             actions={
               <>
                 <DeveloperModeActions />
@@ -499,7 +498,6 @@ function ApplySheetDialog({ project, sheet }: { project: Project; sheet: ApplySh
             {application === "siril" ? m.view_siril_needs_links() : null}
           </Notice>
         ) : null}
-        {noLinks ? <Notice tone="refusal" title={say(m, applyRefusalRef(noLinks))} /> : null}
         {leftovers.length > 0 ? (
           <Section level={3} id="apply-previous" title={m.view_review_previous_first()}>
             <LeftoverTable project={project} leftovers={leftovers} label={m.view_review_previous_first()} />

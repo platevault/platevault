@@ -1,14 +1,18 @@
 /**
  * Catalogue entry (R9-COMPOSITION-PLAN §8.3): feedback routes of P7.
  * Refusal, ActionError, NoticeSlot (the template notice-slot contract) and
- * toast. Component content uses the real catalogue copy; the captions are
- * reviewer labels. The toast buttons need the RootLayout `Toaster`.
+ * toast; then the states themselves: EmptyState, the Notice tones,
+ * SaveState, UnknownValue and the loading skeletons. Component content uses
+ * the real catalogue copy; the captions are reviewer labels. The toast
+ * buttons need the RootLayout `Toaster`.
  */
-import { Archive, Trash2 } from "lucide-react"
+import { Archive, Inbox, Trash2 } from "lucide-react"
 import { useMessages } from "@/app/preferences"
-import { ActionError, NoticeSlot, toast, useSaveState } from "@/components/app/feedback"
+import { ActionError, DetailSkeleton, EmptyState, Notice, NoticeSlot, SaveState, TableSkeleton, toast, UnknownValue, useSaveState } from "@/components/app/feedback"
+import { Section } from "@/components/app/page"
 import { Refusal } from "@/components/app/refusal"
 import { Button } from "@/components/ui/button"
+import { formatNight } from "@/lib/format"
 import type { CommitResult } from "@/store/core"
 import { ComponentSection, Specimen } from "./specimen"
 
@@ -116,6 +120,60 @@ export function FeedbackCatalogue() {
           </Button>
         </div>
       </ComponentSection>
+
+      <Section title={m.ds_feedback_title()}>
+        <div className="grid gap-4 xl:grid-cols-2">
+          <EmptyState
+            icon={Inbox}
+            title={m.targets_empty()}
+            description={m.ds_targets_empty_description()}
+            action={<Button size="sm">{m.location_role_captures_add()}</Button>}
+          />
+          <div className="space-y-3">
+            <Notice
+              tone="offline"
+              title={m.run_cleanup_volume_offline({ name: "Cold-1" })}
+              actions={
+                <Button size="sm" variant="outline">
+                  {m.ds_reconnect()}
+                </Button>
+              }
+            >
+              {m.ds_offline_body({ night: formatNight("2026-09-12") })}
+            </Notice>
+            <Notice tone="warning" title={m.ds_scan_incomplete_title()}>
+              {m.ds_scan_incomplete_body({ path: "/Volumes/Astro-T7/Imaging/M33/2026-08-30" })}
+            </Notice>
+            <Notice
+              tone="warning"
+              title={m.view_developer_mode_off()}
+              actions={
+                <Button size="sm" variant="outline">
+                  {m.project_use_copies()}
+                </Button>
+              }
+            />
+            <Notice tone="info" title={m.ds_provisional_title()}>
+              {m.ds_provisional_body({ volume: "Astro-T7" })}
+            </Notice>
+          </div>
+          <div className="space-y-3">
+            <ActionError message={m.store_not_saved_message({ label: m.ds_target_correction() })} onRetry={() => undefined} />
+            <SaveState state="saved" />
+            <SaveState state="unsaved" />
+            <SaveState state="saving" />
+            <SaveState state="failed" onRetry={() => undefined} message={m.ds_save_failed()} />
+            <SaveState state="stale" onReview={() => undefined} message={m.ds_save_stale({ from: 3, to: 4 })} />
+            <p className="text-sm">
+              {m.run_col_distance()}: <UnknownValue label={m.project_search_position_unknown()} reason={m.indexing_pointing_none()} /> · {m.measure_metric_fwhm()}: <UnknownValue label={m.status_not_measured()} />
+            </p>
+          </div>
+          <div className="grid gap-3">
+            <TableSkeleton label={m.ds_loading_sessions()} rows={4} />
+            <DetailSkeleton label={m.ds_loading_session_detail()} />
+          </div>
+        </div>
+      </Section>
     </>
   )
 }

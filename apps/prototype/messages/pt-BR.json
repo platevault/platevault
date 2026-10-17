@@ -1506,7 +1506,6 @@
   ],
   "wrapup_offer_view_label": "Arquivos da View",
   "wrapup_offer_view_none": "Mover entradas da View para a Lixeira: nenhuma restante",
-  "wrapup_skip": "Pular",
   "wrapup_undo": "Desfazer",
   "wrapup_cleanup_title": "Limpar execuções",
   "wrapup_cleanup_confirm_items": [
@@ -4975,7 +4974,6 @@
   "catalogue_dialogs_state_folded": "Grupos de arquivos, recolhidos",
   "catalogue_dialogs_state_unfolded": "Grupos de arquivos, expandidos",
   "catalogue_dialogs_state_title_only": "Só o título",
-  "catalogue_dialogs_state_skip": "Etapa opcional com Pular",
   "catalogue_dialogs_trash_title": [
     {
       "declarations": [
@@ -5011,7 +5009,6 @@
       }
     }
   ],
-  "catalogue_dialogs_proceed": "Prosseguir",
   "catalogue_actions_heading": "Ações",
   "catalogue_actions_summary": "Uma Action aparece como botão do cabeçalho, item de menu nomeado, item ⋯ da linha, item do menu de contexto e comando da paleta, com o mesmo rótulo, atalho e motivo de indisponibilidade.",
   "catalogue_actions_roles_heading": "Papéis dos botões",
@@ -5058,6 +5055,10 @@
   "catalogue_status_truncated": "truncado (title = texto completo)",
   "catalogue_status_count_desc": "Um número pequeno, limitado a 99+, com rótulo opcional para leitor de tela.",
   "catalogue_status_count_caption": "tons · limite · rótulo",
+  "catalogue_status_badges_desc": "Vários status de um mesmo objeto lado a lado, a 8 px um do outro. Passam para a linha seguinte quando falta espaço na linha.",
+  "catalogue_status_badges_wrap": "dois selos · espaço estreito",
+  "catalogue_page_desc": "O layout de painel em que os templates se apoiam. PageBody: o corpo de um painel com margens de 20 px e o seu ritmo vertical. Section: um h2 com uma legenda de uma linha e as suas ações ao lado do título, ou um h3 dentro dele.",
+  "catalogue_page_caption": "Uma linha sob o título",
   "catalogue_previews_blockers_desc": "Por que uma ação está indisponível. Em volta de um controle desativado focável, o cartão repete a descrição do controle; sem controle, renderiza o gatilho 'motivo ▸' de uma Refusal (pressionar move o foco para o cartão).",
   "catalogue_previews_disabled_control": "controle desativado, tabela de bloqueios (cursor, foco)",
   "catalogue_previews_own_trigger": "gatilho próprio + ações",
@@ -7435,7 +7436,7 @@
   "view_phase_verifying": "Verificando cada entrada e o seu original",
   "view_previous_empty": "Nada restou em View (previous)",
   "view_project_folder": "Pasta do projeto",
-  "view_refused_developer_mode": "Não é possível aplicar · links simbólicos exigem o Modo de Desenvolvedor do Windows",
+  "view_developer_mode_off": "O Modo de Desenvolvedor do Windows está desligado",
   "view_reveal": "Mostrar a View",
   "view_reveal_previous": "Mostrar View (previous)",
   "view_review_previous_first": "Revise primeiro View (previous)",

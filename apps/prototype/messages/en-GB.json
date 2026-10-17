@@ -1392,7 +1392,6 @@
   ],
   "wrapup_offer_view_label": "View files",
   "wrapup_offer_view_none": "Move View entries to Trash: none left",
-  "wrapup_skip": "Skip",
   "wrapup_undo": "Undo",
   "wrapup_cleanup_title": "Clean up runs",
   "wrapup_cleanup_confirm_items": [
@@ -4619,7 +4618,6 @@
   "catalogue_dialogs_state_folded": "File groups, folded",
   "catalogue_dialogs_state_unfolded": "File groups, unfolded",
   "catalogue_dialogs_state_title_only": "Title only",
-  "catalogue_dialogs_state_skip": "Optional step with Skip",
   "catalogue_dialogs_trash_title": [
     {
       "declarations": [
@@ -4651,7 +4649,6 @@
       }
     }
   ],
-  "catalogue_dialogs_proceed": "Proceed",
   "catalogue_actions_heading": "Actions",
   "catalogue_actions_summary": "One Action renders as a header button, a named menu item, a row ⋯ item, a context-menu item and a palette command, with the same label, shortcut and unavailable reason.",
   "catalogue_actions_roles_heading": "Button roles",
@@ -4698,6 +4695,10 @@
   "catalogue_status_truncated": "truncated (title = full text)",
   "catalogue_status_count_desc": "A small number, capped at 99+, with an optional screen-reader label.",
   "catalogue_status_count_caption": "tones · cap · label",
+  "catalogue_status_badges_desc": "Several statuses of one object side by side, 8 px apart. They wrap onto the next line when the row runs out of room.",
+  "catalogue_status_badges_wrap": "two badges · narrow place",
+  "catalogue_page_desc": "The pane layout the templates build on. PageBody: a pane body with 20 px margins and its vertical rhythm. Section: an h2 with a one-line caption and its actions beside the heading, or an h3 inside it.",
+  "catalogue_page_caption": "One line under the heading",
   "catalogue_previews_blockers_desc": "Why an action is unavailable. Wrapping a focusable-disabled control, the card restates the control's description; without a control it renders the 'reason ▸' trigger of a Refusal (press moves focus into the card).",
   "catalogue_previews_disabled_control": "disabled control, blocker table (hover, focus)",
   "catalogue_previews_own_trigger": "own trigger + actions",
@@ -6927,7 +6928,7 @@
   "view_phase_verifying": "Verifying every entry and its original",
   "view_previous_empty": "Nothing left in View (previous)",
   "view_project_folder": "Project folder",
-  "view_refused_developer_mode": "Can't apply · symlinks need Windows Developer Mode",
+  "view_developer_mode_off": "Windows Developer Mode is off",
   "view_reveal": "Reveal View",
   "view_reveal_previous": "Reveal View (previous)",
   "view_review_previous_first": "Review View (previous) first",

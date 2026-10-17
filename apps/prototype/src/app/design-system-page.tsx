@@ -4,30 +4,22 @@
  * states, using live prototype data where a component reads the store.
  * Tracks use it as the visual contract; reviewers use it as evidence.
  */
-import { Inbox, Play, Sparkles } from "lucide-react"
+import { Inbox } from "lucide-react"
 import { useState } from "react"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
 import { FolderPicker } from "@/components/app/folder-picker"
-import { ChannelCoverage, FilterChips, KeyValueList, PathText, Stat } from "@/components/app/data"
+import { PathText } from "@/components/app/data"
 import type { Column } from "@/components/app/contracts"
 import { DataTable } from "@/components/app/data-table"
-import { EvidenceList } from "@/components/app/evidence-list"
-import { ActionError, DetailSkeleton, EmptyState, Notice, SaveState, TableSkeleton, UnknownValue } from "@/components/app/feedback"
-import { OperationPanel } from "@/components/app/operation-panel"
+import { EmptyState, UnknownValue } from "@/components/app/feedback"
 import { PageBody, PageHeader, Section } from "@/components/app/page"
 import { STATUS, type StatusKind, StatusBadge, type StatusValue } from "@/components/app/status"
 import { Button } from "@/components/ui/button"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Spinner } from "@/components/ui/spinner"
-import { Toggle } from "@/components/ui/toggle"
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { emptyBreakdown, sessionBreakdown } from "@/domain/library"
+import { sessionBreakdown } from "@/domain/library"
 import type { Session } from "@/domain/types"
 import { formatDuration, formatExposure, formatNight } from "@/lib/format"
 import type { Messages } from "@/lib/i18n"
 import { useStore } from "@/store/core"
-import { startIndexing } from "@/store/operations"
 import { CATALOGUE } from "./catalogue/registry"
 import { useMessages } from "./preferences"
 
@@ -187,45 +179,6 @@ function SessionTable({ loading, empty, grouped, pinned, locked }: { loading: bo
   )
 }
 
-function SampleOperation() {
-  const m = useMessages()
-  const locations = useStore((s) => Object.values(s.catalog.locations))
-  const latest = useStore((s) => Object.values(s.operations).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0])
-  const [locationId, setLocationId] = useState<string | null>(null)
-  return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-end gap-2">
-        <div className="space-y-1">
-          <Label id="sample-op-label">{m.ds_op_location()}</Label>
-          <Select items={locations.map((l) => ({ value: l.id, label: l.displayName }))} value={locationId} onValueChange={(value) => setLocationId(value as string)}>
-            <SelectTrigger aria-labelledby="sample-op-label" className="w-64">
-              <SelectValue placeholder={m.ds_op_choose_location()} />
-            </SelectTrigger>
-            <SelectContent>
-              {locations.map((l) => (
-                <SelectItem key={l.id} value={l.id}>
-                  {l.displayName}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <Button disabled={!locationId} aria-describedby={locationId ? undefined : "sample-op-reason"} onClick={() => locationId && startIndexing([locationId])}>
-          <Play data-icon="inline-start" aria-hidden="true" />
-          {m.setup_start_indexing()}
-        </Button>
-        {!locationId ? (
-          <p id="sample-op-reason" className="pb-2 text-xs text-muted-foreground">
-            {m.ds_op_choose_first()}
-          </p>
-        ) : null}
-      </div>
-      {locations.length === 0 ? <p className="text-sm text-muted-foreground">{m.ds_op_no_locations()}</p> : null}
-      {latest ? <OperationPanel operationId={latest.id} /> : <p className="text-sm text-muted-foreground">{m.ds_op_none()}</p>}
-    </div>
-  )
-}
-
 function SampleFolderPicker() {
   const m = useMessages()
   const [open, setOpen] = useState(false)
@@ -241,8 +194,6 @@ function SampleFolderPicker() {
   )
 }
 
-type ChipId = "ha" | "object" | "unreviewed"
-
 export function DesignSystemPage() {
   const m = useMessages()
   const [tableLoading, setTableLoading] = useState(false)
@@ -250,21 +201,6 @@ export function DesignSystemPage() {
   const [tableGrouped, setTableGrouped] = useState(false)
   const [tablePinned, setTablePinned] = useState(false)
   const [selectionLocked, setSelectionLocked] = useState(false)
-  const [zoom, setZoom] = useState("fit")
-  const [stretch, setStretch] = useState("auto")
-  const [starsOn, setStarsOn] = useState(true)
-  // Chip ids live in state; their labels are worded at render, so a language switch re-words them.
-  const [chipIds, setChipIds] = useState<ChipId[]>(["ha", "object", "unreviewed"])
-  const chipLabel: Record<ChipId, string> = {
-    ha: m.ds_chip_channel({ channel: "Ha" }),
-    object: m.palette_session_missing_object(),
-    unreviewed: m.ds_chip_quality({ quality: m.status_unreviewed() }),
-  }
-  const chips = chipIds.map((id) => ({ id, label: chipLabel[id] }))
-  const sample = useStore((s) => Object.values(s.catalog.sessions).find((x) => x.target.status === "needs-review") ?? Object.values(s.catalog.sessions)[0])
-  const disk = useStore((s) => s.disk)
-  const catalog = useStore((s) => s.catalog)
-  const breakdown = sample ? sessionBreakdown(disk, catalog, sample) : emptyBreakdown()
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -337,50 +273,6 @@ export function DesignSystemPage() {
           </Section>
         </Section>
 
-        <Section title={m.ds_buttons_title()} description={m.ds_buttons_description()}>
-          <div className="space-y-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <Button>{m.setup_start_indexing()}</Button>
-              <Button variant="outline">{m.location_choose_folder_again()}</Button>
-              <Button variant="ghost">{m.selection_show()}</Button>
-              <Button variant="destructive">{m.ds_send_files_to_trash({ count: 14 })}</Button>
-              <Button variant="link">{m.ds_reveal_location()}</Button>
-            </div>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-              <Button disabled aria-describedby="ds-prepare-reason">
-                {m.project_apply()}
-              </Button>
-              <p id="ds-prepare-reason" className="text-xs text-muted-foreground">
-                {m.ds_prepare_disabled({ count: 2 })}
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-              {/* Loading is not disabled-looking: full opacity, busy, not clickable twice. */}
-              <Button aria-busy="true" aria-disabled="true" className="pointer-events-none">
-                <Spinner data-icon="inline-start" aria-hidden="true" />
-                {m.status_saving()}
-              </Button>
-              <p className="text-xs text-muted-foreground">{m.ds_loading_vs_disabled()}</p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <ToggleGroup value={[zoom]} onValueChange={(value) => value[0] && setZoom(value[0])} variant="outline" size="sm" spacing={0} aria-label={m.review_zoom()}>
-                <ToggleGroupItem value="fit">{m.review_zoom_fit()}</ToggleGroupItem>
-                <ToggleGroupItem value="1">1:1</ToggleGroupItem>
-                <ToggleGroupItem value="2">2:1</ToggleGroupItem>
-              </ToggleGroup>
-              <ToggleGroup value={[stretch]} onValueChange={(value) => value[0] && setStretch(value[0])} variant="outline" size="sm" aria-label={m.review_display_stretch()}>
-                <ToggleGroupItem value="linear">{m.review_stretch_linear()}</ToggleGroupItem>
-                <ToggleGroupItem value="auto">{m.review_stretch_auto()}</ToggleGroupItem>
-                <ToggleGroupItem value="strong">{m.review_stretch_strong()}</ToggleGroupItem>
-              </ToggleGroup>
-              <Toggle variant="outline" size="sm" pressed={starsOn} onPressedChange={setStarsOn}>
-                <Sparkles aria-hidden="true" data-icon="inline-start" />
-                {m.review_tab_stars()}
-              </Toggle>
-            </div>
-          </div>
-        </Section>
-
         <Section title={m.ds_status_title()} description={m.ds_status_description()}>
           <div className="space-y-3">
             {(Object.keys(STATUS) as StatusKind[]).map((kind) => (
@@ -393,90 +285,6 @@ export function DesignSystemPage() {
                 </div>
               </div>
             ))}
-          </div>
-        </Section>
-
-        <Section title={m.ds_feedback_title()}>
-          <div className="grid gap-4 xl:grid-cols-2">
-            <EmptyState
-              icon={Inbox}
-              title={m.targets_empty()}
-              description={m.ds_targets_empty_description()}
-              action={<Button size="sm">{m.location_role_captures_add()}</Button>}
-            />
-            <div className="space-y-3">
-              <Notice
-                tone="offline"
-                title={m.run_cleanup_volume_offline({ name: "Cold-1" })}
-                actions={
-                  <Button size="sm" variant="outline">
-                    {m.ds_reconnect()}
-                  </Button>
-                }
-              >
-                {m.ds_offline_body({ night: formatNight("2026-09-12") })}
-              </Notice>
-              <Notice tone="warning" title={m.ds_scan_incomplete_title()}>
-                {m.ds_scan_incomplete_body({ path: "/Volumes/Astro-T7/Imaging/M33/2026-08-30" })}
-              </Notice>
-              <Notice
-                tone="refusal"
-                title={m.view_refused_developer_mode()}
-                actions={
-                  <Button size="sm" variant="outline">
-                    {m.project_use_copies()}
-                  </Button>
-                }
-              />
-              <Notice tone="info" title={m.ds_provisional_title()}>
-                {m.ds_provisional_body({ volume: "Astro-T7" })}
-              </Notice>
-            </div>
-            <div className="space-y-3">
-              <ActionError message={m.store_not_saved_message({ label: m.ds_target_correction() })} onRetry={() => undefined} />
-              <SaveState state="saved" />
-              <SaveState state="unsaved" />
-              <SaveState state="saving" />
-              <SaveState state="failed" onRetry={() => undefined} message={m.ds_save_failed()} />
-              <SaveState state="stale" onReview={() => undefined} message={m.ds_save_stale({ from: 3, to: 4 })} />
-              <p className="text-sm">
-                {m.run_col_distance()}: <UnknownValue label={m.project_search_position_unknown()} reason={m.indexing_pointing_none()} /> · {m.measure_metric_fwhm()}: <UnknownValue label={m.status_not_measured()} />
-              </p>
-            </div>
-            <div className="grid gap-3">
-              <TableSkeleton label={m.ds_loading_sessions()} rows={4} />
-              <DetailSkeleton label={m.ds_loading_session_detail()} />
-            </div>
-          </div>
-        </Section>
-
-        <Section title={m.ds_data_title()}>
-          <div className="grid gap-6 xl:grid-cols-2">
-            <div className="space-y-4">
-              <KeyValueList
-                items={[
-                  { label: m.location_path(), value: <PathText path="/Volumes/Astro-T7/Captures/NGC7000/2026-09-30/OIII" />, mono: false },
-                  { label: m.run_col_channel(), value: "OIII", source: m.session_header_source({ keyword: "FILTER" }) },
-                  { label: m.session_column_exposure(), value: formatExposure(300), source: m.session_header_source({ keyword: "EXPTIME" }) },
-                  { label: m.ds_pixel_scale(), value: <UnknownValue label={m.ds_fov_unknown()} reason={m.ds_equipment_not_confirmed()} /> },
-                ]}
-              />
-              <div className="flex gap-8">
-                <Stat label={m.review_member_included()} value={m.ds_lights_count({ count: 208 })} hint={formatDuration(62_400)} />
-                <Stat label={m.status_excluded_from_view()} value="6" hint={m.ds_files_stay()} />
-                <Stat label={m.status_unresolved()} value="0" />
-              </div>
-              <ChannelCoverage channel={sample?.channel ?? "Ha"} breakdown={breakdown} goalS={10 * 3600} />
-            </div>
-            <div className="space-y-3">
-              {sample ? <EvidenceList evidence={sample.target.evidence} caption={m.ds_evidence_caption()} /> : null}
-              <FilterChips
-                chips={chips}
-                onRemove={(id) => setChipIds((ids) => ids.filter((chip) => chip !== id))}
-                onClear={() => setChipIds([])}
-                matchLabel={`${m.ds_matching_sessions({ count: 1 })} · ${m.table_selection_hidden({ count: 3, n: "3" })}`}
-              />
-            </div>
           </div>
         </Section>
 
@@ -518,10 +326,6 @@ export function DesignSystemPage() {
 
         <Section title={m.ds_folder_picker_title()} description={m.simulation_ds_folder_picker_description()}>
           <SampleFolderPicker />
-        </Section>
-
-        <Section title={m.ds_operation_title()} description={m.ds_operation_description()}>
-          <SampleOperation />
         </Section>
 
         {CATALOGUE.map(({ id, Entry }) => (
