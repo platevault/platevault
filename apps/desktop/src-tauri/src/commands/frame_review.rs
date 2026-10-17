@@ -7,8 +7,10 @@
 //! beside the library commands. Each handler forwards to
 //! [`platevault_core::frame_review::FrameReview`] and reports failures with the
 //! library [`platevault_core::ErrorResponse`] conventions, naming the asset,
-//! run or import. No command writes a source file, a preview file or a non-PIX
-//! catalog record. Progress is published as `pix_measurement_progress` from
+//! run, import or session. No command writes a source file, a preview file or
+//! a non-PIX catalog record; Finish and Reopen Review write only the session's
+//! review record.
+//! Progress is published as `pix_measurement_progress` from
 //! `desktop_services::jobs::MeasurementProgressFeed`; `pix_measurement_status`
 //! and `pix_review_frames` are the durable truth.
 
@@ -17,10 +19,12 @@ use std::sync::Arc;
 use platevault_core::library::Library;
 use platevault_core::{
     ConfirmedImport, CutoutRequest, DisplayName, FrameDetail, FramePreview, FrameStars, FrameState,
-    ImportReview, MeasurementRun, NameTemplate, NativePath, PreviewTile, RegionsRequest,
+    ImportReview, MeasurementRun, NameTemplate, NativePath, PreviewTile, RegionsRequest, Revision,
     ReviewContext, ReviewFilter, ReviewList, ReviewMark, ReviewMarked, ReviewSort, RowResolution,
-    SampleRequest, SampleValue, StarCutouts, Stretch, ThumbnailEntry, TileRequest,
+    SampleRequest, SampleValue, SessionAdmission, StarCutouts, Stretch, ThumbnailEntry,
+    TileRequest,
 };
+use platevault_core::frame_review::SessionReviewList;
 use serde::Serialize;
 use tauri::State;
 use uuid::Uuid;
@@ -349,4 +353,96 @@ pub async fn pix_review_mark(
         .review_mark(&mark)
         .await
         .map_err(fail(Some(mark.asset.asset_id)))
+}
+
+/// Session intake (spec 064 LIB-FR-04/24): the session's readiness, its
+/// calibration pins and health, and the blockers that keep it out of any
+/// Project. Read-only.
+///
+/// # Errors
+/// `NotFound` for an unknown session; `PersistenceFailure` for a catalog error.
+#[tauri::command]
+pub async fn pix_session_intake(
+    library: State<'_, Arc<Library>>,
+    session_id: Uuid,
+) -> Reply<SessionAdmission> {
+    library.frame_review().session_intake(session_id).await.map_err(fail(Some(session_id)))
+}
+
+/// The session's intake Review: its live frames that `filter` admits, sorted
+/// (capture order by default) and named by `names` (the file name by default),
+/// with per-label counts and the grouping revision Finish Review names.
+/// Starts no measurement and reads no source.
+///
+/// # Errors
+/// `NotFound` for an unknown session; `InvalidInput` for a superseded session
+/// or a display template the naming resolver refuses.
+#[tauri::command]
+pub async fn pix_session_review_list(
+    library: State<'_, Arc<Library>>,
+    session_id: Uuid,
+    filter: ReviewFilter,
+    sort: Option<ReviewSort>,
+    names: Option<NameTemplate>,
+) -> Reply<SessionReviewList> {
+    library
+        .frame_review()
+        .session_review_list(
+            session_id,
+            filter,
+            &sort.unwrap_or_default(),
+            &names.unwrap_or_default(),
+        )
+        .await
+        .map_err(fail(Some(session_id)))
+}
+
+/// One P, X or U library-quality mark from the session's intake Review; the
+/// asset must be a live frame of the session. Library-wide, like
+/// `pix_review_mark`.
+///
+/// # Errors
+/// `NotFound` for an unknown session or asset; `InvalidInput` for an asset that
+/// is not a live frame of the session; `Conflict` for a stale decision
+/// revision; `IdentityConflict` when a P or X mark finds changed bytes.
+#[tauri::command]
+pub async fn pix_session_review_mark(
+    library: State<'_, Arc<Library>>,
+    session_id: Uuid,
+    mark: ReviewMark,
+) -> Reply<ReviewMarked> {
+    library
+        .frame_review()
+        .session_review_mark(session_id, &mark)
+        .await
+        .map_err(fail(Some(mark.asset.asset_id)))
+}
+
+/// Finish Review at the grouping revision the user reviewed; returns that
+/// revision as recorded.
+///
+/// # Errors
+/// `Conflict` for a stale grouping revision; `InvalidInput` for remaining
+/// Unreviewed live frames or a superseded session; `NotFound` for an unknown
+/// session.
+#[tauri::command]
+pub async fn pix_finish_review(
+    library: State<'_, Arc<Library>>,
+    session_id: Uuid,
+    expected_grouping_revision: Revision,
+) -> Reply<Revision> {
+    library
+        .frame_review()
+        .finish_review(session_id, expected_grouping_revision)
+        .await
+        .map_err(fail(Some(session_id)))
+}
+
+/// Reopen Review for a Ready session; only its review record goes.
+///
+/// # Errors
+/// `NotFound` for an unknown session; `InvalidInput` unless the session is Ready.
+#[tauri::command]
+pub async fn pix_reopen_review(library: State<'_, Arc<Library>>, session_id: Uuid) -> Reply<()> {
+    library.frame_review().reopen_review(session_id).await.map_err(fail(Some(session_id)))
 }
