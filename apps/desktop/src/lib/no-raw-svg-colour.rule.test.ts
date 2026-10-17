@@ -342,4 +342,16 @@ describe('svg/no-raw-svg-colour', () => {
 
     expect(diagnostics).toHaveLength(1);
   });
+  it('allows a raw-looking left operand that cannot be the logical result', () => {
+    const diagnostics = lint(
+      "const svg = <svg fill={'red' && 'var(--pv-accent)'} />;",
+    );
+
+    expect(diagnostics).toHaveLength(0);
+  });
+  it('flags raw colors assembled through nested static templates', () => {
+    const diagnostics = lint('const svg = <svg fill={`re${`d`}`} />;');
+
+    expect(diagnostics).toHaveLength(1);
+  });
 });

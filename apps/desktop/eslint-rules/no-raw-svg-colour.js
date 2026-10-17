@@ -92,27 +92,47 @@ function isSvgPresentationElement(node) {
 
   return ownName.toLowerCase() === 'svg' || SVG_ELEMENTS.has(ownName.toLowerCase());
 }
-function collectStringLiterals(expression, values) {
+function getStaticString(expression) {
   if ((expression.type === 'Literal' || expression.type === 'StringLiteral') && typeof expression.value === 'string') {
-    values.push(expression.value);
-    return;
+    return expression.value;
   }
-  if (expression.type === 'LogicalExpression') {
-    collectStringLiterals(expression.left, values);
-    collectStringLiterals(expression.right, values);
+  if (
+    expression.type === 'ChainExpression' || expression.type === 'ParenthesizedExpression' ||
+    expression.type === 'TSAsExpression' || expression.type === 'TSSatisfiesExpression' ||
+    expression.type === 'TSNonNullExpression' || expression.type === 'TypeCastExpression'
+  ) return getStaticString(expression.expression);
+  if (expression.type === 'TemplateLiteral') {
+    let value = expression.quasis[0]?.value.cooked ?? expression.quasis[0]?.value.raw ?? '';
+    for (let index = 0; index < expression.expressions.length; index += 1) {
+      const part = getStaticString(expression.expressions[index]);
+      if (part === null) return null;
+      value += part + (expression.quasis[index + 1]?.value.cooked ?? expression.quasis[index + 1]?.value.raw ?? '');
+    }
+    return value;
+  }
+  return null;
+}
+
+function collectStringLiterals(expression, values) {
+  const staticValue = getStaticString(expression);
+  if (staticValue !== null) {
+    values.push(staticValue);
+    return;
+  } else if (expression.type === 'LogicalExpression') {
+    if (expression.operator === '&&') {
+      collectStringLiterals(expression.right, values);
+    } else if (expression.operator === '||' || expression.operator === '??') {
+      collectStringLiterals(expression.left, values);
+      collectStringLiterals(expression.right, values);
+    }
   } else if (expression.type === 'ConditionalExpression') {
     collectStringLiterals(expression.consequent, values);
     collectStringLiterals(expression.alternate, values);
   } else if (expression.type === 'SequenceExpression') {
     collectStringLiterals(expression.expressions.at(-1), values);
-  } else if (
-    expression.type === 'ChainExpression' || expression.type === 'ParenthesizedExpression' ||
-    expression.type === 'TSAsExpression' || expression.type === 'TSSatisfiesExpression' ||
-    expression.type === 'TSNonNullExpression' || expression.type === 'TypeCastExpression'
-  ) {
-    collectStringLiterals(expression.expression, values);
   }
 }
+
 
 function reportRawColorsInExpression(expression, report) {
   if (
@@ -132,19 +152,16 @@ function reportRawColorsInExpression(expression, report) {
       reportRawColorsInExpression(expression.alternate, report);
       return;
     case 'LogicalExpression':
-      reportRawColorsInExpression(expression.left, report);
-      reportRawColorsInExpression(expression.right, report);
+      if (expression.operator === '&&') {
+        reportRawColorsInExpression(expression.right, report);
+      } else if (expression.operator === '||' || expression.operator === '??') {
+        reportRawColorsInExpression(expression.left, report);
+        reportRawColorsInExpression(expression.right, report);
+      }
       return;
     case 'TemplateLiteral':
       const quasis = expression.quasis.map((quasi) => quasi.value.cooked ?? quasi.value.raw);
-      const staticParts = expression.expressions.map((part) => {
-        let literal = part;
-        while (
-          ['ChainExpression', 'ParenthesizedExpression', 'TSAsExpression', 'TSSatisfiesExpression', 'TSNonNullExpression', 'TypeCastExpression'].includes(literal.type)
-        ) literal = literal.expression;
-        if ((literal.type === 'Literal' || literal.type === 'StringLiteral') && typeof literal.value === 'string') return literal.value;
-        return '\u0000';
-      });
+      const staticParts = expression.expressions.map((part) => getStaticString(part) ?? '\u0000');
       const staticText = quasis.reduce(
         (text, quasi, index) => text + quasi + (staticParts[index] ?? ''),
         '',
