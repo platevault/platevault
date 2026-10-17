@@ -334,10 +334,10 @@ one release, pass the previous release's config as `--pubkey-conf`, e.g.
      `scripts/release/check-signed-installers.ps1` is the authoritative check
      used by both release and rehearsal workflows, making the behavior
      reproducible without the throwaway workflow. Rehearsal mutates the lockfile,
-     SignPath issuer, third-party pin, WiX publisher and issuer, replaces the
-     WiX payload with an unsigned PE, and adds an unlisted PE. Each case must
-     fail through the release checker with its expected diagnostic. Record the
-     passing and per-case run IDs; never use release signing keys.
+     SignPath issuer, pin, publisher, issuer, unsigned PE and unlisted PE; each
+     failure must match its expected diagnostic. Record run IDs and per-case
+     results. If Windows fails before or during the cases, report that instead
+     of claiming coverage; never use release signing keys.
 
 ## macOS signing (state and path)
 
