@@ -30,6 +30,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, Instant};
 
+use desktop_shell::commands::project_apply::ApplyRuns;
+use desktop_shell::commands::project_wrap_up::CloseRuns;
 use desktop_shell::library_shell::CATALOG_FILE;
 use fits_fixtures::FitsFixture;
 use platevault_core::library::Library;
@@ -52,8 +54,8 @@ const PATIENCE: Duration = Duration::from_secs(300);
 /// The library shell over the catalog in `data_dir`, opened as a start opens
 /// it: `Library::open` on `<data dir>/catalog.sqlite`, which settles what an
 /// earlier run left of Apply and of calibration matching, managed before the
-/// `library` window exists. Only the handlers this journey calls are
-/// registered.
+/// `library` window exists, with the running Applies and Closes the shell
+/// manages. Only the handlers this journey calls are registered.
 struct Shell {
     webview: WebviewWindow<MockRuntime>,
     _app: tauri::App<MockRuntime>,
@@ -94,6 +96,8 @@ impl Shell {
             .build(mock_context(noop_assets()))
             .expect("build mock app");
         app.manage(library);
+        app.manage(ApplyRuns::emitting(app.handle().clone()));
+        app.manage(CloseRuns::default());
         let webview = WebviewWindowBuilder::new(&app, "library", WebviewUrl::default())
             .build()
             .expect("library window");
