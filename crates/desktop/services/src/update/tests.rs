@@ -1143,6 +1143,21 @@ async fn an_install_at_quit_that_kept_another_app_aside_says_where_before_exitin
     assert_eq!(rig.next_host_call(), HostCall::Exit);
 }
 
+/// A quit held during Install now wins over the relaunch: the install that
+/// kept another app aside says where, then exits.
+#[tokio::test]
+async fn a_quit_held_during_install_now_that_kept_another_app_aside_says_where_then_exits() {
+    let kept_aside = vec![KEPT.into()];
+    let (rig, release_install, install) =
+        install_now_blocked(Ok(Installed::Relaunch { kept_aside })).await;
+
+    assert_eq!(rig.updater.on_quit_requested(), QuitDecision::Defer);
+    release_install.send(()).expect("release the install");
+    install.await.expect("install task");
+
+    assert_eq!(rig.host_calls(), vec![kept_aside_notice_en_gb(), HostCall::Exit], "no relaunch");
+}
+
 /// Without a quit, the window stays and shows the kept path itself.
 #[tokio::test]
 async fn install_now_over_a_replaced_app_shows_the_kept_path_in_the_app() {
