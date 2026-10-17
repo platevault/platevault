@@ -20,9 +20,10 @@ use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
-use apply_support::{world, World, HA, OIII, OIII_FLATS};
+use apply_support::{world, World, HA, OIII, OIII_FLATS, PROJECT};
 use cleanup_support::ScopedTrash;
 use platevault_core::apply::Unattended;
+use platevault_core::projects::SessionToAdd;
 use platevault_core::wrap_up::ArchiveControl;
 use platevault_core::*;
 use uuid::Uuid;
@@ -72,6 +73,19 @@ impl ArchiveControl for StopAfter {
         self.0.store(left.saturating_sub(1), Ordering::SeqCst);
         left == 0
     }
+}
+
+/// The empty, active `Archive-T7` captures location, canonical.
+async fn archive_location(world: &World) -> (Location, std::path::PathBuf) {
+    let root = world.temp.path().join("Archive-T7");
+    fs::create_dir_all(&root).unwrap();
+    let root = fs::canonicalize(root).unwrap();
+    let location = world
+        .library
+        .register_location(NativePath::from_path(&root), "Archive-T7".into(), LocationRole::Captures)
+        .await
+        .unwrap();
+    (location, root)
 }
 
 /// STO-FR-01/04, RES-FR-06: Clean up offers the View's copies ticked and
@@ -279,18 +293,7 @@ async fn close_locks_with_its_calibration_and_duplicate_takes_current_pins() {
 async fn a_stopped_close_resumes_to_archived_with_its_kept_view_repointed() {
     let mut world = world(ViewMode::Symlinks).await;
     world.apply().await;
-    let archive_root = world.temp.path().join("Archive-T7");
-    fs::create_dir_all(&archive_root).unwrap();
-    let archive_root = fs::canonicalize(archive_root).unwrap();
-    let archive = world
-        .library
-        .register_location(
-            NativePath::from_path(&archive_root),
-            "Archive-T7".into(),
-            LocationRole::Captures,
-        )
-        .await
-        .unwrap();
+    let (archive, archive_root) = archive_location(&world).await;
     let trash = bin(&world);
     skip_to_archive(&world, &trash).await;
     let review = world.library.wrap_up_archive_review(world.project, archive.id).await.unwrap();
@@ -344,4 +347,87 @@ async fn a_stopped_close_resumes_to_archived_with_its_kept_view_repointed() {
     );
     let after = world.library.catalog().project_desired(world.project).await.unwrap();
     assert_eq!(after.sessions, desired.sessions, "archiving changes no Project's sessions");
+}
+
+/// STO-FR-13, record §8 line 203 (a session an open Project holds can't be
+/// selected; the F4 form of the Done archive's holder refusal): the session
+/// another open Project holds stays at its path, named by that Project, and
+/// Close refuses to archive it with nothing changed. The session only this
+/// Project holds archives, and Storage names the transfer as this Project's
+/// Wrap up archive.
+#[tokio::test]
+async fn archive_refuses_a_session_another_open_project_holds() {
+    let world = world(ViewMode::Symlinks).await;
+    world.apply().await;
+    let ha = world.session_of(&world.captures, HA[0]).await.id;
+    let oiii = world.session_of(&world.captures, OIII[0]).await.id;
+    let catalog = world.catalog();
+    let target_id = catalog.project(world.project).await.unwrap().subjects[0].target_id;
+    let other = catalog
+        .create_project(&ProjectInput {
+            name: "Sadr region".into(),
+            notes: None,
+            subjects: vec![SubjectInput { target_id, name: None }],
+            rig_ids: vec![world.rig],
+            goals: Vec::new(),
+        })
+        .await
+        .unwrap();
+    let expected = catalog.project_desired(other.id).await.unwrap().revision;
+    let adds = [SessionToAdd { session_id: ha, expected: None }];
+    world.library.add_project_sessions(other.id, expected, &adds, None).await.unwrap();
+    let (archive, archive_root) = archive_location(&world).await;
+    let trash = bin(&world);
+    skip_to_archive(&world, &trash).await;
+
+    let review = world.library.wrap_up_archive_review(world.project, archive.id).await.unwrap();
+    let offer = |id: Uuid| review.sessions.iter().find(|offer| offer.session_id == id).unwrap();
+    assert_eq!(offer(ha).kept_by, ["Sadr region".to_owned()], "{review:#?}");
+    assert!(offer(oiii).kept_by.is_empty() && offer(oiii).hold.is_none(), "{review:#?}");
+    let close = |sessions: Vec<Uuid>, desired_revision: u64| CloseRequest {
+        project_id: world.project,
+        desired_revision,
+        archive: Some(ArchiveSelection {
+            destination: archive.id,
+            sessions,
+            digest: review.digest.clone(),
+        }),
+    };
+
+    let refused = world
+        .library
+        .close_project(&close(vec![ha, oiii], revision(&world).await), trash.dyn_trash(), &Unattended)
+        .await
+        .unwrap_err();
+    assert_eq!(kind(&refused), "invalid_input", "{refused}");
+    assert!(refused.to_string().contains("Sadr region holds it"), "{refused}");
+    let status = world.library.wrap_up_status(world.project).await.unwrap();
+    assert_eq!(status.lifecycle, ProjectLifecycle::Open);
+    assert!(world.light(HA[0]).exists() && world.light(OIII[0]).exists(), "nothing moved");
+    assert_eq!(trash.moved(), Vec::<std::path::PathBuf>::new(), "nothing went to the OS Trash");
+
+    let report = world
+        .library
+        .close_project(&close(vec![oiii], revision(&world).await), trash.dyn_trash(), &Unattended)
+        .await
+        .unwrap();
+    assert_eq!(report.lifecycle, ProjectLifecycle::Archived, "{report:#?}");
+    assert!(world.light(HA[0]).exists(), "the held session stays at its path");
+    assert!(!world.light(OIII[0]).exists(), "the OIII original is retired");
+    let overview = world.library.storage_overview().await.unwrap();
+    let [transfer] = overview.transfers.as_slice() else {
+        panic!("{:#?}", overview.transfers);
+    };
+    assert_eq!(
+        transfer.archive,
+        Some(persistence_library::ArchiveOwner::Project {
+            project_id: world.project,
+            project_name: PROJECT.into(),
+        })
+    );
+    let root = NativePath::from_path(&archive_root);
+    assert!(transfer
+        .items
+        .iter()
+        .all(|item| item.destination.as_ref().is_some_and(|destination| destination.root == root)));
 }
