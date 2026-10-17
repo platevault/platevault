@@ -17,7 +17,7 @@ Each goal already uses time or frames. The user also wanted a quality bar on cou
 
 ## Decision
 
-Each goal measures time or frames. A goal may carry an optional quality bar. Channel balance is not a goal. Per-channel goals set the ratio, which the Project page shows. Support per-panel goals and editable panel balance per channel of plus or minus 10 percent. Support a deadline or season window.
+Each goal measures time or frames. A goal may carry an optional quality bar. Channel balance is not a goal. Per-channel goals set the ratio, which the Project page shows. Support per-panel goals. Panel balance per channel defaults to plus or minus 10 percent, and the user can change it. A panel outside the band shows a warning, and balance never blocks completion (PRJ-FR-24, specs/065-project-goals/spec.md:143). Support a deadline or season window.
 
 ## Rationale
 

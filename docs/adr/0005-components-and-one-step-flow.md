@@ -17,7 +17,7 @@ The standard component set includes button hierarchy and row action menus. It al
 
 ## Decision
 
-Use selectors to choose what to clean, trash, or keep, then choose Proceed. Do not add separate skip or mark-done buttons. Use the agreed Edit… verb for renaming, editing details, and optics.
+Use selectors to choose what to clean, trash, or keep, then choose Proceed. A selection step has no Skip or mark-done button: proceeding with nothing selected records it as Skipped. An optional step that is not a selection offers Skip beside Proceed. Use the agreed Edit… verb for renaming, editing details, and optics.
 
 ## Rationale
 
@@ -30,4 +30,4 @@ The user asked for one consistent flow across product work, rather than separate
 ## Consequences
 
 Round 9 records decisions C1 to C15. The open Home and goal-condition parts have separate decision beads, astro-plan-b66vy and astro-plan-so89f.
-Amended: D-W76 in specs/063-clean-rebuild-contract/workflow-decisions.md:91 sets one Edit… verb in place of Rename…, Edit details…, and Edit optics.
+Amended: D-W76 in specs/063-clean-rebuild-contract/workflow-decisions.md:91 sets one Edit… verb in place of Rename…, Edit details…, and Edit optics. D-W77 at line 92 limits the no-Skip rule to selection steps.

@@ -17,7 +17,7 @@ The owner asked for a centralised dashboard of open and pending work. It also ne
 
 ## Decision
 
-Home shows what needs attention, active work, and when to capture next. It uses standard components, and each row links to its owning page. Sections include Pending ingestions and Pending work. Other sections cover Open work, Status, Tonight, and the calendar. Show up to five rows in each section. An All N link opens the owning page. Keep the section order fixed. Show problems on affected rows. Put duplicates in the Sessions Duplicates filter. Show drift on the affected rows.
+Home shows what needs attention, active work, and when to capture next. It uses standard components, and each row links to its owning page. Sections include Pending ingestions and Pending work. Other sections cover Open work, Status, Tonight, and the calendar. Show up to five rows in each section. An All N link opens the owning page filtered to those items (PRJ-FR-17, specs/065-project-goals/spec.md:118). Keep the section order fixed. Show problems on affected rows. Put duplicates in the Sessions Duplicates filter. Show drift on the affected rows.
 
 ## Rationale
 
