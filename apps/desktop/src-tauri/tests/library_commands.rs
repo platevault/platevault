@@ -46,8 +46,8 @@ impl OsTrash for NoTrash {
     }
 }
 
-/// The mock shell over a fresh catalog. Fields drop in order: the window and
-/// app (with the library they manage) before the catalog's directory.
+/// The mock shell over a fresh catalog. The window and app drop before the
+/// catalog's directory, but a mock app never drops the Library it manages.
 struct Shell {
     webview: WebviewWindow<MockRuntime>,
     _app: tauri::App<MockRuntime>,

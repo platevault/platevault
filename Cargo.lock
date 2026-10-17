@@ -1517,6 +1517,7 @@ dependencies = [
  "contracts_core",
  "desktop_services",
  "domain_core",
+ "fits_fixtures",
  "fs_executor",
  "fs_inventory",
  "fs_pathsafe",
