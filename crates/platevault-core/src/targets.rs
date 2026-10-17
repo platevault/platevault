@@ -326,6 +326,7 @@ impl PreparedQuery {
 /// One search result with the evidence that matched it.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct TargetSearchHit {
     pub candidate: TargetCandidate,
     /// Display alias that matched the text query.
@@ -817,16 +818,39 @@ fn saved_hit<'a>(
 /// Fields of an explicit user-defined target.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct UserTargetInput {
     pub designation: String,
     #[serde(default)]
     pub aliases: Vec<String>,
     #[serde(default)]
     pub common_name: Option<String>,
+    #[cfg_attr(feature = "wire", specta(type = ObjectTypeWire), schemars(with = "ObjectTypeWire"))]
     pub object_type: ObjectType,
     /// ICRS degrees; `None` keeps the position unknown.
     #[serde(default)]
     pub coordinates: Option<SkyCoordinates>,
+}
+
+/// The `snake_case` strings `simbad_resolver::ObjectType` (a foreign type the
+/// `wire` derives can't reach) serializes as; only those derives read it.
+#[cfg(feature = "wire")]
+#[derive(specta::Type, schemars::JsonSchema)]
+#[serde(rename = "ObjectType", rename_all = "snake_case")]
+#[allow(dead_code, reason = "only the IPC type derives read it")]
+enum ObjectTypeWire {
+    Galaxy,
+    PlanetaryNebula,
+    EmissionNebula,
+    ReflectionNebula,
+    DarkNebula,
+    OpenCluster,
+    GlobularCluster,
+    SupernovaRemnant,
+    GalaxyCluster,
+    DoubleStar,
+    Asterism,
+    Other,
 }
 
 /// Build an explicit user target with [`Provenance::User`].
@@ -1038,6 +1062,7 @@ fn provider_candidate(ns: &Uuid, target: &CachedTarget) -> Result<TargetCandidat
 /// Association evidence for one candidate against one session's frames.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct TargetAssessment {
     pub candidate: TargetCandidate,
     pub state: AssociationState,

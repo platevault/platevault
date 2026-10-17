@@ -30,6 +30,7 @@ fn fail(error: &LibraryError) -> ErrorResponse {
 /// # Errors
 /// `PersistenceFailure` when the catalog cannot be read.
 #[tauri::command]
+#[specta::specta]
 pub async fn naming_get(library: State<'_, Arc<Library>>) -> Reply<Vec<NamingTemplate>> {
     library.naming_templates().await.map_err(|error| fail(&error))
 }
@@ -40,6 +41,7 @@ pub async fn naming_get(library: State<'_, Arc<Library>>) -> Reply<Vec<NamingTem
 /// `InvalidInput` naming the problem (empty, overlong, unknown token, path
 /// traversal, reserved name); nothing is stored.
 #[tauri::command]
+#[specta::specta]
 pub async fn naming_save(
     library: State<'_, Arc<Library>>,
     frame_type: NamingFrameType,
@@ -53,6 +55,7 @@ pub async fn naming_save(
 /// # Errors
 /// `PersistenceFailure` when the write cannot commit.
 #[tauri::command]
+#[specta::specta]
 pub async fn naming_restore_defaults(
     library: State<'_, Arc<Library>>,
 ) -> Reply<Vec<NamingTemplate>> {
@@ -65,6 +68,7 @@ pub async fn naming_restore_defaults(
 /// # Errors
 /// `InvalidInput` naming the problem, as for [`naming_save`].
 #[tauri::command]
+#[specta::specta]
 #[allow(clippy::needless_pass_by_value)] // Tauri deserializes arguments by value
 pub fn naming_preview(
     frame_type: NamingFrameType,

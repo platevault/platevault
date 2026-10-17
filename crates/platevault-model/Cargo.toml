@@ -13,6 +13,14 @@ sqlx.workspace = true
 uuid.workspace = true
 time.workspace = true
 unicode-normalization.workspace = true
+specta = { workspace = true, optional = true }
+schemars = { workspace = true, optional = true }
+
+[features]
+# IPC type derives (`specta::Type`, `JsonSchema`) on the types that cross the
+# library-shell boundary. Off by default; only contracts_core and desktop_shell
+# enable it.
+wire = ["dep:specta", "dep:schemars"]
 
 [lints]
 workspace = true

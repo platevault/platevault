@@ -24,6 +24,7 @@ fn invalid(message: impl Into<String>) -> LibraryError {
 /// configured executable and arguments; it never claims a verified profile.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum ProfileKind {
     /// `PixInsight` with its Weighted Batch Preprocessing script.
     Wbpp,
@@ -37,6 +38,7 @@ pub enum ProfileKind {
 /// evidence makes it `ReadOnly`; until then it is `Unknown`.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum InputBehavior {
     ReadOnly,
     /// The application may write to, rename or rewrite its inputs.
@@ -58,6 +60,7 @@ impl fmt::Display for InputBehavior {
 /// The capabilities D04 requires evidence for before a verified-profile claim.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum Capability {
     /// What the application does to its input files.
     Input,
@@ -88,6 +91,7 @@ impl fmt::Display for Capability {
 /// One recorded piece of capability evidence: what was observed, and where.
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct CapabilityProof {
     pub capability: Capability,
     pub evidence: String,
@@ -98,6 +102,7 @@ pub struct CapabilityProof {
 /// a `Configuration` proof.
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct CapabilityEvidence {
     #[serde(default)]
     pub input_behavior: InputBehavior,
@@ -141,6 +146,7 @@ pub const PROFILE_PLACEHOLDERS: [&str; 3] = ["{folder}", "{results}", "{inputs}"
 /// What the user enters for a profile.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ProfileInput {
     pub name: String,
     pub kind: ProfileKind,
@@ -186,6 +192,7 @@ impl ProfileInput {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct Profile {
     pub id: Uuid,
     pub name: String,

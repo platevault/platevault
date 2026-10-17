@@ -63,6 +63,7 @@ pub struct InputQuery {
 /// dimensions/binning. `None` is the unknown value, never a default.
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct InputGroup {
     pub kind: InputKind,
     pub camera: Option<String>,
@@ -76,6 +77,7 @@ pub struct InputGroup {
 /// One recorded copy of an input member.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct InputCopy {
     pub asset_id: Uuid,
     pub location_id: Uuid,
@@ -87,6 +89,7 @@ pub struct InputCopy {
 /// One logical capture (D16) of an input with every recorded copy.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct InputMember {
     pub member_key: Uuid,
     pub quality: ApplicableQuality,
@@ -96,6 +99,7 @@ pub struct InputMember {
 /// One listed input: a raw set, an adopted master or a detected candidate.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct CalibrationInputSummary {
     pub input: CandidateRef,
     pub kind: InputKind,
@@ -120,6 +124,7 @@ pub struct CalibrationInputSummary {
 /// One input with its members and its Library-Unusable members.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct CalibrationInputDetail {
     #[serde(flatten)]
     pub summary: CalibrationInputSummary,

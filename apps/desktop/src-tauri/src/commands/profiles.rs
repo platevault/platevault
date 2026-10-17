@@ -24,6 +24,7 @@ use super::library::{fail, Reply};
 /// # Errors
 /// `PersistenceFailure` when the catalog cannot be read.
 #[tauri::command]
+#[specta::specta]
 pub async fn prepare_profiles(library: State<'_, Arc<Library>>) -> Reply<Vec<Profile>> {
     library.catalog().profiles().await.map_err(fail(None))
 }
@@ -35,6 +36,7 @@ pub async fn prepare_profiles(library: State<'_, Arc<Library>>) -> Reply<Vec<Pro
 /// `InvalidInput` for a blank name, an unknown placeholder or a claim
 /// without its evidence.
 #[tauri::command]
+#[specta::specta]
 pub async fn prepare_profile_create(
     library: State<'_, Arc<Library>>,
     input: ProfileInput,
@@ -47,6 +49,7 @@ pub async fn prepare_profile_create(
 /// # Errors
 /// As `prepare_profile_create`; `Conflict` for a stale revision.
 #[tauri::command]
+#[specta::specta]
 pub async fn prepare_profile_update(
     library: State<'_, Arc<Library>>,
     profile_id: Uuid,

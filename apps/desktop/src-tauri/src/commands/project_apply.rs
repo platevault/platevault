@@ -28,6 +28,7 @@ use super::library::{fail, Reply};
 /// # Errors
 /// `NotFound` for an unknown Project; catalog errors.
 #[tauri::command]
+#[specta::specta]
 pub async fn project_apply_preview(
     library: State<'_, Arc<Library>>,
     project_id: Uuid,
@@ -45,6 +46,7 @@ pub async fn project_apply_preview(
 /// `InvalidInput` naming every other blocker; `IdentityConflict` when both the
 /// install and restoring the old View failed; catalog errors.
 #[tauri::command]
+#[specta::specta]
 pub async fn project_apply(
     library: State<'_, Arc<Library>>,
     request: ApplyRequest,

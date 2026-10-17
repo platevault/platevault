@@ -35,6 +35,7 @@ use super::library::{fail, Reply};
 /// # Errors
 /// `PersistenceFailure` when the catalog cannot be read.
 #[tauri::command]
+#[specta::specta]
 pub async fn calibration_list_inputs(
     library: State<'_, Arc<Library>>,
     kind: Option<InputKind>,
@@ -53,6 +54,7 @@ pub async fn calibration_list_inputs(
 /// # Errors
 /// `NotFound` for an input that is not listed at that revision.
 #[tauri::command]
+#[specta::specta]
 pub async fn calibration_input(
     library: State<'_, Arc<Library>>,
     input: CandidateRef,
@@ -69,6 +71,7 @@ pub async fn calibration_input(
 /// a destination that is no Calibration location; `Conflict` for a stale
 /// source; `SourceUnavailable` for an offline location.
 #[tauri::command]
+#[specta::specta]
 pub async fn calibration_review_adoption(
     library: State<'_, Arc<Library>>,
     source: AdoptionSource,
@@ -85,6 +88,7 @@ pub async fn calibration_review_adoption(
 /// `Conflict` for a stale or adopted review; `IdentityConflict` for an
 /// occupied destination that is not the recorded installed copy.
 #[tauri::command]
+#[specta::specta]
 pub async fn calibration_adopt(
     library: State<'_, Arc<Library>>,
     review_id: Uuid,
@@ -98,6 +102,7 @@ pub async fn calibration_adopt(
 /// # Errors
 /// `PersistenceFailure` when the catalog cannot be read.
 #[tauri::command]
+#[specta::specta]
 pub async fn calibration_list_adoptions(
     library: State<'_, Arc<Library>>,
     state: Option<AdoptionState>,
@@ -113,6 +118,7 @@ pub async fn calibration_list_adoptions(
 /// # Errors
 /// `PersistenceFailure` when the catalog cannot be read.
 #[tauri::command]
+#[specta::specta]
 pub async fn calibration_custody_facts(
     library: State<'_, Arc<Library>>,
 ) -> Reply<Vec<CustodyFact>> {

@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 /// A catalogue the Targets page can browse.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum Catalogue {
     Messier,
     Ngc,
@@ -37,6 +38,7 @@ impl Catalogue {
 /// One catalogue entry an object is listed under.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct CatalogueMembership {
     pub catalogue: Catalogue,
     /// Designation within the catalogue, for example `M 31` or `Caldwell 14`.
@@ -50,6 +52,7 @@ pub struct CatalogueMembership {
 /// object with no catalogued size has no `AngularSize` at all.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct AngularSize {
     pub major_arcmin: f64,
     pub minor_arcmin: Option<f64>,

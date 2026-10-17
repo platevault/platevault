@@ -33,6 +33,7 @@ fn invalid(message: String) -> LibraryError {
 /// name their assets; a master's one file has none.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct PinnedFile {
     pub asset_id: Option<Uuid>,
     pub sha256: String,
@@ -44,8 +45,10 @@ pub struct PinnedFile {
 /// that explains the match.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct PinTarget {
     pub input: InputRef,
+    #[cfg_attr(feature = "wire", specta(type = Option<String>), schemars(with = "Option<String>"))]
     #[serde(default, with = "crate::iso_date::option")]
     pub captured: Option<Date>,
     pub files: Vec<PinnedFile>,
@@ -90,6 +93,7 @@ impl PinTarget {
 /// How a pin was made.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum PinOrigin {
     /// Every check passed inside the window: pinned at ingestion or when
     /// calibration arrived later.
@@ -103,6 +107,7 @@ pub enum PinOrigin {
 /// Who set a kind to No. The No choice needs no reason.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum DeclineOrigin {
     User,
     /// The camera's "Don't use darks" or "Don't use bias" default.
@@ -112,6 +117,7 @@ pub enum DeclineOrigin {
 /// One kind's calibration state on a session.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "state", rename_all = "snake_case", rename_all_fields = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum PinState {
     /// Not found, or waiting for calibration to arrive.
     Unresolved,
@@ -170,6 +176,7 @@ impl PinState {
 /// A settled kind as an applied View or a Closed snapshot records it.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "state", rename_all = "snake_case", rename_all_fields = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum SettledPin {
     Pinned { target: PinTarget },
     Declined,
@@ -188,6 +195,7 @@ impl SettledPin {
 /// The three kinds of a settled session.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct SettledCalibration {
     pub dark: SettledPin,
     pub flat: SettledPin,
@@ -227,6 +235,7 @@ fn validate_target(session_id: Uuid, target: &PinTarget) -> Result<(), LibraryEr
 /// every kind reads unresolved.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct SessionCalibration {
     pub session_id: Uuid,
     pub generation: Revision,
@@ -342,6 +351,7 @@ impl SessionCalibration {
 /// is reassigned or the bytes return.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum PinHealth {
     Intact,
     Changed,
@@ -359,6 +369,7 @@ impl PinHealth {
 /// reads intact.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct CalibrationHealth {
     pub bias: PinHealth,
     pub dark: PinHealth,
@@ -401,6 +412,7 @@ pub struct SessionCalibrationStatus {
 /// A session in the Needs calibration queue with why it is there.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct SessionNeeds {
     pub session_id: Uuid,
     pub needs: Vec<CalibrationNeed>,
@@ -431,6 +443,7 @@ pub struct CalibrationInputUse {
 /// (LIB-FR-17, LIB-FR-23; decision record §9).
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(tag = "need", rename_all = "snake_case", rename_all_fields = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum CalibrationNeed {
     /// Neither pinned nor No: "Choose its flats first".
     Unsettled { kind: InputKind },

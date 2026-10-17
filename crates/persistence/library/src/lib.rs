@@ -234,6 +234,7 @@ pub struct LocationRegistration {
 /// Last recorded access failure of a location, kept until access is restored.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct LocationFailure {
     pub availability: Availability,
     pub reason: String,
@@ -255,6 +256,7 @@ pub struct LocationReferences {
 /// A Sessions filter (LIB-FR-17, LIB-FR-18).
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum SessionFilter {
     /// The only list that shows Trashed frames: sessions holding any, each
     /// summarized over its Trashed frames alone.
@@ -286,6 +288,7 @@ pub struct SessionQuery {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct SessionSummary {
     pub session: Session,
     pub location_ids: Vec<Uuid>,
@@ -302,6 +305,7 @@ pub struct SessionSummary {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct SessionDetail {
     pub summary: SessionSummary,
     pub assets: Vec<Asset>,
@@ -318,6 +322,7 @@ pub struct SessionDetail {
 /// asset.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct SessionMember {
     pub copies: Vec<Uuid>,
     pub content_sha256: Option<String>,
@@ -330,6 +335,7 @@ pub struct SessionMember {
 /// Result of applying (or proposing) catalog corrections plus their regroup.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct CorrectionOutcome {
     pub correction_id: Uuid,
     pub assets: Vec<Asset>,
@@ -343,6 +349,7 @@ pub struct CorrectionOutcome {
 /// Durable reviewed correction plan; confirming it re-validates every input.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct CorrectionPreview {
     pub id: Uuid,
     pub expected: Vec<ExpectedAsset>,

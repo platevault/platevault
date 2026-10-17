@@ -27,6 +27,9 @@ fn invalid(message: String) -> LibraryError {
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct Microseconds(pub u64);
 
+#[cfg(feature = "wire")]
+wire_as!(Microseconds => f64);
+
 impl Microseconds {
     pub const PER_SECOND: u64 = 1_000_000;
 
@@ -94,6 +97,7 @@ impl<'de> Deserialize<'de> for Microseconds {
 /// panels are the Project's panel groups (PRJ-FR-27).
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct SubjectInput {
     pub target_id: Uuid,
     #[serde(default)]
@@ -154,6 +158,7 @@ pub fn validate_rigs(rig_ids: &[Uuid]) -> Result<(), LibraryError> {
 /// criterion needs reads unknown and counts toward no goal (PV-PRJ progress).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "criterion", rename_all = "snake_case", rename_all_fields = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum QualityCriterion {
     /// Only frames whose applicable library quality is Usable count.
     UsableOnly,
@@ -176,6 +181,7 @@ impl QualityCriterion {
 /// no exposure-preference, equipment, Moon or spread goal (D-W29).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", rename_all_fields = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum GoalSpec {
     Integration {
         channel: Option<String>,
@@ -310,6 +316,7 @@ impl GoalSpec {
 /// goals. A quality bar without a group applies to every panel.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct GoalInput {
     pub target_id: Uuid,
     #[serde(default)]
@@ -344,6 +351,7 @@ pub fn validate_goals(goals: &[GoalInput]) -> Result<(), LibraryError> {
 /// more rigs and any goals. Opening New Project from a Target lists it first.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ProjectInput {
     pub name: String,
     #[serde(default)]
@@ -435,6 +443,7 @@ pub struct ProjectQuery {
 /// A stored subject; `designation` is its Target's current designation.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ProjectSubject {
     pub id: Uuid,
     pub target_id: Uuid,
@@ -446,6 +455,7 @@ pub struct ProjectSubject {
 /// kind and channel (or criterion) stay.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ProjectGoal {
     pub id: Uuid,
     pub subject_id: Uuid,
@@ -460,6 +470,7 @@ pub struct ProjectGoal {
 /// own sites.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct Project {
     pub id: Uuid,
     pub name: String,
@@ -481,6 +492,7 @@ pub struct Project {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ProjectSummary {
     pub id: Uuid,
     pub name: String,
@@ -496,6 +508,7 @@ pub struct ProjectSummary {
 /// its confirmed rig is one of the Project's rigs. Nothing of it is stored.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ProjectCandidate {
     pub session_id: Uuid,
     pub grouping_revision: Revision,
@@ -510,6 +523,7 @@ pub struct ProjectCandidate {
 /// A built-in or user goal template. Applying it copies its values.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct GoalTemplate {
     pub id: Uuid,
     pub name: String,
@@ -527,6 +541,7 @@ pub struct GoalTemplate {
 /// exposure in `seconds`; an unknown value is counted apart, never as zero.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct GoalTally {
     pub frames: u64,
     pub seconds: Microseconds,
@@ -559,6 +574,7 @@ impl GoalTally {
 /// `in_project` never exceeds `captured`, and `met` reads `in_project` only.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct GoalProgress {
     pub goal: ProjectGoal,
     /// The frames of the Project's own sessions on the goal's subject (in
@@ -586,6 +602,7 @@ pub struct GoalProgress {
 /// never blocks Apply.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", rename_all_fields = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum ProjectWarning {
     /// The Project's light sessions on the subject on `rig_id` in `channel`
     /// find darks that differ from them only in exposure: every dark not
@@ -603,6 +620,7 @@ pub enum ProjectWarning {
 /// A Project's goal progress, in goal order, and its warnings at its revision.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ProjectProgress {
     pub project_id: Uuid,
     pub revision: Revision,

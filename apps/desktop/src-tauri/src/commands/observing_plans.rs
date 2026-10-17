@@ -41,6 +41,7 @@ use crate::library_notifier::notification_settings_url;
 /// # Errors
 /// `PersistenceFailure` when the catalog cannot be read.
 #[tauri::command]
+#[specta::specta]
 pub async fn planning_list_sites(library: State<'_, Arc<Library>>) -> Reply<PlanningSites> {
     library.catalog().list_sites().await.map_err(fail(None))
 }
@@ -52,6 +53,7 @@ pub async fn planning_list_sites(library: State<'_, Arc<Library>>) -> Reply<Plan
 /// `InvalidInput` for invalid fields or a zone outside the bundled database;
 /// `NotFound` for an unknown site; `Conflict` for a stale revision.
 #[tauri::command]
+#[specta::specta]
 pub async fn planning_save_site(
     library: State<'_, Arc<Library>>,
     site_id: Option<Uuid>,
@@ -67,6 +69,7 @@ pub async fn planning_save_site(
 /// # Errors
 /// `Conflict` for a stale settings revision; `NotFound` for an unknown site.
 #[tauri::command]
+#[specta::specta]
 pub async fn planning_set_default_site(
     library: State<'_, Arc<Library>>,
     site_id: Option<Uuid>,
@@ -82,6 +85,7 @@ pub async fn planning_set_default_site(
 /// `InvalidInput` for an invalid query; `NotFound` for an unknown Target or
 /// site.
 #[tauri::command]
+#[specta::specta]
 pub async fn planning_compute_windows(
     library: State<'_, Arc<Library>>,
     query: WindowQuery,
@@ -95,6 +99,7 @@ pub async fn planning_compute_windows(
 /// # Errors
 /// `NotFound` for an unknown Target; `Conflict` for a stale mark revision.
 #[tauri::command]
+#[specta::specta]
 pub async fn planning_set_planned(
     library: State<'_, Arc<Library>>,
     target_id: Uuid,
@@ -114,6 +119,7 @@ pub async fn planning_set_planned(
 /// `InvalidInput` for invalid criteria or lead time, or naming `defaultSite`
 /// when none is set; `NotFound` for an unknown Target.
 #[tauri::command]
+#[specta::specta]
 pub async fn planning_review_reminders(
     library: State<'_, Arc<Library>>,
     reminder: ReminderInput,
@@ -129,6 +135,7 @@ pub async fn planning_review_reminders(
 /// `InvalidInput` for invalid values or naming `defaultSite` when none is set;
 /// `Conflict` when the site is not the default or a revision moved.
 #[tauri::command]
+#[specta::specta]
 pub async fn planning_enable_reminders(
     library: State<'_, Arc<Library>>,
     reminder: ReminderInput,
@@ -148,6 +155,7 @@ pub async fn planning_enable_reminders(
 /// # Errors
 /// `NotFound` for no subscription; `Conflict` for a stale revision.
 #[tauri::command]
+#[specta::specta]
 pub async fn planning_disable_reminders(
     library: State<'_, Arc<Library>>,
     target_id: Uuid,
@@ -163,6 +171,7 @@ pub async fn planning_disable_reminders(
 /// # Errors
 /// `PersistenceFailure` when the catalog cannot be read.
 #[tauri::command]
+#[specta::specta]
 pub async fn planning_reminder_status(
     library: State<'_, Arc<Library>>,
     offset: u32,
@@ -174,6 +183,7 @@ pub async fn planning_reminder_status(
 /// `planning_open_notification_settings` result.
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[derive(specta::Type)]
 pub struct SettingsOpened {
     pub opened: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -185,6 +195,7 @@ pub struct SettingsOpened {
 /// # Errors
 /// `SourceUnavailable` when the platform refuses to open its settings.
 #[tauri::command]
+#[specta::specta]
 pub async fn planning_open_notification_settings(app: AppHandle) -> Reply<SettingsOpened> {
     let Some(url) = notification_settings_url() else {
         return Ok(SettingsOpened { opened: false, reason: Some("no_settings_target") });
@@ -202,6 +213,7 @@ pub async fn planning_open_notification_settings(app: AppHandle) -> Reply<Settin
 /// `InvalidInput` for an invalid selection; `Conflict` naming the Target when a
 /// selected key is not in the recomputed set.
 #[tauri::command]
+#[specta::specta]
 pub async fn planning_review_calendar_export(
     library: State<'_, Arc<Library>>,
     selection: ExportSelection,
@@ -218,6 +230,7 @@ pub async fn planning_review_calendar_export(
 /// `Conflict` naming the Target for a stale digest; the write failures of
 /// [`Library::write_calendar_export`], naming the path.
 #[tauri::command]
+#[specta::specta]
 pub async fn planning_export_calendar(
     app: AppHandle,
     library: State<'_, Arc<Library>>,
@@ -265,6 +278,7 @@ pub async fn planning_export_calendar(
 /// `InvalidInput` for invalid criteria or a night outside the supported
 /// calendar.
 #[tauri::command]
+#[specta::specta]
 pub async fn planning_tonight(
     library: State<'_, Arc<Library>>,
     query: TonightQuery,
@@ -280,6 +294,7 @@ pub async fn planning_tonight(
 /// `InvalidInput` for an invalid query; `NotFound` for an unknown Project or
 /// site; `Conflict` when the Project changed between its reads.
 #[tauri::command]
+#[specta::specta]
 pub async fn planning_project_windows(
     library: State<'_, Arc<Library>>,
     query: ProjectPlanningQuery,
@@ -294,6 +309,7 @@ pub async fn planning_project_windows(
 /// `NotFound` for an unknown Target; `Conflict` when a Project changed between
 /// its reads.
 #[tauri::command]
+#[specta::specta]
 pub async fn planning_target_gaps(
     library: State<'_, Arc<Library>>,
     target_id: Uuid,

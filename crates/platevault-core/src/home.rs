@@ -33,6 +33,7 @@ use crate::{
 /// order.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct HomeDashboard {
     /// "N sessions need a Target · M not in any Project" (PRJ-FR-19).
     pub top_line: SessionFilterCounts,
@@ -55,6 +56,7 @@ pub struct HomeDashboard {
 /// Home's new-sessions section (PRJ-FR-17 section 3), in group order.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct NewSessions {
     /// The Sessions "Needs a Target" list.
     pub needs_target: Vec<HomeSession>,
@@ -69,6 +71,7 @@ pub struct NewSessions {
 /// A Sessions row with its one-click actions.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct HomeSession {
     pub session: SessionSummary,
     pub actions: Vec<SessionAction>,

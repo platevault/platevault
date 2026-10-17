@@ -37,6 +37,7 @@ fn invalid(message: String) -> LibraryError {
 /// clones wherever the volume supports them; switching goes through Apply.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum ViewMode {
     #[default]
     Symlinks,
@@ -49,6 +50,7 @@ pub enum ViewMode {
 /// keywords and never a group's.
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(try_from = "String", into = "String")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct GroupKeyword(String);
 
 impl GroupKeyword {
@@ -91,12 +93,14 @@ impl From<GroupKeyword> for String {
 /// The two group keyword names, distinct in any case.
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(try_from = "KeywordNames")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct GroupKeywords {
     group: GroupKeyword,
     panel: GroupKeyword,
 }
 
 #[derive(Deserialize)]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 struct KeywordNames {
     group: GroupKeyword,
     panel: GroupKeyword,
@@ -143,6 +147,7 @@ impl GroupKeywords {
 /// The View step's settings (VSEL-FR-16, PREP-FR-06).
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ProjectViewSettings {
     pub mode: ViewMode,
     /// This Project's keyword names; `None` uses the Settings defaults.
@@ -165,6 +170,7 @@ pub struct ProjectViewSettings {
 /// the layout's, and a rename changes the folder only on the next Apply.
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(try_from = "String", into = "String")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct GroupName(String);
 
 impl GroupName {
@@ -210,6 +216,7 @@ impl From<GroupName> for String {
 /// recomputation never changes a user group.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum GroupOrigin {
     Framing,
     User,
@@ -221,6 +228,7 @@ pub enum GroupOrigin {
 /// angle modulo 180°. A missing angle is unknown, never zero.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct FramingEvidence {
     pub ra_deg: f64,
     pub dec_deg: f64,
@@ -278,6 +286,7 @@ impl From<&SessionFraming> for FramingEvidence {
 /// A panel group carries only the PANEL token and its own goals.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ProjectGroup {
     pub id: Uuid,
     pub rig_id: Uuid,
@@ -304,6 +313,7 @@ impl ProjectGroup {
 /// Why a session sits in its group; a user move survives recomputation.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum SessionPlacement {
     Framing,
     User,
@@ -318,6 +328,7 @@ pub enum SessionPlacement {
 /// a Target the Project lacks (PRJ-AC-26).
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ProjectSessionMember {
     pub session_id: Uuid,
     pub group_id: Uuid,
@@ -332,6 +343,7 @@ pub struct ProjectSessionMember {
 /// when it was chosen (D19): a later change shows as drift, never silently.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct CopyBasis {
     pub asset_id: Uuid,
     pub decision_revision: Revision,
@@ -341,6 +353,7 @@ pub struct CopyBasis {
 /// Why an included capture is included (VSEL-FR-15).
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum InclusionBasis {
     /// Usable when the session was added.
     Usable,
@@ -351,6 +364,7 @@ pub enum InclusionBasis {
 /// Why an excluded capture is excluded.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum ExclusionBasis {
     /// Library-Unusable when the session was added.
     Unusable,
@@ -362,6 +376,7 @@ pub enum ExclusionBasis {
 /// not recorded here: it reads as a pending removal from the Library.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(tag = "state", rename_all = "snake_case", rename_all_fields = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum CaptureInclusion {
     Included { basis: InclusionBasis },
     Excluded { basis: ExclusionBasis },
@@ -415,6 +430,7 @@ impl CaptureInclusion {
 /// stay on disk and library quality is untouched.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum FrameChoice {
     /// Exclude from this Project only.
     Exclude,
@@ -428,6 +444,7 @@ pub enum FrameChoice {
 /// asset id, with every copy once in id order.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ProjectCapture {
     pub capture_key: Uuid,
     pub session_id: Uuid,
@@ -464,6 +481,7 @@ impl ProjectCapture {
 /// Everything a Project holds as its intent, read in one snapshot.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ProjectDesired {
     pub project_id: Uuid,
     /// The Project revision every desired-state edit advances; an Apply sheet
@@ -535,6 +553,7 @@ impl ProjectDesired {
 /// settled ("Choose its flats first"); with none it can be added at `basis`.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ProjectSuggestion {
     pub session_id: Uuid,
     pub subject_id: Uuid,
@@ -560,6 +579,7 @@ pub enum ChangeSource {
 /// computed on read and never stored. A Closed Project has none.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "change", rename_all = "snake_case", rename_all_fields = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum PendingChange {
     SessionAdded {
         session_id: Uuid,

@@ -32,6 +32,7 @@ use super::library::{fail, Reply};
 /// `InvalidInput` for an invalid query or a preset the selected rigs do not
 /// offer; `NotFound` for an unknown site, rig or Project.
 #[tauri::command]
+#[specta::specta]
 pub async fn planning_target_rows(
     library: State<'_, Arc<Library>>,
     query: TargetsQuery,
@@ -46,6 +47,7 @@ pub async fn planning_target_rows(
 /// # Errors
 /// `InvalidInput` for text without searchable characters.
 #[tauri::command]
+#[specta::specta]
 pub async fn targets_search(
     library: State<'_, Arc<Library>>,
     text: String,
@@ -58,6 +60,7 @@ pub async fn targets_search(
 /// # Errors
 /// `NotFound` for an unknown Target; provider errors for a SIMBAD result.
 #[tauri::command]
+#[specta::specta]
 pub async fn targets_add(
     library: State<'_, Arc<Library>>,
     target: AddTarget,
@@ -74,6 +77,7 @@ pub async fn targets_add(
 /// # Errors
 /// `NotFound` for an unsaved Target.
 #[tauri::command]
+#[specta::specta]
 pub async fn targets_set_favourite(
     library: State<'_, Arc<Library>>,
     target_id: Uuid,
@@ -91,6 +95,7 @@ pub async fn targets_set_favourite(
 /// `NotFound` for an unknown rig or Project; `PersistenceFailure` when the
 /// catalog cannot be read.
 #[tauri::command]
+#[specta::specta]
 pub async fn targets_presets_list(
     library: State<'_, Arc<Library>>,
     rigs: Option<RigSelection>,
@@ -104,6 +109,7 @@ pub async fn targets_presets_list(
 /// `InvalidInput` for an invalid or built-in name; `Conflict` for a name a
 /// saved preset has.
 #[tauri::command]
+#[specta::specta]
 pub async fn targets_preset_save(
     library: State<'_, Arc<Library>>,
     name: String,
@@ -118,6 +124,7 @@ pub async fn targets_preset_save(
 /// `InvalidInput` for a built-in preset or an invalid name; `NotFound` and
 /// `Conflict` for an unknown or stale preset.
 #[tauri::command]
+#[specta::specta]
 pub async fn targets_preset_rename(
     library: State<'_, Arc<Library>>,
     preset: PresetRef,
@@ -136,6 +143,7 @@ pub async fn targets_preset_rename(
 /// `InvalidInput` for a built-in preset; `NotFound` and `Conflict` for an
 /// unknown or stale preset.
 #[tauri::command]
+#[specta::specta]
 pub async fn targets_preset_delete(
     library: State<'_, Arc<Library>>,
     preset: PresetRef,

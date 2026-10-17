@@ -187,6 +187,7 @@ impl RotatorPresence {
 /// reducer. Focal length is canonical decimal text, compared exactly.
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct OpticsSignature {
     pub camera_id: Option<Uuid>,
     pub focal_length_mm: Option<String>,

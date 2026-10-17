@@ -24,6 +24,7 @@ use crate::{
 /// while any holds and changes nothing.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "blocker", rename_all = "snake_case", rename_all_fields = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum ApplyBlocker {
     /// A Closing, Closed or Archived Project takes no Apply.
     ProjectLocked { lifecycle: ProjectLifecycle },
@@ -108,6 +109,7 @@ impl ApplyBlocker {
 /// One entry the next build places, relative to `View/`.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ViewPlanEntry {
     pub path: NativePath,
     pub source: EntrySource,
@@ -120,6 +122,7 @@ pub struct ViewPlanEntry {
 /// offered with a tick box.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ForeignFile {
     /// Relative to `View/`.
     pub path: NativePath,
@@ -129,6 +132,7 @@ pub struct ForeignFile {
 /// The Apply sheet's backend part, read-only.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ApplyPreview {
     pub project_id: Uuid,
     /// The Project revision the sheet shows (VSEL-FR-21).
@@ -157,6 +161,7 @@ pub struct ApplyPreview {
 /// What the user confirmed in the sheet.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ApplyRequest {
     pub project_id: Uuid,
     pub desired_revision: Revision,
@@ -169,6 +174,7 @@ pub struct ApplyRequest {
 /// One input the build could not place.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ApplyFailure {
     /// The original, or the entry relative to `View/`.
     pub path: NativePath,
@@ -179,6 +185,7 @@ pub struct ApplyFailure {
 /// it (`outcome` `None`; the next start finishes or rolls it back).
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ApplyReport {
     pub project_id: Uuid,
     pub operation_id: Uuid,

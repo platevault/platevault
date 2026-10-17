@@ -14,6 +14,7 @@ use crate::{ExpectedSession, Project, Revision};
 /// calibration" lists, which Home's top line and Pending work report.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct SessionFilterCounts {
     pub needs_target: u64,
     pub not_in_any_project: u64,
@@ -25,6 +26,7 @@ pub struct SessionFilterCounts {
 /// The session's rig that Add to Project adds because the Project lacks it.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct AddedRig {
     pub id: Uuid,
     pub name: String,
@@ -35,6 +37,7 @@ pub struct AddedRig {
 /// Project lacks it, named by a visible note before saving (D-W59).
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ProjectAddition {
     pub project_id: Uuid,
     /// The Project revision the addition was computed against; the write
@@ -78,6 +81,7 @@ impl ProjectAddition {
 /// The committed Project and the addition the write applied.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ProjectAdded {
     pub project: Project,
     pub addition: ProjectAddition,

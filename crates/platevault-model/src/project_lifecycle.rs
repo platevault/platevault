@@ -30,6 +30,7 @@ fn invalid(message: String) -> LibraryError {
 /// Where a Project is in its life.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum ProjectLifecycle {
     Open,
     /// Close was confirmed and its archive transfer is running.
@@ -124,6 +125,7 @@ impl ClosePolicy {
 /// The `PlateVault` operations that act on a Project's folders.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum ProjectOperationKind {
     Apply,
     CopyToOutput,
@@ -137,6 +139,7 @@ pub enum ProjectOperationKind {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum ProjectOperationState {
     Active,
     Settled,
@@ -147,6 +150,7 @@ pub enum ProjectOperationState {
 /// settles. No writer lock is held across its file work.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ProjectOperation {
     pub id: Uuid,
     pub project_id: Uuid,
@@ -173,6 +177,7 @@ impl ProjectOperation {
 /// Wrap up's steps, in their fixed order.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum WrapUpStep {
     CleanUp,
     Trash,
@@ -196,6 +201,7 @@ impl WrapUpStep {
 /// Proceeding with nothing selected records a step Skipped.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum WrapUpOutcome {
     Finished,
     Skipped,
@@ -205,6 +211,7 @@ pub enum WrapUpOutcome {
 /// read-only record of these.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct WrapUpRecord {
     pub step: WrapUpStep,
     pub outcome: WrapUpOutcome,
@@ -251,6 +258,7 @@ impl WrapUpRecord {
 /// Trashed or unavailable badges may overlay it.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ClosedSnapshot {
     pub project_id: Uuid,
     pub taken_at: String,

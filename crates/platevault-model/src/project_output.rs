@@ -41,6 +41,7 @@ pub enum MasterOfferState {
 /// What a Result is; the user picks it from a dropdown when it isn't known.
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", rename_all_fields = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum OutputKind {
     FinalImage,
     LinearIntegration,
@@ -52,6 +53,7 @@ pub enum OutputKind {
 /// Where an observed file stands.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum OutputState {
     /// "Still being written": its size or time is still changing.
     Settling,
@@ -63,6 +65,7 @@ pub enum OutputState {
 /// How a file came to be in `Output/`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum OutputOrigin {
     /// Saved there by the user or a tool, and found by the watcher.
     Observed,
@@ -73,6 +76,7 @@ pub enum OutputOrigin {
 /// One file of a Project's `Output/`, relative to that folder.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct OutputObservation {
     pub path: NativePath,
     pub kind: Option<OutputKind>,

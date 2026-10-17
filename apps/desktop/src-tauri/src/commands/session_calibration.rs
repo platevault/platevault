@@ -28,6 +28,7 @@ use super::library::{fail, Reply};
 /// # Errors
 /// `PersistenceFailure` for an unreadable or corrupt catalog.
 #[tauri::command]
+#[specta::specta]
 pub async fn calibration_needs(library: State<'_, Arc<Library>>) -> Reply<Vec<SessionNeeds>> {
     library.catalog().needs_calibration().await.map_err(fail(None))
 }
@@ -41,6 +42,7 @@ pub async fn calibration_needs(library: State<'_, Arc<Library>>) -> Reply<Vec<Se
 /// `InvalidInput` for an input of another kind or one a hard check refuses;
 /// `SourceUnavailable` when a frame to hash can't be read.
 #[tauri::command]
+#[specta::specta]
 pub async fn calibration_reassign(
     library: State<'_, Arc<Library>>,
     session_id: Uuid,

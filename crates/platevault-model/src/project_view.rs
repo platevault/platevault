@@ -43,6 +43,7 @@ fn invalid(message: String) -> LibraryError {
 /// record's, so discarding a removal restores the capture exactly.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct BasisCapture {
     pub capture_key: Uuid,
     pub included: bool,
@@ -56,8 +57,10 @@ pub struct BasisCapture {
 /// a removal or a move restores it exactly.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct BasisSession {
     pub session_id: Uuid,
+    #[cfg_attr(feature = "wire", specta(type = Option<String>), schemars(with = "Option<String>"))]
     #[serde(default, with = "crate::iso_date::option")]
     pub night: Option<Date>,
     pub placement: SessionPlacement,
@@ -70,6 +73,7 @@ pub struct BasisSession {
 /// back after the Project removed it: origin, optics, framing and position.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct BasisGroup {
     pub id: Uuid,
     pub name: GroupName,
@@ -88,6 +92,7 @@ pub struct BasisGroup {
 /// each capture's choice and copies.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ProjectBasis {
     pub mode: ViewMode,
     /// The keyword names in effect: the Project's, or the Settings defaults.
@@ -191,6 +196,7 @@ impl ManifestState {
 /// an adopted master version.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(tag = "source", rename_all = "snake_case", rename_all_fields = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum EntrySource {
     Light { capture_key: Uuid, asset_id: Uuid },
     CalibrationFrame { kind: InputKind, session_id: Uuid, asset_id: Uuid },
@@ -213,6 +219,7 @@ impl EntrySource {
 /// or between the View's own copies (D-W81, 063 FR-005).
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum EntryPlacement {
     Symlink,
     Copy,
@@ -399,6 +406,7 @@ impl ApplyPhase {
 /// ticked files is left unfinished.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum ApplyOutcome {
     Applied,
     Failed,
@@ -501,6 +509,7 @@ impl ApplyJournal {
 /// What became of a file `PlateVault` didn't place, listed in the Apply sheet.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum ForeignItemState {
     Pending,
     /// Ticked and moved into the new View after the swap.
@@ -514,6 +523,7 @@ pub enum ForeignItemState {
 /// user's consent. Only a ticked file moves, and only after the swap.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ForeignItem {
     pub seq: u32,
     /// Relative to `View/`.
@@ -543,6 +553,7 @@ impl ForeignItem {
 /// Why a file stayed in `View (previous)/` after the swap (STO-FR-10).
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum PreviousItemReason {
     /// A copy that differs from what `PlateVault` placed.
     ChangedCopy,
@@ -559,6 +570,7 @@ pub enum PreviousItemReason {
 /// still be moved or trashed later, such as by Wrap up's Clean up.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum PreviousItemReview {
     Pending,
     Kept,
@@ -584,6 +596,7 @@ impl PreviousItemReview {
 /// arrives is still open with the owner (decision record §9).
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct PreviousItem {
     pub path: NativePath,
     pub reason: PreviousItemReason,

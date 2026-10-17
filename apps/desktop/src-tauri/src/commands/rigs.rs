@@ -23,6 +23,7 @@ type Reply<T> = Result<T, ErrorResponse>;
 /// One filter on a saved list. `id` is absent for a filter new to the list.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[derive(specta::Type)]
 pub struct RigFilterInput {
     pub id: Option<Uuid>,
     pub name: String,
@@ -35,6 +36,7 @@ pub struct RigFilterInput {
 /// # Errors
 /// `NotFound` for unknown equipment.
 #[tauri::command]
+#[specta::specta]
 pub async fn rig_filters_get(library: State<'_, Arc<Library>>, equipment_id: Uuid) -> Reply<Rig> {
     library.rig(equipment_id).await.map_err(fail(Some(equipment_id)))
 }
@@ -46,6 +48,7 @@ pub async fn rig_filters_get(library: State<'_, Arc<Library>>, equipment_id: Uui
 /// `NotFound` for unknown equipment and a retryable `PersistenceFailure` when
 /// the save did not commit; the previous list then stays in effect.
 #[tauri::command]
+#[specta::specta]
 pub async fn rig_filters_save(
     library: State<'_, Arc<Library>>,
     equipment_id: Uuid,
@@ -73,6 +76,7 @@ pub async fn rig_filters_save(
 /// # Errors
 /// `NotFound` for an unknown `equipment_id`.
 #[tauri::command]
+#[specta::specta]
 pub async fn rig_unknown_filters(
     library: State<'_, Arc<Library>>,
     equipment_id: Option<Uuid>,

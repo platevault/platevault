@@ -33,6 +33,7 @@ use super::library::{fail, Reply};
 /// # Errors
 /// `NotFound` for an unknown Project; `PersistenceFailure` for a corrupt record.
 #[tauri::command]
+#[specta::specta]
 pub async fn project_inputs(
     library: State<'_, Arc<Library>>,
     project_id: Uuid,
@@ -48,6 +49,7 @@ pub async fn project_inputs(
 /// confirmed rig; `Conflict` for a stale revision; `NotFound` for an unknown
 /// Project, session or group.
 #[tauri::command]
+#[specta::specta]
 pub async fn project_add_sessions(
     library: State<'_, Arc<Library>>,
     project_id: Uuid,
@@ -68,6 +70,7 @@ pub async fn project_add_sessions(
 /// `Conflict` for a stale revision; `NotFound` for an unknown Project or a
 /// session it doesn't hold; `InvalidInput` for a Project that isn't open.
 #[tauri::command]
+#[specta::specta]
 pub async fn project_remove_sessions(
     library: State<'_, Arc<Library>>,
     project_id: Uuid,
@@ -89,6 +92,7 @@ pub async fn project_remove_sessions(
 /// or held session; `InvalidInput` for a Project that isn't open or a group of
 /// another rig.
 #[tauri::command]
+#[specta::specta]
 pub async fn project_move_sessions(
     library: State<'_, Arc<Library>>,
     project_id: Uuid,
@@ -109,6 +113,7 @@ pub async fn project_move_sessions(
 /// `InvalidInput` for a blank name or one sharing another group's folder;
 /// otherwise as `project_move_sessions`.
 #[tauri::command]
+#[specta::specta]
 pub async fn project_create_group(
     library: State<'_, Arc<Library>>,
     project_id: Uuid,
@@ -130,6 +135,7 @@ pub async fn project_create_group(
 /// `InvalidInput` for no session, a session of another group or a name
 /// sharing another group's folder; `NotFound` for an unknown group.
 #[tauri::command]
+#[specta::specta]
 pub async fn project_split_group(
     library: State<'_, Arc<Library>>,
     project_id: Uuid,
@@ -150,6 +156,7 @@ pub async fn project_split_group(
 /// `InvalidInput` for a blank name or one sharing another group's folder;
 /// `Conflict` for a stale revision; `NotFound` for an unknown group.
 #[tauri::command]
+#[specta::specta]
 pub async fn project_rename_group(
     library: State<'_, Arc<Library>>,
     project_id: Uuid,
@@ -171,6 +178,7 @@ pub async fn project_rename_group(
 /// `InvalidInput` for a blank name or one sharing another group's folder;
 /// `NotFound` for an unknown group; `Conflict` for a stale revision.
 #[tauri::command]
+#[specta::specta]
 pub async fn project_set_group_panel(
     library: State<'_, Arc<Library>>,
     project_id: Uuid,
@@ -194,6 +202,7 @@ pub async fn project_set_group_panel(
 /// capture it doesn't hold; `InvalidInput` for a Project that isn't open or
 /// no capture.
 #[tauri::command]
+#[specta::specta]
 pub async fn project_set_frames(
     library: State<'_, Arc<Library>>,
     project_id: Uuid,

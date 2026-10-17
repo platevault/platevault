@@ -32,6 +32,28 @@ fn invalid(message: String) -> LibraryError {
 /// numbers, NaN and the infinities are the strings `NaN`, `Infinity` and
 /// `-Infinity`.
 pub mod sample_number {
+    /// The wire shape [`serialize`] writes: a finite JSON number or the name
+    /// of a non-finite value. Exists only for the IPC type derives.
+    #[cfg(feature = "wire")]
+    #[derive(specta::Type, schemars::JsonSchema)]
+    #[serde(untagged)]
+    pub enum Wire {
+        Finite(f64),
+        NonFinite(NonFinite),
+    }
+
+    /// The strings [`serialize`] writes for NaN and the infinities.
+    #[cfg(feature = "wire")]
+    #[derive(specta::Type, schemars::JsonSchema)]
+    pub enum NonFinite {
+        #[serde(rename = "NaN")]
+        NaN,
+        #[serde(rename = "Infinity")]
+        Infinity,
+        #[serde(rename = "-Infinity")]
+        NegativeInfinity,
+    }
+
     use std::fmt;
 
     use serde::{de, Deserializer, Serializer};
@@ -96,7 +118,15 @@ pub mod sample_number {
 
 /// An `f64` carried in [`sample_number`] form.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
-pub struct SampleNumber(#[serde(with = "sample_number")] pub f64);
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
+pub struct SampleNumber(
+    #[cfg_attr(feature = "wire", specta(type = sample_number::Wire), schemars(with = "sample_number::Wire"))]
+    #[serde(with = "sample_number")]
+    pub f64,
+);
+
+#[cfg(feature = "wire")]
+wire_as!(StoredNumber => sample_number::Wire);
 
 /// A stored sample: integers stay JSON integers, floats use [`sample_number`].
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -152,6 +182,7 @@ pub mod reasons {
 
 /// A measurement method and its version.
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct MeasurementMethod {
     pub name: String,
     pub version: u32,
@@ -167,6 +198,7 @@ impl MeasurementMethod {
 /// Where CFA evidence was recorded.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum CfaSource {
     BayerpatKeyword,
     ColorFilterArray,
@@ -175,6 +207,7 @@ pub enum CfaSource {
 /// CFA evidence as recorded; absent values are `null`.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct CfaEvidence {
     pub pattern: Option<String>,
     pub x_offset: Option<i64>,
@@ -186,6 +219,7 @@ pub struct CfaEvidence {
 /// The plane a value was measured on or a preview shows.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum PlaneBasis {
     Mono,
     CfaMosaic(CfaEvidence),
@@ -200,6 +234,7 @@ pub enum PlaneBasis {
 /// Where a saturation level came from.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum SaturationSource {
     SaturateKeyword,
     XisfBounds,
@@ -209,6 +244,7 @@ pub enum SaturationSource {
 
 /// A saturation level in plane units with its source, `null` when unknown.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct SaturationBasis {
     pub level: Option<f64>,
     pub source: SaturationSource,
@@ -217,6 +253,7 @@ pub struct SaturationBasis {
 /// The stored sample type.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum SampleFormat {
     Uint8,
     Int16,
@@ -230,6 +267,7 @@ pub enum SampleFormat {
 
 /// `value = zero + scale * stored`.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct Scaling {
     pub zero: f64,
     pub scale: f64,
@@ -238,6 +276,7 @@ pub struct Scaling {
 /// Masked samples per category.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct MaskCounts {
     pub nan: u64,
     pub pos_inf: u64,
@@ -256,6 +295,7 @@ impl MaskCounts {
 /// What a decode recorded about the measured plane.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct DecodedBasis {
     /// The measured plane; for a multi-channel refusal, the first channel.
     pub plane: PlaneBasis,
@@ -273,6 +313,7 @@ pub struct DecodedBasis {
 /// and, when the data decoded, the plane basis.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct InputBasis {
     pub fingerprint: ObservationFingerprint,
     pub container: ImageFormat,
@@ -290,6 +331,7 @@ impl InputBasis {
 /// A built-in frame metric.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum MetricId {
     StarCount,
     FittedStarCount,
@@ -319,6 +361,7 @@ impl MetricId {
 /// Units as declared; values are never converted.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum Units {
     Count,
     Px,
@@ -335,6 +378,7 @@ pub enum Units {
 /// Whether a metric carries a value.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum MetricState {
     Measured,
     Unavailable,
@@ -343,6 +387,7 @@ pub enum MetricState {
 /// The import format of an external measurement file.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum ImportFormat {
     SubframeSelectorCsv,
 }
@@ -350,6 +395,7 @@ pub enum ImportFormat {
 /// Who computed a value.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum ValueSource {
     BuiltIn {
         method: String,
@@ -365,6 +411,7 @@ pub enum ValueSource {
 
 /// One built-in frame metric with its units and source.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct MetricValue {
     pub metric: MetricId,
     pub label: String,
@@ -424,6 +471,7 @@ impl MetricValue {
 /// The fit state of a detected star.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum StarState {
     Fitted,
     Failed,
@@ -433,6 +481,7 @@ pub enum StarState {
 /// Why a star has no fitted shape (R8).
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum StarReason {
     Saturated,
     TooManyMaskedSamples,
@@ -445,6 +494,7 @@ pub enum StarReason {
 /// Fit warnings (R8).
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum StarWarning {
     Saturated,
     MaskedSamplesExcluded,
@@ -456,6 +506,7 @@ pub enum StarWarning {
 /// The fitted PSF model.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum StarModel {
     EllipticalGaussian,
 }
@@ -466,6 +517,7 @@ pub enum StarModel {
 /// reproducible from the record.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct StarRecord {
     pub index: u32,
     pub x: f64,
@@ -490,6 +542,7 @@ pub struct StarRecord {
 /// The outcome of measuring one frame.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "outcome", rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum MeasurementOutcome {
     Measured {
         metrics: Vec<MetricValue>,
@@ -505,6 +558,7 @@ pub enum MeasurementOutcome {
 /// A cached measurement of one asset.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct MeasurementRecord {
     pub id: Uuid,
     pub asset_id: Uuid,
@@ -520,6 +574,7 @@ pub struct MeasurementRecord {
 /// Derived frame state; never stored.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum FrameStateKind {
     Cached,
     Pending,
@@ -531,6 +586,7 @@ pub enum FrameStateKind {
 /// Whether a cached value was verified against the current file.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum Verification {
     Current,
     LastObserved,
@@ -538,6 +594,7 @@ pub enum Verification {
 
 /// The basis summary shown with a frame state.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct FrameBasis {
     pub fingerprint: ObservationFingerprint,
     pub plane: Option<PlaneBasis>,
@@ -547,6 +604,7 @@ pub struct FrameBasis {
 /// One frame's measurement state with built-in and imported values.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct FrameState {
     pub asset_id: Uuid,
     pub state: FrameStateKind,
@@ -563,6 +621,7 @@ pub struct FrameState {
 /// A measurement run's state.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum RunState {
     Running,
     Completed,
@@ -575,6 +634,7 @@ pub enum RunState {
 /// changed while being read.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct RunIssue {
     pub asset_id: Uuid,
     /// The `ErrorResponse` kind.
@@ -585,6 +645,7 @@ pub struct RunIssue {
 /// Run counters.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct RunCounters {
     pub requested: u64,
     pub already_cached: u64,
@@ -597,6 +658,7 @@ pub struct RunCounters {
 /// A durable measurement run.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct MeasurementRun {
     pub operation_id: Uuid,
     pub revision: Revision,
@@ -624,6 +686,7 @@ pub struct MeasurementProgress {
 /// A display stretch in plane units (linear) or normalized units (MTF).
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum Stretch {
     Linear { black: f64, white: f64 },
     Mtf { shadows: f64, midtones: f64, highlights: f64 },
@@ -674,6 +737,7 @@ impl Stretch {
 /// Which stretch was requested.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum StretchKind {
     Linear,
     Mtf,
@@ -684,6 +748,7 @@ pub enum StretchKind {
 /// in plane units, then the midtones transfer of `(x - shadows) /
 /// (highlights - shadows)`, clamped to `[0, 1]`, scaled to 0..255.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct AppliedStretch {
     pub kind: StretchKind,
     pub black: f64,
@@ -792,6 +857,7 @@ pub struct CutoutRequest {
 /// image is cached.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct PreviewTile {
     pub plane: u32,
     pub level: u8,
@@ -807,6 +873,7 @@ pub struct PreviewTile {
 /// Valid-sample statistics of one plane in plane units.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct PlaneSummary {
     pub valid: u64,
     pub min: Option<f64>,
@@ -822,6 +889,7 @@ pub struct PlaneSummary {
 /// One previewable plane.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct PlanePreview {
     pub index: u32,
     pub basis: PlaneBasis,
@@ -832,6 +900,7 @@ pub struct PlanePreview {
 /// A frame opened for preview after a verified contained read.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct FramePreview {
     pub asset_id: Uuid,
     /// The SHA-256 of the decoded bytes; tile requests name it.
@@ -855,6 +924,7 @@ pub struct FramePreview {
 /// under, and is never an input to measurement.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct FrameThumbnail {
     pub asset_id: Uuid,
     pub sha256: String,
@@ -866,6 +936,7 @@ pub struct FrameThumbnail {
 /// A frame's thumbnail as frame review shows it.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "state", rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum ThumbnailState {
     /// Cached for the frame's current observation and recorded digest.
     Ready { thumbnail: Box<FrameThumbnail> },
@@ -882,6 +953,7 @@ pub enum ThumbnailState {
 /// One requested frame's thumbnail state.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ThumbnailEntry {
     pub asset_id: Uuid,
     #[serde(flatten)]
@@ -891,6 +963,7 @@ pub struct ThumbnailEntry {
 /// A sample's validity category.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum SampleCategory {
     Valid,
     Nan,
@@ -902,10 +975,12 @@ pub enum SampleCategory {
 
 /// One sample as stored, scaled and categorised; never replaced.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct SampleValue {
     pub x: u32,
     pub y: u32,
     pub stored: StoredNumber,
+    #[cfg_attr(feature = "wire", specta(type = sample_number::Wire), schemars(with = "sample_number::Wire"))]
     #[serde(with = "sample_number")]
     pub value: f64,
     pub category: SampleCategory,
@@ -915,6 +990,7 @@ pub struct SampleValue {
 /// A failed star returns only the observed array.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct StarCutouts {
     pub asset_id: Uuid,
     pub measurement_id: Uuid,
@@ -931,6 +1007,7 @@ pub struct StarCutouts {
 /// The stars of a frame's valid record, or its state when none exists.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct FrameStars {
     pub asset_id: Uuid,
     pub state: FrameState,
@@ -942,6 +1019,7 @@ pub struct FrameStars {
 /// and every imported value.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct FrameDetail {
     pub asset: Asset,
     pub state: FrameState,
@@ -952,6 +1030,7 @@ pub struct FrameDetail {
 /// A `SubframeSelector` table layout.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum ExportLayout {
     /// `PixInsight` 1.9.x, 30 columns.
     Columns30,
@@ -963,6 +1042,7 @@ pub enum ExportLayout {
 
 /// One preamble row as recorded.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct PreambleEntry {
     pub key: String,
     pub value: String,
@@ -971,6 +1051,7 @@ pub struct PreambleEntry {
 /// How an import column is treated.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum ColumnClass {
     Mapped,
     Unavailable,
@@ -982,6 +1063,7 @@ pub enum ColumnClass {
 /// came from.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ImportColumn {
     pub header: String,
     pub position: u32,
@@ -995,6 +1077,7 @@ pub struct ImportColumn {
 /// A row's match state.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum RowMatch {
     MatchedPath,
     MatchedName,
@@ -1007,6 +1090,7 @@ pub enum RowMatch {
 /// One cell of a mapped column: the raw text and the parsed number, or a
 /// parse reason.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ImportCell {
     pub position: u32,
     pub raw: String,
@@ -1016,6 +1100,7 @@ pub struct ImportCell {
 
 /// The asset evidence an attached row was reviewed against.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ImportBasis {
     pub fingerprint: ObservationFingerprint,
     /// `null` when the asset was offline and no digest was recorded.
@@ -1025,6 +1110,7 @@ pub struct ImportBasis {
 /// One CSV data row.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ImportRow {
     /// 1-based line in the CSV file.
     pub line: u64,
@@ -1043,6 +1129,7 @@ pub struct ImportRow {
 /// A review's lifecycle.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum ImportReviewState {
     Reviewed,
     Confirmed,
@@ -1051,6 +1138,7 @@ pub enum ImportReviewState {
 /// The CSV file as read.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ImportSource {
     pub path: NativePath,
     pub size_bytes: u64,
@@ -1060,6 +1148,7 @@ pub struct ImportSource {
 /// A durable import proposal, or the confirmed import.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ImportReview {
     pub review_id: Uuid,
     pub revision: Revision,
@@ -1080,6 +1169,7 @@ pub struct ImportReview {
 /// Resolves an ambiguous row to one of its listed candidates.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct RowResolution {
     pub index: u64,
     pub asset_id: Uuid,
@@ -1088,6 +1178,7 @@ pub struct RowResolution {
 /// The result of one confirmation commit.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ConfirmedImport {
     pub review: ImportReview,
     pub attached: Vec<ImportRow>,
@@ -1098,6 +1189,7 @@ pub struct ConfirmedImport {
 /// Imported values are never verified.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum ImportVerification {
     Unverified,
 }
@@ -1105,6 +1197,7 @@ pub enum ImportVerification {
 /// Whether an imported value's asset still matches its import basis.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum Drift {
     Matches,
     Differs,
@@ -1114,6 +1207,7 @@ pub enum Drift {
 /// One confirmed imported value, kept apart from built-in values.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ImportedValue {
     pub import_id: Uuid,
     pub asset_id: Uuid,
@@ -1253,6 +1347,7 @@ impl FrameState {
 /// review lists through `session_review_list`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", rename_all_fields = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum ReviewContext {
     /// A Project's candidate sessions. Home's "Review N new frames" opens it
     /// filtered to Unreviewed (PRJ-FR-18 rule 1).
@@ -1264,6 +1359,7 @@ pub enum ReviewContext {
 /// its own frame choices, never through a review label.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum QualityLabel {
     Unreviewed,
     Picked,
@@ -1292,6 +1388,7 @@ impl QualityLabel {
 /// quality decision.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ReviewMark {
     pub asset: ExpectedAsset,
     pub quality: Quality,
@@ -1300,6 +1397,7 @@ pub struct ReviewMark {
 /// ⌥1–⌥4: All, Picked, Rejected or Unreviewed (D-W14).
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum ReviewFilter {
     #[default]
     All,
@@ -1325,6 +1423,7 @@ impl ReviewFilter {
 /// a value, follow in capture order; frames without a value sort last.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", rename_all_fields = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum ReviewSortKey {
     /// Capture start (DATE-OBS).
     #[default]
@@ -1342,6 +1441,7 @@ pub enum ReviewSortKey {
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum SortDirection {
     #[default]
     Asc,
@@ -1350,6 +1450,7 @@ pub enum SortDirection {
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ReviewSort {
     pub key: ReviewSortKey,
     pub direction: SortDirection,
@@ -1358,6 +1459,7 @@ pub struct ReviewSort {
 /// How frame names read (PIX-FR-16): display only, never a rename.
 #[derive(Clone, Debug, Default, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", rename_all_fields = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum NameTemplate {
     /// The file name: the default preset.
     #[default]
@@ -1370,6 +1472,7 @@ pub enum NameTemplate {
 /// inspector.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct DisplayName {
     pub asset_id: Uuid,
     pub name: String,
@@ -1383,6 +1486,7 @@ pub struct DisplayName {
 /// through one copy outside the Trash.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ReviewFrame {
     /// The copy the frame is reviewed through.
     pub asset: Asset,
@@ -1400,6 +1504,7 @@ pub struct ReviewFrame {
 /// Trashed frame counts nowhere.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ReviewCounts {
     pub all: u64,
     pub picked: u64,
@@ -1421,6 +1526,7 @@ impl ReviewCounts {
 /// `pix_review_list`: the context's frames the filter admits, sorted.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ReviewList {
     pub context: ReviewContext,
     /// The Project whose candidates the list reads.
@@ -1433,6 +1539,7 @@ pub struct ReviewList {
 /// What one Review frames mark wrote: the decided frame copy.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ReviewMarked {
     pub asset: Asset,
 }

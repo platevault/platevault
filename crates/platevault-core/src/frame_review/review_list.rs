@@ -24,6 +24,7 @@ use crate::{
 /// A session's intake review list.
 #[derive(Clone, Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct SessionReviewList {
     pub session_id: Uuid,
     pub grouping_revision: Revision,

@@ -20,6 +20,7 @@ use crate::{
 /// Home's first section (PRJ-FR-17 section 1).
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum HomeAction {
     Import,
     NewProject,
@@ -34,6 +35,7 @@ impl HomeAction {
 /// The Project step a waiting Project opens at (PRJ-FR-18 rule 2).
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum ProjectStep {
     Sessions,
     View,
@@ -43,6 +45,7 @@ pub enum ProjectStep {
 /// provisional), in rule order.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", rename_all_fields = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum ProjectWait {
     /// A session the Project suggests needs calibration before it can join
     /// ("Choose its flats first", PRJ-AC-23).
@@ -67,6 +70,7 @@ impl ProjectWait {
 /// A Project's one Next action: the first rule of PRJ-FR-18 that applies.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", rename_all_fields = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum NextAction {
     /// Rule 1, "Review N new frames": the Project's candidates hold `frames`
     /// Unreviewed frames; it opens frame review on them filtered to
@@ -89,6 +93,7 @@ pub enum NextAction {
 /// One open Project on Home (PRJ-FR-17 section 3, PRJ-FR-32).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct HomeProject {
     pub project: ProjectSummary,
     /// "in project" and "captured" of each integration and frame-count goal,
@@ -102,6 +107,7 @@ pub struct HomeProject {
 /// A new-sessions row's one-click action (PRJ-FR-17 section 2, PRJ-FR-19).
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", rename_all_fields = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum SessionAction {
     /// Needs a Target: choose or confirm the session's Target.
     ChooseTarget,
@@ -121,6 +127,7 @@ pub enum SessionAction {
 /// A candidate session of an open Project with Unreviewed frames in it.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct UnreviewedSession {
     pub project_id: Uuid,
     pub session_id: Uuid,
@@ -134,6 +141,7 @@ pub struct UnreviewedSession {
 /// isn't settled ("Choose its flats first").
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ReadyToAdd {
     pub project_id: Uuid,
     pub suggestion: ProjectSuggestion,
@@ -143,6 +151,7 @@ pub struct ReadyToAdd {
 /// What an unmet goal still needs in project.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", rename_all_fields = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum GoalShortfall {
     Integration { seconds: Microseconds },
     FrameCount { frames: u64 },
@@ -174,6 +183,7 @@ impl GoalShortfall {
 /// One unmet goal of an open Project and what its channel still needs.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct UnmetGoal {
     pub project_id: Uuid,
     pub project_name: String,
@@ -184,6 +194,7 @@ pub struct UnmetGoal {
 /// A Target's unmet goals across the open Projects (PRJ-FR-17 section 5).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct TargetStatus {
     pub target_id: Uuid,
     pub designation: String,
@@ -195,6 +206,7 @@ pub struct TargetStatus {
 /// read names the rest.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", rename_all_fields = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum RunningWork {
     Scan {
         operation_id: Uuid,

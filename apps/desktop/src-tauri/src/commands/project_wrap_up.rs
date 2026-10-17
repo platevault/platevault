@@ -51,6 +51,7 @@ impl WrapUpTrash {
 /// # Errors
 /// `NotFound` for an unknown Project; catalog errors.
 #[tauri::command]
+#[specta::specta]
 pub async fn project_wrap_up_status(
     library: State<'_, Arc<Library>>,
     project_id: Uuid,
@@ -67,6 +68,7 @@ pub async fn project_wrap_up_status(
 /// it; `InvalidInput` while Wrap up doesn't open, before Trash is recorded, or
 /// for a session that can't move; catalog and journal failures.
 #[tauri::command]
+#[specta::specta]
 pub async fn project_close(
     library: State<'_, Arc<Library>>,
     trash: State<'_, WrapUpTrash>,
@@ -87,6 +89,7 @@ pub async fn project_close(
 /// the admission rule refuses now, naming its blockers; `Conflict` for a
 /// session regrouped since; `NotFound` for an unknown Project.
 #[tauri::command]
+#[specta::specta]
 pub async fn project_duplicate(
     library: State<'_, Arc<Library>>,
     request: DuplicateRequest,

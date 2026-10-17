@@ -17,6 +17,7 @@ use crate::{FileIdentity, NativePath, ObservationFingerprint, Revision};
 /// What one storage operation does with each of its items.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum StorageOperationKind {
     /// Move each entry to the OS Trash.
     Trash,
@@ -43,6 +44,7 @@ pub enum StorageOperationState {
 /// target text; its target is never opened, hashed or followed.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum EntryKind {
     File,
     Link { target: NativePath },
@@ -51,6 +53,7 @@ pub enum EntryKind {
 /// Reviewed evidence of one entry, re-verified immediately before it moves (D19).
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct EntryEvidence {
     /// Absolute path of the entry itself.
     pub path: NativePath,
@@ -141,6 +144,7 @@ pub enum ItemOutcome {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum ReasonCode {
     /// The volume has no OS Trash, or its OS removal deletes immediately.
     TrashUnsupported,
@@ -169,6 +173,7 @@ pub enum ReasonCode {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ItemReason {
     pub code: ReasonCode,
     pub detail: String,
