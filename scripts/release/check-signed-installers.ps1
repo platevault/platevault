@@ -12,7 +12,11 @@ param(
   [string] $AuthenticodeIssuer = $env:AUTHENTICODE_ISSUER,
   [string] $SignatureBaseDirectory = 'installers-to-sign',
   [string] $SignatureOutputDirectory = 'installers-signed',
-  [string] $MutationCase
+  [string] $MutationCase,
+  [string] $NsDialogsPin = 'B1350F487692057C8FFDE75DCC55287A52A3272240D4D4912F24464B27551FC0',
+  [string] $WixSigner = 'WiX Toolset (.NET Foundation)',
+  [string] $WixIssuer = '.NET Foundation Projects Code Signing CA2',
+  [switch] $SkipExtraction
 )
 
 $ErrorActionPreference = 'Stop'
@@ -54,8 +58,9 @@ function Expand-With7Zip([string] $Archive, [string] $Destination, [string[]] $O
 }
 
 function Test-SignPathSignatures([string] $InputDirectory, [string] $OutputDirectory, [string] $ExpectedIssuer = $AuthenticodeIssuer) {
-  foreach ($installer in Get-ChildItem -File $InputDirectory) {
-    $signed = Join-Path $OutputDirectory $installer.Name
+  foreach ($installer in Get-ChildItem -Recurse -File $InputDirectory) {
+    $relative = [System.IO.Path]::GetRelativePath((Resolve-Path $InputDirectory).Path, $installer.FullName)
+    $signed = Join-Path $OutputDirectory $relative
     if (-not (Test-Path -LiteralPath $signed -PathType Leaf)) { throw "SignPath returned no $signed. The artifact configuration must keep each file at its path." }
     $identity = Get-Identity $signed
     if ($identity.Status -ne 'Valid' -or $identity.Signer -cne $AuthenticodeSigner -or $identity.Issuer -cne $ExpectedIssuer) {
@@ -65,23 +70,30 @@ function Test-SignPathSignatures([string] $InputDirectory, [string] $OutputDirec
 }
 
 function Check-InstallerContents(
-  [string] $NsDialogsPin = 'B1350F487692057C8FFDE75DCC55287A52A3272240D4D4912F24464B27551FC0',
-  [string] $ExpectedWiXSigner = 'WiX Toolset (.NET Foundation)',
-  [string] $ExpectedWiXIssuer = '.NET Foundation Projects Code Signing CA2',
-  [switch] $SkipExtraction
+  [string] $Pin,
+  [string] $Publisher,
+  [string] $Issuer,
+  [switch] $SkipExtract
 ) {
-  if (-not $SkipExtraction) {
+  if (-not $SkipExtract) {
     $setup = Get-Item (Join-Path $InstallersSignedDirectory '*-setup.exe')
     $msi = Get-Item (Join-Path $InstallersSignedDirectory '*.msi')
     Expand-With7Zip $setup.FullName (Join-Path $UnpackedDirectory 'nsis')
     Expand-With7Zip $msi.FullName (Join-Path $UnpackedDirectory 'msi-streams') @('-tCompound')
-    $admin = Start-Process msiexec.exe -Wait -PassThru -ArgumentList "/a `"$($msi.FullName)`" /qn TARGETDIR=`"$(Join-Path $UnpackedDirectory 'msi')`""
-    if ($admin.ExitCode -ne 0) { throw "msiexec /a $($msi.Name) exited with $($admin.ExitCode)" }
+    $target = Join-Path (Resolve-Path $UnpackedDirectory).Path 'msi'
+    New-Item -ItemType Directory -Force $target | Out-Null
+    $log = Join-Path ([System.IO.Path]::GetTempPath()) 'platevault-msi-admin-extract.log'
+    $arguments = "/a `"$($msi.FullName)`" /qn TARGETDIR=`"$target`" /L*V `"$log`""
+    $process = Start-Process msiexec.exe -Wait -PassThru -ArgumentList $arguments
+    if ($process.ExitCode -ne 0) {
+      $details = if (Test-Path -LiteralPath $log) { Get-Content -LiteralPath $log | Select-String -Pattern 'Return value 3|Error [0-9]+|Product:|TARGETDIR' | Select-Object -Last 12 } else { @() }
+      throw "msiexec /a $($msi.Name) exited with $($process.ExitCode). MSI log: $log`n$($details -join "`n")"
+    }
   }
 
   $signedFor = @{}
   foreach ($bundle in 'nsis', 'msi') {
-    $signedFor[$bundle] = @(Get-ChildItem -File (Join-Path $AppSignedDirectory $bundle)) + @(Get-ChildItem -File -Filter '*.exe' $AppSignedDirectory)
+    $signedFor[$bundle] = @(Get-ChildItem -Recurse -File (Join-Path $AppSignedDirectory $bundle)) + @(Get-ChildItem -File -Filter '*.exe' $AppSignedDirectory)
     foreach ($file in $signedFor[$bundle]) {
       $packed = @(Get-ChildItem -Recurse -File -Filter $file.Name (Join-Path $UnpackedDirectory $bundle))
       if ($packed.Count -ne 1) { throw "expected one $($file.Name) in the $bundle installer, found $($packed.Count)" }
@@ -93,12 +105,12 @@ function Check-InstallerContents(
   $nsisReason = 'NSIS plugin: third-party code extracted and loaded while setup runs; not installed'
   $wixReason = 'WiX custom action: third-party code msiexec runs while installing; not installed'
   $thirdParty = [ordered]@{
-    'nsis/$PLUGINSDIR/nsDialogs.dll' = @{ reason=$nsisReason; sha256=$NsDialogsPin }
+    'nsis/$PLUGINSDIR/nsDialogs.dll' = @{ reason=$nsisReason; sha256=$Pin }
     'nsis/$PLUGINSDIR/nsis_tauri_utils.dll' = @{ reason=$nsisReason; sha256='5BA143B5DB4A87D32D6E7802E033330AAE56CBCEABE0D1E3BA41948385AD4709' }
     'nsis/$PLUGINSDIR/NSISdl.dll' = @{ reason=$nsisReason; sha256='DDF40229DD9D6B268902D8DEA88C8A04AACF1AF218DD29F6DCD35BABC54AC08D' }
     'nsis/$PLUGINSDIR/StartMenu.dll' = @{ reason=$nsisReason; sha256='FE330320459637D8DD2B5D84D07925C38EC264152FFD3B1760A4D44D76536CAA' }
     'nsis/$PLUGINSDIR/System.dll' = @{ reason=$nsisReason; sha256='8B4C47C4CF5E76EC57DD5A050D5ACD832A0D532EE875D7B44F6CDAF68F90D37C' }
-    'msi-streams/Binary.WixUIWixca' = @{ reason=$wixReason; signer=$ExpectedWiXSigner; issuer=$ExpectedWiXIssuer }
+    'msi-streams/Binary.WixUIWixca' = @{ reason=$wixReason; signer=$Publisher; issuer=$Issuer }
   }
 
   $trees = [ordered]@{ nsis='nsis'; msi='msi'; 'msi-streams'='msi' }
@@ -147,7 +159,7 @@ if ($Mode -eq 'SignatureSet') { Test-SignPathSignatures $SignatureBaseDirectory 
 if ($Mode -eq 'Check') {
   Assert-TauriCliVersion $Lockfile
   Test-SignPathSignatures $InstallersToSignDirectory $InstallersSignedDirectory
-  Check-InstallerContents
+  Check-InstallerContents $NsDialogsPin $WixSigner $WixIssuer -SkipExtract:$SkipExtraction
   return
 }
 if ($Mode -eq 'Mutate') {
@@ -159,28 +171,26 @@ if ($Mode -eq 'Mutate') {
         $mutated = [regex]::Replace($lock, $pattern, '$1$2-rehearsal', 1)
         if ($mutated -ceq $lock) { throw 'CLI lockfile mutation did not apply' }
         $temp = Join-Path ([System.IO.Path]::GetTempPath()) ([guid]::NewGuid().ToString() + '-pnpm-lock.yaml')
-        try { [System.IO.File]::WriteAllText($temp, $mutated); Assert-TauriCliVersion $temp }
-        finally { if (Test-Path -LiteralPath $temp) { Remove-Item -LiteralPath $temp -Force } }
+        try {
+          [System.IO.File]::WriteAllText($temp, $mutated)
+          Assert-TauriCliVersion $temp
+        } finally { if (Test-Path -LiteralPath $temp) { Remove-Item -LiteralPath $temp -Force } }
       } 'Tauri CLI 2\.12\.2.*resolves 2\.12\.2-rehearsal'
     }
     'WrongSignPathIssuer' {
-      Invoke-ExpectedFailure 'SignPath issuer' { Test-SignPathSignatures $InstallersToSignDirectory $InstallersSignedDirectory 'Unexpected CA' } 'issued by'
+      Invoke-ExpectedFailure 'SignPath issuer' {
+        Test-SignPathSignatures $InstallersToSignDirectory $InstallersSignedDirectory 'Unexpected CA'
+      } 'issued by Unexpected CA'
     }
-    'WrongPin' {
-      Invoke-ExpectedFailure 'NSIS hash pin' { Check-InstallerContents '0000000000000000000000000000000000000000000000000000000000000000' -SkipExtraction } 'SHA-256 .* did not match the reviewed pin'
-    }
-    'WrongPublisher' {
-      Invoke-ExpectedFailure 'WiX publisher' { Check-InstallerContents -ExpectedWiXSigner 'NOT-WIX-TOOLSET' -SkipExtraction } 'by NOT-WIX-TOOLSET issued by'
-    }
-    'WrongWiXIssuer' {
-      Invoke-ExpectedFailure 'WiX issuer' { Check-InstallerContents -ExpectedWiXIssuer 'Unexpected CA' -SkipExtraction } 'issued by Unexpected CA'
-    }
+    'WrongPin' { Invoke-ExpectedFailure 'NSIS hash pin' { Check-InstallerContents '0000000000000000000000000000000000000000000000000000000000000000' $WixSigner $WixIssuer -SkipExtract } 'SHA-256 .* did not match the reviewed pin' }
+    'WrongPublisher' { Invoke-ExpectedFailure 'WiX publisher' { Check-InstallerContents $NsDialogsPin 'NOT-WIX-TOOLSET' $WixIssuer -SkipExtract } 'by NOT-WIX-TOOLSET issued by' }
+    'WrongWiXIssuer' { Invoke-ExpectedFailure 'WiX issuer' { Check-InstallerContents $NsDialogsPin $WixSigner 'Unexpected CA' -SkipExtract } 'issued by Unexpected CA' }
     'UnsignedWix' {
       Invoke-ExpectedFailure 'unsigned WiX PE' {
         $target = Join-Path $UnpackedDirectory 'msi-streams/Binary.WixUIWixca'
         $source = Join-Path $UnpackedDirectory 'nsis/$PLUGINSDIR/nsDialogs.dll'
         $backup = [System.IO.File]::ReadAllBytes($target)
-        try { Copy-Item -LiteralPath $source -Destination $target -Force; Check-InstallerContents -SkipExtraction }
+        try { Copy-Item -LiteralPath $source -Destination $target -Force; Check-InstallerContents $NsDialogsPin $WixSigner $WixIssuer -SkipExtract }
         finally { [System.IO.File]::WriteAllBytes($target, $backup) }
       } 'found NotSigned'
     }
@@ -188,7 +198,7 @@ if ($Mode -eq 'Mutate') {
       Invoke-ExpectedFailure 'unlisted PE' {
         $source = Join-Path $UnpackedDirectory 'nsis/$PLUGINSDIR/nsDialogs.dll'
         $target = Join-Path $UnpackedDirectory 'msi-streams/Binary.UnlistedMutation'
-        try { Copy-Item -LiteralPath $source -Destination $target -Force; Check-InstallerContents -SkipExtraction }
+        try { Copy-Item -LiteralPath $source -Destination $target -Force; Check-InstallerContents $NsDialogsPin $WixSigner $WixIssuer -SkipExtract }
         finally { if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Force } }
       } 'not signed by SignPath and is not on the third-party list'
     }

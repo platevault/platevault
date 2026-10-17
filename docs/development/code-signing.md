@@ -56,12 +56,12 @@ SignPath also sets, such as the code signing policy, team roles, MFA and
 privacy, are tracked under
 [Code signing policy → Open conditions](../release/code-signing-policy.md#open-conditions).
 
-The certificate is issued to SignPath Foundation itself, an OV certificate
-from GlobalSign (GlobalSign GCC R45 CodeSigning CA 2020, as on the signed
-[vim-win32-installer](https://github.com/vim/vim-win32-installer) v9.2.1202
-setup, read 2026-10-16), so the Authenticode publisher name shown to users will
-read "SignPath Foundation," not "PlateVault" or the maintainer's name — this is
-a program-wide constraint, not something specific to this repo.
+The certificate is issued to SignPath Foundation itself. Its publisher name is
+observed on the valid WiX signature in run 38963983864. The expected SignPath
+issuer `GlobalSign GCC R45 CodeSigning CA 2020` is not confirmed from this
+project's certificate; it was observed on the signed
+[`vim-win32-installer`](https://github.com/vim-win32-installer) v9.2.1202 setup
+(read 2026-10-16). Verify both publisher and issuer on the next tagged release.
 
 ## How SignPath integrates with GitHub Actions / Tauri
 
@@ -120,13 +120,14 @@ the `build` job):
    WiX's `WixUIWixca` custom action required to have a valid Authenticode
    signature from `WiX Toolset (.NET Foundation)`, issued by
    `.NET Foundation Projects Code Signing CA2`. Both certificate names come
-   from the valid Authenticode signature on the WiX payload observed in
-   rehearsal run 38963983864. Checking the named publisher and issuer survives
-   WiX payload and certificate renewals, unlike pinning its bytes. The five
-   NSIS plugins are unsigned, so their exact hashes are the identity evidence.
-   Their pins were read from Tauri CLI 2.12.2's bundle in Windows rehearsal run
-   38963983864 (NSIS 3.11, `nsis_tauri_utils` 0.5.3); hashes and provenance are
-   recorded beside the map entries in `release-please.yml`. Refresh a pin only
+   from the valid Authenticode signature on the WiX payload observed in the
+   discovery run 38963983864, which failed as expected on the then-placeholder
+   NSIS pins. A later rehearsal must pass these checks and their mutated cases
+   before the pins are considered rehearsed. Checking the named publisher and
+   issuer survives WiX payload and certificate renewals, unlike pinning its
+   bytes. The five NSIS plugins are unsigned, so their exact hashes are the
+   identity evidence. Their pins were read from Tauri CLI 2.12.2's bundle in
+   that discovery run (NSIS 3.11, `nsis_tauri_utils` 0.5.3); refresh a pin only
    after reviewing the tool update and new binaries; mismatches fail closed.
    Tauri CLI 2.12.2 bundles WiX 3.14.1 (`wix314-binaries.zip`); its
    `WixUIWixca` signature supplies the publisher and issuer checked above.
@@ -145,10 +146,10 @@ Step 2 copies Tauri CLI 2.12.2's bundler: the marker, `NSS` and `MSI` codes,
 and which bin targets it packs. The workflow reads the resolved CLI version
 from the `apps/desktop` importer in `pnpm-lock.yaml` before the build and fails
 unless it is exactly 2.12.2. A CLI upgrade therefore requires reviewing the
-bundler's marker behavior, the NSS/MSI codes, and the executable selection
-rule before changing the guard; the lockfile cannot silently advance past the
-version whose behavior was checked. Step 6 also fails a release whose
-installers pack an executable step 2 did not send. Step 1 runs the command
+bundler's marker behavior, NSS/MSI codes, executable selection rule, five NSIS
+hash pins, and WiX publisher/issuer before updating the guard; the lockfile
+cannot silently advance past the version whose behavior was checked. Step 6
+also fails a release whose installers pack an executable step 2 did not send.
 `tauri-action` runs on the other legs, `tauri build` in `apps/desktop` with no
 extra arguments, plus `--no-bundle`.
 
@@ -311,13 +312,14 @@ one release, pass the previous release's config as `--pubkey-conf`, e.g.
    - Approve both signing requests in SignPath, each within the hour.
    - The Windows leg's **Bundle the installers around the signed
      executables** and **Check the signed installers** steps pass. Both require
-     a valid signature from `SignPath Foundation` issued by `GlobalSign GCC R45
-     CodeSigning CA 2020`. The issuer is matched as well as the leaf publisher
-     name; see the certificate evidence above. The WixUIWixca stream must also
-     have its valid WiX Toolset/.NET Foundation publisher signature, and each
-     of the five NSIS plugin files must match its pinned SHA-256 in
-     `release-please.yml`. A test-signing policy fails before bundle creation
-     (see [Known limits](#known-limits)).
+     a valid signature by `SignPath Foundation`; verify the publisher and
+     issuer in the tagged build. The expected issuer `GlobalSign GCC R45
+     CodeSigning CA 2020` is unconfirmed for this project's certificate; it
+     was observed on another project's signature. `WixUIWixca` must carry a
+     valid signature from `WiX Toolset (.NET Foundation)` issued by `.NET
+     Foundation Projects Code Signing CA2`. The five NSIS plugins must match
+     their pinned SHA-256 in `release-please.yml`. A test-signing policy fails
+     before bundle creation (see [Known limits](#known-limits)).
    - `updater-manifest` publishes `latest.json`. It only does so when the
      minisign signatures verify against the signed installers.
    - On a Windows machine, `Get-AuthenticodeSignature` reports `Valid`, signed
@@ -327,13 +329,15 @@ one release, pass the previous release's config as `--pubkey-conf`, e.g.
      `%LOCALAPPDATA%\PlateVault` for the NSIS installer and
      `C:\Program Files\PlateVault` for the MSI. `uninstall.exe` in the NSIS
      install folder stays unsigned (see [Known limits](#known-limits)).
-   - Rehearsal method: run the temporary workflow on `chore/signing-rehearsal-3`
-     (never merge it). It builds the Windows installers, substitutes a
-     runner-trusted throwaway certificate and updater key for the release
-     secrets, invokes the signed-installer check, emits third-party file hashes
-     and mutates the CLI lockfile, an NSIS pin, the WiX publisher and issuer to
-     verify their distinct failures. Record the passing and negative run IDs.
-     Never use the release signing key.
+   - A temporary Windows signing rehearsal workflow is kept on
+     `chore/signing-rehearsal-3` and must never be merged. The checked-in
+     `scripts/release/check-signed-installers.ps1` is the authoritative check
+     used by both release and rehearsal workflows, making the behavior
+     reproducible without the throwaway workflow. Rehearsal mutates the lockfile,
+     SignPath issuer, pin, publisher, issuer, unsigned PE and unlisted PE; each
+     failure must match its expected diagnostic. Record run IDs and per-case
+     results. If Windows fails before or during the cases, report that instead
+     of claiming coverage; never use release signing keys.
 
 ## macOS signing (state and path)
 
