@@ -30,4 +30,4 @@ Channel balance as a separate goal was not chosen. The per-channel goals set the
 ## Consequences
 
 Implementation is tracked by astro-plan-v7i9k.
-Amended: D-W90 in specs/063-clean-rebuild-contract/workflow-decisions.md:105 and PRJ-FR-03 in specs/065-project-goals/spec.md:97 make the quality bar optional.
+Amended: D-W90 in specs/063-clean-rebuild-contract/workflow-decisions.md:105 and PRJ-FR-03 in specs/065-project-goals/spec.md:97 make the quality bar optional. PRJ-FR-03 also holds the mosaic completion rule this ADR does not restate: the subject completes when every panel group meets its goals, and its progress shows the weakest panel.
