@@ -21,7 +21,6 @@ use crate::projects::{CalibrationReferences, ProjectReferences};
 use crate::targets::{
     SimbadConfig, SimbadTargetResolver, TargetAssessment, TargetIndex, TargetQuery, TargetSearchHit,
 };
-use crate::view_selection::ViewReferences;
 use crate::{
     Asset, AssetReference, AssociationKind, AssociationState, Availability, CorrectionInput,
     ExpectedAsset, FileIdentity, FramingMargins, LibraryError, Location, LocationRole, NativePath,
@@ -37,8 +36,8 @@ use persistence_library::{
 pub type ReferencesFuture<'a> =
     Pin<Box<dyn Future<Output = Result<Vec<AssetReference>, LibraryError>> + Send + 'a>>;
 
-/// The seam VSEL (fixed View memberships and prepared revisions), PRJ (Projects)
-/// and RES (Results) implement for the records that hold library asset ids.
+/// The seam PRJ (Projects) and CAL (calibration pins) implement for the
+/// records that hold library asset ids.
 /// Retire location reads every registered source to name those records in its
 /// review, and reads them again on confirmation, refusing when they changed. The
 /// library never writes them: a retired copy stays in them, reading Retired.
@@ -59,8 +58,6 @@ pub struct Library {
     references: tokio::sync::RwLock<Vec<Arc<dyn AssetReferences>>>,
     pub(crate) planning: Mutex<crate::observing_plans::PlanningRuntime>,
     frame_review: FrameReview,
-    /// Lifecycle blockers and run folder sources (spec 070, D-W72).
-    pub(crate) lifecycle: crate::run_lifecycle::RunLifecycle,
     /// Test-only: the next N assessments are refused as if a concurrent writer
     /// had committed between the session read and the record.
     #[cfg(test)]
@@ -119,9 +116,9 @@ impl persistence_library::SourceProbe for InventoryProbe {
 }
 
 impl Library {
-    /// Open a fresh-schema catalog and load the offline target dataset, with the
-    /// catalog's Projects and runs registered as reference sources. Interrupted scan
-    /// recovery is owned by the catalog.
+    /// Open a fresh-schema catalog and load the offline target dataset, with
+    /// the catalog's Projects and calibration pins registered as reference
+    /// sources. Interrupted scan recovery is owned by the catalog.
     ///
     /// # Errors
     /// Returns catalog persistence, seed validation or provider configuration errors.
@@ -139,8 +136,6 @@ impl Library {
             Arc::new(ProjectReferences { catalog: Arc::clone(&catalog) });
         let calibration: Arc<dyn AssetReferences> =
             Arc::new(CalibrationReferences { catalog: Arc::clone(&catalog) });
-        let views: Arc<dyn AssetReferences> =
-            Arc::new(ViewReferences { catalog: Arc::clone(&catalog) });
         let frame_review = FrameReview::new(Arc::clone(&catalog));
         let library = Arc::new(Self {
             catalog,
@@ -150,18 +145,11 @@ impl Library {
             saved_targets: Mutex::new(None),
             progress,
             planning,
-            references: tokio::sync::RwLock::new(vec![projects, calibration, views]),
+            references: tokio::sync::RwLock::new(vec![projects, calibration]),
             frame_review,
-            lifecycle: crate::run_lifecycle::RunLifecycle::default(),
             #[cfg(test)]
             forced_conflicts: std::sync::atomic::AtomicUsize::new(0),
         });
-        // PREP (069, U21): Running-preparation guard, run folders; interrupted revisions Paused.
-        crate::prepare::register(&library).await?;
-        // RES (070, U27): Result-input guard on Move run to Trash (RES-FR-10).
-        crate::results::register(&library).await;
-        // PV-STO (071, U29): running Clean up / Empty Trash guard (RES-FR-07, RES-FR-10).
-        crate::storage::register_cleanup(&library).await;
         // APPLY (069, F4): restore the old View or finish installing the new
         // one for every Apply an earlier run left unsettled.
         crate::apply::reconcile(&library).await;
@@ -257,8 +245,9 @@ impl Library {
         self.references.write().await.push(source);
     }
 
-    /// Durably review Retire location, naming the Views, Projects and Results of
-    /// every registered source that hold its copies. No file or record changes.
+    /// Durably review Retire location, naming the Projects and calibration
+    /// records of every registered source that hold its copies. No file or
+    /// record changes.
     ///
     /// # Errors
     /// Returns catalog or reference-source errors; see
