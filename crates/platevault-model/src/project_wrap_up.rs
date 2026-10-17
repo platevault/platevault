@@ -231,6 +231,7 @@ pub struct ArchiveFile {
 /// One session row of an archive review.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ArchiveSessionOffer {
     pub session_id: Uuid,
     pub files: Vec<ArchiveFile>,
@@ -260,6 +261,7 @@ pub struct KeptViewLink {
 /// keeps, and the kept-View links it repoints.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ArchiveReview {
     /// The Project whose Wrap up archives; `None` for Sessions > Archive.
     pub project_id: Option<Uuid>,

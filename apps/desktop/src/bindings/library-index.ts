@@ -472,6 +472,26 @@ export const commands = {
 	 */
 	projectSetFrames: (projectId: string, expectedRevision: number, captureKeys: string[], choice: FrameChoice) => typedError<ProjectDesired_Serialize, ErrorResponse>(__TAURI_INVOKE("project_set_frames", { projectId, expectedRevision, captureKeys, choice })),
 	/**
+	 *  Remove an empty group.
+	 * 
+	 *  # Errors
+	 *  `InvalidInput` for a Project that isn't open, or a group that still holds
+	 *  sessions or goals; `Conflict` for a stale revision; `NotFound` for an
+	 *  unknown Project or group.
+	 */
+	projectRemoveGroup: (projectId: string, expectedRevision: number, groupId: string) => typedError<ProjectDesired_Serialize, ErrorResponse>(__TAURI_INVOKE("project_remove_group", { projectId, expectedRevision, groupId })),
+	/**
+	 *  The View step's settings: the input mode, this Project's keyword names
+	 *  (`null` uses the Settings defaults), the application the View is handed
+	 *  to and the processing location. A mode switch reaches the View only
+	 *  through Apply.
+	 * 
+	 *  # Errors
+	 *  `Conflict` for a stale revision; `NotFound` for an unknown Project or
+	 *  application profile; `InvalidInput` for a Project that isn't open.
+	 */
+	projectSetViewSettings: (projectId: string, expectedRevision: number, settings: ProjectViewSettings_Deserialize) => typedError<ProjectDesired_Serialize, ErrorResponse>(__TAURI_INVOKE("project_set_view_settings", { projectId, expectedRevision, settings })),
+	/**
 	 *  The Apply sheet: the new View as a folder tree, every reason Apply can't
 	 *  run, the files `PlateVault` didn't place, the copies a tool changed and
 	 *  what `View (previous)/` holds. Writes nothing.
@@ -536,6 +556,68 @@ export const commands = {
 	 *  session regrouped since; `NotFound` for an unknown Project.
 	 */
 	projectDuplicate: (request: DuplicateRequest) => typedError<Project, ErrorResponse>(__TAURI_INVOKE("project_duplicate", { request })),
+	/**
+	 *  Reopen `step` from the step strip: it and the later steps are no longer
+	 *  recorded, until the Project is closed. Returns where Wrap up stands then.
+	 * 
+	 *  # Errors
+	 *  `InvalidInput` for a Project that is not open or that an operation runs
+	 *  on; `NotFound` for an unknown Project.
+	 */
+	projectReopenWrapUpStep: (projectId: string, step: WrapUpStep) => typedError<WrapUpStatus, ErrorResponse>(__TAURI_INVOKE("project_reopen_wrap_up_step", { projectId, step })),
+	/**
+	 *  What a Closed, Closing or Archived Project reads for good: its basis with
+	 *  the calibration each session used, and its goals frozen at Close. `null`
+	 *  for a Project that never closed. Read-only.
+	 * 
+	 *  # Errors
+	 *  `PersistenceFailure` for an unreadable or corrupt record.
+	 */
+	projectClosedSnapshot: (projectId: string) => typedError<{
+	projectId: string,
+	takenAt: string,
+	/**
+	 *  The installed manifest generation it froze; `None` when the Project
+	 *  was never applied.
+	 */
+	appliedGeneration: number | null,
+	basis: ProjectBasis_Serialize,
+	goals: GoalProgress[],
+} | null, ErrorResponse>(__TAURI_INVOKE("project_closed_snapshot", { projectId })),
+	/**
+	 *  Archive's review of the selected sessions for `destination`. Read-only.
+	 * 
+	 *  # Errors
+	 *  `NotFound` for an unknown destination; `InvalidInput` for a retired one.
+	 */
+	sessionsArchiveReview: (sessions: string[], destination: string) => typedError<ArchiveReview, ErrorResponse>(__TAURI_INVOKE("sessions_archive_review", { sessions, destination })),
+	/**
+	 *  Archive the sessions the user confirmed on the review whose digest the
+	 *  selection echoes. Returns the archive's progress once it settles.
+	 * 
+	 *  # Errors
+	 *  `Conflict` when the review moved since the user saw it; `InvalidInput` for
+	 *  a session that can't move or that an open Project now keeps; journal and
+	 *  catalog failures.
+	 */
+	sessionsArchive: (selection: ArchiveSelection) => typedError<ArchiveProgress, ErrorResponse>(__TAURI_INVOKE("sessions_archive", { selection })),
+	/**
+	 *  What `View (previous)/` holds that still waits for review or was kept,
+	 *  relative to the Project folder. Read-only; empty for a Project with none.
+	 * 
+	 *  # Errors
+	 *  `PersistenceFailure` for a corrupt record.
+	 */
+	projectPreviousItems: (projectId: string) => typedError<PreviousItem_Serialize[], ErrorResponse>(__TAURI_INVOKE("project_previous_items", { projectId })),
+	/**
+	 *  Review the leftover at `path`, as [`project_previous_items`] listed it.
+	 * 
+	 *  # Errors
+	 *  `NotFound` for an unknown Project or leftover; `InvalidInput` for a review
+	 *  it can't take, a destination `View/` already holds, or a file that changed;
+	 *  `IdentityConflict` when the OS Trash can't take it.
+	 */
+	projectReviewPreviousItem: (projectId: string, path: NativePathWire, resolution: PreviousItemResolution) => typedError<null, ErrorResponse>(__TAURI_INVOKE("project_review_previous_item", { projectId, path, resolution })),
 	/**
 	 *  Frame states from the catalog alone; starts no measurement and reads no
 	 *  source.
@@ -838,6 +920,28 @@ export const commands = {
 	 *  `SourceUnavailable` when a frame to hash can't be read.
 	 */
 	calibrationReassign: (sessionId: string, kind: InputKind, input: InputRef, expectedGeneration: number) => typedError<SessionCalibration_Serialize, ErrorResponse>(__TAURI_INVOKE("calibration_reassign", { sessionId, kind, input, expectedGeneration })),
+	/**
+	 *  Confirm the session's `kind` suggestion at the calibration generation the
+	 *  user saw: it is pinned as the user confirmed it.
+	 * 
+	 *  # Errors
+	 *  `NotFound` for an unknown session; `Conflict` (with successors for a
+	 *  superseded session) for another generation than `expected_generation`;
+	 *  `InvalidInput` when the kind has no suggestion.
+	 */
+	calibrationConfirm: (sessionId: string, kind: InputKind, expectedGeneration: number) => typedError<SessionCalibration_Serialize, ErrorResponse>(__TAURI_INVOKE("calibration_confirm", { sessionId, kind, expectedGeneration })),
+	/**
+	 *  No darks, No flats or No bias on each session, each sent as
+	 *  `[sessionId, expectedGeneration]` with the calibration generation the user
+	 *  saw for it. One transaction: every session takes it or none does. Returns
+	 *  each session's calibration in request order.
+	 * 
+	 *  # Errors
+	 *  `NotFound` for an unknown session; `Conflict` (identifying the session,
+	 *  with successors for a superseded one) for another generation. The request
+	 *  names many sessions, so a refusal names its session in the message.
+	 */
+	calibrationDecline: (sessions: ([string, number])[], kind: InputKind) => typedError<SessionCalibration_Serialize[], ErrorResponse>(__TAURI_INVOKE("calibration_decline", { sessions, kind })),
 	/**
 	 *  Every handoff profile by name.
 	 * 
@@ -1664,11 +1768,35 @@ export type ArchiveProgress = {
 	repointedLinks: KeptViewLink[],
 };
 
+/**
+ *  Archive's review: the sessions it can move to `destination`, the ones it
+ *  keeps, and the kept-View links it repoints.
+ */
+export type ArchiveReview = {
+	/**  The Project whose Wrap up archives; `None` for Sessions > Archive. */
+	projectId: string | null,
+	destination: string,
+	sessions: ArchiveSessionOffer[],
+	links: KeptViewLink[],
+	/**  SHA-256 of the review; archiving refuses one that no longer matches. */
+	digest: string,
+};
+
 /**  What the confirmed archive moves. */
 export type ArchiveSelection = {
 	destination: string,
 	sessions: string[],
 	digest: string,
+};
+
+/**  One session row of an archive review. */
+export type ArchiveSessionOffer = {
+	sessionId: string,
+	files: ArchiveFile[],
+	/**  The open Projects that hold it: it stays at its path, not selectable. */
+	keptBy: string[],
+	/**  Why it can't move otherwise (naming, occupied, offline, already there). */
+	hold: ItemReason | null,
 };
 
 export type Asset = Asset_Serialize | Asset_Deserialize;
@@ -4819,6 +4947,14 @@ export type PreviousItemReason =
 "unticked_file" | 
 /**  A link that failed the no-follow check. */
 "unverified_link";
+
+/**
+ *  The user's review of one file `View (previous)/` still holds (D-W110):
+ *  keep it where it is, move it into `View/` at the same place, or move it to
+ *  the OS Trash. The model's `Pending` is the state the catalog records a
+ *  leftover in, and no client sets it.
+ */
+export type PreviousItemResolution = "kept" | "moved" | "trashed";
 
 /**
  *  The user's review of a leftover (D-W110). A kept file is not asked about
