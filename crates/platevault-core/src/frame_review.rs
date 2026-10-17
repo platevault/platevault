@@ -44,6 +44,8 @@ use crate::{
 mod review_list;
 mod thumbnails;
 
+pub use review_list::SessionReviewList;
+
 /// Memory budget of the frames the measurement workers decode and measure at
 /// once, in MiB, charged per frame from its header (R14).
 const DECODE_BUDGET_MIB: u32 = 1024;

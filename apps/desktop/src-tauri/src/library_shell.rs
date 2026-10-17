@@ -4,16 +4,17 @@
 //! Isolated rebuilt library shell (spec 064): its own Tauri runtime over the
 //! clean catalog.
 //!
-//! It boots only [`Library`] and the [`crate::commands::library`] and
-//! [`crate::commands::observing_plans`] IPC surfaces, with the catalog in its
-//! own data directory. The dialog and opener plugins serve the planning
-//! handlers' Rust calls, and the platform reminder notifier with the system
-//! clock is attached before any command runs. The one window is labelled
-//! `library`, so it holds `capabilities/library.json` (plus the dev bridge
-//! grant with `dev-tools`) and none of the legacy `default.json`. Nothing from
-//! the legacy composition root runs here: no `AppState`, legacy database,
-//! bootstrap job, watcher or legacy command registration. The legacy code stays
-//! archivable and is never booted by this binary.
+//! It boots only [`Library`] and the library-shell IPC surfaces registered
+//! below, with the catalog in its own data directory. The dialog and opener
+//! plugins serve the planning handlers' Rust calls, and the platform reminder
+//! notifier with the system clock is attached before any command runs. At
+//! start the shell also resumes Wrap up through the host Trash and starts the
+//! Output watcher, which it stops when the event loop exits. The one window is
+//! labelled `library`, so it holds `capabilities/library.json` (plus the dev
+//! bridge grant with `dev-tools`) and none of the legacy `default.json`.
+//! Nothing from the legacy composition root runs here: no `AppState`, legacy
+//! database, bootstrap job, legacy watcher or legacy command registration. The
+//! legacy code stays archivable and is never booted by this binary.
 //!
 //! In `dev-tools` (debug-only) builds the MCP bridge always starts, bound to IPv4
 //! loopback, and the webview loads the hosted dev URL so the bridge has a page
@@ -38,11 +39,14 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use desktop_services::jobs::{MeasurementProgressFeed, ScanProgressFeed};
+use platevault_core::custody::trash::SystemTrash;
 use platevault_core::library::Library;
+use platevault_core::project_output::OutputWatch;
 use platevault_core::targets::SimbadConfig;
-use tauri::Manager;
+use tauri::{Manager, RunEvent};
 
 use crate::commands::library as ipc;
+use crate::commands::project_wrap_up::WrapUpTrash;
 
 /// Catalog directory override, used verbatim.
 pub const DATA_DIR_ENV: &str = "PV_LIBRARY_DATA_DIR";
@@ -120,6 +124,25 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         crate::commands::project_goals::goal_template_save,
         crate::commands::project_goals::goal_template_delete,
         crate::commands::project_progress::project_progress,
+        // project inputs (065 PRJ-FR-07/08/27/29/31, 066 VSEL-FR-02/10/15)
+        crate::commands::project_inputs::project_inputs,
+        crate::commands::project_inputs::project_add_sessions,
+        crate::commands::project_inputs::project_remove_sessions,
+        crate::commands::project_inputs::project_move_sessions,
+        crate::commands::project_inputs::project_create_group,
+        crate::commands::project_inputs::project_split_group,
+        crate::commands::project_inputs::project_rename_group,
+        crate::commands::project_inputs::project_set_group_panel,
+        crate::commands::project_inputs::project_set_frames,
+        // apply (066 VSEL-FR-14, 069)
+        crate::commands::project_apply::project_apply_preview,
+        crate::commands::project_apply::project_apply,
+        // output
+        crate::commands::project_output::project_copy_to_output,
+        // wrap up (065 PRJ-FR-14/25/30, 071)
+        crate::commands::project_wrap_up::project_wrap_up_status,
+        crate::commands::project_wrap_up::project_close,
+        crate::commands::project_wrap_up::project_duplicate,
         // frame review
         crate::commands::frame_review::pix_review_frames,
         crate::commands::frame_review::pix_start_measurement,
@@ -141,6 +164,12 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         crate::commands::frame_review::pix_review_list,
         crate::commands::frame_review::pix_display_names,
         crate::commands::frame_review::pix_review_mark,
+        // session intake (064 LIB-FR-04/24)
+        crate::commands::frame_review::pix_session_intake,
+        crate::commands::frame_review::pix_session_review_list,
+        crate::commands::frame_review::pix_session_review_mark,
+        crate::commands::frame_review::pix_finish_review,
+        crate::commands::frame_review::pix_reopen_review,
         // calibration
         crate::commands::calibration_inputs::calibration_list_inputs,
         crate::commands::calibration_inputs::calibration_input,
@@ -148,6 +177,8 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         crate::commands::calibration_inputs::calibration_adopt,
         crate::commands::calibration_inputs::calibration_list_adoptions,
         crate::commands::calibration_inputs::calibration_custody_facts,
+        crate::commands::session_calibration::calibration_needs,
+        crate::commands::session_calibration::calibration_reassign,
         // profiles
         crate::commands::profiles::prepare_profiles,
         crate::commands::profiles::prepare_profile_create,
@@ -243,8 +274,34 @@ pub fn run() -> Result<(), Box<dyn Error>> {
             );
         },
     ));
+    // CLOSE (071): settle what a stop left of Wrap up (an interrupted Clean
+    // up, a Trash step, every unsettled archive) through the host Trash. It
+    // can move whole archives, so it runs beside the event loop; until it
+    // settles them, a Closing Project stays locked and its operation reserved.
+    let trash = WrapUpTrash::new(Arc::new(SystemTrash::default()));
+    tauri::async_runtime::spawn({
+        let library = Arc::clone(&library);
+        let trash = trash.get();
+        async move {
+            match library.recover_wrap_up(trash).await {
+                Ok(settled) => tracing::info!(archives = settled.len(), "wrap up recovered"),
+                Err(error) => {
+                    tracing::error!(%error, "wrap up recovery stopped; the next start resumes it");
+                }
+            }
+        }
+    });
+    // OUTPUT (RES-FR-01): follow every open Project's `Output/` and
+    // `Processing/` while the app runs; its first pass finishes interrupted
+    // Copy to Output. It spawns on the runtime, so it starts inside it.
+    let output_watch = tauri::async_runtime::block_on(async { OutputWatch::start(&library) });
     app.manage(library);
-    app.run(|_, _| {});
+    app.manage(trash);
+    app.run(move |_, event| {
+        if let RunEvent::Exit = event {
+            tauri::async_runtime::block_on(output_watch.shutdown());
+        }
+    });
     Ok(())
 }
 
