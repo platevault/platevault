@@ -1,0 +1,49 @@
+---
+title: Stay on Tauri and React, with backend-owned services
+status: accepted
+date: 2026-10-12
+bead: astro-plan-2ckn9
+---
+
+# Stay on Tauri and React, with backend-owned services
+
+## Status
+
+Accepted on 2026-10-12 by user decision S1.
+
+## Context
+
+The decision synthesised reports on OS-native UI kits, Flutter migration, and backend-owned desktop services, along with Tauri, Flutter, and Slint spike results. Acceptance called for measured spike data, a conditional recommendation, and the user's decision recorded as an ADR.
+
+## Decision
+
+Stay on Tauri + React. Rebuild the UI composition in React. Keep a services crate so a later framework switch remains possible.
+
+## Rationale
+
+The user chose this direction (decision S1, 2026-10-12) after reading the Round 9 reports and spikes. They are in apps/prototype/design/ on the ui-harness-v5 branch: R9-FLUTTER-MIGRATION.md, R9-NATIVE-UI-KITS.md, R9-BACKEND-SERVICES.md, R9-SPIKE-TAURI.md, R9-SPIKE-FLUTTER.md and R9-SPIKE-SLINT.md.
+
+The Flutter migration report recommends staying on Tauri for now, and its verdict is conditional. R9-FLUTTER-MIGRATION.md §8 (lines 437-456) holds the full criteria, condensed below. A later move to Flutter with flutter_rust_bridge would make sense only if all of these hold:
+
+- A ground-up production UI rebuild is planned anyway (the report's scenario B), so the rewrite cost is shared, and the owner accepts about 6-12 person-months of marginal cost.
+- A matched keyboard, VoiceOver and Narrator script passes on Flutter 3.47 or later, and is no worse than on Tauri.
+- Browser-engine divergence keeps causing failures that Tauri 3 CEF cannot address.
+- The owner accepts assembling packaging, signing, notarisation and the updater, and an in-process integration_test harness in place of out-of-process WebDriver.
+- Windows cold start is acceptable.
+
+It would not make sense if any of these hold:
+
+- The goal is an OS-native look per OS.
+- The React prototype is meant to become production code.
+- WCAG AA is a release gate, and the spike reproduces the open VoiceOver and Narrator defects.
+- The only gain sought is fewer Tauri plugins.
+
+The services crate keeps such a switch possible.
+
+## Alternatives
+
+The research considered OS-native UI libraries behind a per-OS abstraction, Flutter with flutter_rust_bridge, Slint, and Tauri + React. The user chose Tauri + React.
+
+## Consequences
+
+The UI composition rebuild remains in React. The services crate keeps a later switch possible. crates/desktop/services holds the desktop backend services that need no UI framework, and the desktop shell only adapts them. No Tauri framework crate, flutter_rust_bridge or raw-window-handle may enter the services crate's dependency graph, which crates/desktop/services/tests/dependency_boundary.rs enforces (docs/architecture/scaffold.md:32-37, crates/desktop/services/src/lib.rs:4-15).
