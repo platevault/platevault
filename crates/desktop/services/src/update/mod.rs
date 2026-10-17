@@ -63,7 +63,7 @@ pub use self::install::LaunchedApp;
 use self::install::{InstallMode, Installed, Installer, OsInstaller};
 use self::manifest::Release;
 use self::signature::{Staged, TrustedKey};
-pub(super) use self::wording::Wording;
+use self::wording::Wording;
 use crate::channels::Latest;
 use crate::locale::{ActiveLocale, ShippedLocale};
 use crate::notifications::Notice;

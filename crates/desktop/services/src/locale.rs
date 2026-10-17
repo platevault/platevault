@@ -13,26 +13,39 @@ use std::sync::{Arc, OnceLock, RwLock};
 /// A shipped locale and its embedded catalogue.
 #[derive(Debug)]
 pub struct ShippedLocale {
-    pub(crate) index: usize,
+    /// The locale's position in [`SHIPPED_LOCALES`], which is its
+    /// [`ShippedMessages`] slot.
+    index: usize,
     /// The locale's tag as `project.inlang/settings.json` lists it.
     pub tag: &'static str,
     /// The catalogue: one JSON object of message keys and their texts.
     pub catalogue: &'static str,
 }
-/// Every locale in `project.inlang/settings.json`, the base locale first.
+
+/// How many locales `project.inlang/settings.json` lists.
 pub const SHIPPED_LOCALE_COUNT: usize = 2;
-pub static SHIPPED_LOCALES: [ShippedLocale; SHIPPED_LOCALE_COUNT] = [
-    ShippedLocale {
-        index: 0,
-        tag: "en-GB",
-        catalogue: include_str!("../../../../apps/desktop/messages/en-GB.json"),
-    },
-    ShippedLocale {
-        index: 1,
-        tag: "pt-BR",
-        catalogue: include_str!("../../../../apps/desktop/messages/pt-BR.json"),
-    },
-];
+
+/// Every locale in `project.inlang/settings.json`, the base locale first.
+pub static SHIPPED_LOCALES: [ShippedLocale; SHIPPED_LOCALE_COUNT] = indexed([
+    ("en-GB", include_str!("../../../../apps/desktop/messages/en-GB.json")),
+    ("pt-BR", include_str!("../../../../apps/desktop/messages/pt-BR.json")),
+]);
+
+/// Each `(tag, catalogue)` as a shipped locale whose index is its position.
+const fn indexed(
+    catalogues: [(&'static str, &'static str); SHIPPED_LOCALE_COUNT],
+) -> [ShippedLocale; SHIPPED_LOCALE_COUNT] {
+    let mut locales =
+        [const { ShippedLocale { index: 0, tag: "", catalogue: "" } }; SHIPPED_LOCALE_COUNT];
+    let mut index = 0;
+    while index < SHIPPED_LOCALE_COUNT {
+        let (tag, catalogue) = catalogues[index];
+        locales[index] = ShippedLocale { index, tag, catalogue };
+        index += 1;
+    }
+    locales
+}
+
 /// The base locale, which the frontend also falls back to.
 #[must_use]
 pub fn base() -> &'static ShippedLocale {

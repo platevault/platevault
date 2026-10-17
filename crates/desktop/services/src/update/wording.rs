@@ -37,6 +37,7 @@ impl Wording {
     pub(super) fn from_locale(locale: &'static crate::locale::ShippedLocale) -> &'static Self {
         Self::for_locale(locale)
     }
+
     pub(super) fn admin_prompt(&self, version: &str) -> String {
         locale::fill(&self.admin_prompt, &[("version", version)])
     }
