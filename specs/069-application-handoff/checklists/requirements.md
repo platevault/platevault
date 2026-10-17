@@ -13,12 +13,12 @@ Feature: [Specification](../spec.md)
 - [x] The F4 amendments (D-W93 to D-W116, 2026-10-14 to 2026-10-16) and the second batch's amendment of D-W108 set the Project folder, the View layout and its folder names, the tool layouts and Apply; *Provisional* and *Open* items are labelled in the text.
 - [x] D-W122 (Round 9 C15, recorded 2026-10-17) moves metadata corrections to session intake: PREP-FR-03 and PREP-AC-06 have Apply deliver the recorded corrections and show "N corrected values", with no per-value choice.
 - [x] A provisional FITS keyword mapping proposal names field mappings, profile evidence, PlateVault reader read-back and a Target association acceptance scenario.
-- [ ] Owner confirmation is pending for D-W123's FITS mapping and alias replacements, generic-tool delivery without per-tool capability evidence, and the non-FITS delivery route.
+- [ ] Owner confirmation remains open for D-W123's mapping and fixed-format alias coverage, whether to patch HIERARCH aliases, generic-tool delivery evidence, and the non-FITS correction route.
 - [x] Independent cross-feature requirements review passed for the 2026-10-03 text after M1 through M13, R1 through R9 and C1 corrections; implementation readiness is not certified.
 - [ ] Independent cross-feature requirements review of the 2026-10-06 workflow amendment.
 - [ ] Independent requirements review of the F4 amendment (PR #1804) has not yet passed.
 - [ ] Independent requirements review of the Round 9 C15 amendment (D-W122, 2026-10-17) has not yet run.
-- [ ] Owner confirmation and independent review of provisional D-W123's alias mapping, generic-tool delivery and non-FITS delivery questions remain pending.
+- [ ] Independent requirements review of D-W123's provisional FITS mapping and open HIERARCH, generic-tool and non-FITS questions has not yet run.
 - [x] The user's all-human-gate waiver follows the root autonomous objective; native gates cite the resolution decision.
 
-All product choices except provisional D-W123 are settled for this run. Its alias mapping, generic-tool delivery evidence and non-FITS delivery route remain open. Independent review, research, plan, data model, contracts, tasks and analysis must still complete before implementation. This checklist does not certify those artifacts or runtime behavior.
+All product choices except provisional D-W123 are settled for this run. Its fixed-format alias coverage, HIERARCH alias handling, generic-tool delivery evidence and non-FITS delivery route remain open. Independent review, research, plan, data model, contracts, tasks and analysis must still complete before implementation. This checklist does not certify those artifacts or runtime behavior.
