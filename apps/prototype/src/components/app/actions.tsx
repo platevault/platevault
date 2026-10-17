@@ -235,15 +235,15 @@ export function useAction({ focusAfterConfirm, focusAfterCancel }: UseActionOpti
     setFailure(result && !result.ok ? { action, result } : null)
   }
 
-  /** Calls `run`; a promise settles into `feedback`, a direct result is returned to the caller. */
-  function execute(action: Action): CommitResult | void {
+  /** Calls `run`. A promise marks the action pending until it settles and resolves to its result, a rejection as a failed write. */
+  function execute(action: Action): CommitResult | void | Promise<CommitResult | void> {
     const outcome = action.run()
     if (!isPromise(outcome)) return outcome
     setPending(action.id)
-    outcome
+    return outcome
       .then(
-        (result) => settle(action, result),
-        (error: unknown) => settle(action, { ok: false, reason: "write-failed", message: error instanceof Error ? error.message : String(error) }),
+        (result) => result,
+        (error: unknown): CommitResult => ({ ok: false, reason: "write-failed", message: error instanceof Error ? error.message : String(error) }),
       )
       .finally(() => setPending((current) => (current === action.id ? null : current)))
   }
@@ -256,7 +256,9 @@ export function useAction({ focusAfterConfirm, focusAfterCancel }: UseActionOpti
       setConfirming({ action, open: true, opener })
       return
     }
-    settle(action, execute(action))
+    const outcome = execute(action)
+    if (isPromise(outcome)) void outcome.then((result) => settle(action, result))
+    else settle(action, outcome)
   }
 
   // Without an opener (a menu item, a shortcut) the dialog keeps its default: the element focused before it opened.
@@ -266,8 +268,13 @@ export function useAction({ focusAfterConfirm, focusAfterCancel }: UseActionOpti
   }
 
   // A refusal closes the dialog and shows beside the trigger (nothing to retry); a failed write stays in the dialog with Retry.
-  function confirmRun(action: Action): CommitResult | void {
-    const result = execute(action)
+  // A promise goes back to the dialog too, so it stays open and busy until the run settles.
+  function confirmRun(action: Action): CommitResult | void | Promise<CommitResult | void> {
+    const outcome = execute(action)
+    return isPromise(outcome) ? outcome.then((result) => afterConfirm(action, result)) : afterConfirm(action, outcome)
+  }
+
+  function afterConfirm(action: Action, result: CommitResult | void): CommitResult | void {
     if (result && !result.ok && result.reason !== "refused") return result
     settle(action, result)
   }
