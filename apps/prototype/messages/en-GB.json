@@ -2601,7 +2601,7 @@
   "review_frame_inspector": "Frame inspector",
   "review_key_grid": "Grid, or back",
   "review_table_height": "Table height",
-  "review_key_filter": "Filter: All, Picked, Rejected, Unreviewed",
+  "review_key_filter": "Filter: All, Usable, Unusable, Unreviewed",
   "review_select_all_shown": "Select all shown",
   "review_key_toggle_selection": "Toggle selection",
   "review_key_escape": "Leave fullscreen, then clear selection",
@@ -2826,8 +2826,8 @@
   "review_announce_selection_cleared": "Selection cleared.",
   "review_cmd_next": "Next frame",
   "review_cmd_previous": "Previous frame",
-  "review_cmd_pick": "Mark Picked",
-  "review_cmd_reject": "Mark Rejected",
+  "review_cmd_usable": "Mark Usable",
+  "review_cmd_unusable": "Mark Unusable",
   "review_cmd_unreviewed": "Mark Unreviewed",
   "review_cmd_zoom": "Zoom Fit or 1:1",
   "review_cmd_fullscreen": "Fullscreen preview",
@@ -2837,8 +2837,8 @@
   "review_cmd_select_all": "Select all shown frames",
   "review_reveal_path": "Reveal path",
   "review_empty_none": "No frames",
-  "review_empty_picked": "No Picked frames",
-  "review_empty_rejected": "No Rejected frames",
+  "review_empty_usable": "No Usable frames",
+  "review_empty_unusable": "No Unusable frames",
   "review_empty_unreviewed": "No Unreviewed frames",
   "review_show_all": "Show all",
   "review_frame_position": "Frame {index} of {total}",
@@ -4249,7 +4249,7 @@
   "importdlg_step_preview": "Preview",
   "importdlg_supported": "Supported format",
   "importdlg_unattached": "Not attached",
-  "review_announce_rest_picked": [
+  "review_announce_rest_usable": [
     {
       "declarations": [
         "input count",
@@ -4259,8 +4259,8 @@
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} frame Picked.",
-        "countPlural=*": "{count} frames Picked."
+        "countPlural=one": "{count} frame Usable.",
+        "countPlural=*": "{count} frames Usable."
       }
     }
   ],
@@ -4290,40 +4290,8 @@
   "review_note_mad": "MAD",
   "review_note_mad_unscaled": "Unscaled",
   "review_note_samples_of": "{count} of {total}, region shown",
-  "review_pick_rest": "Pick the rest",
-  "review_pick_rest_confirm": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Pick {n} frame",
-        "countPlural=*": "Pick {n} frames"
-      }
-    }
-  ],
-  "review_pick_rest_none": "No frame is Unreviewed",
-  "review_pick_rest_title": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Pick the {n} Unreviewed frame?",
-        "countPlural=*": "Pick the {n} Unreviewed frames?"
-      }
-    }
-  ],
+  "review_mark_rest_usable": "Mark rest usable",
+  "review_mark_rest_none": "No frame is unreviewed",
   "review_plot_coverage": "{count} of {total} measured",
   "review_plot_point": "{name}: {value}",
   "review_readout": "x {x} y {y} · {value} ADU",
@@ -4919,7 +4887,7 @@
   "simulation_this_project_title": "This Project: {name}",
   "simulation_actions_title": "Actions",
   "simulation_quick_actions": "Quick actions",
-  "simulation_quick_actions_detail": "One-click runs marks on more than 20 frames, Pick the rest, and Home's Add to Project, Add to Plan, Scan and Rescan where they are, with Undo where they have one. Open page sends each to the page that owns it.",
+  "simulation_quick_actions_detail": "One-click runs marks on more than 20 frames, Mark rest usable, and Home's Add to Project, Add to Plan, Scan and Rescan where they are, with Undo where they have one. Open page sends each to the page that owns it.",
   "simulation_quick_one_click": "One-click",
   "simulation_quick_open_page": "Open page",
   "ds_operation_title": "Operation",

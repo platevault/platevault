@@ -21,15 +21,15 @@ export interface ReviewContext {
   sessionId: SessionId
 }
 
-/** The review buckets of library quality (PIX-FR-14): Picked (Usable), Rejected (Unusable) and Unreviewed. */
+/** The review buckets of library quality (PIX-FR-14), shown with the STATUS words: Usable ("picked"), Unusable ("rejected") and Unreviewed. */
 export type ReviewBucket = "picked" | "rejected" | "unreviewed"
 export type QualityFilter = "all" | ReviewBucket
 
 /** Labels are getters, so every read is in the chosen language. `key` is the ⌥ digit that picks the filter. */
 export const FILTERS: Array<{ id: QualityFilter; readonly label: string; key: string }> = [
   { id: "all", get label() { return m.review_filter_all() }, key: "1" },
-  { id: "picked", get label() { return m.review_picked() }, key: "2" },
-  { id: "rejected", get label() { return m.review_rejected() }, key: "3" },
+  { id: "picked", get label() { return m.status_usable() }, key: "2" },
+  { id: "rejected", get label() { return m.status_unusable() }, key: "3" },
   { id: "unreviewed", get label() { return m.status_unreviewed() }, key: "4" },
 ]
 

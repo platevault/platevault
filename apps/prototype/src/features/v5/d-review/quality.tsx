@@ -1,8 +1,8 @@
 /**
- * Quality labels for Review (PIX-FR-14): glyph plus word. Picked, Rejected
- * and Unreviewed are the review words for library Usable, Unusable and
- * Unreviewed; a decision that no longer applies to the current bytes reads
- * Unreviewed with its reason.
+ * Quality labels for Review (PIX-FR-14): glyph plus word. The words are the
+ * STATUS registry's Usable, Unusable and Unreviewed (W5, C10); a decision
+ * that no longer applies to the current bytes reads Unreviewed with its
+ * reason.
  */
 import { useMessages } from "@/app/preferences"
 import { StatusBadge } from "@/components/app/status"
@@ -12,8 +12,8 @@ import type { ReviewFrame } from "./model"
 /** The frame's quality in words; `short` drops the reason after Unreviewed. */
 export function qualityWord(m: Messages, frame: ReviewFrame, short = false): string {
   const { library } = frame.quality
-  if (library === "unusable") return m.review_rejected()
-  if (library === "usable") return m.review_picked()
+  if (library === "unusable") return m.status_unusable()
+  if (library === "usable") return m.status_usable()
   if (!short && library === "changed-content") return m.review_quality_unreviewed_changed()
   if (!short && library === "verification-pending") return m.review_quality_unreviewed_pending()
   return m.status_unreviewed()
