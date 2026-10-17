@@ -38,6 +38,11 @@
 //!   the directory's device and inode. So is an update over the launched app
 //!   when another bundle was swapped in during the identity read and back
 //!   out before the next check: the identity read is that bundle's.
+//! - Every move onto the app's path or onto a name a kept app takes is
+//!   exclusive (`RENAME_EXCL`, `RENAME_NOREPLACE`). A file system without
+//!   that rename gets a check that nothing is at the destination and then a
+//!   plain rename: an empty directory another process creates there in that
+//!   moment is replaced.
 //!
 //! The swap is the one `tauri-plugin-updater` 2.13.3 made: the two bundles are
 //! exchanged in one step where the file system can (APFS), so the app path
@@ -45,7 +50,9 @@
 //! that could not be put back is kept, never deleted: it counts as back only
 //! when its device and inode are at the app's path again, and every renamed
 //! back or kept entry moves onto nothing, under the next free numbered name
-//! when one is taken.
+//! when one is taken. So does the update: an entry another process put at
+//! the app's path between the two moves is left alone, and the install
+//! refused ([`UpdateError::AppReplaced`]).
 //!
 //! An app the user may not rename is installed by [`PrivilegedInstall`], a
 //! root script that checks again, on its own copy, everything the user
@@ -249,6 +256,9 @@ fn move_into_place(
             }
         }
         Err(SwapError::Io(error)) => error.into(),
+        // Another process filled the app's path after the launched app moved
+        // out; what it put there is left alone.
+        Err(SwapError::Occupied) => app_replaced(installed, &[]),
         Err(SwapError::NotLaunched { found }) => {
             return settle_not_launched(
                 installed,
@@ -259,20 +269,28 @@ fn move_into_place(
             );
         }
     };
-    let kept = keep_backup_if_not_restored(
-        launched,
-        staging,
-        [update, &backup],
-        update_id,
-        home.as_deref(),
-    );
-    Err(match kept {
+    Err(failed_swap(launched, staging, [update, &backup], update_id, error, home.as_deref()))
+}
+
+/// What a swap that put nothing in place because of `error` reports, once
+/// [`keep_backup_if_not_restored`] kept what it left in `staging`:
+/// [`UpdateError::PreviousAppNotRestored`] when the launched app is among
+/// what was kept, else `error`.
+fn failed_swap(
+    launched: &LaunchedBundle,
+    staging: tempfile::TempDir,
+    left: [&Path; 2],
+    update_id: (u64, u64),
+    error: UpdateError,
+    fallback_dir: Option<&Path>,
+) -> UpdateError {
+    match keep_backup_if_not_restored(launched, staging, left, update_id, fallback_dir) {
         Some(kept) => {
             tracing::error!(%error, kept = %kept.display(), "the update failed and the previous app could not be put back");
             UpdateError::PreviousAppNotRestored { kept, cause: Box::new(error) }
         }
         None => error,
-    })
+    }
 }
 
 /// Settle a swap that moved another bundle than the launched app out of the
@@ -434,6 +452,11 @@ fn single_bundle(dir: &Path) -> Result<PathBuf, UpdateError> {
 #[derive(Debug)]
 enum SwapError {
     Io(io::Error),
+    /// Something was at the app's path when the update was to move there,
+    /// after the launched app had moved out: another process put it there.
+    /// It was left alone, and the launched app moved back onto nothing if it
+    /// could ([`move_update_in`]).
+    Occupied,
     /// What the swap moved out of the app's path was not the launched app but
     /// an entry swapped in after the last check, whose device and inode were
     /// `found` (`None` when they could not be read). The swap was undone as
@@ -523,21 +546,34 @@ fn rename_noreplace(from: &Path, to: &Path) -> io::Result<()> {
 
 /// Move `update` to the app `launched` names, keeping what was there in
 /// `backup` until that has succeeded. What the first move brought to `backup`
-/// must be the launched app; anything else is moved back, onto nothing. If
-/// the second move fails, the first is undone as far as the file system lets
-/// it.
+/// must be the launched app; anything else is moved back, onto nothing. The
+/// second move is [`move_update_in`].
 fn replace(launched: &LaunchedBundle, update: &Path, backup: &Path) -> Result<(), SwapError> {
     let installed = launched.path.as_path();
     fs::rename(installed, backup)?;
     check_moved_out(launched, backup, || rename_noreplace(backup, installed))?;
-    if let Err(error) = fs::rename(update, installed) {
-        // Best effort, onto nothing: the error worth reporting is the failed
-        // move, and a failed restore is caught by
-        // `keep_backup_if_not_restored`.
-        let _ = rename_noreplace(backup, installed);
-        return Err(error.into());
-    }
-    Ok(())
+    move_update_in(installed, update, backup)
+}
+
+/// The second of [`replace`]'s moves, once the launched app is in `backup`:
+/// `update` to the app's path at `installed`, onto nothing. Whatever is
+/// there, such as an empty directory or a link, was put there by another
+/// process after the launched app moved out; it is left alone
+/// ([`SwapError::Occupied`]). Should the move fail, the launched app moves
+/// back, onto nothing too; when it cannot, the failed install keeps it
+/// ([`keep_backup_if_not_restored`]).
+fn move_update_in(installed: &Path, update: &Path, backup: &Path) -> Result<(), SwapError> {
+    let Err(error) = rename_noreplace(update, installed) else {
+        return Ok(());
+    };
+    // Best effort: the error worth reporting is the failed move, and a
+    // failed restore is caught by `keep_backup_if_not_restored`.
+    let _ = rename_noreplace(backup, installed);
+    Err(if error.kind() == io::ErrorKind::AlreadyExists {
+        SwapError::Occupied
+    } else {
+        error.into()
+    })
 }
 
 /// `AppleScript`'s "User canceled" error: the authorization prompt was
@@ -1049,9 +1085,10 @@ mod tests {
     use std::path::{Path, PathBuf};
 
     use super::{
-        check_moved_out, entry_id, exchange, identify_launched, keep_backup_if_not_restored,
-        move_aside, rename_noreplace, replace, settle_not_launched, staging_dir_among, swap,
-        CodeSigning, Identity, LaunchedBundle, SwapError,
+        app_replaced, check_moved_out, entry_id, exchange, failed_swap, identify_launched,
+        keep_backup_if_not_restored, move_aside, move_update_in, rename_noreplace, replace,
+        settle_not_launched, staging_dir_among, swap, CodeSigning, Identity, LaunchedBundle,
+        SwapError,
     };
     use crate::update::UpdateError;
 
@@ -2366,6 +2403,25 @@ function run(argv) {{
                 fallback_dir,
             )
         }
+
+        /// The second move, [`move_update_in`], onto the app's path at
+        /// `installed`.
+        fn move_update_in(&self, installed: &Path) -> Result<(), SwapError> {
+            move_update_in(installed, &self.update, &self.backup)
+        }
+
+        /// What the install that failed with `error` reports.
+        fn fail(self, error: UpdateError) -> UpdateError {
+            let update_id = entry_id(&self.update).expect("update");
+            failed_swap(
+                &self.launched,
+                self.staging,
+                [&self.update, &self.backup],
+                update_id,
+                error,
+                None,
+            )
+        }
     }
 
     #[test]
@@ -2464,6 +2520,38 @@ function run(argv) {{
         assert_eq!(kept.as_deref(), Some(expected.as_path()), "the launched app is not kept");
         assert_eq!(version(&expected), "old");
         assert_eq!(version(&installed), "foreign", "the other entry is left alone");
+    }
+
+    /// The two-moves fallback, after another process put an empty directory
+    /// at the app's path between its renames, as it can once the launched
+    /// app has moved out: the update does not move onto it. The planted
+    /// directory is left as it was, the launched app is kept, not deleted
+    /// with staging, and the install fails, asking for a restart.
+    #[test]
+    fn an_entry_planted_before_the_update_moves_in_is_left_alone_and_the_app_kept() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let installed = dir.path().join("App.app");
+        let moves = FirstMoveDone::at(dir.path(), &installed);
+        fs::create_dir(&installed).expect("an empty directory planted at the app's path");
+        let planted = entry_id(&installed).expect("planted");
+
+        let second_move = moves.move_update_in(&installed);
+
+        assert_eq!(entry_id(&installed).ok(), Some(planted), "the planted directory is untouched");
+        assert_eq!(fs::read_dir(&installed).expect("planted").count(), 0, "and still empty");
+        assert!(matches!(second_move, Err(SwapError::Occupied)), "{second_move:?}");
+        let outcome = moves.fail(app_replaced(&installed, &[]));
+        let kept = dir.path().join(KEPT_APP);
+        assert!(
+            matches!(
+                &outcome,
+                UpdateError::PreviousAppNotRestored { kept: at, cause }
+                    if *at == kept && matches!(**cause, UpdateError::AppReplaced(_))
+            ),
+            "{outcome}"
+        );
+        assert_eq!(version(&kept), "old", "the launched app is kept");
+        assert_eq!(entry_id(&installed).ok(), Some(planted), "still untouched");
     }
 
     /// A name a kept app would take is taken: the next numbered name is
