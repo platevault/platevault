@@ -263,8 +263,10 @@ pub struct RecordedPath {
     pub path: NativePath,
     /// For a Missing or Trashed record, whose file left the path, the size
     /// and modification time that file had when last observed: a file at the
-    /// path is that file put back only while it still has them. `None` for
-    /// every other record, whose file the catalog holds there.
+    /// path is that file put back only while it still has them. Likewise for
+    /// the path an archive move's record left while its original waits there
+    /// to be retired. `None` for every other record, whose file the catalog
+    /// holds there.
     pub vacated: Option<SizeAndTime>,
 }
 
@@ -1179,7 +1181,10 @@ impl Catalog {
     /// without reading their records. A Missing or Trashed record's path
     /// carries the size and modification time its file had when last
     /// observed ([`RecordedPath::vacated`]); every other record's file,
-    /// Retired ones included, the catalog holds at its path.
+    /// Retired ones included, the catalog holds at its path. So does the
+    /// path an archive move left once its record moved to the verified copy
+    /// and until the move settles, with the size and time the move started
+    /// from: until then the original stays there, waiting to be retired.
     ///
     /// # Errors
     /// `PersistenceFailure` when the catalog cannot be read.
@@ -1187,7 +1192,10 @@ impl Catalog {
         let mut conn = self.reader().await?;
         let rows = sqlx::query(
             "SELECT path_key, availability IN ('missing', 'trashed') AS vacated, size_bytes, \
-             modified_ns FROM assets WHERE location_id = ?1",
+             modified_ns FROM assets WHERE location_id = ?1 \
+             UNION ALL SELECT from_path, 1, json_extract(from_fingerprint, '$.sizeBytes'), \
+             json_extract(from_fingerprint, '$.modifiedNs') FROM archive_moves \
+             WHERE from_location_id = ?1 AND repointed_at IS NOT NULL AND outcome IS NULL",
         )
         .bind(location_id.to_string())
         .fetch_all(&mut *conn)

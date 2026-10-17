@@ -78,11 +78,11 @@ At `RunEvent::Exit`, the shell first shuts down `OutputWatch`. It then stops `Ca
 
 ## CaptureWatch and eject notices
 
-The shell starts `CaptureWatch` after `OutputWatch`. It walks online Captures locations and starts a live folder watcher for each. (`apps/desktop/src-tauri/src/library_shell.rs:336-345`; `crates/platevault-core/src/new_captures.rs:4-15,195-201`)
+The shell starts `CaptureWatch` after `OutputWatch`. It walks online Captures locations and starts a live folder watcher for each. (`apps/desktop/src-tauri/src/library_shell.rs:336-345`; `crates/platevault-core/src/new_captures.rs:9-15,198-217`)
 
-CaptureWatch handles online Captures roots while the app runs. Its shutdown stops its watchers within a grace period. If filesystem work blocks longer, it cancels the task. (`crates/platevault-core/src/new_captures.rs:39-44,104-112,320-344`; `apps/desktop/src-tauri/src/library_shell.rs:354-363`)
+CaptureWatch handles online Captures roots while the app runs. Its shutdown stops its watchers within a grace period. If filesystem work blocks longer, it cancels the task. (`crates/platevault-core/src/new_captures.rs:119-127,339-353`; `apps/desktop/src-tauri/src/library_shell.rs:354-363`)
 
-While it runs, CaptureWatch reads a location's recorded paths again after a scan ends there and after each change of them outside a scan, so its count follows without a scan. The Trash step records frames Trashed through `Library::record_trashed`, and an archive announces the location each record left and the one it reached. (`crates/platevault-core/src/new_captures.rs:87-94`; `crates/platevault-core/src/library.rs:204-238`; `crates/platevault-core/src/wrap_up/trash.rs:181-183`; `crates/platevault-core/src/wrap_up/archive.rs:529-535`)
+While it runs, CaptureWatch reads a location's recorded paths again after a scan ends there and after each change of them outside a scan, so its count follows without a scan. The Trash step records frames Trashed through `Library::record_trashed`. An archive announces its destination once a record moves to the verified copy, and its source once the original is retired or kept. Until then the catalog reports the original's path with the size and time the move started from, so the original waiting there is held. (`crates/platevault-core/src/new_captures.rs:34-44,89-96`; `crates/platevault-core/src/library.rs:204-238`; `crates/platevault-core/src/wrap_up/trash.rs:181-183`; `crates/platevault-core/src/wrap_up/archive.rs:470-479,541-544`; `crates/persistence/library/src/lib.rs:1180-1222`)
 
 On Windows, the shell starts optional `EjectNotices` after it manages CaptureWatch. The notices forward drive-removal events to CaptureWatch so it can release root handles. Startup continues if the notices cannot start. (`apps/desktop/src-tauri/src/library_shell.rs:346-353`; `apps/desktop/src-tauri/src/eject.rs:68-110`)
 
@@ -92,7 +92,7 @@ The shell stops CaptureWatch before dropping EjectNotices. Pending removal reque
 
 The Apply command returns an `ApplyReport` when a build fails or is canceled. (`apps/desktop/src-tauri/src/commands/project_apply.rs:39-55`)
 
-The shell returns command errors as `ErrorResponse` values with kind, identity, scope, retry action, and message. (`apps/desktop/src-tauri/src/commands/library.rs:32-53`; `crates/platevault-model/src/lib.rs:203-213,229-270`)
+The shell returns command errors as `ErrorResponse` values: a stable `code`, the identity and native scope the failure concerns, the retry action, and a conflict's current revision, successors and window. No English text crosses IPC; the catalogues word each code as `err_library_<code>`. (`apps/desktop/src-tauri/src/commands/library.rs:38-65`; `crates/platevault-model/src/lib.rs:199-294,352-377`)
 
 After reviewing new frames, when rule 2 has waits Home returns `NextAction::WaitsOnUser`. (`crates/platevault-core/src/home.rs:268-281`; `crates/platevault-model/src/home.rs:70-91`)
 The waits include calibration-blocked suggestions, the latest failed or canceled Apply, and pending files in `View (previous)/`. (`crates/platevault-core/src/home.rs:304-336`)

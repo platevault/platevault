@@ -39,7 +39,9 @@
 //! metadata of the frames the walk lists or a live event finds there. A
 //! different file with that same size and modification time is taken for
 //! the original until a scan reads it: discovery reads no file's contents,
-//! and a new capture that matches both, to the nanosecond, is unlikely.
+//! and a new capture that matches both, to the nanosecond, is unlikely. The
+//! path an archive's record left reads the same way until the move settles,
+//! so the original waiting there to be retired is not counted.
 //!
 //! Lifecycle:
 //! - An Active Captures location is watched while its root is online: the
@@ -625,9 +627,10 @@ struct Watched {
     /// longer holds it ([`Watched::know`]).
     known: HashMap<PathIdentity, NativePath>,
     /// Identities of the paths of the location's Missing and Trashed
-    /// records, each with the size and modification time its file had when
-    /// last observed: a frame there is that file put back, held, only while
-    /// it still has them.
+    /// records, and of the paths an archive's record left while its original
+    /// waits there to be retired, each with the size and modification time
+    /// its file had when last observed: a frame there is that file, held,
+    /// only while it still has them.
     vacated: HashMap<PathIdentity, SizeAndTime>,
     /// The new files: identity to relative path.
     new: HashMap<PathIdentity, PathBuf>,

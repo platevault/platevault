@@ -13,15 +13,18 @@
 //! transaction, then the archive runs while the Project reads Closing.
 //!
 //! Each file goes through the verified-transfer journal: copied, re-read
-//! and verified; then its catalog record moves to the copy, announced for
-//! the location it left and the one it reached so new-capture discovery
-//! follows ([`Library::subscribe_recorded_paths`]); then every kept-View
-//! link that read the original is rebuilt to read the copy after a no-follow
-//! check that it is still the recorded link, and recorded beside the frozen
+//! and verified; then its catalog record moves to the copy, and the
+//! destination is announced to new-capture discovery
+//! ([`Library::subscribe_recorded_paths`]); then every kept-View link that
+//! read the original is rebuilt to read the copy after a no-follow check
+//! that it is still the recorded link, and recorded beside the frozen
 //! manifest; only then is the original retired to the OS Trash, re-verified
-//! first. A link that can't be repointed keeps the original. Every step is
-//! durable, so a stop resumes from the recorded phase and the archive
-//! settles its Project Archived, or Closed when nothing moved.
+//! first. Once the original settled, retired or kept, the source is
+//! announced; until then discovery holds the original at its path by the
+//! size and time the move started from. A link that can't be repointed
+//! keeps the original. Every step is durable, so a stop resumes from the
+//! recorded phase and the archive settles its Project Archived, or Closed
+//! when nothing moved.
 
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fs;
@@ -463,8 +466,16 @@ impl Library {
             }
             self.archive_one(&run, index, trash, control, &locations).await?;
             run = catalog.archive_run(storage).await?;
-            if run.moves[index].outcome.is_none() {
+            let step = &run.moves[index];
+            if step.outcome.is_none() {
                 return Ok(run.progress(&locations));
+            }
+            // Its record moved and its original settled, retired to the OS
+            // Trash or kept beside the copy: the source no longer records
+            // the path at all, so new-capture discovery reads it again. Until
+            // now the catalog reported the original held there.
+            if step.repointed {
+                self.recorded_paths_changed(step.from_location_id);
             }
         }
         let operation = catalog.storage_operation(storage).await?;
@@ -527,12 +538,10 @@ impl Library {
                         .await;
                 };
                 match catalog.record_archive_repoint(storage, step.seq, &fingerprint).await {
-                    // The record left its path in one location for the copy's
-                    // in another: new-capture discovery reads both again.
-                    Ok(()) => {
-                        self.recorded_paths_changed(step.from_location_id);
-                        self.recorded_paths_changed(step.to_location_id);
-                    }
+                    // The record now reads the copy's path: new-capture
+                    // discovery reads the destination again. The source is
+                    // read again once the original settled (`run_archive`).
+                    Ok(()) => self.recorded_paths_changed(step.to_location_id),
                     Err(LibraryError::IdentityConflict(detail)) => {
                         let reason = ItemReason::new(
                             ReasonCode::DestinationOccupied,

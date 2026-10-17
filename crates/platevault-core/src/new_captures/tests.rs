@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fs_inventory::artifact_watcher::{ArtifactEventKind, ArtifactFileEvent, TreeWatch};
-use persistence_library::TrashedFrame;
+use persistence_library::{ArchiveDraft, TrashedFrame};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
@@ -24,7 +24,9 @@ use super::{
 use crate::inventory::{self, Entry, Listing, RootRefusal, RootStamp};
 use crate::library::{fixtures, Library};
 use crate::{
-    LibraryError, Location, LocationRole, NativePath, PathSensitivity, ScanOperation, ScanState,
+    EntryEvidence, EntryKind, LibraryError, Location, LocationRole, NativePath,
+    ObservationFingerprint, PathSensitivity, ScanOperation, ScanState, StorageItemDraft,
+    TransferDestination,
 };
 
 /// Ticks short enough for tests; the OS watcher, walks and shutdown grace are
@@ -593,13 +595,15 @@ async fn a_record_moved_away_is_counted_where_it_left_and_not_where_it_went() {
     count_is(&watch, archive.id, 0).await;
 
     // Before the record moves: the copy lands in the archive, the original
-    // goes to the OS Trash and another frame takes its path.
+    // goes to the OS Trash and another frame takes its path, judged held.
+    // The frame written last, at a new path, counts once the events before
+    // it were applied.
     fs::copy(root.join(name), archive_root.join(name)).unwrap();
     move_file(&root.join(name), &bin(&fx).join(name));
     other_frame(&root.join(name));
+    other_frame(&root.join(MISSING[0]));
+    count_is(&watch, location.id, 1).await;
     count_is(&watch, archive.id, 1).await;
-    after(&watch, drains, 2).await;
-    assert_eq!(new_files(&watch.counts(), location.id), Some(0), "judged held");
 
     // The record moves to the copy, as `move_asset_record` does.
     let mut catalog = raw_catalog(&fx).await;
@@ -611,9 +615,90 @@ async fn a_record_moved_away_is_counted_where_it_left_and_not_where_it_went() {
         .unwrap();
     fx.library.recorded_paths_changed(location.id);
     fx.library.recorded_paths_changed(archive.id);
-    count_is(&watch, location.id, 1).await;
+    count_is(&watch, location.id, 2).await;
     count_is(&watch, archive.id, 0).await;
     assert_eq!(walks(&watch), 2, "the start-up walks only: no rescan");
+}
+
+/// Journal Sessions > Archive of the frame at `name` in `location` to the
+/// same path in `archive`, and move its record to the copy there, as the
+/// archive does once the copy verified. The move stays unsettled: its
+/// original waits at its path to be retired.
+async fn archive_in_flight(fx: &Fixture, location: &Location, archive: &Location, name: &str) {
+    let catalog = fx.library.catalog();
+    let relative = NativePath::from_path(Path::new(name));
+    let assets = catalog.location_assets(location.id).await.unwrap();
+    let asset = assets.into_iter().find(|asset| asset.relative_path == relative).unwrap();
+    let session: String = sqlx::query_scalar("SELECT session_id FROM assets WHERE id = ?1")
+        .bind(asset.id.to_string())
+        .fetch_one(&mut raw_catalog(fx).await)
+        .await
+        .unwrap();
+    let original = location.path.to_path_buf().unwrap().join(name);
+    let sha256 = hex::encode(Sha256::digest(fs::read(&original).unwrap()));
+    let draft = ArchiveDraft {
+        session_id: Uuid::parse_str(&session).unwrap(),
+        asset: asset.clone(),
+        to_location_id: archive.id,
+        to_path: relative.clone(),
+        links: Vec::new(),
+        draft: StorageItemDraft {
+            source: EntryEvidence {
+                path: NativePath::from_path(&original),
+                kind: EntryKind::File,
+                fingerprint: ObservationFingerprint {
+                    content_sha256: None,
+                    ..asset.fingerprint.clone()
+                },
+                sha256: Some(sha256.clone()),
+            },
+            relied_on: Vec::new(),
+            destination: Some(TransferDestination { root: archive.path.clone(), relative }),
+        },
+    };
+    let storage = catalog.begin_sessions_archive(&[draft]).await.unwrap();
+    let copy = ObservationFingerprint { content_sha256: Some(sha256), ..asset.fingerprint };
+    catalog.record_archive_repoint(storage, 0, &copy).await.unwrap();
+}
+
+/// An archive moves a frame's record to the verified copy before it retires
+/// the original, which waits at its path meanwhile. Discovery holds it there
+/// by the size and time the move started from, whether a recount or a
+/// start-up walk reads the location in that gap; only a new frame counts.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn an_original_its_archive_has_not_retired_yet_stays_held() {
+    let fx = fixture().await;
+    let root = fx.base.join("Captures");
+    let location = captures(&fx.library, &root).await;
+    let archive_root = fx.base.join("Archive");
+    let archive = captures(&fx.library, &archive_root).await;
+    let name = TRASHED[0];
+    frame(&root.join(name));
+    assert_eq!(scan_to_end(&fx.library, location.id).await.state, ScanState::Completed);
+    let counting = watch(&fx.library);
+    count_is(&counting, location.id, 0).await;
+
+    fs::copy(root.join(name), archive_root.join(name)).unwrap();
+    archive_in_flight(&fx, &location, &archive, name).await;
+    // A new frame, counted once the events before it were applied.
+    other_frame(&root.join(MISSING[0]));
+    count_is(&counting, location.id, 1).await;
+    let recounts = || counting.observed().recounts.load(Ordering::SeqCst);
+    let before = recounts();
+    fx.library.recorded_paths_changed(location.id);
+    eventually("the source was recounted", || recounts() > before).await;
+    after(&counting, drains, 1).await;
+    let recounted = new_files(&counting.counts(), location.id);
+    counting.shutdown().await;
+
+    // A start-up walk in the same gap, as after a stop.
+    let walking = watch(&fx.library);
+    let walked = until(&walking, |counts| new_files(counts, location.id).is_some()).await;
+    assert_eq!(
+        (recounted, new_files(&walked, location.id)),
+        (Some(1), Some(1)),
+        "(recount, walk): the original waiting at its path is held, the new frame counts"
+    );
 }
 
 /// A frame at a Missing record's path that kept the record's modification
