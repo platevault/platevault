@@ -637,7 +637,7 @@ pub enum RunState {
 #[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct RunIssue {
     pub asset_id: Uuid,
-    /// The `ErrorResponse` kind.
+    /// The failure's `LibraryErrorCode` wire string.
     pub kind: String,
     pub message: String,
 }

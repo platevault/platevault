@@ -820,7 +820,7 @@ impl Shared {
             Err(error) => {
                 let issue = RunIssue {
                     asset_id: queued.asset,
-                    kind: error.response(None, None).kind,
+                    kind: error.code().as_str().into(),
                     message: error.to_string(),
                 };
                 self.catalog.record_run_issue(run, &issue).await?

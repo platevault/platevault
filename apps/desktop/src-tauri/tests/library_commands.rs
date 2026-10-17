@@ -5,10 +5,11 @@
 //!
 //! Each test runs the registered handlers through Tauri's mock runtime with
 //! JSON arguments, as the webview sends them, on a temporary catalog. A reply
-//! is either the command's value or a library `ErrorResponse` naming the
-//! identity the request was about. An argument the handler can't deserialize
-//! never reaches it: Tauri refuses it with a plain string, which these tests
-//! tell apart, so each call proves the command's argument names and shapes.
+//! is either the command's value or a library `ErrorResponse`: a stable code
+//! naming the identity the request was about, with no English text. An
+//! argument the handler can't deserialize never reaches it: Tauri refuses it
+//! with a plain string, which these tests tell apart, so each call proves the
+//! command's argument names and shapes.
 
 use std::path::Path;
 use std::sync::Arc;
@@ -16,7 +17,7 @@ use std::sync::Arc;
 use desktop_shell::commands::project_wrap_up::WrapUpTrash;
 use platevault_core::custody::trash::OsTrash;
 use platevault_core::library::Library;
-use platevault_core::{TrashSupport, TrashUnsupported};
+use platevault_core::{LibraryErrorCode, TrashSupport, TrashUnsupported};
 use serde_json::{json, Value};
 use tauri::ipc::{CallbackFn, InvokeBody};
 use tauri::test::{get_ipc_response, mock_builder, mock_context, noop_assets, MockRuntime};
@@ -117,20 +118,23 @@ impl Shell {
         .map(|body| body.deserialize::<Value>().expect("JSON reply"))
     }
 
-    /// The command ran and refused with a library `ErrorResponse` of `kind`
-    /// naming `identity`.
-    fn refuses(&self, cmd: &str, args: &Value, kind: &str, identity: Uuid) {
+    /// The command ran and refused with a library `ErrorResponse` of `code`
+    /// naming `identity`, and sent no English text.
+    fn refuses(&self, cmd: &str, args: &Value, code: LibraryErrorCode, identity: Uuid) {
         let error = self.invoke(cmd, args).expect_err(cmd);
         assert!(error.is_object(), "{cmd} reached its handler: {error}");
-        assert_eq!(error["kind"], kind, "{cmd}: {error}");
+        assert_eq!(error["code"], json!(code), "{cmd}: {error}");
         assert_eq!(error["identity"], json!(identity), "{cmd}: {error}");
-        assert!(error["message"].as_str().is_some_and(|text| !text.is_empty()), "{cmd}: {error}");
+        assert!(error.get("message").is_none(), "{cmd} sent English text: {error}");
     }
 }
 
 fn unix_path(path: &str) -> Value {
     json!({ "encoding": "unix-bytes", "payload": path.as_bytes() })
 }
+
+/// Every refusal below: the request names a record the catalog doesn't hold.
+const NOT_FOUND: LibraryErrorCode = LibraryErrorCode::NotFound;
 
 #[test]
 fn project_inputs_family_takes_its_arguments() {
@@ -142,7 +146,7 @@ fn project_inputs_family_takes_its_arguments() {
     let misnamed = shell.invoke("project_inputs", &json!({ "id": project })).expect_err("misnamed");
     assert!(misnamed.is_string(), "Tauri refuses the arguments itself: {misnamed}");
 
-    shell.refuses("project_inputs", &json!({ "projectId": project }), "not_found", project);
+    shell.refuses("project_inputs", &json!({ "projectId": project }), NOT_FOUND, project);
     shell.refuses(
         "project_add_sessions",
         &json!({
@@ -154,7 +158,7 @@ fn project_inputs_family_takes_its_arguments() {
             }],
             "groupId": null,
         }),
-        "not_found",
+        NOT_FOUND,
         project,
     );
     let edit = |extra: Value| {
@@ -165,43 +169,43 @@ fn project_inputs_family_takes_its_arguments() {
     shell.refuses(
         "project_remove_sessions",
         &edit(json!({ "sessions": [session] })),
-        "not_found",
+        NOT_FOUND,
         project,
     );
     shell.refuses(
         "project_move_sessions",
         &edit(json!({ "sessions": [session], "groupId": group })),
-        "not_found",
+        NOT_FOUND,
         project,
     );
     shell.refuses(
         "project_create_group",
         &edit(json!({ "rigId": Uuid::new_v4(), "name": "Wide", "sessions": [session] })),
-        "not_found",
+        NOT_FOUND,
         project,
     );
     shell.refuses(
         "project_split_group",
         &edit(json!({ "groupId": group, "sessions": [session], "name": null })),
-        "not_found",
+        NOT_FOUND,
         project,
     );
     shell.refuses(
         "project_rename_group",
         &edit(json!({ "groupId": group, "name": "Core" })),
-        "not_found",
+        NOT_FOUND,
         project,
     );
     shell.refuses(
         "project_set_group_panel",
         &edit(json!({ "groupId": group, "panel": true, "name": "Panel 1" })),
-        "not_found",
+        NOT_FOUND,
         project,
     );
     shell.refuses(
         "project_set_frames",
         &edit(json!({ "captureKeys": [Uuid::new_v4()], "choice": "exclude" })),
-        "not_found",
+        NOT_FOUND,
         project,
     );
 }
@@ -210,7 +214,7 @@ fn project_inputs_family_takes_its_arguments() {
 fn apply_family_takes_its_arguments() {
     let shell = Shell::new();
     let project = Uuid::new_v4();
-    shell.refuses("project_apply_preview", &json!({ "projectId": project }), "not_found", project);
+    shell.refuses("project_apply_preview", &json!({ "projectId": project }), NOT_FOUND, project);
     shell.refuses(
         "project_apply",
         &json!({ "request": {
@@ -219,7 +223,7 @@ fn apply_family_takes_its_arguments() {
             "basisDigest": "0".repeat(64),
             "ticked": [unix_path("notes.txt")],
         } }),
-        "not_found",
+        NOT_FOUND,
         project,
     );
 }
@@ -229,17 +233,17 @@ fn intake_family_takes_its_arguments() {
     let shell = Shell::new();
     let session = Uuid::new_v4();
     let asked = json!({ "sessionId": session });
-    shell.refuses("pix_session_intake", &asked, "not_found", session);
+    shell.refuses("pix_session_intake", &asked, NOT_FOUND, session);
     shell.refuses(
         "pix_session_review_list",
         &json!({ "sessionId": session, "filter": "all", "sort": null, "names": { "kind": "file_name" } }),
-        "not_found",
+        NOT_FOUND,
         session,
     );
     shell.refuses(
         "pix_finish_review",
         &json!({ "sessionId": session, "expectedGroupingRevision": 1 }),
-        "not_found",
+        NOT_FOUND,
         session,
     );
     let asset = Uuid::new_v4();
@@ -269,10 +273,10 @@ fn intake_family_takes_its_arguments() {
                 "quality": "usable",
             },
         }),
-        "not_found",
+        NOT_FOUND,
         asset,
     );
-    shell.refuses("pix_reopen_review", &asked, "not_found", session);
+    shell.refuses("pix_reopen_review", &asked, NOT_FOUND, session);
 }
 
 #[test]
@@ -292,7 +296,7 @@ fn calibration_family_lists_the_queue_and_takes_reassign_arguments() {
             "input": { "form": "master", "masterId": Uuid::new_v4(), "revision": 1 },
             "expectedGeneration": 1,
         }),
-        "not_found",
+        NOT_FOUND,
         session,
     );
 }
@@ -308,7 +312,7 @@ fn output_family_takes_its_arguments() {
             "source": unix_path("/tmp/master_dark.xisf"),
             "name": unix_path("master_dark.xisf"),
         }),
-        "not_found",
+        NOT_FOUND,
         project,
     );
 }
@@ -317,11 +321,11 @@ fn output_family_takes_its_arguments() {
 fn wrap_up_family_takes_its_arguments() {
     let shell = Shell::new();
     let project = Uuid::new_v4();
-    shell.refuses("project_wrap_up_status", &json!({ "projectId": project }), "not_found", project);
+    shell.refuses("project_wrap_up_status", &json!({ "projectId": project }), NOT_FOUND, project);
     shell.refuses(
         "project_close",
         &json!({ "request": { "projectId": project, "desiredRevision": 1, "archive": null } }),
-        "not_found",
+        NOT_FOUND,
         project,
     );
     shell.refuses(
@@ -334,7 +338,7 @@ fn wrap_up_family_takes_its_arguments() {
             "notes": false,
             "settings": true,
         } }),
-        "not_found",
+        NOT_FOUND,
         project,
     );
 }

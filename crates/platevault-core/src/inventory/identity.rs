@@ -1057,7 +1057,7 @@ mod tests {
         let folder_meta = fs::symlink_metadata(folder.path()).unwrap();
         assert!(unchanged_length(&folder_meta, folder_meta.len() + 1).is_ok(), "folders differ");
 
-        let kind = |error: &std::io::Error| file_id_error(&path, error).response(None, None).kind;
+        let kind = |error: &std::io::Error| file_id_error(&path, error).code().as_str();
         let grew = unchanged_length(&meta, meta.len() + 2880).unwrap_err();
         assert_eq!(kind(&grew), "identity_conflict", "a file still being written settles again");
         let elsewhere = std::io::Error::other("entry is not on the qualified volume");
@@ -1102,7 +1102,7 @@ mod tests {
         };
         let root = Path::new("/mnt/nas");
         assert!(compare(&location, &registered, root).is_ok());
-        let kind = |error: LibraryError| error.response(None, None).kind;
+        let kind = |error: LibraryError| error.code().as_str();
 
         // The mount point folder left on the local disk: the share is unmounted.
         let mut left_behind = observation("LOCAL-UUID", VolumeKind::Local);
@@ -1124,7 +1124,7 @@ mod tests {
     fn share_addresses_are_refused_before_the_filesystem_is_touched() {
         for address in ["smb://nas/astro", "//nas/astro", "afp://nas/astro"] {
             let refused = observe(Path::new(address), &OsVolumes).err().unwrap();
-            assert_eq!(refused.response(None, None).kind, "invalid_input", "{address}");
+            assert_eq!(refused.code().as_str(), "invalid_input", "{address}");
             assert!(refused.to_string().contains("mounts no share"), "{address}: {refused}");
         }
     }

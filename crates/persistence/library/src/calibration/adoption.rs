@@ -14,8 +14,8 @@ use std::sync::Arc;
 use platevault_model::{
     AdoptedMaster, AdoptionDestination, AdoptionOperation, AdoptionPhase, AdoptionReview,
     AdoptionSource, AdoptionState, Availability, CalibrationRules, CandidateRef, Classification,
-    CreatedFile, LibraryError, Location, LocationRole, MasterProvenance, NativePath,
-    ObservationFingerprint, ReviewState, ReviewedSource, Revision,
+    CreatedFile, LibraryError, LibraryErrorCode, Location, LocationRole, MasterProvenance,
+    NativePath, ObservationFingerprint, ReviewState, ReviewedSource, Revision,
 };
 use sqlx::sqlite::{SqliteConnection, SqliteRow};
 use sqlx::{Connection, Row};
@@ -441,8 +441,8 @@ impl Catalog {
     }
 
     /// Settle the operation `failed` at its last recorded phase. An installed
-    /// copy is named in the recorded error and left in place; the file the
-    /// failure was scoped to, such as a drifted source, stays named in the message.
+    /// copy is the recorded error's scope and is left in place, unregistered;
+    /// a drifted source stays named by the review the operation names.
     async fn fail(
         &self,
         id: Uuid,
@@ -451,16 +451,7 @@ impl Catalog {
     ) -> Result<AdoptionOperation> {
         let mut response = error.response(None, None);
         if let Some(target) = installed_at {
-            let copy = NativePath::from_path(target);
-            let cause = match response.scope.take().filter(|scope| *scope != copy) {
-                Some(scope) => format!("{} ({})", response.message, scope.display()),
-                None => response.message.clone(),
-            };
-            response.scope = Some(copy);
-            response.message = format!(
-                "{cause}; the installed copy {} is left in place and not registered",
-                target.display()
-            );
+            response.scope = Some(NativePath::from_path(target));
         }
         Ok(write_txn!(self, |conn| {
             let updated = sqlx::query(
@@ -631,7 +622,7 @@ fn require_destination(location: &Location) -> Result<()> {
 /// The destination root must still be the registered, reachable folder.
 fn verify_online<P: SourceProbe>(root: &SourceRoot, probe: &P) -> Result<()> {
     root.verify(probe).map_err(|error| {
-        if error.response(None, None).kind == "identity_conflict" {
+        if error.code() == LibraryErrorCode::IdentityConflict {
             return error;
         }
         scoped(
@@ -974,8 +965,8 @@ mod tests {
         AdoptionDestination, AdoptionPhase, AdoptionSource, AdoptionState, Asset, CalibrationRules,
         CaptureKey, CaptureMetadata, Classification, Evaluation, ExpectedAsset, FileIdentity,
         GroupingResult, ImageFormat, InputEvidence, InputForm, InputKind, LibraryError,
-        LightEvidence, Location, LocationRole, MasterBasis, MasterEvidence, NativePath,
-        ObservationFingerprint, PathSensitivity, ScanBatch, ScanFile, ScanObservation,
+        LibraryErrorCode, LightEvidence, Location, LocationRole, MasterBasis, MasterEvidence,
+        NativePath, ObservationFingerprint, PathSensitivity, ScanBatch, ScanFile, ScanObservation,
         ScanProgress, ScanState, SessionCandidate, VolumeIdentity,
     };
     use sha2::{Digest, Sha256};
@@ -1209,15 +1200,15 @@ mod tests {
         );
         assert!(operation.master.is_none() && operation.master_id.is_none());
         let error = operation.error.clone().unwrap();
-        assert_eq!(error.kind, "identity_conflict", "{error:?}");
+        assert_eq!(error.code, LibraryErrorCode::IdentityConflict, "{error:?}");
         assert_eq!(error.scope, Some(NativePath::from_path(&copy)), "the installed copy is named");
-        assert!(error.message.contains("left in place"), "{}", error.message);
+        assert!(operation.installed.is_some(), "the installed copy is recorded");
         assert!(copy.exists(), "the installed copy is left in place");
         assert_eq!(masters(&lib.catalog).await, 0, "nothing is registered");
 
         let corrupted = std::fs::read(&copy).unwrap();
         let retry = lib.catalog.adopt_master(review.id, review.revision, Probe).await.unwrap_err();
-        assert_eq!(retry.response(None, None).kind, "identity_conflict", "{retry}");
+        assert_eq!(retry.code(), LibraryErrorCode::IdentityConflict, "{retry}");
         assert!(retry.to_string().contains("no longer hashes"), "{retry}");
         assert_eq!(std::fs::read(&copy).unwrap(), corrupted, "the retry replaced nothing");
         assert_eq!(masters(&lib.catalog).await, 0);
@@ -1287,7 +1278,7 @@ mod tests {
         std::fs::write(&copy, &bytes).unwrap();
 
         let error = lib.catalog.adopt_master(review.id, review.revision, Probe).await.unwrap_err();
-        assert_eq!(error.response(None, None).kind, "identity_conflict", "{error}");
+        assert_eq!(error.code(), LibraryErrorCode::IdentityConflict, "{error}");
         assert_eq!(error.response(None, None).scope, Some(NativePath::from_path(&copy)));
         assert_eq!(std::fs::read(&copy).unwrap(), bytes, "the other file is left as it was");
         assert_eq!(masters(&lib.catalog).await, 0);
@@ -1305,7 +1296,7 @@ mod tests {
             .unwrap();
         set_hook(Hook::FullBeforeRegister);
         let error = lib.catalog.adopt_master(review.id, review.revision, Probe).await.unwrap_err();
-        assert_eq!(error.response(None, None).kind, "persistence_failure", "{error}");
+        assert_eq!(error.code(), LibraryErrorCode::PersistenceFailure, "{error}");
 
         let lib = reopen(lib).await;
         let copy = lib.calibration_root.join("masters/master_flat_Ha.fit");
@@ -1350,14 +1341,10 @@ mod tests {
         assert!(operation.master.is_none());
         let copy = lib.calibration_root.join("masters/master_flat_Ha.fit");
         let error = operation.error.expect("the drift is recorded");
-        assert_eq!(error.kind, "identity_conflict", "{error:?}");
+        assert_eq!(error.code, LibraryErrorCode::IdentityConflict, "{error:?}");
         assert_eq!(error.scope, Some(NativePath::from_path(&copy)), "the copy is named");
-        assert!(
-            error.message.contains(&source_path.display().to_string()),
-            "the drifted source is named: {}",
-            error.message
-        );
-        assert!(error.message.contains("not registered"), "{}", error.message);
+        assert_eq!(operation.review_id, review.id, "the review names the drifted source");
+        assert!(operation.installed.is_some(), "the verified copy is recorded, not registered");
         assert_eq!(sha_of(&copy), reviewed_sha, "the verified copy stays in place");
         assert_eq!(masters(&lib.catalog).await, 0, "nothing is registered");
         let query = InputQuery { form: Some(InputForm::Master), ..InputQuery::default() };

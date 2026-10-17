@@ -23,12 +23,13 @@ use platevault_model::{
     logical_quality, ApplicableQuality, Asset, AssetReference, Association, AssociationKind,
     AssociationState, Availability, CaptureKey, CaptureMetadata, CorrectionInput,
     CoverageContribution, DigestEvidence, Equipment, EvidenceItem, ExpectedAsset, ExpectedSession,
-    FileIdentity, GroupingResult, LibraryError, Location, LocationLifecycle, LocationRole,
-    NativePath, ObservationFingerprint, PathSensitivity, Provenance, Quality, ReferenceKind,
-    RemapBlock, RemapBlockReason, RemapItem, RemapReview, RetireAsset, RetireReview, RetireSession,
-    Revision, ScanBatch, ScanFile, ScanIssue, ScanObservation, ScanOperation, ScanProgress,
-    ScanState, Session, SessionCandidate, SessionFraming, SessionLineage, TargetCandidate,
-    TargetCone, TargetCoverage, TargetRecord, VolumeIdentity, VolumeKind, NETWORK_ADDRESS_REFUSED,
+    FileIdentity, GroupingResult, LibraryError, LibraryErrorCode, Location, LocationLifecycle,
+    LocationRole, NativePath, ObservationFingerprint, PathSensitivity, Provenance, Quality,
+    ReferenceKind, RemapBlock, RemapBlockReason, RemapItem, RemapReview, RetireAsset, RetireReview,
+    RetireSession, Revision, ScanBatch, ScanFile, ScanIssue, ScanObservation, ScanOperation,
+    ScanProgress, ScanState, Session, SessionCandidate, SessionFraming, SessionLineage,
+    TargetCandidate, TargetCone, TargetCoverage, TargetRecord, VolumeIdentity, VolumeKind,
+    NETWORK_ADDRESS_REFUSED,
 };
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -3415,9 +3416,9 @@ fn verify_root(location: &Location, op: &OperationRow, observed: &FileIdentity) 
 }
 
 fn unavailable_for(error: &LibraryError) -> Availability {
-    match error.response(None, None).kind.as_str() {
-        "access_denied" => Availability::Unreadable,
-        "identity_conflict" => Availability::IdentityConflict,
+    match error.code() {
+        LibraryErrorCode::AccessDenied => Availability::Unreadable,
+        LibraryErrorCode::IdentityConflict => Availability::IdentityConflict,
         _ => Availability::Offline,
     }
 }
@@ -7377,19 +7378,13 @@ mod tests {
         catalog.limit_writer_pages_for_test().await.unwrap();
         let candidate = large_target();
         let error = catalog.save_target(&candidate, None).await.unwrap_err();
-        assert_eq!(error.response(None, None).kind, "persistence_failure");
+        assert_eq!(error.code().as_str(), "persistence_failure");
         assert!(error.to_string().contains("full"), "{error}");
-        assert_eq!(
-            catalog.target(candidate.id).await.unwrap_err().response(None, None).kind,
-            "not_found"
-        );
+        assert_eq!(catalog.target(candidate.id).await.unwrap_err().code().as_str(), "not_found");
         catalog.close().await.unwrap();
 
         let reopened = Catalog::open(&path).await.unwrap();
-        assert_eq!(
-            reopened.target(candidate.id).await.unwrap_err().response(None, None).kind,
-            "not_found"
-        );
+        assert_eq!(reopened.target(candidate.id).await.unwrap_err().code().as_str(), "not_found");
         assert_eq!(
             reopened.list_targets(0, 10).await.unwrap(),
             [] as [platevault_model::TargetRecord; 0]
@@ -7408,7 +7403,7 @@ mod tests {
         catalog.limit_writer_pages_for_test().await.unwrap();
         let candidate = large_target();
         let error = catalog.save_target(&candidate, None).await.unwrap_err();
-        assert_eq!(error.response(None, None).kind, "persistence_failure");
+        assert_eq!(error.code().as_str(), "persistence_failure");
         assert!(error.to_string().contains("full"), "{error}");
         assert_eq!(
             catalog.list_targets(0, 10).await.unwrap(),
@@ -7468,12 +7463,9 @@ mod tests {
             let cancelled = attempt.is_none();
             assert!(saved.is_ok(), "after {polls} polls (cancelled: {cancelled}): {saved:?}");
             committed.insert(next.id);
-            assert_eq!(
-                catalog.target(large.id).await.unwrap_err().response(None, None).kind,
-                "not_found"
-            );
+            assert_eq!(catalog.target(large.id).await.unwrap_err().code().as_str(), "not_found");
             if let Some(result) = attempt {
-                assert_eq!(result.unwrap_err().response(None, None).kind, "persistence_failure");
+                assert_eq!(result.unwrap_err().code().as_str(), "persistence_failure");
                 break;
             }
         }
@@ -7753,7 +7745,7 @@ mod tests {
         .unwrap();
         conn.close().await.unwrap();
         let error = Catalog::open(&path).await.err().expect("an older catalog is refused");
-        assert_eq!(error.response(None, None).kind, "invalid_input", "{error}");
+        assert_eq!(error.code().as_str(), "invalid_input", "{error}");
         assert_eq!(error.to_string(), "invalid input: unsupported catalog schema version 2");
         let mut conn = SqliteConnection::connect_with(&options).await.unwrap();
         let tables: Vec<String> =
@@ -7909,7 +7901,7 @@ mod tests {
         .await;
         let error = catalog.register_location(&stable_registration(&archive)).await.unwrap_err();
         assert_eq!(searches.load(Ordering::SeqCst), 2, "searched again for the moved root");
-        assert_eq!(error.response(None, None).kind, "identity_conflict");
+        assert_eq!(error.code().as_str(), "identity_conflict");
         let found = std::fs::canonicalize(&moved).unwrap().display().to_string();
         let message = error.to_string();
         assert!(message.contains("\"Darks\"") && message.contains(&found), "{message}");
@@ -7935,7 +7927,7 @@ mod tests {
         let error = catalog.register_location(&stable_registration(&flats)).await.unwrap_err();
         assert_eq!(searches.load(Ordering::SeqCst), STALE_ROOT_SEARCH_ATTEMPTS);
         let response = error.response(None, None);
-        assert_eq!((response.kind.as_str(), response.identity), ("conflict", Some(others[2].id)));
+        assert_eq!((response.code.as_str(), response.identity), ("conflict", Some(others[2].id)));
         assert_eq!(catalog.list_locations().await.unwrap().len(), 5, "refusals write nothing");
         assert_eq!(digest_of(&moved.join("Dark_001.fits")), original, "originals unchanged");
     }

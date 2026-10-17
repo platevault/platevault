@@ -75,13 +75,13 @@ fn filesystem_failures_keep_scope_and_do_not_claim_absence() {
     let denied =
         LibraryError::from_io(path, &std::io::Error::from(std::io::ErrorKind::PermissionDenied));
     let denied = denied.response(None, None);
-    assert_eq!(denied.kind, "access_denied");
+    assert_eq!(denied.code.as_str(), "access_denied");
     assert_eq!(denied.retry, RetryAction::Retry);
     assert_eq!(denied.scope.unwrap().to_path_buf().unwrap(), path);
     let absent = LibraryError::from_io(path, &std::io::Error::from(std::io::ErrorKind::NotFound))
         .response(None, None);
-    assert_eq!(absent.kind, "not_found");
-    assert_ne!(absent.kind, "missing");
+    assert_eq!(absent.code.as_str(), "not_found");
+    assert_ne!(absent.code.as_str(), "missing");
     assert!(matches!(LibraryError::from(sqlx::Error::RowNotFound), LibraryError::NotFound(_)));
 }
 

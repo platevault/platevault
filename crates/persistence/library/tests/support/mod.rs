@@ -174,7 +174,7 @@ pub fn root_scope() -> NativePath {
 }
 
 pub fn kind(error: &LibraryError) -> String {
-    error.response(None, None).kind
+    error.code().as_str().into()
 }
 
 pub fn expected(asset: &Asset) -> ExpectedAsset {

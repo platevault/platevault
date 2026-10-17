@@ -811,7 +811,7 @@ mod tests {
 
         let large = site_input(format!("Backyard {}", "x".repeat(64 * 1024)));
         let error = catalog.save_site(None, None, &large).await.unwrap_err();
-        assert_eq!(error.response(None, None).kind, "persistence_failure", "{error}");
+        assert_eq!(error.code().as_str(), "persistence_failure", "{error}");
         // The failed write leaves the writer to be replaced by a fresh connection
         // without the per-connection page limit; the disk is still full.
         catalog.limit_writer_pages_for_test().await.unwrap();
@@ -832,7 +832,7 @@ mod tests {
                 Ok(true) => claimed.push(claim.key),
                 Ok(false) => panic!("a fresh identity was refused"),
                 Err(error) => {
-                    assert_eq!(error.response(None, None).kind, "persistence_failure", "{error}");
+                    assert_eq!(error.code().as_str(), "persistence_failure", "{error}");
                     break claim.key;
                 }
             }

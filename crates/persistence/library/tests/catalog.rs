@@ -1911,7 +1911,7 @@ async fn a_retire_review_whose_availability_changed_is_refused() {
         .unwrap_err();
     let response = error.response(None, None);
     assert_eq!(
-        (response.kind.as_str(), response.identity, response.retry),
+        (response.code.as_str(), response.identity, response.retry),
         ("conflict", Some(location.id), RetryAction::Review)
     );
     let unchanged = catalog.location(location.id).await.unwrap();
@@ -1985,7 +1985,7 @@ async fn a_decision_on_a_retired_copy_is_refused_before_its_root_is_read() {
                     catalog.set_quality(&[expected(copy)], quality, probe).await.unwrap_err();
                 let response = error.response(None, None);
                 assert_eq!(
-                    (response.kind.as_str(), response.identity, response.retry),
+                    (response.code.as_str(), response.identity, response.retry),
                     ("invalid_input", Some(copy.id), RetryAction::Review),
                     "{stage}: {error}"
                 );
@@ -2049,7 +2049,7 @@ async fn a_retired_folder_registers_again_and_counts_each_capture_once() {
         .await
         .unwrap_err();
     let response = error.response(None, None);
-    assert_eq!((response.kind.as_str(), response.identity), ("conflict", Some(operation.id)));
+    assert_eq!((response.code.as_str(), response.identity), ("conflict", Some(operation.id)));
     catalog.abort_scan(operation.id, ScanState::Failed, "volume gone").await.unwrap();
     catalog
         .retire_location(review.id, location.id, review.expected_revision, &references)

@@ -147,6 +147,9 @@ pub(crate) fn validate_copies(key: Uuid, copies: &[CopyBasis]) -> Result<(), Lib
 
 pub type Revision = u64;
 
+/// A library failure. `Display` is an English diagnostic for logs and tests;
+/// it never crosses IPC. The client gets [`ErrorResponse`], whose
+/// [`LibraryErrorCode`] the desktop catalogues word.
 #[derive(Debug, thiserror::Error)]
 pub enum LibraryError {
     #[error("invalid input: {0}")]
@@ -156,7 +159,7 @@ pub enum LibraryError {
     #[error("revision conflict for {id}; current revision {current}")]
     Conflict { id: Uuid, current: Revision, successors: Vec<Uuid> },
     /// A selected window `key` is not among the windows recomputed at `site`;
-    /// `current` is its Target's revision. The wire kind is `conflict`.
+    /// `current` is its Target's revision. The wire code is `conflict`.
     #[error(
         "window {key} at site {site} is not among the recomputed windows; Target {} is at \
          revision {current}",
@@ -191,6 +194,72 @@ pub enum LibraryError {
     Context { error: Box<Self>, scope: NativePath, identity: Option<Uuid> },
 }
 
+/// The stable machine code of a [`LibraryError`]: what the client switches on
+/// and the key of its user-facing message. The desktop catalogues
+/// (`apps/desktop/messages/<locale>.json`) word each code as
+/// `err_library_<code>`, as they word a `contracts_core` `ErrorCode` as
+/// `err_<code>`. The wire strings are the kinds the catalog also records for
+/// run issues, so they don't change.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
+pub enum LibraryErrorCode {
+    InvalidInput,
+    NotFound,
+    Conflict,
+    IdentityConflict,
+    AccessDenied,
+    SourceUnavailable,
+    UnsupportedFormat,
+    MetadataUnreadable,
+    ProviderUnavailable,
+    PersistenceFailure,
+    NoByteProof,
+    SymlinksUnavailable,
+    Canceled,
+}
+
+impl LibraryErrorCode {
+    /// The wire string serde writes.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::InvalidInput => "invalid_input",
+            Self::NotFound => "not_found",
+            Self::Conflict => "conflict",
+            Self::IdentityConflict => "identity_conflict",
+            Self::AccessDenied => "access_denied",
+            Self::SourceUnavailable => "source_unavailable",
+            Self::UnsupportedFormat => "unsupported_format",
+            Self::MetadataUnreadable => "metadata_unreadable",
+            Self::ProviderUnavailable => "provider_unavailable",
+            Self::PersistenceFailure => "persistence_failure",
+            Self::NoByteProof => "no_byte_proof",
+            Self::SymlinksUnavailable => "symlinks_unavailable",
+            Self::Canceled => "canceled",
+        }
+    }
+
+    /// What the client offers for a failure with this code.
+    #[must_use]
+    pub const fn retry(self) -> RetryAction {
+        match self {
+            Self::NotFound
+            | Self::AccessDenied
+            | Self::SourceUnavailable
+            | Self::ProviderUnavailable
+            | Self::PersistenceFailure => RetryAction::Retry,
+            Self::InvalidInput
+            | Self::Conflict
+            | Self::IdentityConflict
+            | Self::MetadataUnreadable
+            | Self::NoByteProof
+            | Self::SymlinksUnavailable => RetryAction::Review,
+            Self::UnsupportedFormat | Self::Canceled => RetryAction::None,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
@@ -200,17 +269,26 @@ pub enum RetryAction {
     None,
 }
 
+/// The IPC form of a [`LibraryError`]: its stable code plus the structured
+/// params the client words it with. No English text crosses IPC; the client
+/// shows the catalogue message for `code`.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ErrorResponse {
-    pub kind: String,
+    pub code: LibraryErrorCode,
+    /// The record the failure concerns.
     pub identity: Option<Uuid>,
+    /// The native path the failure concerns.
     pub scope: Option<NativePath>,
     pub retry: RetryAction,
-    pub message: String,
+    /// A `conflict`'s current revision.
     pub current_revision: Option<Revision>,
+    /// The records that superseded a `conflict`'s record.
     pub successors: Vec<Uuid>,
+    /// The selected window a `conflict` found missing from the windows
+    /// recomputed at its site; the key names the Target and the site.
+    pub window: Option<WindowKey>,
 }
 
 impl LibraryError {
@@ -226,47 +304,52 @@ impl LibraryError {
         Self::Context { error: Box::new(error), scope: NativePath::from_path(path), identity: None }
     }
 
+    /// The stable code the client words this failure by; a [`Self::Context`]
+    /// has its inner error's.
+    #[must_use]
+    pub fn code(&self) -> LibraryErrorCode {
+        match self {
+            Self::InvalidInput(_) => LibraryErrorCode::InvalidInput,
+            Self::NotFound(_) => LibraryErrorCode::NotFound,
+            Self::Conflict { .. } | Self::WindowConflict { .. } => LibraryErrorCode::Conflict,
+            Self::IdentityConflict(_) => LibraryErrorCode::IdentityConflict,
+            Self::AccessDenied(_) => LibraryErrorCode::AccessDenied,
+            Self::SourceUnavailable(_) => LibraryErrorCode::SourceUnavailable,
+            Self::UnsupportedFormat(_) => LibraryErrorCode::UnsupportedFormat,
+            Self::MetadataUnreadable(_) => LibraryErrorCode::MetadataUnreadable,
+            Self::ProviderUnavailable(_) => LibraryErrorCode::ProviderUnavailable,
+            Self::PersistenceFailure(_) => LibraryErrorCode::PersistenceFailure,
+            Self::NoByteProof(_) => LibraryErrorCode::NoByteProof,
+            Self::SymlinksUnavailable(_) => LibraryErrorCode::SymlinksUnavailable,
+            Self::Canceled => LibraryErrorCode::Canceled,
+            Self::Context { error, .. } => error.code(),
+        }
+    }
+
     /// Attach affected identity/scope to the stable IPC failure shape.
     #[must_use]
     pub fn response(&self, identity: Option<Uuid>, scope: Option<NativePath>) -> ErrorResponse {
         if let Self::Context { error, scope: stored_scope, identity: stored_identity } = self {
             return error.response(stored_identity.or(identity), Some(stored_scope.clone()));
         }
-        let (kind, retry) = match self {
-            Self::InvalidInput(_) => ("invalid_input", RetryAction::Review),
-            Self::NotFound(_) => ("not_found", RetryAction::Retry),
-            Self::Conflict { .. } | Self::WindowConflict { .. } => {
-                ("conflict", RetryAction::Review)
-            }
-            Self::IdentityConflict(_) => ("identity_conflict", RetryAction::Review),
-            Self::AccessDenied(_) => ("access_denied", RetryAction::Retry),
-            Self::SourceUnavailable(_) => ("source_unavailable", RetryAction::Retry),
-            Self::UnsupportedFormat(_) => ("unsupported_format", RetryAction::None),
-            Self::MetadataUnreadable(_) => ("metadata_unreadable", RetryAction::Review),
-            Self::ProviderUnavailable(_) => ("provider_unavailable", RetryAction::Retry),
-            Self::PersistenceFailure(_) => ("persistence_failure", RetryAction::Retry),
-            Self::NoByteProof(_) => ("no_byte_proof", RetryAction::Review),
-            Self::SymlinksUnavailable(_) => ("symlinks_unavailable", RetryAction::Review),
-            Self::Canceled => ("canceled", RetryAction::None),
-            Self::Context { .. } => unreachable!("context handled before variant mapping"),
-        };
-        let (identity, current_revision, successors) = match self {
+        let (identity, current_revision, successors, window) = match self {
             Self::Conflict { id, current, successors } => {
-                (Some(*id), Some(*current), successors.clone())
+                (Some(*id), Some(*current), successors.clone(), None)
             }
             Self::WindowConflict { key, current, .. } => {
-                (Some(key.target_id()), Some(*current), Vec::new())
+                (Some(key.target_id()), Some(*current), Vec::new(), Some(*key))
             }
-            _ => (identity, None, Vec::new()),
+            _ => (identity, None, Vec::new(), None),
         };
+        let code = self.code();
         ErrorResponse {
-            kind: kind.into(),
+            code,
             identity,
             scope,
-            retry,
-            message: self.to_string(),
+            retry: code.retry(),
             current_revision,
             successors,
+            window,
         }
     }
 }

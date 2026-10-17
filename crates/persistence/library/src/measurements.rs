@@ -14,10 +14,10 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use platevault_model::{
     Asset, Availability, ColumnClass, ConfirmedImport, Drift, ExportLayout, ImportBasis,
     ImportCandidate, ImportColumn, ImportFormat, ImportReview, ImportReviewState, ImportRow,
-    ImportSource, ImportVerification, ImportedValue, LibraryError, Location, MeasurementMethod,
-    MeasurementOutcome, MeasurementRecord, MeasurementRun, NativePath, ObservationFingerprint,
-    PreambleEntry, RecordValidity, RowMatch, RowResolution, RunCounters, RunIssue, RunState, Units,
-    ValueSource,
+    ImportSource, ImportVerification, ImportedValue, LibraryError, LibraryErrorCode, Location,
+    MeasurementMethod, MeasurementOutcome, MeasurementRecord, MeasurementRun, NativePath,
+    ObservationFingerprint, PreambleEntry, RecordValidity, RowMatch, RowResolution, RunCounters,
+    RunIssue, RunState, Units, ValueSource,
 };
 use serde::{Deserialize, Serialize};
 use sqlx::sqlite::{SqliteConnection, SqliteRow};
@@ -29,9 +29,9 @@ use super::{
     load_location, now, parse_uuid, revision, to_json, to_text, Catalog, Result, MAX_PAGE,
 };
 
-/// The `ErrorResponse` kinds of issues the catalog records itself.
-const CHANGED_ISSUE: &str = "identity_conflict";
-const RETIRED_ISSUE: &str = "source_unavailable";
+/// The [`LibraryErrorCode`]s of the issues the catalog records itself.
+const CHANGED_ISSUE: &str = LibraryErrorCode::IdentityConflict.as_str();
+const RETIRED_ISSUE: &str = LibraryErrorCode::SourceUnavailable.as_str();
 
 /// The label suffix of every imported value.
 const IMPORTED_LABEL: &str = "SubframeSelector";
@@ -1427,7 +1427,7 @@ mod tests {
     }
 
     fn kind(error: &LibraryError) -> String {
-        error.response(None, None).kind
+        error.code().as_str().into()
     }
 
     /// A disposable `max_page_count` catalog: each write reports

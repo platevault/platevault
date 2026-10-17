@@ -299,7 +299,7 @@ async fn a_source_changed_after_review_fails_before_install_and_removes_the_temp
         (AdoptionState::Failed, AdoptionPhase::TempCreated)
     );
     assert_eq!(
-        operation.error.as_ref().unwrap().kind,
+        operation.error.as_ref().unwrap().code.as_str(),
         "identity_conflict",
         "{:?}",
         operation.error
