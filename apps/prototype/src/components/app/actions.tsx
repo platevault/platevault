@@ -363,13 +363,15 @@ export interface ActionBarProps {
   /** The menu's name: "Project" for an object menu; default "More". */
   menuLabel?: string
   runner?: ActionRunner
+  /** How many standard actions get a button: 3 in a page header (default), 2 in a narrow detail panel. The rest go to the menu. */
+  buttons?: number
 }
 
 /**
  * The bar's own layout, so no header picks variants or sizes: standard
  * buttons, then the named menu, then the one primary at the trailing end.
- * Only the first primary and the first three standard actions get a button;
- * every other action, and every destructive one, goes to the menu.
+ * Only the first primary and the first `buttons` (three) standard actions get
+ * a button; every other action, and every destructive one, goes to the menu.
  */
 export function ActionBar({ runner, ...props }: ActionBarProps) {
   return runner ? <ActionBarView {...props} runner={runner} /> : <OwnActionBar {...props} />
@@ -386,10 +388,10 @@ function OwnActionBar(props: Omit<ActionBarProps, "runner">) {
   )
 }
 
-function ActionBarView({ actions, overflow = [], menuLabel, runner }: Omit<ActionBarProps, "runner"> & { runner: ActionRunner }) {
+function ActionBarView({ actions, overflow = [], menuLabel, runner, buttons = MAX_STANDARD }: Omit<ActionBarProps, "runner"> & { runner: ActionRunner }) {
   const m = useMessages()
   const primary = actions.find((action) => action.kind === "primary")
-  const standard = actions.filter((action) => (action.kind ?? "standard") === "standard").slice(0, MAX_STANDARD)
+  const standard = actions.filter((action) => (action.kind ?? "standard") === "standard").slice(0, buttons)
   const menu: MenuItem[] = [...actions.filter((action) => action !== primary && !standard.includes(action)), ...overflow]
   if (!primary && standard.length === 0 && !hasAction(menu)) return null
   return (

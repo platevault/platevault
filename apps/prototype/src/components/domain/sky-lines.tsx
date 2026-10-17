@@ -29,7 +29,7 @@ function degrees(value: number): string {
   return String(Math.round(value)).replace("-", "−")
 }
 
-/** The Moon, once, for a toolbar: illumination, phase, rise and set on the night (PLAN-TGT-FR-07). */
+/** The Moon, once, for a toolbar: illumination, phase, rise and set on the night (PLAN-TGT-FR-07). It wraps inside its container, never past it. */
 export function MoonLine({ moon, timeZone, className }: { moon: MoonTonight; timeZone: string; className?: string }) {
   const m = useMessages()
   const parts = [
@@ -39,9 +39,9 @@ export function MoonLine({ moon, timeZone, className }: { moon: MoonTonight; tim
     moon.set ? m.tonight_moon_sets({ time: siteTime(moon.set, timeZone) }) : m.tonight_moon_no_set(),
   ]
   return (
-    <span className={cn("inline-flex min-w-0 items-center gap-1.5 text-[0.75rem] text-muted-foreground tabular-nums", className)} data-moon>
-      <Moon aria-hidden="true" className="size-3.5 shrink-0" />
-      <span className="truncate">
+    <span className={cn("inline-flex min-w-0 max-w-full items-start gap-1.5 text-[0.75rem] text-muted-foreground tabular-nums", className)} data-moon>
+      <Moon aria-hidden="true" className="mt-px size-3.5 shrink-0" />
+      <span className="min-w-0 text-pretty">
         <span className="text-foreground">{m.tonight_moon()}</span> {parts.join(" · ")}
       </span>
     </span>

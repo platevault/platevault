@@ -197,7 +197,8 @@ export function DetailPanel({ detail, dock, maxWidth, level, onClose }: DetailPa
       </div>
       {hasActions ? (
         <div data-chrome className="flex shrink-0 justify-end border-b border-separator px-3 py-1.5">
-          <ActionBar actions={actions} overflow={detail.menu?.items} menuLabel={detail.menu?.label} />
+          {/* Two buttons and the object menu fit the narrow panel on one row in every locale. */}
+          <ActionBar actions={actions} overflow={detail.menu?.items} menuLabel={detail.menu?.label} buttons={2} />
         </div>
       ) : null}
       <div data-detail-body="" className="min-h-0 flex-1 overflow-y-auto p-3">

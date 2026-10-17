@@ -77,9 +77,10 @@ export interface EmptyStateProps {
   titleAs?: "h1" | "h2" | "h3"
 }
 
+/** One line plus one action, in a dashed frame; inside a table cell the table is the frame, so it draws none of its own. */
 export function EmptyState({ icon: Icon, title, description, action, className, titleAs: Title = "h3" }: EmptyStateProps) {
   return (
-    <Empty className={cn("border border-dashed border-border py-8", className)}>
+    <Empty className={cn("border border-dashed border-border py-8 [td_&]:border-0", className)}>
       <EmptyHeader>
         <EmptyMedia variant="icon">
           <Icon aria-hidden="true" />

@@ -160,7 +160,6 @@ function SessionTable({ loading, empty, grouped, pinned, locked }: { loading: bo
               {m.filters_clear()}
             </Button>
           }
-          className="border-0"
         />
       }
       stickyFirstColumn={pinned}

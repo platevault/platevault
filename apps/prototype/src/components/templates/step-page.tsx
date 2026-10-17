@@ -17,18 +17,27 @@
  *   PageBody rhythm, so a step never wraps blocks just to space them. With
  *   `fill` it is a full-height column with no padding, no rhythm and no
  *   scroll: the step's root takes `flex-1 min-h-0` and scrolls inside
- *   itself (the review Workspace).
+ *   itself (the review Workspace). A fill body's status line (the
+ *   Workspace's) joins the StepFooter through `useStepFooterSlot`, so the
+ *   page keeps one footer.
  * - The step on screen is `viewing` (the route's `$step`). Steps link to
  *   `flow.linkFor`; a flow on local state passes `onSelectStep` instead.
  *   The order rule (C3) is the flow's: read `stepEditable(flow, viewing)` to
  *   make the region read-only.
  */
-import type { ReactNode } from "react"
+import { createContext, type ReactNode, useContext, useState } from "react"
 import type { StepFlow } from "@/components/app/contracts"
 import type { PageNotice } from "@/components/app/feedback"
 import { PageHeader, type PathItem } from "@/components/app/page"
 import { StepFooter, StepStrip } from "@/components/app/step-flow"
 import { headerActions, headerBar, type ObjectMenu, type PageViews, ViewTabs } from "./parts"
+
+const FooterSlot = createContext<HTMLElement | null>(null)
+
+/** Where a `fill` step body puts its status line: a place in the StepFooter. Null outside a fill region. */
+export function useStepFooterSlot(): HTMLElement | null {
+  return useContext(FooterSlot)
+}
 
 export interface StepPageProps {
   path?: PathItem[]
@@ -58,6 +67,7 @@ export interface StepPageProps {
 
 export function StepPage({ path, title, level = 1, status, menu, flow, viewing = flow.current, onSelectStep, stepsLabel, notice, views, fill = false, step }: StepPageProps) {
   const viewed = flow.steps.find((item) => item.id === viewing)
+  const [slot, setSlot] = useState<HTMLElement | null>(null)
   return (
     <div data-template="step" className="flex min-h-0 flex-1 flex-col">
       <PageHeader level={level} path={path} title={title} meta={status} actions={headerActions([], menu)} notice={notice} className={headerBar(level)} />
@@ -68,9 +78,9 @@ export function StepPage({ path, title, level = 1, status, menu, flow, viewing =
           data-step-region={fill ? "fill" : ""}
           className={fill ? "flex min-h-0 flex-1 flex-col overflow-hidden" : "min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-4"}
         >
-          {step}
+          <FooterSlot value={fill ? slot : null}>{step}</FooterSlot>
         </section>
-        <StepFooter flow={flow} viewing={viewing} />
+        <StepFooter flow={flow} viewing={viewing} status={fill ? <div ref={setSlot} className="flex min-w-0 shrink items-center" data-step-footer-status="" /> : undefined} />
       </ViewTabs>
     </div>
   )

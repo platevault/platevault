@@ -281,7 +281,8 @@ const SPECS = {
     info: ok(0.76, 0.12, 250),
     border: ok(1, 0, 0, 0.09),
     separator: ok(0.14, 0.005, 255),
-    input: ok(0.58, 0.006, 255),
+    // 3:1 against the current-row fill (accent) too, so an unticked checkbox on that row stays visible (WCAG 1.4.11).
+    input: ok(0.62, 0.006, 255),
     ring: ok(0.72, 0.13, 250),
     chrome: ok(0.27, 0.007, 255),
     selected: ok(0.5, 0.15, 255),

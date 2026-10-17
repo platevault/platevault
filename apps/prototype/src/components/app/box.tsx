@@ -50,6 +50,9 @@ export function Box({ title, count, level = 3, actions, flush = false, id, class
   )
 }
 
+/** The frame of a DataTable inside a flush Box: none, since the Box frame is the table's. */
+export const BOXED_TABLE_FRAME = "rounded-none border-0"
+
 /**
  * The DataTable of a flush Box: it takes the Box frame as its own and grows
  * with its rows (the page scrolls). A table that needs a filter toolbar or a
@@ -58,5 +61,5 @@ export function Box({ title, count, level = 3, actions, flush = false, id, class
 export type BoxTableProps<T> = DataTableProps<T> & { className?: never; scroll?: never; toolbar?: never; batchActions?: never; stickyFirstColumn?: never }
 
 export function BoxTable<T>(props: BoxTableProps<T>) {
-  return <DataTable {...props} scroll="none" className="rounded-none border-0" />
+  return <DataTable {...props} scroll="none" className={BOXED_TABLE_FRAME} />
 }

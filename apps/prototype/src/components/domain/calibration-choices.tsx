@@ -23,6 +23,7 @@
 import { Check, CircleSlash } from "lucide-react"
 import type { ReactNode } from "react"
 import { useMessages } from "@/app/preferences"
+import { BOXED_TABLE_FRAME } from "@/components/app/box"
 import type { Action, Column, MenuItem } from "@/components/app/contracts"
 import { KeyValueList } from "@/components/app/data"
 import { DataTable } from "@/components/app/data-table"
@@ -211,6 +212,8 @@ export interface CalibrationChoicesProps {
   error?: { message: string; onRetry: () => void }
   /** Shown when there are no rows; default "No sessions to calibrate". */
   empty?: ReactNode
+  /** It fills a flush Box (a session's Calibration box): the Box frame is the table's, so the table draws none of its own. */
+  boxed?: boolean
 }
 
 const ADD_FILES: Record<PinKind, (m: Messages) => string> = {
@@ -219,7 +222,7 @@ const ADD_FILES: Record<PinKind, (m: Messages) => string> = {
   bias: (m) => m.calibration_add_bias(),
 }
 
-export function CalibrationChoices({ label, rows, groupBySession, changeable = true, onConfirm, onPick, onNo, onAddFiles, selection, loading, error, empty }: CalibrationChoicesProps) {
+export function CalibrationChoices({ label, rows, groupBySession, changeable = true, onConfirm, onPick, onNo, onAddFiles, selection, loading, error, empty, boxed = false }: CalibrationChoicesProps) {
   const m = useMessages()
   const order = [...new Set(rows.map((r) => r.sessionId))]
   const grouped = groupBySession ?? order.length > 1
@@ -296,6 +299,7 @@ export function CalibrationChoices({ label, rows, groupBySession, changeable = t
       selection={changeable && selection ? { ...selection, rowLabel: name } : undefined}
       batchActions={changeable && selection ? batchActions : undefined}
       scroll="none"
+      className={boxed ? BOXED_TABLE_FRAME : undefined}
       loading={loading}
       error={error}
       empty={empty ?? m.calibration_choices_empty()}

@@ -198,9 +198,12 @@ export interface StepStripProps {
   label?: string
 }
 
-/** One step: the same box as a link, a button or text, so the strip never moves when a step changes state. */
+/**
+ * One step: the same box as a link, a button or text, so the strip never moves when a step changes state. The step on
+ * screen takes the selected fill, never an underline, so the strip does not read as the view tabs above it.
+ */
 const ITEM =
-  "flex h-8 items-center gap-1.5 border-b-2 px-2 text-xs font-medium whitespace-nowrap outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+  "flex h-7 items-center gap-1.5 rounded-md px-2 text-sm font-medium whitespace-nowrap outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
 
 export function StepStrip({ flow, viewing = flow.current, onSelect, label }: StepStripProps) {
   const m = useMessages()
@@ -209,8 +212,8 @@ export function StepStrip({ flow, viewing = flow.current, onSelect, label }: Ste
   const locked = flow.steps.some((step) => stepAccess(flow, step.id) === "locked")
   const { linkFor } = flow
   return (
-    <nav aria-label={label ?? m.stepflow_steps()} data-chrome data-step-strip="" className="shrink-0 border-b border-separator bg-background px-3">
-      <ol className="flex flex-wrap items-stretch">
+    <nav aria-label={label ?? m.stepflow_steps()} data-chrome data-step-strip="" className="shrink-0 border-b border-separator bg-background px-3 py-1">
+      <ol className="flex flex-wrap items-center gap-1">
         {flow.steps.map((step) => {
           const isCurrent = step.id === flow.current
           const isViewed = step.id === viewing
@@ -220,7 +223,7 @@ export function StepStrip({ flow, viewing = flow.current, onSelect, label }: Ste
             "aria-describedby": stepAccess(flow, step.id) === "locked" ? lockedId : undefined,
             "data-step": step.id,
             "data-state": step.state,
-            className: cn(ITEM, isViewed ? "border-primary text-foreground" : "border-transparent text-muted-foreground", (onSelect || linkFor) && !isViewed && "hover:text-foreground"),
+            className: cn(ITEM, isViewed ? "bg-accent text-accent-foreground" : "text-muted-foreground", (onSelect || linkFor) && !isViewed && "hover:text-foreground"),
           }
           // The name is the label, then the state, as text: it reads the same on a link, a button and plain text.
           const content: ReactNode = (
@@ -285,14 +288,17 @@ export interface StepFooterProps {
   flow: StepFlow
   /** The step on screen (the route's `$step`). Default: the flow's current step. */
   viewing?: string
+  /** The step body's status line, leading the footer (StepPage `fill`: the review Workspace's), so the page keeps one footer. */
+  status?: ReactNode
 }
 
 /**
  * The step pane's footer. It is one row at the same height on every step, so
  * nothing moves when you change steps or a gate clears. The summary truncates
- * before the actions give way.
+ * before the actions give way; it is left out while the gate's refusal beside
+ * Proceed already says the same.
  */
-export function StepFooter({ flow, viewing = flow.current }: StepFooterProps) {
+export function StepFooter({ flow, viewing = flow.current, status }: StepFooterProps) {
   const m = useMessages()
   const root = useRef<HTMLElement>(null)
   const summary = useRef<HTMLParagraphElement>(null)
@@ -364,8 +370,9 @@ export function StepFooter({ flow, viewing = flow.current }: StepFooterProps) {
         if (event.relatedTarget !== null && !event.currentTarget.contains(event.relatedTarget)) hadFocus.current = false
       }}
     >
+      {status}
       <p ref={summary} tabIndex={-1} className="min-w-0 flex-1 truncate text-xs text-muted-foreground outline-none" data-step-summary="">
-        {step?.summary}
+        {access === "current" && proceed && !runner.feedback && current?.gate?.reason === step?.summary ? null : step?.summary}
       </p>
       <div className="flex shrink-0 items-center gap-2">{actions}</div>
       {runner.dialog}

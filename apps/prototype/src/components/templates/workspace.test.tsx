@@ -124,3 +124,49 @@ describe("Workspace overlay inspector", () => {
     expect(opener).toHaveFocus()
   })
 })
+
+describe("Workspace status line", () => {
+  it("is a named group, not a footer landmark", () => {
+    renderWorkspace({ status: ["20 shown"] })
+    expect(screen.getByRole("group", { name: "Review status" })).toHaveTextContent("20 shown")
+    expect(screen.queryByRole("contentinfo")).not.toBeInTheDocument()
+  })
+})
+
+function DockedHost() {
+  const [open, setOpen] = useState(true)
+  const aside: WorkspaceAside = { label: "Frame inspector", title: "Light_0001.fits", closeLabel: "Close the inspector", onClose: () => setOpen(false), children: <p>Metrics</p> }
+  return (
+    <Workspace
+      label="Frames to review"
+      toolbar={{}}
+      list={
+        <table>
+          <tbody>
+            <tr tabIndex={0} aria-label="Light_0001.fits">
+              <td>Light_0001.fits</td>
+            </tr>
+          </tbody>
+        </table>
+      }
+      listHeight="strip"
+      rowsPx={px(8)}
+      onRowsPx={() => {}}
+      stage={[]}
+      status={[]}
+      statusLabel="Review status"
+      asideOverlay={false}
+      aside={() => (open ? aside : null)}
+    />
+  )
+}
+
+describe("Workspace docked inspector", () => {
+  it("hands focus to the list's current row when its Close goes with it", async () => {
+    const user = userEvent.setup()
+    render(<DockedHost />)
+    await user.click(screen.getByRole("button", { name: "Close the inspector" }))
+    expect(screen.queryByRole("complementary", { name: "Frame inspector" })).not.toBeInTheDocument()
+    expect(screen.getByRole("row", { name: "Light_0001.fits" })).toHaveFocus()
+  })
+})

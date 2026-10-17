@@ -19,17 +19,21 @@
  *   the stage; below, it opens over the stage as a dialog that holds focus
  *   and closes on Escape, handing focus back to where it came from. The host
  *   gets the mode, so it can keep separate open states for the two.
- * - Status: one line of items at the bottom (counts, progress, notes).
+ * - Status: one line of items at the bottom (counts, progress, notes), a
+ *   named group. Inside a StepPage `fill` region it joins the step footer,
+ *   so the page keeps one footer.
  * - Fullscreen: the stage alone over the whole window, under a bar of its
  *   own; Escape leaves it.
  */
 import { X } from "lucide-react"
 import { type CSSProperties, type KeyboardEvent, type ReactNode, type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import { useMessages } from "@/app/preferences"
 import { IconButton } from "@/components/app/actions"
 import { titleWhenCut } from "@/components/app/cut-title"
 import { useSize } from "@/lib/use-size"
 import { cn } from "@/lib/utils"
+import { useStepFooterSlot } from "./step-page"
 
 export type WorkspaceListHeight = "strip" | "rows" | "full"
 
@@ -106,6 +110,11 @@ function tableRowPx(element: HTMLElement | null): number {
 /** The list's px for `rows` shown plus its header row. */
 const pxOfRows = (rows: number, rowPx: number) => Math.round((rows + 1) * rowPx)
 const rowsOfPx = (px: number, rowPx: number) => Math.max(0, Math.round(px / rowPx) - 1)
+
+/** The list's current row: its one Tab stop (P-KBD1), else the open row. */
+function currentRow(root: HTMLElement | null): HTMLElement | null {
+  return root?.querySelector<HTMLElement>("[data-workspace-list] tr[tabindex='0']") ?? root?.querySelector<HTMLElement>("[data-workspace-list] [aria-current]") ?? null
+}
 
 /**
  * Holds Tab inside `ref` while `active`, focuses its first control on open, runs `onEscape` on Escape, and hands
@@ -290,6 +299,26 @@ export function Workspace({ label, toolbar, list, listHeight, rowsPx, onRowsPx, 
   const maxPx = Math.max(minPx, bodySize.height > 0 ? bodySize.height - WORKSPACE_STAGE_MIN_PX : pxOfRows(40, rowPx))
   const listPx = Math.round(Math.min(maxPx, Math.max(minPx, rowsPx)))
   const showStage = listHeight !== "full"
+  const docked = shownAside !== null && !overlay
+  // Closing the docked inspector takes the focused control with it: focus goes to the list's current row (WCAG 2.4.3).
+  const asideHadFocus = useRef(false)
+  useLayoutEffect(() => {
+    if (docked || !asideHadFocus.current) return
+    asideHadFocus.current = false
+    const active = document.activeElement
+    if (active === null || active === document.body) currentRow(rootRef.current)?.focus()
+  }, [docked, rootRef])
+  // Inside a StepPage `fill` region the status line joins the step footer, so the page keeps one footer.
+  const footerSlot = useStepFooterSlot()
+  const statusItems = status.map((item, index) =>
+    item === null || item === undefined || item === false ? null : (
+      // Items are the host's, in a fixed order: the slot index is their identity.
+      // biome-ignore lint/suspicious/noArrayIndexKey: fixed slots
+      <span key={index} className="flex min-w-0 items-center gap-1.5">
+        {item}
+      </span>
+    ),
+  )
   return (
     <section ref={rootRef} aria-label={label} data-template="workspace" className="flex min-h-0 min-w-0 flex-1 flex-col">
       <div data-chrome data-workspace-toolbar="" className="flex min-h-(--toolbar-h) shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-separator bg-chrome px-3 py-1">
@@ -309,24 +338,35 @@ export function Workspace({ label, toolbar, list, listHeight, rowsPx, onRowsPx, 
           {showStage && !fullscreen ? <Stage panes={stage} empty={stageEmpty} strip={strip} /> : null}
         </div>
         {shownAside && !overlay ? (
-          <aside aria-label={shownAside.label} data-workspace-aside="side" className="flex min-h-0 w-76 shrink-0 flex-col border-l border-separator bg-background">
+          <aside
+            aria-label={shownAside.label}
+            data-workspace-aside="side"
+            className="flex min-h-0 w-76 shrink-0 flex-col border-l border-separator bg-background"
+            onFocus={() => {
+              asideHadFocus.current = true
+            }}
+            onBlur={(event) => {
+              if (event.relatedTarget !== null && !event.currentTarget.contains(event.relatedTarget)) asideHadFocus.current = false
+            }}
+          >
             <AsideHeader aside={shownAside} />
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-2">{shownAside.children}</div>
           </aside>
         ) : null}
         {shownAside && overlay ? <OverlayAside aside={shownAside} /> : null}
       </div>
-      <footer aria-label={statusLabel} data-chrome data-workspace-status="" className="flex min-h-7 shrink-0 flex-wrap items-center gap-x-3 gap-y-0.5 border-t border-separator px-3 py-0.5 text-xs text-muted-foreground tabular-nums">
-        {status.map((item, index) =>
-          item === null || item === undefined || item === false ? null : (
-            // Items are the host's, in a fixed order: the slot index is their identity.
-            // biome-ignore lint/suspicious/noArrayIndexKey: fixed slots
-            <span key={index} className="flex min-w-0 items-center gap-1.5">
-              {item}
-            </span>
-          ),
-        )}
-      </footer>
+      {footerSlot ? (
+        createPortal(
+          <div role="group" aria-label={statusLabel} data-workspace-status="step-footer" className="flex min-w-0 items-center gap-x-3 overflow-hidden text-xs whitespace-nowrap text-muted-foreground tabular-nums">
+            {statusItems}
+          </div>,
+          footerSlot,
+        )
+      ) : (
+        <div role="group" aria-label={statusLabel} data-chrome data-workspace-status="" className="flex min-h-7 shrink-0 flex-wrap items-center gap-x-3 gap-y-0.5 border-t border-separator px-3 py-0.5 text-xs text-muted-foreground tabular-nums">
+          {statusItems}
+        </div>
+      )}
       {fullscreen ? <Fullscreen fullscreen={fullscreen} panes={stage} empty={stageEmpty} /> : null}
     </section>
   )

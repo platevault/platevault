@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest"
 import type { StepFlow } from "@/components/app/contracts"
 import { m } from "@/lib/i18n"
 import { StepPage, type StepPageProps } from "./step-page"
+import { Workspace } from "./workspace"
 
 const FLOW: StepFlow = {
   steps: [
@@ -62,5 +63,19 @@ describe("StepPage", () => {
     expect(panel).toContainElement(page.querySelector<HTMLElement>("[data-step-footer]"))
     expect(panel).toContainElement(within(page).getByRole("navigation", { name: m.stepflow_steps() }))
     expect(panel).toContainElement(region)
+  })
+})
+
+describe("StepPage fill with a Workspace", () => {
+  it("takes the Workspace's status line into its footer, so the page keeps one footer", async () => {
+    vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} })
+    const { region, page } = await renderStep({
+      fill: true,
+      step: <Workspace label="Frames to review" toolbar={{}} list={null} listHeight="full" rowsPx={260} onRowsPx={() => {}} stage={[]} status={["20 shown"]} statusLabel="Review status" />,
+    })
+    const group = await within(page).findByRole("group", { name: "Review status" })
+    expect(group.closest("[data-step-footer]")).not.toBeNull()
+    expect(region.querySelector("[data-workspace-status]")).toBeNull()
+    vi.unstubAllGlobals()
   })
 })
