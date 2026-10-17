@@ -1302,10 +1302,14 @@ async fn slow_targets_ui_dock_pin_and_width_survive_a_real_restart() -> anyhow::
              {restored_width}px (±2px for borders), but measured {laid_out}px. A -1 here means \
              no side dock rendered at all, so the restored 'side' pin never reached the layout."
         );
+        let scratch_fail = std::env::var_os("PV_DEBUG_DOCK_PASS").is_none();
+        anyhow::ensure!(
+            !scratch_fail,
+            "[DEBUG-dock] scratch-only failure inside the after-restart phase"
+        );
         Ok(())
     })
     .await?;
 
-    app.shutdown().await?;
-    anyhow::bail!("[DEBUG-dock] scratch-only failure so nextest prints the timings above")
+    app.shutdown().await
 }
