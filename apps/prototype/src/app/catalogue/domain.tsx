@@ -28,7 +28,7 @@ import type { DiskFile, ObservingSite } from "@/domain/types"
 import { formatCount, formatDecimal } from "@/lib/format"
 import { detectedStars, linearHistogram, renderWindow, type StarField, starField } from "@/components/domain/raster"
 import { nightGrid } from "@/features/v5/e-targets-plan-settings/sky-tonight"
-import { positionSky, type SkyContext } from "@/features/v5/e-targets-plan-settings/targets-model"
+import { nightSky, type SkyContext } from "@/features/v5/e-targets-plan-settings/targets-model"
 import { useStore } from "@/store/core"
 import { ComponentSection, Specimen } from "./specimen"
 
@@ -182,7 +182,7 @@ function NightVisuals() {
     const midsummer = "2026-06-21"
     const north = skyContext(FAR_NORTH, midsummer, Date.parse(`${midsummer}T08:00:00Z`))
     const sky = (ctx: SkyContext, ra: number, dec: number) => {
-      const s = positionSky(ctx, `${ra}|${dec}`, ra, dec)
+      const s = nightSky(ctx, ra, dec)
       return s.status === "ok" ? s : null
     }
     return { here, north, high: sky(here, 10.68, 41.27), low: sky(here, 270.9, -24.38), polar: sky(north, 10.68, 41.27) }

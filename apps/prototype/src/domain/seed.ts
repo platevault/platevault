@@ -57,7 +57,7 @@ import { m, msg, verbatim } from "@/lib/i18n"
 import { calibrateSessions, confirmChoice, DEFAULT_MASTER_MAX_AGE_DAYS, noChoice } from "./calibration"
 import { adoptionDestination, CALIBRATION_STEP_NAME, processIdFor, processRef, stepRecord } from "./calibration-process"
 import { closeSnapshot, projectHref } from "./derive"
-import { DEFAULT_GROUP_KEYWORDS, DEFAULT_MATCHING, DEFAULT_MOON_AVOIDANCE, DEFAULT_MOON_CONSTRAINTS, unitCount } from "./labels"
+import { DEFAULT_GROUP_KEYWORDS, DEFAULT_MATCHING, DEFAULT_MOON_AVOIDANCE, unitCount } from "./labels"
 import { createFolder, fakeSha256, fileAt, fileKey, filesUnder, makeFile, type NewFile, writeFiles } from "./disk"
 import { capturedRigVersionId, confirmedEvidence, indexLocationsSync, stableHash } from "./indexing"
 import { simulateMeasurement } from "./measurement"
@@ -518,7 +518,6 @@ export function defaultSettings(): AppSettings {
     defaultSiteId: null,
     planningSiteId: null,
     defaultArchiveLocationId: null,
-    moonConstraints: structuredClone(DEFAULT_MOON_CONSTRAINTS),
     moonAvoidance: structuredClone(DEFAULT_MOON_AVOIDANCE),
     onboarding: { completedAt: null, deferredRoles: [] },
     lastProcessingParent: null,

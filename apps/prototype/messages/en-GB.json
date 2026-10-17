@@ -3614,7 +3614,6 @@
   "store_note_adds_rig": "Also adds the rig {rig} to {project}.",
   "store_label_default_archive_location": "Default archive location",
   "store_saved_default_archive": "Default archive: {name}",
-  "store_label_moon_constraint": "Moon constraint for {band}",
   "store_label_goal_template": "Goal template {name}",
   "store_saved_goal_template": "Goal template saved: {name}",
   "store_saved_goal_template_deleted": "Goal template deleted: {name}",

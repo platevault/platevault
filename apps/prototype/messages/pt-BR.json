@@ -3884,7 +3884,6 @@
   "store_note_adds_rig": "Também adiciona o setup {rig} a {project}.",
   "store_label_default_archive_location": "Local de arquivo padrão",
   "store_saved_default_archive": "Arquivo padrão: {name}",
-  "store_label_moon_constraint": "Restrição da Lua para {band}",
   "store_label_goal_template": "Modelo de metas {name}",
   "store_saved_goal_template": "Modelo de metas salvo: {name}",
   "store_saved_goal_template_deleted": "Modelo de metas excluído: {name}",
