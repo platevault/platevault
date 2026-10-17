@@ -171,7 +171,8 @@
       {
         "id": "J23",
         "blocking": [
-          "G2 (implementation qualification) Siril profile capability probes (D04) must exist before S8 can show verified evidence."
+          "G2 (implementation qualification) Siril profile capability probes (D04) must exist before S8 can show verified evidence.",
+          "G10 (product question) Owner must decide whether generic-app delivery needs per-tool consumption evidence and choose a route for corrected non-FITS inputs (D-W123)."
         ]
       },
       {
