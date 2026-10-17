@@ -1,7 +1,7 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 import { rawItems, stepRecord } from "@/domain/calibration-process"
 import { liveLightSessions, sessionReadiness } from "@/domain/derive"
-import { wrapUpFlowState, wrapUpStepLink } from "@/domain/project-view"
+import { wrapUpFlowState } from "@/domain/project-view"
 import { createSeed } from "@/domain/seed"
 import type { CalibrationProcess, Project } from "@/domain/types"
 import { m } from "@/lib/i18n"
@@ -48,7 +48,7 @@ describe("Wrap up as a flow (C3, F2, F4, F5)", () => {
   it("records a step with nothing left as Finished and moves on to the next one", async () => {
     expect(flow().current).toBe("trash")
     const trash = flow()
-    expect(trash.next).toEqual(wrapUpStepLink(M31, "archive"))
+    expect(trash.next).toEqual({ to: "/projects/$projectId", params: { projectId: M31 }, search: { stage: "wrap-up", step: "archive" } })
     expect(await trash.proceed!.run()).toEqual({ ok: true })
     expect(stepState("trash")).toBe("finished")
     expect(flow().current).toBe("archive")

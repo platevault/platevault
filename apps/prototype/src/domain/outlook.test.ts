@@ -1,7 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import { planningSite, type World } from "./derive"
 import { GRADE_RANK, goalHorizon, goalsTonight, type Horizon, nextGoodNight, nightOutlooks } from "./outlook"
-import { nightPlan } from "./planning"
 import { createSeed } from "./seed"
 import type { ObservingSite } from "./types"
 
@@ -55,11 +54,11 @@ describe("nightOutlooks: the calendar's nights", () => {
       // Best first: the subject with the most Img time on the night leads.
       for (let k = 1; k < n.suited.length; k += 1) expect(n.suited[k - 1]!.subject.minutes[i]!).toBeGreaterThanOrEqual(n.suited[k]!.subject.minutes[i]!)
       expect(n.moonLimited.every((g) => g.moonLimited?.[i] === true)).toBe(true)
-      expect(n.planned).toEqual(nightPlan(world.catalog, n.night))
       if (i + 1 < nights.length) expect(n.waxing).toBe(nights[i + 1]!.summary.moon.illuminationPct > n.summary.moon.illuminationPct)
     })
-    // The demo plan holds a Target tonight.
-    expect(nights[0]!.planned.length).toBeGreaterThan(0)
+    // The demo plans NGC 7000 and M 33 for tonight only.
+    expect(nights[0]!.planned.map((t) => t.name).sort()).toEqual(["M 33", "NGC 7000"])
+    expect(nights.slice(1).every((n) => n.planned.length === 0)).toBe(true)
   })
 })
 
