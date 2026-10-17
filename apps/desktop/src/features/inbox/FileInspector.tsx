@@ -5,7 +5,7 @@ import type { InboxFileMetadata_Serialize as InboxFileMetadata } from '@/binding
 import { renderValue } from '@/components';
 import { fieldApplicability } from '@/lib/field-applicability';
 import { m } from '@/lib/i18n';
-import { basename } from './inboxDetailHelpers';
+import { wireBasename } from './inboxDetailHelpers';
 
 /**
  * Compact inspector for per-file fields NOT already shown in the metadata table:
@@ -71,7 +71,7 @@ export function FileInspector({ file }: { file: InboxFileMetadata | null }) {
   return (
     <div className="pv-inbox-inspector" data-testid="file-inspector">
       <div className="pv-inbox-inspector__name" title={file.relativeFilePath}>
-        {basename(file.relativeFilePath)}
+        {wireBasename(file.relativeFilePath)}
       </div>
       <dl className="pv-inbox-inspector__dl">
         {rows.map((r) => (

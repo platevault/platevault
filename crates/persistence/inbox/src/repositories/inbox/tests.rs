@@ -1124,6 +1124,76 @@ async fn mark_file_override_stale_sets_flag_for_path_only() {
     assert_eq!(b.override_stale, 0, "unrelated file must be untouched");
 }
 
+/// bd astro-plan-3pvvc: `rekey_file_overrides_conn` moves every override of
+/// one file in a group to another path with its value, identity and flag. An
+/// override the target path already has for the same property is kept, and
+/// the moved file's one for that property goes. Other files and groups are
+/// untouched.
+#[tokio::test]
+async fn rekey_file_overrides_moves_a_files_overrides_and_keeps_existing_ones() {
+    let db = test_db().await;
+    let pool = db.pool();
+    for id in ["sg-rekey", "sg-other"] {
+        upsert_inbox_source_group(
+            pool,
+            &UpsertSourceGroup {
+                id,
+                root_id: "root-1",
+                relative_path: id,
+                content_signature: None,
+                format: Some("fits"),
+                lane: Some("move"),
+                file_count: 1,
+            },
+        )
+        .await
+        .unwrap();
+    }
+    let identity = (Some(4_194_304), Some("2025-10-10T22:00:00Z"));
+    for (group, path, key, value) in [
+        ("sg-rekey", "a/b.fits", "target", "M 42"),
+        ("sg-rekey", "a/b.fits", "gain", "100"),
+        ("sg-rekey", "a\\b.fits", "gain", "120"),
+        ("sg-rekey", "x.fits", "gain", "200"),
+        ("sg-other", "a/b.fits", "gain", "300"),
+    ] {
+        set_file_override(pool, group, path, key, value, identity.0, identity.1).await.unwrap();
+    }
+    mark_file_override_stale(pool, "sg-rekey", "a/b.fits").await.unwrap();
+
+    let mut conn = pool.acquire().await.unwrap();
+    assert_eq!(
+        list_file_override_paths_conn(&mut conn, "sg-rekey").await.unwrap(),
+        ["a/b.fits", "a\\b.fits", "x.fits"]
+    );
+    rekey_file_overrides_conn(&mut conn, "sg-rekey", "a/b.fits", "a\\b.fits").await.unwrap();
+    drop(conn);
+
+    let rows = |group: &'static str| async move {
+        list_file_overrides_for_group(pool, group)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|o| (o.relative_file_path, o.property_key, o.value, o.override_stale))
+            .collect::<Vec<_>>()
+    };
+    let row = |path: &str, key: &str, value: &str, stale: i64| {
+        (path.to_owned(), key.to_owned(), value.to_owned(), stale)
+    };
+    assert_eq!(
+        rows("sg-rekey").await,
+        [
+            row("a\\b.fits", "gain", "120", 0),
+            row("a\\b.fits", "target", "M 42", 1),
+            row("x.fits", "gain", "200", 0),
+        ]
+    );
+    assert_eq!(rows("sg-other").await, [row("a/b.fits", "gain", "300", 0)]);
+    let moved = list_file_overrides_for_group(pool, "sg-rekey").await.unwrap();
+    let target = moved.iter().find(|o| o.property_key == "target").unwrap();
+    assert_eq!((target.file_size_bytes, target.file_mtime.as_deref()), identity);
+}
+
 /// #1294: `list_evidence` must join the `target` override the same way it
 /// already joins filter/exposureS/binning/frameType — otherwise a target
 /// override (written by `cone_search::confirm`) is a write nobody reads
@@ -2149,4 +2219,400 @@ async fn list_and_stats_agree_when_stale_placeholder_has_evidence() {
         light.folder_count, 1,
         "stale placeholder must not inflate inbox_stats' per-type folder_count"
     );
+}
+
+/// Give `item_id` everything classify writes for one file: a classification,
+/// an evidence row, a file-metadata row and a breakdown row.
+async fn seed_classified_children(pool: &SqlitePool, item_id: &str, file: &str) {
+    upsert_classification(
+        pool,
+        &UpsertClassification {
+            inbox_item_id: item_id,
+            result: "classified",
+            frame_type: Some("light"),
+            content_signature: "sig",
+            unclassified_file_count: 0,
+        },
+    )
+    .await
+    .unwrap();
+    insert_evidence(
+        pool,
+        &InsertEvidence {
+            id: &format!("ev-{item_id}"),
+            inbox_item_id: item_id,
+            relative_file_path: file,
+            frame_type: Some("light"),
+            evidence_source: "imagetyp_header",
+            raw_value: Some("Light Frame"),
+            unclassified: false,
+            manual_override: None,
+            is_master: false,
+            master_detector: None,
+        },
+    )
+    .await
+    .unwrap();
+    upsert_inbox_file_metadata(
+        pool,
+        &UpsertFileMetadata {
+            inbox_item_id: item_id,
+            relative_file_path: file,
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    upsert_breakdown_row(pool, &format!("bd-{item_id}"), item_id, "light", 1, None, "[]")
+        .await
+        .unwrap();
+    update_inbox_item_state(pool, item_id, "classified").await.unwrap();
+}
+
+/// The rows an earlier scan and classify stored for backslash names, each with
+/// every child classify and `set_overrides` write.
+///
+/// Masters: `m-old` (`a/b.fits`) and `m-linked` (`p/q.fits`, linked to
+/// `plan-open`) are classified, `m-done` (`r/s.fits`) was applied.
+/// `set_overrides` gives each a source group at its own path. Folders: `c/d`
+/// has two classified sub-items, `e/f` a plan-linked sub-item beside a
+/// classified one, `j/k` only the scan's group. Every group has an override.
+async fn seed_old_rows(pool: &SqlitePool) {
+    let plan = persistence_plans::repositories::plans::InsertPlan {
+        id: "plan-open",
+        title: "Inbox confirm",
+        origin: "inbox",
+        origin_path: None,
+        plan_type: "split",
+        destructive_destination: "archive",
+        parent_plan_id: None,
+        total_bytes_required: 0,
+    };
+    persistence_plans::repositories::plans::insert_plan(pool, &plan).await.unwrap();
+
+    for (id, path) in [("m-old", "a/b.fits"), ("m-linked", "p/q.fits"), ("m-done", "r/s.fits")] {
+        insert_inbox_item(pool, &sample_item_at(id, path)).await.unwrap();
+        sqlx::query("UPDATE inbox_items SET is_master_item = 1 WHERE id = ?")
+            .bind(id)
+            .execute(pool)
+            .await
+            .unwrap();
+        seed_classified_children(pool, id, path).await;
+        set_overrides(pool, id, path, None, Some("Ha"), None, None).await.unwrap();
+    }
+    insert_plan_link(pool, "m-linked", "plan-open").await.unwrap();
+    update_inbox_item_state(pool, "m-done", "resolved").await.unwrap();
+
+    for (group, path) in [("g-cd", "c/d"), ("g-ef", "e/f"), ("g-jk", "j/k")] {
+        let row = UpsertSourceGroup {
+            id: group,
+            root_id: "root-1",
+            relative_path: path,
+            content_signature: None,
+            format: Some("fits"),
+            lane: Some("move"),
+            file_count: 2,
+        };
+        upsert_inbox_source_group(pool, &row).await.unwrap();
+        set_file_override(pool, group, &format!("{path}/x.fits"), "filter", "Ha", None, None)
+            .await
+            .unwrap();
+    }
+    for (id, group, path, key) in [
+        ("cd-light", "g-cd", "c/d", "type=light"),
+        ("cd-dark", "g-cd", "c/d", "type=dark"),
+        ("ef-light", "g-ef", "e/f", "type=light"),
+        ("ef-dark", "g-ef", "e/f", "type=dark"),
+    ] {
+        let sub = UpsertInboxSubItem {
+            id,
+            root_id: "root-1",
+            relative_path: path,
+            source_group_id: group,
+            group_key: key,
+            group_label: key,
+            frame_type: Some("light"),
+            content_signature: "sig",
+            file_count: 1,
+            lane: "fits",
+            needs_review: false,
+        };
+        upsert_inbox_sub_item(pool, &sub).await.unwrap();
+        seed_classified_children(pool, id, &format!("{path}/{id}.fits")).await;
+    }
+    insert_plan_link(pool, "ef-light", "plan-open").await.unwrap();
+    update_inbox_item_state(pool, "ef-light", "plan_open").await.unwrap();
+}
+
+/// bd astro-plan-3pvvc: the rows an earlier scan stored for a backslash name
+/// carry a classification, evidence, metadata, a breakdown, file overrides
+/// and, for a folder, sub-items. Deleting an unconfirmed row removes all of
+/// it through the foreign keys, without an error. A folder with one
+/// plan-linked sub-item, and a confirmed master, are kept whole.
+#[tokio::test]
+async fn deleting_unconfirmed_old_rows_removes_their_children_and_keeps_linked_folders() {
+    let db = test_db().await;
+    let pool = db.pool();
+    let count = |sql: &'static str| async move {
+        sqlx::query_scalar::<_, i64>(sql).fetch_one(pool).await.unwrap()
+    };
+    let ids = |sql: &'static str| async move {
+        sqlx::query_scalar::<_, String>(sql).fetch_all(pool).await.unwrap()
+    };
+    seed_old_rows(pool).await;
+    let mut conn = pool.acquire().await.unwrap();
+    for path in ["a/b.fits", "p/q.fits", "r/s.fits"] {
+        delete_unconfirmed_master_rows_conn(&mut conn, "root-1", path).await.unwrap();
+    }
+    for path in ["c/d", "e/f", "j/k"] {
+        delete_unconfirmed_folder_rows_conn(&mut conn, "root-1", path).await.unwrap();
+    }
+    drop(conn);
+
+    assert_eq!(
+        ids("SELECT id FROM inbox_items ORDER BY id").await,
+        ["ef-dark", "ef-light", "m-done", "m-linked"],
+        "the unconfirmed master and folder go; a plan-linked folder keeps every sub-item"
+    );
+    assert_eq!(
+        ids("SELECT relative_path FROM inbox_source_groups ORDER BY relative_path").await,
+        ["e/f", "p/q.fits", "r/s.fits"],
+        "a deleted row's source group goes with it, the kept rows' groups stay"
+    );
+    assert_eq!(
+        ids("SELECT DISTINCT g.relative_path FROM inbox_file_overrides o \
+             JOIN inbox_source_groups g ON g.id = o.source_group_id ORDER BY 1")
+        .await,
+        ["e/f", "p/q.fits", "r/s.fits"],
+        "overrides follow their group"
+    );
+    assert_eq!(count("SELECT COUNT(*) FROM inbox_file_overrides").await, 3, "no override orphaned");
+    for (table, kept) in [
+        ("inbox_classifications", 4),
+        ("inbox_classification_evidence", 4),
+        ("inbox_file_metadata", 4),
+        ("inbox_classification_breakdown", 4),
+    ] {
+        // AssertSqlSafe: `table` comes from the fixed list above.
+        let rows: i64 =
+            sqlx::query_scalar(sqlx::AssertSqlSafe(format!("SELECT COUNT(*) FROM {table}")))
+                .fetch_one(pool)
+                .await
+                .unwrap();
+        assert_eq!(rows, kept, "{table}: only the kept items' rows are left");
+        let orphans: i64 = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+            "SELECT COUNT(*) FROM {table} WHERE inbox_item_id NOT IN (SELECT id FROM inbox_items)"
+        )))
+        .fetch_one(pool)
+        .await
+        .unwrap();
+        assert_eq!(orphans, 0, "{table}: no orphaned rows");
+    }
+    assert_eq!(count("SELECT COUNT(*) FROM inbox_plan_links").await, 2, "plan links stay");
+}
+
+/// bd astro-plan-3pvvc: an earlier scan stored the folder `g\h.fits` under
+/// the text `g/h.fits`, where a real master `g/h.fits` is stored too.
+/// Deleting the folder's rows at that path must keep the master row.
+/// - `g/h.fits`: the master was given overrides first, so `set_overrides`
+///   made its group at that path, and the folder's scan then wrote into that
+///   same group (the path is unique per root). The master is plan-linked.
+/// - `p/q.fits`: the folder's scan made the group; the master has none.
+///
+/// The folder's sub-items and its file overrides go. The master items, the
+/// master's group with its own override, its classification and its plan
+/// link stay; the folder-only group goes.
+#[tokio::test]
+async fn deleting_old_folder_rows_at_a_master_path_keeps_the_master() {
+    let db = test_db().await;
+    let pool = db.pool();
+    let ids = |sql: &'static str| async move {
+        sqlx::query_scalar::<_, String>(sql).fetch_all(pool).await.unwrap()
+    };
+    let plan = persistence_plans::repositories::plans::InsertPlan {
+        id: "plan-open",
+        title: "Inbox confirm",
+        origin: "inbox",
+        origin_path: None,
+        plan_type: "split",
+        destructive_destination: "archive",
+        parent_plan_id: None,
+        total_bytes_required: 0,
+    };
+    persistence_plans::repositories::plans::insert_plan(pool, &plan).await.unwrap();
+    for (id, path) in [("m-gh", "g/h.fits"), ("m-pq", "p/q.fits")] {
+        insert_inbox_item(pool, &sample_item_at(id, path)).await.unwrap();
+        sqlx::query("UPDATE inbox_items SET is_master_item = 1 WHERE id = ?")
+            .bind(id)
+            .execute(pool)
+            .await
+            .unwrap();
+        seed_classified_children(pool, id, path).await;
+    }
+    set_overrides(pool, "m-gh", "g/h.fits", None, Some("Ha"), None, None).await.unwrap();
+    insert_plan_link(pool, "m-gh", "plan-open").await.unwrap();
+    update_inbox_item_state(pool, "m-gh", "plan_open").await.unwrap();
+    let folder_group = UpsertSourceGroup {
+        id: "g-pq",
+        root_id: "root-1",
+        relative_path: "p/q.fits",
+        content_signature: None,
+        format: Some("fits"),
+        lane: Some("move"),
+        file_count: 1,
+    };
+    upsert_inbox_source_group(pool, &folder_group).await.unwrap();
+    for (id, group, path) in
+        [("gh-light", "sg-auto-m-gh", "g/h.fits"), ("pq-light", "g-pq", "p/q.fits")]
+    {
+        set_file_override(pool, group, &format!("{path}/x.fits"), "filter", "OIII", None, None)
+            .await
+            .unwrap();
+        let sub = UpsertInboxSubItem {
+            id,
+            root_id: "root-1",
+            relative_path: path,
+            source_group_id: group,
+            group_key: "type=light",
+            group_label: "light",
+            frame_type: Some("light"),
+            content_signature: "sig",
+            file_count: 1,
+            lane: "fits",
+            needs_review: false,
+        };
+        upsert_inbox_sub_item(pool, &sub).await.unwrap();
+        seed_classified_children(pool, id, &format!("{path}/x.fits")).await;
+    }
+
+    let mut conn = pool.acquire().await.unwrap();
+    for path in ["g/h.fits", "p/q.fits"] {
+        delete_unconfirmed_folder_rows_conn(&mut conn, "root-1", path).await.unwrap();
+    }
+    drop(conn);
+
+    assert_eq!(
+        ids("SELECT id FROM inbox_items ORDER BY id").await,
+        ["m-gh", "m-pq"],
+        "the folder's sub-items go; both masters stay"
+    );
+    assert_eq!(
+        ids("SELECT id FROM inbox_source_groups ORDER BY id").await,
+        ["sg-auto-m-gh"],
+        "the master's group stays; the folder-only group goes"
+    );
+    assert_eq!(
+        ids("SELECT relative_file_path || ' ' || property_key || '=' || value \
+             FROM inbox_file_overrides ORDER BY 1")
+        .await,
+        ["g/h.fits filter=Ha"],
+        "only the master's own override is left"
+    );
+    assert_eq!(
+        ids("SELECT inbox_item_id FROM inbox_classifications ORDER BY 1").await,
+        ["m-gh", "m-pq"]
+    );
+    assert_eq!(ids("SELECT inbox_item_id FROM inbox_plan_links").await, ["m-gh"]);
+}
+
+/// bd astro-plan-3pvvc: an earlier scan stored the master `a\b.fits` under
+/// `a/b.fits`, where a folder `a/b.fits` is now. The scan wrote the folder's
+/// group at that path; when the master had overrides, that is the master's
+/// `sg-auto-*` group, since a group is unique per root and path.
+/// - `a/b.fits`: unconfirmed master with an override, folder with one.
+/// - `p/q.fits`: plan-linked master with an override, folder with one.
+/// - `r/s.fits`: unconfirmed master without overrides; the folder's own group.
+///
+/// The unconfirmed masters go with their classification and their own
+/// overrides. Every group stays, with the folders' overrides; the plan-linked
+/// master is kept whole.
+#[tokio::test]
+async fn deleting_an_old_master_row_at_a_folder_keeps_the_folders_group() {
+    let db = test_db().await;
+    let pool = db.pool();
+    let ids = |sql: &'static str| async move {
+        sqlx::query_scalar::<_, String>(sql).fetch_all(pool).await.unwrap()
+    };
+    let plan = persistence_plans::repositories::plans::InsertPlan {
+        id: "plan-open",
+        title: "Inbox confirm",
+        origin: "inbox",
+        origin_path: None,
+        plan_type: "split",
+        destructive_destination: "archive",
+        parent_plan_id: None,
+        total_bytes_required: 0,
+    };
+    persistence_plans::repositories::plans::insert_plan(pool, &plan).await.unwrap();
+    for (id, path) in [("m-ab", "a/b.fits"), ("m-pq", "p/q.fits"), ("m-rs", "r/s.fits")] {
+        insert_inbox_item(pool, &sample_item_at(id, path)).await.unwrap();
+        sqlx::query("UPDATE inbox_items SET is_master_item = 1 WHERE id = ?")
+            .bind(id)
+            .execute(pool)
+            .await
+            .unwrap();
+        seed_classified_children(pool, id, path).await;
+    }
+    for (id, path) in [("m-ab", "a/b.fits"), ("m-pq", "p/q.fits")] {
+        set_overrides(pool, id, path, None, Some("Ha"), None, None).await.unwrap();
+    }
+    insert_plan_link(pool, "m-pq", "plan-open").await.unwrap();
+    update_inbox_item_state(pool, "m-pq", "plan_open").await.unwrap();
+    for (group, path) in [("g-ab", "a/b.fits"), ("g-pq", "p/q.fits"), ("g-rs", "r/s.fits")] {
+        let row = UpsertSourceGroup {
+            id: group,
+            root_id: "root-1",
+            relative_path: path,
+            content_signature: None,
+            format: Some("fits"),
+            lane: Some("move"),
+            file_count: 1,
+        };
+        upsert_inbox_source_group(pool, &row).await.unwrap();
+    }
+    let group_at = |path: &'static str| async move {
+        sqlx::query_scalar::<_, String>(
+            "SELECT id FROM inbox_source_groups WHERE root_id = 'root-1' AND relative_path = ?",
+        )
+        .bind(path)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+    };
+    for path in ["a/b.fits", "p/q.fits", "r/s.fits"] {
+        let group = group_at(path).await;
+        set_file_override(pool, &group, &format!("{path}/x.fits"), "filter", "OIII", None, None)
+            .await
+            .unwrap();
+    }
+
+    let mut conn = pool.acquire().await.unwrap();
+    for path in ["a/b.fits", "p/q.fits", "r/s.fits"] {
+        delete_unconfirmed_master_item_at_folder_conn(&mut conn, "root-1", path).await.unwrap();
+    }
+    drop(conn);
+
+    assert_eq!(
+        ids("SELECT id FROM inbox_items ORDER BY id").await,
+        ["m-pq"],
+        "the unconfirmed masters go; the plan-linked one stays"
+    );
+    assert_eq!(
+        ids("SELECT relative_path FROM inbox_source_groups ORDER BY 1").await,
+        ["a/b.fits", "p/q.fits", "r/s.fits"],
+        "every folder keeps its group"
+    );
+    assert_eq!(
+        ids("SELECT relative_file_path || ' ' || property_key || '=' || value \
+             FROM inbox_file_overrides ORDER BY 1")
+        .await,
+        [
+            "a/b.fits/x.fits filter=OIII",
+            "p/q.fits filter=Ha",
+            "p/q.fits/x.fits filter=OIII",
+            "r/s.fits/x.fits filter=OIII"
+        ],
+        "the deleted master's own override goes; the folders' and the kept master's stay"
+    );
+    assert_eq!(ids("SELECT inbox_item_id FROM inbox_classifications").await, ["m-pq"]);
 }

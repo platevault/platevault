@@ -192,10 +192,13 @@ fn map_frame_type(db_kind: &str) -> InventoryFrameType {
 }
 
 /// Parent folder of a root-relative frame path, or `None` when the frame sits
-/// directly at the root (no separator). Handles both `/` and `\` so a
-/// Windows-captured relative path resolves the same as a POSIX one.
+/// directly at the root (no separator). `/` separates on every platform. On
+/// Windows `\` does too, so a Windows-captured relative path resolves the same
+/// as a POSIX one; on macOS and Linux `\` is part of a name, so a frame named
+/// `a\b.fits` sits at the root (bd astro-plan-3pvvc).
 fn frame_folder(relative_path: &str) -> Option<String> {
-    let idx = relative_path.rfind(['/', '\\'])?;
+    let idx =
+        if cfg!(windows) { relative_path.rfind(['/', '\\']) } else { relative_path.rfind('/') }?;
     Some(relative_path[..idx].to_owned())
 }
 
@@ -752,8 +755,14 @@ mod tests {
     #[test]
     fn frame_folder_derives_parent_and_handles_root_level() {
         assert_eq!(frame_folder("a/b/c.fits").as_deref(), Some("a/b"));
-        assert_eq!(frame_folder("a\\b\\c.fits").as_deref(), Some("a\\b"));
         assert!(frame_folder("c.fits").is_none());
+        if cfg!(windows) {
+            assert_eq!(frame_folder("a\\b\\c.fits").as_deref(), Some("a\\b"));
+        } else {
+            // bd astro-plan-3pvvc: `\` is part of a macOS or Linux name.
+            assert_eq!(frame_folder("a/b\\c.fits").as_deref(), Some("a"));
+            assert!(frame_folder("a\\b.fits").is_none());
+        }
     }
 
     /// Documents the first-frame-folder heuristic: when a session's frames
@@ -771,15 +780,23 @@ mod tests {
         .execute(pool)
         .await
         .unwrap();
+        // A Windows-captured path on Windows; on macOS and Linux `\` is part of
+        // a name, so the same folders are written with `/` there.
+        let (first, first_folder) = if cfg!(windows) {
+            ("night1\\M 42\\light_001.fits", "night1\\M 42")
+        } else {
+            ("night1/M 42/light_001.fits", "night1/M 42")
+        };
         sqlx::query(
             "INSERT INTO file_record \
                 (id, root_id, relative_path, size_bytes, mtime, state, first_seen_at, last_seen_at) \
              VALUES \
-                ('mf1', 'root-mf', 'night1\\M 42\\light_001.fits', 100, '2026-07-14T00:00:00Z', \
+                ('mf1', 'root-mf', ?, 100, '2026-07-14T00:00:00Z', \
                  'observed', '2026-07-14T00:00:00Z', '2026-07-14T00:00:00Z'), \
                 ('mf2', 'root-mf', 'night2/M 42/light_002.fits', 100, '2026-07-14T00:00:00Z', \
                  'observed', '2026-07-14T00:00:00Z', '2026-07-14T00:00:00Z')",
         )
+        .bind(first)
         .execute(pool)
         .await
         .unwrap();
@@ -794,8 +811,8 @@ mod tests {
 
         let sources = list(pool, None).await.unwrap();
         let session = &sources[0].sessions[0];
-        // First frame wins (mf1, a Windows-style path) — mf2's folder is ignored.
-        assert_eq!(session.relative_path.as_deref(), Some("night1\\M 42"));
+        // First frame wins (mf1) — mf2's folder is ignored.
+        assert_eq!(session.relative_path.as_deref(), Some(first_folder));
     }
 
     // ── update_session_notes (#773) ───────────────────────────────────────────

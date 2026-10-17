@@ -299,6 +299,49 @@ async fn generate_creates_plan_with_items() {
     assert_eq!(plan.total_bytes_required, 3000);
 }
 
+/// On Unix, a backslash is part of a native file name, not a path separator.
+#[cfg(unix)]
+#[tokio::test]
+async fn generate_keeps_backslash_in_native_artifact_name() {
+    let (db, _bus, _lock) = setup().await;
+    seed_project(&db, "p-backslash").await;
+    seed_artifact(
+        &db,
+        "a-backslash",
+        "p-backslash",
+        "calibrated/light\\one.xisf",
+        "intermediate",
+        1000,
+    )
+    .await;
+    set_policy(
+        db.pool(),
+        &CleanupPolicy {
+            entries: vec![CleanupPolicyEntry {
+                data_type: "intermediate".to_owned(),
+                action: CleanupAction::Archive,
+            }],
+            auto_on_completion: false,
+        },
+    )
+    .await
+    .unwrap();
+
+    let title = "Cleanup: light\\one.xisf";
+    let resp = generate(db.pool(), "p-backslash", Some(title), None).await.unwrap();
+    let plan = plans_repo::get_plan(db.pool(), &resp.plan_id, false).await.unwrap();
+    assert_eq!(plan.title, title);
+    let items = plans_repo::list_plan_items(db.pool(), &resp.plan_id).await.unwrap();
+    assert_eq!(items[0].name, "light\\one.xisf");
+}
+
+#[cfg(windows)]
+#[test]
+fn file_name_uses_windows_separators() {
+    assert_eq!(super::file_name(r"calibrated\light.xisf"), "light.xisf");
+    assert_eq!(super::file_name("calibrated/light.xisf"), "light.xisf");
+}
+
 #[tokio::test]
 async fn generate_delete_items_require_no_destination_bytes() {
     // Delete-action items are removed, not archived, so they contribute
@@ -746,6 +789,37 @@ async fn generate_raw_frame_plan_skips_missing_selected_frames() {
     .unwrap();
 
     assert_eq!(resp.item_count, 1, "the missing frame must not become a plan item (FR-022)");
+}
+
+/// bd astro-plan-3pvvc: on macOS and Linux a `\` in a frame's stored path is
+/// part of its file name, so the plan item names the whole file.
+#[cfg(unix)]
+#[tokio::test]
+async fn raw_frame_plan_item_keeps_a_backslash_in_the_file_name() {
+    use app_core_targets::frame_writer::upsert_frame_record;
+
+    let (db, _bus, _lock) = setup().await;
+    insert_root(db.pool(), "root-1", "/tmp/lib").await;
+    let frame =
+        upsert_frame_record(db.pool(), "root-1", "lights/a\\b.fits", 1000, "t0", "classified")
+            .await
+            .unwrap();
+    insert_acquisition_session(db.pool(), "sess-1", &[&frame]).await;
+
+    let resp = generate_raw_frame_plan(
+        db.pool(),
+        &RawFrameCleanupGenerateRequest {
+            selected_frame_ids: vec![frame],
+            title: None,
+            destructive_destination: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let items = plans_repo::list_plan_items(db.pool(), &resp.plan_id).await.unwrap();
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0].name, "a\\b.fits");
 }
 
 // ── Unreadable frame attribution refuses cleanup (astro-plan-l2s06) ──────────
