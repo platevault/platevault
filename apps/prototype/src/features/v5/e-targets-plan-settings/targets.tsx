@@ -248,7 +248,7 @@ export function TargetsPage() {
     sortValue: okSort("maxAlt"),
     cell: (v) => skyCell(v, (sky, c) => <AltitudeSpark night={c.grid} sky={sky} darkness={c.summary.darkness} minAltitudeDeg={c.criteria.minAltitudeDeg} timeZone={c.site.timeZone} />),
   }
-  const img: Column<RowView> = { id: "img", header: m.tonight_img_time(), align: "right", truncate: true, sortValue: okSort("img"), cell: (v) => skyCell(v, imgTimeText) }
+  const img: Column<RowView> = { id: "img", header: m.tonight_img_time(), align: "right", sortValue: okSort("img"), cell: (v) => skyCell(v, imgTimeText) }
   const filters: Column<RowView> = {
     id: "tonight",
     header: activeGood.length > 0 ? m.targets_filters_band({ band: activeGood.join(", ") }) : m.domain_suitable_filters(),
