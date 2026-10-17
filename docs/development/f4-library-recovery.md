@@ -83,10 +83,9 @@ The Apply command returns an `ApplyReport` when a build fails or is canceled. (`
 
 The shell returns command errors as `ErrorResponse` values with kind, identity, scope, retry action, and message. (`apps/desktop/src-tauri/src/commands/library.rs:32-51`; `crates/platevault-model/src/lib.rs:203-213,229-270`)
 
-When waits exist, Home's rule 2 creates `NextAction::WaitsOnUser`. (`crates/platevault-core/src/home.rs:267-301`; `crates/platevault-model/src/home.rs:70-91`)
-
-Its waits include calibration-blocked suggestions, the latest failed or canceled Apply, and pending files in `View (previous)/`. (`crates/platevault-core/src/home.rs:303-332`)
+After reviewing the new frames, if rule 2 has waits, Home returns `NextAction::WaitsOnUser`. (`crates/platevault-core/src/home.rs:267-280`; `crates/platevault-model/src/home.rs:70-91`)
+The waits include calibration-blocked suggestions, the latest failed or canceled Apply, and pending files in `View (previous)/`. (`crates/platevault-core/src/home.rs:303-332`)
 
 The first wait selects Sessions or View. (`crates/platevault-model/src/home.rs:44-66`)
 
-The rebuilt shell registers Home and Project Apply commands. Their modules expose `home_dashboard` and `project_apply`. The desktop frontend is not documented here as rendering the F4 Project/Home surfaces. (`apps/desktop/src-tauri/src/library_shell.rs:54-250`; `apps/desktop/src-tauri/src/commands/home.rs:19-34`; `apps/desktop/src-tauri/src/commands/project_apply.rs:24-55`)
+The rebuilt shell registers Home and Project Apply handlers. The command modules do not establish that any frontend consumes or renders these F4 surfaces. (`apps/desktop/src-tauri/src/library_shell.rs:54-250`; `apps/desktop/src-tauri/src/commands/home.rs:4-8`; `apps/desktop/src-tauri/src/commands/project_apply.rs:4-12`)
