@@ -8,7 +8,7 @@
 //! release was made as `update:offer` events
 //! (`crate::updater::UPDATE_OFFER_EVENT`, astro-plan-c72oo).
 
-use std::sync::Arc;
+use desktop_services::locale::ActiveLocale;
 
 use contracts_core::updates::{UpdateOffer, UpdateStatus};
 use contracts_core::ContractError;
@@ -118,9 +118,32 @@ pub async fn update_install_on_quit(app: AppHandle) -> Result<(), ContractError>
 #[tauri::command]
 #[specta::specta]
 #[allow(clippy::needless_pass_by_value)] // Tauri injects arguments by value
-pub fn update_set_locale(app: AppHandle, locale: String) -> Result<(), ContractError> {
-    if let Some(services) = app.try_state::<Arc<desktop_services::Services>>() {
-        services.active_locale().set_locale(&locale);
-    }
+pub fn update_set_locale(app: AppHandle, locale_tag: String) -> Result<(), ContractError> {
+    set_active_locale(app.try_state::<ActiveLocale>().as_deref(), &locale_tag);
     Ok(())
+}
+
+fn set_active_locale(locale: Option<&ActiveLocale>, locale_tag: &str) {
+    if let Some(locale) = locale {
+        locale.set_locale(locale_tag);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::set_active_locale;
+    use desktop_services::locale::ActiveLocale;
+
+    fn update_locale(locale: Option<&ActiveLocale>, tag: &str) {
+        set_active_locale(locale, tag);
+    }
+
+    #[test]
+    fn update_locale_command_seam_changes_the_managed_locale() {
+        let locale = ActiveLocale::new();
+        update_locale(Some(&locale), "pt-BR");
+        assert_eq!(locale.get().tag, "pt-BR");
+        update_locale(Some(&locale), "de-DE");
+        assert_eq!(locale.get().tag, "en-GB");
+    }
 }

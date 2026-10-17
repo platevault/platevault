@@ -9,7 +9,10 @@
 //! [`ShippedLocale::messages`] and fills their `{name}` placeholders with
 //! [`fill`].
 
+use std::sync::{Arc, OnceLock, RwLock};
+
 use serde::de::DeserializeOwned;
+use serde::Deserialize;
 
 /// A shipped locale and its embedded catalogue.
 #[derive(Debug)]
@@ -47,7 +50,7 @@ pub fn shipped_or_base(tag: &str) -> &'static ShippedLocale {
 
 /// The single locale selected for text the backend displays outside the webview.
 #[derive(Clone, Debug)]
-pub struct ActiveLocale(std::sync::Arc<std::sync::RwLock<&'static ShippedLocale>>);
+pub struct ActiveLocale(Arc<RwLock<&'static ShippedLocale>>);
 
 impl Default for ActiveLocale {
     fn default() -> Self {
@@ -59,14 +62,12 @@ impl ActiveLocale {
     /// Start with the base locale used by the webview when no locale is known.
     #[must_use]
     pub fn new() -> Self {
-        Self(std::sync::Arc::new(std::sync::RwLock::new(base())))
+        Self(Arc::new(RwLock::new(base())))
     }
 
     /// Select the shipped locale named by `tag`, falling back to the base.
-    pub fn set_locale(&self, tag: &str) -> &'static ShippedLocale {
-        let locale = shipped_or_base(tag);
-        *self.0.write().unwrap_or_else(std::sync::PoisonError::into_inner) = locale;
-        locale
+    pub fn set_locale(&self, tag: &str) {
+        *self.0.write().unwrap_or_else(std::sync::PoisonError::into_inner) = shipped_or_base(tag);
     }
 
     /// Read the currently selected locale.
@@ -75,6 +76,54 @@ impl ActiveLocale {
         *self.0.read().unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 }
+
+/// Parsed strings shared between notifications and the updater.
+pub struct NotificationMessages {
+    #[serde(rename = "notification_target_resolution_title")]
+    pub target_resolution_title: String,
+    #[serde(rename = "notification_target_resolution_body")]
+    pub target_resolution_body: String,
+    #[serde(rename = "notification_plan_apply_title")]
+    pub plan_apply_title: String,
+    #[serde(rename = "notification_plan_applied_body")]
+    pub plan_state_applied: String,
+    #[serde(rename = "notification_plan_partially_applied_body")]
+    pub plan_state_partially_applied: String,
+    #[serde(rename = "notification_plan_failed_body")]
+    pub plan_state_failed: String,
+    #[serde(rename = "notification_plan_cancelled_body")]
+    pub plan_state_cancelled: String,
+    #[serde(rename = "notification_workflow_run_title")]
+    pub workflow_run_title: String,
+    #[serde(rename = "notification_workflow_run_body")]
+    pub workflow_run_body: String,
+    #[serde(rename = "update_admin_prompt")]
+    pub update_admin_prompt: String,
+    #[serde(rename = "update_notification_install_failed_title")]
+    pub install_failed_title: String,
+    #[serde(rename = "settings_advanced_updates_installfailed")]
+    pub install_failed: String,
+    #[serde(rename = "update_error_previous_app_not_restored")]
+    pub previous_app_not_restored: String,
+}
+
+static EN_GB_NOTIFICATION_MESSAGES: OnceLock<NotificationMessages> = OnceLock::new();
+static PT_BR_NOTIFICATION_MESSAGES: OnceLock<NotificationMessages> = OnceLock::new();
+/// Return parsed notification and updater messages, initializing each shipped cache once.
+#[must_use]
+pub fn notification_messages(locale: &'static ShippedLocale) -> &'static NotificationMessages {
+    let cache = match locale.tag {
+        "en-GB" => &EN_GB_NOTIFICATION_MESSAGES,
+        "pt-BR" => &PT_BR_NOTIFICATION_MESSAGES,
+        _ => unreachable!("shipped_or_base returns a shipped locale"),
+    };
+    cache.get_or_init(|| {
+        locale
+            .messages::<NotificationMessages>()
+            .expect("shipped notification catalogue is complete")
+    })
+}
+
 impl ShippedLocale {
     /// The messages `T` names from this locale's catalogue: `T` is a struct
     /// whose fields carry `#[serde(rename = "<message key>")]`. Every other

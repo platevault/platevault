@@ -412,6 +412,7 @@ pub fn run_app(
     let exit_data_dir = data_dir.clone();
     let services = Arc::new(services);
     let boot_services = Arc::clone(&services);
+    app.manage(services.active_locale().clone());
     std::thread::spawn(move || runtime.block_on(boot(handle, db_url, data_dir, boot_services)));
 
     // astro-plan-5wcib: the services-crate updater. A staged "Install on quit"
@@ -606,9 +607,9 @@ async fn boot(
             None
         });
     let saved_locale_tag = saved_locale.as_ref().and_then(serde_json::Value::as_str);
-    services
-        .active_locale()
-        .set_locale(saved_locale_tag.unwrap_or_else(|| desktop_services::locale::base().tag));
+    if let Some(locale_tag) = saved_locale_tag {
+        services.active_locale().set_locale(locale_tag);
+    }
     install_native_menu(&app, saved_locale_tag);
 
     // kyo7.28: back up the database before applying migrations to an existing,

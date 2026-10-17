@@ -43,8 +43,6 @@ pub mod offer;
 mod signature;
 #[cfg(test)]
 mod tests;
-mod wording;
-
 use std::fmt;
 use std::future::Future;
 use std::io;
@@ -62,9 +60,9 @@ use self::http::{Http, Source};
 use self::install::{InstallMode, Installed, Installer, OsInstaller};
 use self::manifest::Release;
 use self::signature::{Staged, TrustedKey};
-use self::wording::{Notice, Wording};
 use crate::channels::Latest;
 use crate::locale::{ActiveLocale, ShippedLocale};
+use crate::notifications::{Notice, Wording};
 
 /// The longest an install at quit may hold the quit. Long enough for the
 /// slowest legitimate case, a deb or rpm install waiting on its polkit
@@ -489,7 +487,7 @@ impl Updater {
     }
 
     fn wording(&self) -> Wording {
-        Wording::from_locale(self.inner.locale.get())
+        Wording::from_active(&self.inner.locale)
     }
 
     /// The status the UI should show now.

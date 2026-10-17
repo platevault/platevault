@@ -882,12 +882,9 @@ fn previous_app_not_restored() -> UpdateError {
 }
 
 fn kept_notice_en_gb() -> HostCall {
-    HostCall::Notify {
-        title: "Update not installed".to_owned(),
-        body: format!(
-            "Could not install update: the previous version couldn't be put back. It's saved at {KEPT}."
-        ),
-    }
+    let notice = crate::notifications::Wording::from_locale(crate::locale::base())
+        .previous_app_kept(std::path::Path::new(KEPT));
+    HostCall::Notify { title: notice.title, body: notice.body }
 }
 
 #[tokio::test]
