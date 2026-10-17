@@ -104,6 +104,10 @@ const PAGE_PROBE_TIMEOUT: Duration = Duration::from_secs(5);
 /// The page's answer when the close request left it.
 const CLOSE_REQUESTED: &str = "requested";
 
+/// The page's answer when it had no IPC bridge to send the close through —
+/// the one answer that proves no close was sent.
+const NO_BRIDGE: &str = "no window.__PV_E2E__ bridge to send the close through";
+
 /// How long [`E2eApp::wait_for_local_storage_on_disk`] waits for a value to
 /// reach WebView2's on-disk store after the app has exited.
 #[cfg(target_os = "windows")]
@@ -784,12 +788,6 @@ impl E2eApp {
         let ret =
             self.driver.execute(script, vec![]).await.context("bridge_ready script failed")?;
         ret.convert::<bool>().context("failed to deserialise bridge_ready result")
-    }
-
-    /// The tail of this instance's `tauri-webdriver` CLI stdout/stderr, which
-    /// carries the app's own console output too (see [`ProcLog`]).
-    pub fn cli_output(&self) -> String {
-        self.proc_log.dump()
     }
 
     /// Run one named phase of a journey; a failure names the phase and
@@ -1811,12 +1809,13 @@ impl E2eApp {
         let mut report = ShutdownReport {
             close_request,
             deadline: GRACEFUL_EXIT_DEADLINE,
+            watched: may_be_closing,
             exit_hook_after: None,
             process_gone_after: None,
             close_outcome: None,
             cli_output: String::new(),
         };
-        if may_be_closing {
+        if report.watched {
             let deadline = started + GRACEFUL_EXIT_DEADLINE;
             loop {
                 // Port first: the exit hook runs before the process ends, so a
@@ -1864,7 +1863,7 @@ impl E2eApp {
             r"
             var bridge = window.__PV_E2E__;
             if (!bridge || typeof bridge.invoke !== 'function') {{
-                return 'no window.__PV_E2E__ bridge to send the close through';
+                return '{NO_BRIDGE}';
             }}
             window.__pvE2eCloseOutcome = 'pending';
             setTimeout(function () {{
@@ -1879,8 +1878,8 @@ impl E2eApp {
         match tokio::time::timeout(PAGE_PROBE_TIMEOUT, self.driver.execute(&script, vec![])).await {
             Ok(Ok(ret)) => match ret.convert::<String>() {
                 Ok(answer) => {
-                    let sent = answer == CLOSE_REQUESTED;
-                    (answer, sent)
+                    let may_be_closing = answer != NO_BRIDGE;
+                    (answer, may_be_closing)
                 }
                 Err(e) => (format!("<undeserialisable close answer: {e}>"), true),
             },
@@ -1921,12 +1920,21 @@ impl E2eApp {
         let started = Instant::now();
         loop {
             let stores = local_storage_dirs(&profile);
-            if local_storage_on_disk_contains(&stores, fragment) {
+            let search = local_storage_on_disk_contains(&stores, fragment);
+            if search.found {
                 return Ok(started.elapsed());
             }
             if started.elapsed() >= LOCAL_STORAGE_FLUSH_TIMEOUT {
+                let verdict = if search.read_errors.is_empty() {
+                    "never reached".to_owned()
+                } else {
+                    format!(
+                        "could not be confirmed in (unreadable on the last poll: {})",
+                        search.read_errors.join("; ")
+                    )
+                };
                 anyhow::bail!(
-                    "{fragment} never reached WebView2's on-disk localStorage within \
+                    "{fragment} {verdict} WebView2's on-disk localStorage within \
                      {LOCAL_STORAGE_FLUSH_TIMEOUT:?}; stores under {}: {}",
                     profile.display(),
                     describe_stores(&stores)
@@ -1958,6 +1966,9 @@ pub struct ShutdownReport {
     /// The page's answer to the close request.
     close_request: String,
     deadline: Duration,
+    /// Whether the exit signals were watched at all: `false` only when the
+    /// page answered that it sent no close.
+    watched: bool,
     /// Close request to the exit hook's clean-shutdown marker.
     exit_hook_after: Option<Duration>,
     /// Close request to the app's WebDriver plugin port refusing connections.
@@ -1993,19 +2004,24 @@ impl fmt::Display for ShutdownReport {
                 self.deadline
             );
         }
-        let hook = self
-            .exit_hook_after
-            .map_or_else(|| "never seen".to_owned(), |t| format!("seen by {t:.1?}"));
-        let process = self.process_gone_after.map_or_else(
-            || format!("still serving its WebDriver port after {:?}, then killed", self.deadline),
-            |t| format!("gone by {t:.1?}"),
-        );
-        write!(
-            f,
-            "NO orderly exit: close request answered {:?}; exit hook (clean-shutdown marker) \
-             {hook}; app process {process}",
-            self.close_request
-        )?;
+        write!(f, "NO orderly exit: close request answered {:?}; ", self.close_request)?;
+        if self.watched {
+            let hook = self
+                .exit_hook_after
+                .map_or_else(|| "never seen".to_owned(), |t| format!("seen by {t:.1?}"));
+            let process = self.process_gone_after.map_or_else(
+                || {
+                    format!(
+                        "still serving its WebDriver port after {:?}, then killed",
+                        self.deadline
+                    )
+                },
+                |t| format!("gone by {t:.1?}"),
+            );
+            write!(f, "exit hook (clean-shutdown marker) {hook}; app process {process}")?;
+        } else {
+            write!(f, "exit not watched (close never sent); killed")?;
+        }
         if let Some(outcome) = &self.close_outcome {
             write!(f, "; close request outcome in the page: {outcome}")?;
         }

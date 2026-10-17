@@ -512,6 +512,15 @@ pub(super) fn local_storage_dirs(root: &Path) -> Vec<PathBuf> {
     stores
 }
 
+/// Outcome of [`local_storage_on_disk_contains`].
+pub(super) struct OnDiskSearch {
+    pub(super) found: bool,
+    /// Store directories or data files that could not be read, so a locked
+    /// or vanished file is reported as unreadable rather than taken for a
+    /// value that never reached disk.
+    pub(super) read_errors: Vec<String>,
+}
+
 /// Whether any of `stores` holds `fragment` inside a stored value.
 ///
 /// Chromium stores a `localStorage` value as a one-byte format tag followed
@@ -520,24 +529,39 @@ pub(super) fn local_storage_dirs(root: &Path) -> Vec<PathBuf> {
 /// block framing removed ([`leveldb_log_records`]); a fresh profile keeps its
 /// writes there until a later open compacts them into tables. Tables
 /// (`*.ldb`) are searched raw, which only finds values in uncompressed blocks.
-pub(super) fn local_storage_on_disk_contains(stores: &[PathBuf], fragment: &str) -> bool {
+pub(super) fn local_storage_on_disk_contains(stores: &[PathBuf], fragment: &str) -> OnDiskSearch {
     let latin1: Option<Vec<u8>> = fragment.chars().map(|c| u8::try_from(c).ok()).collect();
     let utf16: Vec<u8> = fragment.encode_utf16().flat_map(u16::to_le_bytes).collect();
     let needles: Vec<&[u8]> = latin1.iter().map(Vec::as_slice).chain([utf16.as_slice()]).collect();
-    stores
-        .iter()
-        .filter_map(|store| std::fs::read_dir(store).ok())
-        .flat_map(|entries| entries.flatten().map(|entry| entry.path()))
-        .filter_map(|path| {
-            let ext = path.extension()?.to_str()?;
-            let bytes = std::fs::read(&path).ok()?;
-            match ext {
-                "log" => Some(leveldb_log_records(&bytes)),
-                "ldb" => Some(bytes),
-                _ => None,
+    let mut read_errors = Vec::new();
+    for store in stores {
+        let entries = match std::fs::read_dir(store) {
+            Ok(entries) => entries,
+            Err(e) => {
+                read_errors.push(format!("{}: {e}", store.display()));
+                continue;
             }
-        })
-        .any(|data| needles.iter().any(|needle| contains(&data, needle)))
+        };
+        for path in entries.flatten().map(|entry| entry.path()) {
+            let is_log = match path.extension().and_then(|ext| ext.to_str()) {
+                Some("log") => true,
+                Some("ldb") => false,
+                _ => continue,
+            };
+            let bytes = match std::fs::read(&path) {
+                Ok(bytes) => bytes,
+                Err(e) => {
+                    read_errors.push(format!("{}: {e}", path.display()));
+                    continue;
+                }
+            };
+            let data = if is_log { leveldb_log_records(&bytes) } else { bytes };
+            if needles.iter().any(|needle| contains(&data, needle)) {
+                return OnDiskSearch { found: true, read_errors };
+            }
+        }
+    }
+    OnDiskSearch { found: false, read_errors }
 }
 
 /// The record payloads of a LevelDB write-ahead log with its block framing

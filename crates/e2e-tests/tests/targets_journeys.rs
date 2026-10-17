@@ -993,8 +993,10 @@ async fn targets_ui_identity_columns_stay_pinned_while_table_scrolls() -> anyhow
 
 /// Reads the app's REAL persisted `detailDock` entry for one dock, straight
 /// out of `localStorage` — the bytes, not a React value. Returns
-/// `(placement, width)`.
-async fn read_dock_pref(app: &E2eApp, dock_id: &str) -> anyhow::Result<(String, i64)> {
+/// `(placement, width)`, or `None` when no entry for `dock_id` is stored at
+/// all. Only that `None` says anything about persistence; an `Err` means the
+/// read itself failed or the entry is malformed.
+async fn read_dock_pref(app: &E2eApp, dock_id: &str) -> anyhow::Result<Option<(String, i64)>> {
     let script = format!(
         "var raw = localStorage.getItem('alm-preferences');\
          if (!raw) {{ return null; }}\
@@ -1008,7 +1010,9 @@ async fn read_dock_pref(app: &E2eApp, dock_id: &str) -> anyhow::Result<(String, 
         .context("failed to read the persisted detailDock preference")?
         .convert()
         .context("the detailDock preference did not deserialise")?;
-    anyhow::ensure!(!v.is_null(), "no persisted detailDock entry for {dock_id:?} at all");
+    if v.is_null() {
+        return Ok(None);
+    }
     let placement =
         v.get(0).and_then(Value::as_str).context("persisted placement was not a string")?;
     // Deliberately NOT `Number(dock.width)` on the JS side and NOT a lossy
@@ -1022,7 +1026,7 @@ async fn read_dock_pref(app: &E2eApp, dock_id: &str) -> anyhow::Result<(String, 
     let width = v.get(1).and_then(Value::as_i64).with_context(|| {
         format!("persisted width for {dock_id:?} was null or not a number: {v:?}")
     })?;
-    Ok((placement.to_string(), width))
+    Ok(Some((placement.to_string(), width)))
 }
 
 /// The rendered width of the side dock, as the browser actually lays it out.
@@ -1122,6 +1126,7 @@ async fn pin_and_widen_dock(app: &E2eApp) -> anyhow::Result<(String, i64)> {
 
     read_dock_pref(app, "targets")
         .await
+        .context("reading the dock preference before the restart failed")?
         .context("the dock preference was never written to localStorage before the restart")
 }
 
@@ -1195,7 +1200,7 @@ const DRAG_PX: i64 = 140;
 async fn slow_targets_ui_dock_pin_and_width_survive_a_real_restart() -> anyhow::Result<()> {
     const DEFAULT_WIDTH: i64 = 420;
 
-    let app = E2eApp::launch().await?;
+    let app = E2eApp::launch().await.context("phase failed: first launch")?;
     let (placement, width, fragment) = app
         .phase("before restart: pin, widen and persist the targets dock", async {
             app.wait_bridge_ready(Duration::from_secs(30)).await?;
@@ -1240,8 +1245,8 @@ async fn slow_targets_ui_dock_pin_and_width_survive_a_real_restart() -> anyhow::
         let flushed =
             E2eApp::wait_for_local_storage_on_disk(&fragment).await.with_context(|| {
                 format!(
-                    "phase failed: shutdown — the dock preference was written before the restart \
-                 but never reached disk ({shutdown})\n{}",
+                    "phase failed: shutdown — the dock preference was written before the \
+                     restart but was not confirmed on disk ({shutdown})\n{}",
                     shutdown.cli_output()
                 )
             })?;
@@ -1249,14 +1254,22 @@ async fn slow_targets_ui_dock_pin_and_width_survive_a_real_restart() -> anyhow::
     }
 
     // Cold start: new process, empty module cache, storage read from disk.
-    let app = E2eApp::relaunch().await?;
+    let app = E2eApp::relaunch().await.with_context(|| {
+        format!(
+            "phase failed: relaunch — the app did not come back up after the restart; \
+             shutdown: {shutdown}\n--- first launch ---\n{}",
+            shutdown.cli_output()
+        )
+    })?;
     app.phase("after restart: restore and lay out the targets dock", async {
         app.wait_bridge_ready(Duration::from_secs(30)).await?;
         complete_first_run(&app).await?;
         app.set_viewport(1400, 900).await?;
 
-        let (restored_placement, restored_width) =
-            read_dock_pref(&app, "targets").await.with_context(|| {
+        let (restored_placement, restored_width) = read_dock_pref(&app, "targets")
+            .await
+            .context("reading the dock preference after the restart failed")?
+            .with_context(|| {
                 format!(
                     "the dock preference was written before the restart ({fragment}) but lost \
                      across it; shutdown: {shutdown}\n--- first launch ---\n{}",
