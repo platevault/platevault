@@ -45,6 +45,18 @@ jiff = { version = "0.2.37", default-features = false, features = [
   "tzdb-bundle-always",
 ] }
 tempfile.workspace = true
+specta = { workspace = true, optional = true }
+schemars = { workspace = true, optional = true }
+
+[features]
+# IPC type derives on the types that cross the library-shell boundary. Off by
+# default; only contracts_core and desktop_shell enable it.
+wire = [
+  "dep:specta",
+  "dep:schemars",
+  "platevault_model/wire",
+  "persistence_library/wire",
+]
 
 [target.'cfg(windows)'.dependencies]
 winapi-util = "0.1.11"

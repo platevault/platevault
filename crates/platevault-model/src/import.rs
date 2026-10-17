@@ -22,6 +22,7 @@ use crate::{
 /// A source folder saved under a name, for Import new.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct SavedSource {
     pub id: Uuid,
     pub name: String,
@@ -35,6 +36,7 @@ pub struct SavedSource {
 /// A saved source with whether its folder can be read now.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct SavedSourceView {
     #[serde(flatten)]
     pub source: SavedSource,
@@ -45,6 +47,7 @@ pub struct SavedSourceView {
 /// What a preview reads: a saved source (Import new) or any mounted folder.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum ImportSourceSpec {
     Saved { id: Uuid },
     Folder { path: NativePath },
@@ -53,6 +56,7 @@ pub enum ImportSourceSpec {
 /// Copy keeps every source; Move sends each re-verified source to the OS Trash.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum ImportMode {
     Copy,
     Move,
@@ -60,6 +64,7 @@ pub enum ImportMode {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum ImportState {
     /// Previewed; nothing has been written.
     Previewed,
@@ -75,6 +80,7 @@ pub enum ImportState {
 /// Where an item stands, from the preview through execution.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum ImportItemPhase {
     /// Routed; starting the import approves it.
     Ready,
@@ -119,6 +125,7 @@ impl ImportItemPhase {
 /// What a skipped duplicate matches.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", rename_all_fields = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum ImportDuplicate {
     /// A frame already indexed in the library.
     IndexedFrame { asset_id: Uuid },
@@ -133,6 +140,7 @@ pub enum ImportDuplicate {
 /// Why a preview item is held.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", rename_all_fields = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum ImportBlock {
     /// No active location has the role; register one (LIB-FR-01).
     MissingRole { role: LocationRole },
@@ -157,6 +165,7 @@ pub enum ImportBlock {
 /// A light's confirmed rig, named in the preview.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ImportRig {
     pub equipment_id: Uuid,
     pub name: String,
@@ -166,6 +175,7 @@ pub struct ImportRig {
 /// "Add {value} to {rig}" prompt of PLAN-EQ-FR-04. It holds nothing back.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct UnknownFilter {
     pub equipment_id: Uuid,
     pub rig_name: String,
@@ -175,6 +185,7 @@ pub struct UnknownFilter {
 /// One source file of an import.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ImportItem {
     pub seq: u32,
     /// Absolute path of the source file.
@@ -296,6 +307,7 @@ pub struct ImportDraft {
 /// Whether a destination folder can take new files, checked without writing.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "state", rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum Writability {
     Writable,
     NotWritable {
@@ -312,6 +324,7 @@ pub enum Writability {
 /// One location an import may write to, with what the import puts there.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ImportDestination {
     pub role: LocationRole,
     pub location_id: Uuid,
@@ -330,6 +343,7 @@ pub struct ImportDestination {
 /// Exact per-item counts of an import (STO-IMP-FR-06).
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ImportSummary {
     pub ready: u64,
     /// Destinations that hold a verified copy.
@@ -356,6 +370,7 @@ pub struct ImportSummary {
 /// lights of one capture key split by framing, merged or re-split by the user.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ImportSession {
     pub key: CaptureKey,
     /// The items, in capture order; the first stands for the session in a
@@ -371,6 +386,7 @@ pub struct ImportSession {
     pub object: Option<String>,
     pub filter: Option<String>,
     pub exposure_seconds: Option<f64>,
+    #[cfg_attr(feature = "wire", specta(type = Option<String>), schemars(with = "Option<String>"))]
     #[serde(default, with = "crate::iso_date::option")]
     pub night: Option<Date>,
 }
@@ -379,6 +395,7 @@ pub struct ImportSession {
 /// progress and outcomes.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ImportOperation {
     pub id: Uuid,
     pub source_id: Option<Uuid>,

@@ -76,6 +76,7 @@ struct ScanControl {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct LibrarySession {
     pub detail: SessionDetail,
     pub target_assessments: Vec<TargetAssessment>,
@@ -91,6 +92,7 @@ pub struct LibrarySession {
 /// the next scan or correction retries it.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ConfirmedCorrection {
     #[serde(flatten)]
     pub outcome: CorrectionOutcome,

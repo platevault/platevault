@@ -30,6 +30,7 @@ time::serde::format_description!(iso_date, Date, "[year]-[month]-[day]");
 /// site.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct TonightQuery {
     #[serde(default, with = "iso_date::option")]
     pub night: Option<Date>,
@@ -39,6 +40,7 @@ pub struct TonightQuery {
 /// One Target's best window tonight, with why it is in My targets.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct TonightWindow {
     pub target_id: Uuid,
     pub designation: String,
@@ -56,6 +58,7 @@ pub struct TonightWindow {
 /// `unavailableReason` reads "Add an observing site in Settings".
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct Tonight {
     pub site: Option<SiteBasis>,
     pub time_zone: Option<String>,

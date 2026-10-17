@@ -41,6 +41,7 @@ fn spawn_run(library: &Arc<Library>, id: Uuid) {
 /// # Errors
 /// `PersistenceFailure` when the catalog cannot be read.
 #[tauri::command]
+#[specta::specta]
 pub async fn import_sources_list(library: State<'_, Arc<Library>>) -> Reply<Vec<SavedSourceView>> {
     library.import_sources().await.map_err(fail(None))
 }
@@ -51,6 +52,7 @@ pub async fn import_sources_list(library: State<'_, Arc<Library>>) -> Reply<Vec<
 /// `InvalidInput` for a blank name or a path that is not a readable folder;
 /// `Conflict` when the folder is already saved.
 #[tauri::command]
+#[specta::specta]
 pub async fn import_source_save(
     library: State<'_, Arc<Library>>,
     name: String,
@@ -65,6 +67,7 @@ pub async fn import_source_save(
 /// `NotFound` for an unknown saved source; `SourceUnavailable` while the folder
 /// is not mounted.
 #[tauri::command]
+#[specta::specta]
 pub async fn import_preview(
     library: State<'_, Arc<Library>>,
     source: ImportSourceSpec,
@@ -77,6 +80,7 @@ pub async fn import_preview(
 /// # Errors
 /// `Conflict` for a stale revision; `SourceUnavailable` while offline.
 #[tauri::command]
+#[specta::specta]
 pub async fn import_recheck(
     library: State<'_, Arc<Library>>,
     id: Uuid,
@@ -93,6 +97,7 @@ pub async fn import_recheck(
 /// # Errors
 /// `Conflict` for a stale revision; `NotFound` for an unknown item.
 #[tauri::command]
+#[specta::specta]
 pub async fn import_set_type(
     library: State<'_, Arc<Library>>,
     id: Uuid,
@@ -108,6 +113,7 @@ pub async fn import_set_type(
 /// # Errors
 /// `Conflict` for a stale revision; `NotFound` for an unknown item.
 #[tauri::command]
+#[specta::specta]
 pub async fn import_set_excluded(
     library: State<'_, Arc<Library>>,
     id: Uuid,
@@ -123,6 +129,7 @@ pub async fn import_set_excluded(
 /// # Errors
 /// `InvalidInput` for a location of another role or a retired one.
 #[tauri::command]
+#[specta::specta]
 pub async fn import_choose_location(
     library: State<'_, Arc<Library>>,
     id: Uuid,
@@ -143,6 +150,7 @@ pub async fn import_choose_location(
 /// `Conflict` when the preview changed since it was shown; `InvalidInput`
 /// when nothing is Ready or the import already started.
 #[tauri::command]
+#[specta::specta]
 pub async fn import_start(
     library: State<'_, Arc<Library>>,
     id: Uuid,
@@ -160,6 +168,7 @@ pub async fn import_start(
 /// # Errors
 /// `NotFound` for an unknown import.
 #[tauri::command]
+#[specta::specta]
 pub async fn import_retry(library: State<'_, Arc<Library>>, id: Uuid) -> Reply<ImportOperation> {
     let current = library.import_operation(id).await.map_err(fail(Some(id)))?;
     spawn_run(&library, id);
@@ -171,6 +180,7 @@ pub async fn import_retry(library: State<'_, Arc<Library>>, id: Uuid) -> Reply<I
 /// # Errors
 /// `NotFound` for an unknown import.
 #[tauri::command]
+#[specta::specta]
 pub async fn import_status(library: State<'_, Arc<Library>>, id: Uuid) -> Reply<ImportOperation> {
     library.import_operation(id).await.map_err(fail(Some(id)))
 }

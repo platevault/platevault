@@ -24,6 +24,7 @@ use crate::{
 /// Why Wrap up doesn't open, or one of its steps can't run now.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "blocker", rename_all = "snake_case", rename_all_fields = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum WrapUpBlocker {
     /// Closed, Closing or Archived: Wrap up is a read-only record.
     NotOpen { lifecycle: ProjectLifecycle },
@@ -37,6 +38,7 @@ pub enum WrapUpBlocker {
 /// is current.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct WrapUpStatus {
     pub project_id: Uuid,
     pub lifecycle: ProjectLifecycle,
@@ -218,6 +220,7 @@ pub struct TrashReport {
 /// One file an archive moves: from its path to the templated one.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ArchiveFile {
     pub asset_id: Uuid,
     pub from: NativePath,
@@ -241,6 +244,7 @@ pub struct ArchiveSessionOffer {
 /// the archive moves: it is repointed and recorded (D-W111).
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct KeptViewLink {
     pub project_id: Uuid,
     pub project: String,
@@ -269,6 +273,7 @@ pub struct ArchiveReview {
 /// What the confirmed archive moves.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ArchiveSelection {
     pub destination: Uuid,
     pub sessions: Vec<Uuid>,
@@ -279,6 +284,7 @@ pub struct ArchiveSelection {
 /// no archive, which is valid.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct CloseRequest {
     pub project_id: Uuid,
     pub desired_revision: Revision,
@@ -287,6 +293,7 @@ pub struct CloseRequest {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum ArchiveMoveOutcome {
     /// Copied, verified, every link repointed and the source retired.
     Archived,
@@ -302,6 +309,7 @@ pub enum ArchiveMoveOutcome {
 /// One file of a running or settled archive.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ArchiveMove {
     pub seq: u32,
     pub session_id: Uuid,
@@ -315,6 +323,7 @@ pub struct ArchiveMove {
 /// An archive's durable progress.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ArchiveProgress {
     /// The verified-transfer journal operation.
     pub storage_operation_id: Uuid,
@@ -327,6 +336,7 @@ pub struct ArchiveProgress {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct CloseReport {
     /// Closing while the archive runs or was interrupted, then Archived, or
     /// Closed when nothing was archived.
@@ -342,6 +352,7 @@ pub struct CloseReport {
 /// groups and overrides; nothing links back to the original.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct DuplicateRequest {
     pub project_id: Uuid,
     pub name: String,

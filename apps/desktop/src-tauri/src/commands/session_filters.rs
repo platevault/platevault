@@ -29,6 +29,7 @@ use super::library::{fail, Reply};
 /// # Errors
 /// `PersistenceFailure` when the catalog cannot be read.
 #[tauri::command]
+#[specta::specta]
 pub async fn library_session_filter_counts(
     library: State<'_, Arc<Library>>,
 ) -> Reply<SessionFilterCounts> {
@@ -42,6 +43,7 @@ pub async fn library_session_filter_counts(
 /// `NotFound` for an unknown session; `Conflict` for a superseded one;
 /// `InvalidInput` when it has no confirmed Target.
 #[tauri::command]
+#[specta::specta]
 pub async fn project_prefill_from_session(
     library: State<'_, Arc<Library>>,
     session_id: Uuid,
@@ -56,6 +58,7 @@ pub async fn project_prefill_from_session(
 /// `NotFound` for an unknown session or Project; `Conflict` for a superseded
 /// session; `InvalidInput` when it has no confirmed Target.
 #[tauri::command]
+#[specta::specta]
 pub async fn project_preview_session_addition(
     library: State<'_, Arc<Library>>,
     session_id: Uuid,
@@ -76,6 +79,7 @@ pub async fn project_preview_session_addition(
 /// for an unknown session or Project; `InvalidInput` when the session has no
 /// confirmed Target.
 #[tauri::command]
+#[specta::specta]
 pub async fn project_add_session(
     library: State<'_, Arc<Library>>,
     session: ExpectedSession,

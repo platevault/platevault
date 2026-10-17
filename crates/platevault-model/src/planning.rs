@@ -38,6 +38,7 @@ time::serde::format_description!(iso_date, Date, "[year]-[month]-[day]");
 /// the user chooses; it is never derived from the coordinates.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct SiteInput {
     pub name: String,
     pub latitude_deg: f64,
@@ -85,6 +86,7 @@ impl SiteInput {
 /// A saved site with its own decision revision, starting at 1.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ObservingSite {
     pub id: Uuid,
     pub name: String,
@@ -115,6 +117,7 @@ impl ObservingSite {
 /// The site a window set, review or calendar snapshot was computed for.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct SiteBasis {
     pub id: Uuid,
     pub name: String,
@@ -128,6 +131,7 @@ pub struct SiteBasis {
 /// catalog that never saved it reads no default at revision 0.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct PlanningSettings {
     pub default_site_id: Option<Uuid>,
     pub revision: Revision,
@@ -136,6 +140,7 @@ pub struct PlanningSettings {
 /// Every saved site with the default site and the settings revision.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct PlanningSites {
     pub sites: Vec<ObservingSite>,
     pub default_site_id: Option<Uuid>,
@@ -146,6 +151,7 @@ pub struct PlanningSites {
 /// `needs_reconfirmation` in the same transaction.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct SiteSaved {
     pub site: ObservingSite,
     pub needs_reconfirmation: Vec<Uuid>,
@@ -155,6 +161,7 @@ pub struct SiteSaved {
 /// to `needs_reconfirmation` in the same transaction.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct DefaultSiteSaved {
     pub settings: PlanningSettings,
     pub needs_reconfirmation: Vec<Uuid>,
@@ -164,6 +171,7 @@ pub struct DefaultSiteSaved {
 /// Planned at revision 0. Writing it never changes the Target record.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct TargetPlan {
     pub target_id: Uuid,
     pub planned: bool,
@@ -178,6 +186,7 @@ pub struct TargetPlan {
 /// How dark the sky must be: the Sun below -6, -12 or -18 degrees.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum Darkness {
     Civil,
     Nautical,
@@ -200,6 +209,7 @@ impl Darkness {
 /// least separation whenever the Moon is up.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", rename_all_fields = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum MoonCriterion {
     None,
     BelowHorizon,
@@ -209,6 +219,7 @@ pub enum MoonCriterion {
 /// Explicit astronomical criteria; every field is required and none defaults.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct PlanCriteria {
     /// Geometric target altitude above a flat horizon, without refraction.
     pub min_altitude_deg: f64,
@@ -255,9 +266,11 @@ impl PlanCriteria {
 /// planning site is a request parameter, never a stored record.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct WindowQuery {
     pub target_id: Uuid,
     pub site_id: Uuid,
+    #[cfg_attr(feature = "wire", specta(type = String), schemars(with = "String"))]
     #[serde(with = "iso_date")]
     pub first_night: Date,
     pub nights: u32,
@@ -286,6 +299,7 @@ impl WindowQuery {
 /// Repeat suppression and calendar UIDs both use it. Its text form is
 /// `<target>/<site>/<YYYY-MM-DDTHH:MMZ>`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct WindowKey {
     target_id: Uuid,
     site_id: Uuid,
@@ -380,18 +394,24 @@ impl<'de> Deserialize<'de> for WindowKey {
 /// Target's highest geometric altitude within the window.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ObservingWindow {
     pub key: WindowKey,
+    #[cfg_attr(feature = "wire", specta(type = String), schemars(with = "String"))]
     #[serde(with = "time::serde::rfc3339")]
     pub start_utc: OffsetDateTime,
+    #[cfg_attr(feature = "wire", specta(type = String), schemars(with = "String"))]
     #[serde(with = "time::serde::rfc3339")]
     pub end_utc: OffsetDateTime,
+    #[cfg_attr(feature = "wire", specta(type = String), schemars(with = "String"))]
     #[serde(with = "time::serde::rfc3339")]
     pub start_local: OffsetDateTime,
+    #[cfg_attr(feature = "wire", specta(type = String), schemars(with = "String"))]
     #[serde(with = "time::serde::rfc3339")]
     pub end_local: OffsetDateTime,
     pub time_zone: String,
     pub duration_minutes: u32,
+    #[cfg_attr(feature = "wire", specta(type = String), schemars(with = "String"))]
     #[serde(with = "iso_date")]
     pub night: Date,
     pub site_name: String,
@@ -401,6 +421,7 @@ pub struct ObservingWindow {
 /// Why a night has no window.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum NoWindowReason {
     NeverDark,
     TargetNeverAbove,
@@ -413,6 +434,7 @@ pub enum NoWindowReason {
 /// zero position.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum WindowUnavailableReason {
     TargetCoordinatesUnknown,
     UnsupportedCoordinateFrame,
@@ -422,7 +444,9 @@ pub enum WindowUnavailableReason {
 /// reason it has none.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct NightPlan {
+    #[cfg_attr(feature = "wire", specta(type = String), schemars(with = "String"))]
     #[serde(with = "iso_date")]
     pub night: Date,
     pub windows: Vec<ObservingWindow>,
@@ -432,6 +456,7 @@ pub struct NightPlan {
 /// What a window set was computed from.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct WindowBasis {
     pub target_id: Uuid,
     pub target_revision: Revision,
@@ -445,6 +470,7 @@ pub struct WindowBasis {
 /// Windows for one Target and site, one entry per night.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct WindowSet {
     pub basis: WindowBasis,
     pub nights: Vec<NightPlan>,
@@ -465,6 +491,7 @@ impl WindowSet {
 /// The Moon's phase in eight named sectors of 45 degrees of Sun-Moon elongation.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum MoonPhase {
     New,
     WaxingCrescent,
@@ -482,12 +509,15 @@ pub enum MoonPhase {
 /// cross that way between the night's local noons.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct NightMoon {
     /// Illuminated fraction of the disk, 0 to 1.
     pub illumination: f64,
     pub phase: MoonPhase,
+    #[cfg_attr(feature = "wire", specta(type = Option<String>), schemars(with = "Option<String>"))]
     #[serde(with = "time::serde::rfc3339::option")]
     pub rise_utc: Option<OffsetDateTime>,
+    #[cfg_attr(feature = "wire", specta(type = Option<String>), schemars(with = "Option<String>"))]
     #[serde(with = "time::serde::rfc3339::option")]
     pub set_utc: Option<OffsetDateTime>,
 }
@@ -496,13 +526,18 @@ pub struct NightMoon {
 /// boundary.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct DarknessWindow {
+    #[cfg_attr(feature = "wire", specta(type = String), schemars(with = "String"))]
     #[serde(with = "time::serde::rfc3339")]
     pub start_utc: OffsetDateTime,
+    #[cfg_attr(feature = "wire", specta(type = String), schemars(with = "String"))]
     #[serde(with = "time::serde::rfc3339")]
     pub end_utc: OffsetDateTime,
+    #[cfg_attr(feature = "wire", specta(type = String), schemars(with = "String"))]
     #[serde(with = "time::serde::rfc3339")]
     pub start_local: OffsetDateTime,
+    #[cfg_attr(feature = "wire", specta(type = String), schemars(with = "String"))]
     #[serde(with = "time::serde::rfc3339")]
     pub end_local: OffsetDateTime,
 }
@@ -530,6 +565,7 @@ pub struct NightSky {
 /// criteria and the lead time. The site is always the default site.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ReminderInput {
     pub target_id: Uuid,
     pub criteria: PlanCriteria,
@@ -568,6 +604,7 @@ pub struct EnableReminders {
 /// Why notification permission is unavailable.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum UnavailableReason {
     /// macOS authorizes only a process with a bundle identifier.
     UnbundledProcess,
@@ -583,6 +620,7 @@ pub enum UnavailableReason {
 /// `granted` lets a reminder be submitted.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(tag = "state", rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum PermissionState {
     Granted,
     Denied,
@@ -610,6 +648,7 @@ impl PermissionState {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum SubscriptionState {
     /// Activated with granted permission; the only state that schedules.
     Enabled,
@@ -624,6 +663,7 @@ pub enum SubscriptionState {
 /// Why a subscription is blocked.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum BlockReason {
     PermissionDenied,
     PermissionNotDetermined,
@@ -636,6 +676,7 @@ pub enum BlockReason {
 /// What a blocked subscription offers.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum RecoveryAction {
     /// Open the platform notification settings.
     Settings,
@@ -656,6 +697,7 @@ impl BlockReason {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum AppClosedReason {
     NoInstalledScheduler,
 }
@@ -664,6 +706,7 @@ pub enum AppClosedReason {
 /// tested scheduler exists, so this is always unavailable.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct AppClosedDelivery {
     pub available: bool,
     pub reason: AppClosedReason,
@@ -677,6 +720,7 @@ impl AppClosedDelivery {
 /// A per-Target reminder subscription with the values confirmed at activation.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ReminderSubscription {
     pub target_id: Uuid,
     pub site_id: Uuid,
@@ -698,23 +742,30 @@ pub struct ReminderSubscription {
 /// until window start.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct UpcomingReminder {
     pub target_id: Uuid,
     pub designation: String,
     pub site_id: Uuid,
     pub site_name: String,
     pub window_key: WindowKey,
+    #[cfg_attr(feature = "wire", specta(type = String), schemars(with = "String"))]
     #[serde(with = "time::serde::rfc3339")]
     pub due_at: OffsetDateTime,
+    #[cfg_attr(feature = "wire", specta(type = String), schemars(with = "String"))]
     #[serde(with = "time::serde::rfc3339")]
     pub start_utc: OffsetDateTime,
+    #[cfg_attr(feature = "wire", specta(type = String), schemars(with = "String"))]
     #[serde(with = "time::serde::rfc3339")]
     pub end_utc: OffsetDateTime,
+    #[cfg_attr(feature = "wire", specta(type = String), schemars(with = "String"))]
     #[serde(with = "time::serde::rfc3339")]
     pub start_local: OffsetDateTime,
+    #[cfg_attr(feature = "wire", specta(type = String), schemars(with = "String"))]
     #[serde(with = "time::serde::rfc3339")]
     pub end_local: OffsetDateTime,
     pub time_zone: String,
+    #[cfg_attr(feature = "wire", specta(type = String), schemars(with = "String"))]
     #[serde(with = "iso_date")]
     pub night: Date,
     pub lead_minutes: u32,
@@ -724,6 +775,7 @@ pub struct UpcomingReminder {
 /// acceptance does not prove the user saw the notice.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum DeliveryState {
     /// Committed before submission; the identity is taken.
     Sending,
@@ -738,17 +790,22 @@ pub enum DeliveryState {
 /// The durable record of one window identity's reminder.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ReminderDelivery {
     pub window_key: WindowKey,
     pub target_id: Uuid,
     pub site_id: Uuid,
     pub site_name: String,
+    #[cfg_attr(feature = "wire", specta(type = String), schemars(with = "String"))]
     #[serde(with = "time::serde::rfc3339")]
     pub window_start_utc: OffsetDateTime,
+    #[cfg_attr(feature = "wire", specta(type = String), schemars(with = "String"))]
     #[serde(with = "time::serde::rfc3339")]
     pub window_end_utc: OffsetDateTime,
+    #[cfg_attr(feature = "wire", specta(type = String), schemars(with = "String"))]
     #[serde(with = "iso_date")]
     pub night: Date,
+    #[cfg_attr(feature = "wire", specta(type = String), schemars(with = "String"))]
     #[serde(with = "time::serde::rfc3339")]
     pub due_at: OffsetDateTime,
     pub state: DeliveryState,
@@ -760,6 +817,7 @@ pub struct ReminderDelivery {
 /// A read-only review of reminder activation against the default site.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ReminderReview {
     pub target_id: Uuid,
     pub designation: String,
@@ -778,6 +836,7 @@ pub struct ReminderReview {
 /// Reminder state read in one call; reading it writes nothing.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ReminderStatus {
     pub scheduler_running: bool,
     pub permission: PermissionState,
@@ -795,6 +854,7 @@ pub struct ReminderStatus {
 /// The windows a calendar export confirms, by key, from one window query.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ExportSelection {
     pub query: WindowQuery,
     pub window_keys: Vec<WindowKey>,
@@ -816,14 +876,17 @@ impl ExportSelection {
 /// stored; the saved file is the snapshot.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct CalendarSnapshot {
     pub target_id: Uuid,
     pub target_revision: Revision,
     pub designation: String,
     pub site: SiteBasis,
     pub time_zone: String,
+    #[cfg_attr(feature = "wire", specta(type = String), schemars(with = "String"))]
     #[serde(with = "iso_date")]
     pub first_night: Date,
+    #[cfg_attr(feature = "wire", specta(type = String), schemars(with = "String"))]
     #[serde(with = "iso_date")]
     pub last_night: Date,
     pub criteria: PlanCriteria,
@@ -833,6 +896,7 @@ pub struct CalendarSnapshot {
 /// A read-only export review; export repeats the request with its digest.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct CalendarExportReview {
     #[serde(flatten)]
     pub snapshot: CalendarSnapshot,
@@ -843,6 +907,7 @@ pub struct CalendarExportReview {
 /// The synced calendar file an export wrote.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct CalendarFile {
     pub path: NativePath,
     pub byte_count: u64,
@@ -854,6 +919,7 @@ pub struct CalendarFile {
 /// else `{saved: true, path, byteCount, sha256, windowCount}`.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct CalendarExportOutcome {
     pub saved: bool,
     #[serde(flatten)]

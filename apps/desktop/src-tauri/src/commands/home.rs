@@ -25,6 +25,7 @@ use super::library::{fail, Reply};
 /// `InvalidInput` for invalid Tonight criteria; `PersistenceFailure` when the
 /// catalog cannot be read.
 #[tauri::command]
+#[specta::specta]
 pub async fn home_dashboard(
     library: State<'_, Arc<Library>>,
     tonight: TonightQuery,

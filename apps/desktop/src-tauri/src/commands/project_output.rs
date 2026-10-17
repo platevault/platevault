@@ -31,6 +31,7 @@ use super::library::{fail, Reply};
 /// a regular file; and naming why a started copy did not verify. Access,
 /// identity and catalog errors.
 #[tauri::command]
+#[specta::specta]
 pub async fn project_copy_to_output(
     library: State<'_, Arc<Library>>,
     project_id: Uuid,

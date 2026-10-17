@@ -24,6 +24,7 @@ pub const FRAMING_LABEL_FIELD: &str = "framingLabel";
 /// The framing a session was split by at intake.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct SessionFraming {
     /// 1 for the first framing of the night and key in capture order, 2 for
     /// the one a default name calls "framing 2", and so on.

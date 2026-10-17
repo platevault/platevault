@@ -27,6 +27,7 @@ use super::library::{fail, Reply};
 /// `NotFound` for an unknown Project; `PersistenceFailure` when the catalog
 /// cannot be read.
 #[tauri::command]
+#[specta::specta]
 pub async fn project_progress(
     library: State<'_, Arc<Library>>,
     project_id: Uuid,

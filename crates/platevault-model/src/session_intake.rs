@@ -26,6 +26,7 @@ use crate::{
 /// Where a session stands in its intake flow.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum SessionReadiness {
     NeedsTarget,
     NeedsRig,
@@ -47,6 +48,7 @@ impl fmt::Display for SessionReadiness {
 /// The facts readiness is computed from, read in one catalog snapshot.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct SessionIntake {
     pub session_id: Uuid,
     pub grouping_revision: Revision,
@@ -80,6 +82,7 @@ impl SessionIntake {
 /// records it, and a stale one is refused as a conflict.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct AdmissionBasis {
     pub grouping_revision: Revision,
     pub calibration_generation: Revision,
@@ -88,6 +91,7 @@ pub struct AdmissionBasis {
 /// One reason a session can't join a Project, in the order they are named.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "blocker", rename_all = "snake_case", rename_all_fields = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum AdmissionBlocker {
     /// A Closing, Closed or Archived Project takes no session.
     ProjectLocked {
@@ -168,6 +172,7 @@ impl From<AdmissionRefusal> for LibraryError {
 /// pin's health and the blockers that keep it from any Project.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct SessionAdmission {
     pub intake: SessionIntake,
     pub calibration: SessionCalibration,

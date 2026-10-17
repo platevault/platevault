@@ -17,6 +17,7 @@ use crate::{comparison_key as filter_key, Equipment, LibraryError, Revision};
 /// Whether a camera captures through a colour filter array.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum ColorKind {
     Mono,
     /// One-shot colour: captures R, G and B without a filter.
@@ -25,6 +26,7 @@ pub enum ColorKind {
 
 /// A band a filter passes, in the order the Targets Filters strip lists them.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum Band {
     L,
     R,
@@ -40,6 +42,7 @@ pub enum Band {
 /// One filter on a rig's list.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct RigFilter {
     pub id: Uuid,
     pub name: String,
@@ -62,6 +65,7 @@ impl RigFilter {
 /// A rig's durable filter list. `revision` is 0 until the list is first saved.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct RigFilters {
     pub equipment_id: Uuid,
     pub revision: Revision,
@@ -71,6 +75,7 @@ pub struct RigFilters {
 /// Angular field of view of a rig's sensor at its focal length.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct FieldOfView {
     pub width_deg: f64,
     pub height_deg: f64,
@@ -79,6 +84,7 @@ pub struct FieldOfView {
 /// A rig with what its camera and filter list capture.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct Rig {
     pub equipment: Equipment,
     pub filters: RigFilters,
@@ -92,6 +98,7 @@ pub struct Rig {
 /// One FILTER value observed on live frames of sessions confirmed to a rig.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct RigFilterValue {
     pub value: String,
     pub session_ids: Vec<Uuid>,
@@ -100,6 +107,7 @@ pub struct RigFilterValue {
 /// FILTER values seen on one rig's confirmed sessions.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct RigFilterValues {
     pub equipment_id: Uuid,
     pub rig_name: String,

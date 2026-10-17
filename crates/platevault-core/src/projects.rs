@@ -35,6 +35,7 @@ use crate::{
 /// the current one).
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct SessionToAdd {
     pub session_id: Uuid,
     #[serde(default)]
@@ -45,6 +46,7 @@ pub struct SessionToAdd {
 /// group (D-W114).
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct GroupFolder {
     pub group_id: Uuid,
     pub folder: Option<String>,
@@ -55,6 +57,7 @@ pub struct GroupFolder {
 /// their sources, and its suggestions.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ProjectInputs {
     pub desired: ProjectDesired,
     pub keywords: GroupKeywords,

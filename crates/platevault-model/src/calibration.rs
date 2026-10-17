@@ -31,6 +31,7 @@ fn invalid(message: String) -> LibraryError {
 /// own kind set and reads unknown for dark flats.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum InputKind {
     Bias,
     Dark,
@@ -62,6 +63,7 @@ impl InputKind {
 /// How an input reaches PREP.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum InputForm {
     /// A current Session of raw calibration frames from an indexed location.
     RawSet,
@@ -74,6 +76,7 @@ pub enum InputForm {
 /// A reusable input a decision can name. A candidate is never an input.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 #[serde(tag = "form", rename_all = "snake_case", rename_all_fields = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum InputRef {
     RawSet { session_id: Uuid, grouping_revision: Revision },
     Master { master_id: Uuid, revision: Revision },
@@ -106,6 +109,7 @@ impl InputRef {
 /// The evidence a master determination rests on (R4).
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum MasterBasis {
     /// A present `STACKCNT` or `NCOMBINE` above 1.
     HeaderStackCount,
@@ -117,6 +121,7 @@ pub enum MasterBasis {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct MasterEvidence {
     pub basis: MasterBasis,
     pub stack_count: Option<u32>,
@@ -127,6 +132,7 @@ pub struct MasterEvidence {
 /// A calibration file's kind and whether it is a raw frame or a master.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct Classification {
     pub kind: InputKind,
     /// `None` for a raw frame.
@@ -150,6 +156,7 @@ impl Classification {
 /// A capture value the criteria compare or show.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum EvidenceField {
     ImageType,
     Camera,
@@ -174,6 +181,7 @@ pub enum EvidenceField {
 /// catalog correction or the Session key.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct SourcedValue {
     pub value: String,
     pub source: String,
@@ -184,6 +192,7 @@ pub struct SourcedValue {
 /// never carried.
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct CaptureEvidence {
     pub values: BTreeMap<EvidenceField, SourcedValue>,
     pub confirmed_equipment: Option<Uuid>,
@@ -297,6 +306,7 @@ pub struct InputEvidence {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum Verdict {
     Compatible,
     Incompatible,
@@ -305,6 +315,7 @@ pub enum Verdict {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum CriterionId {
     ImageType,
     Camera,
@@ -329,6 +340,7 @@ pub enum CriterionId {
 /// Exact comparison only (D13); the wire states it on every row.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum Tolerance {
     #[default]
     None,
@@ -337,6 +349,7 @@ pub enum Tolerance {
 /// One "Why this match" row.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct CriterionResult {
     pub criterion: CriterionId,
     pub verdict: Verdict,
@@ -352,6 +365,7 @@ pub struct CriterionResult {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum EvidenceId {
     MeasuredTemperature,
     ReadoutMode,
@@ -363,6 +377,7 @@ pub enum EvidenceId {
 /// Evidence shown beside the criteria without a verdict.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct EvidenceRow {
     pub evidence: EvidenceId,
     pub light_value: Option<String>,
@@ -375,6 +390,7 @@ pub struct EvidenceRow {
 /// criterion is, incompatible when any is, unknown otherwise.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct Evaluation {
     pub verdict: Verdict,
     pub criteria: Vec<CriterionResult>,
@@ -414,6 +430,7 @@ pub fn overall_verdict(criteria: &[CriterionResult]) -> Verdict {
 /// Any listed input, reusable or not.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 #[serde(tag = "form", rename_all = "snake_case", rename_all_fields = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum CandidateRef {
     RawSet { session_id: Uuid, grouping_revision: Revision },
     Master { master_id: Uuid, revision: Revision },
@@ -464,6 +481,7 @@ impl From<InputRef> for CandidateRef {
 /// Where a master came from (R17): an indexed file, its location and path.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", rename_all_fields = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum MasterOrigin {
     Location { location_id: Uuid, location_name: String, relative_path: NativePath },
 }
@@ -472,6 +490,7 @@ pub enum MasterOrigin {
 /// Offline members keep their last-observed state and are never absence.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct InputState {
     pub availability: Availability,
     /// Logical captures that are inputs (Library-Unusable members left out).
@@ -518,6 +537,7 @@ pub struct InputCandidate {
 /// Adopting a master `Processing/` offered is an open CAL item.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(untagged, rename_all_fields = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum AdoptionSource {
     Asset { asset_id: Uuid, expected: ExpectedAsset },
 }
@@ -525,6 +545,7 @@ pub enum AdoptionSource {
 /// A new file below a registered Calibration location.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct AdoptionDestination {
     pub location_id: Uuid,
     pub relative_path: NativePath,
@@ -565,6 +586,7 @@ impl AdoptionDestination {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum ReviewState {
     Open,
     Adopted,
@@ -573,6 +595,7 @@ pub enum ReviewState {
 /// The reviewed source bytes: identity, path and the SHA-256 hashed at review.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ReviewedSource {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub asset_id: Option<Uuid>,
@@ -585,6 +608,7 @@ pub struct ReviewedSource {
 /// A durable adoption review; it writes no file.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct AdoptionReview {
     pub id: Uuid,
     pub revision: Revision,
@@ -599,6 +623,7 @@ pub struct AdoptionReview {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum AdoptionState {
     Running,
     Completed,
@@ -609,6 +634,7 @@ pub enum AdoptionState {
 /// Lifecycle phases, each committed before the next file effect.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum AdoptionPhase {
     Intent,
     TempCreated,
@@ -621,6 +647,7 @@ pub enum AdoptionPhase {
 /// A file the adoption created, by location-relative path and identity.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct CreatedFile {
     pub relative_path: NativePath,
     pub identity: FileIdentity,
@@ -628,6 +655,7 @@ pub struct CreatedFile {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct AdoptionOperation {
     pub id: Uuid,
     pub review_id: Uuid,
@@ -646,6 +674,7 @@ pub struct AdoptionOperation {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct MasterProvenance {
     pub review_id: Uuid,
     pub source: ReviewedSource,
@@ -657,6 +686,7 @@ pub struct MasterProvenance {
 /// source are not carried (R16).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct AdoptedMaster {
     pub id: Uuid,
     pub revision: Revision,
@@ -676,6 +706,7 @@ pub struct AdoptedMaster {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum CustodyKind {
     CandidateMaster,
     AdoptedMaster,
@@ -686,6 +717,7 @@ pub enum CustodyKind {
 /// that holds the same bytes. Distinct from the storage journal's `KeptCopy`.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct MasterKeptCopy {
     pub master_id: Uuid,
     pub location_id: Uuid,
@@ -696,6 +728,7 @@ pub struct MasterKeptCopy {
 /// A calibration file STO keeps in protected Keep, with its no-follow fingerprint.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct CustodyFact {
     pub kind: CustodyKind,
     #[serde(default, skip_serializing_if = "Option::is_none")]

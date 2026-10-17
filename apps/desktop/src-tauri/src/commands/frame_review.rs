@@ -39,6 +39,7 @@ pub const MEASUREMENT_PROGRESS_EVENT: &str = "pix_measurement_progress";
 /// order, and the Running run if any.
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[derive(specta::Type)]
 pub struct ReviewedFrames {
     pub frames: Vec<FrameState>,
     pub running: Option<MeasurementRun>,
@@ -50,6 +51,7 @@ pub struct ReviewedFrames {
 /// # Errors
 /// `NotFound` for an unknown asset; `InvalidInput` for an asset listed twice.
 #[tauri::command]
+#[specta::specta]
 pub async fn pix_review_frames(
     library: State<'_, Arc<Library>>,
     assets: Vec<Uuid>,
@@ -67,6 +69,7 @@ pub async fn pix_review_frames(
 /// `InvalidInput` for an empty request or a priority asset outside it;
 /// `NotFound` for an unknown asset; `Conflict` while the run is stopping.
 #[tauri::command]
+#[specta::specta]
 pub async fn pix_start_measurement(
     library: State<'_, Arc<Library>>,
     assets: Vec<Uuid>,
@@ -80,6 +83,7 @@ pub async fn pix_start_measurement(
 /// # Errors
 /// `NotFound` for an unknown run; `Conflict` when it is not Running.
 #[tauri::command]
+#[specta::specta]
 pub async fn pix_prioritize_measurement(
     library: State<'_, Arc<Library>>,
     operation_id: Uuid,
@@ -94,6 +98,7 @@ pub async fn pix_prioritize_measurement(
 /// # Errors
 /// `NotFound` for an unknown run.
 #[tauri::command]
+#[specta::specta]
 pub async fn pix_measurement_status(
     library: State<'_, Arc<Library>>,
     operation_id: Uuid,
@@ -106,6 +111,7 @@ pub async fn pix_measurement_status(
 /// # Errors
 /// `NotFound` for an unknown run; `Conflict` when it is not Running.
 #[tauri::command]
+#[specta::specta]
 pub async fn pix_cancel_measurement(
     library: State<'_, Arc<Library>>,
     operation_id: Uuid,
@@ -118,6 +124,7 @@ pub async fn pix_cancel_measurement(
 /// # Errors
 /// `PersistenceFailure` when the catalog cannot be read.
 #[tauri::command]
+#[specta::specta]
 pub async fn pix_list_measurement_runs(
     library: State<'_, Arc<Library>>,
     offset: u32,
@@ -132,6 +139,7 @@ pub async fn pix_list_measurement_runs(
 /// `SourceUnavailable`, `UnsupportedFormat` naming the feature,
 /// `MetadataUnreadable` or `IdentityConflict`.
 #[tauri::command]
+#[specta::specta]
 pub async fn pix_open_frame(
     library: State<'_, Arc<Library>>,
     asset_id: Uuid,
@@ -145,6 +153,7 @@ pub async fn pix_open_frame(
 /// `InvalidInput` for an invalid tile; `Conflict` when the bytes differ from
 /// `sha256`.
 #[tauri::command]
+#[specta::specta]
 #[allow(clippy::too_many_arguments)] // The contract's flat TileRequest fields.
 pub async fn pix_preview_tile(
     library: State<'_, Arc<Library>>,
@@ -167,6 +176,7 @@ pub async fn pix_preview_tile(
 /// # Errors
 /// As `pix_preview_tile`.
 #[tauri::command]
+#[specta::specta]
 pub async fn pix_compare_regions(
     library: State<'_, Arc<Library>>,
     asset_id: Uuid,
@@ -184,6 +194,7 @@ pub async fn pix_compare_regions(
 /// # Errors
 /// As `pix_preview_tile`.
 #[tauri::command]
+#[specta::specta]
 pub async fn pix_sample_region(
     library: State<'_, Arc<Library>>,
     asset_id: Uuid,
@@ -203,6 +214,7 @@ pub async fn pix_sample_region(
 /// # Errors
 /// `NotFound` for an unknown asset.
 #[tauri::command]
+#[specta::specta]
 pub async fn pix_frame_stars(
     library: State<'_, Arc<Library>>,
     asset_id: Uuid,
@@ -216,6 +228,7 @@ pub async fn pix_frame_stars(
 /// `NotFound` for an unknown record or star; `Conflict` when the decoded
 /// digest differs from the record's basis.
 #[tauri::command]
+#[specta::specta]
 pub async fn pix_star_cutouts(
     library: State<'_, Arc<Library>>,
     asset_id: Uuid,
@@ -233,6 +246,7 @@ pub async fn pix_star_cutouts(
 /// # Errors
 /// `NotFound` for an unknown asset.
 #[tauri::command]
+#[specta::specta]
 pub async fn pix_frame_detail(
     library: State<'_, Arc<Library>>,
     asset_id: Uuid,
@@ -247,6 +261,7 @@ pub async fn pix_frame_detail(
 /// Read errors naming the path; `UnsupportedFormat` for a table without Index
 /// or File; `InvalidInput` for an invalid scope.
 #[tauri::command]
+#[specta::specta]
 pub async fn pix_review_import(
     library: State<'_, Arc<Library>>,
     path: NativePath,
@@ -260,6 +275,7 @@ pub async fn pix_review_import(
 /// # Errors
 /// `NotFound` for an unknown review.
 #[tauri::command]
+#[specta::specta]
 pub async fn pix_import_review(
     library: State<'_, Arc<Library>>,
     review_id: Uuid,
@@ -273,6 +289,7 @@ pub async fn pix_import_review(
 /// `Conflict` for a confirmed review or a changed attached asset;
 /// `InvalidInput` for a resolution outside a row's candidates.
 #[tauri::command]
+#[specta::specta]
 pub async fn pix_confirm_import(
     library: State<'_, Arc<Library>>,
     review_id: Uuid,
@@ -290,6 +307,7 @@ pub async fn pix_confirm_import(
 /// # Errors
 /// `NotFound` for an unknown asset; `InvalidInput` for an asset listed twice.
 #[tauri::command]
+#[specta::specta]
 pub async fn pix_thumbnails(
     library: State<'_, Arc<Library>>,
     assets: Vec<Uuid>,
@@ -307,6 +325,7 @@ pub async fn pix_thumbnails(
 /// `NotFound` for an unknown Project; `InvalidInput` for a display template the
 /// naming resolver refuses.
 #[tauri::command]
+#[specta::specta]
 pub async fn pix_review_list(
     library: State<'_, Arc<Library>>,
     context: ReviewContext,
@@ -329,6 +348,7 @@ pub async fn pix_review_list(
 /// `InvalidInput` for a refused template, an asset listed twice or a Trashed
 /// frame; `NotFound` for an unknown asset.
 #[tauri::command]
+#[specta::specta]
 pub async fn pix_display_names(
     library: State<'_, Arc<Library>>,
     assets: Vec<Uuid>,
@@ -344,6 +364,7 @@ pub async fn pix_display_names(
 /// `NotFound` for an unknown asset; `Conflict` for a stale decision revision;
 /// `IdentityConflict` when a P or X mark finds changed bytes.
 #[tauri::command]
+#[specta::specta]
 pub async fn pix_review_mark(
     library: State<'_, Arc<Library>>,
     mark: ReviewMark,
@@ -362,6 +383,7 @@ pub async fn pix_review_mark(
 /// # Errors
 /// `NotFound` for an unknown session; `PersistenceFailure` for a catalog error.
 #[tauri::command]
+#[specta::specta]
 pub async fn pix_session_intake(
     library: State<'_, Arc<Library>>,
     session_id: Uuid,
@@ -378,6 +400,7 @@ pub async fn pix_session_intake(
 /// `NotFound` for an unknown session; `InvalidInput` for a superseded session
 /// or a display template the naming resolver refuses.
 #[tauri::command]
+#[specta::specta]
 pub async fn pix_session_review_list(
     library: State<'_, Arc<Library>>,
     session_id: Uuid,
@@ -406,6 +429,7 @@ pub async fn pix_session_review_list(
 /// is not a live frame of the session; `Conflict` for a stale decision
 /// revision; `IdentityConflict` when a P or X mark finds changed bytes.
 #[tauri::command]
+#[specta::specta]
 pub async fn pix_session_review_mark(
     library: State<'_, Arc<Library>>,
     session_id: Uuid,
@@ -426,6 +450,7 @@ pub async fn pix_session_review_mark(
 /// Unreviewed live frames or a superseded session; `NotFound` for an unknown
 /// session.
 #[tauri::command]
+#[specta::specta]
 pub async fn pix_finish_review(
     library: State<'_, Arc<Library>>,
     session_id: Uuid,
@@ -443,6 +468,7 @@ pub async fn pix_finish_review(
 /// # Errors
 /// `NotFound` for an unknown session; `InvalidInput` unless the session is Ready.
 #[tauri::command]
+#[specta::specta]
 pub async fn pix_reopen_review(library: State<'_, Arc<Library>>, session_id: Uuid) -> Reply<()> {
     library.frame_review().reopen_review(session_id).await.map_err(fail(Some(session_id)))
 }

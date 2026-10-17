@@ -31,6 +31,7 @@ use super::library::{fail, Reply};
 /// `InvalidInput` for invalid fields or goal scope; `NotFound` for an unsaved
 /// Target, unknown equipment or a goal naming a Target or panel not listed.
 #[tauri::command]
+#[specta::specta]
 pub async fn project_create(
     library: State<'_, Arc<Library>>,
     name: String,
@@ -49,6 +50,7 @@ pub async fn project_create(
 /// `Conflict` for a stale revision; `NotFound` for an unknown Project;
 /// `InvalidInput` for a blank name.
 #[tauri::command]
+#[specta::specta]
 pub async fn project_update(
     library: State<'_, Arc<Library>>,
     project_id: Uuid,
@@ -72,6 +74,7 @@ pub async fn project_update(
 /// unsaved Target; `InvalidInput` for an invalid subject list or for removing a
 /// subject a held session joined on.
 #[tauri::command]
+#[specta::specta]
 pub async fn project_set_subjects(
     library: State<'_, Arc<Library>>,
     project_id: Uuid,
@@ -92,6 +95,7 @@ pub async fn project_set_subjects(
 /// equipment; `InvalidInput` for an empty or repeated list, or for removing a
 /// rig a group of the Project is on.
 #[tauri::command]
+#[specta::specta]
 pub async fn project_set_rigs(
     library: State<'_, Arc<Library>>,
     project_id: Uuid,
@@ -113,6 +117,7 @@ pub async fn project_set_rigs(
 /// that is no subject or an unknown group; `InvalidInput` for an invalid or
 /// repeated goal or a group that is not a mosaic panel.
 #[tauri::command]
+#[specta::specta]
 pub async fn project_set_goals(
     library: State<'_, Arc<Library>>,
     project_id: Uuid,
@@ -135,6 +140,7 @@ pub async fn project_set_goals(
 /// or group, or a Target that is no subject; `InvalidInput` for a group that is
 /// not a mosaic panel.
 #[tauri::command]
+#[specta::specta]
 pub async fn project_apply_goal_template(
     library: State<'_, Arc<Library>>,
     project_id: Uuid,
@@ -157,6 +163,7 @@ pub async fn project_apply_goal_template(
 /// # Errors
 /// `PersistenceFailure` when the catalog cannot be read.
 #[tauri::command]
+#[specta::specta]
 pub async fn project_list(
     library: State<'_, Arc<Library>>,
     target_id: Option<Uuid>,
@@ -176,6 +183,7 @@ pub async fn project_list(
 /// # Errors
 /// `NotFound` for an unknown Project.
 #[tauri::command]
+#[specta::specta]
 pub async fn project_candidates(
     library: State<'_, Arc<Library>>,
     project_id: Uuid,
@@ -188,6 +196,7 @@ pub async fn project_candidates(
 /// # Errors
 /// `PersistenceFailure` when the catalog cannot be read.
 #[tauri::command]
+#[specta::specta]
 pub async fn goal_template_list(library: State<'_, Arc<Library>>) -> Reply<Vec<GoalTemplate>> {
     library.catalog().goal_templates().await.map_err(fail(None))
 }
@@ -198,6 +207,7 @@ pub async fn goal_template_list(library: State<'_, Arc<Library>>) -> Reply<Vec<G
 /// `InvalidInput` for invalid fields or a built-in id; `NotFound` for an
 /// unknown id; `Conflict` for a stale revision.
 #[tauri::command]
+#[specta::specta]
 pub async fn goal_template_save(
     library: State<'_, Arc<Library>>,
     id: Option<Uuid>,
@@ -215,6 +225,7 @@ pub async fn goal_template_save(
 /// `InvalidInput` for a built-in id; `NotFound` for an unknown id; `Conflict`
 /// for a stale revision.
 #[tauri::command]
+#[specta::specta]
 pub async fn goal_template_delete(
     library: State<'_, Arc<Library>>,
     template_id: Uuid,

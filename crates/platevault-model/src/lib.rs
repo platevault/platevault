@@ -169,6 +169,7 @@ pub enum LibraryError {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum RetryAction {
     Retry,
     Review,
@@ -177,6 +178,7 @@ pub enum RetryAction {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ErrorResponse {
     pub kind: String,
     pub identity: Option<Uuid>,
@@ -263,6 +265,7 @@ impl From<serde_json::Error> for LibraryError {
 /// Native payload is authoritative; display text is never used for identity.
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Deserialize)]
 #[serde(tag = "encoding", content = "payload", rename_all = "kebab-case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum NativePath {
     UnixBytes(Vec<u8>),
     WindowsUtf16(Vec<u16>),
@@ -350,6 +353,7 @@ impl NativePath {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct VolumeIdentity {
     pub filesystem: String,
     pub stable_id: Option<String>,
@@ -360,6 +364,7 @@ pub struct VolumeIdentity {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum PathSensitivity {
     Sensitive,
     Insensitive,
@@ -410,6 +415,7 @@ impl NativePath {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct FileIdentity {
     pub volume: VolumeIdentity,
     pub file_id: Option<String>,
@@ -417,9 +423,11 @@ pub struct FileIdentity {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ObservationFingerprint {
     pub identity: FileIdentity,
     pub size_bytes: u64,
+    #[cfg_attr(feature = "wire", specta(type = String), schemars(with = "String"))]
     #[serde(with = "decimal_i128")]
     pub modified_ns: i128,
     #[serde(default)]
@@ -461,6 +469,7 @@ mod decimal_i128 {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum LocationRole {
     Captures,
     Calibration,
@@ -468,6 +477,7 @@ pub enum LocationRole {
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum Availability {
     Available,
     Offline,
@@ -484,6 +494,7 @@ pub enum Availability {
 }
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum Quality {
     #[default]
     Unreviewed,
@@ -493,6 +504,7 @@ pub enum Quality {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum ApplicableQuality {
     Unreviewed,
     Usable,
@@ -514,6 +526,7 @@ pub enum ApplicableQuality {
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum ImageFormat {
     Fits,
     Xisf,
@@ -525,6 +538,7 @@ pub enum ImageFormat {
 /// remapped, and its root no longer blocks registering an overlapping folder.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum LocationLifecycle {
     Active,
     Retired,
@@ -532,6 +546,7 @@ pub enum LocationLifecycle {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct Location {
     pub id: Uuid,
     pub name: String,
@@ -551,6 +566,7 @@ pub struct Location {
 /// Raw values survive separately; non-finite/invalid scalars remain unknown.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct CaptureMetadata {
     pub raw: BTreeMap<String, String>,
     pub image_type: Option<String>,
@@ -731,6 +747,7 @@ impl CaptureMetadata {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct Asset {
     pub id: Uuid,
     pub location_id: Uuid,
@@ -817,6 +834,7 @@ pub fn logical_quality(copies: &[&Asset]) -> ApplicableQuality {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ExpectedAsset {
     pub asset_id: Uuid,
     pub decision_revision: Revision,
@@ -824,12 +842,14 @@ pub struct ExpectedAsset {
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ExpectedSession {
     pub session_id: Uuid,
     pub grouping_revision: Revision,
     pub decision_revision: Revision,
 }
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct CaptureKey(pub String);
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -850,6 +870,7 @@ pub struct GroupingResult {
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct Session {
     pub id: Uuid,
     pub key: CaptureKey,
@@ -864,6 +885,7 @@ pub struct Session {
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct SessionLineage {
     pub correction_id: Uuid,
     pub predecessors: Vec<Uuid>,
@@ -874,6 +896,7 @@ pub struct SessionLineage {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum AssociationState {
     Unresolved,
     Suggested,
@@ -883,6 +906,7 @@ pub enum AssociationState {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum AssociationKind {
     Target,
     Equipment,
@@ -890,6 +914,7 @@ pub enum AssociationKind {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "source", rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum Provenance {
     Seed { dataset: String },
     User,
@@ -900,6 +925,7 @@ pub enum Provenance {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum EvidenceItem {
     Alias { normalized: String, agrees: bool },
     Coordinates { ra_deg: f64, dec_deg: f64, qualified: bool },
@@ -910,6 +936,7 @@ pub enum EvidenceItem {
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct Association {
     pub session_id: Uuid,
     pub kind: AssociationKind,
@@ -922,6 +949,7 @@ pub struct Association {
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct CorrectionInput {
     pub asset_id: Uuid,
     pub field: String,
@@ -930,6 +958,7 @@ pub struct CorrectionInput {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum ScanState {
     Running,
     Completed,
@@ -939,6 +968,7 @@ pub enum ScanState {
 }
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ScanProgress {
     pub discovered: u64,
     pub metadata_read: u64,
@@ -974,6 +1004,7 @@ pub struct ScanFile {
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ScanIssue {
     pub relative_path: NativePath,
     pub reason: String,
@@ -1000,6 +1031,7 @@ pub struct ScanObservation {
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ScanOperation {
     pub id: Uuid,
     #[serde(default)]
@@ -1026,6 +1058,7 @@ impl Default for ScanOptions {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct TargetAlias {
     pub text: String,
     pub normalized: String,
@@ -1034,6 +1067,7 @@ pub struct TargetAlias {
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct TargetCandidate {
     pub id: Uuid,
     pub designation: String,
@@ -1053,6 +1087,7 @@ pub struct TargetCandidate {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct SkyCoordinates {
     pub ra_deg: f64,
     pub dec_deg: f64,
@@ -1060,12 +1095,14 @@ pub struct SkyCoordinates {
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct TargetRecord {
     pub candidate: TargetCandidate,
     pub decision_revision: Revision,
 }
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct TargetCone {
     pub ra_deg: f64,
     pub dec_deg: f64,
@@ -1091,6 +1128,7 @@ impl TargetCone {
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct Equipment {
     pub id: Uuid,
     pub name: String,
@@ -1109,6 +1147,7 @@ pub struct Equipment {
 /// Coverage is split by session, location and availability, not just session.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct CoverageContribution {
     pub session_id: Uuid,
     pub location_id: Uuid,
@@ -1137,6 +1176,7 @@ pub struct CoverageContribution {
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct TargetCoverage {
     pub target_id: Uuid,
     pub covered_location_ids: Vec<Uuid>,
@@ -1150,12 +1190,14 @@ pub struct TargetCoverage {
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct DigestEvidence {
     pub sha256: String,
     pub fingerprint: ObservationFingerprint,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct RemapItem {
     pub asset_id: Uuid,
     pub original_digest: DigestEvidence,
@@ -1165,6 +1207,7 @@ pub struct RemapItem {
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct RemapReview {
     pub id: Uuid,
     pub location_id: Uuid,
@@ -1177,6 +1220,7 @@ pub struct RemapReview {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct RemapBlock {
     pub asset_id: Option<Uuid>,
     pub reason: RemapBlockReason,
@@ -1184,6 +1228,7 @@ pub struct RemapBlock {
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum RemapBlockReason {
     NoByteProof,
     Mismatch,
@@ -1195,6 +1240,7 @@ pub enum RemapBlockReason {
 /// Kind of a record outside the library that holds library asset ids.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum ReferenceKind {
     /// A Project holding copies of the captures it holds (PRJ).
     Project,
@@ -1207,6 +1253,7 @@ pub enum ReferenceKind {
 /// library reads these to review Retire location and never writes them.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct AssetReference {
     pub kind: ReferenceKind,
     pub id: Uuid,
@@ -1221,6 +1268,7 @@ pub struct AssetReference {
 /// A recorded copy of a location under a Retire location review.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct RetireAsset {
     pub asset_id: Uuid,
     pub relative_path: NativePath,
@@ -1229,6 +1277,7 @@ pub struct RetireAsset {
 /// A current session holding copies of a location under a Retire location review.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct RetireSession {
     pub session_id: Uuid,
     pub grouping_revision: Revision,
@@ -1241,6 +1290,7 @@ pub struct RetireSession {
 /// its copies. Retiring deletes, moves or modifies no file.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct RetireReview {
     pub id: Uuid,
     pub location_id: Uuid,

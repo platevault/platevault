@@ -14,6 +14,7 @@ use crate::NativePath;
 /// What kind of volume a location root is on, as the platform reports it.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum VolumeKind {
     /// An internal disk.
     Local,

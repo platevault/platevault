@@ -326,6 +326,7 @@ impl PreparedQuery {
 /// One search result with the evidence that matched it.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct TargetSearchHit {
     pub candidate: TargetCandidate,
     /// Display alias that matched the text query.
@@ -817,6 +818,7 @@ fn saved_hit<'a>(
 /// Fields of an explicit user-defined target.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct UserTargetInput {
     pub designation: String,
     #[serde(default)]
@@ -1038,6 +1040,7 @@ fn provider_candidate(ns: &Uuid, target: &CachedTarget) -> Result<TargetCandidat
 /// Association evidence for one candidate against one session's frames.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct TargetAssessment {
     pub candidate: TargetCandidate,
     pub state: AssociationState,

@@ -18,6 +18,11 @@ path = "src/bin/schema-agreement-test.rs"
 [dependencies]
 calibration_core = { path = "../../calibration/core" }
 domain_core = { path = "../../domain/core" }
+# Library-shell wire types (F4 WIRE bindings deviation): the derives behind
+# their `wire` feature feed the library schema generator.
+platevault_model = { path = "../../platevault-model", features = ["wire"] }
+persistence_library = { path = "../../persistence/library", features = ["wire"] }
+platevault_core = { path = "../../platevault-core", features = ["wire"] }
 schemars.workspace = true
 serde.workspace = true
 serde_json.workspace = true

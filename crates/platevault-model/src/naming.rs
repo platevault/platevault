@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 /// The seven frame-type classes that each own a naming template.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum NamingFrameType {
     Light,
     Flat,
@@ -55,6 +56,7 @@ impl NamingFrameType {
 /// One frame type's effective template beside its built-in default.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct NamingTemplate {
     pub frame_type: NamingFrameType,
     /// The stored override, else the default.
@@ -83,6 +85,7 @@ pub struct NamingMetadata {
 /// A token that resolved to its fallback because the metadata lacked it.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct NamingFallback {
     pub token: String,
     pub value: String,

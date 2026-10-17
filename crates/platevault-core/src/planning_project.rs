@@ -37,6 +37,7 @@ time::serde::format_description!(iso_date, Date, "[year]-[month]-[day]");
 /// of nights and explicit criteria, as in a Plan area window query.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ProjectPlanningQuery {
     pub project_id: Uuid,
     #[serde(default)]
@@ -49,6 +50,7 @@ pub struct ProjectPlanningQuery {
 
 /// The label a gap amount carries (D-W36).
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum GapLabel {
     /// The frames of the Project's own sessions its next View places: they
     /// count toward the goal.
@@ -73,6 +75,7 @@ impl GapLabel {
 /// One labelled amount of a goal.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct GapAmount {
     pub label: GapLabel,
     pub tally: GoalTally,
@@ -82,6 +85,7 @@ pub struct GapAmount {
 /// zero once the goal is met.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", rename_all_fields = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum GapRemaining {
     Integration { seconds: Microseconds },
     FrameCount { frames: u64 },
@@ -90,6 +94,7 @@ pub enum GapRemaining {
 /// One integration or frame-count goal's gap on one channel (PLAN-FR-02).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct GoalGap {
     pub goal: ProjectGoal,
     pub in_project: GapAmount,
@@ -102,6 +107,7 @@ pub struct GoalGap {
 /// A mosaic panel group, by its framing, with its own goals' gaps.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct PanelGaps {
     pub group_id: Uuid,
     pub name: GroupName,
@@ -115,6 +121,7 @@ pub struct PanelGaps {
 /// order, each with its panel goals.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct SubjectGaps {
     pub subject_id: Uuid,
     pub target_id: Uuid,
@@ -129,6 +136,7 @@ pub struct SubjectGaps {
 /// exactly as the Plan area computes them; absent without a planning site.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct SubjectPlanning {
     #[serde(flatten)]
     pub subject: SubjectGaps,
@@ -140,6 +148,7 @@ pub struct SubjectPlanning {
 /// context returns the page to My targets.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct PlannerContext {
     pub project_id: Uuid,
     pub project_name: String,
@@ -154,6 +163,7 @@ pub struct PlannerContext {
 /// observing site in Settings"; the gaps are listed either way.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ProjectPlanning {
     pub project_id: Uuid,
     pub project_name: String,
@@ -169,6 +179,7 @@ pub struct ProjectPlanning {
 /// One open Project's gaps for a Target in its Plan area.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ProjectGaps {
     pub project_id: Uuid,
     pub project_name: String,

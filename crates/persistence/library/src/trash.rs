@@ -34,6 +34,7 @@ pub struct TrashedFrame {
 /// One stay of a frame in the OS Trash.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct TrashEpisode {
     pub asset_id: Uuid,
     /// The storage operation that trashed the frame.
@@ -47,6 +48,7 @@ pub struct TrashEpisode {
 /// A Trashed frame as the Sessions "Trashed" filter lists it.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct TrashedAsset {
     /// The kept record: identity, digest, last-observed metadata and quality.
     pub asset: Asset,

@@ -65,6 +65,181 @@ pub const SCAN_PROGRESS_EVENT: &str = "library_scan_progress";
 #[cfg(feature = "dev-tools")]
 pub const BRIDGE_BIND_ENV: &str = "PV_MCP_BRIDGE_BIND";
 
+/// The library-shell IPC command list, spliced into `$mac![…]`.
+///
+/// The single list both `tauri::generate_handler!` (in [`run`]) and
+/// `collect_commands!` (in [`library_specta_builder`]) consume, so the
+/// registered handlers and the generated `library-index.ts` cannot drift.
+/// The callback takes the macro by name because neither consumer accepts a
+/// nested macro invocation as its token list.
+///
+/// One labelled block per feature. A feature adds its handlers under its own
+/// label only, by full path (`crate::commands::<feature>::<handler>`), so
+/// features register without touching each other's lines or the imports.
+macro_rules! library_commands {
+    ($mac:ident) => {
+        $mac![
+            // library (064)
+            ipc::library_register_location,
+            ipc::library_list_locations,
+            ipc::library_start_scan,
+            ipc::library_scan_status,
+            ipc::library_cancel_scan,
+            ipc::library_list_sessions,
+            ipc::library_trashed_assets,
+            ipc::library_session,
+            ipc::library_preview_metadata,
+            ipc::library_confirm_metadata,
+            ipc::library_set_quality,
+            ipc::library_search_targets,
+            ipc::library_resolve_target,
+            ipc::library_save_target,
+            ipc::library_associate_target,
+            ipc::library_save_equipment,
+            ipc::library_confirm_equipment,
+            ipc::library_target_coverage,
+            ipc::library_review_remap,
+            ipc::library_apply_remap,
+            ipc::library_update_location,
+            ipc::library_retry_scope,
+            ipc::library_reselect_location,
+            ipc::library_review_retire_location,
+            ipc::library_retire_location,
+            ipc::library_list_operations,
+            // session filters (064 LIB-FR-17, 065 PRJ-FR-19)
+            crate::commands::session_filters::library_session_filter_counts,
+            crate::commands::session_filters::project_prefill_from_session,
+            crate::commands::session_filters::project_preview_session_addition,
+            crate::commands::session_filters::project_add_session,
+            // projects
+            crate::commands::project_goals::project_create,
+            crate::commands::project_goals::project_update,
+            crate::commands::project_goals::project_set_subjects,
+            crate::commands::project_goals::project_set_rigs,
+            crate::commands::project_goals::project_set_goals,
+            crate::commands::project_goals::project_apply_goal_template,
+            crate::commands::project_goals::project_list,
+            crate::commands::project_goals::project_candidates,
+            crate::commands::project_goals::goal_template_list,
+            crate::commands::project_goals::goal_template_save,
+            crate::commands::project_goals::goal_template_delete,
+            crate::commands::project_progress::project_progress,
+            // project inputs (065 PRJ-FR-07/08/27/29/31, 066 VSEL-FR-02/10/15)
+            crate::commands::project_inputs::project_inputs,
+            crate::commands::project_inputs::project_add_sessions,
+            crate::commands::project_inputs::project_remove_sessions,
+            crate::commands::project_inputs::project_move_sessions,
+            crate::commands::project_inputs::project_create_group,
+            crate::commands::project_inputs::project_split_group,
+            crate::commands::project_inputs::project_rename_group,
+            crate::commands::project_inputs::project_set_group_panel,
+            crate::commands::project_inputs::project_set_frames,
+            // apply (066 VSEL-FR-14, 069)
+            crate::commands::project_apply::project_apply_preview,
+            crate::commands::project_apply::project_apply,
+            // output
+            crate::commands::project_output::project_copy_to_output,
+            // wrap up (065 PRJ-FR-14/25/30, 071)
+            crate::commands::project_wrap_up::project_wrap_up_status,
+            crate::commands::project_wrap_up::project_close,
+            crate::commands::project_wrap_up::project_duplicate,
+            // frame review
+            crate::commands::frame_review::pix_review_frames,
+            crate::commands::frame_review::pix_start_measurement,
+            crate::commands::frame_review::pix_prioritize_measurement,
+            crate::commands::frame_review::pix_measurement_status,
+            crate::commands::frame_review::pix_cancel_measurement,
+            crate::commands::frame_review::pix_list_measurement_runs,
+            crate::commands::frame_review::pix_open_frame,
+            crate::commands::frame_review::pix_preview_tile,
+            crate::commands::frame_review::pix_compare_regions,
+            crate::commands::frame_review::pix_sample_region,
+            crate::commands::frame_review::pix_frame_stars,
+            crate::commands::frame_review::pix_star_cutouts,
+            crate::commands::frame_review::pix_frame_detail,
+            crate::commands::frame_review::pix_review_import,
+            crate::commands::frame_review::pix_import_review,
+            crate::commands::frame_review::pix_confirm_import,
+            crate::commands::frame_review::pix_thumbnails,
+            crate::commands::frame_review::pix_review_list,
+            crate::commands::frame_review::pix_display_names,
+            crate::commands::frame_review::pix_review_mark,
+            // session intake (064 LIB-FR-04/24)
+            crate::commands::frame_review::pix_session_intake,
+            crate::commands::frame_review::pix_session_review_list,
+            crate::commands::frame_review::pix_session_review_mark,
+            crate::commands::frame_review::pix_finish_review,
+            crate::commands::frame_review::pix_reopen_review,
+            // calibration
+            crate::commands::calibration_inputs::calibration_list_inputs,
+            crate::commands::calibration_inputs::calibration_input,
+            crate::commands::calibration_inputs::calibration_review_adoption,
+            crate::commands::calibration_inputs::calibration_adopt,
+            crate::commands::calibration_inputs::calibration_list_adoptions,
+            crate::commands::calibration_inputs::calibration_custody_facts,
+            crate::commands::session_calibration::calibration_needs,
+            crate::commands::session_calibration::calibration_reassign,
+            // profiles
+            crate::commands::profiles::prepare_profiles,
+            crate::commands::profiles::prepare_profile_create,
+            crate::commands::profiles::prepare_profile_update,
+            // import
+            crate::commands::naming::naming_get,
+            crate::commands::naming::naming_save,
+            crate::commands::naming::naming_restore_defaults,
+            crate::commands::naming::naming_preview,
+            crate::commands::import::import_sources_list,
+            crate::commands::import::import_source_save,
+            crate::commands::import::import_preview,
+            crate::commands::import::import_recheck,
+            crate::commands::import::import_set_type,
+            crate::commands::import::import_set_excluded,
+            crate::commands::import::import_choose_location,
+            crate::commands::import::import_start,
+            crate::commands::import::import_retry,
+            crate::commands::import::import_status,
+            // planning
+            crate::commands::rigs::rig_filters_get,
+            crate::commands::rigs::rig_filters_save,
+            crate::commands::rigs::rig_unknown_filters,
+            crate::commands::observing_plans::planning_list_sites,
+            crate::commands::observing_plans::planning_save_site,
+            crate::commands::observing_plans::planning_set_default_site,
+            crate::commands::observing_plans::planning_compute_windows,
+            crate::commands::observing_plans::planning_set_planned,
+            crate::commands::observing_plans::planning_review_reminders,
+            crate::commands::observing_plans::planning_enable_reminders,
+            crate::commands::observing_plans::planning_disable_reminders,
+            crate::commands::observing_plans::planning_reminder_status,
+            crate::commands::observing_plans::planning_open_notification_settings,
+            crate::commands::observing_plans::planning_review_calendar_export,
+            crate::commands::observing_plans::planning_export_calendar,
+            crate::commands::observing_plans::planning_tonight,
+            crate::commands::observing_plans::planning_project_windows,
+            crate::commands::observing_plans::planning_target_gaps,
+            // targets
+            crate::commands::targets_list::planning_target_rows,
+            crate::commands::targets_list::targets_search,
+            crate::commands::targets_list::targets_add,
+            crate::commands::targets_list::targets_set_favourite,
+            crate::commands::targets_list::targets_presets_list,
+            crate::commands::targets_list::targets_preset_save,
+            crate::commands::targets_list::targets_preset_rename,
+            crate::commands::targets_list::targets_preset_delete,
+            // home
+            crate::commands::home::home_dashboard,
+        ]
+    };
+}
+
+/// The tauri-specta builder over the library-shell command list; its export
+/// is `apps/desktop/src/bindings/library-index.ts` (`tests/library_bindings.rs`).
+#[must_use]
+pub fn library_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
+    use tauri_specta::collect_commands;
+    tauri_specta::Builder::<tauri::Wry>::new().commands(library_commands!(collect_commands))
+}
+
 /// Build the shell, open its catalog and run the event loop.
 ///
 /// # Errors
@@ -72,163 +247,10 @@ pub const BRIDGE_BIND_ENV: &str = "PV_MCP_BRIDGE_BIND";
 /// configuration, an unusable data directory, a catalog that cannot be opened
 /// (including a foreign or legacy database), reminder subscriptions that
 /// cannot be read when the notifier attaches, or the Tauri runtime itself.
-#[expect(clippy::too_many_lines, reason = "the handler list holds one labelled block per feature")]
 pub fn run() -> Result<(), Box<dyn Error>> {
+    use tauri::generate_handler;
     let provider = provider_config()?;
-    // One labelled block per feature. A feature adds its handlers under its own
-    // label only, by full path (`crate::commands::<feature>::<handler>`), so
-    // features register without touching each other's lines or the imports.
-    let builder = tauri::Builder::default().invoke_handler(tauri::generate_handler![
-        // library (064)
-        ipc::library_register_location,
-        ipc::library_list_locations,
-        ipc::library_start_scan,
-        ipc::library_scan_status,
-        ipc::library_cancel_scan,
-        ipc::library_list_sessions,
-        ipc::library_trashed_assets,
-        ipc::library_session,
-        ipc::library_preview_metadata,
-        ipc::library_confirm_metadata,
-        ipc::library_set_quality,
-        ipc::library_search_targets,
-        ipc::library_resolve_target,
-        ipc::library_save_target,
-        ipc::library_associate_target,
-        ipc::library_save_equipment,
-        ipc::library_confirm_equipment,
-        ipc::library_target_coverage,
-        ipc::library_review_remap,
-        ipc::library_apply_remap,
-        ipc::library_update_location,
-        ipc::library_retry_scope,
-        ipc::library_reselect_location,
-        ipc::library_review_retire_location,
-        ipc::library_retire_location,
-        ipc::library_list_operations,
-        // session filters (064 LIB-FR-17, 065 PRJ-FR-19)
-        crate::commands::session_filters::library_session_filter_counts,
-        crate::commands::session_filters::project_prefill_from_session,
-        crate::commands::session_filters::project_preview_session_addition,
-        crate::commands::session_filters::project_add_session,
-        // projects
-        crate::commands::project_goals::project_create,
-        crate::commands::project_goals::project_update,
-        crate::commands::project_goals::project_set_subjects,
-        crate::commands::project_goals::project_set_rigs,
-        crate::commands::project_goals::project_set_goals,
-        crate::commands::project_goals::project_apply_goal_template,
-        crate::commands::project_goals::project_list,
-        crate::commands::project_goals::project_candidates,
-        crate::commands::project_goals::goal_template_list,
-        crate::commands::project_goals::goal_template_save,
-        crate::commands::project_goals::goal_template_delete,
-        crate::commands::project_progress::project_progress,
-        // project inputs (065 PRJ-FR-07/08/27/29/31, 066 VSEL-FR-02/10/15)
-        crate::commands::project_inputs::project_inputs,
-        crate::commands::project_inputs::project_add_sessions,
-        crate::commands::project_inputs::project_remove_sessions,
-        crate::commands::project_inputs::project_move_sessions,
-        crate::commands::project_inputs::project_create_group,
-        crate::commands::project_inputs::project_split_group,
-        crate::commands::project_inputs::project_rename_group,
-        crate::commands::project_inputs::project_set_group_panel,
-        crate::commands::project_inputs::project_set_frames,
-        // apply (066 VSEL-FR-14, 069)
-        crate::commands::project_apply::project_apply_preview,
-        crate::commands::project_apply::project_apply,
-        // output
-        crate::commands::project_output::project_copy_to_output,
-        // wrap up (065 PRJ-FR-14/25/30, 071)
-        crate::commands::project_wrap_up::project_wrap_up_status,
-        crate::commands::project_wrap_up::project_close,
-        crate::commands::project_wrap_up::project_duplicate,
-        // frame review
-        crate::commands::frame_review::pix_review_frames,
-        crate::commands::frame_review::pix_start_measurement,
-        crate::commands::frame_review::pix_prioritize_measurement,
-        crate::commands::frame_review::pix_measurement_status,
-        crate::commands::frame_review::pix_cancel_measurement,
-        crate::commands::frame_review::pix_list_measurement_runs,
-        crate::commands::frame_review::pix_open_frame,
-        crate::commands::frame_review::pix_preview_tile,
-        crate::commands::frame_review::pix_compare_regions,
-        crate::commands::frame_review::pix_sample_region,
-        crate::commands::frame_review::pix_frame_stars,
-        crate::commands::frame_review::pix_star_cutouts,
-        crate::commands::frame_review::pix_frame_detail,
-        crate::commands::frame_review::pix_review_import,
-        crate::commands::frame_review::pix_import_review,
-        crate::commands::frame_review::pix_confirm_import,
-        crate::commands::frame_review::pix_thumbnails,
-        crate::commands::frame_review::pix_review_list,
-        crate::commands::frame_review::pix_display_names,
-        crate::commands::frame_review::pix_review_mark,
-        // session intake (064 LIB-FR-04/24)
-        crate::commands::frame_review::pix_session_intake,
-        crate::commands::frame_review::pix_session_review_list,
-        crate::commands::frame_review::pix_session_review_mark,
-        crate::commands::frame_review::pix_finish_review,
-        crate::commands::frame_review::pix_reopen_review,
-        // calibration
-        crate::commands::calibration_inputs::calibration_list_inputs,
-        crate::commands::calibration_inputs::calibration_input,
-        crate::commands::calibration_inputs::calibration_review_adoption,
-        crate::commands::calibration_inputs::calibration_adopt,
-        crate::commands::calibration_inputs::calibration_list_adoptions,
-        crate::commands::calibration_inputs::calibration_custody_facts,
-        crate::commands::session_calibration::calibration_needs,
-        crate::commands::session_calibration::calibration_reassign,
-        // profiles
-        crate::commands::profiles::prepare_profiles,
-        crate::commands::profiles::prepare_profile_create,
-        crate::commands::profiles::prepare_profile_update,
-        // import
-        crate::commands::naming::naming_get,
-        crate::commands::naming::naming_save,
-        crate::commands::naming::naming_restore_defaults,
-        crate::commands::naming::naming_preview,
-        crate::commands::import::import_sources_list,
-        crate::commands::import::import_source_save,
-        crate::commands::import::import_preview,
-        crate::commands::import::import_recheck,
-        crate::commands::import::import_set_type,
-        crate::commands::import::import_set_excluded,
-        crate::commands::import::import_choose_location,
-        crate::commands::import::import_start,
-        crate::commands::import::import_retry,
-        crate::commands::import::import_status,
-        // planning
-        crate::commands::rigs::rig_filters_get,
-        crate::commands::rigs::rig_filters_save,
-        crate::commands::rigs::rig_unknown_filters,
-        crate::commands::observing_plans::planning_list_sites,
-        crate::commands::observing_plans::planning_save_site,
-        crate::commands::observing_plans::planning_set_default_site,
-        crate::commands::observing_plans::planning_compute_windows,
-        crate::commands::observing_plans::planning_set_planned,
-        crate::commands::observing_plans::planning_review_reminders,
-        crate::commands::observing_plans::planning_enable_reminders,
-        crate::commands::observing_plans::planning_disable_reminders,
-        crate::commands::observing_plans::planning_reminder_status,
-        crate::commands::observing_plans::planning_open_notification_settings,
-        crate::commands::observing_plans::planning_review_calendar_export,
-        crate::commands::observing_plans::planning_export_calendar,
-        crate::commands::observing_plans::planning_tonight,
-        crate::commands::observing_plans::planning_project_windows,
-        crate::commands::observing_plans::planning_target_gaps,
-        // targets
-        crate::commands::targets_list::planning_target_rows,
-        crate::commands::targets_list::targets_search,
-        crate::commands::targets_list::targets_add,
-        crate::commands::targets_list::targets_set_favourite,
-        crate::commands::targets_list::targets_presets_list,
-        crate::commands::targets_list::targets_preset_save,
-        crate::commands::targets_list::targets_preset_rename,
-        crate::commands::targets_list::targets_preset_delete,
-        // home
-        crate::commands::home::home_dashboard,
-    ]);
+    let builder = tauri::Builder::default().invoke_handler(library_commands!(generate_handler));
     // The planning handlers call these through their Rust APIs, which need no
     // grant; window `library` holds only `capabilities/library.json`.
     let builder = builder.plugin(tauri_plugin_dialog::init()).plugin(tauri_plugin_opener::init());
