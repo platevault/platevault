@@ -220,9 +220,17 @@ impl Library {
         proposed: NativePath,
     ) -> Result<RemapReview, LibraryError> {
         let root = proposed.to_path_buf()?;
-        let identity = blocking(move || inventory::observe_root_identity(&root)).await?;
+        let observed = blocking(move || inventory::observe_root(&root)).await?;
+        let probe = InventoryProbe::default();
         self.catalog
-            .review_remap(location_id, expected, &proposed, &identity, InventoryProbe::default())
+            .review_remap(
+                location_id,
+                expected,
+                &proposed,
+                &observed.identity,
+                observed.volume_kind,
+                probe,
+            )
             .await
     }
 

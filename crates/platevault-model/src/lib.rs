@@ -491,7 +491,8 @@ pub struct Location {
     pub availability: Availability,
     pub last_observed_at: Option<String>,
     pub lifecycle: LocationLifecycle,
-    /// The kind of volume the root was registered on (LIB-FR-01).
+    /// The kind of volume the root is on, as observed when it was registered
+    /// or last remapped (LIB-FR-01).
     pub volume_kind: VolumeKind,
 }
 
@@ -1105,6 +1106,9 @@ pub struct RemapReview {
     pub expected_revision: Revision,
     pub proposed_root: NativePath,
     pub proposed_identity: FileIdentity,
+    /// The kind of volume the proposed root was observed on, which applying
+    /// the review records for the location.
+    pub proposed_volume_kind: VolumeKind,
     pub items: Vec<RemapItem>,
     pub blocked: Vec<RemapBlock>,
 }
