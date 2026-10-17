@@ -155,6 +155,9 @@ pub struct ResolvedDestination {
 /// - `plan.invalid_state` — the draft plan left `draft` (the user discarded
 ///   it) before confirm opened it for review; it stays as it is and the item
 ///   stays unconfirmed.
+///
+/// A refused or failed confirm leaves nothing of `chosen_attribution`: the
+/// pick is written in the transaction that opens the plan.
 #[allow(clippy::too_many_lines)]
 pub async fn confirm(
     pool: &SqlitePool,
@@ -178,7 +181,7 @@ pub async fn confirm(
     // check again here, at the step that plans. A scan can still make the row
     // stale after this check, so `open_plan_for_review` checks once more in
     // the transaction that links the plan; checking here as well spares the
-    // work and the attribution writes below for a row already stale.
+    // work below for a row already stale.
     if item.is_master_item != 0
         && crate::legacy_rows::retire_stale_master(pool, &item.id)
             .await
@@ -233,7 +236,7 @@ pub async fn confirm(
         ));
     }
 
-    // `item_geometry` is consumed by the apply-path below once the plan exists.
+    // `item_geometry` settles the attribution pick once the gates below pass (8f).
     let (item_geometry, attribution_candidates) =
         compute_attribution_candidates(pool, &req.inbox_item_id, is_light_item).await;
 
@@ -303,6 +306,18 @@ pub async fn confirm(
     // 8e. Self-collision gate: refuse before any plan row exists.
     reject_if_destinations_collide(&resolved_items)?;
 
+    // 8f. Attribution pick (spec 008 Q27, F-Framing-10/6, FR-022): check it
+    // against the database and settle the framing/project it creates before
+    // any plan row exists, so a pick naming a missing framing or project, or
+    // needing geometry the item lacks, leaves no plan behind. Its writes wait
+    // for the transaction that opens the plan (steps 12 to 14).
+    let attribution = match (&item_geometry, &req.chosen_attribution) {
+        (Some(geometry), Some(chosen)) => {
+            attribution::resolve_chosen_attribution(pool, geometry, chosen).await?
+        }
+        _ => None,
+    };
+
     // 10. Build the plan.
     // A move-only split is non-destructive from the user perspective but the
     // plans table CHECK constraint only accepts the canonical 'archive' | 'trash'
@@ -351,31 +366,25 @@ pub async fn confirm(
         insert_plan_items_batch(pool, &plan_id, &item.root_id, &resolved_items, &root_paths)
             .await?;
 
-    // 12. Attribution apply-path (spec 008 Q27, F-Framing-10/6, FR-022): the
-    // plan row and its items now exist, so the pick can be persisted
-    // (`plans.chosen_framing_id`) for `ingest_sessions` to bind once the real
-    // session is created. Creates the framing/project the kind requires and
-    // honors the F-Framing-6 completed-project reopen.
+    // 12-14. Move the plan to ready_for_review, write the attribution pick,
+    // link the plan and mark the item `plan_open`, in the transaction that
+    // checks the item can still be planned.
     //
-    // Ordered before `open_plan_for_review` below, not after: frame-to-framing
-    // attribution is a Tier-1 record (Constitution V) that the filesystem cannot
-    // re-derive, and that step is what leaves the plan ready to apply. Running it
-    // first left a `ready_for_review` plan on a failed attribution, so the frames
-    // could move with the user's decision missing. The plan stays in `draft` on
-    // failure, which `plans.approve` refuses.
-    let attribution_applied = match (&item_geometry, &req.chosen_attribution) {
-        (Some(geometry), Some(chosen)) => {
-            attribution::apply_chosen_attribution(pool, bus, &plan_id, geometry, chosen).await?
-        }
-        _ => None,
+    // The pick is written in that transaction, not before or after it.
+    // Frame-to-framing attribution is a Tier-1 record (Constitution V) that
+    // the filesystem cannot re-derive, so a plan opens only with the pick
+    // recorded, or the frames could move with the user's decision missing.
+    // And a confirm refused there must leave none of the pick's framing,
+    // project, reopen or audit row behind (bd astro-plan-ri2e2).
+    let written = open_plan_for_review(pool, &item, &plan_id, attribution).await?;
+
+    // 15. Publish the pick's events, then `inventory.confirmed` (best-effort:
+    //     the durable writes above already succeeded, and a bus failure must
+    //     not surface as Fatal).
+    let attribution_applied = match written {
+        Some(written) => Some(written.publish(bus).await),
+        None => None,
     };
-
-    // 13–14. Move the plan to ready_for_review, link it and mark the item
-    // `plan_open`, in the transaction that checks the item can still be planned.
-    open_plan_for_review(pool, &item, &plan_id).await?;
-
-    // 15. Publish `inventory.confirmed` (best-effort; durable writes above already
-    //     succeeded — a bus failure must not surface as Fatal).
     publish_inventory_confirmed(bus, &req.inbox_item_id, &plan_id).await;
 
     Ok(ConfirmResponse {
@@ -411,10 +420,10 @@ fn stale_master_removed(inbox_item_id: &str) -> ContractError {
     )
 }
 
-/// Steps 13–14: move the draft plan `plan_id` to `ready_for_review`, link
-/// `item` to it and mark the item `plan_open`, in one write transaction, so
-/// an item is never left off `plan_open` while its plan and link stand
-/// (#1101).
+/// Steps 12-14: move the draft plan `plan_id` to `ready_for_review`, write
+/// the attribution `pick` on it, link `item` to it and mark the item
+/// `plan_open`, in one write transaction, so an item is never left off
+/// `plan_open` while its plan and link stand (#1101).
 ///
 /// bd astro-plan-br8hr: the stale-master check at the top of [`confirm`]
 /// commits on its own, and a scan can commit between it and this step. The
@@ -431,6 +440,15 @@ fn stale_master_removed(inbox_item_id: &str) -> ContractError {
 /// `draft`; otherwise the transaction rolls back, so the item stays
 /// unconfirmed and the discarded plan stays discarded, and confirm is refused.
 ///
+/// bd astro-plan-ri2e2: the pick is written after those checks, in this
+/// transaction, so a refusal comes before any of its writes, and a failure
+/// after them (the link, the commit) rolls them back with the plan's opening.
+/// Either way no framing or project of the pick is left without frames, no
+/// completed project stays reopened, and no audit row names a plan that is
+/// gone or discarded. The returned [`attribution::WrittenAttribution`]
+/// carries the pick's events, for the caller to publish now that the plan
+/// is committed.
+///
 /// `BEGIN IMMEDIATE` takes the write lock before the first statement, so a
 /// scan or the plan listener holding it makes this wait for `busy_timeout`
 /// instead of failing on a read snapshot it cannot upgrade. Every statement
@@ -440,7 +458,8 @@ async fn open_plan_for_review(
     pool: &SqlitePool,
     item: &inbox_repo::InboxItemRow,
     plan_id: &str,
-) -> Result<(), ContractError> {
+    pick: Option<attribution::PendingAttribution>,
+) -> Result<Option<attribution::WrittenAttribution>, ContractError> {
     let mut tx = pool
         .begin_with("BEGIN IMMEDIATE")
         .await
@@ -486,10 +505,15 @@ async fn open_plan_for_review(
             false,
         ));
     }
+    let written = match pick {
+        Some(pick) => Some(pick.write(&mut tx, plan_id).await?),
+        None => None,
+    };
     inbox_repo::insert_plan_link_conn(&mut tx, &item.id, plan_id)
         .await
         .map_err(|e| db_internal_ctx(e, "insert plan link"))?;
-    tx.commit().await.map_err(|e| db_internal_ctx(e, "commit the opened plan"))
+    tx.commit().await.map_err(|e| db_internal_ctx(e, "commit the opened plan"))?;
+    Ok(written)
 }
 
 /// Context threaded through [`resolve_per_file_plan_items`] to avoid a
@@ -1232,8 +1256,8 @@ mod tests {
     use persistence_calibration::repositories::equipment as equipment_repo;
     use persistence_core::Database;
     use persistence_inbox::repositories::inbox::{
-        InsertEvidence, InsertInboxItem, UpsertClassification, UpsertInboxSubItem,
-        UpsertSourceGroup,
+        InsertEvidence, InsertInboxItem, UpsertClassification, UpsertFileMetadata,
+        UpsertInboxSubItem, UpsertSourceGroup,
     };
     use std::io::Write;
 
@@ -3615,9 +3639,13 @@ mod tests {
     /// insert writes what the scan writes: the master row for `a\b.fits` under
     /// its own text and, with `scan_reads_old_path`, the deletion of the old
     /// row, which the scan retires when it reads the light frame at `a/b.fits`.
-    /// Either way no plan may be made from the old row.
+    /// Either way no plan may be made from the old row, and nothing `pick`
+    /// would have written may be left.
     #[cfg(not(windows))]
-    async fn assert_no_plan_when_a_scan_lands_mid_confirm(scan_reads_old_path: bool) {
+    async fn assert_no_plan_when_a_scan_lands_mid_confirm(
+        scan_reads_old_path: bool,
+        pick: Option<AttributionPick>,
+    ) {
         let tmp = tempfile::tempdir().unwrap();
         let nested = tmp.path().join("a");
         std::fs::create_dir(&nested).unwrap();
@@ -3639,6 +3667,10 @@ mod tests {
             &["a/b.fits"],
         )
         .await;
+        let chosen_attribution = match pick {
+            Some(pick) => Some(seed_attribution_pick(&db, "old-master", "a/b.fits", pick).await),
+            None => None,
+        };
         sqlx::query(
             "UPDATE inbox_items SET relative_path = 'a/b.fits', is_master_item = 1
              WHERE id = 'old-master'",
@@ -3646,28 +3678,7 @@ mod tests {
         .execute(db.pool())
         .await
         .unwrap();
-        sqlx::query(
-            r"CREATE TRIGGER scan_stores_backslash_row AFTER INSERT ON plans BEGIN
-                INSERT INTO inbox_items
-                    (id, root_id, relative_path, file_count, discovered_at, last_scanned_at,
-                     content_signature, state, lane, format, is_master_item, master_frame_type)
-                VALUES ('new-master', 'root-1', 'a\b.fits', 1, datetime('now'), datetime('now'),
-                        '', 'pending_classification', 'fits', 'fits', 1, 'dark');
-            END",
-        )
-        .execute(db.pool())
-        .await
-        .unwrap();
-        if scan_reads_old_path {
-            sqlx::query(
-                "CREATE TRIGGER scan_retires_old_row AFTER INSERT ON plans BEGIN
-                    DELETE FROM inbox_items WHERE id = 'old-master';
-                END",
-            )
-            .execute(db.pool())
-            .await
-            .unwrap();
-        }
+        install_scan_on_plan_insert(&db, scan_reads_old_path).await;
 
         let result = confirm(
             db.pool(),
@@ -3678,7 +3689,7 @@ mod tests {
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
-                chosen_attribution: None,
+                chosen_attribution,
             },
         )
         .await;
@@ -3698,6 +3709,38 @@ mod tests {
                 .await
                 .unwrap();
         assert_eq!(paths, ["a\\b.fits"], "the old row is gone; the scan's own row stays");
+        if let Some(pick) = pick {
+            assert_no_attribution_left(&db, pick).await;
+        }
+    }
+
+    /// The scan [`assert_no_plan_when_a_scan_lands_mid_confirm`] lets commit
+    /// when confirm inserts the plan: it stores the master row for `a\b.fits`
+    /// and, with `reads_old_path`, deletes the old row `old-master`.
+    #[cfg(not(windows))]
+    async fn install_scan_on_plan_insert(db: &Database, reads_old_path: bool) {
+        sqlx::query(
+            r"CREATE TRIGGER scan_stores_backslash_row AFTER INSERT ON plans BEGIN
+                INSERT INTO inbox_items
+                    (id, root_id, relative_path, file_count, discovered_at, last_scanned_at,
+                     content_signature, state, lane, format, is_master_item, master_frame_type)
+                VALUES ('new-master', 'root-1', 'a\b.fits', 1, datetime('now'), datetime('now'),
+                        '', 'pending_classification', 'fits', 'fits', 1, 'dark');
+            END",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+        if reads_old_path {
+            sqlx::query(
+                "CREATE TRIGGER scan_retires_old_row AFTER INSERT ON plans BEGIN
+                    DELETE FROM inbox_items WHERE id = 'old-master';
+                END",
+            )
+            .execute(db.pool())
+            .await
+            .unwrap();
+        }
     }
 
     /// A scan that cannot read the light frame at `a/b.fits` keeps the old row
@@ -3706,7 +3749,7 @@ mod tests {
     #[cfg(not(windows))]
     #[tokio::test]
     async fn a_scan_storing_the_backslash_row_mid_confirm_stops_the_plan() {
-        assert_no_plan_when_a_scan_lands_mid_confirm(false).await;
+        assert_no_plan_when_a_scan_lands_mid_confirm(false, None).await;
     }
 
     /// A scan that reads the light frame at `a/b.fits` deletes the old row in
@@ -3714,15 +3757,36 @@ mod tests {
     #[cfg(not(windows))]
     #[tokio::test]
     async fn a_scan_retiring_the_old_row_mid_confirm_stops_the_plan() {
-        assert_no_plan_when_a_scan_lands_mid_confirm(true).await;
+        assert_no_plan_when_a_scan_lands_mid_confirm(true, None).await;
+    }
+
+    /// bd astro-plan-ri2e2: the refusal for a backslash row stored mid-confirm
+    /// comes after the pick is known, so whatever the pick would write must
+    /// not be left for a plan that does not exist.
+    #[cfg(not(windows))]
+    #[tokio::test]
+    async fn a_scan_storing_the_backslash_row_mid_confirm_leaves_no_attribution() {
+        for pick in AttributionPick::ALL {
+            assert_no_plan_when_a_scan_lands_mid_confirm(false, Some(pick)).await;
+        }
+    }
+
+    /// bd astro-plan-ri2e2: as above, for the refusal of a row the scan
+    /// deleted mid-confirm.
+    #[cfg(not(windows))]
+    #[tokio::test]
+    async fn a_scan_retiring_the_old_row_mid_confirm_leaves_no_attribution() {
+        for pick in AttributionPick::ALL {
+            assert_no_plan_when_a_scan_lands_mid_confirm(true, Some(pick)).await;
+        }
     }
 
     /// The user discards the draft plan from the plan list while confirm is
     /// still writing it: a trigger on the plan item insert does what
     /// `plans.discard` does. Confirm must not bring the plan back as
-    /// `ready_for_review` with `discarded_at` set, nor link the item to it.
-    #[tokio::test]
-    async fn a_draft_discarded_mid_confirm_is_not_opened_for_review() {
+    /// `ready_for_review` with `discarded_at` set, nor link the item to it,
+    /// nor leave anything `pick` would have written.
+    async fn assert_a_draft_discarded_mid_confirm_is_not_opened(pick: Option<AttributionPick>) {
         let tmp = tempfile::tempdir().unwrap();
         write_fits(
             tmp.path(),
@@ -3742,6 +3806,12 @@ mod tests {
             &["light_001.fits"],
         )
         .await;
+        let chosen_attribution = match pick {
+            Some(pick) => {
+                Some(seed_attribution_pick(&db, "item-discarded", "light_001.fits", pick).await)
+            }
+            None => None,
+        };
         sqlx::query(
             "CREATE TRIGGER user_discards_the_draft AFTER INSERT ON plan_items BEGIN
                 UPDATE plans SET state = 'discarded', discarded_at = '2026-01-01T00:00:00Z'
@@ -3761,7 +3831,7 @@ mod tests {
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
-                chosen_attribution: None,
+                chosen_attribution,
             },
         )
         .await
@@ -3774,5 +3844,299 @@ mod tests {
         assert!(inbox_repo::get_plan_link(db.pool(), "item-discarded").await.unwrap().is_none());
         let item = inbox_repo::get_inbox_item(db.pool(), "item-discarded").await.unwrap();
         assert_ne!(item.state, "plan_open", "the item stays unconfirmed");
+        if let Some(pick) = pick {
+            assert_no_attribution_left(&db, pick).await;
+        }
+    }
+
+    #[tokio::test]
+    async fn a_draft_discarded_mid_confirm_is_not_opened_for_review() {
+        assert_a_draft_discarded_mid_confirm_is_not_opened(None).await;
+    }
+
+    /// bd astro-plan-ri2e2: the discard refusal also comes after the pick is
+    /// known; the discarded plan must not carry it either.
+    #[tokio::test]
+    async fn a_draft_discarded_mid_confirm_leaves_no_attribution() {
+        for pick in AttributionPick::ALL {
+            assert_a_draft_discarded_mid_confirm_is_not_opened(Some(pick)).await;
+        }
+    }
+
+    // ── bd astro-plan-ri2e2: a refused confirm leaves no attribution behind ──
+
+    /// A `chosen_attribution` pick that writes more than the plan's own row.
+    #[derive(Clone, Copy, Debug)]
+    enum AttributionPick {
+        /// `new_framing` under a `completed` project: creates a framing and
+        /// reopens the project (F-Framing-6).
+        NewFramingOnCompletedProject,
+        /// `new_project`: creates a project and its framing.
+        NewProject,
+    }
+
+    impl AttributionPick {
+        const ALL: [Self; 2] = [Self::NewFramingOnCompletedProject, Self::NewProject];
+    }
+
+    /// Stage pointing, rotation and optic train for `item_id`'s `file`, as
+    /// the scan stages them from the headers, so the pick can create a
+    /// framing; seed the completed project `pick` names; return the pick.
+    async fn seed_attribution_pick(
+        db: &Database,
+        item_id: &str,
+        file: &str,
+        pick: AttributionPick,
+    ) -> contracts_core::framing::ChosenAttributionDto {
+        use contracts_core::framing::{ChosenAttributionDto, ChosenAttributionKind};
+        inbox_repo::upsert_inbox_file_metadata(
+            db.pool(),
+            &UpsertFileMetadata {
+                inbox_item_id: item_id,
+                relative_file_path: file,
+                telescop: Some("RASA 8"),
+                instrume: Some("ASI2600MM"),
+                focal_length_mm: Some(400.0),
+                pixel_size_um: Some(3.76),
+                naxis1: Some(6248),
+                naxis2: Some(4176),
+                ra_deg: Some(83.63),
+                dec_deg: Some(22.01),
+                rotator_angle_deg: Some(1.0),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        match pick {
+            AttributionPick::NewFramingOnCompletedProject => {
+                // The reopen parses the project id as a UUID, as every real
+                // project id is one.
+                let project_id = domain_core::ids::new_id();
+                persistence_plans::repositories::projects::insert_project(
+                    db.pool(),
+                    &persistence_plans::repositories::projects::InsertProject {
+                        id: &project_id,
+                        name: "M42 project",
+                        tool: "PixInsight",
+                        lifecycle: "completed",
+                        path: "projects/m42",
+                        notes: None,
+                        canonical_target_id: None,
+                        is_mosaic: false,
+                    },
+                )
+                .await
+                .unwrap();
+                ChosenAttributionDto {
+                    kind: ChosenAttributionKind::NewFraming,
+                    project_id: Some(project_id),
+                    framing_id: None,
+                }
+            }
+            AttributionPick::NewProject => ChosenAttributionDto {
+                kind: ChosenAttributionKind::NewProject,
+                project_id: None,
+                framing_id: None,
+            },
+        }
+    }
+
+    /// Nothing the refused confirm's `pick` wrote is left: no framing, which
+    /// no plan would ever give frames; no project it created; no completed
+    /// project it reopened; no attribution audit row or lifecycle transition
+    /// naming a plan that is gone or discarded, and no event for either.
+    async fn assert_no_attribution_left(db: &Database, pick: AttributionPick) {
+        let count = |sql: &'static str| {
+            let pool = db.pool().clone();
+            async move { sqlx::query_scalar::<_, i64>(sql).fetch_one(&pool).await.unwrap() }
+        };
+        assert_eq!(count("SELECT COUNT(*) FROM framing").await, 0, "{pick:?}: no framing is left");
+        let lifecycles: Vec<String> = sqlx::query_scalar("SELECT lifecycle FROM projects")
+            .fetch_all(db.pool())
+            .await
+            .unwrap();
+        match pick {
+            AttributionPick::NewFramingOnCompletedProject => {
+                assert_eq!(lifecycles, ["completed"], "{pick:?}: the project is not reopened");
+            }
+            AttributionPick::NewProject => {
+                assert!(lifecycles.is_empty(), "{pick:?}: no project is left");
+            }
+        }
+        assert_eq!(
+            count("SELECT COUNT(*) FROM audit_log_entry WHERE trigger = 'attribution.applied'")
+                .await,
+            0,
+            "{pick:?}: no attribution audit row is left"
+        );
+        assert_eq!(
+            count("SELECT COUNT(*) FROM audit_log_entry WHERE entity_type = 'project'").await,
+            0,
+            "{pick:?}: no project transition is recorded"
+        );
+        assert_eq!(
+            count(
+                "SELECT COUNT(*) FROM events \
+                 WHERE topic IN ('attribution.applied', 'lifecycle.transition.applied')"
+            )
+            .await,
+            0,
+            "{pick:?}: no attribution or reopen event is published"
+        );
+        assert_eq!(
+            count("SELECT COUNT(*) FROM plans WHERE chosen_framing_id IS NOT NULL").await,
+            0,
+            "{pick:?}: no plan carries the pick"
+        );
+    }
+
+    /// bd astro-plan-ri2e2: a write after the attribution that fails (here
+    /// the plan link) fails the confirm; the pick's writes go with it.
+    #[tokio::test]
+    async fn a_failed_plan_link_leaves_no_attribution() {
+        for pick in AttributionPick::ALL {
+            let tmp = tempfile::tempdir().unwrap();
+            write_fits(
+                tmp.path(),
+                "light_001.fits",
+                "Light Frame",
+                Some("M42"),
+                Some("Ha"),
+                Some("2025-10-10T22:00:00"),
+            );
+            let db = test_db().await;
+            setup_classified_item(
+                &db,
+                "item-link-fails",
+                "classified",
+                Some("light"),
+                "sig-link-fails",
+                &["light_001.fits"],
+            )
+            .await;
+            let chosen =
+                seed_attribution_pick(&db, "item-link-fails", "light_001.fits", pick).await;
+            sqlx::query(
+                "CREATE TRIGGER plan_link_fails BEFORE INSERT ON inbox_plan_links BEGIN
+                    SELECT RAISE(ABORT, 'disk full');
+                END",
+            )
+            .execute(db.pool())
+            .await
+            .unwrap();
+
+            confirm(
+                db.pool(),
+                &make_bus(&db),
+                ConfirmRequest {
+                    inbox_item_id: "item-link-fails".to_owned(),
+                    content_signature: "sig-link-fails".to_owned(),
+                    destructive_destination: None,
+                    root_absolute_path: tmp.path().to_owned(),
+                    root_id: None,
+                    chosen_attribution: Some(chosen),
+                },
+            )
+            .await
+            .expect_err("a failed plan link must fail the confirm");
+
+            assert_eq!(count_plans_in_state(db.pool(), "ready_for_review").await, 0);
+            assert_no_attribution_left(&db, pick).await;
+        }
+    }
+
+    /// The pick a confirm opens its plan with is written whole: the framing
+    /// it creates, the completed project it reopens, the pick on the plan,
+    /// the attribution audit row naming the plan, and, once that commits,
+    /// the events for both.
+    #[tokio::test]
+    async fn confirm_reopens_the_completed_project_its_new_framing_pick_names() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_fits(
+            tmp.path(),
+            "light_001.fits",
+            "Light Frame",
+            Some("M42"),
+            Some("Ha"),
+            Some("2025-10-10T22:00:00"),
+        );
+        let db = test_db().await;
+        setup_classified_item(
+            &db,
+            "item-reopen",
+            "classified",
+            Some("light"),
+            "sig-reopen",
+            &["light_001.fits"],
+        )
+        .await;
+        let chosen = seed_attribution_pick(
+            &db,
+            "item-reopen",
+            "light_001.fits",
+            AttributionPick::NewFramingOnCompletedProject,
+        )
+        .await;
+        let project_id = chosen.project_id.clone().unwrap();
+
+        let resp = confirm(
+            db.pool(),
+            &make_bus(&db),
+            ConfirmRequest {
+                inbox_item_id: "item-reopen".to_owned(),
+                content_signature: "sig-reopen".to_owned(),
+                destructive_destination: None,
+                root_absolute_path: tmp.path().to_owned(),
+                root_id: None,
+                chosen_attribution: Some(chosen),
+            },
+        )
+        .await
+        .unwrap();
+
+        let applied = resp.attribution_applied.expect("the pick applies");
+        assert_eq!(applied.project_id, project_id);
+        assert!(applied.reopened);
+        let framing_id = applied.framing_id.expect("new_framing creates a framing");
+        let framing =
+            persistence_targets::repositories::framing::get_framing(db.pool(), &framing_id)
+                .await
+                .unwrap();
+        assert_eq!(framing.project_id, project_id);
+        assert_eq!(
+            plans_repo::get_chosen_framing_id(db.pool(), &resp.plan_id).await.unwrap(),
+            Some(framing_id)
+        );
+        let project =
+            persistence_plans::repositories::projects::get_project(db.pool(), &project_id)
+                .await
+                .unwrap();
+        assert_eq!(project.lifecycle, "processing");
+
+        let audited_plans: Vec<String> = sqlx::query_scalar(
+            "SELECT json_extract(payload, '$.planId') FROM audit_log_entry \
+             WHERE trigger = 'attribution.applied'",
+        )
+        .fetch_all(db.pool())
+        .await
+        .unwrap();
+        assert_eq!(audited_plans, [resp.plan_id.as_str()]);
+        let reopens: Vec<(String, String)> = sqlx::query_as(
+            "SELECT from_state, to_state FROM audit_log_entry WHERE entity_type = 'project' \
+             AND trigger != 'attribution.applied'",
+        )
+        .fetch_all(db.pool())
+        .await
+        .unwrap();
+        assert_eq!(reopens, [("completed".to_owned(), "processing".to_owned())]);
+        let topics: Vec<String> = sqlx::query_scalar(
+            "SELECT DISTINCT topic FROM events \
+             WHERE topic IN ('attribution.applied', 'lifecycle.transition.applied') ORDER BY topic",
+        )
+        .fetch_all(db.pool())
+        .await
+        .unwrap();
+        assert_eq!(topics, ["attribution.applied", "lifecycle.transition.applied"]);
     }
 }

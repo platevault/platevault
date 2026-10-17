@@ -567,19 +567,25 @@ pub async fn set_reopened(pool: &SqlitePool, plan_id: &str) -> DbResult<()> {
 /// folded into a real `acquisition_session` — that is the earliest point a
 /// session id exists to add as a framing member.
 ///
+/// Takes any executor, so the inbox confirm writes it in the transaction
+/// that opens the plan for review.
+///
 /// # Errors
 ///
 /// Returns [`persistence_core::DbError::NotFound`] when no plan carries
 /// `plan_id`, and [`persistence_core::DbError::Database`] on connection failure.
-pub async fn set_chosen_framing_id(
-    pool: &SqlitePool,
+pub async fn set_chosen_framing_id<'e, E>(
+    executor: E,
     plan_id: &str,
     framing_id: &str,
-) -> DbResult<()> {
+) -> DbResult<()>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
+{
     let rows = sqlx::query("UPDATE plans SET chosen_framing_id = ? WHERE id = ?")
         .bind(framing_id)
         .bind(plan_id)
-        .execute(pool)
+        .execute(executor)
         .await?;
 
     if rows.rows_affected() == 0 {

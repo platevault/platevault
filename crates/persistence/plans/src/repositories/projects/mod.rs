@@ -124,10 +124,11 @@ pub use create_tx::{create_project_tx, CreateProjectInput};
 pub use crud::{
     apply_project_auto_block, clear_archived_via_plan_id, get_project,
     get_project_canonical_target, get_project_canonical_target_id, insert_project,
-    list_archived_projects, list_projects, list_projects_by_canonical_target_id, name_exists,
-    path_exists, set_archived_via_plan_id, set_channel_drift, set_project_canonical_target_id,
-    update_project_fields, update_project_lifecycle, update_project_lifecycle_unblock,
-    ArchivedProjectRow, ProjectAutoBlockOutcome, ProjectCanonicalTargetRow,
+    insert_project_conn, list_archived_projects, list_projects,
+    list_projects_by_canonical_target_id, name_exists, path_exists, set_archived_via_plan_id,
+    set_channel_drift, set_project_canonical_target_id, update_project_fields,
+    update_project_lifecycle, update_project_lifecycle_unblock, ArchivedProjectRow,
+    ProjectAutoBlockOutcome, ProjectCanonicalTargetRow,
 };
 pub use sources::{
     begin_source_missing_health_check, clear_source_missing_health_check, delete_project_source,

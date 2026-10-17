@@ -30,7 +30,7 @@ pub async fn insert_project(pool: &SqlitePool, data: &InsertProject<'_>) -> DbRe
 /// # Errors
 ///
 /// Returns `persistence_core::DbError::Database` on constraint violation or query failure.
-pub(super) async fn insert_project_conn(
+pub async fn insert_project_conn(
     conn: &mut SqliteConnection,
     data: &InsertProject<'_>,
 ) -> DbResult<String> {
@@ -54,20 +54,24 @@ pub(super) async fn insert_project_conn(
     Ok(now)
 }
 
-/// Fetch a single project row by id.
+/// Fetch a single project row by id. Takes any executor, so a caller can
+/// read inside its own transaction.
 ///
 /// # Errors
 ///
 /// Returns [`DbError::NotFound`] when no project with the given id exists.
 /// Returns `persistence_core::DbError::Database` on query failure.
-pub async fn get_project(pool: &SqlitePool, id: &str) -> DbResult<ProjectRow> {
+pub async fn get_project<'e, E>(executor: E, id: &str) -> DbResult<ProjectRow>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
+{
     let row: Option<ProjectRowTuple> = sqlx::query_as(
         "SELECT id, name, tool, lifecycle, path, notes, channel_drift, created_at, updated_at,
                 blocked_reason_kind, blocked_reason_note, is_mosaic
          FROM projects WHERE id = ?",
     )
     .bind(id)
-    .fetch_optional(pool)
+    .fetch_optional(executor)
     .await?;
 
     let (

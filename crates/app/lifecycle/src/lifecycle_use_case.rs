@@ -22,11 +22,12 @@
 
 use audit::bus::EventBus;
 use audit::event_bus::{LifecycleTransitionApplied, Source, TOPIC_LIFECYCLE_TRANSITION_APPLIED};
-use domain_core::ids::EntityId;
+use domain_core::ids::{EntityId, Timestamp};
 use domain_core::lifecycle::data_asset::EntityType;
 use persistence_lifecycle::repositories::lifecycle::{
-    LifecycleRepository, TransitionRecord, TransitionRequest,
+    record_transition_conn, LifecycleRepository, TransitionRecord, TransitionRequest,
 };
+use sqlx::SqliteConnection;
 
 /// Error type for the lifecycle use case.
 #[derive(Debug, thiserror::Error)]
@@ -89,31 +90,119 @@ where
         })
         .await?;
 
+    publish_transition_applied(
+        bus,
+        cmd.entity_type,
+        cmd.entity_id,
+        cmd.from_state,
+        cmd.to_state,
+        cmd.actor,
+        record.applied_at,
+    )
+    .await;
+
+    Ok(Some(record))
+}
+
+/// [`transition_lifecycle`] on the caller's connection, for a transition that
+/// must commit or roll back with the caller's own writes: it CAS-writes the
+/// transition and its audit row on `conn` and publishes nothing. Publish the
+/// returned [`StagedTransition`] once the caller's transaction commits, so no
+/// subscriber sees a transition that is rolled back.
+///
+/// Un-gated, like [`transition_lifecycle`]; the gated entry point is
+/// [`crate::transition_use_case::apply_transition_conn`].
+///
+/// Returns `Ok(None)` when `from_state == to_state` (noop: nothing written).
+///
+/// # Errors
+/// `LifecycleError::Persistence` on a write failure, including the CAS
+/// rejecting a stale `from_state`.
+pub async fn transition_lifecycle_conn(
+    conn: &mut SqliteConnection,
+    cmd: TransitionCommand,
+) -> Result<Option<StagedTransition>, LifecycleError> {
+    if cmd.from_state == cmd.to_state {
+        return Ok(None);
+    }
+    let actor = cmd.actor.clone();
+    let record = record_transition_conn(
+        conn,
+        TransitionRequest {
+            entity_id: cmd.entity_id,
+            entity_type: cmd.entity_type,
+            from_state: cmd.from_state,
+            to_state: cmd.to_state,
+            trigger: cmd.trigger,
+            actor: cmd.actor,
+            request_id: cmd.request_id,
+        },
+    )
+    .await?;
+    Ok(Some(StagedTransition { record, actor }))
+}
+
+/// A transition [`transition_lifecycle_conn`] wrote inside a transaction that
+/// has not committed yet. Its event waits for [`Self::publish`].
+#[derive(Debug)]
+#[must_use = "publish the transition once its transaction commits"]
+pub struct StagedTransition {
+    record: TransitionRecord,
+    actor: String,
+}
+
+impl StagedTransition {
+    /// Publish `lifecycle.transition.applied`, as [`transition_lifecycle`]
+    /// does, once the transaction that wrote the transition has committed.
+    pub async fn publish(self, bus: &EventBus) {
+        let TransitionRecord { entity_id, entity_type, from_state, to_state, applied_at, .. } =
+            self.record;
+        publish_transition_applied(
+            bus,
+            entity_type,
+            entity_id,
+            from_state,
+            to_state,
+            self.actor,
+            applied_at,
+        )
+        .await;
+    }
+}
+
+/// Publish `lifecycle.transition.applied` for a committed transition
+/// (durable write to `events` table + live broadcast; best-effort).
+async fn publish_transition_applied(
+    bus: &EventBus,
+    entity_type: EntityType,
+    entity_id: EntityId,
+    from_state: String,
+    to_state: String,
+    actor: String,
+    at: Timestamp,
+) {
     // FR-003 (#713): trivial project_id resolution — this primitive has no
     // pool access to look up a non-Project entity's owning project (that
     // lookup lives in `SqliteLifecycleRepository::record_transition`, which
     // publishes its own `lifecycle.transition.applied` with the fully
     // resolved value); `None` here is a StalePropagator no-op, not a bug.
-    let project_id = (cmd.entity_type == EntityType::Project).then(|| cmd.entity_id.to_string());
+    let project_id = (entity_type == EntityType::Project).then(|| entity_id.to_string());
 
-    // Publish event (durable write to `events` table + live broadcast).
     let _ = bus
         .publish(
             TOPIC_LIFECYCLE_TRANSITION_APPLIED,
             Source::User,
             LifecycleTransitionApplied {
-                entity_type: cmd.entity_type,
-                entity_id: cmd.entity_id.to_string(),
-                from_state: cmd.from_state,
-                to_state: cmd.to_state,
-                actor: cmd.actor,
-                at: record.applied_at,
+                entity_type,
+                entity_id: entity_id.to_string(),
+                from_state,
+                to_state,
+                actor,
+                at,
                 project_id,
             },
         )
         .await;
-
-    Ok(Some(record))
 }
 
 #[cfg(test)]

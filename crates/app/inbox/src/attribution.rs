@@ -7,9 +7,10 @@
 //! Matches an incoming light-frame Inbox item against existing framings/
 //! projects by target + optic-train + pointing/rotation (tolerance) and
 //! returns **ranked suggestions** — a suggestion surface only, never an
-//! auto-merge (FR-020). The user's pick ([`ChosenAttributionDto`]) is applied
-//! and persisted by [`apply_chosen_attribution`], called from
-//! [`crate::confirm::confirm`] (FR-022).
+//! auto-merge (FR-020). The user's pick ([`ChosenAttributionDto`]) is settled
+//! by [`resolve_chosen_attribution`] and written by
+//! [`PendingAttribution::write`] in the transaction where
+//! [`crate::confirm::confirm`] opens the plan for review (FR-022).
 //!
 //! ## Composition point (Q22)
 //!
@@ -39,6 +40,7 @@
 
 use std::collections::BTreeMap;
 
+use app_core_lifecycle::lifecycle_use_case::StagedTransition;
 use audit::bus::EventBus;
 use audit::event_bus::Source;
 use audit::{AuditLogEntry, Outcome, Severity};
@@ -53,8 +55,8 @@ use domain_core::ids::{new_id, EntityId};
 use domain_core::lifecycle::data_asset::EntityType;
 use domain_core::lifecycle::ProjectState as DomainProjectState;
 use domain_core::project::framing::Pointing;
+use persistence_core::repositories::audit_writes;
 use persistence_inbox::repositories::inbox as inbox_repo;
-use persistence_lifecycle::repositories::lifecycle::SqliteLifecycleRepository;
 use persistence_plans::repositories::plans as plans_repo;
 use persistence_plans::repositories::projects as projects_repo;
 use persistence_targets::repositories::framing as framing_repo;
@@ -63,7 +65,7 @@ use sessions::{
     angular_separation_deg, optic_train_key as compute_optic_train_key,
     rotation_axial_distance_deg, ToleranceParams,
 };
-use sqlx::SqlitePool;
+use sqlx::{SqliteConnection, SqlitePool};
 
 // Import canonical mapper so `.map_err(db_err)` works identically to the
 // previous local definition but now correctly routes NotFound to Blocking
@@ -464,10 +466,56 @@ pub async fn suggest_candidates(
 /// Result of applying a [`ChosenAttributionDto`] — see [`AttributionAppliedDto`].
 pub type AppliedAttribution = AttributionAppliedDto;
 
-/// Apply the user's attribution pick at confirm time (FR-022): create the
-/// framing/project the kind requires, persist the pick on the plan
-/// (`plans.chosen_framing_id`) for `ingest_sessions` to bind once the real
-/// session exists, and honor the F-Framing-6 completed-project reopen.
+/// The user's attribution pick (FR-022), checked against the database and
+/// settled: [`resolve_chosen_attribution`] reads, [`Self::write`] writes in
+/// the transaction that opens the plan for review, and
+/// [`WrittenAttribution::publish`] announces it once that commits.
+///
+/// bd astro-plan-ri2e2: the writes ride the plan-opening transaction, so a
+/// confirm refused there (a stale or removed master, a discarded draft) or
+/// failing on a later write leaves none of them: no framing or project that
+/// no plan will give frames, no completed project reopened for frames that
+/// will not arrive, and no audit row naming a plan that does not exist.
+#[derive(Debug)]
+pub struct PendingAttribution {
+    kind: ChosenAttributionKind,
+    /// The request's `framingId`, recorded on the audit row as `chosenFramingId`.
+    chosen_framing_id: Option<String>,
+    project: ProjectPick,
+    framing: FramingPick,
+}
+
+#[derive(Debug)]
+enum ProjectPick {
+    Existing(String),
+    /// `new_project`: the minimal project to create (F-Framing-10).
+    New {
+        id: String,
+        canonical_target_id: Option<String>,
+    },
+}
+
+#[derive(Debug)]
+enum FramingPick {
+    Existing(String),
+    New(NewFraming),
+}
+
+/// A framing to create from the item's geometry snapshot.
+#[derive(Debug)]
+struct NewFraming {
+    id: String,
+    target_id: Option<String>,
+    optic_train_key: String,
+    pointing: Pointing,
+    rotation_deg: f32,
+    tolerance_pointing: f64,
+    tolerance_rotation_deg: f32,
+}
+
+/// Check the user's attribution pick against the database and settle what
+/// it writes (FR-022): the framing/project the kind requires, from
+/// `geometry`'s snapshot. Reads only; `None` for `unassigned`.
 ///
 /// # Errors
 /// - `attribution.geometry_unavailable` — `new_framing` / `flag_optic_difference`
@@ -475,18 +523,13 @@ pub type AppliedAttribution = AttributionAppliedDto;
 ///   pointing/rotation/optic-train (Q16 NULL-geometry precedent — no
 ///   fabricated snapshot).
 /// - `framing.not_found` / `project.not_found` — a referenced id doesn't exist.
-/// - `framing.project_mismatch` — `add_to_framing`'s framing belongs to a
-///   different project than the request implies.
-/// - `ContractError` on internal database/audit failure, or if the reopen
-///   transition itself is refused.
-pub async fn apply_chosen_attribution(
+/// - `ContractError` on internal database failure.
+pub async fn resolve_chosen_attribution(
     pool: &SqlitePool,
-    bus: &EventBus,
-    plan_id: &str,
     geometry: &ItemGeometry,
     chosen: &ChosenAttributionDto,
-) -> Result<Option<AttributionAppliedDto>, ContractError> {
-    let (project_id, framing_id) = match chosen.kind {
+) -> Result<Option<PendingAttribution>, ContractError> {
+    let (project, framing) = match chosen.kind {
         ChosenAttributionKind::Unassigned => return Ok(None),
         ChosenAttributionKind::AddToFraming => {
             let framing_id = chosen.framing_id.as_deref().ok_or_else(|| {
@@ -494,7 +537,7 @@ pub async fn apply_chosen_attribution(
             })?;
             let framing =
                 framing_repo::get_framing(pool, framing_id).await.map_err(map_db_not_found)?;
-            (framing.project_id, framing_id.to_owned())
+            (ProjectPick::Existing(framing.project_id), FramingPick::Existing(framing.id))
         }
         ChosenAttributionKind::NewFraming | ChosenAttributionKind::FlagOpticDifference => {
             let project_id = chosen.project_id.as_deref().ok_or_else(|| {
@@ -504,49 +547,132 @@ pub async fn apply_chosen_attribution(
             })?;
             let project =
                 projects_repo::get_project(pool, project_id).await.map_err(map_db_not_found)?;
-            let framing_id = create_framing_for_project(pool, &project, geometry).await?;
-            (project_id.to_owned(), framing_id)
+            let framing = new_framing(pool, geometry, Some(&project)).await?;
+            (ProjectPick::Existing(project.id), FramingPick::New(framing))
         }
         ChosenAttributionKind::NewProject => {
-            let project_id = create_project_for_attribution(pool, geometry).await?;
-            let project =
-                projects_repo::get_project(pool, &project_id).await.map_err(map_db_not_found)?;
-            let framing_id = create_framing_for_project(pool, &project, geometry).await?;
-            (project_id, framing_id)
+            let framing = new_framing(pool, geometry, None).await?;
+            let project = ProjectPick::New {
+                id: new_id(),
+                canonical_target_id: geometry.resolved_target_id.clone(),
+            };
+            (project, FramingPick::New(framing))
         }
     };
-
-    plans_repo::set_chosen_framing_id(pool, plan_id, &framing_id).await.map_err(db_err)?;
-
-    write_attribution_audit(
-        bus,
-        &project_id,
-        &framing_id,
-        chosen,
-        serde_json::json!({
-            "planId": plan_id,
-            "kind": chosen_kind_str(chosen.kind),
-        }),
-    )
-    .await?;
-
-    // F-Framing-6: completed-project match -> add + reopen (Q25 revoke/warn).
-    let project = projects_repo::get_project(pool, &project_id).await.map_err(db_err)?;
-    let (reopened, raw_subs_archived_warning) = if DomainProjectState::parse_str(&project.lifecycle)
-        .is_some_and(DomainProjectState::reopens_on_new_data)
-    {
-        reopen_completed_project(pool, bus, &project_id).await?
-    } else {
-        (false, false)
-    };
-
-    Ok(Some(AttributionAppliedDto {
-        project_id,
-        framing_id: Some(framing_id),
-        reopened,
-        raw_subs_archived_warning,
+    Ok(Some(PendingAttribution {
+        kind: chosen.kind,
+        chosen_framing_id: chosen.framing_id.clone(),
+        project,
+        framing,
     }))
 }
+
+impl PendingAttribution {
+    /// Write the pick on `conn`, inside the transaction that opens `plan_id`
+    /// for review: create the framing/project it settled, persist the pick
+    /// on the plan (`plans.chosen_framing_id`) for `ingest_sessions` to bind
+    /// once the real session exists, record the attribution audit row, and
+    /// honor the F-Framing-6 completed-project reopen. Nothing is published
+    /// until [`WrittenAttribution::publish`].
+    ///
+    /// # Errors
+    /// `ContractError` on an internal database or audit failure, or when the
+    /// reopen transition is refused. The caller rolls the transaction back,
+    /// so none of the writes stay.
+    pub async fn write(
+        self,
+        conn: &mut SqliteConnection,
+        plan_id: &str,
+    ) -> Result<WrittenAttribution, ContractError> {
+        let project_id = match self.project {
+            ProjectPick::Existing(id) => id,
+            ProjectPick::New { id, canonical_target_id } => {
+                insert_project_for_attribution(conn, &id, canonical_target_id.as_deref()).await?;
+                id
+            }
+        };
+        let framing_id = match self.framing {
+            FramingPick::Existing(id) => id,
+            FramingPick::New(framing) => {
+                framing.insert(conn, &project_id).await?;
+                framing.id
+            }
+        };
+
+        plans_repo::set_chosen_framing_id(&mut *conn, plan_id, &framing_id)
+            .await
+            .map_err(db_err)?;
+
+        let mut event_payload = serde_json::json!({
+            "planId": plan_id,
+            "kind": chosen_kind_str(self.kind),
+            "projectId": project_id,
+            "framingId": framing_id,
+        });
+        if let (Some(obj), Some(source_framing)) =
+            (event_payload.as_object_mut(), self.chosen_framing_id)
+        {
+            obj.insert("chosenFramingId".to_owned(), serde_json::Value::String(source_framing));
+        }
+        write_attribution_audit(conn, &project_id, &event_payload).await?;
+
+        // F-Framing-6: completed-project match -> add + reopen (Q25 revoke/warn).
+        let project = projects_repo::get_project(&mut *conn, &project_id).await.map_err(db_err)?;
+        let (reopen, raw_subs_archived_warning) =
+            if DomainProjectState::parse_str(&project.lifecycle)
+                .is_some_and(DomainProjectState::reopens_on_new_data)
+            {
+                reopen_completed_project(conn, &project_id).await?
+            } else {
+                (None, false)
+            };
+
+        Ok(WrittenAttribution {
+            applied: AttributionAppliedDto {
+                project_id,
+                framing_id: Some(framing_id),
+                reopened: reopen.is_some(),
+                raw_subs_archived_warning,
+            },
+            event_payload,
+            reopen,
+        })
+    }
+}
+
+/// A pick [`PendingAttribution::write`] wrote inside a transaction that has
+/// not committed yet. Its events wait for [`Self::publish`].
+#[derive(Debug)]
+#[must_use = "publish the attribution once its transaction commits"]
+pub struct WrittenAttribution {
+    applied: AttributionAppliedDto,
+    event_payload: serde_json::Value,
+    reopen: Option<StagedTransition>,
+}
+
+impl WrittenAttribution {
+    /// Announce the committed pick: `attribution.applied` for the live UI,
+    /// then the reopen's `lifecycle.transition.applied`. Best-effort, like
+    /// the emit in [`EventBus::write_audit`]: the audit row that committed
+    /// with the plan is the authoritative record, so a failed emit is logged
+    /// rather than returned.
+    pub async fn publish(self, bus: &EventBus) -> AttributionAppliedDto {
+        if let Err(err) = bus.publish(ATTRIBUTION_APPLIED, Source::User, self.event_payload).await {
+            tracing::warn!(
+                topic = ATTRIBUTION_APPLIED,
+                error = %err,
+                "attribution emit failed after the plan committed; audit_log_entry row is authoritative"
+            );
+        }
+        if let Some(reopen) = self.reopen {
+            reopen.publish(bus).await;
+        }
+        self.applied
+    }
+}
+
+/// Trigger of the attribution audit row and topic of its event.
+const ATTRIBUTION_APPLIED: &str = "attribution.applied";
 
 fn validation_err(msg: &str) -> ContractError {
     ContractError::new(
@@ -581,15 +707,16 @@ fn chosen_kind_str(kind: ChosenAttributionKind) -> &'static str {
     }
 }
 
-/// Create a new framing under `project` from `geometry`'s snapshot
-/// (`new_framing` / `flag_optic_difference` / `new_project` kinds). Mosaic
-/// projects inherit the project's declared target (FR-017); non-mosaic
-/// projects use the resolved target (may be `None`).
-async fn create_framing_for_project(
+/// Settle the framing to create from `geometry`'s snapshot (`new_framing` /
+/// `flag_optic_difference` / `new_project` kinds). Mosaic projects' framings
+/// inherit the project's declared target (FR-017); other projects' use the
+/// resolved target (may be `None`). `project` is `None` for the project
+/// `new_project` creates, which is never a mosaic.
+async fn new_framing(
     pool: &SqlitePool,
-    project: &projects_repo::ProjectRow,
     geometry: &ItemGeometry,
-) -> Result<String, ContractError> {
+    project: Option<&projects_repo::ProjectRow>,
+) -> Result<NewFraming, ContractError> {
     let (Some(optic_train_key), Some(pointing), Some(rotation_deg)) =
         (&geometry.optic_train_key, geometry.pointing, geometry.rotation_deg)
     else {
@@ -602,10 +729,13 @@ async fn create_framing_for_project(
         ));
     };
 
-    let target_id = if project.is_mosaic {
-        projects_repo::get_project_canonical_target_id(pool, &project.id).await.map_err(db_err)?
-    } else {
-        geometry.resolved_target_id.clone()
+    let target_id = match project {
+        Some(project) if project.is_mosaic => {
+            projects_repo::get_project_canonical_target_id(pool, &project.id)
+                .await
+                .map_err(db_err)?
+        }
+        _ => geometry.resolved_target_id.clone(),
     };
 
     let params = tolerance_params(pool).await?;
@@ -614,26 +744,42 @@ async fn create_framing_for_project(
             (params.pointing_fraction_of_fov * fov, false)
         });
 
-    let framing_id = new_id();
-    framing_repo::insert_framing(
-        pool,
-        &framing_repo::InsertFraming {
-            id: &framing_id,
-            project_id: &project.id,
-            target_id: target_id.as_deref(),
-            optic_train_key,
-            pointing_ra_deg: pointing.ra_deg,
-            pointing_dec_deg: pointing.dec_deg,
-            rotation_deg: f64::from(rotation_deg),
-            tolerance_pointing,
-            tolerance_rotation_deg: f64::from(params.rotation_tolerance_deg),
-            clustering: "suggested",
-        },
-    )
-    .await
-    .map_err(db_err)?;
+    Ok(NewFraming {
+        id: new_id(),
+        target_id,
+        optic_train_key: optic_train_key.clone(),
+        pointing,
+        rotation_deg,
+        tolerance_pointing,
+        tolerance_rotation_deg: params.rotation_tolerance_deg,
+    })
+}
 
-    Ok(framing_id)
+impl NewFraming {
+    async fn insert(
+        &self,
+        conn: &mut SqliteConnection,
+        project_id: &str,
+    ) -> Result<(), ContractError> {
+        framing_repo::insert_framing(
+            &mut *conn,
+            &framing_repo::InsertFraming {
+                id: &self.id,
+                project_id,
+                target_id: self.target_id.as_deref(),
+                optic_train_key: &self.optic_train_key,
+                pointing_ra_deg: self.pointing.ra_deg,
+                pointing_dec_deg: self.pointing.dec_deg,
+                rotation_deg: f64::from(self.rotation_deg),
+                tolerance_pointing: self.tolerance_pointing,
+                tolerance_rotation_deg: f64::from(self.tolerance_rotation_deg),
+                clustering: "suggested",
+            },
+        )
+        .await
+        .map_err(db_err)?;
+        Ok(())
+    }
 }
 
 /// Create a minimal project for `new_project` attribution (F-Framing-10).
@@ -646,37 +792,37 @@ async fn create_framing_for_project(
 /// project starts `setup_incomplete` with a placeholder name/path, same as
 /// any other freshly created project, and the user completes its name/path/
 /// sources via the normal project edit flow.
-async fn create_project_for_attribution(
-    pool: &SqlitePool,
-    geometry: &ItemGeometry,
-) -> Result<String, ContractError> {
-    let project_id = new_id();
+async fn insert_project_for_attribution(
+    conn: &mut SqliteConnection,
+    project_id: &str,
+    canonical_target_id: Option<&str>,
+) -> Result<(), ContractError> {
     let short = project_id.chars().take(8).collect::<String>();
-    projects_repo::insert_project(
-        pool,
+    projects_repo::insert_project_conn(
+        conn,
         &projects_repo::InsertProject {
-            id: &project_id,
+            id: project_id,
             name: &format!("Untitled Project {short}"),
             tool: "PixInsight",
             lifecycle: "setup_incomplete",
             path: &format!("projects/{project_id}"),
             notes: None,
-            canonical_target_id: geometry.resolved_target_id.as_deref(),
+            canonical_target_id,
             is_mosaic: false,
         },
     )
     .await
     .map_err(db_err)?;
-    Ok(project_id)
+    Ok(())
 }
 
 /// F-Framing-6: `completed -> processing` reopen via the existing spec-009
-/// edge, with the Q25 raw-subs-archived warning. Returns `(reopened, warning)`.
+/// edge, with the Q25 raw-subs-archived warning, written on `conn`. Returns
+/// the staged transition (`None` only for a same-state noop) and the warning.
 async fn reopen_completed_project(
-    pool: &SqlitePool,
-    bus: &EventBus,
+    conn: &mut SqliteConnection,
     project_id: &str,
-) -> Result<(bool, bool), ContractError> {
+) -> Result<(Option<StagedTransition>, bool), ContractError> {
     let entity_id = uuid::Uuid::parse_str(project_id).map_err(|_| {
         ContractError::new(
             ErrorCode::ProjectNotFound,
@@ -686,14 +832,12 @@ async fn reopen_completed_project(
         )
     })?;
 
-    let warning = projects_repo::has_archived_raw_frames_for_project(pool, project_id)
+    let warning = projects_repo::has_archived_raw_frames_for_project(&mut *conn, project_id)
         .await
         .map_err(db_err)?;
 
-    let repo = SqliteLifecycleRepository::new(pool.clone(), bus.clone());
-    let response = app_core_lifecycle::transition_use_case::apply_transition(
-        &repo,
-        bus,
+    let reopen = app_core_lifecycle::transition_use_case::apply_transition_conn(
+        conn,
         contracts_core::lifecycle::TransitionRequest::Project(ProjectTransitionRequest {
             contract_version: "2.0.0".to_owned(),
             request_id: uuid::Uuid::new_v4(),
@@ -704,18 +848,17 @@ async fn reopen_completed_project(
             actor: TransitionActor::User,
         }),
     )
-    .await;
-
-    if let Some(err) = response.error {
-        return Err(ContractError::new(
+    .await
+    .map_err(|err| {
+        ContractError::new(
             ErrorCode::ProjectReadOnly,
             format!("reopen of completed project {project_id} was refused: {}", err.message),
             ErrorSeverity::Blocking,
             false,
-        ));
-    }
+        )
+    })?;
 
-    Ok((true, warning))
+    Ok((reopen, warning))
 }
 
 /// Deterministic `entity_id` for the attribution audit row: parses the
@@ -733,43 +876,27 @@ fn attribution_entity_id(id: &str) -> EntityId {
     )
 }
 
+/// The durable half of `EventBus::write_audit`, on `conn`: the attribution's
+/// `audit_log_entry` row commits with the plan. Its event goes out in
+/// [`WrittenAttribution::publish`].
 async fn write_attribution_audit(
-    bus: &EventBus,
+    conn: &mut SqliteConnection,
     project_id: &str,
-    framing_id: &str,
-    chosen: &ChosenAttributionDto,
-    mut payload: serde_json::Value,
+    payload: &serde_json::Value,
 ) -> Result<(), ContractError> {
-    if let Some(obj) = payload.as_object_mut() {
-        obj.insert("projectId".to_owned(), serde_json::Value::String(project_id.to_owned()));
-        obj.insert("framingId".to_owned(), serde_json::Value::String(framing_id.to_owned()));
-        if let Some(source_framing) = chosen.framing_id.as_deref() {
-            obj.insert(
-                "chosenFramingId".to_owned(),
-                serde_json::Value::String(source_framing.to_owned()),
-            );
-        }
-    }
     let entry = AuditLogEntry::new(
         EntityType::Project,
         attribution_entity_id(project_id),
-        "attribution.applied",
+        ATTRIBUTION_APPLIED,
         "user",
         Outcome::Applied,
         Severity::Workflow,
         EntityId::new(),
     )
     .with_payload(payload.clone());
-    bus.write_audit(entry, "attribution.applied", Source::User, payload).await.map(|_| ()).map_err(
-        |e| {
-            ContractError::new(
-                ErrorCode::InternalAudit,
-                e.to_string(),
-                ErrorSeverity::Warning,
-                false,
-            )
-        },
-    )
+    audit_writes::insert_audit_entry_conn(conn, &entry).await.map_err(|e| {
+        ContractError::new(ErrorCode::InternalAudit, e.to_string(), ErrorSeverity::Warning, false)
+    })
 }
 
 #[cfg(test)]
@@ -1263,10 +1390,23 @@ mod tests {
         );
     }
 
-    // ── apply_chosen_attribution ─────────────────────────────────────────────
+    // ── resolve_chosen_attribution → write → publish ────────────────────────
 
-    fn test_bus(db: &Database) -> EventBus {
-        EventBus::with_pool(db.pool().clone())
+    /// Settle `chosen` and write it on `plan_id` in a transaction that
+    /// commits, then publish it, as confirm does around opening the plan.
+    async fn apply(
+        db: &Database,
+        plan_id: &str,
+        geometry: &ItemGeometry,
+        chosen: &ChosenAttributionDto,
+    ) -> Result<Option<AttributionAppliedDto>, ContractError> {
+        let Some(pending) = resolve_chosen_attribution(db.pool(), geometry, chosen).await? else {
+            return Ok(None);
+        };
+        let mut tx = db.pool().begin().await.unwrap();
+        let written = pending.write(&mut tx, plan_id).await?;
+        tx.commit().await.unwrap();
+        Ok(Some(written.publish(&EventBus::with_pool(db.pool().clone())).await))
     }
 
     async fn seed_plan(pool: &SqlitePool, plan_id: &str) {
@@ -1290,7 +1430,6 @@ mod tests {
     #[tokio::test]
     async fn apply_new_project_creates_project_framing_and_persists_plan_pick() {
         let db = test_db().await;
-        let bus = test_bus(&db);
         seed_plan(db.pool(), "plan-1").await;
 
         let geometry = ItemGeometry {
@@ -1306,8 +1445,7 @@ mod tests {
             framing_id: None,
         };
 
-        let applied =
-            apply_chosen_attribution(db.pool(), &bus, "plan-1", &geometry, &chosen).await.unwrap();
+        let applied = apply(&db, "plan-1", &geometry, &chosen).await.unwrap();
         let applied = applied.expect("new_project must apply");
         assert!(!applied.reopened);
         assert!(!applied.raw_subs_archived_warning);
@@ -1328,7 +1466,6 @@ mod tests {
     #[tokio::test]
     async fn apply_add_to_framing_links_existing_framing_without_creating_a_new_one() {
         let db = test_db().await;
-        let bus = test_bus(&db);
         seed_plan(db.pool(), "plan-2").await;
         seed_project(db.pool(), "proj-existing", "ready", false).await;
         seed_framing(db.pool(), "framing-existing", "proj-existing", None, 10.0, 20.0, 0.0).await;
@@ -1340,8 +1477,7 @@ mod tests {
             framing_id: Some("framing-existing".to_owned()),
         };
 
-        let applied =
-            apply_chosen_attribution(db.pool(), &bus, "plan-2", &geometry, &chosen).await.unwrap();
+        let applied = apply(&db, "plan-2", &geometry, &chosen).await.unwrap();
         let applied = applied.unwrap();
         assert_eq!(applied.project_id, "proj-existing");
         assert_eq!(applied.framing_id.as_deref(), Some("framing-existing"));
@@ -1359,7 +1495,6 @@ mod tests {
     async fn apply_new_framing_for_mosaic_project_inherits_declared_target_ignoring_resolved_object(
     ) {
         let db = test_db().await;
-        let bus = test_bus(&db);
         seed_plan(db.pool(), "plan-mosaic").await;
         seed_canonical_target(db.pool(), "target-declared", "NGC 7000").await;
         seed_canonical_target(db.pool(), "target-object-decoy", "M 45").await;
@@ -1382,7 +1517,7 @@ mod tests {
             framing_id: None,
         };
 
-        let applied = apply_chosen_attribution(db.pool(), &bus, "plan-mosaic", &geometry, &chosen)
+        let applied = apply(&db, "plan-mosaic", &geometry, &chosen)
             .await
             .unwrap()
             .expect("new_framing must apply");
@@ -1395,7 +1530,6 @@ mod tests {
     #[tokio::test]
     async fn apply_unassigned_is_a_noop() {
         let db = test_db().await;
-        let bus = test_bus(&db);
         seed_plan(db.pool(), "plan-3").await;
 
         let geometry = ItemGeometry::default();
@@ -1405,8 +1539,7 @@ mod tests {
             framing_id: None,
         };
 
-        let applied =
-            apply_chosen_attribution(db.pool(), &bus, "plan-3", &geometry, &chosen).await.unwrap();
+        let applied = apply(&db, "plan-3", &geometry, &chosen).await.unwrap();
         assert!(applied.is_none());
         assert_eq!(plans_repo::get_chosen_framing_id(db.pool(), "plan-3").await.unwrap(), None);
     }
@@ -1414,7 +1547,6 @@ mod tests {
     #[tokio::test]
     async fn apply_new_framing_without_geometry_is_rejected() {
         let db = test_db().await;
-        let bus = test_bus(&db);
         seed_plan(db.pool(), "plan-4").await;
         seed_project(db.pool(), "proj-nogeo", "ready", false).await;
 
@@ -1425,9 +1557,7 @@ mod tests {
             framing_id: None,
         };
 
-        let err = apply_chosen_attribution(db.pool(), &bus, "plan-4", &geometry, &chosen)
-            .await
-            .unwrap_err();
+        let err = apply(&db, "plan-4", &geometry, &chosen).await.unwrap_err();
         assert_eq!(err.code, ErrorCode::AttributionGeometryUnavailable);
     }
 
@@ -1438,7 +1568,6 @@ mod tests {
     #[tokio::test]
     async fn apply_to_completed_project_reopens_and_surfaces_raw_subs_warning() {
         let db = test_db().await;
-        let bus = test_bus(&db);
         seed_plan(db.pool(), "plan-5").await;
         // `reopen_completed_project` parses the project id as a `Uuid` (the
         // `TransitionRequest::Project.entity_id` contract field, matching
@@ -1518,10 +1647,7 @@ mod tests {
             framing_id: Some("framing-completed".to_owned()),
         };
 
-        let applied = apply_chosen_attribution(db.pool(), &bus, "plan-5", &geometry, &chosen)
-            .await
-            .unwrap()
-            .unwrap();
+        let applied = apply(&db, "plan-5", &geometry, &chosen).await.unwrap().unwrap();
         assert!(applied.reopened);
         assert!(applied.raw_subs_archived_warning);
 

@@ -34,10 +34,14 @@ use persistence_lifecycle::repositories::lifecycle::{
     LifecycleRepository, TransitionRequest as RepoTransitionRequest,
 };
 use serde::Serialize;
+use sqlx::SqliteConnection;
 use time::format_description::well_known::Rfc3339;
 use uuid::Uuid;
 
-use crate::lifecycle_use_case::{transition_lifecycle, LifecycleError, TransitionCommand};
+use crate::lifecycle_use_case::{
+    transition_lifecycle, transition_lifecycle_conn, LifecycleError, StagedTransition,
+    TransitionCommand,
+};
 
 /// Apply a lifecycle transition given a contract `TransitionRequest`.
 ///
@@ -424,42 +428,8 @@ pub fn preview_transition(request: TransitionRequest) -> TransitionResponse {
     if command.from_state == command.to_state {
         return TransitionResponse::noop(request_id);
     }
-    if !validate_edge(command.entity_type, &command.from_state, &command.to_state) {
-        return TransitionResponse::error(
-            request_id,
-            TransitionError {
-                code: TransitionErrorCode::TransitionRefused,
-                message: format!(
-                    "edge ({}, {} -> {}) not in canonical transition table",
-                    command.entity_type, command.from_state, command.to_state
-                ),
-                details: None,
-            },
-        );
-    }
-    if command.actor == "system" && !is_system_permitted(&command.from_state, &command.to_state) {
-        return TransitionResponse::error(
-            request_id,
-            TransitionError {
-                code: TransitionErrorCode::ActorNotAuthorised,
-                message: "actor=system is only permitted on edges entering or leaving `blocked`, or on the setup_incomplete → ready invariant transition"
-                    .to_owned(),
-                details: None,
-            },
-        );
-    }
-    if requires_plan(command.entity_type, &command.from_state, &command.to_state) {
-        return TransitionResponse::error(
-            request_id,
-            TransitionError {
-                code: TransitionErrorCode::PlanRequired,
-                message: format!(
-                    "edge ({}, {} -> {}) requires an approved FilesystemPlan",
-                    command.entity_type, command.from_state, command.to_state
-                ),
-                details: None,
-            },
-        );
+    if let Some(err) = repository_free_refusal(&command) {
+        return TransitionResponse::error(request_id, err);
     }
 
     // Success — applied_at is omitted (dry-run produces no audit row).
@@ -470,6 +440,83 @@ pub fn preview_transition(request: TransitionRequest) -> TransitionResponse {
         command.to_state,
         Uuid::nil(),
     )
+}
+
+/// [`apply_transition`] inside the caller's transaction, for a transition
+/// that must commit or roll back with the caller's own writes (the inbox
+/// confirm reopens a completed project in the transaction that opens the
+/// plan bringing it new frames, F-Framing-6).
+///
+/// Runs the gates [`preview_transition`] runs (noop, edge, actor=system,
+/// plan-required), then writes the transition and its audit row on `conn`
+/// through [`transition_lifecycle_conn`]. Nothing is published: publish the
+/// returned [`StagedTransition`] once the transaction commits. Returns
+/// `Ok(None)` for a same-state noop.
+///
+/// Unlike [`apply_transition`], a refusal records no `refused` audit row:
+/// the caller rolls its transaction back with the refusal, and the row with
+/// it. The action-bound review gate (FR-009/FR-010) reads provenance through
+/// the repository, so an edge that needs one is refused here outright; none
+/// does since spec 041 FR-051 emptied its table.
+///
+/// # Errors
+/// The refusal of the gate that stopped the transition, or
+/// `transition.refused` carrying the write failure (a lost CAS included).
+pub async fn apply_transition_conn(
+    conn: &mut SqliteConnection,
+    request: TransitionRequest,
+) -> Result<Option<StagedTransition>, TransitionError> {
+    let ParsedRequest { command, .. } = parse_request(request).map_err(refused)?;
+    if command.from_state == command.to_state {
+        return Ok(None);
+    }
+    if let Some(err) = repository_free_refusal(&command) {
+        return Err(err);
+    }
+    if !action_critical_fields(command.entity_type, &command.from_state, &command.to_state)
+        .is_empty()
+    {
+        return Err(refused(format!(
+            "edge ({}, {} -> {}) needs an action-bound review, which only the repository path runs",
+            command.entity_type, command.from_state, command.to_state
+        )));
+    }
+    transition_lifecycle_conn(conn, command).await.map_err(|err| refused(err.to_string()))
+}
+
+const fn refused(message: String) -> TransitionError {
+    TransitionError { code: TransitionErrorCode::TransitionRefused, message, details: None }
+}
+
+/// The gates of [`apply_transition`] that need no repository: edge
+/// legality, the actor=system policy and the plan requirement. `None` when
+/// the transition passes all three.
+fn repository_free_refusal(command: &TransitionCommand) -> Option<TransitionError> {
+    if !validate_edge(command.entity_type, &command.from_state, &command.to_state) {
+        return Some(refused(format!(
+            "edge ({}, {} -> {}) not in canonical transition table",
+            command.entity_type, command.from_state, command.to_state
+        )));
+    }
+    if command.actor == "system" && !is_system_permitted(&command.from_state, &command.to_state) {
+        return Some(TransitionError {
+            code: TransitionErrorCode::ActorNotAuthorised,
+            message: "actor=system is only permitted on edges entering or leaving `blocked`, or on the setup_incomplete → ready invariant transition"
+                .to_owned(),
+            details: None,
+        });
+    }
+    if requires_plan(command.entity_type, &command.from_state, &command.to_state) {
+        return Some(TransitionError {
+            code: TransitionErrorCode::PlanRequired,
+            message: format!(
+                "edge ({}, {} -> {}) requires an approved FilesystemPlan",
+                command.entity_type, command.from_state, command.to_state
+            ),
+            details: None,
+        });
+    }
+    None
 }
 
 /// Look up `(from, to)` in the appropriate domain transition table.
@@ -946,5 +993,57 @@ mod tests {
         .await;
 
         assert!(resp.error.is_none(), "ready → processing (user) should be allowed");
+    }
+
+    // ── apply_transition_conn ──────────────────────────────────────────────
+
+    /// The transaction-bound path runs the gates `apply_transition` runs:
+    /// `completed → archived` needs an approved plan (spec 017 C5), so it is
+    /// refused, and the caller's transaction has nothing of it to commit.
+    #[tokio::test]
+    async fn apply_transition_conn_refuses_a_plan_required_edge_and_writes_nothing() {
+        let db = persistence_core::Database::in_memory().await.unwrap();
+        db.migrate().await.unwrap();
+        let project_id = Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO projects \
+             (id, name, tool, lifecycle, path, notes, channel_drift, created_at, updated_at) \
+             VALUES (?, 'M42', 'PixInsight', 'completed', 'projects/m42', NULL, 0, \
+                     '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+        )
+        .bind(project_id.to_string())
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        let mut tx = db.pool().begin().await.unwrap();
+        let err = apply_transition_conn(
+            &mut tx,
+            TransitionRequest::Project(ProjectTransitionRequest {
+                contract_version: "2.0.0".to_owned(),
+                request_id: Uuid::new_v4(),
+                entity_id: project_id,
+                current_state: ProjectState::Completed,
+                next_state: ProjectState::Archived,
+                action_label: None,
+                actor: TransitionActor::User,
+            }),
+        )
+        .await
+        .expect_err("completed → archived needs an approved plan");
+        tx.commit().await.unwrap();
+
+        assert_eq!(err.code, TransitionErrorCode::PlanRequired);
+        let lifecycle: String = sqlx::query_scalar("SELECT lifecycle FROM projects WHERE id = ?")
+            .bind(project_id.to_string())
+            .fetch_one(db.pool())
+            .await
+            .unwrap();
+        assert_eq!(lifecycle, "completed");
+        let audit_rows: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM audit_log_entry")
+            .fetch_one(db.pool())
+            .await
+            .unwrap();
+        assert_eq!(audit_rows, 0);
     }
 }

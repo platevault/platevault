@@ -122,13 +122,19 @@ pub async fn clear_source_missing_health_check(pool: &SqlitePool, root_id: &str)
 /// silent no-op (Q19 "raw kept & protected by default" is what the warning
 /// protects).
 ///
+/// Takes any executor, so the inbox confirm reads it inside the transaction
+/// that reopens the project.
+///
 /// # Errors
 ///
 /// Returns `persistence_core::DbError::Database` on query failure.
-pub async fn has_archived_raw_frames_for_project(
-    pool: &SqlitePool,
+pub async fn has_archived_raw_frames_for_project<'e, E>(
+    executor: E,
     project_id: &str,
-) -> DbResult<bool> {
+) -> DbResult<bool>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
+{
     let row: Option<(i64,)> = sqlx::query_as(
         "SELECT 1 FROM plan_items pi
          JOIN plans p ON p.id = pi.plan_id
@@ -142,7 +148,7 @@ pub async fn has_archived_raw_frames_for_project(
          LIMIT 1",
     )
     .bind(project_id)
-    .fetch_optional(pool)
+    .fetch_optional(executor)
     .await?;
     Ok(row.is_some())
 }

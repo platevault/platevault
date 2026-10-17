@@ -53,7 +53,8 @@
     use cases: persistence round-trip, `user_adjusted` flips, cross-project
     rejection, partial-mutation rejection on invalid input.
   - `crates/app/inbox/src/attribution.rs` — attribution ranking
-    (`compute_candidates`), the apply-path (`apply_chosen_attribution`),
+    (`compute_candidates`), the apply-path (`resolve_chosen_attribution`,
+    `PendingAttribution::write`),
     mosaic target inheritance (no per-frame OBJECT/coordinate resolution
     for `isMosaic` projects), completed-project reopen (Q25 warning), and
     the F-Framing-11 settings-tunables wiring (a stored
