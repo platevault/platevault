@@ -78,7 +78,10 @@ function isSvgPresentationElement(node) {
         ancestor = ancestor.parent;
         continue;
       }
-      if (ancestorName.type !== 'JSXIdentifier' || !isIntrinsic(ancestorName.name)) continue;
+      if (ancestorName.type !== 'JSXIdentifier' || !isIntrinsic(ancestorName.name)) {
+        ancestor = ancestor.parent;
+        continue;
+      }
       const normalizedAncestorName = ancestorName.name.toLowerCase();
       if (normalizedAncestorName === 'foreignobject') return false;
       if (normalizedAncestorName === 'svg') return true;

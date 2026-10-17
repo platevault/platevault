@@ -335,4 +335,11 @@ describe('svg/no-raw-svg-colour', () => {
 
     expect(diagnostics).toHaveLength(1);
   });
+  it('checks SVG elements nested under member-expression wrappers', () => {
+    const diagnostics = lint(
+      '<svg><Foo.Bar><rect fill="red" /></Foo.Bar></svg>',
+    );
+
+    expect(diagnostics).toHaveLength(1);
+  });
 });
