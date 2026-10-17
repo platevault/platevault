@@ -48,7 +48,7 @@ function isRawColor(value) {
 }
 
 const SVG_ELEMENTS = new Set(
-  'circle ellipse line path polygon polyline rect g text tspan textPath use symbol marker pattern mask clipPath defs stop linearGradient radialGradient filter feBlend feColorMatrix feComponentTransfer feComposite feConvolveMatrix feDiffuseLighting feDisplacementMap feDistantLight feFlood feFuncA feFuncB feFuncG feFuncR feGaussianBlur feImage feMerge feMergeNode feMorphology feOffset fePointLight feSpecularLighting feSpotLight feTile feTurbulence'.toLowerCase().split(
+  'circle ellipse image line path polygon polyline rect g text tspan textPath use symbol switch foreignObject view marker pattern mask clipPath defs stop linearGradient radialGradient filter feBlend feColorMatrix feComponentTransfer feComposite feConvolveMatrix feDiffuseLighting feDisplacementMap feDistantLight feFlood feFuncA feFuncB feFuncG feFuncR feGaussianBlur feImage feMerge feMergeNode feMorphology feOffset fePointLight feSpecularLighting feSpotLight feTile feTurbulence'.toLowerCase().split(
     ' ',
   ),
 );
@@ -58,6 +58,7 @@ function isInsideSvg(node) {
   while (ancestor) {
     if (ancestor.type === 'JSXElement' && ancestor.openingElement.name.type === 'JSXIdentifier') {
       const name = ancestor.openingElement.name.name;
+      if (name === 'foreignObject') return false;
       if (name === 'svg' || (/^[a-z]/.test(name) && SVG_ELEMENTS.has(name.toLowerCase()))) return true;
     }
     ancestor = ancestor.parent;
@@ -84,8 +85,17 @@ function reportRawColorsInExpression(expression, report) {
       reportRawColorsInExpression(expression.right, report);
       return;
     case 'TemplateLiteral':
-      for (const quasi of expression.quasis) {
-        if (isRawColor(quasi.value.cooked ?? quasi.value.raw)) report();
+      for (let index = 0; index < expression.quasis.length; index += 1) {
+        const quasi = expression.quasis[index];
+        const text = quasi.value.cooked ?? quasi.value.raw;
+        if (
+          isRawColor(text) ||
+          (index < expression.expressions.length &&
+            !/url\([^)]*$/i.test(text) &&
+            /(?:#|(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\()\s*$/i.test(text))
+        ) {
+          report();
+        }
       }
       for (const interpolation of expression.expressions) {
         reportRawColorsInExpression(interpolation, report);

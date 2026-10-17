@@ -1,6 +1,5 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
-
 import { describe, it, expect } from 'vitest';
 import { Linter } from 'eslint';
 // The local ESLint rule forbidding raw SVG presentation-attribute colours.
@@ -8,19 +7,24 @@ import plugin from '../../eslint-rules/no-raw-svg-colour.js';
 
 function lint(code: string) {
   const linter = new Linter();
-  return linter
-    .verify(code, {
-      plugins: { svg: plugin },
-      languageOptions: {
-        parserOptions: {
-          ecmaFeatures: { jsx: true },
-          ecmaVersion: 'latest',
-          sourceType: 'module',
-        },
+  const messages = linter.verify(code, {
+    plugins: { svg: plugin },
+    languageOptions: {
+      parserOptions: {
+        ecmaFeatures: { jsx: true },
+        ecmaVersion: 'latest',
+        sourceType: 'module',
       },
-      rules: { 'svg/no-raw-svg-colour': 'error' },
-    })
-    .filter((message) => message.ruleId === 'svg/no-raw-svg-colour');
+    },
+    rules: { 'svg/no-raw-svg-colour': 'error' },
+  });
+  const parseErrors = messages.filter(
+    (message) => message.fatal || !message.ruleId,
+  );
+  expect(parseErrors, 'lint fixture must parse').toHaveLength(0);
+  return messages.filter(
+    (message) => message.ruleId === 'svg/no-raw-svg-colour',
+  );
 }
 
 describe('svg/no-raw-svg-colour', () => {
@@ -56,12 +60,15 @@ describe('svg/no-raw-svg-colour', () => {
     expect(diagnostics).toHaveLength(0);
   });
 
-  it('ignores non-SVG presentation-like props and allows keywords in compound values', () => {
-    const diagnostics = lint(
-      '<div fill="red" /><svg fill="none red" stroke="var(--pv-accent) url(#blue)" />',
+  it('allows HTML and theme paint but flags raw colors in compound SVG paint', () => {
+    const htmlDiagnostics = lint('<div fill="red" />');
+    const svgDiagnostics = lint(
+      '<svg fill="none red" stroke="var(--pv-accent) url(#blue)" />',
     );
 
-    expect(diagnostics).toHaveLength(0);
+    expect(htmlDiagnostics).toHaveLength(0);
+    expect(svgDiagnostics).toHaveLength(1);
+    expect(svgDiagnostics[0]?.message).toContain('"fill"');
   });
 
   it('flags system colours on each SVG presentation attribute', () => {
@@ -86,6 +93,7 @@ describe('svg/no-raw-svg-colour', () => {
     );
 
     expect(diagnostics).toHaveLength(4);
+    expect(diagnostics[0]?.message).toContain('"fill"');
   });
 
   it('flags raw colors in template substitutions but allows nested theme choices', () => {
@@ -134,5 +142,27 @@ describe('svg/no-raw-svg-colour', () => {
 
     expect(diagnostics).toHaveLength(1);
     expect(diagnostics[0]?.message).toContain('"floodColor"');
+  });
+
+  it('flags standalone switch paint containers', () => {
+    const diagnostics = lint('<switch color="red"><circle /></switch>');
+
+    expect(diagnostics).toHaveLength(1);
+  });
+
+  it('does not treat HTML inside foreignObject as SVG context', () => {
+    const diagnostics = lint(
+      '<svg><foreignObject><Label color="red" /></foreignObject></svg>',
+    );
+
+    expect(diagnostics).toHaveLength(0);
+  });
+
+  it('flags a raw template color formed across a substitution', () => {
+    const diagnostics = lint(
+      'const swatch = "f00"; const dot = <circle fill={`#${swatch}`} />;',
+    );
+
+    expect(diagnostics).toHaveLength(1);
   });
 });
