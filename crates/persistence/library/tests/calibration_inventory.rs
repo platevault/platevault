@@ -302,8 +302,11 @@ async fn retired_copies_are_not_listed() {
     assert_eq!(inputs(&lib, &bias).await.len(), 1);
     let assets: BTreeSet<Uuid> =
         catalog.location_assets(old.id).await.unwrap().iter().map(|a| a.id).collect();
-    let references =
-        LocationReferences { references: Vec::new(), assets, consulted: vec![ReferenceKind::View] };
+    let references = LocationReferences {
+        references: Vec::new(),
+        assets,
+        consulted: vec![ReferenceKind::Calibration],
+    };
     catalog.mark_location_unavailable(old.id, Availability::Offline, "unplugged").await.unwrap();
     let review = catalog.review_retire_location(old.id, &references).await.unwrap();
     catalog

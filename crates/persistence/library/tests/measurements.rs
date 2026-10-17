@@ -450,7 +450,7 @@ async fn frame_record_validity_follows_fingerprints_digests_methods_and_availabi
     let references = LocationReferences {
         assets: assets.iter().map(|asset| asset.id).collect(),
         references: Vec::new(),
-        consulted: vec![ReferenceKind::View, ReferenceKind::Project, ReferenceKind::Result],
+        consulted: vec![ReferenceKind::Project, ReferenceKind::Calibration],
     };
     let review = ix.catalog.review_retire_location(location.id, &references).await.unwrap();
     let retired = ix

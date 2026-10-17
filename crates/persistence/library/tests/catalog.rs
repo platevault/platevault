@@ -1758,14 +1758,14 @@ fn read_references(assets: &[Asset], references: Vec<AssetReference>) -> Locatio
     LocationReferences {
         assets: assets.iter().map(|asset| asset.id).collect(),
         references,
-        consulted: vec![ReferenceKind::View, ReferenceKind::Project, ReferenceKind::Result],
+        consulted: vec![ReferenceKind::Project, ReferenceKind::Calibration],
     }
 }
 
-/// A fixed View membership holding `assets` at `revision`.
-fn fixed_view(assets: &[Asset], revision: Revision) -> AssetReference {
+/// A Project holding `assets` at its `revision`.
+fn holding_project(assets: &[Asset], revision: Revision) -> AssetReference {
     AssetReference {
-        kind: ReferenceKind::View,
+        kind: ReferenceKind::Project,
         id: Uuid::from_u128(0x7000),
         name: "NGC 7000 Ha".into(),
         revision,
@@ -1792,7 +1792,7 @@ async fn a_reviewed_retire_names_every_reference_and_changes_no_file() {
     let saved = catalog.save_target(&target("NGC 7000", "ngc 7000"), None).await.unwrap();
     catalog.associate_target(&[expected_session(&session)], saved.candidate.id).await.unwrap();
 
-    // The location goes offline; its copies are fixed View members.
+    // The location goes offline; a Project holds its copies.
     let unplugged = fx.root.with_extension("unplugged");
     std::fs::rename(&fx.root, &unplugged).unwrap();
     let location = catalog
@@ -1800,8 +1800,8 @@ async fn a_reviewed_retire_names_every_reference_and_changes_no_file() {
         .await
         .unwrap();
     let assets = catalog.location_assets(location.id).await.unwrap();
-    let view = fixed_view(&assets, 3);
-    let references = read_references(&assets, vec![view.clone()]);
+    let project = holding_project(&assets, 3);
+    let references = read_references(&assets, vec![project.clone()]);
     let review = catalog.review_retire_location(location.id, &references).await.unwrap();
     assert_eq!(
         (review.location_id, review.location_name.as_str(), &review.root),
@@ -1816,7 +1816,7 @@ async fn a_reviewed_retire_names_every_reference_and_changes_no_file() {
     assert_eq!(review.sessions.len(), 1, "{:?}", review.sessions);
     assert_eq!(review.sessions[0].session_id, session.id);
     assert_eq!(review.sessions[0].grouping_revision, session.grouping_revision);
-    assert_eq!(review.references, vec![view.clone()]);
+    assert_eq!(review.references, vec![project.clone()]);
     assert_eq!(review.consulted, references.consulted);
     assert!(
         review.statement.contains("deletes, moves or modifies no file"),
@@ -1826,11 +1826,11 @@ async fn a_reviewed_retire_names_every_reference_and_changes_no_file() {
     let stored = catalog.retire_review(review.id).await.unwrap();
     assert_eq!((stored.references, stored.assets.len()), (review.references.clone(), 2), "durable");
 
-    // A stale revision, or a View that changed since the review, is refused.
+    // A stale revision, or a Project that changed since the review, is refused.
     let stale = location.decision_revision + 1;
     let error = catalog.retire_location(review.id, location.id, stale, &references).await;
     assert_eq!(kind(&error.unwrap_err()), "conflict");
-    let refreshed = read_references(&assets, vec![fixed_view(&assets, 4)]);
+    let refreshed = read_references(&assets, vec![holding_project(&assets, 4)]);
     let error =
         catalog.retire_location(review.id, location.id, review.expected_revision, &refreshed);
     assert_eq!(kind(&error.await.unwrap_err()), "conflict");

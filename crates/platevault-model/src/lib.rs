@@ -1196,11 +1196,8 @@ pub enum RemapBlockReason {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ReferenceKind {
-    /// A fixed View membership or one of its prepared revisions (VSEL, PREP).
-    View,
+    /// A Project holding copies of the captures it holds (PRJ).
     Project,
-    /// A Result's recorded lineage.
-    Result,
     /// An adopted master's provenance record (CAL).
     Calibration,
 }
@@ -1213,7 +1210,7 @@ pub struct AssetReference {
     pub kind: ReferenceKind,
     pub id: Uuid,
     pub name: String,
-    /// The record's own revision, such as a View's membership or prepared revision.
+    /// The record's own revision, such as a Project's or a master's revision.
     pub revision: Revision,
     /// The referenced assets among those asked about.
     pub asset_ids: Vec<Uuid>,

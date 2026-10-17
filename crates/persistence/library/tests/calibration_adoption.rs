@@ -186,7 +186,7 @@ async fn review_refuses_each_unadoptable_request_and_writes_nothing() {
     let references = LocationReferences {
         references: Vec::new(),
         assets: assets.iter().map(|asset| asset.id).collect(),
-        consulted: vec![ReferenceKind::View],
+        consulted: vec![ReferenceKind::Calibration],
     };
     catalog
         .mark_location_unavailable(lib.results.id, Availability::Offline, "unplugged")

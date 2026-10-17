@@ -120,7 +120,6 @@ impl Catalog {
             state: ReviewState::Open,
             source: ReviewedSource {
                 asset_id: Some(asset.id),
-                result_id: None,
                 location_id: asset.location_id,
                 relative_path: asset.relative_path.clone(),
                 fingerprint,

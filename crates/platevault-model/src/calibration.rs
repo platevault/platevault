@@ -576,8 +576,6 @@ pub enum ReviewState {
 pub struct ReviewedSource {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub asset_id: Option<Uuid>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub result_id: Option<Uuid>,
     pub location_id: Uuid,
     pub relative_path: NativePath,
     pub fingerprint: ObservationFingerprint,
@@ -704,8 +702,6 @@ pub struct CustodyFact {
     pub asset_id: Option<Uuid>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub master_id: Option<Uuid>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub result_id: Option<Uuid>,
     pub location_id: Uuid,
     pub relative_path: NativePath,
     pub fingerprint: ObservationFingerprint,

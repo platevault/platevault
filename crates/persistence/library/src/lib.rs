@@ -240,7 +240,7 @@ pub struct LocationFailure {
 }
 
 /// References to one location's copies, read outside the catalog from the
-/// features that hold asset ids (Views, Projects, Results).
+/// features that hold asset ids (Projects, calibration records).
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LocationReferences {
@@ -2201,8 +2201,9 @@ impl Catalog {
 
 impl Catalog {
     /// Durably review Retire location: the location, its root and availability,
-    /// its recorded copies, the current sessions holding them and the Views,
-    /// Projects and Results `references` read for them. Only the review is written.
+    /// its recorded copies, the current sessions holding them and the Projects
+    /// and calibration records `references` read for them. Only the review is
+    /// written.
     ///
     /// # Errors
     /// `InvalidInput` for a retired location; `Conflict` with the location's current
@@ -2595,9 +2596,9 @@ fn retire_statement(location: &Location, copies: usize, references: usize) -> St
     format!(
         "Retiring {name:?} at {root} deletes, moves or modifies no file. Its {copies} recorded \
          copies will read Retired and stay as history, leave captured, usable and Unreviewed \
-         totals and Project progress, and stay named unresolved in the {references} Views, \
-         Projects and Results that hold them. Its folder can then be registered again as a \
-         new location; no decision transfers to it.",
+         totals and Project progress, and stay named unresolved in the {references} Projects \
+         and calibration records that hold them. Its folder can then be registered again as \
+         a new location; no decision transfers to it.",
         name = location.name,
         root = location.path.display(),
     )
