@@ -148,8 +148,8 @@ from the `apps/desktop` importer in `pnpm-lock.yaml` before the build and fails
 unless it is exactly 2.12.2. A CLI upgrade therefore requires reviewing the
 bundler's marker behavior, NSS/MSI codes, executable selection rule, five NSIS
 hash pins, and WiX publisher/issuer before updating the guard; the lockfile
-cannot silently advance past the version whose behavior was checked. Step 6 also fails a release whose
-installers pack an executable step 2 did not send. Step 1 runs the command
+cannot silently advance past the version whose behavior was checked. Step 6
+also fails a release whose installers pack an executable step 2 did not send.
 `tauri-action` runs on the other legs, `tauri build` in `apps/desktop` with no
 extra arguments, plus `--no-bundle`.
 
@@ -312,14 +312,14 @@ one release, pass the previous release's config as `--pubkey-conf`, e.g.
    - Approve both signing requests in SignPath, each within the hour.
    - The Windows leg's **Bundle the installers around the signed
      executables** and **Check the signed installers** steps pass. Both require
-     valid signature from `SignPath Foundation`; verify its publisher and
-     issuer in that tagged build. The expected issuer, `GlobalSign GCC R45
-     CodeSigning CA 2020`, is unconfirmed for this project's certificate; it
-     was observed on another project's signature. The `WixUIWixca` stream must carry a valid signature from `WiX
-     Toolset (.NET Foundation)` issued by `.NET Foundation Projects Code
-     Signing CA2`, and the five NSIS plugins must match their pinned SHA-256 in
-     `release-please.yml`. A test-signing policy fails before bundle creation
-     (see [Known limits](#known-limits)).
+     a valid signature by `SignPath Foundation`; verify the publisher and
+     issuer in the tagged build. The expected issuer `GlobalSign GCC R45
+     CodeSigning CA 2020` is unconfirmed for this project's certificate; it
+     was observed on another project's signature. `WixUIWixca` must carry a
+     valid signature from `WiX Toolset (.NET Foundation)` issued by `.NET
+     Foundation Projects Code Signing CA2`. The five NSIS plugins must match
+     their pinned SHA-256 in `release-please.yml`. A test-signing policy fails
+     before bundle creation (see [Known limits](#known-limits)).
    - `updater-manifest` publishes `latest.json`. It only does so when the
      minisign signatures verify against the signed installers.
    - On a Windows machine, `Get-AuthenticodeSignature` reports `Valid`, signed
