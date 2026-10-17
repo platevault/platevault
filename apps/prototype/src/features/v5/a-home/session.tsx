@@ -106,7 +106,7 @@ function SessionDetail({ session }: { session: Session }) {
       notice={notice}
       sections={[
         { id: "intake", title: m.session_intake(), content: <IntakeFacts state={state} row={row} />, actions: row.trashed ? [] : intakeActions(m, follow, session) },
-        { id: "calibration", title: m.nav_calibration(), content: <SessionCalibrationChoices state={state} session={session} changeable={!row.trashed} /> },
+        { id: "calibration", title: m.nav_calibration(), flush: true, content: <SessionCalibrationChoices state={state} session={session} changeable={!row.trashed} /> },
         { id: "projects", title: m.nav_projects(), count: row.projects.length, flush: true, content: <ProjectsTable state={state} row={row} /> },
         { id: "frames", title: m.sessions_column_frames(), count: assets.length, flush: true, content: <FramesTable state={state} assets={assets} session={session} reviewable={!row.trashed} /> },
         { id: "headers", title: m.session_headers(), content: <Metadata state={state} session={session} hours={hours} /> },
@@ -185,6 +185,8 @@ function IntakeFacts({ state, row }: { state: PrototypeState; row: SessionRow })
   const rigSettled = sessionRigId(session) !== null
   const version = sessionRigVersion(state.catalog, session)
   const duplicates = sessionDuplicateCopies(state).get(session.id) ?? 0
+  // Once review is the step the session waits on, or it is Ready, the header badge already words the review step.
+  const reviewInHeader = !row.trashed && (row.readiness === "needs-review" || row.readiness === "ready")
   return (
     <KeyValueList
       columns={2}
@@ -203,7 +205,7 @@ function IntakeFacts({ state, row }: { state: PrototypeState; row: SessionRow })
         { label: m.sessions_column_rig(), value: rigSettled && row.rig ? say(m, row.rig) : <StatusBadge kind="association" value={session.equipment.status} label={m.sessions_rig_needs_review()} /> },
         { label: m.session_rig_status(), value: <StatusBadge kind="association" value={session.equipment.status} /> },
         ...(version ? [{ label: m.domain_criterion_rig_version(), value: m.session_rig_version_from({ night: formatNight(version.version.from, true) }) }] : []),
-        { label: m.step_review(), value: row.unreviewed > 0 ? m.flow_frames_unreviewed({ count: row.unreviewed }) : <StatusBadge kind="gate" value="ready" /> },
+        ...(reviewInHeader ? [] : [{ label: m.step_review(), value: row.unreviewed > 0 ? m.flow_frames_unreviewed({ count: row.unreviewed }) : <StatusBadge kind="gate" value="ready" /> }]),
         { label: m.session_header_label(), value: session.objectLabel ?? m.session_none() },
         ...(duplicates > 0 ? [{ label: m.sessions_filter_duplicates(), value: <DuplicatesBadge count={duplicates} /> }] : []),
       ]}

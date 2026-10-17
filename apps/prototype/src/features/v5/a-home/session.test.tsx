@@ -2,7 +2,7 @@ import { createMemoryHistory, createRootRoute, createRoute, createRouter, Router
 import { render, screen, waitFor, within } from "@testing-library/react"
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest"
 import { calibrationSources, candidatesFor, sourceKey } from "@/domain/calibration"
-import { canJoinProject, findInput, isLocked, joinBlocker, sessionReadiness } from "@/domain/derive"
+import { canJoinProject, findInput, isLocked, joinBlocker, sessionReadiness, sessionUnreviewedFrames } from "@/domain/derive"
 import { pendingChanges } from "@/domain/project-view"
 import { createSeed } from "@/domain/seed"
 import { m, say } from "@/lib/i18n"
@@ -104,5 +104,16 @@ describe("Reassigning calibration (LIB-AC-30)", () => {
     const count = pendingChanges(after, after.catalog.projects[holder!.id]!).filter((c) => "sessionId" in c && c.sessionId === session.id).length
     await waitFor(() => expect(row).toHaveTextContent(m.session_project_pending({ count })))
     for (const p of closed) expect(within(table).getByRole("rowheader", { name: p.name }).closest("tr")!).toHaveTextContent(m.session_project_snapshot_kept())
+  })
+})
+
+describe("Session detail: intake facts", () => {
+  it("words the frames still to review once, in the header badge, while review is the step the session waits on", async () => {
+    const { catalog } = store.getState()
+    const session = lights().find((s) => sessionReadiness(catalog, s) === "needs-review")
+    expect(session, "the demo holds a session waiting on review").toBeDefined()
+    renderSession(session!.id)
+    await screen.findByRole("heading", { level: 1 })
+    expect(screen.getAllByText(m.flow_frames_unreviewed({ count: sessionUnreviewedFrames(catalog, session!) }))).toHaveLength(1)
   })
 })

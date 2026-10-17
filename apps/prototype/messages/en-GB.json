@@ -5193,8 +5193,8 @@
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} frame Unreviewed",
-        "countPlural=*": "{count} frames Unreviewed"
+        "countPlural=one": "{count} frame unreviewed",
+        "countPlural=*": "{count} frames unreviewed"
       }
     }
   ],

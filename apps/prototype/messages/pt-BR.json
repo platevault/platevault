@@ -5574,9 +5574,9 @@
         "countPlural"
       ],
       "match": {
-        "count=0, countPlural=*": "{count} frames Não revisados",
-        "count=*, countPlural=one": "{count} frame Não revisado",
-        "count=*, countPlural=*": "{count} frames Não revisados"
+        "count=0, countPlural=*": "{count} frames não revisados",
+        "count=*, countPlural=one": "{count} frame não revisado",
+        "count=*, countPlural=*": "{count} frames não revisados"
       }
     }
   ],
