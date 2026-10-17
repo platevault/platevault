@@ -134,7 +134,7 @@ impl DataType {
 
 // ── Shared helpers ────────────────────────────────────────────────────────
 
-/// Take the tail of a project-relative path (the file name) for display.
+/// Take the native file name from a recorded path for display.
 fn file_name(path: &str) -> &str {
-    path.rsplit(['/', '\\']).next().unwrap_or(path)
+    std::path::Path::new(path).file_name().and_then(std::ffi::OsStr::to_str).unwrap_or(path)
 }
