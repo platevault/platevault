@@ -159,8 +159,9 @@ pub async fn library_cancel_scan(
 /// lists light sessions of Captures locations; `filter` `trashed` lists the
 /// sessions holding Trashed frames, summarized over those frames (LIB-FR-16/18).
 /// `needs_target` lists the sessions with no confirmed Target and
-/// `not_in_any_project` those with one that are no Project's candidate and no
-/// run's member (LIB-FR-17); neither assigns anything to a run.
+/// `not_in_any_project` those with one that no Project holds
+/// (`project_sessions`, LIB-FR-17, PRJ-FR-19); matching a Project's subjects
+/// and rigs only makes a session a suggestion, and neither filter adds one.
 ///
 /// # Errors
 /// `PersistenceFailure` when the catalog cannot be read.
@@ -500,8 +501,8 @@ pub async fn library_reselect_location(
 }
 
 /// Durable Retire location review naming the location, root, availability and
-/// decision revision and every asset, session, View, Project and Result that
-/// references its copies. Retiring deletes, moves or modifies no file.
+/// decision revision and the Projects and calibration records that hold its
+/// copies. Retiring deletes, moves or modifies no file.
 ///
 /// # Errors
 /// `InvalidInput` for a retired location; `Conflict` when its copies changed while
@@ -514,10 +515,10 @@ pub async fn library_review_retire_location(
     library.review_retire_location(location_id).await.map_err(fail(Some(location_id)))
 }
 
-/// Confirm a reviewed Retire location: the location is re-read, copies read
-/// Retired and leave integration totals, fixed Views name them unresolved and the
-/// root stops blocking registration. Reads and changes no file bytes, so no
-/// rehash applies.
+/// Confirm a reviewed Retire location: the location and every reference are
+/// re-read, copies read Retired and leave integration totals, and the root
+/// stops blocking registration. Reads and changes no file bytes, so no rehash
+/// applies.
 ///
 /// # Errors
 /// `Conflict` for a stale review or revision, for availability that differs from

@@ -2,12 +2,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! Sessions filter IPC (spec 064 LIB-FR-17, spec 065 PRJ-FR-19, D-W59): the
-//! "Needs a Target" and "Not in any Project" counts, Create Project prefill and
-//! Add to Project. The filters themselves are `library_list_sessions`'s
-//! `filter`. Registered only by the isolated rebuilt shell
-//! ([`crate::library_shell`]). Nothing here writes a run row; Add to Project
-//! writes only Project rows after its transaction commits. Failures follow the
-//! library [`ErrorResponse`] conventions.
+//! "Needs a Target", "Not in any Project" and "Needs calibration" counts,
+//! Create Project prefill and Add to Project. The filters themselves are
+//! `library_list_sessions`'s `filter`; "Not in any Project" reads the sessions
+//! Projects hold (`project_sessions`). Registered only by the isolated rebuilt
+//! shell ([`crate::library_shell`]). Add to Project writes only the Project's
+//! subject and rig rows after its transaction commits; it adds no session to a
+//! group. Failures follow the library [`ErrorResponse`] conventions.
 //!
 //! [`ErrorResponse`]: platevault_core::ErrorResponse
 
@@ -22,8 +23,8 @@ use uuid::Uuid;
 
 use super::library::{fail, Reply};
 
-/// The "Needs a Target" and "Not in any Project" list lengths, which Home's top
-/// line reports. Read-only.
+/// The "Needs a Target", "Not in any Project" and "Needs calibration" list
+/// lengths, which Home's top line reports. Read-only.
 ///
 /// # Errors
 /// `PersistenceFailure` when the catalog cannot be read.

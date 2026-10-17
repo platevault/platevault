@@ -17,9 +17,9 @@ use tauri::State;
 use super::library::{fail, Reply};
 
 /// Home: the top line "N sessions need a Target · M not in any Project",
-/// then Actions, Projects with goals, stages and one Next action (Done ones
-/// only when `showDone`), New sessions, Tonight for `tonight`, Target status
-/// and Running work.
+/// then Actions, the open Projects with goals, pending changes and one Next
+/// action, New sessions, Tonight for `tonight`, Target status and Running
+/// work.
 ///
 /// # Errors
 /// `InvalidInput` for invalid Tonight criteria; `PersistenceFailure` when the
@@ -27,8 +27,7 @@ use super::library::{fail, Reply};
 #[tauri::command]
 pub async fn home_dashboard(
     library: State<'_, Arc<Library>>,
-    show_done: Option<bool>,
     tonight: TonightQuery,
 ) -> Reply<HomeDashboard> {
-    library.home_dashboard(show_done.unwrap_or(false), &tonight).await.map_err(fail(None))
+    library.home_dashboard(&tonight).await.map_err(fail(None))
 }
