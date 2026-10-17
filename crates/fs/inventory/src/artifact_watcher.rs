@@ -138,12 +138,19 @@ fn close_folders(mut guard: WatcherGuard) {
 /// `RecursiveMode::Recursive` watch per path is used (the OS watcher may then
 /// follow links under it).
 ///
+/// The paths register through [`register_watch_paths`], as the tree watcher
+/// (astro-plan-ef440) made it: every path in one batch, a listing that
+/// leaves out a folder swapped for a link or junction while it lists, and an
+/// error for a path that probes as a real folder yet lists no folders.
+///
 /// Returns an `mpsc::Receiver` and a `WatcherGuard`.  Drop the guard to stop.
 ///
 /// # Errors
 ///
-/// Returns an error string if the platform watcher cannot be initialised or a
-/// path cannot be watched.
+/// Returns an error string if the platform watcher cannot be initialised, a
+/// path cannot be watched, or a path lists no folders once it probed fine.
+///
+/// [`register_watch_paths`]: crate::notify_bridge::register_watch_paths
 pub fn start_artifact_watcher(
     paths: &[Utf8PathBuf],
     channel_capacity: usize,
@@ -236,12 +243,14 @@ const fn brings_folder(kind: EventKind) -> bool {
 
 /// Whether `kind` may change who can list a folder: its permissions, owner
 /// or access list changed. A timestamp or extended-attribute change named as
-/// such (`WriteTime`, `AccessTime`, `Extended`) does not. inotify
-/// (`IN_ATTRIB`) and `FSEvents` (inode metadata) report every metadata
-/// change as `Metadata(Any)`, a folder's new times (`utimes`) included, so
-/// such a change rescans too: a copy tool that sets a folder's times costs a
-/// rescan of its location, in exchange for never missing an access change.
-/// Windows reports no metadata kind: see [`folder_rescans`].
+/// such (`WriteTime`, `AccessTime`, `Extended`) does not. notify reports a
+/// permission change and a folder's new times (`utimes`) alike as
+/// `Metadata(Any)`: every inotify `IN_ATTRIB`, and every `FSEvents`
+/// inode-metadata change, maps to it. So such a change rescans too, since
+/// telling the two apart would mean recording each folder's mode and owner
+/// to compare against: a copy tool that sets a folder's times costs a rescan
+/// of its location, in exchange for never missing an access change. Windows
+/// reports no metadata kind: see [`folder_rescans`].
 const fn changes_access(kind: EventKind) -> bool {
     matches!(
         kind,
