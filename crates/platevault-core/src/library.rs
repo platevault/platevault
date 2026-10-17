@@ -1066,7 +1066,7 @@ mod tests {
         library.forced_conflicts.store(usize::MAX, Ordering::Release);
         let confirmed = library.confirm_correction(preview.id, &expected).await.unwrap();
         let reported = confirmed.association_refresh.expect("the conflict is reported");
-        assert_eq!(reported.kind, "conflict");
+        assert_eq!(reported.code.as_str(), "conflict");
         unchanged(&originals);
     }
 
@@ -1196,7 +1196,7 @@ mod tests {
 
         *mounted.lock().unwrap() = "0BADF00D".into();
         let refused = read(assets[0].id).await.unwrap_err();
-        assert_eq!(refused.response(None, None).kind, "identity_conflict", "{refused}");
+        assert_eq!(refused.code().as_str(), "identity_conflict", "{refused}");
         assert_eq!(probe_count(), locations.len() + 1, "the swapped volume is probed again");
 
         *mounted.lock().unwrap() = registered;

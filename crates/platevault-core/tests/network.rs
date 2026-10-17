@@ -24,7 +24,7 @@ fn a_host_folder_is_observed_with_its_volume_kind() {
 fn share_addresses_are_refused_as_location_roots() {
     for address in ["smb://nas.local/Astro", "//nas.local/Astro/Captures", "https://nas/dav"] {
         let refused = inventory::observe_root(Path::new(address)).unwrap_err();
-        assert_eq!(refused.response(None, None).kind, "invalid_input", "{address}: {refused}");
+        assert_eq!(refused.code().as_str(), "invalid_input", "{address}: {refused}");
         assert!(refused.to_string().contains("mounts no share"), "{address}: {refused}");
     }
 }

@@ -33,7 +33,7 @@ fn bin(world: &World) -> Arc<ScopedTrash> {
 }
 
 fn kind(error: &LibraryError) -> String {
-    error.response(None, None).kind
+    error.code().as_str().into()
 }
 
 /// A file the user's tool wrote under the Project folder.

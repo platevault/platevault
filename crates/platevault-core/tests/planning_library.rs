@@ -386,7 +386,7 @@ impl Worked {
 }
 
 fn kind(error: &LibraryError) -> String {
-    error.response(None, None).kind
+    error.code().as_str().into()
 }
 
 fn sha256(bytes: &[u8]) -> String {
@@ -812,20 +812,19 @@ async fn a_selected_key_absent_from_the_recomputed_set_is_a_conflict_naming_it()
     )
     .unwrap();
     let stale = ExportSelection { query, window_keys: vec![present.key, absent] };
-    let review = library.review_calendar_export(&stale).await.unwrap_err().response(None, None);
-    assert_eq!(review.kind, "conflict", "{}", review.message);
-    assert_eq!(
-        (review.identity, review.current_revision),
-        (Some(worked.target.candidate.id), Some(worked.target.decision_revision))
-    );
+    let refused = library.review_calendar_export(&stale).await.unwrap_err();
     assert!(
-        review.message.contains(&absent.to_string()) && review.message.contains("Backyard"),
-        "{}",
-        review.message
+        matches!(&refused, LibraryError::WindowConflict { site, .. } if site.contains("Backyard")),
+        "{refused}"
     );
-    assert!(!review.message.contains(&present.key.to_string()), "{}", review.message);
+    let review = refused.response(None, None);
+    assert_eq!(review.code.as_str(), "conflict", "{refused}");
+    assert_eq!(
+        (review.identity, review.current_revision, review.window),
+        (Some(worked.target.candidate.id), Some(worked.target.decision_revision), Some(absent))
+    );
     let export = library.prepare_calendar_export(&stale, &digest).await.unwrap_err();
-    assert_eq!(export.response(None, None).message, review.message);
+    assert_eq!(export.to_string(), refused.to_string());
     assert_eq!(worked.planning_rows().await, rows, "nothing written");
 }
 

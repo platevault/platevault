@@ -128,13 +128,12 @@ impl ThumbnailWork {
             }
             Err(LibraryError::Canceled) => {}
             Err(error) => {
-                let response = error.response(Some(decode.asset_id), None);
                 jobs.failed.insert(
                     decode.asset_id,
                     Failure {
                         fingerprint: decode.recorded.clone(),
-                        reason: response.kind,
-                        message: response.message,
+                        reason: error.code().as_str().into(),
+                        message: error.to_string(),
                     },
                 );
             }

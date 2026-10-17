@@ -8,6 +8,12 @@
 //! state. Every handler returns only after its catalog transaction commits and
 //! reports failures as [`ErrorResponse`] naming the affected identity and scope.
 //! Source images are only ever read.
+//!
+//! `Reply` is every library-shell command's reply, and `fail`/`fail_at` its
+//! conversion: a [`LibraryError`] reaches the client as its stable
+//! [`platevault_core::LibraryErrorCode`] with structured params, worded by the
+//! desktop catalogues' `err_library_<code>` messages. The error's English
+//! `Display` goes to the log only.
 
 use std::sync::Arc;
 
@@ -50,7 +56,11 @@ fn report(
     scope: Option<NativePath>,
 ) -> ErrorResponse {
     let response = error.response(identity, scope);
-    tracing::warn!(kind = %response.kind, identity = ?response.identity, "{}", response.message);
+    tracing::warn!(
+        code = response.code.as_str(),
+        identity = ?response.identity,
+        "{error}"
+    );
     response
 }
 

@@ -4,21 +4,19 @@
 //! Rig filter-list IPC (spec 072 PLAN-EQ-FR-01..06, LIB-FR-05 unknown filter
 //! part), registered by the isolated library shell under its planning block.
 //!
-//! A failed save returns its [`ErrorResponse`] with the last saved list still
-//! in effect; the UI keeps the edit unsaved and retries it with the same
-//! expected revision.
+//! A failed save returns its [`platevault_core::ErrorResponse`] with the last
+//! saved list still in effect; the UI keeps the edit unsaved and retries it
+//! with the same expected revision.
 
 use std::sync::Arc;
 
 use platevault_core::library::Library;
-use platevault_core::{Band, ErrorResponse, Revision, Rig, RigFilter, RigFilterValues};
+use platevault_core::{Band, Revision, Rig, RigFilter, RigFilterValues};
 use serde::Deserialize;
 use tauri::State;
 use uuid::Uuid;
 
-use crate::commands::library::fail;
-
-type Reply<T> = Result<T, ErrorResponse>;
+use super::library::{fail, Reply};
 
 /// One filter on a saved list. `id` is absent for a filter new to the list.
 #[derive(Clone, Debug, Deserialize)]

@@ -1043,7 +1043,7 @@ async fn a_deleted_or_moved_root_never_blocks_an_unrelated_sibling() {
     // The folder now holding the moved root is refused, naming the root and where it
     // is; reselecting it there is the way out.
     let error = register(&archive, "Archive").await.unwrap_err();
-    assert_eq!(error.response(None, None).kind, "identity_conflict");
+    assert_eq!(error.code().as_str(), "identity_conflict");
     let found = std::fs::canonicalize(&moved).unwrap().display().to_string();
     let message = error.to_string();
     assert!(message.contains("\"Darks\"") && message.contains(&found), "{message}");
@@ -1107,7 +1107,7 @@ async fn rereview_after_return(
     let changed = library.retire_location(review.id, id, review.expected_revision).await;
     let response = changed.unwrap_err().response(None, None);
     assert_eq!(
-        (response.kind.as_str(), response.identity, response.retry),
+        (response.code.as_str(), response.identity, response.retry),
         ("conflict", Some(id), RetryAction::Review)
     );
     assert_eq!(catalog.location(id).await.unwrap().lifecycle, LocationLifecycle::Active);
@@ -1226,7 +1226,7 @@ async fn retiring_an_offline_location_keeps_projects_and_counts_its_folder_once_
     // A second Project holding the copies after the review makes it stale.
     let second = project_holding(&library, "M 31 again", (m31, rig), summary.session.id).await;
     let stale = library.retire_location(review.id, location.id, review.expected_revision).await;
-    assert_eq!(stale.unwrap_err().response(None, None).kind, "conflict");
+    assert_eq!(stale.unwrap_err().code().as_str(), "conflict");
     assert_eq!(catalog.location(location.id).await.unwrap().lifecycle, LocationLifecycle::Active);
     let review = library.review_retire_location(location.id).await.unwrap();
     let named: BTreeSet<Uuid> = review.references.iter().map(|reference| reference.id).collect();
@@ -1248,7 +1248,7 @@ async fn retiring_an_offline_location_keeps_projects_and_counts_its_folder_once_
         .reselect_location(location.id, retired.decision_revision, NativePath::from_path(&root))
         .await
         .unwrap_err();
-    assert_eq!(refused.response(None, None).kind, "invalid_input");
+    assert_eq!(refused.code().as_str(), "invalid_input");
     assert!(refused.to_string().contains("retired"), "{refused}");
     let again = library
         .register_location(NativePath::from_path(&root), "Cold-1".into(), LocationRole::Captures)

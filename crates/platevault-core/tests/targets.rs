@@ -306,7 +306,7 @@ fn simbad(endpoint: &str) -> SimbadTargetResolver {
 }
 
 fn kind(error: &LibraryError) -> String {
-    error.response(None, None).kind
+    error.code().as_str().into()
 }
 
 #[tokio::test]

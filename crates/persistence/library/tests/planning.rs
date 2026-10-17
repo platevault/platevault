@@ -66,7 +66,7 @@ fn criteria() -> PlanCriteria {
 fn conflict_at(error: &LibraryError, id: Uuid, current: Revision) {
     let response = error.response(None, None);
     assert_eq!(
-        (response.kind.as_str(), response.identity, response.current_revision),
+        (response.code.as_str(), response.identity, response.current_revision),
         ("conflict", Some(id), Some(current)),
         "{error}"
     );

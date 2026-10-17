@@ -644,7 +644,7 @@ fn only_a_ready_settled_current_session_on_the_groups_rig_joins_an_open_project(
     );
     assert_eq!(refusal.session_id, session);
     let error = platevault_model::LibraryError::from(refusal.clone());
-    assert_eq!(error.response(None, None).kind, "invalid_input", "{error}");
+    assert_eq!(error.code().as_str(), "invalid_input", "{error}");
     round_trip(&refusal);
 }
 

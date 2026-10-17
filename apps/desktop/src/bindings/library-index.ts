@@ -872,8 +872,8 @@ export const commands = {
 	 *  Validate and save a frame type's template; saving the default stores nothing.
 	 * 
 	 *  # Errors
-	 *  `InvalidInput` naming the problem (empty, overlong, unknown token, path
-	 *  traversal, reserved name); nothing is stored.
+	 *  `InvalidInput` for an empty or overlong template, an unknown token, path
+	 *  traversal or a reserved name; nothing is stored.
 	 */
 	namingSave: (frameType: NamingFrameType, template: string) => typedError<NamingTemplate, ErrorResponse>(__TAURI_INVOKE("naming_save", { frameType, template })),
 	/**
@@ -888,7 +888,7 @@ export const commands = {
 	 *  built-in sample, naming every fallback token used. Stores nothing.
 	 * 
 	 *  # Errors
-	 *  `InvalidInput` naming the problem, as for [`naming_save`].
+	 *  `InvalidInput`, as for [`naming_save`].
 	 */
 	namingPreview: (frameType: NamingFrameType, template: string, sample: {
 	target?: string | null,
@@ -2718,14 +2718,27 @@ export type EquipmentInput = {
 	colorKind: ColorKind | null,
 };
 
+/**
+ *  The IPC form of a [`LibraryError`]: its stable code plus the structured
+ *  params the client words it with. No English text crosses IPC; the client
+ *  shows the catalogue message for `code`.
+ */
 export type ErrorResponse = {
-	kind: string,
+	code: LibraryErrorCode,
+	/**  The record the failure concerns. */
 	identity: string | null,
+	/**  The native path the failure concerns. */
 	scope: NativePathWire | null,
 	retry: RetryAction,
-	message: string,
+	/**  A `conflict`'s current revision. */
 	currentRevision: number | null,
+	/**  The records that superseded a `conflict`'s record. */
 	successors: string[],
+	/**
+	 *  The selected window a `conflict` found missing from the windows
+	 *  recomputed at its site; the key names the Target and the site.
+	 */
+	window: string | null,
 };
 
 /**
@@ -3976,6 +3989,16 @@ export type KeywordNames = {
 	group: GroupKeyword,
 	panel: GroupKeyword,
 };
+
+/**
+ *  The stable machine code of a [`LibraryError`]: what the client switches on
+ *  and the key of its user-facing message. The desktop catalogues
+ *  (`apps/desktop/messages/<locale>.json`) word each code as
+ *  `err_library_<code>`, as they word a `contracts_core` `ErrorCode` as
+ *  `err_<code>`. The wire strings are the kinds the catalog also records for
+ *  run issues, so they don't change.
+ */
+export type LibraryErrorCode = "invalid_input" | "not_found" | "conflict" | "identity_conflict" | "access_denied" | "source_unavailable" | "unsupported_format" | "metadata_unreadable" | "provider_unavailable" | "persistence_failure" | "no_byte_proof" | "symlinks_unavailable" | "canceled";
 
 export type LibrarySession = LibrarySession_Serialize | LibrarySession_Deserialize;
 
@@ -5935,7 +5958,7 @@ export type RunCounters = {
  */
 export type RunIssue = {
 	assetId: string,
-	/**  The `ErrorResponse` kind. */
+	/**  The failure's `LibraryErrorCode` wire string. */
 	kind: string,
 	message: string,
 };

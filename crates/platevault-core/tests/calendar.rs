@@ -261,7 +261,7 @@ fn a_failed_write_leaves_an_existing_file_byte_identical() {
     let result = write_snapshot(&path, b"replacement");
     std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o755)).unwrap();
     let error = result.unwrap_err();
-    assert_eq!(error.response(None, None).kind, "access_denied", "{error:?}");
+    assert_eq!(error.code().as_str(), "access_denied", "{error:?}");
     assert_eq!(sha(&std::fs::read(&path).unwrap()), before);
     assert_eq!(entries(dir.path()), ["existing.ics"]);
 }
@@ -296,7 +296,7 @@ fn a_folder_that_cannot_be_synced_fails_before_replacing_the_file() {
     let result = write_snapshot(&path, b"replacement");
     std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o755)).unwrap();
     let error = result.unwrap_err();
-    assert_eq!(error.response(None, None).kind, "access_denied", "{error:?}");
+    assert_eq!(error.code().as_str(), "access_denied", "{error:?}");
     assert_eq!(std::fs::read(&path).unwrap(), b"original calendar");
     assert_eq!(entries(dir.path()), ["existing.ics"]);
 }

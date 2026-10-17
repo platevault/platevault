@@ -1422,7 +1422,7 @@ mod tests {
         };
         catalog.limit_writer_pages_for_test().await.unwrap();
         let error = catalog.create_project(&input).await.unwrap_err();
-        assert_eq!(error.response(None, None).kind, "persistence_failure");
+        assert_eq!(error.code().as_str(), "persistence_failure");
         assert!(error.to_string().contains("full"), "{error}");
         catalog.close().await.unwrap();
 

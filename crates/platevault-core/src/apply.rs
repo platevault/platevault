@@ -1271,7 +1271,7 @@ mod tests {
         );
         let error = refusal(&checked.blockers);
         assert!(matches!(error, LibraryError::SymlinksUnavailable(_)));
-        assert_eq!(error.response(None, None).kind, "symlinks_unavailable");
+        assert_eq!(error.code().as_str(), "symlinks_unavailable");
         assert!(error.to_string().contains("Developer Mode"));
         assert_eq!(check(&inputs(temp.path(), ViewMode::Copies), os).blockers, Vec::new());
         assert!(fs::read_dir(temp.path()).unwrap().next().is_none(), "nothing was built");
