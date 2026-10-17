@@ -63,13 +63,15 @@ function isSvgPresentationElement(node) {
   }
 
   const isIntrinsic = (name) => /^[a-z]/.test(name);
-  const name = element.openingElement.name.name;
-  if (!isIntrinsic(name)) return false;
-  const normalizedName = name.toLowerCase();
-  if (normalizedName === 'svg' || SVG_ELEMENTS.has(normalizedName)) return true;
+  const ownName = element.openingElement.name.name;
+  if (!isIntrinsic(ownName)) return false;
 
   let ancestor = element.parent;
   while (ancestor) {
+    if (ancestor.type === 'JSXExpressionContainer') {
+      ancestor = ancestor.parent;
+      continue;
+    }
     if (ancestor.type === 'JSXElement') {
       const ancestorName = ancestor.openingElement.name;
       if (ancestorName.type !== 'JSXIdentifier' || !isIntrinsic(ancestorName.name)) {
@@ -77,14 +79,13 @@ function isSvgPresentationElement(node) {
       }
       const normalizedAncestorName = ancestorName.name.toLowerCase();
       if (normalizedAncestorName === 'foreignobject') return false;
-      if (normalizedAncestorName === 'svg' || SVG_ELEMENTS.has(normalizedAncestorName)) {
-        return true;
-      }
-      return false;
+      if (normalizedAncestorName === 'svg') return true;
+      if (SVG_ELEMENTS.has(normalizedAncestorName)) return true;
     }
     ancestor = ancestor.parent;
   }
-  return false;
+
+  return ownName.toLowerCase() === 'svg' || SVG_ELEMENTS.has(ownName.toLowerCase());
 }
 
 function reportRawColorsInExpression(expression, report) {
@@ -106,31 +107,61 @@ function reportRawColorsInExpression(expression, report) {
       reportRawColorsInExpression(expression.right, report);
       return;
     case 'TemplateLiteral':
-      let accumulatedText = '';
-      for (let index = 0; index < expression.quasis.length; index += 1) {
-        const quasi = expression.quasis[index];
-        const text = quasi.value.cooked ?? quasi.value.raw;
-        accumulatedText += text;
-        const insideUrl = /url\([^)]*$/i.test(accumulatedText);
-        if (
-          (!insideUrl && isRawColor(text)) ||
-          (index < expression.expressions.length &&
-            !insideUrl &&
-            /(?:#|(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\()\s*$/i.test(accumulatedText))
-        ) {
-          report();
+      const quasis = expression.quasis.map((quasi) => quasi.value.cooked ?? quasi.value.raw);
+      let mode = 'normal';
+      const opener = /url\s*\(|var\s*\(|(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\s*\(/ig;
+      const scanText = (text) => {
+        let cursor = 0;
+        while (cursor < text.length) {
+          if (mode === 'url' || mode === 'color-function') {
+            const close = text.indexOf(')', cursor);
+            if (close < 0) return;
+            cursor = close + 1;
+            mode = 'normal';
+            continue;
+          }
+          if (mode === 'variable-name') {
+            const boundary = text.slice(cursor).search(/[),]/);
+            if (boundary < 0) return;
+            cursor += boundary + 1;
+            mode = 'normal';
+            continue;
+          }
+
+          opener.lastIndex = cursor;
+          const match = opener.exec(text);
+          const end = match ? match.index : text.length;
+          if (isRawColor(text.slice(cursor, end))) report();
+          if (!match) return;
+
+          const functionName = match[0].trim().slice(0, -1).toLowerCase();
+          cursor = opener.lastIndex;
+          if (functionName === 'url') {
+            mode = 'url';
+          } else if (functionName === 'var') {
+            const nameStart = text.slice(cursor).search(/\S/);
+            if (nameStart >= 0 && text.slice(cursor + nameStart).startsWith('--')) {
+              cursor += nameStart + 2;
+              mode = 'variable-name';
+            } else {
+              mode = 'color-function';
+            }
+          } else {
+            report();
+            mode = 'color-function';
+          }
         }
-        if (index < expression.expressions.length) accumulatedText += ' '; // Keep substitutions from closing url().
-      }
-      for (let index = 0; index < expression.expressions.length; index += 1) {
-        const priorText = expression.quasis
-          .slice(0, index + 1)
-          .map((part) => part.value.cooked ?? part.value.raw)
-          .join(' ');
-        const insideUrl = /url\([^)]*$/i.test(priorText);
-        const insideVariableName = /var\(\s*--[\w-]*$/i.test(priorText);
-        if (!insideUrl && !insideVariableName) {
-          reportRawColorsInExpression(expression.expressions[index], report);
+      };
+
+      for (let index = 0; index < expression.quasis.length; index += 1) {
+        const quasi = quasis[index] ?? '';
+        scanText(quasi);
+        if (index < expression.expressions.length) {
+          if (mode === 'normal' && /#\s*$/.test(quasi)) report();
+          if (mode === 'normal') {
+            reportRawColorsInExpression(expression.expressions[index], report);
+            scanText('x');
+          }
         }
       }
       return;

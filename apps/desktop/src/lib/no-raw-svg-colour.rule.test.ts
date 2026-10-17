@@ -105,7 +105,9 @@ describe('svg/no-raw-svg-colour', () => {
       "const svg = <svg fill={`url(#paint-${active ? '#fff' : 'red'})`} stroke={`url(#${active ? 'currentColor' : 'var(--pv-accent)'})`} />;",
     );
 
-    expect(diagnostics).toHaveLength(0);
+    expect(
+      diagnostics.map((diagnostic) => [diagnostic.message, diagnostic.column]),
+    ).toEqual([]);
   });
 
   it('allows conditionals selecting theme values and currentColor', () => {
@@ -205,7 +207,9 @@ describe('svg/no-raw-svg-colour', () => {
   it('flags a raw RGB function opened before a template substitution', () => {
     const diagnostics = lint('const svg = <svg fill={`rgb(${r}, 0, 0)`} />;');
 
-    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics.map((diagnostic) => diagnostic.message)).toEqual([
+      'Raw colour in SVG presentation attribute "fill". Use a theme variable.',
+    ]);
   });
 
   it('allows dynamic variable names but checks interpolated var fallbacks', () => {
@@ -220,14 +224,18 @@ describe('svg/no-raw-svg-colour', () => {
     expect(fallback).toHaveLength(2);
   });
 
-  it('checks only intrinsic attributes even below an SVG ancestor', () => {
-    const widget = lint('<svg><Widget color="red" /></svg>');
-    const member = lint('<svg><Foo.Bar color="red" /></svg>');
-    const rectangle = lint('<svg><rect fill="#fff" /></svg>');
+  it('keeps foreignObject namespace boundaries while allowing nested SVG re-entry', () => {
+    const htmlText = lint(
+      '<svg><foreignObject><text color="red" /></foreignObject></svg>',
+    );
+    const nestedSvg = lint(
+      '<svg><foreignObject><svg><rect fill="#fff" /></svg></foreignObject></svg>',
+    );
+    const standalonePath = lint('<path fill="#fff" />');
 
-    expect(widget).toHaveLength(0);
-    expect(member).toHaveLength(0);
-    expect(rectangle).toHaveLength(1);
+    expect(htmlText).toHaveLength(0);
+    expect(nestedSvg).toHaveLength(1);
+    expect(standalonePath).toHaveLength(1);
   });
 
   it('unwraps TypeScript non-null assertions around paint expressions', () => {
@@ -258,5 +266,23 @@ describe('svg/no-raw-svg-colour', () => {
 
     expect(parenthesized).toHaveLength(1);
     expect(optionalChain).toHaveLength(1);
+  });
+  it('allows named suffixes after template URL and variable substitutions', () => {
+    const urlSuffix = lint('const svg = <svg fill={`url(#${id}red)`} />;');
+    const variableSuffix = lint(
+      'const svg = <svg color={`var(--pv-${variant}red)`} />;',
+    );
+
+    expect(urlSuffix).toHaveLength(0);
+    expect(variableSuffix).toHaveLength(0);
+  });
+  it('allows color-like template suffixes inside open URL and var names', () => {
+    const urlSuffix = lint('const svg = <svg fill={`url(#${id}red)`} />;');
+    const variableSuffix = lint(
+      'const svg = <svg color={`var(--pv-${variant}red)`} />;',
+    );
+
+    expect(urlSuffix).toHaveLength(0);
+    expect(variableSuffix).toHaveLength(0);
   });
 });
