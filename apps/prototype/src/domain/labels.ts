@@ -7,7 +7,7 @@
 import { formatCount, formatDecimal } from "@/lib/format"
 import { type MessageRef, msg, nightRef, verbatim } from "@/lib/i18n"
 import type { MoonAvoidance } from "./planning"
-import type { ApplicationProfile, Band, Catalog, GoalChannel, GroupKeywords, InputMode, MatchingSettings, MoonConstraint, OperationUnit, OutputKind, SubjectWindow, WindowRule, WrapUpStepId } from "./types"
+import type { ApplicationProfile, Band, Catalog, GoalChannel, GroupKeywords, InputMode, MatchingSettings, OperationUnit, OutputKind, SubjectWindow, WindowRule, WrapUpStepId } from "./types"
 
 /**
  * The catalogue's object types (sky.ts) in the reader's language. A type a
@@ -84,22 +84,6 @@ export function windowRef(window: SubjectWindow): MessageRef {
 export function windowRuleRef(rule: WindowRule | null): MessageRef {
   if (!rule) return msg("domain_window_none")
   return rule.kind === "finish-by" ? msg("domain_window_finish_by", { night: nightRef(rule.night) }) : msg("domain_window_rule_season")
-}
-
-/**
- * Default Moon constraints per band: broadband wants a dark Moon far away;
- * Ha and SII tolerate a bright Moon, OIII sits between (it is close to the
- * Moon's own spectrum).
- * @deprecated One Moon-avoidance curve per filter replaces the two limits (C6): use `DEFAULT_MOON_AVOIDANCE`. W4 removes this.
- */
-export const DEFAULT_MOON_CONSTRAINTS: Record<Band, MoonConstraint> = {
-  L: { minSeparationDeg: 90, maxIlluminationPct: 30 },
-  R: { minSeparationDeg: 90, maxIlluminationPct: 30 },
-  G: { minSeparationDeg: 90, maxIlluminationPct: 30 },
-  B: { minSeparationDeg: 90, maxIlluminationPct: 30 },
-  Ha: { minSeparationDeg: 30, maxIlluminationPct: 100 },
-  SII: { minSeparationDeg: 40, maxIlluminationPct: 100 },
-  OIII: { minSeparationDeg: 60, maxIlluminationPct: 80 },
 }
 
 /**

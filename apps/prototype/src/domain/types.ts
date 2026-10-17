@@ -1403,24 +1403,12 @@ export interface ActivityEvent {
 // Settings, simulation and the root state
 // ---------------------------------------------------------------------------
 
-/**
- * Moon tolerance of one band (planning): the Moon at least this far from the
- * Target, or lit no more than this, while it is up. Broadband needs a dark
- * Moon; narrowband tolerates more.
- */
-export interface MoonConstraint {
-  minSeparationDeg: number
-  maxIlluminationPct: number
-}
-
 export interface AppSettings {
   /** The one default site; Plan and Tonight use it unless another is picked. */
   defaultSiteId: SiteId | null
   planningSiteId: SiteId | null
   /** The Default archive location (P-ARC1); a Project may pick another. */
   defaultArchiveLocationId: LocationId | null
-  /** Per-band Moon constraints behind "good tonight" (`goodTonight`). @deprecated C6: `moonAvoidance` replaces it once P7 switches the Targets page; W4 removes it. */
-  moonConstraints: Record<Band, MoonConstraint>
   /** One Moon-avoidance curve per filter (C6, design/R10-MOON-MODEL.md): grades and Img time (`nightImaging`). Edited through `setMoonAvoidance`, which clamps. */
   moonAvoidance: Record<Band, MoonAvoidance>
   onboarding: {

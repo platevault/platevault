@@ -16,7 +16,7 @@ import { latestCorrection } from "./corrections"
 import { BANDS, GOAL_CHANNELS, isGoalChannel, NARROW_BANDS, numberText } from "./labels"
 import { effectiveExposureS, type FrameTotals, measurementApplies, qualityApplicability } from "./library"
 import { frameOut, framesRef, sessionExposureS } from "./membership"
-import { defaultCriteria, filterSuitability, type FilterTonight, windowProgress, type WindowProgress } from "./planning"
+import { windowProgress, type WindowProgress } from "./planning"
 import { type FieldOfView, fieldOfView } from "./sky"
 import { goalMeasure, type GoalMeasure, type GoalUnit, type NamingValues, namingValues, subjectConditions } from "./templates"
 import type {
@@ -1068,19 +1068,6 @@ export function fitsNicely(fit: Fit): boolean {
 /** Mosaic candidates: Targets that need 2 or more panels (PLAN-TGT-FR-12). */
 export function isMosaicCandidate(fit: Fit): boolean {
   return fit.kind === "panels" && fit.panels >= 2
-}
-
-/**
- * Which filters are good for a Target on a night ("good tonight"): per band,
- * whether a window of the minimum duration meets that band's Moon constraint
- * (`settings.moonConstraints`), with the Moon separation and illumination at
- * the Target's best sample. `bands` defaults to the seven-band strip; pass a
- * rig's bands (`rigBands`) for its filters. Empty without a planning site.
- */
-export function goodTonight(world: Pick<World, "catalog" | "settings" | "faults">, target: Target, night: NightDate, bands: Band[] = BANDS): FilterTonight[] {
-  const site = planningSite(world)
-  if (!site) return []
-  return filterSuitability(target, site, night, defaultCriteria(site), world.settings.moonConstraints, bands)
 }
 
 /**

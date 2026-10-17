@@ -7,18 +7,17 @@
  * page follows the flow when a step settles.
  */
 import { useParams } from "@tanstack/react-router"
-import { SearchX } from "lucide-react"
 import { type ReactNode, useEffect, useRef, useState } from "react"
+import { MissingRecord } from "@/app/missing-record"
 import { useMessages } from "@/app/preferences"
 import { useFollowLink } from "@/components/app/links"
-import { ActionBar, ActionButton } from "@/components/app/actions"
+import { ActionBar } from "@/components/app/actions"
 import { Box } from "@/components/app/box"
 import type { Action, MenuItem } from "@/components/app/contracts"
 import { KeyValueList, type KeyValueItem } from "@/components/app/data"
-import { EmptyState } from "@/components/app/feedback"
 import { SelectField } from "@/components/app/fields"
 import { OperationLine } from "@/components/app/operation-panel"
-import { PageHeader, Section } from "@/components/app/page"
+import { Section } from "@/components/app/page"
 import { PlaceLink } from "@/components/app/previews"
 import { StatusBadge } from "@/components/app/status"
 import { StepPage } from "@/components/templates/step-page"
@@ -40,23 +39,11 @@ function isStep(step: string): step is CalibrationStepId {
 }
 
 export function CalibrationProcessPage() {
+  const m = useMessages()
   const { processId = "", step = "" } = useParams({ strict: false }) as { processId?: string; step?: string }
   const process = useStore((s) => s.catalog.calibrationProcesses[processId])
-  if (!process) return <ProcessMissing />
+  if (!process) return <MissingRecord title={m.calibration_process_missing_title()} backTo="/calibration" backLabel={m.nav_calibration()} />
   return <ProcessFlow key={process.id} process={process} viewing={isStep(step) ? step : null} />
-}
-
-/** The route names no recorded process: say so and lead back to the library. */
-function ProcessMissing() {
-  const m = useMessages()
-  const follow = useFollowLink()
-  const back: Action = { id: "open-library", label: m.import_route_masters(), run: () => follow(PROCESSES) }
-  return (
-    <>
-      <PageHeader title={m.calibration_process_title()} path={[{ label: m.nav_calibration(), link: LIBRARY }]} />
-      <EmptyState icon={SearchX} title={m.calibration_process_gone()} action={<ActionButton action={back} />} titleAs="h2" />
-    </>
-  )
 }
 
 function ProcessFlow({ process, viewing }: { process: CalibrationProcess; viewing: CalibrationStepId | null }) {

@@ -18,7 +18,6 @@ import { useNavigate, useSearch } from "@tanstack/react-router"
 import { Filter as FilterIcon } from "lucide-react"
 import { useState } from "react"
 import { useMessages } from "@/app/preferences"
-import { ActionButton } from "@/components/app/actions"
 import type { Action, Column, MenuItem } from "@/components/app/contracts"
 import { EmptyState } from "@/components/app/feedback"
 import { ChoiceListField, TextField } from "@/components/app/fields"
@@ -132,7 +131,7 @@ function FiltersSection({ onEdit }: { onEdit: (draft: FilterDraft) => void }) {
         getRowId: (f) => f.id,
         rowLabel: (f) => f.name,
         initialSort: { columnId: "name", direction: "asc" },
-        empty: <EmptyState icon={FilterIcon} title={m.tonight_no_filters()} action={<ActionButton action={add} />} />,
+        empty: <EmptyState icon={FilterIcon} title={m.tonight_no_filters()} action={null} />,
         rowActions: (f) => recordMenu(m, catalog, "filter", f, () => onEdit({ filter: f })),
       }}
     />

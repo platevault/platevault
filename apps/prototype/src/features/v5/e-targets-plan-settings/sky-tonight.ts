@@ -4,9 +4,9 @@
  * separation and next opposition.
  *
  * The grid is the planning module's `skyNight`, the samples that
- * `filterSuitability` and `clearStretches` read, on the same 10-minute grid
- * that `computeWindows` and `nightSummary` use, so curves, windows and
- * filter windows line up. Production computes all of it in Rust (PLAN-FR-08).
+ * `nightImaging` reads, on the same 10-minute grid that `computeWindows`
+ * and `nightSummary` use, so curves, windows and filter windows line up.
+ * Production computes all of it in Rust (PLAN-FR-08).
  */
 import { altitudeDeg, julianDay, norm360, SAMPLE_MIN, type SkyNight, skyNight, sunPosition } from "@/domain/planning"
 import { angularSeparationDeg } from "@/domain/sky"

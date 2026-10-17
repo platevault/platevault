@@ -3,14 +3,12 @@ import { render, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest"
 import { statusMeta } from "@/components/app/status"
-import { masterPins, masterProjects } from "@/domain/calibration-library"
 import { sessionLabel } from "@/domain/membership"
 import { createSeed } from "@/domain/seed"
 import type { CalibrationMaster, Session } from "@/domain/types"
 import { m } from "@/lib/i18n"
 import { type PrototypeState, SCHEMA_VERSION, store } from "@/store/core"
 import { initialSliceStates, sliceVersions } from "@/store/slices"
-import { masterLabel, rawSetName, rawSets } from "./calibration-model"
 import { CalibrationPage } from "./calibration"
 
 // Hide, Restore and Move to Trash on the Calibration library (CAL-FR-16, CAL-FR-17): each panel offers only the verb that
@@ -42,21 +40,12 @@ function renderPage() {
   render(<RouterProvider router={router} />)
 }
 
-/** The 600 s dark: in the library and pinned on no session, so it can be hidden. */
-function unusedMaster(): CalibrationMaster {
-  return Object.values(store.getState().catalog.masters).find((x) => x.exposureS === 600)!
-}
+/** The demo's 600 s dark: in the library and pinned on no session, so it can be hidden. */
+const UNUSED = { id: "mst_cpi4bh", name: "Dark 600 s · 2600MM #1" }
+/** The demo's bias that one open Project uses through its sessions. */
+const USED = { id: "mst_d1zwvk", name: "Bias · 2600MM #2" }
 
-/** A master an open Project uses through its sessions, with a row label no other master shares. */
-function usedMaster(): CalibrationMaster {
-  const { catalog } = store.getState()
-  const pins = masterPins(catalog)
-  const masters = Object.values(catalog.masters)
-  const unique = (x: CalibrationMaster) => masters.filter((y) => masterLabel(m, catalog, y) === masterLabel(m, catalog, x)).length === 1
-  return masters.find((x) => unique(x) && masterProjects(catalog, pins, x.id).some((p) => p.state === "open"))!
-}
-
-const labelOf = (master: CalibrationMaster) => masterLabel(m, store.getState().catalog, master)
+const masterOf = (id: string): CalibrationMaster => store.getState().catalog.masters[id]!
 
 /** A light session no Project holds: it pins `master`'s only version for darks, as Reassign would. */
 function pinOutsideProjects(master: CalibrationMaster): Session {
@@ -76,8 +65,8 @@ async function detailOf(name: string) {
 describe("Calibration library: Hide, Restore and Move to Trash", () => {
   it("hides a master into Hidden and restores it to Masters, the panel offering only the valid verb", async () => {
     const user = userEvent.setup()
-    const master = unusedMaster()
-    const name = labelOf(master)
+    const master = masterOf(UNUSED.id)
+    const name = UNUSED.name
     renderPage()
 
     await user.click(await screen.findByRole("rowheader", { name }))
@@ -100,10 +89,8 @@ describe("Calibration library: Hide, Restore and Move to Trash", () => {
 
   it("refuses Hide and Move to Trash while a Project uses the master, and runs neither", async () => {
     const user = userEvent.setup()
-    const master = usedMaster()
-    const { catalog } = store.getState()
-    const projects = masterProjects(catalog, masterPins(catalog), master.id)
-    const name = labelOf(master)
+    const master = masterOf(USED.id)
+    const name = USED.name
     renderPage()
 
     const row = (await screen.findAllByRole("row")).find((r) => within(r).queryByRole("rowheader", { name }))!
@@ -113,7 +100,7 @@ describe("Calibration library: Hide, Restore and Move to Trash", () => {
     for (const label of [m.calibration_hide_master(), m.common_move_to_trash()]) {
       const item = within(menu).getByRole("menuitem", { name: `${label}…` })
       expect(item.getAttribute("aria-disabled")).toBe("true")
-      expect(item.textContent).toContain(m.equipment_used_by_projects({ count: projects.length }))
+      expect(item.textContent).toContain(m.equipment_used_by_projects({ count: 1 }))
       await user.click(item)
     }
     expect(store.getState().catalog.masters[master.id]).toEqual(master)
@@ -121,9 +108,9 @@ describe("Calibration library: Hide, Restore and Move to Trash", () => {
 
   it("lists the sessions a master is pinned on and each file's SHA-256 before Move to Trash; the sessions then need calibration again", async () => {
     const user = userEvent.setup()
-    const master = unusedMaster()
+    const master = masterOf(UNUSED.id)
     const session = pinOutsideProjects(master)
-    const name = labelOf(master)
+    const name = UNUSED.name
     renderPage()
 
     const row = (await screen.findAllByRole("row")).find((r) => within(r).queryByRole("rowheader", { name }))!
@@ -147,12 +134,17 @@ describe("Calibration library: raw sets and candidates", () => {
 
     await user.click(await screen.findByRole("tab", { name: new RegExp(`^${m.calibration_raw_sets()}`) }))
     const table = within(await screen.findByRole("table", { name: m.calibration_raw_sets() }))
-    const { catalog, disk } = store.getState()
-    const sets = rawSets(catalog, disk)
-    expect(sets.length).toBeGreaterThan(0)
+    const sets = [
+      { name: "Flat OIII · 26 Sep", sessions: 1 },
+      { name: "Flat Ha · 18 Sep", sessions: 2 },
+      { name: "Bias · 8 Sep", sessions: 0 },
+      { name: "Dark 120 s · 8 Sep", sessions: 0 },
+    ]
+    // Grouped by kind, each group heading with its count, then its sets.
+    expect(table.getAllByRole("rowheader").map((h) => h.textContent)).toEqual(["Darks 1", "Dark 120 s · 8 Sep", "Flats 2", "Flat OIII · 26 Sep", "Flat Ha · 18 Sep", "Bias 1", "Bias · 8 Sep"])
     for (const set of sets) {
-      const row = within(table.getByRole("rowheader", { name: rawSetName(m, set) }).closest("tr")!)
-      if (set.pinnedOn.length > 0) expect(row.getByText(m.session_count({ count: set.pinnedOn.length }))).toBeDefined()
+      const row = within(table.getByRole("rowheader", { name: set.name }).closest("tr")!)
+      if (set.sessions > 0) expect(row.getByText(m.session_count({ count: set.sessions }))).toBeDefined()
       else expect(row.queryByText(m.session_count({ count: 0 }))).toBeNull()
     }
   })

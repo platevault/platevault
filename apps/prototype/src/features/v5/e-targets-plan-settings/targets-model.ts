@@ -236,14 +236,6 @@ export interface SkyContext {
 }
 
 /**
- * The catalogue's sparkline specimen (app/catalogue/domain.tsx), on the shipped curves.
- * @deprecated Use `nightSky`, which drops the id. W4 removes this once the catalogue calls `nightSky`.
- */
-export function positionSky(ctx: SkyContext | null, _id: string, ra: number | null, dec: number | null): RowSky {
-  return nightSky(ctx, ra, dec)
-}
-
-/**
  * A position on the chosen night under the Moon rule (C6): altitude, the
  * filters' grades and Img time from the same windows. `curves` and `bands`
  * default to the shipped curves and all seven filters.

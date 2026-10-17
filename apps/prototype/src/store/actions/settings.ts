@@ -29,7 +29,6 @@ import type {
   IsoDateTime,
   LocationId,
   MatchingSettings,
-  MoonConstraint,
   NamingFrameType,
   NamingToken,
   NightDate,
@@ -55,22 +54,6 @@ export function setDefaultArchiveLocation(locationId: LocationId): CommitResult 
   const result = commit(msg("store_label_default_archive_location"), (s) => ({ ...s, settings: { ...s.settings, defaultArchiveLocationId: locationId } }), { href })
   if (result.ok) recordSaved(msg("store_saved_default_archive", { name: location.displayName }), null, href)
   return result
-}
-
-/**
- * One band's Moon constraint behind "good tonight"; values are clamped to their ranges.
- * @deprecated C6: `setMoonAvoidance` edits the curves grades and Img time use; P7 switches the Moon limits dialog and W4 removes this.
- */
-export function setMoonConstraint(band: Band, patch: Partial<MoonConstraint>): CommitResult {
-  const href = "/plan"
-  return commit(msg("store_label_moon_constraint", { band }), (s) => {
-    const current = s.settings.moonConstraints[band]
-    const next: MoonConstraint = {
-      minSeparationDeg: Math.min(180, Math.max(0, patch.minSeparationDeg ?? current.minSeparationDeg)),
-      maxIlluminationPct: Math.min(100, Math.max(0, patch.maxIlluminationPct ?? current.maxIlluminationPct)),
-    }
-    return { ...s, settings: { ...s.settings, moonConstraints: { ...s.settings.moonConstraints, [band]: next } } }
-  }, { href })
 }
 
 /** One filter's Moon-avoidance curve (C6): the patch is merged and clamped to `MOON_AVOIDANCE_LIMITS`, so the width never reaches zero. */

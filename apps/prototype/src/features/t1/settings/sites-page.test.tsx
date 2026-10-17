@@ -3,7 +3,6 @@ import { render, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest"
 import { createSeed } from "@/domain/seed"
-import { formatCount } from "@/lib/format"
 import { m } from "@/lib/i18n"
 import { SCHEMA_VERSION, store } from "@/store/core"
 import { initialSliceStates, sliceVersions } from "@/store/slices"
@@ -42,10 +41,9 @@ describe("Settings › Observing sites (cmvgf)", () => {
     for (const shown of [m.site_name(), m.settings_default(), m.site_coordinates_header(), m.site_time_zone()]) expect(headers).toContain(shown)
     for (const hidden of [m.site_elevation(), m.site_darkness(), m.site_min_altitude()]) expect(headers).not.toContain(hidden)
 
-    const site = Object.values(store.getState().catalog.sites).find((s) => s.elevationM !== null)!
-    await user.click(screen.getByRole("button", { name: m.table_row_details({ name: site.name }) }))
+    await user.click(screen.getByRole("button", { name: m.table_row_details({ name: "La Palma" }) }))
     const term = await screen.findByText(m.site_elevation(), { selector: "dt" })
-    expect(term.nextElementSibling?.textContent).toBe(m.site_elevation_value({ metres: formatCount(site.elevationM!) }))
-    expect(screen.getByText(m.site_min_altitude(), { selector: "dt" }).nextElementSibling?.textContent).toBe(m.site_degrees_value({ degrees: formatCount(site.minAltitudeDeg) }))
+    expect(term.nextElementSibling?.textContent).toBe("2,300 m")
+    expect(screen.getByText(m.site_min_altitude(), { selector: "dt" }).nextElementSibling?.textContent).toBe("20°")
   })
 })

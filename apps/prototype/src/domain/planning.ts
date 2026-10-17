@@ -10,7 +10,7 @@
  * the filters and sums Img time from it in one pass.
  */
 import { angularSeparationDeg } from "./sky"
-import type { Band, CalendarExport, Catalog, MoonConstraint, NightDate, ObservingSite, ObservingWindow, PlanCriteria, ReminderSettings, SiteId, SubjectWindow, Target, TargetId } from "./types"
+import type { Band, CalendarExport, Catalog, NightDate, ObservingSite, ObservingWindow, PlanCriteria, ReminderSettings, SiteId, SubjectWindow, Target, TargetId } from "./types"
 import { formatCount, formatDateTime } from "@/lib/format"
 import { m, msg, type MessageRef } from "@/lib/i18n"
 
@@ -546,77 +546,6 @@ function runEndMs(sky: SkyNight, run: Run): number {
 
 function stretchOf(sky: SkyNight, run: Run): Stretch {
   return { start: new Date(sky.samples[run.first]!.ms).toISOString(), end: new Date(runEndMs(sky, run)).toISOString(), minutes: runMinutes(run) }
-}
-
-/**
- * The stretches of a night in which a position is dark, at or above
- * `minAltitudeDeg`, and clear of the Moon under `limit`: the Moon down, or
- * up but at least the minimum separation away and lit no more than the
- * maximum. Without a limit the Moon is ignored. `altitudes` is the
- * position's altitude at each sample.
- * @deprecated The two independent limits give way to one curve per filter (C6): use `nightImaging`. W3 moves the Targets page; W4 removes this.
- */
-export function clearStretches(sky: SkyNight, altitudes: number[], ra: number, dec: number, minAltitudeDeg: number, limit: MoonConstraint | null): Stretch[] {
-  return runsWhere(sky.samples.length, (i) => {
-    const s = sky.samples[i]!
-    if (s.sunAlt > sky.sunLimit || altitudes[i]! < minAltitudeDeg) return false
-    return !limit || s.moonAlt <= 0 || (angularSeparationDeg(ra, dec, s.moonRa, s.moonDec) >= limit.minSeparationDeg && s.moonIllum <= limit.maxIlluminationPct)
-  }).map((run) => stretchOf(sky, run))
-}
-
-/**
- * One band's verdict for one Target and night (`filterSuitability`).
- * @deprecated Use `FilterNight` from `nightImaging` (C6). W4 removes this.
- */
-export interface FilterTonight {
-  band: Band
-  /** A stretch of at least the minimum duration meets the band's Moon constraint that night. */
-  good: boolean
-  /** Longest such stretch, in minutes. */
-  minutes: number
-  /** Moon separation at the Target's highest dark sample; null when it never clears the altitude limit in darkness. */
-  moonSeparationDeg: number | null
-  /** Moon illumination at that sample, 0-100. */
-  moonIlluminationPct: number
-  /** The Moon is up at that sample. */
-  moonUp: boolean
-  /** Every stretch that meets the band's Moon constraint that night, in order (`clearStretches`). */
-  stretches: Stretch[]
-}
-
-/**
- * Per-band suitability of a Target on one night (planning, "good tonight").
- * The night's samples are computed once (`skyNight`); each band's verdict
- * reads its `clearStretches` under the band's Moon constraint, so broadband
- * needs a dark Moon and narrowband tolerates more.
- * @deprecated Grades and Img time come from one Moon curve per filter (C6): use `nightImaging`. W3 moves its callers; W4 removes this.
- */
-export function filterSuitability(target: Target, site: ObservingSite, night: string, criteria: PlanCriteria, constraints: Record<Band, MoonConstraint>, bands: Band[]): FilterTonight[] {
-  const { ra, dec } = target
-  if (ra === null || dec === null) {
-    return bands.map((band) => ({ band, good: false, minutes: 0, moonSeparationDeg: null, moonIlluminationPct: 0, moonUp: false, stretches: [] }))
-  }
-  const sky = skyNight(site, night, criteria.darkness)
-  const altitudes = sky.samples.map((s) => altitudeDeg(ra, dec, site.latitude, site.longitude, julianDay(s.ms)))
-  // The Target's highest sample in darkness above the altitude limit.
-  let peak = -1
-  for (const [i, s] of sky.samples.entries()) {
-    if (s.sunAlt <= sky.sunLimit && altitudes[i]! >= criteria.minAltitudeDeg && (peak < 0 || altitudes[i]! > altitudes[peak]!)) peak = i
-  }
-  const at = peak < 0 ? null : sky.samples[peak]!
-  return bands.map((band): FilterTonight => {
-    const stretches = clearStretches(sky, altitudes, ra, dec, criteria.minAltitudeDeg, constraints[band])
-    const minutes = Math.max(0, ...stretches.map((s) => s.minutes))
-    return {
-      band,
-      good: minutes >= criteria.minDurationMin,
-      minutes,
-      moonSeparationDeg: at ? Math.round(angularSeparationDeg(ra, dec, at.moonRa, at.moonDec)) : null,
-      moonIlluminationPct: at?.moonIllum ?? 0,
-      moonUp: at ? at.moonAlt > 0 : false,
-      stretches,
-    }
-  })
 }
 
 /** How a filter fares on a night: good; marginal, when the Moon takes more than a quarter of the dark time; poor, without a window. */

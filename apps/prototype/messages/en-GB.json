@@ -1690,7 +1690,6 @@
   "target_source_user": "Entered by you",
   "target_source_resolver": "Online resolver",
   "target_find_placeholder": "Name or alias",
-  "target_open_targets": "Open Targets",
   "target_best_none": "None",
   "target_open_planner": "Open in Planner",
   "target_open_equipment": "Open in Equipment",
@@ -2138,7 +2137,7 @@
   "about_data_demo": "Demo library",
   "about_data_empty": "Empty (first run)",
   "about_stored_in": "Stored in",
-  "about_catalog": "Catalog",
+  "about_catalog": "Catalogue",
   "about_count_locations": [
     {
       "declarations": [
@@ -3613,7 +3612,6 @@
   "store_note_adds_rig": "Also adds the rig {rig} to {project}.",
   "store_label_default_archive_location": "Default archive location",
   "store_saved_default_archive": "Default archive: {name}",
-  "store_label_moon_constraint": "Moon constraint for {band}",
   "store_label_goal_template": "Goal template {name}",
   "store_saved_goal_template": "Goal template saved: {name}",
   "store_saved_goal_template_deleted": "Goal template deleted: {name}",
@@ -5460,7 +5458,7 @@
   "apps_keyword_group": "Group keyword",
   "apps_keyword_panel": "Mosaic panel keyword",
   "apps_project_defaults": "Project defaults",
-  "calibration_process_gone": "Unknown process",
+  "calibration_process_missing_title": "This process is not in the catalogue",
   "calibration_processes": "Processes",
   "calibration_on": "On",
   "calibration_off": "Off",
