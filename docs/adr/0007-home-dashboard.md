@@ -17,7 +17,7 @@ The owner asked for a centralised dashboard of open and pending work. It also ne
 
 ## Decision
 
-Home shows what needs attention, active work, and when to capture next. It uses standard components, and each row links to its owning page. Sections include Pending ingestions and Pending work. Other sections cover Open work, Status, Tonight, and the calendar. Show up to five rows in each section. An All N link opens the owning page. Keep the section order fixed. Show problems on affected rows. Keep duplicates and other unshown drift in Issues.
+Home shows what needs attention, active work, and when to capture next. It uses standard components, and each row links to its owning page. Sections include Pending ingestions and Pending work. Other sections cover Open work, Status, Tonight, and the calendar. Show up to five rows in each section. An All N link opens the owning page. Keep the section order fixed. Show problems on affected rows. Put duplicates in the Sessions Duplicates filter. Show drift on the affected rows.
 
 ## Rationale
 
@@ -30,3 +30,4 @@ The owner rejected the Night, Month, and Progress concepts because they showed g
 ## Consequences
 
 Both quick-action modes need to be built and tested on every page. Pending ingestions needs desktop startup scans and capture-folder watching. This adds file-system activity and offline-drive states. The concepts route and its message keys are removed. Units that reused those keys need their own.
+Amended: D-W92 in specs/063-clean-rebuild-contract/workflow-decisions.md:107 routes duplicates through the Sessions Duplicates filter and shows drift on affected rows.

@@ -17,7 +17,7 @@ The standard component set includes button hierarchy and row action menus. It al
 
 ## Decision
 
-Use selectors to choose what to clean, trash, or keep. Then choose Proceed. Do not add separate skip or mark-done buttons. Use consistent naming, such as Rename rather than Edit details.
+Use selectors to choose what to clean, trash, or keep, then choose Proceed. Do not add separate skip or mark-done buttons. Use the agreed Edit… verb for renaming, editing details, and optics.
 
 ## Rationale
 
@@ -25,8 +25,8 @@ The user asked for a better flow across all product work and said to keep it con
 
 ## Alternatives
 
-Use the standard component set and one staged-work flow rather than separate skip and mark-done controls.
+Use one Edit… verb rather than separate Rename, Edit details, and Edit optics verbs.
 
 ## Consequences
 
-Round 9 records decisions C1 to C15. The open Home and goal-condition parts have separate decision beads, astro-plan-b66vy and astro-plan-so89f.
+Amended: D-W76 in specs/063-clean-rebuild-contract/workflow-decisions.md:91 sets one Edit… verb in place of Rename…, Edit details…, and Edit optics.

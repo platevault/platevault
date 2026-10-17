@@ -15,7 +15,7 @@ old one `Superseded`.
 | [0005](0005-components-and-one-step-flow.md) | Standard components and one step flow | Accepted | 2026-10-12 |
 | [0006](0006-tauri-react-and-backend-services.md) | Stay on Tauri and React, with backend-owned services | Accepted | 2026-10-12 |
 | [0007](0007-home-dashboard.md) | Home dashboard without duplicating other pages | Accepted | 2026-10-13 |
-| [0008](0008-goal-conditions.md) | Goal conditions beyond time or frames | Accepted | 2026-10-12 |
+| [0008](0008-goal-conditions.md) | Goal conditions beyond time or frames | Accepted | 2026-10-13 |
 
 ## Status values
 

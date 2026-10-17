@@ -17,7 +17,7 @@ Each goal already uses time or frames. The user also wanted a quality bar on cou
 
 ## Decision
 
-Set a quality bar per goal. Do not add channel balance as a separate goal. Per-channel goals set the ratio, and the Project page shows it. Support per-panel goals and editable panel balance per channel of plus or minus 10 percent. Support a deadline or season window.
+Each goal measures time or frames. A goal may carry an optional quality bar. Channel balance is not a goal. Per-channel goals set the ratio, which the Project page shows. Support per-panel goals and editable panel balance per channel of plus or minus 10 percent. Support a deadline or season window.
 
 ## Rationale
 
@@ -25,8 +25,9 @@ The user dropped channel balance as a goal because per-channel goals set the rat
 
 ## Alternatives
 
-Channel balance as a separate goal was not chosen. The per-channel goals set the ratio, and the Project page shows it.
+Goals may omit the quality bar and measure time or frames alone.
 
 ## Consequences
 
 Implementation is tracked by astro-plan-v7i9k.
+Amended: D-W90 in specs/063-clean-rebuild-contract/workflow-decisions.md:105 and PRJ-FR-03 in specs/065-project-goals/spec.md:97 make the quality bar optional.
