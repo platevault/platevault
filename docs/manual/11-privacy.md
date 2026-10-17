@@ -32,7 +32,12 @@ manually when you ask. Both send the same request to the same place.
 - **When:** once every time PlateVault starts. It does not repeat on a
   schedule while the app runs.
 - **What is sent:** the request described above, to `github.com`.
-- **How to turn it off:** switch off **Settings → Advanced → Software Update → Check for updates automatically**. The same switch appears on the **Configuration** step of first-run setup, next to **Online SIMBAD resolution**. It is on by default. With it off, PlateVault sends no update request at startup or at any other time unless you check manually. **Reset preferences** in **Settings → Advanced** turns it back on.
+- **How to turn it off:** switch off **Settings → Advanced → Software Update
+  → Check for updates automatically**. The same switch appears in the
+  **Configuration** step of first-run setup, next to **Online SIMBAD
+  resolution**. It is on by default. With it off, PlateVault sends no update
+  request at startup or at any other time unless you check manually. **Reset
+  preferences** in **Settings → Advanced** turns it back on.
 - **Releases without the setting:** up to and including the 0.6.x releases,
   the check runs at every start and cannot be turned off. To stop it there,
   block `github.com` for PlateVault in your firewall.

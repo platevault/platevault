@@ -182,7 +182,7 @@ function AutomaticUpdateCheckControl() {
  */
 export function StepCatalogs(_props: StepCatalogsProps) {
   return (
-    <div className="pv-step-catalogs">
+    <div className="pv-step-catalogs" data-testid="step-catalogs">
       {/* Online SIMBAD resolution (label + toggle on one line, desc below). */}
       <ResolverSettingsControl compact />
 
