@@ -170,7 +170,7 @@ pub async fn insert_project_source(
 }
 
 /// Connection-level variant of [`insert_project_source`]. See
-/// [`super::crud::insert_project_conn`].
+/// [`super::crud::insert_project`].
 ///
 /// # Errors
 ///

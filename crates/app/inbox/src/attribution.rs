@@ -798,8 +798,8 @@ async fn insert_project_for_attribution(
     canonical_target_id: Option<&str>,
 ) -> Result<(), ContractError> {
     let short = project_id.chars().take(8).collect::<String>();
-    projects_repo::insert_project_conn(
-        conn,
+    projects_repo::insert_project(
+        &mut *conn,
         &projects_repo::InsertProject {
             id: project_id,
             name: &format!("Untitled Project {short}"),

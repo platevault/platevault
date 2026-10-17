@@ -5,7 +5,7 @@
 
 use domain_core::ids::Timestamp;
 use domain_core::lifecycle::project::{is_allowed, ProjectState};
-use sqlx::{SqliteConnection, SqlitePool};
+use sqlx::SqlitePool;
 
 use persistence_core::{DbError, DbResult};
 
@@ -14,26 +14,17 @@ use super::{InsertProject, ProjectRow, ProjectRowTuple};
 /// Insert a new project row. Returns `DbError::Database` (UNIQUE violation) when
 /// the name or path is already taken.
 ///
-/// # Errors
-///
-/// Returns `persistence_core::DbError::Database` on constraint violation or query failure.
-pub async fn insert_project(pool: &SqlitePool, data: &InsertProject<'_>) -> DbResult<String> {
-    let mut conn = pool.acquire().await?;
-    insert_project_conn(&mut conn, data).await
-}
-
-/// Connection-level variant of [`insert_project`]: takes `&mut SqliteConnection`
-/// (works against a plain connection or a `Transaction` deref) so composite
-/// `*_tx` functions (e.g. [`super::create_project_tx`]) can compose it with
-/// other writes in one transaction.
+/// Takes any executor (a pool, or a connection or `Transaction` deref), so
+/// composite `*_tx` functions (e.g. [`super::create_project_tx`]) can compose
+/// it with other writes in one transaction.
 ///
 /// # Errors
 ///
 /// Returns `persistence_core::DbError::Database` on constraint violation or query failure.
-pub async fn insert_project_conn(
-    conn: &mut SqliteConnection,
-    data: &InsertProject<'_>,
-) -> DbResult<String> {
+pub async fn insert_project<'e, E>(executor: E, data: &InsertProject<'_>) -> DbResult<String>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
+{
     let now = Timestamp::now_iso();
     sqlx::query(
         "INSERT INTO projects (id, name, tool, lifecycle, path, notes, canonical_target_id, channel_drift, is_mosaic, created_at, updated_at)
@@ -49,7 +40,7 @@ pub async fn insert_project_conn(
     .bind(data.is_mosaic)
     .bind(&now)
     .bind(&now)
-    .execute(&mut *conn)
+    .execute(executor)
     .await?;
     Ok(now)
 }
