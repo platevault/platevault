@@ -1,10 +1,10 @@
-import { beforeAll, beforeEach, describe, expect, it } from "vitest"
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 import { canJoinProject, calibrationQueue } from "@/domain/derive"
 import { createSeed } from "@/domain/seed"
-import { m } from "@/lib/i18n"
+import { cancelOperation, isSettled, settleOperation } from "@/store/operations"
 import { type PrototypeState, SCHEMA_VERSION, store } from "@/store/core"
-import { isSettled } from "@/store/operations"
 import { initialSliceStates, sliceVersions } from "@/store/slices"
+import { msg, m } from "@/lib/i18n"
 import { emptyImportDraft, type ImportDraft } from "@/store/slices/a"
 import { type DestinationGroup, type ImportPlan, planImport, previewImport } from "./import-model"
 import { importHandler, startImport } from "./import-run"
@@ -107,5 +107,36 @@ describe("Import review: calibration of the new sessions (LIB-AC-25, LIB-AC-26)"
     const [eight, four] = importedOiii().sort((a, b) => b.assetIds.length - a.assetIds.length)
     expect(eight!.calibration!.flat).toMatchObject({ state: "none", by: "user" })
     expect(four!.calibration!.flat.state).toBe("waiting")
+  })
+
+  it("does not start a Trash operation when Cancel wins the move hand-off window", () => {
+    vi.useFakeTimers()
+    try {
+      const draft = card({ mode: "move" })
+      const plan = planImport(m, store.getState(), draft)!
+      expect(plan.blockers).toEqual([])
+      const id = startImport(plan, draft)
+      for (let i = 0; i < 300 && (store.getState().operations[id]!.payload as unknown as { phase: string }).phase !== "trash"; i++) {
+        store.setState((s) => importHandler.step(s, s.operations[id]!))
+      }
+      store.setState((s) => importHandler.step(s, s.operations[id]!))
+      const pending = store.getState().operations[id]!
+      expect((pending.payload as unknown as { phase: string }).phase).toBe("trash")
+      expect((pending.payload as unknown as { trashRequested: boolean }).trashRequested).toBe(true)
+      const operationCount = Object.keys(store.getState().operations).length
+      cancelOperation(id)
+      const canceled = store.getState().operations[id]!
+      const withCanceledTimer = settleOperation(store.getState(), id, "succeeded", msg("op_no_duplicates"))
+      expect(withCanceledTimer).toBe(store.getState())
+
+      vi.advanceTimersByTime(0)
+      expect(store.getState().operations[id]!.status).toBe("canceled")
+      expect(Object.keys(store.getState().operations)).toHaveLength(operationCount)
+      expect(store.getState().activity.filter((event) => event.operationId === id)).toHaveLength(1)
+      expect(store.getState().disk.trash).toHaveLength(demo.disk.trash.length)
+      expect(canceled.settledAt).not.toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

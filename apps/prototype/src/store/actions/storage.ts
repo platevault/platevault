@@ -12,7 +12,6 @@
  */
 import { duplicateCopies, runningDuplicateScan } from "@/domain/storage"
 import type { AssetId, OperationId } from "@/domain/types"
-import { formatBytes } from "@/lib/format"
 import { msg } from "@/lib/i18n"
 import { type CommitResult, store } from "@/store/core"
 import { addDuplicateScan, ensureTicker, type OperationHandler, patchOperation, settleOperation } from "@/store/operations"
@@ -46,7 +45,7 @@ const duplicateScanStep: OperationHandler = {
     const copies = groups.reduce((n, g) => n + extra(g), 0)
     const bytes = groups.reduce((n, g) => n + (state.catalog.assets[g.assetId]?.sizeBytes ?? 0) * extra(g), 0)
     const next = patchOperation(state, op.id, { progress: { ...op.progress, done }, payload: { groups } })
-    const summary = copies === 0 ? msg("op_no_duplicates") : msg("issue_duplicates", { count: copies, bytes: formatBytes(bytes) })
+    const summary = copies === 0 ? msg("op_no_duplicates") : msg("issue_duplicates", { count: copies, bytes: { bytes: bytes } })
     return settleOperation(next, op.id, "succeeded", summary, DUPLICATES_HREF)
   },
 }

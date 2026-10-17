@@ -1,10 +1,12 @@
-import { beforeAll, beforeEach, describe, expect, it } from "vitest"
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest"
 import { createSeed } from "@/domain/seed"
 import type { AssetId } from "@/domain/types"
+import { setLocale } from "@/app/preferences"
+import { DEFAULT_LOCALE } from "@/lib/i18n"
 import { type PrototypeState, SCHEMA_VERSION, store } from "@/store/core"
 import { isSettled } from "@/store/operations"
 import { initialSliceStates, sliceVersions } from "@/store/slices"
-import { frameMeasureState, type MeasurePayload, measureHandler, startMeasurement } from "./measure"
+import { frameMeasureState, formatMetric, type MeasurePayload, measureHandler, startMeasurement } from "./measure"
 
 let demo: PrototypeState
 beforeAll(() => {
@@ -13,7 +15,7 @@ beforeAll(() => {
 beforeEach(() => {
   store.replace(structuredClone(demo))
 })
-
+afterEach(() => setLocale(DEFAULT_LOCALE))
 /** Run the handler tick by tick until the operation settles. */
 function runToEnd(id: string) {
   for (let i = 0; i < 100 && !isSettled(store.getState().operations[id]!.status); i++) store.setState((s) => measureHandler.step(s, s.operations[id]!))
@@ -50,6 +52,13 @@ describe("measureHandler", () => {
       expect(measurements[frame]?.inputSha256).toBe(assets[frame]!.sha256)
       expect(frameMeasureState(store.getState().catalog, frame, op)).toBe("measured")
     }
+  })
+
+  it("formats localized numbers using the active locale", () => {
+    setLocale("pt-BR")
+    expect(formatMetric({ value: 1820, unit: "stars" })).toBe("1.820 stars")
+    expect(formatMetric({ value: 1.25, unit: "px" })).toBe("1,25 px")
+    setLocale(DEFAULT_LOCALE)
   })
 
   it("starts nothing when there is nothing to measure", () => {

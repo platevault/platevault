@@ -89,7 +89,6 @@ import type {
   WrapUpStepId,
   WrapUpStepRecord,
 } from "./types"
-import { formatCount } from "@/lib/format"
 import { joinRefs, m, type MessageRef, type Messages, msg, say, verbatim } from "@/lib/i18n"
 
 // ---------------------------------------------------------------------------
@@ -1209,7 +1208,7 @@ export function projectNext(world: World, project: Project, nowMs: number): Next
   const unreviewed = waiting.reduce((n, c) => n + sessionUnreviewedFrames(catalog, c.session), 0)
   if (unreviewed > 0) {
     const first = waiting.find((c) => sessionUnreviewedFrames(catalog, c.session) > 0)!
-    return { label: msg("domain_next_review_new_frames", { count: unreviewed, n: formatCount(unreviewed) }), reason: msg("flow_reason_sessions_need_review"), link: sessionIntakeLink(first.session.id, "review") }
+    return { label: msg("domain_next_review_new_frames", { count: unreviewed, n: { count: unreviewed } }), reason: msg("flow_reason_sessions_need_review"), link: sessionIntakeLink(first.session.id, "review") }
   }
   const addable = projectSuggestions(catalog, project).filter((s) => !s.blocked)
   if (project.inputs.length === 0) {

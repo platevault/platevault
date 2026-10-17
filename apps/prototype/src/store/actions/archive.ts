@@ -20,7 +20,6 @@ import { stableHash } from "@/domain/indexing"
 import { unitCount } from "@/domain/labels"
 import { viewLinks } from "@/domain/storage"
 import type { ActivityEvent, Catalog, Disk, OperationId, ProjectId, Session, SessionId } from "@/domain/types"
-import { formatBytes, formatCount } from "@/lib/format"
 import { joinRefs, type MessageRef, type Messages, msg, nightRef, verbatim } from "@/lib/i18n"
 import { nowIso, type PrototypeState, store, withCatalog } from "@/store/core"
 import { type OperationHandler, patchOperation, settleOperation, startOperation } from "@/store/operations"
@@ -85,7 +84,7 @@ export function startArchiveTransfer(projectId: ProjectId | null, rows: ArchiveR
       path: r.folder,
       status: "pending",
       phase: null,
-      detail: joinRefs([unitCount("frames", r.moves.length), verbatim(formatBytes(r.sizeBytes))], " · "),
+      detail: joinRefs([unitCount("frames", r.moves.length), { bytes: r.sizeBytes }], " · "),
     })),
     payload: payload as unknown as Record<string, unknown>,
     canCancel: false,
@@ -151,10 +150,10 @@ function finish(state: PrototypeState, id: OperationId, payload: ArchivePayload)
   const at = nowIso()
   const repoints: ActivityEvent[] = Object.entries(payload.repointed).flatMap(([projectId, count]) => {
     const closed = next.catalog.projects[projectId]
-    return closed ? [{ id: `act_${id}_${projectId}`, at, kind: "saved" as const, title: msg("archive_repointed_title", { name: closed.name }), detail: msg("archive_repointed_detail", { count, n: formatCount(count) }), operationId: id, href: projectHref(projectId, { stage: "view" }) }] : []
+    return closed ? [{ id: `act_${id}_${projectId}`, at, kind: "saved" as const, title: msg("archive_repointed_title", { name: closed.name }), detail: msg("archive_repointed_detail", { count, n: { count } }), operationId: id, href: projectHref(projectId, { stage: "view" }) }] : []
   })
   if (repoints.length > 0) next = { ...next, activity: [...repoints, ...next.activity].slice(0, 200) }
-  const main = msg("op_archive_sessions_archived", { count: moved, n: formatCount(moved) })
+  const main = msg("op_archive_sessions_archived", { count: moved, n: { count: moved } })
   const summary = refused > 0 ? joinRefs([main, msg("op_archive_kept", { count: refused })], " · ") : main
   return settleOperation(next, id, moved === 0 && refused > 0 ? "failed" : refused > 0 ? "partial" : "succeeded", summary, payload.href)
 }

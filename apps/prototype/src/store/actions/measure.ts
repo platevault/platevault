@@ -11,7 +11,7 @@
  */
 import { simulateMeasurement } from "@/domain/measurement"
 import type { AssetId, Catalog, FrameMeasurement, MeasurementRecord, Metric, Operation, OperationId, OperationItem, SessionId } from "@/domain/types"
-import { formatCount } from "@/lib/format"
+import { formatCount, formatDecimal } from "@/lib/format"
 import { joinRefs, m, msg } from "@/lib/i18n"
 import { nowIso, type PrototypeState, store } from "@/store/core"
 import { type OperationHandler, isSettled, patchOperation, resumeOperation, settleOperation, startOperation } from "@/store/operations"
@@ -231,7 +231,7 @@ export const measureHandler: OperationHandler = {
       progress: { done: payload.total - remaining.size, total: payload.total, unit: "frames" },
     })
     if (remaining.size > 0) return next
-    const parts = [msg("op_measure_measured", { count: payload.measured, n: formatCount(payload.measured) }), msg("op_measure_cached_valid", { count: payload.reused })]
+    const parts = [msg("op_measure_measured", { count: payload.measured, n: { count: payload.measured } }), msg("op_measure_cached_valid", { count: payload.reused })]
     if (payload.skipped.length > 0) parts.push(msg("op_measure_not_measured", { count: payload.skipped.length }))
     return settleOperation(next, op.id, payload.skipped.length > 0 ? "partial" : "succeeded", msg("op_measure_summary", { parts: joinRefs(parts, ", ") }), null)
   },
@@ -269,7 +269,8 @@ export const METRIC_LABEL: Record<Metric["key"], string> = {
 /** "6.42″", "2.10 px", "0.41", "1,820 stars", "880 ADU"; null values never become numbers. */
 export function formatMetric(metric: Pick<Metric, "value" | "unit">): string {
   if (metric.value === null) return m.measure_not_reported()
-  const value = metric.unit === "stars" || metric.unit === "ADU" ? metric.value.toLocaleString("en-GB") : String(metric.value)
+  const digits = String(metric.value).split(".")[1]?.length ?? 0
+  const value = metric.unit === "stars" || metric.unit === "ADU" ? formatCount(metric.value) : formatDecimal(metric.value, digits)
   if (metric.unit === "arcsec") return `${value}″`
   if (metric.unit === "ratio" || metric.unit === "") return value
   return `${value} ${metric.unit}`

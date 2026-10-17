@@ -11,7 +11,7 @@
  */
 import { angularSeparationDeg } from "./sky"
 import type { Band, CalendarExport, Catalog, NightDate, ObservingSite, ObservingWindow, PlanCriteria, ReminderSettings, SiteId, SubjectWindow, Target, TargetId } from "./types"
-import { formatCount, formatDateTime } from "@/lib/format"
+import { formatDateTime } from "@/lib/format"
 import { m, msg, type MessageRef } from "@/lib/i18n"
 
 const RAD = Math.PI / 180
@@ -733,7 +733,7 @@ export interface WindowProgress {
 /** Progress shows the nights left and Planning reads the priority (C7). `tonight` is the planning night (`upcomingNight`). */
 export function windowProgress(window: SubjectWindow, tonight: NightDate): WindowProgress {
   const last = window.kind === "finish-by" ? window.night : window.to
-  const nights = (count: number) => ({ count, n: formatCount(count) })
+  const nights = (count: number) => ({ count, n: { count } })
   if (tonight > last) {
     return { window, state: "passed", nightsLeft: 0, opensIn: 0, priority: 0, line: msg(window.kind === "season" ? "domain_window_season_over" : "domain_window_finish_by_passed") }
   }

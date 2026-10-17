@@ -41,7 +41,6 @@ import { WRAP_UP_NAME, WRAP_UP_STEPS } from "@/domain/labels"
 import { wrapUpFlowState, type WrapUpFlowState, wrapUpStepLink } from "@/domain/project-view"
 import { trashBlock, viewLinks } from "@/domain/storage"
 import type { CalibrationProcess, CalibrationStepId, OperationId, OpticalTrainId, ProfileId, Project, Session, TargetId, WrapUpStepId } from "@/domain/types"
-import { formatCount } from "@/lib/format"
 import { joinRefs, type MessageRef, type Messages, msg, say } from "@/lib/i18n"
 import { type CommitResult, store } from "@/store/core"
 import { detectMasters, discardRaws, importMaster, keepRaws, startStack } from "./calibration"
@@ -243,7 +242,7 @@ function rawsReview(m: Messages, world: World, process: CalibrationProcess): Con
   const links = viewLinks(world.catalog, world.disk)
   const frames = new Set(items.map((item) => item.assetId)).size
   return {
-    title: m.calibration_raws_trash_title({ count: frames, n: formatCount(frames) }),
+    title: m.calibration_raws_trash_title({ count: frames, n: frames }),
     groups: [{ label: m.settings_raw_frames(), rows: trashFileRows(m, world, items.map((item) => ({ ...item, refused: trashBlock(world.disk, links, item.path) }))) }],
     confirm: { label: m.common_move_to_trash(), kind: "destructive" },
   }

@@ -14,6 +14,7 @@ import {
   setDefaultInputMode,
   setGroupKeywords,
   setMatchingSettings,
+  checkExecutable,
 } from "./settings"
 
 // The demo's rigs: RedCat (two versions), Esprit and FRA400; two ASI2600MM cameras of one model, the second with "Don't use darks".
@@ -74,6 +75,11 @@ describe("application profiles", () => {
     expect(reasons[0]).toContain(m.equipment_used_by_projects({ count: 1 }))
     expect(reasons[0]).toContain(project.name)
     expect(catalog().profiles[id]).toBeDefined()
+  })
+
+  it("returns MISSING for an unknown executable profile", () => {
+    expect(checkExecutable("missing-profile")).toEqual(expect.objectContaining({ ok: false, reason: "stale" }))
+    expect(store.getState()).toEqual(demo)
   })
 })
 

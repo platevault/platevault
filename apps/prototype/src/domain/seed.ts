@@ -52,7 +52,7 @@
  *
  * All names, paths and counts are illustrative fixtures.
  */
-import { fileName, formatCount } from "@/lib/format"
+import { fileName } from "@/lib/format"
 import { m, msg, verbatim } from "@/lib/i18n"
 import { calibrateSessions, confirmChoice, DEFAULT_MASTER_MAX_AGE_DAYS, noChoice } from "./calibration"
 import { adoptionDestination, CALIBRATION_STEP_NAME, processIdFor, processRef, stepRecord } from "./calibration-process"
@@ -1269,7 +1269,7 @@ function demoSeed(): SeedData {
     scope: { projectId: PROJECT.m31 },
     progress: { done: m31Entries, total: m31Entries, unit: "entries" },
     items: [],
-    summary: msg("seed_cleanup_summary", { count: m31Entries, n: formatCount(m31Entries) }),
+    summary: msg("seed_cleanup_summary", { count: m31Entries, n: { count: m31Entries } }),
     canPause: false,
     canCancel: false,
     payload: {},
@@ -1309,7 +1309,7 @@ function demoSeed(): SeedData {
     status: "running",
     scope: { locationIds: ["loc_nas"] },
     progress: { done: 0, total: nasPending.length, unit: "files" },
-    items: [{ id: "loc_nas", label: verbatim("NAS captures"), path: "/Volumes/NAS/Captures", status: "running", phase: null, detail: msg("op_index_files_to_read", { count: nasPending.length, n: formatCount(nasPending.length) }) }],
+    items: [{ id: "loc_nas", label: verbatim("NAS captures"), path: "/Volumes/NAS/Captures", status: "running", phase: null, detail: msg("op_index_files_to_read", { count: nasPending.length, n: { count: nasPending.length } }) }],
     summary: null,
     canPause: true,
     canCancel: true,
@@ -1321,7 +1321,7 @@ function demoSeed(): SeedData {
 
   const activity: ActivityEvent[] = [
     { id: "act_apply_cygnus", at: applyCygnus.settledAt!, kind: "operation", title: applyCygnus.title, status: "succeeded", detail: applyCygnus.summary, operationId: applyCygnus.id, href: projectHref(PROJECT.cygnus, { stage: "view" }) },
-    { id: "act_trash_m31", at: testTrashAt, kind: "operation", title: msg("seed_move_rejected_title", { count: 8, n: formatCount(8) }), status: "succeeded", detail: msg("seed_trash_m31_detail", { frames: unitCount("frames", 8), session: "M 31 25 Aug L" }), operationId: null, href: projectHref(PROJECT.m31) },
+    { id: "act_trash_m31", at: testTrashAt, kind: "operation", title: msg("seed_move_rejected_title", { count: 8, n: { count: 8 } }), status: "succeeded", detail: msg("seed_trash_m31_detail", { frames: unitCount("frames", 8), session: "M 31 25 Aug L" }), operationId: null, href: projectHref(PROJECT.m31) },
     { id: "act_cleanup_m31", at: trashAt, kind: "operation", title: cleanupM31.title, status: "succeeded", detail: cleanupM31.summary, operationId: cleanupM31.id, href: projectHref(PROJECT.m31, { stage: "wrap-up" }) },
     { id: "act_stack_oiii", at: "2026-09-27T09:10:00.000Z", kind: "operation", title: msg("store_cal_stack_title", { name: processRef(catalog, processOf(flatOiii)) }), status: "failed", detail: msg("store_cal_failed_at", { reason: msg("store_cal_tool_output_not_found"), step: CALIBRATION_STEP_NAME.detect }), operationId: null, href: "/calibration" },
     { id: "act_stack_dark300", at: "2026-09-08T19:10:00.000Z", kind: "operation", title: msg("store_cal_stack_title", { name: processRef(catalog, processOf(dark300)) }), status: "succeeded", detail: msg("store_cal_registered_from", { file: "MasterDark_2026-09-08.xisf", frames: unitCount("frames", 30) }), operationId: null, href: "/calibration" },

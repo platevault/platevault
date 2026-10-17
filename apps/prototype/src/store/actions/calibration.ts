@@ -99,7 +99,7 @@ import type {
   SessionCalibration,
   SessionId,
 } from "@/domain/types"
-import { fileName, formatCount } from "@/lib/format"
+import { fileName } from "@/lib/format"
 import { joinRefs, type MessageRef, msg, verbatim } from "@/lib/i18n"
 import { type CommitOptions, type CommitResult, commit, nowIso, type PrototypeState, store, withCatalog } from "@/store/core"
 import { addOperation, ensureTicker, type OperationHandler, patchOperation, settleOperation } from "@/store/operations"
@@ -573,7 +573,7 @@ function releaseMaster(catalog: Catalog, masterId: MasterId): { catalog: Catalog
 }
 
 function releasedDetail(released: number): MessageRef | null {
-  return released === 0 ? null : msg("store_cal_sessions_need_calibration", { count: released, n: formatCount(released) })
+  return released === 0 ? null : msg("store_cal_sessions_need_calibration", { count: released, n: { count: released } })
 }
 
 /**
@@ -727,7 +727,7 @@ function writeChoices(label: MessageRef, writes: ChoiceWrite[], href: string, ex
     { href, expect },
   )
   const count = new Set(writes.map((w) => w.sessionId)).size
-  if (result.ok) recordSaved(msg("store_cal_saved_sessions", { count, n: formatCount(count) }), null, href)
+  if (result.ok) recordSaved(msg("store_cal_saved_sessions", { count, n: { count } }), null, href)
   return result
 }
 

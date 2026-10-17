@@ -191,7 +191,7 @@ export function totalsLine(frames: number, seconds: number) {
 
 /** "12 frames", the count a pending change or a summary names. */
 export function framesRef(count: number): MessageRef {
-  return msg("project_frames_count", { count, n: formatCount(count) })
+  return msg("project_frames_count", { count, n: { count } })
 }
 
 // ---------------------------------------------------------------------------

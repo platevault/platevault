@@ -6,7 +6,6 @@
  */
 import { stableHash } from "@/domain/indexing"
 import type { AssetId, Catalog, FrameMeasurement, MeasurementImport, MeasurementImportRow, SessionId } from "@/domain/types"
-import { formatCount } from "@/lib/format"
 import { m, msg } from "@/lib/i18n"
 import { historyEntry } from "@/store/actions/measure"
 import { type CommitResult, commit, nowIso, recordActivity, store, updateSlice, withCatalog } from "@/store/core"
@@ -61,8 +60,8 @@ export function importMeasurements(sessionId: SessionId, href: string, path: str
     kind: "saved",
     title: msg("store_saved_measurements_imported"),
     detail: changed > 0
-      ? msg("store_measurements_detail_changed", { count: attach.length, n: formatCount(attach.length), path, rows: rows.length, changed })
-      : msg("store_measurements_detail", { count: attach.length, n: formatCount(attach.length), path, rows: rows.length }),
+      ? msg("store_measurements_detail_changed", { count: attach.length, n: { count: attach.length }, path, rows: rows.length, changed })
+      : msg("store_measurements_detail", { count: attach.length, n: { count: attach.length }, path, rows: rows.length }),
     operationId: null,
     href,
   })

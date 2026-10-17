@@ -15,7 +15,6 @@ import { type CatalogueEntry, entryKeys, targetFromEntry } from "@/domain/sky"
 import { sessionRef } from "@/domain/membership"
 import { namingTemplate, type NamingValues, resolveNamingTemplate } from "@/domain/templates"
 import type { Asset, AssetCopy, AssetId, Catalog, CatalogCorrection, IsoDateTime, Location, OpticalTrainId, QualityValue, Session, SessionId, Target, TargetId } from "@/domain/types"
-import { formatCount } from "@/lib/format"
 import { type MessageRef, msg, verbatim } from "@/lib/i18n"
 import { type CommitResult, commit, nowIso, type PrototypeState, store, withCatalog } from "@/store/core"
 import { freshId, MISSING, recordSaved, refuse } from "./shared"
@@ -33,7 +32,7 @@ export function markFrames(assetIds: AssetId[], value: QualityValue, href: strin
   if (assetIds.length === 0) return { ok: true }
   const at = nowIso()
   const count = assetIds.length
-  const label = msg("store_label_mark_frames", { count, n: formatCount(count), quality: QUALITY_NAME[value] })
+  const label = msg("store_label_mark_frames", { count, n: { count: count }, quality: QUALITY_NAME[value] })
   const result = commit(
     label,
     (s) =>
@@ -47,7 +46,7 @@ export function markFrames(assetIds: AssetId[], value: QualityValue, href: strin
       }),
     { href },
   )
-  if (result.ok) recordSaved(msg("store_saved_frames_marked", { count, n: formatCount(count), quality: QUALITY_NAME[value] }), null, href)
+  if (result.ok) recordSaved(msg("store_saved_frames_marked", { count, n: { count: count }, quality: QUALITY_NAME[value] }), null, href)
   return result
 }
 
@@ -187,7 +186,7 @@ export function fileIntoTarget(sessionId: SessionId, targetId: TargetId, expectR
     },
     { expect: { collection: "sessions", id: sessionId, revision: expectRevision }, href },
   )
-  if (result.ok) recordSaved(msg("session_filed_into", { session: sessionRef(session), target: target.name }), msg("session_frames_moved", { count: moves.length, n: formatCount(moves.length) }), href)
+  if (result.ok) recordSaved(msg("session_filed_into", { session: sessionRef(session), target: target.name }), msg("session_frames_moved", { count: moves.length, n: { count: moves.length } }), href)
   return result
 }
 

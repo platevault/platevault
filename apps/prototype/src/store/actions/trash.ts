@@ -19,7 +19,7 @@ import { isUnder } from "@/domain/indexing"
 import { unitCount } from "@/domain/labels"
 import { keptViewLinks, type TrashBlock, type TrashItem, trashBlock, viewLinks, type ViewLinks } from "@/domain/storage"
 import type { AssetId, CalibrationProcessId, Catalog, Disk, DiskFile, OperationId, OperationItem, OperationKind, OperationUnit, ProjectId, TrashEpisode, TrashEpisodeKind } from "@/domain/types"
-import { fileName, formatBytes, formatCount } from "@/lib/format"
+import { fileName } from "@/lib/format"
 import { joinRefs, type MessageRef, type Messages, msg, say, verbatim } from "@/lib/i18n"
 import { nowIso, type PrototypeState, store } from "@/store/core"
 import { addOperation, ensureTicker, type OperationHandler, patchOperation, settleOperation } from "@/store/operations"
@@ -200,7 +200,7 @@ function trashStep(kind: OperationKind): OperationHandler {
       const refused = done.length - trashed.length
       const bytes = trashed.reduce((n, i) => n + i.sizeBytes, 0)
       const unit = payload.unit ?? "items"
-      const summary = msg("op_trash_summary", { trashed: unitCount(unit, trashed.length), bytes: formatBytes(bytes), refused: unitCount(unit, refused) })
+      const summary = msg("op_trash_summary", { trashed: unitCount(unit, trashed.length), bytes: { bytes: bytes }, refused: unitCount(unit, refused) })
       return settleOperation(next, op.id, refused > 0 && trashed.length === 0 ? "failed" : refused > 0 ? "partial" : "succeeded", summary, payload.href)
     },
   }
@@ -247,7 +247,7 @@ function settleEpisode(state: PrototypeState, operationId: OperationId, payload:
   const process = payload.calibrationProcessId ? catalog.calibrationProcesses[payload.calibrationProcessId] : undefined
   if (process) {
     const refused = payload.done.filter((i) => i.outcome === "refused")
-    const raws = refused.length === 0 ? stepRecord("done", at) : stepRecord("failed", at, joinRefs([msg("op_trash_frames_kept", { count: refused.length, n: formatCount(refused.length) }), refused[0]!.reason ?? msg("wrapup_refused")], " · "))
+    const raws = refused.length === 0 ? stepRecord("done", at) : stepRecord("failed", at, joinRefs([msg("op_trash_frames_kept", { count: refused.length, n: { count: refused.length } }), refused[0]!.reason ?? msg("wrapup_refused")], " · "))
     catalog.calibrationProcesses = {
       ...catalog.calibrationProcesses,
       [process.id]: { ...process, raws: refused.length === 0 ? "trashed" : null, operationId: null, steps: { ...process.steps, raws }, updatedAt: at },
