@@ -8,10 +8,14 @@
 //! below, with the catalog in its own data directory. The dialog and opener
 //! plugins serve the planning handlers' Rust calls, and the platform reminder
 //! notifier with the system clock is attached before any command runs. At
-//! start the shell also resumes Wrap up through the host Trash and starts the
-//! Output watcher, which it stops when the event loop exits. The one window is
-//! labelled `library`, so it holds `capabilities/library.json` (plus the dev
-//! bridge grant with `dev-tools`) and none of the legacy `default.json`.
+//! start the shell also resumes Wrap up through the host Trash, starts the
+//! Output watcher, and starts [`CaptureWatch`], which counts new captures in
+//! every online Captures location (a start-up walk and a live folder watcher
+//! each). Both watchers stop in the exit step. On Windows the removal notices
+//! of each watched volume that is not a network share reach the capture
+//! watcher, so the drive can eject, and they end after it stops. The one
+//! window is labelled `library`, so it holds `capabilities/library.json` (plus
+//! the dev bridge grant with `dev-tools`) and none of the legacy `default.json`.
 //! Nothing from the legacy composition root runs here: no `AppState`, legacy
 //! database, bootstrap job, legacy watcher or legacy command registration. The
 //! legacy code stays archivable and is never booted by this binary.
@@ -38,9 +42,12 @@ use std::net::Ipv4Addr;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use contracts_core::captures::NEW_CAPTURES_EVENT;
+use desktop_services::captures::NewCapturesFeed;
 use desktop_services::jobs::{MeasurementProgressFeed, ScanProgressFeed};
 use platevault_core::custody::trash::SystemTrash;
 use platevault_core::library::Library;
+use platevault_core::new_captures::CaptureWatch;
 use platevault_core::project_output::OutputWatch;
 use platevault_core::targets::SimbadConfig;
 use tauri::{Manager, RunEvent};
@@ -106,6 +113,7 @@ macro_rules! library_commands {
             ipc::library_review_retire_location,
             ipc::library_retire_location,
             ipc::library_list_operations,
+            ipc::library_new_captures,
             // session filters (064 LIB-FR-17, 065 PRJ-FR-19)
             crate::commands::session_filters::library_session_filter_counts,
             crate::commands::session_filters::project_prefill_from_session,
@@ -254,6 +262,7 @@ pub fn library_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
 /// configuration, an unusable data directory, a catalog that cannot be opened
 /// (including a foreign or legacy database), reminder subscriptions that
 /// cannot be read when the notifier attaches, or the Tauri runtime itself.
+/// A removal notice window that Windows refuses is logged, not returned.
 pub fn run() -> Result<(), Box<dyn Error>> {
     use tauri::generate_handler;
     let provider = provider_config()?;
@@ -324,11 +333,33 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     // `Processing/` while the app runs; its first pass finishes interrupted
     // Copy to Output. It spawns on the runtime, so it starts inside it.
     let output_watch = tauri::async_runtime::block_on(async { OutputWatch::start(&library) });
+    // New captures in every online Captures location: a start-up walk and a
+    // live watcher each (astro-plan-ef440). The task runs on the async
+    // runtime, so it starts inside it; the exit step below stops it.
+    let captures = tauri::async_runtime::block_on(async { CaptureWatch::start(&library) });
+    tauri::async_runtime::spawn(crate::bootstrap::feeds::forward(
+        app.handle().clone(),
+        NEW_CAPTURES_EVENT,
+        NewCapturesFeed::subscribe(&captures),
+        |_, error| tracing::error!(%error, "new captures event not delivered"),
+    ));
     app.manage(library);
     app.manage(trash);
-    app.run(move |_, event| {
+    app.manage(captures);
+    // Windows ejects a Captures drive only once discovery's watcher lets go
+    // of it (astro-plan-ef440). Without the notices, which `start` logs, the
+    // app still starts; only that release is lost.
+    #[cfg(windows)]
+    let mut eject = crate::eject::EjectNotices::start(app.handle());
+    app.run(move |handle, event| {
+        // No watcher outlives the app: every OS watch is released before exit.
         if let RunEvent::Exit = event {
             tauri::async_runtime::block_on(output_watch.shutdown());
+            tauri::async_runtime::block_on(handle.state::<CaptureWatch>().shutdown());
+            // Once discovery is stopping, a removal request that waited on it
+            // has returned, so dropping the notices never waits on one.
+            #[cfg(windows)]
+            drop(eject.take());
         }
     });
     Ok(())
@@ -451,7 +482,7 @@ mod window_grants {
         "plugin:mcp-bridge|start_ipc_monitor",
     ];
     /// Granted to the legacy `main` window by `default.json` only.
-    const LEGACY_ONLY: [&str; 13] = [
+    const LEGACY_ONLY: [&str; 11] = [
         "plugin:dialog|open",
         "plugin:dialog|save",
         "plugin:dialog|message",
@@ -462,8 +493,6 @@ mod window_grants {
         "plugin:window|close",
         "plugin:window|show",
         "plugin:window|set_focus",
-        "plugin:updater|check",
-        "plugin:process|restart",
         "plugin:window-state|restore_state",
     ];
 

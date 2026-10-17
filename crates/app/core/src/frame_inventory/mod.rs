@@ -16,6 +16,10 @@
 //! emitting `frame.missing`/`frame.recovered`. It NEVER creates, deletes, or
 //! moves a file (FR-008/INV-2) — only `file_record` rows are written.
 //!
+//! A frame at or below a path the walk cannot read is neither present nor
+//! missing: its record is left unchanged, and the response reports it in
+//! `unknown` with the unreadable paths.
+//!
 //! A missing frame keeps its session `frame_ids` membership in both reconcile
 //! modes. Active counts, totals, and lists already exclude a `missing` frame
 //! via the `state != 'missing'` filter

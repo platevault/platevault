@@ -5,7 +5,7 @@
 //! (batch #9 of the coverage-matrix "Batched plan", Journey 4). Promotes
 //! `docs/development/windows-journeys/journey-04-sessions-review.md`'s
 //! UI-level Tests (1/2/3/5) — the existing `ingestion_sessions_search`
-//! journey (`journeys.rs`) already proves the real event-driven grouping
+//! journey (`apps/desktop/src-tauri/tests/backend_journeys.rs`) already proves the real event-driven grouping
 //! pipeline via `sessions.list`; this file adds the real Sessions PAGE
 //! assertions that journey doesn't touch (nothing before apply, no
 //! review-state controls, rescan doesn't duplicate).
@@ -110,7 +110,7 @@ async fn sessions_ui_derived_view_invariants() -> anyhow::Result<()> {
     );
 
     // Real ingest pipeline (mirrors `ingestion_sessions_search` in
-    // `journeys.rs`) — this journey's new value is the Sessions PAGE
+    // `apps/desktop/src-tauri/tests/backend_journeys.rs`) — this journey's new value is the Sessions PAGE
     // assertions below, not re-proving the ingest pipeline itself.
     let root_dir = tempfile::tempdir()?;
     write_minimal_fits_with_exposure(
@@ -202,7 +202,7 @@ async fn sessions_ui_derived_view_invariants() -> anyhow::Result<()> {
     // that's a different, session-review-era projection) until the grouped
     // session exists, mirroring `invoke_until`'s documented wait primitive
     // for this exact class of event-driven backend effect
-    // (`journeys.rs`'s `ingestion_sessions_search`). Only once the backend
+    // (`backend_journeys.rs`'s `ingestion_sessions_search`). Only once the backend
     // is ready does reloading the UI mean anything.
     app.invoke_until(
         "inventory_list",

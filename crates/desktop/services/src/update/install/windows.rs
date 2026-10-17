@@ -1,0 +1,210 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
+//! The Windows install: start the NSIS or MSI installer, which needs the app
+//! to exit while it replaces the files. The arguments are the ones
+//! `tauri-plugin-updater` passed in its default passive mode.
+//!
+//! Compiled everywhere for tests; only Windows installs through it.
+
+use std::ffi::OsString;
+use std::path::{Path, PathBuf};
+use std::process::Command;
+
+use super::InstallMode;
+#[cfg(windows)]
+use super::Installed;
+#[cfg(windows)]
+use crate::update::signature::Payload;
+use crate::update::Package;
+#[cfg(windows)]
+use crate::update::UpdateError;
+
+/// Where Windows is when `%SystemRoot%` is unset.
+const DEFAULT_SYSTEM_ROOT: &str = r"C:\Windows";
+
+/// Start the installer for `payload`, which then needs this process to exit.
+///
+/// The installer gets a duplicate of the handle [`Staged::reverify`] opened
+/// as its standard input, which it ignores but holds until it exits. That
+/// handle shares reads only, so ordinary opens cannot write, delete or rename
+/// the file between the check and the install: the Windows Installer service
+/// reads the MSI after the UAC prompt and after this process is gone
+/// (astro-plan-ryj83). It does not stop code running as this user, which can
+/// change the file through a view it mapped earlier or tamper with the
+/// unelevated `msiexec` client that holds the handle (see `open_payload`).
+/// No elevated step of the app's own runs before `msiexec` to check the MSI,
+/// since starting one would mean a second, unexplained UAC prompt.
+///
+/// [`Staged::reverify`]: crate::update::signature::Staged::reverify
+#[cfg(windows)]
+pub(super) fn launch_installer(
+    payload: &mut Payload<'_>,
+    package: Package,
+    mode: InstallMode,
+) -> Result<Installed, UpdateError> {
+    let command = installer_command(package, payload.path(), mode, std::env::var_os("SYSTEMROOT"));
+    spawn_holding(command, payload).map_err(|error| {
+        UpdateError::Install(format!(
+            "the {} installer did not start: {error}",
+            package.manifest_name()
+        ))
+    })?;
+    // The installer reads the payload after this process has exited; a later
+    // run removes the directory (`signature::remove_stale_payloads`).
+    payload.keep();
+    Ok(Installed::Handoff)
+}
+
+/// Start `command` with a duplicate of `payload`'s verified handle as its
+/// standard input, which it then holds until it exits.
+#[cfg(windows)]
+fn spawn_holding(
+    mut command: Command,
+    payload: &mut Payload<'_>,
+) -> std::io::Result<std::process::Child> {
+    let lock = payload.reader().try_clone()?;
+    command.stdin(lock).spawn()
+}
+
+/// The installer process for `package` at `installer`. Each argument is
+/// passed on its own, and `Command` quotes it for the Windows command line.
+/// `msiexec` is named by absolute path under `system_root`.
+pub(super) fn installer_command(
+    package: Package,
+    installer: &Path,
+    mode: InstallMode,
+    system_root: Option<OsString>,
+) -> Command {
+    let relaunch = mode == InstallMode::Now;
+    if package == Package::Msi {
+        let msiexec = PathBuf::from(system_root.unwrap_or_else(|| DEFAULT_SYSTEM_ROOT.into()))
+            .join("System32")
+            .join("msiexec.exe");
+        let mut command = Command::new(msiexec);
+        command.arg("/i").arg(installer).args(["/passive", "/promptrestart"]);
+        if relaunch {
+            command.arg("AUTOLAUNCHAPP=True");
+        }
+        command
+    } else {
+        // `/P` passive, `/UPDATE` skips the first-install steps, `/R` starts
+        // the app once the install is done.
+        let mut command = Command::new(installer);
+        command.args(["/P", "/UPDATE"]);
+        if relaunch {
+            command.arg("/R");
+        }
+        command
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::ffi::OsStr;
+    use std::path::{Path, PathBuf};
+
+    use super::installer_command;
+    use crate::update::install::InstallMode;
+    use crate::update::Package;
+
+    const INSTALLER: &str =
+        r"C:\Users\Some User\AppData\Local\Temp\platevault-update-payload-x\update.msi";
+
+    fn args(command: &std::process::Command) -> Vec<&OsStr> {
+        command.get_args().collect()
+    }
+
+    #[test]
+    fn install_now_runs_the_nsis_installer_passively_and_restarts_the_app() {
+        let installer = Path::new(r"C:\Temp\x\update-setup.exe");
+        let command = installer_command(Package::Nsis, installer, InstallMode::Now, None);
+        assert_eq!(command.get_program(), installer.as_os_str());
+        assert_eq!(args(&command), ["/P", "/UPDATE", "/R"]);
+    }
+
+    #[test]
+    fn install_on_quit_runs_the_nsis_installer_without_a_restart() {
+        let installer = Path::new(r"C:\Temp\x\update-setup.exe");
+        let command = installer_command(Package::Nsis, installer, InstallMode::OnQuit, None);
+        assert_eq!(args(&command), ["/P", "/UPDATE"]);
+    }
+
+    #[test]
+    fn the_msi_runs_through_msiexec_under_the_system_root() {
+        let command = installer_command(
+            Package::Msi,
+            Path::new(INSTALLER),
+            InstallMode::Now,
+            Some(r"D:\Win".into()),
+        );
+        assert_eq!(
+            command.get_program(),
+            PathBuf::from(r"D:\Win").join("System32").join("msiexec.exe").as_os_str()
+        );
+        // The path stays one argument, spaces and all.
+        assert_eq!(
+            args(&command),
+            ["/i", INSTALLER, "/passive", "/promptrestart", "AUTOLAUNCHAPP=True"]
+        );
+    }
+
+    #[test]
+    fn without_a_system_root_msiexec_is_still_an_absolute_path() {
+        let command =
+            installer_command(Package::Msi, Path::new(INSTALLER), InstallMode::OnQuit, None);
+        assert_eq!(
+            command.get_program(),
+            PathBuf::from(r"C:\Windows").join("System32").join("msiexec.exe").as_os_str()
+        );
+        assert_eq!(args(&command), ["/i", INSTALLER, "/passive", "/promptrestart"]);
+    }
+
+    /// The lock as an installer holds it: a real child process started as
+    /// `launch_installer` starts the installer inherits the verified handle
+    /// and keeps ordinary writers, renames and deletes out after the app's
+    /// own handle closed, until it exits (astro-plan-ryj83). It is no
+    /// boundary against code running as the user (see `open_payload`).
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn a_started_installer_holds_the_payload_lock_until_it_exits() {
+        use std::io::Read as _;
+
+        const ERROR_SHARING_VIOLATION: i32 = 32;
+        let staged =
+            crate::update::tests::stage(Package::Msi, b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1an msi")
+                .await;
+        let mut payload = staged.reverify().expect("verified");
+        let ping = PathBuf::from(
+            std::env::var_os("SYSTEMROOT").unwrap_or_else(|| super::DEFAULT_SYSTEM_ROOT.into()),
+        )
+        .join("System32")
+        .join("PING.EXE");
+        let mut command = std::process::Command::new(ping);
+        command
+            .args(["-n", "60", "127.0.0.1"])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null());
+        let mut child = super::spawn_holding(command, &mut payload).expect("child");
+        drop(payload);
+        let write = || std::fs::OpenOptions::new().write(true).open(staged.file());
+
+        assert_eq!(
+            write().err().and_then(|error| error.raw_os_error()),
+            Some(ERROR_SHARING_VIOLATION),
+            "the child's handle keeps writers out"
+        );
+        let moved = staged.file().with_extension("moved");
+        assert!(std::fs::rename(staged.file(), &moved).is_err(), "nor can it be renamed away");
+        assert!(std::fs::remove_file(staged.file()).is_err(), "nor deleted");
+        let mut read = Vec::new();
+        std::fs::File::open(staged.file())
+            .expect("readers still may")
+            .read_to_end(&mut read)
+            .expect("read");
+
+        child.kill().expect("end the child");
+        child.wait().expect("the child exits");
+        write().expect("unlocked once the child has exited");
+    }
+}

@@ -186,7 +186,8 @@ async fn external_drift_in_app_written_entry_blocks_item() {
     fs::create_dir_all(archive.join("taken")).unwrap();
     let occupied = archive.join("taken/OIII_002.fits");
     fs::write(&occupied, b"a file PlateVault did not write").unwrap();
-    let (written, drifted, blocked) = (world.light(HA[1]), world.light(OIII[0]), world.light(OIII[1]));
+    let (written, drifted, blocked) =
+        (world.light(HA[1]), world.light(OIII[0]), world.light(OIII[1]));
     let drafts = vec![
         transfer_draft(&world.library, &written, &archive, "copied/Ha_002.fits").await,
         transfer_draft(&world.library, &drifted, &archive, "pending/OIII_001.fits").await,

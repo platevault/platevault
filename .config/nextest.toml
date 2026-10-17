@@ -71,14 +71,15 @@ failure-output = "immediate-final"
 # keeps a recovered flake VISIBLE as `(N flaky)` rather than absorbing it --
 # see the budget note further down for why that visibility is the point.
 #
-# `threads-required = 2` makes each Windows journey occupy the whole
-# `test-threads = 2` budget, i.e. Windows runs one journey at a time while
-# ubuntu/macOS keep running two.
+# Windows runs the profile's `test-threads = 2` like ubuntu/macOS. From #1295
+# until `astro-plan-cws` it did not: a `threads-required = 2` override made
+# each Windows journey occupy the whole budget, so Windows ran one at a time.
 #
-# Why (#1204): the note above claims concurrent journeys have "isolated
-# app-data/config dirs". That is true on Linux (`XDG_*`) and macOS (`HOME`),
-# and **false on Windows**. `InstanceEnv::new` sets `APPDATA`/`LOCALAPPDATA`,
-# but Tauri resolves those directories through `dirs`, which on Windows calls
+# Why that stop-gap existed (#1204): the note above claims concurrent
+# journeys have "isolated app-data/config dirs". That is true on Linux
+# (`XDG_*`) and macOS (`HOME`), and **false on Windows**. `InstanceEnv::new`
+# sets `APPDATA`/`LOCALAPPDATA`, but Tauri resolves those directories through
+# `dirs`, which on Windows calls
 # `SHGetKnownFolderPath(FOLDERID_RoamingAppData)` (`dirs-sys-0.5.0/src/lib.rs`)
 # — the Known Folder API ignores both environment variables outright. So every
 # concurrent instance shares the real `C:\Users\runneradmin\AppData\…`.
@@ -104,7 +105,7 @@ failure-output = "immediate-final"
 # Update: real per-instance webview isolation landed (`WEBVIEW2_USER_DATA_FOLDER`,
 # `crates/e2e-tests/tests/common/mod.rs::InstanceEnv::new` +
 # `apps/desktop/src-tauri/src/data_dir.rs`) — the redb-lock and shared-webview
-# collisions above should no longer happen regardless of `threads-required`.
+# collisions above should no longer happen when journeys run concurrently.
 # Update 2026-07-30: `retries` lowered 2 -> 1 to find out whether the
 # contamination symptom is still there. At `retries = 2` a green Windows shard
 # was not evidence of a clean first attempt, so the symptom could neither be
@@ -121,19 +122,23 @@ failure-output = "immediate-final"
 # It does NOT cover the runner-image faults tracked by `astro-plan-gl5q`
 # (STATUS_DLL_INIT_FAILED / 0xC0000142). Those kill the harness process during
 # init, before any test starts, so nextest has no test to retry and the retry
-# budget is orthogonal to them. `gl5q` asks for exit-code detection, not
-# retries: a step that recognises 0xC0000142, or any exit with zero test output,
-# and reports "runner failure, re-run". That work is unstarted; do not read this
-# retry budget as protection against it.
+# budget is orthogonal to them. The Windows shard job handles them instead:
+# `scripts/e2e-shard-attempt.ps1` classifies such a death as a runner failure
+# and `.github/workflows/e2e.yml` re-runs the shard once, while a real test
+# failure stays red. Do not read this retry budget as protection against it.
 #
 # If flakes return, that is the answer: raise it back to 2 and reopen the
 # contamination investigation with the shard logs as evidence.
-# `threads-required = 2` stays: the comment above gates lowering it on a real
-# Windows run under `test-threads > 1`, and that has not happened.
+# `threads-required = 2` was removed by `astro-plan-cws` once a full Windows
+# run under `test-threads = 2` met `astro-plan-1oe`'s TRY-1 bar (no
+# 0x80070057, no "bridge never became ready", no redb lock error, no flaky
+# test): run 38896453498, jobs 116962278442 / 116962278458 / 116962278508,
+# 5 + 12 + 13 passed on the first try with journeys overlapping. If those
+# signatures come back, the isolation regressed: restore
+# `threads-required = 2` here and reopen #1204 with the shard logs.
 [[profile.e2e.overrides]]
 platform = 'cfg(windows)'
 retries = 1
-threads-required = 2
 
 # ---------------------------------------------------------------------------
 # CI profile for the Layer-1 workspace test run (spec: build/adopt-nextest).

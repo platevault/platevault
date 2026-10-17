@@ -9,9 +9,10 @@ use std::collections::BTreeSet;
 
 use platevault_core::calibration::{self, Rules};
 use platevault_core::{
-    CalibrationRules, CaptureEvidence, CaptureMetadata, CriterionId, CriterionResult, EvidenceField,
-    EvidenceId, InputEvidence, InputForm, InputKind, InputRef, LightEvidence, MasterBasis,
-    MatchCamera, NativePath, SessionInput, SessionLight, Tolerance, Verdict, WorkflowSettings,
+    CalibrationRules, CaptureEvidence, CaptureMetadata, CriterionId, CriterionResult,
+    EvidenceField, EvidenceId, InputEvidence, InputForm, InputKind, InputRef, LightEvidence,
+    MasterBasis, MatchCamera, NativePath, SessionInput, SessionLight, Tolerance, Verdict,
+    WorkflowSettings,
 };
 use time::macros::date;
 use uuid::Uuid;

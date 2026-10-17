@@ -11,11 +11,13 @@
 
 use std::sync::Arc;
 
+use contracts_core::captures::NewCaptures;
 use persistence_library::{
     CorrectionPreview, LocationFailure, SessionFilter, SessionQuery, SessionSummary, TrashedAsset,
     TrashedQuery,
 };
 use platevault_core::library::{ConfirmedCorrection, InventoryProbe, Library, LibrarySession};
+use platevault_core::new_captures::CaptureWatch;
 use platevault_core::targets::{user_target, TargetQuery, TargetSearchHit, UserTargetInput};
 use platevault_core::{
     Asset, Association, AssociationState, ColorKind, CorrectionInput, Equipment, ErrorResponse,
@@ -463,11 +465,17 @@ pub async fn library_apply_remap(
     review_id: Uuid,
     expected_revision: Revision,
 ) -> Reply<Location> {
-    library
-        .catalog()
-        .apply_remap(review_id, expected_revision, InventoryProbe::default())
-        .await
-        .map_err(fail(Some(review_id)))
+    library.apply_remap(review_id, expected_revision).await.map_err(fail(Some(review_id)))
+}
+
+/// New files per online Captures location, the same payload the
+/// `library_new_captures` event carries after every change.
+#[tauri::command]
+#[specta::specta]
+#[must_use]
+#[allow(clippy::needless_pass_by_value)] // Tauri injects the managed state by value
+pub fn library_new_captures(captures: State<'_, CaptureWatch>) -> NewCaptures {
+    desktop_services::captures::new_captures(&captures.counts())
 }
 
 /// Durable display name change; no scan or source change.

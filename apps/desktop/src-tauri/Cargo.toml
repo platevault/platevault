@@ -48,9 +48,8 @@ persistence_targets = { path = "../../../crates/persistence/targets" }
 workflow_artifacts = { path = "../../../crates/workflow/artifacts" }
 serde = { workspace = true }
 serde_json.workspace = true
-# Version parsing for the dev-tools-gated PV_E2E_VERSION_OVERRIDE hook.
-# Already a transitive dep via tauri-plugin-updater; listed explicitly so it
-# is accessible at the crate boundary without relying on leakage.
+# The running version the updater compares against, and the dev-tools-gated
+# PV_E2E_VERSION_OVERRIDE that replaces it.
 semver = { workspace = true }
 specta = { workspace = true }
 specta-typescript = { workspace = true }
@@ -66,9 +65,6 @@ tauri-plugin-mcp-bridge = { workspace = true, optional = true }
 tauri-plugin-single-instance = { workspace = true }
 tauri-plugin-window-state = { workspace = true }
 tauri-plugin-log = { workspace = true }
-tauri-plugin-updater = { workspace = true }
-# Relaunch-to-apply step for the updater plugin (spec 051 US10, T056).
-tauri-plugin-process = { workspace = true }
 tauri-specta = { workspace = true }
 # E2E automation surface — ONLY compiled when the `e2e` feature is enabled.
 # Release binaries MUST omit this feature so the embedded WebDriver server
@@ -87,11 +83,21 @@ futures-util = { workspace = true }
 [target.'cfg(target_os = "macos")'.dependencies]
 platevault_notify_macos = { path = "../../../crates/platevault-notify-macos" }
 
+# astro-plan-ef440: a removable Captures drive ejects while discovery watches
+# it, through the Windows removal notices of the dedicated FFI crate.
+[target.'cfg(windows)'.dependencies]
+platevault_eject_windows = { path = "../../../crates/platevault-eject-windows" }
+
 [dev-dependencies]
 # The `test` feature gates the `tauri::test` module (mock runtime, IPC
 # helpers). Only dev-dependencies pull it in so release builds stay clean.
 tauri = { workspace = true, features = ["test"] }
 tempfile = { workspace = true }
+# `tests/backend_journeys.rs` diverts OS trash through the executor's
+# headless double (`FakeTrashGuard`): the Shell trash blocks forever on a CI
+# runner with no interactive desktop. Dev-only, so no shipping build can reach
+# it.
+fs_executor = { path = "../../../crates/fs/executor", features = ["e2e-trash-fake"] }
 
 [features]
 # Developer-mode surface (spec 021). Release binaries MUST NOT enable this.

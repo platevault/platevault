@@ -13,8 +13,9 @@ metadata_core = { path = "../metadata/core" }
 metadata_fits = { path = "../metadata/fits" }
 metadata_xisf = { path = "../metadata/xisf" }
 fs_pathsafe = { path = "../fs/pathsafe" }
-# The Output watcher reuses the folder watcher (RAII guard, overflow flag,
-# rescan signal) and the stable-size rule (spec 070 RES-FR-01, F4 OUTPUT).
+# The Output watcher and the new-captures watcher (bead astro-plan-ef440)
+# reuse the folder watcher (RAII guard, overflow flag, rescan signal); the
+# Output watcher also reuses the stable-size rule (spec 070 RES-FR-01, F4 OUTPUT).
 fs_inventory = { path = "../fs/inventory" }
 workflow_artifacts = { path = "../workflow/artifacts" }
 camino.workspace = true

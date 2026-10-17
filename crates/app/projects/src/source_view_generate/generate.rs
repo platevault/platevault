@@ -101,8 +101,7 @@ pub async fn generate_source_view(
 
     // 6. Resolve link kinds.
     let (resolved_kinds, drift_warning) =
-        resolve_link_kinds(pool, &planned, &destination_root, &project.path, req.copy_opt_in)
-            .await?;
+        resolve_link_kinds(pool, &planned, &destination_root, req.copy_opt_in).await?;
     warnings.extend(drift_warning);
 
     let used_copy_fallback = resolved_kinds.values().any(|kind| *kind == Materialization::Copy);
@@ -432,13 +431,13 @@ fn check_long_paths(
 
 // ── Phase: link kind resolution ───────────────────────────────────────────────
 
-/// Resolve link kind per item (FR-004/FR-022): capability probed once against
-/// the project root.
+/// Resolve link kind per item (FR-004/FR-022): capability probed once where
+/// the links will be written, `destination_root` (or the nearest folder of it
+/// that already exists).
 async fn resolve_link_kinds(
     pool: &SqlitePool,
     planned: &[PlannedLink],
     destination_root: &Utf8Path,
-    project_path: &str,
     copy_opt_in: bool,
 ) -> Result<(BTreeMap<usize, Materialization>, Option<GenerationWarning>), ContractError> {
     let settings = persistence_lifecycle::repositories::settings::load_settings(pool)
@@ -452,7 +451,7 @@ async fn resolve_link_kinds(
         &settings.source_view_link_kind_cross_drive,
     )
     .unwrap_or(Materialization::Symlink);
-    let capability = fs_inventory::capability::probe(Utf8Path::new(project_path));
+    let capability = fs_inventory::capability::probe(destination_root);
 
     let mut drift_notices: BTreeSet<String> = BTreeSet::new();
     let mut resolved_kinds: BTreeMap<usize, Materialization> = BTreeMap::new();

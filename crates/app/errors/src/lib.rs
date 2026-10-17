@@ -162,6 +162,23 @@ pub fn bus_err(e: audit::bus::BusError) -> ContractError {
         .with_recovery_action(retry_action())
 }
 
+/// The `export.unfinished_file` `ContractError` for an export that failed and
+/// left its own unfinished file at the destination
+/// (`fs_pathsafe::export_dest::ExportWriteError::LeftUnfinished`).
+///
+/// `details.path` carries the path the backend wrote, under the canonicalized
+/// parent, and the UI shows it: the path the user chose can name another file
+/// once a symlink in it is retargeted. Taking the `UnfinishedFile` itself means
+/// no caller can put the chosen path there instead. The message is the backend
+/// diagnostic, never shown to the user.
+#[must_use]
+pub fn export_unfinished_file(file: fs_pathsafe::export_dest::UnfinishedFile) -> ContractError {
+    let message = file.to_string();
+    let path = file.into_path();
+    ContractError::new(ErrorCode::ExportUnfinishedFile, message, ErrorSeverity::Blocking, false)
+        .with_details(serde_json::json!({ "path": path.to_string_lossy() }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -223,6 +240,30 @@ mod tests {
         assert_eq!(err.code, ErrorCode::InternalDatabase);
         assert!(err.retryable);
         assert_eq!(err.recovery_actions.len(), 1);
+    }
+
+    #[test]
+    fn export_unfinished_file_carries_the_path_from_the_file() {
+        let unfinished = fs_pathsafe::export_dest::UnfinishedFile::for_test(
+            std::path::PathBuf::from("/private/tmp/real/out.json"),
+            std::io::Error::other("write failed"),
+            true,
+        );
+
+        let err = export_unfinished_file(unfinished);
+
+        assert_eq!(err.code, ErrorCode::ExportUnfinishedFile);
+        assert!(!err.retryable);
+        assert_eq!(
+            err.message,
+            "the export failed (write failed) and an empty file remains at /private/tmp/real/out.json"
+        );
+        assert_eq!(
+            err.details,
+            contracts_core::JsonAny::from(serde_json::json!({
+                "path": "/private/tmp/real/out.json"
+            }))
+        );
     }
 }
 

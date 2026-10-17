@@ -34,10 +34,10 @@
       "flowStep": "A4",
       "owner": "064-library-inventory",
       "journeyStep": "J19/S5, J19/S6, J19/S7, J19/S8, J19/S15, J28/S11, J28/S11a, J28/S12, J28/S13",
-      "spec": "064-library-inventory LIB-FR-03, LIB-FR-07, LIB-FR-10, LIB-FR-15, LIB-AC-07, LIB-AC-09, LIB-AC-16; 066-view-selection VSEL-FR-09; D02, D11, D19, D-W7, D-W39",
-      "action": "Browse Home and Sessions while indexing runs, recover the denied location with Retry, and take Cold-1 offline. Later, review retiring the lost archive location, meet a refusal after it returns, retire it from a fresh review, and register its folder again.",
-      "expect": "Home opens first with its six sections, and totals are provisional and name their locations. The denied row offers Choose folder again and Retry, and an offline location keeps its last-observed metadata. Retirement review names the location and the sessions, runs, Projects and Results that reference it; retired copies read Retired and stay named unresolved in fixed runs, and the folder registers again as a new location.",
-      "negative": "No total implies unscanned data, and offline, denied or retired files never read Missing or empty. Retirement changes no file, and no retired decision, association or correction transfers to the re-registered copies."
+      "spec": "064-library-inventory LIB-FR-03, LIB-FR-07, LIB-FR-10, LIB-FR-15, LIB-AC-07, LIB-AC-09, LIB-AC-16; D-W97, D-W98, D-W100",
+      "action": "Browse Home and Sessions while indexing runs, recover the denied location with Retry, and take Cold-1 offline. Later review retiring the lost archive location, meet a refusal after it returns, retire it from a fresh review, and register its folder again.",
+      "expect": "Home shows its current sections and provisional totals name their locations. The denied row offers Choose folder again and Retry, and an offline location keeps last-observed metadata. Retirement review names the location and the sessions, Projects and Results in Output/ that reference it; retired copies remain named unresolved, and registering the folder again creates a new location.",
+      "negative": "Offline, denied or retired files never read Missing or empty. Retirement changes no file, and no retired decision, association or correction transfers to the re-registered copies."
     },
     {
       "flowStep": "B1",
@@ -52,46 +52,55 @@
       "flowStep": "B2",
       "owner": "065-project-goals",
       "journeyStep": "J20/S2, J20/S3, J20/S4, J20/S5, J14/S2a, J22/S12",
-      "spec": "065-project-goals PRJ-FR-01, PRJ-FR-02, PRJ-FR-03, PRJ-FR-04, PRJ-FR-05, PRJ-FR-08, PRJ-FR-09, PRJ-FR-12, PRJ-FR-21, PRJ-AC-01, PRJ-AC-02, PRJ-AC-03, PRJ-AC-09, PRJ-AC-14; D10, D12, D-W30, D-W36, D-W37, D-W66",
-      "action": "Create Project NGC 7000 HOO from the Target with rig RedCat and the HOO goal template, read its derived candidates and goals, edit a goal and add rig Esprit. Later, lower the Ha goal until it reads met and set it back.",
-      "expect": "The Project starts with NGC 7000 as its subject and Ha 10h and OIII 10h goals. Candidates are exactly the sessions whose confirmed Target and rig match the Project, and each goal shows in project and captured, where captured counts the candidates plus run members. A met goal leaves the Project open.",
-      "negative": "Creating or editing the Project changes no file, creates no run and changes no quality state. The Project assigns no session itself, and captured never reads lower than in project."
+      "spec": "065-project-goals PRJ-FR-01, PRJ-FR-02, PRJ-FR-03, PRJ-FR-04, PRJ-FR-05, PRJ-FR-08, PRJ-FR-09, PRJ-FR-31, PRJ-FR-12; D-W90, D-W94, D-W95, D-W96, D-W105",
+      "action": "Create Project NGC 7000 HOO from the Target with rig RedCat and the HOO goal template, review its suggestions and goals, edit a goal and add rig Esprit. Later lower the Ha goal until it reads met and set it back.",
+      "expect": "The Project starts with NGC 7000 and Ha 10h and OIII 10h goals. Suggestions are Ready sessions whose confirmed Target and rig match the Project, and are not added automatically. Each goal shows in project and captured; in project counts the Project's sessions, while captured includes matching suggestions. A met goal leaves the Project open.",
+      "negative": "Creating or editing the Project changes no file and no quality state. No session joins without the user's action, and captured never reads lower than in project."
     },
     {
       "flowStep": "B3",
       "owner": "072-observing-plans",
       "journeyStep": "J20/S6, J20/S7, J29/S3",
-      "spec": "072-observing-plans PLAN-FR-01, PLAN-FR-09, PLAN-FR-10, PLAN-AC-01, PLAN-AC-10, PLAN-TGT-AC-14; 065-project-goals PRJ-FR-06, PRJ-AC-04; D07, D-W16, D-W62",
-      "action": "Inspect the candidates' capture sites, then switch the planning site on the Project page and in the Plan area, and open the Planner from the Project.",
-      "expect": "Each session keeps its own capture site, and windows recalculate and name the chosen planning site and its time zone. Open in Planner limits Targets to the Project's subjects with the rig selector on this Project's rigs.",
-      "negative": "Project subjects, run sessions and capture sites do not change, and notifications stay disabled."
+      "spec": "072-observing-plans PLAN-FR-01, PLAN-FR-09, PLAN-FR-10, PLAN-AC-01, PLAN-AC-10, PLAN-TGT-AC-14; 065-project-goals PRJ-FR-06, PRJ-FR-07; D-W16, D-W88, D-W89, D-W95, D-W96",
+      "action": "Inspect the Project sessions' capture sites, switch the planning site on the Project page and in Targets, and open the Planner from the Project.",
+      "expect": "Each session keeps its capture site, and windows recalculate and name the chosen planning site and time zone. Open in Planner limits Targets to the Project's subjects with the rig selector on this Project's rigs.",
+      "negative": "Changing the planning site changes no Project session, group, capture site or membership, and notifications stay disabled unless the user opts in."
     },
     {
       "flowStep": "B4",
       "owner": "066-view-selection",
-      "journeyStep": "J14/S2a, J14/S2b, J20/S8",
-      "spec": "066-view-selection VSEL-FR-01, VSEL-FR-02, VSEL-FR-03, VSEL-AC-01, VSEL-AC-17, VSEL-AC-18; 065-project-goals PRJ-FR-10, PRJ-FR-20; D-W1, D-W8, D-W37, D-W50; harness v5 S10 (a Target page starts no run; VSEL-AC-16 needs a contract amendment)",
-      "action": "From a Target page, add the Target to an existing Project after its preview, then start a run there on subject NGC 7000 and rig RedCat. From the Project page of NGC 7000 HOO, start a run on subject NGC 7000 and rig RedCat.",
-      "expect": "The Target page offers Add to Plan, Add to Project and New Project, and never a run. The run is created inside the Project with only the Project's subjects and rigs as choices, opens at Select with its candidates preselected, and the Runs table lists it at Select although every goal is unmet.",
-      "negative": "No standalone or Target-only run is offered. Starting a run creates no folder on disk, changes no quality state and lists no session from another rig."
+      "journeyStep": "J14/S2a, J14/S2b, J21/S9",
+      "spec": "066-view-selection VSEL-FR-01, VSEL-FR-03, VSEL-AC-16; 065-project-goals PRJ-FR-08, PRJ-FR-09; D-W94, D-W96, D-W105",
+      "action": "From a Target page, preview adding the Target to an existing Project, then use the Project's Sessions step to add a Ready session whose calibration is settled.",
+      "expect": "The Target page offers Add to Project and New Project, not a run action. The Project receives only sessions the user adds, and a session can be added only when Ready and calibration is settled.",
+      "negative": "No standalone run or Target-only processing action exists. Adding a Target or session creates no file and changes no library quality state."
     },
     {
       "flowStep": "C1",
       "owner": "066-view-selection",
       "journeyStep": "J21/S1, J21/S2",
-      "spec": "066-view-selection VSEL-FR-01, VSEL-FR-02; 070-results-reuse RES-FR-10; D-W3, D-W8, D-W50, D-W72",
-      "action": "Move along the run's pipeline rail through Select, Review, Calibrate and Prepare, toggle Sky coverage, and read the run header.",
-      "expect": "Every step shows the same selection, names what it still needs and offers Move run to Trash. The header shows the run name, Project, subject, rig and profile Not chosen, with the subject and rig fixed.",
-      "negative": "No wizard gates movement between steps. Moving saves no revision, creates no folder and starts no measurement, and no control moves the run to another Project."
+      "spec": "066-view-selection VSEL-FR-01, VSEL-FR-02, VSEL-FR-06, VSEL-FR-08, VSEL-FR-12; D-W94, D-W96, D-W100",
+      "action": "Review a Project's selected sessions and included frames, browse the list with filters and Sky coverage, and read its current desired inputs and pending-change count.",
+      "expect": "The Project's Sessions step shows its groups, held sessions, suggestions, exclusions and pending changes. Browsing filters and Sky coverage leaves selected session identities unchanged.",
+      "negative": "No run header, fixed run identity, run Trash or separate Select/Review/Calibrate/Prepare rail is shown. Browsing does not change Project inputs."
+    },
+    {
+      "flowStep": "Project Sessions step: groups, suggestions, Add sessions… and exclusions",
+      "owner": "066-view-selection",
+      "journeyStep": "J21/S1, J21/S3, J21/S6, J21/S9, J14/S5, J14/S7",
+      "spec": "066-view-selection VSEL-FR-02, VSEL-FR-03, VSEL-FR-10, VSEL-FR-12, VSEL-AC-01, VSEL-AC-04, VSEL-AC-16; 065-project-goals PRJ-FR-07, PRJ-FR-08, PRJ-FR-09, PRJ-FR-31; D-W94, D-W95, D-W96, D-W100, D-W105",
+      "action": "Open the Project's Sessions step, read its groups and suggestions, choose Add sessions… and add the suggested sessions, exclude six frames of one session, and later add a session from the Not in any Project filter.",
+      "expect": "The Sessions step lists the Project's groups with their sessions and frame counts, its suggestions with the Target and rig each matches, and its pending changes. Add sessions… lists Ready sessions with settled calibration first; a suggestion that needs calibration reads \"Choose its flats first\" and can't be added. Added sessions join groups by rig and framing, and the exclusion changes only this Project's counts.",
+      "negative": "No suggestion is added automatically, an OBJECT label alone never makes a session a suggestion, and once the View exists nothing in it changes before Apply. Excluding frames changes no file, no library quality and no other Project."
     },
     {
       "flowStep": "C2",
       "owner": "066-view-selection",
       "journeyStep": "J21/S3, J14/S5",
-      "spec": "066-view-selection VSEL-FR-03, VSEL-AC-01, VSEL-AC-08, VSEL-AC-16, VSEL-AC-18; D01, D-W33, D-W37, D-W49",
-      "action": "Read the run's candidate list.",
-      "expect": "Exactly the six sessions with confirmed Target NGC 7000 on rig RedCat are listed, each with its reason, and the five available ones start selected, including the one whose OBJECT reads Cygnus field. Rows show their geometry evidence and sort by footprint overlap, then separation, with unknown position last.",
-      "negative": "No session from another rig appears. Listing candidates merges no session, rewrites no header and changes no Target."
+      "spec": "066-view-selection VSEL-FR-03, VSEL-FR-04, VSEL-AC-01; 065-project-goals PRJ-FR-09, PRJ-FR-31; D-W33, D-W37, D-W95, D-W96, D-W105",
+      "action": "Read the Project's session suggestions, including a session whose OBJECT label differs from its confirmed Target.",
+      "expect": "Matching Ready sessions with settled calibration are offered as suggestions with the reason Target and rig match. Sessions with no confirmed Target or unsettled calibration cannot be added; geometry evidence orders suggestions and supports framing groups.",
+      "negative": "No session from an unrelated rig or Target is an automatic suggestion. Listing or selecting a suggestion adds no session and changes no Target."
     },
     {
       "flowStep": "C3",
@@ -100,7 +109,7 @@
       "spec": "066-view-selection VSEL-FR-04, VSEL-AC-02; D01, D-W33",
       "action": "Open the geometry evidence of a session with a footprint, a pointing-only session and a Position unknown session, then clear and check the unknown one.",
       "expect": "FOV from confirmed equipment lists its inputs, the pointing-only session shows a distance and no footprint, and Position unknown shows no distance. The unknown session can be checked like any other.",
-      "negative": "Unknown geometry never shows a distance of 0 or a footprint derived from a Target or OBJECT label, and it removes no candidate."
+      "negative": "Unknown geometry never shows a distance of 0 or a footprint derived from a Target or OBJECT label, and it removes no suggestion."
     },
     {
       "flowStep": "C4",
@@ -115,37 +124,37 @@
       "flowStep": "C5",
       "owner": "066-view-selection",
       "journeyStep": "J21/S6, J21/S7, J21/S9, J22/S10",
-      "spec": "066-view-selection VSEL-FR-06, VSEL-FR-07, VSEL-FR-08, VSEL-FR-12, VSEL-FR-13, VSEL-FR-16, VSEL-AC-03, VSEL-AC-04; 065-project-goals PRJ-AC-10; D02, D08, D-W34, D-W36, D-W44",
-      "action": "Show the selection, clear it and restore it with Select matching, browse with sorting, paging and Sky coverage, and save the run. Later, save it again after review exclusions.",
-      "expect": "Available frames of the five sessions are included (214 lights, 17h 50m) with Unreviewed and library-Unusable counts visible, and the selection survives sorting, paging and the sky toggle. Save run commits a membership revision, and the Project counts those frames in project.",
-      "negative": "Inclusion applies no quality action, and the run never reads saved before its write succeeds. Saving creates no folder and makes no offline or other-rig session a Project member."
+      "spec": "066-view-selection VSEL-FR-06, VSEL-FR-08, VSEL-FR-10, VSEL-FR-12, VSEL-FR-15; 065-project-goals PRJ-FR-04, PRJ-FR-08; D-W78, D-W94, D-W96, D-W100",
+      "action": "Show the Project's selected sessions, clear and restore the selection with Select matching, browse with sorting, paging and Sky coverage, then add or exclude a session.",
+      "expect": "Available Usable frames are included, library-Unusable frames start visibly excluded, and the selection survives filters and paging. Adding or excluding after the View exists appears as a pending change; Project totals count its own sessions and matching suggestions under their respective labels.",
+      "negative": "Selection applies no quality action, does not create a membership revision, and changes no View before Apply. Offline or other-rig sessions are not silently added."
     },
     {
       "flowStep": "C6",
       "owner": "066-view-selection",
       "journeyStep": "J21/S8",
-      "spec": "066-view-selection VSEL-FR-09, VSEL-AC-09; D02",
-      "action": "Check the offline 12 Sep session, read its state, then clear its checkbox.",
-      "expect": "While selected it reads Offline, its last-observed frames are unverified, and the summary names them as unresolved members with reconnect, locate and remove offered. Cleared, it stays listed as an Offline candidate.",
-      "negative": "An offline session is never dropped silently or counted as verified."
+      "spec": "066-view-selection VSEL-FR-09, VSEL-FR-12, VSEL-FR-14, VSEL-AC-09, VSEL-AC-31; D-W100",
+      "action": "Review an offline session held by the Project, read its state and pending changes, and open the Apply sheet.",
+      "expect": "The session remains listed with last-observed metadata and unresolved originals named. Apply offers reconnect, locate or explicit removal and is disabled while a required original is offline.",
+      "negative": "An offline session is never dropped silently, counted as verified or treated as an absent original. The View and View (previous)/ remain unchanged."
     },
     {
       "flowStep": "D1",
       "owner": "067-frame-review",
       "journeyStep": "J22/S1, J22/S2, J22/S3, J22/S4, J22/S15a, J22/S15b",
-      "spec": "067-frame-review PIX-FR-01, PIX-FR-06, PIX-FR-10, PIX-AC-01, PIX-AC-10; 064-library-inventory LIB-FR-09, LIB-AC-14; D19, D-W13",
-      "action": "Open the Review step, inspect frames while measuring runs, cancel measurement and reopen. Replace a reviewed frame's bytes in place, rescan and reopen review, then restore the reviewed bytes.",
-      "expect": "Pending frames and progress show, and after Cancel unfinished frames read Not measured. Cached values reappear at once on reopening and the rest resume. The replaced frame reads ChangedContent outside usable totals and is measured again, and restored bytes make it Picked again.",
-      "negative": "Cancel discards no selection, inclusion or exclusion. Cached values for other bytes never read valid, imported values never read verified, and no quality decision is recorded."
+      "spec": "067-frame-review PIX-FR-01, PIX-FR-06, PIX-FR-10, PIX-AC-01, PIX-AC-10; 064-library-inventory LIB-FR-20; D19, D-W78, D-W79",
+      "action": "Open a session's Review step, inspect frames while measuring, cancel and reopen. Replace a reviewed frame's bytes in place, rescan, then restore the reviewed bytes.",
+      "expect": "Pending frames and progress show, and after Cancel unfinished frames read Not measured. Cached values reappear on reopening and remaining measurements resume. A changed frame is outside valid quality totals until its reviewed bytes return or it is reviewed again.",
+      "negative": "Cancel changes no selection or Project membership. Cached values for other bytes never read valid, imported values never read verified, and measurement records no quality decision."
     },
     {
       "flowStep": "D2",
       "owner": "067-frame-review",
       "journeyStep": "J22/S2, J22/S5, J22/S5a, J22/S5b, J22/S7a",
-      "spec": "067-frame-review PIX-FR-02, PIX-FR-03, PIX-FR-04, PIX-FR-10, PIX-FR-11, PIX-FR-12, PIX-FR-13, PIX-FR-15, PIX-FR-16, PIX-AC-02, PIX-AC-07, PIX-AC-14, PIX-AC-15, PIX-AC-17; D03, D-W13, D-W14, D-W15, D-W22, D-W40",
-      "action": "Select frames from a row and a plot point, zoom, pan, compare and step frames, apply and remove a stretch, switch views and table heights, change the frame-name template, and select by threshold.",
-      "expect": "The selected frame is highlighted in every view, the plots and the preview, and the disclosure shows metadata, source and units. Measured values are identical with the stretch on and off, and threshold selection picks exactly the measured frames past the value.",
-      "negative": "Stretching, thumbnails and the name template change no measured value, source byte or file name. Threshold selection changes no quality state or membership."
+      "spec": "067-frame-review PIX-FR-02, PIX-FR-03, PIX-FR-04, PIX-FR-10, PIX-FR-11, PIX-FR-12, PIX-FR-13, PIX-FR-15, PIX-FR-16, PIX-AC-02, PIX-AC-07, PIX-AC-14, PIX-AC-15, PIX-AC-17; D-W13, D-W14, D-W15, D-W40, D-W78, D-W79",
+      "action": "Select frames from a row and plot point, zoom, pan, compare and step frames, apply and remove a stretch, switch views and table heights, change the frame-name display template, and select by threshold.",
+      "expect": "The selected frame is highlighted in every view, plot and preview, and the disclosure shows metadata, source and units. Measured values are identical with stretch on and off, and threshold selection picks exactly the measured frames past the value.",
+      "negative": "Stretching, thumbnails and the display-name template change no measured value, source byte or file name. Threshold selection changes no quality state or Project input."
     },
     {
       "flowStep": "D3",
@@ -160,19 +169,19 @@
       "flowStep": "D4",
       "owner": "066-view-selection",
       "journeyStep": "J22/S8, J22/S9, J22/S10",
-      "spec": "066-view-selection VSEL-FR-08, VSEL-FR-10, VSEL-FR-12, VSEL-AC-04; D02, D-W3, D-W44",
-      "action": "Exclude six 30 Sep frames from the run, restore and re-exclude one, read the totals and save.",
-      "expect": "The 30 Sep row reads 42 of 48, and the run reads 208 lights / 17h 20m (Ha 111 / 9h 15m, OIII 97 / 8h 05m) as saved membership revision 2. The Project's in-project values follow the saved revision.",
-      "negative": "The files stay on disk. Library quality, Target usable totals, the Project's other runs and its rejection records are unchanged."
+      "spec": "066-view-selection VSEL-FR-10, VSEL-FR-12, VSEL-FR-14, VSEL-AC-30; 065-project-goals PRJ-FR-04; D-W94, D-W100",
+      "action": "Exclude six 30 Sep frames from the Project, restore and re-exclude one, read the totals and Apply changes.",
+      "expect": "The 30 Sep session shows the updated included-frame count, and the Project's in-project totals reflect its exclusions. The Apply sheet lists the exact frames added or removed from the View.",
+      "negative": "Files stay on disk until separately approved custody operations. Library quality, Target totals and another Project's inputs remain unchanged."
     },
     {
       "flowStep": "D5",
       "owner": "066-view-selection",
       "journeyStep": "J22/S11, J22/S11a, J22/S11b, J22/S13",
-      "spec": "066-view-selection VSEL-FR-11, VSEL-FR-15, VSEL-AC-05, VSEL-AC-11, VSEL-AC-23; 067-frame-review PIX-FR-13, PIX-FR-14, PIX-AC-12, PIX-AC-16; 064-library-inventory LIB-FR-08; 065-project-goals PRJ-AC-08; D10, D-W42, D-W44, D-W54",
-      "action": "Mark the included frames usable with the named scope, reject and re-pick a frame with hotkeys, reject a frame for this Project only and clear it, and mark the excluded frames in the grid.",
-      "expect": "The bulk confirmation names library scope, and Target usable integration rises by the marked total. A library reject leaves the draft at once with the reason Rejected, and a Project-only reject lowers only this Project's in-project value.",
-      "negative": "Hotkey marks ask for no confirmation and change no saved membership revision. A Project-only reject changes no library total."
+      "spec": "066-view-selection VSEL-FR-12, VSEL-FR-15; 067-frame-review PIX-FR-13, PIX-FR-14, PIX-AC-12, PIX-AC-16; 064-library-inventory LIB-FR-17, LIB-FR-20; D-W78, D-W79, D-W100",
+      "action": "Check that the Project's Ready sessions hold no Unreviewed frame, reject and re-pick a frame with hotkeys, and inspect the Project's pending changes after a library mark reaches it.",
+      "expect": "The Project's Ready sessions hold no Unreviewed frame, and Needs review lists none of them. Library marks are global; a rejection reaching an open Project is a pending change labelled with its source.",
+      "negative": "Single-frame hotkey marks do not ask for confirmation or create a Project membership revision. There is no Project-only reject, and a library mark does not mutate the View before Apply."
     },
     {
       "flowStep": "D6",
@@ -187,226 +196,208 @@
       "flowStep": "E1",
       "owner": "068-calibration-inputs",
       "journeyStep": "J23/S1, J23/S2, J23/S3, J23/S4a, J23/S7a",
-      "spec": "068-calibration-inputs CAL-FR-01, CAL-FR-02, CAL-FR-03, CAL-FR-09, CAL-FR-10, CAL-AC-01, CAL-AC-11, CAL-AC-14; D13, D-W5, D-W37, D-W55; P-CAL3 (harness v5, masters only; supersedes the CAL-FR-04 raw-set handoff)",
-      "action": "Move the run to Calibrate, open Review matches, read Why this match for an automatic flat, and check that every assigned input is a master. In a second run, turn automatic assignment off and accept a suggestion.",
-      "expect": "Every fully compatible match is assigned automatically and the readiness line reads every group matched. Review matches lists each light group and calibration type as Automatic with its compatible, incompatible and unknown criteria, and every assigned input is a master from the Calibration library. With automatic assignment off, matches read Suggested until accepted, then Accepted.",
-      "negative": "No match with an unknown or incompatible criterion is assigned automatically, and another camera's inputs are never candidates. No temperature tolerance is applied unless shown, no suggestion is a handoff input before acceptance, and no master is written."
+      "spec": "068-calibration-inputs CAL-FR-01, CAL-FR-03, CAL-FR-09, CAL-FR-19, CAL-FR-20, CAL-FR-21, CAL-FR-22; 064-library-inventory LIB-FR-23, LIB-FR-24; D-W101, D-W102, D-W103, D-W104, D-W105",
+      "action": "Import light sessions with compatible flats, darks and bias, read each import-review match state, then open the session's calibration details.",
+      "expect": "A fully compatible match is pinned automatically on the session. Review shows each kind as pinned automatically, suggested for confirmation, or not found; a settled session has a pin or explicit No choice for every kind.",
+      "negative": "Unknown or incompatible evidence and matches outside their windows are never pinned automatically. Dark flats are never matched or assigned, and calibration does not wait for a Project step."
     },
     {
       "flowStep": "E2",
       "owner": "068-calibration-inputs",
       "journeyStep": "J23/S5, J23/S6, J23/S7",
-      "spec": "068-calibration-inputs CAL-FR-03, CAL-FR-05, CAL-FR-08, CAL-FR-09, CAL-AC-02, CAL-AC-03, CAL-AC-06; 066-view-selection VSEL-FR-03; D-W3, D-W5, D-W49, D-W50",
-      "action": "In Review matches, replace 24 Sep's automatic 30 Sep flat with the 26 Sep set, record a scoped exception with a reason, then check a second run in the same Project.",
-      "expect": "The 26 Sep set shows its optical-train state as unknown, 24 Sep reads Needs review and preparation review lists it as unresolved with its choices. After the exception the row reads Excepted with the criterion and the reason. The second run shows no exception and assigns the 30 Sep set automatically.",
-      "negative": "The flat set's evidence is unchanged and the exception makes it compatible nowhere else. The unresolved flat is not counted as a handoff input, and the 30 Sep set is not reassigned while the user's replacement stands."
+      "spec": "068-calibration-inputs CAL-FR-05, CAL-FR-19, CAL-FR-20, CAL-FR-21; 064-library-inventory LIB-FR-23, LIB-FR-25; D-W101, D-W102, D-W103, D-W105, D-W106",
+      "action": "Review a suggested flat for a light session, confirm or reassign it, and inspect that session's pinned assignment after calibration arrives later.",
+      "expect": "The session shows the chosen flat and its evidence. Calibration imported later fills only sessions still waiting, never replaces a pin, and a user's reassignment is retained.",
+      "negative": "A suggestion remains unpinned until confirmed. Reassignment does not rewrite calibration evidence or silently change another session or a Closed or Archived Project."
     },
     {
       "flowStep": "E3",
       "owner": "069-application-handoff",
       "journeyStep": "J23/S8, J23/S9",
-      "spec": "069-application-handoff PREP-FR-01, PREP-FR-02, PREP-FR-04, PREP-AC-07, PREP-AC-11; D04",
-      "action": "Choose the Siril profile and locate its executable; in a second run, choose Open in... instead.",
-      "expect": "The profile shows its capability evidence for input, layout, configuration, product-input kinds and input-write behavior, and names unsupported configuration. Open in... asks for an executable and arguments, reads as not a verified profile, blocks Linked View and Direct source, and offers isolated Copy or supported Clone.",
-      "negative": "No capability is claimed as verified without evidence, no profile claims that renaming files overrides headers, and nothing is launched."
+      "spec": "069-application-handoff PREP-FR-01, PREP-FR-02, PREP-AC-23, PREP-AC-24; D-W83, D-W98",
+      "action": "Choose the Siril profile for the Project's View and locate its executable; then select a generic Open in… application instead.",
+      "expect": "The View application dropdown lists detected or added applications. Profile capability evidence and unsupported configuration are named; Open in… asks for an executable and arguments and is not described as a verified profile.",
+      "negative": "No capability is claimed as verified without evidence, no profile claims that renaming files overrides headers, and choosing an application launches nothing."
     },
     {
       "flowStep": "E4",
       "owner": "069-application-handoff",
       "journeyStep": "J23/S10, J23/S11, J24/S14, J24/S16",
-      "spec": "069-application-handoff PREP-FR-03, PREP-AC-06; D15",
-      "action": "Compare the catalog and header focal length for 28 Sep, accept the source-header value in the main run, and choose isolated patched copies in the check run.",
-      "expect": "The review names the value the application will read and the effective handoff value. Only the isolated copies carry the patched value.",
-      "negative": "No correction is claimed as delivered while the tool reads the original value. Originals and links are never patched and stay byte-identical."
+      "spec": "069-application-handoff PREP-FR-08, PREP-FR-09, PREP-AC-06; 064-library-inventory LIB-FR-12; D-W93, D-W98, D-W100; HARNESS-V5-FEEDBACK-R1.md Round 9 C15 (PREP-FR-03 conflicts, J23/G9)",
+      "action": "Open the Apply sheet and read its Corrected values section, which lists the corrections the held sessions recorded at ingestion, then Apply the reviewed View.",
+      "expect": "The Apply sheet gives the count of corrected values (\"N corrected values\") and lists each with its session, field, header value and corrected value, naming whether the application reads them through its configuration or as isolated patched copies. Apply delivers every already-recorded correction by that route.",
+      "negative": "Apply offers no per-value choice and creates or changes no catalog correction. No original or symlink target is patched, and no correction is claimed as delivered while the tool reads the original value."
     },
     {
       "flowStep": "F1",
       "owner": "069-application-handoff",
       "journeyStep": "J24/S1, J24/S1a",
-      "spec": "069-application-handoff PREP-FR-04, PREP-FR-05, PREP-AC-04, PREP-AC-08; D04",
-      "action": "Read the input modes, try Direct source, then return to Linked View and confirm a hardlink choice.",
-      "expect": "Each mode states its semantics and storage, and Linked View is suggested. Direct source passes exact paths, or refuses a whole-folder handoff that holds excluded frames and offers supported alternatives. The hardlink confirmation names its volume, permission and filesystem limits.",
-      "negative": "No overinclusive handoff is accepted, and the link type does not change without explicit confirmation."
+      "spec": "069-application-handoff PREP-FR-04, PREP-AC-08, PREP-AC-25; D-W81, D-W98",
+      "action": "Read the Project's input modes and choose Symlinks.",
+      "expect": "Symlinks and Copies state their semantics and storage, Symlinks is the default, and Copies says when the volume supports clones.",
+      "negative": "No other input mode is offered, and the mode does not change without the user's explicit choice and Apply."
     },
     {
       "flowStep": "F2",
       "owner": "069-application-handoff",
       "journeyStep": "J24/S4, J24/S5, J24/S6, J26/S6",
-      "spec": "069-application-handoff PREP-FR-06, PREP-AC-01, PREP-AC-02, PREP-AC-09; D-W3, D-W51",
-      "action": "Choose a parent where the run folder already exists, lose the chosen parent, then choose Work/Processing. Later, read a new run's suggested location.",
-      "expect": "The existing folder and the unavailable parent each prompt another choice. The run folder is named from the Project and the run under the chosen parent, and the next run's suggestion uses the last chosen parent.",
-      "negative": "The existing folder and its content are not reused or cleared, and no other drive or parent is substituted silently."
+      "spec": "069-application-handoff PREP-FR-06, PREP-FR-08, PREP-AC-01, PREP-AC-02, PREP-AC-09; D-W98, D-W100",
+      "action": "Choose a processing location whose Project folder already exists, lose the selected parent, then explicitly choose Work/Processing. Later read the next Project's suggested location.",
+      "expect": "An existing Project folder and an unavailable parent each prompt another choice. The selected parent contains the Project folder with View/, Processing/ and Output/, and the next location suggestion uses the last chosen parent.",
+      "negative": "Existing folders and their contents are not reused or cleared, and no other drive or parent is substituted silently."
     },
     {
       "flowStep": "F3",
       "owner": "069-application-handoff",
       "journeyStep": "J24/S7, J24/S14, J24/S17",
-      "spec": "069-application-handoff PREP-FR-07, PREP-AC-01, PREP-AC-21; D-W51, D-W67",
-      "action": "Read the Results folder of the main run, override the Results parent in the check run, and prepare a second revision.",
-      "expect": "Results go to the sibling Run Results folder outside the run folder, and an override parent gets the run's Results folder under it. Both prepared revisions share the one Results folder, which is recorded for Result discovery.",
-      "negative": "The Results folder is never inside the run folder, and the override parent itself is not used as the Results folder."
+      "spec": "069-application-handoff PREP-FR-06, PREP-FR-07, PREP-AC-01; 070-results-reuse RES-FR-01, RES-FR-06; D-W93, D-W98",
+      "action": "Review the Project folder layout and the selected tool's working directory.",
+      "expect": "The Project folder contains View/, Processing/<Tool>/ and Output/. The tool's working and output files go under Processing/<Tool>/, and results are kept in Output/.",
+      "negative": "No separate Run Results folder or Results-parent override is offered. Tools never write into Output/."
     },
     {
       "flowStep": "F4",
       "owner": "069-application-handoff",
       "journeyStep": "J24/S8, J24/S13",
-      "spec": "069-application-handoff PREP-FR-04, PREP-FR-08, PREP-AC-01, PREP-AC-03, PREP-AC-13; 068-calibration-inputs CAL-FR-08; D02, D-W5, D-W9",
-      "action": "Open Review preparation and confirm the exact membership, then in the check run meet a destination that cannot link.",
-      "expect": "The review shows the Project, subject, selection, profile, source references, calibration assignments and exception, excluded count, paths, mode, operation count, footprint and free space, with each check read. Where linking is unavailable, Clone, Copy and Direct source are offered with their footprints.",
-      "negative": "Nothing is written before Prepare, no unknown or omitted input counts as prepared, and no Suggested or Needs review calibration is handed off. A link plan never becomes a copy silently."
+      "spec": "069-application-handoff PREP-FR-08, PREP-FR-09, VSEL-FR-14, VSEL-AC-30, VSEL-AC-31; D-W100",
+      "action": "Open Apply and review the exact desired Project inputs, calibration assignments, exclusions, layout, mode, paths and required space before confirming.",
+      "expect": "The sheet shows changes and their sources, the new View as a folder tree, unresolved and offline originals, space, operation count and tool-specific layout notes. Where Symlinks cannot be used, Copies is offered explicitly.",
+      "negative": "Nothing is written before Apply. Unknown or omitted inputs never count as placed, and a link plan never becomes a copy silently."
     },
     {
       "flowStep": "F5",
       "owner": "069-application-handoff",
       "journeyStep": "J24/S9, J24/S15, J24/S15a, J24/S16, J24/S17",
-      "spec": "069-application-handoff PREP-FR-09, PREP-FR-11, PREP-AC-05, PREP-AC-12, PREP-AC-14, PREP-AC-21; 070-results-reuse RES-FR-07, RES-AC-07; D09, D-W51, D-W67",
-      "action": "Prepare the run, prepare the check run with three blocked inputs while trying Mark processing complete, Retry while one source changes after its snapshot, restore it and Retry, then prepare a second revision.",
-      "expect": "Prepared appears only when every entry matches the membership and its source snapshot. The partial outcome reads 53 prepared and 3 blocked, then 55 and 1 with drift named, and Retry ends at 56. The second revision lands in a new rev 2 folder beside the first.",
-      "negative": "An acknowledgment is not success and no verified Open is offered on Partial. Complete is refused for this run while its preparation runs and an unrelated run is not blocked. A drifted item never reads Prepared, and no existing folder is reused or cleared."
+      "spec": "069-application-handoff PREP-FR-06, PREP-FR-09, PREP-AC-05, PREP-AC-14; 066-view-selection VSEL-FR-14; D-W100",
+      "action": "Apply the Project's desired inputs, retry after restoring an offline or drifted source, and apply another change to rebuild the View.",
+      "expect": "Apply reports Running and progress, names blocked entries, and reports success only after every new View entry matches the Project inputs and source snapshot. A retry places an entry only after fresh source verification.",
+      "negative": "An acknowledgement is not success. Apply never reuses or clears the current View or creates a revision-numbered folder, and failure leaves the current View unchanged."
     },
     {
       "flowStep": "F6",
       "owner": "069-application-handoff",
       "journeyStep": "J24/S10, J24/S10a, J24/S11",
-      "spec": "069-application-handoff PREP-FR-10, PREP-AC-10, PREP-AC-15; D19",
-      "action": "Open with a missing executable, open after a linked input changed in place, then restore it, open Siril and quit it.",
-      "expect": "Choose application and Reveal run folder are offered. A changed entry refuses the launch and is named against its preparation snapshot. Open re-verifies every entry before launching, and the launch is recorded separately from processing.",
-      "negative": "The run stays Prepared, Siril never launches on changed bytes, and quitting Siril does not mark the run Complete."
+      "spec": "069-application-handoff PREP-FR-10, PREP-AC-10, PREP-AC-15; D-W81, D-W100",
+      "action": "Open the Project View with a missing executable, after a linked input changes, then restore the input and launch the application.",
+      "expect": "Choose application and Reveal View are offered. Open re-verifies every entry before launch; a changed entry refuses launch and is named against its Apply snapshot.",
+      "negative": "The Project remains open and its View unchanged. The external application never launches on changed bytes, and quitting it does not mark the Project complete or closed."
     },
     {
       "flowStep": "G",
       "owner": "066-view-selection",
-      "journeyStep": "J25/S1–S7, J25/S2a, J25/S2b, J25/S5a",
-      "spec": "066-view-selection VSEL-FR-08, VSEL-FR-12, VSEL-FR-13, VSEL-FR-14, VSEL-FR-16, VSEL-FR-17, VSEL-AC-06, VSEL-AC-12, VSEL-AC-15, VSEL-AC-20, VSEL-AC-24; 064-library-inventory LIB-FR-06, LIB-FR-08, LIB-AC-15; 065-project-goals PRJ-AC-26; 069-application-handoff PREP-FR-11; 070-results-reuse RES-FR-07, RES-AC-08; D02, D08, D09, D16, D19, D-W34, D-W45, D-W66",
-      "action": "Index two new sessions, one also copied to a second Captures location, make a member unreadable and re-confirm another member's Target. Mark the run Complete, meet and decline Reopen, then Reopen, keep the run unchanged, accept one addition, decline the rest and save. Finally change one copy of a copied frame and rescan.",
-      "expect": "The run offers Add 2 new sessions, the copied frames count once naming both copies, and a Complete run asks for Reopen first. The refresh diff lists additions with reasons, the unreadable member as Unavailable and the re-confirmed member as no longer matching its subject, with exclusions kept. Save run commits revision 3, which survives restart and needs its own review before preparation, and the changed copy reads as conflicting copies.",
-      "negative": "Membership never changes without approval, and no member leaves without an explicit removal. The prepared revision and the inputs Siril reads stay identical, and no frame is counted twice."
+      "journeyStep": "J25/S1, J25/S2, J25/S2a, J25/S5, J25/S6, J25/S7",
+      "spec": "066-view-selection VSEL-FR-12, VSEL-FR-14, VSEL-FR-21, VSEL-AC-30, VSEL-AC-31, VSEL-AC-29; 064-library-inventory LIB-FR-09, LIB-FR-11; D19, D-W94, D-W100",
+      "action": "Index two new matching sessions, make an existing session unreadable and reconfirm another session's Target. Review the resulting pending changes, then apply after every required original is online.",
+      "expect": "Matching sessions appear as suggestions and are not added automatically. Changes to held sessions and external changes appear with their source; Apply lists exact additions and unresolved inputs, and a successful Apply rebuilds from originals.",
+      "negative": "No Refresh or Reopen action exists. Membership changes only by user action, no unresolved session is silently removed, and the current View is unchanged before Apply succeeds."
     },
     {
       "flowStep": "H1",
       "owner": "070-results-reuse",
       "journeyStep": "J26/S1, J26/S1a",
-      "spec": "070-results-reuse RES-FR-01, RES-AC-01, RES-AC-16; 069-application-handoff PREP-FR-07; D-W4, D-W51, D-W67",
-      "action": "Open the run's Results step, then open it again after a second prepared revision wrote to the same Results folder.",
-      "expect": "Candidates come from the run's Results folder, each with type, path, availability, processing state where known, and the prepared revision it came from. A growing file reads Pending, and recognized intermediates are listed apart.",
-      "negative": "Nothing is auto-accepted or claimed to come from the full selection, and nothing inside the run folder is discovered."
+      "spec": "070-results-reuse RES-FR-01, RES-AC-01, RES-AC-28; 069-application-handoff PREP-FR-07; D-W93, D-W98",
+      "action": "Open the Project's Output step, then rerun the tool so it overwrites a file under Processing/.",
+      "expect": "Output lists each file in Output/ with kind, channel, state and availability where known; a growing file reads Still being written. Tool files stay in Processing/.",
+      "negative": "No file is auto-accepted, attributed to a run or revision, or discovered from inside View/ or Processing/. A tool rerun does not change Output/."
     },
     {
       "flowStep": "H2",
       "owner": "070-results-reuse",
       "journeyStep": "J26/S2, J27/S3",
-      "spec": "070-results-reuse RES-FR-02, RES-FR-03, RES-AC-02; D-W4",
-      "action": "Click Attach Result on the Results step and attach a TIFF saved elsewhere as a Final image; later attach another image to the Complete run.",
-      "expect": "Attach Result is shown on the step beside the discovered list. The file is listed as attached, its run association reads User-linked and its input-frame lineage reads Unknown.",
-      "negative": "The lineage is never shown as Tool-recorded without tool evidence, and attaching does not reopen a Complete run."
+      "spec": "070-results-reuse RES-FR-02, RES-FR-06, RES-AC-02; 071-storage-custody STO-FR-07; D-W93, D-W98",
+      "action": "Choose Copy to Output… on the Project's Output step and select a TIFF from Processing/ as a Final image.",
+      "expect": "The verified copy appears in Output/ as a Result. The file in Processing/ remains unchanged, and the row exposes Kind and Channel fields.",
+      "negative": "No Attach Result action, User-linked association or lineage is recorded, and an existing Output file is never overwritten."
     },
     {
       "flowStep": "H3",
       "owner": "070-results-reuse",
-      "journeyStep": "J26/S3, J26/S3a",
-      "spec": "070-results-reuse RES-FR-04, RES-AC-03, RES-AC-10; D19",
-      "action": "Inspect three products, change one in place before accepting, then inspect it again and accept it.",
-      "expect": "The accepted products appear on the run, the Project and the Target, read protected Keep, and show the SHA-256 recorded at acceptance. A product changed since inspection is refused until inspected again.",
-      "negative": "Acceptance upgrades no lineage, claims no use of all planned frames, and never records bytes that were not inspected."
-    },
-    {
-      "flowStep": "H3a",
-      "owner": "070-results-reuse",
-      "journeyStep": "J26/S4, J26/S4a, J26/S5, J26/S6, J26/S7, J26/S7a",
-      "spec": "070-results-reuse RES-FR-04, RES-FR-05, RES-AC-04, RES-AC-05, RES-AC-09, RES-AC-13, RES-AC-14; D04, D-W4, D-W8, D-W56",
-      "action": "Create a run in the Project from accepted Results through its input filters, read another Project's product from another rig, choose a profile, prepare and open the product run, then change an accepted product in place with its size and mtime preserved and restore it.",
-      "expect": "The picker groups products by originating Project and run with kind, subject, rig, path, availability and lineage. The run lists two product inputs apart from raw sessions, and an unsupported product kind is refused by name. The rehash flags the changed product as drifted and the picker stops offering it until the bytes are restored.",
-      "negative": "No raw integration is added and the Project gains no members. Nothing is converted, combined or replaced silently, equal size and mtime never stand in for content, and a drifted product is not offered or re-accepted."
+      "journeyStep": "J26/S1, J26/S2, J26/S3",
+      "spec": "070-results-reuse RES-FR-01, RES-FR-02, RES-AC-01; D-W93, D-W98",
+      "action": "Set Kind and Channel on a Result row in Output/, then inspect the Result after it is saved there.",
+      "expect": "The row shows the selected Kind and Channel and remains a Result because every file in Output/ is a Result.",
+      "negative": "There is no Accept, Ignore, Keep protection, acceptance digest, input lineage or Result-to-Project input action."
     },
     {
       "flowStep": "H4",
       "owner": "068-calibration-inputs",
       "journeyStep": "J26/S8, J26/S8a, J26/S8b, J26/S8c, J26/S9, J26/S9a, J26/S9b",
-      "spec": "068-calibration-inputs CAL-FR-06, CAL-FR-07, CAL-FR-08, CAL-AC-04, CAL-AC-05, CAL-AC-07, CAL-AC-08, CAL-AC-09, CAL-AC-10, CAL-AC-12; 070-results-reuse RES-FR-01, RES-AC-15; D05, D19, D-W5, D-W55",
-      "action": "Meet the once-only Add to calibration library offer in the run's Results step and dismiss it, then adopt the master from Calibration. Meet an occupied destination path and source changes after review and before registration, adopt into a durable calibration destination, then change and restore the adopted copy.",
-      "expect": "The offer appears once in the Results step and does not return after Dismiss, while Calibration still lists the candidate. The occupied path is refused and both source changes block adoption with drift named. The master registers with its provenance only after its copy and source match the reviewed digest; a changed adopted copy reads drifted until its bytes are restored.",
-      "negative": "A detected master is never assigned or suggested before adoption. No existing file is overwritten, no unregistered copy is offered for reuse, the generated source stays in the Results folder, and a drifted master is not assigned, accepted or re-adopted."
+      "spec": "068-calibration-inputs CAL-FR-06, CAL-FR-07, CAL-FR-08, CAL-FR-13, CAL-FR-14, CAL-FR-16, CAL-FR-17, CAL-AC-08, CAL-AC-09, CAL-AC-29; 070-results-reuse RES-FR-11, RES-AC-15; 064-library-inventory LIB-FR-23; 071-storage-custody STO-FR-12; D-W98, D-W103, D-W113, D-W119",
+      "action": "Read the one-time offer for a generated calibration master found in Processing/, adopt it into the Calibration library, clearing PlateVault's own unregistered copy from its destination, and inspect the adopted master and its digest-bound state.",
+      "expect": "The Output step offers a generated master once; the Calibration library lists the adopted version with its provenance and date. Adoption refuses PlateVault's own unregistered copy at the master's destination, names it and offers a reviewed Move to Trash, then retries. A changed adopted copy reads drifted until its reviewed bytes are restored. A session that pins the changed master keeps the pin and reads the file as changed, with Reassign….",
+      "negative": "A detected candidate is never assigned before adoption. Adoption never overwrites a destination, and a drifted master is not assigned, accepted or re-adopted. Nothing switches to another master by itself."
     },
     {
       "flowStep": "I1",
       "owner": "070-results-reuse",
-      "journeyStep": "J24/S15, J25/S2b, J27/S1, J27/S2, J27/S3, J27/S12",
-      "spec": "070-results-reuse RES-FR-06, RES-FR-07, RES-AC-06, RES-AC-07, RES-AC-08; 065-project-goals PRJ-FR-20; 066-view-selection VSEL-FR-17, VSEL-AC-20; D09, D-W26, D-W34",
-      "action": "Mark processing complete on a run without a Result and on the main run, try edits on a Complete run, meet Add N new sessions on a Complete run, and Reopen a Complete run. Separately, try Mark processing complete while the run's preparation is running.",
-      "expect": "Complete is recorded with or without a Result, and Clean up is offered as a separate action. Membership edits and Add N new sessions ask for an explicit Reopen first, while notes and Result acceptance go through. After Reopen the run is open with its decisions unchanged.",
-      "negative": "Completion removes nothing and claims no external success. Complete is refused only while an app-owned preparation or storage mutation affecting this run is running, and notes, Result acceptance, reviewed cleanup and reference repair do not reopen it."
+      "journeyStep": "J24/S15, J27/S1, J27/S2, J27/S3, J27/S12",
+      "spec": "070-results-reuse RES-FR-06, RES-FR-07, RES-AC-06, RES-AC-07; 065-project-goals PRJ-FR-14, PRJ-FR-25; D-W93, D-W97, D-W98, D-W100",
+      "action": "Close an open Project with an empty Output/ after resolving any pending changes, and try to close it while Apply is running.",
+      "expect": "Closing needs neither a Result nor evidence that an external job stopped. Output/ is kept, and Wrap up is refused while Apply is running on that Project.",
+      "negative": "Close does not remove Output/ or claim external processing success. A Closed or Archived Project cannot be edited or reopened."
     },
     {
       "flowStep": "I2",
       "owner": "071-storage-custody",
-      "journeyStep": "J27/S4",
-      "spec": "071-storage-custody STO-FR-01, STO-FR-03, STO-AC-01, STO-AC-20; 069-application-handoff PREP-FR-14, PREP-AC-19; D-W26, D-W43",
-      "action": "Open Clean up on a Complete run.",
-      "expect": "Only the entries the run's preparation revisions created are listed, here one Prepared hardlinks group with count, size, proposed action and Inspect files. The group starts selected.",
-      "negative": "Nothing in the Results folder is listed, no original capture or library frame is a candidate, the selection never covers the whole run directory, and Clean up offers no move of rejected frames."
+      "journeyStep": "J27/S4, J27/S8, J27/S10, J34/S3, J34/S3b",
+      "spec": "071-storage-custody STO-FR-01, STO-FR-03, STO-AC-01, STO-AC-20; 069-application-handoff PREP-FR-16; 065-project-goals PRJ-FR-14; D-W97, D-W99, D-W100",
+      "action": "Open Clean up in the Project's Wrap up and inspect the offered View entries.",
+      "expect": "Clean up lists only the View entries PlateVault placed and what View (previous)/ still holds, grouped with counts, sizes, proposed actions and Inspect files. The View-removal offer starts selected for Copies and unselected for Symlinks.",
+      "negative": "Nothing in Output/ or Processing/ is listed. No original capture or library frame is a candidate, and the selection never covers the whole Project directory."
     },
     {
       "flowStep": "I3",
       "owner": "071-storage-custody",
       "journeyStep": "J27/S5",
-      "spec": "071-storage-custody STO-FR-02; D-W3",
-      "action": "Click Inspect files and deselect one prepared entry.",
-      "expect": "Each entry shows its path, role, other run or Project references, retained-original evidence and estimated bytes, and the group count drops by one.",
-      "negative": "Link sizes are not presented as guaranteed reclaimed bytes."
+      "spec": "071-storage-custody STO-FR-02, STO-FR-04, STO-AC-01; D19, D-W97, D-W100",
+      "action": "Inspect Clean up files and deselect one View entry.",
+      "expect": "Each entry shows its path, role, other Project references, retained-original evidence and estimated bytes; group counts update when an entry is deselected.",
+      "negative": "Link sizes are not presented as guaranteed reclaimed bytes, and inspection alone moves no file."
     },
     {
       "flowStep": "I4",
       "owner": "071-storage-custody",
       "journeyStep": "J27/S7, J27/S10, J27/S11",
-      "spec": "071-storage-custody STO-FR-04, STO-AC-04, STO-AC-08; D19",
-      "action": "Click Review cleanup on the hardlink run, on a copy run on a location without Trash, and on a symlink run.",
-      "expect": "The review lists exactly the selected and retained entries with Send to OS Trash, and Trash support per location with movable and blocked counts. A last-copy hardlink is blocked for insufficient retained-original proof, and each symlink shows its identity and target path.",
-      "negative": "No entry with stale identity, drift, missing proof, an unavailable source or ambiguous ownership is approved. No symlink target or target directory is followed."
+      "spec": "071-storage-custody STO-FR-04, STO-FR-05, STO-AC-08; D19, D-W81, D-W97, D-W100",
+      "action": "Review selected Copies and Symlinks View entries before confirming Clean up.",
+      "expect": "The review lists exactly selected entries with Send to OS Trash and Trash support per location. Copies require verified retained originals; each symlink shows its identity and target path and is removed only after a no-follow check.",
+      "negative": "An entry with stale identity, drift, missing proof, unavailable source or ambiguous ownership is not approved. No symlink target or target directory is followed."
     },
     {
       "flowStep": "I5",
       "owner": "071-storage-custody",
       "journeyStep": "J27/S8, J27/S9, J27/S10, J27/S11",
-      "spec": "071-storage-custody STO-FR-04, STO-FR-05, STO-AC-03, STO-AC-08, STO-AC-09, STO-AC-15; D09, D19",
-      "action": "Send the selected entries to the Trash after one retained original changes, put one entry back from the OS Trash, try a location without safe Trash, and remove symlink entries.",
-      "expect": "Per-item outcomes and an exact partial summary name each blocked entry, the run records removed and remaining entries, and removed entries are newly in the OS Trash. The location without Trash refuses its items and offers Keep files and Reveal location.",
-      "negative": "Link targets are not followed, changed and protected files stay in place, reviewed cleanup does not reopen the run, and no permanent-delete fallback exists."
+      "spec": "071-storage-custody STO-FR-04, STO-FR-05, STO-AC-03, STO-AC-08, STO-AC-09, STO-AC-15; D19, D-W81, D-W97, D-W100",
+      "action": "Confirm reviewed Clean up after a retained original changes, on a location without safe Trash, and for selected symlink entries.",
+      "expect": "Per-item outcomes and an exact partial summary name every blocked entry. Approved copies go to OS Trash and verified PlateVault symlinks are removed with no-follow checks.",
+      "negative": "Link targets are not followed, changed or protected files stay in place, and no permanent-delete fallback exists."
     },
     {
       "flowStep": "J",
       "owner": "071-storage-custody",
-      "journeyStep": "J28/S1–S10, J28/S7a, J28/S9a, J34/S5, J34/S11",
-      "spec": "071-storage-custody STO-FR-06, STO-FR-07, STO-FR-08, STO-FR-11, STO-FR-13, STO-AC-05, STO-AC-07, STO-AC-10, STO-AC-14, STO-AC-17; 066-view-selection VSEL-FR-09; D06, D09, D11, D19, D-W20, D-W26, D-W46",
-      "action": "From a Done Project's Done / Archive sheet, plan an archive, meet an impostor volume, choose the reference mode, approve, interrupt and retry, change one source before retirement, repair a blocked reference, resolve the drift, and unplug the archive later.",
-      "expect": "The plan lays out destinations by the naming templates and keeps a session another open Project's run uses. Per-item journaled phases show, and a source is retired only after its destination and references verify while it still matches its snapshot. Membership stays fixed, and archived inputs read Offline after unplugging.",
-      "negative": "No source is retired on failure, uncertainty or drift, and drift retains both versions. Hardlinks are not converted implicitly, Retry does not infer from filename presence, and Offline inputs are refused, not omitted."
+      "journeyStep": "J28/S1, J28/S1a, J28/S2, J28/S3, J28/S4, J28/S5, J28/S6, J28/S7, J28/S7a, J28/S8, J28/S9, J28/S9a, J28/S9b, J28/S9c, J28/S10, J28/S11, J28/S11a, J28/S12, J28/S13, J34/S5, J34/S11",
+      "spec": "071-storage-custody STO-FR-06, STO-FR-07, STO-FR-08, STO-FR-11, STO-FR-13, STO-AC-05, STO-AC-07, STO-AC-10, STO-AC-14, STO-AC-17, STO-AC-27, STO-AC-29; 065-project-goals PRJ-FR-14, PRJ-FR-25; 066-view-selection VSEL-FR-09; 064-library-inventory LIB-FR-17; D06, D19, D-W97, D-W100, D-W111, D-W120",
+      "action": "From the Project's Wrap up Archive step, plan a verified archive transfer, meet an impostor destination, approve, interrupt and retry, change a source before retirement, repair a blocked reference, resolve the drift, and unplug the archive later. From Sessions, try to select a session an open Project holds and archive a session in no Project.",
+      "expect": "The review lays out destinations by naming templates and keeps a session held by another open Project; a Closed or Archived Project keeps none. Per-item journaled phases show, and a source is retired only after destination and references verify while it still matches its snapshot. The Project becomes Archived only when the Archive transfer succeeds; archived inputs read Offline if disconnected. Archive also repoints the symlinks of a Closed or Archived Project's kept View to the moved originals and records it, leaving that Project unchanged. Sessions › Archive… follows the same rule: a session an open Project holds can't be selected, and a session in no Project goes through the same reviewed transfer.",
+      "negative": "No source is retired on failure, uncertainty or drift, and drift retains both versions. Retry does not infer from filename presence, and offline inputs are refused rather than omitted. No Reopen or archived-session restore action exists."
     },
     {
       "flowStep": "K",
       "owner": "072-observing-plans",
-      "journeyStep": "J29/S1–S13, J29/S7a",
-      "spec": "072-observing-plans PLAN-FR-01–PLAN-FR-11, PLAN-AC-01–PLAN-AC-11, PLAN-TGT-FR-14; D07, D18, D-W16, D-W36",
-      "action": "Plan windows from a Target, set criteria, switch site, try reminders without a default site, set the default and lead time, deny then grant permission, receive one reminder, restart inside its lead time, export and re-check the .ics, plan a Target outside any Project and from the Project page, and read Tonight on Home.",
-      "expect": "Windows name their site and time zone, beside the Project's per-channel goal gap. Reminders start only after opt-in and name the default site, denial stays visible with Settings and Retry, and a delivered reminder stays delivered after restart. The .ics holds exactly the selected windows.",
+      "journeyStep": "J29/S1, J29/S2, J29/S3, J29/S3a, J29/S4, J29/S5, J29/S6, J29/S7, J29/S7a, J29/S8, J29/S9, J29/S10, J29/S11, J29/S12, J29/S13",
+      "spec": "072-observing-plans PLAN-FR-01, PLAN-FR-08, PLAN-FR-09, PLAN-FR-10, PLAN-FR-11, PLAN-FR-12, PLAN-AC-01, PLAN-AC-11, PLAN-AC-12, PLAN-TGT-FR-14; 065-project-goals PRJ-FR-04, PRJ-FR-07, PRJ-FR-17; D-W16, D-W88, D-W89, D-W96",
+      "action": "Plan windows from a Target, set criteria, switch site, configure and use reminders, export and re-check the .ics, plan a Target outside a Project and from a Project page, and read Tonight on Home.",
+      "expect": "Windows name their site and time zone, beside the Project's goal gap. Reminders start only after opt-in and name the default site; denial stays visible with Settings and Retry. A delivered reminder stays delivered after restart, and the .ics holds exactly the selected windows.",
       "negative": "No weather or readiness claims, no reminder for another site, no repeat delivery of a recorded identity, and no account or hosted subscription. Planning creates no Project record."
-    },
-    {
-      "flowStep": "L",
-      "owner": "071-storage-custody",
-      "journeyStep": "J31/S1, J31/S3, J31/S5, J31/S6, J31/S9, J31/S11",
-      "spec": "071-storage-custody STO-IMP-FR-01, STO-IMP-FR-03, STO-IMP-FR-04, STO-IMP-FR-05, STO-IMP-AC-01, STO-IMP-AC-02, STO-IMP-AC-03, STO-IMP-AC-05, STO-IMP-AC-06; D-W11",
-      "action": "Reviewed filing is withdrawn under D-W11. Import from a card or folder, and Add existing library folder, replace it.",
-      "expect": "The Import steps cited here stand in for filing: a templated preview, verified Copy or Move, and registration of organized folders in place.",
-      "negative": "No File into library action exists in Sessions or anywhere else, and no journey step exercises reviewed filing."
     },
     {
       "flowStep": "Cross-flow: Location offline",
       "owner": "064-library-inventory",
       "journeyStep": "J19/S15, J21/S8, J28/S11, J28/S11a, J28/S12",
-      "spec": "064-library-inventory LIB-FR-07, LIB-FR-15, LIB-AC-05, LIB-AC-16; 066-view-selection VSEL-FR-09, VSEL-AC-09; D02, D11",
-      "action": "Eject Cold-1, select its offline session in a run, and later review and retire a location that cannot return.",
-      "expect": "The location reads Offline and its sessions keep their last-observed metadata. A selected offline session names its frames as unresolved members with reconnect, locate and remove offered. Retirement follows a review that names everything that references the location.",
-      "negative": "No offline frame reads Missing, no offline session is dropped silently or counted as verified, and retirement changes no file."
+      "spec": "064-library-inventory LIB-FR-07, LIB-FR-15, LIB-AC-05, LIB-AC-16; 066-view-selection VSEL-FR-09, VSEL-FR-14, VSEL-AC-09, VSEL-AC-31; D02, D11, D19, D-W100",
+      "action": "Eject Cold-1, review its offline session while it is held by a Project, and review location retirement while the archive is unavailable.",
+      "expect": "The location reads Offline and keeps last-observed metadata. The Project continues to name its unresolved session and its originals; Apply offers reconnect, locate or explicit removal and lists the offline originals.",
+      "negative": "No offline frame reads Missing, no session is silently dropped or counted as verified, and retirement changes no file."
     },
     {
       "flowStep": "Cross-flow: Partial scan",
@@ -430,9 +421,9 @@
       "flowStep": "Cross-flow: External changes",
       "owner": "064-library-inventory",
       "journeyStep": "J22/S15a, J22/S15b, J25/S7",
-      "spec": "064-library-inventory LIB-FR-09, LIB-FR-11, LIB-AC-14, LIB-AC-15; 067-frame-review PIX-AC-10; D16, D19",
-      "action": "Replace a reviewed frame's bytes in place with its size and mtime preserved and rescan, then restore the reviewed bytes. Change one copy of a frame held in two Captures locations and rescan.",
-      "expect": "The replaced frame reads ChangedContent with its earlier decision kept as history and leaves usable totals until its reviewed bytes return. The changed copy reads as conflicting copies needing review.",
+      "spec": "064-library-inventory LIB-FR-09, LIB-FR-11, LIB-AC-14, LIB-AC-15; 066-view-selection VSEL-FR-12, VSEL-FR-14; 067-frame-review PIX-AC-10; D16, D19, D-W100",
+      "action": "Replace a reviewed frame's bytes in place with size and mtime preserved and rescan, then restore reviewed bytes. Change one copy of a frame held in two Captures locations and rescan.",
+      "expect": "The replaced frame reads ChangedContent, with its earlier decision kept as history and no valid total contribution until reviewed bytes return. The changed copy reads as conflicting copies needing review, and any affected open Project lists a pending change with its source.",
       "negative": "Equal size and mtime never stand in for content, a conflicting copy is not counted twice or substituted, and PlateVault changes neither file."
     },
     {
@@ -445,22 +436,40 @@
       "negative": "No surface asks for an account or a network connection, and Running work never reports the rescan finished before Activity records a durable outcome."
     },
     {
-      "flowStep": "Import landing: lights to Sessions, calibration frames to the Calibration library (with PV-STO)",
+      "flowStep": "Session intake: Target → Rig → Review, Finish review (D-W78)",
       "owner": "064-library-inventory",
-      "journeyStep": "J31/S7",
-      "spec": "064-library-inventory LIB-FR-09, LIB-FR-16, LIB-FR-17, LIB-AC-17; 071-storage-custody STO-IMP-FR-08, STO-IMP-AC-10; D-W24, D-W33",
-      "action": "After a Copy import, open Sessions, the Needs a Target filter and the Calibration library.",
-      "expect": "The imported lights appear as new Unreviewed sessions, the session with no Target is listed under Needs a Target, and the flats and darks appear in the Calibration library.",
-      "negative": "No Inbox or confirm step appears, no flat or dark appears in Sessions, and held, duplicate, still-growing and left-out files are absent from the catalog."
+      "journeyStep": "J19/S8, J19/S9, J19/S10, J31/S3, J31/S5a, J31/S7, J37/S6",
+      "spec": "064-library-inventory LIB-FR-05, LIB-FR-12, LIB-FR-20, LIB-FR-23, LIB-FR-24; 067-frame-review PIX-FR-18; D-W78, D-W101, D-W105; HARNESS-V5-FEEDBACK-R1.md Round 9 C15",
+      "action": "Import or open a session, confirm its Target and rig, read the recorded and corrected values on those steps, review its frames, then Finish review.",
+      "expect": "The intake proceeds Target → Rig → Review. The Target and Rig steps show a Corrections table (Field, Recorded, Corrected; provisional copy, from the prototype) for each value that differs from the recorded one. Finish review is available only when no Unreviewed frame remains; it marks the session Ready, and only Ready sessions can be suggested or added to a Project.",
+      "negative": "No session becomes Ready with unresolved Target, rig or Unreviewed frames, and no Project Review step exists. Metadata corrections are not decided in Apply."
     },
     {
-      "flowStep": "Sessions filters: Needs a Target, Not in any Project, Trashed",
+      "flowStep": "Import landing: lights to Sessions, calibration frames to the Calibration library (with PV-STO)",
       "owner": "064-library-inventory",
-      "journeyStep": "J19/S9a, J19/S10, J14/S7, J34/S8, J34/S10",
-      "spec": "064-library-inventory LIB-FR-17, LIB-FR-18, LIB-AC-18, LIB-AC-19; 065-project-goals PRJ-FR-16, PRJ-FR-19, PRJ-AC-09, PRJ-AC-20; D-W33, D-W35, D-W37, D-W43, D-W59",
-      "action": "Choose Needs a Target and Not in any Project before and after confirming associations, add the other-camera session to a Project from Not in any Project, and later choose the Trashed filter and put one trashed frame back.",
-      "expect": "Each filter lists exactly the sessions its rule names and Home's top line matches the counts. Not in any Project offers Create Project and Add to Project, with a visible note when the rig is added. Trashed lists exactly the trashed frames with their last-observed metadata and the operation that trashed them, and a frame put back leaves it.",
-      "negative": "Neither filter assigns a session to a Project or a run, and no other list shows a Trashed frame."
+      "journeyStep": "J31/S6, J31/S7",
+      "spec": "064-library-inventory LIB-FR-09, LIB-FR-16, LIB-FR-17, LIB-FR-20, LIB-FR-23, LIB-AC-17; 071-storage-custody STO-IMP-FR-08, STO-IMP-AC-10; D-W24, D-W78, D-W101, D-W105; HARNESS-V5-FEEDBACK-R1.md Round 9 C14",
+      "action": "After an Import, read its actions and choose Review sessions, then open Sessions, Needs a Target and the Calibration library; inspect the new light session's calibration state.",
+      "expect": "The finished import offers Review sessions (provisional copy, from the prototype) first, which opens the first session in Needs review. Imported lights appear as sessions and calibration frames as calibration-library records. Import review reports pinned, suggested or not-found calibration for each light session, and unsettled sessions appear in Needs calibration.",
+      "negative": "No Inbox or later confirm-and-file step appears. Calibration frames do not appear in Sessions, and held, duplicate, still-growing or left-out files are absent from the catalog."
+    },
+    {
+      "flowStep": "Calibration at ingestion: import review states, the \"Needs calibration\" queue, calibration arriving later and Reassign… (D-W101, D-W105, D-W106)",
+      "owner": "064-library-inventory",
+      "journeyStep": "J31/S3, J31/S5, J31/S5a, J31/S6, J31/S7, J31/S8, J31/S9",
+      "spec": "064-library-inventory LIB-FR-23, LIB-FR-24, LIB-FR-25, LIB-FR-26; 068-calibration-inputs CAL-FR-19, CAL-FR-20, CAL-FR-21, CAL-FR-22; D-W101, D-W102, D-W103, D-W104, D-W105, D-W106",
+      "action": "Read calibration match states in Import review, leave a session unsettled, later import its missing calibration, and reassign one pinned kind from the session detail.",
+      "expect": "Import shows pinned automatically, suggested or not found for every kind; unsettled sessions wait in Needs calibration and cannot be added to a Project. Later calibration fills only waiting sessions, and reassignment creates labelled pending changes on open Projects.",
+      "negative": "Import never waits for calibration, new calibration never replaces a pin, and Closed or Archived Projects never receive changes."
+    },
+    {
+      "flowStep": "Sessions filters: Needs a Target, Needs review, Needs calibration, Not in any Project, Trashed",
+      "owner": "064-library-inventory",
+      "journeyStep": "J19/S9a, J19/S10, J19/S10a, J14/S7, J34/S8, J34/S10, J24/S8b",
+      "spec": "064-library-inventory LIB-FR-17, LIB-FR-18, LIB-FR-20, LIB-FR-23, LIB-AC-33; 065-project-goals PRJ-FR-16, PRJ-FR-19, PRJ-AC-09; 071-storage-custody STO-FR-14; D-W78, D-W97, D-W105, D-W113",
+      "action": "Choose Needs a Target, Needs review, Needs calibration and Not in any Project before and after confirming associations; later choose Trashed to inspect the frame records moved to OS Trash.",
+      "expect": "Each filter lists exactly the sessions or frames its rule names. Needs review is the session intake queue. Needs calibration lists every session whose calibration is unsettled, Ready or not, and every session whose pinned calibration file changed or went missing. Not in any Project offers Create Project or Add to Project. Trashed lists frames with last-observed metadata and the operation that trashed them.",
+      "negative": "No filter assigns a session to a Project, and no run or Project Trash filter exists. A Trashed frame appears nowhere else except a Closed or Archived Project that held it when trashed."
     },
     {
       "flowStep": "Cross-flow: Network volume unmounted",
@@ -472,112 +481,112 @@
       "negative": "No file reads Missing, no verified item is hashed or copied again, and PlateVault offers no way to mount a share."
     },
     {
-      "flowStep": "Projects surface (Project page with stage rail and planning)",
-      "owner": "065-project-goals",
-      "journeyStep": "J20/S3, J20/S7, J20/S8, J20/S9, J14/S6, J27/S14, J29/S12, J34/S2",
-      "spec": "065-project-goals PRJ-FR-02, PRJ-FR-04, PRJ-FR-07, PRJ-FR-08, PRJ-FR-09, PRJ-FR-20, PRJ-AC-06, PRJ-AC-25; 072-observing-plans PLAN-FR-09, PLAN-FR-10; D-W7, D-W16, D-W37, D-W60, D-W65, D-W66, D-W72",
-      "action": "Open the Project page, read its candidates, planning and stage rail, and open the Planner. Try to remove the run's rig and subject and a rig no run uses, rename the Project, and later move a run to the Project's Trash.",
-      "expect": "The page shows subjects, rigs, goals, candidates with their reasons, members, and each run on the stage rail; a run moved to the Project's Trash leaves the rail. Planning lists windows for the Project's own subjects, and Open in Planner opens Targets with the Project context. Removing a rig or subject that any run uses is refused naming each run that uses it, and removing an unused rig succeeds.",
-      "negative": "The page offers no action that assigns a session to the Project, and a refused removal changes neither the Project nor the run. Renaming keeps the subject, the run and the Target link."
+      "flowStep": "Orientation walk after first-run setup, and its replay from Settings > Help (D-W117)",
+      "owner": "064-library-inventory",
+      "journeyStep": "J18/S1, J18/S2, J18/S3, J18/S4, J18/S5",
+      "spec": "064-library-inventory LIB-FR-01, LIB-FR-21, LIB-FR-27, LIB-AC-35; D-W117",
+      "action": "Leave first-run setup by finishing it, by Set up later and by Index later; step through the walk, or close it before its last stop; relaunch; replay the walk from Settings › Help. The controls Next, Back, Skip and Escape are provisional (D-W117).",
+      "expect": "Each way out of setup hands over to Home and opens the walk once at its first stop. The walk has one stop per main navigation entry, in navigation order, with Home's stop last: provisionally Projects, Targets, Sessions, Calibration, Import, Activity and Settings, then Home. After it is finished or skipped it never opens by itself again, and Settings › Help replays it from its first stop.",
+      "negative": "The walk creates, changes or removes no location, session, Project or Target, and no demo or sample record exists."
     },
     {
-      "flowStep": "Project Trash list",
+      "flowStep": "Projects surface (Project page with its steps and planning)",
       "owner": "065-project-goals",
-      "journeyStep": "J27/S14, J27/S14a, J27/S14b, J34/S2, J34/S3a, J34/S12",
-      "spec": "065-project-goals PRJ-FR-04, PRJ-FR-14, PRJ-FR-20, PRJ-AC-15, PRJ-AC-29; 070-results-reuse RES-FR-10, RES-AC-19, RES-AC-21, RES-AC-22; D-W72",
-      "action": "Move a run to the Project's Trash and open the Trash list. Restore the run, move it again and empty it from the list, then empty the Trash from the Done / Archive sheet.",
-      "expect": "The Trash list shows each run in the Project's Trash with its stage, and offers Restore and Empty Trash for it plus Empty Trash for every run in it. A run in the list appears nowhere else, and Restore returns it to the stage rail unchanged. After Empty Trash the list no longer shows it.",
-      "negative": "Opening the list, moving a run to it and Restore move no file, and an emptied run never returns, even after Reopen."
+      "journeyStep": "J20/S3, J20/S7, J20/S8, J20/S9, J14/S6, J29/S12, J34/S1",
+      "spec": "065-project-goals PRJ-FR-02, PRJ-FR-04, PRJ-FR-07, PRJ-FR-08, PRJ-FR-09, PRJ-FR-31, PRJ-FR-32, PRJ-FR-25; 072-observing-plans PLAN-FR-09, PLAN-FR-10; D-W89, D-W94, D-W95, D-W96, D-W97",
+      "action": "Open the Project page, review its subjects, rigs, goals, sessions, suggestions, steps and planning, and open the Planner.",
+      "expect": "The page shows Project-level sessions and groups, suggestions, goals, and Sessions, Calibrate, View, Output and Wrap up steps. Planning lists windows for the Project's subjects, and Open in Planner opens Targets with the Project context. A rig or subject removal changes suggestions only; held sessions remain until the user removes them.",
+      "negative": "The page has no run list, stage rail or Project Trash list. Editing a rig or subject does not silently remove a held session or alter its View."
     },
     {
-      "flowStep": "Home dashboard",
+      "flowStep": "Home dashboard (D-W89)",
       "owner": "065-project-goals",
-      "journeyStep": "J32/S1–S11, J19/S6, J19/S9a",
-      "spec": "065-project-goals PRJ-FR-04, PRJ-FR-05, PRJ-FR-17, PRJ-FR-18, PRJ-FR-19, PRJ-FR-20, PRJ-FR-21, PRJ-AC-03, PRJ-AC-18, PRJ-AC-19, PRJ-AC-20, PRJ-AC-22, PRJ-AC-23; 067-frame-review PIX-FR-18; 072-observing-plans PLAN-FR-11; D-W35, D-W36, D-W39, D-W48, D-W63, D-W66",
-      "action": "Launch PlateVault and read Home's top line and six sections, follow each Project's Next action, act on New sessions needing work, read Tonight and Target status, toggle Show done, and watch a rescan in Running work.",
-      "expect": "Home opens first with its top line and its six sections in order. Each Project shows its goals as in project and captured, its runs' stages and the first Next rule that applies, and Next moves as work is done. Done Projects appear only with Show done on.",
-      "negative": "No row says not in a run, and no goal shows in project above captured or reads met from its captured value. Reading Home and following its actions writes, moves or trashes no file."
+      "journeyStep": "J32/S1, J32/S2, J32/S2a, J32/S3, J32/S4, J32/S5, J32/S6, J32/S7, J32/S7a, J32/S8, J32/S9, J32/S10, J32/S11, J19/S6, J19/S9a",
+      "spec": "065-project-goals PRJ-FR-04, PRJ-FR-17, PRJ-FR-18, PRJ-FR-19, PRJ-FR-32, PRJ-FR-21, PRJ-FR-22; 067-frame-review PIX-FR-18; 072-observing-plans PLAN-FR-11, PLAN-FR-12; D-W35, D-W89, D-W92, D-W96, D-W105",
+      "action": "Launch PlateVault and read Home's six sections, follow an open Project's Next action, act on pending sessions, read Tonight and the calendar, inspect a night card and open that night in Targets, and watch an operation in Status.",
+      "expect": "Home shows Pending ingestions, Pending work and Open work on the left and Status, Tonight and the five-week calendar on the right at wide widths. Each open Project shows its in-project and captured goals, pending changes and next step; rows open their owning pages. A calendar card names the night's Moon, darkness, suitable goals and planned Targets, and its night opens in Targets.",
+      "negative": "Home has no summary line, tabs, header buttons, alert list or Show done toggle. No row says not in a run, and reading Home writes, moves or trashes no file."
     },
     {
-      "flowStep": "Project Done / Archive sheet",
+      "flowStep": "Duplicate (D-W96)",
       "owner": "065-project-goals",
-      "journeyStep": "J34/S1–S12, J28/S1",
-      "spec": "065-project-goals PRJ-FR-14, PRJ-FR-15, PRJ-FR-16, PRJ-FR-20, PRJ-AC-15, PRJ-AC-16, PRJ-AC-17, PRJ-AC-21, PRJ-AC-27, PRJ-AC-28, PRJ-AC-30; 064-library-inventory LIB-FR-18, LIB-AC-19; 071-storage-custody STO-FR-13, STO-FR-14, STO-FR-15, STO-FR-16, STO-FR-17, STO-AC-17, STO-AC-18, STO-AC-19, STO-AC-21, STO-AC-22, STO-AC-23; 070-results-reuse RES-FR-10, RES-AC-22; D19, D-W26, D-W43, D-W46, D-W69, D-W70, D-W72, D-W74",
-      "action": "Mark the Project Done while runs are open, complete each one or move it to the Project's Trash, then use the sheet's five separate offers: empty the Project's Trash, move the rejected frames, the processing intermediates and the duplicate copies to Trash, and Archive. Reopen the Project after Archive.",
-      "expect": "Mark Done names every run outside the Project's Trash that is not Complete. Once each is resolved the sheet opens with Archive, the three Trash offers and, while the Project's Trash holds runs, Empty Trash. Each offer lists refused items with their reasons and runs as its own reviewed approval. Trashed frames read Trashed and leave every list and total except the fixed memberships of the Complete runs that hold them, and Reopen returns the Project to open with its archived sessions shown as Archived.",
-      "negative": "No file moves until an offer is approved, and nothing is permanently deleted. Accepted Results, adopted masters, Project-only rejects and changed items are never trashed, every frame keeps one copy, and Reopen moves no file."
+      "journeyStep": "J20/S3, J20/S4, J34/S12a",
+      "spec": "065-project-goals PRJ-FR-30, PRJ-FR-25, PRJ-AC-43; 066-view-selection VSEL-FR-16; D-W93, D-W96, D-W97, D-W100, D-W112",
+      "action": "Choose Duplicate… on an open Project and on a Closed or Archived Project, select what to copy, and inspect the new Project before its first Apply.",
+      "expect": "The duplicate copies the selected sessions, groups and overrides, goals, notes and settings, but no files. It is open and builds its own View through its first Apply. Its sessions use their current calibration pins, not the original's Close snapshot.",
+      "negative": "The duplicate has no Duplicated from note or link to the original, and duplicating a Closed or Archived Project does not reopen or edit it."
+    },
+    {
+      "flowStep": "Project Wrap up: Clean up → Trash → Archive, then Close project (D-W80, D-W97)",
+      "owner": "065-project-goals",
+      "journeyStep": "J34/S1, J34/S2, J34/S3, J34/S3a, J34/S3b, J34/S4, J34/S5, J34/S6, J34/S7, J34/S8, J34/S9, J34/S9a, J34/S10, J34/S11, J34/S11a, J34/S12, J34/S12a, J28/S1",
+      "spec": "065-project-goals PRJ-FR-14, PRJ-FR-15, PRJ-FR-16, PRJ-FR-32, PRJ-FR-25, PRJ-AC-15, PRJ-AC-16, PRJ-AC-17, PRJ-AC-21, PRJ-AC-27, PRJ-AC-28, PRJ-AC-30; 064-library-inventory LIB-FR-18; 071-storage-custody STO-FR-13, STO-FR-14, STO-FR-15, STO-FR-16; 070-results-reuse RES-FR-06; D19, D-W80, D-W97, D-W98",
+      "action": "Open Wrap up after all Project changes are applied or discarded. Proceed through Clean up, Trash and Archive in order, then Close project…; inspect refused custody items and the Closed or Archived Project menu.",
+      "expect": "Wrap up is a strict Clean up → Trash → Archive flow, and Archive's Proceed is Close project…. Clean up offers the View and View (previous)/ entries; Trash offers rejected frames, Processing/ files and duplicate copies; Archive transfers selected sessions. Close keeps Output/ and locks the Project; a Closed or Archived Project offers Duplicate, not Reopen.",
+      "negative": "No file moves before approval, nothing is permanently deleted, and no file in `Output/`, adopted master or kept duplicate copy is trashed. Close requires no Result and does not infer external success."
     },
     {
       "flowStep": "Settings > Goal templates",
       "owner": "065-project-goals",
-      "journeyStep": "J20/S2, J20/S4, J15/S4e",
-      "spec": "065-project-goals PRJ-FR-12, PRJ-AC-14; 072-observing-plans PLAN-EQ-AC-05; D-W30, D-W31",
-      "action": "Apply the built-in HOO template to a new Project, edit a copied goal, and open Settings > Goal templates with each rig selected.",
-      "expect": "The same built-in templates are listed whichever rig is selected, and applying HOO copies Ha 10h and OIII 10h into the Project as goals.",
-      "negative": "Editing a copied goal changes no template and no other Project, and no template is hidden or reordered for a rig."
+      "journeyStep": "J20/S2, J20/S4, J15/S4e, J41/S9, J41/S11, J41/S11a",
+      "spec": "065-project-goals PRJ-FR-03, PRJ-FR-12, PRJ-FR-23, PRJ-AC-14, PRJ-AC-32, PRJ-AC-33; 072-observing-plans PLAN-EQ-AC-05; D-W30, D-W31, D-W90; HARNESS-V5-FEEDBACK-R1.md Round 9 C7",
+      "action": "Apply the built-in HOO template to a new Project, edit a copied goal, open Settings > Goal templates with each rig selected, create a template with a time goal and a frame goal under a quality bar, and give a subject a Finish by date.",
+      "expect": "The same built-in templates are listed whichever rig is selected, and applying HOO copies Ha 10h and OIII 10h into the Project as goals. Each goal measures time or frames with an optional quality bar, and a subject with a Finish by date shows the nights left.",
+      "negative": "Editing a copied goal changes no template and no other Project, no goal holds both time and frames, and no template is hidden or reordered for a rig."
     },
     {
       "flowStep": "Cross-flow: Missing OBJECT",
       "owner": "066-view-selection",
       "journeyStep": "J21/S3, J21/S4, J21/S5",
-      "spec": "066-view-selection VSEL-FR-03, VSEL-FR-04, VSEL-FR-05, VSEL-AC-02, VSEL-AC-08; D01, D-W33",
-      "action": "Read the candidates with a differing OBJECT label, inspect the session with no OBJECT, and filter by Missing OBJECT.",
-      "expect": "The session whose OBJECT reads Cygnus field is preselected by its confirmed Target, and the session with no OBJECT stays a candidate that can be checked manually. Missing OBJECT matches only that session.",
-      "negative": "No OBJECT label adds or removes a candidate or supplies coordinates."
+      "spec": "066-view-selection VSEL-FR-03, VSEL-FR-04, VSEL-FR-05, VSEL-AC-01; 065-project-goals PRJ-FR-09; D-W33, D-W37, D-W96",
+      "action": "Read Project suggestions where one session has a differing OBJECT label, inspect a session with no OBJECT, and filter the Add sessions… picker by Missing OBJECT.",
+      "expect": "A session with a confirmed Target is suggested based on Target and rig even if OBJECT differs. A session with no OBJECT is suggested only when its Target and rig match; Missing OBJECT filters that label state.",
+      "negative": "No OBJECT label adds or removes a suggestion, assigns a Target or supplies coordinates."
     },
     {
       "flowStep": "Cross-flow: Missing geometry",
       "owner": "066-view-selection",
-      "journeyStep": "J21/S3, J21/S4, J33/S3",
-      "spec": "066-view-selection VSEL-FR-04, VSEL-FR-07, VSEL-AC-02; D01, D-W38",
-      "action": "Read sessions with only pointing or no position evidence in a run and in a mosaic run group.",
-      "expect": "Position unknown reads with no distance, and pointing-only sessions show a distance with no footprint. They remain manually selectable.",
-      "negative": "No invented distance, footprint or overlap appears, and no distance reads 0."
+      "journeyStep": "J21/S3, J21/S4, J33/S1c",
+      "spec": "066-view-selection VSEL-FR-04, VSEL-FR-07, VSEL-AC-02; 065-project-goals PRJ-FR-31, PRJ-FR-27, PRJ-FR-29; D-W33, D-W95",
+      "action": "Read sessions with pointing-only or no position evidence in the Project's Sessions step, including a Project with panel groups.",
+      "expect": "Position unknown reads with no distance, and pointing-only sessions show a distance with no footprint. They remain manually selectable; geometry supports group assignment and the mosaic panel map.",
+      "negative": "No invented distance, footprint or overlap appears, and unknown geometry neither removes a suggestion nor decides group membership automatically."
     },
     {
       "flowStep": "Cross-flow: Selection hidden by filters",
       "owner": "066-view-selection",
-      "journeyStep": "J21/S5, J21/S7",
-      "spec": "066-view-selection VSEL-FR-05, VSEL-FR-06, VSEL-FR-07, VSEL-AC-03",
-      "action": "Filter to Ha with five sessions selected, then sort, page and toggle Sky coverage.",
-      "expect": "Selected outside current filters: 3 shows, and the selection stays five sessions throughout.",
-      "negative": "No filter, sort or page change alters the selected session IDs."
+      "journeyStep": "J21/S5, J21/S6, J21/S7",
+      "spec": "066-view-selection VSEL-FR-05, VSEL-FR-06, VSEL-FR-08, VSEL-FR-12, VSEL-AC-03; D-W100",
+      "action": "Filter a Project session list to Ha while five sessions are selected, then sort, page and toggle Sky coverage.",
+      "expect": "Selected outside current filters: 3 shows, and the selected Project session identities stay unchanged throughout.",
+      "negative": "No filter, sort or page change alters Project inputs, exclusions or selected session IDs."
     },
     {
-      "flowStep": "Run workspace host for the Select, Review, Calibrate and Prepare steps",
+      "flowStep": "View step: application, input mode, Apply… and Open in {app}",
       "owner": "066-view-selection",
-      "journeyStep": "J21/S1, J21/S2, J22/S1",
-      "spec": "066-view-selection VSEL-FR-01, VSEL-FR-02; 067-frame-review PIX-FR-10; 070-results-reuse RES-FR-10; D-W3, D-W13, D-W72",
-      "action": "Move along the run's pipeline rail through Select, Review, Calibrate and Prepare and open the Review step.",
-      "expect": "The rail lists Select, Review, Calibrate, Prepare, Results and Done for this run, every step shows the same selection and offers Move run to Trash, and a later step names what it still needs. Review opens frame review inside the run.",
-      "negative": "No wizard gates movement, and moving between steps saves no revision and creates no folder."
+      "journeyStep": "J21/S1, J21/S2, J24/S1, J24/S1a, J24/S8, J24/S9, J24/S10, J24/S10a, J24/S11",
+      "spec": "066-view-selection VSEL-FR-16; 069-application-handoff PREP-FR-01, PREP-FR-04, PREP-FR-10, PREP-AC-10, PREP-AC-11; D-W81, D-W83, D-W98, D-W100",
+      "action": "Open the Project's View step, choose the application and Symlinks or Copies, inspect pending changes and Apply, then Open in the chosen application.",
+      "expect": "The View step holds the application choice, mode, pending-change count and Apply…; once a View exists it offers Open in {app}. A successful Apply builds the Project's View and Open re-verifies entries before launch.",
+      "negative": "No run pipeline, profile-in-Prepare step, run Trash or Start processing action exists. Moving among Project steps saves no run revision, creates no folder and starts no measurement."
     },
     {
-      "flowStep": "Start a processing run inside a Project (subject and rig)",
+      "flowStep": "Pending changes and the Apply sheet (D-W100)",
       "owner": "066-view-selection",
-      "journeyStep": "J14/S2b, J20/S8, J32/S5, J33/S2",
-      "spec": "066-view-selection VSEL-FR-01, VSEL-FR-18, VSEL-AC-21; 065-project-goals PRJ-FR-10, PRJ-AC-05; D-W1, D-W8, D-W37, D-W38, D-W50; harness v5 S3, S10 (VSEL-AC-16 needs a contract amendment)",
-      "action": "Choose Start a run from a Project page after adding a Target to it, from a Project page, from Home's Next action, and on a mosaic subject.",
-      "expect": "Inside a Project the Start run sheet asks for one subject and one rig of that Project, with an optional profile, and creates the run there; a mosaic subject creates a run group with one panel run per included panel.",
-      "negative": "No run exists outside a Project, a Target page offers no run, no whole-mosaic run is offered, and cancelling creates no run."
+      "journeyStep": "J25/S1, J25/S2, J25/S2a, J25/S3, J25/S4, J25/S5, J25/S5a, J25/S6, J25/S7, J25/S7c, J25/S7d, J24/S8b",
+      "spec": "066-view-selection VSEL-FR-12, VSEL-FR-13, VSEL-FR-14, VSEL-FR-20, VSEL-FR-21, VSEL-AC-30, VSEL-AC-31, VSEL-AC-32, VSEL-AC-28, VSEL-AC-29, VSEL-AC-33, VSEL-AC-34, VSEL-AC-35; D-W94, D-W97, D-W100, D-W109, D-W110, D-W113",
+      "action": "Index new sessions, change a held session's association or calibration, switch mode, and inspect the Project's pending changes and Apply sheet, try to discard a change from the Library, review the files `View (previous)/` still holds, and change a pinned calibration file.",
+      "expect": "Each Project input change after its View exists is pending and labelled with its source. Apply lists exact additions, removals, group moves, calibration and mode changes, layout, changed copies, user files, offline originals and space needed. Only the Project's own edits can be discarded. Apply waits until each file left in `View (previous)/` is reviewed (keep, move or Trash), and a file the user keeps isn't asked about again and keeps its bytes. Apply refuses while a pinned calibration file has changed or is missing, with a link to reassign it.",
+      "negative": "No Add N new sessions or Refresh control exists, and no Reopen action exists. Nothing touches the View before Apply, which builds from originals only. No numbered `View (previous)` folder appears, and no other calibration file is placed by itself."
     },
     {
-      "flowStep": "Add N new sessions (refresh), including Reopen of a Complete run",
-      "owner": "066-view-selection",
-      "journeyStep": "J25/S1, J25/S2b, J25/S3, J25/S5",
-      "spec": "066-view-selection VSEL-FR-12, VSEL-FR-17, VSEL-AC-06, VSEL-AC-20; 070-results-reuse RES-FR-07, RES-AC-08; D-W34",
-      "action": "Index two new candidate sessions, choose Add 2 new sessions on a Complete run, decline Reopen, then Reopen and accept one addition.",
-      "expect": "The run shows Add 2 new sessions and asks for Reopen first while Complete; after Reopen the refresh diff lists both sessions as added with reasons.",
-      "negative": "Declining Reopen leaves the run Complete with its membership unchanged, and Reopen creates no membership revision and moves no file."
-    },
-    {
-      "flowStep": "Mosaic run group: panel assignment, shared setup, Review all",
-      "owner": "066-view-selection",
-      "journeyStep": "J33/S1c, J33/S2, J33/S3, J33/S5, J33/S6",
-      "spec": "066-view-selection VSEL-FR-07, VSEL-FR-08, VSEL-FR-15, VSEL-FR-16, VSEL-FR-18, VSEL-FR-19, VSEL-AC-21, VSEL-AC-22; 067-frame-review PIX-FR-17, PIX-AC-18; 065-project-goals PRJ-FR-04; D-W38, D-W41, D-W73; harness v5 mosaic editor (HARNESS-V5-FEEDBACK-R1.md §B Mosaic flow)",
-      "action": "In the mosaic editor, assign the flagged sessions to panels and start the group with its included panels, read panel coverage, set the shared setup once and save, then open Review all.",
-      "expect": "Sessions are placed on a panel by pointing, flagged sessions wait for the user's choice in the editor, and starting the group creates one panel run per included panel. The shared setup shows on every panel run, each panel run saves its own revision, and Review all lists every panel's frames with a Panel column.",
-      "negative": "No whole-mosaic run is offered, no session joins a panel without pointing or a user choice, and assigning a panel changes no header or Target."
+      "flowStep": "Project groups: automatic by rig and framing, create, split, move and rename, keywords and mosaic panels (D-W95)",
+      "owner": "065-project-goals",
+      "journeyStep": "J33/S1, J33/S1a, J33/S1b, J33/S1c, J33/S2, J33/S2a, J33/S3, J33/S5, J33/S8, J33/S9, J33/S10, J33/S13",
+      "spec": "065-project-goals PRJ-FR-08, PRJ-FR-31, PRJ-FR-24, PRJ-FR-27, PRJ-FR-28, PRJ-FR-29, PRJ-AC-31, PRJ-AC-47; 066-view-selection VSEL-FR-07; 069-application-handoff PREP-FR-16; 070-results-reuse RES-FR-08; D-W95, D-W99, D-W107",
+      "action": "Review Project groups suggested by rig and framing, create or split a group, move and rename sessions, set a group as a mosaic panel, and Apply the changed layout.",
+      "expect": "The Project groups sessions by rig and framing. Users can create, split, rename and move sessions; a mosaic panel group uses PANEL naming, panel progress and goals, and the Project shows a panel map. The user assembles the mosaic in their tool. Groups hold whole sessions, each with one framing from intake.",
+      "negative": "No mosaic mode is chosen up front, no per-panel run is created, and no Review all, shared run setup or in-application stitching occurs. No control divides a session's frames between groups."
     },
     {
       "flowStep": "Cross-flow: Measurement pending/failed",
@@ -589,202 +598,184 @@
       "negative": "No score is shown for a pending, unmeasured or failed value, and Cancel discards no selection or exclusion."
     },
     {
-      "flowStep": "Frame culling: views, hotkeys, threshold selection and quality marks (D-W13, D-W14, D-W40, D-W42)",
+      "flowStep": "Frame culling: views, hotkeys, threshold selection and quality marks (D-W13, D-W14, D-W40, D-W79)",
       "owner": "067-frame-review",
-      "journeyStep": "J22/S5, J22/S5a, J22/S5b, J22/S7a, J22/S11a, J22/S11b, J22/S13, J32/S4",
-      "spec": "067-frame-review PIX-FR-11, PIX-FR-13, PIX-FR-14, PIX-FR-15, PIX-FR-16, PIX-FR-18, PIX-AC-12, PIX-AC-14, PIX-AC-15, PIX-AC-16, PIX-AC-17; 066-view-selection VSEL-FR-15, VSEL-AC-23; 065-project-goals PRJ-AC-08; D10, D-W13, D-W14, D-W40, D-W42, D-W54",
-      "action": "Step and compare frames with hotkeys, switch between table, filmstrip and grid, select by threshold, and mark frames with X, P and U in the table and the grid, including a multi-selection and a Project-only reject.",
-      "expect": "Every view shows the same current frame and selection. X marks a frame Rejected with scope Library and leaves the draft at once, P and U restore it, and the filter hotkeys list the matching frames. Reject for this Project only marks scope This Project.",
-      "negative": "No mark asks for confirmation or changes a saved membership revision, no single-key hotkey rejects for a Project only, and threshold selection changes no quality state."
+      "journeyStep": "J22/S5, J22/S5a, J22/S5b, J22/S7a, J22/S9a, J22/S10, J22/S11a, J22/S11b, J22/S13, J32/S4, J37/S6, J37/S9",
+      "spec": "067-frame-review PIX-FR-11, PIX-FR-13, PIX-FR-14, PIX-FR-15, PIX-FR-16, PIX-FR-18, PIX-AC-12, PIX-AC-14, PIX-AC-15, PIX-AC-16, PIX-AC-17, PIX-AC-21; 066-view-selection VSEL-FR-15; 063-clean-rebuild-contract FR-029; D10, D-W13, D-W14, D-W40, D-W79, D-W118",
+      "action": "Step and compare frames with hotkeys, switch between table, filmstrip and grid, select by threshold, and mark frames with X, P and U in the table and the grid, one at a time, on a hand-picked selection, on a ⌘A selection and on a threshold selection.",
+      "expect": "Every view shows the same current frame and selection. X marks a frame Rejected with scope Library at once, P and U restore it, and the filter hotkeys list the matching frames. A mark on a ⌘A or threshold selection asks for confirmation first, whatever its count, such as \"Mark 48 frames Usable?\".",
+      "negative": "No single-frame or hand-picked mark asks for confirmation or changes a saved membership revision, no Project-only reject exists, and threshold selection alone changes no quality state. A cancelled confirmation marks no frame."
     },
     {
-      "flowStep": "Run-group review across panels (D-W41)",
+      "flowStep": "Session intake Review step and its \"Needs review\" queue (D-W78)",
       "owner": "067-frame-review",
-      "journeyStep": "J33/S6",
-      "spec": "067-frame-review PIX-FR-13, PIX-FR-14, PIX-FR-17, PIX-AC-18; 066-view-selection VSEL-FR-15, VSEL-FR-19, VSEL-AC-22; D-W41, D-W54",
-      "action": "Open Review all on the mosaic run group, filter to one panel, and mark a frame with X and then U.",
-      "expect": "Frames from every panel run list together with a Panel column, and the Panel filter lists exactly that panel's frames. The mark changes only that frame's panel draft.",
-      "negative": "Marking a frame changes no other frame's quality and no other panel run's draft, and every frame stays in its own panel run's membership."
+      "journeyStep": "J18/S9, J22/S1, J22/S2, J22/S3, J22/S4, J22/S7a, J22/S15a, J22/S15b, J31/S7, J37/S6, J37/S9",
+      "spec": "067-frame-review PIX-FR-01, PIX-FR-06, PIX-FR-08, PIX-FR-10, PIX-FR-18; 064-library-inventory LIB-FR-17, LIB-FR-20; D-W78, D-W79, D-W97; HARNESS-V5-FEEDBACK-R1.md Round 9 C10, C14",
+      "action": "Open Review for a session in Needs review, from Import's Review sessions or the Sessions filter, select by threshold, finish review with no Unreviewed frames, and reopen Review on a Ready session.",
+      "expect": "Review shows only the session's frames and offers Mark rest usable and Select by threshold…. Import's Review sessions (provisional copy, from the prototype) opens the first session in Needs review, and Finish review advances to the next one. The session becomes Ready when every frame is Usable or Unusable; a later review mark reaches each open Project holding it as a labelled pending change.",
+      "negative": "No Project Review step or cross-panel Review all exists. Review never changes a Closed or Archived Project, and calibration or group state does not bypass Finish review."
     },
     {
       "flowStep": "Cross-flow: Calibration mismatch",
       "owner": "068-calibration-inputs",
       "journeyStep": "J23/S2, J23/S5, J23/S6, J33/S7",
-      "spec": "068-calibration-inputs CAL-FR-05, CAL-FR-08, CAL-FR-10, CAL-FR-11, CAL-AC-02, CAL-AC-06, CAL-AC-13, CAL-AC-14; D13, D-W5, D-W37, D-W41",
-      "action": "Read the flats of another optical train in Review matches, pick a flat set whose optical-train state is unknown, and record a scoped exception. In a mosaic run group, resolve the one panel whose flat needs review.",
-      "expect": "Another train's flats read incompatible on optical train, and an unknown criterion makes the row read Needs review on the readiness line and unresolved in preparation review. The choices are another input, exclude, defer or a scoped exception with a reason, and the exception keeps the criterion and the reason. The panel needing review is named and the other panels stay ready.",
-      "negative": "No unknown or incompatible match is assigned automatically or handed off. An exception never rewrites master evidence or applies to another run or panel."
+      "spec": "068-calibration-inputs CAL-FR-05, CAL-FR-19, CAL-FR-20, CAL-FR-21, CAL-FR-22; 064-library-inventory LIB-FR-23, LIB-FR-24; D-W101, D-W102, D-W103, D-W104, D-W105",
+      "action": "Review an incompatible or unknown flat and a dark or bias linked to another camera at import, then inspect the session's calibration state.",
+      "expect": "Incompatible flats are not offered, unknown criteria and out-of-window matches are suggestions, and camera aliases distinguish darks and bias when needed. A user must confirm a suggestion before it is pinned.",
+      "negative": "No unknown or incompatible match is assigned automatically, and no session is considered settled while a kind remains an unconfirmed suggestion or not found."
     },
     {
-      "flowStep": "Calibration surface",
+      "flowStep": "Calibration surface: Import masters, Add version… and dated master versions, Old badge, Hide and Show hidden, Move to Trash (D-W82, D-W103)",
       "owner": "068-calibration-inputs",
-      "journeyStep": "J26/S8, J26/S8a, J26/S9, J26/S9a, J31/S7",
-      "spec": "068-calibration-inputs CAL-FR-01, CAL-FR-06, CAL-FR-07, CAL-FR-08, CAL-AC-05, CAL-AC-10, CAL-AC-12; 071-storage-custody STO-IMP-FR-08; D05, D-W5, D-W24",
-      "action": "Open Calibration to read a detected master candidate, start Add to calibration library there, read the adopted and then drifted master, and read the flats and darks that Import routed to the Calibration library.",
-      "expect": "Calibration lists masters and raw calibration sets with their type, camera and settings, channel, origin and compatibility evidence. A dismissed Results offer still leaves the candidate listed with Add to calibration library. An adopted master shows its origin and provenance, and one changed in place reads drifted against its adoption digest.",
-      "negative": "Listing a candidate never makes it available for reuse, and imported calibration frames do not appear in Sessions."
+      "journeyStep": "J26/S8, J26/S8a, J26/S9, J26/S9a, J31/S7, J36/S9, J36/S9a",
+      "spec": "068-calibration-inputs CAL-FR-01, CAL-FR-06, CAL-FR-07, CAL-FR-13, CAL-FR-14, CAL-FR-15, CAL-FR-16, CAL-FR-17; 071-storage-custody STO-IMP-FR-08; D-W82, D-W98, D-W103",
+      "action": "Open Calibration to inspect a master, Import masters or Add version…, read its dated versions and Old badge, then Hide and restore a master through Show hidden or Move to Trash.",
+      "expect": "Calibration lists masters and raw sets with type, camera and settings, channel, origin, compatibility and dated versions. Hide removes a master from offers without touching its file; Show hidden offers Restore, and Move to Trash uses reviewed custody.",
+      "negative": "No version is marked Latest, no Update or Replace across runs is offered, and hiding or listing a candidate never makes it available for use."
     },
     {
-      "flowStep": "Calibrate step: readiness line and Review matches (D-W5)",
+      "flowStep": "Calibrate step: read-only check and calibration diagram (D-W101)",
       "owner": "068-calibration-inputs",
       "journeyStep": "J23/S1, J23/S2, J23/S5, J23/S6, J23/S7, J23/S7a, J24/S12",
-      "spec": "068-calibration-inputs CAL-FR-02, CAL-FR-03, CAL-FR-05, CAL-FR-09, CAL-FR-10, CAL-AC-01, CAL-AC-02, CAL-AC-03, CAL-AC-06, CAL-AC-11, CAL-AC-14; D-W5, D-W37, D-W55",
-      "action": "Reach Calibrate in a run, read the readiness line, open Review matches, replace an automatic flat, record an exception, and turn automatic assignment off in another run.",
-      "expect": "The readiness line counts groups matched, needing review and excepted, for example 5 of 5 groups matched, then 4 of 5 matched and 1 needs review. Review matches has one row per light group and calibration type with its input, its state (Automatic, Suggested, Accepted, Excepted, Excluded or Needs review) and Why this match, grouped by settings, channel and geometry.",
-      "negative": "The table is not grouped by camera, and a user's replacement is never overridden by matching again. A suggestion is not counted as matched until it is accepted."
+      "spec": "068-calibration-inputs CAL-FR-03, CAL-FR-08, CAL-FR-09, CAL-FR-19, CAL-FR-20, CAL-FR-21, CAL-FR-22, CAL-FR-23; 064-library-inventory LIB-FR-23, LIB-FR-25; D-W101, D-W102, D-W103, D-W104, D-W105, D-W106",
+      "action": "Open a Project's Calibrate step and inspect the WBPP-style diagram for the calibration pinned to its groups and nights.",
+      "expect": "The diagram shows each group's nights and the flats, darks and bias they get, including version, date or explicit No choice. It is read-only and reflects the sessions' ingestion-time assignments.",
+      "negative": "The step offers no Review matches, replacement, exception, auto-assignment toggle, assignment table or Proceed gate. Reassign… is performed on the session and becomes a pending change on open Projects."
     },
     {
-      "flowStep": "Run-group calibration per panel (D-W41)",
+      "flowStep": "Matching at ingestion: the flat, dark and bias rules (D-W101 to D-W104)",
       "owner": "068-calibration-inputs",
-      "journeyStep": "J33/S5, J33/S7, J33/S8",
-      "spec": "068-calibration-inputs CAL-FR-11, CAL-FR-02, CAL-FR-05, CAL-FR-09, CAL-AC-13; 069-application-handoff PREP-FR-12, PREP-AC-16; D-W5, D-W41, D-W55",
-      "action": "Set one calibration policy for the mosaic run group, open the group's Calibrate step, and record a scoped exception for the one panel whose flat needs review. Then read the Prepare all review.",
-      "expect": "The group lists one readiness line per panel run, and each panel has its own assignments. Panel 3 is named as needing review until its exception, then reads ready, and the Prepare all review shows each panel's calibration choices with Panel 3's exception.",
-      "negative": "The exception and the unresolved requirement change no assignment in another panel, and the exception does not apply in another panel run."
+      "journeyStep": "J23/S1, J23/S2, J23/S3, J23/S5, J23/S6, J23/S7, J23/S7a",
+      "spec": "068-calibration-inputs CAL-FR-19, CAL-FR-20, CAL-FR-21, CAL-FR-22, CAL-FR-23; 064-library-inventory LIB-FR-23, LIB-FR-26; 072-observing-plans PLAN-EQ-FR-07, PLAN-EQ-FR-08; D-W101, D-W102, D-W103, D-W104, D-W105, D-W106, D-W107, D-W114",
+      "action": "Inspect the flat, dark and bias assignments made at ingestion, including rig versions, camera aliases, camera defaults and matches outside their windows.",
+      "expect": "Flats match the same rig version and geometry rules; flats are matched per session, which has one rotation. Darks and bias match the session camera and capture time within a 365-day window, with separate dark and bias checks, pinned to the closest eligible version, and masters are preferred over raw sets. Unknown, incompatible or out-of-window matches require confirmation. Don't use darks and Don't use bias settle the matching session as No choices.",
+      "negative": "Dark flats are never matched, suggested or assigned. Rig edits do not change a session's recorded version or pinned calibration."
     },
     {
       "flowStep": "Cross-flow: Unsupported input mode",
       "owner": "069-application-handoff",
       "journeyStep": "J23/S9, J24/S13",
-      "spec": "069-application-handoff PREP-FR-04, PREP-FR-06, PREP-FR-08, PREP-AC-03, PREP-AC-11; D04",
-      "action": "Choose a profile with unknown input-write behavior, then keep Linked View for a destination that cannot link.",
-      "expect": "The input-write risk or the missing link support is named, and supported Clone, Copy or Direct source alternatives are offered with their footprints.",
-      "negative": "The mode never changes automatically, and nothing is written until the user chooses a mode."
+      "spec": "069-application-handoff PREP-FR-04, PREP-FR-06, PREP-FR-08, PREP-AC-03, PREP-AC-11; D-W81, D-W98, D-W100",
+      "action": "Choose a profile with unknown or write-prone input behavior, then review Symlinks for a destination that cannot create links.",
+      "expect": "The input-write risk or missing link support is named, Symlinks is refused, and Copies is offered with its footprint.",
+      "negative": "The mode never changes automatically, and no files are written until the user selects a mode and chooses Apply."
     },
     {
-      "flowStep": "Cross-flow: Direct-source exclusion unsupported by tool",
-      "owner": "069-application-handoff",
-      "journeyStep": "J24/S1",
-      "spec": "069-application-handoff PREP-FR-05, PREP-AC-04; D04",
-      "action": "Choose Direct source for a run whose 30 Sep folder also holds excluded frames.",
-      "expect": "Exact original paths pass through a file list or configuration when the profile supports it. A profile that can hand off only whole folders is refused for this membership, and supported alternatives are offered.",
-      "negative": "No overinclusive folder handoff is accepted."
-    },
-    {
-      "flowStep": "Cross-flow: Partial preparation",
+      "flowStep": "Cross-flow: Failed Apply",
       "owner": "069-application-handoff",
       "journeyStep": "J24/S15, J24/S15a, J24/S16, J33/S9, J33/S10",
-      "spec": "069-application-handoff PREP-FR-09, PREP-FR-12, PREP-AC-05, PREP-AC-14, PREP-AC-17; D09, D-W38",
-      "action": "Prepare with three unreadable inputs, Retry into source drift, restore and Retry. In a mosaic run group, Prepare all with one blocked panel and Retry that panel.",
-      "expect": "The outcome reads Partial with each blocked entry named, and Retry completes only journaled entries whose sources match a fresh snapshot. In the group the other panels read Prepared, the blocked panel reads Partial, the group reads Partial, and Open on the group folder appears only after every panel verifies.",
-      "negative": "No verified Open is offered on a partial run or group, Retry does not infer completion from filenames, and the sources stay untouched."
+      "spec": "069-application-handoff PREP-FR-06, PREP-FR-09, PREP-FR-18, PREP-AC-05, PREP-AC-14, PREP-AC-26; 066-view-selection VSEL-FR-14; D-W100",
+      "action": "Apply with three unreadable originals, restore access and Retry; separately change a source after its snapshot, restore the reviewed bytes and Retry.",
+      "expect": "Failed Apply names each blocked input and source drift. Retry places only journaled entries that still match a fresh snapshot, and the View swaps only after the complete new View verifies.",
+      "negative": "No partial View becomes current, no verified Open is offered on failed Apply, Retry does not infer completion from filenames, and originals remain untouched."
     },
     {
-      "flowStep": "Run group: Prepare all and the panel folder layout",
+      "flowStep": "Apply: building from the originals, the swap and waiting for a file in use (D-W100)",
       "owner": "069-application-handoff",
-      "journeyStep": "J33/S8, J33/S9, J33/S10, J33/S13",
-      "spec": "069-application-handoff PREP-FR-06, PREP-FR-07, PREP-FR-12, PREP-FR-13, PREP-AC-16, PREP-AC-17, PREP-AC-18; D-W38, D-W41, D-W51, D-W67, D-W73",
-      "action": "Review Prepare all for the mosaic run group, prepare it with a blocked panel, Retry and Open the group folder, then reprepare one panel's new membership revision.",
-      "expect": "The review lists one Panel N folder per panel run under the group folder, each panel run's Results folder Mosaic Results/Panel N, the group's Results folder Mosaic Results/Assembled, each panel's entry count and calibration choices, and the shared profile, mode and policy once. Open on the group folder re-verifies every panel before launch, and the folder it hands to the application holds only the Panel N folders. The reprepare proposes a Mosaic (rev 2) folder with a Panel N folder for every panel and keeps each panel's one Results folder.",
-      "negative": "No whole-mosaic run is offered, and no Results folder is inside the group folder, a later group folder or a prepared Panel N folder, so the application never reads its own output as input. The previous group folder is not reused, replaced or cleared and stays until its cleanup is approved."
+      "journeyStep": "J24/S8, J24/S9, J24/S15, J24/S15a, J24/S16, J33/S8, J33/S9, J33/S10, J33/S13",
+      "spec": "069-application-handoff PREP-FR-06, PREP-FR-09, PREP-FR-16, PREP-FR-18, PREP-FR-19, PREP-AC-12, PREP-AC-32, PREP-AC-33, PREP-AC-26, 066-view-selection VSEL-FR-14; D-W99, D-W100",
+      "action": "Apply the Project's selected sessions and groups, wait for the build and swap, and release a file held open by a tool on Windows.",
+      "expect": "Apply builds View (building)/ from originals only, verifies it, swaps it in and keeps the old View as View (previous)/. A file in use reads Waiting for a tool to release a file in View and continues when released; the new tree follows current group, night and calibration layout.",
+      "negative": "No existing View entry is moved or reused, no (rev N) or panel-run folder is created, and a failed or canceled Apply leaves the old View unchanged."
     },
     {
-      "flowStep": "The prepared-entry record that a Complete run's Clean up lists (PV-STO runs Clean up, steps I2 to I5)",
+      "flowStep": "View layout and tool layouts (D-W99)",
       "owner": "069-application-handoff",
-      "journeyStep": "J24/S9, J24/S17, J27/S4, J27/S8, J27/S10, J27/S11",
-      "spec": "069-application-handoff PREP-FR-09, PREP-FR-11, PREP-FR-14, PREP-AC-19, PREP-AC-21; 071-storage-custody STO-FR-01, STO-FR-05, STO-AC-01; D-W26, D-W43, D-W67",
-      "action": "Prepare a run and a second revision, mark the runs Complete, and open Clean up on a hardlink run, a two-revision copy run and a symlink run, then send entries to the Trash.",
-      "expect": "Each preparation revision records the links, clones and copies it created. Clean up lists exactly those entries, one group per type and revision, and after removal the run records which prepared entries were removed and which remain.",
-      "negative": "Original sources, Direct-source paths, library frames, the Results folder and files the preparation did not create are never listed."
+      "journeyStep": "J24/S8, J24/S13, J33/S8, J33/S9, J33/S10, J33/S13",
+      "spec": "069-application-handoff PREP-FR-16, PREP-FR-17, PREP-AC-32, PREP-AC-33, PREP-AC-34, PREP-AC-37, PREP-AC-29, PREP-AC-30, PREP-AC-31, PREP-AC-38; 065-project-goals PRJ-FR-28, PRJ-FR-29; D-W95, D-W99, D-W108, D-W114",
+      "action": "Inspect the View tree for Projects with one and several groups, multiple nights, filters, cameras and mosaic panel groups, and read the selected tool's Apply notes.",
+      "expect": "GROUP_ or PANEL_ appears only for multiple groups; NIGHT_ dates are hyphenated; Lights and Flats use FILTER values; Darks and Bias follow camera scope. Tool layouts and working folders are named under Processing/<Tool>/. A one-group Project has no group level, even for a single panel. A Project that mixes gain or offset carries GAIN_ or OFFSET_ parts in its folder names, and light folders end in their exposure (provisional).",
+      "negative": "No run revision, run-group folder, shared Run Results or assembled-results folder appears, and tools never write into Output/."
     },
     {
-      "flowStep": "Cross-flow: Completion with no Result",
+      "flowStep": "The View entry record that Clean up and Apply list (PV-STO, steps I2 to I5)",
+      "owner": "069-application-handoff",
+      "journeyStep": "J24/S9, J24/S17, J27/S4, J27/S5, J27/S8, J27/S10, J27/S11, J34/S3, J34/S3b",
+      "spec": "069-application-handoff PREP-FR-09, PREP-FR-16, PREP-FR-19; 071-storage-custody STO-FR-01, STO-FR-04, STO-FR-05, STO-FR-10; 065-project-goals PRJ-FR-14, PRJ-FR-25; D19, D-W97, D-W99, D-W100",
+      "action": "Close the Project through Wrap up and review Clean up on one Copies Project and one Symlinks Project.",
+      "expect": "Clean up identifies only the View entries PlateVault placed and View (previous)/ contents. The Copies Project's View-removal option starts ticked; the Symlinks Project's starts unticked. Each entry records its identity and custody evidence.",
+      "negative": "No original source, Output/ file or unrelated Processing/ file is listed or removed. Close is unavailable until Wrap up reaches Archive and no Project can be reopened."
+    },
+    {
+      "flowStep": "Apply custody: removing the old View from `View (previous)/` after Apply's swap",
+      "owner": "071-storage-custody",
+      "journeyStep": "J24/S9, J24/S15, J24/S16",
+      "spec": "071-storage-custody STO-FR-04, STO-FR-10; 069-application-handoff PREP-FR-06, PREP-FR-09; D19, D-W100",
+      "action": "After Apply swaps in a verified View, inspect the old entries in View (previous)/ and their cleanup outcome.",
+      "expect": "Old copies are deleted outright only after verifying their original and digest; old symlinks are removed after no-follow checks. Changed, unverified or unticked user files remain in View (previous)/.",
+      "negative": "Apply custody sends no old copies to OS Trash, never deletes an unplaced user file, and never follows a symlink target."
+    },
+    {
+      "flowStep": "Cross-flow: Closing with no Result",
       "owner": "070-results-reuse",
-      "journeyStep": "J27/S1, J33/S15",
-      "spec": "070-results-reuse RES-FR-06, RES-FR-08, RES-AC-06, RES-AC-12; D-W3, D-W26, D-W38",
-      "action": "Mark processing complete on a run that has no accepted Result, and on every panel run of a mosaic run group with no group Result.",
-      "expect": "Each run reads Complete and offers Clean up as a separate action. No group Result is required or shown as missing.",
-      "negative": "No file is removed and no cleanup starts."
+      "journeyStep": "J27/S1",
+      "spec": "070-results-reuse RES-FR-06, RES-FR-08, RES-AC-06, RES-AC-12; 065-project-goals PRJ-FR-14, PRJ-FR-25; D-W97, D-W98",
+      "action": "Close a Project with an empty Output/ and a mosaic Project with panel results but no assembled image.",
+      "expect": "The Project can close without a Result or assembled mosaic, and its state becomes Closed or Archived after successful Archive. Output/ remains in place.",
+      "negative": "No Result is shown as missing or required, no file is removed from Output/, and no cleanup starts implicitly."
     },
     {
-      "flowStep": "Results surface",
+      "flowStep": "Output step: Results, Copy to Output and the master offer",
       "owner": "070-results-reuse",
-      "journeyStep": "J26/S1, J26/S1a, J26/S2, J26/S3, J26/S3a, J26/S4, J26/S8",
-      "spec": "070-results-reuse RES-FR-01, RES-FR-02, RES-FR-03, RES-FR-04, RES-FR-05, RES-AC-01, RES-AC-02, RES-AC-10, RES-AC-15, RES-AC-16; 068-calibration-inputs CAL-FR-06; D-W4, D-W55, D-W67",
-      "action": "Open the run's Results step, attach an external product, inspect and accept products, pick accepted Results in a new run's input filters, and meet the generated master listed in Results.",
-      "expect": "Discovered candidates, attached products and recognized intermediates are listed separately with their revision, type and availability. Attach Result sits on the step itself. Accepted products are protected Keep with their SHA-256, the Results picker offers them grouped by Project and run, and a new generated master carries its once-only offer.",
-      "negative": "No candidate is accepted automatically, and no file appearing in the folder is treated as proof that it came from the full selection."
+      "journeyStep": "J26/S1, J26/S1a, J26/S2, J26/S3, J26/S3a, J26/S8",
+      "spec": "070-results-reuse RES-FR-01, RES-FR-02, RES-FR-06, RES-FR-11, RES-AC-01, RES-AC-02, RES-AC-28, RES-AC-15; 068-calibration-inputs CAL-FR-06; D-W93, D-W97, D-W98",
+      "action": "Open the Project's Output step, copy a tool file to Output/, inspect result rows and the one-time generated-master offer.",
+      "expect": "Every file in Output/ is listed as a Result; Copy to Output verifies a copy from Processing/, and a master newly found in Processing/ is offered once for the calibration library.",
+      "negative": "No file needs accepting, no lineage or provenance is recorded, Results never become inputs, and tools never write into Output/."
     },
     {
-      "flowStep": "Run group Results: per-panel Results folders and the optional group Result",
+      "flowStep": "Mosaic outputs in `Output/Panels/`",
       "owner": "070-results-reuse",
       "journeyStep": "J33/S11, J33/S12, J33/S14, J33/S15",
-      "spec": "070-results-reuse RES-FR-01, RES-FR-02, RES-FR-04, RES-FR-08, RES-AC-11, RES-AC-12; D-W38, D-W67, D-W73",
-      "action": "Save panel images into each panel run's Mosaic Results/Panel N folder, including one whose file name names another panel, a stray file inside a prepared Panel N folder, and an assembled image into the group's Mosaic Results/Assembled folder. Open the group's Results step, accept a panel Result and a group Result, discover a Result from a later revision, and complete each panel run.",
-      "expect": "Each panel run lists exactly the candidates in its own Mosaic Results/Panel N folder, each naming the group revision it came from, whatever a file's name says. The assembled image in Mosaic Results/Assembled is a group Result candidate of kind Assembled mosaic. Every panel run can complete with its own Results.",
-      "negative": "Nothing inside the prepared group folder is discovered, no candidate is listed as unplaced, and nothing is accepted automatically. Accepting the group Result changes no panel run, and no panel run waits for a group Result."
-    },
-    {
-      "flowStep": "Move run to Trash, Restore and Empty Trash",
-      "owner": "070-results-reuse",
-      "journeyStep": "J21/S1, J24/S15, J27/S13, J27/S14, J27/S14a, J27/S14b, J34/S2, J34/S3a",
-      "spec": "070-results-reuse RES-FR-05, RES-FR-07, RES-FR-10, RES-AC-19, RES-AC-20, RES-AC-21, RES-AC-22; 065-project-goals PRJ-FR-04, PRJ-FR-14, PRJ-FR-20, PRJ-AC-29; 071-storage-custody STO-FR-17, STO-AC-24; D-W66, D-W72",
-      "action": "Try Move run to Trash while the run's preparation is running and while another run uses the run's accepted Results. Move a Complete run on a location without OS Trash to the Project's Trash, read the Project's goals, Restore it, move it again and empty it from the Trash with its Results folder ticked. Move an open run to Trash from the Mark Done prompt and empty it from the Done / Archive sheet.",
-      "expect": "Move run to Trash is refused while an app-owned preparation affecting the run is running, naming it, as Mark processing complete is, and while another run uses one of its accepted Results, naming each such run. Otherwise the run leaves the stage rail, Home and every picker and shows only in the Project's Trash list, and its members stop counting in project and captured unless they are still candidates. Restore brings it back with its membership revisions, preparation revisions, Results and stage. Empty Trash reviews the run record, its prepared folders and its Results folder, which goes only when ticked. After confirming, the files go to the OS Trash, and anything that cannot go there is named and left in place.",
-      "negative": "Moving a run to Trash and restoring it move no file. Nothing touches library frames or quality decisions or deletes permanently, a refused Move run to Trash changes nothing, and after Empty Trash the run cannot be restored."
+      "spec": "070-results-reuse RES-FR-01, RES-FR-08, RES-AC-11, RES-AC-12; 065-project-goals PRJ-FR-29; D-W95, D-W98",
+      "action": "Save one image for each mosaic panel in Output/Panels/<group>/ and the assembled mosaic directly in Output/. Open the Project's Output step.",
+      "expect": "Output lists each panel result under its panel folder and the assembled image as a Result in Output/. The folder, not a header or file name, associates a panel result with its panel.",
+      "negative": "PlateVault does not stitch or assemble the mosaic, nothing needs accepting, and no file in `View/` or `Processing/` is listed as a Result."
     },
     {
       "flowStep": "Cross-flow: Cleanup/Trash failure",
       "owner": "071-storage-custody",
       "journeyStep": "J27/S8, J27/S10, J27/S14b, J34/S6, J34/S9, J34/S9a",
-      "spec": "071-storage-custody STO-FR-05, STO-FR-15, STO-FR-16, STO-FR-17, STO-AC-03, STO-AC-09, STO-AC-15, STO-AC-19, STO-AC-21, STO-AC-23, STO-AC-24; D19, D-W43, D-W70, D-W72, D-W74",
-      "action": "Send cleanup entries to the Trash after a retained original changes, on a location without safe Trash, empty a run whose prepared folders sit there from the Project's Trash, and move rejected frames, processing intermediates and duplicate copies to the Trash after one item changes in place.",
-      "expect": "Each refused item is named with its reason in an exact partial summary, and the unsupported location offers Keep files and Reveal location. Items that pass re-verification go to the OS Trash.",
-      "negative": "Refused items stay in place, and no permanent-delete fallback is offered."
+      "spec": "071-storage-custody STO-FR-04, STO-FR-05, STO-FR-10, STO-FR-14, STO-FR-15, STO-FR-16, STO-AC-03, STO-AC-09, STO-AC-15, STO-AC-19, STO-AC-21, STO-AC-23; 065-project-goals PRJ-FR-15; D19, D-W74, D-W80, D-W97, D-W100",
+      "action": "Send approved View entries to Trash after a retained original changes, try cleanup on a location without safe Trash, and move rejected frames, Processing/ files and duplicate copies after one item changes in place.",
+      "expect": "Each refused item is named with its reason in an exact partial summary, and the unsupported location offers Keep files and Reveal location. Items that pass re-verification go to OS Trash; Apply's verified old copies are deleted outright under STO-FR-10.",
+      "negative": "Refused items stay in place, no permanent-delete fallback is offered, Output/ remains protected, and no Empty Trash group or run cleanup exists."
     },
     {
       "flowStep": "Cross-flow: Archive interruption",
       "owner": "071-storage-custody",
       "journeyStep": "J28/S6, J28/S7",
-      "spec": "071-storage-custody STO-FR-08, STO-FR-11, STO-AC-05; D06, D09",
-      "action": "Unplug the archive volume while items are being copied, open Storage, then reconnect and Retry.",
-      "expect": "The transfer and Storage show destination-verified, source-retained, reference-updated and pending work per item. Retry revalidates the volume and item identities and resumes the recorded work.",
-      "negative": "No item with an unverified destination or reference has its source retired, and a partially written file is not treated as verified because its name exists."
+      "spec": "071-storage-custody STO-FR-08, STO-FR-11, STO-FR-13, STO-AC-05; 065-project-goals PRJ-FR-14, PRJ-FR-25; D06, D09, D19, D-W97",
+      "action": "Unplug the archive volume while the Project's Wrap up Archive transfer is running, reconnect it and Retry.",
+      "expect": "The transfer shows destination-verified, source-retained, reference-updated and pending work per item. Retry revalidates volume and item identities and resumes the recorded work.",
+      "negative": "No item with an unverified destination or reference has its source retired, and a partially written file is not treated as verified because its name exists. The Project does not close before Archive succeeds."
     },
     {
-      "flowStep": "Storage: locations, availability, run footprints, duplicate candidates and archive transfers",
+      "flowStep": "Wrap up custody: removing the View and what `View (previous)/` still holds in Clean up, the OS Trash moves of rejected frames, `Processing/` files and duplicate copies in Trash, and the verified archive transfer of Archive, executing the steps of the PV-PRJ Wrap up",
       "owner": "071-storage-custody",
-      "journeyStep": "J28/S6",
-      "spec": "071-storage-custody STO-FR-11, STO-AC-12; D-W3",
-      "action": "Open Storage while an archive transfer is interrupted.",
-      "expect": "Storage lists the transfer with its per-item phases, separately from location availability.",
-      "negative": "Showing a transfer or a duplicate candidate never authorizes removal."
-    },
-    {
-      "flowStep": "Done / Archive custody: the verified archive transfer, the OS Trash moves of rejected frames, processing intermediates and duplicate copies, and the reviewed restore of archived sessions, executing the offers of the PV-PRJ Done / Archive sheet",
-      "owner": "071-storage-custody",
-      "journeyStep": "J34/S5, J34/S6, J34/S9, J34/S9a, J34/S10, J34/S11, J34/S12a, J28/S1",
-      "spec": "071-storage-custody STO-FR-04, STO-FR-06, STO-FR-07, STO-FR-13, STO-FR-14, STO-FR-15, STO-FR-16, STO-AC-17, STO-AC-19, STO-AC-21, STO-AC-22, STO-AC-23; 065-project-goals PRJ-FR-14, PRJ-FR-15, PRJ-AC-17, PRJ-AC-28, PRJ-AC-30; 064-library-inventory LIB-FR-18; D19, D-W26, D-W43, D-W46, D-W69, D-W70, D-W74",
-      "action": "Review Archive, move the rejected frames, the processing intermediates and the duplicate copies to the Trash with one item changed in place, put a frame back, approve Archive, and after Reopen read an archived session's restore review.",
-      "expect": "Each approved offer runs as its own reviewed custody step with per-item outcomes and an exact summary, and every custody refusal is listed with its reason. The adopted master's generated source moves with the intermediates as a verified duplicate naming the kept copy, and each duplicate copy moves only after it and its kept copy re-verify. Archive keeps sessions another open Project's run uses and transfers the rest by the naming templates. After Reopen archived sessions still read Archived, and restoring one opens a reviewed transfer.",
-      "negative": "No file moves before an offer is approved, accepted Results, adopted masters, kept copies, unknown files and prepared entries are never trashed, and nothing is permanently deleted. Reopening moves no file."
-    },
-    {
-      "flowStep": "Empty Trash custody: moving the prepared folders of a run emptied from the Project's Trash, and its Results folder when ticked, to the OS Trash",
-      "owner": "071-storage-custody",
-      "journeyStep": "J27/S14b, J34/S3a",
-      "spec": "071-storage-custody STO-FR-04, STO-FR-05, STO-FR-17, STO-AC-24; 070-results-reuse RES-FR-10, RES-AC-22; 065-project-goals PRJ-FR-14; D19, D-W72",
-      "action": "From the Project's Trash, empty a run whose prepared folders sit on a location without OS Trash, with its Results folder ticked, and from the Done / Archive sheet empty a run that has no preparation revision.",
-      "expect": "The review names each item that cannot go to the OS Trash with its reason. After confirming, every other item goes to the OS Trash, and the summary names every item left in place with its path.",
-      "negative": "No item is permanently deleted, no link target is followed, and no library frame or quality decision changes."
+      "journeyStep": "J34/S3, J34/S4, J34/S5, J34/S6, J34/S9, J34/S9a, J34/S11, J28/S1, J28/S5, J28/S9a, J39/S6a",
+      "spec": "071-storage-custody STO-FR-01, STO-FR-04, STO-FR-06, STO-FR-07, STO-FR-13, STO-FR-14, STO-FR-15, STO-FR-16, STO-AC-17, STO-AC-19, STO-AC-21, STO-AC-23, STO-AC-28; 065-project-goals PRJ-FR-14, PRJ-FR-15, PRJ-FR-25; 064-library-inventory LIB-FR-18; D19, D-W74, D-W80, D-W97, D-W98, D-W100, D-W116",
+      "action": "Review the Project's Clean up, Trash and Archive offers, move eligible rejected frames, Processing/ files and duplicate copies to OS Trash, approve Archive, then close the Project.",
+      "expect": "Each custody offer is reviewed and reports per-item outcomes and an exact summary. Archive keeps sessions held by another open Project and verifies transfers before retiring sources; Close follows successful Archive and preserves Output/. When copies tie for the kept copy, the first-catalogued copy is preselected.",
+      "negative": "Nothing moves before approval, adopted masters and kept copies are not trashed, and nothing is permanently deleted. There is no Reopen or restore of archived sessions."
     },
     {
       "flowStep": "Import: source, preview, Copy or Move, summary, saved sources and Import new",
       "owner": "071-storage-custody",
-      "journeyStep": "J31/S1–S12",
-      "spec": "071-storage-custody STO-IMP-FR-01, STO-IMP-FR-02, STO-IMP-FR-03, STO-IMP-FR-04, STO-IMP-FR-05, STO-IMP-FR-06, STO-IMP-FR-08, STO-IMP-AC-01, STO-IMP-AC-02, STO-IMP-AC-03, STO-IMP-AC-04, STO-IMP-AC-05, STO-IMP-AC-06, STO-IMP-AC-07, STO-IMP-AC-09, STO-IMP-AC-10; 064-library-inventory LIB-FR-16, LIB-FR-19; D19, D-W11, D-W12, D-W24",
-      "action": "Open Import from Home, pick a card and a Captures location, read the preview, type an Unclassified frame, save the source and import with Copy, then Import new, Move from a second card, Move from a network share that drops, and add an existing library folder.",
-      "expect": "The preview lists each file with its templated destination, duplicates, Unclassified and settling files and collisions. Copy and Move verify every destination against its source snapshot, Move trashes a source only after that, and the summary is exact and recorded in Activity. Import new offers only files not already imported, and imported lights land in Sessions and calibration frames in the Calibration library.",
-      "negative": "Nothing is written before the import starts, no file is overwritten, no source is permanently deleted, and Add existing library folder copies, renames and moves nothing."
+      "journeyStep": "J31/S1, J31/S2, J31/S3, J31/S4, J31/S5, J31/S5a, J31/S6, J31/S7, J31/S8, J31/S9, J31/S10, J31/S11, J31/S12, J31/S10a",
+      "spec": "071-storage-custody STO-IMP-FR-01, STO-IMP-FR-02, STO-IMP-FR-03, STO-IMP-FR-04, STO-IMP-FR-05, STO-IMP-FR-06, STO-IMP-FR-07, STO-IMP-FR-08, STO-IMP-AC-01, STO-IMP-AC-02, STO-IMP-AC-03, STO-IMP-AC-04, STO-IMP-AC-05, STO-IMP-AC-06, STO-IMP-AC-07, STO-IMP-AC-09, STO-IMP-AC-10, STO-IMP-AC-11; 064-library-inventory LIB-FR-04, LIB-FR-16, LIB-FR-19, LIB-FR-23, LIB-FR-24, LIB-AC-31, LIB-AC-34; D19, D-W11, D-W12, D-W24, D-W101, D-W104, D-W105, D-W106, D-W107",
+      "action": "Open Import from Home, choose a source and destination, review templated paths, calibration match states and collisions, then import with Copy or Move; later use Import new and add an existing library folder.",
+      "expect": "The preview lists each file and destination, duplicates, Unclassified and unsettled files, collisions and space. Copy and Move verify destinations; Move sends a source to OS Trash only after verification. Import new offers only files not already imported, lights land in Sessions and calibration frames in the Calibration library. The preview shows intake's framing splits, which the user can merge or re-split before starting, and lights with no pointing stay one session.",
+      "negative": "Nothing is written before Import starts, no file is overwritten or permanently deleted, and Add existing library folder copies, renames or moves nothing."
     },
     {
-      "flowStep": "Settings > Naming: templates, chip editor and live preview",
+      "flowStep": "Settings > Naming: text templates per frame type, live preview and token table (D-W84)",
       "owner": "071-storage-custody",
       "journeyStep": "J31/S4",
-      "spec": "071-storage-custody STO-IMP-FR-07, STO-IMP-AC-08; D-W20, D-W58",
-      "action": "Open Settings > Naming, change the light template with the chip editor, try an invalid segment, save, then Restore defaults.",
-      "expect": "The live preview shows the sample path and names any fallback token. An invalid segment shows an inline error and blocks Save, the next Import preview uses the saved template, and Restore defaults returns the per-type defaults.",
-      "negative": "No template change writes, renames or moves a file, and there is no Auto-apply pattern checkbox."
+      "spec": "071-storage-custody STO-IMP-FR-07, STO-IMP-AC-08; D-W84, D-W11",
+      "action": "Open Settings > Naming, edit a frame-type template as plain text, try an invalid segment, save, then Restore defaults.",
+      "expect": "The live preview shows a sample path and fallback token; the token table names available and unavailable renderings. An invalid segment shows an inline error and blocks Save, and the next Import preview uses the saved template.",
+      "negative": "No template change writes, renames or moves a file, there is no chip editor, and no Auto-apply pattern checkbox exists."
     },
     {
       "flowStep": "Cross-flow: Import source unmounted",
@@ -799,37 +790,37 @@
       "flowStep": "Cross-flow: Destination collision",
       "owner": "071-storage-custody",
       "journeyStep": "J24/S4, J26/S8a, J31/S3, J31/S5",
-      "spec": "071-storage-custody STO-FR-12, STO-IMP-FR-05, STO-IMP-AC-06; 069-application-handoff PREP-FR-06, PREP-AC-02; 068-calibration-inputs CAL-FR-07, CAL-AC-08; D05, D-W11, D-W24",
-      "action": "Meet an existing destination in an Import preview, a run location and a master adoption path, then leave the blocked Import item out.",
-      "expect": "Each collision is named and blocks its item until the user changes the template, the name or the destination, or leaves the item out. Other Import items proceed.",
-      "negative": "No existing file is ever overwritten, reused or cleared, and it stays byte-identical."
+      "spec": "071-storage-custody STO-FR-12, STO-IMP-FR-05, STO-IMP-AC-06; 069-application-handoff PREP-FR-06, PREP-AC-02; 068-calibration-inputs CAL-FR-07, CAL-AC-08; D05, D-W11, D-W24, D-W98, D-W100",
+      "action": "Meet an existing destination in an Import preview, a Project folder selected for Apply and a master-adoption path; leave the blocked Import item out.",
+      "expect": "Each collision is named and blocks its item until the user changes the template, name or destination, or leaves the item out. Other Import items proceed.",
+      "negative": "No existing file is overwritten, reused or cleared; it stays byte-identical."
     },
     {
       "flowStep": "Targets list: Show mode, search with Add to targets, columns, presets and rig selector (D-W17, D-W18, D-W19, D-W23, D-W37)",
       "owner": "072-observing-plans",
-      "journeyStep": "J14/S1, J19/S6a, J29/S1, J29/S11, J29/S12, J35/S1–S13, J35/S5a",
-      "spec": "072-observing-plans PLAN-TGT-FR-01, PLAN-TGT-FR-02, PLAN-TGT-FR-03, PLAN-TGT-FR-04, PLAN-TGT-FR-05, PLAN-TGT-FR-06, PLAN-TGT-FR-07, PLAN-TGT-FR-08, PLAN-TGT-FR-09, PLAN-TGT-FR-10, PLAN-TGT-FR-11, PLAN-TGT-FR-12, PLAN-TGT-FR-13, PLAN-TGT-FR-14, PLAN-TGT-AC-01–PLAN-TGT-AC-16, PLAN-FR-10; D-W17, D-W18, D-W19, D-W23, D-W37, D-W60",
-      "action": "Open Targets on My targets, search and use Add to targets, read and sort the columns, open a row's Plan area, browse catalogues, apply and save presets, and select a mono rig, an OSC rig and this Project's rigs. Also read Targets before any observing site exists.",
-      "expect": "My targets lists favourites plus open Projects' subjects with badges, and search covers My targets, the bundled catalogues and SIMBAD with each source named. Columns show tonight's values at the planning site with zero reasons, presets apply and persist, and a selected rig adds Fit, limits the Filters strip and enables the rig presets. Without a site the planning columns read a dash with Add an observing site in Settings.",
+      "journeyStep": "J14/S1, J19/S6a, J29/S1, J29/S11, J29/S12, J35/S1, J35/S2, J35/S3, J35/S4, J35/S5, J35/S5a, J35/S5b, J35/S6, J35/S7, J35/S8, J35/S9, J35/S10, J35/S11, J35/S12, J35/S13",
+      "spec": "072-observing-plans PLAN-TGT-FR-01, PLAN-TGT-FR-02, PLAN-TGT-FR-03, PLAN-TGT-FR-04, PLAN-TGT-FR-05, PLAN-TGT-FR-06, PLAN-TGT-FR-07, PLAN-TGT-FR-08, PLAN-TGT-FR-09, PLAN-TGT-FR-10, PLAN-TGT-FR-11, PLAN-TGT-FR-12, PLAN-TGT-FR-13, PLAN-TGT-FR-14, PLAN-TGT-AC-01, PLAN-TGT-AC-16, PLAN-FR-10; D-W17, D-W18, D-W19, D-W23, D-W37, D-W60, D-W88",
+      "action": "Open Targets on My targets, search and use Add to targets, read and sort columns, open a row's Plan area, browse catalogues, apply and save presets, and select a mono rig, an OSC rig and this Project's rigs. Also read Targets before an observing site exists.",
+      "expect": "My targets lists favourites plus open Projects' subjects with badges. Search names sources; columns show site-based planning values, presets apply and persist, and a selected rig adds Fit and limits the Filters strip. Without a site, planning columns read a dash and offer Add an observing site in Settings.",
       "negative": "Searching and browsing write nothing until Add to targets, and adding a Target creates no Project. No window is computed for an assumed location, built-in presets cannot be edited, and no Avoid tonight preset exists."
     },
     {
-      "flowStep": "Settings > Equipment filter lists and the unknown-filter prompt (D-W31)",
+      "flowStep": "Settings > Equipment: cameras, telescopes, filters and rigs, rig versions, camera aliases and defaults, and the unknown-filter prompt (D-W31, D-W87, D-W104)",
       "owner": "072-observing-plans",
       "journeyStep": "J15/S1, J15/S2, J15/S3, J15/S3a, J15/S4, J15/S4a, J15/S4b, J15/S4c, J15/S4d, J15/S4e, J35/S13",
-      "spec": "072-observing-plans PLAN-EQ-FR-01, PLAN-EQ-FR-02, PLAN-EQ-FR-03, PLAN-EQ-FR-04, PLAN-EQ-FR-05, PLAN-EQ-FR-06, PLAN-EQ-AC-01, PLAN-EQ-AC-02, PLAN-EQ-AC-03, PLAN-EQ-AC-04, PLAN-EQ-AC-05, PLAN-EQ-AC-06, PLAN-TGT-FR-13, PLAN-TGT-AC-13; 064-library-inventory LIB-FR-05; D-W23, D-W30, D-W31, D-W37",
-      "action": "In Settings > Equipment register cameras and telescopes, compose a mono and an OSC rig, add filters with their FILTER values and bands, recover from a failed save, confirm a session's rig and meet, decline and then accept the unknown-filter prompt, and add a dual-band filter to the OSC rig.",
-      "expect": "Mono or OSC comes from the camera and the field of view from sensor and focal length. Each filter shows its matched FILTER values and band, a failed save stays visibly unsaved with Retry, and an unmatched FILTER value on a confirmed rig reads unknown with Add value to rig on the session and in Settings. The Targets Filters strip follows the rig's filter list.",
+      "spec": "072-observing-plans PLAN-EQ-FR-01, PLAN-EQ-FR-02, PLAN-EQ-FR-03, PLAN-EQ-FR-04, PLAN-EQ-FR-05, PLAN-EQ-FR-06, PLAN-EQ-FR-07, PLAN-EQ-FR-08, PLAN-EQ-AC-01, PLAN-EQ-AC-02, PLAN-EQ-AC-03, PLAN-EQ-AC-04, PLAN-EQ-AC-05, PLAN-EQ-AC-06, PLAN-TGT-FR-13, PLAN-TGT-AC-13; 064-library-inventory LIB-FR-05, LIB-FR-26; 068-calibration-inputs CAL-FR-21, CAL-FR-22; D-W23, D-W30, D-W31, D-W37, D-W87, D-W104, D-W105",
+      "action": "In Settings > Equipment register cameras and telescopes, compose mono and OSC rigs, add filters with FITS FILTER values and bands, create a dated rig version, configure camera aliases and defaults, recover from a failed save, confirm a session's rig, and accept or decline an unknown-filter prompt.",
+      "expect": "Mono or OSC comes from the camera and field of view from sensor and focal length. Rig versions list dates and do not rewrite a session's captured version. Cameras that share a model require unique aliases; Don't use darks and Don't use bias settle sessions as No choices. An unmatched FILTER value on a confirmed rig offers Add value to rig.",
       "negative": "No prompt appears before the rig is confirmed, declining leaves the filter list unchanged, no header byte changes, and goal templates never follow the rig's filters."
     },
     {
-      "flowStep": "Tonight data for Home (D-W39)",
+      "flowStep": "Tonight and calendar data for Home (D-W39, D-W89)",
       "owner": "072-observing-plans",
-      "journeyStep": "J19/S6a, J29/S13, J32/S7",
-      "spec": "072-observing-plans PLAN-FR-08, PLAN-FR-11, PLAN-AC-11, PLAN-AC-12; 065-project-goals PRJ-FR-17; D-W39, D-W60, D-W63",
-      "action": "Read Home's Tonight section before any observing site exists, then with a default site, and compare it with the Targets' Plan areas.",
-      "expect": "Without a saved site Tonight lists no windows and reads Add an observing site in Settings. With the default site it lists each favourite and open-Project subject's best window tonight with start, end and peak altitude, plus the Moon's illumination, phase, rise and set and tonight's darkness window, each naming the site and its time zone and matching the Plan area.",
-      "negative": "No window is computed for an assumed location or for the planning site selector's other site, a Target without a window tonight is not listed, and reading Tonight schedules no reminder and starts no indexing."
+      "journeyStep": "J19/S6a, J29/S13, J32/S7, J32/S7a",
+      "spec": "072-observing-plans PLAN-FR-08, PLAN-FR-11, PLAN-FR-12, PLAN-AC-11, PLAN-AC-12; 065-project-goals PRJ-FR-17; D-W89",
+      "action": "Read Home's Tonight section before any site exists and with a default site, then compare its goal windows and five-week calendar with Targets' Plan areas.",
+      "expect": "Without a saved site Tonight lists no windows and reads Add an observing site in Settings. With the default site it lists best windows for favourites and open-Project subjects, the Moon and darkness window; each names the site and time zone and matches the Plan area.",
+      "negative": "No window is computed for an assumed location or for another planning site's selector value. Reading Tonight schedules no reminder and starts no indexing."
     }
   ]
 }

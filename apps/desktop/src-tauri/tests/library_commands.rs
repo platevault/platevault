@@ -53,11 +53,9 @@ impl Shell {
         let dir = tempfile::tempdir().expect("temp dir");
         // Opened on Tauri's runtime, where the handlers run, so the catalog's
         // connections belong to it.
-        let library = tauri::async_runtime::block_on(Library::open(
-            &dir.path().join("catalog.sqlite"),
-            None,
-        ))
-        .expect("open library");
+        let library =
+            tauri::async_runtime::block_on(Library::open(&dir.path().join("catalog.sqlite"), None))
+                .expect("open library");
         let app = mock_builder()
             .invoke_handler(tauri::generate_handler![
                 desktop_shell::commands::project_inputs::project_inputs,
@@ -270,7 +268,11 @@ fn intake_family_takes_its_arguments() {
 #[test]
 fn calibration_family_lists_the_queue_and_takes_reassign_arguments() {
     let shell = Shell::new();
-    assert_eq!(shell.invoke("calibration_needs", &json!({})), Ok(json!([])), "nothing needs calibration");
+    assert_eq!(
+        shell.invoke("calibration_needs", &json!({})),
+        Ok(json!([])),
+        "nothing needs calibration"
+    );
     let session = Uuid::new_v4();
     shell.refuses(
         "calibration_reassign",

@@ -25,7 +25,7 @@ use persistence_targets::repositories::q_targets_ingest::insert_library_root_mir
 use crate::support::{env_size, print_result};
 
 /// Frames per subdirectory. Reconcile walks the whole root once via
-/// `fs_pathsafe::real_files_under`, so the fan-out only affects `read_dir`
+/// `fs_pathsafe::real_files_under_reporting`, so the fan-out only affects `read_dir`
 /// batch sizes, not the number of stat calls.
 const FRAMES_PER_DIR: usize = 200;
 

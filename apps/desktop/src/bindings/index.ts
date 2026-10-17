@@ -851,16 +851,71 @@ export const commands = {
 	 */
 	recoveryStatus: () => typedError<RecoveryStatus, ContractError_Serialize>(__TAURI_INVOKE("recovery_status")),
 	/**
-	 *  `update_install_on_quit_begin` — the main window, answering
-	 *  [`INSTALL_EVENT`], asks to start installing. `true` when the gate now holds
-	 *  the quit, so the install may run; `false` when the quit was already
-	 *  released (a second quit or the watchdog), so the frontend must not install.
+	 *  `update.status` — the update status to show now; later changes arrive as
+	 *  `update:status` events.
 	 * 
 	 *  # Errors
 	 * 
-	 *  Never fails; the `Result` keeps the command surface's envelope uniform.
+	 *  `InternalError` when the build has no usable updater configuration.
 	 */
-	updateInstallOnQuitBegin: () => typedError<boolean, ContractError_Serialize>(__TAURI_INVOKE("update_install_on_quit_begin")),
+	updateStatus: () => typedError<UpdateStatus, ContractError_Serialize>(__TAURI_INVOKE("update_status")),
+	/**
+	 *  `update.offer` — where the Install now and Install on quit offer for the
+	 *  release the last check found was made: the system notification, or the
+	 *  in-app notice. Later changes arrive as `update:offer` events.
+	 * 
+	 *  # Errors
+	 * 
+	 *  `InternalError` when the build has no usable updater configuration.
+	 */
+	updateOffer: () => typedError<UpdateOffer, ContractError_Serialize>(__TAURI_INVOKE("update_offer")),
+	/**
+	 *  `update.check_on_startup` — the check at app start, run once per process
+	 *  and only when `automatic` ("Check for updates automatically") is on.
+	 * 
+	 *  # Errors
+	 * 
+	 *  `InternalError` when the build has no usable updater configuration.
+	 */
+	updateCheckOnStartup: (automatic: boolean) => typedError<null, ContractError_Serialize>(__TAURI_INVOKE("update_check_on_startup", { automatic })),
+	/**
+	 *  `update.check` — a manual check. Never downloads.
+	 * 
+	 *  # Errors
+	 * 
+	 *  `InternalError` when the build has no usable updater configuration.
+	 */
+	updateCheck: () => typedError<null, ContractError_Serialize>(__TAURI_INVOKE("update_check")),
+	/**
+	 *  `update.install_now` — download and verify, install, then relaunch (on
+	 *  Windows the app exits for the installer).
+	 * 
+	 *  # Errors
+	 * 
+	 *  `InternalError` when the build has no usable updater configuration.
+	 */
+	updateInstallNow: () => typedError<null, ContractError_Serialize>(__TAURI_INVOKE("update_install_now")),
+	/**
+	 *  `update.install_on_quit` — download and verify now, install when the app
+	 *  quits.
+	 * 
+	 *  # Errors
+	 * 
+	 *  `InternalError` when the build has no usable updater configuration.
+	 */
+	updateInstallOnQuit: () => typedError<null, ContractError_Serialize>(__TAURI_INVOKE("update_install_on_quit")),
+	/**
+	 *  `update.set_locale` — the webview's active locale, sent at startup and on
+	 *  every locale change, for the text the updater shows outside the webview:
+	 *  the macOS administrator prompt and the notification an install at quit
+	 *  raises. A tag that is not a shipped locale means the base locale. Without
+	 *  an updater there is nothing to tell, which is not an error.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Never; the `Result` keeps the shape every update command has.
+	 */
+	updateSetLocale: (locale: string) => typedError<null, ContractError_Serialize>(__TAURI_INVOKE("update_set_locale", { locale })),
 	/**
 	 *  `audit.list` — returns paginated audit entries read from `audit_log_entry`.
 	 * 
@@ -2149,6 +2204,11 @@ export const commands = {
 	 */
 	devSchemaGet: (request: DevSchemaGetRequest) => typedError<DevSchemaGetResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("dev_schema_get", { request })),
 };
+
+/* Constants */
+export const UPDATE_OFFER_DEADLINE_MS = 30000 as const;
+
+export const UPDATE_PERSISTENT_OFFER_TIMEOUT_MS = 300000 as const;
 
 /* Types */
 /**
@@ -4011,6 +4071,13 @@ export type ErrorCode = "validation.request_envelope_invalid" | "dev_mode.disabl
  *  Included per task instruction.
  */
 "launch.failed" | "macos.quarantine.detected" | "filters.invalid" | "os.command_failed" | "picker.unavailable" | "format.unsupported" | "range.invalid" | "path.write.denied" | "path.parent.missing" | "database.error" | "serialise.error" | "io.error" | 
+/**
+ *  An export failed after claiming its destination and its own
+ *  unfinished file remains there; the user deletes it before retrying.
+ *  `details.path` names that file, under the destination's canonicalized
+ *  parent.
+ */
+"export.unfinished_file" | 
 /**
  *  A root's storage is unavailable (e.g. a removable drive is
  *  disconnected). Frames under it are reported unavailable/missing —
@@ -6313,6 +6380,21 @@ export type InventoryReconcileRunResponse = {
 	newlyMissing: number,
 	recovered: number,
 	sizeBackfilled: number,
+	/**
+	 *  Recorded frames at or below an unreadable path, so their presence is
+	 *  unknown. The pass leaves their records, events and session membership
+	 *  unchanged.
+	 */
+	unknown: number,
+	/**  The walk could not read part of the root; `unreadable_paths` names it. */
+	incomplete: boolean,
+	/**
+	 *  Root-relative, forward-slash paths the walk could not read, sorted;
+	 *  `""` is the root itself. Each is a folder it could not list in full or
+	 *  an entry whose metadata it could not read, and covers everything below
+	 *  it. Empty exactly when `incomplete` is `false`.
+	 */
+	unreadablePaths: string[],
 	progressPct: number,
 };
 
@@ -7057,11 +7139,60 @@ export type NativeMenuLabels = {
 	closeWindow: string,
 };
 
+/**  The new files of one online Captures location. */
+export type NewCaptureCount = {
+	locationId: string,
+	/**
+	 *  Supported frames below the location that the library does not hold
+	 *  yet: arrived since its last index, until indexing adds them.
+	 */
+	newFiles: number,
+	/**
+	 *  Whether a live folder watcher keeps the count current. `false` while
+	 *  the count may lag: the watcher did not start or misses some folders,
+	 *  and every sweep retries it, or the location's removable drive is being
+	 *  ejected.
+	 */
+	live: boolean,
+};
+
+/**  The new files of every counted Captures location, by location id. */
+export type NewCaptures = {
+	locations: NewCaptureCount[],
+};
+
 /**  Summary of items that do NOT require acknowledgement (R-CheckScope, FR-008). */
 export type NonBlockingSummary = {
 	normalCount: number,
 	unprotectedCount: number,
 };
+
+/**
+ *  Where the Install now and Install on quit offer for a release is made
+ *  (astro-plan-c72oo).
+ */
+export type OfferChannel = 
+/**
+ *  A system notification with both buttons is outstanding that stays on
+ *  screen until the user answers it, for a bounded time: on macOS, the
+ *  Alert notification style, unless it was presented while the app was
+ *  frontmost, which shows it as a banner. A Focus may send even an alert
+ *  unseen to Notification Center, which the app cannot read, so after
+ *  that time the in-app notice offers the update too. Elsewhere the
+ *  notification is only a heads-up beside the in-app notice.
+ */
+"system" | 
+/**
+ *  The in-app notice carries them: the notification is a heads-up that
+ *  may leave the screen unanswered (a macOS banner, including any
+ *  notification presented while the app is frontmost, a Windows toast, a
+ *  freedesktop notification), a notification that stays on screen went
+ *  unanswered for that bounded time, notification permission was
+ *  denied, the notification system shows no buttons, the notification
+ *  could not be shown or was not accepted in time, or the user answered
+ *  or closed it, or it was withdrawn.
+ */
+"in-app";
 
 /**  Section-level flags (`onboarding_flags` singleton). */
 export type OnboardingFlagsDto = {
@@ -10624,6 +10755,51 @@ export type UpdateCleanupPolicy = {
 	autoOnCompletion: boolean,
 };
 
+/**
+ *  Why the last update step failed. The UI words it in the user's language;
+ *  the English detail goes to the log only.
+ */
+export type UpdateFailure = 
+/**
+ *  The update server could not be reached or answered with an error, or
+ *  the download stalled, ran out of time or was larger than an update can
+ *  be.
+ */
+{ code: "network" } | 
+/**
+ *  The update information is malformed, has nothing for this platform, or
+ *  points at a file that is not this platform's package.
+ */
+{ code: "manifest" } | 
+/**
+ *  The update's signature is missing, does not verify, or was made for
+ *  another version.
+ */
+{ code: "signature" } | 
+/**  The new macOS app is not signed by the identity of the installed one. */
+{ code: "identity" } | 
+/**
+ *  The macOS app was moved or replaced after it was launched, so nothing
+ *  was installed; a restart launches what is there now.
+ */
+{ code: "app-replaced" } | 
+/**  Permission to install was refused or not given. */
+{ code: "permission" } | 
+/**  The install step failed. */
+{ code: "install" } | 
+/**  The update's files could not be written or read. */
+{ code: "file-system" } | 
+/**
+ *  This copy cannot update itself: no release package installed it, or
+ *  no update endpoint is configured.
+ */
+{ code: "unsupported" } | 
+/**
+ *  The install failed and the previous macOS app could not be put back.
+ *  It was kept at `kept_at` instead of being deleted.
+ */
+{ code: "previous-app-not-restored"; keptAt: string };
+
 export type UpdateFilter = {
 	id: string,
 	name: string,
@@ -10643,6 +10819,13 @@ export type UpdateIngestionSettings = {
 	defaultFilter: string | null,
 };
 
+/**  Where the offer for the release the last check found stands. */
+export type UpdateOffer = {
+	/**  The release offered; `None` until a check has found one. */
+	version: string | null,
+	channel: OfferChannel,
+};
+
 export type UpdateOpticalTrain = {
 	id: string,
 	name: string,
@@ -10650,6 +10833,18 @@ export type UpdateOpticalTrain = {
 	cameraId: string | null,
 	focalLengthMm: number,
 };
+
+/**  Where the update flow stands. */
+export type UpdatePhase = 
+/**  No check has run in this session. */
+"idle" | "checking" | "up-to-date" | "check-failed" | 
+/**
+ *  A newer release exists. Nothing is installed until the user chooses
+ *  Install now or Install on quit.
+ */
+"available" | "downloading" | "download-failed" | "installing" | "install-failed" | 
+/**  Downloaded and signature-verified; installs when the app quits. */
+"install-on-quit";
 
 export type UpdateProcessingTool = {
 	id: string,
@@ -10661,6 +10856,17 @@ export type UpdateProcessingTool = {
 	 *  start with `.` (e.g. `.xisf`).
 	 */
 	watchExtensions?: string[] | null,
+};
+
+/**  The update state the UI shows. */
+export type UpdateStatus = {
+	phase: UpdatePhase,
+	/**  The release version, from the phase a check found it in onwards. */
+	version: string | null,
+	/**  The release notes, when the release has any. */
+	body: string | null,
+	/**  Why the last step failed, in the `*-failed` phases. */
+	error: UpdateFailure | null,
 };
 
 export type UpdateTelescope = {

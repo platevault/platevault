@@ -182,6 +182,14 @@ export function useInboxConfirmFlow(deps: ConfirmFlowDeps): ConfirmFlowResult {
         refreshAll();
       } catch (e) {
         const { code, message, details } = normalizeConfirmError(e);
+        if (code === 'inbox.item.not_found') {
+          // The item is gone (removed by another scan, or by confirm itself
+          // when its stored path names a different frame), so reload the
+          // list to drop its row.
+          addToast({ message: m.err_inbox_item_not_found(), variant: 'warn' });
+          refreshAll();
+          return;
+        }
         if (code === 'inbox.destination_root_required') {
           const parsed = asRootRequiredDetails(details);
           if (parsed) {

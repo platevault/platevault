@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! Desktop backend services that need no UI framework: OS notifications,
-//! process logging, the log viewer stream and job-progress feeds.
+//! process logging, the log viewer stream, job-progress feeds, the updater,
+//! the shipped locales' catalogues for text the backend shows itself and the
+//! new-captures feed.
 //!
 //! The host owns the event loop and the windows and adapts these services to
 //! its UI. It starts [`Services`] once, passes window state in as plain values
@@ -12,11 +14,14 @@
 //! `raw-window-handle` may appear in this crate's dependency graph
 //! (`tests/dependency_boundary.rs`).
 
+pub mod captures;
 pub mod channels;
 pub mod jobs;
+pub mod locale;
 pub mod log_stream;
 mod logging;
 pub mod notifications;
+pub mod update;
 
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, PoisonError};
@@ -74,6 +79,7 @@ pub struct Config {
 
 /// The running services of one process.
 pub struct Services {
+    identity: AppIdentity,
     notifier: Notifier,
     /// Flushes the log file when dropped; `None` when an earlier start in this
     /// process installed the logging.
@@ -91,10 +97,17 @@ impl Services {
     #[must_use]
     pub fn start(config: &Config) -> Self {
         Self {
+            identity: config.identity.clone(),
             notifier: Notifier::new(&config.identity),
             log: Mutex::new(logging::init(&config.log_dir)),
             tasks: Mutex::default(),
         }
+    }
+
+    /// The identity the OS attributes this application's notifications to.
+    #[must_use]
+    pub const fn identity(&self) -> &AppIdentity {
+        &self.identity
     }
 
     #[must_use]

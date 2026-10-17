@@ -121,12 +121,12 @@ local gates (compile, clippy, fmt) are clean.
 
 | Journey | File | Areas | Real commands exercised |
 |---|---|---|---|
-| `first_run_resolve_create_project` | `journeys.rs` | #1, #7, #12/#14 | `target.resolve` (offline bundled-seed cache hit), `projects.create`, `projects.list` |
-| `plan_review_apply_with_audit` | `journeys.rs` | #3, #16, #17, #18 | `roots.register`, `sources.set_organization_state`, `inbox.scan.folder`, `inbox.classify`, `inbox.confirm`, `inbox.plan.apply`, `plans.apply.status` |
-| `ingestion_sessions_search` | `journeys.rs` | #3, #4, #6, #5, #12/#14 | inbox pipeline (as above) + `sessions.list` (event-driven session grouping/resolution), `calibration.match.suggest`, `search.global` |
-| `lifecycle_integrity` | `journeys.rs` | #7/#8 | `projects.create`, `lifecycle.transition.apply`, `lifecycle.ledger.list` |
-| `cleanup_plan_review` (NEW, D22; apply extended 2026-07-05) | `journeys.rs` | #10/#11, #17 | `projects.create`, `source.protection.set`, `artifact.watcher.attach`, `artifact.list`, `cleanup.policy.update`, `cleanup.scan`, `cleanup.plan.generate`, `plans.approve`, `plans.apply.direct`, `plans.apply.status` |
-| `archive_lifecycle_apply_trash_permanent_delete` (NEW, 2026-07-05) | `archive_journeys.rs` | Journey 7 | `projects.create`, `lifecycle.transition.apply` (x3), `source.protection.set`, `artifact.watcher.attach`, `artifact.list`, `archive.plan.generate`, `plans.apply.direct`, `plans.apply.status`, `archive.list`, `archive.send_to_trash`, `settings.update`, `archive.permanently_delete` |
+| `first_run_resolve_create_project` (moved to Layer 1 by #1227: IPC-only) | `apps/desktop/src-tauri/tests/backend_journeys.rs` | #1, #7, #12/#14 | `firstrun.state`, `target.resolve` (offline seed cache hit), `projects.create`, `projects.list` |
+| `plan_review_apply_with_audit` (deleted by #1227; the UI chain is `inbox_ui_confirm_does_not_move_then_apply_moves_to_shown_destination`, its durable apply proofs moved into `ingestion_sessions_search`) | — | #3, #16, #17, #18 | — |
+| `ingestion_sessions_search` (moved to Layer 1 by #1227: IPC-only) | `apps/desktop/src-tauri/tests/backend_journeys.rs` | #3, #4, #6, #5, #12/#14, #16, #17 | `roots.register`, `sources.set_organization_state`, `inbox.scan.folder`, `inbox.classify`, `inbox.confirm`, `inbox.plan.apply`, `plans.apply.status`, `sessions.list` (event-driven session grouping/resolution), `calibration.match.suggest`, `search.global` |
+| `lifecycle_integrity` (moved to Layer 1 by #1227: IPC-only) | `apps/desktop/src-tauri/tests/backend_journeys.rs` | #7/#8 | `projects.create`, `lifecycle.transition.apply`, `lifecycle.ledger.list` |
+| `cleanup_plan_review` (moved to Layer 1 by #1227: IPC-only) | `apps/desktop/src-tauri/tests/backend_journeys.rs` | #10/#11, #17 | `projects.create`, `source.protection.set`, `artifact.watcher.attach`, `artifact.list`, `cleanup.policy.update`, `cleanup.scan`, `cleanup.plan.generate`, `plans.approve`, `plans.apply.direct`, `plans.apply.status` |
+| `archive_lifecycle_apply_trash_permanent_delete` (moved to Layer 1 by #1227: IPC-only) | `apps/desktop/src-tauri/tests/backend_journeys.rs` | Journey 7 | `projects.create`, `lifecycle.transition.apply` (x3), `source.protection.set`, `artifact.watcher.attach`, `artifact.list`, `archive.plan.generate`, `plans.apply.direct`, `plans.apply.status`, `archive.list`, `archive.send_to_trash`, `settings.update`, `archive.permanently_delete` |
 | `cleanup_protection_gate` (NEW, 2026-07-20) | `cleanup_protection_gate_journey.rs` | #10/#11, #17 | `projects.create`, `settings.update` (global `defaultProtection`), `artifact.watcher.attach`, `artifact.list`, `cleanup.policy.update`, `cleanup.scan`, `cleanup.plan.generate`, `plans.approve`, `plans.apply.direct`, `plans.apply.status`, `plans.get` |
 | `plan_review_destructive_confirm_gate_and_apply` + `plan_review_empty_archive_plan_refuses_apply` (NEW, 2026-07-21, PR #1385) | `plan_review_overlay_journeys.rs` | #17, #18 | `roots.register`, `projects.create`, `artifact.watcher.attach`, `artifact.list`, `cleanup.policy.update`, `lifecycle.transition.apply` (x3), then the real `PlanReviewOverlay` DOM: `cleanup.scan` / `cleanup.plan.generate` / `plans.approve` / `plans.apply_real` via the Cleanup section buttons, and `archive.plan.generate` via the plan-gated `archived` transition |
 | `all_top_level_screens_load` | `smoke.rs` | #21 | real routes + the shipped `AppErrorBoundary` fallback presence check |
@@ -734,10 +734,9 @@ sequencing doesn't have to re-derive it (issue #1228):
 
 - Four new real-UI journeys: cleanup/apply (~45s), archive/trash (~50s), root
   remap (~35s), first-run wizard (~40s) — **+170s**.
-- Delete `plan_review_apply_with_audit`
-  (`crates/e2e-tests/tests/journeys.rs:155`, confirmed still present as of
-  this writing) as subsumed by the new cleanup/apply journey — **−30s**.
-- Move six IPC-only tests to `apps/desktop/src-tauri/tests/` — **−180s**.
+- Delete `plan_review_apply_with_audit` as subsumed — **−30s**. Done by #1227.
+- Move the IPC-only tests to `apps/desktop/src-tauri/tests/` — **−180s**.
+  Done by #1227 (`backend_journeys.rs`).
 - **Net: ≈ −40s.**
 
 Caveats: `.config/nextest.toml`'s `e2e` profile runs with `test-threads > 1`,

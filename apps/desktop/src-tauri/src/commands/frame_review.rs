@@ -16,15 +16,15 @@
 
 use std::sync::Arc;
 
+use platevault_core::frame_review::SessionReviewList;
 use platevault_core::library::Library;
 use platevault_core::{
     ConfirmedImport, CutoutRequest, DisplayName, FrameDetail, FramePreview, FrameStars, FrameState,
-    ImportReview, MeasurementRun, NameTemplate, NativePath, PreviewTile, RegionsRequest, Revision,
-    ReviewContext, ReviewFilter, ReviewList, ReviewMark, ReviewMarked, ReviewSort, RowResolution,
-    SampleRequest, SampleValue, SessionAdmission, StarCutouts, Stretch, ThumbnailEntry,
-    TileRequest,
+    ImportReview, MeasurementRun, NameTemplate, NativePath, PreviewTile, RegionsRequest,
+    ReviewContext, ReviewFilter, ReviewList, ReviewMark, ReviewMarked, ReviewSort, Revision,
+    RowResolution, SampleRequest, SampleValue, SessionAdmission, StarCutouts, Stretch,
+    ThumbnailEntry, TileRequest,
 };
-use platevault_core::frame_review::SessionReviewList;
 use serde::Serialize;
 use tauri::State;
 use uuid::Uuid;
@@ -369,11 +369,7 @@ pub async fn pix_review_mark(
     library: State<'_, Arc<Library>>,
     mark: ReviewMark,
 ) -> Reply<ReviewMarked> {
-    library
-        .frame_review()
-        .review_mark(&mark)
-        .await
-        .map_err(fail(Some(mark.asset.asset_id)))
+    library.frame_review().review_mark(&mark).await.map_err(fail(Some(mark.asset.asset_id)))
 }
 
 /// Session intake (spec 064 LIB-FR-04/24): the session's readiness, its

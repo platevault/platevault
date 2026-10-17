@@ -191,8 +191,9 @@ impl Library {
         let pending_changes = count(catalog.project_pending_changes(id).await?.len());
         let latest_apply = catalog.latest_apply_journal(id).await?;
         let leftovers = catalog.previous_items(id).await?;
-        let unreviewed_leftovers =
-            count(leftovers.iter().filter(|item| item.review == PreviousItemReview::Pending).count());
+        let unreviewed_leftovers = count(
+            leftovers.iter().filter(|item| item.review == PreviousItemReview::Pending).count(),
+        );
         Ok(ProjectReads {
             project,
             goals,
@@ -323,7 +324,10 @@ fn project_waits(reads: &ProjectReads) -> Vec<ProjectWait> {
         .collect();
     if let Some(journal) = &reads.latest_apply {
         if let Some(outcome @ (ApplyOutcome::Failed | ApplyOutcome::Canceled)) = journal.outcome {
-            waits.push(ProjectWait::ApplyNotFinished { operation_id: journal.operation_id, outcome });
+            waits.push(ProjectWait::ApplyNotFinished {
+                operation_id: journal.operation_id,
+                outcome,
+            });
         }
     }
     if reads.unreviewed_leftovers > 0 {

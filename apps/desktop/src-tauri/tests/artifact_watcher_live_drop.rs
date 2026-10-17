@@ -7,7 +7,7 @@
 //! with contract-valid payloads (spec 033 T025, FR-009).
 //!
 //! This closes a genuine coverage gap found while auditing spec 037's
-//! `crates/e2e-tests/tests/journeys.rs::cleanup_plan_review`: that Layer-2
+//! `cleanup_plan_review` journey (now `tests/backend_journeys.rs`): that
 //! journey writes its fixture file *before* calling `artifact_watcher_attach`,
 //! so it only proves the attach-time reconciliation path
 //! (`run_attach_reconciliation`'s `report.new_files` loop). The live
