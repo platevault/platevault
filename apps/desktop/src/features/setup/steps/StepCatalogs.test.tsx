@@ -6,8 +6,8 @@
  * StepCatalogs tests — first-run "Configuration" step.
  *
  * The step no longer downloads catalogs (spec-014 backend removed). It is now a
- * small Configuration screen: SIMBAD online-resolution toggle, display density,
- * and default source protection.
+ * small Configuration screen: SIMBAD online-resolution toggle, automatic
+ * update checks, display density, and default source protection.
  */
 
 import {
@@ -17,7 +17,7 @@ import {
   fireEvent,
   act,
 } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { mockGet, mockUpdate, mockSettingsGet, mockSettingsUpdate } = vi.hoisted(
   () => ({
@@ -50,6 +50,7 @@ vi.mock('@/bindings/index', () => ({
 }));
 
 import { StepCatalogs, DEFAULT_CATALOG_SETTINGS } from './StepCatalogs';
+import { getPreferences } from '@/data/preferences';
 
 beforeEach(() => {
   mockGet.mockReset();
@@ -102,6 +103,23 @@ describe('StepCatalogs (Configuration)', () => {
       screen.getByLabelText('Default source protection'),
     ).toBeInTheDocument();
     expect(screen.getByLabelText('Display density')).toBeInTheDocument();
+  });
+
+  it('writes the shared automatic-update preference when toggled off', async () => {
+    renderStep();
+
+    const toggle = await screen.findByLabelText(
+      'Check for updates automatically',
+    );
+    expect(toggle).toBeChecked();
+
+    fireEvent.click(toggle);
+
+    expect(getPreferences().checkUpdatesAutomatically).toBe(false);
+    expect(
+      JSON.parse(localStorage.getItem('alm-preferences') ?? '{}')
+        .checkUpdatesAutomatically,
+    ).toBe(false);
   });
 
   it('shows no catalog-download affordance', () => {

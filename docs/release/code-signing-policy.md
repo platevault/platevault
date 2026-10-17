@@ -2,8 +2,7 @@
 
 This is the code signing policy for PlateVault. It is written to meet the
 [SignPath Foundation conditions for open-source projects](https://signpath.org/terms.html).
-One of them is not met yet; [Open conditions](#open-conditions) says what
-must be done before the project applies.
+Clause c is met through first-run setup; see [SignPath conditions](#signpath-conditions).
 
 ## Status
 
@@ -90,38 +89,37 @@ requests, each tied to a feature. [Privacy and network access](../manual/11-priv
 lists them, links the privacy policies of the services involved, and says
 how to turn off or avoid each one.
 
-## Open conditions
+## SignPath conditions
 
-This SignPath condition is not met yet. It blocks the application:
+Clause c is met: first-run **Configuration** offers **Check for updates
+automatically** and **Online SIMBAD resolution** switches to disable those
+network requests. The update switch shares its preference with **Settings →
+Advanced → Software Update → Check for updates automatically**. With it off,
+the first startup check sends no update request. The SIMBAD switch appears
+next to it in **Configuration**. [Privacy and network access](../manual/11-privacy.md)
+documents both services and how to turn off their requests.
 
-- **Installation option for the update check.** SignPath asks for options at
-  installation to turn off requests to systems you did not choose. First-run
-  setup does not offer **Check for updates automatically** yet. The first
-  automatic check runs as soon as setup finishes, before you can reach the
-  switch in Settings. The Configuration step of first-run setup needs that
-  switch, next to **Online SIMBAD resolution**.
-
-These SignPath conditions are met:
+These conditions are met:
 
 - **Privacy policy shown during installation.** The NSIS setup.exe and the
   MSI show a privacy notice
   ([`apps/desktop/src-tauri/installer/privacy-notice.txt`](../../apps/desktop/src-tauri/installer/privacy-notice.txt))
   before any file is installed. It summarises
   [Privacy and network access](../manual/11-privacy.md) and links to it.
-- **Option to disable the update check.** The automatic update check at
-  startup can be turned off with **Settings → Advanced → Software Update →
-  Check for updates automatically**. With it off, PlateVault contacts GitHub
-  for updates only when you click **Check for updates**.
-- **Option to disable the observing-site map.** The map requests no
-  OpenStreetMap tiles until you click **Show map** in the step or form that
-  shows it. Without that click, the coordinate fields work on their own.
-  Target lookups to CDS have their own off switch, **Online SIMBAD
-  resolution**.
+- **Installation options to disable network requests.** The **Configuration**
+  step offers **Check for updates automatically** and **Online SIMBAD
+  resolution** switches. With automatic update checks off, no update request
+  is made at startup; with Online SIMBAD resolution off, target requests are
+  disabled. The map sends no OpenStreetMap request until the user clicks
+  **Show map**.
+
+Together, the privacy policy, installation notice and first-run options meet
+SignPath conditions a, b and c.
 
 ## Uninstalling
 
 [Uninstalling PlateVault](../manual/12-uninstalling.md) covers every package
-type, including where PlateVault keeps your data and how to remove it.
+type, including where PlateVault keeps its data and how to remove it.
 
 ## Report a problem
 
