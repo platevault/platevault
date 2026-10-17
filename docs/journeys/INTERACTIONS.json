@@ -627,7 +627,7 @@
     {
       "flowStep": "Calibration surface: Import masters, Add version… and dated master versions, Old badge, Hide and Show hidden, Move to Trash (D-W82, D-W103)",
       "owner": "068-calibration-inputs",
-      "journeyStep": "J26/S8, J26/S8a, J26/S9, J26/S9a, J31/S7",
+      "journeyStep": "J26/S8, J26/S8a, J26/S9, J26/S9a, J31/S7, J36/S9, J36/S9a",
       "spec": "068-calibration-inputs CAL-FR-01, CAL-FR-06, CAL-FR-07, CAL-FR-13, CAL-FR-14, CAL-FR-15, CAL-FR-16, CAL-FR-17; 071-storage-custody STO-IMP-FR-08; D-W82, D-W98, D-W103",
       "action": "Open Calibration to inspect a master, Import masters or Add version…, read its dated versions and Old badge, then Hide and restore a master through Show hidden or Move to Trash.",
       "expect": "Calibration lists masters and raw sets with type, camera and settings, channel, origin, compatibility and dated versions. Hide removes a master from offers without touching its file; Show hidden offers Restore, and Move to Trash uses reviewed custody.",
@@ -816,7 +816,7 @@
     {
       "flowStep": "Tonight and calendar data for Home (D-W39, D-W89)",
       "owner": "072-observing-plans",
-      "journeyStep": "J19/S6a, J29/S13, J32/S7",
+      "journeyStep": "J19/S6a, J29/S13, J32/S7, J32/S7a",
       "spec": "072-observing-plans PLAN-FR-08, PLAN-FR-11, PLAN-FR-12, PLAN-AC-11, PLAN-AC-12; 065-project-goals PRJ-FR-17; D-W89",
       "action": "Read Home's Tonight section before any site exists and with a default site, then compare its goal windows and five-week calendar with Targets' Plan areas.",
       "expect": "Without a saved site Tonight lists no windows and reads Add an observing site in Settings. With the default site it lists best windows for favourites and open-Project subjects, the Moon and darkness window; each names the site and time zone and matches the Plan area.",
