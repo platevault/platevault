@@ -6,7 +6,8 @@
 //! Registered only by the isolated rebuilt shell ([`crate::library_shell`])
 //! under its `projects` block. Each goal carries its "in project" and
 //! "captured" numbers, labelled apart, and goal met reads "in project" only;
-//! warnings are never goals. Failures follow the library [`ErrorResponse`]
+//! warnings, computed from the sessions the Project holds, are never goals and
+//! never block Apply. Failures follow the library [`ErrorResponse`]
 //! conventions. The command reads only: no file, decision or record changes.
 //!
 //! [`ErrorResponse`]: platevault_core::ErrorResponse
