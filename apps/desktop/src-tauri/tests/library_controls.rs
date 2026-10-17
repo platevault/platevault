@@ -36,8 +36,8 @@ use platevault_core::library::Library;
 use platevault_core::project_output::OutputWatch;
 use platevault_core::{
     ApplyOutcome, ApplyPhase, ApplyReport, ArchiveMoveOutcome, ArchiveSelection, CleanUpRequest,
-    CloseReport, CloseRequest, LocationRole, NativePath, OutputObservation, ProjectLifecycle,
-    TrashRequest, TrashSupport, ViewMode, WrapUpStatus,
+    CloseReport, CloseRequest, LibraryErrorCode, LocationRole, NativePath, OutputObservation,
+    ProjectLifecycle, TrashRequest, TrashSupport, ViewMode, WrapUpStatus,
 };
 use serde_json::{json, Value};
 use tauri::async_runtime::block_on;
@@ -87,13 +87,14 @@ impl Shell {
         invoke(&self.webview, cmd, args)
     }
 
-    /// The command ran and refused with a library `ErrorResponse` of `kind`
-    /// naming `identity`.
-    fn refuses(&self, cmd: &str, args: &Value, kind: &str, identity: Uuid) {
+    /// The command ran and refused with a library `ErrorResponse` of `code`
+    /// naming `identity`, and sent no English text.
+    fn refuses(&self, cmd: &str, args: &Value, code: LibraryErrorCode, identity: Uuid) {
         let error = self.invoke(cmd, args).expect_err(cmd);
         assert!(error.is_object(), "{cmd} reached its handler: {error}");
-        assert_eq!(error["kind"], kind, "{cmd}: {error}");
+        assert_eq!(error["code"], json!(code), "{cmd}: {error}");
         assert_eq!(error["identity"], json!(identity), "{cmd}: {error}");
+        assert!(error.get("message").is_none(), "{cmd} sent English text: {error}");
     }
 
     /// Every `project_apply_waiting` payload from now on, in order.
@@ -233,7 +234,7 @@ fn cancel_stops_a_held_apply_and_its_journal_ends_canceled() {
     shell.refuses(
         "project_apply_cancel",
         &json!({ "operationId": report.operation_id }),
-        "not_found",
+        LibraryErrorCode::NotFound,
         report.operation_id,
     );
 }
@@ -338,7 +339,7 @@ fn close_stop_leaves_a_resumable_closing_project() {
     let status: WrapUpStatus =
         from(shell.invoke("project_wrap_up_status", &project).expect("status"));
     assert_eq!(status.lifecycle, ProjectLifecycle::Closing);
-    shell.refuses("project_close_stop", &project, "not_found", world.project);
+    shell.refuses("project_close_stop", &project, LibraryErrorCode::NotFound, world.project);
 
     drop(shell);
     let settled = block_on(async {
@@ -375,6 +376,11 @@ fn rescan_reports_a_new_output_file() {
     assert_eq!(paths, ["NGC7000_final.xisf"], "{after:#?}");
 
     let unknown = Uuid::new_v4();
-    shell.refuses("project_output_rescan", &json!({ "projectId": unknown }), "not_found", unknown);
+    shell.refuses(
+        "project_output_rescan",
+        &json!({ "projectId": unknown }),
+        LibraryErrorCode::NotFound,
+        unknown,
+    );
     block_on(shell.app.state::<OutputWatch>().shutdown());
 }

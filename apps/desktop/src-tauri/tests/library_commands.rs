@@ -216,7 +216,7 @@ fn clean_up_nothing(shell: &Shell, project: Uuid) -> (Value, Value) {
     (review, report)
 }
 
-/// Every refusal below: the request names a record the catalog doesn't hold.
+/// The refusal for a request that names a record the catalog doesn't hold.
 const NOT_FOUND: LibraryErrorCode = LibraryErrorCode::NotFound;
 
 #[test]
@@ -544,12 +544,7 @@ fn view_previous_family_lists_leftovers_and_takes_a_resolution() {
 fn clean_up_family_reviews_and_records_the_step() {
     let shell = Shell::new();
     let unknown = Uuid::new_v4();
-    shell.refuses(
-        "project_clean_up_review",
-        &json!({ "projectId": unknown }),
-        "not_found",
-        unknown,
-    );
+    shell.refuses("project_clean_up_review", &json!({ "projectId": unknown }), NOT_FOUND, unknown);
     shell.refuses(
         "project_clean_up",
         &json!({ "request": {
@@ -558,7 +553,7 @@ fn clean_up_family_reviews_and_records_the_step() {
             "generation": null,
             "selected": [unix_path("View/Lights/frame.fits")],
         } }),
-        "not_found",
+        NOT_FOUND,
         unknown,
     );
 
@@ -575,7 +570,7 @@ fn clean_up_family_reviews_and_records_the_step() {
 fn trash_family_reviews_and_records_the_step() {
     let shell = Shell::new();
     let unknown = Uuid::new_v4();
-    shell.refuses("project_trash_review", &json!({ "projectId": unknown }), "not_found", unknown);
+    shell.refuses("project_trash_review", &json!({ "projectId": unknown }), NOT_FOUND, unknown);
     let trash = |project: Uuid, digest: &Value| {
         json!({ "request": {
             "projectId": project,
@@ -584,7 +579,7 @@ fn trash_family_reviews_and_records_the_step() {
         } })
     };
     let stale = json!("0".repeat(64));
-    shell.refuses("project_wrap_up_trash", &trash(unknown, &stale), "not_found", unknown);
+    shell.refuses("project_wrap_up_trash", &trash(unknown, &stale), NOT_FOUND, unknown);
 
     let project = shell.open_project();
     clean_up_nothing(&shell, project);
@@ -594,7 +589,12 @@ fn trash_family_reviews_and_records_the_step() {
         review["groups"].as_array().expect("rows").iter().map(|row| &row["group"]).collect();
     assert_eq!(groups, ["rejected_frames", "processing_files", "duplicate_copies"], "{review}");
     // The digest is the proof the user saw this sheet.
-    shell.refuses("project_wrap_up_trash", &trash(project, &stale), "conflict", project);
+    shell.refuses(
+        "project_wrap_up_trash",
+        &trash(project, &stale),
+        LibraryErrorCode::Conflict,
+        project,
+    );
     let report =
         shell.invoke("project_wrap_up_trash", &trash(project, &review["digest"])).expect("trash");
     assert_eq!(report["record"]["step"], "trash", "{report}");
@@ -612,7 +612,7 @@ fn wrap_up_archive_review_family_lays_out_for_a_destination() {
     shell.refuses(
         "project_wrap_up_archive_review",
         &asked(unknown, destination),
-        "not_found",
+        NOT_FOUND,
         unknown,
     );
 
@@ -621,7 +621,7 @@ fn wrap_up_archive_review_family_lays_out_for_a_destination() {
     shell.refuses(
         "project_wrap_up_archive_review",
         &asked(project, Uuid::new_v4()),
-        "not_found",
+        NOT_FOUND,
         project,
     );
     let review = shell
