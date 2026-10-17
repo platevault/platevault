@@ -98,7 +98,7 @@ async fn adoption_rows(lib: &Lib) -> BTreeMap<String, Vec<String>> {
 
 async fn candidates(lib: &Lib) -> Vec<CandidateRef> {
     let query = InputQuery { form: Some(InputForm::Candidate), ..InputQuery::default() };
-    let rows = lib.catalog.calibration_inputs(&query, &TestRules::default()).await.unwrap();
+    let rows = lib.catalog.calibration_inputs(&query, &TestRules).await.unwrap();
     rows.into_iter().map(|row| row.input).collect()
 }
 
@@ -112,7 +112,7 @@ async fn review_hashes_the_source_checks_the_destination_and_writes_no_file() {
         .review_adoption(
             &master_source(&lib).await,
             &into(&lib.calibration, "masters/master_flat_Ha.fit"),
-            &TestRules::default(),
+            &TestRules,
             DiskProbe,
         )
         .await
@@ -146,12 +146,8 @@ async fn review_refuses_each_unadoptable_request_and_writes_nothing() {
         location_at(catalog, &lib.fx, "Spare/Calibration", LocationRole::Calibration).await;
     std::fs::create_dir_all(spare_root.join("masters")).unwrap();
     let before = sources(lib.fx.temp.path());
-    let rules = TestRules::default();
-    let refuse = |source: AdoptionSource, destination: AdoptionDestination| {
-        let rules = rules.clone();
-        async move {
-            catalog.review_adoption(&source, &destination, &rules, DiskProbe).await.unwrap_err()
-        }
+    let refuse = |source: AdoptionSource, destination: AdoptionDestination| async move {
+        catalog.review_adoption(&source, &destination, &TestRules, DiskProbe).await.unwrap_err()
     };
     let master = master_source(&lib).await;
 
@@ -212,7 +208,7 @@ async fn review_refuses_each_unadoptable_request_and_writes_nothing() {
 #[tokio::test]
 async fn adoption_copies_verifies_and_registers_the_master_with_provenance() {
     let lib = library().await;
-    let rules = TestRules::default();
+    let rules = TestRules;
     let source_path = lib.results_root.join(MASTER);
     let source_sha = sha_of(&source_path);
     let before = sources(lib.fx.temp.path());
@@ -291,7 +287,7 @@ async fn a_source_changed_after_review_fails_before_install_and_removes_the_temp
     let destination = into(&lib.calibration, "masters/master_flat_Ha.fit");
     let review = lib
         .catalog
-        .review_adoption(&master_source(&lib).await, &destination, &TestRules::default(), DiskProbe)
+        .review_adoption(&master_source(&lib).await, &destination, &TestRules, DiskProbe)
         .await
         .unwrap();
     std::fs::write(lib.results_root.join(MASTER), b"re-stacked after review").unwrap();
@@ -328,7 +324,7 @@ async fn a_source_changed_after_review_fails_before_install_and_removes_the_temp
 async fn adoption_refuses_existing_destination_file() {
     let lib = library().await;
     let source = master_source(&lib).await;
-    let rules = TestRules::default();
+    let rules = TestRules;
     let taken = into(&lib.calibration, "masters/master_flat_Ha.fit");
     let review = lib.catalog.review_adoption(&source, &taken, &rules, DiskProbe).await.unwrap();
     let occupant = lib.calibration_root.join("masters/master_flat_Ha.fit");

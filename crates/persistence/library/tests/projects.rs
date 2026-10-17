@@ -908,7 +908,10 @@ async fn project_references_name_the_copies_a_project_holds() {
             vec![first.id]
         )]
     );
-    assert!(catalog.project_references(&BTreeSet::new()).await.unwrap().is_empty());
+    assert_eq!(
+        catalog.project_references(&BTreeSet::new()).await.unwrap(),
+        [] as [platevault_model::AssetReference; 0]
+    );
     assert_eq!(tree(&world.fx.root), world.before, "no file changed");
     world.catalog.close().await.unwrap();
 }

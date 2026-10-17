@@ -4,7 +4,8 @@
 //! Calibration custody facts and references (spec 068, R19): the STO seam that
 //! names candidate masters, adopted masters and retained adoption sources with
 //! their no-follow fingerprints, and the Retire location references of adopted
-//! masters. Both are reads that touch no file.
+//! masters and of the sessions whose calibration pins a file. Both are reads
+//! that touch no file.
 #![cfg(unix)]
 
 #[path = "support/calibration.rs"]
@@ -18,7 +19,8 @@ use calibration_support::*;
 use persistence_library::{Catalog, InputQuery, LocationReferences};
 use platevault_model::{
     AdoptedMaster, AdoptionDestination, AdoptionSource, Asset, AssetReference, Availability,
-    CustodyFact, CustodyKind, Location, LocationRole, MasterKeptCopy, NativePath, ReferenceKind,
+    CustodyFact, CustodyKind, InputKind, InputRef, Location, LocationRole, MasterKeptCopy,
+    NativePath, ReferenceKind,
 };
 use support::*;
 use uuid::Uuid;
@@ -79,7 +81,7 @@ fn calibration_files(root: &Path, adopted: bool) -> Vec<platevault_model::ScanFi
 }
 
 fn rules() -> TestRules {
-    TestRules::default()
+    TestRules
 }
 
 async fn asset_at(catalog: &Catalog, location: &Location, name: &str) -> Asset {
@@ -295,4 +297,124 @@ async fn references_name_adopted_masters_with_their_revisions() {
         "an unadopted candidate is no calibration record"
     );
     assert_eq!(sources(lib.fx.temp.path()), before, "reading references touches no file");
+}
+
+/// A light session of 300 s Ha frames on the `RedCat 51` train in a Captures
+/// location: the darks and the Siril master flat both fit it.
+async fn light_session(lib: &Lib) -> Uuid {
+    let (captures, root) =
+        location_at(&lib.catalog, &lib.fx, "Astro-T7/Captures", LocationRole::Captures).await;
+    let light = with_train(calibration_frame("LIGHT", Some("Ha"), 300.0, "2026-09-18"));
+    scan_frames(&lib.catalog, &captures, vec![frame(&root, "lights/Ha_001.fits", light)]).await;
+    let asset = asset_at(&lib.catalog, &captures, "lights/Ha_001.fits").await;
+    let query = persistence_library::SessionQuery::default();
+    let sessions = lib.catalog.list_sessions(&query).await.unwrap();
+    sessions.into_iter().find(|s| s.session.asset_ids.contains(&asset.id)).unwrap().session.id
+}
+
+/// The calibration input listing `asset` among its members.
+async fn input_holding(lib: &Lib, asset: Uuid) -> InputRef {
+    let rows = lib.catalog.calibration_inputs(&InputQuery::default(), &rules()).await.unwrap();
+    let row = rows.iter().find(|row| row.member_assets.contains(&asset)).unwrap();
+    row.input.input().expect("a raw set or an adopted master")
+}
+
+/// Pin `kind` of `session` to `input` at its current calibration generation.
+async fn pin(lib: &Lib, session: Uuid, kind: InputKind, input: InputRef) -> u64 {
+    let catalog = &lib.catalog;
+    let generation = catalog.session_calibration(session).await.unwrap().calibration.generation;
+    let rules = rules();
+    let pinned = catalog.reassign_calibration(session, kind, input, generation, &rules, DiskProbe);
+    pinned.await.unwrap().generation
+}
+
+/// Record §6 (Hide and Move to Trash of a master list the sessions that use
+/// it), R19: a session's pins hold the files they bind, a raw set's frames and
+/// a pinned master's file, so Retire location names the session at its
+/// calibration generation, and a pin change since the review makes it stale.
+/// Only pins hold files; reading them touches no file.
+#[tokio::test]
+async fn references_name_sessions_whose_pins_bind_the_files() {
+    let lib = library().await;
+    let catalog = &lib.catalog;
+    let master = adopt(&lib).await;
+    let destination = index_destination(&lib).await;
+    let light = light_session(&lib).await;
+    let darks = [
+        asset_at(catalog, &lib.calibration, "darks/Dark_300s_001.fits").await.id,
+        asset_at(catalog, &lib.calibration, "darks/Dark_300s_002.fits").await.id,
+    ];
+    let asked = ids(&catalog.location_assets(lib.calibration.id).await.unwrap());
+    let master_reference = AssetReference {
+        kind: ReferenceKind::Calibration,
+        id: master.id,
+        name: format!("flat master {DESTINATION}"),
+        revision: master.revision,
+        asset_ids: vec![destination.id],
+    };
+    assert_eq!(
+        catalog.calibration_references(&asked).await.unwrap(),
+        std::slice::from_ref(&master_reference),
+        "no session pins anything yet"
+    );
+
+    let raw_set = input_holding(&lib, darks[0]).await;
+    pin(&lib, light, InputKind::Dark, raw_set).await;
+    let flat = input_holding(&lib, destination.id).await;
+    assert_eq!(flat, InputRef::Master { master_id: master.id, revision: master.revision });
+    let generation = pin(&lib, light, InputKind::Flat, flat).await;
+    let before = sources(lib.fx.temp.path());
+    let mut held = BTreeSet::from(darks);
+    held.insert(destination.id);
+    let pins = AssetReference {
+        kind: ReferenceKind::Calibration,
+        id: light,
+        name: format!("dark, flat pinned on session {light}"),
+        revision: generation,
+        asset_ids: held.into_iter().collect(),
+    };
+    assert_eq!(
+        catalog.calibration_references(&asked).await.unwrap(),
+        [master_reference.clone(), pins.clone()],
+        "the session holds the raw darks and the master's file it pins"
+    );
+    assert_eq!(
+        catalog.calibration_references(&BTreeSet::from([darks[1]])).await.unwrap(),
+        [AssetReference {
+            name: format!("dark pinned on session {light}"),
+            asset_ids: vec![darks[1]],
+            ..pins.clone()
+        }],
+        "only the asked files count"
+    );
+    assert_eq!(sources(lib.fx.temp.path()), before, "reading references touches no file");
+
+    let references = LocationReferences {
+        references: catalog.calibration_references(&asked).await.unwrap(),
+        assets: asked.clone(),
+        consulted: vec![ReferenceKind::Calibration],
+    };
+    catalog
+        .mark_location_unavailable(lib.calibration.id, Availability::Offline, "unplugged")
+        .await
+        .unwrap();
+    let review = catalog.review_retire_location(lib.calibration.id, &references).await.unwrap();
+    assert!(review.references.contains(&pins), "the review names the session: {review:#?}");
+
+    assert_eq!(catalog.release_calibration_input(&raw_set).await.unwrap(), [light]);
+    let released = LocationReferences {
+        references: catalog.calibration_references(&asked).await.unwrap(),
+        ..references.clone()
+    };
+    let session = released.references.iter().find(|reference| reference.id == light).unwrap();
+    assert_eq!(
+        (session.name.clone(), session.asset_ids.clone()),
+        (format!("flat pinned on session {light}"), vec![destination.id]),
+        "a released raw set is held no more"
+    );
+    let stale = catalog
+        .retire_location(review.id, lib.calibration.id, review.expected_revision, &released)
+        .await
+        .unwrap_err();
+    assert_eq!(kind(&stale), "conflict", "the pins changed since the review: {stale}");
 }

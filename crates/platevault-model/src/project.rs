@@ -92,7 +92,7 @@ impl<'de> Deserialize<'de> for Microseconds {
 /// Project across edits. `name` is an optional label; the Target's
 /// designation is always shown beside it. A mosaic is not a subject kind: its
 /// panels are the Project's panel groups (PRJ-FR-27).
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SubjectInput {
     pub target_id: Uuid,
@@ -433,7 +433,7 @@ pub struct ProjectQuery {
 // ---------------------------------------------------------------------------
 
 /// A stored subject; `designation` is its Target's current designation.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectSubject {
     pub id: Uuid,

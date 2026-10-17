@@ -96,7 +96,7 @@ async fn indexed() -> Lib {
 }
 
 async fn inputs(lib: &Lib, query: &InputQuery) -> Vec<CalibrationInputSummary> {
-    lib.catalog.calibration_inputs(query, &TestRules::default()).await.unwrap()
+    lib.catalog.calibration_inputs(query, &TestRules).await.unwrap()
 }
 
 /// The listed row whose evidence copy lives at `path` (raw sets) or is `path`.
@@ -207,11 +207,11 @@ async fn raw_sets_and_candidates_list_grouped_with_their_missing_evidence() {
         rows[1..3].iter().map(|r| r.input).collect::<Vec<_>>()
     );
 
-    let detail = lib.catalog.calibration_input(&ha.input, &TestRules::default()).await.unwrap();
+    let detail = lib.catalog.calibration_input(&ha.input, &TestRules).await.unwrap();
     assert_eq!(detail.members.len(), 3);
     assert!(detail.excluded.is_empty());
     let unknown = CandidateRef::Candidate { asset_id: Uuid::new_v4() };
-    let error = lib.catalog.calibration_input(&unknown, &TestRules::default()).await.unwrap_err();
+    let error = lib.catalog.calibration_input(&unknown, &TestRules).await.unwrap_err();
     assert_eq!(kind(&error), "not_found");
     unchanged(&lib, &rows_before).await;
 }
@@ -259,7 +259,7 @@ async fn one_copy_per_capture_with_unusable_members_excluded_and_offline_ones_co
     let rows = inputs(&lib, &InputQuery::default()).await;
     let ha = row(&rows, &lib, "flats/Ha/Flat_Ha_003.fits");
     assert_eq!((ha.state.members, ha.state.excluded_members), (2, 1));
-    let detail = catalog.calibration_input(&ha.input, &TestRules::default()).await.unwrap();
+    let detail = catalog.calibration_input(&ha.input, &TestRules).await.unwrap();
     assert_eq!(detail.excluded.len(), 1);
     assert!(detail.excluded[0].copies.iter().any(|copy| copy.asset_id == unusable.id));
 

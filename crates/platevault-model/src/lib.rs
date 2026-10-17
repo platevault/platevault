@@ -1198,7 +1198,8 @@ pub enum RemapBlockReason {
 pub enum ReferenceKind {
     /// A Project holding copies of the captures it holds (PRJ).
     Project,
-    /// An adopted master's provenance record (CAL).
+    /// An adopted master's provenance record, or a session's calibration pins
+    /// (CAL).
     Calibration,
 }
 
@@ -1210,7 +1211,8 @@ pub struct AssetReference {
     pub kind: ReferenceKind,
     pub id: Uuid,
     pub name: String,
-    /// The record's own revision, such as a Project's or a master's revision.
+    /// The record's own revision: a Project's or a master's revision, or a
+    /// session's calibration generation.
     pub revision: Revision,
     /// The referenced assets among those asked about.
     pub asset_ids: Vec<Uuid>,
