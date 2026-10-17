@@ -1,7 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { planningPriorities } from "@/domain/derive"
 import { createSeed } from "@/domain/seed"
-import { m } from "@/lib/i18n"
 import { imgTimeText, prioritiesByTarget, priorityOrder, type RowView, sortValue } from "./targets-model"
 
 const NIGHT = "2026-10-13"
@@ -12,14 +10,12 @@ function view(designation: string, planningRank: number | null): RowView {
 }
 
 describe("Planning order (C7): planningPriorities, then the rest by designation", () => {
-  it("ranks each Target by its first subject in planningPriorities", () => {
-    const { catalog } = createSeed("demo")
-    const order = planningPriorities(catalog, NIGHT)
-    expect(order.length).toBeGreaterThan(0)
-    const ranks = prioritiesByTarget(catalog, NIGHT)
-    const firstPerTarget = [...new Set(order.map((p) => p.subject.targetId))]
-    expect([...ranks.entries()].map(([id, r]) => [id, r.rank])).toEqual(firstPerTarget.map((id, rank) => [id, rank]))
-    for (const [id, r] of ranks) expect(r.priority).toEqual(order.find((p) => p.subject.targetId === id))
+  it("ranks the demo's Targets with a window: NGC 7000 (Cygnus HOO 2026) first, then IC 5070", () => {
+    const ranks = prioritiesByTarget(createSeed("demo").catalog, NIGHT)
+    expect([...ranks.entries()].map(([id, r]) => [id, r.rank, r.priority.project.id, r.priority.subject.id])).toEqual([
+      ["tgt_y2bxfy", 0, "prj_cygnus", "sub_ngc7000"],
+      ["tgt_3bg4tx", 1, "prj_ic5070", "sub_ic5070"],
+    ])
   })
 
   it("puts ranked rows first in rank order, then the others by designation", () => {
@@ -49,9 +45,9 @@ describe("Suitable filters sort", () => {
 
 describe("Img time (T10): the reason it is zero is a short value beside 0h, never a sentence", () => {
   it("reads the hours when there is time, and 0h with its reason label when there is none", () => {
-    expect(imgTimeText({ imgTimeS: 7800, zeroReason: null })).not.toContain(m.tonight_zero_hours())
-    expect(imgTimeText({ imgTimeS: 0, zeroReason: "low" })).toBe(`${m.tonight_zero_hours()} · ${m.tonight_zero_low()}`)
-    expect(imgTimeText({ imgTimeS: 0, zeroReason: "darkness" })).toBe(`${m.tonight_zero_hours()} · ${m.tonight_zero_darkness()}`)
-    expect(imgTimeText({ imgTimeS: 0, zeroReason: null })).toBe(m.tonight_zero_hours())
+    expect(imgTimeText({ imgTimeS: 7800, zeroReason: null })).toBe("2h10")
+    expect(imgTimeText({ imgTimeS: 0, zeroReason: "low" })).toBe("0h · Too low")
+    expect(imgTimeText({ imgTimeS: 0, zeroReason: "darkness" })).toBe("0h · Twilight only")
+    expect(imgTimeText({ imgTimeS: 0, zeroReason: null })).toBe("0h")
   })
 })

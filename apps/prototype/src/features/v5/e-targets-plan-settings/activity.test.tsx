@@ -3,7 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest"
 import { createSeed } from "@/domain/seed"
-import { m, say } from "@/lib/i18n"
+import { m } from "@/lib/i18n"
 import { SCHEMA_VERSION, store } from "@/store/core"
 import { initialSliceStates, sliceVersions } from "@/store/slices"
 import { ActivityPage, openLabel } from "./activity"
@@ -35,19 +35,18 @@ function renderActivity() {
 
 describe("Activity", () => {
   it("opens the surface that owns an entry from the row's ⋯ menu", async () => {
-    const event = store.getState().activity.find((e) => e.href)
-    expect(event, "the demo seed records an entry that links to its surface").toBeDefined()
     const user = userEvent.setup()
     renderActivity()
 
-    await user.click(await screen.findByRole("button", { name: m.actions_for({ name: say(m, event!.title) }) }))
-    await user.click(await screen.findByRole("menuitem", { name: openLabel(event!.href!) }))
-    await waitFor(() => expect(window.location.hash).toBe(`#${event!.href}`))
+    // The demo's Apply entry links to Cygnus HOO 2026's View tab.
+    await user.click(await screen.findByRole("button", { name: m.actions_for({ name: "Apply Cygnus HOO 2026" }) }))
+    await user.click(await screen.findByRole("menuitem", { name: "Open View" }))
+    await waitFor(() => expect(window.location.hash).toBe("#/projects/prj_cygnus?stage=view"))
   })
 
   it("names the Open item after the surface it opens, and plain Open for a page with no name", () => {
-    expect(openLabel("/settings/equipment")).toBe(m.activity_open_destination({ name: m.settings_equipment() }))
-    expect(openLabel("/sessions/ses_1")).toBe(m.activity_open_destination({ name: m.activity_destination_session() }))
-    expect(openLabel("/no-such-surface")).toBe(m.verb_open())
+    expect(openLabel("/settings/equipment")).toBe("Open Equipment")
+    expect(openLabel("/sessions/ses_1")).toBe("Open Session")
+    expect(openLabel("/no-such-surface")).toBe("Open")
   })
 })

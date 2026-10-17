@@ -7,7 +7,7 @@ import { createSeed } from "@/domain/seed"
 import { m } from "@/lib/i18n"
 import { SCHEMA_VERSION, store, withCatalog } from "@/store/core"
 import { initialSliceStates, sliceVersions } from "@/store/slices"
-import { leadText, ReminderScheduler, RemindersDialog } from "./planned-tools"
+import { ReminderScheduler, RemindersDialog } from "./planned-tools"
 
 beforeEach(() => {
   store.replace({ ...createSeed("demo"), schemaVersion: SCHEMA_VERSION, sliceVersions: sliceVersions(), slices: initialSliceStates() })
@@ -39,10 +39,10 @@ describe("Reminders dialog (D-W88, PLAN-AC-13)", () => {
     const user = userEvent.setup()
     const dialog = await openDialog()
     const lead = within(dialog).getByRole("combobox", { name: m.plan_reminder_lead() })
-    expect(lead).toHaveTextContent(leadText(m, 12 * 60))
+    expect(lead).toHaveTextContent("12 h before")
     await user.click(lead)
     const options = (await screen.findAllByRole("option")).map((o) => o.textContent)
-    expect(options).toEqual([leadText(m, 60), leadText(m, 120), leadText(m, 240), leadText(m, 720), leadText(m, 1440), m.plan_lead_custom()])
+    expect(options).toEqual(["1 h before", "2 h before", "4 h before", "12 h before", "1 day before", "Custom"])
   })
 
   it("says reminders arrive only while PlateVault is open", async () => {
