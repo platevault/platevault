@@ -1,7 +1,7 @@
 ---
 id: J23
 title: Review Project calibration and configure its View
-version: 6
+version: 7
 status: draft
 last_reviewed: 2026-10-03
 actors: [primary-user]
@@ -17,7 +17,7 @@ The user checks the pinned calibration for the sessions in Project `NGC 7000 HOO
 - Every session held by the Project has settled calibration: each kind is pinned or explicitly set to No.
 - Confirming the suggested flat records its unknown optical-train evidence without changing the master or another session's assignment.
 - Reassigning calibration on a session appears as a pending change on the open Project and does not change the existing View before Apply.
-- Siril and an input mode are selected in View, and the Apply sheet reports the effective value for the corrected session.
+- Siril and an input mode are selected in View, and the Apply sheet reports the corrected values recorded at ingestion, which Apply applies with no per-value choice.
 - Calibration masters and original source files remain unchanged.
 
 ## Preconditions
@@ -31,7 +31,7 @@ The user checks the pinned calibration for the sessions in Project `NGC 7000 HOO
   - `MasterFlat_2026-09-26.xisf`: OIII, imported in J36/S9 with no optical-train evidence.
 
   The 50 raw bias frames that J36/S8 kept stay indexed in `Astro-T7/Calibration/Raw/Bias/2026-09-20/`.
-- P3: The library also holds the two other masters J36/S9 imported: a master dark from a second camera (ZWO ASI294MM Pro) and an OIII master flat from a second optical train (Esprit 100). Neither is part of rig RedCat.
+- P3: The library also holds the two other masters J36/S9 and J36/S9a imported: a master dark from a second camera (ZWO ASI294MM Pro) and an OIII master flat from a second optical train (Esprit 100). Neither is part of rig RedCat. The bias master also holds the 15 Jun version that J36/S9a added, which is never the closest version for these sessions.
 - P4: Siril is installed at a known path and not yet configured in PlateVault.
 - P5: The J19/P5 manifest is available.
 
@@ -121,18 +121,19 @@ The user checks the pinned calibration for the sessions in Project `NGC 7000 HOO
 - **Expect (negative):** PlateVault does not silently change the mode or offer a third mode.
 - **Trace:** PREP-FR-01, PREP-FR-02, PREP-FR-04, PREP-AC-11 · D-W81, D-W83, D-W100
 
-### S10 — Review a corrected value in Apply {#S10}
+### S10 — Read the corrected values in Apply {#S10}
 
-- **Do:** Open the Apply sheet and inspect the 28 Sep session's corrected focal length.
-- **Expect:** The sheet shows the catalog value beside the value the selected application will read. It offers supported application configuration, isolated patched Copies, accepting the source value or excluding the input. It shows the pending calibration change and the new View as a folder tree.
-- **Trace:** PREP-FR-03, PREP-FR-08, PREP-FR-16 · VSEL-FR-14 · D-W100
+- **Do:** With the S9 generic application selected in View and the View in Copies mode, open the Apply sheet and read its Corrected values section.
+- **Expect:** The section reads "2 corrected values", the two that held sessions recorded at ingestion in J19/S10. It lists each with its session, its field, the value in the header and the corrected value. 24 Sep's Target reads "–" in the header and NGC 7000 corrected, and 28 Sep's Equipment reads "–" in the header and `RedCat` corrected. Because the generic application reads no corrected values through its configuration, the section names the route as isolated patched copies in the Copies View. The sheet also shows the pending calibration change and the new View as a folder tree.
+- **Expect (negative):** The sheet offers no per-value choice: no accepting the source value and no excluding an input. Apply creates or changes no catalog correction; it only delivers the ones already recorded.
+- **Trace:** PREP-FR-08, PREP-FR-16 · VSEL-FR-14 · LIB-FR-12 · D-W100 · HARNESS-V5-FEEDBACK-R1.md Round 9 C15 · PREP-FR-03 conflicts (G9)
 
-### S11 — Apply without delivering a correction {#S11}
+### S11 — Apply the corrected values {#S11}
 
-- **Do:** Choose **accept the source value** for 28 Sep and Apply the reviewed View changes.
-- **Expect:** Apply builds the View from the originals and swaps it in. The sheet names the source-header value as effective, with no metadata patch claimed.
-- **Expect (negative):** No original is patched, and the external application is not claimed to have received the catalog correction.
-- **Trace:** PREP-FR-03, PREP-FR-06, PREP-FR-09 · D-W100
+- **Do:** Apply the reviewed View changes.
+- **Expect:** Apply builds the View from the originals, writes the two corrected values into isolated patched copies of the 24 Sep and 28 Sep frames in the Copies View, and swaps the View in.
+- **Expect (negative):** No original or link target is patched, and no correction is reported as delivered while the application still reads the original value.
+- **Trace:** PREP-FR-06, PREP-FR-09 · D-W100 · HARNESS-V5-FEEDBACK-R1.md Round 9 C15 · PREP-FR-03 conflicts (G9)
 
 ## Success criteria
 
@@ -142,7 +143,7 @@ The user checks the pinned calibration for the sessions in Project `NGC 7000 HOO
 - SC4: Dated versions are shown with no Latest label or Update notice, and the 148-day-old dark has `Old · 148 d` while flats have no badge (S7a).
 - SC5: Hiding a master pinned on the Project is refused with the Project named; hiding and restoring an unused master changes no file bytes (S7b, S7c).
 - SC6: Siril and the input mode are chosen in View; an unknown or write-prone profile cannot use Symlinks without a refusal and explicit mode choice (S8, S9).
-- SC7: The Apply sheet shows the corrected focal length and the calibration change; Apply uses the source value without patching any original (S10, S11).
+- SC7: The Apply sheet reads "2 corrected values" with the route isolated patched copies and offers 0 per-value choices; Apply patches 0 originals (S10, S11).
 
 ## Known gaps
 
@@ -154,6 +155,7 @@ The user checks the pinned calibration for the sessions in Project `NGC 7000 HOO
 - G6: (dissolved 2026-10-15): D-W101 matches calibration at ingestion and makes the Project's Calibrate step a read-only check, so no Calibrate row offers `Stack from <session>`. Raw sets wait as calibration processes in the Calibration library, which J36 stacks.
 - G7: (dissolved 2026-10-15): PREP-AC-11 (D-W81, D-W83) answers it: for a profile whose input-write behavior is unknown or write-prone, Symlinks is refused with the input-write risk named, and Copies is offered without a silent mode change. S9 asserts that refusal for a generic application.
 - G8: Rests on provisional F4 items, pending the owner's confirmation in PR #1804: D-W106's refusal of Hide on a master an open Project uses through its sessions (S7b, SC5), and D-W102's ranking, which makes the 30 Sep master the best fully compatible flat for 24 Sep (P2, S3). If the owner changes one, the steps that cite it change.
+- G9: Contract conflict: 069 PREP-FR-03 still has the Apply sheet offer a choice per corrected value (application configuration, isolated patched copies, accepting the source value or excluding the input). Round 9 C15 moves corrections to session ingestion review and has Apply show "N corrected values", so S10 and S11 follow C15. Until PREP-FR-03 is amended, how each corrected value reaches the application rests on the prototype: through the profile's configuration, else as an isolated patched copy. Blocks readiness.
 
 ## Delta log
 
@@ -174,3 +176,6 @@ The user checks the pinned calibration for the sessions in Project `NGC 7000 HOO
 - **Δ6** 2026-10-15 · S1, S2, S3, S4a, S5, S6, S7, S7a, S7b, S7c, S8, S9, S10, S11 · behavior-change
   Calibration is pinned on sessions at ingestion; Project Calibrate is a read-only diagram, and profile and input-mode choices are in View. Dated versions have no Latest or Update notice, and darks and bias use the Old badge. S9 refuses Symlinks for a profile with unknown input-write behavior, which dissolves G7; G6 is dissolved because Calibrate has no rows to offer Stack, and G8 is new.
   Evidence: D-W93 to D-W106 (F4 Project model, owner's answers of 2026-10-14) in PR #1804, LIB-FR-23 to LIB-FR-26, CAL-FR-02 to CAL-FR-09, CAL-FR-13 to CAL-FR-23, PREP-FR-01, PREP-FR-03, PREP-FR-04, PREP-FR-06, PREP-FR-08, PREP-FR-09, PREP-AC-11 · by: SpecF4Writer2 (intent-gated)
+- **Δ7** 2026-10-17 · S10, S11 · behavior-change
+  Corrections are recorded at session ingestion, so Apply lists the corrected values with their count ("2 corrected values" from J19/S10) and applies all of them, here as isolated patched copies for the S9 generic application. The per-value choice (accept the source value, exclude the input) is gone. G9 records the conflict with 069 PREP-FR-03.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md Round 9 C15 · prototype view-step.tsx Corrected values section (ui-harness-v5) · by: JourneysR9c (intent-gated)

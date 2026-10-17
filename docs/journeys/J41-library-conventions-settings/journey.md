@@ -1,7 +1,7 @@
 ---
 id: J41
 title: Set library and Project conventions in Settings for naming, goals, grouping, locations and applications
-version: 5
+version: 6
 status: draft
 last_reviewed: 2026-10-12
 actors: [primary-user]
@@ -93,31 +93,38 @@ The user sets how imported files are named, which goals a new Project starts wit
 - **Expect:** A Built-in box lists exactly five templates with their goals as channel chips and kinds: HOO (Ha 10h, OIII 10h); SHO (Ha 10h, OIII 10h, SII 10h); LRGB (L 6h with quality "Usable, FWHM ≤ 3″", R, G and B 2h each); OSC broadband (OSC 10h); OSC dual-band (Dual-band 15h). Every channel other than L reads quality Usable. Built-in rows offer only **Duplicate**. A Yours box reads "No templates of yours" with **New template**. No column or row names the Projects a template was applied in.
 - **Trace:** Feedback §Domain and seed (goal kinds, structured channels, no Applied in) · D-W30 · D-W47 · templates.ts BUILT_IN_GOAL_TEMPLATES
 
-### S9 — Create `HOO deep` from HOO {#S9}
+### S9 — Create time and frame-count template goals {#S9}
 
-- **Do:** Duplicate HOO. In the dialog, rename it `HOO deep`, set Ha to 15 hours and OIII to 15 hours with a frame count of 120, set OIII's quality to Usable with FWHM ≤ 3.5″, and save.
-- **Expect:** The dialog opens titled "Duplicate HOO" with the name "HOO copy" and HOO's values. Channels are chips from the band set (L, R, G, B, Ha, OIII, SII, OSC, Dual-band), never free text. After saving, Yours lists `HOO deep` with Ha 15h (Usable) and OIII 15h · 120 frames ("Usable, FWHM ≤ 3.5″"), offering Edit, Duplicate and Delete. Activity records `Goal template saved: HOO deep`. HOO is unchanged.
-- **Trace:** settings-goal-templates.tsx (duplicate, TemplateDialog) · Feedback §Domain and seed (structured channels) · D-W29
+- **Do:** Duplicate HOO. In the dialog, rename it `HOO deep`. Set Ha to 15 hours with a quality bar of FWHM ≤ 3.5″, set OIII to 120 frames with the same quality bar, and save.
+- **Expect:** The dialog opens titled "Duplicate HOO" with the name "HOO copy" and HOO's values. Channels are chips from the band set (L, R, G, B, Ha, OIII, SII, OSC, Dual-band), never free text. After saving, Yours lists `HOO deep` with Ha 15h and OIII 120 frames, each with quality "Usable, FWHM ≤ 3.5″", offering Edit, Duplicate and Delete. Each goal has one unit, time or frames, never both. Activity records `Goal template saved: HOO deep`. HOO is unchanged.
+- **Trace:** settings-goal-templates.tsx (duplicate, TemplateDialog) · PRJ-FR-03, PRJ-FR-12, PRJ-AC-32 · D-W29, D-W90 · HARNESS-V5-FEEDBACK-R1.md Round 9 C7
 
 ### S10 — Try invalid template values {#S10}
 
 - **Do:** Click **New template** and save it empty. Then name it `HOO` and add an SII channel with neither hours nor frames, and save again. Cancel the dialog.
 - **Expect:** The first save shows "Name required" and "Add a channel". The second shows "Name taken" and "Hours or frames needed · SII". The dialog stays open each time.
 - **Expect (negative):** No template is added and no Activity entry is recorded.
-- **Trace:** settings-goal-templates.tsx submit validation
+- **Trace:** settings-goal-templates.tsx submit validation · PRJ-FR-03, PRJ-AC-32 · D-W90
 
 ### S11 — Copy `HOO deep` into a new Project {#S11}
 
 - **Do:** Start a New Project named `IC 1396 HOO deep` with subject IC 1396, rig `RedCat` and goal template `HOO deep`, and create it (J20 owns the New Project sheet).
-- **Expect:** The Project page's Goals read IC 1396 Ha goal 15h and OIII goal 15h with 120 frames and the quality bar "Usable, FWHM ≤ 3.5″".
-- **Trace:** IA §Screens S4 (template values copied in and stay editable) · D-W30 · projects.ts goalsFromValues
+- **Expect:** The Project page's Goals read IC 1396 Ha goal 15h and OIII goal 120 frames, each with the quality bar "Usable, FWHM ≤ 3.5″". Each goal has one unit, time or frames.
+- **Trace:** IA §Screens S4 (template values copied in and stay editable) · PRJ-FR-03, PRJ-AC-32 · D-W30, D-W90
+
+### S11a — Give the subject a Finish by date {#S11a}
+
+- **Do:** On `IC 1396 HOO deep`, edit the IC 1396 subject's goals, set **Finish by** to the date 12 nights from today, and save.
+- **Expect:** The subject's goal progress shows "12 nights left". The goal values stay Ha 15h and OIII 120 frames.
+- **Expect (negative):** Setting the date changes no file, no other subject and no template.
+- **Trace:** PRJ-FR-23, PRJ-AC-33 · D-W90 · HARNESS-V5-FEEDBACK-R1.md "Goals, grilling round 4" (deadline or season window)
 
 ### S12 — Edit, then delete, the template {#S12}
 
 - **Do:** In Settings › Goal templates, edit `HOO deep` to Ha 20 hours and save. Open `IC 1396 HOO deep`. Then delete `HOO deep` and confirm.
 - **Expect:** The template reads Ha 20h after the edit. The confirmation is titled "Delete HOO deep?". After deleting, Yours reads "No templates of yours" and Activity records `Goal template deleted: HOO deep` with "Projects keep the values copied from it."
-- **Expect (negative):** After the edit and after the delete, `IC 1396 HOO deep` still reads Ha goal 15h and OIII goal 15h · 120 frames. No other Project's goals change.
-- **Trace:** settings.ts saveGoalTemplate, deleteGoalTemplate · D-W30
+- **Expect (negative):** After the edit and after the delete, `IC 1396 HOO deep` still reads Ha goal 15h and OIII goal 120 frames with FWHM ≤ 3.5″. No other Project's goals change.
+- **Trace:** settings.ts saveGoalTemplate, deleteGoalTemplate · D-W30 · PRJ-FR-03, D-W90
 
 ### S13 — Read Settings › Locations {#S13}
 
@@ -179,7 +186,7 @@ The user sets how imported files are named, which goals a new Project starts wit
 - SC2: After S3, 1 Lights template is saved and the S6 Import preview, once NGC 7000 is picked, resolves to `NGC 7000/2026-10-04/Ha/`; after S7, 0 naming templates are custom.
 - SC3: S4 and S10 save 0 changes and record 0 Activity entries.
 - SC4: S8 lists exactly 5 built-in templates with the D-W47 values, and 0 Applied in references.
-- SC5: `IC 1396 HOO deep` reads Ha 15h and OIII 15h · 120 frames after S11, after the S12 edit and after the S12 delete.
+- SC5: `IC 1396 HOO deep` reads Ha 15h and OIII 120 frames with FWHM ≤ 3.5″ after S11, after the S12 edit and after the S12 delete.
 - SC6: After S14, exactly 1 Archive location carries the Default pill (`Backup archive`) and `IC 1396 Ha`'s destination is `Cold-1 archive`.
 - SC7: After S15 and S16, PixInsight / WBPP reads Found and Open in… holds the saved arguments, with 0 application processes started.
 - SC8: S17 manifests match P6 for 100% of files.
@@ -215,3 +222,6 @@ The user sets how imported files are named, which goals a new Project starts wit
 - **Δ5** 2026-10-16 · S16b · behavior-change
   The framing and mosaic-panel defaults are settled values, adjustable in Settings, and a one-group Project has no group folder even when its group is a mosaic panel.
   Evidence: D-W114 (owner's answers of 2026-10-15/16) in PR #1804, PRJ-FR-28, PRJ-FR-29, PRJ-FR-31 · by: SpecF4Answers (intent-gated)
+- **Δ6** 2026-10-17 · S9, S10, S11, +S11a, S12 · behavior-change
+  Each goal is time or frames, never both, with an optional quality bar: `HOO deep` now holds Ha 15h and OIII 120 frames, each with FWHM ≤ 3.5″, and the Project copies them unchanged. New S11a sets a Finish by date on the subject, whose progress then shows the nights left.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md Round 9 C7 and "Goals, grilling round 4" · D-W90 · PRJ-FR-03, PRJ-FR-23, PRJ-AC-32, PRJ-AC-33 · by: JourneysR9c (intent-gated)

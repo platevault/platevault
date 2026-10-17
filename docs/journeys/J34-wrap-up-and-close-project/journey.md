@@ -185,7 +185,7 @@ The user wraps up Project `NGC 7000 HOO` after its View changes have been applie
 - **Expect (negative):** Close moves no file in `Output/` and does not change the Project's sessions or goals. No Reopen is offered.
 - **Trace:** HARNESS-V5-IA.md S1, S2, S3, S9 · P-WRAP1 · PRJ-FR-14, PRJ-FR-25 · PRJ-AC-21, PRJ-AC-22, PRJ-AC-34 · RES-FR-06 · D-W80, D-W97
 
-### S12 - Confirm the Archived Project is locked {#S12}
+### S12 — Confirm the Archived Project is locked {#S12}
 
 - **Do:** On the Archived Project page, inspect its menu, Edit… control, Wrap up, goals, sessions and View. In Sessions, change the library quality of one 24 Sep frame, and on the 24 Sep session's calibration choose No darks. Return to the Project.
 - **Expect:**

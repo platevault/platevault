@@ -1,7 +1,7 @@
 ---
 id: J33
 title: Process a mosaic with Project panel groups
-version: 7
+version: 8
 status: draft
 last_reviewed: 2026-10-06
 actors: [primary-user]
@@ -63,8 +63,9 @@ The user organizes the seven in-scope Veil sessions in Project `Veil Mosaic HOO`
 
 ### S2 — Check panel goals and progress {#S2}
 - **Do:** Read each panel's Ha and OIII goals and progress on the Project page.
-- **Expect:** Each panel has its own goals and counts. The four panels contain 40, 30, 30 and 20 lights respectively, for 120 lights total. The subject's progress identifies the weakest panel.
-- **Trace:** PRJ-FR-03, PRJ-FR-24, PRJ-AC-13 · D-W90, D-W95
+- **Expect:** Each panel has its own goals and counts. The four panels contain 40, 30, 30 and 20 lights respectively, for 120 lights total. Counted at 300 s, Ha reads 1h40 in Panel 1, 2h30 in Panels 2 and 3 and 0 in Panel 4, and OIII reads 1h40 in Panels 1 and 4 and 0 in Panels 2 and 3. The subject's progress identifies the weakest panel, and the subject completes only when every panel meets its goals. Panel balance reads ±10 %, the default, and measures each panel against the panels' mean (1h40 for Ha, 50 min for OIII). Ha is out of balance in Panels 2 and 3 (50 % above) and Panel 4 (100 % below), and its line names the furthest panel: `Panel 4 100% below average · limit ±10%`. OIII is out of balance in all four panels (100 % each way), and on the tie its line names the first panel below: `Panel 2 100% below average · limit ±10%`. The warning copy is provisional, from the prototype.
+- **Expect (negative):** The balance warning never blocks completion and is not a goal.
+- **Trace:** PRJ-FR-03, PRJ-FR-24, PRJ-AC-13 · D-W90, D-W95 · HARNESS-V5-FEEDBACK-R1.md "Goals, grilling round 4" (mosaic coverage, mosaic panel balance)
 
 ### S2a — Read the panel map {#S2a}
 - **Do:** Open the linked sky-coverage view and read the panel map.
@@ -73,8 +74,9 @@ The user organizes the seven in-scope Veil sessions in Project `Veil Mosaic HOO`
 
 ### S3 — Read Project-level progress {#S3}
 - **Do:** Read the Project's panel progress and group list.
-- **Expect:** Progress is shown per panel and per panel goal. The panels are groups of one Project, and no whole-mosaic processing state exists.
-- **Trace:** PRJ-FR-03, PRJ-FR-07, PRJ-FR-27, PRJ-FR-29 · D-W94, D-W95
+- **Expect:** Progress is shown per panel and per panel goal. The panels are groups of one Project, and no whole-mosaic processing state exists. The Project page shows the subject's counted Ha to OIII ratio, 6h40 to 3h20 (2:1), next to the 1:1 ratio its HOO goals imply.
+- **Expect (negative):** Channel balance is not offered as a goal.
+- **Trace:** PRJ-FR-03, PRJ-FR-07, PRJ-FR-27, PRJ-FR-29 · D-W90, D-W94, D-W95 · HARNESS-V5-FEEDBACK-R1.md "Goals, grilling round 4" (channel balance dropped as a goal)
 
 ### S5 — Choose the application and View mode {#S5}
 - **Do:** On View, select PixInsight and Symlinks.
@@ -148,6 +150,7 @@ The user organizes the seven in-scope Veil sessions in Project `Veil Mosaic HOO`
 - SC4: Exactly six files appear as Results: five in panel-group folders under `Output/Panels/`, which are the four panel stacks, one per panel folder, and `Panel4_OIII_drizzle.xisf` under Panel 2, and one assembled mosaic in `Output/`. The filename of a file in a panel folder does not change its panel attribution; none needs acceptance or has recorded lineage (S11, S12, S14).
 - SC5: Marking Q1 and Q2 Unusable creates exactly two Library-labelled pending removals; neither the marks nor Apply moves originals, and `Output/` remains unchanged (S13).
 - SC6: Wrap up moves exactly two rejected captures to the OS Trash, leaves `Output/` in place, and permanently deletes zero files (S15).
+- SC7: At S2, panel balance at ±10 % flags 3 of 4 panels for Ha and 4 of 4 for OIII, names Panel 4 for Ha and Panel 2 for OIII, and blocks 0 completions. At S3 the counted ratio reads 2:1 against the goals' 1:1.
 
 ## Known gaps
 
@@ -181,3 +184,6 @@ The user organizes the seven in-scope Veil sessions in Project `Veil Mosaic HOO`
 - **Δ7** 2026-10-16 · S8 · behavior-change
   Light folders end in their exposure, such as `Lights/Ha_300s/` (provisional), while flat folders keep the filter name.
   Evidence: D-W108 as amended by the owner's second batch of 2026-10-16 in PR #1804, PREP-FR-16, PREP-AC-32 · by: EncodeOwnerAnswers2 (intent-gated)
+- **Δ8** 2026-10-17 · S2, S3, +SC7 · behavior-change
+  Panel balance (±10 % by default) flags each panel outside the band around the panels' mean and names the furthest one per channel, without blocking completion (S2). The Project page shows the subject's counted channel ratio next to the ratio its goals imply, with no channel-balance goal (S3).
+  Evidence: HARNESS-V5-FEEDBACK-R1.md Round 9 C7 and "Goals, grilling round 4" · D-W90 · PRJ-FR-03, PRJ-FR-24, PRJ-AC-13 · prototype derive.ts panelBalance, messages domain_balance_below (ui-harness-v5) · by: JourneysR9c (intent-gated)
