@@ -173,6 +173,7 @@ async fn exposure_mismatch_warns_per_subject_and_channel() {
     for summary in &sessions {
         membership_support::hold(&library, project.id, summary.session.id).await;
     }
+    let progress = library.project_progress(project.id).await.unwrap();
 
     assert_eq!(progress.project_id, project.id);
     assert_eq!(progress.revision, library.catalog().project(project.id).await.unwrap().revision);
