@@ -7,6 +7,7 @@
 //!
 //! - [`signature`] — content signature computation (R-Sig-1).
 //! - [`scan`] — recursive folder scan, leaf detection, video lane.
+//! - [`legacy_rows`] — rows the scan stored under the old backslash text.
 //! - [`classify`] — `inbox.classify` use case: extract IMAGETYP, normalise,
 //!   persist evidence, compute classification result.
 //! - [`confirm`] — `inbox.confirm` use case: TOCTOU guard, plan creation.
@@ -23,6 +24,7 @@ pub mod classify;
 pub mod cone_search;
 pub mod confirm;
 pub mod grouping;
+pub mod legacy_rows;
 pub mod metadata;
 pub mod plan_listener;
 pub mod property_registry;

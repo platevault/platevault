@@ -335,7 +335,7 @@ pub async fn audit_export(
             )),
             ExportWriteError::Io(e) => ContractError::internal(format!("write error: {e}")),
             ExportWriteError::LeftUnfinished(file) => {
-                app_core::errors::export_unfinished_file(file.path(), file.to_string())
+                app_core::errors::export_unfinished_file(file)
             }
         })?;
 

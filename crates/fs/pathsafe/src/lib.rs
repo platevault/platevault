@@ -428,7 +428,15 @@ pub fn create_symlink(source: &Path, destination: &Path) -> io::Result<()> {
 
 // ── Wire-path helpers ─────────────────────────────────────────────────────────
 
-/// Convert `path` to a forward-slash UTF-8 string for wire and contract fields.
+/// Convert `path` to the UTF-8 text wire and contract fields carry, with `/`
+/// as the separator.
+///
+/// Only Windows needs a conversion: there `\` is a separator and never part
+/// of a name, so it becomes `/` without loss. On macOS and Linux `/` is
+/// already the separator and `\` is an ordinary name character, so the text
+/// is kept as it is. A file named `a\b.fits` and the nested `a/b.fits` keep
+/// distinct wire text, and `root.join(wire)` names the entry the text came
+/// from on every platform (bd `astro-plan-3pvvc`).
 ///
 /// Uses `camino::Utf8Path` for a lossless conversion when the path is valid
 /// UTF-8, falling back to `to_string_lossy` (which replaces invalid sequences
@@ -436,18 +444,21 @@ pub fn create_symlink(source: &Path, destination: &Path) -> io::Result<()> {
 /// in production all paths pass the non-UTF-8 skip at the `read_dir` boundary
 /// before reaching this function.
 ///
-/// This is the canonical single home for `replace('\\', "/")` on a `Path`
-/// so the wire format (`relative_file_path` contract field) cannot drift
-/// between scan, classify, and confirm (bd `astro-plan-kyo7.88`).
+/// This is the canonical single home for the separator rule on a `Path` so
+/// the wire format (`relative_file_path` contract field) cannot drift between
+/// scan, classify, and confirm (bd `astro-plan-kyo7.88`).
 #[must_use]
 pub fn wire_path(path: &Path) -> String {
-    Utf8Path::from_path(path).map_or_else(
-        || path.to_string_lossy().replace('\\', "/"),
-        |u| u.as_str().replace('\\', "/"),
-    )
+    let text =
+        Utf8Path::from_path(path).map_or_else(|| path.to_string_lossy(), |u| u.as_str().into());
+    if cfg!(windows) {
+        text.replace('\\', "/")
+    } else {
+        text.into_owned()
+    }
 }
 
-/// Compute the forward-slash UTF-8 path of `path` relative to `root`.
+/// Compute the [`wire_path`] of `path` relative to `root`.
 ///
 /// Strips the `root` prefix via `strip_prefix`; falls back to `wire_path(path)`
 /// if `path` does not start with `root`. Callers must ensure `path` is a
@@ -456,6 +467,23 @@ pub fn wire_path(path: &Path) -> String {
 pub fn relative_wire_path(root: &Path, path: &Path) -> String {
     let rel = path.strip_prefix(root).unwrap_or(path);
     wire_path(rel)
+}
+
+/// The last name in `wire`, the text a [`wire_path`] call produced: what
+/// follows its last separator, or all of it when it has none.
+///
+/// The separators follow [`wire_path`]. On macOS and Linux only `/`
+/// separates, so `folder/a\b.fits` names `a\b.fits`. On Windows `\` never
+/// belongs to a name, so it separates as well; wire text holds none, but text
+/// written into a wire column without passing [`wire_path`] still splits
+/// there (bd `astro-plan-3pvvc`).
+///
+/// Use it on wire text only. A native path splits by its own platform's
+/// rules (`Path::file_name`).
+#[must_use]
+pub fn wire_file_name(wire: &str) -> &str {
+    let last = if cfg!(windows) { wire.rfind(['/', '\\']) } else { wire.rfind('/') };
+    last.map_or(wire, |idx| &wire[idx + 1..])
 }
 
 #[cfg(test)]
@@ -868,5 +896,74 @@ mod tests {
         let (files, unreadable) = real_files_under_reporting(&scan_root, false);
         assert!(files.is_empty(), "must not see files behind an un-enabled junction");
         assert_eq!(unreadable, Vec::<PathBuf>::new(), "a gated junction is skipped, not unknown");
+    }
+
+    #[test]
+    fn wire_path_separates_nested_components_with_a_slash() {
+        let nested = Path::new("a").join("b").join("c.fits");
+        assert_eq!(wire_path(&nested), "a/b/c.fits");
+
+        let root = Path::new("inbox");
+        assert_eq!(relative_wire_path(root, &root.join(&nested)), "a/b/c.fits");
+    }
+
+    /// On macOS and Linux `\` is an ordinary name character: a file named
+    /// `a\b.fits` and the nested `a/b.fits` are different files, so they must
+    /// get different wire text, and joining the wire text back onto the root
+    /// must name the file or folder it came from (bd `astro-plan-3pvvc`).
+    #[cfg(unix)]
+    #[test]
+    fn wire_path_keeps_a_unix_backslash_name_apart_from_a_nested_path() {
+        let root = Path::new("/inbox");
+        let cases = [
+            (root.join("a\\b.fits"), "a\\b.fits"),
+            (root.join("a").join("b.fits"), "a/b.fits"),
+            (root.join("c\\d").join("x.fits"), "c\\d/x.fits"),
+            (root.join("c").join("d").join("x.fits"), "c/d/x.fits"),
+        ];
+
+        for (path, expected) in &cases {
+            let wire = relative_wire_path(root, path);
+            assert_eq!(wire, *expected);
+            assert_eq!(&root.join(&wire), path, "{wire} must join back onto its own path");
+            assert_eq!(wire_path(Path::new(&wire)), wire, "{wire} must survive a round trip");
+        }
+    }
+
+    /// Windows refuses `\` in a name, so there it is only ever a separator and
+    /// becomes `/` on the wire.
+    #[cfg(windows)]
+    #[test]
+    fn wire_path_turns_windows_separators_into_slashes() {
+        assert_eq!(wire_path(Path::new(r"a\b.fits")), "a/b.fits");
+        assert_eq!(wire_path(Path::new(r"a\b/c.fits")), "a/b/c.fits");
+        assert_eq!(
+            relative_wire_path(Path::new(r"C:\inbox"), Path::new(r"C:\inbox\a\b.fits")),
+            "a/b.fits"
+        );
+    }
+
+    #[test]
+    fn wire_file_name_is_the_text_after_the_last_slash() {
+        assert_eq!(wire_file_name("masters/darks/300/master.xisf"), "master.xisf");
+        assert_eq!(wire_file_name("master.xisf"), "master.xisf");
+        assert_eq!(wire_file_name(""), "");
+    }
+
+    /// On macOS and Linux a `\` in wire text is part of a name.
+    #[cfg(unix)]
+    #[test]
+    fn wire_file_name_keeps_a_unix_backslash_in_the_name() {
+        assert_eq!(wire_file_name("folder/a\\b.fits"), "a\\b.fits");
+        assert_eq!(wire_file_name("a\\b.fits"), "a\\b.fits");
+        assert_eq!(wire_file_name("c\\d/x.fits"), "x.fits");
+    }
+
+    /// On Windows a `\` only ever separates.
+    #[cfg(windows)]
+    #[test]
+    fn wire_file_name_splits_on_a_windows_backslash() {
+        assert_eq!(wire_file_name(r"folder\a\b.fits"), "b.fits");
+        assert_eq!(wire_file_name(r"c\d/x.fits"), "x.fits");
     }
 }
