@@ -152,6 +152,10 @@ mod tests {
         let webview = WebviewWindowBuilder::new(&app, "main", WebviewUrl::default())
             .build()
             .expect("build mock webview");
+        // The origin a real webview invokes from is the app URL it loaded:
+        // `tauri://localhost` on macOS and Linux, `http://tauri.localhost` on
+        // Windows. Any other origin is remote, which the ACL refuses.
+        let origin = webview.url().expect("mock webview URL");
 
         for (tag, expected) in [("pt-BR", "pt-BR"), ("de-DE", "en-GB")] {
             test::get_ipc_response(
@@ -160,7 +164,7 @@ mod tests {
                     cmd: "update_set_locale".to_owned(),
                     callback: CallbackFn(0),
                     error: CallbackFn(1),
-                    url: "tauri://localhost".parse().expect("IPC URL"),
+                    url: origin.clone(),
                     body: InvokeBody::Json(serde_json::json!({ "locale": tag })),
                     headers: HeaderMap::default(),
                     invoke_key: INVOKE_KEY.to_owned(),
