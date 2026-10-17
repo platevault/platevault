@@ -42,7 +42,10 @@
 //! The swap is the one `tauri-plugin-updater` 2.13.3 made: the two bundles are
 //! exchanged in one step where the file system can (APFS), so the app path
 //! never stands empty, and moved with a restore elsewhere. A previous app
-//! that could not be put back is kept, never deleted.
+//! that could not be put back is kept, never deleted: it counts as back only
+//! when its device and inode are at the app's path again, and every renamed
+//! back or kept entry moves onto nothing, under the next free numbered name
+//! when one is taken.
 //!
 //! An app the user may not rename is installed by [`PrivilegedInstall`], a
 //! root script that checks again, on its own copy, everything the user
@@ -256,7 +259,14 @@ fn move_into_place(
             );
         }
     };
-    Err(match keep_backup_if_not_restored(installed, staging, &backup, home.as_deref()) {
+    let kept = keep_backup_if_not_restored(
+        launched,
+        staging,
+        [update, &backup],
+        update_id,
+        home.as_deref(),
+    );
+    Err(match kept {
         Some(kept) => {
             tracing::error!(%error, kept = %kept.display(), "the update failed and the previous app could not be put back");
             UpdateError::PreviousAppNotRestored { kept, cause: Box::new(error) }
@@ -490,11 +500,25 @@ fn exchange(installed: &Path, update: &Path) -> io::Result<()> {
 
 /// Move `from` to `to` only while nothing is at `to` (`RENAME_EXCL` on macOS,
 /// `RENAME_NOREPLACE` on Linux), as root's exclusive moves do: a plain rename
-/// replaces an empty directory another process put at `to`.
+/// replaces an empty directory another process put at `to`. A file system
+/// without an exclusive rename gets the check that nothing is at `to` and a
+/// plain rename, which leaves a moment for another process in between.
 fn rename_noreplace(from: &Path, to: &Path) -> io::Result<()> {
     use rustix::fs::{renameat_with, RenameFlags, CWD};
+    use rustix::io::Errno;
 
-    renameat_with(CWD, from, CWD, to, RenameFlags::NOREPLACE).map_err(io::Error::from)
+    // `ENOTSUP` and `EOPNOTSUPP` are one value on Linux, so they are compared
+    // rather than matched as patterns.
+    let unsupported = [Errno::NOTSUP, Errno::OPNOTSUPP, Errno::INVAL, Errno::NOSYS];
+    match renameat_with(CWD, from, CWD, to, RenameFlags::NOREPLACE) {
+        Err(errno) if unsupported.contains(&errno) => {
+            if fs::symlink_metadata(to).is_ok() {
+                return Err(io::ErrorKind::AlreadyExists.into());
+            }
+            fs::rename(from, to)
+        }
+        other => other.map_err(io::Error::from),
+    }
 }
 
 /// Move `update` to the app `launched` names, keeping what was there in
@@ -507,9 +531,10 @@ fn replace(launched: &LaunchedBundle, update: &Path, backup: &Path) -> Result<()
     fs::rename(installed, backup)?;
     check_moved_out(launched, backup, || rename_noreplace(backup, installed))?;
     if let Err(error) = fs::rename(update, installed) {
-        // Best effort: the error worth reporting is the failed move, and a
-        // failed restore is caught by `keep_backup_if_not_restored`.
-        let _ = fs::rename(backup, installed);
+        // Best effort, onto nothing: the error worth reporting is the failed
+        // move, and a failed restore is caught by
+        // `keep_backup_if_not_restored`.
+        let _ = rename_noreplace(backup, installed);
         return Err(error.into());
     }
     Ok(())
@@ -778,7 +803,7 @@ impl PrivilegedInstall {
                 Identity::Designated(requirement) => Some(requirement.clone()),
                 Identity::AdHoc | Identity::Unsigned => None,
             },
-            kept: previous_version_name(installed),
+            kept: previous_version_name(installed, 1),
         })
     }
 
@@ -909,11 +934,19 @@ fn applescript_string(text: &str) -> String {
     format!("\"{}\"", text.replace('\\', r"\\").replace('"', "\\\""))
 }
 
-/// `<name> (previous version).app`: what a previous app that could not be put
-/// back is called where it is kept.
-fn previous_version_name(installed: &Path) -> OsString {
+/// How many numbered names [`move_aside`] tries in one directory.
+const KEPT_NAMES: u32 = 100;
+
+/// `<name> (previous version).app`, or `<name> (previous version <number>).app`
+/// from 2 on: what a previous app that could not be put back is called where
+/// it is kept.
+fn previous_version_name(installed: &Path, number: u32) -> OsString {
     let mut name = installed.file_stem().unwrap_or_default().to_os_string();
-    name.push(" (previous version)");
+    if number > 1 {
+        name.push(format!(" (previous version {number})"));
+    } else {
+        name.push(" (previous version)");
+    }
     if let Some(extension) = installed.extension() {
         name.push(".");
         name.push(extension);
@@ -921,40 +954,66 @@ fn previous_version_name(installed: &Path) -> OsString {
     name
 }
 
-/// After a failed swap, where the previous app is if it never made it back to
-/// `installed`: `backup`, which is then the only copy left, moved aside by
-/// [`move_aside`], or, should that fail, in `staging`, which is then kept
-/// rather than deleted.
+/// After a failed swap, where the launched app is kept when it is no longer
+/// at its path, `None` when it is ([`still_at`]). Whatever another process
+/// put at the app's path does not count as the app back in place. Every
+/// entry at `left`, the two places in `staging` a swap moves things to, that
+/// is not the update (`update_id`) is kept aside by [`keep_all_but`], so
+/// nothing is deleted with `staging`: the launched app, should it not have
+/// gone back, and anything else found there.
 fn keep_backup_if_not_restored(
-    installed: &Path,
+    launched: &LaunchedBundle,
     staging: tempfile::TempDir,
-    backup: &Path,
+    left: [&Path; 2],
+    update_id: (u64, u64),
     fallback_dir: Option<&Path>,
 ) -> Option<PathBuf> {
-    if fs::symlink_metadata(installed).is_ok() || fs::symlink_metadata(backup).is_err() {
+    let installed = launched.path.as_path();
+    let restored = still_at(installed, launched.id).unwrap_or(false);
+    let kept = keep_all_but(installed, staging, left, update_id, fallback_dir);
+    let previous = kept.iter().find(|kept| entry_id(kept).is_ok_and(|id| id == launched.id));
+    if restored || previous.is_none() {
+        if !kept.is_empty() {
+            tracing::warn!(
+                ?kept,
+                restored,
+                "the failed swap left entries in staging that are not the update; they are kept"
+            );
+        }
         return None;
     }
-    Some(move_aside(installed, backup, fallback_dir).unwrap_or_else(|| {
-        let _ = staging.keep();
-        backup.to_path_buf()
-    }))
+    previous.cloned()
 }
 
 /// Move `entry`, which came out of the app's path at `installed` and must not
 /// be deleted, out of the staging dir, which is deleted on drop and sits in
 /// the system temp dir that macOS empties on its own: next to `installed`, or
-/// into `fallback_dir` (the home folder) when that is not writable, under
-/// [`previous_version_name`]. Where it went; `None` when neither worked.
+/// into `fallback_dir` (the home folder) when that is not writable, under the
+/// first [`previous_version_name`] not taken there. Where it went; `None`
+/// when neither worked.
 fn move_aside(installed: &Path, entry: &Path, fallback_dir: Option<&Path>) -> Option<PathBuf> {
-    let name = previous_version_name(installed);
     [installed.parent(), fallback_dir]
         .into_iter()
         .flatten()
-        .map(|dir| dir.join(&name))
-        // `rename` replaces an empty directory, so never move onto anything
-        // already there.
-        .filter(|kept| fs::symlink_metadata(kept).is_err())
-        .find(|kept| fs::rename(entry, kept).is_ok())
+        .find_map(|dir| move_into(dir, installed, entry))
+}
+
+/// Move `entry` into `dir` under the first free [`previous_version_name`]
+/// for `installed`, never onto anything already there; `None` when `dir`
+/// takes none of them.
+fn move_into(dir: &Path, installed: &Path, entry: &Path) -> Option<PathBuf> {
+    for number in 1..=KEPT_NAMES {
+        let kept = dir.join(previous_version_name(installed, number));
+        match rename_noreplace(entry, &kept) {
+            Ok(()) => return Some(kept),
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
+            Err(error) => {
+                tracing::debug!(%error, dir = %dir.display(), "cannot keep the entry here");
+                return None;
+            }
+        }
+    }
+    None
 }
 
 /// The macOS installer over an explicit launched bundle, for tests.
@@ -991,8 +1050,8 @@ mod tests {
 
     use super::{
         check_moved_out, entry_id, exchange, identify_launched, keep_backup_if_not_restored,
-        rename_noreplace, replace, settle_not_launched, staging_dir_among, swap, CodeSigning,
-        Identity, LaunchedBundle, SwapError,
+        move_aside, rename_noreplace, replace, settle_not_launched, staging_dir_among, swap,
+        CodeSigning, Identity, LaunchedBundle, SwapError,
     };
     use crate::update::UpdateError;
 
@@ -2274,36 +2333,69 @@ function run(argv) {{
         }
     }
 
+    /// The staging dir of a two-moves swap that failed after its first move:
+    /// the app at the installed path, `old`, launched as it was and then
+    /// moved to `backup`, and the update, `new`, unpacked next to it.
+    struct FirstMoveDone {
+        staging: tempfile::TempDir,
+        launched: LaunchedBundle,
+        update: PathBuf,
+        backup: PathBuf,
+    }
+
+    impl FirstMoveDone {
+        fn at(dir: &Path, installed: &Path) -> Self {
+            bundle(installed, "old");
+            let launched = launched(installed);
+            let staging = tempfile::tempdir_in(dir).expect("staging");
+            let update = staging.path().join("App.app");
+            bundle(&update, "new");
+            let backup = staging.path().join("previous.app");
+            fs::rename(installed, &backup).expect("the first move");
+            Self { staging, launched, update, backup }
+        }
+
+        /// What the failed install makes of it.
+        fn settle(self, fallback_dir: Option<&Path>) -> Option<PathBuf> {
+            let update_id = entry_id(&self.update).expect("update");
+            keep_backup_if_not_restored(
+                &self.launched,
+                self.staging,
+                [&self.update, &self.backup],
+                update_id,
+                fallback_dir,
+            )
+        }
+    }
+
     #[test]
     fn a_previous_app_that_was_not_put_back_moves_next_to_the_installed_path() {
         let dir = tempfile::tempdir().expect("tempdir");
         let installed = dir.path().join("App.app");
-        let staging = tempfile::tempdir_in(dir.path()).expect("staging");
-        let staging_path = staging.path().to_path_buf();
-        let backup = staging_path.join("previous.app");
-        bundle(&backup, "old");
+        let moves = FirstMoveDone::at(dir.path(), &installed);
+        let staging_path = moves.staging.path().to_path_buf();
 
-        let kept = keep_backup_if_not_restored(&installed, staging, &backup, None);
+        let kept = moves.settle(None);
 
-        let expected = dir.path().join("App (previous version).app");
+        let expected = dir.path().join(KEPT_APP);
         assert_eq!(kept.as_deref(), Some(expected.as_path()));
         assert_eq!(version(&expected), "old");
-        assert!(!staging_path.exists(), "the empty staging dir is removed");
+        assert!(!staging_path.exists(), "the staging dir, with the update, is removed");
     }
 
     #[test]
     fn a_previous_app_that_cannot_go_next_to_the_installed_path_goes_to_the_fallback() {
         let dir = tempfile::tempdir().expect("tempdir");
-        let installed = dir.path().join("App.app");
-        fs::write(dir.path().join("App (previous version).app"), "other").expect("other");
-        let staging = tempfile::tempdir_in(dir.path()).expect("staging");
-        let backup = staging.path().join("previous.app");
-        bundle(&backup, "old");
+        let applications = dir.path().join("Applications");
+        fs::create_dir(&applications).expect("Applications");
+        let installed = applications.join("App.app");
+        let moves = FirstMoveDone::at(dir.path(), &installed);
+        fs::remove_dir(&applications).expect("no folder to keep it next to");
         let fallback = tempfile::tempdir_in(dir.path()).expect("fallback");
 
-        let kept = keep_backup_if_not_restored(&installed, staging, &backup, Some(fallback.path()));
+        let kept = moves.settle(Some(fallback.path()));
 
-        let expected = fallback.path().join("App (previous version).app");
+        let expected = fallback.path().join(KEPT_APP);
         assert_eq!(kept.as_deref(), Some(expected.as_path()));
         assert_eq!(version(&expected), "old");
     }
@@ -2311,26 +2403,17 @@ function run(argv) {{
     #[test]
     fn a_previous_app_that_cannot_move_stays_in_the_kept_staging_dir() {
         let dir = tempfile::tempdir().expect("tempdir");
-        let installed = dir.path().join("App.app");
-        // A file where the previous app would go, which must not be replaced.
-        fs::write(dir.path().join("App (previous version).app"), "other").expect("other");
-        let staging = tempfile::tempdir_in(dir.path()).expect("staging");
-        let backup = staging.path().join("previous.app");
-        bundle(&backup, "old");
+        let applications = dir.path().join("Applications");
+        fs::create_dir(&applications).expect("Applications");
+        let installed = applications.join("App.app");
+        let moves = FirstMoveDone::at(dir.path(), &installed);
+        fs::remove_dir(&applications).expect("no folder to keep it next to");
+        let backup = moves.backup.clone();
 
-        let kept = keep_backup_if_not_restored(
-            &installed,
-            staging,
-            &backup,
-            Some(&dir.path().join("missing")),
-        );
+        let kept = moves.settle(Some(&dir.path().join("missing")));
 
         assert_eq!(kept.as_deref(), Some(backup.as_path()));
         assert_eq!(version(&backup), "old", "the staging dir was not deleted");
-        assert_eq!(
-            fs::read_to_string(dir.path().join("App (previous version).app")).expect("other"),
-            "other"
-        );
         fs::remove_dir_all(backup.parent().expect("staging")).expect("clean up the kept dir");
     }
 
@@ -2338,13 +2421,69 @@ function run(argv) {{
     fn a_previous_app_back_in_place_needs_no_backup() {
         let dir = tempfile::tempdir().expect("tempdir");
         let installed = dir.path().join("App.app");
-        bundle(&installed, "old");
-        let staging = tempfile::tempdir_in(dir.path()).expect("staging");
-        let staging_path = staging.path().to_path_buf();
-        let backup = staging_path.join("previous.app");
-        bundle(&backup, "older");
+        let moves = FirstMoveDone::at(dir.path(), &installed);
+        fs::rename(&moves.backup, &installed).expect("the restore");
+        let staging_path = moves.staging.path().to_path_buf();
 
-        assert!(keep_backup_if_not_restored(&installed, staging, &backup, None).is_none());
+        assert!(moves.settle(None).is_none());
+        assert_eq!(version(&installed), "old");
+        assert!(!dir.path().join(KEPT_APP).exists(), "nothing is kept");
         assert!(!staging_path.exists());
+    }
+
+    /// With the app back in place, an entry another process put in staging
+    /// is still kept aside, not deleted with staging.
+    #[test]
+    fn an_unknown_entry_in_staging_is_kept_with_the_app_back_in_place() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let installed = dir.path().join("App.app");
+        let moves = FirstMoveDone::at(dir.path(), &installed);
+        fs::rename(&moves.backup, &installed).expect("the restore");
+        bundle(&moves.backup, "stray");
+
+        assert!(moves.settle(None).is_none(), "the app is back");
+        assert_eq!(version(&installed), "old");
+        assert_eq!(version(&dir.path().join(KEPT_APP)), "stray");
+    }
+
+    /// The two-moves fallback, after something landed at the app's path
+    /// between its renames: the second rename and the restore both failed,
+    /// so the launched app is still in `backup`, and the app's path holds
+    /// the other entry. The launched app is kept aside, not deleted with
+    /// staging.
+    #[test]
+    fn a_previous_app_not_put_back_behind_another_entry_is_kept() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let installed = dir.path().join("App.app");
+        let moves = FirstMoveDone::at(dir.path(), &installed);
+        bundle(&installed, "foreign");
+
+        let kept = moves.settle(None);
+
+        let expected = dir.path().join(KEPT_APP);
+        assert_eq!(kept.as_deref(), Some(expected.as_path()), "the launched app is not kept");
+        assert_eq!(version(&expected), "old");
+        assert_eq!(version(&installed), "foreign", "the other entry is left alone");
+    }
+
+    /// A name a kept app would take is taken: the next numbered name is
+    /// used, next to the app, rather than the fallback or the temp folder.
+    #[test]
+    fn a_kept_app_whose_name_is_taken_gets_a_numbered_name() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let installed = dir.path().join("App.app");
+        fs::write(dir.path().join("App (previous version).app"), "other").expect("taken");
+        fs::create_dir(dir.path().join("App (previous version 2).app")).expect("taken, empty");
+        let staging = tempfile::tempdir_in(dir.path()).expect("staging");
+        let entry = staging.path().join("previous.app");
+        bundle(&entry, "old");
+
+        let kept = move_aside(&installed, &entry, None);
+
+        let expected = dir.path().join("App (previous version 3).app");
+        assert_eq!(kept.as_deref(), Some(expected.as_path()));
+        assert_eq!(version(&expected), "old");
+        let empty = dir.path().join("App (previous version 2).app");
+        assert_eq!(fs::read_dir(empty).expect("empty").count(), 0, "not moved onto");
     }
 }
