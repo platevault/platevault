@@ -185,6 +185,53 @@ pub(super) fn stamp(meta: &Metadata) -> Stamp {
     }
 }
 
+/// A folder's identity on its mounted volume: the device and inode numbers on
+/// Unix, and on Windows the volume serial number and the 64-bit file index
+/// (`nFileIndexHigh << 32 | nFileIndexLow`) that `GetFileInformationByHandle`
+/// reports for a handle on the folder itself, which `Metadata` does not
+/// expose there. Same-session continuity evidence like [`Stamp`], never
+/// persisted.
+///
+/// `platevault_eject_windows::FolderId`, computed in that crate's
+/// `window::folder_id`, names a Windows folder the same way, and the desktop
+/// shell copies this one into it (`apps/desktop/src-tauri/src/eject.rs`) to
+/// bind a removal notice handle to the watched root. The two must agree, or
+/// every root's handle is refused: change both together.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FolderId {
+    pub volume: u64,
+    pub index: u64,
+}
+
+/// The [`FolderId`] of the folder at `path`, whose no-follow metadata is
+/// `meta`. Windows opens the folder itself, never a reparse target, and
+/// refuses one that turned into a link or junction; elsewhere `meta` holds
+/// it. `None` on a platform with neither.
+///
+/// # Errors
+/// The Windows handle could not be opened or queried.
+// Only the Windows branch can fail; the shared signature keeps callers uniform.
+#[cfg_attr(not(windows), allow(clippy::unnecessary_wraps))]
+pub(super) fn folder_id(path: &Path, meta: &Metadata) -> std::io::Result<Option<FolderId>> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        let _ = path;
+        Ok(Some(FolderId { volume: meta.dev(), index: meta.ino() }))
+    }
+    #[cfg(windows)]
+    {
+        let _ = meta;
+        let info = windows_handle::information(path)?;
+        Ok(Some(FolderId { volume: info.volume_serial_number(), index: info.file_index() }))
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        let _ = (path, meta);
+        Ok(None)
+    }
+}
+
 /// Remount-stable file ID of an entry, recorded only where the volume
 /// qualifies its file IDs as stable.
 ///

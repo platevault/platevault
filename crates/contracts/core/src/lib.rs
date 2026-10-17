@@ -8,6 +8,7 @@ pub mod audit;
 pub mod calibration;
 pub mod calibration_match;
 pub mod calibration_tolerances;
+pub mod captures;
 pub mod cleanup;
 pub mod cone_search;
 pub mod dev;

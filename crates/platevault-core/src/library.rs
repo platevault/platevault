@@ -55,6 +55,9 @@ pub struct Library {
     saved_targets: Mutex<Option<(u64, Arc<Vec<TargetCandidate>>)>>,
     scans: Mutex<HashMap<Uuid, ScanControl>>,
     progress: broadcast::Sender<ScanOperation>,
+    /// The id of each location whose registration, path or lifecycle changed
+    /// through this library (register, reselect, remap, retire).
+    location_changes: broadcast::Sender<Uuid>,
     references: tokio::sync::RwLock<Vec<Arc<dyn AssetReferences>>>,
     pub(crate) planning: Mutex<crate::observing_plans::PlanningRuntime>,
     frame_review: FrameReview,
@@ -132,6 +135,7 @@ impl Library {
         let targets = blocking(TargetIndex::bundled).await?;
         let provider = provider.map(SimbadTargetResolver::simbad).transpose()?;
         let (progress, _) = broadcast::channel(128);
+        let (location_changes, _) = broadcast::channel(64);
         let planning =
             Mutex::new(crate::observing_plans::PlanningRuntime::new(Arc::clone(&catalog)));
         let projects: Arc<dyn AssetReferences> =
@@ -148,6 +152,7 @@ impl Library {
             scans: Mutex::new(HashMap::new()),
             saved_targets: Mutex::new(None),
             progress,
+            location_changes,
             planning,
             references: tokio::sync::RwLock::new(vec![projects, calibration, views]),
             frame_review,
@@ -180,6 +185,20 @@ impl Library {
         self.progress.subscribe()
     }
 
+    /// The id of each location registered, reselected, remapped or retired
+    /// from now on. A lagged receiver has missed changes and re-reads the
+    /// locations.
+    #[must_use]
+    pub fn subscribe_location_changes(&self) -> broadcast::Receiver<Uuid> {
+        self.location_changes.subscribe()
+    }
+
+    /// Publish a committed location change; nobody listening is not an error.
+    fn location_changed(&self, location: Location) -> Location {
+        let _ = self.location_changes.send(location.id);
+        location
+    }
+
     #[must_use]
     pub fn seed_target(&self, id: Uuid) -> Option<TargetCandidate> {
         self.targets.candidate(id)
@@ -201,10 +220,32 @@ impl Library {
         proposed: NativePath,
     ) -> Result<RemapReview, LibraryError> {
         let root = proposed.to_path_buf()?;
-        let identity = blocking(move || inventory::observe_root_identity(&root)).await?;
+        let observed = blocking(move || inventory::observe_root(&root)).await?;
+        let probe = InventoryProbe::default();
         self.catalog
-            .review_remap(location_id, expected, &proposed, &identity, InventoryProbe::default())
+            .review_remap(
+                location_id,
+                expected,
+                &proposed,
+                &observed.identity,
+                observed.volume_kind,
+                probe,
+            )
             .await
+    }
+
+    /// Apply a reviewed remap; see [`Catalog::apply_remap`].
+    ///
+    /// # Errors
+    /// `Conflict`, `IdentityConflict` or `NoByteProof` leave every path unchanged.
+    pub async fn apply_remap(
+        &self,
+        review_id: Uuid,
+        expected: Revision,
+    ) -> Result<Location, LibraryError> {
+        let location =
+            self.catalog.apply_remap(review_id, expected, InventoryProbe::default()).await?;
+        Ok(self.location_changed(location))
     }
 
     /// Register a qualified native root without scanning or modifying its files.
@@ -219,7 +260,8 @@ impl Library {
     ) -> Result<Location, LibraryError> {
         let root = path.to_path_buf()?;
         let observed = blocking(move || inventory::observe_root(&root)).await?;
-        self.catalog
+        let location = self
+            .catalog
             .register_location(&LocationRegistration {
                 name,
                 path,
@@ -227,7 +269,8 @@ impl Library {
                 identity: observed.identity,
                 volume_kind: observed.volume_kind,
             })
-            .await
+            .await?;
+        Ok(self.location_changed(location))
     }
 
     /// Restore a location only when its registered volume and folder still match.
@@ -242,7 +285,8 @@ impl Library {
     ) -> Result<Location, LibraryError> {
         let root = path.to_path_buf()?;
         let identity = blocking(move || inventory::observe_root_identity(&root)).await?;
-        self.catalog.reselect_location(id, expected, &path, &identity).await
+        let location = self.catalog.reselect_location(id, expected, &path, &identity).await?;
+        Ok(self.location_changed(location))
     }
 
     /// Register a feature's records that hold asset ids (see [`AssetReferences`]).
@@ -278,7 +322,9 @@ impl Library {
         expected: Revision,
     ) -> Result<Location, LibraryError> {
         let references = self.read_references(location_id).await?;
-        self.catalog.retire_location(review_id, location_id, expected, &references).await
+        let location =
+            self.catalog.retire_location(review_id, location_id, expected, &references).await?;
+        Ok(self.location_changed(location))
     }
 
     async fn read_references(&self, location_id: Uuid) -> Result<LocationReferences, LibraryError> {
@@ -808,7 +854,7 @@ pub(crate) fn root_failure(error: &LibraryError) -> Option<Availability> {
 
 #[cfg(test)]
 #[path = "../tests/support/mod.rs"]
-mod fixtures;
+pub(crate) mod fixtures;
 
 #[cfg(test)]
 mod tests {

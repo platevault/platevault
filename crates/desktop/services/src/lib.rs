@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! Desktop backend services that need no UI framework: OS notifications,
-//! process logging, the log viewer stream, job-progress feeds, the updater
-//! and the shipped locales' catalogues for text the backend shows itself.
+//! process logging, the log viewer stream, job-progress feeds, the updater,
+//! the shipped locales' catalogues for text the backend shows itself and the
+//! new-captures feed.
 //!
 //! The host owns the event loop and the windows and adapts these services to
 //! its UI. It starts [`Services`] once, passes window state in as plain values
@@ -13,6 +14,7 @@
 //! `raw-window-handle` may appear in this crate's dependency graph
 //! (`tests/dependency_boundary.rs`).
 
+pub mod captures;
 pub mod channels;
 pub mod jobs;
 pub mod locale;

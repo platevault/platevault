@@ -185,6 +185,11 @@ fn base_builder() -> Builder<tauri::Wry> {
         .typ::<contracts_core::targets::ResolverSettingsGetRequest>()
         .typ::<contracts_core::targets::ResolverSettingsUpdateRequest>()
         .typ::<contracts_core::targets::ResolverSettingsResponse>()
+        // astro-plan-ef440 — the rebuilt shell's `library_new_captures`
+        // query reply and event payload (`contracts_core::captures`). The
+        // rebuilt shell registers its commands outside this builder, so the
+        // type is registered on its own.
+        .typ::<contracts_core::captures::NewCaptures>()
         // astro-plan-c72oo: how long the backend waits for the OS to accept
         // the update offer's notification, so the webview's in-app notice
         // knows when to stop waiting for the backend's offer.
