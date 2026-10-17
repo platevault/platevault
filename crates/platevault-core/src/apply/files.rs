@@ -441,7 +441,7 @@ pub async fn move_aside(
             Ok(Err(error)) if held_by_a_tool(&error) => {
                 if !waited {
                     waited = true;
-                    control.waiting(true);
+                    control.waiting(Some(from));
                 }
                 if control.canceled() {
                     break Aside::Canceled;
@@ -458,7 +458,7 @@ pub async fn move_aside(
         }
     };
     if waited {
-        control.waiting(false);
+        control.waiting(None);
     }
     outcome
 }
@@ -632,7 +632,7 @@ mod tests {
     #[derive(Default)]
     struct Control {
         cancel: AtomicBool,
-        waited: AtomicBool,
+        held: std::sync::Mutex<Option<PathBuf>>,
         released: AtomicBool,
     }
 
@@ -640,11 +640,10 @@ mod tests {
         fn canceled(&self) -> bool {
             self.cancel.load(Ordering::SeqCst)
         }
-        fn waiting(&self, waiting: bool) {
-            if waiting {
-                self.waited.store(true, Ordering::SeqCst);
-            } else {
-                self.released.store(true, Ordering::SeqCst);
+        fn waiting(&self, held: Option<&Path>) {
+            match held {
+                Some(folder) => *self.held.lock().unwrap() = Some(folder.to_path_buf()),
+                None => self.released.store(true, Ordering::SeqCst),
             }
         }
     }
@@ -664,7 +663,8 @@ mod tests {
         let moved =
             move_aside(busy_twice, Duration::from_millis(1), &view, &previous, &control).await;
         assert!(matches!(moved, Aside::Moved { waited: true }), "{moved:?}");
-        assert!(control.waited.load(Ordering::SeqCst) && control.released.load(Ordering::SeqCst));
+        assert_eq!(control.held.lock().unwrap().as_deref(), Some(view.as_path()), "it names View");
+        assert!(control.released.load(Ordering::SeqCst));
         assert!(!view.exists());
         assert_eq!(fs::read(previous.join("Light_001.fits")).unwrap(), b"held by a tool");
     }

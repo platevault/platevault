@@ -1,19 +1,21 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Project Output IPC (RES-FR-02, RES-AC-02/25): Copy to Output.
+//! Project Output IPC (RES-FR-01/02, RES-AC-02/25): Copy to Output and
+//! Rescan.
 //!
 //! Registered only by the isolated rebuilt shell ([`crate::library_shell`])
-//! under its `output` block. `Output/` itself is followed by the shell's
-//! [`platevault_core::project_output::OutputWatch`]. Copy to Output
-//! copies through the storage journal's verified transfer, never replaces
-//! anything at the destination and leaves the source unchanged. Failures
-//! follow the library [`platevault_core::ErrorResponse`] conventions, naming
-//! the Project.
+//! under its `output` block. `Output/` itself is followed by the
+//! [`OutputWatch`] the shell manages, and Rescan walks one Project through it
+//! now. Copy to Output copies through the storage journal's verified
+//! transfer, never replaces anything at the destination and leaves the
+//! source unchanged. Failures follow the library
+//! [`platevault_core::ErrorResponse`] conventions, naming the Project.
 
 use std::sync::Arc;
 
 use platevault_core::library::Library;
+use platevault_core::project_output::OutputWatch;
 use platevault_core::{NativePath, OutputObservation};
 use tauri::State;
 use uuid::Uuid;
@@ -39,4 +41,20 @@ pub async fn project_copy_to_output(
     name: NativePath,
 ) -> Reply<OutputObservation> {
     library.copy_to_output(project_id, &source, &name).await.map_err(fail(Some(project_id)))
+}
+
+/// Rescan, in the Output step's More menu: walk the Project's `Output/` now
+/// and return its Output step as recorded, a file saved since included.
+///
+/// # Errors
+/// `InvalidInput` for a Project that is not open or has no processing
+/// location, or once the watcher stopped; `NotFound` for an unknown Project;
+/// catalog errors.
+#[tauri::command]
+#[specta::specta]
+pub async fn project_output_rescan(
+    watch: State<'_, OutputWatch>,
+    project_id: Uuid,
+) -> Reply<Vec<OutputObservation>> {
+    watch.rescan(project_id).await.map_err(fail(Some(project_id)))
 }

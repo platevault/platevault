@@ -14,7 +14,8 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use desktop_shell::commands::project_wrap_up::WrapUpTrash;
+use desktop_shell::commands::project_apply::ApplyRuns;
+use desktop_shell::commands::project_wrap_up::{CloseRuns, WrapUpTrash};
 use platevault_core::custody::trash::OsTrash;
 use platevault_core::library::Library;
 use platevault_core::targets::TargetQuery;
@@ -105,6 +106,8 @@ impl Shell {
             .expect("build mock app");
         app.manage(library);
         app.manage(WrapUpTrash::new(Arc::new(NoTrash)));
+        app.manage(ApplyRuns::emitting(app.handle().clone()));
+        app.manage(CloseRuns::default());
         let webview = WebviewWindowBuilder::new(&app, "library", WebviewUrl::default())
             .build()
             .expect("library window");

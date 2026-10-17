@@ -55,6 +55,10 @@ use crate::{
 
 /// What Apply asks while it runs (PREP-FR-09, PREP-FR-18).
 pub trait ApplyControl: Send + Sync {
+    /// Apply reserved the Project as `operation_id`. Called once, before any
+    /// other question; every later one is about this operation.
+    fn reserved(&self, _operation_id: Uuid) {}
+
     /// The user chose Cancel: stop where it is safe. Once the new View is
     /// being installed, Apply finishes instead.
     fn canceled(&self) -> bool {
@@ -67,8 +71,9 @@ pub trait ApplyControl: Send + Sync {
         false
     }
 
-    /// "Waiting for a tool to release a file in View" begins or ends.
-    fn waiting(&self, _waiting: bool) {}
+    /// "Waiting for a tool to release a file in View" begins, naming the
+    /// folder a tool holds a file in (`Some`), or ends (`None`).
+    fn waiting(&self, _held: Option<&Path>) {}
 }
 
 /// Apply with nobody to ask: never canceled or interrupted.
@@ -91,10 +96,72 @@ struct Os {
 
 impl Os {
     const SYSTEM: Self = Self {
+        #[cfg(not(feature = "test-pacing"))]
         rename: transfer::rename_noreplace,
+        #[cfg(feature = "test-pacing")]
+        rename: pacing::rename,
         poll: RELEASE_POLL,
         symlinks: files::probe_symlinks,
     };
+}
+
+/// A test's stand-in for a tool holding a file in a folder (PREP-FR-18), so
+/// a test outside this crate (the shell's IPC tests) holds a real Apply
+/// where a tool would: waiting before it moves the old View aside, until the
+/// test cancels it or lets the folder go.
+///
+/// Keyed by folder, because tests share one process: a hold affects only the
+/// Apply that moves that folder.
+///
+/// The whole module is behind the `test-pacing` feature, which is off by
+/// default and reachable only through a `[dev-dependencies]` edge, so no
+/// release binary contains a way to stall a real Apply.
+#[cfg(feature = "test-pacing")]
+pub mod pacing {
+    use std::collections::BTreeSet;
+    use std::io;
+    use std::path::{Path, PathBuf};
+    use std::sync::{Mutex, MutexGuard, PoisonError};
+
+    use crate::custody::transfer;
+
+    static HELD: Mutex<BTreeSet<PathBuf>> = Mutex::new(BTreeSet::new());
+
+    /// Recovers from poisoning: a test panicking while it holds a folder must
+    /// still leave the registry usable, and a panicking `Drop` would abort.
+    fn held() -> MutexGuard<'static, BTreeSet<PathBuf>> {
+        HELD.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// A held folder; dropping it lets go, as a tool releasing its file.
+    pub struct HeldFolder(PathBuf);
+
+    impl HeldFolder {
+        /// Hold `folder`: moving it reports a busy resource, as a tool
+        /// holding a file in it does, until the returned value drops.
+        ///
+        /// # Panics
+        /// If `folder` is already held.
+        #[must_use]
+        pub fn hold(folder: &Path) -> Self {
+            assert!(held().insert(folder.to_path_buf()), "{} is already held", folder.display());
+            Self(folder.to_path_buf())
+        }
+    }
+
+    impl Drop for HeldFolder {
+        fn drop(&mut self) {
+            held().remove(&self.0);
+        }
+    }
+
+    /// The host rename, unless a test holds `from`.
+    pub(super) fn rename(from: &Path, to: &Path) -> io::Result<()> {
+        if held().contains(from) {
+            return Err(io::Error::from(io::ErrorKind::ResourceBusy));
+        }
+        transfer::rename_noreplace(from, to)
+    }
 }
 
 impl Library {
@@ -263,6 +330,7 @@ impl Library {
                 previous_gone,
             })
             .await?;
+        control.reserved(reserved.operation_id);
         let journal = ApplyJournal {
             operation_id: reserved.operation_id,
             project_id: request.project_id,

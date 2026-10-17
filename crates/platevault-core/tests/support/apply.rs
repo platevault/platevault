@@ -250,8 +250,8 @@ impl platevault_core::apply::ApplyControl for Recorder {
     fn interrupted(&self, phase: ApplyPhase) -> bool {
         *self.stop_at.lock().unwrap() == Some(phase)
     }
-    fn waiting(&self, waiting: bool) {
-        if waiting {
+    fn waiting(&self, held: Option<&Path>) {
+        if held.is_some() {
             self.waited.store(true, std::sync::atomic::Ordering::SeqCst);
         }
     }
