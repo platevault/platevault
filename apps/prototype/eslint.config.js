@@ -4,14 +4,16 @@
 // `m.<key>()` from '@/lib/i18n'. A hardcoded string is an error anywhere
 // under src/ (design/I18N.md). It also enforces the composition rules
 // (eslint-rules/composition.js; design/R9-COMPOSITION-PLAN.md §8.1-§8.2) as
-// errors over src/ since W4: the L1-L11 syntax rules on src/features and
-// src/app, the I1-I3 layer boundaries on src/components, and each feature
-// area's I4-I6 import boundary. `pnpm lint:composition`
-// (scripts/report-composition-lint.mjs) counts them per rule.
+// errors over src/ since W4: the L1-L11 rules on src/features and src/app,
+// the I1-I3 layer boundaries on src/components, and each feature area's
+// I4-I6 import boundary. `pnpm lint:composition`
+// (scripts/report-composition-lint.mjs) counts them per rule. Every
+// eslint-disable directive names its reason after ` -- `
+// (`alm/require-disable-reason`).
 // Type checking stays with `tsc`.
 import { defineConfig } from "eslint/config"
 import tseslint from "typescript-eslint"
-import { AREAS, areaImportPatterns, COMPOSITION_SYNTAX } from "./eslint-rules/composition.js"
+import composition, { COMPOSITION_SYNTAX } from "./eslint-rules/composition.js"
 import alm from "./eslint-rules/no-user-string.js"
 
 // Outside the gate: only tests and fixtures, which carry assertion and
@@ -29,15 +31,6 @@ export const I18N_IGNORES = ["**/*.test.{ts,tsx}", "**/*.spec.{ts,tsx}", "**/__f
  */
 export const COMPOSITION_EXEMPT = [...I18N_IGNORES, "src/app/design-system-page.tsx", "src/app/catalogue/**", "src/app/simulation-panel.tsx"]
 
-/**
- * @param {string[]} files
- * @param {string[]} group
- * @param {string} message
- */
-function layerImports(files, group, message) {
-  return { files, rules: { "no-restricted-imports": ["error", { patterns: [{ group, message }] }] } }
-}
-
 export default defineConfig(
   {
     ignores: ["node_modules/**", "dist/**", "src/paraglide/**", "eslint-rules/**", "eslint.config.js", "vite.config.ts"],
@@ -48,7 +41,11 @@ export default defineConfig(
   {
     files: ["src/**/*.{ts,tsx}"],
     languageOptions: { parser: tseslint.parser },
-    plugins: { alm },
+    plugins: { alm, composition },
+  },
+  {
+    files: ["src/**/*.{ts,tsx}"],
+    rules: { "alm/require-disable-reason": "error" },
   },
   {
     files: ["src/**/*.{ts,tsx}"],
@@ -64,22 +61,17 @@ export default defineConfig(
   {
     files: ["src/features/**/*.{ts,tsx}", "src/app/**/*.{ts,tsx}"],
     ignores: COMPOSITION_EXEMPT,
-    rules: { "no-restricted-syntax": ["error", ...COMPOSITION_SYNTAX] },
+    rules: { "no-restricted-syntax": ["error", ...COMPOSITION_SYNTAX], "composition/components": "error" },
   },
-  layerImports(
-    ["src/components/ui/**/*.{ts,tsx}"],
-    ["@/components/app/**", "@/components/templates/**", "@/features/**", "@/store/**"],
-    "[I1] components/ui imports no patterns, templates, features or store.",
-  ),
-  layerImports(
-    ["src/components/app/**/*.{ts,tsx}", "src/components/domain/**/*.{ts,tsx}"],
-    ["@base-ui/**", "@/features/**", "@/components/templates/**"],
-    "[I2] Patterns import Base UI through components/ui, and never features or templates.",
-  ),
-  layerImports(["src/components/templates/**/*.{ts,tsx}"], ["@/features/**", "@/store/actions/**"], "[I3] Templates import no features and no store actions."),
-  ...AREAS.map((area) => ({
-    files: [`src/features/${area.dir}/**/*.{ts,tsx}`],
+  // I1-I3 hold for every file of a component layer, its tests included.
+  {
+    files: ["src/components/**/*.{ts,tsx}"],
+    rules: { "composition/imports": "error" },
+  },
+  // I4-I6, for each feature area of eslint-rules/composition.js AREAS.
+  {
+    files: ["src/features/**/*.{ts,tsx}"],
     ignores: COMPOSITION_EXEMPT,
-    rules: { "no-restricted-imports": ["error", { patterns: areaImportPatterns(area) }] },
-  })),
+    rules: { "composition/imports": "error" },
+  },
 )

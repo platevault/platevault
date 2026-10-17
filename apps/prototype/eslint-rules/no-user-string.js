@@ -1008,9 +1008,47 @@ const noJsPlural = {
   },
 };
 
+// alm/require-disable-reason. Every eslint-disable, eslint-disable-line and
+// eslint-disable-next-line directive names its reason after ` -- `, so a
+// reviewer can judge the exception (design/I18N.md "The gate"). It reads the
+// directives as ESLint itself parses them (SourceCode#getDisableDirectives), so
+// the reason is the directive's justification. ESLint applies directives to
+// this rule too: a directive that names no rule and covers its own line
+// (`/* eslint-disable */`, a bare `// eslint-disable-line`) suppresses its own
+// report. Name the rule being disabled.
+/** @type {import('eslint').Rule.RuleModule} */
+const requireDisableReason = {
+  meta: {
+    type: "problem",
+    docs: {
+      description: "Require a reason after ` -- ` on every eslint-disable directive.",
+    },
+    schema: [],
+    messages: {
+      missing:
+        "This {{type}} directive gives no reason. Add one after ` -- `: `// eslint-disable-next-line <rule> -- <reason>`.",
+    },
+  },
+  create(context) {
+    return {
+      Program() {
+        for (const directive of context.sourceCode.getDisableDirectives().directives) {
+          if (!directive.type.startsWith("disable") || directive.justification.trim()) continue;
+          context.report({
+            loc: directive.node.loc,
+            messageId: "missing",
+            data: { type: `eslint-${directive.type}` },
+          });
+        }
+      },
+    };
+  },
+};
+
 export default {
   rules: {
     "no-user-string": rule,
     "no-js-plural": noJsPlural,
+    "require-disable-reason": requireDisableReason,
   },
 };

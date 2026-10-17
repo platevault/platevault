@@ -861,14 +861,14 @@ Allowed patterns:
 
 `scripts/check-copy.mjs` runs inside `pnpm lint:i18n`, next to `check-i18n-catalog.mjs` (`package.json:16`). Over `messages/en-GB.json` it checks:
 - the W10 word list and the W9 prototype words outside allowed prefixes;
-- title case in labels;
+- title case in labels and buttons;
 - a trailing period on label keys (`*_title`, `*_label`, `verb_*`, `*_action`);
-- button keys over 3 words;
+- buttons over 3 words: button keys (`verb_*`, `*_action`, `*_button`) and every key an Action in `src/` takes as its label;
 - "…" used without a dialog (by key suffix convention `*_ellipsis`).
 
-It reports in W0 and fails from W4.
+An Action label is found statically (TypeScript parser): an object literal with a `run` and a `label` that calls `m.<key>(…)` directly, in either branch of a `?:`, or through a `const` of the same file. Not found: an Action whose `run` or `label` comes from a spread or a helper, a label from a parameter or another file, a `msg("key")` reference, and a ConfirmSpec's `{ label, kind }` confirm button (no `run`). Tests and fixtures are not scanned. The rule tests are `pnpm test:lint-rules` (`eslint-rules/tests/`).
 
----
+It reports in W0 and fails from W4.
 
 ## 7. Migration waves
 
@@ -1035,12 +1035,21 @@ ESLint 10 and the typescript-eslint parser are already configured (`apps/prototy
 | L4 | Button roles only | `JSXOpeningElement[name.name='Button'] > JSXAttribute[name.name='variant'][value.value='secondary']`; `… > JSXAttribute[name.name='size'][value.value=/^(lg\|icon\|icon-xs\|icon-lg)$/]`. End state: features don't import Button (L9). | census: secondary on 2 routes |
 | L5 | No side fold-outs | `JSXOpeningElement[name.name='SheetContent']` | 5 in features |
 | L6 | No `title=` tooltips | `JSXOpeningElement[name.name=/^[a-z]/] > JSXAttribute[name.name='title']` | 410 in src |
-| L7 | HelpTip needs a reason | `JSXOpeningElement[name.name='HelpTip']`, always reported; allowed only with `// eslint-disable-next-line no-restricted-syntax -- help: <reason>` | 25 |
+| L7 | HelpTip needs a reason | `JSXOpeningElement[name.name='HelpTip']`, always reported; allowed only with `// eslint-disable-next-line composition/components -- help: <reason>` | 25 |
 | L8 | No arbitrary sizes | `Literal[value=/(?:^\|\s)(?:min-\|max-)?(?:w\|h\|size\|text\|gap\|p[xytrbl]?\|m[xytrbl]?\|inset\|top\|left)-\[/]`, plus the same on `TemplateElement[value.raw=…]` | 121 in src |
 | L9 | No inline style (as the original: `apps/desktop/eslint.config.js:130-158`) | `JSXAttribute[name.name='style']` | – |
 | L10 | Layout belongs to templates: budget falls to 0 | `JSXOpeningElement[name.name=/^(div\|span\|section\|ul\|ol\|li\|p\|header\|footer\|nav\|aside)$/] > JSXAttribute[name.name='className']` | counted in W0 |
 
 **Exempt:** `src/app/simulation-panel.tsx`, `src/app/catalogue/**`, the Prototype controls. These are the same as the i18n ignores at `eslint.config.js:17-25`.
+
+**As built (astro-plan-qv07u).** L1 and L8-L11 stay core selectors (`COMPOSITION_SYNTAX`). L2-L7 run in the local rule `composition/components` (`eslint-rules/composition.js`), because a selector sees only the tag name written at the use site:
+- The component is resolved through `import { Pill as P }`, `const P = Pill`, `const P = App.Pill` and `<App.Pill>`. `pillClass` calls resolve the same way.
+- Props come from the element's attributes and from statically known spreads: object literals, their nested spreads, both branches of `?:`, the object of `cond && {…}`, and `const` bindings.
+- L4 values resolve through literals, `?:`/`&&`/`||`/`??` branches and `const` bindings; `variant={busy ? "outline" : "secondary"}` fails.
+- L6 flags every `title` on an intrinsic element or a tooltip component (Button, Link, Pill, Badge, Toggle, ToggleGroupItem, TabsTrigger), a `truncate` element's included (T2). Still allowed: `onPointerEnter={titleWhenCut}` (`components/app/cut-title.ts`), which sets the title only while the text is cut, the automatic `DataTable` and `PathText` `truncate`, and a component's heading prop (`PageHeader title`).
+- Not covered: a default or namespace import renamed away from the export (`import P from …`), a component passed as a value or prop (`as={Pill}`, `const C = cond ? Pill : Badge`), a spread of a parameter, call result or `{...rest}`, a value computed by a call (`variant={kindVariant(a)}`), and an alias declared with `let`.
+
+Every eslint-disable directive needs a reason after ` -- ` (`alm/require-disable-reason`, read from ESLint's own directive parse). A directive that names no rule and covers its own line (`/* eslint-disable */`, a bare `// eslint-disable-line`) also disables that report, as ESLint applies directives to every rule; name the rule.
 
 ### 8.2 Import boundaries (`no-restricted-imports`, one config block per glob)
 
@@ -1050,6 +1059,8 @@ ESLint 10 and the typescript-eslint parser are already configured (`apps/prototy
 | `src/components/app/**`, `src/components/domain/**` | `@base-ui/*` (go through `components/ui`), `@/features/*`, `@/components/templates/*` | – |
 | `src/components/templates/**` | `@/features/*`, `@/store/actions/*` | – |
 | `src/features/<area>/**` | `@base-ui/*`; `@/components/ui/*` (end state; warn until W4); `["@/features/**", "!@/features/<area>/**"]` (gitignore-style negation) | 0 base-ui; 194 ui; **45 cross-feature** (d-review→t3 16, e-targets→t1 9, b-projects→t3 5, c-runs→b-projects 4, b-projects→c-runs 3, a-home→b-projects 3, c-runs→t3 2, others 3) |
+
+**As built (astro-plan-qv07u).** One local rule, `composition/imports`, enforces I1-I6. It resolves `@/` and relative specifiers, `..` included, to a path under `src/` before matching layers, so `@/features/<area>/../other`, `../app/pill` from `components/ui` and `../../../components/ui/button` from a feature are caught; `import()` with a string literal counts too. I1-I3 hold for every file of a component layer, tests included; I4-I6 for each area in `AREAS`, minus the §8.1 exemptions. Not covered: a specifier built at run time, and `require`.
 
 `t1`, `t3` and `t4` dissolve: their shared code goes to L2, and their pages to the owning area. Cross-feature imports then reach 0.
 

@@ -162,7 +162,7 @@ function UnknownFiltersSection({ onAdd }: { onAdd: (draft: FilterDraft) => void 
   )
   if (rows.length === 0) return null
   const actionsFor = (u: UnknownValue): Action[] => [
-    ...u.known.map((f): Action => ({ id: `add-${f.id}`, label: m.equipment_add_value_to_rig({ value: filterName(f, u.known), rig: u.rig.name }), run: () => addFilterToRig(u.rig.id, f.id) })),
+    ...u.known.map((f): Action => ({ id: `add-${f.id}`, label: m.equipment_add_value({ value: filterName(f, u.known) }), run: () => addFilterToRig(u.rig.id, f.id) })),
     { id: "add-filter", label: m.equipment_add_filter(), opensDialog: true, run: () => onAdd({ filter: null, prefill: { name: u.value, bands: guessBands(u.value) }, onRig: u.rig }) },
   ]
   const columns: Column<UnknownValue>[] = [
