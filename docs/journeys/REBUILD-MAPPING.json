@@ -172,7 +172,7 @@
         "id": "J23",
         "blocking": [
           "G2 (implementation qualification) Siril profile capability probes (D04) must exist before S8 can show verified evidence.",
-          "G10 (product question) D-W123's FITS mapping and fixed-format alias coverage, including FOCAL/FLENGTH, remain provisional. The owner must decide whether to patch TELESCOPE/INSTRUMENT as HIERARCH aliases, whether generic-app delivery needs per-tool evidence, and which route to use for corrected non-FITS inputs."
+          "G10 (product question) D-W123's FITS mapping and fixed-format alias coverage, including FOCAL/FLENGTH, remain provisional. The owner must decide whether to patch TELESCOPE/INSTRUMENT as HIERARCH aliases, whether generic-app delivery needs per-tool evidence, which route to use for corrected non-FITS inputs, and how to handle values FITS cannot represent in printable-ASCII cards (header_patch.rs:261-280)."
         ]
       },
       {
