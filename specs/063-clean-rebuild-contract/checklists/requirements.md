@@ -20,6 +20,7 @@ Feature: [Specification](../spec.md)
 - [x] The 2026-10-06 workflow decisions D-W1 through D-W71 and the 2026-10-07 answers D-W72 through D-W74 are copied verbatim into the repository, and every D01 to D19 entry they contradict names its superseding decision.
 - [x] The workflow decisions log records D-W75 (2026-10-08), D-W76 to D-W92 (2026-10-12 to 2026-10-14), D-W93 to D-W106 (2026-10-14), D-W107 to D-W116 (2026-10-15/16), D-W117 to D-W121 (2026-10-16), and D-W122 (Round 9 C15, recorded 2026-10-17).
   It also records provisional D-W123 for corrected-FITS mapping and the open generic-tool and non-FITS delivery questions, with *Provisional* and *Open* items marked.
+- [ ] Owner confirmation is still pending for the provisional D-W123 FITS keyword/alias mapping, generic-tool delivery without per-tool capability evidence, and the non-FITS correction route.
 - [x] Changed and added requirements end with their D-W tag; the cross-spec flow states the Project, its groups, its View and Apply, and the Wrap up model.
 - [ ] Independent requirements review of the 2026-10-06 workflow amendment has not yet run.
 - [ ] Independent requirements review of the 2026-10-08 and round 9 amendments (D-W75 to D-W92) has not yet run.
