@@ -218,6 +218,35 @@ async fn network_location_flagged_in_row() {
     reopened.close().await.unwrap();
 }
 
+/// A share location remapped onto a local folder is a local location: the
+/// review records the kind the proposed root was observed on, and applying it
+/// writes that kind to the row.
+#[tokio::test]
+async fn a_share_location_remapped_onto_a_local_root_reads_local() {
+    let fx = Fixture::new();
+    fx.write("Ha_001.fits", b"frame one bytes");
+    let catalog = Catalog::open(&fx.db).await.unwrap();
+    let nas = catalog.register_location(&network_registration(&fx)).await.unwrap();
+    scan(&catalog, &fx, &nas, &["Ha_001.fits"]).await;
+    let nas = catalog.location(nas.id).await.unwrap();
+    let copy = fx.temp.path().join("Internal").join("Captures");
+    std::fs::create_dir_all(&copy).unwrap();
+    std::fs::copy(fx.root.join("Ha_001.fits"), copy.join("Ha_001.fits")).unwrap();
+    let (root, identity) = (NativePath::from_path(&copy), folder_identity(&copy).unwrap());
+    let review = catalog
+        .review_remap(nas.id, nas.decision_revision, &root, &identity, VolumeKind::Local, DiskProbe)
+        .await
+        .unwrap();
+    assert!(review.blocked.is_empty(), "{:?}", review.blocked);
+    let stored = catalog.remap_review(review.id).await.unwrap();
+    assert_eq!(stored.proposed_volume_kind, VolumeKind::Local);
+
+    let remapped = catalog.apply_remap(review.id, nas.decision_revision, DiskProbe).await.unwrap();
+    assert_eq!(remapped.volume_kind, VolumeKind::Local);
+    catalog.close().await.unwrap();
+    assert_eq!(stored_kinds(&fx.db).await, BTreeMap::from([(nas.id, "local".to_owned())]));
+}
+
 #[tokio::test]
 async fn unmount_mid_hash_reads_offline_never_missing() {
     let fx = Fixture::new();
@@ -360,7 +389,14 @@ async fn no_smb_or_url_registration_accepted() {
             .unwrap_err();
         assert_eq!(kind(&reselect), "invalid_input", "{address}: {reselect}");
         let remap = catalog
-            .review_remap(nas.id, nas.decision_revision, &path, &nas.identity, DiskProbe)
+            .review_remap(
+                nas.id,
+                nas.decision_revision,
+                &path,
+                &nas.identity,
+                VolumeKind::Network,
+                DiskProbe,
+            )
             .await
             .unwrap_err();
         assert_eq!(kind(&remap), "invalid_input", "{address}: {remap}");

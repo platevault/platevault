@@ -50,6 +50,7 @@ use crate::{
     ScanProgress, ScanState, VolumeIdentity, VolumeKind,
 };
 
+pub use identity::FolderId;
 #[cfg(test)]
 pub(crate) use identity::Probed;
 use identity::Stamp;
@@ -135,6 +136,34 @@ pub(crate) fn validate_location_root_in(
     Ok(observed.identity)
 }
 
+/// Why [`check_location_root`] refused a root.
+#[derive(Debug)]
+pub(crate) enum RootRefusal {
+    /// The root was observed and is not the registered folder on the
+    /// registered volume (or the registered share is not mounted there). It
+    /// stays refused until the folder at the path changes.
+    Mismatch(LibraryError),
+    /// The root or its volume could not be observed, as when a volume query
+    /// fails or times out: it may pass when checked again.
+    Unobserved(LibraryError),
+}
+
+/// [`validate_location_root`], telling a root that was observed and refused
+/// from one that could not be observed.
+///
+/// # Errors
+/// The refusal, as [`validate_location_root`] reports it.
+pub(crate) fn check_location_root(location: &Location) -> Result<(), RootRefusal> {
+    let root = location
+        .path
+        .to_path_buf()
+        .map_err(|error| RootRefusal::Mismatch(locate(error, location)))?;
+    let observed = identity::observe(&root, &OsVolumes)
+        .map_err(|error| RootRefusal::Unobserved(locate(error, location)))?;
+    identity::compare(location, &observed, &root)
+        .map_err(|error| RootRefusal::Mismatch(locate(error, location)))
+}
+
 /// Observe one file's current fingerprint: no-follow size, nanosecond mtime,
 /// remount-stable volume identity and qualified file ID. Reads no content.
 ///
@@ -173,6 +202,357 @@ pub(crate) fn probe_fingerprint_in(
         )
     })?;
     Ok(fingerprint(file_id, &meta, &volume, modified_ns))
+}
+
+/// A location root's same-session continuity evidence, taken when new-capture
+/// discovery starts watching it: the same folder on the same mounted volume
+/// keeps it, while an unmounted, remounted or replaced root does not.
+///
+/// Besides the root's [`Stamp`], which the walker compares its folders
+/// against, it holds the root's [`FolderId`]. On Windows the stamp holds only
+/// the creation time, which a replacement folder can share (NTFS can carry
+/// it over to a folder created under a name that was just renamed away), so
+/// the folder ID tells the two apart.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct RootStamp {
+    stamp: Stamp,
+    folder: Option<FolderId>,
+}
+
+impl RootStamp {
+    /// The root's folder ID; `None` on a platform that reports none.
+    pub(crate) const fn folder(self) -> Option<FolderId> {
+        self.folder
+    }
+}
+
+/// The stamp of the real folder at `root`, or `None` when it is absent,
+/// unreadable, a link, a junction or not a folder. One no-follow `stat`, and
+/// on Windows a query of a handle on the folder itself for its folder ID.
+pub(crate) fn root_stamp(root: &Path) -> Option<RootStamp> {
+    let meta = fs::symlink_metadata(root).ok()?;
+    if !meta.is_dir() || fs_pathsafe::is_link_or_junction_metadata(&meta) {
+        return None;
+    }
+    let folder = identity::folder_id(root, &meta).ok()?;
+    Some(RootStamp { stamp: identity::stamp(&meta), folder })
+}
+
+/// What an entry below a location root is to the walker, decided from its
+/// no-follow metadata alone.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Entry {
+    /// A supported frame: the next scan reads its header.
+    Frame,
+    /// A real folder on the root's volume: the walker enters it.
+    Folder,
+    /// Absent, or nothing the walker reads: a link, a junction, an unsupported
+    /// file, a nested foreign volume, or anything below one of those.
+    Other,
+    /// Not observed: its metadata, or that of a folder above it, could not be
+    /// read for another reason than its absence (a share's brief I/O error,
+    /// a folder without search permission), or a folder above it changed
+    /// while it was looked up. What it is stays unknown.
+    Unobserved,
+}
+
+/// One entry by the walker's rules, from its no-follow metadata. The scan
+/// ([`Walk::visit`]) and new-capture discovery ([`entry_of`]) both decide by
+/// it, so discovery counts exactly the files the next scan reads.
+enum Kind {
+    /// A link or junction: never followed.
+    Link,
+    /// A real folder on the root's volume, entered; its stamp.
+    Folder(Stamp),
+    /// A real folder on another volume: never entered.
+    ForeignVolume,
+    /// Anything else, with its format: `Unsupported` unless it is a regular
+    /// file with a supported extension.
+    File(ImageFormat),
+}
+
+fn kind(meta: &Metadata, relative: &Path, root: &Stamp) -> Kind {
+    if fs_pathsafe::is_link_or_junction_metadata(meta) {
+        Kind::Link
+    } else if meta.is_dir() {
+        let stamp = identity::stamp(meta);
+        if stamp.same_device(root) {
+            Kind::Folder(stamp)
+        } else {
+            Kind::ForeignVolume
+        }
+    } else if meta.is_file() {
+        Kind::File(format_of(relative))
+    } else {
+        Kind::File(ImageFormat::Unsupported)
+    }
+}
+
+/// What one entry is to discovery, by the walker's rules ([`Kind`]).
+fn entry_of(kind: &Kind) -> Entry {
+    match kind {
+        Kind::Folder(_) => Entry::Folder,
+        Kind::File(ImageFormat::Fits | ImageFormat::Xisf) => Entry::Frame,
+        Kind::Link | Kind::ForeignVolume | Kind::File(ImageFormat::Unsupported) => Entry::Other,
+    }
+}
+
+/// What `relative` (a path below `root`, whose stamp is `stamp`) is by the
+/// walker's rules: every folder from the root down must be a real folder on
+/// the root's volume. See [`entry_at_with`].
+pub(crate) fn entry_at(root: &Path, stamp: RootStamp, relative: &Path) -> Entry {
+    entry_at_with(root, stamp, relative, |path| fs::symlink_metadata(path))
+}
+
+/// [`entry_at`], reading each entry's no-follow metadata on the way down
+/// through `stat`.
+///
+/// An entry, or a folder above it, that is not there is [`Entry::Other`]; one
+/// whose metadata could not be read for another reason is
+/// [`Entry::Unobserved`]. Each folder above the entry is checked only before
+/// the lookup steps into it, so, as the walker does ([`changed_folder`]), the
+/// root and every folder above the entry are checked again once the lookup
+/// ended: when the root no longer carries `stamp` (its folder ID included,
+/// as [`root_stamp`] reads it) or a folder above the entry is no longer the
+/// real folder recorded on the way down (swapped for a link or junction
+/// meanwhile, which a later step followed), the result is not the tree's and
+/// is [`Entry::Unobserved`].
+pub(crate) fn entry_at_with(
+    root: &Path,
+    stamp: RootStamp,
+    relative: &Path,
+    mut stat: impl FnMut(&Path) -> std::io::Result<Metadata>,
+) -> Entry {
+    let depth = relative.components().count();
+    if depth == 0 || relative.components().any(|part| !matches!(part, Component::Normal(_))) {
+        return Entry::Other;
+    }
+    // The stamps of the folders above the entry, as the lookup found them.
+    let mut above = Vec::with_capacity(depth - 1);
+    let mut path = root.to_path_buf();
+    let found = 'lookup: {
+        for (step, part) in relative.components().enumerate() {
+            path.push(part);
+            let meta = match stat(&path) {
+                Ok(meta) => meta,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                    break 'lookup Entry::Other;
+                }
+                Err(_) => break 'lookup Entry::Unobserved,
+            };
+            let kind = kind(&meta, relative, &stamp.stamp);
+            if step + 1 == depth {
+                break 'lookup entry_of(&kind);
+            }
+            let Kind::Folder(folder) = kind else {
+                break 'lookup Entry::Other;
+            };
+            above.push(folder);
+        }
+        Entry::Other
+    };
+    let mut path = root.to_path_buf();
+    let unchanged = root_stamp(root) == Some(stamp)
+        && relative.components().zip(&above).all(|(part, recorded)| {
+            path.push(part);
+            still_folder(&path, recorded)
+        });
+    if unchanged {
+        found
+    } else {
+        Entry::Unobserved
+    }
+}
+
+/// What [`frame_paths`] found below a location root, as relative paths.
+#[derive(Debug, Default)]
+pub(crate) struct Listing {
+    /// Every supported frame.
+    pub(crate) frames: Vec<NativePath>,
+    /// Every folder entered below the root, listed or not.
+    pub(crate) folders: Vec<PathBuf>,
+    /// The folders below the root that could not be listed, or only in part
+    /// (an entry that could not be read or `stat`ed): what they hold is
+    /// missing from `frames`, or may be.
+    pub(crate) unlisted: Vec<PathBuf>,
+}
+
+/// Every supported frame below `root`, listed by the walker's rules (no
+/// link, junction or nested foreign volume is entered) without reading a
+/// header: the files the next scan of the location reads. A folder below
+/// the root that cannot be listed, or only in part, is skipped or kept with
+/// what it listed, as a scan would name it incomplete, and named in
+/// [`Listing::unlisted`]. Cancellation ends the listing with what it found;
+/// a listing canceled before it starts touches nothing.
+///
+/// As the scan's walker does, each folder is listed only while it, and every
+/// folder above it, is still the real folder found when it was queued: one
+/// swapped for a link or junction is not entered, and a listing taken while
+/// one was swapped is dropped, so no listing reaches outside the root.
+///
+/// The root's stamp is checked before and after the listing, as a scan
+/// checks it before its final batch: a drive pulled mid-walk leaves its
+/// remaining folders unreadable, and that partial listing is not the root's.
+///
+/// # Errors
+/// `SourceUnavailable` when `root` no longer carries `stamp`, and the I/O
+/// error kind when the root itself cannot be listed.
+pub(crate) fn frame_paths(
+    root: &Path,
+    stamp: RootStamp,
+    canceled: &AtomicBool,
+) -> Result<Listing, LibraryError> {
+    if canceled.load(Ordering::Acquire) {
+        return Ok(Listing::default());
+    }
+    still_root(root, stamp)?;
+    let mut listed = Listing::default();
+    let mut pending = vec![Rc::new(Folder {
+        relative: PathBuf::new(),
+        path: root.to_path_buf(),
+        stamp: stamp.stamp,
+        parent: None,
+        excluded: Cell::new(false),
+    })];
+    while let Some(folder) = pending.pop() {
+        if canceled.load(Ordering::Acquire) {
+            return Ok(listed);
+        }
+        match list_folder(&folder, &stamp.stamp) {
+            Ok(Some(FolderListing { frames, folders, complete })) => {
+                listed.frames.extend(frames);
+                listed.folders.extend(folders.iter().map(|child| child.relative.clone()));
+                pending.extend(folders);
+                if !complete {
+                    listed.unlisted.push(folder.relative.clone());
+                }
+            }
+            // Swapped for a link or junction: what is there now is not below
+            // the root, and an event names its path.
+            Ok(None) => {}
+            Err(error) if folder.parent.is_none() => {
+                return Err(LibraryError::from_io(root, &error));
+            }
+            Err(_) => listed.unlisted.push(folder.relative.clone()),
+        }
+    }
+    still_root(root, stamp)?;
+    Ok(listed)
+}
+
+/// The supported frames and the real folders one folder holds, as relative
+/// paths.
+struct FolderListing {
+    frames: Vec<NativePath>,
+    folders: Vec<Rc<Folder>>,
+    /// Whether every entry was read and `stat`ed.
+    complete: bool,
+}
+
+/// List `folder` while it and every folder above it are still the real
+/// folders recorded: `None` when one of them changed before or during the
+/// listing. An entry that cannot be read or `stat`ed, unless it was removed
+/// meanwhile, leaves the listing incomplete.
+///
+/// # Errors
+/// The folder could not be listed.
+fn list_folder(folder: &Rc<Folder>, root: &Stamp) -> std::io::Result<Option<FolderListing>> {
+    if changed_folder(folder).is_some() {
+        return Ok(None);
+    }
+    let mut listing = FolderListing { frames: Vec::new(), folders: Vec::new(), complete: true };
+    for entry in fs::read_dir(&folder.path)? {
+        let Ok(entry) = entry else {
+            // The read stopped part-way.
+            listing.complete = false;
+            break;
+        };
+        let relative = folder.relative.join(entry.file_name());
+        let path = folder.path.join(entry.file_name());
+        let meta = match fs::symlink_metadata(&path) {
+            Ok(meta) => meta,
+            Err(error) => {
+                listing.complete &= error.kind() == std::io::ErrorKind::NotFound;
+                continue;
+            }
+        };
+        match kind(&meta, &relative, root) {
+            Kind::Folder(stamp) => listing.folders.push(Rc::new(Folder {
+                relative,
+                path,
+                stamp,
+                parent: Some(Rc::clone(folder)),
+                excluded: Cell::new(false),
+            })),
+            Kind::File(ImageFormat::Fits | ImageFormat::Xisf) => {
+                listing.frames.push(NativePath::from_path(&relative));
+            }
+            Kind::Link | Kind::ForeignVolume | Kind::File(ImageFormat::Unsupported) => {}
+        }
+    }
+    // A listing read through a folder swapped mid-read names entries outside
+    // the root.
+    Ok(changed_folder(folder).is_none().then_some(listing))
+}
+
+/// `read` applied to `relative`, a folder below `root` (whose stamp is
+/// `stamp`; empty for the root itself), while the root still carries
+/// `stamp` and every folder from the root down to it is a real folder on
+/// the root's volume, checked without following links before the read and
+/// after it. A folder, or one above it, swapped for a link or junction
+/// before the read is not read, and a read taken through one swapped while
+/// it ran is discarded. `None` when a check failed.
+fn read_real_folder<T>(
+    root: &Path,
+    stamp: RootStamp,
+    relative: &Path,
+    read: impl FnOnce(&Path) -> T,
+) -> Option<T> {
+    let in_tree = || {
+        root_stamp(root) == Some(stamp)
+            && (relative.as_os_str().is_empty() || entry_at(root, stamp, relative) == Entry::Folder)
+    };
+    if !in_tree() {
+        return None;
+    }
+    let outcome = read(&root.join(relative));
+    in_tree().then_some(outcome)
+}
+
+/// Whether `relative`, a folder below `root` (whose stamp is `stamp`), opens
+/// for listing, by [`read_real_folder`]'s checks: what a link swapped in
+/// reaches does not count.
+pub(crate) fn opens(root: &Path, stamp: RootStamp, relative: &Path) -> bool {
+    read_real_folder(root, stamp, relative, |folder| fs::read_dir(folder).is_ok()) == Some(true)
+}
+
+/// Whether `relative`, a folder below `root` (whose stamp is `stamp`), can
+/// now be listed in full: it opens, and every entry is read and `stat`ed (or
+/// was removed meanwhile). [`read_real_folder`] checks it, so a listing read
+/// through a folder swapped for a link is discarded.
+pub(crate) fn lists_fully(root: &Path, stamp: RootStamp, relative: &Path) -> bool {
+    let listed = read_real_folder(root, stamp, relative, |folder| {
+        fs::read_dir(folder).is_ok_and(|entries| {
+            entries.into_iter().all(|entry| {
+                entry.is_ok_and(|entry| match fs::symlink_metadata(entry.path()) {
+                    Ok(_) => true,
+                    Err(error) => error.kind() == std::io::ErrorKind::NotFound,
+                })
+            })
+        })
+    });
+    listed == Some(true)
+}
+
+/// `SourceUnavailable` unless `root` still carries `stamp`.
+fn still_root(root: &Path, stamp: RootStamp) -> Result<(), LibraryError> {
+    if root_stamp(root) == Some(stamp) {
+        return Ok(());
+    }
+    Err(identity::scoped(
+        LibraryError::SourceUnavailable("the location root is no longer the watched folder".into()),
+        root,
+    ))
 }
 
 /// Walk a registered location and report its observations progressively.
@@ -334,13 +714,21 @@ struct Folder {
 /// The topmost folder from the root down to `folder` that is no longer the
 /// real directory the walk recorded, if any.
 fn changed_folder(folder: &Folder) -> Option<&Folder> {
-    folder.parent.as_deref().and_then(changed_folder).or_else(|| {
-        let unchanged = fs::symlink_metadata(&folder.path).is_ok_and(|meta| {
-            !fs_pathsafe::is_link_or_junction_metadata(&meta)
-                && meta.is_dir()
-                && identity::stamp(&meta) == folder.stamp
-        });
-        (!unchanged).then_some(folder)
+    folder
+        .parent
+        .as_deref()
+        .and_then(changed_folder)
+        .or_else(|| (!still_folder(&folder.path, &folder.stamp)).then_some(folder))
+}
+
+/// Whether the entry at `path` is still the real folder recorded with
+/// `stamp`: not a link or junction, a folder, and the same stamp. One
+/// no-follow `stat`.
+fn still_folder(path: &Path, stamp: &Stamp) -> bool {
+    fs::symlink_metadata(path).is_ok_and(|meta| {
+        !fs_pathsafe::is_link_or_junction_metadata(&meta)
+            && meta.is_dir()
+            && identity::stamp(&meta) == *stamp
     })
 }
 
@@ -475,45 +863,37 @@ impl<F: FnMut(ScanBatch) -> Result<(), LibraryError>> Walk<'_, F> {
                     io_availability(&error),
                 );
             }
-            Ok(meta) if fs_pathsafe::is_link_or_junction_metadata(&meta) => {
-                self.exclude(
+            Ok(meta) => match kind(&meta, &relative, &self.root_stamp) {
+                Kind::Link => self.exclude(
                     &relative,
                     "link or junction not followed".into(),
                     Availability::Unreadable,
-                );
-            }
-            Ok(meta) if meta.is_dir() => {
-                let stamp = identity::stamp(&meta);
-                if stamp.same_device(&self.root_stamp) {
-                    children.push(Rc::new(Folder {
-                        relative,
-                        path,
-                        stamp,
-                        parent: Some(Rc::clone(parent)),
-                        excluded: Cell::new(false),
-                    }));
-                } else {
-                    self.exclude(
-                        &relative,
-                        "a different volume is mounted here; not traversed".into(),
-                        Availability::IdentityConflict,
-                    );
-                }
-            }
-            Ok(meta) => {
-                self.totals.discovered += 1;
-                let format =
-                    if meta.is_file() { format_of(&relative) } else { ImageFormat::Unsupported };
-                match format {
-                    ImageFormat::Fits => {
-                        self.read(parent, &relative, &path, &meta, format, &FitsExtractor);
+                ),
+                Kind::Folder(stamp) => children.push(Rc::new(Folder {
+                    relative,
+                    path,
+                    stamp,
+                    parent: Some(Rc::clone(parent)),
+                    excluded: Cell::new(false),
+                })),
+                Kind::ForeignVolume => self.exclude(
+                    &relative,
+                    "a different volume is mounted here; not traversed".into(),
+                    Availability::IdentityConflict,
+                ),
+                Kind::File(format) => {
+                    self.totals.discovered += 1;
+                    match format {
+                        ImageFormat::Fits => {
+                            self.read(parent, &relative, &path, &meta, format, &FitsExtractor);
+                        }
+                        ImageFormat::Xisf => {
+                            self.read(parent, &relative, &path, &meta, format, &XisfExtractor);
+                        }
+                        ImageFormat::Unsupported => self.totals.unsupported += 1,
                     }
-                    ImageFormat::Xisf => {
-                        self.read(parent, &relative, &path, &meta, format, &XisfExtractor);
-                    }
-                    ImageFormat::Unsupported => self.totals.unsupported += 1,
                 }
-            }
+            },
         }
         if self.pending.files.len() + self.pending.issues.len() >= self.batch_size {
             self.flush()?;
@@ -791,5 +1171,239 @@ fn nanos_since_epoch(time: SystemTime) -> Option<i128> {
     match time.duration_since(UNIX_EPOCH) {
         Ok(after) => i128::try_from(after.as_nanos()).ok(),
         Err(before) => i128::try_from(before.duration().as_nanos()).ok().map(|nanos| -nanos),
+    }
+}
+
+/// [`list_folder`] refuses a folder swapped for a link once it was queued, so
+/// a walk never lists outside the root through one.
+#[cfg(all(test, unix))]
+mod swapped_folders {
+    use std::os::unix::fs::symlink;
+
+    use super::*;
+
+    /// `relative` below `root`, as a walk queues it: each folder from the
+    /// root down with the stamp it has now.
+    fn queued(root: &Path, relative: &str) -> Rc<Folder> {
+        let stamp = |path: &Path| identity::stamp(&fs::symlink_metadata(path).unwrap());
+        let mut folder = Rc::new(Folder {
+            relative: PathBuf::new(),
+            path: root.to_path_buf(),
+            stamp: stamp(root),
+            parent: None,
+            excluded: Cell::new(false),
+        });
+        for part in Path::new(relative).components() {
+            let path = folder.path.join(part);
+            folder = Rc::new(Folder {
+                relative: folder.relative.join(part),
+                stamp: stamp(&path),
+                path,
+                parent: Some(folder),
+                excluded: Cell::new(false),
+            });
+        }
+        folder
+    }
+
+    fn frames(folder: &Rc<Folder>, root: &Path) -> Option<usize> {
+        let root = identity::stamp(&fs::symlink_metadata(root).unwrap());
+        list_folder(folder, &root).unwrap().map(|listing| listing.frames.len())
+    }
+
+    #[test]
+    fn a_folder_swapped_for_a_link_once_queued_is_not_listed() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("Captures");
+        fs::create_dir_all(root.join("night")).unwrap();
+        fs::write(root.join("night/Ha_001.fits"), b"").unwrap();
+        let outside = dir.path().join("outside");
+        fs::create_dir(&outside).unwrap();
+        fs::write(outside.join("Ha_901.fits"), b"").unwrap();
+        fs::write(outside.join("Ha_902.fits"), b"").unwrap();
+        let night = queued(&root, "night");
+        assert_eq!(frames(&night, &root), Some(1));
+
+        fs::rename(root.join("night"), dir.path().join("moved")).unwrap();
+        symlink(&outside, root.join("night")).unwrap();
+        assert_eq!(frames(&night, &root), None, "nothing outside the root is listed");
+    }
+
+    /// The link points at the moved original, so the queued folder itself
+    /// still reads the same through it: only the folder above it changed.
+    #[test]
+    fn a_folder_reached_through_a_swapped_parent_is_not_listed() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("Captures");
+        fs::create_dir_all(root.join("night/Ha")).unwrap();
+        fs::write(root.join("night/Ha/Ha_001.fits"), b"").unwrap();
+        let filter = queued(&root, "night/Ha");
+        assert_eq!(frames(&filter, &root), Some(1));
+
+        let moved = dir.path().join("moved");
+        fs::rename(root.join("night"), &moved).unwrap();
+        symlink(&moved, root.join("night")).unwrap();
+        assert_eq!(frames(&filter, &root), None, "listed through a link above it");
+    }
+
+    /// A folder a walk could not list in full is probed again at a sweep,
+    /// and a folder the watcher refused is checked for whether it opens;
+    /// once it, or a folder above it, is swapped for a link, neither reads
+    /// through the link.
+    #[test]
+    fn a_folder_swapped_for_a_link_is_never_probed_through_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("Captures");
+        fs::create_dir_all(root.join("night/Ha")).unwrap();
+        let stamp = root_stamp(&root).unwrap();
+        assert!(lists_fully(&root, stamp, Path::new("night/Ha")));
+        assert!(opens(&root, stamp, Path::new("night/Ha")));
+
+        let moved = dir.path().join("moved");
+        fs::rename(root.join("night"), &moved).unwrap();
+        symlink(&moved, root.join("night")).unwrap();
+        for folder in ["night/Ha", "night"] {
+            let folder = Path::new(folder);
+            assert!(!lists_fully(&root, stamp, folder), "{folder:?} listed through a link");
+            assert!(!opens(&root, stamp, folder), "{folder:?} opened through a link");
+        }
+    }
+
+    /// The root itself swapped for a link to its moved original: nothing
+    /// below it is probed through the link, the root included.
+    #[test]
+    fn nothing_is_probed_through_a_root_swapped_for_a_link() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("Captures");
+        fs::create_dir_all(root.join("night")).unwrap();
+        let stamp = root_stamp(&root).unwrap();
+        assert!(opens(&root, stamp, Path::new("")), "the root itself opens");
+
+        let moved = dir.path().join("moved");
+        fs::rename(&root, &moved).unwrap();
+        symlink(&moved, &root).unwrap();
+        for folder in ["night", ""] {
+            let folder = Path::new(folder);
+            assert!(!lists_fully(&root, stamp, folder), "{folder:?} listed through the root link");
+            assert!(!opens(&root, stamp, folder), "{folder:?} opened through the root link");
+        }
+    }
+
+    /// A folder above an entry is swapped for a link once the lookup checked
+    /// it, before the entry is read: what was read through the link is not
+    /// the tree's.
+    #[test]
+    fn an_ancestor_swapped_during_a_lookup_leaves_the_entry_unobserved() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("Captures");
+        fs::create_dir_all(root.join("night")).unwrap();
+        let outside = dir.path().join("outside");
+        fs::create_dir(&outside).unwrap();
+        fs::write(outside.join("Ha_901.fits"), b"").unwrap();
+        let stamp = root_stamp(&root).unwrap();
+        let frame = Path::new("night/Ha_901.fits");
+
+        let mut swapped = false;
+        let entry = entry_at_with(&root, stamp, frame, |path| {
+            if path == root.join(frame) && !swapped {
+                swapped = true;
+                fs::rename(root.join("night"), dir.path().join("moved"))?;
+                symlink(&outside, root.join("night"))?;
+            }
+            fs::symlink_metadata(path)
+        });
+        assert!(swapped);
+        assert_eq!(entry, Entry::Unobserved, "read through the swapped folder");
+        assert_eq!(entry_at(&root, stamp, frame), Entry::Other, "below a link");
+    }
+}
+
+/// [`entry_at`] tells a path that is not there from one whose metadata, or
+/// that of a folder above it, could not be read.
+#[cfg(test)]
+mod entry_lookups {
+    use super::*;
+
+    /// `fs::symlink_metadata`, failing for `failed` as a share's brief I/O
+    /// error does.
+    fn failing_at(failed: &Path) -> impl FnMut(&Path) -> std::io::Result<Metadata> + '_ {
+        move |path| {
+            if path == failed {
+                Err(std::io::Error::other("the share did not answer"))
+            } else {
+                fs::symlink_metadata(path)
+            }
+        }
+    }
+
+    #[test]
+    fn an_unreadable_entry_is_unobserved_not_absent() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("Captures");
+        fs::create_dir_all(root.join("night")).unwrap();
+        fs::write(root.join("night/Ha_001.fits"), b"").unwrap();
+        let stamp = root_stamp(&root).unwrap();
+        let frame = Path::new("night/Ha_001.fits");
+        assert_eq!(entry_at(&root, stamp, frame), Entry::Frame);
+
+        let above = root.join("night");
+        let unread = entry_at_with(&root, stamp, frame, failing_at(&above));
+        assert_eq!(unread, Entry::Unobserved, "a folder above it could not be read");
+        let itself = root.join(frame);
+        let unread = entry_at_with(&root, stamp, frame, failing_at(&itself));
+        assert_eq!(unread, Entry::Unobserved, "it could not be read");
+        assert_eq!(entry_at(&root, stamp, Path::new("night/Ha_002.fits")), Entry::Other);
+        assert_eq!(entry_at(&root, stamp, Path::new("gone/Ha_001.fits")), Entry::Other);
+    }
+}
+
+/// A root's continuity stamp tells apart two folders whose [`Stamp`] matches,
+/// as on Windows a folder created at the same time as the root it replaced
+/// does, by their folder IDs.
+#[cfg(test)]
+mod root_stamps {
+    use super::*;
+
+    #[test]
+    fn folders_with_one_stamp_but_two_folder_ids_have_two_root_stamps() {
+        let dir = tempfile::tempdir().unwrap();
+        let stamp = identity::stamp(&fs::symlink_metadata(dir.path()).unwrap());
+        let folder =
+            |index| RootStamp { stamp, folder: Some(identity::FolderId { volume: 7, index }) };
+
+        assert_eq!(folder(1), folder(1));
+        assert_ne!(folder(1), folder(2), "a replacement with the same stamp passed as the root");
+    }
+
+    /// The root is renamed away and a new folder, given the old one's
+    /// creation time, takes its name: only the folder ID differs.
+    #[cfg(windows)]
+    #[test]
+    fn a_root_replaced_by_a_folder_created_at_the_same_time_has_another_stamp() {
+        use std::os::windows::fs::{FileTimesExt, OpenOptionsExt};
+        /// `FILE_WRITE_ATTRIBUTES`, which setting a time needs.
+        const WRITE_ATTRIBUTES: u32 = 0x0100;
+        /// `FILE_FLAG_BACKUP_SEMANTICS`, which opening a folder needs.
+        const BACKUP_SEMANTICS: u32 = 0x0200_0000;
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("Captures");
+        fs::create_dir(&root).unwrap();
+        let watched = root_stamp(&root).unwrap();
+        let created = fs::symlink_metadata(&root).unwrap().created().unwrap();
+
+        fs::rename(&root, dir.path().join("moved")).unwrap();
+        fs::create_dir(&root).unwrap();
+        let replacement = fs::OpenOptions::new()
+            .access_mode(WRITE_ATTRIBUTES)
+            .custom_flags(BACKUP_SEMANTICS)
+            .open(&root)
+            .unwrap();
+        replacement.set_times(fs::FileTimes::new().set_created(created)).unwrap();
+        drop(replacement);
+
+        let now = fs::symlink_metadata(&root).unwrap();
+        assert_eq!(now.created().unwrap(), created, "the replacement has the root's creation time");
+        assert_eq!(identity::stamp(&now), watched.stamp, "its stamp alone matches the root's");
+        assert_ne!(root_stamp(&root), Some(watched), "the replacement passed as the root");
     }
 }

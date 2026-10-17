@@ -27,6 +27,7 @@ pub mod test_support;
 use std::fs::{self, Metadata};
 use std::io;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 
 use camino::Utf8Path;
 
@@ -162,30 +163,124 @@ pub fn real_dirs_under(root: &Path, follow_symlinks: bool) -> Vec<PathBuf> {
     if follow_symlinks {
         return vec![root.to_path_buf()];
     }
-    if is_link_or_junction(root) {
-        return Vec::new();
-    }
+    real_dirs(root, |_| true)
+}
 
-    let mut dirs = vec![root.to_path_buf()];
-    let mut stack = vec![root.to_path_buf()];
+/// [`real_dirs_under`] without following links that also stays on `root`'s
+/// volume: a folder another volume is mounted on is left out, with
+/// everything below it, as a scan never enters a nested foreign volume.
+///
+/// On Unix a mount point is an ordinary folder, told apart by its device id.
+/// On Windows a volume mounted in a folder is a reparse point, which no walk
+/// enters anyway. An unreadable root yields nothing.
+#[must_use]
+pub fn real_dirs_on_volume(root: &Path) -> Vec<PathBuf> {
+    let Ok(volume) = fs::symlink_metadata(root) else {
+        return Vec::new();
+    };
+    real_dirs(root, |folder| same_volume(folder, &volume))
+}
+
+/// Whether `folder` is on the volume `root` is on, from their no-follow
+/// metadata.
+fn same_volume(folder: &Metadata, root: &Metadata) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        folder.dev() == root.dev()
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (folder, root);
+        true
+    }
+}
+
+/// Every real folder below a real `root`, the root first, entering only the
+/// folders `enters` accepts from their no-follow metadata. An entry that
+/// cannot be `stat`ed is refused, as [`is_link_or_junction`] refuses it, and
+/// an unreadable folder is listed without its contents.
+///
+/// A folder counts only while it, and every folder above it, is still the
+/// real folder found when it was queued: one swapped for a link or junction
+/// before it is listed is left out, and so is one swapped while it was being
+/// read, with what that read found. No folder outside `root` is therefore
+/// returned through a swapped one. The folders are returned by path, so one
+/// swapped after this returns is followed by whatever opens that path.
+fn real_dirs(root: &Path, mut enters: impl FnMut(&Metadata) -> bool) -> Vec<PathBuf> {
+    let meta = match fs::symlink_metadata(root) {
+        Ok(meta) if !is_link_or_junction_metadata(&meta) => meta,
+        // A missing root is listed alone; a link, a junction or any other
+        // failure refuses it.
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return vec![root.to_path_buf()],
+        Ok(_) | Err(_) => return Vec::new(),
+    };
+    let mut dirs = Vec::new();
+    let mut stack = vec![Rc::new(Queued { path: root.to_path_buf(), meta, parent: None })];
 
     while let Some(dir) = stack.pop() {
-        let Ok(entries) = fs::read_dir(&dir) else {
+        let is_root = dir.parent.is_none();
+        if !is_root && !still_queued(&dir) {
+            continue;
+        }
+        dirs.push(dir.path.clone());
+        let Ok(entries) = fs::read_dir(&dir.path) else {
             continue;
         };
+        let mut children = Vec::new();
         for entry in entries.flatten() {
             let path = entry.path();
-            if is_link_or_junction(&path) {
+            let Ok(meta) = fs::symlink_metadata(&path) else {
+                continue;
+            };
+            if is_link_or_junction_metadata(&meta) || !meta.is_dir() || !enters(&meta) {
                 continue;
             }
-            if path.is_dir() {
-                dirs.push(path.clone());
-                stack.push(path);
-            }
+            children.push(Rc::new(Queued { path, meta, parent: Some(Rc::clone(&dir)) }));
         }
+        // A listing read through a folder swapped mid-read is not the tree's.
+        if !still_queued(&dir) {
+            if !is_root {
+                dirs.pop();
+            }
+            continue;
+        }
+        stack.extend(children);
     }
 
     dirs
+}
+
+/// A folder [`real_dirs`] queued, with its no-follow metadata then.
+struct Queued {
+    path: PathBuf,
+    meta: Metadata,
+    parent: Option<Rc<Self>>,
+}
+
+/// Whether `folder`, and every folder above it, is still the real folder it
+/// was when queued: not a link or junction and, on Unix, the same device
+/// and inode. Windows reports no stable folder id here, but a folder swapped
+/// for a junction or symlink reads as a reparse point.
+fn still_queued(folder: &Queued) -> bool {
+    folder.parent.as_deref().is_none_or(still_queued)
+        && fs::symlink_metadata(&folder.path).is_ok_and(|now| {
+            !is_link_or_junction_metadata(&now) && now.is_dir() && same_folder(&now, &folder.meta)
+        })
+}
+
+/// Whether two no-follow metadata reads are of the same folder.
+fn same_folder(now: &Metadata, then: &Metadata) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        now.dev() == then.dev() && now.ino() == then.ino()
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (now, then);
+        true
+    }
 }
 
 /// Recursively collect every real (non-link) **file** under `root`, together
@@ -411,6 +506,121 @@ mod tests {
         assert!(dirs.contains(&dir.path().to_path_buf()));
         assert!(dirs.contains(&dir.path().join("a")));
         assert!(dirs.contains(&nested));
+    }
+
+    #[test]
+    fn real_dirs_on_volume_lists_the_tree_of_one_volume() {
+        let dir = tempfile::tempdir().unwrap();
+        let nested = dir.path().join("a").join("b");
+        std::fs::create_dir_all(&nested).unwrap();
+
+        let mut on_volume = real_dirs_on_volume(dir.path());
+        let mut every = real_dirs_under(dir.path(), false);
+        on_volume.sort();
+        every.sort();
+        assert_eq!(on_volume, every);
+        assert_eq!(real_dirs_on_volume(&dir.path().join("missing")), [] as [PathBuf; 0]);
+    }
+
+    /// A folder of the tree is swapped for a link to its moved original
+    /// while the walk runs: as `swap_at` is offered to `enters`, before the
+    /// swapped folder is listed or while it is.
+    #[cfg(unix)]
+    fn swapped_during_walk(swap_at: &str) -> Vec<PathBuf> {
+        use std::os::unix::fs::MetadataExt;
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("root");
+        fs::create_dir_all(root.join("a/b/c")).unwrap();
+        let trigger = fs::symlink_metadata(root.join(swap_at)).unwrap().ino();
+        let mut swapped = false;
+        let dirs = real_dirs(&root, |meta| {
+            if !swapped && meta.ino() == trigger {
+                let moved = dir.path().join("moved");
+                fs::rename(root.join("a"), &moved).unwrap();
+                std::os::unix::fs::symlink(&moved, root.join("a")).unwrap();
+                swapped = true;
+            }
+            true
+        });
+        assert!(swapped);
+        dirs
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn real_dirs_never_lists_through_a_folder_swapped_for_a_link() {
+        let names = |dirs: Vec<PathBuf>| -> Vec<String> {
+            dirs.iter().map(|dir| dir.file_name().unwrap().to_string_lossy().into_owned()).collect()
+        };
+        // `a` is swapped as the root's listing offers it: queued, then a link.
+        assert_eq!(names(swapped_during_walk("a")), ["root"]);
+        // `a` is swapped while it is read, as its listing offers `b`.
+        assert_eq!(names(swapped_during_walk("a/b")), ["root"]);
+    }
+
+    /// `mount` is a real folder below `root` that another volume is mounted
+    /// on: [`real_dirs_on_volume`] leaves it out, with all below it.
+    #[cfg(unix)]
+    fn assert_stops_at_mount(root: &Path, mount: &Path) {
+        use std::os::unix::fs::MetadataExt;
+        let device = |path: &Path| fs::symlink_metadata(path).unwrap().dev();
+        assert_ne!(device(mount), device(root), "{} is a mount", mount.display());
+        assert!(real_dirs_under(root, false).iter().any(|dir| dir == mount));
+
+        let on_volume = real_dirs_on_volume(root);
+        assert!(on_volume.iter().any(|dir| dir == root));
+        let entered: Vec<&PathBuf> =
+            on_volume.iter().filter(|dir| dir.starts_with(mount)).collect();
+        assert_eq!(entered, [] as [&PathBuf; 0]);
+    }
+
+    /// devpts is a file system of its own, mounted at `/dev/pts`.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn real_dirs_on_volume_stops_at_a_mount_below_the_root() {
+        assert_stops_at_mount(Path::new("/dev"), Path::new("/dev/pts"));
+    }
+
+    /// A disk image attached inside the root.
+    #[cfg(target_os = "macos")]
+    #[test]
+    #[ignore = "attaches a disk image with hdiutil"]
+    fn real_dirs_on_volume_stops_at_a_disk_image_below_the_root() {
+        use std::process::Command;
+
+        struct Detach<'a>(&'a Path);
+        impl Drop for Detach<'_> {
+            fn drop(&mut self) {
+                let _ = Command::new("/usr/bin/hdiutil")
+                    .arg("detach")
+                    .arg("-force")
+                    .arg(self.0)
+                    .status();
+            }
+        }
+
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().canonicalize().unwrap().join("Captures");
+        let mount = root.join("card");
+        fs::create_dir_all(&mount).unwrap();
+        let image = dir.path().join("card.dmg");
+        let created = Command::new("/usr/bin/hdiutil")
+            .args(["create", "-quiet", "-size", "8m", "-fs", "HFS+", "-volname", "PVCARD"])
+            .arg(&image)
+            .status()
+            .unwrap();
+        assert!(created.success(), "hdiutil create");
+        let attached = Command::new("/usr/bin/hdiutil")
+            .args(["attach", "-quiet", "-nobrowse", "-mountpoint"])
+            .arg(&mount)
+            .arg(&image)
+            .status()
+            .unwrap();
+        assert!(attached.success(), "hdiutil attach");
+        let _detach = Detach(&mount);
+        fs::create_dir(mount.join("night")).unwrap();
+
+        assert_stops_at_mount(&root, &mount);
     }
 
     #[test]

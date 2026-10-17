@@ -20,8 +20,8 @@ use platevault_model::{
     Availability, CorrectionInput, EvidenceItem, ExpectedSession, FileIdentity, GroupingResult,
     ImageFormat, LibraryError, Location, LocationLifecycle, LocationRole, NativePath,
     ObservationFingerprint, PathSensitivity, Provenance, Quality, ReferenceKind, RemapBlockReason,
-    RetryAction, Revision, ScanBatch, ScanFile, ScanIssue, ScanObservation, ScanOperation,
-    ScanProgress, ScanState, Session, VolumeIdentity, VolumeKind,
+    RemapReview, RetryAction, Revision, ScanBatch, ScanFile, ScanIssue, ScanObservation,
+    ScanOperation, ScanProgress, ScanState, Session, VolumeIdentity, VolumeKind,
 };
 use sqlx::sqlite::{SqliteConnectOptions, SqliteConnection};
 use sqlx::{Column, Connection, Row};
@@ -357,16 +357,7 @@ async fn remap_refuses_mismatch_and_missing_byte_proof_then_verified_copy_keeps_
     let stamped = last_verified(&catalog, &assets).await;
     assert!(stamped[0].is_some() && stamped[1].is_none(), "{stamped:?}");
 
-    let review = catalog
-        .review_remap(
-            location.id,
-            location.decision_revision,
-            &NativePath::from_path(&bad),
-            &folder_identity(&bad).unwrap(),
-            DiskProbe,
-        )
-        .await
-        .unwrap();
+    let review = review_onto(&catalog, &location, &bad).await;
     assert!(review.blocked.iter().any(|block| block.reason == RemapBlockReason::Mismatch));
     let error =
         catalog.apply_remap(review.id, location.decision_revision, DiskProbe).await.unwrap_err();
@@ -376,16 +367,7 @@ async fn remap_refuses_mismatch_and_missing_byte_proof_then_verified_copy_keeps_
 
     let away = fx.root.with_extension("offline");
     std::fs::rename(&fx.root, &away).unwrap();
-    let review = catalog
-        .review_remap(
-            location.id,
-            location.decision_revision,
-            &NativePath::from_path(&good),
-            &folder_identity(&good).unwrap(),
-            DiskProbe,
-        )
-        .await
-        .unwrap();
+    let review = review_onto(&catalog, &location, &good).await;
     assert!(review.blocked.iter().any(|block| block.reason == RemapBlockReason::NoByteProof));
     let error =
         catalog.apply_remap(review.id, location.decision_revision, DiskProbe).await.unwrap_err();
@@ -404,16 +386,7 @@ async fn remap_refuses_mismatch_and_missing_byte_proof_then_verified_copy_keeps_
     assert_eq!(last_verified(&catalog, &assets).await, stamped, "a refused remap stamps nothing");
     std::fs::rename(&away, &fx.root).unwrap();
 
-    let review = catalog
-        .review_remap(
-            location.id,
-            location.decision_revision,
-            &NativePath::from_path(&good),
-            &folder_identity(&good).unwrap(),
-            DiskProbe,
-        )
-        .await
-        .unwrap();
+    let review = review_onto(&catalog, &location, &good).await;
     assert!(review.blocked.is_empty(), "{:?}", review.blocked);
 
     // The candidate changes after the review with its stats kept: apply hashes
@@ -542,16 +515,7 @@ async fn a_remap_onto_a_candidate_replaced_with_equal_stats_after_hashing_moves_
     for name in ["Ha_001.fits", "Ha_002.fits"] {
         std::fs::copy(fx.root.join(name), copy.join(name)).unwrap();
     }
-    let review = catalog
-        .review_remap(
-            location.id,
-            location.decision_revision,
-            &NativePath::from_path(&copy),
-            &folder_identity(&copy).unwrap(),
-            DiskProbe,
-        )
-        .await
-        .unwrap();
+    let review = review_onto(&catalog, &location, &copy).await;
     assert!(review.blocked.is_empty(), "{:?}", review.blocked);
     let stamped = last_verified(&catalog, &assets).await;
 
@@ -1673,16 +1637,7 @@ async fn a_deleted_or_moved_root_blocks_only_the_folders_that_hold_it() {
         std::fs::copy(fx.root.join(name), copy.join(name)).unwrap();
     }
     let captures = catalog.location(captures.id).await.unwrap();
-    let review = catalog
-        .review_remap(
-            captures.id,
-            captures.decision_revision,
-            &NativePath::from_path(&copy),
-            &folder_identity(&copy).unwrap(),
-            DiskProbe,
-        )
-        .await
-        .unwrap();
+    let review = review_onto(&catalog, &captures, &copy).await;
     assert!(review.blocked.is_empty(), "{:?}", review.blocked);
     let remapped =
         catalog.apply_remap(review.id, captures.decision_revision, DiskProbe).await.unwrap();
@@ -1905,7 +1860,9 @@ async fn refuses_reuse_of_retired(
     assert_eq!(kind(&catalog.begin_scan(retired.id, None).await.unwrap_err()), "invalid_input");
     let night = NativePath::from_path(Path::new("night1"));
     assert_eq!(kind(&catalog.retry_scope(retired.id, night).await.unwrap_err()), "invalid_input");
-    let remap = catalog.review_remap(retired.id, revision, &root, &identity, DiskProbe).await;
+    let remap = catalog
+        .review_remap(retired.id, revision, &root, &identity, VolumeKind::Local, DiskProbe)
+        .await;
     assert_eq!(kind(&remap.unwrap_err()), "invalid_input");
     let decided = catalog.set_quality(&[expected(copy)], Quality::Usable, DiskProbe).await;
     assert_eq!(kind(&decided.unwrap_err()), "invalid_input");
@@ -2875,6 +2832,15 @@ async fn hashed_assets(catalog: &Catalog, locations: &[&Location]) -> usize {
         }
     }
     hashed
+}
+
+/// Review remapping `location`, at its current revision, onto the local
+/// folder `root`.
+async fn review_onto(catalog: &Catalog, location: &Location, root: &Path) -> RemapReview {
+    let (path, identity) = (NativePath::from_path(root), folder_identity(root).unwrap());
+    let (id, revision) = (location.id, location.decision_revision);
+    let review = catalog.review_remap(id, revision, &path, &identity, VolumeKind::Local, DiskProbe);
+    review.await.unwrap()
 }
 
 /// The last verification of each asset, read now.

@@ -8,12 +8,16 @@
 //! [`crate::commands::observing_plans`] IPC surfaces, with the catalog in its
 //! own data directory. The dialog and opener plugins serve the planning
 //! handlers' Rust calls, and the platform reminder notifier with the system
-//! clock is attached before any command runs. The one window is labelled
-//! `library`, so it holds `capabilities/library.json` (plus the dev bridge
-//! grant with `dev-tools`) and none of the legacy `default.json`. Nothing from
-//! the legacy composition root runs here: no `AppState`, legacy database,
-//! bootstrap job, watcher or legacy command registration. The legacy code stays
-//! archivable and is never booted by this binary.
+//! clock is attached before any command runs. [`CaptureWatch`] counts new
+//! captures in every online Captures location (a start-up walk and a live
+//! folder watcher each) and is stopped in the exit step. On Windows the
+//! removal notices of each watched volume that is not a network share reach
+//! it, so the drive can eject, and they end after it stops. The one window is
+//! labelled `library`, so it holds `capabilities/library.json` (plus the dev
+//! bridge grant with `dev-tools`) and none of the legacy `default.json`.
+//! Nothing from the legacy composition root runs here: no `AppState`, legacy
+//! database, bootstrap job, legacy watcher or legacy command registration. The
+//! legacy code stays archivable and is never booted by this binary.
 //!
 //! In `dev-tools` (debug-only) builds the MCP bridge always starts, bound to IPv4
 //! loopback, and the webview loads the hosted dev URL so the bridge has a page
@@ -37,8 +41,11 @@ use std::net::Ipv4Addr;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use contracts_core::captures::NEW_CAPTURES_EVENT;
+use desktop_services::captures::NewCapturesFeed;
 use desktop_services::jobs::{MeasurementProgressFeed, ScanProgressFeed};
 use platevault_core::library::Library;
+use platevault_core::new_captures::CaptureWatch;
 use platevault_core::targets::SimbadConfig;
 use tauri::Manager;
 
@@ -68,6 +75,7 @@ pub const BRIDGE_BIND_ENV: &str = "PV_MCP_BRIDGE_BIND";
 /// configuration, an unusable data directory, a catalog that cannot be opened
 /// (including a foreign or legacy database), reminder subscriptions that
 /// cannot be read when the notifier attaches, or the Tauri runtime itself.
+/// A removal notice window that Windows refuses is logged, not returned.
 #[expect(clippy::too_many_lines, reason = "the handler list holds one labelled block per feature")]
 pub fn run() -> Result<(), Box<dyn Error>> {
     let provider = provider_config()?;
@@ -102,6 +110,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         ipc::library_review_retire_location,
         ipc::library_retire_location,
         ipc::library_list_operations,
+        ipc::library_new_captures,
         // session filters (064 LIB-FR-17, 065 PRJ-FR-19)
         crate::commands::session_filters::library_session_filter_counts,
         crate::commands::session_filters::project_prefill_from_session,
@@ -334,8 +343,33 @@ pub fn run() -> Result<(), Box<dyn Error>> {
             );
         },
     ));
+    // New captures in every online Captures location: a start-up walk and a
+    // live watcher each (astro-plan-ef440). The task runs on the async
+    // runtime, so it starts inside it; the exit step below stops it.
+    let captures = tauri::async_runtime::block_on(async { CaptureWatch::start(&library) });
+    tauri::async_runtime::spawn(crate::bootstrap::feeds::forward(
+        app.handle().clone(),
+        NEW_CAPTURES_EVENT,
+        NewCapturesFeed::subscribe(&captures),
+        |_, error| tracing::error!(%error, "new captures event not delivered"),
+    ));
     app.manage(library);
-    app.run(|_, _| {});
+    app.manage(captures);
+    // Windows ejects a Captures drive only once discovery's watcher lets go
+    // of it (astro-plan-ef440). Without the notices, which `start` logs, the
+    // app still starts; only that release is lost.
+    #[cfg(windows)]
+    let mut eject = crate::eject::EjectNotices::start(app.handle());
+    app.run(move |handle, event| {
+        // No watcher outlives the app: every OS watch is released before exit.
+        if let tauri::RunEvent::Exit = event {
+            tauri::async_runtime::block_on(handle.state::<CaptureWatch>().shutdown());
+            // Once discovery is stopping, a removal request that waited on it
+            // has returned, so dropping the notices never waits on one.
+            #[cfg(windows)]
+            drop(eject.take());
+        }
+    });
     Ok(())
 }
 
