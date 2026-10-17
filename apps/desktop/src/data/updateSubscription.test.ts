@@ -76,6 +76,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   delete (window as Window & { __PV_TEST__?: unknown }).__PV_TEST__;
   resetPreferences();
+  setPreference('setupCompleted', true);
   push = null;
   pushOffer = null;
   mockListen.mockImplementation(
@@ -480,22 +481,33 @@ describe('startUpdateSubscription', () => {
 // astro-plan-bzzbp: the backend's startup check runs only while "Check for
 // updates automatically" is on; the webview passes the preference along.
 describe('startUpdateSubscription — Check for updates automatically', () => {
-  it('asks for the startup check with the setting on by default', async () => {
+  it('waits for setup to finish then sends the saved opt-out to startup check', async () => {
+    setPreference('setupCompleted', false);
+    setPreference('checkUpdatesAutomatically', false);
+
+    await startUpdateSubscription();
+    expect(mockCommands.updateCheckOnStartup).not.toHaveBeenCalled();
+
+    // SetupWizard sets setupCompleted before navigating to /inbox; Shell then
+    // remounts and starts the subscription with the stored preference.
+    stopUpdateSubscription();
+    setPreference('setupCompleted', true);
+    await startUpdateSubscription();
+
+    expect(mockCommands.updateCheckOnStartup).toHaveBeenCalledTimes(1);
+    expect(mockCommands.updateCheckOnStartup).toHaveBeenCalledWith(false);
+    expect(mockCommands.updateCheck).not.toHaveBeenCalled();
+  });
+
+  it('asks for the startup check with the setting on by default after setup', async () => {
+    setPreference('setupCompleted', true);
     await startUpdateSubscription();
 
     expect(mockCommands.updateCheckOnStartup).toHaveBeenCalledWith(true);
   });
 
-  it('tells the backend the setting is off', async () => {
-    setPreference('checkUpdatesAutomatically', false);
-
-    await startUpdateSubscription();
-
-    expect(mockCommands.updateCheckOnStartup).toHaveBeenCalledWith(false);
-    expect(mockCommands.updateCheck).not.toHaveBeenCalled();
-  });
-
   it('still checks when the user asks while it is off', async () => {
+    setPreference('setupCompleted', true);
     setPreference('checkUpdatesAutomatically', false);
     await startUpdateSubscription();
 

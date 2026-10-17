@@ -427,6 +427,22 @@ async fn with_automatic_checks_off_the_startup_check_makes_no_request() {
 }
 
 #[tokio::test]
+async fn with_automatic_checks_off_in_saved_preferences_makes_no_startup_request() {
+    let signer = Signer::new();
+    let source = FakeSource::release(&signer, b"new AppImage");
+    let rig = Rig::new(&signer, &source, Box::new(FakeInstaller::answering(vec![])));
+    let preferences = serde_json::json!({ "checkUpdatesAutomatically": false });
+    let automatic = preferences["checkUpdatesAutomatically"]
+        .as_bool()
+        .expect("the saved user preference is a boolean");
+
+    rig.updater.check_on_startup(automatic).await;
+
+    assert_eq!(source.manifest_requests(), 0, "no request while saved preference is off");
+    assert_eq!(rig.phase(), UpdatePhase::Idle);
+}
+
+#[tokio::test]
 async fn with_automatic_checks_on_the_startup_check_runs_once() {
     let signer = Signer::new();
     let source = FakeSource::release(&signer, b"new AppImage");
