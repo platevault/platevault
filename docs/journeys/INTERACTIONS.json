@@ -609,7 +609,7 @@
     {
       "flowStep": "Session intake Review step and its \"Needs review\" queue (D-W78)",
       "owner": "067-frame-review",
-      "journeyStep": "J22/S1, J22/S2, J22/S3, J22/S4, J22/S7a, J22/S15a, J22/S15b, J31/S7, J37/S6, J37/S9",
+      "journeyStep": "J18/S9, J22/S1, J22/S2, J22/S3, J22/S4, J22/S7a, J22/S15a, J22/S15b, J31/S7, J37/S6, J37/S9",
       "spec": "067-frame-review PIX-FR-01, PIX-FR-06, PIX-FR-08, PIX-FR-10, PIX-FR-18; 064-library-inventory LIB-FR-17, LIB-FR-20; D-W78, D-W79, D-W97; HARNESS-V5-FEEDBACK-R1.md Round 9 C10, C14",
       "action": "Open Review for a session in Needs review, from Import's Review sessions or the Sessions filter, select by threshold, finish review with no Unreviewed frames, and reopen Review on a Ready session.",
       "expect": "Review shows only the session's frames and offers Mark rest usable and Select by threshold…. Import's Review sessions (provisional copy, from the prototype) opens the first session in Needs review, and Finish review advances to the next one. The session becomes Ready when every frame is Usable or Unusable; a later review mark reaches each open Project holding it as a labelled pending change.",
