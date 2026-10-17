@@ -478,15 +478,24 @@ fn move_file(from: &Path, to: &Path) {
     fs::rename(from, to).unwrap();
 }
 
-/// Vacate the records of [`TRASHED`] and [`MISSING`], frames indexed at
-/// `root`, the root of `location`: the first two go to a stand-in OS Trash
-/// and are recorded Trashed, as custody does, and the other two leave the
-/// drive and a scan records them Missing. Then another frame takes the path
-/// of the first of each, and the second of each is put back.
-async fn vacate_and_refill(fx: &Fixture, location: &Location, root: &Path) {
-    let (bin, aside) = (fx.base.join("Trash"), fx.base.join("aside"));
+/// Where [`vacate`] moves [`TRASHED`] and [`MISSING`]: a stand-in OS Trash,
+/// and another drive.
+fn bin(fx: &Fixture) -> PathBuf {
+    fx.base.join("Trash")
+}
+
+fn aside(fx: &Fixture) -> PathBuf {
+    fx.base.join("aside")
+}
+
+/// Vacate the records of [`MISSING`] and the files of [`TRASHED`], frames
+/// indexed at `root`, the root of `location`: the first leave the drive and
+/// a scan records them Missing, and the others go to the OS Trash
+/// ([`bin`]). Returns the [`TRASHED`] frames as custody records them once
+/// the OS Trash took them.
+async fn vacate(fx: &Fixture, location: &Location, root: &Path) -> Vec<TrashedFrame> {
     for name in MISSING {
-        move_file(&root.join(name), &aside.join(name));
+        move_file(&root.join(name), &aside(fx).join(name));
     }
     assert_eq!(scan_to_end(&fx.library, location.id).await.state, ScanState::Completed);
     let assets = fx.library.catalog().location_assets(location.id).await.unwrap();
@@ -495,22 +504,17 @@ async fn vacate_and_refill(fx: &Fixture, location: &Location, root: &Path) {
         let relative = NativePath::from_path(Path::new(name));
         let asset = assets.iter().find(|asset| asset.relative_path == relative).unwrap();
         let sha256 = hex::encode(Sha256::digest(fs::read(root.join(name)).unwrap()));
-        move_file(&root.join(name), &bin.join(name));
+        move_file(&root.join(name), &bin(fx).join(name));
         trashed.push(TrashedFrame { asset_id: asset.id, sha256, complete_view_ids: Vec::new() });
     }
-    fx.library.catalog().record_trashed(Uuid::new_v4(), &trashed).await.unwrap();
-
-    other_frame(&root.join(TRASHED[0]));
-    other_frame(&root.join(MISSING[0]));
-    move_file(&bin.join(TRASHED[1]), &root.join(TRASHED[1]));
-    move_file(&aside.join(MISSING[1]), &root.join(MISSING[1]));
+    trashed
 }
 
 /// A frame at the path of a Missing or Trashed record is new unless it is
 /// the record's file put back, with the size and modification time the
 /// record last observed (bead astro-plan-0rfuw): the start-up walk counts
-/// the two other frames, and a scan, which returns all four records, leaves
-/// none.
+/// the other frame at one path of each, not the originals put back at the
+/// others, and a scan, which returns all four records, leaves none.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn the_start_up_walk_counts_a_frame_at_a_vacated_path_unless_its_file_was_put_back() {
     let fx = fixture().await;
@@ -520,7 +524,12 @@ async fn the_start_up_walk_counts_a_frame_at_a_vacated_path_unless_its_file_was_
         frame(&root.join(name));
     }
     assert_eq!(scan_to_end(&fx.library, location.id).await.state, ScanState::Completed);
-    vacate_and_refill(&fx, &location, &root).await;
+    let trashed = vacate(&fx, &location, &root).await;
+    fx.library.record_trashed(Uuid::new_v4(), &trashed).await.unwrap();
+    other_frame(&root.join(TRASHED[0]));
+    other_frame(&root.join(MISSING[0]));
+    move_file(&bin(&fx).join(TRASHED[1]), &root.join(TRASHED[1]));
+    move_file(&aside(&fx).join(MISSING[1]), &root.join(MISSING[1]));
 
     let watch = watch(&fx.library);
     count_is(&watch, location.id, 2).await;
@@ -529,9 +538,9 @@ async fn the_start_up_walk_counts_a_frame_at_a_vacated_path_unless_its_file_was_
 }
 
 /// As [`the_start_up_walk_counts_a_frame_at_a_vacated_path_unless_its_file_was_put_back`],
-/// with every change made while discovery runs: live events count the two
-/// other frames. The frames trashed meanwhile were recorded with no event
-/// discovery follows.
+/// with every change made while discovery runs, which live events count.
+/// A frame written in place of a trashed one before custody recorded the
+/// trash is judged again once it did.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_live_event_counts_a_frame_at_a_vacated_path_unless_its_file_was_put_back() {
     let fx = fixture().await;
@@ -545,8 +554,17 @@ async fn a_live_event_counts_a_frame_at_a_vacated_path_unless_its_file_was_put_b
     assert_eq!(scan_to_end(&fx.library, location.id).await.state, ScanState::Completed);
     count_is(&watch, location.id, 0).await;
 
-    vacate_and_refill(&fx, &location, &root).await;
+    let trashed = vacate(&fx, &location, &root).await;
+    // Written before the trash is recorded: its path still holds a file the
+    // catalog holds. The frame at the Missing path, written after it, counts.
+    other_frame(&root.join(TRASHED[0]));
+    move_file(&aside(&fx).join(MISSING[1]), &root.join(MISSING[1]));
+    other_frame(&root.join(MISSING[0]));
+    count_is(&watch, location.id, 1).await;
+
+    fx.library.record_trashed(Uuid::new_v4(), &trashed).await.unwrap();
     count_is(&watch, location.id, 2).await;
+    move_file(&bin(&fx).join(TRASHED[1]), &root.join(TRASHED[1]));
     // Every event the changes raised was applied: the count stays.
     after(&watch, drains, 3).await;
     assert_eq!(new_files(&watch.counts(), location.id), Some(2));

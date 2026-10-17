@@ -651,7 +651,7 @@ impl Library {
             })
             .collect();
         if !frames.is_empty() {
-            self.catalog().record_trashed(record.op_id, &frames).await?;
+            self.record_trashed(record.op_id, &frames).await?;
         }
         let seqs: Vec<u32> = pending.iter().map(|item| item.seq).collect();
         self.catalog().record_trash_move_outcomes(record.op_id, &seqs).await
