@@ -97,7 +97,6 @@ async fn activity(world: &World, target: Uuid) -> TargetActivity {
 fn ha_frames(target: Uuid, group: Option<Uuid>, goal_frames: u64) -> GoalInput {
     GoalInput {
         target_id: target,
-        panel: None,
         group_id: group,
         goal: GoalSpec::FrameCount { channel: Some("Ha".into()), goal_frames },
     }
@@ -538,12 +537,7 @@ async fn each_project_counts_its_own_sessions_and_the_target_counts_them_once() 
         .create_project(&ProjectInput {
             name: "NGC 7000 again".into(),
             notes: None,
-            subjects: vec![SubjectInput {
-                target_id: target,
-                name: None,
-                mosaic: false,
-                panels: Vec::new(),
-            }],
+            subjects: vec![SubjectInput { target_id: target, name: None }],
             rig_ids: vec![world.rig],
             goals: vec![ha_frames(target, None, 10)],
         })
@@ -581,7 +575,6 @@ async fn each_project_counts_its_own_sessions_and_the_target_counts_them_once() 
     let revision = desired(&world).await.revision;
     let oiii_goal = GoalInput {
         target_id: target,
-        panel: None,
         group_id: None,
         goal: GoalSpec::FrameCount { channel: Some("OIII".into()), goal_frames: 10 },
     };

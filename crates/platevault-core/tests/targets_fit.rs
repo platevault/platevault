@@ -106,12 +106,7 @@ async fn project(library: &Library, subject: &str, rig_ids: Vec<Uuid>) -> Uuid {
     let input = ProjectInput {
         name: "Autumn".into(),
         notes: None,
-        subjects: vec![SubjectInput {
-            target_id: target.id,
-            name: None,
-            mosaic: false,
-            panels: Vec::new(),
-        }],
+        subjects: vec![SubjectInput { target_id: target.id, name: None }],
         rig_ids,
         goals: Vec::new(),
     };

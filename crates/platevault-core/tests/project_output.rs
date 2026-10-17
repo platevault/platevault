@@ -66,12 +66,7 @@ impl World {
         let input = ProjectInput {
             name: PROJECT.into(),
             notes: None,
-            subjects: vec![SubjectInput {
-                target_id: target.id,
-                name: None,
-                mosaic: false,
-                panels: Vec::new(),
-            }],
+            subjects: vec![SubjectInput { target_id: target.id, name: None }],
             rig_ids: vec![rig],
             goals: Vec::new(),
         };

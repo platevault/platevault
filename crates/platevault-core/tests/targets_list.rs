@@ -132,12 +132,7 @@ async fn my_targets_is_favourites_plus_open_project_subjects_with_badge() {
         .create_project(&ProjectInput {
             name: "Summer nebulae".into(),
             notes: None,
-            subjects: vec![SubjectInput {
-                target_id: ic1396.id,
-                name: None,
-                mosaic: false,
-                panels: Vec::new(),
-            }],
+            subjects: vec![SubjectInput { target_id: ic1396.id, name: None }],
             rig_ids: vec![rig.id],
             goals: Vec::new(),
         })
