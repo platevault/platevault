@@ -421,4 +421,3 @@ fn path_of(path: &NativePath) -> Result<PathBuf, ItemReason> {
     path.to_path_buf()
         .map_err(|error| ItemReason::new(ReasonCode::SourceUnavailable, error.to_string()))
 }
-

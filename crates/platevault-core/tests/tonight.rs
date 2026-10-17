@@ -11,11 +11,11 @@
 use std::path::Path;
 use std::sync::Arc;
 
+use persistence_library::NewGroup;
 use platevault_core::library::Library;
 use platevault_core::targets::{user_target, ObjectType, TargetQuery, UserTargetInput, ICRS_FRAME};
 use platevault_core::tonight::{Tonight, TonightQuery, TonightWindow};
 use platevault_core::*;
-use persistence_library::NewGroup;
 use time::macros::date;
 use time::Date;
 use uuid::Uuid;
@@ -243,7 +243,8 @@ async fn subject_uses_target_position_once() {
     };
     let catalog = library.catalog();
     let desired = catalog.project_desired(project.id).await.unwrap();
-    let grouped = catalog.create_project_group(project.id, desired.revision, &group, &[]).await.unwrap();
+    let grouped =
+        catalog.create_project_group(project.id, desired.revision, &group, &[]).await.unwrap();
     library
         .set_project_group_panel(project.id, grouped.revision, group.id, true, None)
         .await
@@ -251,7 +252,11 @@ async fn subject_uses_target_position_once() {
     let tonight = library.tonight(&query()).await.unwrap();
     assert_eq!(ids(&tonight), [ngc7000.id], "one window per Project subject, not panel");
     let outline = library.project_inputs(project.id).await.unwrap();
-    assert!(outline.desired.groups.iter().any(|candidate| candidate.panel && candidate.id == group.id));
+    assert!(outline
+        .desired
+        .groups
+        .iter()
+        .any(|candidate| candidate.panel && candidate.id == group.id));
     assert_eq!(
         window(&tonight, ngc7000.id).window,
         plan_area_best(&library, ngc7000.id, backyard).await

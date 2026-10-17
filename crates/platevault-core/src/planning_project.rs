@@ -24,10 +24,9 @@ use uuid::Uuid;
 use crate::library::{blocking, Library};
 use crate::planning;
 use crate::{
-    FramingEvidence, GoalProgress, GoalSpec, GoalTally, GroupName, LibraryError,
-    MeasurementMethod, Microseconds, ObservingSite, PlanCriteria, PlanningUnknownReason, Project,
-    ProjectDesired, ProjectGoal, ProjectQuery, ProjectSubject, Revision, SiteBasis, WindowQuery,
-    WindowSet,
+    FramingEvidence, GoalProgress, GoalSpec, GoalTally, GroupName, LibraryError, MeasurementMethod,
+    Microseconds, ObservingSite, PlanCriteria, PlanningUnknownReason, Project, ProjectDesired,
+    ProjectGoal, ProjectQuery, ProjectSubject, Revision, SiteBasis, WindowQuery, WindowSet,
 };
 
 time::serde::format_description!(iso_date, Date, "[year]-[month]-[day]");
@@ -323,9 +322,10 @@ fn subject_gaps(
     let mut panels = Vec::new();
     for group in desired.groups.iter().filter(|group| group.panel) {
         let goals = by_owner.remove(&(subject.id, Some(group.id)));
-        let holds = desired.sessions.iter().any(|member| {
-            member.group_id == group.id && member.target_id == subject.target_id
-        });
+        let holds = desired
+            .sessions
+            .iter()
+            .any(|member| member.group_id == group.id && member.target_id == subject.target_id);
         if goals.is_some() || holds {
             panels.push(PanelGaps {
                 group_id: group.id,

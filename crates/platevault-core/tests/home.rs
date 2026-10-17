@@ -211,10 +211,11 @@ async fn next_rule2_waits_on_calibration_then_an_unfinished_apply() {
     };
     assert_eq!(ready.suggestion.session_id, suggested.id);
     assert!(
-        ready.suggestion.blockers.iter().any(|blocker| matches!(
-            blocker,
-            AdmissionBlocker::CalibrationUnsettled { .. }
-        )),
+        ready
+            .suggestion
+            .blockers
+            .iter()
+            .any(|blocker| matches!(blocker, AdmissionBlocker::CalibrationUnsettled { .. })),
         "{:#?}",
         ready.suggestion.blockers
     );

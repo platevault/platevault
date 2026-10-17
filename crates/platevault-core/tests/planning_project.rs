@@ -84,9 +84,9 @@ fn rig(name: &str) -> Equipment {
     }
 }
 
- fn subject(target_id: Uuid) -> SubjectInput {
+fn subject(target_id: Uuid) -> SubjectInput {
     SubjectInput { target_id, name: None }
- }
+}
 
 fn ids(planning: &ProjectPlanning) -> Vec<Uuid> {
     planning.subjects.iter().map(|subject| subject.subject.target_id).collect()

@@ -309,10 +309,7 @@ pub async fn catalogued(mode: ViewMode) -> World {
         .create_project(&ProjectInput {
             name: PROJECT.into(),
             notes: None,
-            subjects: vec![SubjectInput {
-                target_id: ngc.candidate.id,
-                name: None,
-            }],
+            subjects: vec![SubjectInput { target_id: ngc.candidate.id, name: None }],
             rig_ids: vec![redcat.id],
             goals: Vec::new(),
         })

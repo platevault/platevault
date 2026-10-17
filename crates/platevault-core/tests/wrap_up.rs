@@ -82,7 +82,11 @@ async fn archive_location(world: &World) -> (Location, std::path::PathBuf) {
     let root = fs::canonicalize(root).unwrap();
     let location = world
         .library
-        .register_location(NativePath::from_path(&root), "Archive-T7".into(), LocationRole::Captures)
+        .register_location(
+            NativePath::from_path(&root),
+            "Archive-T7".into(),
+            LocationRole::Captures,
+        )
         .await
         .unwrap();
     (location, root)
@@ -396,7 +400,11 @@ async fn archive_refuses_a_session_another_open_project_holds() {
 
     let refused = world
         .library
-        .close_project(&close(vec![ha, oiii], revision(&world).await), trash.dyn_trash(), &Unattended)
+        .close_project(
+            &close(vec![ha, oiii], revision(&world).await),
+            trash.dyn_trash(),
+            &Unattended,
+        )
         .await
         .unwrap_err();
     assert_eq!(kind(&refused), "invalid_input", "{refused}");

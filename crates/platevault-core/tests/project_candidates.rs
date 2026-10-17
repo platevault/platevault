@@ -60,7 +60,11 @@ async fn project_candidates_context_filtered_unreviewed() {
     let picked = world.asset_at(&world.captures, HA[0]).await;
     let rejected = world.asset_at(&world.captures, OIII[0]).await;
     for asset in [&picked, &rejected] {
-        assert!(candidates.contains(&asset.id), "{} is a candidate frame", asset.relative_path.display());
+        assert!(
+            candidates.contains(&asset.id),
+            "{} is a candidate frame",
+            asset.relative_path.display()
+        );
     }
     let calibration: BTreeSet<Uuid> = catalog
         .location_assets(world.calibration.id)

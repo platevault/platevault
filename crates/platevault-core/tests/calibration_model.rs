@@ -47,7 +47,10 @@ fn references_are_project_or_calibration() {
         assert_eq!(serde_json::from_value::<ReferenceKind>(text).unwrap(), kind);
     }
     for gone in ["view", "result"] {
-        assert!(serde_json::from_value::<ReferenceKind>(serde_json::json!(gone)).is_err(), "{gone}");
+        assert!(
+            serde_json::from_value::<ReferenceKind>(serde_json::json!(gone)).is_err(),
+            "{gone}"
+        );
     }
 }
 
