@@ -7662,30 +7662,27 @@ mod tests {
         }
     }
 
-    /// The Prepare all and Results foreign-key lookups seek an index: a
-    /// Prepare all's panel revisions, the Results a preparation revision or a
-    /// Prepare all is recorded on, and a run's open master offers.
+    /// The Project operation lookups seek an index: a Project's latest Apply
+    /// (Home rule 2), and the Wrap up trash items and archive moves a Project
+    /// operation carries.
     #[tokio::test]
-    async fn preparation_and_results_lookups_use_indexes() {
+    async fn project_operation_lookups_use_indexes() {
         let dir = tempfile::tempdir().unwrap();
         let catalog = Catalog::open(&dir.path().join("catalog.sqlite")).await.unwrap();
         let mut conn = catalog.reader().await.unwrap();
         for (sql, index) in [
             (
-                "SELECT state FROM preparation_revisions WHERE group_preparation_id = ?1",
-                "preparation_revisions_group",
+                "SELECT operation_id FROM apply_operations WHERE project_id = ?1 \
+                 ORDER BY generation DESC LIMIT 1",
+                "apply_operations_project",
             ),
             (
-                "SELECT id FROM result_candidates WHERE prepared_revision_id = ?1",
-                "result_candidates_prepared",
+                "SELECT seq FROM wrap_up_trash_items WHERE operation_id = ?1",
+                "wrap_up_trash_items_operation",
             ),
             (
-                "SELECT id FROM result_candidates WHERE group_preparation_id = ?1",
-                "result_candidates_group_prepared",
-            ),
-            (
-                "SELECT id FROM master_offers WHERE view_id = ?1 AND state = 'offered'",
-                "master_offers_view",
+                "SELECT seq FROM archive_moves WHERE project_operation_id = ?1",
+                "archive_moves_project_operation",
             ),
         ] {
             let plan: Vec<String> =
