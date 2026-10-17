@@ -1061,10 +1061,43 @@ mod tests {
 
     /// A non-Project transition is refused on the transaction path, whose
     /// event could not name the entity's owning project, and writes nothing.
+    /// The projection row is really `current`, so without the refusal the
+    /// `current → stale` write would go through.
     #[tokio::test]
     async fn apply_transition_conn_refuses_a_non_project_entity() {
         let db = persistence_core::Database::in_memory().await.unwrap();
         db.migrate().await.unwrap();
+        let now = "2026-01-01T00:00:00Z";
+        sqlx::query(
+            "INSERT INTO library_root (id, label, current_path, kind, state, created_at) \
+             VALUES ('root1', 'r', '/tmp', 'local', 'active', ?)",
+        )
+        .bind(now)
+        .execute(db.pool())
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO file_record \
+             (id, root_id, relative_path, size_bytes, mtime, state, first_seen_at, last_seen_at) \
+             VALUES ('fr1', 'root1', 'a.fits', 1, ?, 'observed', ?, ?)",
+        )
+        .bind(now)
+        .bind(now)
+        .bind(now)
+        .execute(db.pool())
+        .await
+        .unwrap();
+        let artifact_id = Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO processing_artifact \
+             (id, project_id, file_record_id, kind, staleness, created_at) \
+             VALUES (?, NULL, 'fr1', 'manifest', 'current', ?)",
+        )
+        .bind(artifact_id.to_string())
+        .bind(now)
+        .execute(db.pool())
+        .await
+        .unwrap();
 
         let mut tx = db.pool().begin().await.unwrap();
         let err = apply_transition_conn(
@@ -1072,7 +1105,7 @@ mod tests {
             TransitionRequest::Projection(contracts_core::lifecycle::ProjectionTransitionRequest {
                 contract_version: "2.0.0".to_owned(),
                 request_id: Uuid::new_v4(),
-                entity_id: Uuid::new_v4(),
+                entity_id: artifact_id,
                 current_state: contracts_core::lifecycle::ProjectionState::Current,
                 next_state: contracts_core::lifecycle::ProjectionState::Stale,
                 action_label: None,
@@ -1084,6 +1117,13 @@ mod tests {
         tx.commit().await.unwrap();
 
         assert_eq!(err.code, TransitionErrorCode::TransitionRefused);
+        let staleness: String =
+            sqlx::query_scalar("SELECT staleness FROM processing_artifact WHERE id = ?")
+                .bind(artifact_id.to_string())
+                .fetch_one(db.pool())
+                .await
+                .unwrap();
+        assert_eq!(staleness, "current", "the projection is not transitioned");
         let audit_rows: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM audit_log_entry")
             .fetch_one(db.pool())
             .await
