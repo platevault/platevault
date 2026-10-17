@@ -13,7 +13,7 @@ Feature: [Specification](../spec.md)
 - [x] The F4 amendments (D-W93 to D-W116, 2026-10-14 to 2026-10-16) and the second batch's amendment of D-W108 set the Project folder, the View layout and its folder names, the tool layouts and Apply; *Provisional* and *Open* items are labelled in the text.
 - [x] D-W122 (Round 9 C15, recorded 2026-10-17) moves metadata corrections to session intake: PREP-FR-03 and PREP-AC-06 have Apply deliver the recorded corrections and show "N corrected values", with no per-value choice.
 - [x] A provisional FITS keyword mapping proposal names field mappings, profile evidence, PlateVault reader read-back and a Target association acceptance scenario.
-- [ ] Owner confirmation remains open for D-W123's mapping and fixed-format alias coverage, whether to patch HIERARCH aliases, generic-tool delivery evidence, and the non-FITS correction route.
+- [ ] Owner confirmation remains open for D-W123's mapping and fixed-format alias coverage (including `FOCAL` and `FLENGTH`), whether to patch HIERARCH aliases, generic-tool delivery evidence, and the non-FITS correction route.
 - [x] Independent cross-feature requirements review passed for the 2026-10-03 text after M1 through M13, R1 through R9 and C1 corrections; implementation readiness is not certified.
 - [ ] Independent cross-feature requirements review of the 2026-10-06 workflow amendment.
 - [ ] Independent requirements review of the F4 amendment (PR #1804) has not yet passed.
