@@ -4,7 +4,7 @@
 //! New-capture discovery over real temp folders, the real OS watcher and a
 //! real catalog (bead astro-plan-ef440).
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -571,6 +571,49 @@ async fn a_live_event_counts_a_frame_at_a_vacated_path_unless_its_file_was_put_b
     assert_eq!(walks(&watch), 1, "live events, no rescan");
     assert_eq!(scan_to_end(&fx.library, location.id).await.state, ScanState::Completed);
     count_is(&watch, location.id, 0).await;
+}
+
+/// A record an archive moved to another location leaves its path, though
+/// it was never Missing or Trashed. A frame written there before the move,
+/// judged held, is looked up again once the move is announced
+/// ([`Library::recorded_paths_changed`]) and counts; the archive's copy,
+/// counted while its record had not moved yet, leaves the other count.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_record_moved_away_is_counted_where_it_left_and_not_where_it_went() {
+    let fx = fixture().await;
+    let root = fx.base.join("Captures");
+    let location = captures(&fx.library, &root).await;
+    let archive_root = fx.base.join("Archive");
+    let archive = captures(&fx.library, &archive_root).await;
+    let name = TRASHED[0];
+    frame(&root.join(name));
+    assert_eq!(scan_to_end(&fx.library, location.id).await.state, ScanState::Completed);
+    let watch = watch(&fx.library);
+    count_is(&watch, location.id, 0).await;
+    count_is(&watch, archive.id, 0).await;
+
+    // Before the record moves: the copy lands in the archive, the original
+    // goes to the OS Trash and another frame takes its path.
+    fs::copy(root.join(name), archive_root.join(name)).unwrap();
+    move_file(&root.join(name), &bin(&fx).join(name));
+    other_frame(&root.join(name));
+    count_is(&watch, archive.id, 1).await;
+    after(&watch, drains, 2).await;
+    assert_eq!(new_files(&watch.counts(), location.id), Some(0), "judged held");
+
+    // The record moves to the copy, as `move_asset_record` does.
+    let mut catalog = raw_catalog(&fx).await;
+    sqlx::query("UPDATE assets SET location_id = ?1 WHERE location_id = ?2")
+        .bind(archive.id.to_string())
+        .bind(location.id.to_string())
+        .execute(&mut catalog)
+        .await
+        .unwrap();
+    fx.library.recorded_paths_changed(location.id);
+    fx.library.recorded_paths_changed(archive.id);
+    count_is(&watch, location.id, 1).await;
+    count_is(&watch, archive.id, 0).await;
+    assert_eq!(walks(&watch), 2, "the start-up walks only: no rescan");
 }
 
 /// A frame at a Missing record's path that kept the record's modification
@@ -1659,7 +1702,7 @@ fn counted(location: Location, root: &Path) -> Watched {
         prefixes: vec![root.to_path_buf()],
         location,
         live: None,
-        known: HashSet::new(),
+        known: HashMap::new(),
         vacated: HashMap::new(),
         new: HashMap::new(),
         walk: None,

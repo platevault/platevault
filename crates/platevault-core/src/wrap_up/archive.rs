@@ -13,13 +13,15 @@
 //! transaction, then the archive runs while the Project reads Closing.
 //!
 //! Each file goes through the verified-transfer journal: copied, re-read
-//! and verified; then its catalog record moves to the copy; then every
-//! kept-View link that read the original is rebuilt to read the copy after
-//! a no-follow check that it is still the recorded link, and recorded beside
-//! the frozen manifest; only then is the original retired to the OS Trash,
-//! re-verified first. A link that can't be repointed keeps the original.
-//! Every step is durable, so a stop resumes from the recorded phase and the
-//! archive settles its Project Archived, or Closed when nothing moved.
+//! and verified; then its catalog record moves to the copy, announced for
+//! the location it left and the one it reached so new-capture discovery
+//! follows ([`Library::subscribe_recorded_paths`]); then every kept-View
+//! link that read the original is rebuilt to read the copy after a no-follow
+//! check that it is still the recorded link, and recorded beside the frozen
+//! manifest; only then is the original retired to the OS Trash, re-verified
+//! first. A link that can't be repointed keeps the original. Every step is
+//! durable, so a stop resumes from the recorded phase and the archive
+//! settles its Project Archived, or Closed when nothing moved.
 
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fs;
@@ -525,7 +527,12 @@ impl Library {
                         .await;
                 };
                 match catalog.record_archive_repoint(storage, step.seq, &fingerprint).await {
-                    Ok(()) => {}
+                    // The record left its path in one location for the copy's
+                    // in another: new-capture discovery reads both again.
+                    Ok(()) => {
+                        self.recorded_paths_changed(step.from_location_id);
+                        self.recorded_paths_changed(step.to_location_id);
+                    }
                     Err(LibraryError::IdentityConflict(detail)) => {
                         let reason = ItemReason::new(
                             ReasonCode::DestinationOccupied,

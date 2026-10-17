@@ -4,7 +4,8 @@
 //! IPC tests for the controls of the F4 library shell's long operations:
 //! Apply's waiting-for-a-tool event and its Cancel (spec 069 PREP-FR-18),
 //! Close's Stop and its resumption (071 STO-FR-08), and the Output step's
-//! Rescan (070 RES-FR-01).
+//! Rescan (070 RES-FR-01). New-capture discovery follows the records the
+//! Trash step and Close's archive move, with no scan (astro-plan-0rfuw).
 //!
 //! The handlers run through Tauri's mock runtime with JSON arguments, as the
 //! webview sends them, over the F4 Apply world of `platevault_core`'s own
@@ -25,20 +26,21 @@ use std::path::Path;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use apply_support::{catalogued, world, World};
+use apply_support::{catalogued, world, World, HA};
 use cleanup_support::ScopedTrash;
 use desktop_shell::commands::project_apply::APPLY_WAITING_EVENT;
 use desktop_shell::commands::project_wrap_up::WrapUpTrash;
 use platevault_core::apply::pacing::HeldFolder;
 use platevault_core::custody::trash::OsTrash;
 use platevault_core::library::Library;
+use platevault_core::new_captures::CaptureWatch;
 use platevault_core::project_output::OutputWatch;
 use platevault_core::{
     ApplyOutcome, ApplyPhase, ApplyReport, ArchiveMoveOutcome, ArchiveSelection, CleanUpRequest,
     CloseReport, CloseRequest, LocationRole, NativePath, OutputObservation, ProjectLifecycle,
-    TrashRequest, TrashSupport, ViewMode, WrapUpStatus,
+    Quality, TrashRequest, TrashSupport, ViewMode, WrapUpStatus,
 };
 use serde_json::{json, Value};
 use support::{Ipc, NOT_FOUND};
@@ -70,6 +72,8 @@ impl Shell {
                 desktop_shell::commands::project_wrap_up::project_wrap_up_status,
                 desktop_shell::commands::project_wrap_up::project_close,
                 desktop_shell::commands::project_wrap_up::project_close_stop,
+                desktop_shell::commands::project_wrap_up::project_wrap_up_trash,
+                desktop_shell::commands::library::library_new_captures,
             ])
             .build(mock_context(noop_assets()))
             .expect("build mock app");
@@ -103,6 +107,13 @@ impl Shell {
             "basisDigest": preview["basisDigest"],
             "ticked": [],
         } })
+    }
+
+    /// Count new captures as the shell does, over `library`'s Captures
+    /// locations, for `library_new_captures`.
+    fn watch_captures(&self, library: &Arc<Library>) {
+        // Discovery runs on Tauri's runtime, where it starts.
+        self.app.manage(block_on(async { CaptureWatch::start(library) }));
     }
 }
 
@@ -241,14 +252,7 @@ impl OsTrash for GatedTrash {
 /// session the review offers there.
 async fn close_request(world: &World, trash: &Arc<ScopedTrash>) -> CloseRequest {
     let library = &world.library;
-    let review = library.clean_up_review(world.project).await.unwrap();
-    let request = CleanUpRequest {
-        project_id: world.project,
-        desired_revision: review.desired_revision,
-        generation: review.generation,
-        selected: Vec::new(),
-    };
-    library.clean_up(&request, trash.dyn_trash()).await.unwrap();
+    clean_up_nothing(world, trash).await;
     let review = library.trash_review(world.project, trash.dyn_trash()).await.unwrap();
     let request =
         TrashRequest { project_id: world.project, digest: review.digest, ticked: Vec::new() };
@@ -353,4 +357,113 @@ fn rescan_reports_a_new_output_file() {
     let unknown = Uuid::new_v4();
     shell.refuses("project_output_rescan", &json!({ "projectId": unknown }), NOT_FOUND, unknown);
     block_on(shell.app.state::<OutputWatch>().shutdown());
+}
+
+/// Clean up proceeds with nothing selected, as its review offers it.
+async fn clean_up_nothing(world: &World, trash: &Arc<ScopedTrash>) {
+    let library = &world.library;
+    let review = library.clean_up_review(world.project).await.unwrap();
+    let request = CleanUpRequest {
+        project_id: world.project,
+        desired_revision: review.desired_revision,
+        generation: review.generation,
+        selected: Vec::new(),
+    };
+    library.clean_up(&request, trash.dyn_trash()).await.unwrap();
+}
+
+/// What `library_new_captures` counts in `location` while its watcher is
+/// live; `None` before discovery knows its count.
+fn new_files(shell: &Shell, location: Uuid) -> Option<u64> {
+    let reply = shell.call("library_new_captures", &json!({}));
+    reply["locations"]
+        .as_array()?
+        .iter()
+        .find(|count| count["locationId"] == json!(location) && count["live"] == json!(true))
+        .and_then(|count| count["newFiles"].as_u64())
+}
+
+/// Wait, with no scan, until discovery counts `expected` new captures in
+/// `location`.
+fn counts(shell: &Shell, location: Uuid, expected: u64, what: &str) {
+    let deadline = Instant::now() + PATIENCE;
+    loop {
+        let counted = new_files(shell, location);
+        if counted == Some(expected) {
+            return;
+        }
+        assert!(Instant::now() < deadline, "{what}: {counted:?} new captures, not {expected}");
+        thread::sleep(Duration::from_millis(50));
+    }
+}
+
+/// A frame the catalog doesn't hold, of another size than the world's.
+fn new_capture(path: &Path) {
+    fs::write(path, b"SIMPLE  =                    T / a capture taken tonight").unwrap();
+}
+
+/// astro-plan-0rfuw through the Trash step: the step records the rejected
+/// frames it moved Trashed, which announces their Captures location, so a
+/// frame written later at a trashed frame's path counts as a new capture
+/// with no scan (the shell here registers none).
+#[test]
+fn a_frame_written_where_the_trash_step_took_one_counts_without_a_scan() {
+    let world = block_on(async {
+        let world = world(ViewMode::Symlinks).await;
+        let ha = world.session_of(&world.captures, HA[0]).await;
+        world.apply().await;
+        world.mark(&ha, Quality::Unusable).await;
+        world.apply().await;
+        world
+    });
+    let bin = ScopedTrash::new(&world.temp.path().join("bin"));
+    let digest = block_on(async {
+        clean_up_nothing(&world, &bin).await;
+        world.library.trash_review(world.project, bin.dyn_trash()).await.unwrap().digest
+    });
+    let shell = Shell::new(&world.library, bin.dyn_trash());
+    shell.watch_captures(&world.library);
+    counts(&shell, world.captures.id, 0, "before the Trash step");
+
+    let report = shell.call(
+        "project_wrap_up_trash",
+        &json!({ "request": {
+            "projectId": world.project,
+            "digest": digest,
+            "ticked": ["rejected_frames"],
+        } }),
+    );
+    let mut moved = bin.moved();
+    moved.sort();
+    assert_eq!(moved, [world.light(HA[0]), world.light(HA[1])], "{report}");
+    new_capture(&world.light(HA[0]));
+    counts(&shell, world.captures.id, 1, "a frame where a trashed one was");
+    block_on(shell.app.state::<CaptureWatch>().shutdown());
+}
+
+/// astro-plan-0rfuw through Close's archive: each archived record moves from
+/// the Captures location to the archive, an active Captures location
+/// discovery also watches, and the archive announces both. With no scan, a
+/// frame written later at an archived frame's path counts, and the archive
+/// counts only the frame written there, not the copies it holds.
+#[test]
+fn an_archive_announces_the_locations_its_records_leave_and_reach() {
+    let world = applied(ViewMode::Symlinks);
+    let bin = ScopedTrash::new(&world.temp.path().join("bin"));
+    let request = block_on(close_request(&world, &bin));
+    let archive = request.archive.as_ref().expect("an archive").destination;
+    let archive_root = fs::canonicalize(world.temp.path().join("Archive-T7")).unwrap();
+    let shell = Shell::new(&world.library, bin.dyn_trash());
+    shell.watch_captures(&world.library);
+    counts(&shell, world.captures.id, 0, "Captures before Close");
+    counts(&shell, archive, 0, "the archive before Close");
+
+    let report: CloseReport = from(shell.call("project_close", &json!({ "request": request })));
+    assert_eq!(report.lifecycle, ProjectLifecycle::Archived, "{report:#?}");
+    assert_eq!(bin.moved().len(), 4, "the four originals went to the OS Trash");
+    new_capture(&world.light(HA[0]));
+    counts(&shell, world.captures.id, 1, "a frame where an archived one was");
+    new_capture(&archive_root.join("tonight.fits"));
+    counts(&shell, archive, 1, "the archive's one new frame, none of its copies");
+    block_on(shell.app.state::<CaptureWatch>().shutdown());
 }

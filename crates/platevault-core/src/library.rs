@@ -58,9 +58,9 @@ pub struct Library {
     /// The id of each location whose registration, path or lifecycle changed
     /// through this library (register, reselect, remap, retire).
     location_changes: broadcast::Sender<Uuid>,
-    /// The id of each location holding a copy recorded Trashed through this
-    /// library ([`Library::record_trashed`]).
-    trashed: broadcast::Sender<Uuid>,
+    /// The id of each location whose recorded paths changed through this
+    /// library outside a scan ([`Library::subscribe_recorded_paths`]).
+    recorded_paths: broadcast::Sender<Uuid>,
     references: tokio::sync::RwLock<Vec<Arc<dyn AssetReferences>>>,
     pub(crate) planning: Mutex<crate::observing_plans::PlanningRuntime>,
     frame_review: FrameReview,
@@ -139,7 +139,7 @@ impl Library {
         let provider = provider.map(SimbadTargetResolver::simbad).transpose()?;
         let (progress, _) = broadcast::channel(128);
         let (location_changes, _) = broadcast::channel(64);
-        let (trashed, _) = broadcast::channel(64);
+        let (recorded_paths, _) = broadcast::channel(64);
         let planning =
             Mutex::new(crate::observing_plans::PlanningRuntime::new(Arc::clone(&catalog)));
         let projects: Arc<dyn AssetReferences> =
@@ -155,7 +155,7 @@ impl Library {
             saved_targets: Mutex::new(None),
             progress,
             location_changes,
-            trashed,
+            recorded_paths,
             planning,
             references: tokio::sync::RwLock::new(vec![projects, calibration]),
             frame_review,
@@ -201,17 +201,25 @@ impl Library {
         location
     }
 
-    /// The id of each location that holds a copy recorded Trashed from now on,
-    /// once per recording. A lagged receiver has missed some and re-reads
-    /// every location.
+    /// The id of each location whose recorded paths change outside a scan
+    /// from now on, once per change: frames recorded Trashed there, or a
+    /// record an archive moved out of or into it. A lagged receiver has missed
+    /// some and re-reads every location.
     #[must_use]
-    pub fn subscribe_trashed(&self) -> broadcast::Receiver<Uuid> {
-        self.trashed.subscribe()
+    pub fn subscribe_recorded_paths(&self) -> broadcast::Receiver<Uuid> {
+        self.recorded_paths.subscribe()
+    }
+
+    /// Announce that the paths the catalog records in `location` changed
+    /// outside a scan ([`Library::subscribe_recorded_paths`]); nobody
+    /// listening is not an error.
+    pub(crate) fn recorded_paths_changed(&self, location: Uuid) {
+        let _ = self.recorded_paths.send(location);
     }
 
     /// Record frames the storage custody moved to the OS Trash
-    /// ([`Catalog::record_trashed`]), then publish the location of each;
-    /// nobody listening is not an error.
+    /// ([`Catalog::record_trashed`]), then announce the location of each
+    /// ([`Library::recorded_paths_changed`]).
     ///
     /// # Errors
     /// As [`Catalog::record_trashed`].
@@ -224,7 +232,7 @@ impl Library {
         let locations: BTreeSet<Uuid> =
             trashed.iter().map(|trashed| trashed.asset.location_id).collect();
         for location in locations {
-            let _ = self.trashed.send(location);
+            self.recorded_paths_changed(location);
         }
         Ok(trashed)
     }

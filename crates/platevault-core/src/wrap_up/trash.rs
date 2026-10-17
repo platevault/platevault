@@ -151,7 +151,8 @@ impl Library {
     }
 
     /// Run or resume a journaled Trash step until it settles, record the
-    /// Trashed library copies and the step Finished.
+    /// Trashed library copies, which announces their locations to new-capture
+    /// discovery ([`Library::record_trashed`]), and the step Finished.
     pub(super) async fn drive_trash(
         &self,
         journal: WrapUpTrash,
@@ -178,7 +179,7 @@ impl Library {
             }
         }
         if !trashed.is_empty() {
-            catalog.record_trashed(storage, &trashed).await?;
+            self.record_trashed(storage, &trashed).await?;
         }
         catalog.mark_wrap_up_trash_recorded(storage, &recorded).await?;
         let record = catalog.finish_trash(&journal).await?;

@@ -82,6 +82,8 @@ The shell starts `CaptureWatch` after `OutputWatch`. It walks online Captures lo
 
 CaptureWatch handles online Captures roots while the app runs. Its shutdown stops its watchers within a grace period. If filesystem work blocks longer, it cancels the task. (`crates/platevault-core/src/new_captures.rs:39-44,104-112,320-344`; `apps/desktop/src-tauri/src/library_shell.rs:354-363`)
 
+While it runs, CaptureWatch reads a location's recorded paths again after a scan ends there and after each change of them outside a scan, so its count follows without a scan. The Trash step records frames Trashed through `Library::record_trashed`, and an archive announces the location each record left and the one it reached. (`crates/platevault-core/src/new_captures.rs:87-94`; `crates/platevault-core/src/library.rs:204-238`; `crates/platevault-core/src/wrap_up/trash.rs:181-183`; `crates/platevault-core/src/wrap_up/archive.rs:529-535`)
+
 On Windows, the shell starts optional `EjectNotices` after it manages CaptureWatch. The notices forward drive-removal events to CaptureWatch so it can release root handles. Startup continues if the notices cannot start. (`apps/desktop/src-tauri/src/library_shell.rs:346-353`; `apps/desktop/src-tauri/src/eject.rs:68-110`)
 
 The shell stops CaptureWatch before dropping EjectNotices. Pending removal requests can then return without delaying app exit. (`apps/desktop/src-tauri/src/library_shell.rs:354-363`; `apps/desktop/src-tauri/src/eject.rs:68-74`)
