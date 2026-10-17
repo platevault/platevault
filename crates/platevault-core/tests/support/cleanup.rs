@@ -10,6 +10,8 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
+use platevault_core::custody::trash::OsTrash;
+use platevault_core::*;
 
 /// A stand-in OS Trash: it moves the entry itself, never a link's target,
 /// into its bin, and below each `no_trash` root it has no Trash at all.
