@@ -43,6 +43,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use metadata_core::{MetadataExtractError, MetadataExtractor};
 use metadata_fits::FitsExtractor;
 use metadata_xisf::XisfExtractor;
+use persistence_library::SizeAndTime;
 
 use crate::{
     Availability, CaptureMetadata, FileIdentity, ImageFormat, LibraryError, Location, NativePath,
@@ -364,17 +365,41 @@ pub(crate) fn entry_at_with(
     }
 }
 
+/// The size and modification time of the frame at `relative` (a path below
+/// `root`, whose stamp is `stamp`), from the no-follow metadata the lookup of
+/// [`entry_at`] reads there: `None` unless that lookup finds a frame whose
+/// modification time can be read.
+pub(crate) fn frame_file(root: &Path, stamp: RootStamp, relative: &Path) -> Option<SizeAndTime> {
+    // Each step overwrites it; a lookup that finds a frame ends at its entry.
+    let mut last = None;
+    let entry = entry_at_with(root, stamp, relative, |path| {
+        let meta = fs::symlink_metadata(path)?;
+        last = size_and_time(&meta);
+        Ok(meta)
+    });
+    last.filter(|_| entry == Entry::Frame)
+}
+
 /// What [`frame_paths`] found below a location root, as relative paths.
 #[derive(Debug, Default)]
 pub(crate) struct Listing {
     /// Every supported frame.
-    pub(crate) frames: Vec<NativePath>,
+    pub(crate) frames: Vec<ListedFrame>,
     /// Every folder entered below the root, listed or not.
     pub(crate) folders: Vec<PathBuf>,
     /// The folders below the root that could not be listed, or only in part
     /// (an entry that could not be read or `stat`ed): what they hold is
     /// missing from `frames`, or may be.
     pub(crate) unlisted: Vec<PathBuf>,
+}
+
+/// A supported frame [`frame_paths`] found: its relative path, and its size
+/// and modification time from the no-follow metadata the walker read there
+/// (`None` when the time could not be read).
+#[derive(Debug)]
+pub(crate) struct ListedFrame {
+    pub(crate) path: NativePath,
+    pub(crate) file: Option<SizeAndTime>,
 }
 
 /// Every supported frame below `root`, listed by the walker's rules (no
@@ -443,7 +468,7 @@ pub(crate) fn frame_paths(
 /// The supported frames and the real folders one folder holds, as relative
 /// paths.
 struct FolderListing {
-    frames: Vec<NativePath>,
+    frames: Vec<ListedFrame>,
     folders: Vec<Rc<Folder>>,
     /// Whether every entry was read and `stat`ed.
     complete: bool,
@@ -485,7 +510,8 @@ fn list_folder(folder: &Rc<Folder>, root: &Stamp) -> std::io::Result<Option<Fold
                 excluded: Cell::new(false),
             })),
             Kind::File(ImageFormat::Fits | ImageFormat::Xisf) => {
-                listing.frames.push(NativePath::from_path(&relative));
+                let file = size_and_time(&meta);
+                listing.frames.push(ListedFrame { path: NativePath::from_path(&relative), file });
             }
             Kind::Link | Kind::ForeignVolume | Kind::File(ImageFormat::Unsupported) => {}
         }
@@ -1172,6 +1198,13 @@ fn nanos_since_epoch(time: SystemTime) -> Option<i128> {
         Ok(after) => i128::try_from(after.as_nanos()).ok(),
         Err(before) => i128::try_from(before.duration().as_nanos()).ok().map(|nanos| -nanos),
     }
+}
+
+/// A file's size and modification time, as a scan records them in its
+/// fingerprint; `None` when the time cannot be read.
+fn size_and_time(meta: &Metadata) -> Option<SizeAndTime> {
+    let modified_ns = meta.modified().ok().and_then(nanos_since_epoch)?;
+    Some(SizeAndTime { size_bytes: meta.len(), modified_ns })
 }
 
 /// [`list_folder`] refuses a folder swapped for a link once it was queued, so

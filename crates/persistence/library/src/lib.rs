@@ -241,6 +241,26 @@ pub struct LocationReferences {
     pub consulted: Vec<ReferenceKind>,
 }
 
+/// A path the catalog records in a location, as new-capture discovery reads
+/// it ([`Catalog::location_recorded_paths`]).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RecordedPath {
+    pub path: NativePath,
+    /// For a Missing or Trashed record, whose file left the path, the size
+    /// and modification time that file had when last observed: a file at the
+    /// path is that file put back only while it still has them. `None` for
+    /// every other record, whose file the catalog holds there.
+    pub vacated: Option<SizeAndTime>,
+}
+
+/// A file's size and modification time.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SizeAndTime {
+    pub size_bytes: u64,
+    /// Signed nanoseconds since the Unix epoch.
+    pub modified_ns: i128,
+}
+
 /// A Sessions filter (LIB-FR-17, LIB-FR-18).
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -1131,19 +1151,41 @@ impl Catalog {
     }
 
     /// The relative path of every asset the catalog records in `location_id`,
-    /// whatever its availability (Missing, Trashed and Retired included): the
-    /// files it already holds there, without reading their records.
+    /// without reading their records. A Missing or Trashed record's path
+    /// carries the size and modification time its file had when last
+    /// observed ([`RecordedPath::vacated`]); every other record's file,
+    /// Retired ones included, the catalog holds at its path.
     ///
     /// # Errors
     /// `PersistenceFailure` when the catalog cannot be read.
-    pub async fn location_asset_paths(&self, location_id: Uuid) -> Result<Vec<NativePath>> {
+    pub async fn location_recorded_paths(&self, location_id: Uuid) -> Result<Vec<RecordedPath>> {
         let mut conn = self.reader().await?;
-        let keys: Vec<Vec<u8>> =
-            sqlx::query_scalar("SELECT path_key FROM assets WHERE location_id = ?1")
-                .bind(location_id.to_string())
-                .fetch_all(&mut *conn)
-                .await?;
-        keys.iter().map(|key| path_from_key(key)).collect()
+        let rows = sqlx::query(
+            "SELECT path_key, availability IN ('missing', 'trashed') AS vacated, size_bytes, \
+             modified_ns FROM assets WHERE location_id = ?1",
+        )
+        .bind(location_id.to_string())
+        .fetch_all(&mut *conn)
+        .await?;
+        rows.iter()
+            .map(|row| {
+                let path = path_from_key(&row.try_get::<Vec<u8>, _>("path_key")?)?;
+                let vacated = if row.try_get::<i64, _>("vacated")? == 1 {
+                    let size: i64 = row.try_get("size_bytes")?;
+                    let modified: String = row.try_get("modified_ns")?;
+                    let corrupt = |what: &str| {
+                        LibraryError::PersistenceFailure(format!("corrupt asset {what}"))
+                    };
+                    Some(SizeAndTime {
+                        size_bytes: u64::try_from(size).map_err(|_| corrupt("size"))?,
+                        modified_ns: modified.parse().map_err(|_| corrupt("modification time"))?,
+                    })
+                } else {
+                    None
+                };
+                Ok(RecordedPath { path, vacated })
+            })
+            .collect()
     }
 
     /// Sessions in list order (see [`SessionQuery`]): without a filter each
