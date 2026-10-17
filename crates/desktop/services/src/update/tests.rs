@@ -22,8 +22,8 @@ use super::install::{InstallMode, Installed, Installer};
 use super::manifest::Release;
 use super::signature::{self, Payload, Staged, TrustedKey};
 use super::{
-    manifest, Package, Parts, Platform, QuitDecision, UpdateError, UpdateFailure, UpdateHost,
-    UpdatePhase, UpdatePort, Updater, UpdaterConfig,
+    manifest, LaunchedApp, Package, Parts, Platform, QuitDecision, UpdateError, UpdateFailure,
+    UpdateHost, UpdatePhase, UpdatePort, Updater, UpdaterConfig,
 };
 
 const RUNNING: &str = "0.6.0";
@@ -1079,6 +1079,7 @@ fn every_error_reaches_the_ui_as_a_code() {
         (UpdateError::Manifest(String::new()), UpdateFailure::Manifest),
         (UpdateError::Signature(String::new()), UpdateFailure::Signature),
         (UpdateError::Identity(String::new()), UpdateFailure::Identity),
+        (UpdateError::AppReplaced(String::new()), UpdateFailure::AppReplaced),
         (UpdateError::Permission(String::new()), UpdateFailure::Permission),
         (UpdateError::Install(String::new()), UpdateFailure::Install),
         (io(std::io::ErrorKind::PermissionDenied), UpdateFailure::Permission),
@@ -1141,6 +1142,7 @@ fn config(endpoint: &str, public_key: String) -> UpdaterConfig {
         endpoints: vec![endpoint.to_owned()],
         public_key,
         platform: Platform::current(None),
+        launched: LaunchedApp::record(),
     }
 }
 
@@ -1184,19 +1186,21 @@ mod bundle {
         manifest_json, FakeSource, HostCall, Rig, Signer, UpdatePhase, UpdatePort as _, RELEASE,
         WAIT,
     };
-    use crate::update::install::{BundleInstaller, CodeSigning, Identity};
-    use crate::update::{Package, UpdateError};
+    use crate::update::install::{BundleInstaller, CodeSigning, Identity, LaunchedBundle};
+    use crate::update::{Package, UpdateError, UpdateFailure};
 
     const REQUIREMENT: &str =
         r#"identifier "dev.astro-plan.astro-library-manager" and certificate leaf = H"abc""#;
 
     /// Code signing that reports `installed` for the installed app and accepts
-    /// `accepted` for the update, recording the update bundle it checked.
+    /// `accepted` for the update, recording the update bundle it checked and
+    /// running what [`Self::during_check`] was given as it checks.
     struct FakeSigning {
         installed: Identity,
         accepted: &'static str,
         identity_calls: AtomicUsize,
         checked: Mutex<Vec<String>>,
+        during_check: Mutex<Option<Box<dyn FnOnce() + Send>>>,
     }
 
     impl FakeSigning {
@@ -1206,12 +1210,18 @@ mod bundle {
                 accepted,
                 identity_calls: AtomicUsize::new(0),
                 checked: Mutex::default(),
+                during_check: Mutex::default(),
             })
         }
 
         fn consulted(&self) -> bool {
             self.identity_calls.load(Ordering::SeqCst) > 0
                 || !self.checked.lock().expect("checked").is_empty()
+        }
+
+        /// Run `run` while the next update's signature is checked.
+        fn during_check(&self, run: impl FnOnce() + Send + 'static) {
+            *self.during_check.lock().expect("hook") = Some(Box::new(run));
         }
     }
 
@@ -1223,6 +1233,10 @@ mod bundle {
 
         fn satisfies(&self, bundle: &Path, requirement: &str) -> Result<bool, UpdateError> {
             self.checked.lock().expect("checked").push(marker(bundle));
+            let during_check = self.during_check.lock().expect("hook").take();
+            if let Some(run) = during_check {
+                run();
+            }
             Ok(requirement == self.accepted)
         }
     }
@@ -1258,6 +1272,17 @@ mod bundle {
         signing: &Arc<FakeSigning>,
         bad_signature: bool,
     ) -> (Rig, PathBuf, tempfile::TempDir) {
+        install_after_launch(signing, bad_signature, |_| {}).await
+    }
+
+    /// [`install`], with `after_launch` run on the installed app's path
+    /// between the launch, when the installer reads the app's launch record,
+    /// and the install.
+    async fn install_after_launch(
+        signing: &Arc<FakeSigning>,
+        bad_signature: bool,
+        after_launch: impl FnOnce(&Path),
+    ) -> (Rig, PathBuf, tempfile::TempDir) {
         let dir = tempfile::tempdir().expect("tempdir");
         let app = installed_app(dir.path());
         let signer = Signer::new();
@@ -1271,14 +1296,20 @@ mod bundle {
             )),
             &archive,
         );
-        let bundle_installer =
-            BundleInstaller { installed: app.clone(), signing: Arc::clone(signing) };
+        let launched = LaunchedBundle::at(app.clone()).expect("launch");
+        let bundle_installer = BundleInstaller { launched, signing: Arc::clone(signing) };
         let rig =
             Rig::build(&signer, &source, Box::new(bundle_installer), Some(Package::App), WAIT);
         rig.updater.check().await;
         assert_eq!(rig.phase(), UpdatePhase::Available);
+        after_launch(&app);
         rig.updater.install_now().await;
         (rig, app, dir)
+    }
+
+    /// Where the tests that move the launched app away put it.
+    fn launched_app_moved(installed: &Path) -> PathBuf {
+        installed.with_file_name("Launched.app")
     }
 
     #[tokio::test]
@@ -1338,6 +1369,102 @@ mod bundle {
         }
     }
 
+    /// Move the launched app at `app` away and put another bundle, whose
+    /// marker reads `foreign`, in its place, as another process of the user's
+    /// could.
+    fn swap_in_another_bundle(app: &Path) {
+        std::fs::rename(app, launched_app_moved(app)).expect("move the launched app");
+        std::fs::create_dir_all(app.join("Contents")).expect("swapped-in bundle");
+        std::fs::write(app.join("Contents/marker"), "foreign").expect("marker");
+    }
+
+    /// Another process of the user's swaps a bundle in at the app's path
+    /// after launch and before the install (astro-plan-uyguq). The pin the
+    /// install takes then would name that bundle, read its identity and
+    /// replace it; the launch record refuses it before any identity is read,
+    /// and both bundles stay as they were.
+    #[tokio::test]
+    async fn an_app_swapped_after_launch_is_refused_whatever_its_identity() {
+        for identity in
+            [Identity::Designated(REQUIREMENT.to_owned()), Identity::AdHoc, Identity::Unsigned]
+        {
+            let signing = FakeSigning::new(identity.clone(), REQUIREMENT);
+            let (rig, installed, _dir) =
+                install_after_launch(&signing, false, swap_in_another_bundle).await;
+
+            assert_eq!(marker(&installed), "foreign", "{identity:?}: the swapped-in bundle stays");
+            assert_eq!(marker(&launched_app_moved(&installed)), "old", "{identity:?}");
+            let status = rig.updater.current_status();
+            assert_eq!(status.phase, UpdatePhase::InstallFailed, "{identity:?}");
+            assert_eq!(status.error, Some(UpdateFailure::AppReplaced), "{identity:?}");
+            assert!(
+                rig.updater.error_text().expect("detail").contains("launched from"),
+                "{identity:?}"
+            );
+            assert!(!signing.consulted(), "{identity:?}: refused before any identity is read");
+            assert!(rig.host_calls().is_empty(), "{identity:?}: no relaunch");
+        }
+    }
+
+    /// The same swap once the launch record was checked: while the update's
+    /// signature is checked, which can take seconds, another process of the
+    /// user's swaps a bundle in. The install refuses it rather than replacing
+    /// and deleting it, and both bundles stay as they were.
+    #[tokio::test]
+    async fn an_app_swapped_while_the_update_is_checked_is_refused() {
+        let signing = FakeSigning::new(Identity::Designated(REQUIREMENT.to_owned()), REQUIREMENT);
+        let hook = Arc::clone(&signing);
+        let (rig, installed, _dir) = install_after_launch(&signing, false, move |app| {
+            let app = app.to_path_buf();
+            hook.during_check(move || swap_in_another_bundle(&app));
+        })
+        .await;
+
+        assert_eq!(*signing.checked.lock().expect("checked"), ["new"], "the update was checked");
+        assert_eq!(marker(&installed), "foreign", "the swapped-in bundle stays");
+        assert_eq!(marker(&launched_app_moved(&installed)), "old");
+        let status = rig.updater.current_status();
+        assert_eq!(status.phase, UpdatePhase::InstallFailed);
+        assert_eq!(status.error, Some(UpdateFailure::AppReplaced));
+        assert!(rig.host_calls().is_empty(), "no relaunch");
+    }
+
+    /// The launched app moved away after launch, with nothing in its place:
+    /// the user is asked to restart, not told that files could not be read.
+    #[tokio::test]
+    async fn an_app_moved_after_launch_is_refused() {
+        let signing = FakeSigning::new(Identity::AdHoc, "never asked");
+        let (rig, installed, _dir) = install_after_launch(&signing, false, |app| {
+            std::fs::rename(app, launched_app_moved(app)).expect("move the launched app");
+        })
+        .await;
+
+        assert!(std::fs::symlink_metadata(&installed).is_err(), "nothing is installed there");
+        assert_eq!(marker(&launched_app_moved(&installed)), "old");
+        assert_eq!(rig.updater.current_status().error, Some(UpdateFailure::AppReplaced));
+        assert!(!signing.consulted(), "refused before any identity is read");
+        assert!(rig.host_calls().is_empty(), "no relaunch");
+    }
+
+    /// The launched app's folder replaced by a file after launch reads as a
+    /// replaced app too, not as files that could not be read.
+    #[tokio::test]
+    async fn an_app_whose_folder_became_a_file_after_launch_is_refused() {
+        let signing = FakeSigning::new(Identity::AdHoc, "never asked");
+        let moved_folder = |app: &Path| app.parent().expect("folder").with_file_name("Moved");
+        let (rig, installed, _dir) = install_after_launch(&signing, false, |app| {
+            let folder = app.parent().expect("folder");
+            std::fs::rename(folder, moved_folder(app)).expect("move the folder");
+            std::fs::write(folder, "a file").expect("a file in its place");
+        })
+        .await;
+
+        assert_eq!(marker(&moved_folder(&installed).join("PlateVault.app")), "old");
+        assert_eq!(rig.updater.current_status().error, Some(UpdateFailure::AppReplaced));
+        assert!(!signing.consulted(), "refused before any identity is read");
+        assert!(rig.host_calls().is_empty(), "no relaunch");
+    }
+
     #[tokio::test]
     async fn an_archive_without_an_app_bundle_is_refused() {
         let dir = tempfile::tempdir().expect("tempdir");
@@ -1353,7 +1480,7 @@ mod bundle {
 
         let signing = FakeSigning::new(Identity::AdHoc, "never asked");
         let error = crate::update::install::install_bundle(
-            &installed,
+            &LaunchedBundle::at(installed.clone()).expect("launch"),
             &mut staged.reverify().expect("verified"),
             &signing,
             "",

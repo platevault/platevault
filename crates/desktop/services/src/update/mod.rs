@@ -14,10 +14,12 @@
 //! installed. One client serves every OS (decision astro-plan-eub2i):
 //!
 //! - **Windows**: the NSIS or MSI installer runs, and the app exits for it.
-//! - **macOS**: the new `.app` replaces the installed one, but only when it
-//!   satisfies the installed app's designated requirement. That check is
-//!   skipped while the installed copy is ad-hoc signed, which has no stable
-//!   identity to pin, so the move to the self-signed identity can happen.
+//! - **macOS**: the new `.app` replaces the installed one, but only while the
+//!   installed one is still the app this process was launched from
+//!   ([`LaunchedApp`]), and only when the new one satisfies its designated
+//!   requirement. That check is skipped while the installed copy is ad-hoc
+//!   signed, which has no stable identity to pin, so the move to the
+//!   self-signed identity can happen.
 //! - **Linux**: an `AppImage` replaces itself; a deb or rpm is installed with
 //!   `pkexec`, so the polkit prompt appears only after the user chose Install.
 //!
@@ -59,6 +61,7 @@ use semver::Version;
 use tokio::sync::watch;
 
 use self::http::{Http, Source};
+pub use self::install::LaunchedApp;
 use self::install::{InstallMode, Installed, Installer, OsInstaller};
 use self::manifest::Release;
 use self::signature::{Staged, TrustedKey};
@@ -167,6 +170,8 @@ pub struct UpdaterConfig {
     /// minisign public key file, as `tauri.conf.json` stores it.
     pub public_key: String,
     pub platform: Platform,
+    /// Where this process was launched from, read at startup.
+    pub launched: LaunchedApp,
 }
 
 /// The host side of an install: the updater asks, the host owns the process.
@@ -225,6 +230,9 @@ pub enum UpdateError {
     /// The new macOS bundle does not satisfy the installed app's designated
     /// requirement.
     Identity(String),
+    /// The macOS app at the path this process was launched from is no longer
+    /// the one launched: it was moved or replaced since.
+    AppReplaced(String),
     /// The OS refused an install step its permission, or the user did not
     /// give it.
     Permission(String),
@@ -250,6 +258,7 @@ impl UpdateError {
             Self::Manifest(_) => UpdateFailure::Manifest,
             Self::Signature(_) => UpdateFailure::Signature,
             Self::Identity(_) => UpdateFailure::Identity,
+            Self::AppReplaced(_) => UpdateFailure::AppReplaced,
             Self::Permission(_) => UpdateFailure::Permission,
             Self::Install(_) => UpdateFailure::Install,
             Self::PreviousAppNotRestored { kept, .. } => {
@@ -271,6 +280,7 @@ impl fmt::Display for UpdateError {
             | Self::Manifest(message)
             | Self::Signature(message)
             | Self::Identity(message)
+            | Self::AppReplaced(message)
             | Self::Permission(message)
             | Self::Install(message)
             | Self::Unsupported(message) => f.write_str(message),
@@ -450,7 +460,7 @@ impl Updater {
             current_version: config.current_version,
             endpoints,
             key: TrustedKey::from_config(&config.public_key)?,
-            installer: Box::new(OsInstaller::new(config.platform.package)),
+            installer: Box::new(OsInstaller::new(config.platform.package, config.launched)),
             platform: config.platform,
             source: Box::new(source),
             host: Box::new(host),

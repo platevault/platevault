@@ -382,12 +382,14 @@ fn apply_dev_url_override(context: &mut tauri::Context) {
 /// finished — so a long migration is visible instead of being a windowless
 /// pause, and the UI still cannot reach an unmigrated database.
 ///
-/// `services` lives until the exit hook shuts it down.
+/// `services` lives until the exit hook shuts it down. `launched` is where
+/// this process was launched from, which the updater replaces or nothing.
 pub fn run_app(
     app: tauri::App,
     db_url: String,
     data_dir: std::path::PathBuf,
     services: desktop_services::Services,
+    launched: desktop_services::update::LaunchedApp,
 ) {
     // Developer diagnostics call buffer (spec 021).
     // Always managed so the type is available; only populated when dev-tools
@@ -417,7 +419,7 @@ pub fn run_app(
     // astro-plan-5wcib: the services-crate updater. A staged "Install on quit"
     // holds the first quit while it installs, then exits. astro-plan-c72oo:
     // its offer goes out as a system notification under the app's identity.
-    updater::register(app.handle(), services.notifier().clone(), services.identity());
+    updater::register(app.handle(), services.notifier().clone(), services.identity(), launched);
 
     app.run(move |handle, event| {
         updater::on_run_event(handle, &event);

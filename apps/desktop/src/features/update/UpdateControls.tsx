@@ -35,6 +35,8 @@ export function updateFailureMessage(failure: UpdateFailure | null): string {
       return m.update_error_signature();
     case 'identity':
       return m.update_error_identity();
+    case 'app-replaced':
+      return m.update_error_app_replaced();
     case 'permission':
       return m.update_error_permission();
     case 'install':

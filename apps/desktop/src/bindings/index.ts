@@ -10756,6 +10756,11 @@ export type UpdateFailure =
 { code: "signature" } | 
 /**  The new macOS app is not signed by the identity of the installed one. */
 { code: "identity" } | 
+/**
+ *  The macOS app was moved or replaced after it was launched, so nothing
+ *  was installed; a restart launches what is there now.
+ */
+{ code: "app-replaced" } | 
 /**  Permission to install was refused or not given. */
 { code: "permission" } | 
 /**  The install step failed. */
