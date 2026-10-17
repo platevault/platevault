@@ -71,13 +71,9 @@ const SCHEMA: &str = schema_modules![
     "measurements.sql",
     "frame_thumbnails.sql",
     "storage.sql",
-    "views.sql",
-    "calibration_decisions.sql",
     "import.sql",
     "targets_list.sql",
-    "view_groups.sql",
-    "prepare.sql",
-    "results.sql",
+    "profiles.sql",
     "workflow_settings.sql",
     "project_inputs.sql",
     "project_lifecycle.sql",
@@ -154,25 +150,12 @@ mod import;
 mod session_filters;
 mod storage;
 mod storage_overview;
-pub use storage_overview::{DuplicateCopy, VerifiedTransfer};
+pub use storage_overview::{ArchiveOwner, DuplicateCopy, VerifiedTransfer};
 mod targets_list;
-mod views;
-pub use views::{CandidateBasis, CandidateSession, ChoiceBasis, MembershipBasis};
-mod view_groups;
-pub use view_groups::{GroupCandidates, ViewGroupBasis};
-mod prepare;
-pub use prepare::{
-    EntryUpdate, GroupPanel, GroupPreparationBasis, GroupPreparationRecord, NewGroupPreparation,
-    NewPanelPreparation, NewPreparation, NewPreparedEntry, PanelPreparationRecord,
-    PreparationRecord, RecordedFolder, RecordedFolders, ResumedGroupPreparation,
-};
+// Handoff profiles: the application a Project's View opens in.
 mod home;
-pub use home::{RunningOperations, RunningStorage};
-mod results;
-pub use results::{
-    DetectedMaster, NewAttachment, Observation, ResultsBasis, ResultsScan, ScannedResult,
-    VerifiedAcceptance, VerifiedProduct,
-};
+mod profiles;
+pub use home::{RunningOperations, RunningProject};
 // A Project's `Output/`, Copy to Output and the Processing master offer's
 // hand-off (spec 070, F4).
 mod project_output;

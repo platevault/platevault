@@ -203,6 +203,10 @@ CREATE TABLE IF NOT EXISTS apply_operations (
         'old_moved'
     ))
 ) STRICT;
+-- A Project's latest Apply (Home's Next action, PRJ-FR-18 rule 2): the
+-- highest generation, since every Apply builds a new manifest.
+CREATE INDEX IF NOT EXISTS apply_operations_project
+    ON apply_operations (project_id, generation);
 
 CREATE TRIGGER IF NOT EXISTS apply_operations_of_an_apply
 BEFORE INSERT ON apply_operations

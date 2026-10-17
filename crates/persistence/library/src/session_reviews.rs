@@ -8,16 +8,13 @@
 //! derive readiness from that row plus every live logical capture's applicable
 //! quality; a later regroup therefore makes an older row stale without a migration.
 
-use crate::ReviewCapture;
-use platevault_model::{
-    ApplicableQuality, Availability, LibraryError, ProjectDecision, ReviewMember, ReviewPanel,
-    Revision,
-};
+use platevault_model::{ApplicableQuality, LibraryError, Revision};
 use sqlx::sqlite::SqliteConnection;
 use sqlx::Row;
 use sqlx::{Acquire, Connection};
 use uuid::Uuid;
 
+use super::review_lists::{absolute, reviewed_copy, ReviewCapture, Roots};
 use super::{
     db_revision, now, parse_uuid, revision, scoped_members, CaptureView, Catalog, Members, Result,
 };
@@ -47,50 +44,21 @@ impl Catalog {
         let assets = scoped_members(&mut snapshot, &mut row, Members::Live).await?;
         let view = CaptureView::read(&mut snapshot, &[session_id], &assets).await?;
         let mut captures = Vec::new();
-        let mut roots = std::collections::HashMap::new();
+        let mut roots = Roots::new();
         for (key, present) in view.group(&assets) {
-            let copies = view.copies_of(&key);
-            let asset = copies
-                .iter()
-                .copied()
-                .min_by_key(|copy| {
-                    let decided = matches!(
-                        copy.applicable_quality(),
-                        ApplicableQuality::Usable
-                            | ApplicableQuality::Unusable
-                            | ApplicableQuality::VerificationPending { .. }
-                    );
-                    (!decided, copy.availability != Availability::Available, copy.id)
-                })
-                .ok_or_else(|| {
-                    LibraryError::PersistenceFailure(format!("live capture {key} has no copies"))
-                })?;
-            let location_path = match roots.entry(asset.location_id) {
-                std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
-                std::collections::hash_map::Entry::Vacant(entry) => entry.insert(
-                    super::load_location(&mut snapshot, asset.location_id)
-                        .await?
-                        .path
-                        .to_path_buf()?,
-                ),
-            };
-            let path = platevault_model::NativePath::from_path(
-                &location_path.join(asset.relative_path.relative_path()?),
-            );
+            let asset = reviewed_copy(&view.copies_of(&key)).ok_or_else(|| {
+                LibraryError::PersistenceFailure(format!("live capture {key} has no copies"))
+            })?;
             captures.push(ReviewCapture {
-                asset: asset.clone(),
-                path,
+                path: absolute(&mut snapshot, &mut roots, asset).await?,
                 session_id,
                 quality: view.quality(&key),
-                project: ProjectDecision::default(),
-                project_rejected: false,
                 other_copies: present
                     .iter()
                     .map(|copy| copy.id)
                     .filter(|id| *id != asset.id)
                     .collect(),
-                member: Option::<ReviewMember>::None,
-                panel: Option::<ReviewPanel>::None,
+                asset: asset.clone(),
             });
         }
         snapshot.rollback().await?;

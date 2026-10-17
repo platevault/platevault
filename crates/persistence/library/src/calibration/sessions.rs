@@ -38,7 +38,7 @@ use time::Date;
 use uuid::Uuid;
 
 use super::inventory::{self, Listed};
-use super::{light_basis, load_master, night_of};
+use super::{light_capture, load_master, night_of};
 use crate::admission::read_calibration;
 use crate::rigs::cameras::{
     link_session_camera_by_model, load_cameras, load_session_camera, load_session_camera_link,
@@ -758,10 +758,7 @@ async fn session_light(
 ) -> Result<Option<SessionLight>> {
     let members = current_member_assets(conn, session_id).await?;
     let ids: BTreeSet<Uuid> = members.iter().map(|asset| asset.id).collect();
-    let Some(basis) = light_basis(conn, session_id, &ids).await? else { return Ok(None) };
-    if !basis.light_type_known {
-        return Ok(None);
-    }
+    let Some(capture) = light_capture(conn, session_id, &ids).await? else { return Ok(None) };
     let row = load_session_row(conn, session_id).await?;
     let rig = match super::confirmed_equipment(conn, session_id).await? {
         Some(rig_id) => Some(LightRig {
@@ -788,7 +785,7 @@ async fn session_light(
         .or_else(|| members.iter().find_map(|asset| asset.effective.mechanical_rotation_deg));
     Ok(Some(SessionLight {
         session_id,
-        capture: basis.evidence.capture,
+        capture,
         night: key_night(&row.session.key),
         camera,
         rig,

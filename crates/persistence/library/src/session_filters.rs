@@ -78,12 +78,7 @@ impl Catalog {
         Ok(ProjectInput {
             name: target.candidate.designation,
             notes: None,
-            subjects: vec![SubjectInput {
-                target_id: basis.target_id,
-                name: None,
-                mosaic: false,
-                panels: Vec::new(),
-            }],
+            subjects: vec![SubjectInput { target_id: basis.target_id, name: None }],
             rig_ids: basis.rig_id.into_iter().collect(),
             goals: Vec::new(),
         })
@@ -111,7 +106,8 @@ impl Catalog {
     /// Add to Project: add the session's confirmed Target as the Project's last
     /// subject unless it is one, and its confirmed rig as the last rig when the
     /// Project lacks it, in one Project revision. A session already covered
-    /// writes nothing. Writes only Project rows; no run membership changes.
+    /// writes nothing. Writes only the subject and rig rows: the session
+    /// joins no group (a membership add does that through admission).
     ///
     /// # Errors
     /// `Conflict` for a stale Project revision or a session whose grouping or
@@ -320,8 +316,8 @@ async fn append(conn: &mut SqliteConnection, addition: &ProjectAddition) -> Resu
     let project = addition.project_id.to_string();
     if addition.adds_subject {
         sqlx::query(
-            "INSERT INTO project_subjects (id, project_id, target_id, mosaic, name, position) \
-             VALUES (?1, ?2, ?3, 0, NULL, (SELECT coalesce(max(position) + 1, 0) \
+            "INSERT INTO project_subjects (id, project_id, target_id, name, position) \
+             VALUES (?1, ?2, ?3, NULL, (SELECT coalesce(max(position) + 1, 0) \
              FROM project_subjects WHERE project_id = ?2))",
         )
         .bind(Uuid::new_v4().to_string())

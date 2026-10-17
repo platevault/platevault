@@ -12,7 +12,7 @@
 use platevault_model::{
     LibraryError, ProjectLifecycle, ProjectOperation, ProjectOperationKind, ProjectOperationState,
 };
-use sqlx::sqlite::SqliteConnection;
+use sqlx::sqlite::{SqliteConnection, SqliteRow};
 use sqlx::Row;
 use uuid::Uuid;
 
@@ -41,23 +41,29 @@ pub async fn active_operation(
     project_id: Uuid,
 ) -> Result<Option<ProjectOperation>> {
     let row = sqlx::query(
-        "SELECT id, kind, state, reserved_at, settled_at FROM project_operations \
+        "SELECT id, project_id, kind, state, reserved_at, settled_at FROM project_operations \
          WHERE project_id = ?1 AND state = 'active'",
     )
     .bind(project_id.to_string())
     .fetch_optional(&mut *conn)
     .await?;
-    row.map(|row| {
-        Ok(ProjectOperation {
-            id: parse_uuid(&row.try_get::<String, _>("id")?)?,
-            project_id,
-            kind: from_text(&row.try_get::<String, _>("kind")?)?,
-            state: from_text(&row.try_get::<String, _>("state")?)?,
-            reserved_at: row.try_get("reserved_at")?,
-            settled_at: row.try_get("settled_at")?,
-        })
+    row.as_ref().map(operation_row).transpose()
+}
+
+/// A `project_operations` row with its `id`, `project_id`, `kind`, `state`,
+/// `reserved_at` and `settled_at` columns.
+///
+/// # Errors
+/// `PersistenceFailure` for a corrupt record.
+pub fn operation_row(row: &SqliteRow) -> Result<ProjectOperation> {
+    Ok(ProjectOperation {
+        id: parse_uuid(&row.try_get::<String, _>("id")?)?,
+        project_id: parse_uuid(&row.try_get::<String, _>("project_id")?)?,
+        kind: from_text(&row.try_get::<String, _>("kind")?)?,
+        state: from_text(&row.try_get::<String, _>("state")?)?,
+        reserved_at: row.try_get("reserved_at")?,
+        settled_at: row.try_get("settled_at")?,
     })
-    .transpose()
 }
 
 /// Reserve `project_id` for one `kind` operation inside the caller's write

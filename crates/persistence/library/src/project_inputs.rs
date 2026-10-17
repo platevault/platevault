@@ -1136,10 +1136,7 @@ impl FrameChanges {
     }
 }
 
-pub async fn pending_changes(
-    conn: &mut SqliteConnection,
-    id: Uuid,
-) -> Result<Vec<PendingChange>> {
+pub async fn pending_changes(conn: &mut SqliteConnection, id: Uuid) -> Result<Vec<PendingChange>> {
     let desired = read_desired(conn, id).await?;
     if !desired.lifecycle.is_open() {
         return Ok(Vec::new());

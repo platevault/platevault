@@ -1015,9 +1015,8 @@ impl Catalog {
                     .bind(asset.id.to_string())
                     .fetch_one(&mut *conn)
                     .await?;
-            let session_id = parse_uuid(
-                &session.ok_or_else(|| corrupt("archive frame without a session"))?,
-            )?;
+            let session_id =
+                parse_uuid(&session.ok_or_else(|| corrupt("archive frame without a session"))?)?;
             let target: Option<String> = sqlx::query_scalar(
                 "SELECT t.designation FROM associations a JOIN targets t ON t.id = a.target_id \
                  WHERE a.session_id = ?1 AND a.kind = 'target' AND a.state = 'confirmed'",

@@ -336,6 +336,31 @@ impl Catalog {
         read_journal(&mut conn, operation_id).await
     }
 
+    /// The Project's latest Apply journal, settled or not: the one with the
+    /// highest manifest generation, since every Apply builds a new one. `None`
+    /// when the Project was never applied. Home's Next action reads it for
+    /// "Apply didn't finish" (PRJ-FR-18 rule 2).
+    ///
+    /// # Errors
+    /// `PersistenceFailure` for a corrupt record.
+    pub async fn latest_apply_journal(&self, project_id: Uuid) -> Result<Option<ApplyJournal>> {
+        let mut conn = self.reader().await?;
+        let mut snapshot = conn.begin().await?;
+        let latest: Option<String> = sqlx::query_scalar(
+            "SELECT operation_id FROM apply_operations WHERE project_id = ?1 \
+             ORDER BY generation DESC LIMIT 1",
+        )
+        .bind(project_id.to_string())
+        .fetch_optional(&mut *snapshot)
+        .await?;
+        let journal = match latest {
+            Some(id) => Some(read_journal(&mut snapshot, parse_uuid(&id)?).await?),
+            None => None,
+        };
+        snapshot.rollback().await?;
+        Ok(journal)
+    }
+
     /// One manifest with its entries.
     ///
     /// # Errors
@@ -581,10 +606,7 @@ async fn failed_building(
         .and_then(|expected| expected.building))
 }
 
-pub async fn read_inputs(
-    conn: &mut SqliteConnection,
-    project_id: Uuid,
-) -> Result<ApplyInputs> {
+pub async fn read_inputs(conn: &mut SqliteConnection, project_id: Uuid) -> Result<ApplyInputs> {
     let project = read_project(conn, project_id).await?;
     let mut relative = Relative::new();
     let held = held_basis(conn, project_id, &mut relative).await?;

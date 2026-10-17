@@ -237,26 +237,6 @@ pub async fn insert_operation(
     Ok(id)
 }
 
-/// Delete a reviewed operation that never started, inside the caller's write
-/// transaction: nothing on disk was written or moved for it, so a review the
-/// user replaced leaves no unsettled work behind.
-///
-/// # Errors
-/// `InvalidInput` once the operation has started; `NotFound` for an unknown
-/// operation.
-pub async fn withdraw_reviewed_operation(conn: &mut SqliteConnection, id: Uuid) -> Result<()> {
-    if operation_state(conn, id).await? != StorageOperationState::Reviewed {
-        return Err(invalid("only a reviewed storage operation that never started is withdrawn"));
-    }
-    for statement in [
-        "DELETE FROM storage_items WHERE op_id = ?1",
-        "DELETE FROM storage_operations WHERE id = ?1",
-    ] {
-        sqlx::query(statement).bind(id.to_string()).execute(&mut *conn).await?;
-    }
-    Ok(())
-}
-
 fn invalid(message: &str) -> LibraryError {
     LibraryError::InvalidInput(message.into())
 }

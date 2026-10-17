@@ -45,7 +45,7 @@ BEGIN SELECT RAISE(ABORT, 'a Project reads Closing only while its archive transf
 
 -- Only the lifecycle and `updated_at` change once a Project is not open.
 CREATE TRIGGER IF NOT EXISTS projects_locked
-BEFORE UPDATE OF name, notes, state, done_at, revision, created_at, closed_at, view_mode,
+BEFORE UPDATE OF name, notes, revision, created_at, closed_at, view_mode,
     group_keyword, panel_keyword, profile_id, processing_parent ON projects
 WHEN OLD.lifecycle <> 'open' AND NEW.lifecycle IS OLD.lifecycle
 BEGIN SELECT RAISE(ABORT, 'a Closed Project is locked'); END;
