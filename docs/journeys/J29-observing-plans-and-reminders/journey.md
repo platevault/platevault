@@ -1,7 +1,7 @@
 ---
 id: J29
 title: Plan nights on the Targets page's Planned view, opt into default-site reminders, see Tonight on Home, and export every planned night to a calendar
-version: 8
+version: 6
 status: draft
 last_reviewed: 2026-10-03
 actors: [primary-user]
@@ -25,11 +25,12 @@ picker names the night they belong to. Adding a Target to one night's plan
 leaves every other night's plan unchanged. Reminders need opt-in, a default
 site, criteria and lead time, and each names Backyard and a planned window. A
 delivered reminder is not delivered again after a restart. The saved `.ics`
-contains exactly the upcoming windows of every planned night, here tonight's
-and tomorrow's, and remains unchanged afterwards. Home's Tonight lists NGC 7000
-and M 31 at the picked planning site. Moving the default site while reminders
-are on asks first. Planning changes no library, Project or session data and
-starts no indexing.
+contains exactly the upcoming windows of every planned night. When S7 enables
+reminders, only tonight's plan exists. S3a adds the following night's plan
+before S9 exports both. The saved file remains unchanged afterwards. Home's
+Tonight lists NGC 7000 and M 31 at the picked planning site. When reminders
+are on, moving the default site asks first. Planning changes no library,
+Project or session data and starts no indexing.
 
 ## Preconditions
 
@@ -49,11 +50,11 @@ starts no indexing.
 
 ### S2 — Grade filters with the per-filter Moon curve {#S2}
 
-- **Do:** Set the header date picker to **2026-10-25** and choose Backyard in the site picker. In All, choose **Add to plan** for NGC 7000 on that night. Return to the plan view and expand its Per filter sub-rows. Open **Moon limits**, choose OIII, raise **Separation at full Moon** from 60° to 90°, and leave **Width** at 7 days. Save. Read the OIII row. In All, choose **Remove from plan** for NGC 7000 on 2026-10-25. Return to the plan view.
+- **Do:** Set the header date picker to **2026-10-25** and choose Backyard in the site picker. In All, choose **Add to plan** for NGC 7000 on that night. Return to the plan view, expand its Per filter sub-rows, and read each band's grade, windows and Img time. Record those baseline values. Open **Moon limits**, choose OIII, raise **Separation at full Moon** from 60° to 90°, and leave **Width** at 7 days. Save and read the recalculated OIII row. Compare the other four rows with their recorded values. In All, choose **Remove from plan** for NGC 7000 on 2026-10-25. Set the date picker back to tonight and return to the plan view.
 - **Expect:** On fixture night 2026-10-25 at Backyard (52.09° N, 5.12° E), the seeded NGC 7000 position (RA 314.75°, Dec 44.53°) has a Moon-up reading at 100% illumination, 64.74° separation, and Moon age 14.306 days. Its separation is between the 60° and 90° full-Moon thresholds. At this age, the 60°/7-day OIII curve requires 59.74°, and the raised 90°/7-day curve requires 89.61°. Before the edit, the prototype computes Good with a 440-minute OIII window from 2026-10-25 18:20 to 2026-10-26 01:40 UTC. After the edit, OIII is Poor with no window. Forty-four Moon-up samples on the 10-minute darkness grid lie between the curves. `domain/planning.ts` computes these values with `skyNight` (lines 489 to 509), `nightImaging` (lines 605 to 646), and `requiredMoonSeparationDeg` (lines 455 to 457). Seeded coordinates are in `domain/seed.ts` (line 805) and `domain/sky.ts` (line 59). Each saved rig's R, G, B, Ha and OIII bands appears as a Per filter sub-row with its grade and Moon-clear windows. Each band follows its own Moon-avoidance curve. The required separation is greatest at full Moon and shrinks as the Moon dims. A sample counts when the Moon is below the horizon or at least that far away.
-- **Expect:** After removal, the 2026-10-25 plan view reads `Plan list empty` and NGC 7000 offers **Add to plan**. Only the original tonight and following-night plans remain.
-- **Expect (negative):** The R, G, B and Ha curve definitions are unchanged; on this full-Moon night their grade/windows may also change under their stricter curves. The dialog offers no separate maximum-illumination limit. Editing OIII's curve changes no rig filter list or Project goal.
-- **Trace:** flow K · PLAN-FR-02 · PLAN-TGT-FR-06 · PLAN-TGT-AC-18 · D-W88 · HARNESS-V5-FEEDBACK-R1.md Round 9 C6 · prototype `domain/planning.ts` (`skyNight`, `nightImaging`, `requiredMoonSeparationDeg`), `domain/seed.ts`, `domain/sky.ts` and `moon-limits.tsx` on ui-harness-v5
+- **Expect:** After removal, the 2026-10-25 plan view reads `Plan list empty` and NGC 7000 offers **Add to plan**. Only tonight's plan remains, ready for S3 to recalculate at `Remote site` and S3a to add the following night.
+- **Expect (negative):** For R, G, B and Ha, the grade, windows and Img-time values are identical immediately before and after saving the OIII curve on 2026-10-25. The edit changes 0 of the other 4 bands. R, G and B are Poor with no window or Img time. Ha is Good with a 440-minute window from 2026-10-25 18:20 to 2026-10-26 01:40 UTC. The dialog offers no separate maximum-illumination limit. Editing the curve changes no rig filter list or Project goal.
+- **Trace:** flow K · PLAN-FR-02 · PLAN-TGT-FR-06 · PLAN-TGT-AC-18 · D-W88 · HARNESS-V5-FEEDBACK-R1.md Round 9 C6 · prototype `domain/planning.ts` (`skyNight`, `nightImaging`, `requiredMoonSeparationDeg`), `domain/seed.ts`, `domain/sky.ts` and `moon-limits.tsx` at a2ec1297 on ui-harness-v5
 
 ### S3 — Switch the planning site {#S3}
 
@@ -96,9 +97,9 @@ starts no indexing.
 ### S7 — Enable reminders {#S7}
 
 - **Do:** Grant the permission in the OS settings and click **Retry**.
-- **Expect:** The Planned view header reads notifications on for Backyard. Reminders exist only for planned windows: each names NGC 7000, Backyard and one of its windows on tonight's or tomorrow's night, the two nights whose plan holds NGC 7000.
+- **Expect:** The Planned view header reads notifications on for Backyard. S1 created tonight's plan. S3a adds NGC 7000 to the following-night plan before this step. Reminders cover both planned nights.
 - **Expect (negative):** No reminder is created for `Remote site`, for a night without a plan, or for a Target in no plan. Enabling reminders starts no indexing or processing.
-- **Trace:** flow K · PLAN-FR-03 · PLAN-AC-02, PLAN-AC-05 · D07 · Round 6 "Reminders and calendar export stay" (a notification before a planned window), "Per-night plans"
+- **Trace:** flow K · PLAN-FR-03 · PLAN-AC-02, PLAN-AC-05 · D07 · Round 6 "Reminders and calendar export stay" (a notification before a planned window), "Per-night plans" (S1 creates tonight's plan; S3a adds the following-night plan before S7)
 
 ### S7a — Receive one reminder {#S7a}
 
@@ -116,17 +117,17 @@ starts no indexing.
 
 ### S9 — Export every planned night to a calendar file {#S9}
 
-- **Do:** With the date picker on tonight, click **Export calendar** in the Planned view header. Read the confirmation of the planning site, date range, time zone and windows, confirm it, and save the `.ics` with the native save dialog.
-- **Expect:** The confirmation covers everything upcoming, not only the night the date picker shows: its date range runs from tonight to tomorrow's night, it names `Remote site` and its time zone, and it lists exactly NGC 7000's windows on those two nights. The saved file contains exactly those windows with the displayed site and time-zone basis.
-- **Expect (negative):** The export leaves out no planned night, and it holds no window of an unplanned Target or of a night without a plan. No provider account, calendar authorization, or hosted subscription is requested.
-- **Trace:** flow K calendar · PLAN-FR-04 · PLAN-AC-03 · root FR-015, D18 · Round 6 "Reminders and calendar export stay" (a calendar export of everything upcoming, all planned nights)
+- **Do:** After S3a adds NGC 7000 to the following night's plan, set the date picker to tonight and click **Export calendar** in the Planned view header. Read the confirmation of the planning site, date range, time zone and windows. Confirm that scope and save the `.ics` with the native save dialog.
+- **Expect:** The confirmation covers everything upcoming, not only the night the date picker shows: it names `Remote site` and its time zone, and lists exactly NGC 7000's windows on tonight's and following night's plans. The saved file contains exactly those windows with the displayed site and time-zone basis.
+- **Expect (negative):** The export leaves out no window from tonight's or the following night's plan. It holds no window of an unplanned Target or of a night without a plan. The flow requests no provider account, calendar authorization, or hosted subscription.
+- **Trace:** flow K calendar · PLAN-FR-04 · PLAN-AC-03 · root FR-015, D18 · Round 6 "Reminders and calendar export stay" (a calendar export of all planned nights). S3a creates the following-night plan before S9.
 
 ### S10 — Change criteria after export {#S10}
 
 - **Do:** In Settings → Observing sites, raise `Remote site`'s Min. altitude by 10°. Return to the Planned view and compare the saved `.ics` with its S9 bytes.
-- **Expect:** The window list changes: every listed window now stays above the new minimum altitude. The saved file is byte-identical to S9, and a new export is needed to reflect the change.
+- **Expect:** The window list changes: every listed window now stays above the new minimum altitude. The saved S9 file containing the windows from both planned nights remains byte-identical, and a new export is needed to reflect the change.
 - **Expect (negative):** Raising the minimum altitude changes no field of Backyard.
-- **Trace:** flow K calendar · PLAN-FR-04 · PLAN-AC-03 · apps/prototype src/features/t1/settings/sites-page.tsx (Min. altitude, Darkness) and src/domain/planning.ts defaultCriteria @ b5e813a5
+- **Trace:** flow K calendar · PLAN-FR-04 · PLAN-AC-03 · apps/prototype src/features/t1/settings/sites-page.tsx (Min. altitude, Darkness) and src/domain/planning.ts defaultCriteria @ b5e813a5. S3a adds the following-night plan before S9 exports.
 
 ### S11 — Plan a Target outside any Project {#S11}
 
@@ -166,7 +167,7 @@ starts no indexing.
 - SC6: Exactly 1 notification is delivered for the S7a target/site/window identity across S7a and S8.
 - SC7: M 31 is planned with 0 Projects created or chosen (S11), and the Project page plans exactly 1 subject, NGC 7000 (S12).
 - SC8: Tonight lists exactly 2 Targets with a window, NGC 7000 and M 31, at `Remote site`, and each best window equals the Planned view's best `Remote site` window for that Target (S13).
-- SC9: Per filter shows five NGC 7000 bands. On 2026-10-25 at Backyard, raising the full-Moon separation for OIII from 60° to 90° changes its grade from Good to Poor and Img time from 440 minutes to 0 (S2). S2 removes that temporary plan, leaving the two-night scope for S7 and S9. Returning the picker to tonight restores the S3 values (S3a).
+- SC9: On 2026-10-25 at Backyard, raising the full-Moon separation for OIII from 60° to 90° changes its grade from Good to Poor and Img time from 440 minutes to zero (S2). The other 4 bands stay unchanged: R/G/B remain Poor; Ha remains Good. Their windows and Img times also stay the same. The OIII edit changes 0 of the other 4 bands. After S2 removes its temporary plan, only tonight's plan remains. S3a later adds the following night's plan. Returning the picker to tonight restores the S3 values (S3a).
 - SC10: Making `Remote site` the default asks first and, when cancelled, moves 0 defaults and 0 reminders (S14).
 - SC11: Tomorrow's plan holds 0 Targets before the S3a add and exactly 1, NGC 7000, after it; tonight's plan holds exactly NGC 7000 throughout S3a, and adding M 31 at S11 leaves tomorrow's plan at exactly 1.
 
@@ -176,7 +177,7 @@ starts no indexing.
 - G2: Unresolved implementation qualification: how a scheduled reminder is observed before delivery is unspecified, and so is delivery while the app is closed, which is not claimed without an installed, tested scheduler (D07). S7 and S8 depend on it. Blocks readiness.
 - G3: Unresolved implementation qualification: no development clock control yet brings a window to its lead time or holds it there across a relaunch (P4). S7a, S8 and S13 depend on it. Blocks readiness.
 - G4: Out of scope for this journey: a mosaic Project is not exercised. Its Plan area shows the goal gap per panel group (PLAN-FR-02), and Tonight grades each panel group's goals from the subject's window (PLAN-FR-11, provisional). Blocks readiness until covered by a step or a journey. J32/S5 and J32/S7 cover Home's **Plan tonight** Next action (PRJ-FR-18), and J19/S6a covers Tonight without a saved site (PLAN-AC-12).
-- G5: (dissolved 2026-10-12): answered by Round 6 "Reminders and calendar export stay"; S1, S4 to S7 and S14 now assert **Enable notifications**, its lead time and its state in the Planned view header with reminders only for planned windows at the default site, and S9 and S10 assert **Export calendar** there with an export of every upcoming planned night (tonight's and tomorrow's).
+- G5: (dissolved 2026-10-12): answered by Round 6 "Reminders and calendar export stay". S1 and S4 to S7 assert **Enable notifications**, its lead time and state in the Planned view header, with reminders only for planned nights at the default site. S1 creates tonight's plan. S3a later adds the following night's plan before S7. S9 exports both nights, and S10 checks that saved file.
 - G6: (dissolved 2026-10-12): answered by Round 6 "Per-night plans"; S3a now asserts that tomorrow's plan starts empty, **Add to plan** adds NGC 7000 to tomorrow only and tonight keeps its list, and S11 asserts that M 31 joins tonight's plan only.
 
 ## Delta log
@@ -195,6 +196,6 @@ starts no indexing.
 - **Δ5** 2026-10-15 · S1, S3 · behavior-change
   The Project holds sessions directly, with no processing run, and a mosaic is a Project with panel groups whose goals Tonight grades from the subject's window.
   Evidence: D-W93 to D-W106 (F4 Project model, owner's answers of 2026-10-14) in PR #1804, 065 PRJ-FR-29, 072 PLAN-AC-01, PLAN-FR-02, PLAN-FR-11 · by: SpecF4Writer2 (intent-gated)
-- **Δ8** 2026-10-17 · S2 · behavior-change
-  After checking the moonlit OIII recalculation, S2 removes its temporary 2026-10-25 NGC 7000 plan. Only tonight's and the following night's plans remain for reminders and calendar export.
-  Evidence: Codex PRRT_kwDOSdTu0s6tdUvD on PR #1841 (J29/S2 follow-up). Prototype `domain/planning.ts` `plannedNights` (lines 171 to 177) and Targets `planAction` (lines 103 to 108) · by: agent (intent-gated, user instruction)
+- **Δ6** 2026-10-17 · S2 · behavior-change
+  One Moon-avoidance curve per filter replaces the separate Moon limits. S2's **Moon limits** edit now raises OIII's separation at full Moon, and only OIII's grade, windows and Img time recalculate.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md Round 9 C6 · D-W88 · PLAN-FR-02, PLAN-TGT-FR-06, PLAN-TGT-AC-18 · prototype moon-limits.tsx (ui-harness-v5) · by: JourneysR9c (intent-gated)
