@@ -71,7 +71,7 @@ export function TargetPage() {
   const m = useMessages()
   const { targetId = "" } = useParams({ strict: false }) as { targetId?: string }
   const exists = useStore((s) => Boolean(s.catalog.targets[targetId]))
-  if (!exists) return <MissingRecord title={m.target_missing_title()} backTo="/targets" backLabel={m.target_open_targets()} />
+  if (!exists) return <MissingRecord title={m.target_missing_title()} backTo="/targets" backLabel={m.nav_targets()} />
   return <TargetDetail key={targetId} targetId={targetId} />
 }
 
