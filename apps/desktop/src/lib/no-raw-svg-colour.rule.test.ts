@@ -165,4 +165,15 @@ describe('svg/no-raw-svg-colour', () => {
 
     expect(diagnostics).toHaveLength(1);
   });
+  it('flags color on a standalone foreignObject', () => {
+    const diagnostics = lint('<foreignObject color="red" />');
+
+    expect(diagnostics).toHaveLength(1);
+  });
+
+  it('flags color on foreignObject inside SVG', () => {
+    const diagnostics = lint('<svg><foreignObject color="red" /></svg>');
+
+    expect(diagnostics).toHaveLength(1);
+  });
 });

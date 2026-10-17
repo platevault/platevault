@@ -54,18 +54,23 @@ const SVG_ELEMENTS = new Set(
 );
 
 function isInsideSvg(node) {
-  let ancestor = node.parent;
+  let ancestor = node.parent?.parent;
+  const ownElement = ancestor;
   while (ancestor) {
-    if (ancestor.type === 'JSXElement' && ancestor.openingElement.name.type === 'JSXIdentifier') {
+    if (
+      ancestor.type === 'JSXElement' &&
+      ancestor.openingElement.name.type === 'JSXIdentifier'
+    ) {
       const name = ancestor.openingElement.name.name;
-      if (name === 'foreignObject') return false;
-      if (name === 'svg' || (/^[a-z]/.test(name) && SVG_ELEMENTS.has(name.toLowerCase()))) return true;
+      if (name === 'foreignObject') return ancestor === ownElement;
+      if (name === 'svg' || (/^[a-z]/.test(name) && SVG_ELEMENTS.has(name.toLowerCase()))) {
+        return true;
+      }
     }
     ancestor = ancestor.parent;
   }
   return false;
 }
-
 function reportRawColorsInExpression(expression, report) {
   if (
     (expression.type === 'Literal' || expression.type === 'StringLiteral') &&
