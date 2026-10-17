@@ -1,19 +1,25 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Wrap up and Close IPC (spec 065 PRJ-FR-14, PRJ-FR-25, PRJ-FR-30; 071
-//! STO-FR-01/04): where Wrap up stands, reopening a step, Close project…, the
-//! Closed snapshot and Duplicate….
+//! Wrap up and Close IPC (spec 065 PRJ-FR-14, PRJ-FR-15, PRJ-FR-25,
+//! PRJ-FR-30; 071 STO-FR-01/04/06/13/14): where Wrap up stands, its Clean
+//! up and Trash steps, Archive's review, reopening a step, Close project…,
+//! the Closed snapshot and Duplicate….
 //!
 //! Registered only by the isolated rebuilt shell ([`crate::library_shell`])
-//! under its `wrap up` block. Close records the Closed snapshot, locks the
-//! Project for good and runs the selected archive while the Project reads
-//! Closing; it runs unattended, and a stop leaves the Project Closing until
-//! `Library::recover_wrap_up` resumes it at the next start. Close moves
-//! entries to the [`WrapUpTrash`] the shell manages. A step reopens only while
-//! the Project is open; a Closed Project has no Reopen: Duplicate continues it.
-//! Failures follow the library [`platevault_core::ErrorResponse`]
-//! conventions, naming the Project.
+//! under its `wrap up` block. Each step is reviewed, then confirmed: the
+//! confirmation echoes what the review returned (the revisions Clean up
+//! read, the digest of the Trash rows or of Archive's layout), and the core
+//! refuses it when that moved. Clean up and Trash move entries to the
+//! [`WrapUpTrash`] the shell manages and take no stop control: each runs to
+//! its end, and a journaled Trash a stop interrupts resumes at the next
+//! start. Close records the Closed snapshot, locks the Project for good and
+//! runs the selected archive while the Project reads Closing; it runs
+//! unattended, and a stop leaves the Project Closing until
+//! `Library::recover_wrap_up` resumes it at the next start. A step reopens
+//! only while the Project is open; a Closed Project has no Reopen: Duplicate
+//! continues it. Failures follow the library
+//! [`platevault_core::ErrorResponse`] conventions, naming the Project.
 
 use std::sync::Arc;
 
@@ -21,7 +27,9 @@ use platevault_core::apply::Unattended;
 use platevault_core::custody::trash::OsTrash;
 use platevault_core::library::Library;
 use platevault_core::{
-    CloseReport, CloseRequest, ClosedSnapshot, DuplicateRequest, Project, WrapUpStatus, WrapUpStep,
+    ArchiveReview, CleanUpReport, CleanUpRequest, CleanUpReview, CloseReport, CloseRequest,
+    ClosedSnapshot, DuplicateRequest, Project, TrashReport, TrashRequest, TrashReview,
+    WrapUpStatus, WrapUpStep,
 };
 use tauri::State;
 use uuid::Uuid;
@@ -130,4 +138,95 @@ pub async fn project_closed_snapshot(
     project_id: Uuid,
 ) -> Reply<Option<ClosedSnapshot>> {
     library.closed_snapshot(project_id).await.map_err(fail(Some(project_id)))
+}
+
+/// Clean up as it opens (STO-FR-01): every entry still in the installed
+/// View, Copies ticked and Symlinks unticked, and every file
+/// `View (previous)/` still holds, unticked. Read-only; it hashes nothing.
+///
+/// # Errors
+/// `InvalidInput` for a Project that is not open; `NotFound` for an unknown
+/// Project.
+#[tauri::command]
+#[specta::specta]
+pub async fn project_clean_up_review(
+    library: State<'_, Arc<Library>>,
+    project_id: Uuid,
+) -> Reply<CleanUpReview> {
+    library.clean_up_review(project_id).await.map_err(fail(Some(project_id)))
+}
+
+/// Clean up the rows the user confirmed (STO-FR-04/05), echoing the
+/// review's revisions: a placed link is deleted, a copy or leftover goes to
+/// the OS Trash, each once it re-verifies, and anything else stays, named.
+/// Records the step: Finished, or Skipped when nothing was selected though
+/// something was offered.
+///
+/// # Errors
+/// `Conflict` when the Project or its View moved since the review;
+/// `InvalidInput` for a row the review doesn't offer, while Wrap up doesn't
+/// open or out of order; `NotFound` for an unknown Project.
+#[tauri::command]
+#[specta::specta]
+pub async fn project_clean_up(
+    library: State<'_, Arc<Library>>,
+    trash: State<'_, WrapUpTrash>,
+    request: CleanUpRequest,
+) -> Reply<CleanUpReport> {
+    library.clean_up(&request, trash.get()).await.map_err(fail(Some(request.project_id)))
+}
+
+/// The Trash step as it opens (PRJ-FR-15, STO-FR-14): its three rows with
+/// what each moves, keeps and refuses, the OS Trash's refusals included, and
+/// the digest Trash echoes. It hashes the `Processing/` files; it moves and
+/// records nothing.
+///
+/// # Errors
+/// `InvalidInput` for a Project that is not open; `NotFound` for an unknown
+/// Project.
+#[tauri::command]
+#[specta::specta]
+pub async fn project_trash_review(
+    library: State<'_, Arc<Library>>,
+    trash: State<'_, WrapUpTrash>,
+    project_id: Uuid,
+) -> Reply<TrashReview> {
+    library.trash_review(project_id, trash.get()).await.map_err(fail(Some(project_id)))
+}
+
+/// Move the rows the user ticked to the OS Trash (D-W43: an unticked row
+/// moves nothing), each copy re-verified first, and record the step:
+/// Finished, or Skipped when nothing was ticked though something was
+/// offered. Returns what moved and every approved item that stayed.
+///
+/// # Errors
+/// `Conflict` when the review moved since the user saw it; `InvalidInput`
+/// while Wrap up doesn't open or before Clean up is recorded; `NotFound` for
+/// an unknown Project; journal and catalog failures.
+#[tauri::command]
+#[specta::specta]
+pub async fn project_wrap_up_trash(
+    library: State<'_, Arc<Library>>,
+    trash: State<'_, WrapUpTrash>,
+    request: TrashRequest,
+) -> Reply<TrashReport> {
+    library.wrap_up_trash(&request, trash.get()).await.map_err(fail(Some(request.project_id)))
+}
+
+/// Archive's review of the Project's sessions for `destination`
+/// (STO-FR-06/13): every file's from and to path, the sessions other open
+/// Projects keep, and the kept-View links the archive repoints. Close
+/// project…'s archive selection echoes its digest. Read-only.
+///
+/// # Errors
+/// `InvalidInput` for a Project that is not open or a retired destination;
+/// `NotFound` for an unknown Project or destination.
+#[tauri::command]
+#[specta::specta]
+pub async fn project_wrap_up_archive_review(
+    library: State<'_, Arc<Library>>,
+    project_id: Uuid,
+    destination: Uuid,
+) -> Reply<ArchiveReview> {
+    library.wrap_up_archive_review(project_id, destination).await.map_err(fail(Some(project_id)))
 }

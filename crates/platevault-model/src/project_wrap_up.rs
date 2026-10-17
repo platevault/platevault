@@ -55,6 +55,7 @@ pub struct WrapUpStatus {
 /// What one Clean up row is.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", rename_all_fields = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum CleanUpEntryKind {
     /// An entry Apply placed in `View/`, by its manifest seq.
     Placed { seq: u32, placement: EntryPlacement },
@@ -65,6 +66,7 @@ pub enum CleanUpEntryKind {
 /// One Clean up row (STO-FR-01/02).
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct CleanUpEntry {
     /// Relative to the Project folder: below `View/` or `View (previous)/`.
     pub path: NativePath,
@@ -79,6 +81,7 @@ pub struct CleanUpEntry {
 /// library frames are never listed.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct CleanUpReview {
     pub project_id: Uuid,
     pub desired_revision: Revision,
@@ -90,6 +93,7 @@ pub struct CleanUpReview {
 /// The rows the user confirmed, by path; anything else stays.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct CleanUpRequest {
     pub project_id: Uuid,
     pub desired_revision: Revision,
@@ -99,6 +103,7 @@ pub struct CleanUpRequest {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "outcome", rename_all = "snake_case", rename_all_fields = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum CleanUpOutcome {
     /// A link `PlateVault` placed, deleted after its no-follow check.
     Deleted,
@@ -110,6 +115,7 @@ pub enum CleanUpOutcome {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct CleanUpResult {
     pub path: NativePath,
     pub outcome: CleanUpOutcome,
@@ -117,6 +123,7 @@ pub struct CleanUpResult {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct CleanUpReport {
     pub record: WrapUpRecord,
     /// One result per selected row.
@@ -130,6 +137,7 @@ pub struct CleanUpReport {
 /// The three rows of the Trash step (PRJ-FR-15).
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum TrashGroup {
     /// "Move N rejected frames to Trash (size)": every copy of each
     /// library-Unusable frame, or none.
@@ -148,6 +156,7 @@ impl TrashGroup {
 /// One item a Trash row moves under its approval.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct TrashCandidate {
     /// The frame's capture key, or the duplicate copy's asset id; `None` for
     /// a `Processing/` file.
@@ -162,6 +171,7 @@ pub struct TrashCandidate {
 /// An item a row lists as not selectable, with its reason.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct TrashRefusal {
     pub id: Option<Uuid>,
     pub path: NativePath,
@@ -171,6 +181,7 @@ pub struct TrashRefusal {
 /// One Trash row: what it moves, its size and what it refuses.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct TrashGroupOffer {
     pub group: TrashGroup,
     pub items: Vec<TrashCandidate>,
@@ -184,6 +195,7 @@ pub struct TrashGroupOffer {
 /// The Trash step as it opens.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct TrashReview {
     pub project_id: Uuid,
     pub desired_revision: Revision,
@@ -199,6 +211,7 @@ pub struct TrashReview {
 /// The rows the user ticked (D-W43): an unticked row moves nothing.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct TrashRequest {
     pub project_id: Uuid,
     pub digest: String,
@@ -207,6 +220,7 @@ pub struct TrashRequest {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct TrashReport {
     pub record: WrapUpRecord,
     /// The files that reached the OS Trash.
