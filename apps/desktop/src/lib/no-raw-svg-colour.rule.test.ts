@@ -368,4 +368,11 @@ describe('svg/no-raw-svg-colour', () => {
 
     expect(diagnostics).toHaveLength(1);
   });
+  it('checks raw paint after an interpolated var close', () => {
+    const diagnostics = lint(
+      "const svg = <svg fill={`var(--pv-fill${useRaw ? ') red' : ')'}`} />;",
+    );
+
+    expect(diagnostics).toHaveLength(1);
+  });
 });

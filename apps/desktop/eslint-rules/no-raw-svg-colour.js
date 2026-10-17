@@ -312,6 +312,12 @@ function reportRawColorsInExpression(expression, report) {
                   if (after) scanText(after);
                 }
               }
+            } else if (values.some((value) => value.includes(')'))) {
+              mode = 'normal';
+              for (const value of values) {
+                const close = value.indexOf(')');
+                if (close >= 0 && value.slice(close + 1)) scanText(value.slice(close + 1));
+              }
             }
           }
           if (mode === 'normal' && expression.expressions[index].type === 'LogicalExpression' && isAllowedPaintExpression(expression.expressions[index])) {
