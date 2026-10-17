@@ -11,13 +11,13 @@ import { markFrames } from "@/store/actions/library"
 import type { CommitResult } from "@/store/core"
 import type { ReviewFrame, ReviewScope } from "./model"
 
-/** The review word of each library mark; getters, so every read is in the chosen language. */
+/** The STATUS word of each library mark (W5: Usable, Unusable, Unreviewed); getters, so every read is in the chosen language. */
 export const MARK_WORD: Record<QualityValue, string> = {
   get usable() {
-    return m.review_picked()
+    return m.status_usable()
   },
   get unusable() {
-    return m.review_rejected()
+    return m.status_unusable()
   },
   get unreviewed() {
     return m.status_unreviewed()
@@ -37,7 +37,7 @@ export function markLibrary(scope: ReviewScope, frames: ReviewFrame[], value: Qu
   )
 }
 
-/** "Rejected: 12 frames. Library scope." */
+/** "Unusable: 12 frames. Library scope." */
 export function markAnnouncement(frames: ReviewFrame[], value: QualityValue): string {
   return m.review_mark_announcement({ mark: MARK_WORD[value], what: framesWhat(frames) })
 }

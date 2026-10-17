@@ -48,7 +48,8 @@ function Values({ frame, record }: { frame: ReviewFrame; record: FrameMeasuremen
   const rows: MetricRow[] = METRIC_ORDER.map((key) => ({ key, builtIn: find(builtIn, key), imported: find(imported, key), earlier: find(earlier, key) }))
   const missing = frame.measure === "pending" ? m.status_pending() : frame.measure === "verifying" ? m.status_verifying() : m.status_not_measured()
   const columns: Column<MetricRow>[] = [
-    { id: "metric", header: m.frame_col_metric(), rowHeader: true, sortValue: (row) => METRIC_LABEL[row.key], cell: (row) => METRIC_LABEL[row.key] },
+    // The metric's name gives way first, so the values stay in the 19rem inspector in every language.
+    { id: "metric", header: m.frame_col_metric(), rowHeader: true, truncate: true, sortValue: (row) => METRIC_LABEL[row.key], cell: (row) => METRIC_LABEL[row.key] },
     { id: "built-in", header: m.status_built_in(), align: "right", sortValue: (row) => row.builtIn?.value ?? null, cell: (row) => (row.builtIn ? formatMetricFixed(m, row.builtIn) : "–") },
     {
       id: "imported",

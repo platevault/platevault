@@ -20,9 +20,9 @@ import type { Action, Column, Facet, MenuItem } from "@/components/app/contracts
 import { type IssueFilter, issuesFacet, matchesIssueFilter, type OwnIssues, parseIssueFilter, withIssueItems } from "@/components/app/issue-actions"
 import { EmptyState } from "@/components/app/feedback"
 import { useFollowLink } from "@/components/app/links"
-import { StatusBadge } from "@/components/app/status"
+import { StatusBadge, statusMeta } from "@/components/app/status"
 import { ListPage } from "@/components/templates/list-page"
-import { goalProgress, isLocked, isMosaic, type NextAction, panelGroups, PROJECT_STATUS_NAME, rigName, subjectName } from "@/domain/derive"
+import { goalProgress, isLocked, isMosaic, type NextAction, panelGroups, rigName, subjectName } from "@/domain/derive"
 import { projectIssues } from "@/domain/home"
 import { pendingChanges, projectNext, wrapUpSummary } from "@/domain/project-view"
 import { matchesQuery } from "@/domain/sky"
@@ -88,7 +88,7 @@ export function ProjectsPage() {
   const open = (r: Row, search: Record<string, string> = {}) => void navigate({ to: "/projects/$projectId", params: { projectId: r.project.id }, search })
   const newProject: Action = { id: "new-project", label: m.newproject_title(), icon: Plus, kind: "primary", opensDialog: true, run: () => openSheet({ kind: "new-project" }) }
   const nextAction = (r: Row): Action | null => (r.next ? { id: `next-${r.project.id}`, label: say(m, r.next.label), run: () => follow(r.next!.link) } : null)
-  const statusLabel = (r: Row) => say(m, PROJECT_STATUS_NAME[r.project.state])
+  const statusLabel = (r: Row) => statusMeta("project", r.project.state).label
 
   const columns: Column<Row>[] = [
     { id: "name", header: m.project_noun(), cell: (r) => r.project.name, sortValue: (r) => r.project.name, rowHeader: true, truncate: true },
@@ -102,7 +102,7 @@ export function ProjectsPage() {
     },
     { id: "sessions", header: m.nav_sessions(), cell: (r) => r.sessions, sortValue: (r) => r.sessions, align: "right" },
     { id: "pending", header: m.project_pending_changes(), cell: (r) => r.pending, sortValue: (r) => r.pending, align: "right" },
-    { id: "state", header: m.projects_col_state(), cell: (r) => <StatusBadge kind="project" value={r.project.state} label={statusLabel(r)} />, sortValue: statusLabel },
+    { id: "state", header: m.projects_col_state(), cell: (r) => <StatusBadge kind="project" value={r.project.state} />, sortValue: statusLabel },
     {
       id: "next",
       header: m.common_up_next(),
@@ -135,15 +135,10 @@ export function ProjectsPage() {
       label: m.projects_col_state(),
       kind: "single",
       value: state,
-      options: STATES.map((value) => ({ value, label: say(m, PROJECT_STATUS_NAME[value]), count: rows.filter((r) => r.project.state === value).length })),
+      options: STATES.map((value) => ({ value, label: statusMeta("project", value).label, count: rows.filter((r) => r.project.state === value).length })),
     },
     issuesFacet(m, rows.map(issuesOf), issueFilter),
   ]
-  const clear = () => {
-    setQuery("")
-    setState("")
-    setIssueFilter("")
-  }
   const live = (project: Project) => rows.find((r) => r.project.id === project.id)?.project ?? project
 
   return (
@@ -171,12 +166,8 @@ export function ProjectsPage() {
             },
             matchCount: shown.length,
           },
-          empty:
-            rows.length === 0 ? (
-              <EmptyState icon={FolderKanban} title={m.projects_empty()} action={<ActionButton action={newProject} />} />
-            ) : (
-              <EmptyState icon={FolderKanban} title={m.projects_no_match()} action={<ActionButton action={{ id: "clear-filters", label: m.filters_clear(), run: clear }} />} />
-            ),
+          // With rows hidden by filters, the chip row above already offers Clear filters.
+          empty: rows.length === 0 ? <EmptyState icon={FolderKanban} title={m.projects_empty()} action={<ActionButton action={newProject} />} /> : <EmptyState icon={FolderKanban} title={m.projects_no_match()} action={null} />,
         }}
       />
       {editing ? <ProjectDetailsDialog project={live(editing)} open onOpenChange={(next) => !next && setEditing(null)} /> : null}

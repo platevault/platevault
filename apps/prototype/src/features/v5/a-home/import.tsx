@@ -152,7 +152,7 @@ export function ImportPage() {
   const state = useStore((s) => s)
   const draft = state.slices.a.importDraft
   const { catalog, disk, settings } = state
-  const plan = useMemo(() => planImport({ catalog, disk, settings }, draft), [catalog, disk, settings, draft])
+  const plan = useMemo(() => planImport(m, { catalog, disk, settings }, draft), [m, catalog, disk, settings, draft])
   const op = lastImportOp(state)
   const viewing: ImportStepId = search.step === "preview" ? "preview" : "source"
   const flow = importFlow(m, plan, draft, viewing, op)

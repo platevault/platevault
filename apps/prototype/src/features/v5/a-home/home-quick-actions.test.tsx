@@ -117,6 +117,17 @@ describe("Home: Add to Plan under the Quick actions switch", () => {
     expect(plannedNights()).toEqual(before)
   })
 
+  it("keeps focus on the Tonight row when Add to Plan goes away with the plan (WCAG 2.4.3)", async () => {
+    const user = userEvent.setup()
+    renderHome()
+    const tonight = await screen.findByRole("table", { name: m.home_tonight() })
+    const button = await within(tonight).findByRole("button", { name: m.targets_add_to_plan() })
+    const row = button.closest("tr")!
+    await user.click(button)
+    await waitFor(() => expect(within(row).queryByRole("button", { name: m.targets_add_to_plan() })).toBeNull())
+    expect(document.activeElement).toBe(row)
+  })
+
   it("Open page opens Targets › Planned for tonight with the Target's panel and its Add to Plan, and plans nothing yet", async () => {
     setFault("quickActions", "open-page")
     const before = plannedNights()

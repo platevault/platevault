@@ -8,11 +8,11 @@
  * - Everything about how frames show (view, list height, zoom, stretch,
  *   overlays, names, columns, inspector, auto-advance) is in one Display
  *   menu (P13); the list's quality filter leads the toolbar.
- * - Selection swaps the table's toolbar for its batch bar (Picked ·
- *   Rejected · Unreviewed); "Select by threshold…" and "Pick the rest" sit
- *   in that toolbar. A mark on more than 20 frames and Pick the rest ask
- *   first under the Quick actions switch's Open page; One-click runs them at
- *   once with an Undo notice (astro-plan-zzjlz).
+ * - Selection swaps the table's toolbar for its batch bar (Usable ·
+ *   Unusable · Unreviewed, the STATUS words); "Select by threshold…" and
+ *   "Mark rest usable" sit in that toolbar. A mark on more than 20 frames
+ *   and Mark rest usable ask first under the Quick actions switch's Open
+ *   page; One-click runs them at once with an Undo notice (astro-plan-zzjlz).
  * - Hotkeys (PIX-FR-13) act the same in the table, the filmstrip and the
  *   grid, never while a field or a menu has focus, and follow the app's
  *   single-key setting (WCAG 2.1.4). They are listed on the Help page.
@@ -222,7 +222,7 @@ export function ReviewWorkspace({ context, onFinished }: ReviewWorkspaceProps) {
     }
   }
   function markAction(value: QualityValue, list: ReviewFrame[], always = false): Action {
-    // The review's own words (Picked, Rejected, Unreviewed), as the buttons that ask read.
+    // The STATUS words (Usable, Unusable, Unreviewed), as the buttons that ask read.
     const said = { count: list.length, n: formatCount(list.length), quality: markLabel[value] }
     const bulk = list.length > BULK_MARK_CONFIRM_OVER
     return {
@@ -458,8 +458,8 @@ export function ReviewWorkspace({ context, onFinished }: ReviewWorkspaceProps) {
     registerReviewCommands([
       { id: "next", get label() { return m.review_cmd_next() }, keys: REVIEW_KEY.next, run: () => h().step(1) },
       { id: "previous", get label() { return m.review_cmd_previous() }, keys: REVIEW_KEY.previous, run: () => h().step(-1) },
-      { id: "pick", get label() { return m.review_cmd_pick() }, keys: REVIEW_KEY.pick, run: () => h().mark("usable") },
-      { id: "reject", get label() { return m.review_cmd_reject() }, keys: REVIEW_KEY.reject, run: () => h().mark("unusable") },
+      { id: "pick", get label() { return m.review_cmd_usable() }, keys: REVIEW_KEY.pick, run: () => h().mark("usable") },
+      { id: "reject", get label() { return m.review_cmd_unusable() }, keys: REVIEW_KEY.reject, run: () => h().mark("unusable") },
       { id: "unreviewed", get label() { return m.review_cmd_unreviewed() }, keys: REVIEW_KEY.unreviewed, run: () => h().mark("unreviewed") },
       { id: "zoom", get label() { return m.review_cmd_zoom() }, keys: REVIEW_KEY.zoom, run: () => h().toggleZoom() },
       { id: "fullscreen", get label() { return m.review_cmd_fullscreen() }, keys: REVIEW_KEY.fullscreen, run: () => h().toggleFullscreen() },
@@ -479,7 +479,7 @@ export function ReviewWorkspace({ context, onFinished }: ReviewWorkspaceProps) {
   }, [])
 
   if (!scope) {
-    return context.kind === "session" ? <MissingRecord title={m.session_missing_title()} backTo="/sessions" backLabel={m.session_open_sessions()} /> : <MissingRecord title={m.project_missing_title()} backTo="/projects" backLabel={m.project_back_to_projects()} />
+    return context.kind === "session" ? <MissingRecord title={m.session_missing_title()} backTo="/sessions" backLabel={m.nav_sessions()} /> : <MissingRecord title={m.project_missing_title()} backTo="/projects" backLabel={m.nav_projects()} />
   }
   const session = scope.session
 
@@ -497,11 +497,11 @@ export function ReviewWorkspace({ context, onFinished }: ReviewWorkspaceProps) {
     ]
   }
 
-  const emptyTitle = frames.length === 0 || filter === "all" ? m.review_empty_none() : filter === "picked" ? m.review_empty_picked() : filter === "rejected" ? m.review_empty_rejected() : m.review_empty_unreviewed()
+  const emptyTitle = frames.length === 0 || filter === "all" ? m.review_empty_none() : filter === "picked" ? m.review_empty_usable() : filter === "rejected" ? m.sessions_empty_unusable() : m.review_empty_unreviewed()
   const emptyList = <EmptyState icon={ImageOff} title={emptyTitle} action={filter !== "all" ? <ActionButton action={{ id: "show-all", label: m.review_show_all(), run: () => setFilter("all") }} /> : null} />
 
   const selectByThreshold: Action = { id: "threshold", label: m.review_select_by_threshold_ellipsis(), opensDialog: true, run: () => setThreshold({ metric: "fwhm", direction: "above", value: null, add: false }) }
-  /** The frames Pick the rest is about to pick, as they are now, and their way back to Unreviewed. */
+  /** The frames Mark rest usable is about to mark, as they are now, and their way back to Unreviewed. */
   const restUnreviewed = (): QuickUndo => {
     const ids = session ? unreviewedAssetIds(store.getState().catalog, session) : []
     return {
@@ -509,16 +509,18 @@ export function ReviewWorkspace({ context, onFinished }: ReviewWorkspaceProps) {
       run: () => markFrames(ids, "unreviewed", scope.href),
     }
   }
-  const pickRest: Action = {
-    id: "pick-rest",
-    label: m.review_pick_rest(),
-    unavailable: unreviewed === 0 ? { action: m.review_pick_rest(), reason: m.review_pick_rest_none(), blockers: [] } : undefined,
-    confirm: { title: m.review_pick_rest_title({ count: unreviewed, n: formatCount(unreviewed) }), confirm: { label: m.review_pick_rest_confirm({ count: unreviewed, n: formatCount(unreviewed) }) } },
-    // Owner tick A4: its Undo sets the frames it picks back to Unreviewed.
+  // The owner's "Mark rest usable" (C10); its confirm reads as every bulk mark's ("Mark 120 frames Unusable?").
+  const restSaid = { count: unreviewed, n: formatCount(unreviewed), quality: markLabel.usable }
+  const markRest: Action = {
+    id: "mark-rest-usable",
+    label: m.review_mark_rest_usable(),
+    unavailable: unreviewed === 0 ? { action: m.review_mark_rest_usable(), reason: m.review_mark_rest_none(), blockers: [] } : undefined,
+    confirm: { title: m.review_bulk_mark_title(restSaid), confirm: { label: m.store_label_mark_frames(restSaid) } },
+    // Owner tick A4: its Undo sets the frames it marks back to Unreviewed.
     quick: { oneClick: { undo: () => restUnreviewed() }, openPage: "keep" },
     run: () => {
       const result = session ? markRestUsable(session.id) : ({ ok: true } as const)
-      if (result.ok) announce(m.review_announce_rest_picked({ count: unreviewed }))
+      if (result.ok) announce(m.review_announce_rest_usable({ count: unreviewed }))
       return result
     },
   }
@@ -537,10 +539,11 @@ export function ReviewWorkspace({ context, onFinished }: ReviewWorkspaceProps) {
         onRowClick={(f) => select(f.asset.id)}
         rowLabel={(f) => names.get(f.asset.id) ?? f.asset.fileName}
         rowActions={(f) => rowItems(f.asset.id)}
-        toolbar={{ actions: session ? [selectByThreshold, pickRest] : [selectByThreshold] }}
+        toolbar={{ actions: session ? [selectByThreshold, markRest] : [selectByThreshold] }}
         batchActions={(ids) => marksFor(frames.filter((f) => ids.includes(f.asset.id)))}
         empty={emptyList}
         scroll="fill"
+        stickyFirstColumn
       />
     ) : (
       <FrameThumbnails

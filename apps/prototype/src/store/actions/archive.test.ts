@@ -1,6 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, it } from "vitest"
 import { sessionsArchivePlan, type TrashOffer, unusableFramesOffer } from "@/domain/archive"
-import { projectHref } from "@/domain/derive"
 import { fileAt } from "@/domain/disk"
 import { isUnder } from "@/domain/indexing"
 import { createSeed } from "@/domain/seed"
@@ -50,7 +49,7 @@ describe("startArchiveTransfer", () => {
     const rows = sessionsArchivePlan(state, Object.values(state.catalog.sessions).filter((s) => s.imageType === "light")).rows.slice(0, 1)
     const id = startArchiveTransfer(project.id, rows)
     const op = store.getState().operations[id]!
-    expect((op.payload as unknown as ArchivePayload).href).toBe(projectHref(project.id, { stage: "wrap-up" }))
+    expect((op.payload as unknown as ArchivePayload).href).toBe(`/projects/${project.id}?stage=wrap-up`)
     expect(op.scope.projectId).toBe(project.id)
   })
 })
@@ -85,7 +84,7 @@ describe("archive repoints a Closed Project's kept View (D-W111)", () => {
     expect(after.activity.find((a) => a.operationId === id && a.kind === "saved")).toMatchObject({
       title: { params: { name: project.name } },
       detail: { params: { count: repointed.length } },
-      href: projectHref(OIII, { stage: "view" }),
+      href: `/projects/${OIII}?stage=view`,
     })
   })
 })

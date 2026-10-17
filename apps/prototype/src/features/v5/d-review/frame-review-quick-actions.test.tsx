@@ -12,7 +12,7 @@ import { initialSliceStates, sliceVersions } from "@/store/slices"
 import { type ReviewBucket, reviewScope } from "./model"
 import { SessionReview } from "./review"
 
-// M 31 L on 2 Sep in the demo library: 60 frames, most Picked, a few Rejected, and one whose decision no longer applies (Unreviewed).
+// M 31 L on 2 Sep in the demo library: 60 frames, most Usable, a few Unusable, and one whose decision no longer applies (Unreviewed).
 const SESSION = "ses_573cbz"
 const CONTEXT = { kind: "session", sessionId: SESSION } as const
 
@@ -76,11 +76,11 @@ describe("Review: a mark on more than 20 frames under the Quick actions switch (
     const user = userEvent.setup()
     renderReview()
 
-    await user.click(within(await selectAll(user)).getByRole("button", { name: m.review_rejected() }))
+    await user.click(within(await selectAll(user)).getByRole("button", { name: m.status_unusable() }))
     expect(screen.queryByRole("alertdialog")).toBeNull()
     expect(count("rejected")).toBe(frames().length)
 
-    await user.click(await undoOf(m.store_saved_frames_marked({ ...frameCount(frames().length), quality: m.review_rejected() })))
+    await user.click(await undoOf(m.store_saved_frames_marked({ ...frameCount(frames().length), quality: m.status_unusable() })))
     expect(buckets()).toEqual(before)
   })
 
@@ -90,42 +90,42 @@ describe("Review: a mark on more than 20 frames under the Quick actions switch (
     const user = userEvent.setup()
     renderReview()
 
-    await user.click(within(await selectAll(user)).getByRole("button", { name: `${m.review_rejected()}…` }))
+    await user.click(within(await selectAll(user)).getByRole("button", { name: `${m.status_unusable()}…` }))
     const total = frames().length
-    const dialog = await screen.findByRole("alertdialog", { name: m.review_bulk_mark_title({ ...frameCount(total), quality: m.review_rejected() }) })
+    const dialog = await screen.findByRole("alertdialog", { name: m.review_bulk_mark_title({ ...frameCount(total), quality: m.status_unusable() }) })
     expect(buckets()).toEqual(before)
-    await user.click(within(dialog).getByRole("button", { name: m.store_label_mark_frames({ ...frameCount(total), quality: m.review_rejected() }) }))
+    await user.click(within(dialog).getByRole("button", { name: m.store_label_mark_frames({ ...frameCount(total), quality: m.status_unusable() }) }))
     await waitFor(() => expect(count("rejected")).toBe(total))
-    expect(screen.queryByText(m.store_saved_frames_marked({ ...frameCount(total), quality: m.review_rejected() }))).toBeNull()
+    expect(screen.queryByText(m.store_saved_frames_marked({ ...frameCount(total), quality: m.status_unusable() }))).toBeNull()
   })
 })
 
-describe("Review: Pick the rest under the Quick actions switch (A4)", () => {
-  it("One-click picks at once with an Undo notice, and Undo sets those frames back to Unreviewed", async () => {
+describe("Review: Mark rest usable under the Quick actions switch (A4)", () => {
+  it("One-click marks at once with an Undo notice, and Undo sets those frames back to Unreviewed", async () => {
     const before = buckets()
     const rest = count("unreviewed")
     const user = userEvent.setup()
     renderReview()
 
-    await user.click(await screen.findByRole("button", { name: m.review_pick_rest() }))
+    await user.click(await screen.findByRole("button", { name: m.review_mark_rest_usable() }))
     expect(screen.queryByRole("alertdialog")).toBeNull()
     expect(count("unreviewed")).toBe(0)
 
-    await user.click(await undoOf(m.store_saved_frames_marked({ ...frameCount(rest), quality: m.review_picked() })))
+    await user.click(await undoOf(m.store_saved_frames_marked({ ...frameCount(rest), quality: m.status_usable() })))
     expect(buckets()).toEqual(before)
   })
 
-  it("Open page keeps the confirm, and picks with no Undo notice", async () => {
+  it("Open page keeps the confirm, worded as every bulk mark's, and marks with no Undo notice", async () => {
     setFault("quickActions", "open-page")
     const rest = count("unreviewed")
     const user = userEvent.setup()
     renderReview()
 
-    await user.click(await screen.findByRole("button", { name: `${m.review_pick_rest()}…` }))
-    const dialog = await screen.findByRole("alertdialog", { name: m.review_pick_rest_title(frameCount(rest)) })
+    await user.click(await screen.findByRole("button", { name: `${m.review_mark_rest_usable()}…` }))
+    const dialog = await screen.findByRole("alertdialog", { name: m.review_bulk_mark_title({ ...frameCount(rest), quality: m.status_usable() }) })
     expect(count("unreviewed")).toBe(rest)
-    await user.click(within(dialog).getByRole("button", { name: m.review_pick_rest_confirm(frameCount(rest)) }))
+    await user.click(within(dialog).getByRole("button", { name: m.store_label_mark_frames({ ...frameCount(rest), quality: m.status_usable() }) }))
     await waitFor(() => expect(count("unreviewed")).toBe(0))
-    expect(screen.queryByText(m.store_saved_frames_marked({ ...frameCount(rest), quality: m.review_picked() }))).toBeNull()
+    expect(screen.queryByText(m.store_saved_frames_marked({ ...frameCount(rest), quality: m.status_usable() }))).toBeNull()
   })
 })

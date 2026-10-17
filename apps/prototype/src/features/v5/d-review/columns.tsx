@@ -44,7 +44,8 @@ function metricColumn(m: Messages, key: MetricKey, header: string): Column<Revie
 /** Every column the review offers; `frame` is always shown. */
 export function frameColumns(m: Messages, names: ReadonlyMap<AssetId, string>): Column<ReviewFrame>[] {
   return [
-    { id: "frame", header: m.review_col_frame(), rowHeader: true, truncate: true, sortValue: (f) => names.get(f.asset.id) ?? f.asset.fileName, cell: (f) => names.get(f.asset.id) ?? f.asset.fileName },
+    // Never cut: the frame number ends the name. The list pins this column and scrolls the values sideways instead.
+    { id: "frame", header: m.review_col_frame(), rowHeader: true, sortValue: (f) => names.get(f.asset.id) ?? f.asset.fileName, cell: (f) => names.get(f.asset.id) ?? f.asset.fileName },
     { id: "time", header: m.review_col_time(), sortValue: (f) => f.asset.observed.dateObs, cell: (f) => formatTime(f.asset.observed.dateObs) },
     { id: "exposure", header: m.review_col_exposure(), align: "right", sortValue: (f) => f.asset.observed.exposureS, cell: (f) => formatExposure(f.asset.observed.exposureS) },
     { id: "quality", header: m.review_col_quality(), sortValue: (f) => qualityWord(m, f, true), cell: (f) => <QualityLabel frame={f} short /> },

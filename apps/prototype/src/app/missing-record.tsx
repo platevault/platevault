@@ -1,29 +1,15 @@
 /**
- * The page a record route shows when its id is not in the catalog (an old
- * link, or a run emptied from the Trash). Foundation-owned; every record
- * screen uses it so the wording and the way back stay the same.
+ * The page a record route shows when its id is not in the catalogue (an old
+ * link, or a record that went to the Trash). Foundation-owned; every record
+ * screen uses it so the wording and the way back stay the same: the standard
+ * page header, whose path leads back to the list the record belongs to.
  */
-import { Link } from "@tanstack/react-router"
-import { FileQuestion } from "lucide-react"
-import { EmptyState } from "@/components/app/feedback"
-import { PageBody, useDocumentTitle } from "@/components/app/page"
-import { Button } from "@/components/ui/button"
+import { DetailPage } from "@/components/templates/detail-page"
 
-/** `title` names what is missing as one complete message ("This Project is not in the catalog"), so its noun agrees in every language; `backLabel` is the way back. */
+/**
+ * `title` names what is missing as one complete message ("This Project is not in the catalogue"), so its noun agrees in
+ * every language; `backLabel` names the list `backTo` opens ("Projects"), the path before the title.
+ */
 export function MissingRecord({ title, backTo, backLabel }: { title: string; backTo: string; backLabel: string }) {
-  useDocumentTitle(title)
-  return (
-    <PageBody className="mx-auto w-full max-w-lg">
-      <EmptyState
-        icon={FileQuestion}
-        titleAs="h1"
-        title={title}
-        action={
-          <Button size="sm" render={<Link to={backTo} />}>
-            {backLabel}
-          </Button>
-        }
-      />
-    </PageBody>
-  )
+  return <DetailPage path={[{ label: backLabel, link: { to: backTo } }]} title={title} sections={[]} />
 }

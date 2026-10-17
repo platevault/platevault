@@ -80,6 +80,16 @@ describe("Project groups, suggestions, Add sessions and the Closed menu (F4 P)",
     expect(within(row).getByText(m.domain_join_choose_flats())).toBeInTheDocument()
   })
 
+  it("words the Suggestions actions as verbs of one to three words (W2), with Choose calibration for the unsettled ones", async () => {
+    renderProject(cygnus().id)
+    const heading = await screen.findByRole("heading", { name: new RegExp(`^${m.project_suggestions()}`) })
+    const labels = within(heading.closest<HTMLElement>("[data-chrome]")!)
+      .getAllByRole("button")
+      .map((button) => button.textContent!.trim())
+    expect(labels).toContain(m.home_choose_calibration())
+    for (const label of labels) expect(label.split(/\s+/).length, label).toBeLessThanOrEqual(3)
+  })
+
   it("marks a group as a mosaic panel under 'Panel 1', which shows the panel map (PRJ-AC-46)", async () => {
     const p = cygnus()
     const group = p.groups[0]!

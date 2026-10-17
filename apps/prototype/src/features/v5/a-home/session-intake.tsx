@@ -73,7 +73,7 @@ export function SessionIntakePage({ review }: { review: SessionReviewBody }) {
   const { sessionId = "" } = useParams({ strict: false }) as { sessionId?: string }
   const session = useStore((s) => s.catalog.sessions[sessionId])
   const m = useMessages()
-  if (!session) return <MissingRecord title={m.session_missing_title()} backTo="/sessions" backLabel={m.session_open_sessions()} />
+  if (!session) return <MissingRecord title={m.session_missing_title()} backTo="/sessions" backLabel={m.nav_sessions()} />
   // Raw calibration frames have no intake: they are input to a calibration process (P-CAL3).
   if (session.imageType !== "light") return <SessionPage />
   // Keyed by session: the pickers start from this session's own values, never the previous session's.

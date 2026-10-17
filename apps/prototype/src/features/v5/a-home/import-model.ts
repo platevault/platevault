@@ -37,7 +37,7 @@ import { locationAvailability } from "@/domain/library"
 import { headerNamingValues, namingTemplate, resolveNamingTemplate } from "@/domain/templates"
 import type { Blocker } from "@/components/app/contracts"
 import { formatBytes } from "@/lib/format"
-import { m, type MessageRef, type Messages, msg, say } from "@/lib/i18n"
+import { type MessageRef, type Messages, msg, say } from "@/lib/i18n"
 import type {
   AppSettings,
   AssetId,
@@ -237,12 +237,12 @@ export function destinationLocations(catalog: Catalog, role: ImportRole): Locati
     .sort((a, b) => a.displayName.localeCompare(b.displayName))
 }
 
-function locationWritable(disk: Disk, location: Location): { writable: boolean; problem: string | null; volume: Volume | null } {
+function locationWritable(disk: Disk, location: Location): { writable: boolean; problem: MessageRef | null; volume: Volume | null } {
   const volume = disk.volumes[location.volumeId] ?? null
-  if (locationAvailability(disk, location) !== "online" || !volume?.mounted) return { writable: false, volume, problem: m.issue_location_offline({ name: location.displayName }) }
-  if (!volume.writable) return { writable: false, volume, problem: m.import_location_read_only({ name: volume.name }) }
-  if (disk.readOnlyPaths.some((p) => isUnder(location.path, p))) return { writable: false, volume, problem: m.import_no_write_permission({ name: location.displayName }) }
-  if (disk.deniedPaths.some((p) => isUnder(location.path, p))) return { writable: false, volume, problem: m.folder_picker_live_denied({ name: location.displayName }) }
+  if (locationAvailability(disk, location) !== "online" || !volume?.mounted) return { writable: false, volume, problem: msg("issue_location_offline", { name: location.displayName }) }
+  if (!volume.writable) return { writable: false, volume, problem: msg("import_location_read_only", { name: volume.name }) }
+  if (disk.readOnlyPaths.some((p) => isUnder(location.path, p))) return { writable: false, volume, problem: msg("import_no_write_permission", { name: location.displayName }) }
+  if (disk.deniedPaths.some((p) => isUnder(location.path, p))) return { writable: false, volume, problem: msg("folder_picker_live_denied", { name: location.displayName }) }
   return { writable: true, volume, problem: null }
 }
 
@@ -368,7 +368,7 @@ function incomingSessions(state: ImportWorld, draft: ImportDraft, lights: DiskFi
 }
 
 /** Why Move cannot take files from this folder (a chip, "No OS Trash"); null when it can. */
-function moveRefusal(disk: Disk, path: string): string | null {
+function moveRefusal(m: Messages, disk: Disk, path: string): string | null {
   const volumeId = volumeForPath(disk, path)
   const volume = volumeId ? disk.volumes[volumeId] : undefined
   if (!volume?.mounted) return m.import_not_connected()
@@ -377,7 +377,8 @@ function moveRefusal(disk: Disk, path: string): string | null {
   return null
 }
 
-export function planImport(state: ImportWorld, draft: ImportDraft): ImportPlan | null {
+/** The import plan, its problems and blockers worded in `m`: the caller's catalogue, so a language switch re-plans (I18N.md). */
+export function planImport(m: Messages, state: ImportWorld, draft: ImportDraft): ImportPlan | null {
   const source = sourcePathOf(state, draft)
   if (!source) return null
   const { disk, catalog } = state
@@ -487,12 +488,12 @@ export function planImport(state: ImportWorld, draft: ImportDraft): ImportPlan |
     }
     const check = locationWritable(disk, location)
     const free = check.volume ? freeBytes(disk, check.volume.id) : 0
-    const problem = needed === 0 ? null : (check.problem ?? (free < needed ? m.import_space_short({ name: check.volume?.name ?? location.displayName, size: formatBytes(needed - free) }) : null))
+    const problem = needed === 0 ? null : check.problem ? say(m, check.problem) : free < needed ? m.import_space_short({ name: check.volume?.name ?? location.displayName, size: formatBytes(needed - free) }) : null
     plan.destinations.push({ role, location, volume: check.volume, neededBytes: needed, freeBytes: free, writable: check.writable, problem })
   }
 
   // Move sends every source it copied to the OS Trash, so each folder the batch reads must allow it.
-  const refusal = plan.folders.map((f) => moveRefusal(disk, f.path)).find((r) => r !== null) ?? null
+  const refusal = plan.folders.map((f) => moveRefusal(m, disk, f.path)).find((r) => r !== null) ?? null
   plan.move = refusal ? { allowed: false, reason: refusal } : { allowed: true, reason: null }
 
   if (!online) plan.blockers.push({ label: volume?.mounted ? m.folder_picker_live_denied({ name: source.label }) : m.import_source_not_connected({ name: source.label }) })

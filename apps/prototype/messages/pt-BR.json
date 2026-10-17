@@ -911,7 +911,6 @@
   "import_only_held": "Apenas arquivos retidos",
   "import_nothing_new": "Nada novo",
   "import_move_blocked": "Mover: {reason}",
-  "session_open_sessions": "Abrir Sessões",
   "session_open_calibration": "Abrir Calibração",
   "session_step_failed": "{step} falhou",
   "session_in_os_trash": "Na Lixeira do sistema",
@@ -1248,7 +1247,6 @@
   "projects_empty": "Nenhum Projeto ainda",
   "projects_no_goals": "Sem metas",
   "projects_goals_met": "{met} de {total} atingidas",
-  "project_back_to_projects": "Abrir Projetos",
   "goal_hours": "Horas",
   "goal_frames": "Frames",
   "goal_usable_hours": "Horas utilizáveis",
@@ -2791,7 +2789,7 @@
   "review_frame_inspector": "Inspetor do frame",
   "review_key_grid": "Grade, ou voltar",
   "review_table_height": "Altura da tabela",
-  "review_key_filter": "Filtro: Todos, Aprovados, Rejeitados, Não revisados",
+  "review_key_filter": "Filtro: Todos, Utilizáveis, Inutilizáveis, Não revisados",
   "review_select_all_shown": "Selecionar todos os exibidos",
   "review_key_toggle_selection": "Alternar seleção",
   "review_key_escape": "Sair da tela cheia, depois limpar a seleção",
@@ -3034,8 +3032,8 @@
   "review_announce_selection_cleared": "Seleção limpa.",
   "review_cmd_next": "Frame seguinte",
   "review_cmd_previous": "Frame anterior",
-  "review_cmd_pick": "Marcar como Aprovado",
-  "review_cmd_reject": "Marcar como Rejeitado",
+  "review_cmd_usable": "Marcar como Utilizável",
+  "review_cmd_unusable": "Marcar como Inutilizável",
   "review_cmd_unreviewed": "Marcar como Não revisado",
   "review_cmd_zoom": "Zoom Ajustar ou 1:1",
   "review_cmd_fullscreen": "Prévia em tela cheia",
@@ -3045,8 +3043,7 @@
   "review_cmd_select_all": "Selecionar todos os frames exibidos",
   "review_reveal_path": "Revelar caminho",
   "review_empty_none": "Nenhum frame",
-  "review_empty_picked": "Nenhum frame Aprovado",
-  "review_empty_rejected": "Nenhum frame Rejeitado",
+  "review_empty_usable": "Nenhum frame Utilizável",
   "review_empty_unreviewed": "Nenhum frame Não revisado",
   "review_show_all": "Mostrar todos",
   "review_frame_position": "Frame {index} de {total}",
@@ -4574,7 +4571,7 @@
   "importdlg_step_preview": "Pré-visualizar",
   "importdlg_supported": "Formato aceito",
   "importdlg_unattached": "Não anexadas",
-  "review_announce_rest_picked": [
+  "review_announce_rest_usable": [
     {
       "declarations": [
         "input count",
@@ -4585,9 +4582,9 @@
         "countPlural"
       ],
       "match": {
-        "count=0, countPlural=*": "{count} frames aprovados.",
-        "count=*, countPlural=one": "{count} frame aprovado.",
-        "count=*, countPlural=*": "{count} frames aprovados."
+        "count=0, countPlural=*": "{count} frames utilizáveis.",
+        "count=*, countPlural=one": "{count} frame utilizável.",
+        "count=*, countPlural=*": "{count} frames utilizáveis."
       }
     }
   ],
@@ -4619,44 +4616,8 @@
   "review_note_mad": "MAD",
   "review_note_mad_unscaled": "Sem escala",
   "review_note_samples_of": "{count} de {total}, região exibida",
-  "review_pick_rest": "Aprovar o resto",
-  "review_pick_rest_confirm": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "count",
-        "countPlural"
-      ],
-      "match": {
-        "count=0, countPlural=*": "Aprovar {n} frames",
-        "count=*, countPlural=one": "Aprovar {n} frame",
-        "count=*, countPlural=*": "Aprovar {n} frames"
-      }
-    }
-  ],
-  "review_pick_rest_none": "Nenhum frame não revisado",
-  "review_pick_rest_title": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "count",
-        "countPlural"
-      ],
-      "match": {
-        "count=0, countPlural=*": "Aprovar os {n} frames não revisados?",
-        "count=*, countPlural=one": "Aprovar o {n} frame não revisado?",
-        "count=*, countPlural=*": "Aprovar os {n} frames não revisados?"
-      }
-    }
-  ],
+  "review_mark_rest_usable": "Marcar o resto como utilizável",
+  "review_mark_rest_none": "Nenhum frame não revisado",
   "review_plot_coverage": "{count} de {total} medidos",
   "review_plot_point": "{name}: {value}",
   "review_readout": "x {x} y {y} · {value} ADU",
@@ -5292,7 +5253,7 @@
   "simulation_this_project_title": "Este projeto: {name}",
   "simulation_actions_title": "Ações",
   "simulation_quick_actions": "Ações rápidas",
-  "simulation_quick_actions_detail": "Um clique executa marcações em mais de 20 frames, Aprovar o resto e, no Início, Adicionar ao Projeto, Adicionar ao Plano, Escanear e Reescanear onde estão, com Desfazer quando há um. Abrir página leva cada uma à página que a contém.",
+  "simulation_quick_actions_detail": "Um clique executa marcações em mais de 20 frames, Marcar o resto como utilizável e, no Início, Adicionar ao Projeto, Adicionar ao Plano, Escanear e Reescanear onde estão, com Desfazer quando há um. Abrir página leva cada uma à página que a contém.",
   "simulation_quick_one_click": "Um clique",
   "simulation_quick_open_page": "Abrir página",
   "ds_operation_title": "Operação",
@@ -5573,9 +5534,9 @@
         "countPlural"
       ],
       "match": {
-        "count=0, countPlural=*": "{count} frames Não revisados",
-        "count=*, countPlural=one": "{count} frame Não revisado",
-        "count=*, countPlural=*": "{count} frames Não revisados"
+        "count=0, countPlural=*": "{count} frames não revisados",
+        "count=*, countPlural=one": "{count} frame não revisado",
+        "count=*, countPlural=*": "{count} frames não revisados"
       }
     }
   ],
