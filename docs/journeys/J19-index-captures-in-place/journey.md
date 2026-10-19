@@ -1,7 +1,7 @@
 ---
 id: J19
 title: Index capture folders in place and inspect sessions on first use
-version: 7
+version: 8
 status: draft
 last_reviewed: 2026-10-03
 actors: [primary-user]
@@ -97,10 +97,10 @@ opens on Home, the control-panel dashboard. Done means:
 
 ### S6a — Read planning before any site exists {#S6a}
 
-- **Do:** On Home, read Tonight. Open Targets and search for `NGC 7000`.
-- **Expect:** Tonight reads `No site` and offers **Add site**, which leads to Settings › Observing sites. Targets opens on My targets, with tonight in its header date picker and a toggle to Browse catalogues. My targets holds no Target, the altitude column draws no sparkline and the page offers **Add site**. The search lists NGC 7000 from the bundled catalogues with its source. The row's primary action, on a click, is Add to targets, and the row shows no separate Add button. The results read `SIMBAD off` or `SIMBAD unreachable`, never `SIMBAD searched`.
-- **Expect (negative):** No window, altitude or Img time is computed for an assumed location. Searching writes nothing: this step clicks no result row, and My targets stays empty.
-- **Trace:** PLAN-FR-11 · PLAN-AC-12 · PLAN-TGT-FR-01, PLAN-TGT-FR-03 · PLAN-TGT-AC-04, PLAN-TGT-AC-15 · D-W17, D-W39 · HARNESS-V5-IA.md §Screens S1 (Tonight), S10, S11 · HARNESS-V5-FEEDBACK-R1.md §Round 5 (P-PLAN2, Click a result to act), §Round 6 "Targets opens on My targets", "Clicking a result" · G10
+- **Do:** When both Captures locations finish indexing, on Home, read Tonight. Open Targets and search for `NGC 7000`.
+- **Expect:** Tonight reads `No site` and offers **Add site**, which leads to Settings › Observing sites. Targets opens on My targets, with tonight in its header date picker and a toggle to Browse catalogues. My targets lists NGC 7000, because its sessions are indexed, with no ★ and no Project badge. The altitude column draws no sparkline and the page offers **Add site**. The search lists NGC 7000 from the bundled catalogues with its source, and the result shows it is in My targets, so it offers no Add to targets (PLAN-TGT-FR-03). The results read `SIMBAD off` or `SIMBAD unreachable`, never `SIMBAD searched`.
+- **Expect (negative):** No window, altitude or Img time is computed for an assumed location. Searching writes nothing: this step clicks no result row, and the search adds no Target to My targets.
+- **Trace:** PLAN-FR-11 · PLAN-AC-12 · PLAN-TGT-FR-01, PLAN-TGT-FR-03 · PLAN-TGT-AC-03, PLAN-TGT-AC-04, PLAN-TGT-AC-15 · D-W17, D-W39 · HARNESS-V5-IA.md §Screens S1 (Tonight), S10, S11 · HARNESS-V5-FEEDBACK-R1.md §Round 6 "Targets opens on My targets"
 
 ### S7 — Recover the denied location {#S7}
 
@@ -138,12 +138,12 @@ opens on Home, the control-panel dashboard. Done means:
 
 - **Do:** In Sessions, read the filter counts, then choose the **Needs a Target** filter, then **Not in any Project**. Open Home and read its Pending work section. Choose the status bar's ⚠ counter, then its ℹ counter.
 - **Expect:**
-  - The filters read All 7, Needs calibration 5 and Trashed 0. **Needs calibration** lists 12, 24, 26 and 28 Sep and the other-camera session (S7a): none of them is Ready, and the filter lists every session whose calibration isn't settled (LIB-FR-17). The Needs a Target, Needs review and Not in any Project counts aren't asserted here, because they depend on G11.
-  - **Needs a Target** lists 24 Sep, which has no Target, and its row offers **Choose Target**. Whether it also lists the sessions whose Target is associated by pointing is G11's question.
-  - **Not in any Project** doesn't list 24 Sep. Each row it lists reads `No Project` and offers **Add to Project**, and its menu reads `No open Project` and offers **Create Project…**. Which sessions it lists depends on G11.
+  - The filters read All 7, Needs calibration 5 and Trashed 0. **Needs calibration** lists 12, 24, 26 and 28 Sep and the other-camera session (S7a): none of them is Ready, and the filter lists every session whose calibration isn't settled (LIB-FR-17).
+  - **Needs a Target** lists 24 Sep, which has no Target, and its row offers **Choose Target**. It lists none of 12, 18, 26, 28 and 30 Sep and the other-camera session, whose Target is associated by pointing, because an associated Target counts as confirmed.
+  - **Not in any Project** doesn't list 24 Sep. It lists 12, 18, 26, 28 and 30 Sep and the other-camera session, because their associated Target counts as confirmed. Each row it lists reads `No Project` and offers **Add to Project**, and its menu reads `No open Project` and offers **Create Project…**.
   - Home's Pending work reports the same counts as the Sessions filters, with 24 Sep among the sessions needing a Target and the five S7a sessions as needing calibration.
   - The ⚠ counter opens Sessions filtered to the rows its warnings affect, 24 Sep among them.
-  - The ℹ counter opens a menu naming `Calibration · <n>` for the S7a processes waiting to stack. Whether it also names `Sessions · <n>` for sessions not in a Project depends on G11.
+  - The ℹ counter opens a menu naming `Calibration · <n>` for the S7a processes waiting to stack, and `Sessions · <n>` for the sessions not in a Project.
 - **Expect (negative):** Neither filter assigns a session to a Project. No session is suggested to any Project, because no Project exists. Home shows no Sessions box, issues strip or summary line, and no counter opens a list of issues.
 - **Trace:** cross-flow "Missing OBJECT" · LIB-FR-17 · LIB-AC-18 · PRJ-FR-17, PRJ-FR-19 · PRJ-AC-20 · D-W33, D-W43, D-W78, D-W89, D-W92, D-W105 · HARNESS-V5-IA.md §Screens S12 · HARNESS-V5-FEEDBACK-R1.md §Round 5 (P-SB3, Home has no issues strip)
 
@@ -160,7 +160,7 @@ opens on Home, the control-panel dashboard. Done means:
 ### S10 — Confirm and correct associations in the catalog {#S10}
 
 - **Do:** In 24 Sep's Target box, choose NGC 7000 and click **Confirm Target**. Do the same for 26 Sep. Choose **Confirm rig** with rig `RedCat` for the six RedCat sessions: 12, 18, 24, 26, 28 and 30 Sep. Then open the intake Target and Rig steps of 24 Sep, 28 Sep and 30 Sep.
-- **Expect:** 24 Sep's Target picker opens on `Choose a Target`, with no Target chosen. After each confirmation, the Target box reads NGC 7000 Confirmed next to the original evidence. 26 Sep still displays its `Cygnus field` label. Each of the six sessions reads rig `RedCat` Confirmed, including 28 Sep, whose rig read Needs review before. **Needs a Target** lists neither 24 nor 26 Sep, **Not in any Project** lists both, and 24 Sep's row carries no Needs a Target warning. Whether 12, 18, 28 and 30 Sep and the other-camera session, whose Target is still associated by pointing, read Needs a Target or Not in any Project depends on G11.
+- **Expect:** 24 Sep's Target picker opens on `Choose a Target`, with no Target chosen. After each confirmation, the Target box reads NGC 7000 Confirmed next to the original evidence. 26 Sep still displays its `Cygnus field` label. Each of the six sessions reads rig `RedCat` Confirmed, including 28 Sep, whose rig read Needs review before. **Needs a Target** lists neither 24 nor 26 Sep, **Not in any Project** lists both, and 24 Sep's row carries no Needs a Target warning. 12, 18, 28 and 30 Sep and the other-camera session, whose Target is still associated by pointing, stay out of **Needs a Target** and in **Not in any Project**, because an associated Target counts as confirmed.
 - **Expect:** 24 Sep's Target step shows a Corrections table with the columns Field, Recorded and Corrected (provisional copy, from the prototype). Its Target row reads "–" recorded and NGC 7000 corrected. 28 Sep's Rig step shows the same table with one Equipment row, "–" recorded and `RedCat` corrected, because its rig had no associated value. 30 Sep's rig was already associated as `RedCat`, and its Target is still associated by pointing, so neither of its steps shows a Corrections table.
 - **Expect (negative):** Source bytes still match P5, including the 26 Sep OBJECT keyword and the absent 28 Sep optics keywords. Session boundaries and frame counts do not change. No picker offers or preselects a Target from an OBJECT label. A correction writes no header.
 - **Trace:** flow A3 · LIB-FR-05, LIB-FR-12, LIB-FR-17, LIB-FR-20 · LIB-AC-06 · root FR-002 · D11, D15, D-W37, D-W122 · HARNESS-V5-IA.md §Screens S12 (Confirm Target / Confirm rig) · S9b (names the rigs) · HARNESS-V5-FEEDBACK-R1.md Round 9 C15 (corrections recorded at ingestion)
@@ -202,7 +202,7 @@ opens on Home, the control-panel dashboard. Done means:
 ### S15 — Take Cold-1 offline {#S15}
 
 - **Do:** Eject `Cold-1`. Read the status bar, open its ⚠ counter and choose `Settings › Locations · 1` in its menu.
-- **Expect:** The status bar's locations count reads `2 of 3 online`. Its ⚠ counter opens a menu naming `Sessions · <n>` and `Settings › Locations · 1`. n counts the session warnings: 4 for the sessions still in Needs calibration after S10a (12, 24 and 28 Sep and the other-camera session), plus any Needs a Target warnings that G11 leaves open. `Settings › Locations · 1` opens Settings › Locations filtered to the `Cold-1 captures` row. In Settings › Locations, the `Cold-1 captures` row reads Offline, and each `Astro-T7` row shows its disk use: the bytes PlateVault catalogues in that location, plus the free space of the `Astro-T7` volume. The 12 Sep session stays listed with its last-observed metadata and an Offline state. Its metadata is marked as last observed rather than currently verified.
+- **Expect:** The status bar's locations count reads `2 of 3 online`. Its ⚠ counter opens a menu naming `Sessions · <n>` and `Settings › Locations · 1`. n counts the session warnings: 4 for the sessions still in Needs calibration after S10a (12, 24 and 28 Sep and the other-camera session). No session carries a Needs a Target warning: after S10, 24 and 26 Sep are confirmed and every other session has a Target associated by pointing, which counts as confirmed. `Settings › Locations · 1` opens Settings › Locations filtered to the `Cold-1 captures` row. In Settings › Locations, the `Cold-1 captures` row reads Offline, and each `Astro-T7` row shows its disk use: the bytes PlateVault catalogues in that location, plus the free space of the `Astro-T7` volume. The 12 Sep session stays listed with its last-observed metadata and an Offline state. Its metadata is marked as last observed rather than currently verified.
 - **Expect (negative):** No 12 Sep frame reads Missing and the session is not removed.
 - **Trace:** flow A3, cross-flow "Location offline" · LIB-FR-07, LIB-FR-17 · LIB-AC-05 · 063 FR-032 · D11, D-W92 · HARNESS-V5-IA.md §Round 2b (Status bar, Left: locations online) · HARNESS-V5-FEEDBACK-R1.md §Round 5 (P-SB3, P-STO2), §Round 6 "Disk use per location"
 
@@ -215,7 +215,7 @@ opens on Home, the control-panel dashboard. Done means:
 - SC5: After S7, the Calibration row has no failure and its frames are indexed. The failure offered both recovery actions (S5). At S7a, every raw calibration session in P4 has exactly one process with Stack To do, and 0 masters are written and 0 raw frames are trashed. Indexing pinned the raw darks and bias on the six RedCat sessions, the Ha flats on 18 Sep and the OIII flats on 30 Sep, so 2 sessions are settled and 5 are not, 26 Sep among them with the OIII flats suggested. After S10a the 26 Sep session's flats are pinned, its calibration is settled, and **Needs calibration** lists 4 sessions.
 - SC6: At the end, 0 frames read Usable (S8).
 - SC7: A failing catalog write never reads Saved (S11).
-- SC8: Home is the first surface after onboarding (S6). At S9a the filters read exactly All 7, Needs calibration 5 and Trashed 0, Needs a Target lists 24 Sep, and Home's Pending work reports the same counts as the filters. After S10, **Needs a Target** lists neither 24 nor 26 Sep. G11 leaves the other counts open.
+- SC8: Home is the first surface after onboarding (S6). At S9a the filters read exactly All 7, Needs calibration 5 and Trashed 0, Needs a Target lists 24 Sep and none of the sessions whose Target is associated by pointing (12, 18, 26, 28 and 30 Sep and the other-camera session), and Home's Pending work reports the same counts as the filters. After S10, **Needs a Target** lists neither 24 nor 26 Sep, and **Not in any Project** lists 24 and 26 Sep and every session whose Target is associated by pointing.
 - SC9: With no saved site, 0 windows and 0 Img time values are computed (S6a).
 - SC10: 0 Targets are taken from an OBJECT label: no evidence list names OBJECT at S9, and 24 Sep's picker opens with no Target chosen at S10.
 - SC11: At S15 the status bar reads `2 of 3 online`, and 0 duplicate-copies issues are raised after indexing (S8).
@@ -230,8 +230,8 @@ opens on Home, the control-panel dashboard. Done means:
 - G6: Out of scope for this journey: the P2 fixture has no single night holding both Ha and OIII 300 s lights, so the same-night channel split of LIB-AC-03 is not exercised. Blocks readiness until covered by a step or a journey.
 - G7: Out of scope for this journey: the release-build exclusion of the development MCP bridge (LIB-AC-13, D17) is a build check that no running-product step observes. Release-build verification evidence is required. Blocks readiness until it exists.
 - G9: Unresolved implementation qualification (carried from G2 unchanged): same-asset locate/remap (LIB-FR-07, D11) and "locate a known copy" are not exercised in this journey. Blocks readiness.
-- G10: Unresolved product question: Round 6 defines My targets as "yours plus favourites", while HARNESS-V5-IA.md S10 says "the ★ favourites plus open-Project subjects". Neither says whether a Target that only has indexed sessions (NGC 7000 at S6a, associated by pointing, with no ★ and no Project) is "yours". S6a keeps the IA reading: My targets holds no Target, and NGC 7000's search result is added on a click. Blocks readiness.
-- G11: Unresolved product question, open with the owner: does a Target associated by agreeing pointing evidence count as confirmed for Needs a Target, Not in any Project and Ready? The v5 design assumes it does: `sessionTargetId` and `sessionReadiness` in the prototype's `src/domain/derive.ts` treat an associated Target as settled. LIB-FR-17 and LIB-FR-20 say "confirmed Target", and the F4 backend contract computes readiness from `SessionIntake.target_confirmed`, so they need an explicit confirmation. S9a and S10 therefore assert only what holds under either answer and leave the Needs a Target, Needs review and Not in any Project counts open, as SC8 does. J14, J20, J28 and J35 assume the design's answer and depend on it too. Blocks readiness.
+- G10: (dissolved 2026-10-19): the owner's answer in astro-plan-rzbzu.1 settles My targets: favourites, subjects of open Projects, and every Target that has at least one session. S6a now asserts that My targets lists NGC 7000 once its sessions are indexed, and that its search result shows it is in My targets.
+- G11: (dissolved 2026-10-19): the owner's answer in astro-plan-rzbzu.1: a Target associated by agreeing pointing counts as confirmed for Needs a Target, Not in any Project and Ready. S9a, S10, S15 and SC8 now assert it for the sessions whose Target is associated by pointing. J14, J20, J28 and J35 already assumed this answer.
 
 ## Delta log
 
@@ -257,3 +257,7 @@ opens on Home, the control-panel dashboard. Done means:
   One **Edit…** verb replaces Rename and Edit optics: S9b names the detected rigs and enters the camera's pixel size through **Edit…**.
   Metadata corrections are recorded at ingestion: S10 reads 24 Sep's Target and 28 Sep's rig in the Corrections tables of their intake steps.
   Evidence: HARNESS-V5-FEEDBACK-R1.md Round 9 C2, C15 · D-W76 · PLAN-EQ-FR-07, LIB-FR-12 · prototype session-intake.tsx Corrections (ui-harness-v5) · by: JourneysR9c (intent-gated)
+- **Δ8** 2026-10-19 · S6a, S9a, S10, S15, SC8 · behavior-change
+  My targets lists every Target with at least one session, so at S6a it lists NGC 7000, and NGC 7000's search result offers no Add to targets.
+  A Target associated by agreeing pointing counts as confirmed: at S9a and S10 the sessions associated by pointing are not in Needs a Target and are in Not in any Project.
+  Evidence: owner's answers of 2026-10-19 in astro-plan-rzbzu.1 (My targets, associated Target), PLAN-TGT-FR-03, LIB-FR-17, LIB-FR-20 · by: Main (intent-gated)
