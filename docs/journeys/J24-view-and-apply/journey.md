@@ -7,7 +7,7 @@ last_reviewed: 2026-10-03
 actors: [primary-user]
 surfaces: [preparation, projects, sessions, applications, status-bar]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 069-application-handoff, 070-results-reuse, D02, D04, D09, D13, D15, D19, D-W3, D-W5, D-W94, D-W98, D-W100, D-W110, D-W113, D-W114, specs/063-clean-rebuild-contract/decisions.md, specs/063-clean-rebuild-contract/workflow-decisions.md, specs/069-application-handoff/spec.md, specs/070-results-reuse/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-f-prepare-and-open-the-view, HARNESS-V5-IA.md#S5, HARNESS-V5-IA.md#fix-pass, HARNESS-V5-FEEDBACK-R1.md#c-run-and-run-group, HARNESS-V5-FEEDBACK-R1.md#b-projects-project-new-project-start-run-trash-wrap-up, HARNESS-V5-FEEDBACK-R1.md#round-5, P-SB3, HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#round-7, P-PREP3, RUN-VIEWS-OPTIONS.md, 066-view-selection, 068-calibration-inputs, 071-storage-custody, D-W113]
+trace: [063-clean-rebuild-contract, 069-application-handoff, 070-results-reuse, D02, D04, D09, D13, D15, D19, D-W3, D-W5, D-W94, D-W98, D-W100, D-W110, D-W114, specs/063-clean-rebuild-contract/decisions.md, specs/063-clean-rebuild-contract/workflow-decisions.md, specs/069-application-handoff/spec.md, specs/070-results-reuse/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-f-prepare-and-open-the-view, HARNESS-V5-IA.md#S5, HARNESS-V5-IA.md#fix-pass, HARNESS-V5-FEEDBACK-R1.md#c-run-and-run-group, HARNESS-V5-FEEDBACK-R1.md#b-projects-project-new-project-start-run-trash-wrap-up, HARNESS-V5-FEEDBACK-R1.md#round-5, P-SB3, HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#round-7, P-PREP3, RUN-VIEWS-OPTIONS.md, 066-view-selection, 068-calibration-inputs, 071-storage-custody, D-W99, D-W101, specs/066-view-selection/spec.md, specs/068-calibration-inputs/spec.md, specs/071-storage-custody/spec.md, D-W113]
 ---
 
 ## Goal
@@ -200,7 +200,7 @@ Done means:
 - G9: (dissolved 2026-10-12): answered by Round 6 "Reject is library-wide by default"; S17 now makes revision 2 with "Reject for this Project only" on one 28 Sep frame, whose library quality stays Usable, as in J22/S11b.
 - G10: (dissolved 2026-10-15): D-W94 removes runs and their saved and prepared revisions. A library rejection becomes a labelled pending change on every open Project that holds the frame (D-W100, VSEL-FR-12), so there is no other run's revision to define.
 - G11: Unresolved implementation qualification: the Windows file-handle fixture of P8 does not exist in the rebuilt application yet, and S15, S15a and S16 depend on it. Blocks readiness.
-- G12: Rests on F4 items still marked provisional in their specifications: D-W100's first Apply has no separate Start processing (S8, S9), PREP-FR-15/17's Siril refusal copy (S1a), D-W95's "re-add View in your tool" note (S14), and D-W108's exposure part (S8, S17).
+- G12: Rests on provisional F4 items, pending the owner's confirmation in PR #1804: D-W100's rule that the first Apply builds the View with no separate Start processing (S8, S9), the "Use copies for this Project" refusal copy of PREP-FR-15 and the Siril refusal that omits it (PREP-FR-17, S1a), D-W95's "re-add View in your tool" layout note (S14), and D-W108's exposure part that ends every light folder name, `Ha_300s` (S8, S17). If the owner changes one, the steps that cite it change.
 
 ## Delta log
 - **Δ2** 2026-10-06 · S1, S4, S6, S7, S8, S9, S10, S12, S13, S14, S15, +S17 · behavior-change

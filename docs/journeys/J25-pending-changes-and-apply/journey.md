@@ -148,8 +148,8 @@ Done means: the Project shows the addition, group and calibration changes as pen
 - G3: Out of scope for this journey: path repair after an archive transfer is distinct from refresh and is exercised in J28/S8.
 - G4: Out of scope for this journey: adding a session while an external application reads the View (VSEL-AC-12) is not exercised, and no frame is an explicit inclusion, so the D09 pinning of manual inclusions is not observed. Blocks readiness until covered by a step or a journey.
 - G5: Covered elsewhere: the Duplicates review and its clean-up (Keep this copy, Move the others to the OS Trash) opened from the S1 warning are exercised by J39 (S2 to S6); this journey only reads the warning.
-- G6: Rests on the F4 items not settled by the owner's answer: D-W96's matching rule and its "captured" count (S1), D-W95's "re-add View in your tool" note (S5), and D-W108's exposure part that ends every light folder name (S5). If the owner changes one, the steps that cite it change.
-- G7: (dissolved 2026-10-19): the owner's answer, 2026-10-19 (astro-plan-rzbzu.1), settles D-W110: on the next Apply, kept files move to a separate kept folder; a `-2` suffix is added on name clashes. S7c and S7d state the resulting placement while preserving the kept file's bytes and avoiding a repeated review.
+- G6: Rests on provisional F4 items, pending the owner's confirmation in PR #1804: D-W96's matching rule and its "captured" count (S1), D-W95's "re-add View in your tool" note (S5), and D-W108's exposure part that ends every light folder name (S5). If the owner changes one, the steps that cite it change.
+- G7: (dissolved 2026-10-19): the owner's answer, 2026-10-19 (astro-plan-rzbzu.1), settles D-W110: on the next Apply, kept files move to a separate kept folder; a `-2` suffix is added on name clashes. S7c and S7d still assert only that the kept note keeps its bytes, isn't deleted or asked about again, and that no numbered `View (previous)` folder appears; neither asserts the kept folder.
 
 ## Delta log
 - **Δ2** 2026-10-06 · S1, S3, S4, S5, +S2a, +S2b, +S5a · behavior-change

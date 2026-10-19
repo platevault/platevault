@@ -6,7 +6,7 @@
 
 **Created**: 2026-10-03
 
-**Amended**: 2026-10-06, to the settled workflow decisions D-W1 to D-W71, on 2026-10-07 to the answers D-W72 to D-W74, on 2026-10-14 to the F4 Project model, D-W93 to D-W106, on 2026-10-16 to the owner's answers D-W107 to D-W116 and second batch amending D-W110, and on 2026-10-19 to the answers D-W100, D-W110, D-W113 and D-W114 (astro-plan-rzbzu.1).
+**Amended**: 2026-10-06, to the settled workflow decisions D-W1 to D-W71, on 2026-10-07 to the answers D-W72 to D-W74, on 2026-10-08 to the decision D-W75, on 2026-10-14 to the F4 Project model, D-W93 to D-W106, on 2026-10-16 to the owner's answers of 2026-10-15/16, D-W107 to D-W116, and on 2026-10-16 to the owner's second batch, which amends D-W110 in place, and on 2026-10-19 to the answers D-W100, D-W110, D-W113 and D-W114 (astro-plan-rzbzu.1).
 
 **Status**: Draft; product defaults and all human-approval gate waivers follow the root autonomous objective. Requirements analysis, implementation and verification remain required.
 

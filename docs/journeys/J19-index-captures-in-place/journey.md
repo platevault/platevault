@@ -139,8 +139,8 @@ opens on Home, the control-panel dashboard. Done means:
 - **Do:** In Sessions, read the filter counts, then choose the **Needs a Target** filter, then **Not in any Project**. Open Home and read its Pending work section. Choose the status bar's ⚠ counter, then its ℹ counter.
 - **Expect:**
   - The filters read All 7, Needs calibration 5 and Trashed 0. **Needs calibration** lists 12, 24, 26 and 28 Sep and the other-camera session (S7a): none of them is Ready, and the filter lists every session whose calibration isn't settled (LIB-FR-17).
-  - **Needs a Target** lists 24 Sep, which has no Target, and its row offers **Choose Target**. It lists none of 12, 18, 28 and 30 Sep and the other-camera session, whose Target is associated by pointing, because an associated Target counts as confirmed.
-  - **Not in any Project** doesn't list 24 Sep. It lists 12, 18, 28 and 30 Sep and the other-camera session, because their associated Target counts as confirmed. Each row it lists reads `No Project` and offers **Add to Project**, and its menu reads `No open Project` and offers **Create Project…**.
+  - **Needs a Target** lists 24 Sep, which has no Target, and its row offers **Choose Target**. It lists none of 12, 18, 26, 28 and 30 Sep and the other-camera session, whose Target is associated by pointing, because an associated Target counts as confirmed.
+  - **Not in any Project** doesn't list 24 Sep. It lists 12, 18, 26, 28 and 30 Sep and the other-camera session, because their associated Target counts as confirmed. Each row it lists reads `No Project` and offers **Add to Project**, and its menu reads `No open Project` and offers **Create Project…**.
   - Home's Pending work reports the same counts as the Sessions filters, with 24 Sep among the sessions needing a Target and the five S7a sessions as needing calibration.
   - The ⚠ counter opens Sessions filtered to the rows its warnings affect, 24 Sep among them.
   - The ℹ counter opens a menu naming `Calibration · <n>` for the S7a processes waiting to stack, and `Sessions · <n>` for the sessions not in a Project.
@@ -202,7 +202,7 @@ opens on Home, the control-panel dashboard. Done means:
 ### S15 — Take Cold-1 offline {#S15}
 
 - **Do:** Eject `Cold-1`. Read the status bar, open its ⚠ counter and choose `Settings › Locations · 1` in its menu.
-- **Expect:** The status bar's locations count reads `2 of 3 online`. Its ⚠ counter opens a menu naming `Sessions · <n>` and `Settings › Locations · 1`. n counts the session warnings: 4 for the sessions still in Needs calibration after S10a (12, 24 and 28 Sep and the other-camera session), plus any Needs a Target warnings that G11 leaves open. `Settings › Locations · 1` opens Settings › Locations filtered to the `Cold-1 captures` row. In Settings › Locations, the `Cold-1 captures` row reads Offline, and each `Astro-T7` row shows its disk use: the bytes PlateVault catalogues in that location, plus the free space of the `Astro-T7` volume. The 12 Sep session stays listed with its last-observed metadata and an Offline state. Its metadata is marked as last observed rather than currently verified.
+- **Expect:** The status bar's locations count reads `2 of 3 online`. Its ⚠ counter opens a menu naming `Sessions · <n>` and `Settings › Locations · 1`. n counts the session warnings: 4 for the sessions still in Needs calibration after S10a (12, 24 and 28 Sep and the other-camera session). No session carries a Needs a Target warning: after S10, 24 and 26 Sep are confirmed and every other session has a Target associated by pointing, which counts as confirmed. `Settings › Locations · 1` opens Settings › Locations filtered to the `Cold-1 captures` row. In Settings › Locations, the `Cold-1 captures` row reads Offline, and each `Astro-T7` row shows its disk use: the bytes PlateVault catalogues in that location, plus the free space of the `Astro-T7` volume. The 12 Sep session stays listed with its last-observed metadata and an Offline state. Its metadata is marked as last observed rather than currently verified.
 - **Expect (negative):** No 12 Sep frame reads Missing and the session is not removed.
 - **Trace:** flow A3, cross-flow "Location offline" · LIB-FR-07, LIB-FR-17 · LIB-AC-05 · 063 FR-032 · D11, D-W92 · HARNESS-V5-IA.md §Round 2b (Status bar, Left: locations online) · HARNESS-V5-FEEDBACK-R1.md §Round 5 (P-SB3, P-STO2), §Round 6 "Disk use per location"
 
@@ -215,7 +215,7 @@ opens on Home, the control-panel dashboard. Done means:
 - SC5: After S7, the Calibration row has no failure and its frames are indexed. The failure offered both recovery actions (S5). At S7a, every raw calibration session in P4 has exactly one process with Stack To do, and 0 masters are written and 0 raw frames are trashed. Indexing pinned the raw darks and bias on the six RedCat sessions, the Ha flats on 18 Sep and the OIII flats on 30 Sep, so 2 sessions are settled and 5 are not, 26 Sep among them with the OIII flats suggested. After S10a the 26 Sep session's flats are pinned, its calibration is settled, and **Needs calibration** lists 4 sessions.
 - SC6: At the end, 0 frames read Usable (S8).
 - SC7: A failing catalog write never reads Saved (S11).
-- SC8: Home is the first surface after onboarding (S6). At S9a the filters read exactly All 7, Needs calibration 5 and Trashed 0, Needs a Target lists 24 Sep and none of the sessions whose Target is associated by pointing, and Home's Pending work reports the same counts as the filters. After S10, **Needs a Target** lists neither 24 nor 26 Sep, and **Not in any Project** lists 24 and 26 Sep and every session whose Target is associated by pointing.
+- SC8: Home is the first surface after onboarding (S6). At S9a the filters read exactly All 7, Needs calibration 5 and Trashed 0, Needs a Target lists 24 Sep and none of the sessions whose Target is associated by pointing (12, 18, 26, 28 and 30 Sep and the other-camera session), and Home's Pending work reports the same counts as the filters. After S10, **Needs a Target** lists neither 24 nor 26 Sep, and **Not in any Project** lists 24 and 26 Sep and every session whose Target is associated by pointing.
 - SC9: With no saved site, 0 windows and 0 Img time values are computed (S6a).
 - SC10: 0 Targets are taken from an OBJECT label: no evidence list names OBJECT at S9, and 24 Sep's picker opens with no Target chosen at S10.
 - SC11: At S15 the status bar reads `2 of 3 online`, and 0 duplicate-copies issues are raised after indexing (S8).
@@ -231,7 +231,7 @@ opens on Home, the control-panel dashboard. Done means:
 - G7: Out of scope for this journey: the release-build exclusion of the development MCP bridge (LIB-AC-13, D17) is a build check that no running-product step observes. Release-build verification evidence is required. Blocks readiness until it exists.
 - G9: Unresolved implementation qualification (carried from G2 unchanged): same-asset locate/remap (LIB-FR-07, D11) and "locate a known copy" are not exercised in this journey. Blocks readiness.
 - G10: (dissolved 2026-10-19): the owner's answer in astro-plan-rzbzu.1 settles My targets: favourites, subjects of open Projects, and every Target that has at least one session. S6a now asserts that My targets lists NGC 7000 once its sessions are indexed, and that its search result shows it is in My targets.
-- G11: (dissolved 2026-10-19): the owner's answer in astro-plan-rzbzu.1: a Target associated by agreeing pointing counts as confirmed for Needs a Target, Not in any Project and Ready. S9a, S10 and SC8 now assert it for 12, 18, 28 and 30 Sep and the other-camera session. J14, J20, J28 and J35 already assumed this answer.
+- G11: (dissolved 2026-10-19): the owner's answer in astro-plan-rzbzu.1: a Target associated by agreeing pointing counts as confirmed for Needs a Target, Not in any Project and Ready. S9a, S10, S15 and SC8 now assert it for the sessions whose Target is associated by pointing. J14, J20, J28 and J35 already assumed this answer.
 
 ## Delta log
 
@@ -257,7 +257,7 @@ opens on Home, the control-panel dashboard. Done means:
   One **Edit…** verb replaces Rename and Edit optics: S9b names the detected rigs and enters the camera's pixel size through **Edit…**.
   Metadata corrections are recorded at ingestion: S10 reads 24 Sep's Target and 28 Sep's rig in the Corrections tables of their intake steps.
   Evidence: HARNESS-V5-FEEDBACK-R1.md Round 9 C2, C15 · D-W76 · PLAN-EQ-FR-07, LIB-FR-12 · prototype session-intake.tsx Corrections (ui-harness-v5) · by: JourneysR9c (intent-gated)
-- **Δ8** 2026-10-19 · S6a, S9a, S10 · behavior-change
+- **Δ8** 2026-10-19 · S6a, S9a, S10, S15, SC8 · behavior-change
   My targets lists every Target with at least one session, so at S6a it lists NGC 7000, and NGC 7000's search result offers no Add to targets.
   A Target associated by agreeing pointing counts as confirmed: at S9a and S10 the sessions associated by pointing are not in Needs a Target and are in Not in any Project.
   Evidence: owner's answers of 2026-10-19 in astro-plan-rzbzu.1 (My targets, associated Target), PLAN-TGT-FR-03, LIB-FR-17, LIB-FR-20 · by: Main (intent-gated)

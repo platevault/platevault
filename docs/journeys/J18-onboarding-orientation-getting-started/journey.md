@@ -10,6 +10,7 @@ interfaces: [desktop-ui, desktop-ui-macos]
 trace:
   - specs/067-frame-review/spec.md (PIX-FR-14; D-W118)
   - astro-plan-rzbzu.1 (owner's answer of 2026-10-19: Mark rest usable confirmation)
+  - specs/056-onboarding-redesign (legacy design of the walk and checklist; PR #1048)
   - specs/056-onboarding-redesign/PENDING_REVIEW_QUESTIONS.md (PQ-004, user directive 2026-07-18: auto-hide when complete, resurface through Settings)
   - specs/063-clean-rebuild-contract/spec.md (FR-020, FR-023)
   - specs/064-library-inventory/spec.md (LIB-FR-05, LIB-FR-10, LIB-FR-16, LIB-FR-21, LIB-FR-27, LIB-AC-09, LIB-AC-35)

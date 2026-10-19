@@ -101,7 +101,7 @@
   "readiness": {
     "common": {
       "goalObservableDone": "pass (all 28 rebuild journeys, per the authoring audit of each slice)",
-      "expectsFalsifiable": "pass except where a blocker leaves an Expect undecided or not yet observable: J23 (G10 generic-app consumption), J29 (G2), J35 (G6).",
+      "expectsFalsifiable": "pass except where a blocker leaves an Expect undecided or not yet observable: J23 (G10 corrected non-FITS formats other than XISF), J29 (G2), J35 (G6).",
       "successCriteriaConcrete": "pass (all 28; each SC has a count, value, or state)",
       "negativesAtTrustPoints": "pass (all 28; every mutation, deletion, transfer, trash, patch, and quality step has an Expect (negative))",
       "actorsSurfacesInterfacesTrace": "pass (all 28 fill actors, surfaces, interfaces and trace; README lists the rebuild and harness v5 surface keys and maps the v5 prototype paths)",
@@ -123,7 +123,7 @@
           "G7 (out of scope) the unknown-filter prompt in the Import preview (STO-IMP-FR-03) and the Targets Filters strip a rig drives (PLAN-TGT-FR-06) are not exercised here.",
           "G10 (dissolved 2026-10-19, astro-plan-rzbzu.1) The owner settles PLAN-EQ-FR-04: S4b and S4c retain the session's Add {value} to {rig} control asking which bands the filter passes; the prototype still lacks that control.",
           "G11 (implementation qualification) the v5 design does not state the rule that matches a header to a camera or telescope added by hand (J37/G3 records the same gap for rigs).",
-          "G12 (dissolved 2026-10-19, astro-plan-rzbzu.1) PLAN-EQ-FR-07: a session captured before the rig's first version records that first version; new versions default to today and are editable. S3b and SC8 assert the captured version. G12 retains only the unwalked filter-version dates and Don't use darks/bias defaults.",
+          "G12 (out of scope; its product question answered 2026-10-19, astro-plan-rzbzu.1) PLAN-EQ-FR-07: a session captured before the rig's first version records that first version; new versions default to today and are editable. S3b and SC8 assert the captured version. G12 retains only the unwalked filter-version dates and Don't use darks/bias defaults."
         ]
       },
       {
@@ -207,8 +207,7 @@
         "blocking": [
           "G2 (implementation qualification) no fault fixture yet produces a destination hash mismatch, so the hash-failure branch is not exercised.",
           "G3 (implementation qualification) no fault control yet makes one symlink's repoint fail (P4), and the flow does not name the method of source retirement after verification.",
-          "G5 (implementation qualification) no fault control yet pauses an item after destination verification and before retirement (P5)",
-          "G11 (dissolved 2026-10-19, astro-plan-rzbzu.1) Retiring a location with pinned calibration there is refused and names pinning sessions and Projects. (LIB-FR-15, LIB-AC-16; J28/S11)."
+          "G5 (implementation qualification) no fault control yet pauses an item after destination verification and before retirement (P5)."
         ]
       },
       {

@@ -798,15 +798,16 @@
     {
       "flowStep": "Targets list: Show mode, search with Add to targets, columns, presets and rig selector (D-W17, D-W18, D-W19, D-W23, D-W37)",
       "owner": "072-observing-plans",
-      "journeyStep": "J14/S1, J19/S6a (My targets includes indexed Targets), J29/S1, J29/S11, J29/S12, J35/S1, J35/S2, J35/S3, J35/S4, J35/S5, J35/S5a, J35/S5b, J35/S6, J35/S7, J35/S8, J35/S9, J35/S10, J35/S11, J35/S12, J35/S13",
+      "journeyStep": "J14/S1, J19/S6a, J29/S1, J29/S11, J29/S12, J35/S1, J35/S2, J35/S3, J35/S4, J35/S5, J35/S5a, J35/S5b, J35/S6, J35/S7, J35/S8, J35/S9, J35/S10, J35/S11, J35/S12, J35/S13",
       "spec": "072-observing-plans PLAN-TGT-FR-01, PLAN-TGT-FR-02, PLAN-TGT-FR-03, PLAN-TGT-FR-04, PLAN-TGT-FR-05, PLAN-TGT-FR-06, PLAN-TGT-FR-07, PLAN-TGT-FR-08, PLAN-TGT-FR-09, PLAN-TGT-FR-10, PLAN-TGT-FR-11, PLAN-TGT-FR-12, PLAN-TGT-FR-13, PLAN-TGT-FR-14, PLAN-TGT-AC-01, PLAN-TGT-AC-16, PLAN-FR-10; D-W17, D-W18, D-W19, D-W23, D-W37, D-W60, D-W88",
       "action": "Open Targets on My targets, search and use Add to targets, read and sort columns, open a row's Plan area, browse catalogues, apply and save presets, and select a mono rig, an OSC rig and this Project's rigs. Also read Targets before an observing site exists.",
-      "expect": "My targets lists favourites, subjects of open Projects and every Target with at least one session; each open-Project subject has its Project badge. Search names sources; columns show site-based planning values, presets apply and persist, and a selected rig adds Fit and limits the Filters strip. Without a site, planning columns read a dash and offer Add an observing site in Settings (owner's answer, 2026-10-19, astro-plan-rzbzu.1) ",
+      "expect": "My targets lists favourites, subjects of open Projects and every Target with at least one session; each open-Project subject has its Project badge. Search names sources; columns show site-based planning values, presets apply and persist, and a selected rig adds Fit and limits the Filters strip. Without a site, planning columns read a dash and offer Add an observing site in Settings (owner's answer, 2026-10-19, astro-plan-rzbzu.1).",
       "negative": "Searching and browsing write nothing until Add to targets, and adding a Target creates no Project. No window is computed for an assumed location, built-in presets cannot be edited, and no Avoid tonight preset exists."
     },
     {
       "flowStep": "Settings > Equipment: cameras, telescopes, filters and rigs, rig versions, camera aliases and defaults, and the unknown-filter prompt (D-W31, D-W87, D-W104)",
-      "journeyStep": "J15/S1, J15/S2, J15/S3, J15/S3a, J15/S4, J15/S4a, J15/S4b, J15/S4c, J15/S4d, J15/S4e, J35/S13", 
+      "owner": "072-observing-plans",
+      "journeyStep": "J15/S1, J15/S2, J15/S3, J15/S3a, J15/S4, J15/S4a, J15/S4b, J15/S4c, J15/S4d, J15/S4e, J35/S13",
       "spec": "072-observing-plans PLAN-EQ-FR-01, PLAN-EQ-FR-02, PLAN-EQ-FR-03, PLAN-EQ-FR-04, PLAN-EQ-FR-05, PLAN-EQ-FR-06, PLAN-EQ-FR-07, PLAN-EQ-FR-08, PLAN-EQ-AC-01, PLAN-EQ-AC-02, PLAN-EQ-AC-03, PLAN-EQ-AC-04, PLAN-EQ-AC-05, PLAN-EQ-AC-06, PLAN-TGT-FR-13, PLAN-TGT-AC-13; 064-library-inventory LIB-FR-05, LIB-FR-26; 068-calibration-inputs CAL-FR-21, CAL-FR-22; D-W23, D-W30, D-W31, D-W37, D-W87, D-W104, D-W105",
       "action": "In Settings > Equipment register cameras and telescopes, compose mono and OSC rigs, add filters with FITS FILTER values and bands, create a dated rig version, configure camera aliases and defaults, recover from a failed save, confirm a session's rig, and accept or decline an unknown-filter prompt.",
       "expect": "Mono or OSC comes from the camera and field of view from sensor and focal length. Rig versions list dates and do not rewrite a session's captured version. Cameras that share a model require unique aliases; Don't use darks and Don't use bias settle sessions as No choices. An unmatched FILTER value on a confirmed rig offers Add value to rig.",

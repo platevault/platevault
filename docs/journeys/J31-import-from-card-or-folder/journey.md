@@ -214,7 +214,7 @@ folder is added in place. Done means:
 - SC6: S11 copies, renames or moves 0 files.
 - SC7: At S12, 100% of imported destination files match their source's SHA-256, and 0 files were permanently deleted or overwritten.
 - SC8: Card-1 reads ASIAIR (S1) and Card-2 reads USB device (S9). 0 duplicate-copies issues are raised after S6, S8, S9, S10, S10a or S11, and 0 duplicates warnings name a `Card-1` file.
-- SC9: The six imported light sessions use their preview Target or Unclassified route: five with NGC 7000 and `4 Oct Ha` preselected Unclassified until a Target is chosen solely to file it (S3, S9; owner's answer, 2026-10-19, astro-plan-rzbzu.1; import_no_target). 0 Targets or folders come from OBJECT; no file moves after import (S10a, S12).
+- SC9: The 6 imported light sessions land with the Target their preview showed: 5 with NGC 7000 Confirmed (`2 Oct Ha`, `5 Oct OIII` and the two 6 Oct sessions of S10a prefilled from pointing, `2 Oct OIII` changed at S5a) and 1 with no Target under `unclassified/`, where Unclassified was preselected (`4 Oct Ha`, S9; owner's answer, 2026-10-19, astro-plan-rzbzu.1). 0 Targets and 0 folders come from OBJECT, and 0 files move after an import (S10a, S12).
 - SC10: At S10a the preview lists exactly 2 sessions, of 24 and 10 lights. The merge shows 1 session of 34, the re-split restores the 2 sessions, and 0 bytes are written before the import starts.
 
 ## Known gaps
