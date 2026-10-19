@@ -142,8 +142,6 @@ function collectStringLiterals(expression, values) {
   if (staticValue !== null) {
     values.push(staticValue);
     return;
-  } else if (TRANSPARENT_EXPRESSION_WRAPPERS.has(expression.type)) {
-    collectStringLiterals(expression.expression, values);
   } else if (expression.type === 'LogicalExpression') {
     if (expression.operator === '&&') collectStringLiterals(expression.right, values);
     else if (expression.operator === '||' || expression.operator === '??') {
@@ -156,7 +154,6 @@ function collectStringLiterals(expression, values) {
   } else if (expression.type === 'SequenceExpression') {
     collectStringLiterals(expression.expressions.at(-1), values);
   }
-
 }
 function isAllowedPaintExpression(expression) {
   if (expression.type === 'Literal' || expression.type === 'StringLiteral') {
@@ -177,8 +174,6 @@ function isAllowedPaintExpression(expression) {
 }
 
 function reportRawColorsInExpression(expression, report) {
-
-  if (!expression) return;
   if (
     (expression.type === 'Literal' || expression.type === 'StringLiteral') &&
     typeof expression.value === 'string'
@@ -348,6 +343,7 @@ function reportRawColorsInExpression(expression, report) {
           }
         }
       }
+      return;
     default:
       if (TRANSPARENT_EXPRESSION_WRAPPERS.has(expression.type)) {
         reportRawColorsInExpression(expression.expression, report);
