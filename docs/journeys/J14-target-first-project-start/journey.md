@@ -1,7 +1,7 @@
 ---
 id: J14
 title: Add a Target and sessions to an existing Project
-version: 5
+version: 6
 status: draft
 last_reviewed: 2026-07-14
 actors: [primary-user]
@@ -37,7 +37,7 @@ Done means:
 ### S1 — Find NGC 7000 on the Targets page {#S1}
 
 - **Do:** From Home, open **Targets**. Search for `ngc7000`. Open the NGC 7000 result row's menu and choose **Add ★**. In the toolbar rig selector, choose `RedCat`.
-- **Expect:** Targets opens on **My targets**, which lists only NGC 6888, with the badge `Project Cygnus HOO`. The search lists NGC 7000 with its source, and `ngc7000` matches the same Target as `NGC 7000`. After **Add ★**, NGC 7000 is listed under My targets with ★ set. Choosing the rig adds a Fit column, and NGC 7000's Fit reads fits, with its coverage: its major axis is about 2° against the rig's 3.6° shorter side. The Filters column shows one chip per `RedCat` filter, Ha and OIII, each graded good tonight.
+- **Expect:** Targets opens on **My targets**, which lists NGC 6888, with the badge `Project Cygnus HOO`, and NGC 7000, with no ★ and no badge, because it has indexed sessions (PLAN-TGT-FR-01, D-W125; owner's answer, 2026-10-19, astro-plan-rzbzu.1). The search lists NGC 7000 with its source, and `ngc7000` matches the same Target as `NGC 7000`. After **Add ★**, NGC 7000 is listed under My targets with ★ set. Choosing the rig adds a Fit column, and NGC 7000's Fit reads fits, with its coverage: its major axis is about 2° against the rig's 3.6° shorter side. The Filters column shows one chip per `RedCat` filter, Ha and OIII, each graded good tonight.
 - **Expect (negative):** No result row carries an Add button. Starring a Target creates no Project, adds no subject and assigns no session to anything.
 - **Trace:** Targets list · HARNESS-V5-IA.md S10 · HARNESS-V5-FEEDBACK-R1.md Round 5 "Click a result to act", P-PLAN2 · PLAN-TGT-FR-01, PLAN-TGT-FR-03, PLAN-TGT-FR-11, PLAN-TGT-FR-06 · PLAN-TGT-AC-03, PLAN-TGT-AC-11 · D-W17, D-W23, D-W61
 
@@ -123,3 +123,6 @@ Done means:
 - **Δ5** 2026-10-15 · S2, S2a, S2b, S5, S6, S7, S8 · behavior-change
   The Project holds sessions in groups by rig and framing; users add sessions explicitly, and Apply builds the Project's View from originals. Processing no longer uses a separate run, revisions or run folders.
   Evidence: D-W93 to D-W106 (F4 Project model, owner's answers of 2026-10-14) in PR #1804, FR-033 to FR-035, LIB-FR-17, LIB-FR-20, LIB-FR-23, PRJ-FR-01, PRJ-FR-02, PRJ-FR-04, PRJ-FR-05, PRJ-FR-07 to PRJ-FR-09, PRJ-FR-27, PRJ-FR-31, VSEL-FR-03, VSEL-FR-12, VSEL-FR-14, VSEL-FR-16 · by: SpecF4Writer2 (intent-gated)
+- **Δ6** 2026-10-19 · S1 · behavior-change
+  My targets lists every Target with at least one session, so S1 lists NGC 7000 before **Add ★**.
+  Evidence: D-W125, PLAN-TGT-FR-01 · owner's answer, 2026-10-19 in astro-plan-rzbzu.1 · by: Main (intent-gated)

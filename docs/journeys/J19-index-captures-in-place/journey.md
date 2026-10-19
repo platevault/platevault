@@ -97,7 +97,7 @@ opens on Home, the control-panel dashboard. Done means:
 
 ### S6a — Read planning before any site exists {#S6a}
 
-- **Do:** On Home, read Tonight. Open Targets and search for `NGC 7000`.
+- **Do:** When both Captures locations finish indexing, on Home, read Tonight. Open Targets and search for `NGC 7000`.
 - **Expect:** Tonight reads `No site` and offers **Add site**, which leads to Settings › Observing sites. Targets opens on My targets, with tonight in its header date picker and a toggle to Browse catalogues. My targets lists NGC 7000, because its sessions are indexed, with no ★ and no Project badge. The altitude column draws no sparkline and the page offers **Add site**. The search lists NGC 7000 from the bundled catalogues with its source, and the result shows it is in My targets, so it offers no Add to targets (PLAN-TGT-FR-03). The results read `SIMBAD off` or `SIMBAD unreachable`, never `SIMBAD searched`.
 - **Expect (negative):** No window, altitude or Img time is computed for an assumed location. Searching writes nothing: this step clicks no result row, and the search adds no Target to My targets.
 - **Trace:** PLAN-FR-11 · PLAN-AC-12 · PLAN-TGT-FR-01, PLAN-TGT-FR-03 · PLAN-TGT-AC-03, PLAN-TGT-AC-04, PLAN-TGT-AC-15 · D-W17, D-W39 · HARNESS-V5-IA.md §Screens S1 (Tonight), S10, S11 · HARNESS-V5-FEEDBACK-R1.md §Round 6 "Targets opens on My targets"

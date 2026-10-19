@@ -121,16 +121,13 @@
         "blocking": [
           "G5 (implementation qualification) no fault control yet fails a filter-list save (P4).",
           "G7 (out of scope) the unknown-filter prompt in the Import preview (STO-IMP-FR-03) and the Targets Filters strip a rig drives (PLAN-TGT-FR-06) are not exercised here.",
-          "G10 (dissolved 2026-10-19, astro-plan-rzbzu.1) The owner settles PLAN-EQ-FR-04: S4b and S4c retain the session's Add {value} to {rig} control asking which bands the filter passes; the prototype still lacks that control.",
           "G11 (implementation qualification) the v5 design does not state the rule that matches a header to a camera or telescope added by hand (J37/G3 records the same gap for rigs).",
           "G12 (out of scope; its product question answered 2026-10-19, astro-plan-rzbzu.1) PLAN-EQ-FR-07: a session captured before the rig's first version records that first version; new versions default to today and are editable. S3b and SC8 assert the captured version. G12 retains only the unwalked filter-version dates and Don't use darks/bias defaults."
         ]
       },
       {
         "id": "J18",
-        "blocking": [
-          "G8 (dissolved 2026-10-19, astro-plan-rzbzu.1) D-W118: Mark rest usable asks for confirmation and names the number of Unreviewed frames (J18/S9)."
-        ]
+        "blocking": []
       },
       {
         "id": "J19",
@@ -139,17 +136,14 @@
           "G5 (implementation qualification) S6 needs indexing to run long enough to observe.",
           "G6 (out of scope) the P2 fixture has no single night holding both Ha and OIII 300 s lights, so the same-night channel split of LIB-AC-03 is not exercised.",
           "G7 (out of scope) the release-build exclusion of the development MCP bridge (LIB-AC-13, D17) is a build check that no running-product step observes.",
-          "G9 (implementation qualification) same-asset locate/remap (LIB-FR-07, D11) and \"locate a known copy\" are not exercised in this journey.",
-          "G10 (dissolved 2026-10-19, astro-plan-rzbzu.1) My targets lists favourites, subjects of open Projects and every Target with at least one session; each open-Project subject has its Project badge.",
-          "G11 (dissolved 2026-10-19, astro-plan-rzbzu.1) an associated Target counts as confirmed for Needs a Target, Not in any Project and Ready. Sessions with no Target, such as 24 Sep, remain in Needs a Target until confirmed."
+          "G9 (implementation qualification) same-asset locate/remap (LIB-FR-07, D11) and \"locate a known copy\" are not exercised in this journey."
         ]
       },
       {
         "id": "J20",
         "blocking": [
           "G4 (out of scope) external resolver enrichment of a saved target, its provider provenance and a resolver failure (LIB-AC-12, D18) are not exercised.",
-          "G7 (out of scope) the exposure-mismatch warning per subject and channel (PRJ-FR-11, HARNESS-V5-IA.md S3) is not exercised.",
-          "G9 (dissolved 2026-10-19, astro-plan-rzbzu.1) Removing NGC 7000 keeps its goals hidden in the Project; re-adding it restores those goals (PRJ-FR-02, PRJ-FR-03)."
+          "G7 (out of scope) the exposure-mismatch warning per subject and channel (PRJ-FR-11, HARNESS-V5-IA.md S3) is not exercised."
         ]
       },
       {
@@ -186,8 +180,7 @@
       {
         "id": "J25",
         "blocking": [
-          "G4 (out of scope) adding a session while an external application reads the View (VSEL-AC-12) is not exercised, and no frame is an explicit inclusion, so the D09 pinning of manual inclusions is not observed.",
-          "G7 (dissolved 2026-10-19, astro-plan-rzbzu.1) D-W110: on the next Apply, kept files move to a separate kept folder; name clashes receive a -2 suffix."
+          "G4 (out of scope) adding a session while an external application reads the View (VSEL-AC-12) is not exercised, and no frame is an explicit inclusion, so the D09 pinning of manual inclusions is not observed."
         ]
       },
       {
@@ -224,7 +217,6 @@
           "G2 (implementation qualification) the growing-file writer (P2) and unmounting the share at a known point (S10) need fixture tooling that does not exist yet.",
           "G3 (out of scope) a failed destination verification and a source that changes after its snapshot (STO-IMP-AC-03, STO-AC-14) need fault injection.",
           "G4 (out of scope) a role with no location, which blocks its items with the missing role named (STO-IMP-FR-02; `No Captures location`), and the unknown-filter prompt in the preview (STO-IMP-FR-03, PLAN-EQ-FR-04) are not exercised.",
-          "G8 (dissolved 2026-10-19, astro-plan-rzbzu.1) For a session with no pointing or no matching Target, the preview preselects Unclassified so Import is available; choosing a Target only files it under that Target.",
           "G9 (implementation qualification) the Card-1 fixture doesn't fix the calibration evidence of its two light sessions, so no step asserts which Import review state their darks, flats and bias read (LIB-FR-24, STO-IMP-AC-11)."
         ]
       },

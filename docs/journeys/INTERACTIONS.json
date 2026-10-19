@@ -225,8 +225,8 @@
       "journeyStep": "J23/S10, J23/S11, J24/S14, J24/S16",
       "spec": "069-application-handoff PREP-FR-03, PREP-FR-08, PREP-FR-09, PREP-FR-20, PREP-FR-21, PREP-AC-06, PREP-AC-39; 064-library-inventory LIB-FR-12, LIB-FR-20; D-W93, D-W98, D-W100, D-W122, D-W123; HARNESS-V5-FEEDBACK-R1.md Round 9 C15",
       "action": "Open the Apply sheet and read its Corrected values section, which lists corrections recorded at intake, then Apply the reviewed View.",
-      "expect": "The Apply sheet reports 'N corrected values written to patched copies' and lists each session, field, header value, corrected value and route. J23/S11 reads the patched FITS copy through PlateVault's metadata reader; this verifies the copy, not whether the selected tool consumes the value. The report makes no claim about application reading (D-W123; owner's answer, 2026-10-19, astro-plan-rzbzu.1).",
-      "negative": "Apply offers no per-value choice and creates or changes no catalog correction. Originals are never edited; only patched copies' headers change. No original or symlink target is patched (D-W123; owner's answer, 2026-10-19, astro-plan-rzbzu.1)."
+      "expect": "The Apply sheet gives the corrected-value count and lists each session, field, header value, corrected value and route. J23/S11 reads the patched FITS copy through PlateVault's metadata reader; this verifies the copy, not whether the selected tool consumes the value. For an application with no evidence about which header keys it reads, Apply reports 'N corrected values written to patched copies' and makes no claim about application reading (D-W123; owner's answer, 2026-10-19, astro-plan-rzbzu.1).",
+      "negative": "Apply offers no per-value choice and creates or changes no catalog correction. Originals are never edited; only patched copies' headers change. No original or symlink target is patched (D-W123; owner's answer, 2026-10-19, astro-plan-rzbzu.1). Under PREP-FR-03, a correction is not reported as delivered while the tool still reads the source value."
     },
     {
       "flowStep": "F1",

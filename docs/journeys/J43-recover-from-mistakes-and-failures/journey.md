@@ -1,7 +1,7 @@
 ---
 id: J43
 title: Recover from routine mistakes and failures by retrying interrupted work, changing a wrong Target, acting on a refusal and undoing marks
-version: 3
+version: 4
 status: draft
 last_reviewed: 2026-10-12
 actors: [primary-user]
@@ -57,7 +57,7 @@ Recoveries that other journeys own end to end are referenced, not repeated (G5).
 
 ### S4 — Confirm the wrong Target {#S4}
 
-- **Do:** Open the `6 Oct` session. Read its Target box, then choose IC 1396 (as its OBJECT says) and click **Confirm Target**. Confirm its rig as `RedCat`, mark its frames Usable with **Mark rest usable**, and choose **Finish review**.
+- **Do:** Open the `6 Oct` session. Read its Target box, then choose IC 1396 (as its OBJECT says) and click **Confirm Target**. Confirm its rig as `RedCat`, mark its frames Usable with **Mark rest usable**, confirm the Unreviewed-frame count it names, and choose **Finish review**.
 - **Expect:** Before confirming, the Target picker preselects NGC 7000, the Target evidence lists the pointing, and OBJECT `IC 1396` appears only as a label of the session. Confirming IC 1396 is allowed: after confirming, the Target pill reads IC 1396 as confirmed, and the session's Target box shows a mismatch warning that the session's pointing disagrees with IC 1396. After **Finish review** the session is Ready with settled calibration (P3), and `IC 1396 Ha` lists it as a suggestion (1 session, 10 frames). Activity records `Target confirmed` with "IC 1396. Catalog only; source headers unchanged."
 - **Expect (negative):** OBJECT is never listed as Target evidence and never preselects IC 1396. The mismatch warning does not block or undo the confirmation. No FITS header changes and no file moves.
 - **Trace:** LIB-FR-05 · PRJ-FR-09 · D-W96
@@ -137,3 +137,6 @@ Recoveries that other journeys own end to end are referenced, not repeated (G5).
 - **Δ3** 2026-10-15 · S3, S5, S6, S7, S8, S9 · behavior-change
   Target correction changes Project suggestions but not held sessions. Failed Apply preserves the current View; Closed Projects have no Reopen and continue only through Duplicate. Reversible frame marks take effect immediately and offer Undo.
   Evidence: D-W93 to D-W106 in specs/063-clean-rebuild-contract/workflow-decisions.md, PREP-AC-14, PREP-FR-06, PREP-FR-09, FR-029, PIX-FR-14, PRJ-FR-08, PRJ-FR-25, PRJ-FR-30 · by: SpecF4Writer2 (intent-gated)
+- **Δ4** 2026-10-19 · S4 · behavior-change
+  **Mark rest usable** asks for confirmation and names the number of Unreviewed frames; S4 confirms it.
+  Evidence: PIX-FR-14 · D-W118 · owner's answer, 2026-10-19 in astro-plan-rzbzu.1 · by: Main (intent-gated)
