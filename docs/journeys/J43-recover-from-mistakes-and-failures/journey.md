@@ -60,7 +60,7 @@ Recoveries that other journeys own end to end are referenced, not repeated (G5).
 - **Do:** Open the `6 Oct` session. Read its Target box, then choose IC 1396 (as its OBJECT says) and click **Confirm Target**. Confirm its rig as `RedCat`, mark its frames Usable with **Mark rest usable**, confirm the Unreviewed-frame count it names, and choose **Finish review**.
 - **Expect:** Before confirming, the Target picker preselects NGC 7000, the Target evidence lists the pointing, and OBJECT `IC 1396` appears only as a label of the session. Confirming IC 1396 is allowed: after confirming, the Target pill reads IC 1396 as confirmed, and the session's Target box shows a mismatch warning that the session's pointing disagrees with IC 1396. After **Finish review** the session is Ready with settled calibration (P3), and `IC 1396 Ha` lists it as a suggestion (1 session, 10 frames). Activity records `Target confirmed` with "IC 1396. Catalog only; source headers unchanged."
 - **Expect (negative):** OBJECT is never listed as Target evidence and never preselects IC 1396. The mismatch warning does not block or undo the confirmation. No FITS header changes and no file moves.
-- **Trace:** LIB-FR-05 · PRJ-FR-09 · D-W96
+- **Trace:** LIB-FR-05 · PRJ-FR-09 · PIX-FR-14 · D-W96, D-W118
 
 ### S5 — Change the Target and watch suggestions follow {#S5}
 
