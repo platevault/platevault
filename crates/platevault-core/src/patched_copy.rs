@@ -276,12 +276,13 @@ pub struct EntryFrame {
 /// empty value (owner decision 2026-10-19); or a text value FITS can't
 /// hold, not printable ASCII or too long for the card it is written to:
 /// one card on its own, or less where the header holds a HIERARCH alias of
-/// the field, as the FITS patcher works it out from the header. Clearing
-/// a field the header lacks undoes a correction and is never refused, nor
-/// is the framing label, a grouping decision rather than a header
-/// correction. What only the rest of the frame refuses, Apply refuses.
-/// Reads the header only for a field with a HIERARCH alias; a source that
-/// can't be read isn't refused here.
+/// the field, as the FITS patcher works it out from the header. A value
+/// equal to the header's own is never refused: it reverts a correction,
+/// and Apply writes nothing for it. Nor is clearing a field the header
+/// lacks, which undoes a correction, nor the framing label, a grouping
+/// decision rather than a header correction. What only the rest of the
+/// frame refuses, Apply refuses. Reads the header only for a field with a
+/// HIERARCH alias; a source that can't be read isn't refused here.
 #[must_use]
 pub fn entry_refusal(
     field: &str,
@@ -291,12 +292,17 @@ pub fn entry_refusal(
     if field == FRAMING_LABEL_FIELD {
         return None;
     }
+    let held = serde_json::to_value(&frame.observed)
+        .ok()
+        .and_then(|observed| observed.get(field).cloned())
+        .unwrap_or(serde_json::Value::Null);
+    if same_value(value, &held) {
+        return None;
+    }
     let mapping = mapping(field);
     if value.is_null() {
-        let holds = serde_json::to_value(&frame.observed)
-            .is_ok_and(|observed| observed.get(field).is_some_and(|held| !held.is_null()));
         // As `edit_of` refuses the change: its keyword first, then its value.
-        return holds.then_some(mapping.map_or(PatchRefusal::NoKeyword, |_| PatchRefusal::NoValue));
+        return Some(mapping.map_or(PatchRefusal::NoKeyword, |_| PatchRefusal::NoValue));
     }
     let Some(mapping) = mapping else { return Some(PatchRefusal::NoKeyword) };
     let text = value.as_str()?;
@@ -318,6 +324,16 @@ pub fn entry_refusal(
     match check(frame.source.as_deref()?, frame.format, &[change]) {
         Err(Refusal { reason: PatchRefusal::TooLong, .. }) => Some(PatchRefusal::TooLong),
         _ => None,
+    }
+}
+
+/// Whether a correction's `value` is the header's own `held` value as the
+/// catalog records it, numbers by their value: 250 is 250.0.
+fn same_value(value: &serde_json::Value, held: &serde_json::Value) -> bool {
+    if value.is_number() && held.is_number() {
+        value.as_f64() == held.as_f64()
+    } else {
+        value == held
     }
 }
 
@@ -707,6 +723,36 @@ mod tests {
         assert_eq!(cleared("object"), None, "the header holds no OBJECT");
         assert_eq!(cleared("dateObs"), None);
         assert_eq!(cleared(FRAMING_LABEL_FIELD), None);
+    }
+
+    /// A value equal to the header's own reverts a correction, so it is
+    /// taken even where the header's value breaks an entry rule: a UTF-8
+    /// OBJECT an XISF header holds, a FITS OBJECT longer than one card, a
+    /// field no header keyword is written for. A number equals its header
+    /// value as the catalog records it; any other value is still refused.
+    #[test]
+    fn takes_a_value_equal_to_the_header_value() {
+        let (utf8, long) = ("Cœur NGC 7000", "x".repeat(69));
+        let frame = |object: &str| {
+            unread(CaptureMetadata {
+                object: Some(object.into()),
+                date_obs: Some("2026-10-12T20:00:00".into()),
+                ra_deg: Some(10.0),
+                ..CaptureMetadata::default()
+            })
+        };
+        let refusal = |field: &str, value: serde_json::Value, object: &str| {
+            entry_refusal(field, &value, &frame(object))
+        };
+        let json = |value: &str| serde_json::Value::String(value.to_owned());
+        assert_eq!(refusal("object", json(utf8), utf8), None);
+        assert_eq!(refusal("object", json(&long), &long), None);
+        assert_eq!(refusal("dateObs", json("2026-10-12T20:00:00"), utf8), None);
+        assert_eq!(refusal("raDeg", serde_json::json!(10), utf8), None);
+        assert_eq!(refusal("object", json("Cœur"), utf8), Some(PatchRefusal::NotPrintableAscii));
+        let other = json("2026-10-13T20:00:00");
+        assert_eq!(refusal("dateObs", other, utf8), Some(PatchRefusal::NoKeyword));
+        assert_eq!(refusal("raDeg", serde_json::json!(10.5), utf8), Some(PatchRefusal::NoKeyword));
     }
 
     /// A HIERARCH alias the header holds leaves its value the room the FITS

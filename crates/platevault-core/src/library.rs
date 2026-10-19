@@ -4,7 +4,7 @@
 //! Application operations over the clean catalog. Image paths are read-only.
 
 use std::collections::hash_map::Entry;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
@@ -574,14 +574,13 @@ impl Library {
     ///
     /// # Errors
     /// `CorrectionUndeliverable` naming the frame and field of such a
-    /// correction; `NotFound` for an unknown frame; the catalog's preview
-    /// errors.
+    /// correction; the catalog's preview errors.
     pub async fn preview_correction(
         &self,
         expected: &[ExpectedAsset],
         corrections: &[CorrectionInput],
     ) -> Result<CorrectionPreview, LibraryError> {
-        self.refuse_undeliverable(corrections).await?;
+        self.refuse_undeliverable(expected, corrections).await?;
         let margins = self.framing_margins().await?;
         self.catalog
             .preview_correction(expected, corrections, |assets: &[Asset]| {
@@ -605,7 +604,7 @@ impl Library {
         expected: &[crate::ExpectedAsset],
     ) -> Result<ConfirmedCorrection, LibraryError> {
         let preview = self.catalog.correction_preview(preview_id).await?;
-        self.refuse_undeliverable(&preview.corrections).await?;
+        self.refuse_undeliverable(expected, &preview.corrections).await?;
         let margins = self.framing_margins().await?;
         let outcome = self
             .catalog
@@ -623,16 +622,27 @@ impl Library {
     /// The first of `corrections` no isolated patched copy can deliver, as
     /// a coded refusal naming its frame and field (PREP-FR-03, D-W123).
     /// Each frame is the catalog's record of it; its header is read off the
-    /// runtime, only where the refusal depends on it.
+    /// runtime, only where the refusal depends on it. A correction of a
+    /// frame `expected` doesn't name, or the catalog doesn't know, is left
+    /// to the catalog, which refuses it with its own code.
     async fn refuse_undeliverable(
         &self,
+        expected: &[ExpectedAsset],
         corrections: &[CorrectionInput],
     ) -> Result<(), LibraryError> {
-        let mut frames: HashMap<Uuid, EntryFrame> = HashMap::new();
+        let named: HashSet<Uuid> = expected.iter().map(|item| item.asset_id).collect();
+        let mut frames: HashMap<Uuid, Option<EntryFrame>> = HashMap::new();
         let mut roots: HashMap<Uuid, Option<PathBuf>> = HashMap::new();
-        for correction in corrections {
-            let Entry::Vacant(frame) = frames.entry(correction.asset_id) else { continue };
-            let asset = self.catalog.asset(correction.asset_id).await?;
+        for correction in corrections.iter().filter(|item| named.contains(&item.asset_id)) {
+            let Entry::Vacant(slot) = frames.entry(correction.asset_id) else { continue };
+            let asset = match self.catalog.asset(correction.asset_id).await {
+                Ok(asset) => asset,
+                Err(LibraryError::NotFound(_)) => {
+                    slot.insert(None);
+                    continue;
+                }
+                Err(error) => return Err(error),
+            };
             if let Entry::Vacant(root) = roots.entry(asset.location_id) {
                 root.insert(
                     self.catalog.location(asset.location_id).await?.path.to_path_buf().ok(),
@@ -642,12 +652,13 @@ impl Library {
                 .as_deref()
                 .zip(asset.relative_path.relative_path().ok())
                 .map(|(root, relative)| root.join(relative));
-            frame.insert(EntryFrame { observed: asset.observed, format: asset.format, source });
+            let frame = EntryFrame { observed: asset.observed, format: asset.format, source };
+            slot.insert(Some(frame));
         }
         let corrections = corrections.to_vec();
         blocking(move || {
             corrections.iter().try_for_each(|correction| {
-                let frame = &frames[&correction.asset_id];
+                let Some(Some(frame)) = frames.get(&correction.asset_id) else { return Ok(()) };
                 match patched_copy::entry_refusal(&correction.field, &correction.value, frame) {
                     Some(refusal) => Err(LibraryError::CorrectionUndeliverable {
                         identity: correction.asset_id,

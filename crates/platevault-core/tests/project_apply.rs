@@ -892,6 +892,62 @@ async fn a_value_longer_than_its_hierarch_alias_holds_is_refused_where_it_is_rec
     assert!(world.library.preview_correction(&expected(&plain), &telescope(&plain)).await.is_ok());
 }
 
+/// A correction is reverted by entering the header's own value, which is
+/// taken at the preview and the confirm even where that value breaks an
+/// entry rule: here the UTF-8 OBJECT an XISF header holds, which FITS
+/// can't. The frame reads its header value again.
+#[tokio::test]
+async fn reverting_to_the_header_value_is_taken_where_the_value_breaks_an_entry_rule() {
+    let world = catalogued(ViewMode::Copies).await;
+    let relative = "2026-10-12/J23_Coeur_Light_001.xisf";
+    let coeur = "Cœur NGC 7000";
+    let body = format!("<FITSKeyword name=\"OBJECT\" value=\"'{coeur}'\" comment=\"\"/>");
+    let bytes = apply_support::xisf_frame(Some(body.as_str()), &[9_u8; 16], None);
+    let metadata = CaptureMetadata {
+        object: Some(coeur.into()),
+        ..meta("LIGHT", Some("Ha"), 300.0, 100.0, "2026-10-12")
+    };
+    world.add_lights(&[(relative.to_owned(), metadata, bytes)]).await;
+    world.correct(relative, &[("object", json!("NGC 7000"))]).await;
+    let corrected = world.asset_at(&world.captures, relative).await;
+    assert_eq!(corrected.effective.object.as_deref(), Some("NGC 7000"));
+
+    let object = |value: &str| {
+        [CorrectionInput { asset_id: corrected.id, field: "object".into(), value: json!(value) }]
+    };
+    let refused = json!({ "field": "object", "refusal": "not_printable_ascii" });
+    let found = refused_at_entry(&world, &expected(&corrected), &object("Cœur")).await;
+    assert_eq!(found, [refused.clone(), refused], "another UTF-8 value is refused");
+
+    let preview =
+        world.library.preview_correction(&expected(&corrected), &object(coeur)).await.unwrap();
+    world.library.confirm_correction(preview.id, &expected(&corrected)).await.unwrap();
+    let reverted = world.asset_at(&world.captures, relative).await;
+    assert_eq!(reverted.effective.object.as_deref(), Some(coeur), "the correction is reverted");
+    assert_eq!(reverted.effective, reverted.observed);
+}
+
+/// A correction of a frame the request's expectations don't name is the
+/// catalog's `invalid_input`, whose action is Review, as before entry read
+/// the frames: whether the catalog knows the frame or not, and whatever
+/// the entry checks would make of the value. Nothing is recorded.
+#[tokio::test]
+async fn a_correction_of_a_frame_the_expectations_do_not_name_is_invalid_input() {
+    let world = catalogued(ViewMode::Copies).await;
+    let (named, other) = (
+        world.asset_at(&world.captures, HA[0]).await,
+        world.asset_at(&world.captures, HA[1]).await,
+    );
+    assert_eq!(other.observed.filter.as_deref(), Some("Ha"));
+    for asset_id in [other.id, uuid::Uuid::new_v4()] {
+        let cleared = [CorrectionInput { asset_id, field: "filter".into(), value: Value::Null }];
+        let refused =
+            world.library.preview_correction(&expected(&named), &cleared).await.unwrap_err();
+        assert_eq!(refused.code().as_str(), "invalid_input", "{refused}");
+    }
+    assert_eq!(world.asset_at(&world.captures, HA[1]).await, other, "nothing was recorded");
+}
+
 /// A card's comment never refuses a value that fits a card on its own:
 /// NINA's `OBJECT` comment leaves 35 characters, and "Heart and Soul
 /// Nebulae (IC 1805 / IC 1848)" reaches the patched copy in one card, its
