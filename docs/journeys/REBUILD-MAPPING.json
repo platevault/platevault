@@ -101,7 +101,7 @@
   "readiness": {
     "common": {
       "goalObservableDone": "pass (all 28 rebuild journeys, per the authoring audit of each slice)",
-      "expectsFalsifiable": "pass except where a blocker leaves an Expect undecided or not yet observable: J19 (G10), J23 (G10 generic-app consumption), J29 (G2), J35 (G6).",
+      "expectsFalsifiable": "pass except where a blocker leaves an Expect undecided or not yet observable: J23 (G10 generic-app consumption), J29 (G2), J35 (G6).",
       "successCriteriaConcrete": "pass (all 28; each SC has a count, value, or state)",
       "negativesAtTrustPoints": "pass (all 28; every mutation, deletion, transfer, trash, patch, and quality step has an Expect (negative))",
       "actorsSurfacesInterfacesTrace": "pass (all 28 fill actors, surfaces, interfaces and trace; README lists the rebuild and harness v5 surface keys and maps the v5 prototype paths)",
@@ -121,15 +121,15 @@
         "blocking": [
           "G5 (implementation qualification) no fault control yet fails a filter-list save (P4).",
           "G7 (out of scope) the unknown-filter prompt in the Import preview (STO-IMP-FR-03) and the Targets Filters strip a rig drives (PLAN-TGT-FR-06) are not exercised here.",
-          "G10 (product question) the v5 prototype's session detail offers no \"Add {value} to {rig}\", and the v5 design (HARNESS-V5-IA.md S16) does not say either way, so S4b and S4c keep the contract text (PLAN-EQ-FR-04).",
+          "G10 (dissolved 2026-10-19, astro-plan-rzbzu.1) The owner settles PLAN-EQ-FR-04: S4b and S4c retain the session's Add {value} to {rig} control asking which bands the filter passes; the prototype still lacks that control.",
           "G11 (implementation qualification) the v5 design does not state the rule that matches a header to a camera or telescope added by hand (J37/G3 records the same gap for rigs).",
-          "G12 (out of scope; product question, open with the owner) rig versions (PLAN-EQ-FR-07) are not walked, and no source decides which version a session captured before a rig's first version gets or the start date a new version takes by default."
+          "G12 (dissolved 2026-10-19, astro-plan-rzbzu.1) PLAN-EQ-FR-07: a session captured before the rig's first version records that first version; new versions default to today and are editable. S3b and SC8 assert the captured version. G12 retains only the unwalked filter-version dates and Don't use darks/bias defaults.",
         ]
       },
       {
         "id": "J18",
         "blocking": [
-          "G8 (product question, open with the owner) whether \"Mark rest usable\" asks for confirmation (D-W118)."
+          "G8 (dissolved 2026-10-19, astro-plan-rzbzu.1) D-W118: Mark rest usable asks for confirmation and names the number of Unreviewed frames (J18/S9)."
         ]
       },
       {
@@ -140,8 +140,8 @@
           "G6 (out of scope) the P2 fixture has no single night holding both Ha and OIII 300 s lights, so the same-night channel split of LIB-AC-03 is not exercised.",
           "G7 (out of scope) the release-build exclusion of the development MCP bridge (LIB-AC-13, D17) is a build check that no running-product step observes.",
           "G9 (implementation qualification) same-asset locate/remap (LIB-FR-07, D11) and \"locate a known copy\" are not exercised in this journey.",
-          "G10 (product question) Round 6 defines My targets as \"yours plus favourites\", while HARNESS-V5-IA.md S10 says \"the ★ favourites plus open-Project subjects\".",
-          "G11 (product question, open with the owner) whether a Target associated by agreeing pointing evidence counts as confirmed for Needs a Target, Not in any Project and Ready: the v5 design says yes, LIB-FR-17, LIB-FR-20 and the F4 backend's target_confirmed need an explicit confirmation. J14, J20, J28 and J35 depend on the answer."
+          "G10 (dissolved 2026-10-19, astro-plan-rzbzu.1) My targets lists favourites, subjects of open Projects and every Target with at least one session; each open-Project subject has its Project badge.",
+          "G11 (dissolved 2026-10-19, astro-plan-rzbzu.1) an associated Target counts as confirmed for Needs a Target, Not in any Project and Ready. Sessions with no Target, such as 24 Sep, remain in Needs a Target until confirmed."
         ]
       },
       {
@@ -149,7 +149,7 @@
         "blocking": [
           "G4 (out of scope) external resolver enrichment of a saved target, its provider provenance and a resolver failure (LIB-AC-12, D18) are not exercised.",
           "G7 (out of scope) the exposure-mismatch warning per subject and channel (PRJ-FR-11, HARNESS-V5-IA.md S3) is not exercised.",
-          "G9 (product question, open with the owner) PRJ-FR-02 says removing a subject changes only the suggestions, and goals are set per subject (PRJ-FR-03); no source says whether a subject removed and added back keeps its goals, gets the template's again, or gets none."
+          "G9 (dissolved 2026-10-19, astro-plan-rzbzu.1) Removing NGC 7000 keeps its goals hidden in the Project; re-adding it restores those goals (PRJ-FR-02, PRJ-FR-03)."
         ]
       },
       {
@@ -172,7 +172,7 @@
         "id": "J23",
         "blocking": [
           "G2 (implementation qualification) Siril profile capability probes (D04) must exist before S8 can show verified evidence.",
-          "G10 (product question) D-W123's FITS mapping and fixed-format alias coverage, including FOCAL/FLENGTH, remain provisional. The owner must decide whether to patch TELESCOPE/INSTRUMENT as HIERARCH aliases, whether generic-app delivery needs per-tool evidence, which route to use for corrected non-FITS inputs, and how to handle values FITS cannot represent in printable-ASCII cards (header_patch.rs:261-280)."
+          "G10 (D-W123 owner answers settled 2026-10-19, astro-plan-rzbzu.1): overwrite every present alias card for a corrected field and add none, patch present HIERARCH TELESCOPE/INSTRUMENT cards, and patch corrected XISF copies. Refuse values FITS cannot represent in printable-ASCII cards at entry and again in the backend. Originals are never edited; only the patched copy's header changes. Apply reports only 'N corrected values written to patched copies' and claims nothing about application reading. The route for corrected non-FITS formats other than XISF remains open."
         ]
       },
       {
@@ -187,7 +187,7 @@
         "id": "J25",
         "blocking": [
           "G4 (out of scope) adding a session while an external application reads the View (VSEL-AC-12) is not exercised, and no frame is an explicit inclusion, so the D09 pinning of manual inclusions is not observed.",
-          "G7 (product question, open with the owner) what the next Apply does with the outgoing View when `View (previous)/` already holds kept files: merge into it with a suffix on name clashes, or move kept files to a separate folder (D-W110)."
+          "G7 (dissolved 2026-10-19, astro-plan-rzbzu.1) D-W110: on the next Apply, kept files move to a separate kept folder; name clashes receive a -2 suffix."
         ]
       },
       {
@@ -207,7 +207,8 @@
         "blocking": [
           "G2 (implementation qualification) no fault fixture yet produces a destination hash mismatch, so the hash-failure branch is not exercised.",
           "G3 (implementation qualification) no fault control yet makes one symlink's repoint fail (P4), and the flow does not name the method of source retirement after verification.",
-          "G5 (implementation qualification) no fault control yet pauses an item after destination verification and before retirement (P5)."
+          "G5 (implementation qualification) no fault control yet pauses an item after destination verification and before retirement (P5)",
+          "G11 (dissolved 2026-10-19, astro-plan-rzbzu.1) Retiring a location with pinned calibration there is refused and names pinning sessions and Projects. (LIB-FR-15, LIB-AC-16; J28/S11)."
         ]
       },
       {
@@ -224,7 +225,7 @@
           "G2 (implementation qualification) the growing-file writer (P2) and unmounting the share at a known point (S10) need fixture tooling that does not exist yet.",
           "G3 (out of scope) a failed destination verification and a source that changes after its snapshot (STO-IMP-AC-03, STO-AC-14) need fault injection.",
           "G4 (out of scope) a role with no location, which blocks its items with the missing role named (STO-IMP-FR-02; `No Captures location`), and the unknown-filter prompt in the preview (STO-IMP-FR-03, PLAN-EQ-FR-04) are not exercised.",
-          "G8 (product question) P-IMP2 prefills a session's Target from its pointing, but Round 6 does not say what the preview shows for a session whose pointing is missing or that no Target's footprint contains (`2 Oct OIII`, `4 Oct Ha`), or whether Import waits for a choice.",
+          "G8 (dissolved 2026-10-19, astro-plan-rzbzu.1) For a session with no pointing or no matching Target, the preview preselects Unclassified so Import is available; choosing a Target only files it under that Target.",
           "G9 (implementation qualification) the Card-1 fixture doesn't fix the calibration evidence of its two light sessions, so no step asserts which Import review state their darks, flats and bias read (LIB-FR-24, STO-IMP-AC-11)."
         ]
       },

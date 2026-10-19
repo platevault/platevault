@@ -1,7 +1,7 @@
 ---
 id: J28
 title: Archive Project sessions with verified transfer from Wrap up and Sessions
-version: 8
+version: 9
 status: draft
 last_reviewed: 2026-10-03
 actors: [primary-user]
@@ -160,9 +160,9 @@ The user archives the sessions of Project `NGC 7000 HOO` from the Archive step o
 ### S11 — Review retiring the lost archive {#S11}
 
 - **Do:** With `Archive` still unplugged, open Settings › Locations, choose the Offline location `Archive/NGC7000`, and choose **Retire location**.
-- **Expect:** The review names the location, its root and Offline state, and the four sessions with their 158 copies. It also names Project `NGC 7000 HOO` and the affected entries in its View that reference those copies. It states that retiring deletes, moves or modifies no file.
+- **Expect:** The review names the location, its root and Offline state, and the four sessions with their 158 copies. It also names Project `NGC 7000 HOO` and the affected entries in its View that reference those copies. It states that retiring deletes, moves or modifies no file. Any session pinning a calibration file at this location would block retirement and the refusal would list the pinning sessions and Projects; this fixture contains no calibration files there (LIB-FR-15; owner's answer, 2026-10-19, astro-plan-rzbzu.1).
 - **Expect (negative):** Nothing is retired before confirmation.
-- **Trace:** flow A4, cross-flow "Location offline" · HARNESS-V5-IA.md S16 · HARNESS-V5-FEEDBACK-R1.md Round 5 (P-STO2) · LIB-FR-15 · LIB-AC-16 · D11
+- **Trace:** flow A4, cross-flow "Location offline" · HARNESS-V5-IA.md S16 · HARNESS-V5-FEEDBACK-R1.md Round 5 (P-STO2) · LIB-FR-15 · LIB-AC-16 · D11 · owner's answer, 2026-10-19 in astro-plan-rzbzu.1
 
 ### S11a — Confirm after the archive returns {#S11a}
 
@@ -243,3 +243,6 @@ The user archives the sessions of Project `NGC 7000 HOO` from the Archive step o
 - **Δ8** 2026-10-16 · S9b, S9c · behavior-change
   Archive from Sessions follows the Wrap up rule: a session that an open Project holds can't be selected and names that Project, a session held only by Closed or Archived Projects is archived with their kept Views repointed, and a suggestion doesn't count. S9b now tries to select 28 Sep. G9 is dissolved.
   Evidence: D-W120 (owner's second batch of 2026-10-16) in PR #1804, LIB-FR-17, STO-FR-06, STO-FR-13, STO-AC-29 · by: EncodeOwnerAnswers2 (intent-gated)
+- **Δ9** 2026-10-19 · S11 · behavior-change
+  Retiring a location with a pinned calibration file there is refused and names the pinning sessions and Projects.
+  Evidence: LIB-FR-15, LIB-AC-16 · owner's answer, 2026-10-19 in astro-plan-rzbzu.1 · by: OwnerAnswersDocsFix (intent-gated)

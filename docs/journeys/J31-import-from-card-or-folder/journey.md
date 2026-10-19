@@ -1,7 +1,7 @@
 ---
 id: J31
 title: Import from a card or folder with Copy or Move and templated paths
-version: 7
+version: 8
 status: draft
 last_reviewed: 2026-10-06
 actors: [primary-user]
@@ -84,9 +84,9 @@ folder is added in place. Done means:
 - **Do:** Read the full preview without starting the import.
 - **Expect:** The preview lists each incoming light session with its Target, then each planned file with its destination and its route. Lights and raw calibration files keep their original basenames.
   - `2 Oct Ha` (30 lights) reads Target NGC 7000, prefilled from its pointing, with `OBJECT NGC 7000` shown beside it only as a hint.
-  - `2 Oct OIII` (6 lights) is one session with no framing split, because its lights have no pointing. It has no Target prefilled for the same reason, and it shows no OBJECT hint.
+  - `2 Oct OIII` (6 lights) is one session with no framing split, because its lights have no pointing. **Unclassified is preselected**, so Import is available without choosing a Target; choose one only to file the session under that Target. It shows no OBJECT hint.
   - The 30 Ha lights are listed under `NGC 7000/Ha/2026-10-02/light/` in `Astro-T7 captures`, routed to Sessions, including the 12 taken after midnight.
-  - The 6 OIII lights are not listed under `NGC 7000/` or under any other Target's folder (G8).
+  - The 6 OIII lights are not listed under `NGC 7000/` or under any other Target's folder until the user chooses a Target (G8; owner's answer, 2026-10-19, astro-plan-rzbzu.1; import_no_target).
   - The 10 flats are listed under `Raw/Flats/Ha/2026-10-02/` and the darks under `Raw/Darks/300s/2026-10-02/` in `Astro-T7 calibration`, routed `Calibration → stack`.
   - The master dark is listed at `Darks/ASI2600MM/300s_g100_o50_-10C/MasterDark_2026-10-02.xisf`, routed `Calibration library`.
   - Under Skipped, the P3 dark reads `Name taken`, and its note reads `holds different bytes; nothing is overwritten`.
@@ -96,7 +96,7 @@ folder is added in place. Done means:
 
   For each destination volume, the preview shows its free space and the space the import needs, and reads `Writable`. Copy and Move are offered for the whole import. The footer reads `56 frames` with the total size, and the start button reads **Import 56 frames**.
 - **Expect (negative):** Nothing is written before the user starts the import, and the collision is never resolved by overwriting. `2 Oct Ha`'s Target is attributed to its pointing, never to its OBJECT.
-- **Trace:** Import preview · STO-IMP-FR-02, STO-IMP-FR-03, STO-IMP-FR-05, STO-IMP-FR-07 · STO-IMP-AC-01, STO-IMP-AC-06, STO-IMP-AC-10 · LIB-FR-04 · LIB-AC-34 · D-W11, D-W20, D-W24, D-W107 · HARNESS-V5-IA.md §Screens S13, §Round 2b (P-CAL3: structured storage, Routing) · HARNESS-V5-FEEDBACK-R1.md §Round 6 (P-IMP2) · `templates.ts` DEFAULT_NAMING, resolveNamingTemplate
+- **Trace:** Import preview · STO-IMP-FR-02, STO-IMP-FR-03, STO-IMP-FR-05, STO-IMP-FR-07 · STO-IMP-AC-01, STO-IMP-AC-06, STO-IMP-AC-10 · LIB-FR-04 · LIB-AC-34 · D-W11, D-W20, D-W24, D-W107 · HARNESS-V5-IA.md §Screens S13, §Round 2b (P-CAL3: structured storage, Routing) · HARNESS-V5-FEEDBACK-R1.md §Round 6 (P-IMP2) · owner's answer, 2026-10-19 (astro-plan-rzbzu.1; import_no_target) · `templates.ts` DEFAULT_NAMING, resolveNamingTemplate
 
 ### S4 — Change the light naming template {#S4}
 
@@ -156,17 +156,17 @@ folder is added in place. Done means:
 
 ### S9 — Import with Move from Card-2 {#S9}
 
-- **Do:** Connect `Card-2`. Choose it as the source and `Astro-T7 captures` as the Captures location. Read the preview, then open the Target picker of `4 Oct Ha` and choose Unclassified. Choose **Move**, click **Move 12 frames** and confirm. Open the OS Trash.
+- **Do:** Connect `Card-2`. Choose it as the source and `Astro-T7 captures` as the Captures location. Read the preview. `4 Oct Ha` has no pointing and no matching Target, so Unclassified is preselected and Import is available; choosing a Target is only to file the session under it (owner's answer, 2026-10-19, astro-plan-rzbzu.1). Leave it Unclassified. Choose **Move**, click **Move 12 frames** and confirm. Open the OS Trash.
 - **Expect:**
   - Card-2 appears under Removable devices once connected, read as `USB device` with no recognised layout.
-  - The preview lists `4 Oct Ha` (12 lights) as one session with no framing split and no Target prefilled, because its lights have no pointing, with `OBJECT NGC7000` shown beside it only as a hint. Before the choice, none of its lights is listed under `NGC7000/` or `NGC 7000/`.
-  - After choosing Unclassified, its 12 lights are listed under `unclassified/Ha/2026-10-04/light/` in `Astro-T7 captures`, and the preview names the `{target}` fallback it used.
+  - The preview lists `4 Oct Ha` (12 lights) as one session with no framing split and no Target prefilled, because its lights have no pointing, with `OBJECT NGC7000` shown beside it only as a hint. **Unclassified is preselected**, so Import is available; a Target may be chosen only to file it under that Target. Before choosing a Target, none of its lights is listed under `NGC7000/` or `NGC 7000/`.
+  - Its 12 lights remain listed under `unclassified/Ha/2026-10-04/light/` in `Astro-T7 captures`, and the preview names the `{target}` fallback it used.
   - The confirmation `Move 12 frames?` lists `Copies 12 frames (<size>) into Astro-T7 captures`, `Verifies each copy (SHA-256)` and `Sends 12 verified sources on Card-2 to the OS Trash`.
+  - Sessions lists a new 4 Oct Ha session of 12 frames with no Target, under **Needs a Target**, with `OBJECT NGC7000` shown as a label. Its frames sit under `unclassified/Ha/2026-10-04/light/`.
   - The summary reads `12 frames · <size> · 1 session · sources → OS Trash`. A second operation, `Move import sources to the OS Trash`, moves the 12 sources only after every copy verified against its source snapshot.
   - The 12 files are in the OS Trash and can be put back.
-  - Sessions lists a new 4 Oct Ha session of 12 frames with no Target, under **Needs a Target**, with `OBJECT NGC7000` shown as a label. Its frames sit under `unclassified/Ha/2026-10-04/light/`.
 - **Expect (negative):** No source is permanently deleted, and no source reached the Trash before its destination verified. OBJECT `NGC7000` sets neither the session's Target nor `{target}`: no `NGC7000/` folder and no `NGC 7000/Ha/2026-10-04/` folder is created, and no file moves after the import.
-- **Trace:** Import · STO-IMP-FR-04, STO-IMP-FR-06 · STO-IMP-AC-03 · LIB-FR-04 · LIB-AC-34 · D19, D-W11, D-W107 · HARNESS-V5-IA.md §Screens S13 (Move verifies, then sends the source to the OS Trash) · HARNESS-V5-FEEDBACK-R1.md §Domain and seed (removable devices detected when connected), §Round 5 (OBJECT is a label, never evidence), §Round 6 (P-IMP2: OBJECT shown only as a hint; Unclassified sessions go to an Unclassified folder)
+- **Trace:** Import · STO-IMP-FR-04, STO-IMP-FR-06 · STO-IMP-AC-03 · LIB-FR-04, LIB-FR-17 · LIB-AC-34 · D19, D-W11, D-W107 · owner's answer, 2026-10-19 (astro-plan-rzbzu.1) · HARNESS-V5-IA.md §Screens S13 (Move verifies, then sends the source to the OS Trash) · HARNESS-V5-FEEDBACK-R1.md §Domain and seed (removable devices detected when connected), §Round 5 (OBJECT is a label, never evidence), §Round 6 (P-IMP2: OBJECT shown only as a hint; Unclassified sessions go to an Unclassified folder)
 
 ### S10 — Import from a network share that drops mid-import {#S10}
 
@@ -214,7 +214,7 @@ folder is added in place. Done means:
 - SC6: S11 copies, renames or moves 0 files.
 - SC7: At S12, 100% of imported destination files match their source's SHA-256, and 0 files were permanently deleted or overwritten.
 - SC8: Card-1 reads ASIAIR (S1) and Card-2 reads USB device (S9). 0 duplicate-copies issues are raised after S6, S8, S9, S10, S10a or S11, and 0 duplicates warnings name a `Card-1` file.
-- SC9: The 6 imported light sessions land with the Target their preview showed: 5 with NGC 7000 Confirmed (`2 Oct Ha`, `5 Oct OIII` and the two 6 Oct sessions of S10a prefilled from pointing, `2 Oct OIII` changed at S5a) and 1 with no Target under `unclassified/` (`4 Oct Ha`, S9). 0 Targets and 0 folders come from OBJECT, and 0 files move after an import (S10a, S12).
+- SC9: The six imported light sessions use their preview Target or Unclassified route: five with NGC 7000 and `4 Oct Ha` preselected Unclassified until a Target is chosen solely to file it (S3, S9; owner's answer, 2026-10-19, astro-plan-rzbzu.1; import_no_target). 0 Targets or folders come from OBJECT; no file moves after import (S10a, S12).
 - SC10: At S10a the preview lists exactly 2 sessions, of 24 and 10 lights. The merge shows 1 session of 34, the re-split restores the 2 sessions, and 0 bytes are written before the import starts.
 
 ## Known gaps
@@ -225,7 +225,7 @@ folder is added in place. Done means:
 - G4: Out of scope for this journey: a role with no location, which blocks its items with the missing role named (STO-IMP-FR-02; `No Captures location`), and the unknown-filter prompt in the preview (STO-IMP-FR-03, PLAN-EQ-FR-04) are not exercised. Blocks readiness until covered by a step or a journey.
 - G6: (dissolved 2026-10-12): answered by Round 6 "P-IMP2: confirm Targets in the Import preview"; S3, S5a, S8, S9 and S10 now assert that a session's Target is prefilled only from its pointing, with OBJECT shown as a hint, and that the user keeps it, changes it or picks Unclassified there; S7, S9 and S12 assert that the import files frames under that `{target}` or under `unclassified/` at once, with no later move and no OBJECT-named folder.
 - G7: (dissolved 2026-10-12): answered by Round 6 "Import source vanishes mid-import"; S10 now asserts that the import pauses as `Interrupted`, fails no item, and resumes on Retry. Unmounting the share at a known point still needs the fixture tooling that G2 records.
-- G8: Unresolved product question: P-IMP2 prefills a session's Target from its pointing, but Round 6 does not say what the preview shows for a session whose pointing is missing or that no Target's footprint contains (`2 Oct OIII`, `4 Oct Ha`), or whether Import waits for a choice. Options: (a, recommended) Unclassified is preselected, so the import is always available and the user chooses a Target only to file it under that Target; (b) the Target is empty and Import is unavailable until the user chooses a Target or Unclassified, which forces a decision but blocks a quick card dump. S3 and S9 assert only that no Target is prefilled and that no light is listed under a Target's folder; S5a and S9 choose explicitly. Blocks readiness.
+- G8: (dissolved 2026-10-19): the owner's answer in astro-plan-rzbzu.1 (import_no_target) settles the import preview for sessions with no pointing or no matching Target: preselect Unclassified, so Import is always available; a Target is chosen only to file the session under it. S3 and S9 assert this for 2 Oct OIII and 4 Oct Ha.
 - G9: Unresolved implementation qualification: the Card-1 fixture doesn't fix the calibration evidence of its two light sessions, so no step asserts which Import review state their darks, flats and bias read (LIB-FR-24, STO-IMP-AC-11). Blocks readiness until a fixture fixes them.
 - G10: (dissolved 2026-10-16): answered by the owner's amendment of D-W107 (LIB-FR-04, LIB-AC-34): frames with no pointing stay in one session, because without pointing there is no framing split. S3 and S9 assert that `2 Oct OIII` and `4 Oct Ha` each read as one session in the preview.
 
@@ -251,3 +251,6 @@ folder is added in place. Done means:
 - **Δ7** 2026-10-17 · S7, P2 · behavior-change
   The finished import leads with **Review sessions**, which opens this import's first session in the Needs review queue (oldest night, then start time), here `2 Oct Ha` at its Review step; Show in Sessions stays as the second action. P2 gives the 2 Oct lights their start times.
   Evidence: HARNESS-V5-FEEDBACK-R1.md Round 9 C14 · D-W78 · LIB-FR-20, PIX-FR-18 · prototype import.tsx OutcomeStep, derive.ts reviewQueue and importReviewLink (ui-harness-v5) · by: JourneysR9c (intent-gated)
+- **Δ8** 2026-10-19 · S3, S9, SC9 · behavior-change
+  When a session has no pointing or no matching Target, the preview preselects Unclassified so Import is available; choosing a Target only files it under that Target.
+  Evidence: STO-IMP-FR-03 · owner's answer of 2026-10-19 in astro-plan-rzbzu.1 · by: OwnerAnswersDocsFix (intent-gated)

@@ -1,7 +1,7 @@
 ---
 id: J23
 title: Review Project calibration and configure its View
-version: 8
+version: 9
 status: draft
 last_reviewed: 2026-10-03
 actors: [primary-user]
@@ -132,8 +132,8 @@ The user checks the pinned calibration for the sessions in Project `NGC 7000 HOO
 ### S11 — Apply the corrected values {#S11}
 
 - **Do:** Apply the reviewed View changes.
-- **Expect:** Apply patches all 20 corrected 24 Sep FITS lights and all 56 corrected 28 Sep FITS lights in the new Copies View. PlateVault's FITS reader returns `object = "NGC 7000"` for every reopened 24 Sep copy, and all 20 original digests are unchanged. For every reopened 28 Sep copy, it returns `telescope = "RedCat 51"`, `instrument = "ZWO ASI2600MM Pro"`, and `FOCALLEN = 250` millimetres. A source `FOCAL` card reads back as `FOCAL = 250` millimetres; a source `FLENGTH` card reads back as `FLENGTH = 0.25` metres. All 56 original digests are unchanged. J19/P2 lines 34 and 41 give the frame count and state that 28 Sep lacks `TELESCOP` and `FOCALLEN`; no `FOCAL` or `FLENGTH` is specified. J15/P2 and J15/S3 give RedCat's 250 mm focal length. S11 verifies FITS copy metadata, not tool consumption.
-- **Expect (negative):** No original or link target is patched, and no correction is reported as delivered while the application still reads the original value.
+- **Expect:** Apply patches all 20 corrected 24 Sep FITS lights and all 56 corrected 28 Sep FITS lights in the new Copies View. PlateVault's FITS reader returns `object = "NGC 7000"` for every reopened 24 Sep copy, and all 20 original digests are unchanged. For every reopened 28 Sep copy, it returns `telescope = "RedCat 51"`, `instrument = "ZWO ASI2600MM Pro"`, and `FOCALLEN = 250` millimetres. A `FOCAL` or `FLENGTH` alias card present in a source frame is overwritten: `FOCAL` reads back as 250 millimetres and `FLENGTH` as 0.25 metres. A `HIERARCH TELESCOPE` or `HIERARCH INSTRUMENT` card present in a source frame is patched with the corrected telescope or camera. All 56 original digests are unchanged. J19/P2 lines 34 and 41 give the frame count and state that 28 Sep lacks `TELESCOP` and `FOCALLEN`; no `FOCAL`, `FLENGTH` or HIERARCH card is specified. J15/P2 and J15/S3 give RedCat's 250 mm focal length. Apply reports "2 corrected values written to patched copies". S11 verifies FITS copy metadata, not tool consumption.
+- **Expect (negative):** No original or link target is patched, no alias card such as `FOCAL` or `FLENGTH` is added to a frame that lacks it, and Apply's report makes no claim that the generic application reads the corrected values.
 - **Trace:** PREP-FR-03, PREP-FR-06, PREP-FR-09, PREP-FR-20, PREP-AC-06, PREP-AC-39 · VSEL-FR-14 · LIB-FR-12, LIB-FR-20 · D-W100, D-W122, D-W123 · J19/P2, J15/S3 · HARNESS-V5-FEEDBACK-R1.md Round 9 C15
 
 ## Success criteria
@@ -158,7 +158,7 @@ The user checks the pinned calibration for the sessions in Project `NGC 7000 HOO
 - G7: (dissolved 2026-10-15): PREP-AC-11 (D-W81, D-W83) answers it: for a profile whose input-write behavior is unknown or write-prone, Symlinks is refused with the input-write risk named, and Copies is offered without a silent mode change. S9 asserts that refusal for a generic application.
 - G8: Rests on provisional F4 items pending owner confirmation in PR #1804: D-W106's Hide refusal for a master an open Project uses through its sessions (S7b, SC5), and D-W102's flat ranking (P2, S3). Changes to either decision may change those steps.
 - G9: (dissolved 2026-10-17): PREP-FR-20 and provisional D-W123 map Target and rig corrections to FITS header keywords, and S10, S11 and SC8 read back those values.
-- G10: Open owner questions (D-W123): The FITS keyword mapping and fixed-format alias coverage, including `FOCAL` and `FLENGTH`, remain provisional. Should PlateVault patch longer `TELESCOPE`/`INSTRUMENT` aliases using HIERARCH cards? May Apply report a patched FITS correction delivered to a generic application without per-tool evidence that it reads the corrected field? How should Apply handle corrected non-FITS inputs lacking a profile route: block, warn and continue, patch XISF FITSKeywords with cited capability evidence, or convert? How should Apply handle a corrected value that FITS cannot represent in printable-ASCII cards? Today `header_patch::value_card` refuses such values (`crates/platevault-core/src/header_patch.rs:261-280`). The owner must decide whether to validate at entry, write CONTINUE long strings, or refuse Apply with a named reason. PREP-FR-03 says the source value must not reach the tool and forbids reporting delivery while the tool still reads that value. These owner choices remain open; readiness remains blocked.
+- G10: Open owner question (D-W123), partly answered on 2026-10-19 by the owner's answer in astro-plan-rzbzu.1: every present alias card of a corrected field is overwritten (`FOCAL` in millimetres, `FLENGTH` in metres) and none is added; present `HIERARCH TELESCOPE` and `HIERARCH INSTRUMENT` cards are patched; a corrected XISF input is patched too; a value FITS cannot hold is refused at entry and again in the backend; originals are never edited, only the copy's header changes; Apply reports "N corrected values written to patched copies" with no claim that the application reads them. Still open: how Apply handles a corrected input in another non-FITS format that has no profile route (PREP-FR-20). Readiness stays blocked until the owner answers it.
 ## Delta log
 
 - **Δ2** 2026-10-06 · S1, S2, S3, S5, S6, S7, +S7a, S9 · behavior-change
@@ -184,3 +184,6 @@ The user checks the pinned calibration for the sessions in Project `NGC 7000 HOO
 - **Δ8** 2026-10-17 · S10, S11 · behavior-change
   Apply maps corrected Target, equipment/rig, Filter and Exposure values to FITS keywords based on the available profile evidence. S10 shows corrected Target and rig values. S11 reads back Target and RedCat telescope, instrument and focal length from the patched copies; they match J19 and J15. G9 dissolves. The mapping and profile support remain provisional pending owner confirmation.
   Evidence: PREP-FR-20, PREP-FR-21, PREP-AC-39, J19/P2, J15/S3. Code references: `crates/platevault-core/src/header_patch.rs:33-47` and `crates/metadata/fits/src/lib.rs:183-223`. Owner confirmation remains pending in astro-plan-ysy9m. · by: Spec069Keywords (intent-gated)
+- **Δ9** 2026-10-19 · S11 · behavior-change
+  Apply reports "2 corrected values written to patched copies" and makes no claim that the generic application reads them. A present `FOCAL` or `FLENGTH` alias card is overwritten, and none is added to a frame that lacks it. G10 keeps only the route for other non-FITS formats open.
+  Evidence: owner's answers of 2026-10-19 in astro-plan-rzbzu.1, D-W123, PREP-FR-20 · by: Main (intent-gated)
