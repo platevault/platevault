@@ -22,7 +22,6 @@
 //! which every later proof compares against.
 
 use std::fs::File;
-use std::io;
 use std::path::{Path, PathBuf};
 
 use metadata_core::patch::{self, EditValue, FieldEdit, KeywordWrite, PatchError};
@@ -259,23 +258,67 @@ fn shown(value: &serde_json::Value) -> Option<String> {
     }
 }
 
-/// Why recording `value` as the corrected `field` would leave a correction
-/// no patched copy can deliver (D-W123, owner decisions): a field no header
-/// keyword carries, or a text value FITS can't hold, not printable ASCII or
-/// too long for one card on its own. The framing label is a grouping
-/// decision, not a header correction, so it is never refused. The backend
-/// that records a correction refuses it, and Apply refuses it again.
+/// The frame a correction is recorded for, as entry checks it.
+#[derive(Clone, Debug)]
+pub struct EntryFrame {
+    /// What its header holds.
+    pub observed: CaptureMetadata,
+    /// Its catalogued format, which picks the patcher.
+    pub format: ImageFormat,
+    /// Its original, when its location's root resolves.
+    pub source: Option<PathBuf>,
+}
+
+/// Why recording `value` as the corrected `field` of `frame` would leave a
+/// correction no patched copy can deliver (D-W123, owner decisions), as
+/// Apply would refuse it: a field no header keyword carries; a cleared
+/// value where the frame's header holds the field, since no card holds an
+/// empty value (owner decision 2026-10-19); or a text value FITS can't
+/// hold, not printable ASCII or too long for the card it is written to:
+/// one card on its own, or less where the header holds a HIERARCH alias of
+/// the field, as the FITS patcher works it out from the header. Clearing
+/// a field the header lacks undoes a correction and is never refused, nor
+/// is the framing label, a grouping decision rather than a header
+/// correction. What only the rest of the frame refuses, Apply refuses.
+/// Reads the header only for a field with a HIERARCH alias; a source that
+/// can't be read isn't refused here.
 #[must_use]
-pub fn entry_refusal(field: &str, value: &serde_json::Value) -> Option<PatchRefusal> {
+pub fn entry_refusal(
+    field: &str,
+    value: &serde_json::Value,
+    frame: &EntryFrame,
+) -> Option<PatchRefusal> {
     if field == FRAMING_LABEL_FIELD {
         return None;
     }
-    let Some(mapping) = mapping(field) else { return Some(PatchRefusal::NoKeyword) };
+    let mapping = mapping(field);
+    if value.is_null() {
+        let holds = serde_json::to_value(&frame.observed)
+            .is_ok_and(|observed| observed.get(field).is_some_and(|held| !held.is_null()));
+        // As `edit_of` refuses the change: its keyword first, then its value.
+        return holds.then_some(mapping.map_or(PatchRefusal::NoKeyword, |_| PatchRefusal::NoValue));
+    }
+    let Some(mapping) = mapping else { return Some(PatchRefusal::NoKeyword) };
     let text = value.as_str()?;
     if mapping.kind != Kind::Text {
         return None;
     }
-    patch::fits_text(text).err().map(refusal_of)
+    if let Err(reason) = patch::fits_text(text) {
+        return Some(refusal_of(reason));
+    }
+    if mapping.hierarch.is_empty() {
+        return None;
+    }
+    let change = CorrectedField {
+        field: field.to_owned(),
+        keywords: Vec::new(),
+        header: None,
+        catalog: Some(text.to_owned()),
+    };
+    match check(frame.source.as_deref()?, frame.format, &[change]) {
+        Err(Refusal { reason: PatchRefusal::TooLong, .. }) => Some(PatchRefusal::TooLong),
+        _ => None,
+    }
 }
 
 const fn refusal_of(reason: patch::Refusal) -> PatchRefusal {
@@ -383,8 +426,8 @@ fn reason(code: ReasonCode, detail: impl Into<String>) -> ItemReason {
 
 /// The refusal or failure of a patch at build time, as Apply reports it.
 fn build_failure(path: &Path, changes: &[CorrectedField], error: &PatchError) -> ItemReason {
-    match (refused(changes, error), error) {
-        (Some(refusal), _) => reason(
+    match refused(changes, error) {
+        Some(refusal) => reason(
             ReasonCode::WriteFailed,
             format!(
                 "{} can't carry its corrected {}: {}",
@@ -393,11 +436,7 @@ fn build_failure(path: &Path, changes: &[CorrectedField], error: &PatchError) ->
                 refusal.reason.describe()
             ),
         ),
-        (None, PatchError::Io(error)) if error.kind() == io::ErrorKind::AlreadyExists => reason(
-            ReasonCode::DestinationOccupied,
-            format!("{} already holds an entry; nothing is replaced", path.display()),
-        ),
-        (None, error) => reason(ReasonCode::WriteFailed, format!("{}: {error}", path.display())),
+        None => reason(ReasonCode::WriteFailed, format!("{}: {error}", path.display())),
     }
 }
 
@@ -567,7 +606,7 @@ pub fn is_planned_patch(
 #[cfg(test)]
 mod tests {
     use std::fs;
-    use std::io::Write;
+    use std::io::{self, Write};
 
     use sha2::{Digest, Sha256};
 
@@ -628,34 +667,96 @@ mod tests {
         assert_eq!(corrections(&observed, &observed), Vec::<CorrectedField>::new());
     }
 
+    /// A frame whose header holds `observed`, its source unread.
+    fn unread(observed: CaptureMetadata) -> EntryFrame {
+        EntryFrame { observed, format: ImageFormat::Fits, source: None }
+    }
+
     /// What no patched copy can deliver is refused when it is recorded: a
     /// value FITS can't hold, and a field no header keyword carries. The
     /// framing label is a grouping decision, not a header correction.
     #[test]
     fn refuses_at_entry_what_no_patched_copy_can_deliver() {
+        let frame = unread(CaptureMetadata::default());
+        let refusal = |field: &str, value: serde_json::Value| entry_refusal(field, &value, &frame);
         let text = |value: &str| serde_json::Value::String(value.to_owned());
-        assert_eq!(entry_refusal("object", &text("Hα")), Some(PatchRefusal::NotPrintableAscii));
-        assert_eq!(entry_refusal("object", &text(&"x".repeat(69))), Some(PatchRefusal::TooLong));
-        assert_eq!(entry_refusal("object", &text("NGC 7000")), None);
+        assert_eq!(refusal("object", text("Hα")), Some(PatchRefusal::NotPrintableAscii));
+        assert_eq!(refusal("object", text(&"x".repeat(69))), Some(PatchRefusal::TooLong));
+        assert_eq!(refusal("object", text("NGC 7000")), None);
         let date = text("2026-10-12T20:00:00");
-        assert_eq!(entry_refusal("dateObs", &date), Some(PatchRefusal::NoKeyword));
-        assert_eq!(entry_refusal("raDeg", &serde_json::json!(10.5)), Some(PatchRefusal::NoKeyword));
-        assert_eq!(entry_refusal(FRAMING_LABEL_FIELD, &text("Ha 2")), None);
-        assert_eq!(entry_refusal("gain", &serde_json::json!(120)), None);
+        assert_eq!(refusal("dateObs", date), Some(PatchRefusal::NoKeyword));
+        assert_eq!(refusal("raDeg", serde_json::json!(10.5)), Some(PatchRefusal::NoKeyword));
+        assert_eq!(refusal(FRAMING_LABEL_FIELD, text("Ha 2")), None);
+        assert_eq!(refusal("gain", serde_json::json!(120)), None);
+    }
+
+    /// Owner decision 2026-10-19: clearing a value the header holds is
+    /// refused, as no card holds an empty value; one without a keyword is
+    /// refused for that first, as Apply would. Clearing a field the header
+    /// lacks undoes a correction and is taken.
+    #[test]
+    fn refuses_clearing_a_value_the_header_holds() {
+        let frame = unread(CaptureMetadata {
+            filter: Some("Ha".into()),
+            date_local: Some("2026-10-12T22:00:00".into()),
+            ..CaptureMetadata::default()
+        });
+        let cleared = |field: &str| entry_refusal(field, &serde_json::Value::Null, &frame);
+        assert_eq!(cleared("filter"), Some(PatchRefusal::NoValue));
+        assert_eq!(cleared("dateLocal"), Some(PatchRefusal::NoKeyword));
+        assert_eq!(cleared("object"), None, "the header holds no OBJECT");
+        assert_eq!(cleared("dateObs"), None);
+        assert_eq!(cleared(FRAMING_LABEL_FIELD), None);
+    }
+
+    /// A HIERARCH alias the header holds leaves its value the room the FITS
+    /// patcher works out: 57 characters for a telescope beside `HIERARCH
+    /// TELESCOPE`, 56 for a camera beside `HIERARCH INSTRUMENT`. A frame
+    /// without the alias, or whose source can't be read, takes 68.
+    #[test]
+    fn refuses_at_entry_a_value_longer_than_its_hierarch_alias_holds() {
+        let dir = tempfile::tempdir().unwrap();
+        let (aliased, plain) = (dir.path().join("aliased.fits"), dir.path().join("plain.fits"));
+        let cards = ["HIERARCH TELESCOPE = 'Samyang 135'", "HIERARCH INSTRUMENT = 'ASI2600MM'"];
+        fs::write(&aliased, fits_light_holding(&cards)).unwrap();
+        fs::write(&plain, fits_light()).unwrap();
+        let frame = |source: Option<&Path>| EntryFrame {
+            source: source.map(Path::to_path_buf),
+            ..unread(CaptureMetadata::default())
+        };
+        let refusal = |field: &str, len: usize, source: Option<&Path>| {
+            entry_refusal(field, &serde_json::Value::String("x".repeat(len)), &frame(source))
+        };
+        let too_long = Some(PatchRefusal::TooLong);
+        assert_eq!(refusal("telescope", 57, Some(&aliased)), None);
+        assert_eq!(refusal("telescope", 58, Some(&aliased)), too_long);
+        assert_eq!(refusal("camera", 56, Some(&aliased)), None);
+        assert_eq!(refusal("camera", 57, Some(&aliased)), too_long);
+        assert_eq!(refusal("telescope", 68, Some(&plain)), None);
+        assert_eq!(refusal("telescope", 68, None), None);
+        assert_eq!(refusal("telescope", 69, Some(&plain)), too_long);
     }
 
     /// A FITS light: its primary header and a 4 × 4 8-bit image.
     fn fits_light() -> Vec<u8> {
-        let cards = [
+        fits_light_holding(&[])
+    }
+
+    /// A FITS light whose primary header also holds `cards`.
+    fn fits_light_holding(cards: &[&str]) -> Vec<u8> {
+        let axes = [
             "SIMPLE  =                    T",
             "BITPIX  =                    8",
             "NAXIS   =                    2",
             "NAXIS1  =                    4",
             "NAXIS2  =                    4",
-            "END",
         ];
-        let mut bytes: Vec<u8> =
-            cards.iter().flat_map(|card| format!("{card:<80}").into_bytes()).collect();
+        let mut bytes: Vec<u8> = axes
+            .iter()
+            .chain(cards)
+            .chain(&["END"])
+            .flat_map(|card| format!("{card:<80}").into_bytes())
+            .collect();
         bytes.resize(2880, b' ');
         bytes.extend([7_u8; 16]);
         bytes.resize(2 * 2880, 0);

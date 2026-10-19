@@ -26,6 +26,9 @@ use xisf_header::{Error as XisfError, GeometryError, Header};
 const PREAMBLE: usize = 16;
 /// How much of a file is read at a time.
 const STREAM_BUFFER: usize = 1 << 20;
+/// The longest XML header read: `xisf-header`'s cap on the declared length
+/// (8 MiB), which it refuses beyond and doesn't export.
+const MAX_HEADER_LEN: usize = 8 * 1024 * 1024;
 
 /// Whether the XISF file at `source` can carry `edits`; reads only its
 /// preamble and XML header. The layouts `xisf-header` splices are one
@@ -131,7 +134,8 @@ fn header_error(error: XisfError) -> PatchError {
 }
 
 /// The preamble and XML header of the file at `path`, and the file left at
-/// the first byte after them.
+/// the first byte after them. A header declared longer than
+/// `xisf-header` reads is refused before anything is allocated for it.
 fn read_head(path: &Path) -> Result<(File, Vec<u8>), PatchError> {
     let no_header = || PatchError::refused(0, Refusal::NoHeader);
     let mut file = File::open(path)?;
@@ -141,7 +145,8 @@ fn read_head(path: &Path) -> Result<(File, Vec<u8>), PatchError> {
         return Err(no_header());
     }
     let len = u32::from_le_bytes([head[8], head[9], head[10], head[11]]);
-    let len = usize::try_from(len).map_err(|_| no_header())?;
+    let len =
+        usize::try_from(len).ok().filter(|len| *len <= MAX_HEADER_LEN).ok_or_else(no_header)?;
     head.resize(PREAMBLE + len, 0);
     file.read_exact(&mut head[PREAMBLE..]).map_err(|_| no_header())?;
     Ok((file, head))
@@ -318,5 +323,24 @@ mod tests {
             );
             assert_eq!(std::fs::read(&path).unwrap(), bytes, "nothing was written");
         }
+    }
+
+    /// A header declared longer than `xisf-header` reads is refused before
+    /// it is read, even where the file holds that many bytes.
+    #[test]
+    fn refuses_a_header_longer_than_xisf_header_reads() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("light.xisf");
+        let len = MAX_HEADER_LEN + 1;
+        let mut bytes = b"XISF0100".to_vec();
+        bytes.extend_from_slice(&u32::try_from(len).unwrap().to_le_bytes());
+        bytes.extend_from_slice(&[0_u8; 4]);
+        bytes.resize(PREAMBLE + len, b' ');
+        std::fs::write(&path, &bytes).unwrap();
+        let refused = read_head(&path).map(drop).unwrap_err();
+        assert!(
+            matches!(refused, PatchError::Refused(r) if r.reason == Refusal::NoHeader),
+            "{refused}"
+        );
     }
 }

@@ -9,10 +9,9 @@ path = "src/lib.rs"
 
 [dependencies]
 metadata_core = { path = "../core" }
-# nightwatch-astro/fits-header#31 (reviewed, CI green): HIERARCH value cards
-# are addressable through `Key::hierarch`, a breaking change (0.5.0). Pinned
-# to the reviewed rev until it is released; replace with the released version.
-fits-header = { git = "https://github.com/nightwatch-astro/fits-header", rev = "eb05656768b314d070f6879ad3ced70d7900818d" }
+# 0.5.0 (nightwatch-astro/fits-header#31): HIERARCH value cards are
+# addressable through `Key::hierarch`.
+fits-header = "0.5.0"
 # The SHA-256 of a patched copy as it is written, and of its original.
 sha2.workspace = true
 

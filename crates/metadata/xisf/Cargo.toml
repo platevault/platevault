@@ -9,10 +9,9 @@ path = "src/lib.rs"
 
 [dependencies]
 metadata_core = { path = "../core" }
-# nightwatch-astro/xisf-header#33 (approved): `update_file` edits files with
-# several attachments, such as an Image with a Thumbnail. Pinned to the
-# reviewed rev until it is released; replace with the released version.
-xisf-header = { git = "https://github.com/nightwatch-astro/xisf-header", rev = "76b86dd7668dfc11012d47003418b0b1280ba665" }
+# 0.4.5 (nightwatch-astro/xisf-header#33): `update_file` edits files with
+# several attachments, such as an Image with a Thumbnail.
+xisf-header = "0.4.5"
 # The SHA-256 of a patched copy once it is proven against its original.
 sha2.workspace = true
 

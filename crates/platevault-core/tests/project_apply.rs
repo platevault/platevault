@@ -779,6 +779,38 @@ async fn a_correction_no_patched_copy_can_carry_refuses_apply_before_building() 
     nothing_built(&world);
 }
 
+/// The reviewed expectation of recording a correction for `asset`.
+fn expected(asset: &Asset) -> [ExpectedAsset; 1] {
+    [ExpectedAsset {
+        asset_id: asset.id,
+        decision_revision: asset.decision_revision,
+        fingerprint: asset.fingerprint.clone(),
+    }]
+}
+
+/// The coded refusals of recording `corrections` for one frame: at the
+/// preview, naming the frame, and at the confirm of the same plan
+/// previewed below that check. Each carries the refused field and why.
+async fn refused_at_entry(
+    world: &World,
+    expected: &[ExpectedAsset],
+    corrections: &[CorrectionInput],
+) -> [Value; 2] {
+    let refused = world.library.preview_correction(expected, corrections).await.unwrap_err();
+    assert_eq!(refused.code().as_str(), "correction_unpatchable", "{refused}");
+    let previewed = serde_json::to_value(refused.response(None, None)).unwrap();
+    assert_eq!(previewed["identity"], json!(corrections[0].asset_id), "{previewed:#}");
+    let preview = world
+        .catalog()
+        .preview_correction(expected, corrections, apply_support::group_by_night)
+        .await
+        .unwrap();
+    let confirmed = world.library.confirm_correction(preview.id, expected).await;
+    let Err(refused) = confirmed else { panic!("the confirm takes {corrections:?}") };
+    let confirmed = serde_json::to_value(refused.response(None, None)).unwrap();
+    [previewed["correction"].clone(), confirmed["correction"].clone()]
+}
+
 /// Owner decisions (D-W123, LIB-FR-20): a correction no patched copy can
 /// deliver, a value FITS can't hold or a field no header keyword carries,
 /// is refused where it is recorded, at the preview and again at the
@@ -788,11 +820,6 @@ async fn a_correction_no_patched_copy_can_carry_refuses_apply_before_building() 
 async fn recording_a_correction_no_patched_copy_can_deliver_is_refused() {
     let world = catalogued(ViewMode::Copies).await;
     let asset = world.asset_at(&world.captures, HA[0]).await;
-    let expected = [ExpectedAsset {
-        asset_id: asset.id,
-        decision_revision: asset.decision_revision,
-        fingerprint: asset.fingerprint.clone(),
-    }];
     let correction = |field: &str, value: Value| {
         [CorrectionInput { asset_id: asset.id, field: field.into(), value }]
     };
@@ -801,30 +828,68 @@ async fn recording_a_correction_no_patched_copy_can_deliver_is_refused() {
         ("dateObs", json!("2026-10-12T20:00:00"), "no_keyword"),
         ("readoutMode", json!("High Gain"), "no_keyword"),
     ] {
-        let refused = world
-            .library
-            .preview_correction(&expected, &correction(field, value.clone()))
-            .await
-            .unwrap_err();
-        assert_eq!(refused.code().as_str(), "correction_unpatchable", "{refused}");
-        let response = serde_json::to_value(refused.response(None, None)).unwrap();
-        assert_eq!(response["identity"], json!(asset.id), "{response:#}");
-        assert_eq!(response["correction"], json!({ "field": field, "refusal": refusal }));
-
-        // A preview recorded below the check is refused at the confirm.
-        let preview = world
-            .catalog()
-            .preview_correction(&expected, &correction(field, value), apply_support::group_by_night)
-            .await
-            .unwrap();
-        let confirmed = world.library.confirm_correction(preview.id, &expected).await;
-        let Err(refused) = confirmed else { panic!("the confirm takes {field}") };
-        let response = serde_json::to_value(refused.response(None, None)).unwrap();
-        assert_eq!(response["correction"], json!({ "field": field, "refusal": refusal }));
+        let refused = json!({ "field": field, "refusal": refusal });
+        let found = refused_at_entry(&world, &expected(&asset), &correction(field, value)).await;
+        assert_eq!(found, [refused.clone(), refused]);
     }
     assert_eq!(world.asset_at(&world.captures, HA[0]).await, asset, "nothing was recorded");
     let framing = correction(platevault_core::FRAMING_LABEL_FIELD, json!("Ha 2"));
-    assert!(world.library.preview_correction(&expected, &framing).await.is_ok());
+    assert!(world.library.preview_correction(&expected(&asset), &framing).await.is_ok());
+}
+
+/// Owner decision 2026-10-19: clearing a value the frame's header holds
+/// is refused where it is recorded, at the preview and again at the
+/// confirm, as no header card holds an empty value, and nothing is
+/// recorded. Clearing a field the header lacks undoes an earlier
+/// correction and is taken.
+#[tokio::test]
+async fn clearing_a_value_the_header_holds_is_refused_and_undoing_a_correction_is_taken() {
+    let world = catalogued(ViewMode::Copies).await;
+    world.correct(HA[0], &[("object", json!("NGC 7000"))]).await;
+    let asset = world.asset_at(&world.captures, HA[0]).await;
+    assert_eq!(asset.observed.filter.as_deref(), Some("Ha"));
+    assert_eq!(asset.observed.object, None);
+    let cleared = |field: &str| {
+        [CorrectionInput { asset_id: asset.id, field: field.into(), value: Value::Null }]
+    };
+
+    let refused = json!({ "field": "filter", "refusal": "no_value" });
+    let found = refused_at_entry(&world, &expected(&asset), &cleared("filter")).await;
+    assert_eq!(found, [refused.clone(), refused]);
+    assert_eq!(world.asset_at(&world.captures, HA[0]).await, asset, "nothing was recorded");
+
+    let preview =
+        world.library.preview_correction(&expected(&asset), &cleared("object")).await.unwrap();
+    world.library.confirm_correction(preview.id, &expected(&asset)).await.unwrap();
+    let undone = world.asset_at(&world.captures, HA[0]).await;
+    assert_eq!(undone.effective.object, None, "the correction is undone");
+}
+
+/// A HIERARCH alias leaves its value less room than a card on its own:
+/// beside `HIERARCH TELESCOPE` a telescope value fits 57 characters, as
+/// the FITS patcher works it out. A 60-character one is refused where it
+/// is recorded, at the preview and again at the confirm, rather than at
+/// Apply; on a frame without the alias it is taken.
+#[tokio::test]
+async fn a_value_longer_than_its_hierarch_alias_holds_is_refused_where_it_is_recorded() {
+    let world = catalogued(ViewMode::Copies).await;
+    let relative = "2026-10-12/J23_Hierarch_Light_001.fits";
+    let alias = "HIERARCH TELESCOPE = 'Samyang 135'";
+    let metadata = meta("LIGHT", Some("Ha"), 300.0, 100.0, "2026-10-12");
+    world.add_lights(&[(relative.to_owned(), metadata, frame(relative, true, &[alias]))]).await;
+    let rig = "William Optics RedCat 51 WIFD 250 mm f/4.9 with 0.8x reducer";
+    assert_eq!(rig.len(), 60);
+    let telescope = |asset: &Asset| {
+        [CorrectionInput { asset_id: asset.id, field: "telescope".into(), value: json!(rig) }]
+    };
+
+    let aliased = world.asset_at(&world.captures, relative).await;
+    let refused = json!({ "field": "telescope", "refusal": "too_long" });
+    let found = refused_at_entry(&world, &expected(&aliased), &telescope(&aliased)).await;
+    assert_eq!(found, [refused.clone(), refused]);
+
+    let plain = world.asset_at(&world.captures, HA[0]).await;
+    assert!(world.library.preview_correction(&expected(&plain), &telescope(&plain)).await.is_ok());
 }
 
 /// A card's comment never refuses a value that fits a card on its own:

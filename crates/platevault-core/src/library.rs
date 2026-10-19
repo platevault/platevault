@@ -3,9 +3,10 @@
 
 //! Application operations over the clean catalog. Image paths are read-only.
 
+use std::collections::hash_map::Entry;
 use std::collections::{BTreeSet, HashMap};
 use std::future::Future;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -17,6 +18,7 @@ use uuid::Uuid;
 use crate::frame_review::FrameReview;
 use crate::grouping::group_assets;
 use crate::inventory;
+use crate::patched_copy::{self, EntryFrame};
 use crate::projects::{CalibrationReferences, ProjectReferences};
 use crate::targets::{
     SimbadConfig, SimbadTargetResolver, TargetAssessment, TargetIndex, TargetQuery, TargetSearchHit,
@@ -566,18 +568,20 @@ impl Library {
     /// Preview a correction and the regroup it causes under the current
     /// framing margins; nothing but the plan is recorded. A correction no
     /// patched copy can deliver is refused here, as Apply refuses it again
-    /// (PREP-FR-03, D-W123): a field no header keyword carries, or a text
-    /// value FITS can't hold in one card.
+    /// (PREP-FR-03, D-W123): a field no header keyword carries, a cleared
+    /// value the frame's header holds, or a text value FITS can't hold in
+    /// the card it is written to.
     ///
     /// # Errors
     /// `CorrectionUndeliverable` naming the frame and field of such a
-    /// correction; the catalog's preview errors.
+    /// correction; `NotFound` for an unknown frame; the catalog's preview
+    /// errors.
     pub async fn preview_correction(
         &self,
         expected: &[ExpectedAsset],
         corrections: &[CorrectionInput],
     ) -> Result<CorrectionPreview, LibraryError> {
-        refuse_undeliverable(corrections)?;
+        self.refuse_undeliverable(corrections).await?;
         let margins = self.framing_margins().await?;
         self.catalog
             .preview_correction(expected, corrections, |assets: &[Asset]| {
@@ -600,7 +604,8 @@ impl Library {
         preview_id: Uuid,
         expected: &[crate::ExpectedAsset],
     ) -> Result<ConfirmedCorrection, LibraryError> {
-        refuse_undeliverable(&self.catalog.correction_preview(preview_id).await?.corrections)?;
+        let preview = self.catalog.correction_preview(preview_id).await?;
+        self.refuse_undeliverable(&preview.corrections).await?;
         let margins = self.framing_margins().await?;
         let outcome = self
             .catalog
@@ -613,6 +618,48 @@ impl Library {
             Err(error) => Some(error.response(Some(preview_id), None)),
         };
         Ok(ConfirmedCorrection { outcome, association_refresh })
+    }
+
+    /// The first of `corrections` no isolated patched copy can deliver, as
+    /// a coded refusal naming its frame and field (PREP-FR-03, D-W123).
+    /// Each frame is the catalog's record of it; its header is read off the
+    /// runtime, only where the refusal depends on it.
+    async fn refuse_undeliverable(
+        &self,
+        corrections: &[CorrectionInput],
+    ) -> Result<(), LibraryError> {
+        let mut frames: HashMap<Uuid, EntryFrame> = HashMap::new();
+        let mut roots: HashMap<Uuid, Option<PathBuf>> = HashMap::new();
+        for correction in corrections {
+            let Entry::Vacant(frame) = frames.entry(correction.asset_id) else { continue };
+            let asset = self.catalog.asset(correction.asset_id).await?;
+            if let Entry::Vacant(root) = roots.entry(asset.location_id) {
+                root.insert(
+                    self.catalog.location(asset.location_id).await?.path.to_path_buf().ok(),
+                );
+            }
+            let source = roots[&asset.location_id]
+                .as_deref()
+                .zip(asset.relative_path.relative_path().ok())
+                .map(|(root, relative)| root.join(relative));
+            frame.insert(EntryFrame { observed: asset.observed, format: asset.format, source });
+        }
+        let corrections = corrections.to_vec();
+        blocking(move || {
+            corrections.iter().try_for_each(|correction| {
+                let frame = &frames[&correction.asset_id];
+                match patched_copy::entry_refusal(&correction.field, &correction.value, frame) {
+                    Some(refusal) => Err(LibraryError::CorrectionUndeliverable {
+                        identity: correction.asset_id,
+                        path: None,
+                        field: correction.field.clone(),
+                        refusal,
+                    }),
+                    None => Ok(()),
+                }
+            })
+        })
+        .await
     }
 
     /// Refresh every resulting session; the first failure is reported after the
@@ -911,22 +958,6 @@ impl Library {
             }
         }
     }
-}
-
-/// The first of `corrections` no isolated patched copy can deliver, as a
-/// coded refusal naming its frame and field (PREP-FR-03, D-W123).
-fn refuse_undeliverable(corrections: &[CorrectionInput]) -> Result<(), LibraryError> {
-    corrections.iter().try_for_each(|correction| {
-        match crate::patched_copy::entry_refusal(&correction.field, &correction.value) {
-            Some(refusal) => Err(LibraryError::CorrectionUndeliverable {
-                identity: correction.asset_id,
-                path: None,
-                field: correction.field.clone(),
-                refusal,
-            }),
-            None => Ok(()),
-        }
-    })
 }
 
 pub(crate) async fn blocking<T: Send + 'static>(

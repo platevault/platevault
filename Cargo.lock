@@ -1953,19 +1953,9 @@ checksum = "5baebc0774151f905a1a2cc41989300b1e6fbb29aff0ceffa1064fdd3088d582"
 
 [[package]]
 name = "fits-header"
-version = "0.4.3"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "969ed073af9c306b26221d182a258167934916fc249caf9f3fd08fe5bc091431"
-dependencies = [
- "skymath 0.6.0",
- "thiserror 2.0.19",
- "time",
-]
-
-[[package]]
-name = "fits-header"
-version = "0.4.3"
-source = "git+https://github.com/nightwatch-astro/fits-header?rev=eb05656768b314d070f6879ad3ced70d7900818d#eb05656768b314d070f6879ad3ced70d7900818d"
+checksum = "5e2ba2c109f4f44f1fe28aa0d4a3d568c4e6049bb919ea1e29e1305f99594348"
 dependencies = [
  "skymath 0.6.0",
  "thiserror 2.0.19",
@@ -3648,7 +3638,7 @@ dependencies = [
 name = "metadata_fits"
 version = "0.1.0"
 dependencies = [
- "fits-header 0.4.3 (git+https://github.com/nightwatch-astro/fits-header?rev=eb05656768b314d070f6879ad3ced70d7900818d)",
+ "fits-header",
  "metadata_core",
  "sha2 0.10.9",
  "tempfile",
@@ -3665,7 +3655,7 @@ dependencies = [
  "metadata_core",
  "sha2 0.10.9",
  "tempfile",
- "xisf-header 0.4.4 (git+https://github.com/nightwatch-astro/xisf-header?rev=76b86dd7668dfc11012d47003418b0b1280ba665)",
+ "xisf-header",
 ]
 
 [[package]]
@@ -4927,7 +4917,7 @@ dependencies = [
 name = "platevault_pixels"
 version = "0.1.0"
 dependencies = [
- "fits-header 0.4.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "fits-header",
  "flate2",
  "hex",
  "lz4_flex",
@@ -4935,7 +4925,7 @@ dependencies = [
  "quick-xml",
  "sha2 0.10.9",
  "tempfile",
- "xisf-header 0.4.4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xisf-header",
 ]
 
 [[package]]
@@ -9043,20 +9033,9 @@ dependencies = [
 
 [[package]]
 name = "xisf-header"
-version = "0.4.4"
+version = "0.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "63302fc2304740b741a7f5cc136a2c27ae14b18b18c3614acb786a9d29281348"
-dependencies = [
- "quick-xml",
- "skymath 0.6.0",
- "thiserror 2.0.19",
- "time",
-]
-
-[[package]]
-name = "xisf-header"
-version = "0.4.4"
-source = "git+https://github.com/nightwatch-astro/xisf-header?rev=76b86dd7668dfc11012d47003418b0b1280ba665#76b86dd7668dfc11012d47003418b0b1280ba665"
+checksum = "17f5443240bf08e7ef894fe9100090421d7cee0b9c414354fd5c9bf77f9e68c5"
 dependencies = [
  "quick-xml",
  "skymath 0.6.0",
