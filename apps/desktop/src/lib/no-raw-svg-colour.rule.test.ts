@@ -375,4 +375,11 @@ describe('svg/no-raw-svg-colour', () => {
 
     expect(diagnostics).toHaveLength(1);
   });
+  it('checks wrapped conditional fallback values', () => {
+    const diagnostics = lint(
+      "const svg = <svg fill={`var(--pv-accent${(enabled ? ', red' : '') as string})`} />;",
+    );
+
+    expect(diagnostics).toHaveLength(1);
+  });
 });

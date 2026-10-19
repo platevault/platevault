@@ -92,6 +92,22 @@ function isSvgPresentationElement(node) {
 
   return ownName.toLowerCase() === 'svg' || SVG_ELEMENTS.has(ownName.toLowerCase());
 }
+const TRANSPARENT_EXPRESSION_WRAPPERS = new Set([
+  'ChainExpression',
+  'ParenthesizedExpression',
+  'TSAsExpression',
+  'TSSatisfiesExpression',
+  'TSNonNullExpression',
+  'TypeCastExpression',
+]);
+
+function unwrapTransparentExpression(expression) {
+  while (TRANSPARENT_EXPRESSION_WRAPPERS.has(expression.type)) {
+    expression = expression.expression;
+  }
+  return expression;
+}
+
 function findUrlClose(value) {
   let nestedParens = 0;
   for (let index = 0; index < value.length; index += 1) {
@@ -104,14 +120,10 @@ function findUrlClose(value) {
   return -1;
 }
 function getStaticString(expression) {
+  expression = unwrapTransparentExpression(expression);
   if ((expression.type === 'Literal' || expression.type === 'StringLiteral') && typeof expression.value === 'string') {
     return expression.value;
   }
-  if (
-    expression.type === 'ChainExpression' || expression.type === 'ParenthesizedExpression' ||
-    expression.type === 'TSAsExpression' || expression.type === 'TSSatisfiesExpression' ||
-    expression.type === 'TSNonNullExpression' || expression.type === 'TypeCastExpression'
-  ) return getStaticString(expression.expression);
   if (expression.type === 'TemplateLiteral') {
     let value = expression.quasis[0]?.value.cooked ?? expression.quasis[0]?.value.raw ?? '';
     for (let index = 0; index < expression.expressions.length; index += 1) {
@@ -125,14 +137,16 @@ function getStaticString(expression) {
 }
 
 function collectStringLiterals(expression, values) {
+  expression = unwrapTransparentExpression(expression);
   const staticValue = getStaticString(expression);
   if (staticValue !== null) {
     values.push(staticValue);
     return;
+  } else if (TRANSPARENT_EXPRESSION_WRAPPERS.has(expression.type)) {
+    collectStringLiterals(expression.expression, values);
   } else if (expression.type === 'LogicalExpression') {
-    if (expression.operator === '&&') {
-      collectStringLiterals(expression.right, values);
-    } else if (expression.operator === '||' || expression.operator === '??') {
+    if (expression.operator === '&&') collectStringLiterals(expression.right, values);
+    else if (expression.operator === '||' || expression.operator === '??') {
       collectStringLiterals(expression.left, values);
       collectStringLiterals(expression.right, values);
     }
@@ -142,6 +156,7 @@ function collectStringLiterals(expression, values) {
   } else if (expression.type === 'SequenceExpression') {
     collectStringLiterals(expression.expressions.at(-1), values);
   }
+
 }
 function isAllowedPaintExpression(expression) {
   if (expression.type === 'Literal' || expression.type === 'StringLiteral') {
@@ -161,8 +176,9 @@ function isAllowedPaintExpression(expression) {
   return false;
 }
 
-
 function reportRawColorsInExpression(expression, report) {
+
+  if (!expression) return;
   if (
     (expression.type === 'Literal' || expression.type === 'StringLiteral') &&
     typeof expression.value === 'string'
@@ -332,14 +348,10 @@ function reportRawColorsInExpression(expression, report) {
           }
         }
       }
-      return;
-    case 'ChainExpression':
-    case 'ParenthesizedExpression':
-    case 'TSAsExpression':
-    case 'TSSatisfiesExpression':
-    case 'TypeCastExpression':
-    case 'TSNonNullExpression':
-      reportRawColorsInExpression(expression.expression, report);
+    default:
+      if (TRANSPARENT_EXPRESSION_WRAPPERS.has(expression.type)) {
+        reportRawColorsInExpression(expression.expression, report);
+      }
       return;
   }
 }
