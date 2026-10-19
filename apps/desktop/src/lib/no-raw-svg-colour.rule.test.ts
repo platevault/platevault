@@ -368,6 +368,22 @@ describe('svg/no-raw-svg-colour', () => {
 
     expect(diagnostics).toHaveLength(1);
   });
+
+  it('does not flag hex-like paint-server IDs closed by interpolation', () => {
+    const cases: [string, number][] = [
+      ["const svg = <svg fill={`url(#fade${c ? ')' : ')'})`} />;", 0],
+      ["const svg = <svg fill={`url(#${dark ? 'a)' : 'b)'}`} />;", 0],
+      [
+        "const svg = <svg fill={`var(--pv-a, url(#bad${c ? ')' : ')'}))`} />;",
+        0,
+      ],
+      ["const svg = <svg fill={`url(#fade${c ? ') red' : ')'}`} />;", 1],
+    ];
+    for (const [source, expected] of cases) {
+      expect(lint(source)).toHaveLength(expected);
+    }
+  });
+
   it('checks raw paint after an interpolated var close', () => {
     const diagnostics = lint(
       "const svg = <svg fill={`var(--pv-fill${useRaw ? ') red' : ')'}`} />;",

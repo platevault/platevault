@@ -25,8 +25,20 @@ const SYSTEM_COLORS = new Set(
   ),
 );
 
-const COLOR_FUNCTION =
-  /(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color|color-mix|light-dark|device-cmyk)\s*\(/i;
+const COLOR_FUNCTIONS = [
+  'rgba?',
+  'hsla?',
+  'hwb',
+  'lab',
+  'lch',
+  'oklab',
+  'oklch',
+  'color',
+  'color-mix',
+  'light-dark',
+  'device-cmyk',
+];
+const COLOR_FUNCTION = new RegExp(`(?:${COLOR_FUNCTIONS.join('|')})\\s*\\(`, 'i');
 const HEX_COLOR = /#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})\b/i;
 const ALLOWED_WORDS = new Set(['currentcolor', 'none', 'inherit', 'transparent']);
 
@@ -68,16 +80,8 @@ function isSvgPresentationElement(node) {
   let ancestor = element.parent;
   if (ownName.toLowerCase() === 'svg') return true;
   while (ancestor) {
-    if (ancestor.type === 'JSXExpressionContainer') {
-      ancestor = ancestor.parent;
-      continue;
-    }
     if (ancestor.type === 'JSXElement') {
       const ancestorName = ancestor.openingElement.name;
-      if (ancestorName.type === 'JSXIdentifier' && /^[A-Z]/.test(ancestorName.name)) {
-        ancestor = ancestor.parent;
-        continue;
-      }
       if (ancestorName.type !== 'JSXIdentifier' || !isIntrinsic(ancestorName.name)) {
         ancestor = ancestor.parent;
         continue;
@@ -90,7 +94,7 @@ function isSvgPresentationElement(node) {
     ancestor = ancestor.parent;
   }
 
-  return ownName.toLowerCase() === 'svg' || SVG_ELEMENTS.has(ownName.toLowerCase());
+  return SVG_ELEMENTS.has(ownName.toLowerCase());
 }
 const TRANSPARENT_EXPRESSION_WRAPPERS = new Set([
   'ChainExpression',
@@ -155,25 +159,9 @@ function collectStringLiterals(expression, values) {
     collectStringLiterals(expression.expressions.at(-1), values);
   }
 }
-function isAllowedPaintExpression(expression) {
-  if (expression.type === 'Literal' || expression.type === 'StringLiteral') {
-    return typeof expression.value === 'string' && !isRawColor(expression.value);
-  }
-  if (expression.type === 'LogicalExpression') {
-    return expression.operator === '&&'
-      ? isAllowedPaintExpression(expression.right)
-      : expression.operator === '||' || expression.operator === '??'
-        ? isAllowedPaintExpression(expression.left) && isAllowedPaintExpression(expression.right)
-        : false;
-  }
-  if (expression.type === 'ConditionalExpression') {
-    return isAllowedPaintExpression(expression.consequent) && isAllowedPaintExpression(expression.alternate);
-  }
-  if (expression.type === 'SequenceExpression') return isAllowedPaintExpression(expression.expressions.at(-1));
-  return false;
-}
 
 function reportRawColorsInExpression(expression, report) {
+  expression = unwrapTransparentExpression(expression);
   if (
     (expression.type === 'Literal' || expression.type === 'StringLiteral') &&
     typeof expression.value === 'string'
@@ -199,33 +187,21 @@ function reportRawColorsInExpression(expression, report) {
       }
       return;
     case 'TemplateLiteral':
-      const quasis = expression.quasis.map((quasi) => quasi.value.cooked ?? quasi.value.raw);
-      const staticParts = expression.expressions.map((part) => getStaticString(part));
-      const staticText = quasis.reduce(
-        (text, quasi, index) => text + quasi + (staticParts[index] ?? ''),
-        '',
-      );
-      if (staticParts.every((part) => part !== null)) {
+      const staticText = getStaticString(expression);
+      if (staticText !== null) {
         if (isRawColor(staticText)) report();
         return;
       }
+      const quasis = expression.quasis.map((quasi) => quasi.value.cooked ?? quasi.value.raw);
       let mode = 'normal';
-      const opener = /url\s*\(|var\s*\(|(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\s*\(/ig;
+      const opener = new RegExp(`url\\s*\\(|var\\s*\\(|(?:${COLOR_FUNCTIONS.join('|')})\\s*\\(`, 'ig');
       const scanText = (text) => {
         let cursor = 0;
         while (cursor < text.length) {
           if (mode === 'url') {
-            let nestedParens = 0;
-            let close = -1;
-            for (let index = cursor; index < text.length; index += 1) {
-              if (text[index] === '(') nestedParens += 1;
-              else if (text[index] === ')') {
-                if (nestedParens === 0) { close = index; break; }
-                nestedParens -= 1;
-              }
-            }
+            const close = findUrlClose(text.slice(cursor));
             if (close < 0) return;
-            cursor = close + 1;
+            cursor += close + 1;
             mode = 'normal';
             continue;
           }
@@ -291,6 +267,8 @@ function reportRawColorsInExpression(expression, report) {
         const quasi = quasis[index] ?? '';
         scanText(quasi);
         if (index < expression.expressions.length) {
+          if (mode === 'normal' && /#\s*$/.test(quasi)) report();
+          if (mode === 'normal' && /#[0-9a-f]+$/i.test(quasi)) report();
           let interpolationHandled = false;
           if (mode === 'url') {
             interpolationHandled = true;
@@ -331,24 +309,14 @@ function reportRawColorsInExpression(expression, report) {
               }
             }
           }
-          if (mode === 'normal' && expression.expressions[index].type === 'LogicalExpression' && isAllowedPaintExpression(expression.expressions[index])) {
-            interpolationHandled = true;
-          }
           const skipInterpolation = interpolationHandled || mode !== 'normal';
-          if (mode === 'normal' && /#\s*$/.test(quasi)) report();
-          if (mode === 'normal' && /#[0-9a-f]+$/i.test(quasi)) report();
           if (!skipInterpolation) {
             reportRawColorsInExpression(expression.expressions[index], report);
-            scanText('x');
           }
         }
       }
       return;
     default:
-      if (TRANSPARENT_EXPRESSION_WRAPPERS.has(expression.type)) {
-        reportRawColorsInExpression(expression.expression, report);
-      }
-      return;
   }
 }
 
@@ -369,12 +337,9 @@ const rule = {
     return {
       JSXAttribute(node) {
         const name = node.name.name;
-        const elementName = node.parent?.name;
         if (
           typeof name !== 'string' ||
           !PRESENTATION_ATTRIBUTES.has(name) ||
-          elementName?.type !== 'JSXIdentifier' ||
-          !/^[a-z]/.test(elementName.name) ||
           !isSvgPresentationElement(node)
         ) {
           return;
