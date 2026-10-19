@@ -19,8 +19,8 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use apply_support::{
-    catalogued, corrected, digest, frame, meta, world, Recorder, World, DARKS, HA, HA_FLATS,
-    HA_GAIN_0, OIII, SEP24, SEP28,
+    catalogued, corrected, digest, frame, meta, sep24_frame, world, Recorder, World, DARKS, HA,
+    HA_FLATS, HA_GAIN_0, OIII, SEP24, SEP28,
 };
 use metadata_core::MetadataExtractor;
 use platevault_core::apply::{ApplyControl, Unattended};
@@ -531,9 +531,10 @@ fn value(path: &Path, keyword: &str) -> Option<String> {
 /// (D-W122, provisional D-W123): in a Copies View each held frame with a
 /// recorded correction is an isolated patched copy whose cards carry the
 /// corrected values and `PlateVault`'s FITS reader returns them; its present
-/// aliases are overwritten in their own units, an absent alias isn't added,
-/// and the original keeps its bytes. The report reads "4 corrected values
-/// written to 2 patched copies" and claims nothing about what a tool reads.
+/// aliases, its HIERARCH `TELESCOPE` among them, are overwritten in their
+/// own units, an absent alias isn't added, and the original keeps its
+/// bytes. The report reads "4 corrected values written to 2 patched copies"
+/// and claims nothing about what a tool reads.
 #[tokio::test]
 async fn corrected_frames_reach_a_copies_view_as_isolated_patched_copies() {
     let world = corrected(ViewMode::Copies).await;
@@ -561,6 +562,11 @@ async fn corrected_frames_reach_a_copies_view_as_isolated_patched_copies() {
     assert_eq!(value(&sep28, "DETECTOR").as_deref(), Some("'ZWO ASI2600MM Pro'"));
     assert_eq!(value(&sep28, "EXPOSURE").as_deref(), Some("300.0"), "uncorrected");
     assert_eq!(value(&sep28, "TARGET"), None, "an absent alias is never added");
+    let hierarch = |path: &Path| -> Vec<String> {
+        cards(path).into_iter().filter(|card| card.starts_with("HIERARCH")).collect()
+    };
+    assert_eq!(hierarch(&sep28), ["HIERARCH TELESCOPE = 'RedCat 51'"]);
+    assert_eq!(hierarch(&sep24), Vec::<String>::new(), "no HIERARCH card is added");
 
     for ((copy, original), digested) in [&sep24, &sep28].into_iter().zip(&originals).zip(&before) {
         assert_eq!(&digest(original), digested, "the original keeps its bytes");
@@ -648,13 +654,36 @@ async fn cancel_keeps_the_old_patched_view_and_clears_the_new_patched_copies() {
     assert_eq!(read_fits(&placed(&world, SEP24)).object.as_deref(), Some("NGC 7000"));
 }
 
-/// PREP-AC-05: an Apply stopped after its build leaves its patched copies in
-/// `View (building)/`; the restart settles it Failed and the next Apply
-/// clears them as its own.
+/// The corrected XISF light of the tests below.
+const XISF: &str = "2026-10-12/J23_Light_001.xisf";
+
+/// An XISF light holding `FILTER = 'Ha'` with its image data and, when
+/// `thumbnail`, a thumbnail's data block after it.
+fn xisf_light(thumbnail: bool) -> Vec<u8> {
+    let body = "<FITSKeyword name=\"FILTER\" value=\"'Ha'\" comment=\"\"/>";
+    apply_support::xisf_frame(Some(body), &[9_u8; 16], thumbnail.then_some([5_u8; 4].as_slice()))
+}
+
+/// PREP-AC-05 and the partial copies an interruption leaves: an Apply
+/// stopped after its build leaves its FITS and XISF patched copies in
+/// `View (building)/`, and one killed mid-write a partial copy and the file
+/// `xisf-header` writes beside one; the restart settles it Failed and the
+/// next Apply clears them all as its own and succeeds.
 #[tokio::test]
-async fn the_next_apply_clears_the_patched_copies_an_interrupted_build_left() {
-    let mut world = corrected(ViewMode::Copies).await;
+async fn the_next_apply_clears_what_an_interrupted_build_left() {
+    let mut world = catalogued(ViewMode::Copies).await;
+    let metadata = meta("LIGHT", Some("Ha"), 300.0, 100.0, "2026-10-12");
+    world.add_lights(&[sep24_frame(), (XISF.to_owned(), metadata, xisf_light(true))]).await;
+    world.correct(SEP24, &[("object", json!("NGC 7000"))]).await;
+    world.correct(XISF, &[("object", json!("NGC 7000"))]).await;
+    world.hold(HA[0]).await;
     let report = interrupted_at(&world, ApplyPhase::BuildVerified).await;
+    let built = World::tree(&world.building());
+    let xisf = built.iter().find(|path| path.ends_with("J23_Light_001.xisf")).unwrap();
+    let night = world.building().join(xisf).parent().unwrap().to_path_buf();
+    let partial = format!(".pv-{}-99-a1b2c3.partial", report.operation_id.simple());
+    fs::write(night.join(&partial), b"SIMPLE  =                    T half a copy").unwrap();
+    fs::write(night.join(format!(".{partial}.tmp-4242")), b"XISF0100 half an edit").unwrap();
     world.reopen().await;
     assert_eq!(world.journal(report.operation_id).await.outcome, Some(ApplyOutcome::Failed));
     assert!(world.building().exists(), "the failed build stays for Retry");
@@ -663,6 +692,8 @@ async fn the_next_apply_clears_the_patched_copies_an_interrupted_build_left() {
     assert_eq!(report.outcome, Some(ApplyOutcome::Applied), "{report:#?}");
     assert!(!world.building().exists());
     assert_eq!(read_fits(&placed(&world, SEP24)).object.as_deref(), Some("NGC 7000"));
+    let read = metadata_xisf::XisfExtractor.extract(&placed(&world, XISF)).unwrap().unwrap();
+    assert_eq!(read.object.as_deref(), Some("NGC 7000"));
 }
 
 /// The `correction_undeliverable` blockers of a sheet, by original path.
@@ -684,37 +715,29 @@ fn nothing_built(world: &World) {
     assert!(!world.view().exists() && !world.building().exists(), "nothing was built");
 }
 
-/// An XISF light holding `FILTER = 'Ha'` and, when `thumbnail`, a second
-/// attachment beside its image.
-fn xisf_light(thumbnail: bool) -> Vec<u8> {
-    let mut body = "<FITSKeyword name=\"FILTER\" value=\"'Ha'\" comment=\"\"/>".to_owned();
-    if thumbnail {
-        body.push_str(
-            "<Thumbnail geometry=\"1:1:1\" sampleFormat=\"UInt8\" location=\"attachment:0:1\"/>",
-        );
-    }
-    apply_support::xisf_frame(&body, &[9_u8; 16])
-}
-
 /// D-W123 owner decisions and the FITS limits: a corrected value no patched
 /// copy can carry refuses Apply before anything is built, so the source
 /// value never reaches the tool. Recording such a value is refused too, so
-/// these were recorded below that check. The sheet names each frame and
-/// field; Apply's coded error names the session, one frame and its field,
-/// in no English.
+/// these were recorded below that check. An image in an extension refuses
+/// even where the primary header holds the keyword, and a HIERARCH alias
+/// in a spelling the header crate can't address refuses rather than keep
+/// the old value. The sheet names each frame and field; Apply's coded
+/// error names the session, one frame and its field, in no English.
 #[tokio::test]
 async fn a_correction_no_patched_copy_can_carry_refuses_apply_before_building() {
     let world = catalogued(ViewMode::Copies).await;
     let long = "NGC 7000 ".repeat(8);
-    let hierarch = frame("Hierarch", true, &["HIERARCH TELESCOPE = 'RedCat 51'"]);
+    let hierarch = frame("Hierarch", true, &["HIERARCH Telescope = 'RedCat 51'"]);
     let ascii = frame("Ascii", true, &[]);
-    let (too_long, extension) = (frame("Long", true, &[]), frame("Extension", false, &[]));
+    let too_long = frame("Long", true, &[]);
+    let extension = frame("Extension", false, &["OBJECT  = 'M 31'"]);
+    let closed = apply_support::xisf_frame(None, &[9_u8; 16], None);
     let cases: [(&str, Vec<u8>, &str, &str, &str); 5] = [
         ("2026-10-12/J23_Ascii.fits", ascii, "object", "Hα NGC 7000", "not_printable_ascii"),
         ("2026-10-12/J23_Long.fits", too_long, "object", &long, "too_long"),
         ("2026-10-12/J23_Extension.fits", extension, "object", "NGC 7000", "image_in_extension"),
         ("2026-10-12/J23_Hierarch.fits", hierarch, "telescope", "Samyang 135", "hierarch_alias"),
-        ("2026-10-12/J23_Thumbnail.xisf", xisf_light(true), "object", "NGC 7000", "xisf_layout"),
+        ("2026-10-12/J23_Closed.xisf", closed, "object", "NGC 7000", "xisf_layout"),
     ];
     let frames: Vec<(String, CaptureMetadata, Vec<u8>)> = cases
         .iter()
@@ -756,11 +779,13 @@ async fn a_correction_no_patched_copy_can_carry_refuses_apply_before_building() 
     nothing_built(&world);
 }
 
-/// Owner decision (D-W123): recording a corrected value FITS can't hold is
-/// refused where the correction is recorded, with a coded error naming the
-/// frame and field, and nothing is recorded.
+/// Owner decisions (D-W123, LIB-FR-20): a correction no patched copy can
+/// deliver, a value FITS can't hold or a field no header keyword carries,
+/// is refused where it is recorded, at the preview and again at the
+/// confirm, with a coded error naming the frame and field, and nothing is
+/// recorded. The framing label is no header correction and is taken.
 #[tokio::test]
-async fn recording_a_value_fits_cannot_hold_is_refused() {
+async fn recording_a_correction_no_patched_copy_can_deliver_is_refused() {
     let world = catalogued(ViewMode::Copies).await;
     let asset = world.asset_at(&world.captures, HA[0]).await;
     let expected = [ExpectedAsset {
@@ -768,44 +793,143 @@ async fn recording_a_value_fits_cannot_hold_is_refused() {
         decision_revision: asset.decision_revision,
         fingerprint: asset.fingerprint.clone(),
     }];
-    let correction =
-        [CorrectionInput { asset_id: asset.id, field: "object".into(), value: json!("Hα") }];
-    let refused = world.library.preview_correction(&expected, &correction).await.unwrap_err();
-    assert_eq!(refused.code().as_str(), "correction_unpatchable", "{refused}");
-    let response = serde_json::to_value(refused.response(None, None)).unwrap();
-    assert_eq!(response["identity"], json!(asset.id), "{response:#}");
-    assert_eq!(
-        response["correction"],
-        json!({ "field": "object", "refusal": "not_printable_ascii" })
-    );
+    let correction = |field: &str, value: Value| {
+        [CorrectionInput { asset_id: asset.id, field: field.into(), value }]
+    };
+    for (field, value, refusal) in [
+        ("object", json!("Hα"), "not_printable_ascii"),
+        ("dateObs", json!("2026-10-12T20:00:00"), "no_keyword"),
+        ("readoutMode", json!("High Gain"), "no_keyword"),
+    ] {
+        let refused = world
+            .library
+            .preview_correction(&expected, &correction(field, value.clone()))
+            .await
+            .unwrap_err();
+        assert_eq!(refused.code().as_str(), "correction_unpatchable", "{refused}");
+        let response = serde_json::to_value(refused.response(None, None)).unwrap();
+        assert_eq!(response["identity"], json!(asset.id), "{response:#}");
+        assert_eq!(response["correction"], json!({ "field": field, "refusal": refusal }));
+
+        // A preview recorded below the check is refused at the confirm.
+        let preview = world
+            .catalog()
+            .preview_correction(&expected, &correction(field, value), apply_support::group_by_night)
+            .await
+            .unwrap();
+        let confirmed = world.library.confirm_correction(preview.id, &expected).await;
+        let Err(refused) = confirmed else { panic!("the confirm takes {field}") };
+        let response = serde_json::to_value(refused.response(None, None)).unwrap();
+        assert_eq!(response["correction"], json!({ "field": field, "refusal": refusal }));
+    }
     assert_eq!(world.asset_at(&world.captures, HA[0]).await, asset, "nothing was recorded");
+    let framing = correction(platevault_core::FRAMING_LABEL_FIELD, json!("Ha 2"));
+    assert!(world.library.preview_correction(&expected, &framing).await.is_ok());
 }
 
-/// Owner decision (D-W123): a corrected XISF frame is patched too. Its copy
-/// is a byte copy of the original whose header keywords carry the corrected
-/// value, read back by `PlateVault`'s XISF reader, with the attached data
-/// unchanged; the original keeps its bytes.
+/// A card's comment never refuses a value that fits a card on its own:
+/// NINA's `OBJECT` comment leaves 35 characters, and "Heart and Soul
+/// Nebulae (IC 1805 / IC 1848)" reaches the patched copy in one card, its
+/// comment cut to the room left.
+#[tokio::test]
+async fn a_value_longer_than_the_room_a_card_comment_leaves_reaches_the_copy() {
+    let world = catalogued(ViewMode::Copies).await;
+    let relative = "2026-10-12/J23_NINA_Light_001.fits";
+    let nina = "OBJECT  = 'IC 1805'            / Name of the object of interest";
+    let metadata = CaptureMetadata {
+        object: Some("IC 1805".into()),
+        ..meta("LIGHT", Some("Ha"), 300.0, 100.0, "2026-10-12")
+    };
+    world.add_lights(&[(relative.to_owned(), metadata, frame(relative, true, &[nina]))]).await;
+    let heart = "Heart and Soul Nebulae (IC 1805 / IC 1848)";
+    world.correct(relative, &[("object", json!(heart))]).await;
+    world.hold(HA[0]).await;
+
+    let report = world.apply().await;
+    assert_eq!(report.outcome, Some(ApplyOutcome::Applied), "{report:#?}");
+    let copy = placed(&world, relative);
+    assert_eq!(read_fits(&copy).object.as_deref(), Some(heart));
+    let object: Vec<String> =
+        cards(&copy).into_iter().filter(|card| card.starts_with("OBJECT")).collect();
+    assert_eq!(object, [format!("OBJECT  = '{heart}' / Name of the object of")]);
+    assert!(!cards(&copy).iter().any(|card| card.starts_with("CONTINUE")));
+}
+
+/// Owner decision (D-W123): a corrected XISF frame is patched too, an
+/// Image with a Thumbnail among them. Its copy is a byte copy of the
+/// original whose header keywords carry the corrected value, read back by
+/// `PlateVault`'s XISF reader, with both data blocks unchanged; its entry
+/// is a Copy that records the digest it was proven to hold, and the
+/// original keeps its bytes.
 #[tokio::test]
 async fn a_corrected_xisf_frame_reaches_the_view_as_a_patched_copy() {
     let world = catalogued(ViewMode::Copies).await;
-    let xisf = "2026-10-12/J23_Light_001.xisf";
     let metadata = meta("LIGHT", Some("Ha"), 300.0, 100.0, "2026-10-12");
-    world.add_lights(&[(xisf.to_owned(), metadata, xisf_light(false))]).await;
-    world.correct(xisf, &[("object", json!("NGC 7000"))]).await;
+    world.add_lights(&[(XISF.to_owned(), metadata, xisf_light(true))]).await;
+    world.correct(XISF, &[("object", json!("NGC 7000"))]).await;
     world.hold(HA[0]).await;
-    let original = digest(&world.light(xisf));
+    let original = digest(&world.light(XISF));
 
     let report = world.apply().await;
     assert_eq!(report.outcome, Some(ApplyOutcome::Applied), "{report:#?}");
     assert_eq!((report.corrected_values, report.patched_copies), (1, 1));
-    let copy = placed(&world, xisf);
+    let copy = placed(&world, XISF);
     let read = metadata_xisf::XisfExtractor.extract(&copy).unwrap().unwrap();
     assert_eq!(read.object.as_deref(), Some("NGC 7000"));
     assert_eq!(read.filter.as_deref(), Some("Ha"));
-    assert!(fs::read(&copy).unwrap().ends_with(&[9_u8; 16]), "the attached data is unchanged");
-    assert_eq!(digest(&world.light(xisf)), original, "the original keeps its bytes");
-    let read = metadata_xisf::XisfExtractor.extract(&world.light(xisf)).unwrap().unwrap();
+    let blocks: Vec<u8> = [[9_u8; 16].as_slice(), &[5_u8; 4]].concat();
+    assert!(fs::read(&copy).unwrap().ends_with(&blocks), "both data blocks are unchanged");
+    assert_eq!(digest(&world.light(XISF)), original, "the original keeps its bytes");
+    let read = metadata_xisf::XisfExtractor.extract(&world.light(XISF)).unwrap().unwrap();
     assert_eq!(read.object, None);
+
+    let installed = world.catalog().apply_inputs(world.project).await.unwrap().installed.unwrap();
+    let entry = installed.entries.iter().find(|entry| !entry.header_patch.is_empty()).unwrap();
+    assert_eq!(entry.placement, EntryPlacement::Copy, "a patched copy is never a clone");
+    assert_eq!(entry.patched_sha256.as_deref(), Some(digest(&copy).as_str()));
+}
+
+/// PREP-FR-04 with PREP-FR-03: a Symlinks View holds symlinks beside the
+/// isolated patched copies of its corrected frames, never dropping a
+/// correction; the sheet's footprint counts those copies' bytes, and a
+/// re-Apply after a further correction replaces the copy and retires the
+/// old one as `PlateVault`'s own.
+#[tokio::test]
+async fn a_symlinks_view_holds_patched_copies_of_its_corrected_frames() {
+    let world = corrected(ViewMode::Symlinks).await;
+    let preview = world.preview().await;
+    let copies =
+        preview.entries.iter().filter(|entry| entry.placement == EntryPlacement::Copy).count();
+    assert_eq!(copies, 2, "{:#?}", preview.entries);
+    let corrected_bytes: u64 = [SEP24, SEP28]
+        .iter()
+        .map(|relative| fs::metadata(world.light(relative)).unwrap().len())
+        .sum();
+    assert_eq!(preview.copy_bytes, corrected_bytes, "the footprint counts the patched copies");
+
+    let report = world.apply().await;
+    assert_eq!(report.outcome, Some(ApplyOutcome::Applied), "{report:#?}");
+    assert_eq!(report.patched_copies, 2);
+    let (sep24, sep28) = (placed(&world, SEP24), placed(&world, SEP28));
+    for copy in [&sep24, &sep28] {
+        assert!(fs::symlink_metadata(copy).unwrap().is_file(), "{} is a copy", copy.display());
+    }
+    assert_eq!(read_fits(&sep24).object.as_deref(), Some("NGC 7000"));
+    assert_eq!(read_fits(&sep28).telescop.as_deref(), Some("RedCat 51"));
+    let links = World::tree(&world.view())
+        .into_iter()
+        .filter(|entry| !entry.ends_with("J23_24Sep_Light_001.fits"))
+        .filter(|entry| !entry.ends_with("J23_28Sep_Light_001.fits"))
+        .map(|entry| fs::symlink_metadata(world.view().join(entry)).unwrap())
+        .collect::<Vec<_>>();
+    assert!(!links.is_empty() && links.iter().all(|link| link.file_type().is_symlink()));
+
+    world.correct(SEP24, &[("object", json!("North America Nebula"))]).await;
+    let report = world.apply().await;
+    assert_eq!(report.outcome, Some(ApplyOutcome::Applied), "{report:#?}");
+    assert!(report.leftovers.is_empty(), "the old patched copy was retired: {report:#?}");
+    let read = read_fits(&placed(&world, SEP24));
+    assert_eq!(read.object.as_deref(), Some("North America Nebula"));
 }
 
 /// A corrected input neither FITS nor XISF can't be patched, and PREP-FR-03

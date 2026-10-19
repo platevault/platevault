@@ -1963,6 +1963,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "fits-header"
+version = "0.4.3"
+source = "git+https://github.com/nightwatch-astro/fits-header?rev=eb05656768b314d070f6879ad3ced70d7900818d#eb05656768b314d070f6879ad3ced70d7900818d"
+dependencies = [
+ "skymath 0.6.0",
+ "thiserror 2.0.19",
+ "time",
+]
+
+[[package]]
 name = "fits_fixtures"
 version = "0.1.0"
 dependencies = [
@@ -3638,8 +3648,9 @@ dependencies = [
 name = "metadata_fits"
 version = "0.1.0"
 dependencies = [
- "fits-header",
+ "fits-header 0.4.3 (git+https://github.com/nightwatch-astro/fits-header?rev=eb05656768b314d070f6879ad3ced70d7900818d)",
  "metadata_core",
+ "sha2 0.10.9",
  "tempfile",
 ]
 
@@ -3652,8 +3663,9 @@ name = "metadata_xisf"
 version = "0.1.0"
 dependencies = [
  "metadata_core",
+ "sha2 0.10.9",
  "tempfile",
- "xisf-header",
+ "xisf-header 0.4.4 (git+https://github.com/nightwatch-astro/xisf-header?rev=76b86dd7668dfc11012d47003418b0b1280ba665)",
 ]
 
 [[package]]
@@ -4915,7 +4927,7 @@ dependencies = [
 name = "platevault_pixels"
 version = "0.1.0"
 dependencies = [
- "fits-header",
+ "fits-header 0.4.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "flate2",
  "hex",
  "lz4_flex",
@@ -4923,7 +4935,7 @@ dependencies = [
  "quick-xml",
  "sha2 0.10.9",
  "tempfile",
- "xisf-header",
+ "xisf-header 0.4.4 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -9034,6 +9046,17 @@ name = "xisf-header"
 version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "63302fc2304740b741a7f5cc136a2c27ae14b18b18c3614acb786a9d29281348"
+dependencies = [
+ "quick-xml",
+ "skymath 0.6.0",
+ "thiserror 2.0.19",
+ "time",
+]
+
+[[package]]
+name = "xisf-header"
+version = "0.4.4"
+source = "git+https://github.com/nightwatch-astro/xisf-header?rev=76b86dd7668dfc11012d47003418b0b1280ba665#76b86dd7668dfc11012d47003418b0b1280ba665"
 dependencies = [
  "quick-xml",
  "skymath 0.6.0",

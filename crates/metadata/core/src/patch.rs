@@ -42,8 +42,9 @@ pub struct FieldEdit {
     pub writes: Vec<KeywordWrite>,
     /// The canonical keyword is added when the header holds none of these.
     pub add_unless: &'static [&'static str],
-    /// Longer aliases that only a FITS HIERARCH card can hold; an XISF
-    /// keyword of that name is overwritten like any alias.
+    /// Longer aliases a FITS file holds only as `HIERARCH` cards; a present
+    /// one, like an XISF keyword of that name, takes the canonical value,
+    /// and none is ever added.
     pub hierarch: &'static [&'static str],
     /// An XISF `<Property>` alias, overwritten when present, never added.
     pub property: Option<(&'static str, String)>,
@@ -64,17 +65,18 @@ pub enum Refusal {
     NoHeader,
     /// A text value holds a character outside printable ASCII.
     NotPrintableAscii,
-    /// The value doesn't fit one 80-character card.
+    /// The value doesn't fit one 80-character card on its own.
     TooLong,
-    /// The FITS primary header holds `NAXIS = 0` and would take an added
-    /// keyword: the image lies in an extension, whose header isn't patched.
+    /// The FITS primary header holds `NAXIS = 0`: the image lies in an
+    /// extension, whose header isn't patched.
     ImageInExtension,
-    /// The FITS header holds a HIERARCH alias of the field, which the
-    /// header crate keeps as opaque text and can't overwrite yet.
+    /// The FITS header holds a `HIERARCH` card naming an alias of the field
+    /// in a spelling the header crate can't address (only ESO-style
+    /// uppercase names are), so it would keep the old value.
     HierarchAlias,
-    /// The XISF layout isn't one the in-place splice can edit safely: not
-    /// exactly one attachment, or a self-closing `<Image>` that would take
-    /// an added keyword.
+    /// The XISF layout isn't one `xisf-header` splices: no single `<Image>`
+    /// with an attachment location, a self-closing `<Image>` that would take
+    /// an added keyword, or attachment blocks it refuses to move.
     XisfLayout,
 }
 

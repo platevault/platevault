@@ -43,7 +43,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use persistence_library::{ApplyInputs, ApplyReservation, SourcePath};
+use persistence_library::{ApplyInputs, ApplyReservation};
 use uuid::Uuid;
 
 use self::files::{Aside, Ours, PlannedPatch, Rename, SymlinkProbe};
@@ -53,7 +53,7 @@ use crate::custody::{observe_entry, same_identity, transfer};
 use crate::inventory::{self, observe_folder_identity};
 use crate::layout::{self, VIEW_BUILDING_FOLDER, VIEW_FOLDER, VIEW_PREVIOUS_FOLDER};
 use crate::library::{blocking, Library};
-use crate::patched_copy;
+use crate::patched_copy::{self, HeaderPatch};
 use crate::{
     ApplyBlocker, ApplyFailure, ApplyJournal, ApplyOutcome, ApplyPhase, ApplyPreview, ApplyReport,
     ApplyRequest, EntryEvidence, EntryPlacement, ExpectedTree, FileIdentity, ForeignFile,
@@ -481,9 +481,7 @@ fn preview(inputs: &ApplyInputs, os: Os) -> ApplyPreview {
         .map(|entry| entry.size_bytes)
         .sum();
     let (foreign, changed_copies) = match (&checked.project, &inputs.installed) {
-        (Some(project), Some(installed)) => {
-            current_view(&project.join(VIEW_FOLDER), installed, &inputs.sources)
-        }
+        (Some(project), Some(installed)) => current_view(&project.join(VIEW_FOLDER), installed),
         _ => (Vec::new(), Vec::new()),
     };
     ApplyPreview {
@@ -503,13 +501,9 @@ fn preview(inputs: &ApplyInputs, os: Os) -> ApplyPreview {
 }
 
 /// The current View's foreign files and the copies that differ from what
-/// `PlateVault` placed (VSEL-AC-28, VSEL-AC-32); a patched copy differs
-/// once it holds more than its original's bytes with its reviewed change.
-fn current_view(
-    view: &Path,
-    installed: &ViewManifest,
-    sources: &BTreeMap<Uuid, SourcePath>,
-) -> (Vec<ForeignFile>, Vec<NativePath>) {
+/// `PlateVault` placed (VSEL-AC-28, VSEL-AC-32): the bytes it placed, a
+/// patched copy's being the digest it was proven to hold.
+fn current_view(view: &Path, installed: &ViewManifest) -> (Vec<ForeignFile>, Vec<NativePath>) {
     let placed: BTreeSet<PathBuf> =
         installed.entries.iter().filter_map(|entry| entry.path.relative_path().ok()).collect();
     let foreign = files::foreign_files(view, &placed)
@@ -529,22 +523,16 @@ fn current_view(
                         .written
                         .as_ref()
                         .is_some_and(|written| same_identity(&now.identity, written));
-                    let resized = now.size_bytes != entry.source_fingerprint.size_bytes;
-                    // A patched copy's header may have grown; its proof decides.
-                    if !ours || (resized && entry.header_patch.is_empty()) {
+                    // A patched copy's header may have grown; its digest decides.
+                    let resized = entry.patched_sha256.is_none()
+                        && now.size_bytes != entry.source_fingerprint.size_bytes;
+                    if !ours || resized {
                         true
                     } else if now.modified_ns == entry.source_fingerprint.modified_ns {
                         false
                     } else {
                         observe_entry(&path).map_or(true, |copy| {
-                            if entry.header_patch.is_empty() {
-                                return copy.sha256.as_deref() != Some(&entry.source_sha256);
-                            }
-                            let original = sources
-                                .get(&files::source_id(entry))
-                                .and_then(|source| source.path.to_path_buf().ok());
-                            !original
-                                .is_some_and(|original| files::holds_patch(&copy, entry, &original))
+                            copy.sha256.as_deref() != Some(entry.copy_sha256())
                         })
                     }
                 }
@@ -635,19 +623,16 @@ fn check(inputs: &ApplyInputs, os: Os) -> Checked {
     Checked { blockers, plan, project, previous_gone }
 }
 
-/// Every held frame a Copies View places with a recorded correction is an
-/// isolated patched copy carrying it (PREP-FR-03, PREP-FR-20; D-W122): its
-/// entry takes the reviewed change. A frame the patched-copy seam refuses,
-/// a value its header can't hold or, provisionally, a non-FITS input, is a
-/// named blocker, so Apply refuses before it builds and the source value
-/// never reaches the tool (D-W123, J23 G10). A Symlinks View links every
-/// frame; its provisional patched copy beside the links (PREP-FR-03) is
-/// not built.
+/// Every held frame placed with a recorded correction is an isolated
+/// patched copy carrying it (PREP-FR-03, PREP-FR-20; D-W122): its entry
+/// takes the reviewed change, as a Copy also in a Symlinks View, which
+/// holds symlinks beside such copies (PREP-FR-04), so the sheet's footprint
+/// counts its bytes. A frame the patched-copy seam refuses, a value its
+/// header can't hold or an input neither FITS nor XISF, is a named blocker,
+/// so Apply refuses before it builds and the source value never reaches
+/// the tool (D-W123).
 fn patch_corrections(inputs: &ApplyInputs, plan: &mut Plan, blockers: &mut Vec<ApplyBlocker>) {
     for entry in &mut plan.entries {
-        if entry.placement == EntryPlacement::Symlink {
-            continue;
-        }
         let Some(corrected) = inputs.corrected.get(&entry.source_id) else { continue };
         let Some(source) = inputs.sources.get(&entry.source_id) else { continue };
         let changes = patched_copy::corrections(&corrected.observed, &corrected.effective);
@@ -659,7 +644,10 @@ fn patch_corrections(inputs: &ApplyInputs, plan: &mut Plan, blockers: &mut Vec<A
             .to_path_buf()
             .map_or(Ok(()), |path| patched_copy::check(&path, corrected.format, &changes));
         match checked {
-            Ok(()) => entry.header_patch = changes,
+            Ok(()) => {
+                entry.placement = EntryPlacement::Copy;
+                entry.patch = Some(HeaderPatch { format: corrected.format, changes });
+            }
             Err(refused) => blockers.push(ApplyBlocker::CorrectionUndeliverable {
                 session_id: corrected.session_id,
                 path: source.path.clone(),
@@ -1143,13 +1131,13 @@ impl Run<'_> {
     fn planned_patches(&self, plan: &Plan) -> BTreeMap<PathBuf, PlannedPatch> {
         plan.entries
             .iter()
-            .filter(|entry| !entry.header_patch.is_empty())
             .filter_map(|entry| {
+                let patch = entry.patch.as_ref()?;
                 let snapshot = self.snapshots.get(&entry.source_id)?;
                 let patch = PlannedPatch {
                     original: snapshot.path.to_path_buf().ok()?,
                     source_sha256: snapshot.sha256.clone()?,
-                    changes: entry.header_patch.clone(),
+                    patch: patch.clone(),
                 };
                 Some((entry.path.clone(), patch))
             })
@@ -1223,7 +1211,8 @@ impl Run<'_> {
                         source_sha256: snapshot.sha256.clone().unwrap_or_default(),
                         source_fingerprint: snapshot.fingerprint.clone(),
                         written: Some(made.identity),
-                        header_patch: entry.header_patch,
+                        header_patch: entry.patch.map(|patch| patch.changes).unwrap_or_default(),
+                        patched_sha256: made.patched_sha256,
                     });
                 }
                 Err(reason) => {

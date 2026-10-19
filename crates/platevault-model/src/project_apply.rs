@@ -94,17 +94,19 @@ pub enum PatchRefusal {
     NotPrintableAscii,
     /// The field's keyword holds a number and the value isn't one.
     NotANumber,
-    /// The value doesn't fit one 80-character card; it is never continued
-    /// on CONTINUE cards.
+    /// The value doesn't fit one 80-character card on its own; it is never
+    /// continued on CONTINUE cards.
     TooLong,
-    /// The FITS primary header holds `NAXIS = 0` and lacks the keyword: the
-    /// image lies in an extension, whose header `PlateVault` doesn't patch.
+    /// The FITS primary header holds `NAXIS = 0`: the image lies in an
+    /// extension, whose header `PlateVault` doesn't patch.
     ImageInExtension,
-    /// The FITS header holds a HIERARCH alias of the field (`TELESCOPE`,
-    /// `INSTRUMENT`), which the header crate can't overwrite yet.
+    /// The FITS header holds a `HIERARCH` card naming an alias of the field
+    /// (`TELESCOPE`, `INSTRUMENT`) in a spelling the header crate can't
+    /// address, so the copy would keep the old value there.
     HierarchAlias,
-    /// The XISF layout isn't one the in-place edit can target safely: not
-    /// exactly one attachment (a thumbnail beside the image, say).
+    /// The XISF layout isn't one the in-place edit splices: no single
+    /// `<Image>` with an attachment, a self-closing `<Image>` that would
+    /// take an added keyword, or attachment blocks it can't move safely.
     XisfLayout,
 }
 
@@ -124,9 +126,10 @@ impl PatchRefusal {
                 "its image lies in an extension, whose header PlateVault does not patch"
             }
             Self::HierarchAlias => {
-                "its header holds a HIERARCH alias of the field, which can't be patched yet"
+                "its header holds a HIERARCH alias of the field in a spelling PlateVault can't \
+                 patch"
             }
-            Self::XisfLayout => "its XISF layout holds more than the one attachment it can patch",
+            Self::XisfLayout => "its XISF layout is not one PlateVault can patch",
         }
     }
 }

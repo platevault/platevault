@@ -22,12 +22,12 @@ The expected tree stores identities for the Project root and `View/`, `View (bui
 Apply can settle as `Failed` or `Canceled` only before `NewInstalled`. It can settle as `Applied` only from `ManifestCommitted` or a later phase. (`crates/platevault-model/src/project_view.rs:403-414,445-450`)
 Both a failure and cancellation leave the old View active. For cancellation, `Run::end` reports an unchanged View. (`crates/platevault-core/src/apply.rs:847-868`)
 
-When the user cancels, `Run::end` clears the staging tree before it records the outcome. It removes links, partial files, and files that match recorded digests. It leaves unreadable or unproven files on disk. (`crates/platevault-core/src/apply.rs:852-863`; `crates/platevault-core/src/apply/files.rs:232-260`)
+When the user cancels, `Run::end` clears the staging tree before it records the outcome. It removes links, partial files (a `.pv-…partial` copy, and the `.<partial>.tmp-<pid>` file `xisf-header` writes beside one while it edits it), files that match recorded digests, and the patched copies the build plans, proven against their originals. It leaves unreadable or unproven files on disk. (`crates/platevault-core/src/apply.rs:1027-1043`; `crates/platevault-core/src/apply/files.rs:283-333`; `crates/platevault-core/src/custody/transfer.rs:190-202`; `crates/platevault-core/src/patched_copy.rs:537-565`)
 
 Persistence records entries built so far, marks the manifest `discarded`, and settles both the journal and Project operation. The journal retains the outcome and error. (`crates/persistence/library/src/project_view.rs:179-207,1162-1172`; `crates/persistence/library/src/project_operations.rs:122-139`)
 
 `Run::end` clears `View (building)/` for a canceled Apply. A failed Apply leaves that folder on disk. (`crates/platevault-core/src/apply.rs:847-863`)
-The next explicit Apply creates a new operation and generation. It first clears leftover staging files, but refuses if it cannot prove ownership of every entry. (`crates/persistence/library/src/project_view.rs:1047-1095`; `crates/platevault-core/src/apply.rs:884-901`; `crates/platevault-core/src/apply/files.rs:232-260`)
+The next explicit Apply creates a new operation and generation. It first clears leftover staging files, but refuses if it cannot prove ownership of every entry. (`crates/persistence/library/src/project_view.rs:1047-1095`; `crates/platevault-core/src/apply.rs:1072-1089`; `crates/platevault-core/src/apply/files.rs:307-333`)
 
 ### A process stop during Apply
 
@@ -91,7 +91,7 @@ The shell stops CaptureWatch before dropping EjectNotices. Pending removal reque
 ## What the library exposes
 
 The Apply command returns an `ApplyReport` when a build fails or is canceled. (`apps/desktop/src-tauri/src/commands/project_apply.rs:39-55`)
-An Applied report counts the corrected values written to patched copies, one per held session and corrected field, and the isolated patched copies the installed View holds, one per held frame with a recorded correction. It claims nothing about what an application reads from them, which D-W123 leaves open. (`crates/platevault-model/src/project_apply.rs:270-280`)
+An Applied report counts the corrected values written to patched copies, one per held session and corrected field, and the isolated patched copies the installed View holds, one per held frame with a recorded correction, in a Copies or a Symlinks View. Each patched copy's manifest entry records the digest it was proven to hold when written, which retiring the old View and Clean up compare against. The report claims nothing about what an application reads from them, which D-W123 leaves open. (`crates/platevault-model/src/project_apply.rs:270-280`; `crates/platevault-model/src/project_view.rs:254-271`)
 
 The shell returns command errors as `ErrorResponse` values: a stable `code`, the identity and native scope the failure concerns, the retry action, a conflict's current revision, successors and window, and, as `correction`, the field and refusal of a corrected value no patched copy can carry, whether refused when it is recorded or at Apply. No English text crosses IPC; the catalogues word each code as `err_library_<code>`. (`apps/desktop/src-tauri/src/commands/library.rs:38-65`; `crates/platevault-model/src/lib.rs:193-242,298-331,396-437`)
 

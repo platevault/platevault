@@ -2,34 +2,38 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! The one seam through which Apply, Clean up and the Apply sheet deliver
-//! and prove a recorded correction as an isolated patched copy (spec 069
-//! PREP-FR-03, PREP-FR-09, PREP-FR-20; D-W122, D-W123). It keeps the
-//! capture field to header keyword mapping; writing a header is the
-//! metadata crates' (`metadata_fits::patch` on `fits-header`,
-//! `metadata_xisf::patch` on `xisf-header`). Its callers see the reviewed
-//! change, the refusal and the proof, never how a header is written.
+//! a recorded correction as an isolated patched copy (spec 069 PREP-FR-03,
+//! PREP-FR-04, PREP-FR-09, PREP-FR-20; D-W122, D-W123). It keeps the
+//! capture field to header keyword mapping and makes each copy the way a
+//! verified transfer does; how a header is written, and what a patched
+//! copy holds, is the metadata crates' (`metadata_fits::patch` on
+//! `fits-header`, `metadata_xisf::patch` on `xisf-header`), chosen by the
+//! original's catalogued format. Its callers see the reviewed change, the
+//! refusal and the proven digest, never how a header is written.
 //!
-//! Originals are only read. A FITS copy is written new from its original:
-//! the patched primary header, then every byte after the original one. An
-//! XISF copy is a verified byte copy Apply wrote, edited in place. Either
-//! keeps its original's modification time, as every copy does, and proves
-//! it differs from its original only by the corrected header: its digest is
-//! the one the same patch of the original yields.
+//! Originals are only read. A patched copy is made under a partial name
+//! beside its entry (`.pv-…partial`), proven, then installed without
+//! replacing anything; one that fails is removed, and the partial an
+//! interruption leaves is one clearing `View (building)/` knows by name. A
+//! FITS copy is written new from its original: the patched primary header,
+//! then every byte after the original one. An XISF copy is a verified byte
+//! copy, edited in place. Either keeps its original's modification time, as
+//! every copy does. Its entry records the digest it was proven to hold,
+//! which every later proof compares against.
 
-use std::fs::{self, File};
-use std::io::{self, Read};
+use std::fs::File;
+use std::io;
 use std::path::{Path, PathBuf};
 
 use metadata_core::patch::{self, EditValue, FieldEdit, KeywordWrite, PatchError};
-use sha2::{Digest, Sha256};
+use metadata_fits::patch::CopyDigests;
+use uuid::Uuid;
 
-use crate::custody::{observe_entry, transfer};
+use crate::custody::transfer;
 use crate::{
-    inventory, CaptureMetadata, CorrectedField, EntryEvidence, EntryPlacement, FileIdentity,
-    ImageFormat, ItemReason, PatchRefusal, ReasonCode, FRAMING_LABEL_FIELD,
+    inventory, CaptureMetadata, CorrectedField, EntryEvidence, FileIdentity, ImageFormat,
+    ItemReason, PatchRefusal, ReasonCode, TransferDestination, WrittenCopy, FRAMING_LABEL_FIELD,
 };
-
-const HASH_BUFFER: usize = 1 << 20;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Kind {
@@ -62,9 +66,10 @@ struct Mapping {
 /// A present alias is overwritten, never added (owner decision). The
 /// catalog has no distinct Target or rig field, so a Target association
 /// corrects `object`, and a rig `telescope`, `camera` and `focalLengthMm`.
-/// `TELESCOPE` and `INSTRUMENT` exist in FITS only as HIERARCH cards. The
-/// last six fields are the ones `PlateVault`'s readers take from their own
-/// keywords, which PREP-FR-20 doesn't name.
+/// `TELESCOPE` and `INSTRUMENT` exist in FITS only as HIERARCH cards; a
+/// present one takes the corrected value, and none is added (owner
+/// decision). The last six fields are the ones `PlateVault`'s readers take
+/// from their own keywords, which PREP-FR-20 doesn't name.
 const MAPPINGS: [Mapping; 12] = [
     Mapping {
         field: "object",
@@ -188,12 +193,31 @@ pub struct Refusal {
     pub reason: PatchRefusal,
 }
 
-/// A patched copy written and proven.
+/// The reviewed change a frame's patched copy carries, and its original's
+/// catalogued format, which picks the patcher.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct HeaderPatch {
+    pub format: ImageFormat,
+    pub changes: Vec<CorrectedField>,
+}
+
+/// Where a patched copy goes and what it carries.
+pub struct PatchTarget<'a> {
+    /// The original's snapshot (D19), which the copy is made from.
+    pub snapshot: &'a EntryEvidence,
+    pub destination: TransferDestination,
+    /// The Apply and the entry, which name the partial copy.
+    pub operation: Uuid,
+    pub seq: u32,
+    pub patch: &'a HeaderPatch,
+}
+
+/// A patched copy installed and proven.
 #[derive(Clone, Debug)]
-pub struct PatchOutcome {
-    pub placement: EntryPlacement,
-    /// The copy's identity once it carries the corrections.
+pub struct Patched {
     pub identity: FileIdentity,
+    /// The SHA-256 it was proven to hold, which its entry records.
+    pub sha256: String,
 }
 
 /// The reviewed change of a frame: every field whose corrected value
@@ -235,14 +259,20 @@ fn shown(value: &serde_json::Value) -> Option<String> {
     }
 }
 
-/// Why recording `value` as the corrected `field` would leave a value FITS
-/// can't hold: not printable ASCII, or too long for one card (D-W123,
-/// owner decision). The backend that records a correction refuses it, and
-/// Apply refuses it again.
+/// Why recording `value` as the corrected `field` would leave a correction
+/// no patched copy can deliver (D-W123, owner decisions): a field no header
+/// keyword carries, or a text value FITS can't hold, not printable ASCII or
+/// too long for one card on its own. The framing label is a grouping
+/// decision, not a header correction, so it is never refused. The backend
+/// that records a correction refuses it, and Apply refuses it again.
 #[must_use]
 pub fn entry_refusal(field: &str, value: &serde_json::Value) -> Option<PatchRefusal> {
+    if field == FRAMING_LABEL_FIELD {
+        return None;
+    }
+    let Some(mapping) = mapping(field) else { return Some(PatchRefusal::NoKeyword) };
     let text = value.as_str()?;
-    if mapping(field)?.kind != Kind::Text {
+    if mapping.kind != Kind::Text {
         return None;
     }
     patch::fits_text(text).err().map(refusal_of)
@@ -347,19 +377,6 @@ pub fn check(
     checked.map_err(|error| refused(changes, &error)).or_else(|refusal| refusal.map_or(Ok(()), Err))
 }
 
-/// The format a file's own first bytes give.
-fn format_of(path: &Path) -> io::Result<Option<ImageFormat>> {
-    let mut start = [0_u8; 9];
-    let read = File::open(path)?.read(&mut start)?;
-    Ok(if start[..read].starts_with(b"SIMPLE  =") {
-        Some(ImageFormat::Fits)
-    } else if start[..read].starts_with(b"XISF0100") {
-        Some(ImageFormat::Xisf)
-    } else {
-        None
-    })
-}
-
 fn reason(code: ReasonCode, detail: impl Into<String>) -> ItemReason {
     ItemReason::new(code, detail)
 }
@@ -384,38 +401,28 @@ fn build_failure(path: &Path, changes: &[CorrectedField], error: &PatchError) ->
     }
 }
 
-/// Give the copy at `dest` the modification time `modified`, the
-/// original's, sync it and its folder.
-fn settle(dest: &Path, modified: std::time::SystemTime) -> io::Result<()> {
-    let file = fs::OpenOptions::new().write(true).open(dest)?;
-    file.set_modified(modified)?;
-    file.sync_all()?;
-    transfer::sync_folder(dest.parent().unwrap_or(dest))
+fn partial_path(written: &WrittenCopy) -> Result<PathBuf, ItemReason> {
+    written
+        .partial
+        .to_path_buf()
+        .map_err(|error| reason(ReasonCode::DestinationChanged, error.to_string()))
 }
 
-/// Make `dest` the isolated patched copy of the original `snapshot`
-/// records, carrying `changes`, and prove it (PREP-FR-03, PREP-FR-09). A
-/// FITS copy is written new from the original; an XISF copy is the verified
-/// byte copy `copy` makes, edited in place. A copy that fails is removed,
+/// Make the isolated patched copy of the original `target.snapshot`
+/// records at `target.destination`, carrying its patch, and prove it
+/// (PREP-FR-03, PREP-FR-09): written under a partial name, installed
+/// without replacing anything, and re-read. A copy that fails is removed,
 /// so Retry makes it again.
 ///
 /// # Errors
-/// Why `dest` couldn't be written, patched or proven.
-pub fn patch_copy(
-    snapshot: &EntryEvidence,
-    dest: &Path,
-    changes: &[CorrectedField],
-    copy: impl FnOnce() -> Result<(EntryPlacement, FileIdentity), ItemReason>,
-) -> Result<PatchOutcome, ItemReason> {
-    let original = snapshot
+/// Why the copy couldn't be written, patched, installed or proven.
+pub fn patch_copy(target: &PatchTarget<'_>) -> Result<Patched, ItemReason> {
+    let original = target
+        .snapshot
         .path
         .to_path_buf()
         .map_err(|error| reason(ReasonCode::SourceUnavailable, error.to_string()))?;
-    let unavailable = |error: io::Error| {
-        reason(ReasonCode::SourceUnavailable, format!("{}: {error}", original.display()))
-    };
-    let modified =
-        fs::metadata(&original).and_then(|metadata| metadata.modified()).map_err(unavailable)?;
+    let changes = &target.patch.changes;
     let edits = edits_of(changes).map_err(|refusal| {
         reason(
             ReasonCode::WriteFailed,
@@ -427,151 +434,146 @@ pub fn patch_copy(
             ),
         )
     })?;
-    match format_of(&original).map_err(unavailable)? {
-        Some(ImageFormat::Fits) => {
-            let bytes = fs::read(&original).map_err(unavailable)?;
-            if Some(hex::encode(Sha256::digest(&bytes))) != snapshot.sha256 {
-                return Err(reason(
-                    ReasonCode::SourceDrift,
-                    format!("{} changed since its snapshot", original.display()),
-                ));
-            }
-            let header = metadata_fits::patch::write_copy(&bytes, dest, &edits)
-                .map_err(|error| build_failure(dest, changes, &error))?;
-            let tail = metadata_fits::patch::header_len(&bytes).unwrap_or(bytes.len());
-            let mut expected = Sha256::new();
-            expected.update(&header);
-            expected.update(&bytes[tail..]);
-            let expected = hex::encode(expected.finalize());
-            let written = inventory::probe_fingerprint(dest)
-                .map_err(|error| reason(ReasonCode::DestinationChanged, error.to_string()))?;
-            let proven = settle(dest, modified)
-                .map_err(|error| {
-                    reason(ReasonCode::WriteFailed, format!("{}: {error}", dest.display()))
-                })
-                .and_then(|()| prove(dest, &expected));
-            match proven {
-                Ok(identity) => Ok(PatchOutcome { placement: EntryPlacement::Copy, identity }),
-                Err(failure) => {
-                    transfer::discard(dest, &written.identity);
-                    Err(failure)
-                }
-            }
-        }
-        Some(ImageFormat::Xisf) => {
-            let (placement, identity) = copy()?;
-            let patched = metadata_xisf::patch::patch_in_place(dest, &edits)
-                .map_err(|error| build_failure(dest, changes, &error))
-                .and_then(|()| {
-                    settle(dest, modified).map_err(|error| {
-                        reason(ReasonCode::WriteFailed, format!("{}: {error}", dest.display()))
-                    })
-                })
-                .and_then(|()| {
-                    let expected = expected_digest(&original, snapshot.sha256.as_deref(), changes)
-                        .ok_or_else(|| {
-                            reason(
-                                ReasonCode::SourceDrift,
-                                format!("{} changed since its snapshot", original.display()),
-                            )
-                        })?;
-                    prove(dest, &expected)
-                });
-            match patched {
-                Ok(identity) => Ok(PatchOutcome { placement, identity }),
-                Err(failure) => {
-                    let now =
-                        inventory::probe_fingerprint(dest).map_or(identity, |now| now.identity);
-                    transfer::discard(dest, &now);
-                    Err(failure)
-                }
-            }
-        }
-        _ => Err(reason(
+    match target.patch.format {
+        ImageFormat::Fits => patch_fits(target, &original, |out| {
+            metadata_fits::patch::write_copy(&original, out, &edits)
+        }),
+        ImageFormat::Xisf => patch_xisf(target, &original, &edits),
+        ImageFormat::Unsupported => Err(reason(
             ReasonCode::WriteFailed,
             format!("{}: {}", original.display(), PatchRefusal::UnsupportedFormat.describe()),
         )),
     }
 }
 
-/// The copy at `dest` holds `expected`'s bytes; its identity.
-fn prove(dest: &Path, expected: &str) -> Result<FileIdentity, ItemReason> {
-    let written = observe_entry(dest)
-        .map_err(|error| reason(ReasonCode::DestinationChanged, error.to_string()))?;
-    if written.sha256.as_deref() != Some(expected) {
-        return Err(reason(
-            ReasonCode::DestinationMismatch,
-            format!("{} differs from its original beyond its corrected header", dest.display()),
-        ));
-    }
-    Ok(written.fingerprint.identity)
+/// A FITS patched copy: `write` fills the partial copy from the original,
+/// which must still hold its snapshot's bytes.
+fn patch_fits(
+    target: &PatchTarget<'_>,
+    original: &Path,
+    write: impl FnOnce(&mut File) -> Result<CopyDigests, PatchError>,
+) -> Result<Patched, ItemReason> {
+    let written = transfer::begin(target.operation, target.seq, &target.destination)?;
+    let snapshot = target.snapshot;
+    let digests = transfer::fill_partial(&written, snapshot.fingerprint.modified_ns, |out| {
+        let digests =
+            write(out).map_err(|error| build_failure(original, &target.patch.changes, &error))?;
+        if snapshot.sha256.as_deref() != Some(hex::encode(digests.source).as_str()) {
+            return Err(reason(
+                ReasonCode::SourceDrift,
+                format!("{} changed since its snapshot", original.display()),
+            ));
+        }
+        Ok(digests)
+    })?;
+    install(target, &written, digests.copy_len, hex::encode(digests.copy))
 }
 
-/// Whether `copy`, a patched copy `PlateVault` placed, still holds exactly
-/// the patch of `original`, which must hold `source_sha256`, with
-/// `changes`: the proof before Clean up, retiring the old View or clearing
-/// a failed build treats it as `PlateVault`'s own.
+/// An XISF patched copy: a verified byte copy of the original, edited in
+/// place by `xisf-header`, then proven to differ from it only by the
+/// corrected header.
+fn patch_xisf(
+    target: &PatchTarget<'_>,
+    original: &Path,
+    edits: &[FieldEdit],
+) -> Result<Patched, ItemReason> {
+    let written = transfer::begin(target.operation, target.seq, &target.destination)?;
+    transfer::fill_from_source(target.snapshot, &written)?;
+    let partial = partial_path(&written)?;
+    if let Err(error) = metadata_xisf::patch::patch_in_place(&partial, edits) {
+        transfer::discard(&partial, &written.identity);
+        return Err(build_failure(original, &target.patch.changes, &error));
+    }
+    // The edit renamed a new file over the partial copy. Should it vanish
+    // now, clearing `View (building)/` still knows the partial by name.
+    let edited = inventory::probe_fingerprint(&partial)
+        .map_err(|error| reason(ReasonCode::DestinationChanged, error.to_string()))?;
+    let written = WrittenCopy { identity: edited.identity, ..written };
+    let proven = transfer::settle_partial(&written, target.snapshot.fingerprint.modified_ns)
+        .and_then(|()| {
+            metadata_xisf::patch::patched_digest(&partial, original, edits)
+                .map_err(|error| build_failure(original, &target.patch.changes, &error))?
+                .ok_or_else(|| {
+                    reason(
+                        ReasonCode::DestinationMismatch,
+                        format!(
+                            "{} differs from its original beyond its corrected header",
+                            partial.display()
+                        ),
+                    )
+                })
+        });
+    match proven {
+        Ok(digest) => install(target, &written, edited.size_bytes, hex::encode(digest)),
+        Err(failure) => {
+            transfer::discard(&partial, &written.identity);
+            Err(failure)
+        }
+    }
+}
+
+/// Install the proven partial copy at its entry and re-read it there; one
+/// that doesn't hold what was proven is removed.
+fn install(
+    target: &PatchTarget<'_>,
+    written: &WrittenCopy,
+    size_bytes: u64,
+    sha256: String,
+) -> Result<Patched, ItemReason> {
+    transfer::install(&target.destination, written)?;
+    if let Err(failure) =
+        transfer::verify_bytes(&target.destination, written, size_bytes, Some(&sha256))
+    {
+        if let (Ok(root), Ok(relative)) =
+            (target.destination.root.to_path_buf(), target.destination.relative.relative_path())
+        {
+            transfer::discard(&root.join(relative), &written.identity);
+        }
+        return Err(failure);
+    }
+    Ok(Patched { identity: written.identity.clone(), sha256 })
+}
+
+/// Whether `file`, found in a `View (building)/` where the build plans the
+/// patched copy of `original` with `patch`, is that copy: what an
+/// interrupted build of the same plan left. A FITS copy is proven by the
+/// digest the same patch of `original`, which must still hold
+/// `source_sha256`, yields; an XISF copy by comparison with `original`,
+/// which the build snapshotted just before.
 #[must_use]
-pub fn holds_patch(
-    copy: &EntryEvidence,
+pub fn is_planned_patch(
+    file: &EntryEvidence,
     original: &Path,
     source_sha256: &str,
-    changes: &[CorrectedField],
+    patch: &HeaderPatch,
 ) -> bool {
-    expected_digest(original, Some(source_sha256), changes)
-        .is_some_and(|expected| copy.sha256.as_deref() == Some(expected.as_str()))
-}
-
-/// The SHA-256 the patched copy of `original` with `changes` holds, once
-/// `original` is proven to hold `source_sha256`. A FITS original is read
-/// once; an XISF one is patched in a scratch copy.
-fn expected_digest(
-    original: &Path,
-    source_sha256: Option<&str>,
-    changes: &[CorrectedField],
-) -> Option<String> {
-    let edits = edits_of(changes).ok()?;
-    match format_of(original).ok()?? {
+    let (Ok(edits), Some(found)) = (edits_of(&patch.changes), file.sha256.as_deref()) else {
+        return false;
+    };
+    match patch.format {
         ImageFormat::Fits => {
-            let header = metadata_fits::patch::read_header_region(original).ok()?;
-            let patched = metadata_fits::patch::patched_header(&header, &edits).ok()?;
-            let mut file = File::open(original).ok()?;
-            let (mut whole, mut expected) = (Sha256::new(), Sha256::new());
-            expected.update(&patched);
-            let mut offset = 0_usize;
-            let mut buffer = vec![0_u8; HASH_BUFFER];
-            loop {
-                let read = file.read(&mut buffer).ok()?;
-                if read == 0 {
-                    break;
-                }
-                let chunk = &buffer[..read];
-                whole.update(chunk);
-                let skip = header.len().saturating_sub(offset).min(read);
-                expected.update(&chunk[skip..]);
-                offset += read;
-            }
-            (Some(hex::encode(whole.finalize()).as_str()) == source_sha256)
-                .then(|| hex::encode(expected.finalize()))
+            metadata_fits::patch::copy_digests(original, &edits).is_ok_and(|digests| {
+                hex::encode(digests.source) == source_sha256 && hex::encode(digests.copy) == found
+            })
         }
-        ImageFormat::Xisf => {
-            let scratch = tempfile::tempdir().ok()?;
-            let copy: PathBuf = scratch.path().join("patched.xisf");
-            fs::copy(original, &copy).ok()?;
-            let copied = hex::encode(Sha256::digest(fs::read(&copy).ok()?));
-            if Some(copied.as_str()) != source_sha256 {
-                return None;
-            }
-            metadata_xisf::patch::patch_in_place(&copy, &edits).ok()?;
-            Some(hex::encode(Sha256::digest(fs::read(&copy).ok()?)))
-        }
-        ImageFormat::Unsupported => None,
+        ImageFormat::Xisf => file.path.to_path_buf().is_ok_and(|copy| {
+            metadata_xisf::patch::patched_digest(&copy, original, &edits)
+                .is_ok_and(|digest| digest.is_some_and(|digest| hex::encode(digest) == found))
+        }),
+        ImageFormat::Unsupported => false,
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+    use std::io::Write;
+
+    use sha2::{Digest, Sha256};
+
     use super::*;
+    use crate::custody::observe_entry;
+    use crate::NativePath;
 
     fn change(field: &str, catalog: &str) -> CorrectedField {
         CorrectedField {
@@ -626,14 +628,155 @@ mod tests {
         assert_eq!(corrections(&observed, &observed), Vec::<CorrectedField>::new());
     }
 
-    /// A value FITS can't hold is refused when it is recorded.
+    /// What no patched copy can deliver is refused when it is recorded: a
+    /// value FITS can't hold, and a field no header keyword carries. The
+    /// framing label is a grouping decision, not a header correction.
     #[test]
-    fn refuses_a_text_value_fits_cannot_hold_at_entry() {
+    fn refuses_at_entry_what_no_patched_copy_can_deliver() {
         let text = |value: &str| serde_json::Value::String(value.to_owned());
         assert_eq!(entry_refusal("object", &text("Hα")), Some(PatchRefusal::NotPrintableAscii));
         assert_eq!(entry_refusal("object", &text(&"x".repeat(69))), Some(PatchRefusal::TooLong));
         assert_eq!(entry_refusal("object", &text("NGC 7000")), None);
-        assert_eq!(entry_refusal("dateObs", &text("Hα")), None, "no keyword, no FITS card");
+        let date = text("2026-10-12T20:00:00");
+        assert_eq!(entry_refusal("dateObs", &date), Some(PatchRefusal::NoKeyword));
+        assert_eq!(entry_refusal("raDeg", &serde_json::json!(10.5)), Some(PatchRefusal::NoKeyword));
+        assert_eq!(entry_refusal(FRAMING_LABEL_FIELD, &text("Ha 2")), None);
         assert_eq!(entry_refusal("gain", &serde_json::json!(120)), None);
+    }
+
+    /// A FITS light: its primary header and a 4 × 4 8-bit image.
+    fn fits_light() -> Vec<u8> {
+        let cards = [
+            "SIMPLE  =                    T",
+            "BITPIX  =                    8",
+            "NAXIS   =                    2",
+            "NAXIS1  =                    4",
+            "NAXIS2  =                    4",
+            "END",
+        ];
+        let mut bytes: Vec<u8> =
+            cards.iter().flat_map(|card| format!("{card:<80}").into_bytes()).collect();
+        bytes.resize(2880, b' ');
+        bytes.extend([7_u8; 16]);
+        bytes.resize(2 * 2880, 0);
+        bytes
+    }
+
+    struct Fixture {
+        _dir: tempfile::TempDir,
+        original: PathBuf,
+        building: PathBuf,
+        snapshot: EntryEvidence,
+        patch: HeaderPatch,
+    }
+
+    impl Fixture {
+        fn new() -> Self {
+            let dir = tempfile::tempdir().unwrap();
+            let (original, building) =
+                (dir.path().join("light.fits"), dir.path().join("View (building)"));
+            fs::write(&original, fits_light()).unwrap();
+            fs::create_dir(&building).unwrap();
+            let snapshot = observe_entry(&original).unwrap();
+            let patch = HeaderPatch {
+                format: ImageFormat::Fits,
+                changes: vec![change("object", "NGC 7000")],
+            };
+            Self { _dir: dir, original, building, snapshot, patch }
+        }
+
+        fn target(&self) -> PatchTarget<'_> {
+            PatchTarget {
+                snapshot: &self.snapshot,
+                destination: TransferDestination {
+                    root: NativePath::from_path(&self.building),
+                    relative: NativePath::from_path(Path::new("NIGHT/light.fits")),
+                },
+                operation: Uuid::from_u128(7),
+                seq: 3,
+                patch: &self.patch,
+            }
+        }
+
+        fn night(&self) -> PathBuf {
+            self.building.join("NIGHT")
+        }
+    }
+
+    /// A writer on a volume that fills up after `left` bytes.
+    struct FullAfter<'a> {
+        out: &'a mut File,
+        left: usize,
+    }
+
+    impl Write for FullAfter<'_> {
+        fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+            if self.left == 0 {
+                return Err(io::ErrorKind::StorageFull.into());
+            }
+            let written = self.out.write(&bytes[..bytes.len().min(self.left)])?;
+            self.left -= written;
+            Ok(written)
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            self.out.flush()
+        }
+    }
+
+    /// A FITS patched copy whose write fails part way leaves nothing at its
+    /// entry and no partial copy beside it, so Retry writes it; the copy it
+    /// writes is proven, and so recognised as this plan's own.
+    #[test]
+    fn a_patched_copy_that_fails_to_write_leaves_nothing_and_retry_writes_it() {
+        let fixture = Fixture::new();
+        let edits = edits_of(&fixture.patch.changes).unwrap();
+        let failed = patch_fits(&fixture.target(), &fixture.original, |out| {
+            let mut full = FullAfter { out, left: 3000 };
+            metadata_fits::patch::write_copy(&fixture.original, &mut full, &edits)
+        })
+        .unwrap_err();
+        assert_eq!(failed.code, ReasonCode::WriteFailed, "{failed:?}");
+        assert_eq!(fs::read_dir(fixture.night()).unwrap().count(), 0, "nothing stays");
+
+        let patched = patch_copy(&fixture.target()).unwrap();
+        let path = fixture.night().join("light.fits");
+        let copy = fs::read(&path).unwrap();
+        assert_eq!(patched.sha256, hex::encode(Sha256::digest(&copy)));
+        assert!(copy.windows(20).any(|card| card == b"OBJECT  = 'NGC 7000'"));
+        assert_eq!(copy[2880..], fits_light()[2880..], "the data unit is unchanged");
+        assert_eq!(fs::read(&fixture.original).unwrap(), fits_light(), "the original is only read");
+        assert_eq!(fs::read_dir(fixture.night()).unwrap().count(), 1, "no partial copy stays");
+
+        let sha256 = fixture.snapshot.sha256.as_deref().unwrap();
+        let found = observe_entry(&path).unwrap();
+        assert!(is_planned_patch(&found, &fixture.original, sha256, &fixture.patch));
+        let plain = observe_entry(&fixture.original).unwrap();
+        assert!(!is_planned_patch(&plain, &fixture.original, sha256, &fixture.patch));
+    }
+
+    /// An entry something else already holds is reported as occupied and
+    /// never replaced.
+    #[test]
+    fn an_occupied_entry_is_reported_and_kept() {
+        let fixture = Fixture::new();
+        fs::create_dir(fixture.night()).unwrap();
+        fs::write(fixture.night().join("light.fits"), b"a tool's file").unwrap();
+        let refused = patch_copy(&fixture.target()).unwrap_err();
+        assert_eq!(refused.code, ReasonCode::DestinationOccupied, "{refused:?}");
+        assert_eq!(fs::read(fixture.night().join("light.fits")).unwrap(), b"a tool's file");
+        assert_eq!(fs::read_dir(fixture.night()).unwrap().count(), 1, "no partial copy stays");
+    }
+
+    /// The unfinished copies an interruption can leave are known by name:
+    /// a partial copy, and the file `xisf-header` writes beside one.
+    #[test]
+    fn knows_the_partial_copies_an_interruption_leaves() {
+        let partial = ".pv-0123abcd-3-a1b2c3.partial";
+        assert!(transfer::is_partial_name(partial));
+        assert!(transfer::is_partial_name(&format!(".{partial}.tmp-4242")));
+        assert!(!transfer::is_partial_name(&format!(".{partial}.tmp-")));
+        assert!(!transfer::is_partial_name(".light.fits.tmp-4242"));
+        assert!(!transfer::is_partial_name("light.fits"));
     }
 }

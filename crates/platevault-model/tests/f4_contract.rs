@@ -12,18 +12,19 @@ use platevault_model::{
     admit_session, session_blockers, AdmissionBlocker, ApplicableQuality, ApplyJournal,
     ApplyOutcome, ApplyPhase, BasisCapture, BasisGroup, BasisSession, CalibrationHealth,
     CalibrationNeed, Camera, CameraBasis, CameraLink, CaptureInclusion, ChangeSource,
-    Classification, ClosePolicy, ClosedSnapshot, CopyBasis, DeclineOrigin, EntryEvidence,
-    EntryInput, EntryKind, EntryName, EntryPlacement, EntrySource, Evaluation, ExclusionBasis,
-    ExpectedTree, FileIdentity, ForeignItem, ForeignItemState, GroupKeywords, GroupName,
-    GroupOrigin, InclusionBasis, InputKind, InputRef, ManifestEntry, ManifestState, MasterBasis,
-    MasterEvidence, MasterOfferState, NativePath, ObservationFingerprint, OpticsSignature,
-    OutputKind, OutputObservation, OutputOrigin, OutputState, PathSensitivity, PendingChange,
-    PinHealth, PinOrigin, PinState, PinTarget, PinnedFile, PreviousItem, PreviousItemReason,
-    PreviousItemReview, ProcessingMasterOffer, ProjectBasis, ProjectCapture, ProjectDesired,
-    ProjectGroup, ProjectLifecycle, ProjectOperation, ProjectOperationKind, ProjectOperationState,
-    ProjectSessionMember, ProjectViewSettings, RigVersion, RotatorPresence, SessionCalibration,
-    SessionIntake, SessionPlacement, SessionReadiness, SettledPin, ViewManifest, ViewMode,
-    VolumeIdentity, WorkflowSettings, WrapUpOutcome, WrapUpRecord, WrapUpStep,
+    Classification, ClosePolicy, ClosedSnapshot, CopyBasis, CorrectedField, DeclineOrigin,
+    EntryEvidence, EntryInput, EntryKind, EntryName, EntryPlacement, EntrySource, Evaluation,
+    ExclusionBasis, ExpectedTree, FileIdentity, ForeignItem, ForeignItemState, GroupKeywords,
+    GroupName, GroupOrigin, InclusionBasis, InputKind, InputRef, ManifestEntry, ManifestState,
+    MasterBasis, MasterEvidence, MasterOfferState, NativePath, ObservationFingerprint,
+    OpticsSignature, OutputKind, OutputObservation, OutputOrigin, OutputState, PathSensitivity,
+    PendingChange, PinHealth, PinOrigin, PinState, PinTarget, PinnedFile, PreviousItem,
+    PreviousItemReason, PreviousItemReview, ProcessingMasterOffer, ProjectBasis, ProjectCapture,
+    ProjectDesired, ProjectGroup, ProjectLifecycle, ProjectOperation, ProjectOperationKind,
+    ProjectOperationState, ProjectSessionMember, ProjectViewSettings, RigVersion, RotatorPresence,
+    SessionCalibration, SessionIntake, SessionPlacement, SessionReadiness, SettledPin,
+    ViewManifest, ViewMode, VolumeIdentity, WorkflowSettings, WrapUpOutcome, WrapUpRecord,
+    WrapUpStep,
 };
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -202,6 +203,7 @@ fn light_entry(seq: u32, file: &str, placement: EntryPlacement) -> ManifestEntry
         source_fingerprint: fingerprint(30),
         written: None,
         header_patch: Vec::new(),
+        patched_sha256: None,
     }
 }
 
@@ -778,7 +780,23 @@ fn a_manifest_places_each_path_once_in_its_mode_and_never_as_a_hard_link() {
 
     let mut symlinked = copies.clone();
     symlinked.basis.mode = ViewMode::Symlinks;
-    assert!(symlinked.validate().is_err(), "Symlinks mode places only links");
+    assert!(symlinked.validate().is_err(), "Symlinks mode places only links and patched copies");
+    let mut patched = symlinked;
+    patched.entries.truncate(1);
+    patched.entries[0].header_patch = vec![CorrectedField {
+        field: "object".into(),
+        keywords: vec!["OBJECT".into()],
+        header: None,
+        catalog: Some("NGC 7000".into()),
+    }];
+    patched.validate().unwrap();
+    patched.entries[0].written = Some(fingerprint(30).identity);
+    assert!(patched.validate().is_err(), "a written patched copy records its digest");
+    patched.entries[0].patched_sha256 = Some(SHA.into());
+    patched.validate().unwrap();
+    round_trip(&patched);
+    patched.entries[0].placement = EntryPlacement::Clone;
+    assert!(patched.validate().is_err(), "a patched copy is never a clone");
 
     let clash = manifest(vec![
         light_entry(0, "NIGHT_2026-10-14/Lights/Ha/a.fits", EntryPlacement::Copy),

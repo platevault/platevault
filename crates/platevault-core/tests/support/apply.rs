@@ -706,8 +706,9 @@ pub fn digest(path: &Path) -> String {
 
 /// J23's 24 Sep light: no `OBJECT` card; intake records Target NGC 7000.
 pub const SEP24: &str = "2026-10-12/J23_24Sep_Light_001.fits";
-/// J23's 28 Sep light: no `TELESCOP` or `FOCALLEN`, and Siril's `FOCAL` and
-/// `FLENGTH` aliases at the wrong focal length; intake records the `RedCat`.
+/// J23's 28 Sep light: no `TELESCOP` or `FOCALLEN`, Siril's `FOCAL` and
+/// `FLENGTH` aliases at the wrong focal length and a HIERARCH `TELESCOPE`;
+/// intake records the `RedCat`.
 pub const SEP28: &str = "2026-10-13/J23_28Sep_Light_001.fits";
 
 /// A light whose primary header holds `cards`: J23/P6's frame (`NAXIS = 2`
@@ -759,6 +760,7 @@ pub fn sep28_frame() -> (String, CaptureMetadata, Vec<u8>) {
         "DETECTOR= 'ASI2600MM'",
         "FOCAL   =                135.0",
         "FLENGTH =                0.135",
+        "HIERARCH TELESCOPE = 'Samyang 135'",
     ];
     let metadata = CaptureMetadata {
         object: Some("NGC 7000".into()),
@@ -792,16 +794,31 @@ pub async fn corrected(mode: ViewMode) -> World {
     world
 }
 
-/// An XISF light whose one attachment, `data`, follows its XML header,
-/// which holds `body` inside its `<Image>` (`xisf-header` reads it).
-pub fn xisf_frame(body: &str, data: &[u8]) -> Vec<u8> {
+/// An XISF light whose image attachment `data`, then a thumbnail's when
+/// given, follow its XML header, which holds `body` inside its `<Image>`
+/// (`xisf-header` reads it); without a `body` the `<Image>` is self-closing.
+pub fn xisf_frame(body: Option<&str>, data: &[u8], thumbnail: Option<&[u8]>) -> Vec<u8> {
     let xml = |offset: usize| {
+        let thumb = thumbnail.map_or(String::new(), |thumb| {
+            format!(
+                "<Thumbnail geometry=\"1:1:1\" sampleFormat=\"UInt8\" colorSpace=\"Gray\" \
+                 location=\"attachment:{:08}:{}\"/>",
+                offset + data.len(),
+                thumb.len()
+            )
+        });
+        let image = format!(
+            "<Image geometry=\"4:4:1\" sampleFormat=\"UInt8\" colorSpace=\"Gray\" \
+             location=\"attachment:{offset:08}:{}\"",
+            data.len()
+        );
+        let image = match body {
+            Some(body) => format!("{image}>{body}{thumb}</Image>"),
+            None => format!("{image}/>"),
+        };
         format!(
             "<?xml version=\"1.0\" encoding=\"UTF-8\"?><xisf version=\"1.0\" \
-             xmlns=\"http://www.pixinsight.com/xisf\"><Image geometry=\"4:4:1\" \
-             sampleFormat=\"UInt8\" colorSpace=\"Gray\" location=\"attachment:{offset:08}:{}\">\
-             {body}</Image></xisf>",
-            data.len()
+             xmlns=\"http://www.pixinsight.com/xisf\">{image}</xisf>"
         )
     };
     let offset = 16 + xml(0).len();
@@ -811,5 +828,6 @@ pub fn xisf_frame(body: &str, data: &[u8]) -> Vec<u8> {
     bytes.extend_from_slice(&[0_u8; 4]);
     bytes.extend_from_slice(xml.as_bytes());
     bytes.extend_from_slice(data);
+    bytes.extend_from_slice(thumbnail.unwrap_or_default());
     bytes
 }

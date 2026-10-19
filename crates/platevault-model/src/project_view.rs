@@ -251,9 +251,23 @@ pub struct ManifestEntry {
     pub source_sha256: String,
     pub source_fingerprint: ObservationFingerprint,
     pub written: Option<FileIdentity>,
-    /// The reviewed header change an isolated patched Copy or Clone carries.
+    /// The reviewed header change an isolated patched Copy carries
+    /// (PREP-FR-03).
     #[serde(default)]
     pub header_patch: Vec<CorrectedField>,
+    /// The SHA-256 the patched copy was proven to hold when it was written;
+    /// `None` for a link or a plain copy, which holds `source_sha256`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub patched_sha256: Option<String>,
+}
+
+impl ManifestEntry {
+    /// The SHA-256 a Copy or Clone entry holds: its proven patched digest,
+    /// else its original's.
+    #[must_use]
+    pub fn copy_sha256(&self) -> &str {
+        self.patched_sha256.as_deref().unwrap_or(&self.source_sha256)
+    }
 }
 
 /// What one Apply placed and the basis it was built from.
@@ -272,8 +286,10 @@ pub struct ViewManifest {
 }
 
 impl ViewManifest {
-    /// A valid basis; each seq and path once; every placement fits the mode;
-    /// a patch only on a Copy or Clone; a light entry places a copy of an
+    /// A valid basis; each seq and path once; every placement fits the mode,
+    /// a Symlinks View also holding the isolated patched copies of corrected
+    /// frames (PREP-FR-04); a patch only on a Copy, which records the digest
+    /// it was proven to hold once written; a light entry places a copy of an
     /// included capture.
     ///
     /// # Errors
@@ -293,11 +309,28 @@ impl ViewManifest {
                     entry.path.display()
                 )));
             }
-            if !entry.placement.fits(self.basis.mode) {
-                return Err(invalid(format!("entry {seq}: Symlinks mode places only links")));
-            }
-            if entry.placement == EntryPlacement::Symlink && !entry.header_patch.is_empty() {
+            let patched = !entry.header_patch.is_empty();
+            if patched && entry.placement != EntryPlacement::Copy {
                 return Err(invalid(format!("entry {seq}: only a copy carries a patch")));
+            }
+            if !(entry.placement.fits(self.basis.mode) || patched) {
+                return Err(invalid(format!(
+                    "entry {seq}: Symlinks mode places links and patched copies only"
+                )));
+            }
+            match (&entry.patched_sha256, patched) {
+                (Some(digest), true) => require_sha256("a patched copy's digest", digest)?,
+                (None, true) if entry.written.is_some() => {
+                    return Err(invalid(format!(
+                        "entry {seq}: a written patched copy records its digest"
+                    )));
+                }
+                (Some(_), false) => {
+                    return Err(invalid(format!(
+                        "entry {seq}: only a patched copy records a patched digest"
+                    )));
+                }
+                _ => {}
             }
             if let EntrySource::Light { capture_key, asset_id } = entry.source {
                 if !included.get(&capture_key).is_some_and(|copies| copies.contains(&asset_id)) {

@@ -7,8 +7,8 @@
 //! user confirmed are retired. A link `PlateVault` placed is deleted after
 //! its no-follow check proves it is still the recorded link pointing at its
 //! original; a copy goes to the OS Trash once it still holds the bytes
-//! `PlateVault` placed (for an isolated patched copy, its original's bytes
-//! with its planned header cards) and its original re-verifies, both
+//! `PlateVault` placed (for an isolated patched copy, the bytes it was
+//! proven to hold when written) and its original re-verifies, both
 //! immediately before the move; a leftover goes to the OS Trash after its
 //! recorded evidence re-verifies. Anything that fails stays, named.
 //! `Processing/`, `Output/`, originals and library frames are never listed.
@@ -23,8 +23,8 @@ use uuid::Uuid;
 
 use super::project_folder;
 use crate::apply::files;
+use crate::custody::same_identity;
 use crate::custody::trash::{self, OsTrash, Retirement};
-use crate::custody::{observe_entry, same_identity};
 use crate::layout::{VIEW_FOLDER, VIEW_PREVIOUS_FOLDER};
 use crate::library::{blocking, Library};
 use crate::{
@@ -277,8 +277,8 @@ fn original_of(inputs: &ApplyInputs, entry: &ManifestEntry) -> Option<PathBuf> {
 /// Retire one placed entry (STO-FR-04): a link deleted once it is still the
 /// recorded link pointing at its original, never followed; a copy moved to
 /// the OS Trash once it still holds the bytes `PlateVault` placed and its
-/// original still holds them too. A patched copy's bytes are its original's
-/// with the cards its recorded change plans on it (PREP-FR-03).
+/// original still holds them too. A patched copy's bytes are the ones it
+/// was proven to hold when written (PREP-FR-03).
 fn remove_placed(
     path: &Path,
     entry: &ManifestEntry,
@@ -332,26 +332,11 @@ fn remove_placed(
                     )
                 }
             };
-            let copy = if entry.header_patch.is_empty() {
-                EntryEvidence {
-                    path: NativePath::from_path(path),
-                    kind: EntryKind::File,
-                    fingerprint: ObservationFingerprint { content_sha256: None, ..observed },
-                    sha256: Some(entry.source_sha256.clone()),
-                }
-            } else {
-                match observe_entry(path) {
-                    Ok(copy) if files::holds_patch(&copy, entry, original) => copy,
-                    _ => {
-                        return kept(
-                            ReasonCode::SourceDrift,
-                            format!(
-                                "{} is no longer the patched copy PlateVault placed; it stays",
-                                path.display()
-                            ),
-                        )
-                    }
-                }
+            let copy = EntryEvidence {
+                path: NativePath::from_path(path),
+                kind: EntryKind::File,
+                fingerprint: ObservationFingerprint { content_sha256: None, ..observed },
+                sha256: Some(entry.copy_sha256().to_owned()),
             };
             let retained = KeptCopy {
                 path: NativePath::from_path(original),

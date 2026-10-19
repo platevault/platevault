@@ -253,6 +253,22 @@ impl F4 {
         .await
     }
 
+    /// A copy entry carrying a header patch (PREP-FR-03).
+    async fn patched_entry(&mut self, n: &str, seq: &str) -> Result<(), String> {
+        let asset = self.first_asset().await;
+        run(
+            &mut self.conn,
+            "INSERT INTO view_manifest_entries (project_id, generation, seq, path_key, input, \
+             placement, capture_key, asset_id, source_sha256, entry) \
+             VALUES (?1, CAST(?2 AS INTEGER), CAST(?3 AS INTEGER), CAST(?3 AS BLOB), 'light', \
+             'copy', ?4, ?4, ?5, json_object('seq', CAST(?3 AS INTEGER), \
+             'sourceSha256', ?5, 'placement', json_object('kind', 'copy'), \
+             'headerPatch', json_array(json_object('field', 'object'))))",
+            &[&self.project, n, seq, &asset, SHA],
+        )
+        .await
+    }
+
     async fn first_asset(&mut self) -> String {
         sqlx::query_scalar(
             "SELECT asset_id FROM session_members WHERE session_id = ?1 ORDER BY asset_id",
@@ -702,6 +718,21 @@ async fn manifests_entries_and_the_apply_journal_hold_their_invariants() {
     f4.manifest_state("2", "installed").await.unwrap();
     let error = f4.manifest_state("1", "installed").await.unwrap_err();
     assert!(error.contains("View state"), "{error}");
+}
+
+/// PREP-FR-03/04: a Symlinks View places links and, for a corrected frame,
+/// its isolated patched copy, never a plain copy or a clone.
+#[tokio::test]
+async fn a_symlinks_view_holds_links_and_patched_copies_only() {
+    let mut f4 = F4::new().await;
+    let apply = f4.reserve("apply").await.unwrap();
+    f4.building(&apply, "1", "symlinks").await.unwrap();
+    f4.entry("1", "0", "symlink").await.unwrap();
+    let error = f4.entry("1", "1", "copy").await.unwrap_err();
+    assert!(error.contains("patched copies"), "a plain copy in Symlinks mode: {error}");
+    let error = f4.entry("1", "2", "clone").await.unwrap_err();
+    assert!(error.contains("patched copies"), "a clone in Symlinks mode: {error}");
+    f4.patched_entry("1", "3").await.unwrap();
 }
 
 /// PREP-FR-19, D-W114: an entry's name is fixed for life.

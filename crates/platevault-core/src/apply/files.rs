@@ -7,15 +7,15 @@
 //! Every entry is made from an original whose bytes were just snapshotted,
 //! never from an entry of the current or previous View: a symlink to the
 //! original, or a clone or verified copy of it. A copy of a frame with a
-//! recorded correction is an isolated patched copy: it then takes the
-//! header cards planned from its original and is re-read to differ from
-//! the snapshot only by them. Nothing is ever hard-linked, so each Copies
-//! entry is its own file (D-W81, 063 FR-005). Nothing here replaces an
-//! existing entry or follows a link. Old entries leave `View (previous)/`
-//! only once proven: a link that is still the one `PlateVault` placed and
-//! points at its original, a copy that still holds the bytes `PlateVault`
-//! placed while its original still holds them too. Everything else stays,
-//! named, for the user's review.
+//! recorded correction is an isolated patched copy, in a Copies or a
+//! Symlinks View (PREP-FR-04): it takes the header change planned from its
+//! original, and its entry records the digest it was proven to hold.
+//! Nothing is ever hard-linked, so each Copies entry is its own file (D-W81,
+//! 063 FR-005). Nothing here replaces an existing entry or follows a link.
+//! Old entries leave `View (previous)/` only once proven: a link that is
+//! still the one `PlateVault` placed and points at its original, a copy
+//! that still holds the bytes `PlateVault` placed while its original still
+//! holds them too. Everything else stays, named, for the user's review.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -30,10 +30,10 @@ use super::plan::PlanEntry;
 use super::ApplyControl;
 use crate::custody::{observe_entry, same_identity, transfer, verify_source};
 use crate::layout::VIEW_PREVIOUS_FOLDER;
-use crate::patched_copy;
+use crate::patched_copy::{self, HeaderPatch, PatchTarget};
 use crate::{
-    CorrectedField, EntryEvidence, EntryKind, EntryPlacement, FileIdentity, ForeignItem,
-    ForeignItemState, ItemReason, ManifestEntry, NativePath, ObservationFingerprint, PreviousItem,
+    EntryEvidence, EntryKind, EntryPlacement, FileIdentity, ForeignItem, ForeignItemState,
+    ItemReason, ManifestEntry, NativePath, ObservationFingerprint, PreviousItem,
     PreviousItemReason, PreviousItemReview, ReasonCode, TransferDestination,
 };
 
@@ -128,14 +128,7 @@ pub fn snapshot(
 pub struct PlannedPatch {
     pub original: PathBuf,
     pub source_sha256: String,
-    pub changes: Vec<CorrectedField>,
-}
-
-/// Whether the old patched copy `copy` still holds exactly what
-/// `PlateVault` placed: its original's recorded bytes with its recorded
-/// change, proven on `original`, which must hold those bytes.
-pub fn holds_patch(copy: &EntryEvidence, entry: &ManifestEntry, original: &Path) -> bool {
-    patched_copy::holds_patch(copy, original, &entry.source_sha256, &entry.header_patch)
+    pub patch: HeaderPatch,
 }
 
 // ── Build ────────────────────────────────────────────────────────────────────
@@ -145,6 +138,8 @@ pub fn holds_patch(copy: &EntryEvidence, entry: &ManifestEntry, original: &Path)
 pub struct Written {
     pub placement: EntryPlacement,
     pub identity: FileIdentity,
+    /// The digest a patched copy was proven to hold.
+    pub patched_sha256: Option<String>,
 }
 
 /// What placing one entry needs, owned so it runs off the async runtime.
@@ -179,7 +174,11 @@ pub fn place(placing: &Placing) -> Result<Written, ItemReason> {
                     format!("{} does not point at {}", path.display(), original.display()),
                 ));
             }
-            Ok(Written { placement: EntryPlacement::Symlink, identity: link.fingerprint.identity })
+            Ok(Written {
+                placement: EntryPlacement::Symlink,
+                identity: link.fingerprint.identity,
+                patched_sha256: None,
+            })
         }
         EntryPlacement::Copy | EntryPlacement::Clone => copy(placing, &original, &path),
     }
@@ -190,14 +189,26 @@ pub fn place(placing: &Placing) -> Result<Written, ItemReason> {
 /// (PREP-FR-03, PREP-FR-09), which removes one that fails so Retry makes
 /// it again.
 fn copy(placing: &Placing, original: &Path, path: &Path) -> Result<Written, ItemReason> {
-    let changes = &placing.entry.header_patch;
-    if changes.is_empty() {
-        return plain_copy(placing, original, path);
-    }
-    let outcome = patched_copy::patch_copy(&placing.snapshot, path, changes, || {
-        plain_copy(placing, original, path).map(|written| (written.placement, written.identity))
+    let Some(header) = &placing.entry.patch else { return plain_copy(placing, original, path) };
+    let patched = patched_copy::patch_copy(&PatchTarget {
+        snapshot: &placing.snapshot,
+        destination: destination(placing),
+        operation: placing.operation,
+        seq: placing.entry.seq,
+        patch: header,
     })?;
-    Ok(Written { placement: outcome.placement, identity: outcome.identity })
+    Ok(Written {
+        placement: EntryPlacement::Copy,
+        identity: patched.identity,
+        patched_sha256: Some(patched.sha256),
+    })
+}
+
+fn destination(placing: &Placing) -> TransferDestination {
+    TransferDestination {
+        root: NativePath::from_path(&placing.building),
+        relative: NativePath::from_path(&placing.entry.path),
+    }
 }
 
 /// A clone where the volume makes one, else a verified copy (PREP-FR-04).
@@ -210,6 +221,7 @@ fn plain_copy(placing: &Placing, original: &Path, path: &Path) -> Result<Written
             return Ok(Written {
                 placement: EntryPlacement::Clone,
                 identity: clone.fingerprint.identity,
+                patched_sha256: None,
             });
         }
         transfer::discard(path, &clone.fingerprint.identity);
@@ -218,14 +230,15 @@ fn plain_copy(placing: &Placing, original: &Path, path: &Path) -> Result<Written
             format!("the clone {} differs from its original", path.display()),
         ));
     }
-    let destination = TransferDestination {
-        root: NativePath::from_path(&placing.building),
-        relative: NativePath::from_path(&placing.entry.path),
-    };
+    let destination = destination(placing);
     let written = transfer::begin(placing.operation, placing.entry.seq, &destination)?;
     transfer::write(snapshot, &destination, &written)?;
     transfer::verify(snapshot, &destination, &written)?;
-    Ok(Written { placement: EntryPlacement::Copy, identity: written.identity })
+    Ok(Written {
+        placement: EntryPlacement::Copy,
+        identity: written.identity,
+        patched_sha256: None,
+    })
 }
 
 /// Immediately before the swap (PREP-FR-09): each original still holds its
@@ -270,7 +283,7 @@ fn holds_identity(path: &Path, identity: &FileIdentity) -> bool {
 /// What of a `View (building)/` is this Project's own: a copy holding the
 /// bytes of an original just snapshotted, by its digest, or a patched copy
 /// at the path the build plans one, holding its original's bytes with the
-/// planned cards.
+/// planned change.
 pub struct Ours {
     pub digests: BTreeSet<String>,
     /// By path relative to `View (building)/`.
@@ -280,21 +293,21 @@ pub struct Ours {
 impl Ours {
     fn holds(&self, relative: &Path, file: &EntryEvidence) -> bool {
         file.sha256.as_ref().is_some_and(|sha| self.digests.contains(sha))
-            || self.patches.get(relative).is_some_and(|patch| {
-                patched_copy::holds_patch(
+            || self.patches.get(relative).is_some_and(|planned| {
+                patched_copy::is_planned_patch(
                     file,
-                    &patch.original,
-                    &patch.source_sha256,
-                    &patch.changes,
+                    &planned.original,
+                    &planned.source_sha256,
+                    &planned.patch,
                 )
             })
     }
 }
 
 /// Empty the `View (building)/` an earlier Apply of this Project left, then
-/// remove it: a symlink holds no data, a partial copy is this module's own,
-/// and so is every file of `ours`. Anything else stays and is returned; the
-/// folder then stays too.
+/// remove it: a symlink holds no data, a partial copy an interrupted write
+/// left is this module's own by its name, and so is every file of `ours`.
+/// Anything else stays and is returned; the folder then stays too.
 pub fn clear_building(building: &Path, ours: &Ours) -> Vec<PathBuf> {
     let (files, unreadable) = walk(building);
     let mut kept: Vec<PathBuf> = unreadable;
@@ -305,7 +318,7 @@ pub fn clear_building(building: &Path, ours: &Ours) -> Vec<PathBuf> {
                 let partial = path
                     .file_name()
                     .and_then(|name| name.to_str())
-                    .is_some_and(|name| name.starts_with(".pv-") && name.ends_with(".partial"));
+                    .is_some_and(transfer::is_partial_name);
                 let relative = path.strip_prefix(building).unwrap_or(&path);
                 partial || observe_entry(&path).is_ok_and(|file| ours.holds(relative, &file))
             }
@@ -624,10 +637,9 @@ pub fn old_link(
     }
 }
 
-/// An old copy goes once it still holds the bytes `PlateVault` placed and
-/// its original still exists and matches the recorded digest. An old
-/// patched copy holds them once it differs from that verified original only
-/// by the cards its recorded change plans on it.
+/// An old copy goes once it still holds the bytes `PlateVault` placed, its
+/// original's or, for a patched copy, the digest it was proven to hold when
+/// written, and its original still exists and matches the recorded digest.
 fn old_copy(
     path: &Path,
     entry: &ManifestEntry,
@@ -639,21 +651,19 @@ fn old_copy(
             .written
             .as_ref()
             .is_some_and(|written| same_identity(&copy.fingerprint.identity, written));
-    let unpatched = entry.header_patch.is_empty();
-    if !placed || (unpatched && copy.sha256.as_deref() != Some(entry.source_sha256.as_str())) {
+    if !placed || copy.sha256.as_deref() != Some(entry.copy_sha256()) {
         return Err(PreviousItemReason::ChangedCopy);
     }
-    let verified = original.filter(|original| {
+    let verified = original.is_some_and(|original| {
         observe_entry(original).is_ok_and(|now| {
             now.kind == EntryKind::File
                 && now.sha256.as_deref() == Some(entry.source_sha256.as_str())
         })
     });
-    match verified {
-        None => Err(PreviousItemReason::UnverifiedCopy),
-        Some(_) if unpatched => Ok(()),
-        Some(original) if holds_patch(&copy, entry, original) => Ok(()),
-        Some(_) => Err(PreviousItemReason::ChangedCopy),
+    if verified {
+        Ok(())
+    } else {
+        Err(PreviousItemReason::UnverifiedCopy)
     }
 }
 

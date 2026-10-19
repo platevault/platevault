@@ -136,13 +136,19 @@ WHEN (SELECT state FROM view_manifests
     IN ('installed', 'previous')
 BEGIN SELECT RAISE(ABORT, 'a View''s entries are fixed once built'); END;
 
--- Symlinks mode places only links; Copies mode copies and clones.
+-- Symlinks mode places links and, for a frame with a recorded correction,
+-- its isolated patched copy (PREP-FR-03, PREP-FR-04); Copies mode copies and
+-- clones.
 CREATE TRIGGER IF NOT EXISTS view_manifest_entries_mode
 BEFORE INSERT ON view_manifest_entries
-WHEN ((SELECT mode FROM view_manifests
-    WHERE project_id = NEW.project_id AND generation = NEW.generation) = 'symlinks')
-    <> (NEW.placement = 'symlink')
-BEGIN SELECT RAISE(ABORT, 'Symlinks mode places only links, and Copies mode none'); END;
+WHEN CASE (SELECT mode FROM view_manifests
+        WHERE project_id = NEW.project_id AND generation = NEW.generation)
+    WHEN 'symlinks' THEN NEW.placement <> 'symlink' AND NOT (NEW.placement = 'copy'
+        AND coalesce(json_array_length(NEW.entry, '$.headerPatch'), 0) > 0)
+    ELSE NEW.placement = 'symlink' END
+BEGIN
+    SELECT RAISE(ABORT, 'Symlinks mode places links and patched copies, and Copies mode no links');
+END;
 
 -- An input's entry basename, fixed for life (PREP-FR-19, D-W114): a newcomer
 -- whose name clashes takes a suffix, and the existing entry keeps its name.

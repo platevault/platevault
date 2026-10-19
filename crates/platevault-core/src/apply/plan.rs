@@ -29,10 +29,11 @@ use time::Date;
 use uuid::Uuid;
 
 use crate::layout::{self, name_key, COMPONENT_LIMIT};
+use crate::patched_copy::HeaderPatch;
 use crate::{
-    ApplyBlocker, BasisGroup, BasisSession, CaptureMetadata, CorrectedField, EntryInput, EntryName,
-    EntryPlacement, EntrySource, InputKind, InputRef, ObservationFingerprint, PinTarget,
-    ProjectBasis, Revision, SettledPin, ViewMode,
+    ApplyBlocker, BasisGroup, BasisSession, CaptureMetadata, EntryInput, EntryName, EntryPlacement,
+    EntrySource, InputKind, InputRef, ObservationFingerprint, PinTarget, ProjectBasis, Revision,
+    SettledPin, ViewMode,
 };
 
 /// Room a filter token may take in a light folder name, leaving the rest
@@ -69,7 +70,7 @@ pub struct PlanEntry {
     /// The reviewed header change of an isolated patched copy (PREP-FR-03):
     /// set by the preflight from the recorded corrections, never by the
     /// layout.
-    pub header_patch: Vec<CorrectedField>,
+    pub patch: Option<HeaderPatch>,
 }
 
 /// The layout of one build and the names newcomers take.
@@ -518,7 +519,7 @@ fn finish(input: &PlanInput<'_>, drafts: Vec<Draft>) -> Plan {
             placement,
             basis: draft.basis,
             sha256: draft.sha256,
-            header_patch: Vec::new(),
+            patch: None,
         });
     }
     Plan { entries, names }

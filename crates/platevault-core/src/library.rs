@@ -564,30 +564,20 @@ impl Library {
     }
 
     /// Preview a correction and the regroup it causes under the current
-    /// framing margins; nothing but the plan is recorded. A text value FITS
-    /// can't hold in one card is refused here, as Apply refuses it again
-    /// (PREP-FR-03, D-W123).
+    /// framing margins; nothing but the plan is recorded. A correction no
+    /// patched copy can deliver is refused here, as Apply refuses it again
+    /// (PREP-FR-03, D-W123): a field no header keyword carries, or a text
+    /// value FITS can't hold in one card.
     ///
     /// # Errors
-    /// `CorrectionUndeliverable` naming the frame and field of such a value;
-    /// the catalog's preview errors.
+    /// `CorrectionUndeliverable` naming the frame and field of such a
+    /// correction; the catalog's preview errors.
     pub async fn preview_correction(
         &self,
         expected: &[ExpectedAsset],
         corrections: &[CorrectionInput],
     ) -> Result<CorrectionPreview, LibraryError> {
-        for correction in corrections {
-            if let Some(refusal) =
-                crate::patched_copy::entry_refusal(&correction.field, &correction.value)
-            {
-                return Err(LibraryError::CorrectionUndeliverable {
-                    identity: correction.asset_id,
-                    path: None,
-                    field: correction.field.clone(),
-                    refusal,
-                });
-            }
-        }
+        refuse_undeliverable(corrections)?;
         let margins = self.framing_margins().await?;
         self.catalog
             .preview_correction(expected, corrections, |assets: &[Asset]| {
@@ -598,16 +588,19 @@ impl Library {
 
     /// Confirm a reviewed correction preview, then re-derive the target suggestion
     /// of every resulting session: those holding a corrected asset and every
-    /// successor of the regroup.
+    /// successor of the regroup. A preview holding a correction no patched
+    /// copy can deliver is refused, as its preview was.
     ///
     /// # Errors
-    /// Returns the catalog's confirmation errors; a refresh failure after commit is
+    /// `CorrectionUndeliverable` as [`Self::preview_correction`]; the
+    /// catalog's confirmation errors; a refresh failure after commit is
     /// reported in [`ConfirmedCorrection::association_refresh`] instead.
     pub async fn confirm_correction(
         &self,
         preview_id: Uuid,
         expected: &[crate::ExpectedAsset],
     ) -> Result<ConfirmedCorrection, LibraryError> {
+        refuse_undeliverable(&self.catalog.correction_preview(preview_id).await?.corrections)?;
         let margins = self.framing_margins().await?;
         let outcome = self
             .catalog
@@ -918,6 +911,22 @@ impl Library {
             }
         }
     }
+}
+
+/// The first of `corrections` no isolated patched copy can deliver, as a
+/// coded refusal naming its frame and field (PREP-FR-03, D-W123).
+fn refuse_undeliverable(corrections: &[CorrectionInput]) -> Result<(), LibraryError> {
+    corrections.iter().try_for_each(|correction| {
+        match crate::patched_copy::entry_refusal(&correction.field, &correction.value) {
+            Some(refusal) => Err(LibraryError::CorrectionUndeliverable {
+                identity: correction.asset_id,
+                path: None,
+                field: correction.field.clone(),
+                refusal,
+            }),
+            None => Ok(()),
+        }
+    })
 }
 
 pub(crate) async fn blocking<T: Send + 'static>(

@@ -183,10 +183,113 @@ pub(crate) fn write(
             partial.display()
         )));
     }
-    if let Err(reason) = fill(source, &partial, &written.identity) {
+    fill_from_source(source, written)?;
+    install(destination, written)
+}
+
+/// Whether `name` is a partial copy this module writes (`.pv-…partial`), or
+/// the temporary file `xisf-header` writes beside one while it edits it in
+/// place (`.` + the partial's name + `.tmp-<pid>`). Either is only ever an
+/// unfinished copy `PlateVault` wrote, left by an interruption.
+pub(crate) fn is_partial_name(name: &str) -> bool {
+    let partial = |name: &str| name.starts_with(".pv-") && name.ends_with(".partial");
+    partial(name)
+        || name.strip_prefix('.').and_then(|rest| rest.rsplit_once(".tmp-")).is_some_and(
+            |(edited, pid)| {
+                partial(edited) && !pid.is_empty() && pid.bytes().all(|byte| byte.is_ascii_digit())
+            },
+        )
+}
+
+/// Copy the reviewed source into the recorded partial copy through handles
+/// proven to be both, prove the bytes are the snapshot, give the copy the
+/// source's modification time and sync it. A partial that fails is removed.
+pub(crate) fn fill_from_source(
+    source: &EntryEvidence,
+    written: &WrittenCopy,
+) -> Result<(), ItemReason> {
+    let source_path = super::path_of(&source.path)?;
+    fill_partial(written, source.fingerprint.modified_ns, |out| {
+        let digest =
+            read_unchanged(&source_path, &Expect::recorded(&source.fingerprint), |bytes| {
+                out.write_all(bytes)
+            })
+            .map_err(|check| match check {
+                Check::Unavailable(detail) => reason(ReasonCode::SourceUnavailable, detail),
+                Check::Changed(detail) => reason(ReasonCode::SourceDrift, detail),
+            })?;
+        if Some(digest.as_str()) == source.sha256.as_deref() {
+            return Ok(());
+        }
+        Err(reason(
+            ReasonCode::SourceDrift,
+            format!(
+                "{} no longer holds its reviewed bytes (SHA-256 differs)",
+                source_path.display()
+            ),
+        ))
+    })
+}
+
+/// Write the recorded partial copy afresh with `fill`, through a handle
+/// proven to be it, then give it the modification time `modified_ns` and
+/// sync it. A partial that fails is removed.
+pub(crate) fn fill_partial<T>(
+    written: &WrittenCopy,
+    modified_ns: i128,
+    fill: impl FnOnce(&mut fs::File) -> Result<T, ItemReason>,
+) -> Result<T, ItemReason> {
+    let partial = written.partial.to_path_buf().map_err(|error| changed(error.to_string()))?;
+    let filled = open_partial(&partial, &written.identity).and_then(|mut out| {
+        out.set_len(0).map_err(|error| write_failed(&partial, &error))?;
+        let value = fill(&mut out)?;
+        settle(&out, &partial, modified_ns)?;
+        Ok(value)
+    });
+    if filled.is_err() {
         discard(&partial, &written.identity);
-        return Err(reason);
     }
+    filled
+}
+
+/// Give the recorded partial copy the modification time `modified_ns` and
+/// sync it, through a handle proven to be it.
+pub(crate) fn settle_partial(written: &WrittenCopy, modified_ns: i128) -> Result<(), ItemReason> {
+    let partial = written.partial.to_path_buf().map_err(|error| changed(error.to_string()))?;
+    let out = open_partial(&partial, &written.identity)?;
+    settle(&out, &partial, modified_ns)
+}
+
+/// The recorded partial copy, opened for writing through a handle proven to
+/// be it.
+fn open_partial(partial: &Path, identity: &FileIdentity) -> Result<fs::File, ItemReason> {
+    let inspected = fs::symlink_metadata(partial).map_err(|error| write_failed(partial, &error))?;
+    let out = OpenOptions::new()
+        .write(true)
+        .open(partial)
+        .map_err(|error| write_failed(partial, &error))?;
+    if !super::handle_is(&out, &inspected, identity) {
+        return Err(changed(format!("{} was replaced while it was opened", partial.display())));
+    }
+    Ok(out)
+}
+
+fn settle(out: &fs::File, partial: &Path, modified_ns: i128) -> Result<(), ItemReason> {
+    if let Some(modified) = modified_time(modified_ns) {
+        out.set_modified(modified).map_err(|error| write_failed(partial, &error))?;
+    }
+    out.sync_all().map_err(|error| write_failed(partial, &error))
+}
+
+/// Install the recorded partial copy at the destination without replacing
+/// anything, and sync its folder. A partial that can't be installed is
+/// removed.
+pub(crate) fn install(
+    destination: &TransferDestination,
+    written: &WrittenCopy,
+) -> Result<(), ItemReason> {
+    let partial = written.partial.to_path_buf().map_err(|error| changed(error.to_string()))?;
+    let (_, _, file) = layout(destination)?;
     let mut installing = match tempfile::TempPath::try_from_path(&partial) {
         Ok(installing) => installing,
         Err(error) => {
@@ -209,43 +312,6 @@ pub(crate) fn write(
     sync_folder(folder).map_err(|error| write_failed(folder, &error))
 }
 
-/// Copy the source into the partial file through handles proven to be the
-/// reviewed source and the recorded partial, then set the source's
-/// modification time and sync.
-fn fill(source: &EntryEvidence, partial: &Path, identity: &FileIdentity) -> Result<(), ItemReason> {
-    let source_path = super::path_of(&source.path)?;
-    let inspected = fs::symlink_metadata(partial).map_err(|error| write_failed(partial, &error))?;
-    let mut out = OpenOptions::new()
-        .write(true)
-        .open(partial)
-        .map_err(|error| write_failed(partial, &error))?;
-    if !super::handle_is(&out, &inspected, identity) {
-        return Err(changed(format!("{} was replaced while it was opened", partial.display())));
-    }
-    out.set_len(0).map_err(|error| write_failed(partial, &error))?;
-    let digest = read_unchanged(&source_path, &Expect::recorded(&source.fingerprint), |bytes| {
-        out.write_all(bytes)
-    })
-    .map_err(|check| match check {
-        Check::Unavailable(detail) => reason(ReasonCode::SourceUnavailable, detail),
-        Check::Changed(detail) => reason(ReasonCode::SourceDrift, detail),
-    })?;
-    if Some(digest.as_str()) != source.sha256.as_deref() {
-        return Err(reason(
-            ReasonCode::SourceDrift,
-            format!(
-                "{} no longer holds its reviewed bytes (SHA-256 differs)",
-                source_path.display()
-            ),
-        ));
-    }
-    let modified = modified_time(source.fingerprint.modified_ns);
-    if let Some(modified) = modified {
-        out.set_modified(modified).map_err(|error| write_failed(partial, &error))?;
-    }
-    out.sync_all().map_err(|error| write_failed(partial, &error))
-}
-
 fn modified_time(nanos: i128) -> Option<std::time::SystemTime> {
     let magnitude = std::time::Duration::from_nanos(u64::try_from(nanos.unsigned_abs()).ok()?);
     if nanos >= 0 {
@@ -263,6 +329,18 @@ pub(crate) fn verify(
     destination: &TransferDestination,
     written: &WrittenCopy,
 ) -> Result<(), ItemReason> {
+    let expected = source.sha256.as_deref();
+    verify_bytes(destination, written, source.fingerprint.size_bytes, expected)
+}
+
+/// Re-read the destination through a handle proven to be the recorded copy:
+/// it must hold `size_bytes` bytes whose SHA-256 is `sha256`.
+pub(crate) fn verify_bytes(
+    destination: &TransferDestination,
+    written: &WrittenCopy,
+    size_bytes: u64,
+    sha256: Option<&str>,
+) -> Result<(), ItemReason> {
     let (_, _, file) = layout(destination)?;
     if !holds(&file, &written.identity) {
         return Err(changed(format!(
@@ -270,16 +348,12 @@ pub(crate) fn verify(
             file.display()
         )));
     }
-    let expect = Expect {
-        identity: &written.identity,
-        size_bytes: source.fingerprint.size_bytes,
-        modified_ns: None,
-    };
+    let expect = Expect { identity: &written.identity, size_bytes, modified_ns: None };
     match read_unchanged(&file, &expect, |_| Ok(())) {
-        Ok(digest) if Some(digest.as_str()) == source.sha256.as_deref() => Ok(()),
+        Ok(digest) if Some(digest.as_str()) == sha256 => Ok(()),
         Ok(_) => Err(reason(
             ReasonCode::DestinationMismatch,
-            format!("the re-read of {} differs from the source snapshot", file.display()),
+            format!("the re-read of {} differs from the bytes written", file.display()),
         )),
         Err(Check::Changed(detail)) => Err(changed(detail)),
         Err(Check::Unavailable(detail)) => Err(reason(ReasonCode::DestinationMismatch, detail)),
