@@ -120,7 +120,7 @@ The user opens Home and sees, on one page, what needs them, what is running and 
 - Failed catalog writes remain visibly unsaved with Retry.
 - Start acknowledgments do not imply durable operation success.
 - Apply never treats an offline original as absent: it refuses and lists it. (D-W100)
-- Source corrections are delivered only through patched copies or supported tool configuration. The original is never edited; only the copy's header changes. Apply's patched-copy report confirms the write and makes no claim that the application reads the correction (D-W123; owner's answer, 2026-10-19, astro-plan-rzbzu.1).
+- Source corrections are delivered only through patched copies or supported tool configuration. The original is never edited; only the copy's header changes. Apply's patched-copy report states the number of corrected values written to patched copies (D-W123; owner's answer, 2026-10-19, astro-plan-rzbzu.1).
 - Cleanup never follows link targets or removes the last retained copy without proof.
 - External application exit does not imply processing success or that the Project is done. (D-W3)
 
@@ -208,7 +208,7 @@ The stage model runs across the feature specs (D-W1, D-W94, D-W101):
 
 1. Library: Import (PV-STO) or Add existing library folder, then indexing (PV-LIB); sessions appear in Sessions and on the Target page. Calibration is matched at ingestion and pinned on each light session, and a session whose calibration is not settled waits in "Needs calibration". The Planner works on the Targets list without a Project (PV-PLAN, D-W11, D-W16, D-W101, D-W105).
 2. Project: the user creates a Project with subjects, rigs and goals, optionally from a goal template, and adds Ready, settled sessions; matching sessions are suggested and never added automatically. PlateVault groups the sessions by rig and framing. Home and the Project page show progress and Next (PV-PRJ, D-W30, D-W39, D-W95, D-W96).
-   A pointing-associated Target counts as confirmed for Ready, Needs a Target, and Not in any Project; My targets includes any Target with an indexed session (PV-LIB, PV-PLAN; D-W124, D-W125; owner's answers, 2026-10-19, astro-plan-rzbzu.1). A removed subject's goals stay hidden and return when the subject is added again (PV-PRJ; D-W128; owner's answer, 2026-10-19, astro-plan-rzbzu.1).
+   A pointing-associated Target counts as confirmed for Ready, Needs a Target, and Not in any Project. My targets includes any Target with an indexed session (PV-LIB, PV-PLAN; D-W124, D-W125; owner's answers, 2026-10-19, astro-plan-rzbzu.1). A removed subject's goals stay hidden and return when the subject is added again (PV-PRJ; D-W128; owner's answer, 2026-10-19, astro-plan-rzbzu.1).
 3. The Project's steps (provisional step list, from the approved F4 prototype plan). While the Project is open, Calibrate is a read-only check and the other steps stay editable:
    1. Sessions: its sessions in groups, its suggestions, exclusions and pending changes (PV-PRJ, PV-VSEL).
    2. Calibrate: a read-only check with the calibration diagram (PV-CAL, D-W101).
