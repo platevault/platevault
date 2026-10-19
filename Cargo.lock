@@ -3652,6 +3652,7 @@ name = "metadata_xisf"
 version = "0.1.0"
 dependencies = [
  "metadata_core",
+ "tempfile",
  "xisf-header",
 ]
 

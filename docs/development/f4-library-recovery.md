@@ -91,8 +91,9 @@ The shell stops CaptureWatch before dropping EjectNotices. Pending removal reque
 ## What the library exposes
 
 The Apply command returns an `ApplyReport` when a build fails or is canceled. (`apps/desktop/src-tauri/src/commands/project_apply.rs:39-55`)
+An Applied report counts the corrected values written to patched copies, one per held session and corrected field, and the isolated patched copies the installed View holds, one per held frame with a recorded correction. It claims nothing about what an application reads from them, which D-W123 leaves open. (`crates/platevault-model/src/project_apply.rs:270-280`)
 
-The shell returns command errors as `ErrorResponse` values: a stable `code`, the identity and native scope the failure concerns, the retry action, and a conflict's current revision, successors and window. No English text crosses IPC; the catalogues word each code as `err_library_<code>`. (`apps/desktop/src-tauri/src/commands/library.rs:38-65`; `crates/platevault-model/src/lib.rs:199-294,352-377`)
+The shell returns command errors as `ErrorResponse` values: a stable `code`, the identity and native scope the failure concerns, the retry action, a conflict's current revision, successors and window, and, as `correction`, the field and refusal of a corrected value no patched copy can carry, whether refused when it is recorded or at Apply. No English text crosses IPC; the catalogues word each code as `err_library_<code>`. (`apps/desktop/src-tauri/src/commands/library.rs:38-65`; `crates/platevault-model/src/lib.rs:193-242,298-331,396-437`)
 
 After reviewing new frames, when rule 2 has waits Home returns `NextAction::WaitsOnUser`. (`crates/platevault-core/src/home.rs:268-281`; `crates/platevault-model/src/home.rs:70-91`)
 The waits include calibration-blocked suggestions, the latest failed or canceled Apply, and pending files in `View (previous)/`. (`crates/platevault-core/src/home.rs:304-336`)

@@ -11,5 +11,8 @@ path = "src/lib.rs"
 metadata_core = { path = "../core" }
 xisf-header = "0.4.4"
 
+[dev-dependencies]
+tempfile = { workspace = true }
+
 [lints]
 workspace = true

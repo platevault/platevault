@@ -10,7 +10,7 @@
 use std::collections::BTreeSet;
 use std::path::Path;
 
-use platevault_core::{LibraryError, LibraryErrorCode, NativePath, WindowKey};
+use platevault_core::{LibraryError, LibraryErrorCode, NativePath, PatchRefusal, WindowKey};
 use serde_json::{Map, Value};
 use uuid::Uuid;
 
@@ -47,6 +47,18 @@ fn every_variant() -> Vec<LibraryError> {
             scope: Some(NativePath::from_path(Path::new("/night/light_001.fits"))),
             identity: Some(id),
         },
+        LibraryError::CorrectionUndeliverable {
+            identity: id,
+            path: Some(NativePath::from_path(Path::new("/night/light_001.fits"))),
+            field: "object".into(),
+            refusal: PatchRefusal::TooLong,
+        },
+        LibraryError::CorrectionUndeliverable {
+            identity: id,
+            path: None,
+            field: "object".into(),
+            refusal: PatchRefusal::UnsupportedFormat,
+        },
     ];
     let variant = |error: &LibraryError| match error {
         LibraryError::InvalidInput(_) => 0,
@@ -64,9 +76,10 @@ fn every_variant() -> Vec<LibraryError> {
         LibraryError::SymlinksUnavailable(_) => 12,
         LibraryError::Canceled => 13,
         LibraryError::Context { .. } => 14,
+        LibraryError::CorrectionUndeliverable { .. } => 15,
     };
     let seen: BTreeSet<usize> = errors.iter().map(variant).collect();
-    assert_eq!(seen, (0..=14).collect(), "one error per variant");
+    assert_eq!(seen, (0..=15).collect(), "one error per variant");
     errors
 }
 
@@ -86,6 +99,8 @@ const fn code_index(code: LibraryErrorCode) -> usize {
         LibraryErrorCode::NoByteProof => 10,
         LibraryErrorCode::SymlinksUnavailable => 11,
         LibraryErrorCode::Canceled => 12,
+        LibraryErrorCode::CorrectionUnpatchable => 13,
+        LibraryErrorCode::CorrectionFormatUnpatchable => 14,
     }
 }
 
@@ -145,5 +160,5 @@ fn every_library_error_has_a_code_every_catalogue_words() {
         }
         codes.insert(code_index(code));
     }
-    assert_eq!(codes, (0..=12).collect(), "every code is some variant's");
+    assert_eq!(codes, (0..=14).collect(), "every code is some variant's");
 }

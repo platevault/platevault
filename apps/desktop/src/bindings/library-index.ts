@@ -1685,7 +1685,14 @@ export type ApplyBlocker =
  */
 { blocker: "previous_holds_kept_files"; paths: NativePathWire[] } | 
 /**  `View (building)/` holds files this Project's Apply didn't place. */
-{ blocker: "building_occupied"; path: NativePathWire };
+{ blocker: "building_occupied"; path: NativePathWire } | 
+/**
+ *  A held frame's recorded correction can't reach the application: no
+ *  isolated patched copy of `path`, the original, can carry `field`
+ *  (PREP-FR-03). Apply refuses before it builds rather than let the
+ *  source value reach the tool.
+ */
+{ blocker: "correction_undeliverable"; sessionId: string; path: NativePathWire; field: string; refusal: PatchRefusal };
 
 /**  One input the build could not place. */
 export type ApplyFailure = {
@@ -1784,6 +1791,20 @@ export type ApplyReport_Deserialize = {
 	foreign: ForeignItem_Deserialize[],
 	/**  What `View (previous)/` still holds for review. */
 	leftovers: PreviousItem_Deserialize[],
+	/**
+	 *  "N corrected values written to patched copies" (PREP-FR-03, D-W122):
+	 *  the corrected fields of the held sessions, one per session and
+	 *  field, that the installed View's patched copies carry; 0 unless
+	 *  Applied. It claims nothing about what an application reads from
+	 *  them: per-tool delivery evidence is open (D-W123, J23 G10).
+	 */
+	correctedValues: number,
+	/**
+	 *  The isolated patched copies the installed View holds, one per held
+	 *  frame with a recorded correction; 0 unless Applied. Each was re-read
+	 *  to differ from its original only by its corrected header.
+	 */
+	patchedCopies: number,
 	error: string | null,
 };
 
@@ -1800,6 +1821,20 @@ export type ApplyReport_Serialize = {
 	foreign: ForeignItem_Serialize[],
 	/**  What `View (previous)/` still holds for review. */
 	leftovers: PreviousItem_Serialize[],
+	/**
+	 *  "N corrected values written to patched copies" (PREP-FR-03, D-W122):
+	 *  the corrected fields of the held sessions, one per session and
+	 *  field, that the installed View's patched copies carry; 0 unless
+	 *  Applied. It claims nothing about what an application reads from
+	 *  them: per-tool delivery evidence is open (D-W123, J23 G10).
+	 */
+	correctedValues: number,
+	/**
+	 *  The isolated patched copies the installed View holds, one per held
+	 *  frame with a recorded correction; 0 unless Applied. Each was re-read
+	 *  to differ from its original only by its corrected header.
+	 */
+	patchedCopies: number,
 	error: string | null,
 };
 
@@ -3025,6 +3060,12 @@ export type ErrorResponse = {
 	 *  recomputed at its site; the key names the Target and the site.
 	 */
 	window: string | null,
+	/**
+	 *  The corrected field a `correction_*` refusal names and why no
+	 *  isolated patched copy can carry it; boxed so the response stays
+	 *  below the workspace's `large-error-threshold`.
+	 */
+	correction: UndeliverableCorrection | null,
 };
 
 /**
@@ -4284,7 +4325,14 @@ export type KeywordNames = {
  *  `err_<code>`. The wire strings are the kinds the catalog also records for
  *  run issues, so they don't change.
  */
-export type LibraryErrorCode = "invalid_input" | "not_found" | "conflict" | "identity_conflict" | "access_denied" | "source_unavailable" | "unsupported_format" | "metadata_unreadable" | "provider_unavailable" | "persistence_failure" | "no_byte_proof" | "symlinks_unavailable" | "canceled";
+export type LibraryErrorCode = "invalid_input" | "not_found" | "conflict" | "identity_conflict" | "access_denied" | "source_unavailable" | "unsupported_format" | "metadata_unreadable" | "provider_unavailable" | "persistence_failure" | "no_byte_proof" | "symlinks_unavailable" | "canceled" | 
+/**
+ *  A recorded correction no patched copy can carry: a value FITS can't
+ *  hold, or a header that can't take it.
+ */
+"correction_unpatchable" | 
+/**  A recorded correction on an input neither FITS nor XISF. */
+"correction_format_unpatchable";
 
 export type LibrarySession = LibrarySession_Serialize | LibrarySession_Deserialize;
 
@@ -4817,6 +4865,51 @@ export type PanelGaps = {
 	framing: FramingEvidence | null,
 	gaps: GoalGap[],
 };
+
+/**
+ *  Why no isolated patched copy can carry a recorded correction
+ *  (PREP-FR-03, PREP-FR-20; D-W123). `PlateVault` patches FITS and XISF
+ *  headers, writing each value to one fixed-format card it can hold.
+ */
+export type PatchRefusal = 
+/**  The input is neither FITS nor XISF. */
+"unsupported_format" | 
+/**  The file holds no header `PlateVault` can read. */
+"no_header" | 
+/**  `PlateVault` writes no header keyword for the corrected field. */
+"no_keyword" | 
+/**
+ *  The correction clears the field, and a header card holds no empty
+ *  value.
+ */
+"no_value" | 
+/**
+ *  The value holds a character outside printable ASCII, which FITS
+ *  can't hold.
+ */
+"not_printable_ascii" | 
+/**  The field's keyword holds a number and the value isn't one. */
+"not_a_number" | 
+/**
+ *  The value doesn't fit one 80-character card; it is never continued
+ *  on CONTINUE cards.
+ */
+"too_long" | 
+/**
+ *  The FITS primary header holds `NAXIS = 0` and lacks the keyword: the
+ *  image lies in an extension, whose header `PlateVault` doesn't patch.
+ */
+"image_in_extension" | 
+/**
+ *  The FITS header holds a HIERARCH alias of the field (`TELESCOPE`,
+ *  `INSTRUMENT`), which the header crate can't overwrite yet.
+ */
+"hierarch_alias" | 
+/**
+ *  The XISF layout isn't one the in-place edit can target safely: not
+ *  exactly one attachment (a thumbnail beside the image, say).
+ */
+"xisf_layout";
 
 export type PathSensitivity = "sensitive" | "insensitive" | "unknown";
 
@@ -7551,6 +7644,12 @@ export type UnavailableReason =
 "limited_authorization" | 
 /**  The application attached no notification adapter. */
 "notifier_not_attached";
+
+/**  A corrected capture field no isolated patched copy can carry, and why. */
+export type UndeliverableCorrection = {
+	field: string,
+	refusal: PatchRefusal,
+};
 
 /**  Units as declared; values are never converted. */
 export type Units = "count" | "px" | "dimensionless" | "deg" | "dn" | "normalized" | "data_unit" | "arcsec" | "e-";

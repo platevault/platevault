@@ -1,8 +1,9 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Apply (spec 066 VSEL-FR-14/20/21, 069 PREP-FR-04/06/09/15/16/18/19, 071
-//! STO-FR-10; D19, D-W81, D-W98 to D-W100, D-W108, D-W110, D-W113, D-W114):
+//! Apply (spec 066 VSEL-FR-14/20/21, 069 PREP-FR-03/04/06/09/15/16/18/19/20,
+//! 071 STO-FR-10; D19, D-W81, D-W98 to D-W100, D-W108, D-W110, D-W113,
+//! D-W114, D-W122, D-W123):
 //! the View rebuilt from the originals, a verified swap and a safe
 //! retirement of the old View.
 //!
@@ -23,6 +24,12 @@
 //! the old copies are deleted only once proven, with everything else kept in
 //! `View (previous)/` for review.
 //!
+//! A Copies View places each held frame with a recorded correction as an
+//! isolated patched copy whose primary header carries the corrected values
+//! (PREP-FR-03, PREP-FR-20; D-W122, provisional D-W123). A correction no
+//! patched copy can carry refuses Apply before it builds, naming the
+//! session, the frame and the field.
+//!
 //! While `View (previous)/` still holds kept files, Apply refuses: what the
 //! next outgoing View does with them is open with the owner (decision
 //! record §9).
@@ -36,16 +43,17 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use persistence_library::{ApplyInputs, ApplyReservation};
+use persistence_library::{ApplyInputs, ApplyReservation, SourcePath};
 use uuid::Uuid;
 
-use self::files::{Aside, Rename, SymlinkProbe};
+use self::files::{Aside, Ours, PlannedPatch, Rename, SymlinkProbe};
 use self::plan::{Plan, PlanEntry, PlanInput};
 use crate::custody::trash::{self, OsTrash, Retirement};
 use crate::custody::{observe_entry, same_identity, transfer};
 use crate::inventory::{self, observe_folder_identity};
 use crate::layout::{self, VIEW_BUILDING_FOLDER, VIEW_FOLDER, VIEW_PREVIOUS_FOLDER};
 use crate::library::{blocking, Library};
+use crate::patched_copy;
 use crate::{
     ApplyBlocker, ApplyFailure, ApplyJournal, ApplyOutcome, ApplyPhase, ApplyPreview, ApplyReport,
     ApplyRequest, EntryEvidence, EntryPlacement, ExpectedTree, FileIdentity, ForeignFile,
@@ -185,7 +193,8 @@ impl Library {
     /// The Apply sheet's backend part (VSEL-FR-14): the new View as a folder
     /// tree, every reason Apply can't run, the files `PlateVault` didn't
     /// place, the copies a tool changed, and what `View (previous)/` holds.
-    /// Reads originals' fingerprints, never their bytes, and writes nothing.
+    /// Reads originals' fingerprints, and only the primary header of a
+    /// corrected FITS original, never their other bytes; writes nothing.
     ///
     /// # Errors
     /// `NotFound` for an unknown Project; catalog errors.
@@ -200,7 +209,9 @@ impl Library {
     /// # Errors
     /// `Conflict` when the Project or the Library moved since the sheet;
     /// `SymlinksUnavailable` when the Symlinks View can't be made here;
-    /// `InvalidInput` naming every other blocker; `IdentityConflict` when
+    /// `CorrectionUndeliverable` naming a held frame whose recorded
+    /// correction no patched copy can carry; `InvalidInput` naming every
+    /// other blocker; `IdentityConflict` when
     /// both the install and restoring the old View failed (the next start
     /// recovers); catalog errors. A build that fails or is canceled reports
     /// that outcome instead.
@@ -351,6 +362,7 @@ impl Library {
             project,
             inputs,
             snapshots: Arc::new(BTreeMap::new()),
+            patches: Arc::new(BTreeMap::new()),
             built: Vec::new(),
             failures: Vec::new(),
             building_made: false,
@@ -375,6 +387,7 @@ impl Library {
             project,
             inputs,
             snapshots: Arc::new(BTreeMap::new()),
+            patches: Arc::new(BTreeMap::new()),
             built: Vec::new(),
             failures: Vec::new(),
             building_made: false,
@@ -408,14 +421,26 @@ const fn before(phase: ApplyPhase, other: ApplyPhase) -> bool {
 }
 
 /// The Apply refusal: `SymlinksUnavailable` when Symlinks can't be made
-/// here (PREP-FR-15), else `InvalidInput`, naming every blocker.
+/// here (PREP-FR-15), else `CorrectionUndeliverable` for the first held
+/// frame whose correction no patched copy can carry (PREP-FR-03), else
+/// `InvalidInput`, naming every blocker.
 fn refusal(blockers: &[ApplyBlocker]) -> LibraryError {
     let message = blockers.iter().map(ApplyBlocker::describe).collect::<Vec<_>>().join("; ");
     if blockers.iter().any(|blocker| matches!(blocker, ApplyBlocker::SymlinksUnavailable { .. })) {
-        LibraryError::SymlinksUnavailable(message)
-    } else {
-        LibraryError::InvalidInput(message)
+        return LibraryError::SymlinksUnavailable(message);
     }
+    for blocker in blockers {
+        if let ApplyBlocker::CorrectionUndeliverable { session_id, path, field, refusal } = blocker
+        {
+            return LibraryError::CorrectionUndeliverable {
+                identity: *session_id,
+                path: Some(path.clone()),
+                field: field.clone(),
+                refusal: *refusal,
+            };
+        }
+    }
+    LibraryError::InvalidInput(message)
 }
 
 fn project_folder(inputs: &ApplyInputs) -> Result<PathBuf, LibraryError> {
@@ -456,7 +481,9 @@ fn preview(inputs: &ApplyInputs, os: Os) -> ApplyPreview {
         .map(|entry| entry.size_bytes)
         .sum();
     let (foreign, changed_copies) = match (&checked.project, &inputs.installed) {
-        (Some(project), Some(installed)) => current_view(&project.join(VIEW_FOLDER), installed),
+        (Some(project), Some(installed)) => {
+            current_view(&project.join(VIEW_FOLDER), installed, &inputs.sources)
+        }
         _ => (Vec::new(), Vec::new()),
     };
     ApplyPreview {
@@ -476,8 +503,13 @@ fn preview(inputs: &ApplyInputs, os: Os) -> ApplyPreview {
 }
 
 /// The current View's foreign files and the copies that differ from what
-/// `PlateVault` placed (VSEL-AC-28, VSEL-AC-32).
-fn current_view(view: &Path, installed: &ViewManifest) -> (Vec<ForeignFile>, Vec<NativePath>) {
+/// `PlateVault` placed (VSEL-AC-28, VSEL-AC-32); a patched copy differs
+/// once it holds more than its original's bytes with its reviewed change.
+fn current_view(
+    view: &Path,
+    installed: &ViewManifest,
+    sources: &BTreeMap<Uuid, SourcePath>,
+) -> (Vec<ForeignFile>, Vec<NativePath>) {
     let placed: BTreeSet<PathBuf> =
         installed.entries.iter().filter_map(|entry| entry.path.relative_path().ok()).collect();
     let foreign = files::foreign_files(view, &placed)
@@ -497,13 +529,22 @@ fn current_view(view: &Path, installed: &ViewManifest) -> (Vec<ForeignFile>, Vec
                         .written
                         .as_ref()
                         .is_some_and(|written| same_identity(&now.identity, written));
-                    if !ours || now.size_bytes != entry.source_fingerprint.size_bytes {
+                    let resized = now.size_bytes != entry.source_fingerprint.size_bytes;
+                    // A patched copy's header may have grown; its proof decides.
+                    if !ours || (resized && entry.header_patch.is_empty()) {
                         true
                     } else if now.modified_ns == entry.source_fingerprint.modified_ns {
                         false
                     } else {
-                        observe_entry(&path).map_or(true, |evidence| {
-                            evidence.sha256.as_deref() != Some(&entry.source_sha256)
+                        observe_entry(&path).map_or(true, |copy| {
+                            if entry.header_patch.is_empty() {
+                                return copy.sha256.as_deref() != Some(&entry.source_sha256);
+                            }
+                            let original = sources
+                                .get(&files::source_id(entry))
+                                .and_then(|source| source.path.to_path_buf().ok());
+                            !original
+                                .is_some_and(|original| files::holds_patch(&copy, entry, &original))
                         })
                     }
                 }
@@ -573,7 +614,7 @@ fn check(inputs: &ApplyInputs, os: Os) -> Checked {
         .collect();
     let chosen = choose_copies(inputs, &online, &mut blockers);
     pin_health(inputs, &online, &mut blockers);
-    let plan = match plan::plan(&PlanInput {
+    let mut plan = match plan::plan(&PlanInput {
         basis: &inputs.basis,
         metadata: &inputs.metadata,
         sources: &inputs.sources,
@@ -586,9 +627,47 @@ fn check(inputs: &ApplyInputs, os: Os) -> Checked {
             None
         }
     };
+    if let Some(plan) = &mut plan {
+        patch_corrections(inputs, plan, &mut blockers);
+    }
     let mut seen = BTreeSet::new();
     blockers.retain(|blocker| seen.insert(format!("{blocker:?}")));
     Checked { blockers, plan, project, previous_gone }
+}
+
+/// Every held frame a Copies View places with a recorded correction is an
+/// isolated patched copy carrying it (PREP-FR-03, PREP-FR-20; D-W122): its
+/// entry takes the reviewed change. A frame the patched-copy seam refuses,
+/// a value its header can't hold or, provisionally, a non-FITS input, is a
+/// named blocker, so Apply refuses before it builds and the source value
+/// never reaches the tool (D-W123, J23 G10). A Symlinks View links every
+/// frame; its provisional patched copy beside the links (PREP-FR-03) is
+/// not built.
+fn patch_corrections(inputs: &ApplyInputs, plan: &mut Plan, blockers: &mut Vec<ApplyBlocker>) {
+    for entry in &mut plan.entries {
+        if entry.placement == EntryPlacement::Symlink {
+            continue;
+        }
+        let Some(corrected) = inputs.corrected.get(&entry.source_id) else { continue };
+        let Some(source) = inputs.sources.get(&entry.source_id) else { continue };
+        let changes = patched_copy::corrections(&corrected.observed, &corrected.effective);
+        if changes.is_empty() {
+            continue;
+        }
+        let checked = source
+            .path
+            .to_path_buf()
+            .map_or(Ok(()), |path| patched_copy::check(&path, corrected.format, &changes));
+        match checked {
+            Ok(()) => entry.header_patch = changes,
+            Err(refused) => blockers.push(ApplyBlocker::CorrectionUndeliverable {
+                session_id: corrected.session_id,
+                path: source.path.clone(),
+                field: refused.field,
+                refusal: refused.reason,
+            }),
+        }
+    }
 }
 
 /// The processing location as a real folder, and the Project folder in it.
@@ -851,6 +930,45 @@ fn recover_folders(
     Recovered::NotInstalled(interrupted.into())
 }
 
+/// What an installed View delivers as isolated patched copies
+/// (PREP-FR-03): "N corrected values written to patched copies".
+#[derive(Clone, Copy, Debug, Default)]
+struct Delivered {
+    /// One per held session and corrected field.
+    corrected_values: u64,
+    patched_copies: u64,
+}
+
+impl Delivered {
+    fn of(manifest: &ViewManifest) -> Self {
+        let session_of: BTreeMap<Uuid, Uuid> = manifest
+            .basis
+            .groups
+            .iter()
+            .flat_map(|group| &group.sessions)
+            .flat_map(|session| {
+                session.captures.iter().map(|capture| (capture.capture_key, session.session_id))
+            })
+            .collect();
+        let patched: Vec<&ManifestEntry> =
+            manifest.entries.iter().filter(|entry| !entry.header_patch.is_empty()).collect();
+        let values: BTreeSet<(Option<Uuid>, &str)> = patched
+            .iter()
+            .flat_map(|entry| {
+                let session = match entry.source {
+                    crate::EntrySource::Light { capture_key, .. } => {
+                        session_of.get(&capture_key).copied()
+                    }
+                    _ => None,
+                };
+                entry.header_patch.iter().map(move |change| (session, change.field.as_str()))
+            })
+            .collect();
+        let count = |n: usize| u64::try_from(n).unwrap_or(u64::MAX);
+        Self { corrected_values: count(values.len()), patched_copies: count(patched.len()) }
+    }
+}
+
 /// One Apply from its reservation to its settlement.
 struct Run<'a> {
     library: &'a Library,
@@ -861,6 +979,8 @@ struct Run<'a> {
     inputs: Arc<ApplyInputs>,
     /// Each original's snapshot, by asset or master id.
     snapshots: Arc<BTreeMap<Uuid, EntryEvidence>>,
+    /// Each patched copy the build plans, by entry path.
+    patches: Arc<BTreeMap<PathBuf, PlannedPatch>>,
     built: Vec<ManifestEntry>,
     failures: Vec<ApplyFailure>,
     building_made: bool,
@@ -892,6 +1012,7 @@ impl Run<'_> {
         outcome: Option<ApplyOutcome>,
         foreign: Vec<ForeignItem>,
         leftovers: Vec<PreviousItem>,
+        delivered: Delivered,
     ) -> ApplyReport {
         ApplyReport {
             project_id: self.journal.project_id,
@@ -901,6 +1022,8 @@ impl Run<'_> {
             failures: self.failures.clone(),
             foreign,
             leftovers,
+            corrected_values: delivered.corrected_values,
+            patched_copies: delivered.patched_copies,
             error: self.journal.error.clone(),
         }
     }
@@ -909,7 +1032,7 @@ impl Run<'_> {
     fn interrupted(&self) -> Option<ApplyReport> {
         self.control
             .interrupted(self.journal.phase)
-            .then(|| self.report(None, Vec::new(), Vec::new()))
+            .then(|| self.report(None, Vec::new(), Vec::new(), Delivered::default()))
     }
 
     /// End before the new View is installed: the old View stays.
@@ -920,23 +1043,32 @@ impl Run<'_> {
     ) -> Result<ApplyReport, LibraryError> {
         if outcome == ApplyOutcome::Canceled && self.building_made {
             let building = self.building();
-            let digests = self.digests();
-            blocking(move || Ok(files::clear_building(&building, &digests))).await?;
+            let ours = self.ours();
+            blocking(move || Ok(files::clear_building(&building, &ours))).await?;
         }
         self.journal.error = Some(error);
         self.library
             .catalog()
             .discard_apply(&self.journal, outcome, self.journal.error.as_deref(), &self.built)
             .await?;
-        Ok(self.report(Some(outcome), Vec::new(), Vec::new()))
+        Ok(self.report(Some(outcome), Vec::new(), Vec::new(), Delivered::default()))
     }
 
     async fn cancel(&mut self) -> Result<ApplyReport, LibraryError> {
         self.end(ApplyOutcome::Canceled, "canceled; the current View is unchanged".into()).await
     }
 
-    fn digests(&self) -> BTreeSet<String> {
-        self.snapshots.values().filter_map(|snapshot| snapshot.sha256.clone()).collect()
+    /// What a `View (building)/` may hold of this Apply's own: copies of the
+    /// snapshotted originals and the patched copies it plans.
+    fn ours(&self) -> Ours {
+        Ours {
+            digests: self
+                .snapshots
+                .values()
+                .filter_map(|snapshot| snapshot.sha256.clone())
+                .collect(),
+            patches: Arc::clone(&self.patches),
+        }
     }
 
     fn failed(&mut self, failures: Vec<(PathBuf, ItemReason)>) -> String {
@@ -954,10 +1086,10 @@ impl Run<'_> {
     /// its own instead.
     async fn make_building(&self) -> Result<Result<FileIdentity, Vec<PathBuf>>, LibraryError> {
         let building = self.building();
-        let digests = self.digests();
+        let ours = self.ours();
         blocking(move || {
             if fs::symlink_metadata(&building).is_ok() {
-                let kept = files::clear_building(&building, &digests);
+                let kept = files::clear_building(&building, &ours);
                 if !kept.is_empty() {
                     return Ok(Err(kept));
                 }
@@ -1006,6 +1138,24 @@ impl Run<'_> {
         .await
     }
 
+    /// Every patched copy the plan places, with its snapshotted original,
+    /// by entry path (PREP-FR-03).
+    fn planned_patches(&self, plan: &Plan) -> BTreeMap<PathBuf, PlannedPatch> {
+        plan.entries
+            .iter()
+            .filter(|entry| !entry.header_patch.is_empty())
+            .filter_map(|entry| {
+                let snapshot = self.snapshots.get(&entry.source_id)?;
+                let patch = PlannedPatch {
+                    original: snapshot.path.to_path_buf().ok()?,
+                    source_sha256: snapshot.sha256.clone()?,
+                    changes: entry.header_patch.clone(),
+                };
+                Some((entry.path.clone(), patch))
+            })
+            .collect()
+    }
+
     /// Snapshot, build, verify, swap and settle.
     async fn build(
         &mut self,
@@ -1022,6 +1172,7 @@ impl Run<'_> {
                 return self.end(ApplyOutcome::Failed, error).await;
             }
         }
+        self.patches = Arc::new(self.planned_patches(&plan));
         self.advance(ApplyPhase::SourcesVerified, None).await?;
         if let Some(report) = self.interrupted() {
             return Ok(report);
@@ -1072,7 +1223,7 @@ impl Run<'_> {
                         source_sha256: snapshot.sha256.clone().unwrap_or_default(),
                         source_fingerprint: snapshot.fingerprint.clone(),
                         written: Some(made.identity),
-                        header_patch: Vec::new(),
+                        header_patch: entry.header_patch,
                     });
                 }
                 Err(reason) => {
@@ -1219,9 +1370,15 @@ impl Run<'_> {
             }
         }
         let inputs = catalog.apply_inputs(self.journal.project_id).await?;
+        let delivered = inputs
+            .installed
+            .as_ref()
+            .filter(|manifest| manifest.generation == self.journal.generation)
+            .map(Delivered::of)
+            .unwrap_or_default();
         let Some(old) = inputs.previous.clone() else {
             catalog.settle_apply(&self.journal, &[], true, None).await?;
-            return Ok(self.report(Some(ApplyOutcome::Applied), foreign, Vec::new()));
+            return Ok(self.report(Some(ApplyOutcome::Applied), foreign, Vec::new(), delivered));
         };
         if before(self.journal.phase, ApplyPhase::RetiringPrevious) {
             self.advance(ApplyPhase::RetiringPrevious, None).await?;
@@ -1237,7 +1394,7 @@ impl Run<'_> {
         let project = self.project.clone();
         let retired = blocking(move || Ok(files::retire(&project, &old.entries, &sources))).await?;
         catalog.settle_apply(&self.journal, &retired.leftovers, retired.gone, None).await?;
-        Ok(self.report(Some(ApplyOutcome::Applied), foreign, retired.leftovers))
+        Ok(self.report(Some(ApplyOutcome::Applied), foreign, retired.leftovers, delivered))
     }
 }
 
@@ -1314,6 +1471,7 @@ mod tests {
             basis_digest: String::new(),
             unsettled: Vec::new(),
             metadata: BTreeMap::new(),
+            corrected: BTreeMap::new(),
             sources: BTreeMap::new(),
             locations: BTreeMap::new(),
             names: BTreeMap::new(),

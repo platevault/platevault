@@ -271,6 +271,8 @@
   "err_library_access_denied": "A permissão para ler este arquivo ou pasta foi negada. Verifique as permissões e tente novamente.",
   "err_library_canceled": "A operação foi cancelada antes de terminar.",
   "err_library_conflict": "Isso mudou desde que você o abriu. Recarregue e faça a alteração novamente.",
+  "err_library_correction_format_unpatchable": "Um valor corrigido está em um quadro que não é um arquivo FITS nem XISF, então não pode ser gravado no cabeçalho de uma cópia. Revise as correções da sessão.",
+  "err_library_correction_unpatchable": "Não é possível gravar um valor corrigido no cabeçalho da cópia deste quadro. Revise as correções da sessão.",
   "err_library_identity_conflict": "Um arquivo ou pasta não é o que a biblioteca registrou. Revise-o antes de continuar.",
   "err_library_invalid_input": "Parte do que foi informado não é válida. Verifique e tente novamente.",
   "err_library_metadata_unreadable": "Não foi possível ler o cabeçalho deste arquivo. Revise o arquivo antes de usá-lo.",

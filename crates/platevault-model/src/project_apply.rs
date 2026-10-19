@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! What the Apply sheet reads and what one Apply reports (spec 066
-//! VSEL-FR-14/20/21, 069 PREP-FR-06/08/09/15/18/19, 071 STO-FR-10; D-W98 to
-//! D-W100, D-W110, D-W113, D-W114).
+//! VSEL-FR-14/20/21, 069 PREP-FR-03/06/08/09/15/18/19/20, 071 STO-FR-10;
+//! D-W98 to D-W100, D-W110, D-W113, D-W114, D-W122, D-W123).
 //!
 //! The sheet is computed, never stored: the folder tree the next build
 //! places, every reason Apply can't run now, the files `PlateVault` didn't
@@ -61,6 +61,74 @@ pub enum ApplyBlocker {
     PreviousHoldsKeptFiles { paths: Vec<NativePath> },
     /// `View (building)/` holds files this Project's Apply didn't place.
     BuildingOccupied { path: NativePath },
+    /// A held frame's recorded correction can't reach the application: no
+    /// isolated patched copy of `path`, the original, can carry `field`
+    /// (PREP-FR-03). Apply refuses before it builds rather than let the
+    /// source value reach the tool.
+    CorrectionUndeliverable {
+        session_id: Uuid,
+        path: NativePath,
+        field: String,
+        refusal: PatchRefusal,
+    },
+}
+
+/// Why no isolated patched copy can carry a recorded correction
+/// (PREP-FR-03, PREP-FR-20; D-W123). `PlateVault` patches FITS and XISF
+/// headers, writing each value to one fixed-format card it can hold.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
+pub enum PatchRefusal {
+    /// The input is neither FITS nor XISF.
+    UnsupportedFormat,
+    /// The file holds no header `PlateVault` can read.
+    NoHeader,
+    /// `PlateVault` writes no header keyword for the corrected field.
+    NoKeyword,
+    /// The correction clears the field, and a header card holds no empty
+    /// value.
+    NoValue,
+    /// The value holds a character outside printable ASCII, which FITS
+    /// can't hold.
+    NotPrintableAscii,
+    /// The field's keyword holds a number and the value isn't one.
+    NotANumber,
+    /// The value doesn't fit one 80-character card; it is never continued
+    /// on CONTINUE cards.
+    TooLong,
+    /// The FITS primary header holds `NAXIS = 0` and lacks the keyword: the
+    /// image lies in an extension, whose header `PlateVault` doesn't patch.
+    ImageInExtension,
+    /// The FITS header holds a HIERARCH alias of the field (`TELESCOPE`,
+    /// `INSTRUMENT`), which the header crate can't overwrite yet.
+    HierarchAlias,
+    /// The XISF layout isn't one the in-place edit can target safely: not
+    /// exactly one attachment (a thumbnail beside the image, say).
+    XisfLayout,
+}
+
+impl PatchRefusal {
+    /// An English diagnostic for logs and the sheet's one-line reason.
+    #[must_use]
+    pub const fn describe(self) -> &'static str {
+        match self {
+            Self::UnsupportedFormat => "PlateVault patches FITS and XISF headers only",
+            Self::NoHeader => "it holds no header PlateVault can read",
+            Self::NoKeyword => "PlateVault writes no header keyword for it",
+            Self::NoValue => "the correction clears it, and a header card holds no empty value",
+            Self::NotPrintableAscii => "the value is not printable ASCII, which a FITS card needs",
+            Self::NotANumber => "the value is not the number its keyword holds",
+            Self::TooLong => "the value does not fit one FITS header card",
+            Self::ImageInExtension => {
+                "its image lies in an extension, whose header PlateVault does not patch"
+            }
+            Self::HierarchAlias => {
+                "its header holds a HIERARCH alias of the field, which can't be patched yet"
+            }
+            Self::XisfLayout => "its XISF layout holds more than the one attachment it can patch",
+        }
+    }
 }
 
 impl ApplyBlocker {
@@ -102,6 +170,11 @@ impl ApplyBlocker {
             Self::BuildingOccupied { path } => {
                 format!("{} holds files PlateVault didn't place", path.display())
             }
+            Self::CorrectionUndeliverable { session_id, path, field, refusal } => format!(
+                "session {session_id}: the corrected {field} of {} can't be delivered: {}",
+                path.display(),
+                refusal.describe()
+            ),
         }
     }
 }
@@ -195,5 +268,15 @@ pub struct ApplyReport {
     pub foreign: Vec<ForeignItem>,
     /// What `View (previous)/` still holds for review.
     pub leftovers: Vec<PreviousItem>,
+    /// "N corrected values written to patched copies" (PREP-FR-03, D-W122):
+    /// the corrected fields of the held sessions, one per session and
+    /// field, that the installed View's patched copies carry; 0 unless
+    /// Applied. It claims nothing about what an application reads from
+    /// them: per-tool delivery evidence is open (D-W123, J23 G10).
+    pub corrected_values: u64,
+    /// The isolated patched copies the installed View holds, one per held
+    /// frame with a recorded correction; 0 unless Applied. Each was re-read
+    /// to differ from its original only by its corrected header.
+    pub patched_copies: u64,
     pub error: Option<String>,
 }

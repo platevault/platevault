@@ -22,6 +22,8 @@
 //! No heavy C dependencies — `xisf-header` is pure Rust.
 #![allow(clippy::doc_markdown)]
 
+pub mod patch;
+
 use std::path::Path;
 
 use metadata_core::{

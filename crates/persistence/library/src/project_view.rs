@@ -1,18 +1,19 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Apply's catalog side (spec 066 VSEL-FR-14/20/21, 069 PREP-FR-06/09/19, 071
-//! STO-FR-10; D-W98 to D-W100, D-W110, D-W113, D-W114): the inputs one Apply
-//! builds from, its manifest, journal, foreign files and leftovers, written in
-//! the order `project_view.sql` expects.
+//! Apply's catalog side (spec 066 VSEL-FR-14/20/21, 069 PREP-FR-03/06/09/19,
+//! 071 STO-FR-10; D-W98 to D-W100, D-W110, D-W113, D-W114, D-W122): the
+//! inputs one Apply builds from, its manifest, journal, foreign files and
+//! leftovers, written in the order `project_view.sql` expects.
 //!
 //! The inputs are the Project's desired state read together with the live
 //! Library state in one snapshot: a capture added Usable and since rejected
 //! in the Library leaves the build, one added Unusable and since restored
 //! joins it, and an explicit choice holds either way. Each held session
-//! brings its current settled calibration pins. A digest of that basis is
-//! what the Apply sheet records; reserving the Apply recomputes it inside
-//! the write transaction and refuses a sheet that no longer matches.
+//! brings its current settled calibration pins, and each included copy the
+//! corrections recorded at intake on it. A digest of that basis is what the
+//! Apply sheet records; reserving the Apply recomputes it inside the write
+//! transaction and refuses a sheet that no longer matches.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -20,10 +21,10 @@ use platevault_model::{
     ApplyJournal, ApplyOutcome, ApplyPhase, Asset, Availability, BasisCapture, BasisGroup,
     BasisSession, CaptureKey, CaptureMetadata, CopyBasis, EntryEvidence, EntryInput, EntryName,
     EntryPlacement, EntrySource, ExpectedTree, FileIdentity, ForeignItem, GroupKeywords, GroupName,
-    InputKind, InputRef, LibraryError, Location, ManifestEntry, ManifestState, NativePath,
-    PreviousItem, PreviousItemReason, PreviousItemReview, ProjectBasis, ProjectLifecycle,
-    ProjectOperation, ProjectOperationKind, Revision, SessionPlacement, SettledPin, ViewManifest,
-    ViewMode, WorkflowSettings,
+    ImageFormat, InputKind, InputRef, LibraryError, Location, ManifestEntry, ManifestState,
+    NativePath, PreviousItem, PreviousItemReason, PreviousItemReview, ProjectBasis,
+    ProjectLifecycle, ProjectOperation, ProjectOperationKind, Revision, SessionPlacement,
+    SettledPin, ViewManifest, ViewMode, WorkflowSettings,
 };
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -43,6 +44,21 @@ use super::{
 pub struct SourcePath {
     pub location_id: Uuid,
     pub path: NativePath,
+}
+
+/// An included copy whose metadata the corrections recorded at intake
+/// change (LIB-FR-20, D-W122): Apply delivers it as an isolated patched
+/// copy (PREP-FR-03).
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CorrectedSource {
+    /// The held session it is in.
+    pub session_id: Uuid,
+    pub format: ImageFormat,
+    /// What its header holds.
+    pub observed: CaptureMetadata,
+    /// That with the recorded corrections.
+    pub effective: CaptureMetadata,
 }
 
 /// Everything one Apply reads, in one catalog snapshot.
@@ -66,6 +82,8 @@ pub struct ApplyInputs {
     pub unsettled: Vec<(Uuid, Vec<InputKind>)>,
     /// One included light's effective metadata per session of `basis`.
     pub metadata: BTreeMap<Uuid, CaptureMetadata>,
+    /// Every included copy the recorded corrections change, by asset id.
+    pub corrected: BTreeMap<Uuid, CorrectedSource>,
     /// The current path of every copy, calibration frame and master that
     /// `basis` or the installed and previous manifests name, by asset or
     /// master id. Trashed and retired copies are left out.
@@ -509,11 +527,13 @@ async fn read_project(conn: &mut SqliteConnection, project_id: Uuid) -> Result<P
 }
 
 /// The basis of what the Project holds, with each session's representative
-/// light metadata and the sessions whose calibration isn't settled; every
-/// source it names goes into `relative`.
+/// light metadata, the included copies the recorded corrections change and
+/// the sessions whose calibration isn't settled; every source it names goes
+/// into `relative`.
 struct HeldBasis {
     groups: Vec<BasisGroup>,
     metadata: BTreeMap<Uuid, CaptureMetadata>,
+    corrected: BTreeMap<Uuid, CorrectedSource>,
     unsettled: Vec<(Uuid, Vec<InputKind>)>,
 }
 
@@ -523,8 +543,12 @@ async fn held_basis(
     relative: &mut Relative,
 ) -> Result<HeldBasis> {
     let mut held = Held::read(conn, project_id).await?;
-    let mut basis =
-        HeldBasis { groups: Vec::new(), metadata: BTreeMap::new(), unsettled: Vec::new() };
+    let mut basis = HeldBasis {
+        groups: Vec::new(),
+        metadata: BTreeMap::new(),
+        corrected: BTreeMap::new(),
+        unsettled: Vec::new(),
+    };
     for mut group in std::mem::take(&mut held.groups) {
         let mut sessions = Vec::new();
         for held_session in held.sessions.remove(&group.id).unwrap_or_default() {
@@ -543,6 +567,17 @@ async fn held_basis(
                 .collect();
             if let Some(first) = live.first() {
                 basis.metadata.insert(session_id, first.effective.clone());
+            }
+            for asset in live.into_iter().filter(|asset| asset.observed != asset.effective) {
+                basis.corrected.insert(
+                    asset.id,
+                    CorrectedSource {
+                        session_id,
+                        format: asset.format,
+                        observed: asset.observed.clone(),
+                        effective: asset.effective.clone(),
+                    },
+                );
             }
             for asset in captures
                 .iter()
@@ -627,6 +662,7 @@ pub async fn read_inputs(conn: &mut SqliteConnection, project_id: Uuid) -> Resul
         parent: project.parent.as_ref(),
         basis: &basis,
         names: names.iter().collect(),
+        corrected: (!held.corrected.is_empty()).then_some(&held.corrected),
     })?;
     Ok(ApplyInputs {
         project_id,
@@ -638,6 +674,7 @@ pub async fn read_inputs(conn: &mut SqliteConnection, project_id: Uuid) -> Resul
         basis_digest,
         unsettled: held.unsettled,
         metadata: held.metadata,
+        corrected: held.corrected,
         sources,
         locations,
         names,
@@ -1031,6 +1068,10 @@ struct Digested<'a> {
     parent: Option<&'a NativePath>,
     basis: &'a ProjectBasis,
     names: Vec<(&'a EntryInput, &'a String)>,
+    /// A correction recorded after the sheet changes what Apply writes, so
+    /// it moves the digest; a Project without one keeps its earlier digest.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    corrected: Option<&'a BTreeMap<Uuid, CorrectedSource>>,
 }
 
 fn digest(value: &Digested<'_>) -> Result<String> {

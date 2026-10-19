@@ -27,6 +27,8 @@
 //! with no panic and no error.
 #![allow(clippy::doc_markdown)]
 
+pub mod patch;
+
 use std::io::{self, Read};
 use std::path::Path;
 

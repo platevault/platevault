@@ -190,6 +190,21 @@ pub enum LibraryError {
     SymlinksUnavailable(String),
     #[error("operation canceled")]
     Canceled,
+    /// A recorded correction can't reach the application: no isolated
+    /// patched copy can carry `field` (PREP-FR-03, D-W123). Apply refuses
+    /// before it builds, naming the held session as `identity` and the
+    /// original as `path`; recording a value no FITS card can hold is
+    /// refused too, naming the frame as `identity`. The wire code is
+    /// `correction_format_unpatchable` for an input neither FITS nor XISF,
+    /// else `correction_unpatchable`; the response names the identity, the
+    /// path, the field and the refusal.
+    #[error("{identity}: the corrected {field} can't be delivered: {}", .refusal.describe())]
+    CorrectionUndeliverable {
+        identity: Uuid,
+        path: Option<NativePath>,
+        field: String,
+        refusal: PatchRefusal,
+    },
     /// `error` concerning the record `identity`, the native path `scope`, or
     /// both; the innermost context that names one wins.
     #[error("{error}")]
@@ -219,6 +234,11 @@ pub enum LibraryErrorCode {
     NoByteProof,
     SymlinksUnavailable,
     Canceled,
+    /// A recorded correction no patched copy can carry: a value FITS can't
+    /// hold, or a header that can't take it.
+    CorrectionUnpatchable,
+    /// A recorded correction on an input neither FITS nor XISF.
+    CorrectionFormatUnpatchable,
 }
 
 impl LibraryErrorCode {
@@ -239,6 +259,8 @@ impl LibraryErrorCode {
             Self::NoByteProof => "no_byte_proof",
             Self::SymlinksUnavailable => "symlinks_unavailable",
             Self::Canceled => "canceled",
+            Self::CorrectionUnpatchable => "correction_unpatchable",
+            Self::CorrectionFormatUnpatchable => "correction_format_unpatchable",
         }
     }
 
@@ -256,7 +278,9 @@ impl LibraryErrorCode {
             | Self::IdentityConflict
             | Self::MetadataUnreadable
             | Self::NoByteProof
-            | Self::SymlinksUnavailable => RetryAction::Review,
+            | Self::SymlinksUnavailable
+            | Self::CorrectionUnpatchable
+            | Self::CorrectionFormatUnpatchable => RetryAction::Review,
             Self::UnsupportedFormat | Self::Canceled => RetryAction::None,
         }
     }
@@ -291,6 +315,19 @@ pub struct ErrorResponse {
     /// The selected window a `conflict` found missing from the windows
     /// recomputed at its site; the key names the Target and the site.
     pub window: Option<WindowKey>,
+    /// The corrected field a `correction_*` refusal names and why no
+    /// isolated patched copy can carry it; boxed so the response stays
+    /// below the workspace's `large-error-threshold`.
+    pub correction: Option<Box<UndeliverableCorrection>>,
+}
+
+/// A corrected capture field no isolated patched copy can carry, and why.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
+pub struct UndeliverableCorrection {
+    pub field: String,
+    pub refusal: PatchRefusal,
 }
 
 impl LibraryError {
@@ -319,8 +356,10 @@ impl LibraryError {
             Self::Context { error, scope, identity: None } => {
                 Self::Context { error, scope, identity: Some(identity) }
             }
-            error
-            @ (Self::Context { .. } | Self::Conflict { .. } | Self::WindowConflict { .. }) => error,
+            error @ (Self::Context { .. }
+            | Self::Conflict { .. }
+            | Self::WindowConflict { .. }
+            | Self::CorrectionUndeliverable { .. }) => error,
             error => {
                 Self::Context { error: Box::new(error), scope: None, identity: Some(identity) }
             }
@@ -345,6 +384,10 @@ impl LibraryError {
             Self::NoByteProof(_) => LibraryErrorCode::NoByteProof,
             Self::SymlinksUnavailable(_) => LibraryErrorCode::SymlinksUnavailable,
             Self::Canceled => LibraryErrorCode::Canceled,
+            Self::CorrectionUndeliverable { refusal: PatchRefusal::UnsupportedFormat, .. } => {
+                LibraryErrorCode::CorrectionFormatUnpatchable
+            }
+            Self::CorrectionUndeliverable { .. } => LibraryErrorCode::CorrectionUnpatchable,
             Self::Context { error, .. } => error.code(),
         }
     }
@@ -355,25 +398,41 @@ impl LibraryError {
         if let Self::Context { error, scope: stored_scope, identity: stored_identity } = self {
             return error.response(stored_identity.or(identity), stored_scope.clone().or(scope));
         }
-        let (identity, current_revision, successors, window) = match self {
-            Self::Conflict { id, current, successors } => {
-                (Some(*id), Some(*current), successors.clone(), None)
-            }
-            Self::WindowConflict { key, current, .. } => {
-                (Some(key.target_id()), Some(*current), Vec::new(), Some(*key))
-            }
-            _ => (identity, None, Vec::new(), None),
-        };
         let code = self.code();
-        ErrorResponse {
+        let mut response = ErrorResponse {
             code,
             identity,
             scope,
             retry: code.retry(),
-            current_revision,
-            successors,
-            window,
+            current_revision: None,
+            successors: Vec::new(),
+            window: None,
+            correction: None,
+        };
+        match self {
+            Self::Conflict { id, current, successors } => {
+                response.identity = Some(*id);
+                response.current_revision = Some(*current);
+                response.successors.clone_from(successors);
+            }
+            Self::WindowConflict { key, current, .. } => {
+                response.identity = Some(key.target_id());
+                response.current_revision = Some(*current);
+                response.window = Some(*key);
+            }
+            Self::CorrectionUndeliverable { identity, path, field, refusal } => {
+                response.identity = Some(*identity);
+                if path.is_some() {
+                    response.scope.clone_from(path);
+                }
+                response.correction = Some(Box::new(UndeliverableCorrection {
+                    field: field.clone(),
+                    refusal: *refusal,
+                }));
+            }
+            _ => {}
         }
+        response
     }
 }
 

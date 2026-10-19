@@ -12,6 +12,7 @@
 //! - [`MetadataExtractor`] — trait implemented by FITS/XISF adapters.
 //! - [`RawFileMetadata`] — minimal header values returned by extractors.
 //! - [`CaptureProfileRegistry`] — versioned normalization of raw FITS/XISF fields.
+//! - [`patch`] — the header edits an isolated patched copy carries.
 #![allow(clippy::doc_markdown)]
 
 use std::collections::HashMap;
@@ -19,6 +20,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 mod evidence;
+pub mod patch;
 mod profile;
 
 pub use evidence::{

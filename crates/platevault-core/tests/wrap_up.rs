@@ -20,7 +20,7 @@ use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
-use apply_support::{world, World, HA, OIII, OIII_FLATS, PROJECT};
+use apply_support::{corrected, world, World, HA, OIII, OIII_FLATS, PROJECT, SEP24, SEP28};
 use cleanup_support::ScopedTrash;
 use platevault_core::apply::Unattended;
 use platevault_core::projects::SessionToAdd;
@@ -138,6 +138,45 @@ async fn clean_up_retires_only_the_reviewed_rows_and_never_output() {
     assert!(world.light(HA[0]).exists(), "originals are never Clean up's");
     let status = world.library.wrap_up_status(world.project).await.unwrap();
     assert_eq!(status.current, Some(WrapUpStep::Trash));
+}
+
+/// STO-FR-04 with PREP-FR-03: Clean up moves an isolated patched copy to the
+/// OS Trash once it still differs from its re-verified original only by its
+/// planned header cards; one a tool rewrote stays, named.
+#[tokio::test]
+async fn clean_up_trashes_a_patched_copy_only_while_it_holds_its_patch() {
+    let world = corrected(ViewMode::Copies).await;
+    world.apply().await;
+    let trash = bin(&world);
+    let review = world.library.clean_up_review(world.project).await.unwrap();
+    let row = |relative: &str| {
+        let name = Path::new(relative).file_name().unwrap().to_string_lossy().into_owned();
+        let found = review.entries.iter().find(|entry| entry.path.display().ends_with(&name));
+        found.unwrap_or_else(|| panic!("{name} is no row: {review:#?}")).path.clone()
+    };
+    let (sep24, sep28) = (row(SEP24), row(SEP28));
+    let at = |row: &NativePath| world.folder().join(row.to_path_buf().unwrap());
+    let patched = String::from_utf8_lossy(&fs::read(at(&sep24)).unwrap()).into_owned();
+    assert!(patched.contains("OBJECT  = 'NGC 7000'"), "the View holds the patched copy");
+    // A tool rewrites the 28 Sep copy's first card in place, keeping its size.
+    let mut rewritten = fs::read(at(&sep28)).unwrap();
+    rewritten[..80].copy_from_slice(format!("{:<80}", "SIMPLE  = T / rewritten").as_bytes());
+    fs::write(at(&sep28), &rewritten).unwrap();
+
+    let request = CleanUpRequest {
+        project_id: world.project,
+        desired_revision: review.desired_revision,
+        generation: review.generation,
+        selected: vec![sep24.clone(), sep28.clone()],
+    };
+    let report = world.library.clean_up(&request, trash.dyn_trash()).await.unwrap();
+    let outcome = |row: &NativePath| {
+        report.results.iter().find(|result| result.path == *row).map(|result| &result.outcome)
+    };
+    assert_eq!(outcome(&sep24), Some(&CleanUpOutcome::Trashed), "{report:#?}");
+    assert!(matches!(outcome(&sep28), Some(CleanUpOutcome::Kept { .. })), "{report:#?}");
+    assert_eq!(trash.moved(), [at(&sep24)]);
+    assert!(at(&sep28).exists(), "the rewritten copy stays");
 }
 
 /// STO-FR-04: a View link goes only after its no-follow check proves it is

@@ -20,6 +20,7 @@ pub mod naming;
 pub mod new_captures;
 pub mod notifier;
 pub mod observing_plans;
+mod patched_copy;
 pub mod planning;
 pub mod planning_project;
 pub mod project_groups;

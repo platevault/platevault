@@ -178,7 +178,7 @@ mod project_operations;
 // Apply's catalog side: its inputs, manifest, journal, foreign files and
 // leftovers (project_view.sql).
 mod project_view;
-pub use project_view::{ApplyInputs, ApplyReservation, ApplyReserved, SourcePath};
+pub use project_view::{ApplyInputs, ApplyReservation, ApplyReserved, CorrectedSource, SourcePath};
 // A Project's inputs: whole-session membership through the admission rule,
 // groups, frame choices, View settings, pending changes and suggestions
 // (project_inputs.sql).

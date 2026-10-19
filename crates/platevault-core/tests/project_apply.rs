@@ -1,27 +1,32 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! F4 Apply (spec 066 VSEL-AC-28/29/31/32/34/35, 069 PREP-AC-05/12/14/25/26/
-//! 28/32/33/34/36/38, 071 STO-AC-11/26; astro-plan-y1zq7, astro-plan-mks5g):
-//! the View rebuilt from the originals only, a restart-safe swap, and old
-//! copies deleted only once their originals verify, against a real catalog
-//! and real files.
+//! F4 Apply (spec 066 VSEL-AC-28/29/31/32/34/35, 069 PREP-AC-05/06/12/14/25/
+//! 26/28/32/33/34/36/38/39, 071 STO-AC-11/26; astro-plan-y1zq7,
+//! astro-plan-mks5g, astro-plan-q8rxp): the View rebuilt from the originals
+//! only, corrected frames as isolated patched copies, a restart-safe swap,
+//! and old copies deleted only once their originals verify, against a real
+//! catalog and real files.
 #![cfg(unix)]
 
 #[path = "support/apply.rs"]
 mod apply_support;
 
+use std::collections::BTreeSet;
 use std::fs;
 use std::os::unix::fs::MetadataExt;
-use std::path::Path;
-use std::sync::atomic::Ordering;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use apply_support::{
-    catalogued, digest, world, Recorder, World, DARKS, HA, HA_FLATS, HA_GAIN_0, OIII,
+    catalogued, corrected, digest, frame, meta, world, Recorder, World, DARKS, HA, HA_FLATS,
+    HA_GAIN_0, OIII, SEP24, SEP28,
 };
-use platevault_core::apply::Unattended;
+use metadata_core::MetadataExtractor;
+use platevault_core::apply::{ApplyControl, Unattended};
 use platevault_core::custody::trash::OsTrash;
 use platevault_core::*;
+use serde_json::{json, Value};
 
 fn names(tree: &[String], folder: &str) -> Vec<String> {
     tree.iter()
@@ -486,4 +491,347 @@ async fn a_failed_build_keeps_the_current_view_and_its_building_folder_for_retry
     fs::write(&ha, &original).unwrap();
     fs::File::options().write(true).open(&ha).unwrap().set_modified(modified).unwrap();
     assert_eq!(world.apply().await.outcome, Some(ApplyOutcome::Applied));
+}
+
+// ── Corrected values as isolated patched copies ──────────────────────────────
+
+/// The entry the View places for the light at `relative`.
+fn placed(world: &World, relative: &str) -> PathBuf {
+    let name = Path::new(relative).file_name().unwrap().to_string_lossy().into_owned();
+    let found = World::tree(&world.view());
+    let entry = found.iter().find(|path| path.ends_with(&format!("/{name}")));
+    world.view().join(entry.unwrap_or_else(|| panic!("{name} is not in {found:#?}")))
+}
+
+/// What `PlateVault`'s FITS reader returns for the file at `path`.
+fn read_fits(path: &Path) -> metadata_core::RawFileMetadata {
+    metadata_fits::FitsExtractor.extract(path).unwrap().unwrap()
+}
+
+/// The primary header's cards up to `END`, trailing blanks trimmed.
+fn cards(path: &Path) -> Vec<String> {
+    fs::read(path)
+        .unwrap()
+        .chunks(80)
+        .map(|card| String::from_utf8_lossy(card).trim_end().to_owned())
+        .take_while(|card| card != "END")
+        .collect()
+}
+
+/// The value field of the fixed-format `keyword` card, trimmed.
+fn value(path: &Path, keyword: &str) -> Option<String> {
+    cards(path).into_iter().find_map(|card| {
+        let name = card.get(..8).unwrap_or(card.as_str()).trim_end();
+        (name == keyword && card.get(8..10) == Some("= "))
+            .then(|| card[10..].split('/').next().unwrap_or_default().trim().to_owned())
+    })
+}
+
+/// PREP-FR-03, PREP-FR-20, PREP-AC-06, PREP-AC-39; J23 S11, SC7 and SC8
+/// (D-W122, provisional D-W123): in a Copies View each held frame with a
+/// recorded correction is an isolated patched copy whose cards carry the
+/// corrected values and `PlateVault`'s FITS reader returns them; its present
+/// aliases are overwritten in their own units, an absent alias isn't added,
+/// and the original keeps its bytes. The report reads "4 corrected values
+/// written to 2 patched copies" and claims nothing about what a tool reads.
+#[tokio::test]
+async fn corrected_frames_reach_a_copies_view_as_isolated_patched_copies() {
+    let world = corrected(ViewMode::Copies).await;
+    let originals = [world.light(SEP24), world.light(SEP28)];
+    let before: Vec<String> = originals.iter().map(|path| digest(path)).collect();
+
+    let report = world.apply().await;
+    assert_eq!(report.outcome, Some(ApplyOutcome::Applied), "{report:#?}");
+    let wire = serde_json::to_value(&report).unwrap();
+    assert_eq!(wire["correctedValues"], json!(4), "24 Sep's Target, 28 Sep's rig: {wire:#}");
+    assert_eq!(wire["patchedCopies"], json!(2), "{wire:#}");
+
+    let sep24 = placed(&world, SEP24);
+    assert_eq!(read_fits(&sep24).object.as_deref(), Some("NGC 7000"));
+    assert_eq!(value(&sep24, "OBJECT").as_deref(), Some("'NGC 7000'"));
+    assert_eq!(read_fits(&originals[0]).object, None, "the original still lacks OBJECT");
+
+    let sep28 = placed(&world, SEP28);
+    let read = read_fits(&sep28);
+    assert_eq!(read.telescop.as_deref(), Some("RedCat 51"));
+    assert_eq!(read.instrume.as_deref(), Some("ZWO ASI2600MM Pro"));
+    assert_eq!(read.focal_length_mm, Some(250.0));
+    assert_eq!(value(&sep28, "FOCAL").as_deref(), Some("250.0"), "Siril FOCAL is in mm");
+    assert_eq!(value(&sep28, "FLENGTH").as_deref(), Some("0.25"), "Siril FLENGTH is in m");
+    assert_eq!(value(&sep28, "DETECTOR").as_deref(), Some("'ZWO ASI2600MM Pro'"));
+    assert_eq!(value(&sep28, "EXPOSURE").as_deref(), Some("300.0"), "uncorrected");
+    assert_eq!(value(&sep28, "TARGET"), None, "an absent alias is never added");
+
+    for ((copy, original), digested) in [&sep24, &sep28].into_iter().zip(&originals).zip(&before) {
+        assert_eq!(&digest(original), digested, "the original keeps its bytes");
+        let (copied, source) = (fs::read(copy).unwrap(), fs::read(original).unwrap());
+        assert_ne!(copied, source, "{} carries the corrected cards", copy.display());
+        assert_eq!(copied.len(), source.len());
+        assert_eq!(copied[2880..], source[2880..], "only the header differs");
+        let metadata = fs::symlink_metadata(copy).unwrap();
+        assert!(metadata.is_file(), "a patched copy is its own file, never a link");
+        assert_eq!(metadata.nlink(), 1, "never a hard link");
+        assert_ne!(metadata.ino(), fs::metadata(original).unwrap().ino());
+    }
+
+    // Every other entry is a byte-for-byte copy of its original.
+    let sources: BTreeSet<String> = [&world.captures, &world.calibration]
+        .into_iter()
+        .map(|location| location.path.to_path_buf().unwrap())
+        .flat_map(|root| World::tree(&root).into_iter().map(move |file| digest(&root.join(file))))
+        .collect();
+    let tree = World::tree(&world.view());
+    let patched: Vec<&String> =
+        tree.iter().filter(|entry| !sources.contains(&digest(&world.view().join(entry)))).collect();
+    assert_eq!(patched.len(), 2, "only the corrected frames are patched: {patched:#?}");
+}
+
+/// PREP-FR-03 with PREP-FR-06: a further correction on a held session reaches
+/// the View at the next Apply, whose fresh patched copy replaces the old one;
+/// the sheet doesn't list the untouched old copy as changed, it leaves
+/// `View (previous)/` as a copy `PlateVault` placed, and the original never
+/// changes.
+#[tokio::test]
+async fn a_reapply_after_a_further_correction_replaces_the_patched_copy() {
+    let world = corrected(ViewMode::Copies).await;
+    let original = digest(&world.light(SEP24));
+    assert_eq!(world.apply().await.outcome, Some(ApplyOutcome::Applied));
+    assert_eq!(read_fits(&placed(&world, SEP24)).object.as_deref(), Some("NGC 7000"));
+
+    world.correct(SEP24, &[("object", json!("North America Nebula"))]).await;
+    // A tool opens the patched copy for writing and changes nothing but its
+    // modification time, so the sheet reads its bytes.
+    let touched = fs::File::options().write(true).open(placed(&world, SEP24)).unwrap();
+    touched.set_modified(std::time::SystemTime::now()).unwrap();
+    let sheet = world.preview().await;
+    assert_eq!(sheet.changed_copies, Vec::<NativePath>::new(), "{sheet:#?}");
+    let report = world.apply().await;
+    assert_eq!(report.outcome, Some(ApplyOutcome::Applied), "{report:#?}");
+    assert!(report.leftovers.is_empty(), "the old patched copy was retired: {report:#?}");
+    assert!(!world.previous().exists());
+    assert_eq!(read_fits(&placed(&world, SEP24)).object.as_deref(), Some("North America Nebula"));
+    assert_eq!(read_fits(&placed(&world, SEP28)).telescop.as_deref(), Some("RedCat 51"));
+    assert_eq!(digest(&world.light(SEP24)), original);
+    assert_eq!(read_fits(&world.light(SEP24)).object, None);
+}
+
+/// Cancels once the build is verified, before the swap.
+#[derive(Default)]
+struct CancelAfterBuild(AtomicBool);
+
+impl ApplyControl for CancelAfterBuild {
+    fn canceled(&self) -> bool {
+        self.0.load(Ordering::SeqCst)
+    }
+    fn interrupted(&self, phase: ApplyPhase) -> bool {
+        if phase == ApplyPhase::BuildVerified {
+            self.0.store(true, Ordering::SeqCst);
+        }
+        false
+    }
+}
+
+/// PREP-FR-09: Cancel keeps the old View with its patched copy, and the
+/// canceled build's patched copies are cleared as its own.
+#[tokio::test]
+async fn cancel_keeps_the_old_patched_view_and_clears_the_new_patched_copies() {
+    let world = corrected(ViewMode::Copies).await;
+    world.apply().await;
+    let kept = digest(&placed(&world, SEP24));
+    world.correct(SEP24, &[("object", json!("North America Nebula"))]).await;
+    let preview = world.preview().await;
+    let control = CancelAfterBuild::default();
+    let report = world.library.apply(&World::request(&preview), &control).await.unwrap();
+    assert_eq!(report.outcome, Some(ApplyOutcome::Canceled), "{report:#?}");
+    assert!(!world.building().exists(), "{:#?}", World::tree(&world.building()));
+    assert_eq!(digest(&placed(&world, SEP24)), kept);
+    assert_eq!(read_fits(&placed(&world, SEP24)).object.as_deref(), Some("NGC 7000"));
+}
+
+/// PREP-AC-05: an Apply stopped after its build leaves its patched copies in
+/// `View (building)/`; the restart settles it Failed and the next Apply
+/// clears them as its own.
+#[tokio::test]
+async fn the_next_apply_clears_the_patched_copies_an_interrupted_build_left() {
+    let mut world = corrected(ViewMode::Copies).await;
+    let report = interrupted_at(&world, ApplyPhase::BuildVerified).await;
+    world.reopen().await;
+    assert_eq!(world.journal(report.operation_id).await.outcome, Some(ApplyOutcome::Failed));
+    assert!(world.building().exists(), "the failed build stays for Retry");
+
+    let report = world.apply().await;
+    assert_eq!(report.outcome, Some(ApplyOutcome::Applied), "{report:#?}");
+    assert!(!world.building().exists());
+    assert_eq!(read_fits(&placed(&world, SEP24)).object.as_deref(), Some("NGC 7000"));
+}
+
+/// The `correction_undeliverable` blockers of a sheet, by original path.
+fn undeliverable(preview: &ApplyPreview) -> Vec<(Value, Value, Value)> {
+    let blockers = serde_json::to_value(&preview.blockers).unwrap();
+    blockers
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|blocker| blocker["blocker"] == "correction_undeliverable")
+        .map(|blocker| {
+            (blocker["path"].clone(), blocker["field"].clone(), blocker["refusal"].clone())
+        })
+        .collect()
+}
+
+/// Nothing was built: no `View/` and no `View (building)/`.
+fn nothing_built(world: &World) {
+    assert!(!world.view().exists() && !world.building().exists(), "nothing was built");
+}
+
+/// An XISF light holding `FILTER = 'Ha'` and, when `thumbnail`, a second
+/// attachment beside its image.
+fn xisf_light(thumbnail: bool) -> Vec<u8> {
+    let mut body = "<FITSKeyword name=\"FILTER\" value=\"'Ha'\" comment=\"\"/>".to_owned();
+    if thumbnail {
+        body.push_str(
+            "<Thumbnail geometry=\"1:1:1\" sampleFormat=\"UInt8\" location=\"attachment:0:1\"/>",
+        );
+    }
+    apply_support::xisf_frame(&body, &[9_u8; 16])
+}
+
+/// D-W123 owner decisions and the FITS limits: a corrected value no patched
+/// copy can carry refuses Apply before anything is built, so the source
+/// value never reaches the tool. Recording such a value is refused too, so
+/// these were recorded below that check. The sheet names each frame and
+/// field; Apply's coded error names the session, one frame and its field,
+/// in no English.
+#[tokio::test]
+async fn a_correction_no_patched_copy_can_carry_refuses_apply_before_building() {
+    let world = catalogued(ViewMode::Copies).await;
+    let long = "NGC 7000 ".repeat(8);
+    let hierarch = frame("Hierarch", true, &["HIERARCH TELESCOPE = 'RedCat 51'"]);
+    let ascii = frame("Ascii", true, &[]);
+    let (too_long, extension) = (frame("Long", true, &[]), frame("Extension", false, &[]));
+    let cases: [(&str, Vec<u8>, &str, &str, &str); 5] = [
+        ("2026-10-12/J23_Ascii.fits", ascii, "object", "Hα NGC 7000", "not_printable_ascii"),
+        ("2026-10-12/J23_Long.fits", too_long, "object", &long, "too_long"),
+        ("2026-10-12/J23_Extension.fits", extension, "object", "NGC 7000", "image_in_extension"),
+        ("2026-10-12/J23_Hierarch.fits", hierarch, "telescope", "Samyang 135", "hierarch_alias"),
+        ("2026-10-12/J23_Thumbnail.xisf", xisf_light(true), "object", "NGC 7000", "xisf_layout"),
+    ];
+    let frames: Vec<(String, CaptureMetadata, Vec<u8>)> = cases
+        .iter()
+        .map(|(relative, bytes, _, _, _)| {
+            let metadata = meta("LIGHT", Some("Ha"), 300.0, 100.0, "2026-10-12");
+            ((*relative).to_owned(), metadata, bytes.clone())
+        })
+        .collect();
+    world.add_lights(&frames).await;
+    for (relative, _, field, value, _) in &cases {
+        world.correct(relative, &[(*field, json!(value))]).await;
+    }
+    let session = world.hold(HA[0]).await;
+    let path = |relative: &str| serde_json::to_value(NativePath::from_path(&world.light(relative)));
+
+    let preview = world.preview().await;
+    let mut named = undeliverable(&preview);
+    named.sort_by_key(|(path, _, _)| path.to_string());
+    let mut expected: Vec<(Value, Value, Value)> = cases
+        .iter()
+        .map(|(relative, _, field, _, refusal)| {
+            (path(relative).unwrap(), json!(field), json!(refusal))
+        })
+        .collect();
+    expected.sort_by_key(|(path, _, _)| path.to_string());
+    assert_eq!(named, expected, "{:#?}", preview.blockers);
+
+    let refused = world.library.apply(&World::request(&preview), &Unattended).await.unwrap_err();
+    assert_eq!(refused.code().as_str(), "correction_unpatchable", "{refused}");
+    let response = serde_json::to_value(refused.response(None, None)).unwrap();
+    assert_eq!(response["identity"], json!(session), "{response:#}");
+    assert!(
+        expected.iter().any(|(path, field, refusal)| response["scope"] == *path
+            && response["correction"]["field"] == *field
+            && response["correction"]["refusal"] == *refusal),
+        "{response:#}"
+    );
+    assert!(!response.to_string().contains("can't"), "no English crosses IPC: {response}");
+    nothing_built(&world);
+}
+
+/// Owner decision (D-W123): recording a corrected value FITS can't hold is
+/// refused where the correction is recorded, with a coded error naming the
+/// frame and field, and nothing is recorded.
+#[tokio::test]
+async fn recording_a_value_fits_cannot_hold_is_refused() {
+    let world = catalogued(ViewMode::Copies).await;
+    let asset = world.asset_at(&world.captures, HA[0]).await;
+    let expected = [ExpectedAsset {
+        asset_id: asset.id,
+        decision_revision: asset.decision_revision,
+        fingerprint: asset.fingerprint.clone(),
+    }];
+    let correction =
+        [CorrectionInput { asset_id: asset.id, field: "object".into(), value: json!("Hα") }];
+    let refused = world.library.preview_correction(&expected, &correction).await.unwrap_err();
+    assert_eq!(refused.code().as_str(), "correction_unpatchable", "{refused}");
+    let response = serde_json::to_value(refused.response(None, None)).unwrap();
+    assert_eq!(response["identity"], json!(asset.id), "{response:#}");
+    assert_eq!(
+        response["correction"],
+        json!({ "field": "object", "refusal": "not_printable_ascii" })
+    );
+    assert_eq!(world.asset_at(&world.captures, HA[0]).await, asset, "nothing was recorded");
+}
+
+/// Owner decision (D-W123): a corrected XISF frame is patched too. Its copy
+/// is a byte copy of the original whose header keywords carry the corrected
+/// value, read back by `PlateVault`'s XISF reader, with the attached data
+/// unchanged; the original keeps its bytes.
+#[tokio::test]
+async fn a_corrected_xisf_frame_reaches_the_view_as_a_patched_copy() {
+    let world = catalogued(ViewMode::Copies).await;
+    let xisf = "2026-10-12/J23_Light_001.xisf";
+    let metadata = meta("LIGHT", Some("Ha"), 300.0, 100.0, "2026-10-12");
+    world.add_lights(&[(xisf.to_owned(), metadata, xisf_light(false))]).await;
+    world.correct(xisf, &[("object", json!("NGC 7000"))]).await;
+    world.hold(HA[0]).await;
+    let original = digest(&world.light(xisf));
+
+    let report = world.apply().await;
+    assert_eq!(report.outcome, Some(ApplyOutcome::Applied), "{report:#?}");
+    assert_eq!((report.corrected_values, report.patched_copies), (1, 1));
+    let copy = placed(&world, xisf);
+    let read = metadata_xisf::XisfExtractor.extract(&copy).unwrap().unwrap();
+    assert_eq!(read.object.as_deref(), Some("NGC 7000"));
+    assert_eq!(read.filter.as_deref(), Some("Ha"));
+    assert!(fs::read(&copy).unwrap().ends_with(&[9_u8; 16]), "the attached data is unchanged");
+    assert_eq!(digest(&world.light(xisf)), original, "the original keeps its bytes");
+    let read = metadata_xisf::XisfExtractor.extract(&world.light(xisf)).unwrap().unwrap();
+    assert_eq!(read.object, None);
+}
+
+/// A corrected input neither FITS nor XISF can't be patched, and PREP-FR-03
+/// forbids letting the source value reach the tool: Apply refuses before
+/// building, with its own code naming the input.
+#[tokio::test]
+async fn a_corrected_input_neither_fits_nor_xisf_refuses_apply_naming_it() {
+    let world = catalogued(ViewMode::Copies).await;
+    let raw = "2026-10-12/J23_Light_001.cr2";
+    let metadata = meta("LIGHT", Some("Ha"), 300.0, 100.0, "2026-10-12");
+    world.add_lights(&[(raw.to_owned(), metadata, b"II*\0 J23 raw light".to_vec())]).await;
+    world.correct(raw, &[("object", json!("NGC 7000"))]).await;
+    let session = world.hold(HA[0]).await;
+    let input = serde_json::to_value(NativePath::from_path(&world.light(raw))).unwrap();
+
+    let preview = world.preview().await;
+    let named = undeliverable(&preview);
+    assert_eq!(named, [(input.clone(), json!("object"), json!("unsupported_format"))]);
+    let refused = world.library.apply(&World::request(&preview), &Unattended).await.unwrap_err();
+    assert_eq!(refused.code().as_str(), "correction_format_unpatchable", "{refused}");
+    let response = serde_json::to_value(refused.response(None, None)).unwrap();
+    assert_eq!(response["identity"], json!(session), "{response:#}");
+    assert_eq!(response["scope"], input);
+    assert_eq!(
+        response["correction"],
+        json!({ "field": "object", "refusal": "unsupported_format" })
+    );
+    nothing_built(&world);
 }

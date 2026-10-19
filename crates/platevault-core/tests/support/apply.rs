@@ -89,7 +89,7 @@ fn calibration_frames() -> Vec<(String, CaptureMetadata)> {
 }
 
 /// One session per type, night, filter, exposure and gain.
-fn group_by_night(assets: &[Asset]) -> GroupingResult {
+pub fn group_by_night(assets: &[Asset]) -> GroupingResult {
     let mut sessions: BTreeMap<String, Vec<Uuid>> = BTreeMap::new();
     for asset in assets {
         let m = &asset.effective;
@@ -148,16 +148,40 @@ pub async fn scan(
     root: &Path,
     frames: &[(String, CaptureMetadata)],
 ) {
+    let files: Vec<(String, CaptureMetadata, Vec<u8>)> = frames
+        .iter()
+        .map(|(relative, metadata)| (relative.clone(), metadata.clone(), fits(relative, metadata)))
+        .collect();
+    scan_files(library, location, root, &files).await;
+}
+
+/// Write each frame's bytes and scan them in with the metadata their header
+/// is read as; a `.xisf` file is an XISF image, a `.cr2` one a format no
+/// header reader takes, anything else FITS. A file that already holds its
+/// bytes is left as it is, as a rescan finds it.
+pub async fn scan_files(
+    library: &Library,
+    location: &Location,
+    root: &Path,
+    frames: &[(String, CaptureMetadata, Vec<u8>)],
+) {
     let catalog = library.catalog();
     let mut files = Vec::new();
-    for (relative, metadata) in frames {
+    for (relative, metadata, bytes) in frames {
         let path = root.join(relative);
         fs::create_dir_all(path.parent().unwrap()).unwrap();
-        fs::write(&path, fits(relative, metadata)).unwrap();
+        if fs::read(&path).ok().as_deref() != Some(bytes.as_slice()) {
+            fs::write(&path, bytes).unwrap();
+        }
+        let format = match Path::new(relative).extension().and_then(|ext| ext.to_str()) {
+            Some("xisf") => ImageFormat::Xisf,
+            Some("cr2") => ImageFormat::Unsupported,
+            _ => ImageFormat::Fits,
+        };
         files.push(ScanFile {
             relative_path: NativePath::from_path(Path::new(relative)),
             fingerprint: InventoryProbe::default().fingerprint(&path).unwrap(),
-            format: ImageFormat::Fits,
+            format,
             metadata: metadata.clone(),
         });
     }
@@ -585,6 +609,44 @@ impl World {
         .await;
     }
 
+    /// Rescan the captures with every light and `extra`, as a scan that
+    /// finds new frames does: each joins the session its metadata keys.
+    pub async fn add_lights(&self, extra: &[(String, CaptureMetadata, Vec<u8>)]) {
+        let root = self.captures.path.to_path_buf().unwrap();
+        let mut frames: Vec<(String, CaptureMetadata, Vec<u8>)> = lights()
+            .into_iter()
+            .map(|(relative, metadata)| {
+                let bytes = fits(&relative, &metadata);
+                (relative, metadata, bytes)
+            })
+            .collect();
+        frames.extend_from_slice(extra);
+        scan_files(&self.library, &self.captures, &root, &frames).await;
+    }
+
+    /// Record `fields` as the corrected values of the light at `path`, as a
+    /// session's intake does (LIB-FR-20, D-W122).
+    pub async fn correct(&self, path: &str, fields: &[(&str, serde_json::Value)]) {
+        let asset = self.asset_at(&self.captures, path).await;
+        let expected = [ExpectedAsset {
+            asset_id: asset.id,
+            decision_revision: asset.decision_revision,
+            fingerprint: asset.fingerprint.clone(),
+        }];
+        let corrections: Vec<CorrectionInput> = fields
+            .iter()
+            .map(|(field, value)| CorrectionInput {
+                asset_id: asset.id,
+                field: (*field).to_owned(),
+                value: value.clone(),
+            })
+            .collect();
+        self.catalog()
+            .apply_correction_and_regroup(&expected, &corrections, group_by_night)
+            .await
+            .unwrap();
+    }
+
     pub async fn preview(&self) -> ApplyPreview {
         self.library.apply_preview(self.project).await.unwrap()
     }
@@ -638,4 +700,116 @@ impl World {
 /// The SHA-256 of a file.
 pub fn digest(path: &Path) -> String {
     hex::encode(Sha256::digest(fs::read(path).unwrap()))
+}
+
+// ── J23's corrected frames (spec 069 PREP-AC-39; J23/P6, SC7, SC8) ───────────
+
+/// J23's 24 Sep light: no `OBJECT` card; intake records Target NGC 7000.
+pub const SEP24: &str = "2026-10-12/J23_24Sep_Light_001.fits";
+/// J23's 28 Sep light: no `TELESCOP` or `FOCALLEN`, and Siril's `FOCAL` and
+/// `FLENGTH` aliases at the wrong focal length; intake records the `RedCat`.
+pub const SEP28: &str = "2026-10-13/J23_28Sep_Light_001.fits";
+
+/// A light whose primary header holds `cards`: J23/P6's frame (`NAXIS = 2`
+/// with its 4 × 4 8-bit image, blank cards after `END`, no `CHECKSUM` or
+/// `DATASUM`) when `image`, else a primary HDU with `NAXIS = 0`. `relative`
+/// makes each file's bytes its own.
+pub fn frame(relative: &str, image: bool, cards: &[&str]) -> Vec<u8> {
+    let mut header = vec!["SIMPLE  =                    T".to_owned()];
+    header.push("BITPIX  =                    8".to_owned());
+    if image {
+        header.push("NAXIS   =                    2".to_owned());
+        header.push("NAXIS1  =                    4".to_owned());
+        header.push("NAXIS2  =                    4".to_owned());
+    } else {
+        header.push("NAXIS   =                    0".to_owned());
+    }
+    header.extend(cards.iter().map(|card| (*card).to_owned()));
+    header.push(format!("COMMENT {relative}"));
+    header.push("END".to_owned());
+    let mut bytes: Vec<u8> =
+        header.iter().flat_map(|card| format!("{card:<80}").into_bytes()).collect();
+    bytes.resize(bytes.len().div_ceil(2880) * 2880, b' ');
+    if image {
+        bytes.extend([7_u8; 16]);
+        bytes.resize(bytes.len().div_ceil(2880) * 2880, 0);
+    }
+    bytes
+}
+
+pub fn sep24_frame() -> (String, CaptureMetadata, Vec<u8>) {
+    let cards = [
+        "IMAGETYP= 'LIGHT   '",
+        "FILTER  = 'Ha      '",
+        "EXPTIME =                300.0",
+        "INSTRUME= 'ASI2600MM'",
+        "TELESCOP= 'RedCat 51'",
+        "FOCALLEN=                250.0",
+    ];
+    let metadata = meta("LIGHT", Some("Ha"), 300.0, 100.0, "2026-10-12");
+    (SEP24.to_owned(), metadata, frame(SEP24, true, &cards))
+}
+
+pub fn sep28_frame() -> (String, CaptureMetadata, Vec<u8>) {
+    let cards = [
+        "IMAGETYP= 'LIGHT   '",
+        "FILTER  = 'OIII    '",
+        "EXPOSURE=                300.0",
+        "OBJECT  = 'NGC 7000'",
+        "DETECTOR= 'ASI2600MM'",
+        "FOCAL   =                135.0",
+        "FLENGTH =                0.135",
+    ];
+    let metadata = CaptureMetadata {
+        object: Some("NGC 7000".into()),
+        camera: None,
+        telescope: None,
+        focal_length_mm: None,
+        ..meta("LIGHT", Some("OIII"), 300.0, 100.0, "2026-10-13")
+    };
+    (SEP28.to_owned(), metadata, frame(SEP28, true, &cards))
+}
+
+/// The world in `mode` with J23's corrected 24 and 28 Sep frames in its
+/// held Ha and OIII sessions, corrected at intake before they were held
+/// (J19/S10): 24 Sep's Target NGC 7000 and 28 Sep's `RedCat` rig.
+pub async fn corrected(mode: ViewMode) -> World {
+    let world = catalogued(mode).await;
+    world.add_lights(&[sep24_frame(), sep28_frame()]).await;
+    world.correct(SEP24, &[("object", serde_json::json!("NGC 7000"))]).await;
+    world
+        .correct(
+            SEP28,
+            &[
+                ("telescope", serde_json::json!("RedCat 51")),
+                ("camera", serde_json::json!("ZWO ASI2600MM Pro")),
+                ("focalLengthMm", serde_json::json!(250.0)),
+            ],
+        )
+        .await;
+    world.hold(HA[0]).await;
+    world.hold(OIII[0]).await;
+    world
+}
+
+/// An XISF light whose one attachment, `data`, follows its XML header,
+/// which holds `body` inside its `<Image>` (`xisf-header` reads it).
+pub fn xisf_frame(body: &str, data: &[u8]) -> Vec<u8> {
+    let xml = |offset: usize| {
+        format!(
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?><xisf version=\"1.0\" \
+             xmlns=\"http://www.pixinsight.com/xisf\"><Image geometry=\"4:4:1\" \
+             sampleFormat=\"UInt8\" colorSpace=\"Gray\" location=\"attachment:{offset:08}:{}\">\
+             {body}</Image></xisf>",
+            data.len()
+        )
+    };
+    let offset = 16 + xml(0).len();
+    let xml = xml(offset);
+    let mut bytes = b"XISF0100".to_vec();
+    bytes.extend_from_slice(&u32::try_from(xml.len()).unwrap().to_le_bytes());
+    bytes.extend_from_slice(&[0_u8; 4]);
+    bytes.extend_from_slice(xml.as_bytes());
+    bytes.extend_from_slice(data);
+    bytes
 }

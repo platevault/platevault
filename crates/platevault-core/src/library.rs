@@ -564,15 +564,30 @@ impl Library {
     }
 
     /// Preview a correction and the regroup it causes under the current
-    /// framing margins; nothing but the plan is recorded.
+    /// framing margins; nothing but the plan is recorded. A text value FITS
+    /// can't hold in one card is refused here, as Apply refuses it again
+    /// (PREP-FR-03, D-W123).
     ///
     /// # Errors
-    /// Returns the catalog's preview errors.
+    /// `CorrectionUndeliverable` naming the frame and field of such a value;
+    /// the catalog's preview errors.
     pub async fn preview_correction(
         &self,
         expected: &[ExpectedAsset],
         corrections: &[CorrectionInput],
     ) -> Result<CorrectionPreview, LibraryError> {
+        for correction in corrections {
+            if let Some(refusal) =
+                crate::patched_copy::entry_refusal(&correction.field, &correction.value)
+            {
+                return Err(LibraryError::CorrectionUndeliverable {
+                    identity: correction.asset_id,
+                    path: None,
+                    field: correction.field.clone(),
+                    refusal,
+                });
+            }
+        }
         let margins = self.framing_margins().await?;
         self.catalog
             .preview_correction(expected, corrections, |assets: &[Asset]| {
