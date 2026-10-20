@@ -12,13 +12,14 @@
 //! provisional evidence; nothing falls back to the clock, app settings or zero.
 //! Pointing and rotation split a key's lights into framings within the
 //! framing margins in force at intake; the framing joins the session's
-//! identity beside the key.
+//! identity beside the key. A session the catalog already holds keeps its
+//! frames and its own limits whatever the margins now ([`Intake`]).
 
 mod framing;
 
 pub(crate) use framing::framing_offset;
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use time::{Date, Duration, Month, PrimitiveDateTime, Time, UtcOffset};
 use unicode_normalization::UnicodeNormalization;
@@ -26,7 +27,7 @@ use uuid::Uuid;
 
 use crate::{
     Asset, CaptureKey, CaptureMetadata, FramingMargins, GroupingResult, ImageTypeEvidence,
-    NativePath, SessionCandidate,
+    NativePath, SessionCandidate, StandingSession,
 };
 
 /// Version prefix of the canonical key encoding.
@@ -49,13 +50,38 @@ pub const BASIS_UTC: &str = "utc-date-provisional";
 /// ascending.
 #[must_use]
 pub fn group_assets(assets: &[Asset], margins: &FramingMargins) -> GroupingResult {
+    regroup_assets(assets, &[], margins)
+}
+
+/// [`group_assets`] around the catalog's `standing` sessions: each keeps its
+/// members, and a frame joins it within its own recorded split limits
+/// (D-W107). The other frames split within `margins`, the limits of the
+/// intake bringing them in. A standing session whose members no longer share
+/// its capture key stands no longer: its frames are grouped afresh.
+#[must_use]
+pub fn regroup_assets(
+    assets: &[Asset],
+    standing: &[StandingSession],
+    margins: &FramingMargins,
+) -> GroupingResult {
     let names: Vec<String> = assets.iter().map(|asset| file_name(&asset.relative_path)).collect();
     let frames: Vec<Frame<'_>> = assets
         .iter()
         .zip(&names)
         .map(|(asset, name)| Frame { id: asset.id, name, metadata: &asset.effective })
         .collect();
-    group_frames(&frames, margins)
+    group_frames(&frames, standing, margins)
+}
+
+/// Intake's grouping inside a catalog regroup, within these margins: the
+/// catalog's standing sessions keep their frames ([`regroup_assets`]).
+#[derive(Clone, Copy)]
+pub struct Intake<'a>(pub &'a FramingMargins);
+
+impl persistence_library::Grouping for Intake<'_> {
+    fn group(&mut self, assets: &[Asset], standing: &[StandingSession]) -> GroupingResult {
+        regroup_assets(assets, standing, self.0)
+    }
 }
 
 /// One frame as grouping reads it: a catalogued asset, or an import item the
@@ -76,8 +102,12 @@ pub(crate) fn file_name(path: &NativePath) -> String {
         .unwrap_or_default()
 }
 
-/// [`group_assets`] over frames.
-pub(crate) fn group_frames(frames: &[Frame<'_>], margins: &FramingMargins) -> GroupingResult {
+/// [`regroup_assets`] over frames.
+pub(crate) fn group_frames<'a>(
+    frames: &[Frame<'a>],
+    standing: &'a [StandingSession],
+    margins: &FramingMargins,
+) -> GroupingResult {
     let mut buckets: BTreeMap<CaptureKey, Bucket> = BTreeMap::new();
     for (index, frame) in frames.iter().enumerate() {
         let capture = derive(frame.metadata);
@@ -92,9 +122,9 @@ pub(crate) fn group_frames(frames: &[Frame<'_>], margins: &FramingMargins) -> Gr
     }
     let mut sessions = Vec::new();
     for (key, bucket) in buckets {
-        let local: Vec<Frame<'_>> = bucket.members.iter().map(|&index| frames[index]).collect();
+        let local: Vec<Frame<'a>> = bucket.members.iter().map(|&index| frames[index]).collect();
         let splits = if bucket.lights {
-            framing::split(&local, margins)
+            framing::split(&local, &standing_in(&key, &local, standing), margins)
         } else {
             vec![framing::Split {
                 members: (0..local.len()).collect(),
@@ -129,6 +159,30 @@ pub(crate) fn group_frames(frames: &[Frame<'_>], margins: &FramingMargins) -> Gr
         sessions.extend(candidates);
     }
     GroupingResult { sessions }
+}
+
+/// The standing sessions of `key` among its frames `local`, as members of
+/// `local`. A session with a member outside them no longer shares one key:
+/// it stands no longer, and its members are split afresh.
+fn standing_in<'a>(
+    key: &CaptureKey,
+    local: &[Frame<'_>],
+    standing: &'a [StandingSession],
+) -> Vec<framing::Standing<'a>> {
+    let position: HashMap<Uuid, usize> =
+        local.iter().enumerate().map(|(index, frame)| (frame.id, index)).collect();
+    standing
+        .iter()
+        .filter(|session| &session.key == key)
+        .filter_map(|session| {
+            let members = session
+                .asset_ids
+                .iter()
+                .map(|id| position.get(id).copied())
+                .collect::<Option<Vec<usize>>>()?;
+            Some(framing::Standing { members, framing: session.framing.as_ref() })
+        })
+        .collect()
 }
 
 /// The frames of one key, with each frame's provisional notes.

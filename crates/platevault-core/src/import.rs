@@ -1278,7 +1278,8 @@ impl Library {
             next.item.indexed = true;
             indexed.push(next);
         }
-        self.record_decisions(&decisions).await?;
+        let margins = self.import_margins(&record).await?;
+        self.record_decisions(&decisions, &margins).await?;
         self.file_under_targets(&filed).await?;
         if !indexed.is_empty() {
             self.catalog().record_import_progress(id, &indexed).await?;
@@ -1342,8 +1343,13 @@ impl Library {
     /// Record what the user set in review on the indexed frames, in one
     /// reviewed correction so they regroup once: a frame type as the frame's
     /// IMAGETYP correction and a merge as its framing label. The header bytes
-    /// are untouched.
-    async fn record_decisions(&self, decisions: &[ReviewDecision]) -> Result<(), LibraryError> {
+    /// are untouched. A session the regroup forms is split within the
+    /// import's `margins`, which it records as its own (D-W107).
+    async fn record_decisions(
+        &self,
+        decisions: &[ReviewDecision],
+        margins: &FramingMargins,
+    ) -> Result<(), LibraryError> {
         let mut expected = Vec::new();
         let mut corrections = Vec::new();
         for decision in decisions {
@@ -1372,8 +1378,8 @@ impl Library {
         if corrections.is_empty() {
             return Ok(());
         }
-        let preview = self.preview_correction(&expected, &corrections).await?;
-        self.confirm_correction(preview.id, &expected).await?;
+        let preview = self.preview_correction_within(&expected, &corrections, margins).await?;
+        self.confirm_correction_within(preview.id, &expected, margins).await?;
         Ok(())
     }
 

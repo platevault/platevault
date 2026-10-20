@@ -93,7 +93,7 @@ pub(super) fn sessions(
             metadata: &light.metadata,
         })
         .collect();
-    group_frames(&frames, margins)
+    group_frames(&frames, &[], margins)
         .sessions
         .into_iter()
         .filter_map(|candidate| {

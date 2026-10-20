@@ -83,6 +83,7 @@ fn framing_at(anchor: Uuid, ra_deg: f64, rotator_deg: f64) -> SessionFraming {
         sky_angle_deg: None,
         field: Some(FieldOfView { width_deg: 3.0, height_deg: 2.0 }),
         label: None,
+        split_limits: SplitLimits::default(),
     }
 }
 

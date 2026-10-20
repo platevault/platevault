@@ -6,8 +6,9 @@
 //! within 5° stay one session whatever the field, a meridian flip never
 //! splits, the sky angle alone reads 180° as the same framing, lights without
 //! pointing stay together, exposure still splits, the split is deterministic
-//! and non-transitive, a framing label holds lights together, and rescans
-//! keep every session id.
+//! and non-transitive, a framing label holds lights together, rescans
+//! keep every session id, and a later Settings change re-splits no indexed
+//! session: new frames join a session by its own intake limits.
 
 mod support;
 
@@ -232,6 +233,32 @@ fn rotation_beyond_the_margin_splits_and_never_chains() {
     assert_eq!(framing(&result.sessions[1]).rotator_deg, Some(8.0));
 }
 
+/// Owner, 2026-10-20: a frame within the limits of two anchors joins the
+/// nearest by centre, then by rotation, then the earlier framing.
+#[test]
+fn a_frame_within_two_framings_joins_the_nearer_rotation_on_a_centre_tie() {
+    let assets = lights(&[
+        Shot::at(0).rotatang(Some(10.0)),
+        // 7° from the first anchor: a second framing at the same centre.
+        Shot::at(1).rotatang(Some(17.0)),
+        // 4.5° from the first anchor, 2.5° from the second.
+        Shot::at(2).rotatang(Some(14.5)),
+        // 3.5° from each: the earlier framing.
+        Shot::at(3).rotatang(Some(13.5)),
+    ]);
+
+    let result = group(&assets);
+
+    let shape: Vec<Vec<Uuid>> =
+        result.sessions.iter().map(|session| session.asset_ids.clone()).collect();
+    let ids_of = |indices: &[usize]| {
+        let mut ids: Vec<Uuid> = indices.iter().map(|&index| assets[index].id).collect();
+        ids.sort_unstable();
+        ids
+    };
+    assert_eq!(shape, vec![ids_of(&[0, 3]), ids_of(&[1, 2])], "rotation decides a centre tie");
+}
+
 #[test]
 fn with_only_the_sky_angle_a_half_turn_is_the_same_framing() {
     let assets = lights(&[
@@ -439,4 +466,128 @@ async fn intake_splits_by_framing_and_rescans_keep_every_session_id() {
     let renumbered: Vec<u32> =
         all.iter().map(|session| session.framing.as_ref().unwrap().ordinal).collect();
     assert_eq!(renumbered, [1, 2, 3]);
+}
+
+// ── Settings changed after intake (D-W107, owner 2026-10-15/16/20) ──────────
+
+/// Save the workflow settings with these split limits, as Settings does.
+async fn save_split(library: &Library, split: SplitLimits) {
+    let (mut settings, revision) = library.catalog().workflow_settings().await.unwrap();
+    settings.framing.split = split;
+    library.catalog().save_workflow_settings(revision, &settings).await.unwrap();
+}
+
+/// Write `shots` as lights under `folder`, one file per shot.
+fn write_lights(root: &Path, folder: &str, shots: &[Shot]) {
+    for (index, shot) in shots.iter().enumerate() {
+        shot.write(&root.join(format!("{folder}/{folder}_{index:03}.fits")), "LIGHT");
+    }
+}
+
+/// A library with a Captures location holding `shots`, scanned once.
+async fn indexed_night(temp: &Path, shots: &[Shot]) -> (Arc<Library>, Uuid, std::path::PathBuf) {
+    let root = temp.join("Captures");
+    write_lights(&root, "night", shots);
+    let library = Library::open(&temp.join("catalog.sqlite"), None).await.unwrap();
+    let location = library
+        .register_location(NativePath::from_path(&root), "Captures".into(), LocationRole::Captures)
+        .await
+        .unwrap();
+    scan(&library, location.id).await;
+    (library, location.id, root)
+}
+
+/// Each session's id and member count, by framing ordinal.
+fn shape(sessions: &[Session]) -> Vec<(Uuid, usize)> {
+    sessions.iter().map(|session| (session.id, session.asset_ids.len())).collect()
+}
+
+fn is_superset(session: &Session, earlier: &Session) -> bool {
+    earlier.asset_ids.iter().all(|asset| session.asset_ids.contains(asset))
+}
+
+#[tokio::test]
+async fn a_narrower_centre_limit_re_splits_no_indexed_session() {
+    let temp = tempfile::tempdir().unwrap();
+    // 3′ apart: one framing under the 5′ default.
+    let night: Vec<Shot> =
+        (0..10).map(|minute| Shot::at(minute).offset(if minute < 5 { 0.0 } else { 3.0 })).collect();
+    let (library, location, root) = indexed_night(temp.path(), &night).await;
+    let first = light_sessions(&library).await;
+    assert_eq!(first.len(), 1, "3′ is within the 5′ default");
+
+    save_split(&library, SplitLimits { max_centre_offset_arcmin: 2.0, ..SplitLimits::default() })
+        .await;
+    let mut late: Vec<Shot> = (20..23).map(|minute| Shot::at(minute).offset(3.5)).collect();
+    late.extend((30..33).map(|minute| Shot::at(minute).offset(8.0)));
+    late.extend((34..36).map(|minute| Shot::at(minute).offset(9.5)));
+    late.push(Shot::at(40).offset(10.5));
+    write_lights(&root, "late", &late);
+    scan(&library, location).await;
+
+    let all = light_sessions(&library).await;
+    assert_eq!(all.len(), 3, "{:?}", shape(&all));
+    assert_eq!(all[0].id, first[0].id, "the indexed session keeps its id");
+    assert!(is_superset(&all[0], &first[0]), "and every frame intake gave it");
+    assert_eq!(all[0].asset_ids.len(), 13, "3.5′ from its anchor joins it by its own 5′ limit");
+    assert_eq!(all[1].asset_ids.len(), 5, "8′ starts a session that 9.5′ joins within 2′");
+    assert_eq!(all[2].asset_ids.len(), 1, "2.5′ from that anchor is beyond the new 2′ limit");
+    let limits = |session: &Session| session.framing.as_ref().unwrap().split_limits;
+    assert_eq!(limits(&all[0]), SplitLimits::default(), "it keeps the limits of its intake");
+    assert_eq!(limits(&all[1]).max_centre_offset_arcmin, 2.0, "a new one records the new limit");
+}
+
+#[tokio::test]
+async fn a_narrower_rotation_limit_re_splits_no_indexed_session() {
+    let temp = tempfile::tempdir().unwrap();
+    // 3° apart: one framing under the 5° default.
+    let night: Vec<Shot> = (0..10)
+        .map(|minute| Shot::at(minute).rotatang(Some(if minute < 5 { 10.0 } else { 13.0 })))
+        .collect();
+    let (library, location, root) = indexed_night(temp.path(), &night).await;
+    let first = light_sessions(&library).await;
+    assert_eq!(first.len(), 1, "3° is within the 5° default");
+
+    save_split(&library, SplitLimits { max_rotation_deg: 2.0, ..SplitLimits::default() }).await;
+    let mut late: Vec<Shot> =
+        (20..23).map(|minute| Shot::at(minute).rotatang(Some(14.0))).collect();
+    late.extend((30..33).map(|minute| Shot::at(minute).rotatang(Some(30.0))));
+    late.extend((34..36).map(|minute| Shot::at(minute).rotatang(Some(31.5))));
+    late.push(Shot::at(40).rotatang(Some(32.5)));
+    write_lights(&root, "late", &late);
+    scan(&library, location).await;
+
+    let all = light_sessions(&library).await;
+    assert_eq!(all.len(), 3, "{:?}", shape(&all));
+    assert_eq!(all[0].id, first[0].id, "the indexed session keeps its id");
+    assert!(is_superset(&all[0], &first[0]), "and every frame intake gave it");
+    assert_eq!(all[0].asset_ids.len(), 13, "4° from its anchor joins it by its own 5° limit");
+    assert_eq!(all[1].asset_ids.len(), 5, "30° starts a session that 31.5° joins within 2°");
+    assert_eq!(all[2].asset_ids.len(), 1, "2.5° from that anchor is beyond the new 2° limit");
+}
+
+#[tokio::test]
+async fn a_returning_frame_rejoins_its_session_by_that_sessions_limits() {
+    let temp = tempfile::tempdir().unwrap();
+    let mut night: Vec<Shot> = (0..5).map(Shot::at).collect();
+    night.extend((10..15).map(|minute| Shot::at(minute).offset(8.0)));
+    let (library, location, root) = indexed_night(temp.path(), &night).await;
+    let first = light_sessions(&library).await;
+    assert_eq!(first.len(), 2);
+
+    save_split(&library, SplitLimits { max_centre_offset_arcmin: 2.0, ..SplitLimits::default() })
+        .await;
+    // Back to the first framing after the second, 3′ from its anchor, then
+    // back to the second.
+    let mut late: Vec<Shot> = (20..23).map(|minute| Shot::at(minute).offset(3.0)).collect();
+    late.push(Shot::at(25).offset(7.0));
+    write_lights(&root, "late", &late);
+    scan(&library, location).await;
+
+    let all = light_sessions(&library).await;
+    let ids = |sessions: &[Session]| sessions.iter().map(|session| session.id).collect::<Vec<_>>();
+    assert_eq!(ids(&all), ids(&first), "no session is replaced or added: {:?}", shape(&all));
+    assert_eq!(all[0].asset_ids.len(), 8, "the returning frames rejoin the first framing");
+    assert_eq!(all[1].asset_ids.len(), 6, "and 1′ from the second's anchor rejoins it");
+    assert!(is_superset(&all[0], &first[0]) && is_superset(&all[1], &first[1]));
 }

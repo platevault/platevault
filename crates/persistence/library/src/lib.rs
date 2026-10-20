@@ -27,9 +27,9 @@ use platevault_model::{
     LocationRole, NativePath, ObservationFingerprint, PathSensitivity, Provenance, Quality,
     ReferenceKind, RemapBlock, RemapBlockReason, RemapItem, RemapReview, RetireAsset, RetireBlock,
     RetirePinProject, RetireReview, RetireSession, Revision, ScanBatch, ScanFile, ScanIssue,
-    ScanObservation, ScanOperation, ScanProgress, ScanState, Session, SessionCandidate, SessionFraming,
-    SessionLineage, TargetCandidate, TargetCone, TargetCoverage, TargetRecord, VolumeIdentity, VolumeKind,
-    NETWORK_ADDRESS_REFUSED,
+    ScanObservation, ScanOperation, ScanProgress, ScanState, Session, SessionCandidate,
+    SessionFraming, SessionLineage, StandingSession, TargetCandidate, TargetCone, TargetCoverage,
+    TargetRecord, VolumeIdentity, VolumeKind, NETWORK_ADDRESS_REFUSED,
 };
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -84,12 +84,15 @@ const SCHEMA: &str = schema_modules![
 ];
 /// The one version of the whole [`SCHEMA`] list, recorded by `schema.sql`'s
 /// `catalog_meta` row. There are no migrations: a catalog recording any other
-/// version is refused before any module's DDL runs. Version 19 is the F4
+/// version is refused before any module's DDL runs. Version 19 was the F4
 /// greenfield catalog (D-W115): no earlier catalog is upgraded. That refuses
 /// main's version 17 (remap reviews' `proposed_volume_kind`) and F4's own 18,
-/// whose `project_sessions_admit_ready` trigger predates D-W124. Bump it with
-/// any DDL change that `IF NOT EXISTS` would leave stale in an existing catalog.
-pub const SCHEMA_VERSION: i64 = 19;
+/// whose `project_sessions_admit_ready` trigger predates D-W124. Version 20
+/// records each session's intake split limits in its framing JSON, which a
+/// version 19 framing lacks. Bump it with any DDL change that `IF NOT EXISTS`
+/// would leave stale in an existing catalog, and with any stored JSON shape
+/// an existing catalog's rows can't be read as.
+pub const SCHEMA_VERSION: i64 = 20;
 const BUSY_TIMEOUT: Duration = Duration::from_secs(10);
 const READER_CONNECTIONS: u32 = 4;
 const MAX_PAGE: u32 = 1000;
@@ -886,7 +889,7 @@ impl Catalog {
         mut grouping: G,
     ) -> Result<ScanOperation>
     where
-        G: FnMut(&[Asset]) -> GroupingResult,
+        G: Grouping,
     {
         let files: Vec<&ScanFile> = batch.files.iter().collect();
         let issues: Vec<&ScanIssue> = batch.issues.iter().collect();
@@ -935,7 +938,7 @@ impl Catalog {
     ) -> Result<ScanOperation>
     where
         R: FnMut(&Location) -> Result<FileIdentity>,
-        G: FnMut(&[Asset]) -> GroupingResult,
+        G: Grouping,
     {
         if observation.state == ScanState::Running {
             return Err(LibraryError::InvalidInput("final observation must be terminal".into()));
@@ -1383,7 +1386,7 @@ impl Catalog {
         mut grouping: G,
     ) -> Result<CorrectionPreview>
     where
-        G: FnMut(&[Asset]) -> GroupingResult,
+        G: Grouping,
     {
         validate_correction_request(expected, corrections)?;
         let proposal = {
@@ -1440,7 +1443,7 @@ impl Catalog {
         mut grouping: G,
     ) -> Result<CorrectionOutcome>
     where
-        G: FnMut(&[Asset]) -> GroupingResult,
+        G: Grouping,
     {
         let correction_id = Uuid::new_v4();
         let outcome = write_txn!(self, |conn| {
@@ -1487,7 +1490,7 @@ impl Catalog {
         mut grouping: G,
     ) -> Result<CorrectionOutcome>
     where
-        G: FnMut(&[Asset]) -> GroupingResult,
+        G: Grouping,
     {
         validate_correction_request(expected, corrections)?;
         let correction_id = Uuid::new_v4();
@@ -3620,7 +3623,7 @@ async fn finish_verified<G>(
     grouping: &mut G,
 ) -> Result<()>
 where
-    G: FnMut(&[Asset]) -> GroupingResult,
+    G: Grouping,
 {
     let observation = input.observation;
     arm_verification(conn, op).await?;
@@ -4422,6 +4425,28 @@ async fn next_counter(conn: &mut SqliteConnection, key: &'static str) -> Result<
 // Grouping: supplied pure callback inside the current transaction
 // ---------------------------------------------------------------------------
 
+/// The capture grouping a regroup runs inside its transaction. It must be
+/// pure and deterministic over its inputs: every asset belongs to exactly
+/// one returned candidate.
+///
+/// A plain `FnMut(&[Asset]) -> GroupingResult` is a grouping that reads the
+/// assets alone and ignores the standing sessions; intake's grouping keeps
+/// each standing session's members in it (D-W107).
+pub trait Grouping {
+    /// Group `assets`. `standing` are the current sessions among them, each
+    /// with its members whose evidence this regroup did not change.
+    fn group(&mut self, assets: &[Asset], standing: &[StandingSession]) -> GroupingResult;
+}
+
+impl<F> Grouping for F
+where
+    F: FnMut(&[Asset]) -> GroupingResult,
+{
+    fn group(&mut self, assets: &[Asset], _standing: &[StandingSession]) -> GroupingResult {
+        self(assets)
+    }
+}
+
 async fn regroup<G>(
     conn: &mut SqliteConnection,
     changed: &BTreeSet<Uuid>,
@@ -4429,31 +4454,40 @@ async fn regroup<G>(
     cause: Cause,
 ) -> Result<Option<SessionLineage>>
 where
-    G: FnMut(&[Asset]) -> GroupingResult,
+    G: Grouping,
 {
     if changed.is_empty() {
         return Ok(None);
     }
     let changed_assets = load_assets(conn, changed).await?;
-    let first = checked_grouping(grouping(&changed_assets), changed)?;
+    let first = checked_grouping(grouping.group(&changed_assets, &[]), changed)?;
     let mut affected: BTreeSet<Uuid> =
         current_session_of(conn, changed).await?.into_values().collect();
     for candidate in &first.sessions {
         affected.extend(current_sessions_with_key(conn, &candidate.key).await?);
     }
     let mut prior = BTreeMap::new();
+    let mut standing = Vec::new();
     let mut closure = changed.clone();
     for id in &affected {
         let row = load_session_row(conn, *id).await?;
         let members = current_members(conn, *id).await?;
         closure.extend(members.iter().copied());
+        let unchanged: Vec<Uuid> = members.difference(changed).copied().collect();
+        if !unchanged.is_empty() {
+            standing.push(StandingSession {
+                key: row.session.key.clone(),
+                asset_ids: unchanged,
+                framing: row.session.framing.clone(),
+            });
+        }
         prior.insert(
             *id,
             PriorSession { key: row.session.key, members, framing: row.session.framing },
         );
     }
     let closure_assets = load_assets(conn, &closure).await?;
-    let result = checked_grouping(grouping(&closure_assets), &closure)?;
+    let result = checked_grouping(grouping.group(&closure_assets, &standing), &closure)?;
     let old_session_of = current_session_of(conn, &closure).await?;
     let plan = plan_grouping(&prior, &old_session_of, result);
     let context =
@@ -5308,7 +5342,7 @@ async fn correct_in_txn<G>(
     correction_id: Uuid,
 ) -> Result<CorrectionOutcome>
 where
-    G: FnMut(&[Asset]) -> GroupingResult,
+    G: Grouping,
 {
     check_expected_assets(conn, expected).await?;
     let created_at = now()?;
