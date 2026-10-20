@@ -1,7 +1,7 @@
 ---
 id: J22
 title: Review session frames and record quality decisions
-version: 7
+version: 8
 status: draft
 last_reviewed: 2026-10-03
 actors: [primary-user]
@@ -36,6 +36,7 @@ moves or trashes no source file.
 - P5: For one named 18 Sep Ha frame, a backup of its original bytes and nanosecond mtime, and a replacement file of identical size with different pixel bytes, both kept outside PlateVault.
 - P6: For one named 26 Sep OIII frame that P3 names, a backup of its original bytes and nanosecond mtime and a same-size variant with different pixel bytes, both kept outside PlateVault.
 - P7: Two named 28 Sep Ha frames, F1 and F2, adjacent in the default list order.
+- P8: Open Project `NGC 7000 HOO` holds 18 Sep and its View contains the P5 frame. Closed Project `NGC 7000 Closed` also holds that session.
 
 ## Steps
 
@@ -195,9 +196,9 @@ moves or trashes no source file.
 ### S15a — Replace a reviewed frame in place {#S15a}
 
 - **Do:** Outside PlateVault, overwrite the P5 frame with its replacement and restore its recorded mtime. Open NGC 7000 and read its usable Ha integration. Index `Astro-T7 captures` again, then reopen the Ready session's Review step and click **Measure frames**.
-- **Expect:** Before the rescan, usable Ha still reads 9h 15m, with the last-verified label it had before this step. After the rescan completes, the frame reads ChangedContent with its previous Picked decision kept as history, and it is listed under the ChangedContent filter. NGC 7000 usable Ha integration reads 9h 10m, labelled as verified at this rescan. In frame review its cached values never read valid, its imported S14 values show as history, its thumbnail is decoded again, and it reads Not measured until **Measure frames**. Then it is measured again from its current bytes, and the earlier cached values show as history for the earlier content.
-- **Expect (negative):** Opening NGC 7000 starts no rehash. The frame counts as neither Usable nor Unreviewed after the rescan. No quality decision is recorded.
-- **Trace:** flow D1 · LIB-FR-09, PIX-FR-01, PIX-FR-06, PIX-FR-12 · LIB-AC-14, PIX-AC-10 · root FR-017 · D10, D19 · J19/G4
+- **Expect:** Before the rescan, usable Ha still reads 9h 15m, with the last-verified label it had before this step. After the rescan completes, the frame reads ChangedContent with its previous Picked decision kept as history, and it is listed under the ChangedContent filter. NGC 7000 usable Ha integration reads 9h 10m, labelled as verified at this rescan. The held session reads Needs review in `NGC 7000 HOO`; that Project shows a Library-sourced pending change for the changed frame, not a pending change for the content drift itself. Apply names the Changed content frame and waits until the frame is reconfirmed or its reviewed bytes return. The session's ChangedContent frame is not a candidate for Trash.
+- **Expect (negative):** Opening NGC 7000 starts no rehash. The frame counts as neither Usable nor Unreviewed after the rescan. No quality decision is recorded; the Closed Project stays unchanged. The view stays unchanged until Apply.
+- **Trace:** flow D1 · LIB-FR-09, PIX-FR-01, PIX-FR-06, PIX-FR-12 · LIB-AC-14, PIX-AC-10 · root FR-017 · D10, D19, D-W140 · J19/G4
 
 ### S15b — Restore the reviewed bytes {#S15b}
 
@@ -225,6 +226,7 @@ moves or trashes no source file.
 - SC8: Measurement starts exactly three times, at S1, S4 and S15a, each time from **Measure frames**. Opening Review and the corner inspector (S7b) start 0 measurements, and S7b shows exactly 9 tiles.
 - SC9: The ⌘A **P** on 42 frames at S10 and the threshold **X** at S7a ask for confirmation, and zero frames are marked before a confirmation is accepted or after one is cancelled. Zero single-frame or hand-picked marks ask (S8, S9, S9a, S11a, S13, S16).
 - SC10: 0 files are moved or sent to the OS Trash by any step: the six rejected frames (S8) and F1 (S11a, S13) stay on disk.
+- SC11: With the P5 frame's replacement bytes in place, `NGC 7000 HOO`'s held 18 Sep session reads Needs review, its pending-change list names the frame as Library-sourced but no pending change represents the content drift itself, and Apply names the Changed content frame and waits. The Closed Project is unchanged. After the reviewed bytes return, 18 Sep is Ready again and Apply no longer waits on the frame (S15a, S15b; D-W140, owner's answer, 2026-10-20).
 
 ## Known gaps
 
@@ -261,3 +263,7 @@ moves or trashes no source file.
 - **Δ7** 2026-10-17 · S7a · behavior-change
   S7a selects the frames through the Review step's **Select by threshold…** action.
   Evidence: HARNESS-V5-FEEDBACK-R1.md Round 9 C10 · D-W78 · PIX-FR-08 · by: JourneysR9c (intent-gated)
+
+- **Δ8** 2026-10-20 · S15a, S15b, SC11 · behavior-change
+  A byte-changed frame makes its held session read Needs review until the frame is reconfirmed or its reviewed bytes return. Its open Project has a labelled pending change from the Library, while the content drift itself is not a pending change; Apply names the Changed content frame and waits.
+  Evidence: LIB-AC-14, LIB-FR-09, PRJ-FR-15 · D-W140, owner's answer, 2026-10-20 · by: DocsJourneysB2 (intent-gated)

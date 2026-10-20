@@ -1,7 +1,7 @@
 ---
 id: J25
 title: Add sessions and apply Project View changes
-version: 8
+version: 9
 status: draft
 last_reviewed: 2026-10-03
 actors: [primary-user]
@@ -22,8 +22,9 @@ Done means: the Project shows the addition, group and calibration changes as pen
 - P2: Two new RedCat sessions with confirmed Target NGC 7000, reviewed frames and settled, pinned calibration are available to index: one Ha session and one OIII session, each with 10 lights of 300 s, captured after 30 Sep.
 - P3: Every frame in the new Ha session also has a byte-identical copy in registered location `Spare`; one named `Spare` copy has a same-size variant with different bytes kept outside PlateVault.
 - P4: The Project holds the 18 Sep session, whose original is on the `Astro-T7` location and can be made offline and restored.
-- P5: One named copy in the current View can be changed in place and restored from a backup. The View also contains a DSS `.Info.txt` file and a user note that PlateVault did not place.
+- P5: One named copy in the current View can be changed in place and restored from a backup. The View also contains a DSS `.Info.txt` file and a user note `user-note.txt` that PlateVault did not place.
 - P6: `Astro-T7` can be mounted and unmounted. On Windows, a fixture can hold a current View file in use and release it on demand.
+- P7: A helper records the identity, bytes, mtime and path of `user-note.txt` after an Apply moves it into the kept folder, removes it before a later Apply, and can restore the same file to the recorded path.
 
 ## Steps
 
@@ -113,20 +114,21 @@ Done means: the Project shows the addition, group and calibration changes as pen
 
 ### S7c — Review `View (previous)/` before the next Apply {#S7c}
 
-- **Do:** On the Sessions step, exclude one frame of the 18 Sep session. Open **Apply…** and read it. For the leftovers in `View (previous)/`, choose keep for the user note and Trash for the changed copy, then confirm Apply.
+- **Do:** On the Sessions step, exclude one frame of the 18 Sep session. Open **Apply…** and read it. For the leftovers in `View (previous)/`, choose keep for `user-note.txt` and Trash for the changed copy, then confirm Apply. After the swap succeeds, use P7 to remove the kept note at its recorded path. Open **Apply…** again and inspect the sheet.
 - **Expect:**
-  - Before anything else, the sheet lists the two files `View (previous)/` still holds from S7a: the changed copy and the unticked user note. Each offers keep, move and Trash, and Apply stays disabled until both are reviewed. It also lists the `.Info.txt` in the View with its tick box (VSEL-FR-20).
-  - After the review, the changed copy is in the OS Trash and Apply is enabled. Apply swaps in a View without the excluded frame.
-  - No `View (previous 2)/` or other numbered folder exists. The kept note still exists, and where it sits after this swap isn't asserted (G7).
-- **Expect (negative):** No leftover is deleted or moved before the user chooses for it, and Apply does not start while one is unreviewed. The kept note isn't deleted, and its bytes are unchanged.
-- **Trace:** VSEL-FR-14, VSEL-FR-20 · VSEL-AC-34 · STO-FR-10 · D-W110
+  - Before anything else, the sheet lists the two files `View (previous)/` still holds from S7a: the changed copy and `user-note.txt`. Each offers keep, move and Trash, and Apply stays disabled until both are reviewed. It also lists the `.Info.txt` in the View with its tick box (VSEL-FR-20).
+  - After the review, the changed copy is in the OS Trash and Apply is enabled. Apply swaps in a View without the excluded frame. The user note remains in the kept folder with its original bytes.
+  - No `View (previous 2)/` or other numbered folder exists. The note exists until the P7 helper removes it.
+  - After deletion, the next Apply names the missing kept file by its recorded path and refuses or waits; it does not silently omit it. The Project View remains unchanged.
+- **Expect (negative):** No leftover is deleted or moved before the user chooses for it. A missing kept file is never silently skipped; deleting the note changes no other file or Project input.
+- **Trace:** VSEL-FR-14, VSEL-FR-20 · VSEL-AC-34 · STO-FR-10 · D-W110; D-W137, owner's answer, 2026-10-20
 
-### S7d — Open the next Apply without the kept note asked again {#S7d}
+### S7d — Restore the kept note after Apply reports it missing {#S7d}
 
-- **Do:** On the Sessions step, restore the frame excluded at S7c. Open **Apply…**, read it, then close it without applying.
-- **Expect:** The sheet lists the restored frame as a change. Its list of `View (previous)/` files to review doesn't name the user note kept at S7c, and the note shows no keep, move or Trash choice.
-- **Expect (negative):** Opening and closing the sheet changes nothing in the View or `View (previous)/`, and the note's bytes are unchanged.
-- **Trace:** VSEL-FR-14 · VSEL-AC-34 · STO-FR-10 · D-W110
+- **Do:** Use P7 to restore `user-note.txt` at its recorded path with its original bytes and mtime. Exclude another 18 Sep frame and open **Apply…**.
+- **Expect:** The sheet lists the excluded frame as a change, does not ask what to do with the already-kept note again, and offers Apply. Closing the sheet changes nothing in the View, and the note's bytes match P7.
+- **Expect (negative):** The restored note is not silently replaced, re-created or duplicated by PlateVault; no file moves before Apply.
+- **Trace:** VSEL-FR-14, VSEL-AC-34 · STO-FR-10 · D-W110, D-W137
 
 ## Success criteria
 
@@ -140,6 +142,7 @@ Done means: the Project shows the addition, group and calibration changes as pen
 - SC8: Discard is offered for the Project's own changes and refused for the calibration reassignment, which changes 0 pins (S4).
 - SC9: With 2 leftovers in `View (previous)/`, Apply stays disabled until both are reviewed; afterwards 1 file is in the OS Trash, the kept note exists with its bytes unchanged, and 0 numbered `View (previous)` folders exist (S7c).
 - SC10: The note kept at S7c is offered for review 0 times by the next Apply sheet (S7d).
+- SC11: After the kept note goes missing, Apply reports it by path rather than silently skipping it and leaves the View unchanged (S7c; D-W137, owner's answer, 2026-10-20).
 
 ## Known gaps
 
@@ -174,3 +177,7 @@ Done means: the Project shows the addition, group and calibration changes as pen
 - **Δ8** 2026-10-16 · S5, +S7d, +SC10 · behavior-change
   A file the user keeps in `View (previous)/` isn't asked about again: new S7d opens the next Apply sheet and finds no review choice for the note kept at S7c. Light folders end in their exposure (provisional). G6 drops the kept-file rule, and G7 records the open swap rule.
   Evidence: D-W110 and D-W108 as amended by the owner's second batch of 2026-10-16 in PR #1804, VSEL-FR-14, VSEL-AC-34, STO-FR-10, PREP-FR-16 · by: EncodeOwnerAnswers2 (intent-gated)
+
+- **Δ9** 2026-10-20 · S7c, +SC11 · behavior-change
+  If a kept `View (previous)/` file goes missing before Apply, the Apply sheet reports it rather than silently skipping it.
+  Evidence: VSEL-FR-14, STO-FR-10 · D-W137, owner's answer, 2026-10-20 · by: DocsJourneysB2 (intent-gated)
