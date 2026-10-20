@@ -26,7 +26,7 @@ use apply_support::{world, Recorder, World, DARKS, HA, HA_GAIN_0};
 use cleanup_support::ScopedTrash;
 use home_support::{
     default_site, ha_goal, indexed, quiet, running_import, running_project_operation,
-    running_storage, tonight,
+    running_storage, target, tonight,
 };
 use persistence_library::{SessionFilter, SessionQuery};
 use platevault_core::apply::Unattended;
@@ -292,6 +292,73 @@ async fn next_rule3_plan_tonight_when_goal_unmet_and_window() {
     let [status] = home.target_status.as_slice() else { panic!("{:#?}", home.target_status) };
     assert_eq!(status.target_id, target);
     assert_eq!(status.goals[0].still_needed, GoalShortfall::FrameCount { frames: 48 });
+}
+
+/// Where the Apply world's Project counts goals: the goal ids of its
+/// progress, of its Home entry and of Home's Target status (sorted), and the
+/// Targets its Next figure plans tonight.
+async fn counted_goals(world: &World) -> (Vec<Uuid>, Vec<Uuid>, Vec<Uuid>, NextAction) {
+    let progress = world.library.project_progress(world.project).await.unwrap();
+    let home = home_project(world).await;
+    let ids = |goals: &[GoalProgress]| goals.iter().map(|goal| goal.goal.id).collect();
+    let mut unmet: Vec<Uuid> = dashboard(&world.library)
+        .await
+        .target_status
+        .iter()
+        .flat_map(|status| status.goals.iter().map(|unmet| unmet.progress.goal.id))
+        .collect();
+    unmet.sort_unstable();
+    (ids(&progress.goals), ids(&home.goals), unmet, home.next)
+}
+
+/// What [`counted_goals`] reads when exactly `goals` of `project` count and
+/// Next plans `target_ids` tonight.
+fn counting(
+    project: &Project,
+    target_ids: Vec<Uuid>,
+) -> (Vec<Uuid>, Vec<Uuid>, Vec<Uuid>, NextAction) {
+    let ids: Vec<Uuid> = project.goals.iter().map(|goal| goal.id).collect();
+    let mut unmet = ids.clone();
+    unmet.sort_unstable();
+    (ids.clone(), ids, unmet, NextAction::PlanTonight { target_ids })
+}
+
+/// D-W128, PRJ-FR-02/03/18: a removed subject's goals are hidden and count
+/// nowhere: not in Project progress, Home's open Projects and Target status,
+/// or the Next figure. Adding the subject back restores the same goals.
+#[tokio::test]
+async fn a_removed_subjects_goals_count_nowhere_until_it_is_added_back() {
+    let world = world(ViewMode::Symlinks).await;
+    quiet(&world).await;
+    world.apply().await;
+    default_site(&world.library).await;
+    let catalog = world.catalog();
+    let ic = catalog.save_target(&target("IC 1396", 324.74, 57.5), None).await.unwrap();
+    let ic = ic.candidate.id;
+    let project = catalog.project(world.project).await.unwrap();
+    let ngc = project.subjects[0].target_id;
+    let both = [ngc, ic].map(|target_id| SubjectInput { target_id, name: None });
+    let project = catalog.set_project_subjects(project.id, project.revision, &both).await.unwrap();
+    let goals = [ngc, ic].map(|target_id| GoalInput {
+        target_id,
+        group_id: None,
+        goal: GoalSpec::FrameCount { channel: Some("Ha".into()), goal_frames: 50 },
+    });
+    let project = catalog.set_project_goals(project.id, project.revision, &goals).await.unwrap();
+    let shown = counting(&project, vec![ngc, ic]);
+    assert_eq!(counted_goals(&world).await, shown, "both subjects' goals count");
+
+    let only_ngc = [SubjectInput { target_id: ngc, name: None }];
+    let hidden =
+        catalog.set_project_subjects(project.id, project.revision, &only_ngc).await.unwrap();
+    assert_eq!(hidden.goals, project.goals[..1], "the removed subject's goal does not show");
+    assert_eq!(counted_goals(&world).await, counting(&hidden, vec![ngc]), "nor counts");
+
+    let restored = catalog.set_project_subjects(project.id, hidden.revision, &both).await.unwrap();
+    let ic_goal = (project.goals[1].id, &project.goals[1].goal);
+    let back = restored.goals.get(1).map(|goal| (goal.id, &goal.goal));
+    assert_eq!(back, Some(ic_goal), "the same goal returns");
+    assert_eq!(counted_goals(&world).await, shown, "the restored goal counts again");
 }
 
 /// PRJ-AC-22: Home lists open Projects only; a Closed one leaves the list.

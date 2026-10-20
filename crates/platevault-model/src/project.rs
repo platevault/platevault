@@ -452,7 +452,8 @@ pub struct ProjectSubject {
 }
 
 /// A stored goal; its id stays across edits while its subject, panel group,
-/// kind and channel (or criterion) stay.
+/// kind and channel (or criterion) stay. A removed subject's goals are hidden
+/// and return with their ids when its Target is added back (D-W128).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]

@@ -589,6 +589,15 @@ async fn close_needs_its_snapshot_and_wrap_up_and_a_closed_project_is_locked() {
     .await;
     refused(
         &mut f4.conn,
+        "INSERT INTO project_hidden_goals (id, project_id, target_id, kind, channel, \
+         goal_frames, position) \
+         VALUES ('hidden', ?1, ?2, 'frame_count', 'Ha', 10, 0)",
+        &[&f4.project, &f4.world.ngc.candidate.id.to_string()],
+        "Closed Project is locked",
+    )
+    .await;
+    refused(
+        &mut f4.conn,
         "DELETE FROM project_wrap_up_steps WHERE project_id = ?1 AND step = 'archive'",
         &[&f4.project],
         "Closed Project is locked",

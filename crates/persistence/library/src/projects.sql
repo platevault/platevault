@@ -90,3 +90,23 @@ CREATE TABLE IF NOT EXISTS goal_templates (
     revision INTEGER NOT NULL CHECK (revision > 0),
     updated_at TEXT NOT NULL
 ) STRICT;
+
+-- The goals of a removed subject, kept hidden (D-W128, PRJ-FR-02): each
+-- `project_goals` row moves here with its id when its subject is removed, by
+-- its subject's Target. No read counts or shows them. When the Target is a
+-- subject again they move back with their ids, except a panel goal whose
+-- group is gone or no longer a panel, which is dropped then.
+CREATE TABLE IF NOT EXISTS project_hidden_goals (
+    id TEXT PRIMARY KEY NOT NULL,
+    project_id TEXT NOT NULL REFERENCES projects (id),
+    target_id TEXT NOT NULL REFERENCES targets (id),
+    group_id TEXT,
+    kind TEXT NOT NULL,
+    channel TEXT,
+    goal_seconds INTEGER,
+    goal_frames INTEGER,
+    criterion TEXT,
+    position INTEGER NOT NULL
+) STRICT;
+CREATE INDEX IF NOT EXISTS project_hidden_goals_target
+    ON project_hidden_goals (project_id, target_id, position);

@@ -92,8 +92,9 @@ impl Catalog {
     }
 
     /// Replace the subject list. A listed Target keeps its subject; an
-    /// omitted subject is removed with its goals. Suggestions follow at once;
-    /// no held session changes.
+    /// omitted subject is removed and its goals kept hidden, counted nowhere,
+    /// until its Target is a subject again (D-W128). Suggestions follow at
+    /// once; no held session changes.
     ///
     /// # Errors
     /// `Conflict` for a stale revision; `NotFound` for an unknown Project or an
@@ -467,7 +468,8 @@ async fn subject_ids(conn: &mut SqliteConnection, project: Uuid) -> Result<HashM
     rows.iter().map(|(target, id)| Ok((parse_uuid(target)?, parse_uuid(id)?))).collect()
 }
 
-/// Keep each listed Target's subject and remove the rest with their goals. A
+/// Keep each listed Target's subject and remove the rest, keeping their goals
+/// hidden; a Target listed again gets its hidden goals back (D-W128). A
 /// subject a held session joined on is never removed: the session's joined
 /// Target is fixed and its goals keep counting it (PRJ-AC-26).
 async fn write_subjects(
@@ -496,12 +498,11 @@ async fn write_subjects(
                 if held == 1 { "" } else { "s" }
             )));
         }
-        for statement in [
-            "DELETE FROM project_goals WHERE subject_id = ?1",
-            "DELETE FROM project_subjects WHERE id = ?1",
-        ] {
-            sqlx::query(statement).bind(removed.to_string()).execute(&mut *conn).await?;
-        }
+        hide_goals(conn, *removed, *target).await?;
+        sqlx::query("DELETE FROM project_subjects WHERE id = ?1")
+            .bind(removed.to_string())
+            .execute(&mut *conn)
+            .await?;
     }
     for (position, subject) in (0_i64..).zip(subjects) {
         let id = stored.get(&subject.target_id).copied().unwrap_or_else(Uuid::new_v4);
@@ -517,7 +518,68 @@ async fn write_subjects(
         .bind(position)
         .execute(&mut *conn)
         .await?;
+        if !stored.contains_key(&subject.target_id) {
+            restore_hidden_goals(conn, project, subject.target_id).await?;
+        }
     }
+    Ok(())
+}
+
+/// Move the goals of `subject`, the subject of `target`, into the Project's
+/// hidden goals with their ids (D-W128): no read counts or shows them.
+async fn hide_goals(conn: &mut SqliteConnection, subject: Uuid, target: Uuid) -> Result<()> {
+    sqlx::query(
+        "INSERT INTO project_hidden_goals (id, project_id, target_id, group_id, kind, channel, \
+         goal_seconds, goal_frames, criterion, position) \
+         SELECT id, project_id, ?2, group_id, kind, channel, goal_seconds, goal_frames, \
+         criterion, position FROM project_goals WHERE subject_id = ?1",
+    )
+    .bind(subject.to_string())
+    .bind(target.to_string())
+    .execute(&mut *conn)
+    .await?;
+    sqlx::query("DELETE FROM project_goals WHERE subject_id = ?1")
+        .bind(subject.to_string())
+        .execute(&mut *conn)
+        .await?;
+    Ok(())
+}
+
+/// Give `target`'s subject, just added to `project`, the goals it had when it
+/// was removed, with their ids, after the Project's goals and in their order
+/// (D-W128). A panel goal whose group is gone or no longer a panel is
+/// dropped: no group is left for it.
+pub async fn restore_hidden_goals(
+    conn: &mut SqliteConnection,
+    project: Uuid,
+    target: Uuid,
+) -> Result<()> {
+    let next: i64 = sqlx::query_scalar(
+        "SELECT coalesce(max(position) + 1, 0) FROM project_goals WHERE project_id = ?1",
+    )
+    .bind(project.to_string())
+    .fetch_one(&mut *conn)
+    .await?;
+    sqlx::query(
+        "INSERT INTO project_goals (id, project_id, subject_id, group_id, kind, channel, \
+         goal_seconds, goal_frames, criterion, position) \
+         SELECT h.id, h.project_id, s.id, h.group_id, h.kind, h.channel, h.goal_seconds, \
+         h.goal_frames, h.criterion, ?3 + h.position FROM project_hidden_goals h \
+         JOIN project_subjects s ON s.project_id = h.project_id AND s.target_id = h.target_id \
+         WHERE h.project_id = ?1 AND h.target_id = ?2 AND (h.group_id IS NULL OR EXISTS \
+         (SELECT 1 FROM project_groups g WHERE g.project_id = h.project_id \
+         AND g.id = h.group_id AND g.panel = 1)) ORDER BY h.position",
+    )
+    .bind(project.to_string())
+    .bind(target.to_string())
+    .bind(next)
+    .execute(&mut *conn)
+    .await?;
+    sqlx::query("DELETE FROM project_hidden_goals WHERE project_id = ?1 AND target_id = ?2")
+        .bind(project.to_string())
+        .bind(target.to_string())
+        .execute(&mut *conn)
+        .await?;
     Ok(())
 }
 
