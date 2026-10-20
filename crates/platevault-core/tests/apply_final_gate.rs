@@ -125,7 +125,7 @@ async fn a_same_size_copy_edit_with_its_time_restored_is_listed_as_changed() {
     let applied = world.apply().await;
     let copy = placed(&world, HA[0]);
     let relative = copy.strip_prefix(world.view()).unwrap().to_path_buf();
-    assert!(world.preview().await.changed_copies.is_empty());
+    assert_eq!(world.preview().await.changed_copies, []);
     // The edit puts back the very time the sheet compares: its original's,
     // as the manifest recorded it.
     let manifest = world.catalog().view_manifest(world.project, applied.generation).await.unwrap();
@@ -142,7 +142,7 @@ async fn a_same_size_copy_edit_with_its_time_restored_is_listed_as_changed() {
     let preview = world.preview().await;
     let changed: Vec<PathBuf> =
         preview.changed_copies.iter().filter_map(|path| path.relative_path().ok()).collect();
-    assert_eq!(changed, [relative.to_path_buf()], "{preview:#?}");
+    assert_eq!(changed, std::slice::from_ref(&relative), "{preview:#?}");
 }
 
 /// What one test commits while the build runs.
@@ -150,7 +150,7 @@ enum Edit {
     /// A desired-state edit of the Project.
     Project,
     /// A Library review rejecting a held session.
-    Review(Session),
+    Review(Box<Session>),
 }
 
 /// Commits `edit` once the building folder is made, before any entry is
@@ -183,7 +183,7 @@ async fn edited_during_the_build(review: bool) {
     let world = world(ViewMode::Copies).await;
     world.apply().await;
     let edit = if review {
-        Edit::Review(world.session_of(&world.captures, HA[0]).await)
+        Edit::Review(Box::new(world.session_of(&world.captures, HA[0]).await))
     } else {
         Edit::Project
     };

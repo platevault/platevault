@@ -1,9 +1,10 @@
 //! Offline target catalog, provider adapter and association evidence, exercised
 //! against the real bundled seed and a loopback SIMBAD TAP endpoint.
 
-// Included whole; import.rs, not this test, calls `separation_from_deg`.
+// Included whole: import.rs, not this test, calls `separation_from_deg`, and
+// the crate-visible items are private to this test crate.
 #[path = "../src/targets.rs"]
-#[allow(dead_code)]
+#[allow(dead_code, clippy::redundant_pub_crate)]
 mod targets;
 
 use std::io::{Read, Write};

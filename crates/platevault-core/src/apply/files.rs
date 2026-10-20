@@ -899,7 +899,7 @@ mod tests {
         assert!(!holds_nothing(&root));
         assert!(foreign_files(&root, &BTreeSet::new()).is_err());
         let ours = Ours { digests: BTreeSet::new(), patches: Arc::default() };
-        assert_eq!(clear_building(&root, &ours), [root.clone()]);
+        assert_eq!(clear_building(&root, &ours), std::slice::from_ref(&root));
         remove_empty_folders(&root);
         assert!(elsewhere.join("empty").is_dir(), "nothing below the link is removed");
         assert!(elsewhere.join("notes.txt").exists());
