@@ -2,12 +2,12 @@ import { createMemoryHistory, createRootRoute, createRoute, createRouter, Router
 import { render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeAll, beforeEach, describe, expect, it } from "vitest"
-import { sessionReadiness, sessionRigId, sessionUnreviewedFrames } from "@/domain/derive"
+import { rigFilterFor, sessionReadiness, sessionRigId, sessionUnreviewedFrames } from "@/domain/derive"
 import { targetAtPointing } from "@/domain/indexing"
 import { sessionLongLabel } from "@/domain/membership"
 import { createSeed } from "@/domain/seed"
 import type { Session } from "@/domain/types"
-import { AddFilterToRigDialog } from "@/features/v5/e-targets-plan-settings/settings-equipment"
+import { AddFilterToRig } from "@/features/v5/e-targets-plan-settings/settings-equipment"
 import { m } from "@/lib/i18n"
 import { filedUnclassified } from "@/store/actions/library"
 import { type PrototypeState, SCHEMA_VERSION, store } from "@/store/core"
@@ -23,10 +23,10 @@ beforeEach(() => {
   store.replace(structuredClone(demo))
 })
 
-/** The intake on its own route, injected as the route does: the Review step's body is the host's, so the tests pass none; Add {value} to {rig} is Settings › Equipment's dialog. */
+/** The intake on its own route, injected as the route does: the Review step's body is the host's, so the tests pass none; the unknown-filter offers are Settings › Equipment's. */
 function renderIntake(sessionId: string, step: string) {
   const root = createRootRoute()
-  const intake = createRoute({ getParentRoute: () => root, path: "/sessions/$sessionId", component: () => <SessionIntakePage review={() => null} addFilter={AddFilterToRigDialog} /> })
+  const intake = createRoute({ getParentRoute: () => root, path: "/sessions/$sessionId", component: () => <SessionIntakePage review={() => null} addFilter={AddFilterToRig} /> })
   const router = createRouter({ routeTree: root.addChildren([intake]), history: createMemoryHistory({ initialEntries: [`/sessions/${sessionId}?step=${step}`] }) })
   render(<RouterProvider router={router} />)
   return router
@@ -102,18 +102,18 @@ describe("Session intake gates (U11 sessionIntake)", () => {
 })
 
 describe("Rig step: Add {value} to {rig} for an unknown FILTER value (D-W127, PLAN-EQ-FR-04)", () => {
-  /** A demo light session on a confirmed rig, its rig then read as `status`, given the FILTER value `Halpha`, which no seed filter matches. */
-  function withHalpha(status: "confirmed" | "associated"): Session {
+  /** A demo light session on a confirmed rig, its rig then read as `status`, given the FILTER value `channel`. `Halpha` matches no seed filter. */
+  function withChannel(status: "confirmed" | "associated", channel: string): Session {
     const session = lightSessions().find((s) => s.equipment.status === "confirmed" && s.equipment.value !== null)
     expect(session, "the demo seed holds a light session whose rig is confirmed").toBeDefined()
     const state = store.getState()
-    const edited: Session = { ...session!, channel: "Halpha", equipment: { ...session!.equipment, status } }
+    const edited: Session = { ...session!, channel, equipment: { ...session!.equipment, status } }
     store.replace({ ...state, catalog: { ...state.catalog, sessions: { ...state.catalog.sessions, [edited.id]: edited } } })
     return edited
   }
 
   it("on the confirmed rig, shows Halpha as unknown; Add Halpha to the rig opens the band form with Ha guessed and puts the filter on that rig", async () => {
-    const session = withHalpha("confirmed")
+    const session = withChannel("confirmed", "Halpha")
     const rig = store.getState().catalog.opticalTrains[session.equipment.value!]!
     const user = userEvent.setup()
     renderIntake(session.id, "rig")
@@ -139,11 +139,34 @@ describe("Rig step: Add {value} to {rig} for an unknown FILTER value (D-W127, PL
   })
 
   it("before the rig is confirmed, shows the observed value with no prompt naming a rig (J15 S4b)", async () => {
-    const session = withHalpha("associated")
+    const session = withChannel("associated", "Halpha")
     const rig = store.getState().catalog.opticalTrains[session.equipment.value!]!
     renderIntake(session.id, "rig")
     expect(await screen.findByText("Halpha")).toBeInTheDocument()
     expect(screen.queryByText(m.session_unknown_filter({ value: "Halpha" }))).toBeNull()
     expect(screen.queryByRole("button", { name: new RegExp(m.equipment_add_value_to_rig({ value: "Halpha", rig: rig.name })) })).toBeNull()
+  })
+
+  it("offers Add {filter} for another rig's matching record, and reusing it adds that record to the rig and no new one", async () => {
+    const state = store.getState()
+    const rigId = lightSessions().find((s) => s.equipment.status === "confirmed" && s.equipment.value !== null)!.equipment.value!
+    const rig = state.catalog.opticalTrains[rigId]!
+    const matching = (value: string) => Object.values(state.catalog.filters).filter((f) => [f.name, ...f.matches].some((x) => x.toLowerCase() === value.toLowerCase()))
+    const other = Object.values(state.catalog.filters).find((f) => !rig.filterIds.includes(f.id) && rigFilterFor(state.catalog, rig, f.name) === null && matching(f.name).length === 1)
+    expect(other, "the demo seed holds a filter of another rig that the session's rig does not match").toBeDefined()
+    const session = withChannel("confirmed", other!.name)
+    const filters = Object.keys(state.catalog.filters).length
+    const user = userEvent.setup()
+    renderIntake(session.id, "rig")
+    expect(await screen.findByText(m.session_unknown_filter({ value: other!.name }))).toBeInTheDocument()
+    // Both offers, as on Settings › Equipment: the matching record, and a new filter.
+    expect(screen.getByRole("button", { name: `${m.equipment_add_value_to_rig({ value: other!.name, rig: rig.name })}…` })).toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: m.equipment_add_value({ value: other!.name }) }))
+    const { catalog } = store.getState()
+    expect(catalog.opticalTrains[rig.id]!.filterIds).toContain(other!.id)
+    expect(Object.keys(catalog.filters)).toHaveLength(filters)
+    await waitFor(() => expect(screen.queryByText(m.session_unknown_filter({ value: other!.name }))).toBeNull())
+    expect(screen.queryByRole("button", { name: m.equipment_add_value({ value: other!.name }) })).toBeNull()
+    expect(screen.getByRole("heading", { level: 2, name: m.sessions_column_rig() })).toHaveFocus()
   })
 })

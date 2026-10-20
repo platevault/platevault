@@ -205,17 +205,19 @@ export interface SessionReviewProps {
 }
 
 /**
- * "Add {value} to {rig}" in a session (PLAN-EQ-FR-04, D-W127): the filter
- * dialog of Settings › Equipment for a FILTER value no filter of the
- * session's confirmed rig matches, prefilled with the value and the bands it
- * likely passes, which adds the new filter to that rig. The intake Rig step
- * (P3) hosts it; slice E implements it (`AddFilterToRigDialog`), and the
+ * "Add {value} to {rig}" in a session (PLAN-EQ-FR-04, D-W127): what Settings ›
+ * Equipment offers for a FILTER value no filter of the session's confirmed rig
+ * matches. Each filter record that already matches it, from another rig, is
+ * offered as "Add {filter}" and reused; then a new filter, through the filter
+ * dialog prefilled with the value and the bands it likely passes. The intake
+ * Rig step (P3) hosts it; slice E implements it (`AddFilterToRig`), and the
  * route injects it.
  */
 export interface AddFilterToRigProps {
-  /** The FILTER value and the rig it goes onto; null while the dialog is closed. */
-  request: { value: string; rigId: OpticalTrainId } | null
-  onClose: () => void
-  /** Where focus goes once the filter is added: adding removes the prompt that opened the dialog. */
-  focusAfterConfirm: () => HTMLElement | null
+  /** The unknown FILTER value and the rig it goes onto; null while there is none, and the prompt offers nothing. */
+  unknown: { value: string; rigId: OpticalTrainId } | null
+  /** Renders the host's action bar with the prompt's actions. */
+  children: (actions: Action[]) => ReactNode
+  /** Where focus goes once the filter is on the rig: adding removes the prompt that was used. */
+  focusAfterAdd: () => HTMLElement | null
 }
