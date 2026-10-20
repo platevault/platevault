@@ -244,6 +244,19 @@ describe("a removed subject's goals stay hidden until it comes back (D-W128)", (
     expect(kept(goalsOf(MOSAIC, targetId))).toEqual(kept(before.filter((g) => g.groupId !== p1!.id && g.groupId !== p4)))
     expect(project(MOSAIC).hiddenGoals).toEqual([])
   })
+
+  it("restores them onto a subject re-pointed at their Target, replacing its goals of the same channel (owner, 2026-10-20)", () => {
+    const { targetId, edited } = editedSecondSubject()
+    expect(remove(M31, targetId).ok).toBe(true)
+    const inputs = project(M31).inputs
+    const own = project(M31).subjects[0]!
+    expect(projects.changeSubjectTarget(M31, own.id, targetId, project(M31).revision).ok).toBe(true)
+    expect(project(M31).subjects).toHaveLength(1)
+    expect(goalsOf(M31, targetId)).toEqual(edited.map((g) => ({ ...g, subjectId: own.id })))
+    expect(project(M31).goals).toHaveLength(edited.length)
+    expect(project(M31).hiddenGoals).toEqual([])
+    expect(project(M31).inputs).toEqual(inputs)
+  })
 })
 
 describe("applying a goal template copies its conditions (C7)", () => {
