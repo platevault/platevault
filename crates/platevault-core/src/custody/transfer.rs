@@ -542,7 +542,7 @@ fn without_noreplace(from: &Path, to: &Path) -> std::io::Result<Moved> {
     let metadata = fs::symlink_metadata(from)?;
     if metadata.is_dir() {
         fs::create_dir(to)?;
-        let placeholder = fs::symlink_metadata(to)?;
+        let placeholder = open_no_follow(to)?;
         return over_placeholder(from, to, &placeholder).map(|()| Moved::Renamed);
     }
     let mut moving = tempfile::TempPath::try_from_path(from)?;
@@ -573,11 +573,13 @@ fn lacks_links(error: &std::io::Error) -> bool {
     })
 }
 
-/// What [`copy_onto_new`] proved: the source entry it read, as a no-follow
-/// observation, the handle of the file it created and that file's identity.
+/// What [`copy_onto_new`] proved: a no-follow handle on the source entry it
+/// read, the handle of the file it created and that file's identity. Both
+/// stay open, so neither inode can be handed to another entry while the move
+/// runs: ext4 gives a just-freed inode number to the next file created.
 #[cfg(unix)]
 struct Copied {
-    source: fs::Metadata,
+    source: fs::File,
     created: fs::File,
     identity: FileIdentity,
 }
@@ -609,7 +611,7 @@ struct Copied {
 #[cfg(unix)]
 fn copy_onto_new(from: &Path, to: &Path) -> std::io::Result<Copied> {
     let fingerprint = inventory::probe_fingerprint(from).map_err(std::io::Error::other)?;
-    let source = fs::symlink_metadata(from)?;
+    let source = open_no_follow(from)?;
     let mut out = OpenOptions::new().read(true).write(true).create_new(true).open(to)?;
     let filled = (|| {
         let digest =
@@ -679,7 +681,7 @@ fn remove_source(from: &Path, to: &Path, copied: &Copied) -> std::io::Result<()>
             ))
         })
     };
-    if !fs::symlink_metadata(&aside).is_ok_and(|now| super::same_entry(&copied.source, &now)) {
+    if !names(&aside, &copied.source) {
         return put_back();
     }
     if let Err(error) = fs::remove_file(&aside) {
@@ -758,23 +760,23 @@ fn names(path: &Path, handle: &fs::File) -> bool {
 }
 
 /// Rename the folder `from` over the empty `placeholder` this rename created
-/// at `to`. Rename replaces only an empty folder, so a file another process
-/// put in the placeholder fails it with `ENOTEMPTY`, and a file in its place
-/// with `ENOTDIR`; either is reported as `to` taken, nothing moved. A failed
-/// rename removes the placeholder while it is still that folder and empty.
+/// at `to` and holds open. Rename replaces only an empty folder, so a file
+/// another process put in the placeholder fails it with `ENOTEMPTY`, and a
+/// file in its place with `ENOTDIR`; either is reported as `to` taken,
+/// nothing moved. A failed rename removes the placeholder while it is still
+/// that folder and empty. The open handle keeps the placeholder's inode from
+/// being reused, so a folder another process made in its place never reads
+/// as it: ext4 gives a just-freed inode number to the next entry created.
 #[cfg(unix)]
-fn over_placeholder(from: &Path, to: &Path, placeholder: &fs::Metadata) -> std::io::Result<()> {
+fn over_placeholder(from: &Path, to: &Path, placeholder: &fs::File) -> std::io::Result<()> {
     use std::io::ErrorKind;
-    use std::os::unix::fs::MetadataExt;
 
     let Err(error) = fs::rename(from, to) else {
         return Ok(());
     };
     // Only while it lists nothing: macOS also removes a folder holding only
     // `._` AppleDouble files, and them with it.
-    if fs::symlink_metadata(to)
-        .is_ok_and(|now| now.dev() == placeholder.dev() && now.ino() == placeholder.ino())
-        && fs::read_dir(to).is_ok_and(|mut entries| entries.next().is_none())
+    if names(to, placeholder) && fs::read_dir(to).is_ok_and(|mut entries| entries.next().is_none())
     {
         let _ = fs::remove_dir(to);
     }
@@ -882,11 +884,12 @@ mod tests {
         assert_eq!(fs::read(previous.join("theirs.txt")).unwrap(), b"theirs");
     }
 
-    /// `to` claimed with an empty placeholder, as [`without_noreplace`] does.
+    /// `to` claimed with an empty placeholder held open, as
+    /// [`without_noreplace`] does.
     #[cfg(unix)]
-    fn claimed(to: &Path) -> fs::Metadata {
+    fn claimed(to: &Path) -> fs::File {
         fs::create_dir(to).unwrap();
-        fs::symlink_metadata(to).unwrap()
+        open_no_follow(to).unwrap()
     }
 
     #[cfg(unix)]

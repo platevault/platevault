@@ -1,0 +1,37 @@
+# TEMPORARY (astro-plan-yju9s): evidence of ext4 inode reuse and birth-time
+# granularity on ubuntu-latest. Removed before the branch lands.
+name: btime probe
+on:
+  pull_request:
+    branches: [feat/f4-backend]
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe /tmp
+        run: |
+          set -x
+          uname -r
+          findmnt -T /tmp
+          d=$(mktemp -d)
+          cd "$d"
+          # The archive test: a link removed and another put in its place.
+          ln -s from link
+          stat -c 'recorded link ino=%i btime=%w' link
+          rm link; ln -s from other; mv other link
+          stat -c 'replaced link ino=%i btime=%w' link
+          # The placeholder test: a folder removed and another made.
+          mkdir p; stat -c 'first folder ino=%i btime=%w' p
+          rmdir p; mkdir p; stat -c 'second folder ino=%i btime=%w' p
+          # The source test: a file removed and another written.
+          echo a > f; stat -c 'first file ino=%i btime=%w' f
+          rm f; echo b > f; stat -c 'second file ino=%i btime=%w' f
+          # Granularity: 2000 files created by one process, back to back.
+          touch n{1..2000}
+          echo "distinct birth times over 2000 creations:"
+          stat -c '%w' n* | sort -u | wc -l
+          stat -c '%w' n* | sort -u | head -5
+          echo "creation span:"
+          stat -c '%w' n* | sort | sed -n '1p;$p'
