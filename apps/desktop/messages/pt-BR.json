@@ -269,6 +269,7 @@
   "err_key_unoverridable": "Esta configuração não pode ser substituída.",
   "measurement_failure_malformed_data": "Não foi possível medir os dados deste quadro. Revise o arquivo antes de usá-lo.",
   "measurement_failure_multichannel_unqualified": "Este quadro colorido tem vários canais, que este método de medição não consegue analisar.",
+  "measurement_failure_unsupported_format": "O formato deste quadro não é compatível.",
   "err_launch_failed": "Não foi possível iniciar a ferramenta externa.",
   "err_library_access_denied": "A permissão para ler este arquivo ou pasta foi negada. Verifique as permissões e tente novamente.",
   "err_library_canceled": "A operação foi cancelada antes de terminar.",
