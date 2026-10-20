@@ -234,6 +234,7 @@ folder is added in place. Done means:
 - G10: (dissolved 2026-10-16): answered by the owner's amendment of D-W107 (LIB-FR-04, LIB-AC-34): frames with no pointing stay in one session, because without pointing there is no framing split. S3 and S9 assert that `2 Oct OIII` and `4 Oct Ha` each read as one session in the preview.
 - G11: D-W132 not observed: no fixture has an imported FILTER value that matches an existing filter record missing from the light's rig, so no step shows the preview offering that record (PLAN-EQ-FR-04; D-W132; owner's answer, 2026-10-20). Blocks readiness until a fixture does.
 - G12: D-W139 not observed: no fixture puts a destination on a volume without an atomic no-replace rename, such as exFAT (STO-FR-12; D-W139; owner's answer, 2026-10-20). Blocks readiness until a fixture does.
+- G13: D-W133 not observed: no fixture has import pointing that matches several Targets, so no step shows Unclassified staying preselected while the preview recommends the Target nearest the field centre (STO-IMP-FR-03; D-W133; owner's answer, 2026-10-20). Blocks readiness until a fixture does.
 
 ## Delta log
 
