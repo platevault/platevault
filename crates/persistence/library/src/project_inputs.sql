@@ -68,11 +68,28 @@ BEFORE INSERT ON project_sessions
 WHEN (SELECT superseded_by FROM sessions WHERE id = NEW.session_id) IS NOT NULL
 BEGIN SELECT RAISE(ABORT, 'a superseded session never joins a Project; add its successor'); END;
 
+-- The Target counts as confirmed when the user confirmed it or it is
+-- associated by agreeing evidence: Suggested with an agreeing alias, qualified
+-- geometry and no conflict (D-W124). This restates the Rust rule
+-- `platevault_model::counts_as_confirmed`; f4_schema.rs checks they agree.
 CREATE TRIGGER IF NOT EXISTS project_sessions_admit_ready
 BEFORE INSERT ON project_sessions
 WHEN NOT EXISTS (
-    SELECT 1 FROM associations WHERE session_id = NEW.session_id AND kind = 'target'
-        AND state = 'confirmed'
+    SELECT 1 FROM associations a WHERE a.session_id = NEW.session_id AND a.kind = 'target'
+        AND a.target_id IS NOT NULL
+        AND (a.state = 'confirmed' OR (a.state = 'suggested'
+            AND EXISTS (
+                SELECT 1 FROM json_each(a.evidence) e
+                WHERE json_extract(e.value, '$.kind') = 'alias'
+                    AND json_extract(e.value, '$.agrees') = 1
+            ) AND EXISTS (
+                SELECT 1 FROM json_each(a.evidence) e
+                WHERE json_extract(e.value, '$.kind') IN ('coordinates', 'footprint')
+                    AND json_extract(e.value, '$.qualified') = 1
+            ) AND NOT EXISTS (
+                SELECT 1 FROM json_each(a.evidence) e
+                WHERE json_extract(e.value, '$.kind') = 'conflict'
+            )))
 ) OR NOT EXISTS (
     SELECT 1 FROM associations WHERE session_id = NEW.session_id AND kind = 'equipment'
         AND state = 'confirmed'

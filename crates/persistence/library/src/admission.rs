@@ -12,8 +12,8 @@
 //! calibration is unsettled, Ready or not: this contract only gates joining.
 
 use platevault_model::{
-    admit_session, session_blockers, AdmissionBasis, ApplicableQuality, AssociationKind,
-    AssociationState, InputKind, LibraryError, PinState, ProjectLifecycle, SessionAdmission,
+    admit_session, counts_as_confirmed, session_blockers, AdmissionBasis, ApplicableQuality,
+    AssociationKind, InputKind, LibraryError, PinState, ProjectLifecycle, SessionAdmission,
     SessionCalibration, SessionIntake,
 };
 use sqlx::sqlite::SqliteConnection;
@@ -134,9 +134,11 @@ async fn read_intake(conn: &mut SqliteConnection, session_id: Uuid) -> Result<Se
     let mut row = load_session_row(conn, session_id).await?;
     let grouping_revision = row.session.grouping_revision;
     let superseded = row.superseded_by.is_some();
+    // A Target associated by agreeing evidence counts as confirmed (D-W124).
     let target_confirmed = load_associations(conn, session_id).await?.iter().any(|association| {
         association.kind == AssociationKind::Target
-            && association.state == AssociationState::Confirmed
+            && association.subject_id.is_some()
+            && counts_as_confirmed(&association.state, &association.evidence)
     });
     let rig_id = calibration::confirmed_equipment(conn, session_id).await?;
     let reviewed: Option<i64> =

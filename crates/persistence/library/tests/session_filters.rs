@@ -23,7 +23,7 @@ use persistence_library::{
 use platevault_model::{
     AdmissionBasis, AssociationKind, AssociationState, Equipment, EvidenceItem, Location, Project,
     ProjectInput, ProjectQuery, Provenance, Quality, ScanFile, ScanObservation, ScanProgress,
-    ScanState, Session, SessionFilterCounts, SubjectInput, TargetRecord,
+    ScanState, Session, SessionFilterCounts, SessionReadiness, SubjectInput, TargetRecord,
 };
 use sqlx::sqlite::{SqliteConnectOptions, SqliteConnection};
 use sqlx::Connection;
@@ -110,15 +110,37 @@ impl World {
 
     /// An automatic Target row in `state` naming no Target.
     async fn suggest(&self, path: &str, state: AssociationState) {
+        let evidence = vec![EvidenceItem::Unknown { field: "object".into() }];
+        self.record(path, state, None, evidence).await;
+    }
+
+    /// An automatic Target row associating `target` by agreeing evidence: its
+    /// `OBJECT` alias agrees and its pointing is inside every frame (LIB-FR-05).
+    async fn associate(&self, path: &str, target: &TargetRecord) {
+        let alias = target.candidate.designation.to_lowercase();
+        let evidence = vec![
+            EvidenceItem::Alias { normalized: alias, agrees: true },
+            EvidenceItem::Coordinates { ra_deg: 148.9, dec_deg: 69.1, qualified: true },
+        ];
+        self.record(path, AssociationState::Suggested, Some(target.candidate.id), evidence).await;
+    }
+
+    async fn record(
+        &self,
+        path: &str,
+        state: AssociationState,
+        subject_id: Option<Uuid>,
+        evidence: Vec<EvidenceItem>,
+    ) {
         let session = self.session(path).await;
         let assets = self.catalog.session(session.id).await.unwrap().assets;
         let suggestion = SuggestedAssociation {
             session_id: session.id,
             grouping_revision: session.grouping_revision,
             kind: AssociationKind::Target,
-            subject_id: None,
+            subject_id,
             state,
-            evidence: vec![EvidenceItem::Unknown { field: "object".into() }],
+            evidence,
             provenance: Provenance::Inferred { rule: "object-header".into() },
             expected_observations: assets.iter().map(|a| (a.id, a.fingerprint.clone())).collect(),
             expected_decisions: assets.iter().map(|a| (a.id, a.decision_revision)).collect(),
@@ -274,8 +296,9 @@ async fn dump(db: &Path, tables: &[&str]) -> BTreeMap<String, Vec<String>> {
 }
 
 /// LIB-FR-17, LIB-AC-18, PRJ-FR-19: "Needs a Target" lists every session with
-/// no confirmed Target, whatever its automatic row says (Suggested, Needs
-/// review, Unresolved or none), and confirming a Target moves it out.
+/// no confirmed Target, whatever its automatic row says (Suggested without
+/// agreeing evidence, Needs review, Unresolved or none), and confirming a
+/// Target moves it out.
 #[tokio::test]
 async fn needs_target_lists_unconfirmed_incl_needs_review() {
     let world = world().await;
@@ -292,6 +315,49 @@ async fn needs_target_lists_unconfirmed_incl_needs_review() {
     let listed = world.listed(SessionFilter::NeedsTarget).await;
     assert_eq!(listed, world.ids(&[RC_OIII, RC_R, RC_G]).await, "confirming moves it out");
     assert_eq!(world.counts().await.needs_target, 3);
+    world.catalog.close().await.unwrap();
+}
+
+/// D-W124, LIB-FR-05, LIB-FR-17, LIB-FR-20, LIB-AC-18: a Target associated by
+/// agreeing evidence counts as confirmed. The session leaves "Needs a
+/// Target", is listed in "Not in any Project" until a Project holds it,
+/// prefills Create Project with that Target, and counts toward Ready. A
+/// Suggested Target without agreeing pointing still reads "Needs a Target".
+#[tokio::test]
+async fn a_target_associated_by_agreeing_evidence_counts_as_confirmed() {
+    let world = world().await;
+    let catalog = &world.catalog;
+    world.associate(RC_OIII, &world.m81).await;
+    let oiii = world.id(RC_OIII).await;
+    let unconfirmed = world.ids(&[RC_HB, RC_R, RC_G]).await;
+    assert_eq!(world.listed(SessionFilter::NeedsTarget).await, unconfirmed);
+    let outside = world.ids(&[RC_HA, ES_HA, RC_L, RC_SII, RC_OIII]).await;
+    assert_eq!(world.listed(SessionFilter::NotInAnyProject).await, outside);
+    let counts = world.counts().await;
+    assert_eq!((counts.needs_target, counts.not_in_any_project), (3, 5));
+
+    let alias_only = vec![EvidenceItem::Alias { normalized: "ngc 7000".into(), agrees: true }];
+    let ngc = Some(world.ngc7000.candidate.id);
+    world.record(RC_HB, AssociationState::Suggested, ngc, alias_only).await;
+    assert_eq!(
+        world.listed(SessionFilter::NeedsTarget).await,
+        unconfirmed,
+        "an alias without agreeing pointing is no association"
+    );
+
+    let prefill = catalog.project_prefill(oiii).await.unwrap();
+    let subjects: Vec<Uuid> = prefill.subjects.iter().map(|s| s.target_id).collect();
+    assert_eq!(subjects, vec![world.m81.candidate.id]);
+    assert_eq!(prefill.rig_ids, vec![world.redcat.id]);
+
+    admit(catalog, oiii, Quality::Usable).await;
+    let intake = catalog.session_admission(oiii).await.unwrap().intake;
+    assert_eq!(intake.readiness(), SessionReadiness::Ready, "{intake:?}");
+    let project = world.project("M 81", &[&world.m81], &[world.redcat.id]).await;
+    add(catalog, project.id, oiii, world.redcat.id).await.unwrap();
+    let held = catalog.project_desired(project.id).await.unwrap().sessions;
+    assert!(held.iter().any(|m| m.session_id == oiii), "the associated session joins");
+    assert!(!world.listed(SessionFilter::NotInAnyProject).await.contains(&oiii));
     world.catalog.close().await.unwrap();
 }
 
