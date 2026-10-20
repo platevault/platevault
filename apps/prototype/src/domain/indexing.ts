@@ -70,7 +70,7 @@ export function deniedAncestor(disk: Disk, path: string): string | null {
 
 export interface LocationListing {
   offline: boolean
-  /** Readable, supported image files. */
+  /** Readable, supported image files in capture order (DATE-OBS, then path), the order intake reads them in (D-W107). */
   readable: DiskFile[]
   unsupported: DiskFile[]
   /** Denied folders inside (or covering) the location. */
@@ -93,7 +93,7 @@ export function listLocation(disk: Disk, location: Location): LocationListing {
     if ((file.kind === "fits" || file.kind === "xisf") && file.header) readable.push(file)
     else unsupported.push(file)
   }
-  readable.sort((a, b) => a.path.localeCompare(b.path))
+  readable.sort((a, b) => a.header!.dateObs.localeCompare(b.header!.dateObs) || a.path.localeCompare(b.path))
   return { offline: false, readable, unsupported, unreadableFolders }
 }
 
@@ -498,13 +498,16 @@ export function framingOf(h: FrameHeader): Framing | null {
   return { ra: h.ra, dec: h.dec, rotationDeg: h.rotationDeg, fieldDeg }
 }
 
+/** The Settings margins two framings are compared with (D-W114). */
+type FramingMargins = Pick<MatchingSettings["framing"], "centrePct" | "rotationDeg">
+
 /**
  * The same framing (D-W107, PRJ-FR-31): the centres within `centrePct` of
  * the field and ROTATANG within `rotationDeg`, a meridian flip (180°)
  * counting as the same. Missing pointing or field evidence never splits
  * (provisional, LIB-FR-04).
  */
-export function sameFraming(a: Framing | null, b: Framing | null, margins: Pick<MatchingSettings["framing"], "centrePct" | "rotationDeg">): boolean {
+export function sameFraming(a: Framing | null, b: Framing | null, margins: FramingMargins): boolean {
   if (!a || !b) return true
   const field = a.fieldDeg ?? b.fieldDeg
   if (field !== null && angularSeparationDeg(a.ra, a.dec, b.ra, b.dec) > (field * margins.centrePct) / 100) return false
@@ -515,22 +518,66 @@ export function sameFraming(a: Framing | null, b: Framing | null, margins: Pick<
   return true
 }
 
+/** Frames in capture order (D-W107): by DATE-OBS, a tie keeping the order given. */
+export function inCaptureOrder<T>(items: readonly T[], header: (item: T) => FrameHeader): T[] {
+  return [...items].sort((a, b) => header(a).dateObs.localeCompare(header(b).dateObs))
+}
+
 /**
- * Frames of one capture key split by framing, in arrival order: each frame
- * joins the first framing whose first frame it matches, else starts the
- * next ("framing 2"). Import review previews the same split (LIB-AC-31).
+ * The framing a pointed frame joins (D-W107): the one whose anchor, its
+ * first pointed frame in capture order, lies nearest within the margins,
+ * the earlier framing on a tie. A frame is compared with anchors only, never
+ * with the frame before it, so a slow drift splits instead of chaining, and
+ * a frame back at an earlier framing rejoins it. A framing without an anchor
+ * (Framing unknown) never takes a pointed frame.
  */
-export function splitByFraming<T>(items: T[], framing: (item: T) => Framing | null, margins: Pick<MatchingSettings["framing"], "centrePct" | "rotationDeg">): T[][] {
-  const groups: Array<{ anchor: Framing | null; items: T[] }> = []
-  for (const item of items) {
-    const f = framing(item)
-    const group = groups.find((g) => sameFraming(g.anchor, f, margins))
-    if (group) {
-      group.items.push(item)
-      group.anchor ??= f
-    } else groups.push({ anchor: f, items: [item] })
+function nearestFraming<G extends { anchor: Framing | null }>(framings: readonly G[], framing: Framing, margins: FramingMargins): G | undefined {
+  let nearest: G | undefined
+  let nearestDeg = Number.POSITIVE_INFINITY
+  for (const candidate of framings) {
+    const anchor = candidate.anchor
+    if (!anchor || !sameFraming(anchor, framing, margins)) continue
+    const separation = angularSeparationDeg(anchor.ra, anchor.dec, framing.ra, framing.dec)
+    if (separation < nearestDeg) {
+      nearest = candidate
+      nearestDeg = separation
+    }
   }
-  return groups.map((g) => g.items)
+  return nearest
+}
+
+/**
+ * Frames of one capture key split by framing (D-W107, LIB-FR-04), in capture
+ * order: a pointed frame joins its nearest framing (`nearestFraming`), else
+ * anchors the next ("framing 2"); frames with no pointing never join one and
+ * form a session of their own, flagged Framing unknown. Import review
+ * previews the same split (LIB-AC-31).
+ */
+export function splitByFraming<T>(items: readonly T[], header: (item: T) => FrameHeader, margins: FramingMargins): { framings: T[][]; unpointed: T[] } {
+  const framings: Array<{ anchor: Framing; items: T[] }> = []
+  const unpointed: T[] = []
+  for (const item of inCaptureOrder(items, header)) {
+    const framing = framingOf(header(item))
+    if (!framing) {
+      unpointed.push(item)
+      continue
+    }
+    const joined = nearestFraming(framings, framing, margins)
+    if (joined) joined.items.push(item)
+    else framings.push({ anchor: framing, items: [item] })
+  }
+  return { framings: framings.map((f) => f.items), unpointed }
+}
+
+/** A light session's anchor (D-W107): the framing of its first pointed frame in capture order; null for one with no pointing (Framing unknown) and for calibration frames. */
+function sessionAnchor(catalog: Catalog, session: Session): Framing | null {
+  if (session.imageType !== "light") return null
+  const pointed = session.assetIds.flatMap((id) => {
+    const header = catalog.assets[id]?.observed
+    return header && header.ra !== null && header.dec !== null ? [header] : []
+  })
+  const first = inCaptureOrder(pointed, (h) => h)[0]
+  return first ? framingOf(first) : null
 }
 
 /** A session's framing: its mean pointing and rotation, with its first frame's field. */
@@ -639,8 +686,10 @@ function newSession(id: SessionId, header: FrameHeader, framing: number): Sessio
  * the asset keeps its identity and the pair reads as conflicting copies
  * (LIB-AC-15): both stay registered and neither is used in place of the
  * other until their bytes agree again (D19). New light frames join the
- * session of their capture key and framing: a frame outside every framing
- * of its key starts the next one (D-W107).
+ * session of their capture key and framing, read in capture order: a
+ * pointed frame joins the framing whose first frame it lies nearest within
+ * the margins, else starts the next one, and frames with no pointing form a
+ * session of their own, Framing unknown (D-W107).
  * Returns a new catalog object (collections are shallow-copied). Every
  * ingestion goes through `ingestFiles`, which matches calibration after it.
  */
@@ -655,8 +704,8 @@ function readFiles(source: Catalog, location: Location, files: DiskFile[], now: 
     opticalTrains: { ...source.opticalTrains },
     masters: { ...source.masters },
   }
-  /** Live sessions by capture key, with the framing a new frame is compared against. */
-  const keyToSessions = new Map<string, Array<{ id: SessionId; framing: Framing | null }>>()
+  /** Live sessions by capture key, with the anchor a new frame is compared against (`sessionAnchor`). */
+  const keyToSessions = new Map<string, Array<{ id: SessionId; anchor: Framing | null }>>()
   const takenSessionIds = new Set<SessionId>()
   for (const session of Object.values(catalog.sessions)) {
     // A session whose frames are all retired never absorbs new files (D11).
@@ -668,7 +717,7 @@ function readFiles(source: Catalog, location: Location, files: DiskFile[], now: 
       })
     if (!session.supersededBy && !retired) {
       const key = sessionKeyOf(session)
-      keyToSessions.set(key, [...(keyToSessions.get(key) ?? []), { id: session.id, framing: sessionFraming(catalog, session) }].sort((a, b) => catalog.sessions[a.id]!.framing - catalog.sessions[b.id]!.framing))
+      keyToSessions.set(key, [...(keyToSessions.get(key) ?? []), { id: session.id, anchor: sessionAnchor(catalog, session) }].sort((a, b) => catalog.sessions[a.id]!.framing - catalog.sessions[b.id]!.framing))
     }
     takenSessionIds.add(session.id)
     for (const previous of session.previousSessionIds) takenSessionIds.add(previous)
@@ -676,7 +725,10 @@ function readFiles(source: Catalog, location: Location, files: DiskFile[], now: 
   }
   const touched = new Set<SessionId>()
 
-  for (const file of files) {
+  // Capture order, lights with no pointing after the rest: the framings number ahead of the Framing unknown session, as import review lists them.
+  const ordered = inCaptureOrder(files, (f) => f.header!)
+  const unpointedLight = (f: DiskFile) => f.header!.imageType === "light" && framingOf(f.header!) === null
+  for (const file of [...ordered.filter((f) => !unpointedLight(f)), ...ordered.filter(unpointedLight)]) {
     const header = file.header!
     const copy: AssetCopy = { locationId: location.id, volumeId: file.volumeId, path: file.path, sha256: file.sha256, presence: "observed", lastObservedAt: now }
     const existing = assetForFile(catalog, location, file)
@@ -704,14 +756,14 @@ function readFiles(source: Catalog, location: Location, files: DiskFile[], now: 
     let sessionId: SessionId | undefined
     if (!isMaster) {
       const key = sessionGroupingKey(header)
-      const framing = header.imageType === "light" ? framingOf(header) : null
+      const anchor = header.imageType === "light" ? framingOf(header) : null
       const sessions = keyToSessions.get(key) ?? []
-      sessionId = sessions.find((s) => sameFraming(s.framing, framing, margins))?.id
+      sessionId = (anchor ? nearestFraming(sessions, anchor, margins) : sessions.find((s) => s.anchor === null))?.id
       if (!sessionId) {
         const n = sessions.length + 1
         sessionId = freshSessionId(n === 1 ? key : `${key}|framing ${n}`, takenSessionIds)
         takenSessionIds.add(sessionId)
-        keyToSessions.set(key, [...sessions, { id: sessionId, framing }])
+        keyToSessions.set(key, [...sessions, { id: sessionId, anchor }])
         catalog.sessions[sessionId] = newSession(sessionId, header, n)
       }
       const session = catalog.sessions[sessionId]!

@@ -400,9 +400,11 @@ export interface Session {
   scope: "complete" | "provisional" | "incomplete"
   /**
    * The framing within its capture key (D-W107, LIB-FR-04): 1 for the
-   * night's first framing, 2 for "framing 2" and so on. Intake splits frames
-   * whose pointing moves more than the framing margin from the session's or
-   * whose ROTATANG turns more than it; a meridian flip never splits.
+   * night's first framing, 2 for "framing 2" and so on. Intake reads frames
+   * in capture order and splits a frame whose pointing lies more than the
+   * framing margin from the session's first frame, or whose ROTATANG turns
+   * more than it; a meridian flip never splits. Frames with no pointing form
+   * a session of their own (Framing unknown), numbered after the framings.
    */
   framing: number
   /** The rig version the session was captured with (LIB-FR-26): set with its rig and kept when the rig is edited later. */

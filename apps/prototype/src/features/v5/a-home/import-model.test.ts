@@ -1,5 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 import { canJoinProject, calibrationQueue } from "@/domain/derive"
+import { makeFile, writeFiles } from "@/domain/disk"
 import { createSeed } from "@/domain/seed"
 import { cancelOperation, isSettled, settleOperation } from "@/store/operations"
 import { type PrototypeState, SCHEMA_VERSION, store } from "@/store/core"
@@ -67,6 +68,67 @@ describe("Import review: sessions split by framing, merge and re-split (LIB-AC-3
         .map((s) => s.assetIds.length)
         .sort((a, b) => a - b),
     ).toEqual([4, 8])
+  })
+})
+
+describe("Import review: the framing split intake makes (D-W107)", () => {
+  /** Two OIII frames back at the first framing after the re-point, then two with no pointing; their names list them before the re-pointed ones. */
+  function addReturnAndUnpointed() {
+    const template = Object.values(store.getState().disk.files).find((f) => f.path.includes("Light_NGC7000_300s_OIII_20261006"))!
+    const dir = template.path.slice(0, template.path.lastIndexOf("/") + 1)
+    const frames: Array<[string, boolean]> = [
+      ["22:30", true],
+      ["22:35", true],
+      ["22:45", false],
+      ["22:50", false],
+    ]
+    const extra = frames.map(([time, pointed], i) =>
+      makeFile({
+        path: `${dir}Light_NGC7000_300s_OIII_A_20261006_${i}.fits`,
+        volumeId: template.volumeId,
+        sizeBytes: template.sizeBytes,
+        kind: template.kind,
+        header: { ...template.header!, dateObs: `2026-10-06T${time}:00Z`, ...(pointed ? {} : { ra: null, dec: null, rotationDeg: null }) },
+        pixelTruth: template.pixelTruth,
+        modifiedAt: template.modifiedAt,
+      }),
+    )
+    store.setState((s) => ({ ...s, disk: writeFiles(s.disk, extra) }))
+  }
+
+  it("previews frames back at the first framing in it, and frames with no pointing as their own Framing unknown session, merged or not", () => {
+    addReturnAndUnpointed()
+    const state = store.getState()
+    const split = lightsOf(planImport(m, state, card())!, "OIII")
+    expect(split.map((g) => [g.session!.framing, g.session!.framingUnknown, g.items.length])).toEqual([
+      [1, false, 10],
+      [2, false, 4],
+      [3, true, 2],
+    ])
+    const merged = lightsOf(planImport(m, state, card({ merged: [split[0]!.session!.captureKey] }))!, "OIII")
+    expect(merged.map((g) => [g.session!.framing, g.session!.framingUnknown, g.session!.framings, g.items.length])).toEqual([
+      [1, false, 2, 14],
+      [2, true, 2, 2],
+    ])
+  })
+
+  it("imports the sessions the preview showed, the Framing unknown one with no pointing", () => {
+    addReturnAndUnpointed()
+    runImport(card())
+    const sessions = () => importedOiii().map((s) => [s.framing, s.assetIds.length, s.pointing === null])
+    expect(sessions().sort((a, b) => Number(a[0]) - Number(b[0]))).toEqual([
+      [1, 10, false],
+      [2, 4, false],
+      [3, 2, true],
+    ])
+    store.replace(structuredClone(demo))
+    addReturnAndUnpointed()
+    const captureKey = lightsOf(planImport(m, store.getState(), card())!, "OIII")[0]!.session!.captureKey
+    runImport(card({ merged: [captureKey] }))
+    expect(sessions().sort((a, b) => Number(a[0]) - Number(b[0]))).toEqual([
+      [1, 14, false],
+      [2, 2, true],
+    ])
   })
 })
 

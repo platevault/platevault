@@ -32,7 +32,7 @@ import { type CalSource, calibrationSources, candidatesFor, confirmChoice, noCho
 import { masterStoragePath } from "@/domain/calibration-process"
 import type { World } from "@/domain/derive"
 import { fileAt, freeBytes, makeFile, volumeForPath, writeFiles } from "@/domain/disk"
-import { framingOf, ingestFiles, isUnder, NO_MASTER_CAMERAS, nightOf, sessionGroupingKey, splitByFraming, targetAtPointing } from "@/domain/indexing"
+import { ingestFiles, isUnder, NO_MASTER_CAMERAS, nightOf, sessionGroupingKey, splitByFraming, targetAtPointing } from "@/domain/indexing"
 import { locationAvailability } from "@/domain/library"
 import { headerNamingValues, namingTemplate, resolveNamingTemplate } from "@/domain/templates"
 import type { Blocker } from "@/components/app/contracts"
@@ -130,14 +130,14 @@ export interface IncomingSession {
   key: string
   /** The capture's grouping key, shared by its framings: Merge framings and Re-split act on it. */
   captureKey: string
-  /** 1 for the capture key's first framing, 2 for "framing 2" and so on (D-W107). */
+  /** 1 for the capture key's first framing, 2 for "framing 2" and so on (D-W107); the Framing unknown session numbers after them. */
   framing: number
-  /** How many framings the capture splits into by the Settings margins; above 1 it can be merged. */
+  /** How many framings the capture's pointed frames split into by the Settings margins; above 1 they can be merged. */
   framings: number
-  /** The user merged the capture's framings: one session for all of them. */
+  /** The user merged the capture's framings: its pointed frames import as one session, read with its Framing unknown session in one batch. */
   merged: boolean
-  /** Frames with no RA/DEC: they never split and stay in this session [PROVISIONAL, C's rule]. */
-  unpointed: number
+  /** The capture's frames with no RA/DEC: they never join a framing and form this session of their own (D-W107). */
+  framingUnknown: boolean
   /** OBJECT: a hint only, never the Target. */
   objectLabel: string | null
   /** The Target whose footprint contains the session's pointing (nearest centre); null without one. */
@@ -329,9 +329,10 @@ function lightKey(file: DiskFile): string {
 /**
  * The incoming light sessions (P-IMP2) of each light, by file path: grouped
  * by key, then split by framing with the Settings margins as intake splits
- * them (`splitByFraming`), unless the user merged the capture's framings;
- * each prefilled with the Target its mean pointing associates, unless the
- * draft chose another Target or Unclassified (null).
+ * them (`splitByFraming`), unless the user merged the capture's framings,
+ * and its frames with no pointing as one Framing unknown session after
+ * them; each prefilled with the Target its mean pointing associates, unless
+ * the draft chose another Target or Unclassified (null).
  */
 function incomingSessions(state: ImportWorld, draft: ImportDraft, lights: DiskFile[]): Map<string, IncomingSession> {
   const { catalog } = state
@@ -339,11 +340,13 @@ function incomingSessions(state: ImportWorld, draft: ImportDraft, lights: DiskFi
   for (const file of lights) byKey.set(lightKey(file), [...(byKey.get(lightKey(file)) ?? []), file])
   const out = new Map<string, IncomingSession>()
   for (const [captureKey, all] of byKey) {
-    const split = splitByFraming(all, (f) => framingOf(f.header!), state.settings.matching.framing)
-    const merged = split.length > 1 && draft.merged.includes(captureKey)
-    ;(merged ? [all] : split).forEach((files, i) => {
+    const { framings, unpointed } = splitByFraming(all, (f) => f.header!, state.settings.matching.framing)
+    const merged = framings.length > 1 && draft.merged.includes(captureKey)
+    const sessions = merged ? [framings.flat()] : framings
+    ;(unpointed.length > 0 ? [...sessions, unpointed] : sessions).forEach((files, i) => {
       const framing = i + 1
       const key = framing === 1 ? captureKey : `${captureKey}|framing ${framing}`
+      const framingUnknown = i === sessions.length
       const pointed = files.map((f) => f.header!).filter((h) => h.ra !== null && h.dec !== null)
       const suggested =
         pointed.length > 0 ? targetAtPointing(catalog, pointed.reduce((n, h) => n + h.ra!, 0) / pointed.length, pointed.reduce((n, h) => n + h.dec!, 0) / pointed.length) : null
@@ -354,9 +357,9 @@ function incomingSessions(state: ImportWorld, draft: ImportDraft, lights: DiskFi
         key,
         captureKey,
         framing,
-        framings: split.length,
+        framings: framings.length,
         merged,
-        unpointed: files.length - pointed.length,
+        framingUnknown,
         objectLabel: files[0]!.header!.object,
         suggested,
         target,
