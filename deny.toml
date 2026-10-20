@@ -158,4 +158,13 @@ ignore = [
   { id = "RUSTSEC-2026-0367", reason = "zip SUID/SGID bits kept by extract(); dev-only via thirtyfour, which never calls extract()" },
   { id = "RUSTSEC-2026-0368", reason = "zip extract() symlink targets outside the destination; dev-only via thirtyfour, which never calls extract()" },
   { id = "RUSTSEC-2026-0369", reason = "zip extract() applies Unix permissions through symlinks; dev-only via thirtyfour, which never calls extract()" },
+  # zvariant, zbus_names and zvariant_derive: unmaintained as standalone crates
+  # since zbus 6 merged them (z-galaxy/zbus#2043). No vulnerability is reported.
+  # They reach the workspace only through zbus 5.18, the Linux D-Bus backend of
+  # notify-rust 4.18 (desktop_services), tauri-plugin-single-instance 2.4 and
+  # tauri-plugin-opener 2.5, all of which still require zbus 5. Remove these
+  # once those crates move to zbus 6.
+  { id = "RUSTSEC-2026-0370", reason = "zvariant merged into zbus 6; via zbus 5 in notify-rust, tauri-plugin-single-instance and tauri-plugin-opener (Linux D-Bus); no zbus 6 release of them yet" },
+  { id = "RUSTSEC-2026-0371", reason = "zbus_names merged into zbus 6; via zbus 5 in notify-rust, tauri-plugin-single-instance and tauri-plugin-opener (Linux D-Bus); no zbus 6 release of them yet" },
+  { id = "RUSTSEC-2026-0372", reason = "zvariant_derive merged into zbus 6; via zbus 5 in notify-rust, tauri-plugin-single-instance and tauri-plugin-opener (Linux D-Bus); no zbus 6 release of them yet" },
 ]
