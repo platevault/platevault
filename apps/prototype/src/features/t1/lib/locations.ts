@@ -4,12 +4,15 @@
  * (`access`, `scanScope`, `unreadablePaths`, `lastIndexedAt`) is written by the
  * foundation `index` operation.
  */
+import { PIN_KINDS } from "@/domain/calibration"
 import { locationAvailability } from "@/domain/library"
 import { fileAt, volumeForPath } from "@/domain/disk"
 import { isUnder, stableHash } from "@/domain/indexing"
-import type { Availability, Catalog, Disk, Location, LocationId, LocationRole, Operation, Volume } from "@/domain/types"
+import { sessionLongRef } from "@/domain/membership"
+import type { Availability, Catalog, Disk, Location, LocationId, LocationRole, Operation, Project, Session, Volume } from "@/domain/types"
 import { formatCount, formatExposure, formatNight } from "@/lib/format"
-import { joinRefs, m, type MessageRef, msg, say } from "@/lib/i18n"
+import { joinRefs, m, type MessageRef, msg, say, verbatim } from "@/lib/i18n"
+import { refuse } from "@/store/actions/shared"
 import { type CommitResult, nowIso, type PrototypeState, store, withCatalog } from "@/store/core"
 import { isSettled } from "@/store/operations"
 import { save } from "./writes"
@@ -285,11 +288,50 @@ export function reviewRetire(state: PrototypeState, locationId: LocationId): Ret
   }
 }
 
+/** A session whose calibration pins a file at a location, with every Project that holds it. */
+export interface LocationPin {
+  session: Session
+  /** Open, Closed or Archived. */
+  projects: Project[]
+}
+
+/**
+ * The sessions that pin a calibration file under the location (a master's
+ * version or a raw calibration session), in night order, each with every
+ * Project, open, Closed or Archived, that holds it. Retire location is
+ * refused while any exists (LIB-FR-15, LIB-AC-16). Superseded sessions never
+ * count. Catalog-only: no file bytes are read.
+ */
+export function locationPins(catalog: Catalog, location: Location): LocationPin[] {
+  const pinsHere = (session: Session) =>
+    PIN_KINDS.some((kind) => {
+      const choice = session.calibration?.[kind]
+      return choice?.state === "pinned" && choice.evidence.files.some((file) => isUnder(file.path, location.path))
+    })
+  return Object.values(catalog.sessions)
+    .filter((s) => !s.supersededBy && pinsHere(s))
+    .sort((a, b) => a.night.localeCompare(b.night))
+    .map((session) => ({ session, projects: Object.values(catalog.projects).filter((p) => p.inputs.some((i) => i.sessionId === session.id)) }))
+}
+
+/** A Project as the refusal names it: "NGC 7000 HOO", or "M31 (Closed)" and "M42 (Archived)". */
+function pinProjectRef(project: Project): MessageRef {
+  if (project.state === "open") return verbatim(project.name)
+  return msg("location_retire_project_state", { name: project.name, state: msg(project.state === "closed" ? "status_closed" : "status_archived") })
+}
+
+/** One refusal reason per pinning session: "18 Sep · Ha · 300 s pins calibration here · NGC 7000 HOO, M31 (Closed)". */
+function pinReason({ session, projects }: LocationPin): MessageRef {
+  const held = projects.length > 0 ? joinRefs(projects.map(pinProjectRef), ", ") : msg("location_retire_pin_no_project")
+  return msg("location_retire_pinned_by", { session: sessionLongRef(session), projects: held })
+}
+
 /**
  * Confirm a reviewed retirement. It re-reads the location first and refuses
- * when its availability differs from the review, or while an operation that
- * affects it is unsettled. Changes the catalog only: no file is deleted,
- * moved, modified or read.
+ * when its availability differs from the review, while an operation that
+ * affects it is unsettled, or while a session pins a calibration file there,
+ * naming those sessions and their Projects. Changes the catalog only: no
+ * file is deleted, moved, modified or read.
  */
 export function retireLocation(review: RetireReview, href: string): CommitResult {
   const state = store.getState()
@@ -309,6 +351,8 @@ export function retireLocation(review: RetireReview, href: string): CommitResult
   }
   const busy = Object.values(state.operations).find((op) => !isSettled(op.status) && op.scope.locationIds?.includes(review.locationId))
   if (busy) return { ok: false, reason: "stale", message: m.location_retire_busy({ title: say(m, busy.title) }) }
+  const pins = locationPins(state.catalog, location)
+  if (pins.length > 0) return refuse(msg("store_refused", { label: msg("store_label_retirement_of", { name: review.displayName }) }), pins.map(pinReason), href)
   return save(
     {
       label: msg("store_label_retirement_of", { name: review.displayName }),
