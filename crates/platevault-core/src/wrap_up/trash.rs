@@ -351,12 +351,14 @@ fn offers(
         }
     }
 
-    // Processing files: a `Processing/` that is a link, or holds anything
-    // that can't be read, is refused as such, never offered in part.
+    // Processing files: a Project folder or `Processing/` that is a link, or
+    // holds anything that can't be read, is refused as such, never offered
+    // in part. Both are entered as themselves, as Apply enters the Project
+    // folder, so a linked Project folder offers nothing from outside it.
     let mut protected_masters = Vec::new();
     if let Some(project) = project_folder(basis.parent.as_ref(), &basis.name)? {
         let processing = project.join(PROCESSING_FOLDER);
-        match files::files_below(&processing) {
+        match files::files_below_from(&project, Path::new(PROCESSING_FOLDER)) {
             Ok(found) => {
                 for relative in found {
                     let path = processing.join(&relative);
@@ -417,7 +419,7 @@ fn offers(
             let Some(keeper) = keeper(&copies, &locations, &basis.first_observed) else { continue };
             let kept_path = file(keeper);
             for extra in copies.iter().filter(|copy| copy.id != keeper.id) {
-                let kept = kept_copy(keeper, kept_path.as_deref());
+                let kept = kept_copy(keeper, kept_path.as_deref(), &locations);
                 let checked = kept.and_then(|kept| {
                     library_copy(extra, file(extra), &locations, &basis.in_open_views, trash, false)
                         .map_err(|(_, reason)| reason)
@@ -610,15 +612,21 @@ fn keeper<'a>(
 }
 
 /// The kept copy a duplicate's move relies on; it must be online to be
-/// re-verified before the move.
-fn kept_copy(keeper: &Asset, path: Option<&Path>) -> Result<KeptCopy, ItemReason> {
+/// re-verified before the move, reached from its location's registered root
+/// without following a link.
+fn kept_copy(
+    keeper: &Asset,
+    path: Option<&Path>,
+    locations: &BTreeMap<Uuid, (usize, &Location)>,
+) -> Result<KeptCopy, ItemReason> {
     let (Some(path), Some(sha256)) = (path, keeper.fingerprint.content_sha256.clone()) else {
         return Err(ItemReason::new(
             ReasonCode::KeptCopyUnproven,
             "the kept copy has no recorded digest",
         ));
     };
-    if keeper.availability != Availability::Available {
+    let root = locations.get(&keeper.location_id).map(|(_, location)| location.path.clone());
+    if keeper.availability != Availability::Available || root.is_none() {
         return Err(ItemReason::new(
             ReasonCode::KeptCopyUnproven,
             format!("the kept copy {} is not online", path.display()),
@@ -626,6 +634,7 @@ fn kept_copy(keeper: &Asset, path: Option<&Path>) -> Result<KeptCopy, ItemReason
     }
     Ok(KeptCopy {
         path: NativePath::from_path(path),
+        root,
         fingerprint: ObservationFingerprint { content_sha256: None, ..keeper.fingerprint.clone() },
         sha256,
     })

@@ -197,3 +197,123 @@ async fn archive_refuses_a_session_whose_indexed_folder_became_a_link() {
     still_outside(&originals, Some(&trash));
     holds_none_of(&archive_root, &bytes);
 }
+
+/// Swaps the indexed night folder for a link once Apply recorded its
+/// snapshots, before it places anything.
+struct SwapAfterSnapshot<'a> {
+    world: &'a World,
+    moved: std::sync::Mutex<Option<PathBuf>>,
+}
+
+impl platevault_core::apply::ApplyControl for SwapAfterSnapshot<'_> {
+    fn interrupted(&self, phase: ApplyPhase) -> bool {
+        let mut moved = self.moved.lock().unwrap();
+        if phase == ApplyPhase::SourcesVerified && moved.is_none() {
+            *moved = Some(swap_night_for_link(self.world));
+        }
+        false
+    }
+}
+
+/// nlewt: a folder swapped for a link after the snapshot and before the
+/// placement: the clone or copy reads the original through the folders
+/// entered from its root, so Apply refuses and no outside byte is placed.
+#[tokio::test]
+async fn apply_places_no_outside_byte_when_a_folder_becomes_a_link_after_the_snapshot() {
+    let world = world(ViewMode::Copies).await;
+    let preview = world.preview().await;
+    assert!(preview.blockers.is_empty(), "{:#?}", preview.blockers);
+    let control = SwapAfterSnapshot { world: &world, moved: std::sync::Mutex::new(None) };
+    let applied = world.library.apply(&World::request(&preview), &control).await;
+    let moved = control.moved.lock().unwrap().clone().expect("the swap ran");
+    if let Ok(report) = &applied {
+        assert_ne!(report.outcome, Some(ApplyOutcome::Applied), "{report:#?}");
+    }
+    let originals = outside_lights(&moved);
+    still_outside(&originals, None);
+    holds_none_of(&world.folder(), &digests(&originals));
+}
+
+/// 9w4qm: an old copy is deleted outright only once its original verifies,
+/// so an original now reached through a link proves nothing and the copy
+/// stays, named.
+#[tokio::test]
+async fn apply_keeps_an_old_copy_whose_original_is_reached_through_a_link() {
+    let world = world(ViewMode::Copies).await;
+    let ha = world.session_of(&world.captures, HA[0]).await;
+    world.apply().await;
+    world.mark(&ha, Quality::Unusable).await;
+    let moved = swap_night_for_link(&world);
+    let report = world.apply().await;
+    assert_eq!(report.outcome, Some(ApplyOutcome::Applied), "{report:#?}");
+    let kept: Vec<&PreviousItem> = report
+        .leftovers
+        .iter()
+        .filter(|item| item.reason == PreviousItemReason::UnverifiedCopy)
+        .collect();
+    assert_eq!(kept.len(), HA.len(), "{:#?}", report.leftovers);
+    for item in kept {
+        let path = world.folder().join(item.path.relative_path().unwrap());
+        assert!(path.exists(), "{} stays", path.display());
+    }
+    still_outside(&outside_lights(&moved), None);
+}
+
+/// 9w4qm: Clean up moves a copy to the OS Trash only once its original
+/// verifies below its root; reached through a link, the copy stays.
+#[tokio::test]
+async fn clean_up_keeps_a_copy_whose_original_is_reached_through_a_link() {
+    let world = world(ViewMode::Copies).await;
+    world.apply().await;
+    let moved = swap_night_for_link(&world);
+    let trash = bin(&world);
+    let review = world.library.clean_up_review(world.project).await.unwrap();
+    let ha: Vec<NativePath> = review
+        .entries
+        .iter()
+        .map(|entry| entry.path.clone())
+        .filter(|path| path.display().contains("NIGHT_2026-10-12/Lights"))
+        .collect();
+    assert_eq!(ha.len(), HA.len(), "{review:#?}");
+    let request = CleanUpRequest {
+        project_id: world.project,
+        desired_revision: review.desired_revision,
+        generation: review.generation,
+        selected: ha.clone(),
+    };
+    let report = world.library.clean_up(&request, trash.dyn_trash()).await.unwrap();
+    for row in &ha {
+        let outcome = report.results.iter().find(|result| result.path == *row).unwrap();
+        assert!(matches!(outcome.outcome, CleanUpOutcome::Kept { .. }), "{report:#?}");
+        assert!(world.folder().join(row.relative_path().unwrap()).exists());
+    }
+    assert!(trash.moved().is_empty(), "{:#?}", trash.moved());
+    still_outside(&outside_lights(&moved), Some(&trash));
+}
+
+/// yb133: a Project folder that is a link offers no `Processing/` file
+/// from where it points, as Apply refuses a linked Project folder.
+#[tokio::test]
+async fn trash_offers_nothing_through_a_linked_project_folder() {
+    let world = world(ViewMode::Symlinks).await;
+    world.apply().await;
+    let trash = bin(&world);
+    skip_clean_up(&world, &trash).await;
+    let elsewhere = world.temp.path().join("elsewhere");
+    fs::create_dir_all(&elsewhere).unwrap();
+    let away = elsewhere.join(apply_support::PROJECT);
+    fs::rename(world.folder(), &away).unwrap();
+    fs::create_dir_all(away.join("Processing")).unwrap();
+    fs::write(away.join("Processing/registered.xisf"), b"elsewhere").unwrap();
+    std::os::unix::fs::symlink(&away, world.folder()).unwrap();
+
+    let review = world.library.trash_review(world.project, trash.dyn_trash()).await.unwrap();
+    let offered = review
+        .groups
+        .iter()
+        .filter(|group| group.group == TrashGroup::ProcessingFiles)
+        .flat_map(|group| group.items.iter().flat_map(|item| &item.files))
+        .count();
+    assert_eq!(offered, 0, "{review:#?}");
+    assert!(away.join("Processing/registered.xisf").exists());
+}

@@ -15,7 +15,7 @@
 
 use std::collections::BTreeSet;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 
 use persistence_library::ApplyInputs;
@@ -29,9 +29,9 @@ use crate::layout::{VIEW_FOLDER, VIEW_PREVIOUS_FOLDER};
 use crate::library::{blocking, Library};
 use crate::{
     inventory, CleanUpEntry, CleanUpEntryKind, CleanUpOutcome, CleanUpReport, CleanUpRequest,
-    CleanUpResult, CleanUpReview, EntryEvidence, EntryKind, EntryPlacement, EntrySource,
-    ItemReason, KeptCopy, LibraryError, ManifestEntry, NativePath, ObservationFingerprint,
-    PreviousItemReview, ReasonCode, WrapUpOutcome, WrapUpStep,
+    CleanUpResult, CleanUpReview, EntryEvidence, EntryKind, EntryPlacement, ItemReason, KeptCopy,
+    LibraryError, ManifestEntry, NativePath, ObservationFingerprint, PreviousItemReview,
+    ReasonCode, WrapUpOutcome, WrapUpStep,
 };
 
 impl Library {
@@ -138,15 +138,11 @@ impl Library {
                             .find(|placed| placed.seq == *seq)
                             .cloned()
                             .ok_or_else(|| LibraryError::NotFound(format!("View entry {seq}")))?;
-                        let original = original_of(&inputs, &placed);
+                        let original =
+                            files::Original::all(&inputs).remove(&files::source_id(&placed));
                         let trash = Arc::clone(&trash);
                         let outcome = blocking(move || {
-                            Ok(remove_placed(
-                                &absolute,
-                                &placed,
-                                original.as_deref(),
-                                trash.as_ref(),
-                            ))
+                            Ok(remove_placed(&absolute, &placed, original.as_ref(), trash.as_ref()))
                         })
                         .await?;
                         if let CleanUpOutcome::Deleted | CleanUpOutcome::Trashed = outcome {
@@ -263,47 +259,33 @@ fn review(inputs: &ApplyInputs, removed: &BTreeSet<u32>) -> Result<CleanUpReview
     })
 }
 
-/// The current path of a placed entry's original.
-fn original_of(inputs: &ApplyInputs, entry: &ManifestEntry) -> Option<PathBuf> {
-    let id = match entry.source {
-        EntrySource::Light { asset_id, .. } | EntrySource::CalibrationFrame { asset_id, .. } => {
-            asset_id
-        }
-        EntrySource::Master { master_id, .. } => master_id,
-    };
-    inputs.sources.get(&id).and_then(|source| source.path.to_path_buf().ok())
-}
-
 /// Retire one placed entry (STO-FR-04): a link deleted once it is still the
 /// recorded link pointing at its original, never followed; a copy moved to
 /// the OS Trash once it still holds the bytes `PlateVault` placed and its
-/// original still holds them too. A patched copy's bytes are the ones it
-/// was proven to hold when written (PREP-FR-03).
+/// original, reached from its registered root without following a link,
+/// is still the file its snapshot recorded with those bytes. A patched
+/// copy's bytes are the ones it was proven to hold when written
+/// (PREP-FR-03).
 fn remove_placed(
     path: &Path,
     entry: &ManifestEntry,
-    original: Option<&Path>,
+    original: Option<&files::Original>,
     trash: &dyn OsTrash,
 ) -> CleanUpOutcome {
     match entry.placement {
-        EntryPlacement::Symlink => {
-            let original = original.map(Path::to_path_buf);
-            match files::old_link(path, entry, original.as_ref()) {
-                Ok(()) => match fs::remove_file(path) {
-                    Ok(()) => CleanUpOutcome::Deleted,
-                    Err(error) => {
-                        kept(ReasonCode::WriteFailed, format!("{}: {error}", path.display()))
-                    }
-                },
-                Err(_) => kept(
-                    ReasonCode::DestinationChanged,
-                    format!(
-                        "{} is no longer the link PlateVault placed to its original; it stays",
-                        path.display()
-                    ),
+        EntryPlacement::Symlink => match files::old_link(path, entry, original) {
+            Ok(()) => match fs::remove_file(path) {
+                Ok(()) => CleanUpOutcome::Deleted,
+                Err(error) => kept(ReasonCode::WriteFailed, format!("{}: {error}", path.display())),
+            },
+            Err(_) => kept(
+                ReasonCode::DestinationChanged,
+                format!(
+                    "{} is no longer the link PlateVault placed to its original; it stays",
+                    path.display()
                 ),
-            }
-        }
+            ),
+        },
         EntryPlacement::Copy | EntryPlacement::Clone => {
             let Some(original) = original else {
                 return kept(
@@ -323,15 +305,6 @@ fn remove_placed(
                     format!("{} is no longer the copy PlateVault placed; it stays", path.display()),
                 );
             };
-            let original_now = match inventory::probe_fingerprint(original) {
-                Ok(fingerprint) => fingerprint,
-                Err(error) => {
-                    return kept(
-                        ReasonCode::KeptCopyUnproven,
-                        format!("its original {} can't be read: {error}", original.display()),
-                    )
-                }
-            };
             let copy = EntryEvidence {
                 path: NativePath::from_path(path),
                 root: None,
@@ -339,9 +312,11 @@ fn remove_placed(
                 fingerprint: ObservationFingerprint { content_sha256: None, ..observed },
                 sha256: Some(entry.copy_sha256().to_owned()),
             };
+            let recorded = original.as_placed_by(entry);
             let retained = KeptCopy {
-                path: NativePath::from_path(original),
-                fingerprint: ObservationFingerprint { content_sha256: None, ..original_now },
+                path: recorded.path,
+                root: recorded.root,
+                fingerprint: recorded.fingerprint,
                 sha256: entry.source_sha256.clone(),
             };
             retirement(trash::retire(trash, &copy, &[retained], || Ok(())))

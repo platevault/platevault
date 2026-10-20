@@ -76,6 +76,11 @@ pub struct EntryEvidence {
 #[serde(rename_all = "camelCase")]
 pub struct KeptCopy {
     pub path: NativePath,
+    /// The registered location root a library copy lies below, reached from
+    /// it one folder at a time as [`EntryEvidence::root`] is. `None` for a
+    /// copy checked by its path alone.
+    #[serde(default)]
+    pub root: Option<NativePath>,
     pub fingerprint: ObservationFingerprint,
     pub sha256: String,
 }

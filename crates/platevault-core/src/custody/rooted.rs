@@ -206,6 +206,169 @@ fn open_entry(_folder: &File, path: &Path) -> Result<File, Check> {
     Err(Check::Unavailable(format!("{}: no rooted lookup on this platform", path.display())))
 }
 
+// ── Folders walked through their handles ────────────────────────────────────
+
+/// Why a folder could not be entered as itself.
+#[derive(Debug)]
+pub enum Unentered {
+    /// A link, a junction or no folder: nothing below it is read.
+    NotAFolder,
+    Io(std::io::Error),
+}
+
+/// One entry a [`Folder`] lists: its name and whether it was a real folder,
+/// never a link or junction, when it was listed.
+pub struct Listed {
+    pub name: std::ffi::OsString,
+    pub folder: bool,
+}
+
+/// A folder opened as itself, never through a link. It is listed through
+/// its handle and its subfolders are entered through it, so a walk stays
+/// below the folder it began at whatever its path names meanwhile (spec 071
+/// STO-FR-04/05/16, astro-plan-yb133). On Windows the handle is held
+/// without `FILE_SHARE_DELETE` while the folder is listed and walked below,
+/// so it can't be renamed or replaced meanwhile.
+pub struct Folder {
+    handle: File,
+    path: PathBuf,
+}
+
+impl Folder {
+    /// Open `path` itself as a folder.
+    ///
+    /// # Errors
+    /// [`Unentered::NotAFolder`] for a link, a junction or no folder.
+    pub fn open(path: &Path) -> Result<Self, Unentered> {
+        Ok(Self { handle: open_dir(None, path)?, path: path.to_path_buf() })
+    }
+
+    /// Enter the subfolder `name` through this folder's handle.
+    ///
+    /// # Errors
+    /// [`Unentered::NotAFolder`] when `name` is now a link, a junction or no
+    /// folder.
+    pub fn child(&self, name: &OsStr) -> Result<Self, Unentered> {
+        let path = self.path.join(name);
+        Ok(Self { handle: open_dir(Some((&self.handle, name)), &path)?, path })
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    /// Every entry of this folder but `.` and `..`, as listed now.
+    ///
+    /// # Errors
+    /// The folder or an entry of it can't be read.
+    #[cfg(unix)]
+    pub fn list(&self) -> std::io::Result<Vec<Listed>> {
+        use std::os::unix::ffi::OsStrExt as _;
+
+        use rustix::fs::{statat, AtFlags, Dir, FileType};
+        let mut listed = Vec::new();
+        for entry in Dir::read_from(&self.handle)? {
+            let entry = entry?;
+            let name = OsStr::from_bytes(entry.file_name().to_bytes());
+            if name == "." || name == ".." {
+                continue;
+            }
+            let kind = match entry.file_type() {
+                FileType::Unknown => {
+                    match statat(&self.handle, name, AtFlags::SYMLINK_NOFOLLOW) {
+                        Ok(stat) => FileType::from_raw_mode(stat.st_mode),
+                        // Gone since it was listed: nothing to account for.
+                        Err(rustix::io::Errno::NOENT) => continue,
+                        Err(errno) => return Err(errno.into()),
+                    }
+                }
+                kind => kind,
+            };
+            listed.push(Listed { name: name.to_os_string(), folder: kind == FileType::Directory });
+        }
+        Ok(listed)
+    }
+
+    /// Every entry of this folder, listed by its path while its handle keeps
+    /// it from being renamed or replaced.
+    ///
+    /// # Errors
+    /// The folder or an entry of it can't be read.
+    #[cfg(not(unix))]
+    pub fn list(&self) -> std::io::Result<Vec<Listed>> {
+        let mut listed = Vec::new();
+        for entry in std::fs::read_dir(&self.path)? {
+            let entry = entry?;
+            let folder = match std::fs::symlink_metadata(entry.path()) {
+                Ok(metadata) => metadata.is_dir() && !is_link(&metadata),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(error) => return Err(error),
+            };
+            listed.push(Listed { name: entry.file_name(), folder });
+        }
+        Ok(listed)
+    }
+
+    /// Whether the regular file `name` of this folder begins with `magic`;
+    /// a link is never opened.
+    pub fn file_starts_with(&self, name: &OsStr, magic: &[u8]) -> bool {
+        use std::io::Read as _;
+        let path = self.path.join(name);
+        let Ok(mut file) = open_entry(&self.handle, &path) else { return false };
+        let mut head = vec![0_u8; magic.len()];
+        file.metadata().is_ok_and(|metadata| metadata.is_file())
+            && file.read_exact(&mut head).is_ok()
+            && head == magic
+    }
+}
+
+#[cfg(unix)]
+fn open_dir(parent: Option<(&File, &OsStr)>, path: &Path) -> Result<File, Unentered> {
+    use rustix::fs::{openat, Mode, OFlags, CWD};
+    use rustix::io::Errno;
+    let flags = OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC;
+    let opened = match parent {
+        Some((parent, name)) => openat(parent, name, flags, Mode::empty()),
+        None => openat(CWD, path, flags, Mode::empty()),
+    };
+    match opened {
+        Ok(folder) => Ok(File::from(folder)),
+        Err(Errno::LOOP | Errno::NOTDIR) => Err(Unentered::NotAFolder),
+        Err(errno) => Err(Unentered::Io(errno.into())),
+    }
+}
+
+/// The folder opened by its path as itself, and refused when it is a
+/// reparse point; the caller holds the parent's handle meanwhile.
+#[cfg(windows)]
+fn open_dir(_parent: Option<(&File, &OsStr)>, path: &Path) -> Result<File, Unentered> {
+    use std::os::windows::fs::OpenOptionsExt;
+    const FILE_LIST_DIRECTORY: u32 = 0x0001;
+    const FILE_READ_ATTRIBUTES: u32 = 0x0080;
+    const FILE_SHARE_READ: u32 = 0x0001;
+    const FILE_SHARE_WRITE: u32 = 0x0002;
+    const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
+    let folder = std::fs::OpenOptions::new()
+        .access_mode(FILE_LIST_DIRECTORY | FILE_READ_ATTRIBUTES)
+        .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
+        .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
+        .open(path)
+        .map_err(Unentered::Io)?;
+    let metadata = folder.metadata().map_err(Unentered::Io)?;
+    if is_link(&metadata) || !metadata.is_dir() {
+        return Err(Unentered::NotAFolder);
+    }
+    Ok(folder)
+}
+
+#[cfg(not(any(unix, windows)))]
+fn open_dir(_parent: Option<(&File, &OsStr)>, path: &Path) -> Result<File, Unentered> {
+    Err(Unentered::Io(std::io::Error::new(
+        std::io::ErrorKind::Unsupported,
+        format!("{}: no rooted lookup on this platform", path.display()),
+    )))
+}
+
 #[cfg(all(test, unix))]
 mod tests {
     use std::fs;
