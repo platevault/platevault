@@ -522,5 +522,12 @@ mod tests {
                 "provenance.read.generated.json",
             );
         }
+        #[test]
+        fn previous_item_resolution_schema_no_drift() {
+            assert_schema_matches::<crate::library_requests::PreviousItemResolution>(
+                "064-library-inventory",
+                "library.previous-item-resolution.generated.json",
+            );
+        }
     }
 }

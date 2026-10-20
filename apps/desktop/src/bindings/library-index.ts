@@ -4578,6 +4578,9 @@ export type MasterProvenance_Serialize = {
 	adoptedAt: string,
 };
 
+/**  A stable category for a failed frame measurement. */
+export type MeasurementFailureCode = "unsupported_format" | "malformed_data" | "source_unavailable";
+
 /**  A measurement method and its version. */
 export type MeasurementMethod = {
 	name: string,
@@ -4587,9 +4590,7 @@ export type MeasurementMethod = {
 /**  The outcome of measuring one frame. */
 export type MeasurementOutcome = { outcome: "measured"; metrics: MetricValue[]; stars: StarRecord[]; masks: MaskCounts; 
 /**  Only the brightest candidates were kept. */
-truncated: boolean } | 
-/**  The method's reason for the whole frame. */
-{ outcome: "failed"; reason: string; message: string };
+truncated: boolean } | { outcome: "failed"; code: MeasurementFailureCode; parameters: { [key in string]: string } };
 
 /**  A cached measurement of one asset. */
 export type MeasurementRecord = MeasurementRecord_Serialize | MeasurementRecord_Deserialize;
@@ -6511,9 +6512,10 @@ export type RunCounters = {
  */
 export type RunIssue = {
 	assetId: string,
-	/**  The failure's `LibraryErrorCode` wire string. */
-	kind: string,
-	message: string,
+	/**  The stable machine code for the failure. */
+	kind: LibraryErrorCode,
+	/**  Safe structured display parameters; raw diagnostic text is log-only. */
+	parameters: { [key in string]: string },
 };
 
 /**  A measurement run's state. */
