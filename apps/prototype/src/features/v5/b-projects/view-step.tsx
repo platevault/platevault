@@ -42,7 +42,7 @@ import { Pill } from "@/components/app/pill"
 import { ViewFolderTree } from "@/components/domain/view-folder-tree"
 import type { DetailSection } from "@/components/templates/detail-page"
 import { CHOICE_STATE_NAME, KIND_NAME, NO_KIND_NAME, sourceRef } from "@/domain/calibration"
-import { isLocked, isMosaic, type StepLink } from "@/domain/derive"
+import { isLocked, isMosaic, sessionIntakeEntry, type StepLink } from "@/domain/derive"
 import { filesUnder, freeBytes, trashRefusal, volumeForPath } from "@/domain/disk"
 import { MODE_NAME, orderedProfiles, profileRef } from "@/domain/labels"
 import { sessionLongRef } from "@/domain/membership"
@@ -385,9 +385,11 @@ function ApplySheetHost({ project }: { project: Project }) {
 
 const sessionLink = (sessionId: string): StepLink => ({ to: "/sessions/$sessionId", params: { sessionId } })
 
-/** Each refusal as a blocker, linked to where it is resolved. */
-function refusalBlockers(m: Messages, refusal: ApplyRefusal, project: Project): Blocker[] {
+/** Each refusal as a blocker, linked to where it is resolved: a session that is not Ready opens at its first unsettled intake step (D-W100). */
+function refusalBlockers(m: Messages, catalog: Catalog, refusal: ApplyRefusal, project: Project): Blocker[] {
   switch (refusal.kind) {
+    case "not-ready":
+      return refusal.sessions.map((s) => ({ label: m.view_blocker_not_ready({ name: say(m, sessionLongRef(s)) }), link: sessionIntakeEntry(catalog, s) }))
     case "unsettled":
       return refusal.sessions.map((s) => ({ label: m.view_blocker_unsettled({ name: say(m, sessionLongRef(s)) }), link: sessionLink(s.id) }))
     case "pin-drift":
@@ -410,7 +412,7 @@ function ApplySheetDialog({ project, sheet }: { project: Project; sheet: ApplySh
   const label = m.project_apply()
   const stale = plan.fingerprint !== sheet.fingerprint
   const refusals = plan.refusals
-  const blockers = refusals.flatMap((r) => refusalBlockers(m, r, project))
+  const blockers = refusals.flatMap((r) => refusalBlockers(m, state.catalog, r, project))
   const footprint = plannedFootprint(state.disk, plan)
   const free = freeOn(state.disk, plan.paths?.root ?? null)
   const application = projectApplication(state.catalog, project)

@@ -29,10 +29,11 @@ import { Pill } from "@/components/app/pill"
 import { StatusBadge } from "@/components/app/status"
 import { CalibrationChoices, calibrationChoiceRows } from "@/components/domain/calibration-choices"
 import { DuplicatesBadge } from "@/components/domain/duplicates-badge"
+import { ReadinessBadge } from "@/components/domain/readiness-badge"
 import { DetailPage } from "@/components/templates/detail-page"
 import { CHOICE_STATE_NAME, KIND_NAME, NO_KIND_NAME, PIN_KINDS, sessionPinProblems } from "@/domain/calibration"
 import { CALIBRATION_STEP_NAME, processForSession, processView } from "@/domain/calibration-process"
-import { findGroup, findInput, formatHours, isLocked, sessionIntakeEntry, sessionIntakeLink, type SessionReadiness, sessionRigId, sessionTargetId } from "@/domain/derive"
+import { findGroup, findInput, formatHours, isLocked, sessionIntakeEntry, sessionIntakeLink, sessionRigId, sessionTargetId } from "@/domain/derive"
 import { sessionRigVersion } from "@/domain/indexing"
 import { assetAvailability, captureSite, qualityApplicability } from "@/domain/library"
 import { sessionLongLabel } from "@/domain/membership"
@@ -120,15 +121,6 @@ function intakeActions(m: Messages, follow: (link: ReturnType<typeof sessionInta
     { id: "intake-target", label: m.session_choose_target(), run: () => follow(sessionIntakeLink(session.id, "target")) },
     { id: "intake-rig", label: m.session_choose_rig(), run: () => follow(sessionIntakeLink(session.id, "rig")) },
   ]
-}
-
-/** Where intake stands, as one status word: Ready, or the step it still needs (C10). The Sessions list, the detail and the intake show the same. */
-export function ReadinessBadge({ readiness, unreviewed, trashed }: { readiness: SessionReadiness; unreviewed: number; trashed: boolean }) {
-  const m = useMessages()
-  if (trashed) return <StatusBadge kind="record" value="trashed" />
-  if (readiness === "ready") return <StatusBadge kind="gate" value="ready" />
-  const label = readiness === "needs-target" ? m.sessions_filter_needs_target() : readiness === "needs-rig" ? m.sessions_rig_needs_review() : m.flow_frames_unreviewed({ count: unreviewed })
-  return <StatusBadge kind="gate" value="review" label={label} />
 }
 
 /**

@@ -6033,6 +6033,25 @@
   "project_change_frames_included": "{frames} de {session} incluídos de volta",
   "project_change_frames_rejected": "{frames} de {session} rejeitados",
   "project_change_frames_restored": "{frames} de {session} restaurados",
+  "project_change_frames_unreviewed": "Não revisado de novo: {frames} de {session}",
+  "apply_refused_not_ready": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "count",
+        "countPlural"
+      ],
+      "match": {
+        "count=0, countPlural=*": "{count} sessões precisam de revisão",
+        "count=*, countPlural=one": "{count} sessão precisa de revisão",
+        "count=*, countPlural=*": "{count} sessões precisam de revisão"
+      }
+    }
+  ],
+  "view_blocker_not_ready": "Concluir a revisão de {name}",
   "project_change_group_renamed": "Grupo {from} renomeado para {to}",
   "project_change_keywords": "Palavras-chave de grupo alteradas",
   "project_change_mode": "O modo de entrada muda para {mode}",
