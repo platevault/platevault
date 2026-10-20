@@ -1156,6 +1156,36 @@ pub enum EvidenceItem {
     Unknown { field: String },
     Conflict { field: String, values: Vec<String> },
 }
+
+/// Whether an association in `state` with `evidence` counts as confirmed for
+/// Needs a Target, Not in any Project, Ready and coverage (LIB-FR-05,
+/// LIB-FR-17, LIB-FR-20, D-W124): confirmed by the user, or associated by
+/// agreeing evidence, a Suggested row with an agreeing `OBJECT` alias and
+/// qualified pointing geometry and no conflict. The admission trigger
+/// `project_sessions_admit_ready` restates this rule in SQL.
+#[must_use]
+pub fn counts_as_confirmed(state: &AssociationState, evidence: &[EvidenceItem]) -> bool {
+    match state {
+        AssociationState::Confirmed => true,
+        AssociationState::Suggested => {
+            let alias = evidence
+                .iter()
+                .any(|item| matches!(item, EvidenceItem::Alias { agrees: true, .. }));
+            let geometry = evidence.iter().any(|item| {
+                matches!(
+                    item,
+                    EvidenceItem::Coordinates { qualified: true, .. }
+                        | EvidenceItem::Footprint { qualified: true, .. }
+                )
+            });
+            let conflicting =
+                evidence.iter().any(|item| matches!(item, EvidenceItem::Conflict { .. }));
+            alias && geometry && !conflicting
+        }
+        AssociationState::Unresolved | AssociationState::NeedsReview => false,
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]

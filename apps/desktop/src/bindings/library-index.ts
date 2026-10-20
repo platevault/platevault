@@ -60,12 +60,15 @@ export const commands = {
 "trashed" | 
 /**
  *  Sessions with no confirmed Target, whatever their automatic Target row
- *  says (Unresolved, Suggested, Needs review or none).
+ *  says (Unresolved, Needs review, Suggested without agreeing evidence or
+ *  none). A Target associated by agreeing evidence counts as confirmed
+ *  (D-W124).
  */
 "needs_target" | 
 /**
- *  Sessions with a confirmed Target that are neither a Project's candidate
- *  nor a member of any Project's run.
+ *  Sessions with a confirmed Target, or one associated by agreeing
+ *  evidence, that are neither a Project's candidate nor a member of any
+ *  Project's run.
  */
 "not_in_any_project" | 
 /**
@@ -6647,12 +6650,15 @@ export type SessionFilter =
 "trashed" | 
 /**
  *  Sessions with no confirmed Target, whatever their automatic Target row
- *  says (Unresolved, Suggested, Needs review or none).
+ *  says (Unresolved, Needs review, Suggested without agreeing evidence or
+ *  none). A Target associated by agreeing evidence counts as confirmed
+ *  (D-W124).
  */
 "needs_target" | 
 /**
- *  Sessions with a confirmed Target that are neither a Project's candidate
- *  nor a member of any Project's run.
+ *  Sessions with a confirmed Target, or one associated by agreeing
+ *  evidence, that are neither a Project's candidate nor a member of any
+ *  Project's run.
  */
 "not_in_any_project" | 
 /**
@@ -6712,6 +6718,10 @@ export type SessionIntake = {
 	groupingRevision: number,
 	/**  A regroup replaced the session; its successors are current. */
 	superseded: boolean,
+	/**
+	 *  The session's Target counts as confirmed: the user confirmed it or it
+	 *  is associated by agreeing evidence (D-W124).
+	 */
 	targetConfirmed: boolean,
 	/**  The confirmed rig. */
 	rigId: string | null,

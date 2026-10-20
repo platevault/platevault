@@ -20,8 +20,8 @@ use std::sync::Arc;
 use std::time::{Duration, UNIX_EPOCH};
 
 use platevault_model::{
-    logical_quality, ApplicableQuality, Asset, AssetReference, Association, AssociationKind,
-    AssociationState, Availability, CaptureKey, CaptureMetadata, CorrectionInput,
+    counts_as_confirmed, logical_quality, ApplicableQuality, Asset, AssetReference, Association,
+    AssociationKind, AssociationState, Availability, CaptureKey, CaptureMetadata, CorrectionInput,
     CoverageContribution, DigestEvidence, Equipment, EvidenceItem, ExpectedAsset, ExpectedSession,
     FileIdentity, GroupingResult, LibraryError, LibraryErrorCode, Location, LocationLifecycle,
     LocationRole, NativePath, ObservationFingerprint, PathSensitivity, Provenance, Quality,
@@ -296,10 +296,13 @@ pub enum SessionFilter {
     /// summarized over its Trashed frames alone.
     Trashed,
     /// Sessions with no confirmed Target, whatever their automatic Target row
-    /// says (Unresolved, Suggested, Needs review or none).
+    /// says (Unresolved, Needs review, Suggested without agreeing evidence or
+    /// none). A Target associated by agreeing evidence counts as confirmed
+    /// (D-W124).
     NeedsTarget,
-    /// Sessions with a confirmed Target that are neither a Project's candidate
-    /// nor a member of any Project's run.
+    /// Sessions with a confirmed Target, or one associated by agreeing
+    /// evidence, that are neither a Project's candidate nor a member of any
+    /// Project's run.
     NotInAnyProject,
     /// The calibration queue: sessions with a kind neither pinned nor No,
     /// Ready or not, and sessions whose pinned file changed or went missing.
@@ -1938,7 +1941,7 @@ impl Catalog {
         for row in &rows {
             let state: AssociationState = from_text(&row.try_get::<String, _>("state")?)?;
             let evidence: Vec<EvidenceItem> = from_json(&row.try_get::<String, _>("evidence")?)?;
-            if !counts_toward_coverage(&state, &evidence) {
+            if !counts_as_confirmed(&state, &evidence) {
                 continue;
             }
             let session_id = parse_uuid(&row.try_get::<String, _>("id")?)?;
@@ -5839,32 +5842,6 @@ async fn associations_of(
         }
     }
     Ok(index)
-}
-
-// ---------------------------------------------------------------------------
-// Coverage helpers
-// ---------------------------------------------------------------------------
-
-fn counts_toward_coverage(state: &AssociationState, evidence: &[EvidenceItem]) -> bool {
-    match state {
-        AssociationState::Confirmed => true,
-        AssociationState::Suggested => {
-            let alias = evidence
-                .iter()
-                .any(|item| matches!(item, EvidenceItem::Alias { agrees: true, .. }));
-            let geometry = evidence.iter().any(|item| {
-                matches!(
-                    item,
-                    EvidenceItem::Coordinates { qualified: true, .. }
-                        | EvidenceItem::Footprint { qualified: true, .. }
-                )
-            });
-            let conflicting =
-                evidence.iter().any(|item| matches!(item, EvidenceItem::Conflict { .. }));
-            alias && geometry && !conflicting
-        }
-        AssociationState::Unresolved | AssociationState::NeedsReview => false,
-    }
 }
 
 /// D16 state of one read request: logical captures of its assets, their

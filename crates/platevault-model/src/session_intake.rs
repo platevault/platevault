@@ -54,6 +54,8 @@ pub struct SessionIntake {
     pub grouping_revision: Revision,
     /// A regroup replaced the session; its successors are current.
     pub superseded: bool,
+    /// The session's Target counts as confirmed: the user confirmed it or it
+    /// is associated by agreeing evidence (D-W124).
     pub target_confirmed: bool,
     /// The confirmed rig.
     pub rig_id: Option<Uuid>,
