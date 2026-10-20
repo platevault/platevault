@@ -13,6 +13,7 @@ use std::net::TcpListener;
 use std::path::Path;
 use std::sync::Arc;
 
+use persistence_library::SessionQuery;
 use platevault_core::library::Library;
 use platevault_core::targets::{
     user_target, ObjectType, SimbadConfig, TargetQuery, UserTargetInput, ICRS_FRAME,
@@ -21,6 +22,105 @@ use platevault_core::*;
 use time::macros::date;
 use time::Date;
 use uuid::Uuid;
+#[path = "support/mod.rs"]
+mod support;
+
+/// D-W125: an indexed session Target appears in My targets alongside saved
+/// favourites and Project subjects; listing it does not favourite it.
+#[tokio::test]
+async fn my_targets_page_includes_a_target_with_an_indexed_session() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().join("captures");
+    std::fs::create_dir_all(&root).unwrap();
+    let fits = root.join("ngc7000.fits");
+    support::fits(
+        &fits,
+        &[
+            ("IMAGETYP", "'LIGHT'"),
+            ("FILTER", "'Ha'"),
+            ("EXPTIME", "300"),
+            ("DATE-OBS", "'2026-09-18T22:00:00Z'"),
+            ("OBJECT", "'NGC 7000'"),
+            ("RA", "314.75"),
+            ("DEC", "44.33"),
+            ("FOCALLEN", "400"),
+            ("XPIXSZ", "3.76"),
+        ],
+    )
+    .unwrap();
+    let library = open(&temp.path().join("library.sqlite")).await;
+    let location = library
+        .register_location(NativePath::from_path(&root), "Captured".into(), LocationRole::Captures)
+        .await
+        .unwrap();
+    let candidate = user_target(&UserTargetInput {
+        designation: "NGC 7000".into(),
+        aliases: Vec::new(),
+        common_name: None,
+        object_type: ObjectType::EmissionNebula,
+        coordinates: Some(SkyCoordinates {
+            ra_deg: 314.75,
+            dec_deg: 44.33,
+            frame: ICRS_FRAME.into(),
+        }),
+    })
+    .unwrap();
+    library.catalog().save_target(&candidate, None).await.unwrap();
+    let generation = library.catalog().target_generation().await.unwrap();
+
+    let mut progress = library.subscribe_scan_progress();
+    let started = library.start_scan(location.id, None).await.unwrap();
+    let terminal = tokio::time::timeout(std::time::Duration::from_secs(120), async {
+        loop {
+            let operation = progress.recv().await.unwrap();
+            if operation.id == started.id && operation.state != ScanState::Running {
+                break operation;
+            }
+        }
+    })
+    .await
+    .expect("indexing publishes a terminal scan event");
+    assert_eq!(terminal.state, ScanState::Completed, "{terminal:?}");
+    let session = library
+        .catalog()
+        .list_sessions(&SessionQuery::default())
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|summary| !summary.session.asset_ids.is_empty())
+        .unwrap()
+        .session;
+    library
+        .catalog()
+        .associate_target(
+            &[ExpectedSession {
+                session_id: session.id,
+                grouping_revision: session.grouping_revision,
+                decision_revision: session.decision_revision,
+            }],
+            candidate.id,
+        )
+        .await
+        .unwrap();
+    let detail = library.catalog().session(session.id).await.unwrap();
+    let association = detail
+        .associations
+        .iter()
+        .find(|association| association.kind == AssociationKind::Target)
+        .expect("the indexed session has a Target association");
+    assert_eq!(association.subject_id, Some(candidate.id));
+    assert_eq!(association.state, AssociationState::Confirmed);
+    let page = library
+        .target_rows(&query(TargetsShow::MyTargets, None, date!(2026 - 10 - 10)))
+        .await
+        .unwrap();
+    assert_eq!(designations(&page), ["NGC 7000"]);
+    let target = row(&page, candidate.id);
+    assert!(target.saved, "an indexed session's Target record remains saved");
+    assert!(!target.favourite, "a session does not make its Target a favourite");
+    assert_eq!(target.sessions, 1);
+    assert_eq!(library.catalog().target_generation().await.unwrap(), generation);
+}
 
 const BACKYARD: (f64, f64) = (52.09, 5.12);
 const TROMSO: (f64, f64) = (69.65, 18.96);

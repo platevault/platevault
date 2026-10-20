@@ -11,13 +11,13 @@ mod support;
 
 use std::path::Path;
 
-use persistence_library::{Catalog, SessionQuery};
+use persistence_library::{Catalog, SessionQuery, SuggestedAssociation};
 use platevault_model::{
-    AssociationState, Availability, BuiltinPreset, Catalogue, ChannelIntegration, Equipment,
-    LibraryError, Location, MeasurementMethod, PresetFilters, ProjectBadge, ProjectInput,
-    Provenance, ScanFile, ScanObservation, ScanProgress, ScanState, Session, SubjectInput,
-    TargetActivity, TargetRecord, TargetsColumn, TargetsShow, TargetsSort, WrapUpOutcome,
-    WrapUpStep,
+    AssociationKind, AssociationState, Availability, BuiltinPreset, Catalogue, ChannelIntegration,
+    Equipment, EvidenceItem, LibraryError, Location, MeasurementMethod, PresetFilters,
+    ProjectBadge, ProjectInput, Provenance, ScanFile, ScanObservation, ScanProgress, ScanState,
+    Session, SubjectInput, TargetActivity, TargetRecord, TargetsColumn, TargetsShow, TargetsSort,
+    WrapUpOutcome, WrapUpStep,
 };
 use sqlx::sqlite::{SqliteConnectOptions, SqliteConnection};
 use sqlx::Connection;
@@ -62,9 +62,9 @@ async fn save(catalog: &Catalog, designation: &str) -> TargetRecord {
     catalog.save_target(&target(designation, &designation.to_lowercase()), None).await.unwrap()
 }
 
-/// D-W60, PLAN-TGT-FR-01: My targets is the ★ favourites plus every subject of
-/// an open Project, each subject carrying its Project's badge; a Closed
-/// Project adds nothing, and ★ never removes a subject.
+/// D-W60, PLAN-TGT-FR-01: My targets includes ★ favourites, every subject of
+/// an open Project, and current sessions that count as confirmed. Projects
+/// carry badges, a Closed Project adds nothing, and ★ never removes a subject.
 #[tokio::test]
 async fn marks_hold_favourites_and_open_project_subjects_only() {
     let fx = Fixture::new();
@@ -116,6 +116,102 @@ async fn marks_hold_favourites_and_open_project_subjects_only() {
     assert_eq!(catalog.my_target_marks().await.unwrap().favourites.len(), 1);
     let unsaved = catalog.set_favourite(Uuid::new_v4(), true).await.unwrap_err();
     assert!(matches!(unsaved, LibraryError::NotFound(_)), "{unsaved:?}");
+}
+/// D-W125: a live, indexed Target session joins My targets without favouriting
+/// it or creating its Target record. An unqualified suggestion alone does not.
+#[tokio::test]
+async fn my_targets_include_confirmed_sessions_but_not_unqualified_suggestions() {
+    let fx = Fixture::new();
+    for frame in &FRAMES {
+        fx.write(frame.path, frame.path.as_bytes());
+    }
+    let catalog = Catalog::open(&fx.db).await.unwrap();
+    let location = catalog.register_location(&fx.registration()).await.unwrap();
+    scan_frames(&catalog, &fx, &location).await;
+
+    let confirmed_target = save(&catalog, "M 31").await;
+    let qualified_target = save(&catalog, "IC 1396").await;
+    let suggested_target = save(&catalog, "NGC 7000").await;
+    let generation = catalog.target_generation().await.unwrap();
+
+    let confirmed_session = session_of(&catalog, &location, "m31/Ha_1.fits").await;
+    catalog
+        .associate_target(&[expected_session(&confirmed_session)], confirmed_target.candidate.id)
+        .await
+        .unwrap();
+    let qualified_session = session_of(&catalog, &location, "m31/OIII_1.fits").await;
+    let qualified_detail = catalog.session(qualified_session.id).await.unwrap();
+    let qualified_suggestion = SuggestedAssociation {
+        session_id: qualified_session.id,
+        grouping_revision: qualified_session.grouping_revision,
+        kind: AssociationKind::Target,
+        subject_id: Some(qualified_target.candidate.id),
+        state: AssociationState::Suggested,
+        evidence: vec![
+            EvidenceItem::Alias { normalized: "ic 1396".into(), agrees: true },
+            EvidenceItem::Coordinates { ra_deg: 314.75, dec_deg: 44.33, qualified: true },
+        ],
+        provenance: Provenance::Inferred { rule: "test-qualified-pointing".into() },
+        expected_observations: qualified_detail
+            .assets
+            .iter()
+            .map(|asset| (asset.id, asset.fingerprint.clone()))
+            .collect(),
+        expected_decisions: qualified_detail
+            .assets
+            .iter()
+            .map(|asset| (asset.id, asset.decision_revision))
+            .collect(),
+        expected_observation_revisions: qualified_detail
+            .assets
+            .iter()
+            .map(|asset| (asset.id, asset.observation_revision))
+            .collect(),
+    };
+    catalog.record_suggestions(&[qualified_suggestion]).await.unwrap();
+
+    let suggested_session = session_of(&catalog, &location, "m31/L_1.fits").await;
+    let suggested_detail = catalog.session(suggested_session.id).await.unwrap();
+    let suggestion_only = SuggestedAssociation {
+        session_id: suggested_session.id,
+        grouping_revision: suggested_session.grouping_revision,
+        kind: AssociationKind::Target,
+        subject_id: Some(suggested_target.candidate.id),
+        state: AssociationState::Suggested,
+        evidence: vec![EvidenceItem::Alias { normalized: "ngc 7000".into(), agrees: true }],
+        provenance: Provenance::Inferred { rule: "test-unqualified".into() },
+        expected_observations: suggested_detail
+            .assets
+            .iter()
+            .map(|asset| (asset.id, asset.fingerprint.clone()))
+            .collect(),
+        expected_decisions: suggested_detail
+            .assets
+            .iter()
+            .map(|asset| (asset.id, asset.decision_revision))
+            .collect(),
+        expected_observation_revisions: suggested_detail
+            .assets
+            .iter()
+            .map(|asset| (asset.id, asset.observation_revision))
+            .collect(),
+    };
+    catalog.record_suggestions(&[suggestion_only]).await.unwrap();
+
+    let marks = catalog.my_target_marks().await.unwrap();
+    assert!(marks.contains(confirmed_target.candidate.id), "confirmed indexed session");
+    assert!(marks.contains(qualified_target.candidate.id), "qualified pointing association");
+    assert!(!marks.contains(suggested_target.candidate.id), "suggestion alone is not membership");
+    assert!(marks.favourites.is_empty(), "session membership does not favourite targets");
+    assert!(marks.badges.is_empty(), "session membership adds no Project badge");
+    assert_eq!(
+        marks.sessions,
+        [confirmed_target.candidate.id, qualified_target.candidate.id].into()
+    );
+    assert_eq!(catalog.target_generation().await.unwrap(), generation);
+    let saved = catalog.list_targets(0, 0).await.unwrap();
+    assert_eq!(saved.len(), 3, "membership reads do not create Target records");
+    assert!(saved.iter().any(|record| record.candidate.id == confirmed_target.candidate.id));
 }
 
 /// PLAN-TGT-FR-03: Add to targets writes an unsaved Target into the library
