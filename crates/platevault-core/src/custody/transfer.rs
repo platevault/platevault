@@ -552,8 +552,12 @@ fn copy_onto_new(from: &Path, to: &Path) -> std::io::Result<Copied> {
             .map_err(|failed| std::io::Error::other(failed.detail))?;
         sync_folder(to.parent().unwrap_or_else(|| Path::new("")))?;
         let identity = inventory::probe_fingerprint(to).map_err(std::io::Error::other)?.identity;
-        let expect =
-            Expect { identity: &identity, size_bytes: fingerprint.size_bytes, modified_ns: None };
+        let expect = Expect {
+            identity: &identity,
+            size_bytes: fingerprint.size_bytes,
+            modified_ns: None,
+            root: None,
+        };
         let reread = read_unchanged(to, &expect, |_| Ok(()))
             .map_err(|check| std::io::Error::other(check.detail().to_owned()))?;
         if reread != digest || !names(to, &out) {
