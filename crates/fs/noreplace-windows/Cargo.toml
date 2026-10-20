@@ -1,0 +1,36 @@
+[package]
+name = "fs_noreplace_windows"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+# astro-plan-nfsgg: the Windows rename that never replaces its destination,
+# behind a safe API. It is one FFI call, so this crate alone allows `unsafe`
+# at that call site and `platevault_core` keeps the workspace `forbid`.
+# Empty on every other target.
+[target.'cfg(windows)'.dependencies]
+# `MoveFileExW` (`Win32_Storage_FileSystem`); the version
+# `platevault_eject_windows` already locks.
+windows-sys = { version = "0.61.2", features = ["Win32_Storage_FileSystem"] }
+
+[target.'cfg(windows)'.dev-dependencies]
+tempfile = { workspace = true }
+
+# The workspace table with `unsafe_code` at `deny` instead of `forbid`, so the
+# FFI call site can allow it. Keep the rest in step with the workspace
+# `[workspace.lints]`.
+[lints.rust]
+unsafe_code = "deny"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+disallowed_methods = "allow"
+use_self = "warn"
+redundant_pub_crate = "warn"
+derive_partial_eq_without_eq = "warn"
+redundant_clone = "warn"
+needless_collect = "warn"
+significant_drop_tightening = "warn"
+or_fun_call = "warn"
+cognitive_complexity = "warn"

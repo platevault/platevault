@@ -27,6 +27,7 @@ members = [
   "crates/domain/core",
   "crates/fs/executor",
   "crates/fs/inventory",
+  "crates/fs/noreplace-windows",
   "crates/fs/pathsafe",
   "crates/metadata/core",
   "crates/metadata/fits",

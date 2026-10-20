@@ -413,33 +413,207 @@ pub(crate) fn clone_file(_source: &Path, _path: &Path) -> std::io::Result<()> {
 }
 
 /// Rename `from` to `to` on one volume without ever replacing what is at
-/// `to`: `renameat2(RENAME_NOREPLACE)` on Linux and `renamex_np(RENAME_EXCL)`
-/// on macOS. Where the volume lacks those, a folder is renamed only while
-/// `to` is free (Windows refuses a folder rename onto an existing name by
-/// itself) and a file goes through a no-replace link or move.
+/// `to`, an empty folder included (STO-FR-12, PREP-FR-06). Every path either
+/// asks the filesystem for a rename that refuses an existing `to` in the same
+/// step that takes the name, or refuses: none checks `to` and then renames,
+/// because a plain rename replaces an empty folder on Unix, and on Windows 10
+/// 1607 and later where the volume supports `FileRenameInfoEx` (the
+/// platform notes of `std::fs::rename`).
+///
+/// - macOS and Linux: `renamex_np(RENAME_EXCL)` and
+///   `renameat2(RENAME_NOREPLACE)` (rustix `RenameFlags::NOREPLACE`), which
+///   the kernel refuses with `EEXIST`.
+/// - Windows: `MoveFileExW(from, to, 0)`, without `MOVEFILE_REPLACE_EXISTING`
+///   (`fs_noreplace_windows`, which holds the one `unsafe` call so this crate
+///   keeps `forbid`). The filesystem fails it with `ERROR_ALREADY_EXISTS`
+///   when anything is at `to`; it moves a folder with its children on one
+///   volume, and a link as the link itself. tempfile's `persist_noclobber`
+///   isn't used: it first sets the source's attributes through its path,
+///   which follows a link to an original.
+/// - A volume that answers the no-replace rename as unsupported (`EINVAL`,
+///   `ENOTSUP`, `ENOSYS`: macOS exFAT, some network and FUSE mounts), and
+///   every other platform: see [`without_noreplace`]. A folder is refused
+///   there (fail closed), so Apply can't swap a View on such a volume.
 ///
 /// # Errors
-/// `AlreadyExists` when `to` is taken; the platform's rename error.
+/// `AlreadyExists` when `to` is taken; `Unsupported` for a folder on a
+/// volume without the no-replace rename; the platform's rename error.
 pub(crate) fn rename_noreplace(from: &Path, to: &Path) -> std::io::Result<()> {
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     {
         use rustix::fs::{renameat_with, RenameFlags, CWD};
         use rustix::io::Errno;
         match renameat_with(CWD, from, CWD, to, RenameFlags::NOREPLACE) {
-            Ok(()) => return Ok(()),
-            Err(Errno::INVAL | Errno::NOTSUP | Errno::NOSYS) => {}
-            Err(error) => return Err(error.into()),
+            Ok(()) => Ok(()),
+            Err(errno @ (Errno::INVAL | Errno::NOTSUP | Errno::NOSYS)) => {
+                without_noreplace(from, to, &errno.into())
+            }
+            Err(error) => Err(error.into()),
         }
     }
-    match fs::symlink_metadata(to) {
-        Ok(_) => return Err(std::io::ErrorKind::AlreadyExists.into()),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-        Err(error) => return Err(error),
+    #[cfg(windows)]
+    {
+        fs_noreplace_windows::move_noreplace(from, to)
     }
+    #[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
+    {
+        without_noreplace(from, to, &std::io::ErrorKind::Unsupported.into())
+    }
+}
+
+/// [`rename_noreplace`] where the volume has no no-replace rename (`cause`
+/// says how it answered). A file goes through tempfile's no-clobber persist,
+/// whose hard link refuses an existing name atomically; the move fails where
+/// the volume has no hard links either. A folder can't be hard-linked and
+/// has no other move there that refuses an existing name, so it is never
+/// renamed.
+#[cfg(not(windows))]
+fn without_noreplace(from: &Path, to: &Path, cause: &std::io::Error) -> std::io::Result<()> {
     if fs::symlink_metadata(from)?.is_dir() {
-        return fs::rename(from, to);
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            format!(
+                "{} was not renamed to {}: its volume offers no rename that refuses an existing \
+                 folder ({cause})",
+                from.display(),
+                to.display()
+            ),
+        ));
     }
     let mut moving = tempfile::TempPath::try_from_path(from)?;
     moving.disable_cleanup(true);
     moving.persist_noclobber(to).map_err(|failure| failure.error)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io;
+
+    use super::*;
+
+    /// `View/` holding one file, and the name beside it a rename targets.
+    fn view_in(temp: &tempfile::TempDir) -> (PathBuf, PathBuf) {
+        let view = temp.path().join("View");
+        fs::create_dir(&view).unwrap();
+        fs::write(view.join("Light_001.fits"), b"old view").unwrap();
+        (view, temp.path().join("View (previous)"))
+    }
+
+    fn kept(view: &Path) {
+        assert_eq!(fs::read(view.join("Light_001.fits")).unwrap(), b"old view", "the old View");
+    }
+
+    /// The rename on a volume that answers the no-replace rename `ENOTSUP`.
+    #[cfg(not(windows))]
+    fn fallback(from: &Path, to: &Path) -> io::Result<()> {
+        without_noreplace(from, to, &io::ErrorKind::Unsupported.into())
+    }
+
+    #[test]
+    fn a_folder_rename_refuses_an_empty_destination_folder() {
+        let temp = tempfile::tempdir().unwrap();
+        let (view, previous) = view_in(&temp);
+        fs::create_dir(&previous).unwrap();
+        let error = rename_noreplace(&view, &previous).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::AlreadyExists, "{error}");
+        kept(&view);
+        assert_eq!(fs::read_dir(&previous).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn a_folder_rename_refuses_a_destination_folder_that_holds_files() {
+        let temp = tempfile::tempdir().unwrap();
+        let (view, previous) = view_in(&temp);
+        fs::create_dir(&previous).unwrap();
+        fs::write(previous.join("theirs.txt"), b"theirs").unwrap();
+        let error = rename_noreplace(&view, &previous).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::AlreadyExists, "{error}");
+        kept(&view);
+        assert_eq!(fs::read(previous.join("theirs.txt")).unwrap(), b"theirs");
+    }
+
+    #[test]
+    fn a_folder_rename_onto_a_free_name_moves_the_folder() {
+        let temp = tempfile::tempdir().unwrap();
+        let (view, previous) = view_in(&temp);
+        rename_noreplace(&view, &previous).unwrap();
+        assert!(!view.exists());
+        kept(&previous);
+    }
+
+    /// The plain rename the old fallback ended in: on Unix it silently
+    /// replaces an empty folder, which is why no check before it is safe.
+    #[cfg(unix)]
+    #[test]
+    fn a_plain_rename_replaces_an_empty_folder() {
+        let temp = tempfile::tempdir().unwrap();
+        let (view, previous) = view_in(&temp);
+        fs::create_dir(&previous).unwrap();
+        fs::rename(&view, &previous).unwrap();
+        kept(&previous);
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn without_the_primitive_a_folder_is_never_renamed() {
+        let temp = tempfile::tempdir().unwrap();
+        let (view, previous) = view_in(&temp);
+        let error = fallback(&view, &previous).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::Unsupported, "{error}");
+        kept(&view);
+        assert!(!previous.exists(), "nothing was created");
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn without_the_primitive_a_folder_rename_refuses_an_existing_destination() {
+        let temp = tempfile::tempdir().unwrap();
+        let (view, previous) = view_in(&temp);
+        fs::create_dir(&previous).unwrap();
+        assert!(fallback(&view, &previous).is_err(), "onto an empty folder");
+        fs::write(previous.join("theirs.txt"), b"theirs").unwrap();
+        assert!(fallback(&view, &previous).is_err(), "onto a folder with files");
+        kept(&view);
+        assert_eq!(fs::read(previous.join("theirs.txt")).unwrap(), b"theirs");
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn without_the_primitive_a_file_moves_only_onto_a_free_name() {
+        let temp = tempfile::tempdir().unwrap();
+        let (from, to) = (temp.path().join("a.fits"), temp.path().join("b.fits"));
+        fs::write(&from, b"ours").unwrap();
+        fs::write(&to, b"theirs").unwrap();
+        let error = fallback(&from, &to).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::AlreadyExists, "{error}");
+        assert_eq!(fs::read(&to).unwrap(), b"theirs");
+        fs::remove_file(&to).unwrap();
+        fallback(&from, &to).unwrap();
+        assert!(!from.exists());
+        assert_eq!(fs::read(&to).unwrap(), b"ours");
+    }
+
+    /// The swap's first step, `View/` → `View (previous)/`, onto a name an
+    /// empty folder took after the swap checked it was free.
+    #[tokio::test]
+    async fn the_swap_reports_the_refusal_and_keeps_the_old_view() {
+        use crate::apply::files::{move_aside, Aside, Rename};
+        use crate::apply::Unattended;
+
+        let poll = std::time::Duration::from_millis(1);
+        for rename in [
+            rename_noreplace as Rename,
+            #[cfg(not(windows))]
+            fallback,
+        ] {
+            let temp = tempfile::tempdir().unwrap();
+            let (view, previous) = view_in(&temp);
+            fs::create_dir(&previous).unwrap();
+            let moved = move_aside(rename, poll, &view, &previous, &Unattended).await;
+            let Aside::Failed(detail) = moved else { panic!("not refused: {moved:?}") };
+            assert!(detail.contains(&view.display().to_string()), "{detail}");
+            kept(&view);
+            assert_eq!(fs::read_dir(&previous).unwrap().count(), 0, "the empty folder stays");
+        }
+    }
 }
