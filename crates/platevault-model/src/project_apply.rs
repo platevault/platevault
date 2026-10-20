@@ -17,7 +17,7 @@ use uuid::Uuid;
 use crate::{
     ApplyOutcome, EntryEvidence, EntryPlacement, EntrySource, ForeignItem, InputKind, ItemReason,
     NativePath, PinHealth, PreviousItem, ProjectLifecycle, ProjectOperationKind, ReasonCode,
-    Revision, ViewMode,
+    Revision, SessionReadiness, ViewMode,
 };
 
 /// One reason Apply can't run now. The sheet lists every one; Apply refuses
@@ -85,6 +85,11 @@ pub enum ApplyBlocker {
     /// can't be read, or the folder is a link: the sheet can't account for
     /// it, so Apply refuses before it starts (VSEL-FR-20, STO-FR-05/16).
     ViewUnreadable { path: NativePath, reason: ReasonCode },
+    /// A session an open Project holds isn't Ready in the Library: its
+    /// review was reopened and a frame set back to Unreviewed, or a frame's
+    /// bytes changed after review. Apply waits until it is Ready again
+    /// (FR-034, VSEL-FR-12, LIB-FR-09; D-W100, D-W140).
+    SessionNotReady { session_id: Uuid, readiness: SessionReadiness },
 }
 
 /// Why no isolated patched copy can carry a recorded correction
@@ -200,6 +205,9 @@ impl ApplyBlocker {
             ),
             Self::ViewUnreadable { path, .. } => {
                 format!("{} can't be read, so Apply can't account for it", path.display())
+            }
+            Self::SessionNotReady { session_id, readiness } => {
+                format!("session {session_id} {readiness}; Apply waits until it is Ready")
             }
         }
     }

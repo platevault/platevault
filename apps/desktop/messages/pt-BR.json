@@ -284,6 +284,7 @@
   "err_library_not_found": "Esse registro não está mais na biblioteca. Atualize e tente novamente.",
   "err_library_persistence_failure": "Não foi possível salvar no catálogo da biblioteca. Nada foi alterado — tente novamente.",
   "err_library_provider_unavailable": "O serviço de consulta online não está disponível no momento. Tente novamente mais tarde.",
+  "err_library_session_not_ready": "Uma sessão deste projeto precisa de revisão novamente, então a aplicação aguarda e nada foi alterado. Conclua a sessão em Sessões e depois aplique.",
   "err_library_source_unavailable": "Este arquivo ou pasta não está acessível no momento. Verifique se a unidade está conectada e tente novamente.",
   "err_library_symlinks_unavailable": "Não é possível aplicar · os links simbólicos exigem o Modo de Desenvolvedor do Windows. Ative-o nas configurações do Windows e verifique novamente, ou use cópias para este projeto.",
   "err_library_unsupported_format": "O formato deste arquivo não é suportado.",

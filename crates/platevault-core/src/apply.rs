@@ -438,8 +438,9 @@ const fn before(phase: ApplyPhase, other: ApplyPhase) -> bool {
 /// off (PREP-FR-15, PREP-AC-08), else `LinksUnsupported` scoped to a
 /// processing location that holds no links (PREP-AC-03), else
 /// `CorrectionUndeliverable` for the first held frame whose correction no
-/// patched copy can carry (PREP-FR-03), else `InvalidInput`, naming every
-/// blocker.
+/// patched copy can carry (PREP-FR-03), else `SessionNotReady` naming the
+/// first held session that isn't Ready (FR-034; D-W100, D-W140), else
+/// `InvalidInput`, naming every blocker.
 fn refusal(blockers: &[ApplyBlocker]) -> LibraryError {
     let message = blockers.iter().map(ApplyBlocker::describe).collect::<Vec<_>>().join("; ");
     if blockers.contains(&ApplyBlocker::SymlinksUnavailable) {
@@ -463,6 +464,11 @@ fn refusal(blockers: &[ApplyBlocker]) -> LibraryError {
                 field: field.clone(),
                 refusal: *refusal,
             };
+        }
+    }
+    for blocker in blockers {
+        if let ApplyBlocker::SessionNotReady { session_id, .. } = blocker {
+            return LibraryError::SessionNotReady(message).concerning(*session_id);
         }
     }
     LibraryError::InvalidInput(message)
@@ -635,6 +641,16 @@ fn check(inputs: &ApplyInputs, os: Os) -> Checked {
             session_id: *session_id,
             kinds: kinds.clone(),
         });
+    }
+    // A held session's review never reaches a Closed or Archived Project,
+    // which reads only Locked (LIB-AC-22).
+    if inputs.lifecycle.is_open() {
+        for (session_id, readiness) in &inputs.not_ready {
+            blockers.push(ApplyBlocker::SessionNotReady {
+                session_id: *session_id,
+                readiness: *readiness,
+            });
+        }
     }
     let mut project = None;
     let mut found = Found::default();
@@ -1713,6 +1729,7 @@ mod tests {
             basis: ProjectBasis { mode, keywords: GroupKeywords::default(), groups: Vec::new() },
             basis_digest: String::new(),
             unsettled: Vec::new(),
+            not_ready: Vec::new(),
             metadata: BTreeMap::new(),
             corrected: BTreeMap::new(),
             sources: BTreeMap::new(),

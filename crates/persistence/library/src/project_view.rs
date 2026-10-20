@@ -24,7 +24,7 @@ use platevault_model::{
     ImageFormat, InputKind, InputRef, LibraryError, Location, ManifestEntry, ManifestState,
     NativePath, PreviousItem, PreviousItemReason, PreviousItemReview, ProjectBasis,
     ProjectLifecycle, ProjectOperation, ProjectOperationKind, Revision, SessionPlacement,
-    SettledPin, ViewManifest, ViewMode, WorkflowSettings,
+    SessionReadiness, SettledPin, ViewManifest, ViewMode, WorkflowSettings,
 };
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -80,6 +80,9 @@ pub struct ApplyInputs {
     /// Held sessions whose calibration isn't settled, with the kinds; they
     /// are left out of `basis`.
     pub unsettled: Vec<(Uuid, Vec<InputKind>)>,
+    /// Held sessions the Library doesn't have Ready, with their readiness;
+    /// Apply waits for them (FR-034; D-W100, D-W140). They stay in `basis`.
+    pub not_ready: Vec<(Uuid, SessionReadiness)>,
     /// One included light's effective metadata per session of `basis`.
     pub metadata: BTreeMap<Uuid, CaptureMetadata>,
     /// Every included copy the recorded corrections change, by asset id.
@@ -527,14 +530,15 @@ async fn read_project(conn: &mut SqliteConnection, project_id: Uuid) -> Result<P
 }
 
 /// The basis of what the Project holds, with each session's representative
-/// light metadata, the included copies the recorded corrections change and
-/// the sessions whose calibration isn't settled; every source it names goes
-/// into `relative`.
+/// light metadata, the included copies the recorded corrections change, the
+/// sessions whose calibration isn't settled and those that aren't Ready;
+/// every source it names goes into `relative`.
 struct HeldBasis {
     groups: Vec<BasisGroup>,
     metadata: BTreeMap<Uuid, CaptureMetadata>,
     corrected: BTreeMap<Uuid, CorrectedSource>,
     unsettled: Vec<(Uuid, Vec<InputKind>)>,
+    not_ready: Vec<(Uuid, SessionReadiness)>,
 }
 
 async fn held_basis(
@@ -548,12 +552,17 @@ async fn held_basis(
         metadata: BTreeMap::new(),
         corrected: BTreeMap::new(),
         unsettled: Vec::new(),
+        not_ready: Vec::new(),
     };
     for mut group in std::mem::take(&mut held.groups) {
         let mut sessions = Vec::new();
         for held_session in held.sessions.remove(&group.id).unwrap_or_default() {
             let session_id = held_session.session_id;
             let calibration = admission::read_calibration(conn, session_id).await?;
+            let readiness = admission::read_intake(conn, session_id).await?.readiness();
+            if readiness != SessionReadiness::Ready {
+                basis.not_ready.push((session_id, readiness));
+            }
             let Some(settled) = calibration.settled() else {
                 basis.unsettled.push((session_id, calibration.unsettled_kinds()));
                 continue;
@@ -663,6 +672,7 @@ pub async fn read_inputs(conn: &mut SqliteConnection, project_id: Uuid) -> Resul
         basis: &basis,
         names: names.iter().collect(),
         corrected: (!held.corrected.is_empty()).then_some(&held.corrected),
+        not_ready: &held.not_ready,
     })?;
     Ok(ApplyInputs {
         project_id,
@@ -673,6 +683,7 @@ pub async fn read_inputs(conn: &mut SqliteConnection, project_id: Uuid) -> Resul
         basis,
         basis_digest,
         unsettled: held.unsettled,
+        not_ready: held.not_ready,
         metadata: held.metadata,
         corrected: held.corrected,
         sources,
@@ -1072,6 +1083,11 @@ struct Digested<'a> {
     /// it moves the digest; a Project without one keeps its earlier digest.
     #[serde(skip_serializing_if = "Option::is_none")]
     corrected: Option<&'a BTreeMap<Uuid, CorrectedSource>>,
+    /// A held session that stopped being Ready after the sheet moves the
+    /// digest, so reserving refuses it; a Project whose sessions are all
+    /// Ready keeps its earlier digest.
+    #[serde(skip_serializing_if = "<[_]>::is_empty")]
+    not_ready: &'a [(Uuid, SessionReadiness)],
 }
 
 fn digest(value: &Digested<'_>) -> Result<String> {

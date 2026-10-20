@@ -63,6 +63,10 @@ pub struct SessionIntake {
     pub review_finished: bool,
     /// Live logical captures whose applicable quality is Unreviewed.
     pub unreviewed_frames: u64,
+    /// Live logical captures whose bytes changed after review
+    /// (`ChangedContent`): each sets the session back to Needs review until
+    /// it is reconfirmed or its reviewed bytes return (LIB-FR-09, D-W140).
+    pub changed_frames: u64,
 }
 
 impl SessionIntake {
@@ -72,7 +76,7 @@ impl SessionIntake {
             SessionReadiness::NeedsTarget
         } else if self.rig_id.is_none() {
             SessionReadiness::NeedsRig
-        } else if !self.review_finished || self.unreviewed_frames > 0 {
+        } else if !self.review_finished || self.unreviewed_frames > 0 || self.changed_frames > 0 {
             SessionReadiness::NeedsReview
         } else {
             SessionReadiness::Ready

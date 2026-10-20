@@ -30,7 +30,7 @@ use platevault_model::{
     GroupName, GroupOrigin, InclusionBasis, LibraryError, NativePath, OpticsSignature,
     PendingChange, ProjectBasis, ProjectCandidate, ProjectCapture, ProjectDesired, ProjectGroup,
     ProjectLifecycle, ProjectSessionMember, ProjectSuggestion, ProjectViewSettings, Revision,
-    SessionAdmission, SessionPlacement, SessionReadiness, ViewMode,
+    SessionAdmission, SessionIntake, SessionPlacement, SessionReadiness, ViewMode,
 };
 
 use sqlx::sqlite::SqliteConnection;
@@ -1114,7 +1114,11 @@ impl FrameChanges {
         list.push(key);
     }
 
-    /// The held frames of `session` whose placement moved from `basis`.
+    /// The held frames of `session` whose placement moved from `basis`. The
+    /// Library's side of a frame awaiting a decision, set back to Unreviewed
+    /// in a reopened review or changed after review, moves nothing: its
+    /// session reads Needs review, and Apply waits until it is decided
+    /// (D-W100, D-W140).
     fn of(
         session: Uuid,
         held: &[ProjectCapture],
@@ -1126,9 +1130,18 @@ impl FrameChanges {
             let Some(was) = basis.iter().find(|was| was.capture_key == capture.capture_key) else {
                 continue;
             };
-            let now = capture.inclusion.admits(live_quality(&live_of(capture, live)));
+            let quality = live_quality(&live_of(capture, live));
+            let own_edit = capture.inclusion != was.inclusion;
+            let undecided = matches!(
+                quality,
+                Some(ApplicableQuality::Unreviewed | ApplicableQuality::ChangedContent { .. })
+            );
+            if undecided && !own_edit {
+                continue;
+            }
+            let now = capture.inclusion.admits(quality);
             if now != was.included {
-                frames.record(capture.capture_key, now, capture.inclusion != was.inclusion);
+                frames.record(capture.capture_key, now, own_edit);
             }
         }
         frames
@@ -1275,7 +1288,9 @@ fn group_changes(desired: &ProjectDesired, applied: &ProjectBasis) -> Vec<Pendin
     own
 }
 
-/// A held session the Library replaced or no longer has Ready.
+/// A held session the Library replaced or no longer has Ready. A frame whose
+/// bytes changed after review holds the session back without being a
+/// pending change (LIB-FR-09, D-W140), so only the other causes count here.
 async fn session_change(
     conn: &mut SqliteConnection,
     session_id: Uuid,
@@ -1286,7 +1301,7 @@ async fn session_change(
         let successors = successors_of(conn, &row).await?;
         return Ok(Some(PendingChange::SessionRegrouped { session_id, successors }));
     }
-    let readiness = intake.readiness();
+    let readiness = SessionIntake { changed_frames: 0, ..intake }.readiness();
     Ok((readiness != SessionReadiness::Ready)
         .then_some(PendingChange::SessionNotReady { session_id, readiness }))
 }

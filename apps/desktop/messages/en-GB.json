@@ -284,6 +284,7 @@
   "err_library_not_found": "That record is no longer in the library. Refresh and try again.",
   "err_library_persistence_failure": "Couldn't save to the library catalogue. Nothing was changed — try again.",
   "err_library_provider_unavailable": "The online lookup service isn't available right now. Try again later.",
+  "err_library_session_not_ready": "A session in this project needs review again, so Apply waits and nothing was changed. Finish the session in Sessions, then apply.",
   "err_library_source_unavailable": "This file or folder can't be reached right now. Check that its drive is connected, then try again.",
   "err_library_symlinks_unavailable": "Can't apply · symlinks need Windows Developer Mode. Turn it on in Windows settings and check again, or use copies for this project.",
   "err_library_unsupported_format": "This file's format isn't supported.",

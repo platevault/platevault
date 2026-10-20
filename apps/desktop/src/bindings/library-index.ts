@@ -1795,7 +1795,14 @@ export type ApplyBlocker =
  *  can't be read, or the folder is a link: the sheet can't account for
  *  it, so Apply refuses before it starts (VSEL-FR-20, STO-FR-05/16).
  */
-{ blocker: "view_unreadable"; path: NativePathWire; reason: ReasonCode };
+{ blocker: "view_unreadable"; path: NativePathWire; reason: ReasonCode } | 
+/**
+ *  A session an open Project holds isn't Ready in the Library: its
+ *  review was reopened and a frame set back to Unreviewed, or a frame's
+ *  bytes changed after review. Apply waits until it is Ready again
+ *  (FR-034, VSEL-FR-12, LIB-FR-09; D-W100, D-W140).
+ */
+{ blocker: "session_not_ready"; sessionId: string; readiness: SessionReadiness };
 
 /**  One input the build could not place. */
 export type ApplyFailure = {
@@ -4533,7 +4540,9 @@ export type LibraryErrorCode = "invalid_input" | "not_found" | "conflict" | "ide
  */
 "correction_unpatchable" | 
 /**  A recorded correction on an input neither FITS nor XISF. */
-"correction_format_unpatchable";
+"correction_format_unpatchable" | 
+/**  A session the Project holds isn't Ready, so Apply waits. */
+"session_not_ready";
 
 export type LibrarySession = LibrarySession_Serialize | LibrarySession_Deserialize;
 
@@ -6972,6 +6981,12 @@ export type SessionIntake = {
 	reviewFinished: boolean,
 	/**  Live logical captures whose applicable quality is Unreviewed. */
 	unreviewedFrames: number,
+	/**
+	 *  Live logical captures whose bytes changed after review
+	 *  (`ChangedContent`): each sets the session back to Needs review until
+	 *  it is reconfirmed or its reviewed bytes return (LIB-FR-09, D-W140).
+	 */
+	changedFrames: number,
 };
 
 export type SessionLineage = {
