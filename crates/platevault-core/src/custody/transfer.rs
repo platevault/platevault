@@ -435,15 +435,19 @@ pub(crate) fn clone_file(_source: &Path, _path: &Path) -> std::io::Result<()> {
 ///   over an empty placeholder it claimed itself; the one exception to
 ///   "never replaces" is an empty folder another process swaps in for that
 ///   placeholder before the rename (owner decision of 2026-10-20, so Apply
-///   keeps working on such volumes).
+///   keeps working on such volumes). A file moves with a no-replace hard
+///   link, or where the volume has none, as a verified copy onto a file it
+///   created with `create_new` ([`copy_onto_new`]), which replaces nothing.
 ///
 /// Evidence (astro-plan-nfsgg, a 64 MB exFAT image from `hdiutil create -fs
 /// ExFAT` on macOS 26): `renamex_np(RENAME_EXCL)` answers `ENOTSUP` onto a
-/// free name and `EEXIST` onto an existing folder; `mkdir` onto an existing
-/// name answers `EEXIST`; `rename` over an empty folder moves the folder with
-/// its files; over a folder holding a file it answers `ENOTEMPTY` and over a
-/// file `ENOTDIR`, both leaving either side unchanged; `link` answers
-/// `ENOTSUP`.
+/// free name and `EEXIST` onto an existing entry; `mkdir` and
+/// `open(O_CREAT | O_EXCL)` onto an existing name answer `EEXIST`; `rename`
+/// over an empty folder moves the folder with its files; over a folder
+/// holding a file it answers `ENOTEMPTY` and over a file `ENOTDIR`, both
+/// leaving either side unchanged; `link`, `renamex_np(RENAME_SWAP)`,
+/// `exchangedata` and `clonefile` answer `ENOTSUP`, so no file can be
+/// published under a new name there without replacing what may hold it.
 ///
 /// # Errors
 /// `AlreadyExists` when `to` is taken; the platform's rename error.
@@ -470,19 +474,137 @@ pub(crate) fn rename_noreplace(from: &Path, to: &Path) -> std::io::Result<()> {
 
 /// [`rename_noreplace`] where the volume has no no-replace rename. A file
 /// goes through tempfile's no-clobber persist, whose hard link refuses an
-/// existing name atomically; the move fails where the volume has no hard
-/// links either. A folder goes [`over_placeholder`] once `mkdir` claimed
-/// `to`, which fails when anything is there.
+/// existing name atomically, and where the volume has no hard links either
+/// is copied by [`copy_onto_new`] and then removed. A folder goes
+/// [`over_placeholder`] once `mkdir` claimed `to`, which fails when anything
+/// is there.
 #[cfg(unix)]
 fn without_noreplace(from: &Path, to: &Path) -> std::io::Result<()> {
-    if !fs::symlink_metadata(from)?.is_dir() {
-        let mut moving = tempfile::TempPath::try_from_path(from)?;
-        moving.disable_cleanup(true);
-        return moving.persist_noclobber(to).map_err(|failure| failure.error);
+    let metadata = fs::symlink_metadata(from)?;
+    if metadata.is_dir() {
+        fs::create_dir(to)?;
+        let placeholder = fs::symlink_metadata(to)?;
+        return over_placeholder(from, to, &placeholder);
     }
-    fs::create_dir(to)?;
-    let placeholder = fs::symlink_metadata(to)?;
-    over_placeholder(from, to, &placeholder)
+    let mut moving = tempfile::TempPath::try_from_path(from)?;
+    moving.disable_cleanup(true);
+    match moving.persist_noclobber(to) {
+        Ok(()) => Ok(()),
+        Err(failure) if metadata.is_file() && lacks_links(&failure.error) => {
+            let copied = copy_onto_new(from, to)?;
+            remove_source(from, to, &copied)
+        }
+        Err(failure) => Err(failure.error),
+    }
+}
+
+/// Whether a no-clobber persist failed because the volume has neither a
+/// no-replace rename nor hard links: tempfile reports the rename's error,
+/// or the link's after a rename the volume rejects as `EINVAL` or `ENOSYS`.
+/// macOS exFAT answers both with `ENOTSUP`, Linux reports a volume without
+/// hard links as `EPERM`, and a FUSE server lacking an operation answers
+/// `ENOSYS` (as `fs_pathsafe::export_dest` classifies them).
+#[cfg(unix)]
+fn lacks_links(error: &std::io::Error) -> bool {
+    use rustix::io::Errno;
+
+    Errno::from_io_error(error).is_some_and(|errno| {
+        [Errno::NOTSUP, Errno::OPNOTSUPP, Errno::NOSYS, Errno::PERM].contains(&errno)
+    })
+}
+
+/// What [`copy_onto_new`] proved: the source entry it read, as a no-follow
+/// observation, and the handle of the file it created.
+#[cfg(unix)]
+struct Copied {
+    source: fs::Metadata,
+    created: fs::File,
+}
+
+/// Copy the regular file `from` onto a file created at `to` with
+/// `create_new`, which fails when anything is there, the way a verified
+/// transfer fills its partial copy: the source is streamed through a handle
+/// proven to be it and hashed as it is written ([`read_unchanged`]), the copy
+/// takes the source's modification time and is synced with its folder, and
+/// the copy is re-read through a handle proven to be the created file and
+/// must have the source's SHA-256. The transfer's `install` is not reused: it
+/// is the no-clobber persist this volume lacks.
+///
+/// Until the copy is verified, `to` holds an unfinished copy under its final
+/// name, since no other name can be published there without replacing. A
+/// copy that fails is removed while `to` still names the created file; an
+/// interruption leaves it, with the source intact, and a retry is refused
+/// as `to` taken.
+///
+/// The created file is recognised through its open handle, compared each
+/// time: macOS exFAT reports a placeholder inode for an empty file and the
+/// first cluster once data is written, so an inode noted at creation no
+/// longer matches.
+#[cfg(unix)]
+fn copy_onto_new(from: &Path, to: &Path) -> std::io::Result<Copied> {
+    let fingerprint = inventory::probe_fingerprint(from).map_err(std::io::Error::other)?;
+    let source = fs::symlink_metadata(from)?;
+    let mut out = OpenOptions::new().read(true).write(true).create_new(true).open(to)?;
+    let filled = (|| {
+        let digest = read_unchanged(from, &Expect::recorded(&fingerprint), |bytes| {
+            out.write_all(bytes)
+        })
+        .map_err(|check| std::io::Error::other(check.detail().to_owned()))?;
+        settle(&out, to, fingerprint.modified_ns)
+            .map_err(|failed| std::io::Error::other(failed.detail))?;
+        sync_folder(to.parent().unwrap_or_else(|| Path::new("")))?;
+        let identity = inventory::probe_fingerprint(to).map_err(std::io::Error::other)?.identity;
+        let expect =
+            Expect { identity: &identity, size_bytes: fingerprint.size_bytes, modified_ns: None };
+        let reread = read_unchanged(to, &expect, |_| Ok(()))
+            .map_err(|check| std::io::Error::other(check.detail().to_owned()))?;
+        if reread != digest || !names(to, &out) {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("the re-read of {} differs from the bytes written", to.display()),
+            ));
+        }
+        Ok(())
+    })();
+    match filled {
+        Ok(()) => Ok(Copied { source, created: out }),
+        Err(error) => {
+            if names(to, &out) {
+                let _ = fs::remove_file(to);
+            }
+            Err(error)
+        }
+    }
+}
+
+/// Remove the source of a verified [`copy_onto_new`], only while `from` is
+/// still the entry that was read; another entry there is left alone, and the
+/// copy holds the bytes read. A source that can't be removed keeps it, and
+/// the copy is removed while `to` still names the created file.
+#[cfg(unix)]
+fn remove_source(from: &Path, to: &Path, copied: &Copied) -> std::io::Result<()> {
+    let still_source =
+        fs::symlink_metadata(from).is_ok_and(|now| super::same_entry(&copied.source, &now));
+    if !still_source {
+        return Ok(());
+    }
+    if let Err(error) = fs::remove_file(from) {
+        if names(to, &copied.created) {
+            let _ = fs::remove_file(to);
+        }
+        return Err(error);
+    }
+    let _ = sync_folder(from.parent().unwrap_or_else(|| Path::new("")));
+    Ok(())
+}
+
+/// Whether `path` names the file `handle` holds open right now.
+#[cfg(unix)]
+fn names(path: &Path, handle: &fs::File) -> bool {
+    match (fs::symlink_metadata(path), handle.metadata()) {
+        (Ok(named), Ok(held)) => super::same_entry(&held, &named),
+        _ => false,
+    }
 }
 
 /// Rename the folder `from` over the empty `placeholder` this rename created
@@ -666,6 +788,146 @@ mod tests {
         without_noreplace(&from, &to).unwrap();
         assert!(!from.exists());
         assert_eq!(fs::read(&to).unwrap(), b"ours");
+    }
+
+    /// A source file and the free name a move targets.
+    #[cfg(unix)]
+    fn file_in(temp: &tempfile::TempDir) -> (PathBuf, PathBuf) {
+        let (from, to) = (temp.path().join("notes.txt"), temp.path().join("moved.txt"));
+        fs::write(&from, b"the user's notes").unwrap();
+        (from, to)
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_verified_copy_moves_the_bytes_and_the_modification_time() {
+        let temp = tempfile::tempdir().unwrap();
+        let (from, to) = file_in(&temp);
+        let modified = fs::metadata(&from).unwrap().modified().unwrap();
+        let copied = copy_onto_new(&from, &to).unwrap();
+        remove_source(&from, &to, &copied).unwrap();
+        assert!(!from.exists());
+        assert_eq!(fs::read(&to).unwrap(), b"the user's notes");
+        assert_eq!(fs::metadata(&to).unwrap().modified().unwrap(), modified);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_verified_copy_never_replaces_an_existing_file() {
+        let temp = tempfile::tempdir().unwrap();
+        let (from, to) = file_in(&temp);
+        fs::write(&to, b"theirs").unwrap();
+        let Err(error) = copy_onto_new(&from, &to) else { panic!("not refused") };
+        assert_eq!(error.kind(), io::ErrorKind::AlreadyExists, "{error}");
+        assert_eq!(fs::read(&from).unwrap(), b"the user's notes");
+        assert_eq!(fs::read(&to).unwrap(), b"theirs");
+    }
+
+    /// Interrupted after the copy was verified, before the source was
+    /// removed: both hold the bytes, and a retry replaces and loses nothing.
+    #[cfg(unix)]
+    #[test]
+    fn a_retry_after_the_copy_but_before_the_source_removal_is_refused() {
+        let temp = tempfile::tempdir().unwrap();
+        let (from, to) = file_in(&temp);
+        drop(copy_onto_new(&from, &to).unwrap());
+        for retry in [rename_noreplace as fn(&Path, &Path) -> io::Result<()>, without_noreplace] {
+            let error = retry(&from, &to).unwrap_err();
+            assert_eq!(error.kind(), io::ErrorKind::AlreadyExists, "{error}");
+            assert_eq!(fs::read(&from).unwrap(), b"the user's notes");
+            assert_eq!(fs::read(&to).unwrap(), b"the user's notes");
+        }
+    }
+
+    /// Interrupted while copying: the unfinished copy at `to` and the intact
+    /// source both stay, and a retry replaces and loses nothing.
+    #[cfg(unix)]
+    #[test]
+    fn a_retry_after_an_interrupted_copy_is_refused() {
+        let temp = tempfile::tempdir().unwrap();
+        let (from, to) = file_in(&temp);
+        fs::write(&to, b"the user's").unwrap();
+        for retry in [rename_noreplace as fn(&Path, &Path) -> io::Result<()>, without_noreplace] {
+            let error = retry(&from, &to).unwrap_err();
+            assert_eq!(error.kind(), io::ErrorKind::AlreadyExists, "{error}");
+            assert_eq!(fs::read(&from).unwrap(), b"the user's notes");
+            assert_eq!(fs::read(&to).unwrap(), b"the user's");
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_failed_copy_removes_only_the_file_it_created_and_keeps_the_source() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp = tempfile::tempdir().unwrap();
+        let (from, to) = file_in(&temp);
+        fs::set_permissions(&from, fs::Permissions::from_mode(0o000)).unwrap();
+        if fs::File::open(&from).is_ok() {
+            // A volume mounted without owners (exFAT `noowners`) ignores the
+            // mode, so the source can't be made unreadable there.
+            eprintln!("skipped: {} ignores file modes", temp.path().display());
+            return;
+        }
+        let failed = copy_onto_new(&from, &to);
+        fs::set_permissions(&from, fs::Permissions::from_mode(0o644)).unwrap();
+        assert!(failed.is_err(), "the source can't be read");
+        assert!(!to.exists(), "the created file is removed");
+        assert_eq!(fs::read(&from).unwrap(), b"the user's notes");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_source_replaced_after_the_copy_is_left_alone() {
+        let temp = tempfile::tempdir().unwrap();
+        let (from, to) = file_in(&temp);
+        let copied = copy_onto_new(&from, &to).unwrap();
+        fs::remove_file(&from).unwrap();
+        fs::write(&from, b"another file").unwrap();
+        remove_source(&from, &to, &copied).unwrap();
+        assert_eq!(fs::read(&from).unwrap(), b"another file");
+        assert_eq!(fs::read(&to).unwrap(), b"the user's notes");
+    }
+
+    /// Apply's move of a ticked foreign file from `View (previous)/` into the
+    /// new `View/`, and its refusal where the new View holds the name.
+    #[cfg(unix)]
+    #[test]
+    fn apply_moves_a_ticked_foreign_file_and_never_over_an_entry() {
+        use crate::apply::files::{foreign_files, move_foreign};
+        use crate::{ForeignItem, ForeignItemState};
+
+        let temp = tempfile::tempdir().unwrap();
+        let (previous, view) = (temp.path().join("View (previous)"), temp.path().join("View"));
+        fs::create_dir_all(previous.join("notes")).unwrap();
+        fs::create_dir(&view).unwrap();
+        fs::write(previous.join("notes/session.txt"), b"the user's notes").unwrap();
+        // macOS also writes `._` AppleDouble files beside these on exFAT.
+        let (path, evidence) = foreign_files(&previous, &std::collections::BTreeSet::new())
+            .into_iter()
+            .find(|(path, _)| path == Path::new("notes/session.txt"))
+            .unwrap();
+        let item = ForeignItem {
+            seq: 0,
+            path: NativePath::from_path(&path),
+            evidence,
+            ticked: true,
+            state: ForeignItemState::Pending,
+            reason: None,
+        };
+
+        fs::create_dir(view.join("notes")).unwrap();
+        fs::write(view.join("notes/session.txt"), b"placed").unwrap();
+        let refused = move_foreign(&previous, &view, &item);
+        assert_eq!(refused.state, ForeignItemState::Failed, "{refused:?}");
+        assert_eq!(fs::read(view.join("notes/session.txt")).unwrap(), b"placed");
+        assert_eq!(fs::read(previous.join("notes/session.txt")).unwrap(), b"the user's notes");
+
+        fs::remove_file(view.join("notes/session.txt")).unwrap();
+        let moved = move_foreign(&previous, &view, &item);
+        assert_eq!(moved.state, ForeignItemState::Moved, "{moved:?}");
+        assert!(!previous.join("notes/session.txt").exists());
+        assert_eq!(fs::read(view.join("notes/session.txt")).unwrap(), b"the user's notes");
     }
 
     /// The swap's first step, `View/` → `View (previous)/`, onto a name an
