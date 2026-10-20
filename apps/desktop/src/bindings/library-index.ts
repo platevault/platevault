@@ -299,8 +299,8 @@ export const commands = {
 	projectUpdate: (projectId: string, expectedRevision: number, name: string, notes: string | null) => typedError<Project, ErrorResponse>(__TAURI_INVOKE("project_update", { projectId, expectedRevision, name, notes })),
 	/**
 	 *  Replace the subject list; a listed Target keeps its subject and an omitted
-	 *  subject is removed with its goals. Suggestions follow; no held session
-	 *  changes.
+	 *  subject is removed with its goals kept hidden, which return when its Target
+	 *  is added back (D-W128). Suggestions follow; no held session changes.
 	 * 
 	 *  # Errors
 	 *  `Conflict` for a stale revision; `NotFound` for an unknown Project or an
@@ -5491,7 +5491,8 @@ export type ProjectGaps = {
 
 /**
  *  A stored goal; its id stays across edits while its subject, panel group,
- *  kind and channel (or criterion) stay.
+ *  kind and channel (or criterion) stay. A removed subject's goals are hidden
+ *  and return with their ids when its Target is added back (D-W128).
  */
 export type ProjectGoal = {
 	id: string,
@@ -5799,8 +5800,12 @@ export type Quality = "unreviewed" | "usable" | "unusable";
 export type QualityCriterion = 
 /**  Only frames whose applicable library quality is Usable count. */
 { criterion: "usable_only" } | 
-/**  Only frames whose measured median FWHM is at most `max_px` pixels count. */
-{ criterion: "max_fwhm_median"; maxPx: number | null };
+/**
+ *  Only frames whose measured median FWHM, in arcseconds through the
+ *  frame's own pixel scale, is at most `max_arcsec` count. A frame whose
+ *  pixel scale is unknown cannot be judged (PRJ-FR-03).
+ */
+{ criterion: "max_fwhm_median"; maxArcsec: number | null };
 
 /**
  *  The review label of a frame's library quality (PIX-FR-14), in sort

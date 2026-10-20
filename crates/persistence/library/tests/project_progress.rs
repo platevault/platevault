@@ -24,12 +24,12 @@ use persistence_library::{
     Catalog, LocationRegistration, ProgressBasis, SessionQuery, SourceProbe, TrashedFrame,
 };
 use platevault_model::{
-    reasons, Asset, AssociationState, DecodedBasis, Equipment, FrameChoice, GoalInput,
-    GoalProgress, GoalSpec, GoalTally, ImageFormat, InputBasis, Location, LocationRole, MaskCounts,
-    MeasurementMethod, MeasurementOutcome, MeasurementRecord, MetricId, MetricValue, Microseconds,
-    NativePath, PlaneBasis, Project, ProjectInput, ProjectLifecycle, Provenance, Quality,
-    QualityCriterion, RunState, SampleFormat, SaturationBasis, SaturationSource, Scaling, ScanFile,
-    ScanObservation, ScanProgress, ScanState, Session, SubjectInput, TargetRecord, Units,
+    reasons, Asset, AssociationState, CaptureMetadata, DecodedBasis, Equipment, FrameChoice,
+    GoalInput, GoalProgress, GoalSpec, GoalTally, ImageFormat, InputBasis, Location, LocationRole,
+    MaskCounts, MeasurementMethod, MeasurementOutcome, MeasurementRecord, MetricId, MetricValue,
+    Microseconds, NativePath, PlaneBasis, Project, ProjectInput, ProjectLifecycle, Provenance,
+    Quality, QualityCriterion, RunState, SampleFormat, SaturationBasis, SaturationSource, Scaling,
+    ScanFile, ScanObservation, ScanProgress, ScanState, Session, SubjectInput, TargetRecord, Units,
     VolumeKind,
 };
 use support::*;
@@ -57,6 +57,18 @@ fn rig() -> Equipment {
         decision_revision: 0,
         state: AssociationState::Confirmed,
         provenance: Provenance::User,
+    }
+}
+
+/// A confirmed rig of `camera` behind a `focal_mm` telescope named `name`.
+fn equipment(name: &str, camera: &str, focal_mm: f64, pixel_um: f64) -> Equipment {
+    Equipment {
+        name: name.into(),
+        camera: Some(camera.into()),
+        telescope: Some(name.into()),
+        focal_length_mm: Some(focal_mm),
+        pixel_size_um: Some(pixel_um),
+        ..rig()
     }
 }
 
@@ -124,15 +136,9 @@ async fn world(extra: &[(&str, &str)], copies: &[&str]) -> World {
         for name in copies {
             std::fs::copy(fx.root.join(name), nas.join(name)).unwrap();
         }
-        let registration = LocationRegistration {
-            name: "NAS".into(),
-            path: NativePath::from_path(&nas),
-            role: LocationRole::Captures,
-            identity: folder_identity(&nas).unwrap(),
-            volume_kind: VolumeKind::Local,
-        };
-        let backup = catalog.register_location(&registration).await.unwrap();
-        scan_copies(&catalog, &backup, &nas, copies).await;
+        let backup = register_folder(&catalog, &nas, "NAS").await;
+        let files: Vec<_> = copies.iter().map(|name| (*name, metadata_for(name))).collect();
+        scan_folder(&catalog, &backup, &nas, &files).await;
         Some(backup)
     };
     let ngc = catalog.save_target(&target("NGC 7000", "ngc 7000"), None).await.unwrap();
@@ -151,16 +157,34 @@ async fn world(extra: &[(&str, &str)], copies: &[&str]) -> World {
     world
 }
 
-/// A complete scan of the copies in a second location.
-async fn scan_copies(catalog: &Catalog, location: &Location, root: &Path, names: &[&str]) {
+/// A Captures location on the existing folder `root`.
+async fn register_folder(catalog: &Catalog, root: &Path, name: &str) -> Location {
+    let registration = LocationRegistration {
+        name: name.into(),
+        path: NativePath::from_path(root),
+        role: LocationRole::Captures,
+        identity: folder_identity(root).unwrap(),
+        volume_kind: VolumeKind::Local,
+    };
+    catalog.register_location(&registration).await.unwrap()
+}
+
+/// A complete scan of the files in a second location, each with the
+/// metadata its header records.
+async fn scan_folder(
+    catalog: &Catalog,
+    location: &Location,
+    root: &Path,
+    files: &[(&str, CaptureMetadata)],
+) {
     let operation = catalog.begin_scan(location.id, None).await.unwrap();
-    let files = names
+    let files = files
         .iter()
-        .map(|name| ScanFile {
+        .map(|(name, metadata)| ScanFile {
             relative_path: NativePath::from_path(Path::new(name)),
             fingerprint: file_fingerprint(&root.join(name)).unwrap(),
             format: ImageFormat::Fits,
-            metadata: metadata_for(name),
+            metadata: metadata.clone(),
         })
         .collect();
     let observation = ScanObservation {
@@ -190,9 +214,7 @@ impl World {
     }
 
     async fn session(&self, name: &str) -> Session {
-        let asset = self.asset(name).await.id;
-        let summaries = self.catalog.list_sessions(&SessionQuery::default()).await.unwrap();
-        summaries.into_iter().map(|s| s.session).find(|s| s.asset_ids.contains(&asset)).unwrap()
+        session_holding(&self.catalog, self.asset(name).await.id).await
     }
 
     /// Confirm the Target of the session holding `name`.
@@ -243,6 +265,12 @@ impl World {
     async fn progress(&self, project: Uuid) -> ProgressBasis {
         self.catalog.project_progress_basis(project, &method()).await.unwrap()
     }
+}
+
+/// The session that holds `asset`.
+async fn session_holding(catalog: &Catalog, asset: Uuid) -> Session {
+    let summaries = catalog.list_sessions(&SessionQuery::default()).await.unwrap();
+    summaries.into_iter().map(|s| s.session).find(|s| s.asset_ids.contains(&asset)).unwrap()
 }
 
 fn goal<'a>(basis: &'a ProgressBasis, channel: &str) -> &'a GoalProgress {
@@ -473,11 +501,9 @@ async fn goal_met_uses_in_project_only() {
 }
 
 /// PRJ-FR-03, PRJ-AC-07: a Usable-only bar admits only Usable frames, even
-/// ones the Project includes explicitly; a median FWHM limit admits measured
-/// frames within it, and a frame without a valid measured median reads
-/// unknown and counts toward no goal. Captured stays.
+/// ones the Project includes explicitly. Captured stays.
 #[tokio::test]
-async fn quality_bar_usable_only_and_fwhm_median_limit_unknown_when_unmeasured() {
+async fn quality_bar_usable_only_admits_only_usable_frames() {
     let world = world(&[], &[]).await;
     let ngc = world.ngc.candidate.id;
     let project = world
@@ -493,47 +519,148 @@ async fn quality_bar_usable_only_and_fwhm_median_limit_unknown_when_unmeasured()
     assert_eq!(row.quality_bars, [QualityCriterion::UsableOnly]);
     assert_eq!((row.in_project, row.captured, row.unknown_for_bar), (frames(1), frames(4), 0));
     assert!(progress.goals.iter().all(|row| row.goal.goal.counts_frames()), "a bar is no row");
+    world.catalog.close().await.unwrap();
+}
 
-    let limit = QualityCriterion::MaxFwhmMedian { max_px: 3.0 };
-    let goals = [integration(ngc, "Ha", 3600), bar(ngc, limit.clone())];
-    let revision = world.catalog.project_desired(project.id).await.unwrap().revision;
-    world.catalog.set_project_goals(project.id, revision, &goals).await.unwrap();
-    let ids: Vec<Uuid> = {
-        let mut ids = Vec::new();
-        for name in &HA[..3] {
-            ids.push(world.asset(name).await.id);
-        }
-        ids
-    };
+// --- Median-FWHM bar in arcseconds (PRJ-FR-03) ------------------------------
+
+/// An Ha light on `camera` whose header records FOCALLEN `focal_mm`, XPIXSZ
+/// `pixel_um` (the binned pixel, as `MaxIm DL` and N.I.N.A. write it),
+/// XBINNING/YBINNING `binning` and the binned frame size.
+fn light_with_optics(
+    name: &str,
+    camera: &str,
+    focal_mm: Option<f64>,
+    pixel_um: f64,
+    binning: u32,
+) -> CaptureMetadata {
+    CaptureMetadata {
+        camera: Some(camera.into()),
+        focal_length_mm: focal_mm,
+        pixel_size_um: Some(pixel_um),
+        binning_x: Some(binning),
+        binning_y: Some(binning),
+        width: Some(6248 / binning),
+        height: Some(4176 / binning),
+        ..metadata_for(name)
+    }
+}
+
+/// The median FWHM in pixels that reads `arcsec` at `focal_mm` and
+/// `pixel_um`, written out here rather than through the code under test.
+fn fwhm_px(arcsec: f64, focal_mm: f64, pixel_um: f64) -> f64 {
+    arcsec / (pixel_um / 1000.0 / focal_mm * 206_264.806)
+}
+
+/// PRJ-FR-03, PRJ-AC-07: the median-FWHM bar is set and read in arcseconds.
+/// Each frame's pixel median converts through its own pixel scale (FOCALLEN
+/// and XPIXSZ, which already includes binning), so a 2.5″ bar admits 2.4″ and
+/// refuses 2.6″ on two rigs of different scale, and a bin-2 frame is not
+/// doubled. A frame without FOCALLEN, a failed frame and an unmeasured one
+/// read unknown and count toward no goal; another method version is no
+/// evidence. Captured stays.
+#[tokio::test]
+async fn fwhm_bar_in_arcseconds_converts_through_each_frames_pixel_scale() {
+    let world = world(&[], &[]).await;
+    let ngc = world.ngc.candidate.id;
+    let limit = QualityCriterion::MaxFwhmMedian { max_arcsec: 2.5 };
+    assert_eq!(
+        serde_json::to_value(&limit).unwrap(),
+        serde_json::json!({ "criterion": "max_fwhm_median", "maxArcsec": 2.5 }),
+        "the bar crosses IPC in arcseconds",
+    );
+    let project = world.project(vec![integration(ngc, "Ha", 3600), bar(ngc, limit.clone())]).await;
+
+    // Esprit 100 at 550 mm on an ASI6200MM (3.76 µm, 1.41″/px), at bin 1 and
+    // bin 2 (XPIXSZ 7.52 µm); FRA400 at 400 mm on an ASI183MM (2.4 µm,
+    // 1.24″/px).
+    let (esprit, fra) = ("ASI6200MM", "ASI183MM");
+    let lights: [(&str, CaptureMetadata, Option<f64>, bool); 8] = [
+        (
+            "E_24.fits",
+            light_with_optics("E_24", esprit, Some(550.0), 3.76, 1),
+            Some(fwhm_px(2.4, 550.0, 3.76)),
+            false,
+        ),
+        (
+            "E_26.fits",
+            light_with_optics("E_26", esprit, Some(550.0), 3.76, 1),
+            Some(fwhm_px(2.6, 550.0, 3.76)),
+            false,
+        ),
+        (
+            "E_bin2_24.fits",
+            light_with_optics("E_bin2", esprit, Some(550.0), 7.52, 2),
+            Some(fwhm_px(2.4, 550.0, 7.52)),
+            false,
+        ),
+        ("E_failed.fits", light_with_optics("E_failed", esprit, Some(550.0), 3.76, 1), None, true),
+        (
+            "E_unmeasured.fits",
+            light_with_optics("E_unmeasured", esprit, Some(550.0), 3.76, 1),
+            None,
+            false,
+        ),
+        (
+            "F_24.fits",
+            light_with_optics("F_24", fra, Some(400.0), 2.4, 1),
+            Some(fwhm_px(2.4, 400.0, 2.4)),
+            false,
+        ),
+        (
+            "F_26.fits",
+            light_with_optics("F_26", fra, Some(400.0), 2.4, 1),
+            Some(fwhm_px(2.6, 400.0, 2.4)),
+            false,
+        ),
+        ("F_no_focal.fits", light_with_optics("F_no_focal", fra, None, 2.4, 1), Some(1.0), false),
+    ];
+    let root = world.fx.temp.path().join("Rigs");
+    std::fs::create_dir_all(&root).unwrap();
+    for (name, ..) in &lights {
+        std::fs::write(root.join(name), format!("light {name}")).unwrap();
+    }
+    let rigs = register_folder(&world.catalog, &root, "Rigs").await;
+    let files: Vec<_> = lights.iter().map(|(name, meta, ..)| (*name, meta.clone())).collect();
+    scan_folder(&world.catalog, &rigs, &root, &files).await;
+    let assets = world.catalog.location_assets(rigs.id).await.unwrap();
+
+    for (first, rig) in [
+        ("E_24.fits", equipment("Esprit 100", esprit, 550.0, 3.76)),
+        ("F_24.fits", equipment("FRA400", fra, 400.0, 2.4)),
+    ] {
+        let rig = world.catalog.save_equipment(&rig, None).await.unwrap();
+        let session = session_holding(&world.catalog, by_name(&assets, first).id).await;
+        world.catalog.associate_target(&[expected_session(&session)], ngc).await.unwrap();
+        let session = session_holding(&world.catalog, by_name(&assets, first).id).await;
+        world.catalog.confirm_equipment(&[expected_session(&session)], rig.id).await.unwrap();
+        hold(&world.catalog, project.id, session.id, rig.id).await;
+    }
+
+    let ids: Vec<Uuid> = lights.iter().map(|(name, ..)| by_name(&assets, name).id).collect();
     let run = world.catalog.begin_measurement_run(&method(), &ids, 0).await.unwrap();
-    for (sequence, (name, fwhm, failed)) in
-        [(HA[0], Some(2.5), false), (HA[1], Some(3.5), false), (HA[2], None, true)]
-            .into_iter()
-            .enumerate()
-    {
-        let asset = world.asset(name).await;
-        let record = record(
-            &asset,
-            &world.fx.root.join(name),
-            run.operation_id,
-            sequence as u64 + 1,
-            fwhm,
-            failed,
-        );
+    for (sequence, (name, _, fwhm, failed)) in lights.iter().enumerate() {
+        let asset = by_name(&assets, name);
+        let record =
+            record(asset, &root.join(name), run.operation_id, sequence as u64 + 1, *fwhm, *failed);
         world.catalog.record_measurement(run.operation_id, &record).await.unwrap();
     }
     world.catalog.finish_measurement_run(run.operation_id, RunState::Completed).await.unwrap();
+
     let progress = world.progress(project.id).await;
     let row = goal(&progress, "Ha");
-    assert_eq!(row.quality_bars, [limit]);
-    assert_eq!(row.in_project, frames(1), "2.5 px is within 3 px, 3.5 px is not");
-    assert_eq!(row.unknown_for_bar, 2, "a failed and an unmeasured frame read unknown");
-    assert_eq!(row.captured, frames(4));
+    assert_eq!(row.quality_bars, [limit], "the bar is stored in arcseconds");
+    assert_eq!(row.in_project, frames(3), "2.4″ on each rig and at bin 2 count; 2.6″ does not");
+    assert_eq!(
+        row.unknown_for_bar, 3,
+        "no FOCALLEN, a failed and an unmeasured frame read unknown"
+    );
+    assert_eq!(row.captured, frames(8), "every held frame is captured, whatever the bar");
 
     // Another method version's record is not valid evidence.
     let other = MeasurementMethod::new("platevault.stars", 2);
     let stale = world.catalog.project_progress_basis(project.id, &other).await.unwrap();
-    assert_eq!((goal(&stale, "Ha").in_project.frames, goal(&stale, "Ha").unknown_for_bar), (0, 4));
+    assert_eq!((goal(&stale, "Ha").in_project.frames, goal(&stale, "Ha").unknown_for_bar), (0, 8));
     world.catalog.close().await.unwrap();
 }
 
