@@ -228,13 +228,18 @@ export function addSubject(projectId: ProjectId, targetId: TargetId, expectRevis
   return editProject(projectId, msg("store_label_add_subject"), expectRevision, (p) => (p.subjects.some((s) => s.targetId === targetId) ? p : withSubject(p, subject)))
 }
 
+/** `goals` kept hidden by `targetId`, their subject's Target (D-W128). */
+function hiddenBy(goals: Goal[], targetId: TargetId): HiddenGoal[] {
+  return goals.map(({ subjectId: _, ...goal }) => ({ ...goal, targetId }))
+}
+
 /**
  * Point the subject at another Target; its goals stay. A Target with goals
  * kept hidden gets them back on this subject, as adding it would (D-W128,
- * owner 2026-10-20); a restored goal replaces the subject's goal of the same
- * panel group and channel. Sessions the Project holds stay held: only
- * suggestions change (F8 as amended). Refused when the Target is already a
- * subject.
+ * owner 2026-10-20). The old Target stops being a subject, so the subject's
+ * goals a restored one replaces (same panel group and channel) are kept
+ * hidden under it. Sessions the Project holds stay held: only suggestions
+ * change (F8 as amended). Refused when the Target is already a subject.
  */
 export function changeSubjectTarget(projectId: ProjectId, subjectId: string, targetId: TargetId, expectRevision: number): CommitResult {
   const { catalog } = store.getState()
@@ -244,11 +249,18 @@ export function changeSubjectTarget(projectId: ProjectId, subjectId: string, tar
   const taken = project.subjects.find((s) => s.id !== subjectId && s.targetId === targetId)
   if (taken) return refuse(msg("store_refused", { label }), [msg("store_reason_already_subject", { name: subjectName(m, catalog, taken) })], projectHref(projectId))
   return editProject(projectId, label, expectRevision, (p) => {
+    const was = p.subjects.find((s) => s.id === subjectId)
+    if (!was) return p
     const subjects = p.subjects.map((s) => (s.id === subjectId ? { ...s, targetId } : s))
     const restored = restoredGoals(p, targetId, subjectId)
     if (!restored) return { ...p, subjects }
     const replaced = (g: Goal) => g.subjectId === subjectId && restored.goals.some((r) => r.groupId === g.groupId && r.channel === g.channel)
-    return { ...p, subjects, goals: [...p.goals.filter((g) => !replaced(g)), ...restored.goals], hiddenGoals: restored.hiddenGoals }
+    return {
+      ...p,
+      subjects,
+      goals: [...p.goals.filter((g) => !replaced(g)), ...restored.goals],
+      hiddenGoals: [...restored.hiddenGoals, ...hiddenBy(p.goals.filter(replaced), was.targetId)],
+    }
   })
 }
 
@@ -261,7 +273,7 @@ export function removeSubject(projectId: ProjectId, subjectId: string, expectRev
   return editProject(projectId, msg("store_label_remove_subject"), expectRevision, (p) => {
     const subject = p.subjects.find((s) => s.id === subjectId)
     if (!subject) return p
-    const hidden = p.goals.filter((g) => g.subjectId === subjectId).map(({ subjectId: _, ...goal }) => ({ ...goal, targetId: subject.targetId }))
+    const hidden = hiddenBy(p.goals.filter((g) => g.subjectId === subjectId), subject.targetId)
     return { ...p, subjects: p.subjects.filter((s) => s.id !== subjectId), goals: p.goals.filter((g) => g.subjectId !== subjectId), hiddenGoals: [...(p.hiddenGoals ?? []), ...hidden] }
   })
 }
