@@ -76,18 +76,19 @@ impl From<&ProjectGroup> for Candidate {
     }
 }
 
-/// Place `sessions`, in order, into the Project's framing groups or new
-/// ones (PRJ-FR-31). New groups take their default names (PRJ-FR-27).
+/// Place `sessions`, in order, into the framing groups among a Project's
+/// `groups` or new ones (PRJ-FR-31). New groups take their default names
+/// (PRJ-FR-27).
 ///
 /// # Errors
 /// `InvalidInput` when a default name leaves no folder name.
 pub fn place_sessions(
-    desired: &ProjectDesired,
+    groups: &[ProjectGroup],
     sessions: &[SessionToPlace],
     margins: &FramingMargins,
 ) -> Result<PlacementPlan, LibraryError> {
-    let mut candidates: Vec<Candidate> = desired.groups.iter().map(Candidate::from).collect();
-    let mut names: Vec<GroupName> = desired.groups.iter().map(|group| group.name.clone()).collect();
+    let mut candidates: Vec<Candidate> = groups.iter().map(Candidate::from).collect();
+    let mut names: Vec<GroupName> = groups.iter().map(|group| group.name.clone()).collect();
     let mut plan = PlacementPlan::default();
     for session in sessions {
         let fits = |candidate: &&Candidate| {

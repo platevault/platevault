@@ -223,6 +223,63 @@ async fn an_add_is_refused_unless_ready_and_settled_and_a_refusal_writes_nothing
     assert_eq!(desired(&world).await, held);
 }
 
+/// The session as a Sessions row read it.
+fn row(session: &Session) -> ExpectedSession {
+    ExpectedSession {
+        session_id: session.id,
+        grouping_revision: session.grouping_revision,
+        decision_revision: session.decision_revision,
+    }
+}
+
+/// LIB-FR-17, PRJ-FR-08, PRJ-FR-19: a session row's Add to Project and Create
+/// Project place the session as Add sessions does and hold it through
+/// admission: only a session whose calibration is settled joins, and a
+/// refusal writes nothing.
+#[tokio::test]
+async fn a_session_rows_add_and_create_hold_the_session_through_admission() {
+    let world = world().await;
+    let before = desired(&world).await;
+    let oiii = world.admissible(OIII[0]).await;
+    world.pin(oiii.id, "flat", &PinState::Unresolved).await;
+    let error = world
+        .library
+        .add_session_to_project(&row(&oiii), world.project, before.revision)
+        .await
+        .unwrap_err();
+    assert!(refusal(&error).contains("calibration is not settled: choose its flat"), "{error}");
+    let mut input = world.catalog().project_prefill(oiii.id).await.unwrap();
+    input.name = "NGC 7000 OIII".into();
+    let error = world.library.create_project_from_session(&input, &row(&oiii)).await.unwrap_err();
+    assert!(refusal(&error).contains("calibration is not settled: choose its flat"), "{error}");
+    assert_eq!(desired(&world).await, before, "no refusal wrote anything");
+    let projects = world.catalog().list_projects(&ProjectQuery::default()).await.unwrap();
+    assert_eq!(projects.len(), 1, "no Project was created");
+
+    let ha = world.admissible(HA[0]).await;
+    let added =
+        world.library.add_session_to_project(&row(&ha), world.project, before.revision).await;
+    assert_eq!(added.unwrap().project.revision, before.revision + 1, "one Project revision");
+    let after = desired(&world).await;
+    let ([member], [group]) = (after.sessions.as_slice(), after.groups.as_slice()) else {
+        panic!("{after:#?}")
+    };
+    assert_eq!((member.session_id, member.group_id), (ha.id, group.id));
+    assert_eq!(group.name.as_str(), "RedCat 51", "placed as Add sessions places it");
+
+    let gain = world.admissible(HA_GAIN_0).await;
+    let mut input = world.catalog().project_prefill(gain.id).await.unwrap();
+    input.name = "NGC 7000 gain 0".into();
+    let project = world.library.create_project_from_session(&input, &row(&gain)).await.unwrap();
+    assert_eq!(project.revision, 1, "created holding the session");
+    let created = world.catalog().project_desired(project.id).await.unwrap();
+    let ([member], [group]) = (created.sessions.as_slice(), created.groups.as_slice()) else {
+        panic!("{created:#?}")
+    };
+    assert_eq!((member.session_id, member.group_id), (gain.id, group.id));
+    assert_eq!((group.name.as_str(), group.rig_id), ("RedCat 51", world.rig));
+}
+
 /// D08, D-W105: an add checks the basis the user saw and the Project
 /// revision; either being stale is a conflict and writes nothing.
 #[tokio::test]
@@ -385,7 +442,7 @@ fn sessions_group_by_rig_optics_and_framing_without_chaining() {
         to_place(16, esprit, optics(250.0), Some(evidence(100.0, Some(10.0), None))),
     ];
     let margins = FramingMargins::default();
-    let plan = place_sessions(&empty_project(), &sessions, &margins).unwrap();
+    let plan = place_sessions(&[], &sessions, &margins).unwrap();
     let names: Vec<&str> = plan.groups.iter().map(|group| group.name.as_str()).collect();
     assert_eq!(
         names,
@@ -413,7 +470,7 @@ fn sessions_group_by_rig_optics_and_framing_without_chaining() {
         to_place(22, esprit, optics(250.0), Some(evidence(50.0, Some(30.0), None))),
         to_place(23, esprit, optics(250.0), Some(evidence(50.0, Some(210.0), None))),
     ];
-    let plan = place_sessions(&empty_project(), &flipped, &margins).unwrap();
+    let plan = place_sessions(&[], &flipped, &margins).unwrap();
     let names: Vec<&str> = plan.groups.iter().map(|group| group.name.as_str()).collect();
     assert_eq!(names, ["RedCat", "Esprit 100", "Esprit 100 · Framing 2"]);
 }

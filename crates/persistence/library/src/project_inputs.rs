@@ -104,26 +104,9 @@ impl Catalog {
         groups: &[NewGroup],
         adds: &[SessionAdd],
     ) -> Result<ProjectDesired> {
-        if adds.is_empty() {
-            return Err(LibraryError::InvalidInput("no session to add".into()));
-        }
-        require_distinct(adds.iter().map(|add| add.session_id), "session")?;
-        if let Some(group) =
-            groups.iter().find(|group| adds.iter().all(|add| add.group_id != group.id))
-        {
-            return Err(LibraryError::InvalidInput(format!(
-                "new group {} gets no session",
-                group.name.as_str()
-            )));
-        }
         let desired = write_txn!(self, |conn| {
             let next = begin_edit(conn, id, expected).await?;
-            for group in groups {
-                insert_group(conn, id, group).await?;
-            }
-            for add in adds {
-                add_session(conn, id, add).await?;
-            }
+            add_members(conn, id, groups, adds).await?;
             commit_revision(conn, id, next).await?;
             read_desired(conn, id).await?
         });
@@ -531,7 +514,11 @@ fn require_distinct(ids: impl Iterator<Item = Uuid>, what: &str) -> Result<()> {
 
 /// An edit of Project `id` at `expected`: the revision it commits. A Closing,
 /// Closed or Archived Project takes no edit (PRJ-FR-25).
-async fn begin_edit(conn: &mut SqliteConnection, id: Uuid, expected: Revision) -> Result<Revision> {
+pub async fn begin_edit(
+    conn: &mut SqliteConnection,
+    id: Uuid,
+    expected: Revision,
+) -> Result<Revision> {
     let next = next_project_revision(conn, id, expected).await?;
     let lifecycle = read_lifecycle(conn, id).await?;
     if !lifecycle.is_open() {
@@ -731,6 +718,39 @@ async fn delete_member(conn: &mut SqliteConnection, project: Uuid, session: Uuid
 }
 
 // ── Membership add ───────────────────────────────────────────────────────────
+
+/// The membership add of [`Catalog::add_project_sessions`] in the caller's
+/// transaction, all or none: the new framing groups, then each whole session
+/// through admission with its Target and rig. The caller checks the Project
+/// revision and commits the next one.
+///
+/// # Errors
+/// As [`Catalog::add_project_sessions`], less the Project revision.
+pub async fn add_members(
+    conn: &mut SqliteConnection,
+    project: Uuid,
+    groups: &[NewGroup],
+    adds: &[SessionAdd],
+) -> Result<()> {
+    if adds.is_empty() {
+        return Err(LibraryError::InvalidInput("no session to add".into()));
+    }
+    require_distinct(adds.iter().map(|add| add.session_id), "session")?;
+    if let Some(group) = groups.iter().find(|group| adds.iter().all(|add| add.group_id != group.id))
+    {
+        return Err(LibraryError::InvalidInput(format!(
+            "new group {} gets no session",
+            group.name.as_str()
+        )));
+    }
+    for group in groups {
+        insert_group(conn, project, group).await?;
+    }
+    for add in adds {
+        add_session(conn, project, add).await?;
+    }
+    Ok(())
+}
 
 /// Add one whole session in the caller's transaction, in the order
 /// `project_inputs.sql` expects: admission, the session row with the basis

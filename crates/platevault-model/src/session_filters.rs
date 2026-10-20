@@ -3,7 +3,7 @@
 
 //! The Sessions filters' counts and the Add to Project addition (LIB-FR-17,
 //! PRJ-FR-19, D-W59). Both derive from current associations, Project subjects
-//! and rigs, and run memberships, and assign nothing to a run.
+//! and rigs, and the sessions Projects hold.
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -69,16 +69,10 @@ impl ProjectAddition {
             .map(|rig| format!("Also adds the rig {} to this Project.", rig.name));
         Self { project_id, project_revision, session, target_id, adds_subject, added_rig, note }
     }
-
-    /// Nothing to write: the Target is a subject and the rig is on the Project
-    /// or unconfirmed.
-    #[must_use]
-    pub const fn is_empty(&self) -> bool {
-        !self.adds_subject && self.added_rig.is_none()
-    }
 }
 
-/// The committed Project and the addition the write applied.
+/// The committed Project holding the session a row's Add to Project added,
+/// and the subject and rig it added with it.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]

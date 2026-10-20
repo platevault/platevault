@@ -44,23 +44,8 @@ impl Catalog {
     /// Target, unknown equipment, or a goal naming a Target or panel the input
     /// does not list.
     pub async fn create_project(&self, input: &ProjectInput) -> Result<Project> {
-        input.validate()?;
         let project = write_txn!(self, |conn| {
-            let id = Uuid::new_v4();
-            let at = now()?;
-            sqlx::query(
-                "INSERT INTO projects (id, name, notes, revision, created_at, updated_at) \
-                 VALUES (?1, ?2, ?3, 1, ?4, ?4)",
-            )
-            .bind(id.to_string())
-            .bind(input.name.trim())
-            .bind(notes(input.notes.as_deref()))
-            .bind(&at)
-            .execute(&mut *conn)
-            .await?;
-            write_subjects(conn, id, &input.subjects).await?;
-            write_rigs(conn, id, &input.rig_ids).await?;
-            write_goals(conn, id, &input.goals).await?;
+            let id = insert_project(conn, input).await?;
             load_project(conn, id).await?
         });
         Ok(project)
@@ -426,6 +411,31 @@ fn count(row: &SqliteRow, column: &str) -> Result<u64> {
 
 fn not_a_subject(project: Uuid, target: Uuid) -> LibraryError {
     LibraryError::NotFound(format!("Target {target} is not a subject of project {project}"))
+}
+
+/// A new open Project at revision 1 with `input`'s subjects, rigs and goals,
+/// in the caller's transaction: its id.
+///
+/// # Errors
+/// As [`Catalog::create_project`].
+pub async fn insert_project(conn: &mut SqliteConnection, input: &ProjectInput) -> Result<Uuid> {
+    input.validate()?;
+    let id = Uuid::new_v4();
+    let at = now()?;
+    sqlx::query(
+        "INSERT INTO projects (id, name, notes, revision, created_at, updated_at) \
+         VALUES (?1, ?2, ?3, 1, ?4, ?4)",
+    )
+    .bind(id.to_string())
+    .bind(input.name.trim())
+    .bind(notes(input.notes.as_deref()))
+    .bind(&at)
+    .execute(&mut *conn)
+    .await?;
+    write_subjects(conn, id, &input.subjects).await?;
+    write_rigs(conn, id, &input.rig_ids).await?;
+    write_goals(conn, id, &input.goals).await?;
+    Ok(id)
 }
 
 pub async fn require_project(conn: &mut SqliteConnection, id: Uuid) -> Result<Revision> {

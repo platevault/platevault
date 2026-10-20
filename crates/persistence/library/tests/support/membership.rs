@@ -12,7 +12,7 @@
 use persistence_library::{Catalog, NewGroup, SessionAdd};
 use platevault_model::{
     AdmissionBasis, ExpectedAsset, GroupName, GroupOrigin, InputKind, LibraryError,
-    OpticsSignature, ProjectDesired, Quality, Revision, SessionPlacement,
+    OpticsSignature, ProjectDesired, ProjectGroup, Quality, Revision, SessionPlacement,
 };
 use uuid::Uuid;
 
@@ -22,6 +22,12 @@ use crate::support::{expected, DiskProbe};
 /// finish its review and say No to each calibration kind: it is Ready and
 /// settled.
 pub async fn admit(catalog: &Catalog, session: Uuid, quality: Quality) {
+    admit_leaving(catalog, session, quality, &[]).await;
+}
+
+/// [`admit`], leaving the `open` kinds unsettled: the session is Ready, but
+/// no Project can add it until they are settled (LIB-FR-23).
+pub async fn admit_leaving(catalog: &Catalog, session: Uuid, quality: Quality, open: &[InputKind]) {
     let detail = catalog.session(session).await.unwrap();
     let unreviewed: Vec<ExpectedAsset> = detail
         .assets
@@ -35,9 +41,16 @@ pub async fn admit(catalog: &Catalog, session: Uuid, quality: Quality) {
     let grouping = catalog.session(session).await.unwrap().summary.session.grouping_revision;
     catalog.finish_session_review(session, grouping).await.unwrap();
     for kind in [InputKind::Bias, InputKind::Dark, InputKind::Flat] {
-        let generation = catalog.session_admission(session).await.unwrap().calibration.generation;
-        catalog.decline_calibration(&[(session, generation)], kind).await.unwrap();
+        if !open.contains(&kind) {
+            settle(catalog, session, kind).await;
+        }
     }
+}
+
+/// Say No to `kind` of `session`, settling it.
+pub async fn settle(catalog: &Catalog, session: Uuid, kind: InputKind) {
+    let generation = catalog.session_admission(session).await.unwrap().calibration.generation;
+    catalog.decline_calibration(&[(session, generation)], kind).await.unwrap();
 }
 
 /// Add the Ready, settled `session` whole to `project` at its current
@@ -68,28 +81,40 @@ pub async fn add_at(
     expected: Option<AdmissionBasis>,
 ) -> Result<ProjectDesired, LibraryError> {
     let desired = catalog.project_desired(project).await.unwrap();
-    let mut groups = Vec::new();
-    let group_id = if let Some(group) = desired.groups.iter().find(|group| group.rig_id == rig) {
+    let (groups, adds) = place(&desired.groups, session, rig, expected);
+    catalog.add_project_sessions(project, revision, &groups, &adds).await
+}
+
+/// Where `session` goes among a Project's `groups`, as core places it: the
+/// group on `rig`, or a new group for it.
+pub fn place(
+    groups: &[ProjectGroup],
+    session: Uuid,
+    rig: Uuid,
+    expected: Option<AdmissionBasis>,
+) -> (Vec<NewGroup>, [SessionAdd; 1]) {
+    let mut new = Vec::new();
+    let group_id = if let Some(group) = groups.iter().find(|group| group.rig_id == rig) {
         group.id
     } else {
         let id = Uuid::new_v4();
-        groups.push(NewGroup {
+        new.push(NewGroup {
             id,
             rig_id: rig,
-            name: GroupName::new(&format!("Rig {}", desired.groups.len() + 1)).unwrap(),
+            name: GroupName::new(&format!("Rig {}", groups.len() + 1)).unwrap(),
             origin: GroupOrigin::Framing,
             optics: OpticsSignature::new(None, Some(250.0), None).unwrap(),
             framing: None,
         });
         id
     };
-    let adds = [SessionAdd {
+    let add = SessionAdd {
         session_id: session,
         group_id,
         placement: SessionPlacement::FramingUnknown,
         expected,
-    }];
-    catalog.add_project_sessions(project, revision, &groups, &adds).await
+    };
+    (new, [add])
 }
 
 /// [`admit`] with every Unreviewed frame Usable, then [`add`].

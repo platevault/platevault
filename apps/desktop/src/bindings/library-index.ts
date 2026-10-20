@@ -257,13 +257,26 @@ export const commands = {
 	librarySessionFilterCounts: () => typedError<SessionFilterCounts, ErrorResponse>(__TAURI_INVOKE("library_session_filter_counts")),
 	/**
 	 *  Create Project's prefill from a session: its confirmed Target as the one
-	 *  subject and its confirmed rig. Nothing is saved; `project_create` saves.
+	 *  subject and its confirmed rig. Nothing is saved;
+	 *  `project_create_from_session` saves.
 	 * 
 	 *  # Errors
 	 *  `NotFound` for an unknown session; `Conflict` for a superseded one;
 	 *  `InvalidInput` when it has no confirmed Target.
 	 */
 	projectPrefillFromSession: (sessionId: string) => typedError<ProjectInput, ErrorResponse>(__TAURI_INVOKE("project_prefill_from_session", { sessionId })),
+	/**
+	 *  Create Project from a session row: the Project `input` describes, holding
+	 *  the session in a group of its rig, at revision 1. Only a session whose
+	 *  calibration is settled is held; otherwise no Project is saved.
+	 * 
+	 *  # Errors
+	 *  `InvalidInput` naming every admission blocker, such as the calibration
+	 *  kinds to choose first, for invalid fields, or for a session with no
+	 *  confirmed Target or rig; `Conflict` for a session changed since it was
+	 *  read; `NotFound` for an unknown session, Target or rig.
+	 */
+	projectCreateFromSession: (session: ExpectedSession, input: ProjectInput) => typedError<Project, ErrorResponse>(__TAURI_INVOKE("project_create_from_session", { session, input })),
 	/**
 	 *  What Add to Project would add for the session, with the note naming a rig
 	 *  it adds. Nothing is saved.
@@ -274,13 +287,15 @@ export const commands = {
 	 */
 	projectPreviewSessionAddition: (sessionId: string, projectId: string) => typedError<ProjectAddition, ErrorResponse>(__TAURI_INVOKE("project_preview_session_addition", { sessionId, projectId })),
 	/**
-	 *  Add to Project as previewed: the session's Target as a subject and, when
-	 *  the Project lacks it, its rig, in one Project revision.
+	 *  Add to Project as previewed: the session joins a group of its rig, with
+	 *  its Target as a subject and its rig when the Project lacks them, in one
+	 *  Project revision. Only a session whose calibration is settled joins.
 	 * 
 	 *  # Errors
 	 *  `Conflict` for a stale Project revision or a changed session; `NotFound`
-	 *  for an unknown session or Project; `InvalidInput` when the session has no
-	 *  confirmed Target.
+	 *  for an unknown session or Project; `InvalidInput` naming every admission
+	 *  blocker, such as the calibration kinds to choose first, or for a session
+	 *  with no confirmed Target or rig or one the Project already holds.
 	 */
 	projectAddSession: (session: ExpectedSession, projectId: string, expectedRevision: number) => typedError<ProjectAdded, ErrorResponse>(__TAURI_INVOKE("project_add_session", { session, projectId, expectedRevision })),
 	/**
@@ -5485,7 +5500,10 @@ export type Project = {
 	goals: ProjectGoal[],
 };
 
-/**  The committed Project and the addition the write applied. */
+/**
+ *  The committed Project holding the session a row's Add to Project added,
+ *  and the subject and rig it added with it.
+ */
 export type ProjectAdded = {
 	project: Project,
 	addition: ProjectAddition,
