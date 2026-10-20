@@ -2,17 +2,18 @@
  * Library writes shared by every screen (foundation-owned): library quality
  * (P/X/U, library-wide, P-REJ2; D-W54), Confirm Target and Confirm rig
  * (LIB-FR-05), File into Target for a session imported as Unclassified
- * (P-IMP2) and ★ favourites (D-W60). Catalog only, except File into Target,
- * which moves the session's frames: source headers never change. A Project
- * reads these writes as pending changes from the Library on its next Apply
- * (VSEL-FR-12); a Closed Project reads its Close snapshot and never changes.
+ * (P-IMP2), a session's Edit… (its name and notes, D-W76) and ★ favourites
+ * (D-W60). Catalog only, except File into Target, which moves the session's
+ * frames: source headers never change. A Project reads these writes as
+ * pending changes from the Library on its next Apply (VSEL-FR-12); a Closed
+ * Project reads its Close snapshot and never changes.
  */
 import { calibrateSessions } from "@/domain/calibration"
-import { liveAssetIds, sessionNamingValues, unreviewedAssetIds } from "@/domain/derive"
+import { isTrashedSession, liveAssetIds, sessionNamingValues, unreviewedAssetIds } from "@/domain/derive"
 import { fileKey, removeFile, writeFiles } from "@/domain/disk"
 import { capturedRigVersionId, confirmedEvidence, isUnder } from "@/domain/indexing"
 import { type CatalogueEntry, entryKeys, targetFromEntry } from "@/domain/sky"
-import { sessionRef } from "@/domain/membership"
+import { sessionDefaultRef, sessionRef } from "@/domain/membership"
 import { namingTemplate, type NamingValues, resolveNamingTemplate } from "@/domain/templates"
 import type { Asset, AssetCopy, AssetId, Catalog, CatalogCorrection, IsoDateTime, Location, OpticalTrainId, QualityValue, Session, SessionId, Target, TargetId } from "@/domain/types"
 import { type MessageRef, msg, verbatim } from "@/lib/i18n"
@@ -91,6 +92,33 @@ export function confirmTarget(sessionId: SessionId, targetId: TargetId, expectRe
     { expect: { collection: "sessions", id: sessionId, revision: expectRevision }, href },
   )
   if (result.ok) recordSaved(msg("session_target_confirmed", { name: sessionRef(session) }), msg("store_catalog_only_detail", { name: target.name }), href)
+  return result
+}
+
+/**
+ * Edit… on a session: its name and notes, and nothing else (D-W76, the one
+ * Edit… verb; owner's answer, 2026-10-20). Target, rig and calibration stay
+ * with intake and calibration (LIB-FR-20, LIB-FR-25). An empty name restores
+ * the derived one (LIB-FR-04). Refused only for a session whose frames are
+ * in the OS Trash (C10). A Closed or Archived Project holding the session
+ * does not refuse it: a name is a label, so those Projects show the current
+ * name and notes while their frozen frames, calibration and Output stay
+ * untouched (owner's answer, 2026-10-20). A stale revision is refused and
+ * nothing is saved (LIB-AC-08, LIB-FR-11). Catalog only.
+ */
+export function editSessionDetails(sessionId: SessionId, details: { name: string; notes: string }, expectRevision: number): CommitResult {
+  const { catalog } = store.getState()
+  const session = catalog.sessions[sessionId]
+  if (!session) return MISSING
+  const label = msg("store_label_session_details")
+  const href = `/sessions/${sessionId}`
+  if (isTrashedSession(catalog, session)) return refuse(msg("store_refused", { label }), [msg("store_reason_session_trashed")], href)
+  const name = details.name.trim() || null
+  const result = commit(label, (s) => withCatalog(s, (c) => ({ ...c, sessions: { ...c.sessions, [sessionId]: { ...c.sessions[sessionId]!, name, notes: details.notes } } })), {
+    expect: { collection: "sessions", id: sessionId, revision: expectRevision },
+    href,
+  })
+  if (result.ok) recordSaved(msg("store_saved_label_name", { label, name: name ? verbatim(name) : sessionDefaultRef(session) }), null, href)
   return result
 }
 

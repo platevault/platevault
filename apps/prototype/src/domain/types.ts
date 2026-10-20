@@ -385,6 +385,10 @@ export interface Session {
   endedAt: IsoDateTime
   /** OBJECT header value: a label and filter, never capture identity. */
   objectLabel: string | null
+  /** The name the user gave it with Edit… (D-W76; owner's answer, 2026-10-20); null keeps the derived "18 Sep · Ha · 300 s". */
+  name: string | null
+  /** The user's notes, edited with Edit… (D-W76; owner's answer, 2026-10-20); empty when none. */
+  notes: string
   pointing: { ra: number; dec: number; rotationDeg: number | null } | null
   target: Association<TargetId>
   equipment: Association<OpticalTrainId>
