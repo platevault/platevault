@@ -3619,6 +3619,10 @@
   "store_saved_label_name": "{label}: {name}",
   "store_label_project_details": "Project details",
   "store_label_session_details": "Session name and notes",
+  "store_label_correct_frames": "Correct frames of {name}",
+  "store_saved_frames_corrected": "Corrected frames of {name}",
+  "store_saved_session_resplit": "Re-split {name}",
+  "store_saved_review_finished": "Finished review of {name}",
   "store_label_add_subject": "Add subject",
   "store_label_remove_subject": "Remove subject",
   "store_label_edit_subject": "Edit subject",
@@ -5656,6 +5660,7 @@
   "project_change_session_added": "Added {session} ({frames})",
   "project_change_session_moved": "Moved {session} from {from} to {to}",
   "project_change_session_removed": "Removed {session}",
+  "project_change_session_resplit": "{session} ({frames}), re-split from {from}",
   "project_change_source": "From",
   "project_change_source_calibration": "Calibration",
   "project_change_source_library": "Library",
@@ -7001,6 +7006,7 @@
   "apply_refused_no_symlinks": "{name} can't hold symlinks: choose another processing location",
   "project_pending_with_source": "{change} ({source})",
   "project_pending_added": "Added",
+  "project_pending_resplit": "Re-split",
   "project_pending_moved": "Moved from {group}",
   "project_pending_frames": [
     {

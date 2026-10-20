@@ -29,6 +29,8 @@ import type {
   Camera,
   CameraId,
   Catalog,
+  CatalogCorrection,
+  CorrectionField,
   Disk,
   DiskFile,
   Evidence,
@@ -675,6 +677,7 @@ function newSession(id: SessionId, header: FrameHeader, framing: number): Sessio
     corrections: [],
     previousSessionIds: [],
     supersededBy: null,
+    reviewReset: false,
     scope: "provisional",
     framing,
     rigVersionId: null,
@@ -792,6 +795,60 @@ function readFiles(source: Catalog, location: Location, files: DiskFile[], now: 
   for (const sessionId of touched) catalog.sessions[sessionId] = rebuildSession(catalog, catalog.sessions[sessionId]!, now)
   catalog.calibrationProcesses = routeRawCalibration(catalog, touched, now)
   return catalog
+}
+
+/** The grouping values a correction carries into the capture key (`sessionKeyOf`), so correcting some frames re-splits their session (LIB-FR-12). */
+export type RegroupField = Extract<CorrectionField, "exposure" | "filter">
+
+/**
+ * A regrouping correction of `field` on some frames of a session, the 064
+ * contract's library_confirm_metadata (LIB-FR-12, D15): the session is
+ * superseded and its frames split into successors by the corrected capture
+ * key, the corrected frames in one and the rest in the other. The
+ * predecessor keeps its record and frames for traceability; each successor
+ * names it in `previousSessionIds`, and `supersededBy` names the successor
+ * holding the first frame, which keeps the session's name and notes while
+ * the others take the derived name (owner's answer, 2026-10-20). A
+ * successor inherits the Target, rig, calibration and every frame's mark,
+ * since all its frames share them, and its Review step reads Needs review
+ * until Finish review (D-W100). Source headers never change. Returns the
+ * successors, first-frame holder first; the catalog is mutated in place
+ * (callers pass a copy, as `withCatalog` does).
+ */
+export function resplitSession(catalog: Catalog, sessionId: SessionId, corrected: ReadonlySet<AssetId>, correction: Omit<CatalogCorrection, "revision">, now: IsoDateTime): Session[] {
+  const predecessor = catalog.sessions[sessionId]!
+  const revision = predecessor.revision + 1
+  const taken = new Set<SessionId>()
+  for (const s of Object.values(catalog.sessions)) {
+    taken.add(s.id)
+    for (const previous of s.previousSessionIds) taken.add(previous)
+  }
+  const first = [...predecessor.assetIds].sort((a, b) => catalog.assets[a]!.observed.dateObs.localeCompare(catalog.assets[b]!.observed.dateObs))[0]!
+  const parts = [predecessor.assetIds.filter((id) => !corrected.has(id)), predecessor.assetIds.filter((id) => corrected.has(id))].sort((a, b) => Number(b.includes(first)) - Number(a.includes(first)))
+  const successors = parts.map((assetIds, i) => {
+    const isCorrected = assetIds.some((id) => corrected.has(id))
+    const draft: Session = {
+      ...predecessor,
+      revision,
+      assetIds,
+      channel: isCorrected && correction.field === "filter" ? correction.correctedValue : predecessor.channel,
+      corrections: isCorrected ? [...predecessor.corrections, { ...correction, revision }] : predecessor.corrections,
+      name: i === 0 ? predecessor.name : null,
+      notes: i === 0 ? predecessor.notes : "",
+      previousSessionIds: [predecessor.id],
+      supersededBy: null,
+      reviewReset: true,
+    }
+    const id = freshSessionId(sessionKeyOf(draft), taken)
+    taken.add(id)
+    return rebuildSession(catalog, { ...draft, id }, now)
+  })
+  for (const successor of successors) {
+    catalog.sessions[successor.id] = successor
+    for (const id of successor.assetIds) catalog.assets[id] = { ...catalog.assets[id]!, sessionId: successor.id }
+  }
+  catalog.sessions[sessionId] = { ...predecessor, supersededBy: successors[0]!.id }
+  return successors
 }
 
 /** For an ingestion that links no master file to a camera: scans, and imports with no camera choice. */

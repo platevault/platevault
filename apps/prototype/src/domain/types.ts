@@ -400,6 +400,12 @@ export interface Session {
    * Superseded sessions stay for traceability and never count in totals.
    */
   supersededBy: SessionId | null
+  /**
+   * Set on each successor a regrouping correction re-split this session's
+   * predecessor into (LIB-FR-12, D-W100): its Review step reads Needs review,
+   * with every frame's mark kept, until the user runs Finish review on it.
+   */
+  reviewReset: boolean
   /** "provisional" while a scan runs; "incomplete" when part was unreadable or the scan stopped. */
   scope: "complete" | "provisional" | "incomplete"
   /**

@@ -7,8 +7,9 @@
  * The Project's inputs, groups and settings are the desired state; its
  * `view` is the applied state the last Apply built. Every difference is a
  * pending change labelled with its source: the Project's own edits, which
- * it can discard, and changes from the Library (a rejected frame, or a
- * frame a reopened review set back to Unreviewed) or a session's
+ * it can discard, and changes from the Library (a rejected frame, a
+ * frame a reopened review set back to Unreviewed, or a held session a
+ * regrouping correction re-split, LIB-FR-12) or a session's
  * calibration (a reassigned pin), fixed at their source or by removing the
  * session (D-W100, D-W109). Apply waits until every held session is Ready
  * (D-W100), then builds a complete `View (building)/`
@@ -708,7 +709,7 @@ export function appliedViewFor(world: Pick<World, "catalog">, project: Project, 
 // Pending changes (VSEL-FR-12, D-W109)
 // ---------------------------------------------------------------------------
 
-/** Who made a pending change: the Project's own edit, the Library (a rejected or trashed frame, or a frame set back to Unreviewed), or a session's calibration. */
+/** Who made a pending change: the Project's own edit, the Library (a rejected or trashed frame, a frame set back to Unreviewed, or a re-split session), or a session's calibration. */
 export type ChangeSource = "project" | "library" | "calibration"
 
 export const CHANGE_SOURCE_NAME: Record<ChangeSource, MessageRef> = {
@@ -731,6 +732,7 @@ export type PendingChange = ChangeBase &
   (
     | { kind: "session-added"; sessionId: SessionId; groupId: ProjectGroupId }
     | { kind: "session-removed"; sessionId: SessionId }
+    | { kind: "session-resplit"; sessionId: SessionId; from: SessionId; groupId: ProjectGroupId }
     | { kind: "session-moved"; sessionId: SessionId; from: ProjectGroupId; to: ProjectGroupId }
     | { kind: "frames-excluded" | "frames-included" | "frames-rejected" | "frames-restored"; sessionId: SessionId; assetIds: AssetId[] }
     | { kind: "frames-unreviewed"; sessionId: SessionId; assetIds: AssetId[] }
@@ -769,6 +771,19 @@ const FRAMES_CHANGE_KEY = {
 } as const
 
 /**
+ * The applied session a desired one descends from through re-splits
+ * (`previousSessionIds`, LIB-FR-12), or null when it descends from none.
+ */
+function appliedPredecessor(catalog: Catalog, sessionId: SessionId, applied: ReadonlyMap<SessionId, ProjectInput>): SessionId | null {
+  const queue = [...(catalog.sessions[sessionId]?.previousSessionIds ?? [])]
+  for (const id of queue) {
+    if (applied.has(id)) return id
+    queue.push(...(catalog.sessions[id]?.previousSessionIds ?? []))
+  }
+  return null
+}
+
+/**
  * Every difference between the desired state and the applied View, with its
  * source (VSEL-FR-12). Empty before the first Apply (it builds the View
  * from the desired state) and for a Closed Project, which takes no incoming
@@ -776,7 +791,9 @@ const FRAMES_CHANGE_KEY = {
  * Unreviewed are the Library's change until the session is Ready again
  * (D-W100, LIB-FR-20); fixed in the session's Review step. A frame whose
  * bytes changed after review keeps its decision (ChangedContent, LIB-FR-09):
- * no review set it back, so it is no change here.
+ * no review set it back, so it is no change here. A regrouping correction
+ * that re-split a held session is the Library's change once per successor
+ * the Project now holds, not an addition and a removal (LIB-FR-12, D-W100).
  */
 export function pendingChanges(world: Pick<World, "catalog" | "disk">, project: Project): PendingChange[] {
   const view = project.view
@@ -796,6 +813,21 @@ export function pendingChanges(world: Pick<World, "catalog" | "disk">, project: 
     const before = applied.get(sessionId)
     if (!before) {
       const frames = inFrames(catalog, input).size
+      const from = appliedPredecessor(catalog, sessionId, applied)
+      if (from) {
+        // A successor of a re-split applied session: the Library's change, reviewed in its Review step (LIB-FR-12, D-W100).
+        out.push({
+          id: `resplit|${from}|${sessionId}`,
+          kind: "session-resplit",
+          sessionId,
+          from,
+          groupId: input.groupId,
+          source: "library",
+          label: msg("project_change_session_resplit", { session: sessionLabel(catalog, sessionId), from: sessionLabel(catalog, from), frames: framesRef(frames) }),
+          link: sessionIntakeLink(sessionId, "review"),
+        })
+        continue
+      }
       out.push({ id: `add|${sessionId}`, kind: "session-added", sessionId, groupId: input.groupId, source: "project", label: msg("project_change_session_added", { session: sessionLabel(catalog, sessionId), frames: framesRef(frames) }), link: null })
       continue
     }
@@ -849,8 +881,9 @@ export function pendingChanges(world: Pick<World, "catalog" | "disk">, project: 
       }
     }
   }
+  const resplitFrom = new Set(out.flatMap((c) => (c.kind === "session-resplit" ? [c.from] : [])))
   for (const sessionId of applied.keys()) {
-    if (!desired.has(sessionId)) out.push({ id: `remove|${sessionId}`, kind: "session-removed", sessionId, source: "project", label: msg("project_change_session_removed", { session: sessionLabel(catalog, sessionId) }), link: null })
+    if (!desired.has(sessionId) && !resplitFrom.has(sessionId)) out.push({ id: `remove|${sessionId}`, kind: "session-removed", sessionId, source: "project", label: msg("project_change_session_removed", { session: sessionLabel(catalog, sessionId) }), link: null })
   }
   for (const group of project.groups) {
     const before = view.groups.find((g) => g.id === group.id)

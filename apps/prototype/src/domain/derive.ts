@@ -892,11 +892,15 @@ export function sessionUnreviewedFrames(catalog: Catalog, session: Session): num
 /** A light session's intake state (§5.7, P-REV2): it can join a Project only once Ready (and settled). */
 export type SessionReadiness = "needs-target" | "needs-rig" | "needs-review" | "ready"
 
-/** Ready means a settled Target, a settled rig and every live frame Usable or Unusable (C10). Calibration settles separately (`isSettled`). */
+/**
+ * Ready means a settled Target, a settled rig and every live frame Usable or
+ * Unusable (C10), with no Review step a re-split reset (LIB-FR-12, D-W100).
+ * Calibration settles separately (`isSettled`).
+ */
 export function sessionReadiness(catalog: Catalog, session: Session): SessionReadiness {
   if (!sessionTargetId(session)) return "needs-target"
   if (!sessionRigId(session)) return "needs-rig"
-  return sessionUnreviewedFrames(catalog, session) > 0 ? "needs-review" : "ready"
+  return session.reviewReset || sessionUnreviewedFrames(catalog, session) > 0 ? "needs-review" : "ready"
 }
 
 /** The Sessions list's "Needs review" facet, which is the review queue (C14): live light sessions that are not Ready, oldest night first. */
@@ -1229,7 +1233,8 @@ export function importReviewLink(catalog: Catalog, sessionIds: SessionId[]): Ste
 /**
  * Session intake: Target → Rig → Review, Finish review on the last step
  * (§5.3). Each step's data is the session's own, so a step reads finished
- * whenever it holds: a settled Target, a settled rig, 0 Unreviewed. Only
+ * whenever it holds: a settled Target, a settled rig, 0 Unreviewed and no
+ * Review a re-split reset (LIB-FR-12). Only
  * Review has a domain gate (every frame Usable or Unusable, C10); Target's
  * and Rig's Proceed confirm what the page's picker holds, so the builder
  * gates them on that choice. Review is always allowed: a Project that holds
@@ -1243,12 +1248,13 @@ export function sessionIntakeState(world: World, session: Session): SessionIntak
   const rigId = sessionRigId(session)
   const unreviewed = sessionUnreviewedFrames(catalog, session)
   const target = targetId ? catalog.targets[targetId] : undefined
-  const settled: Record<SessionIntakeStepId, boolean> = { target: targetId !== null, rig: rigId !== null, review: unreviewed === 0 }
+  const settled: Record<SessionIntakeStepId, boolean> = { target: targetId !== null, rig: rigId !== null, review: unreviewed === 0 && !session.reviewReset }
   const reviewGate: FlowGate | null = unreviewed > 0 ? { reason: msg("flow_frames_unreviewed", { count: unreviewed }), blockers: [] } : null
   const summaries: Record<SessionIntakeStepId, MessageRef> = {
     target: target ? verbatim(target.name) : msg("sessions_filter_needs_target"),
     rig: rigId ? rigRef(catalog, rigId) : msg("sessions_rig_needs_review"),
-    review: unreviewed > 0 ? msg("flow_frames_unreviewed", { count: unreviewed }) : msg("status_ready"),
+    // A re-split successor whose frames all keep their marks still needs Finish review (LIB-FR-12, D-W100).
+    review: unreviewed > 0 ? msg("flow_frames_unreviewed", { count: unreviewed }) : session.reviewReset ? msg("status_needs_review") : msg("status_ready"),
   }
   const current = SESSION_INTAKE_STEPS.find((id) => !settled[id]) ?? "review"
   const steps = SESSION_INTAKE_STEPS.map((id): DerivedStep<SessionIntakeStepId> => {
