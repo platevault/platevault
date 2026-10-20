@@ -325,6 +325,8 @@ async fn append(conn: &mut SqliteConnection, addition: &ProjectAddition) -> Resu
         .bind(addition.target_id.to_string())
         .execute(&mut *conn)
         .await?;
+        super::projects::restore_hidden_goals(conn, addition.project_id, addition.target_id)
+            .await?;
     }
     if let Some(rig) = &addition.added_rig {
         sqlx::query(
