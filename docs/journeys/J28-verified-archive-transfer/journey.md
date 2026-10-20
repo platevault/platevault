@@ -193,7 +193,7 @@ The user archives the sessions of Project `NGC 7000 HOO` from the Archive step o
 
 - **Do:** In Sessions, open 28 Sep, use **Reassign…** on its darks and choose the raw dark set in `Astro-T7/Darks`. Then, in Settings › Locations, choose `Astro-T7/Darks` and choose **Retire location**. Read the review and try to confirm it.
 - **Expect:** 28 Sep's darks are pinned to the raw set. Open Project `NGC 7000 Ha deep` lists a pending calibration change labelled as a session reassignment, and the Archived `NGC 7000 HOO` takes none. Before confirmation, the retire review shows that retiring is blocked because 28 Sep pins files there. It lists 28 Sep and the two Projects holding it, `NGC 7000 HOO`, marked Archived, and `NGC 7000 Ha deep`, and counts 2 Projects. Confirmation is refused and names 28 Sep and both Projects.
-- **Expect (negative):** `Astro-T7/Darks` doesn't read Retired, and its darks read neither Retired nor Missing. 28 Sep's darks stay pinned to the raw set, and no file changes.
+- **Expect (negative):** `Astro-T7/Darks` doesn't read Retired, and its darks read neither Retired nor Missing. The refusal keeps 28 Sep's darks pinned to the raw set and `NGC 7000 Ha deep`'s pending change, and no file changes.
 - **Trace:** flow A4 · LIB-FR-15, LIB-FR-23, LIB-FR-25 · LIB-AC-16 · CAL-FR-04 · VSEL-FR-12 · PRJ-FR-25 · D11, D-W106, D-W138
 
 ## Success criteria
