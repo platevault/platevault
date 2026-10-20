@@ -190,6 +190,24 @@ describe("the next Apply moves kept files to View (kept)/ at their View paths (D
     expect(new Set(digests).size).toBe(3)
     expect(project().previous).toBeNull()
   })
+
+  it("names each kept file that is gone from disk in the Apply summary, and still moves the others", () => {
+    userFile("Lights/Ha/notes.txt", 1)
+    const notes = applyThenKeep("notes.txt")
+    expect(reviewLeftover(CYGNUS, "Lights/Ha/notes.txt", "keep")).toEqual({ ok: true })
+    const gone = `${paths().previous}/Lights/Ha/notes.txt`
+    deleteFileExternally(gone)
+    changeSomething(0)
+
+    const id = start()
+    runUntil(id)
+    expect(operation(id).status).toBe("succeeded")
+    const summary = say(m, operation(id).summary!)
+    expect(summary).toContain(m.op_apply_moved_kept({ count: 1, n: "1" }))
+    expect(summary).toContain(m.op_apply_kept_missing({ path: gone }))
+    expect(keptFiles()).toEqual({ "notes.txt": notes })
+    expect(project().previous).toBeNull()
+  })
 })
 
 describe("adopting a generated master refuses PlateVault's own unregistered copy (CAL-FR-06, decision record §9)", () => {
