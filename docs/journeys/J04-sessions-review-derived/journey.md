@@ -1,7 +1,7 @@
 ---
 id: J04
 title: Review acquisition sessions as a derived, always-current inventory
-version: 8
+version: 7
 status: draft
 last_reviewed: 2026-07-14
 actors: [astrophotographer]
@@ -43,8 +43,7 @@ the view carries no leftover review-state controls.
   missing/disabled) — root reconnect scenarios are out of scope here (see
   Known gaps G3).
 
-- P3: Closed Project `NGC 7000 Closed` holds session `18 Sep`; the session is also listed in Sessions.
-- P4: Session `Trashed-18 Sep` has every frame Trashed and remains visible in Sessions' Trashed filter.
+## Steps
 
 ### S1 — Sessions stays empty until inventory is confirmed {#S1}
 - **Do:** Open Sessions before any Inbox item has been confirmed and
@@ -169,11 +168,6 @@ the view carries no leftover review-state controls.
   Sessions-specific. spec-054/FR-001, FR-004, FR-005 (adaptive side/bottom
   placement, resizable+persistent width, per-page pin).
 
-### S4a — Edit a session held by a Closed Project {#S4a}
-- **Do:** In Sessions, open the session held only by Closed Project `NGC 7000 Closed`. Choose **Edit…**, change its name from `18 Sep` to `18 Sep East` and its notes to `Cedar field`, then save. Read the Closed Project's session list and reopen the session's Edit… form. In the Trashed filter, open `Trashed-18 Sep` and try to edit it.
-- **Expect:** The Edit… form saves both values. The Closed Project's session list shows the new session name `18 Sep East`; reopening Edit… shows name `18 Sep East` and notes `Cedar field`. The Trashed session has no Edit… action.
-- **Expect (negative):** Editing the Closed Project's held session changes no Project state, source file or session association.
-- **Trace:** LIB-FR-05, PRJ-FR-25 · D-W130, owner's answer, 2026-10-20
 ### S5 — Follow a linked project from session detail {#S5}
 - **Do:** Click a linked project chip in session detail.
 - **Expect:** Navigation lands on the Projects list. The Projects route
@@ -245,7 +239,7 @@ the view carries no leftover review-state controls.
   `relativePath`, falling back to the root only when no relative path is
   recorded (legacy/unscanned sessions) — see S6.
 - SC7: A rescan changes neither session count nor introduces any
-- SC8: Editing a session held only by a Closed Project updates its name and notes, and the Closed Project shows that name; a Trashed session is not editable (S4a; D-W130, owner's answer, 2026-10-20).
+  review-state indicator (S7).
 
 ## Known gaps
 
@@ -310,7 +304,3 @@ the view carries no leftover review-state controls.
   reports zero frames, which is indistinguishable from genuinely unattributed
   frames (G4).
   Evidence: PR #1736 (da71a9c44) · by: journey-scribe (intent-gated)
-
-- **Δ8** 2026-10-20 · +S4a, +SC8 · behavior-change
-  Session Edit… changes a session's name and notes even when a Closed Project holds it; the Closed Project shows the new name. A Trashed session cannot be edited.
-  Evidence: D-W130, owner's answer, 2026-10-20 · by: DocsJourneysB2 (intent-gated)

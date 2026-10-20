@@ -233,7 +233,7 @@ folder is added in place. Done means:
 - G9: Unresolved implementation qualification: the Card-1 fixture doesn't fix the calibration evidence of its two light sessions, so no step asserts which Import review state their darks, flats and bias read (LIB-FR-24, STO-IMP-AC-11). Blocks readiness until a fixture fixes them.
 - G10: (dissolved 2026-10-16): answered by the owner's amendment of D-W107 (LIB-FR-04, LIB-AC-34): frames with no pointing stay in one session, because without pointing there is no framing split. S3 and S9 assert that `2 Oct OIII` and `4 Oct Ha` each read as one session in the preview.
 - G11: D-W132 not observed: no fixture has an imported FILTER value that matches an existing filter record missing from the light's rig, so no step shows the preview offering that record (PLAN-EQ-FR-04; D-W132; owner's answer, 2026-10-20). Blocks readiness until a fixture does.
-- G12: D-W139 not observed: no fixture puts a destination on a volume without an atomic no-replace rename, such as exFAT. The backend's exFAT tests cover the behaviour (STO-FR-12; D-W139; owner's answer, 2026-10-20). Blocks readiness until a fixture does.
+- G12: D-W139 not observed: no fixture puts a destination on a volume without an atomic no-replace rename, such as exFAT (STO-FR-12; D-W139; owner's answer, 2026-10-20). Blocks readiness until a fixture does.
 
 ## Delta log
 

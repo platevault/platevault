@@ -54,6 +54,7 @@ Done means:
 - **Expect:** **Add to Project** lists the open Projects that lack NGC 7000: exactly `Cygnus HOO`. Adding NGC 7000 makes it a Project subject; the Target page's Projects box lists `Cygnus HOO`, Open. Its Sessions step suggests the six matching RedCat sessions, including 12 Sep with its last-observed contribution. The NGC 7000 goals read Ha `0h00 in project · 9h15 captured · goal 10h` and OIII `0h00 in project · 10h35 captured · goal 10h`; both are unmet. "captured" counts matching suggestions, not only sessions already added to the Project. **Add to Project** is unavailable because NGC 7000 is already a subject of every open Project.
 - **Expect (negative):** Adding the subject adds no rig or session, so `Esprit` stays off the Project and its suggestions. It changes no source file or quality decision, and leaves NGC 6888 and its goals unchanged.
 - **Trace:** PRJ-FR-01, PRJ-FR-02, PRJ-FR-04, PRJ-FR-09 · PRJ-AC-03 · D-W94, D-W96
+
 ### S2b — Add RedCat sessions and apply the View {#S2b}
 
 - **Do:** Open `Cygnus HOO` from the Target page's Projects box. On Sessions, open **Add sessions…**, select the five available RedCat sessions dated 18, 24, 26, 28 and 30 Sep, and add them. Open View, keep the default **Symlinks** mode, choose **Apply…**, review the changes and folder tree, then apply.
@@ -61,12 +62,12 @@ Done means:
 - **Expect (negative):** The Project adds no session without the user's action. The offline 12 Sep original is not needed by this Apply; no original is moved, renamed or modified, and no quality state changes. The Project stays Open, and no goal reads "in project" above "captured".
 - **Trace:** PRJ-FR-04, PRJ-FR-07, PRJ-FR-08, PRJ-FR-27, PRJ-FR-31 · VSEL-FR-03, VSEL-FR-12, VSEL-FR-14, VSEL-FR-16 · FR-033, FR-034 · D-W94, D-W95, D-W96, D-W100
 
-### S2c — Re-point a subject with hidden goals on both Targets {#S2c}
+### S2c — Change a subject's Target to one with hidden goals {#S2c}
 
-- **Do:** In the open Project, add IC 5070 as a second subject and give its goals distinct values: Ha 7h and OIII 11h. Remove IC 5070 so its goals are hidden. Re-point the NGC 7000 subject to IC 5070 and read both subjects' goal sections. Then re-point it to NGC 7000 and read them again.
-- **Expect:** While the subject points to IC 5070, its hidden Ha 7h and OIII 11h goals return there, while NGC 7000's Ha 10h and OIII 10h goals remain hidden under NGC 7000. When the subject points back, NGC 7000's Ha 10h and OIII 10h goals return and IC 5070's Ha 7h and OIII 11h goals are hidden under IC 5070.
-- **Expect (negative):** Re-pointing changes no Project session, session Target association or source file, and never replaces one Target's goal values with the other's.
-- **Trace:** PRJ-FR-02, PRJ-FR-03, PRJ-AC-38 · D-W134, owner's answer, 2026-10-20
+- **Do:** On the Targets page, search `ic5070` and click IC 5070's result row. Choose **Add to Project** and choose `Cygnus HOO`. In the Project, set IC 5070's Ha goal to 8h, delete its OIII goal, then remove IC 5070 as a subject. Change the NGC 7000 subject's Target to IC 5070 and read its goals. Then change it back to NGC 7000 and read its goals again.
+- **Expect:** Pointed at IC 5070, the subject shows its hidden Ha 8h goal again and no OIII goal, and NGC 7000's Ha 10h and OIII 10h goals are hidden. Pointed back at NGC 7000, it shows Ha 10h and OIII 10h again, and IC 5070's Ha 8h goal is hidden.
+- **Expect (negative):** Changing the Target keeps every Project session, changes no session's Target or source file, and never gives one Target's goal values to the other.
+- **Trace:** PRJ-FR-02, PRJ-FR-03 · PRJ-AC-38, PRJ-AC-49 · D-W94, D-W134
 
 ### S5 — Read the Project sessions and groups {#S5}
 
@@ -104,7 +105,7 @@ Done means:
 - SC4: After each S6 rename, the badge, Target page and Project page show the same Project name; the subject NGC 7000 remains linked to the Project.
 - SC5: After S7, the Project has 2 rigs and 6 sessions, including the Esprit session; Ha reads 12h35 in project and 12h35 captured.
 - SC6: The S8 manifest of original J19 files equals P4 for 100% of paths, sizes and hashes, and 0 frames change library quality state.
-- SC7: Re-pointing to IC 5070 restores its hidden Ha 7h and OIII 11h goals and hides NGC 7000's Ha 10h and OIII 10h goals; re-pointing back restores NGC 7000's values and hides IC 5070's values (S2c; D-W134, owner's answer, 2026-10-20).
+- SC7: Pointed at IC 5070, the subject shows 1 goal, Ha 8h, and hides NGC 7000's 2 goals; pointed back, it shows Ha 10h and OIII 10h and hides IC 5070's goal (S2c).
 
 ## Known gaps
 
@@ -133,7 +134,6 @@ Done means:
 - **Δ6** 2026-10-19 · S1 · behavior-change
   My targets lists every Target with at least one session, so S1 lists NGC 7000 before **Add ★**.
   Evidence: D-W125, PLAN-TGT-FR-01 · owner's answer, 2026-10-19 in astro-plan-rzbzu.1 · by: Main (intent-gated)
-
 - **Δ7** 2026-10-20 · +S2c, +SC7 · behavior-change
-  When a subject is re-pointed at a Target with hidden goals, those goals are restored and the replaced Target's goals remain hidden under it.
-  Evidence: PRJ-FR-02, PRJ-FR-03, PRJ-AC-38 · D-W134, owner's answer, 2026-10-20 · by: DocsJourneysB2 (intent-gated)
+  Changing a subject's Target to one with hidden goals restores those goals and hides the subject's previous goals under its old Target.
+  Evidence: D-W134 (owner's answer, 2026-10-20) in PR #1855, PRJ-FR-02, PRJ-AC-49 · by: Main (intent-gated)
