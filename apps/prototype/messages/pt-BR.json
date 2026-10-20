@@ -3663,6 +3663,7 @@
   "store_label_move_to_trash_named": "Mover {name} para a Lixeira",
   "domain_session_no_filter": "{night} sem filtro",
   "domain_session_framing": "enquadramento {n}",
+  "domain_session_framing_unknown": "enquadramento desconhecido",
   "domain_reason_changes_pending": "Há alterações aguardando o Aplicar",
   "domain_reason_goals_met": "Todas as metas foram atingidas",
   "domain_reason_sessions_suggested": "Há sessões correspondentes prontas para adicionar",
@@ -6377,24 +6378,6 @@
     }
   ],
   "import_resplit_framings": "Separar de novo por enquadramento",
-  "import_no_pointing": "Sem apontamento",
-  "import_no_pointing_stays": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "count",
-        "countPlural"
-      ],
-      "match": {
-        "count=0, countPlural=*": "{count} frames · ficam nesta sessão",
-        "count=*, countPlural=one": "{count} frame · fica nesta sessão",
-        "count=*, countPlural=*": "{count} frames · ficam nesta sessão"
-      }
-    }
-  ],
   "import_in_this_import": "nesta importação",
   "import_add_calibration_files_ellipsis": "Adicionar arquivos de calibração…",
   "import_reset_calibration": "Redefinir escolhas",

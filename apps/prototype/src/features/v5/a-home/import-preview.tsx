@@ -5,7 +5,8 @@
  * - Copy or Move, and the destination per role with its space and
  *   writability (each a chip in the gate when it refuses).
  * - The destinations table: lights become sessions, split by framing as
- *   intake splits them (a second framing reads "framing 2", D-W107); the
+ *   intake splits them (a second framing reads "framing 2", frames with no
+ *   pointing a session of their own flagged Framing unknown, D-W107); the
  *   row's menu merges a capture's framings into one session and re-splits
  *   them (LIB-AC-31). Each session files under the Target its pointing
  *   suggests (P-IMP2; OBJECT is only a hint), which the row's menu changes
@@ -182,10 +183,10 @@ function DestinationSection({ state, plan, editable }: { state: PrototypeState; 
   )
 }
 
-/** An incoming light session in words: "1 Oct · Ha · 300 s", with "framing 2" for a later framing of the same capture (D-W107). */
+/** An incoming light session in words: "1 Oct · Ha · 300 s", with "framing 2" for a later framing of the same capture and "framing unknown" for its frames with no pointing (D-W107). */
 function incomingLabel(m: Messages, g: DestinationGroup): string {
   const header = g.items[0]!.file.header!
-  const framing = g.session && g.session.framing > 1 ? [m.domain_session_framing({ n: g.session.framing })] : []
+  const framing = !g.session ? [] : g.session.framingUnknown ? [m.domain_session_framing_unknown()] : g.session.framing > 1 ? [m.domain_session_framing({ n: g.session.framing })] : []
   return [formatNight(nightOf(header.dateObs), true), header.filter ?? m.palette_session_no_filter(), formatExposure(header.exposureS), ...framing].join(" · ")
 }
 
@@ -216,7 +217,7 @@ function GroupsSection({ state, plan, preview, editable }: { state: PrototypeSta
     )
   }
   const columns: Column<DestinationGroup>[] = [
-    // A light session reads as itself ("6 Oct · OIII · 300 s · framing 2"), a calibration set as its folder; each row's folder sits in its details, so the table fits from 1280 px.
+    // A light session reads as itself ("6 Oct · OIII · 300 s · framing 2", "… · framing unknown"), a calibration set as its folder; each row's folder sits in its details, so the table fits from 1280 px.
     {
       id: "item",
       header: m.import_destination(),
@@ -224,7 +225,7 @@ function GroupsSection({ state, plan, preview, editable }: { state: PrototypeSta
       truncate: true,
       sortValue: (g) => `${g.route}|${name(g)}`,
       cell: (g) =>
-        g.session?.merged ? (
+        g.session?.merged && !g.session.framingUnknown ? (
           <>
             {name(g)} <Pill tone="info">{m.import_framings_merged({ count: g.session.framings })}</Pill>
           </>
@@ -270,11 +271,14 @@ function GroupsSection({ state, plan, preview, editable }: { state: PrototypeSta
   const actions = (g: DestinationGroup): MenuItem[] => {
     const session = g.session
     if (!editable || !session) return []
-    const framing: MenuItem[] = session.merged
-      ? [{ id: "resplit", label: m.import_resplit_framings(), icon: Split, run: () => setMerged(session.captureKey, false) }]
-      : session.framings > 1
-        ? [{ id: "merge", label: m.import_merge_framings({ count: session.framings }), icon: Merge, run: () => setMerged(session.captureKey, true) }]
-        : []
+    // Merge and Re-split act on the capture's pointed framings, never on its Framing unknown session.
+    const framing: MenuItem[] = session.framingUnknown
+      ? []
+      : session.merged
+        ? [{ id: "resplit", label: m.import_resplit_framings(), icon: Split, run: () => setMerged(session.captureKey, false) }]
+        : session.framings > 1
+          ? [{ id: "merge", label: m.import_merge_framings({ count: session.framings }), icon: Merge, run: () => setMerged(session.captureKey, true) }]
+          : []
     return [
       ...(session.suggested && session.target?.id !== session.suggested.id ? [{ id: "use-suggested", label: m.session_file_into({ name: session.suggested.name }), icon: Check, run: () => chooseTarget(session.key, session.suggested!.id) }] : []),
       { id: "change-target", label: m.session_choose_target(), icon: FolderSearch, opensDialog: true, run: () => setChanging(g) },
@@ -288,18 +292,6 @@ function GroupsSection({ state, plan, preview, editable }: { state: PrototypeSta
         { label: m.import_column_folder(), value: `${g.location.displayName}/${g.relative}` },
         { label: m.import_column_into(), value: routeLabel(m, g.route) },
         ...(g.fallbacks.length > 0 ? [{ label: m.import_fallback(), value: g.fallbacks.map((f) => `{${f}}`).join(", "), mono: true }] : []),
-        ...(g.session && g.session.unpointed > 0
-          ? [
-              {
-                label: m.import_no_pointing(),
-                value: (
-                  <>
-                    {m.import_no_pointing_stays({ count: g.session.unpointed })} <StatusBadge kind="rule" value="provisional" />
-                  </>
-                ),
-              },
-            ]
-          : []),
       ]}
     />
   )

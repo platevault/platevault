@@ -82,9 +82,10 @@ export function projectFrames(disk: Disk, catalog: Catalog, inputs: ReadonlyArra
 // Labels
 // ---------------------------------------------------------------------------
 
-/** " · framing 2" after a second or later framing of its night (D-W107); nothing for the first. */
+/** " · framing 2" after a second or later framing of its night (D-W107), " · framing unknown" for the night's frames with no pointing split off as their own session; nothing for the first. */
 function framingSuffix(session: Session): MessageRef[] {
-  return session.framing > 1 ? [msg("domain_session_framing", { n: session.framing })] : []
+  if (session.framing <= 1) return []
+  return [session.pointing ? msg("domain_session_framing", { n: session.framing }) : msg("domain_session_framing_unknown")]
 }
 
 /** "18 Sep Ha"; "18 Sep no filter" without a filter; "18 Sep Ha · framing 2" for a second framing. */

@@ -3403,6 +3403,7 @@
   "store_label_move_to_trash_named": "Move {name} to Trash",
   "domain_session_no_filter": "{night} no filter",
   "domain_session_framing": "framing {n}",
+  "domain_session_framing_unknown": "framing unknown",
   "domain_reason_changes_pending": "Changes are waiting for Apply",
   "domain_reason_goals_met": "Every goal is met",
   "domain_reason_sessions_suggested": "Matching sessions are ready to add",
@@ -5945,22 +5946,6 @@
     }
   ],
   "import_resplit_framings": "Re-split by framing",
-  "import_no_pointing": "No pointing",
-  "import_no_pointing_stays": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} frame · kept in this session",
-        "countPlural=*": "{count} frames · kept in this session"
-      }
-    }
-  ],
   "import_in_this_import": "in this import",
   "import_add_calibration_files_ellipsis": "Add calibration files…",
   "import_reset_calibration": "Reset choices",
