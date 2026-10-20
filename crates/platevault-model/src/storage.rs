@@ -57,6 +57,12 @@ pub enum EntryKind {
 pub struct EntryEvidence {
     /// Absolute path of the entry itself.
     pub path: NativePath,
+    /// The registered location root a catalog source lies below. Every read
+    /// and check reaches the entry from it one folder at a time, never
+    /// following a link, so a folder swapped for a link after indexing is
+    /// refused (STO-FR-07). `None` for an entry checked by its path alone.
+    #[serde(default)]
+    pub root: Option<NativePath>,
     pub kind: EntryKind,
     /// No-follow identity, size and modification time; never a content digest.
     pub fingerprint: ObservationFingerprint,

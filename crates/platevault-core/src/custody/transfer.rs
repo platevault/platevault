@@ -211,13 +211,11 @@ pub(crate) fn fill_from_source(
     let source_path = super::path_of(&source.path)?;
     fill_partial(written, source.fingerprint.modified_ns, |out| {
         let digest =
-            read_unchanged(&source_path, &Expect::recorded(&source.fingerprint), |bytes| {
-                out.write_all(bytes)
-            })
-            .map_err(|check| match check {
-                Check::Unavailable(detail) => reason(ReasonCode::SourceUnavailable, detail),
-                Check::Changed(detail) => reason(ReasonCode::SourceDrift, detail),
-            })?;
+            read_unchanged(&source_path, &Expect::source(source), |bytes| out.write_all(bytes))
+                .map_err(|check| match check {
+                    Check::Unavailable(detail) => reason(ReasonCode::SourceUnavailable, detail),
+                    Check::Changed(detail) => reason(ReasonCode::SourceDrift, detail),
+                })?;
         if Some(digest.as_str()) == source.sha256.as_deref() {
             return Ok(());
         }
@@ -348,7 +346,7 @@ pub(crate) fn verify_bytes(
             file.display()
         )));
     }
-    let expect = Expect { identity: &written.identity, size_bytes, modified_ns: None };
+    let expect = Expect { identity: &written.identity, size_bytes, modified_ns: None, root: None };
     match read_unchanged(&file, &expect, |_| Ok(())) {
         Ok(digest) if Some(digest.as_str()) == sha256 => Ok(()),
         Ok(_) => Err(reason(

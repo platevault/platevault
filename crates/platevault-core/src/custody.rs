@@ -14,6 +14,7 @@
 //! it the entry stays where it is.
 
 pub mod journal;
+mod rooted;
 pub mod transfer;
 pub mod trash;
 
@@ -104,31 +105,81 @@ fn modified_nanos(metadata: &Metadata) -> Option<i128> {
 }
 
 /// The no-follow evidence of one entry: a file with its SHA-256, a link with
-/// its target text. PREP snapshots its sources and written entries with it.
+/// its target text. PREP snapshots its written entries with it.
 pub(crate) fn observe_entry(path: &Path) -> Result<EntryEvidence, LibraryError> {
+    observe(path, None)
+}
+
+/// [`observe_entry`] for a catalog source below its registered `root`
+/// (STO-FR-07): the entry is reached from the root one folder at a time,
+/// never following a link, and its evidence keeps the root so that every
+/// later check reaches it the same way.
+pub(crate) fn observe_source(root: &Path, path: &Path) -> Result<EntryEvidence, LibraryError> {
+    observe(path, Some(NativePath::from_path(root)))
+}
+
+fn observe(path: &Path, root: Option<NativePath>) -> Result<EntryEvidence, LibraryError> {
     if !path.is_absolute() {
         return Err(LibraryError::InvalidInput("custody paths must be absolute".into()));
     }
-    let metadata = lstat(path)?;
+    let conflict =
+        |check: Check| scoped(LibraryError::IdentityConflict(check.detail().to_owned()), path);
+    let metadata = rooted_check(root.as_ref(), path, || Ok(lstat(path))).map_err(conflict)??;
     if is_link(&metadata) {
-        let (fingerprint, target) = link_fingerprint(path, &metadata)?;
+        let (fingerprint, target) =
+            rooted_check(root.as_ref(), path, || Ok(link_fingerprint(path, &metadata)))
+                .map_err(conflict)??;
         return Ok(EntryEvidence {
             path: NativePath::from_path(path),
+            root,
             kind: EntryKind::Link { target },
             fingerprint,
             sha256: None,
         });
     }
     let fingerprint = inventory::probe_fingerprint(path)?;
-    let expect = Expect::recorded(&fingerprint);
-    let sha256 = read_unchanged(path, &expect, |_| Ok(()))
-        .map_err(|check| scoped(LibraryError::IdentityConflict(check.detail().to_owned()), path))?;
+    let expect = Expect { root: root.as_ref(), ..Expect::recorded(&fingerprint) };
+    let sha256 = read_unchanged(path, &expect, |_| Ok(())).map_err(conflict)?;
     Ok(EntryEvidence {
         path: NativePath::from_path(path),
+        root,
         kind: EntryKind::File,
         fingerprint,
         sha256: Some(sha256),
     })
+}
+
+/// The folders between `root` and `path`'s entry, entered without
+/// following a link ([`rooted`]).
+fn enter_below(root: &NativePath, path: &Path) -> Result<rooted::Below, Check> {
+    let root = root
+        .to_path_buf()
+        .map_err(|error| Check::Unavailable(format!("{error}: {}", path.display())))?;
+    rooted::Below::enter(&root, path)
+}
+
+/// Run `check`, which observes the entry at `path` by its path alone. With a
+/// `root`, the folders above the entry are entered from it first and must
+/// still be the ones `path` names once `check` is done, so what `check` saw
+/// was the entry below its root.
+fn rooted_check<T>(
+    root: Option<&NativePath>,
+    path: &Path,
+    check: impl FnOnce() -> Result<T, Check>,
+) -> Result<T, Check> {
+    let below = root.map(|root| enter_below(root, path)).transpose()?;
+    let checked = check()?;
+    if below.is_some_and(|below| !below.holds_path()) {
+        return Err(folder_changed(path));
+    }
+    Ok(checked)
+}
+
+fn folder_changed(path: &Path) -> Check {
+    Check::Changed(format!(
+        "a folder above {} changed while it was checked; links are not followed",
+        path.display()
+    ))
 }
 
 /// The link's own fingerprint and its target text. The target is never read.
@@ -209,6 +260,7 @@ pub(crate) fn same_identity(observed: &FileIdentity, recorded: &FileIdentity) ->
 }
 
 /// Why a re-read did not prove the recorded entry.
+#[derive(Debug)]
 enum Check {
     /// The entry is missing or cannot be read.
     Unavailable(String),
@@ -234,6 +286,9 @@ struct Expect<'a> {
     size_bytes: u64,
     /// `None` where the volume may not keep the recorded time exactly.
     modified_ns: Option<i128>,
+    /// The registered root the entry is reached from without following a
+    /// link; `None` for an entry read by its path alone.
+    root: Option<&'a NativePath>,
 }
 
 impl<'a> Expect<'a> {
@@ -242,18 +297,27 @@ impl<'a> Expect<'a> {
             identity: &fingerprint.identity,
             size_bytes: fingerprint.size_bytes,
             modified_ns: Some(fingerprint.modified_ns),
+            root: None,
         }
+    }
+
+    /// What a reviewed source must still be, reached from its root.
+    const fn source(source: &'a EntryEvidence) -> Self {
+        Self { root: source.root.as_ref(), ..Self::recorded(&source.fingerprint) }
     }
 }
 
 /// Stream a regular file's bytes through `sink` and return their SHA-256,
 /// proving the open handle is the expected entry and that it did not change
-/// while it was read. Links are never followed.
+/// while it was read. Links are never followed. With a root, the handle is
+/// opened through the folders entered from it, so the bytes read are always
+/// those of an entry below the root.
 fn read_unchanged(
     path: &Path,
     expect: &Expect<'_>,
     mut sink: impl FnMut(&[u8]) -> std::io::Result<()>,
 ) -> Result<String, Check> {
+    let below = expect.root.map(|root| enter_below(root, path)).transpose()?;
     let before = fs::symlink_metadata(path).map_err(|error| unavailable(path, &error))?;
     if is_link(&before) || !before.is_file() {
         return Err(Check::Changed(format!("{} is no longer a regular file", path.display())));
@@ -271,7 +335,10 @@ fn read_unchanged(
             path.display()
         )));
     }
-    let mut file = File::open(path).map_err(|error| unavailable(path, &error))?;
+    let mut file = match &below {
+        Some(below) => below.open_entry()?,
+        None => File::open(path).map_err(|error| unavailable(path, &error))?,
+    };
     if !handle_is(&file, &before, expect.identity) {
         return Err(Check::Changed(format!("{} was replaced while it was opened", path.display())));
     }
@@ -294,6 +361,9 @@ fn read_unchanged(
         || !same_stats(&before, &after)
     {
         return Err(Check::Changed(format!("{} changed while it was read", path.display())));
+    }
+    if below.is_some_and(|below| !below.holds_path()) {
+        return Err(folder_changed(path));
     }
     Ok(hex::encode(hasher.finalize()))
 }
@@ -343,16 +413,21 @@ const fn handle_is(_file: &File, _inspected: &Metadata, _identity: &FileIdentity
 }
 
 /// Whether the reviewed entry is still at its path with its recorded
-/// identity, without reading its bytes.
+/// identity, without reading its bytes; a source with a root is reached
+/// from it without following a link.
 pub(crate) fn in_place(source: &EntryEvidence) -> bool {
     let Ok(path) = source.path.to_path_buf() else {
         return false;
     };
-    match &source.kind {
+    rooted_check(source.root.as_ref(), &path, || match &source.kind {
         EntryKind::File => inventory::probe_fingerprint(&path)
-            .is_ok_and(|observed| observed.equivalent(&source.fingerprint)),
-        EntryKind::Link { target } => link_holds(&path, &source.fingerprint, target).is_ok(),
-    }
+            .ok()
+            .filter(|observed| observed.equivalent(&source.fingerprint))
+            .map(|_| ())
+            .ok_or_else(|| Check::Changed(format!("{} is not the reviewed entry", path.display()))),
+        EntryKind::Link { target } => link_holds(&path, &source.fingerprint, target),
+    })
+    .is_ok()
 }
 
 fn link_holds(
@@ -380,20 +455,20 @@ fn link_holds(
 pub(crate) fn verify_source(source: &EntryEvidence) -> Result<(), ItemReason> {
     let path = path_of(&source.path)?;
     let checked = match &source.kind {
-        EntryKind::Link { target } => link_holds(&path, &source.fingerprint, target),
+        EntryKind::Link { target } => rooted_check(source.root.as_ref(), &path, || {
+            link_holds(&path, &source.fingerprint, target)
+        }),
         EntryKind::File => {
-            read_unchanged(&path, &Expect::recorded(&source.fingerprint), |_| Ok(())).and_then(
-                |digest| {
-                    if Some(digest.as_str()) == source.sha256.as_deref() {
-                        Ok(())
-                    } else {
-                        Err(Check::Changed(format!(
-                            "{} no longer holds its reviewed bytes (SHA-256 differs)",
-                            path.display()
-                        )))
-                    }
-                },
-            )
+            read_unchanged(&path, &Expect::source(source), |_| Ok(())).and_then(|digest| {
+                if Some(digest.as_str()) == source.sha256.as_deref() {
+                    Ok(())
+                } else {
+                    Err(Check::Changed(format!(
+                        "{} no longer holds its reviewed bytes (SHA-256 differs)",
+                        path.display()
+                    )))
+                }
+            })
         }
     };
     checked.map_err(|check| match check {

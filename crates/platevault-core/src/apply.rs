@@ -1196,26 +1196,30 @@ impl Run<'_> {
         plan: &Plan,
     ) -> Result<Result<BTreeMap<Uuid, EntryEvidence>, Vec<(PathBuf, ItemReason)>>, LibraryError>
     {
-        let mut wanted: BTreeMap<Uuid, (PathBuf, &PlanEntry)> = BTreeMap::new();
+        let mut wanted: BTreeMap<Uuid, (PathBuf, PathBuf, &PlanEntry)> = BTreeMap::new();
         for entry in &plan.entries {
-            if let Some(path) = self
-                .inputs
-                .sources
-                .get(&entry.source_id)
-                .and_then(|source| source.path.to_path_buf().ok())
+            if let Some((root, path)) =
+                self.inputs.sources.get(&entry.source_id).and_then(|source| {
+                    let root =
+                        self.inputs.locations.get(&source.location_id)?.path.to_path_buf().ok()?;
+                    Some((root, source.path.to_path_buf().ok()?))
+                })
             {
-                wanted.entry(entry.source_id).or_insert((path, entry));
+                wanted.entry(entry.source_id).or_insert((root, path, entry));
             }
         }
-        let jobs: Vec<(Uuid, PathBuf, crate::ObservationFingerprint, Option<String>)> = wanted
-            .into_iter()
-            .map(|(id, (path, entry))| (id, path, entry.basis.clone(), entry.sha256.clone()))
-            .collect();
+        let jobs: Vec<(Uuid, PathBuf, PathBuf, crate::ObservationFingerprint, Option<String>)> =
+            wanted
+                .into_iter()
+                .map(|(id, (root, path, entry))| {
+                    (id, root, path, entry.basis.clone(), entry.sha256.clone())
+                })
+                .collect();
         blocking(move || {
             let mut snapshots = BTreeMap::new();
             let mut failures = Vec::new();
-            for (id, path, basis, sha256) in jobs {
-                match files::snapshot(&path, &basis, sha256.as_deref()) {
+            for (id, root, path, basis, sha256) in jobs {
+                match files::snapshot(&root, &path, &basis, sha256.as_deref()) {
                     Ok(snapshot) => {
                         snapshots.insert(id, snapshot);
                     }

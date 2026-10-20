@@ -28,7 +28,7 @@ use uuid::Uuid;
 
 use super::plan::PlanEntry;
 use super::ApplyControl;
-use crate::custody::{observe_entry, same_identity, transfer, verify_source};
+use crate::custody::{observe_entry, observe_source, same_identity, transfer, verify_source};
 use crate::layout::VIEW_PREVIOUS_FOLDER;
 use crate::patched_copy::{self, HeaderPatch, PatchTarget};
 use crate::{
@@ -94,13 +94,15 @@ pub fn same_file(observed: &ObservationFingerprint, recorded: &ObservationFinger
 }
 
 /// The original's snapshot (D19): its no-follow identity and SHA-256, which
-/// must still be the file, size, time and digest its basis recorded.
+/// must still be the file, size, time and digest its basis recorded. It is
+/// reached from its location's `root` without following a link.
 pub fn snapshot(
+    root: &Path,
     path: &Path,
     basis: &ObservationFingerprint,
     sha256: Option<&str>,
 ) -> Result<EntryEvidence, ItemReason> {
-    let evidence = observe_entry(path)
+    let evidence = observe_source(root, path)
         .map_err(|error| reason(ReasonCode::SourceUnavailable, error.to_string()))?;
     if evidence.kind != EntryKind::File {
         return Err(reason(

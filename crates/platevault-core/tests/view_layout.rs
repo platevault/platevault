@@ -9,15 +9,20 @@
 use std::path::Path;
 
 use platevault_core::layout::{
-    component_len, entry_basename, folder_token, group_folder, name_key, project_folder,
+    component_len, entry_name, folder_token, group_folder, name_key, project_folder,
     COMPONENT_LIMIT, OUTPUT_FOLDER, PROCESSING_FOLDER, VIEW_BUILDING_FOLDER, VIEW_FOLDER,
     VIEW_PREVIOUS_FOLDER,
 };
-use platevault_core::{GroupKeywords, GroupName};
+use platevault_core::{EntryInput, GroupKeywords, GroupName};
 use uuid::Uuid;
 
 fn name(text: &str) -> GroupName {
     GroupName::new(text).unwrap()
+}
+
+/// The entry basename a capture keyed `id` takes for `source`.
+fn entry_basename(source: &str, id: Uuid, taken: impl Fn(&str) -> bool) -> String {
+    entry_name(EntryInput::Capture { capture_key: id }, source, taken).unwrap().basename
 }
 
 #[test]
@@ -88,4 +93,18 @@ fn a_long_entry_name_keeps_its_extension_and_takes_the_id_suffix() {
     let entry = entry_basename(&wide, id, |_| false);
     assert!(component_len(&entry) <= COMPONENT_LIMIT);
     assert_eq!(Path::new(&entry).extension().and_then(|ext| ext.to_str()), Some("xisf"));
+}
+
+/// STO-IMP-AC-08, astro-plan-9w4qm C8: a source named after a Windows device
+/// is refused while no other input holds its name, and still when the
+/// suffixed name keeps the device stem before its first dot.
+#[test]
+fn an_entry_never_takes_a_windows_device_name() {
+    let capture = EntryInput::Capture { capture_key: Uuid::new_v4() };
+    for source in ["CON.fits", "nul.xisf", "COM1", "aux.tar.fits"] {
+        assert!(entry_name(capture, source, |_| false).is_err(), "{source:?}");
+    }
+    assert!(entry_name(capture, "aux.tar.fits", |_| true).is_err(), "the suffix keeps the stem");
+    let suffixed = entry_name(capture, "CON.fits", |candidate| name_key(candidate) == "con.fits");
+    assert!(suffixed.unwrap().basename.starts_with("CON-"), "a suffix leaves no device name");
 }

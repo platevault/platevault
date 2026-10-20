@@ -17,7 +17,7 @@ use sha2::{Digest, Sha256};
 use unicode_normalization::UnicodeNormalization;
 use uuid::Uuid;
 
-use crate::{GroupKeywords, GroupName, LibraryError};
+use crate::{EntryInput, EntryName, GroupKeywords, GroupName, LibraryError};
 
 /// The inputs Apply places.
 pub const VIEW_FOLDER: &str = "View";
@@ -165,14 +165,27 @@ fn capped(name: &str, limit: usize, suffix: &str) -> String {
     format!("{}{suffix}", name[..end].trim_end_matches(['-', '.']))
 }
 
-/// One entry's basename for life (PREP-FR-19, D-W114): the source's own
+/// One input's entry name for life (PREP-FR-19, D-W114): the source's own
 /// name while no other input of the Project holds it, compared without case
 /// as the case-insensitive volumes do, else `<stem>-<id>.<ext>` with the
 /// first 8 hex digits of the input's id, extended one digit at a time while
 /// that is taken too. A name too long for one path component keeps its
 /// extension, shortens its stem and always takes the id suffix.
-#[must_use]
-pub fn entry_basename(source: &str, id: Uuid, taken: impl Fn(&str) -> bool) -> String {
+///
+/// # Errors
+/// `InvalidInput` when the name is no entry name on every platform
+/// ([`EntryName::new`]), as a source named after a Windows device such as
+/// `CON.fits` is (STO-IMP-AC-08).
+pub fn entry_name(
+    input: EntryInput,
+    source: &str,
+    taken: impl Fn(&str) -> bool,
+) -> Result<EntryName, LibraryError> {
+    EntryName::new(input, &entry_basename(source, input.id(), taken))
+}
+
+/// The basename [`entry_name`] picks, before it is validated.
+fn entry_basename(source: &str, id: Uuid, taken: impl Fn(&str) -> bool) -> String {
     let source = source.trim_matches(|c: char| c.is_whitespace() || c == '.');
     let source = if source.is_empty() { "entry" } else { source };
     if component_len(source) <= COMPONENT_LIMIT && !taken(source) {
