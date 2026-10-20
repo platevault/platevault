@@ -1637,17 +1637,18 @@ pub async fn held_captures(conn: &mut SqliteConnection, id: Uuid) -> Result<Vec<
     .await?
     {
         let associated_subject: Option<String> = row.try_get("associated_subject_id")?;
+        let joined_subject: Option<String> = row.try_get("joined_subject_id")?;
         let subject_id = if let Some(state) = row.try_get::<Option<String>, _>("target_state")? {
             let state: AssociationState = from_text(&state)?;
             let evidence: Vec<EvidenceItem> =
                 from_json(&row.try_get::<String, _>("target_evidence")?)?;
             if counts_as_confirmed(&state, &evidence) {
-                associated_subject
+                associated_subject.or(joined_subject)
             } else {
-                row.try_get("joined_subject_id")?
+                joined_subject
             }
         } else {
-            row.try_get("joined_subject_id")?
+            joined_subject
         };
         places.insert(
             parse_uuid(&row.try_get::<String, _>("session_id")?)?,
