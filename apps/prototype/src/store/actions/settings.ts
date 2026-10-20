@@ -12,7 +12,7 @@
  */
 import { calibrateSessions } from "@/domain/calibration"
 import { currentRigVersion, sessionRigVersion } from "@/domain/indexing"
-import { MODE_NAME } from "@/domain/labels"
+import { FRAMING_LIMIT_RANGE, MODE_NAME } from "@/domain/labels"
 import { PROFILE_IDS } from "@/domain/seed"
 import { clampMoonAvoidance, type MoonAvoidance } from "@/domain/planning"
 import { NAMING_TOKENS, validateNamingTemplate } from "@/domain/templates"
@@ -264,7 +264,7 @@ function clamp(value: number | undefined, current: number, min: number, max: num
   return whole ? Math.round(bounded) : bounded
 }
 
-/** The thresholds with `patch` merged in and each clamped to its range: percentages 0-100, angles 0-90°, windows whole nights or days. */
+/** The thresholds with `patch` merged in and each clamped to its range: percentages 0-100, the split limits to `FRAMING_LIMIT_RANGE`, other angles 0-90°, windows whole nights or days. */
 function mergedMatching(current: MatchingSettings, patch: MatchingPatch): MatchingSettings {
   const { framing, flats, darks, bias } = current
   const f = patch.framing ?? {}
@@ -274,8 +274,8 @@ function mergedMatching(current: MatchingSettings, patch: MatchingPatch): Matchi
   return {
     framing: {
       overlapPct: clamp(f.overlapPct, framing.overlapPct, 0, 100),
-      centrePct: clamp(f.centrePct, framing.centrePct, 0, 100),
-      rotationDeg: clamp(f.rotationDeg, framing.rotationDeg, 0, 90),
+      centreArcmin: clamp(f.centreArcmin, framing.centreArcmin, FRAMING_LIMIT_RANGE.centreArcmin.min, FRAMING_LIMIT_RANGE.centreArcmin.max),
+      rotationDeg: clamp(f.rotationDeg, framing.rotationDeg, FRAMING_LIMIT_RANGE.rotationDeg.min, FRAMING_LIMIT_RANGE.rotationDeg.max),
       panelOverlapMinPct: clamp(f.panelOverlapMinPct, framing.panelOverlapMinPct, 0, 100),
       panelOverlapMaxPct: clamp(f.panelOverlapMaxPct, framing.panelOverlapMaxPct, 0, 100),
     },
@@ -287,7 +287,8 @@ function mergedMatching(current: MatchingSettings, patch: MatchingPatch): Matchi
 
 /**
  * The framing and calibration matching thresholds (D-W114). Framing applies
- * to later intake splits and group placement; the calibration thresholds
+ * to later intake splits, import review's defaults and group placement; no
+ * existing session is re-split; the calibration thresholds
  * match every kind still waiting or suggested now, as ingestion would, while
  * pins and Nos never change (CAL-FR-02). Refused when a lower bound passes
  * its upper one (panel overlap, the flats' fine and warning rotation).

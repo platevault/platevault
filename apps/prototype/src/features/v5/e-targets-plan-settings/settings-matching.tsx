@@ -1,7 +1,9 @@
 /**
  * Settings › Equipment › Matching thresholds (slice E; D-W114, PRJ-FR-31,
  * CAL-FR-19 to CAL-FR-21): the framing tolerances that split sessions and
- * group them in a Project, and the flat, dark and bias windows and warning
+ * group them in a Project (the centre limit an angle in arcminutes; import
+ * review starts from these and can override them for one import), and the
+ * flat, dark and bias windows and warning
  * levels calibration matching uses. The section reads the values; Edit…
  * opens one dialog for all of them, so a half-typed number is never matched
  * against. Saving re-matches every kind still waiting or suggested; a pin or
@@ -24,7 +26,7 @@ import { useStore } from "@/store/core"
 /** One number per threshold, null while the field is empty. */
 interface MatchingForm {
   overlapPct: number | null
-  centrePct: number | null
+  centreArcmin: number | null
   rotationDeg: number | null
   panelOverlapMinPct: number | null
   panelOverlapMaxPct: number | null
@@ -40,7 +42,7 @@ interface MatchingForm {
 function formOf(s: MatchingSettings): MatchingForm {
   return {
     overlapPct: s.framing.overlapPct,
-    centrePct: s.framing.centrePct,
+    centreArcmin: s.framing.centreArcmin,
     rotationDeg: s.framing.rotationDeg,
     panelOverlapMinPct: s.framing.panelOverlapMinPct,
     panelOverlapMaxPct: s.framing.panelOverlapMaxPct,
@@ -69,7 +71,7 @@ function MatchingDialog({ open, onClose }: { open: boolean; onClose: () => void 
     unavailable: blockedByErrors(label, errors),
     run: () =>
       setMatchingSettings({
-        framing: { overlapPct: values.overlapPct ?? undefined, centrePct: values.centrePct ?? undefined, rotationDeg: values.rotationDeg ?? undefined, panelOverlapMinPct: values.panelOverlapMinPct ?? undefined, panelOverlapMaxPct: values.panelOverlapMaxPct ?? undefined },
+        framing: { overlapPct: values.overlapPct ?? undefined, centreArcmin: values.centreArcmin ?? undefined, rotationDeg: values.rotationDeg ?? undefined, panelOverlapMinPct: values.panelOverlapMinPct ?? undefined, panelOverlapMaxPct: values.panelOverlapMaxPct ?? undefined },
         flats: { fineDeg: values.flatFineDeg ?? undefined, warnDeg: values.flatWarnDeg ?? undefined, windowNights: values.flatWindowNights ?? undefined },
         darks: { windowDays: values.darkWindowDays ?? undefined, temperatureWarnC: values.darkTemperatureWarnC ?? undefined },
         bias: { windowDays: values.biasWindowDays ?? undefined, temperatureWarnC: values.biasTemperatureWarnC ?? undefined },
@@ -83,8 +85,8 @@ function MatchingDialog({ open, onClose }: { open: boolean; onClose: () => void 
     <FormDialog open={open} onOpenChange={(next) => !next && onClose()} title={m.settings_label_matching()} size="lg" confirm={confirm}>
       <FieldGroup label={m.equipment_matching_framing()}>
         {field("overlapPct", m.equipment_matching_overlap(), "%")}
-        {field("centrePct", m.equipment_matching_centre(), "%")}
-        {field("rotationDeg", m.equipment_matching_rotation(), "°")}
+        {field("centreArcmin", m.equipment_matching_centre(), "′", 0.5)}
+        {field("rotationDeg", m.equipment_matching_rotation(), "°", 0.5)}
         {field("panelOverlapMinPct", m.equipment_matching_panel_min(), "%")}
         {field("panelOverlapMaxPct", m.equipment_matching_panel_max(), "%")}
       </FieldGroup>
@@ -111,7 +113,7 @@ function summary(m: Messages, s: MatchingSettings): Array<{ label: string; value
   return [
     {
       label: m.equipment_matching_framing(),
-      value: m.equipment_matching_framing_line({ overlap: num(s.framing.overlapPct), centre: num(s.framing.centrePct), rotation: num(s.framing.rotationDeg), min: num(s.framing.panelOverlapMinPct), max: num(s.framing.panelOverlapMaxPct) }),
+      value: m.equipment_matching_framing_line({ overlap: num(s.framing.overlapPct), centre: num(s.framing.centreArcmin), rotation: num(s.framing.rotationDeg), min: num(s.framing.panelOverlapMinPct), max: num(s.framing.panelOverlapMaxPct) }),
     },
     { label: m.calibration_heading_flats(), value: m.equipment_matching_flats_line({ fine: num(s.flats.fineDeg), warn: num(s.flats.warnDeg), nights: num(s.flats.windowNights) }) },
     { label: m.calibration_heading_darks(), value: darkLine(s.darks) },

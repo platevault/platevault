@@ -22,6 +22,7 @@ import { Combobox, ComboboxCollection, ComboboxContent, ComboboxEmpty, ComboboxG
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Slider } from "@/components/ui/slider"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
@@ -292,6 +293,49 @@ export function NumberField({ value, onChange, unit, min, max, step, disabled, l
           onChange={(event) => onChange(event.target.value === "" ? null : Number(event.target.value))}
           className="tabular-nums"
         />
+      )}
+    </Field>
+  )
+}
+
+export interface SliderFieldProps extends FieldChrome {
+  value: number
+  /** Called as the thumb moves, not only when it is let go, so a preview can follow it. */
+  onChange: (value: number) => void
+  min: number
+  max: number
+  step: number
+  /** The value as shown at the end of the track: "5′". */
+  format: (value: number) => string
+  /** The value as a screen reader says it: "5 arcminutes". */
+  valueText: (value: number) => string
+  disabled?: boolean
+}
+
+/** One number on a bounded range that applies while it moves: the track, then the value it reads. */
+export function SliderField({ value, onChange, min, max, step, format, valueText, disabled, ...chrome }: SliderFieldProps) {
+  return (
+    <Field {...chrome}>
+      {(control) => (
+        <div className="flex w-full max-w-md min-w-0 items-center gap-3">
+          <Slider
+            id={control.id}
+            aria-labelledby={control["aria-labelledby"]}
+            aria-describedby={control["aria-describedby"]}
+            getAriaValueText={(_formatted, n) => valueText(n)}
+            value={value}
+            min={min}
+            max={max}
+            step={step}
+            disabled={disabled}
+            onValueChange={(next) => onChange(next)}
+            className="min-w-0 flex-1"
+          />
+          {/* The thumb's input says the value (aria-valuetext); this is the sighted reading. */}
+          <span aria-hidden="true" className="w-12 shrink-0 text-right text-sm tabular-nums">
+            {format(value)}
+          </span>
+        </div>
       )}
     </Field>
   )

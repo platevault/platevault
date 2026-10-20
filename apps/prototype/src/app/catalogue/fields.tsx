@@ -11,7 +11,7 @@ import { useMessages } from "@/app/preferences"
 import { IconButton } from "@/components/app/actions"
 import type { Column } from "@/components/app/contracts"
 import { DataTable } from "@/components/app/data-table"
-import { ArgumentsField, ChoiceListField, ComboboxField, FieldGroup, FilesField, NumberField, PathField, SegmentedField, SelectField, SwitchField, type TemplateToken, TextAreaField, TextField, TokenTable, TokenTemplateField } from "@/components/app/fields"
+import { ArgumentsField, ChoiceListField, ComboboxField, FieldGroup, FilesField, NumberField, PathField, SegmentedField, SelectField, SliderField, SwitchField, type TemplateToken, TextAreaField, TextField, TokenTable, TokenTemplateField } from "@/components/app/fields"
 import { Section } from "@/components/app/page"
 import { SettingsRow, SettingsSection } from "@/components/app/settings"
 import { Button } from "@/components/ui/button"
@@ -70,14 +70,17 @@ function NumberAndChoiceFields() {
   const [camera, setCamera] = useState<string | null>(null)
   const [kind, setKind] = useState<"mono" | "osc">("mono")
   const [mode, setMode] = useState<"symlink" | "copy">("symlink")
+  const [centre, setCentre] = useState(5)
   // eslint-disable-next-line alm/no-user-string -- filter names
   const filters = [{ value: "ha", label: "Ha" }, { value: "oiii", label: "OIII" }, { value: "sii", label: "SII" }, { value: "l", label: "L", disabled: true }]
   return (
-    <ComponentSection components={["NumberField", "SelectField", "ComboboxField", "SegmentedField"]} level={3}>
+    <ComponentSection components={["NumberField", "SliderField", "Slider", "SelectField", "ComboboxField", "SegmentedField"]} level={3}>
       <Caption>{m.catalogue_fields_choice_caption()}</Caption>
       <div className="grid max-w-3xl grid-cols-2 gap-4">
         <NumberField label={m.domain_criterion_exposure()} unit="s" min={0} step={1} value={exposure} onChange={setExposure} />
         <NumberField label={m.domain_criterion_gain()} value={gain} onChange={setGain} error={gain === null ? m.settings_name_required() : undefined} />
+        <SliderField label={m.import_split_centre()} value={centre} min={0} max={60} step={0.5} format={(v) => `${v}′`} valueText={(v) => m.import_split_arcmin({ count: v, value: String(v) })} onChange={setCentre} />
+        <SliderField label={m.import_split_rotation()} value={5} min={0} max={90} step={0.5} format={(v) => `${v}°`} valueText={(v) => m.import_split_degrees({ count: v, value: String(v) })} onChange={() => {}} disabled />
         <SelectField label={m.session_filter()} value={filter} options={filters} onChange={setFilter} />
         <SelectField label={m.session_filter()} value={filter} options={filters} onChange={setFilter} disabled />
         <ComboboxField

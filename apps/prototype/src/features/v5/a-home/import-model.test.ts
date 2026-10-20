@@ -6,6 +6,7 @@ import { cancelOperation, isSettled, settleOperation } from "@/store/operations"
 import { type PrototypeState, SCHEMA_VERSION, store } from "@/store/core"
 import { initialSliceStates, sliceVersions } from "@/store/slices"
 import { msg, m } from "@/lib/i18n"
+import { setMatchingSettings } from "@/store/actions/settings"
 import { emptyImportDraft, type ImportDraft } from "@/store/slices/a"
 import { type DestinationGroup, type ImportPlan, planImport, previewImport } from "./import-model"
 import { importHandler, startImport } from "./import-run"
@@ -68,6 +69,47 @@ describe("Import review: sessions split by framing, merge and re-split (LIB-AC-3
         .map((s) => s.assetIds.length)
         .sort((a, b) => a - b),
     ).toEqual([4, 8])
+  })
+})
+
+describe("Import review: this import's centre and rotation limits (the owner's answer of 2026-10-20)", () => {
+  // The demo's re-pointed OIII frames sit 0.6° (36′) north of the first framing, at the same ROTATANG.
+  const wide = { centreArcmin: 60, rotationDeg: 5 }
+  const framed = (plan: ImportPlan) => lightsOf(plan, "OIII").map((g) => [g.session!.framing, g.items.length])
+
+  it("starts from Settings' 5′ and 5°, and re-splits the preview at the limits set without writing anything", () => {
+    const state = store.getState()
+    const settings = planImport(m, state, card())!
+    expect(settings.limits).toEqual({ centreArcmin: 5, rotationDeg: 5 })
+    expect(framed(settings)).toEqual([
+      [1, 8],
+      [2, 4],
+    ])
+    const overridden = planImport(m, state, card({ limits: wide }))!
+    expect(overridden.limits).toEqual(wide)
+    expect(framed(overridden)).toEqual([[1, 12]])
+    expect(framed(planImport(m, state, card({ limits: { centreArcmin: 60, rotationDeg: 0 } }))!)).toEqual([[1, 12]])
+    const preview = previewImport(state, overridden, card({ limits: wide }), AT)
+    expect(new Set(lightsOf(overridden, "OIII").map((g) => preview.sessionOf.get(g.session!.key))).size).toBe(1)
+    expect(store.getState().catalog).toBe(state.catalog)
+    expect(store.getState().settings).toBe(state.settings)
+  })
+
+  it("imports with the limits shown, even when Settings change before the copies are read, and clears the override", () => {
+    const plan = planImport(m, store.getState(), card({ limits: wide }))!
+    const id = startImport(plan, card({ limits: wide }))
+    expect(store.getState().slices.a.importDraft.limits).toBeNull()
+    expect(setMatchingSettings({ framing: { centreArcmin: 1 } }).ok).toBe(true)
+    for (let i = 0; i < 300 && !isSettled(store.getState().operations[id]!.status); i++) store.setState((s) => importHandler.step(s, s.operations[id]!))
+    expect(importedOiii().map((s) => s.assetIds.length)).toEqual([12])
+  })
+
+  it("re-splits no existing session when Settings change later", () => {
+    runImport(card())
+    const before = importedOiii().map((s) => [s.id, s.assetIds])
+    expect(setMatchingSettings({ framing: { centreArcmin: 60, rotationDeg: 90 } }).ok).toBe(true)
+    expect(importedOiii().map((s) => [s.id, s.assetIds])).toEqual(before)
+    expect(before).toHaveLength(2)
   })
 })
 

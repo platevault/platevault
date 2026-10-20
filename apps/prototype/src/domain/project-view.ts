@@ -198,10 +198,10 @@ const PANEL_IN_NAME = /panel\s*(\d+)/i
 export function groupPlacement(m: Messages, world: Pick<World, "catalog" | "settings">, project: Pick<Project, "inputs" | "groups">, session: Session): GroupPlacement {
   const { catalog } = world
   const optics = opticsKey(catalog, session)
-  const framing = sessionFraming(catalog, session)
+  const framing = sessionFraming(session)
   for (const group of project.groups) {
     const members = groupInputs(project, group.id).map((i) => catalog.sessions[i.sessionId]).filter((s): s is Session => s !== undefined)
-    if (members.some((s) => opticsKey(catalog, s) === optics && sameFraming(sessionFraming(catalog, s), framing, world.settings.matching.framing))) return { groupId: group.id, name: group.name, panel: group.panel }
+    if (members.some((s) => opticsKey(catalog, s) === optics && sameFraming(sessionFraming(s), framing, world.settings.matching.framing))) return { groupId: group.id, name: group.name, panel: group.panel }
   }
   if (isMosaic(project)) return { groupId: null, name: panelGroupName(m, project, [session.objectLabel]), panel: true }
   const taken = new Set(project.groups.map((g) => g.name))

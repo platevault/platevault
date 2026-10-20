@@ -5966,6 +5966,45 @@
     }
   ],
   "import_resplit_framings": "Re-split by framing",
+  "import_split_limits": "Session split",
+  "import_split_centre": "Centre limit",
+  "import_split_rotation": "Rotation limit",
+  "import_split_help": "A frame further than either limit from its session's first frame starts another session. Moving a slider changes this import only.",
+  "import_split_settings": "Settings: {value}",
+  "import_split_use_settings": "Use Settings limits",
+  "import_split_settings_in_use": "Already the Settings limits",
+  "import_split_arcmin": [
+    {
+      "declarations": [
+        "input count",
+        "input value",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{value} arcminute",
+        "countPlural=*": "{value} arcminutes"
+      }
+    }
+  ],
+  "import_split_degrees": [
+    {
+      "declarations": [
+        "input count",
+        "input value",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{value} degree",
+        "countPlural=*": "{value} degrees"
+      }
+    }
+  ],
   "import_in_this_import": "in this import",
   "import_add_calibration_files_ellipsis": "Add calibration files…",
   "import_reset_calibration": "Reset choices",
@@ -6199,13 +6238,13 @@
   "equipment_unknown_filters": "Unknown filters",
   "equipment_calibration_defaults": "Calibration defaults",
   "equipment_first_night": "First night",
-  "equipment_matching_centre": "Centres apart at most, share of the field",
+  "equipment_matching_centre": "Centres apart at most",
   "equipment_matching_dark_line": "Days apart at most: {days} · temperature warning past {temp} °C",
   "equipment_matching_flat_fine": "Rotation fine up to",
   "equipment_matching_flat_warn": "Rotation warns up to",
   "equipment_matching_flats_line": "Rotation fine up to {fine}°, warning up to {warn}° · nights apart at most: {nights}",
   "equipment_matching_framing": "Framing",
-  "equipment_matching_framing_line": "Overlap at least {overlap} % · centres within {centre} % of the field · rotation within {rotation}° · mosaic panels overlap {min}–{max} %",
+  "equipment_matching_framing_line": "Overlap at least {overlap} % · centres within {centre}′ · rotation within {rotation}° · mosaic panels overlap {min}–{max} %",
   "equipment_matching_overlap": "Overlap at least",
   "equipment_matching_panel_max": "Mosaic panels overlap at most",
   "equipment_matching_panel_min": "Mosaic panels overlap at least",

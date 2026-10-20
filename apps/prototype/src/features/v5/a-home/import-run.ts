@@ -19,7 +19,7 @@
 import { fileAt, writeFiles } from "@/domain/disk"
 import { bundledTarget } from "@/domain/indexing"
 import { unitCount } from "@/domain/labels"
-import type { ImageType, ImportSource, ImportSourceId, LocationId, OperationId, OperationItem, SessionId, VolumeId } from "@/domain/types"
+import type { FramingMargins, ImageType, ImportSource, ImportSourceId, LocationId, OperationId, OperationItem, SessionId, VolumeId } from "@/domain/types"
 import { joinRefs, m, type MessageRef, msg, verbatim } from "@/lib/i18n"
 import { sessionWithTarget } from "@/store/actions/library"
 import { moveToOsTrash } from "@/store/actions/trash"
@@ -59,6 +59,8 @@ export interface ImportPayload {
   skipped: { duplicate: number; imported: number; held: number; notImage: number; nameTaken: number }
   /** Calibration chosen in review, by incoming session key: applied once the frames are read. */
   calibration: ImportDraft["calibration"]
+  /** The centre and rotation limits review showed: the lights split by these, not by Settings' at the time the copies are read. */
+  limits: FramingMargins
   /** Sessions the imported frames belong to, for Sessions' "Imported" highlight. */
   sessionIds: SessionId[]
   trashRequested: boolean
@@ -123,7 +125,7 @@ function copyBatch(state: PrototypeState, opId: OperationId, payload: ImportPayl
 function indexCopies(state: PrototypeState, opId: OperationId, payload: ImportPayload): PrototypeState {
   const now = nowIso()
   const entries = payload.copied.map((item) => ({ dest: item.dest, locationId: item.locationId, type: item.type, merged: item.merged ?? false }))
-  const ingested = ingestImport(state.catalog, state.disk, state.settings, importBatches(state.catalog, state.disk, entries), now)
+  const ingested = ingestImport(state.catalog, state.disk, state.settings, payload.limits, importBatches(state.catalog, state.disk, entries), now)
   const landed = sessionsAt(ingested, new Set(payload.copied.map((q) => q.dest)))
   const picks = choicePicks(
     payload.copied.map((q) => ({ destPath: q.dest, sessionKey: q.sessionKey ?? null })),
@@ -271,6 +273,7 @@ export function startImport(plan: ImportPlan, draft: ImportDraft): OperationId {
       nameTaken: plan.skipped.nameTaken.length,
     },
     calibration: draft.calibration,
+    limits: plan.limits,
     sessionIds: [],
     trashRequested: false,
     trashOperationId: null,

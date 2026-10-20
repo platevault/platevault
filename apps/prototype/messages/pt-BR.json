@@ -6400,6 +6400,45 @@
     }
   ],
   "import_resplit_framings": "Separar de novo por enquadramento",
+  "import_split_limits": "Divisão em sessões",
+  "import_split_centre": "Limite do centro",
+  "import_split_rotation": "Limite de rotação",
+  "import_split_help": "Um frame que passa de qualquer um dos limites em relação ao primeiro frame da sessão começa outra sessão. Mover um controle muda só esta importação.",
+  "import_split_settings": "Configurações: {value}",
+  "import_split_use_settings": "Usar limites das Configurações",
+  "import_split_settings_in_use": "Já são os limites das Configurações",
+  "import_split_arcmin": [
+    {
+      "declarations": [
+        "input count",
+        "input value",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{value} minuto de arco",
+        "countPlural=*": "{value} minutos de arco"
+      }
+    }
+  ],
+  "import_split_degrees": [
+    {
+      "declarations": [
+        "input count",
+        "input value",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{value} grau",
+        "countPlural=*": "{value} graus"
+      }
+    }
+  ],
   "import_in_this_import": "nesta importação",
   "import_add_calibration_files_ellipsis": "Adicionar arquivos de calibração…",
   "import_reset_calibration": "Redefinir escolhas",
@@ -6653,13 +6692,13 @@
   "equipment_unknown_filters": "Filtros desconhecidos",
   "equipment_calibration_defaults": "Padrões de calibração",
   "equipment_first_night": "Primeira noite",
-  "equipment_matching_centre": "Distância máxima entre centros, fração do campo",
+  "equipment_matching_centre": "Distância máxima entre centros",
   "equipment_matching_dark_line": "Dias de diferença, no máximo: {days} · aviso de temperatura acima de {temp} °C",
   "equipment_matching_flat_fine": "Rotação aceitável até",
   "equipment_matching_flat_warn": "Rotação com aviso até",
   "equipment_matching_flats_line": "Rotação aceitável até {fine}°, com aviso até {warn}° · noites de diferença, no máximo: {nights}",
   "equipment_matching_framing": "Enquadramento",
-  "equipment_matching_framing_line": "Sobreposição mínima de {overlap} % · centros a até {centre} % do campo · rotação até {rotation}° · painéis de mosaico com sobreposição de {min}–{max} %",
+  "equipment_matching_framing_line": "Sobreposição mínima de {overlap} % · centros a até {centre}′ · rotação até {rotation}° · painéis de mosaico com sobreposição de {min}–{max} %",
   "equipment_matching_overlap": "Sobreposição mínima",
   "equipment_matching_panel_max": "Sobreposição máxima dos painéis de mosaico",
   "equipment_matching_panel_min": "Sobreposição mínima dos painéis de mosaico",

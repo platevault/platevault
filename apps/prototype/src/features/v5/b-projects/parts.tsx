@@ -36,8 +36,8 @@ export function sessionSubjectName(m: Messages, catalog: Catalog, project: Pick<
  * "Rotation unknown", or "Framing unknown" without a pointing, which the
  * user places by hand (VSEL-FR-04); never a zero distance.
  */
-export function framingLine(m: Messages, catalog: Catalog, session: Session): string {
-  const framing = sessionFraming(catalog, session)
+export function framingLine(m: Messages, session: Session): string {
+  const framing = sessionFraming(session)
   if (!framing) return m.project_framing_unknown()
   return framing.rotationDeg === null ? m.project_rotation_unknown() : m.project_rotatang({ angle: formatDegrees(framing.rotationDeg, 0) })
 }
