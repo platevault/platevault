@@ -1384,10 +1384,11 @@ impl Run<'_> {
     /// Move the old View aside, waiting for a tool that holds a file in it,
     /// and install the new one; restore the old one if that fails. First the
     /// catalog is read again: an edit or a global change committed during
-    /// the build fails Apply here, the old View kept (plan §3).
+    /// the build fails Apply here, the old View kept (plan §3). The wait for
+    /// a tool has no limit, so after one the catalog is read once more, and
+    /// an edit committed meanwhile puts the old View back and fails Apply.
     async fn swap(&mut self, reserved: &Reserved) -> Result<ApplyReport, LibraryError> {
-        let now = self.library.catalog().apply_inputs(self.journal.project_id).await?;
-        if !reserved.holds(&now, self.journal.operation_id) {
+        if !self.still_reserved(reserved).await? {
             return self.end(ApplyOutcome::Failed, CATALOG_MOVED.into()).await;
         }
         let view = self.project.join(VIEW_FOLDER);
@@ -1413,7 +1414,9 @@ impl Run<'_> {
             {
                 Aside::Moved { waited } => {
                     if waited {
-                        self.advance(ApplyPhase::WaitingForRelease, None).await?;
+                        if let Some(report) = self.after_wait(reserved).await? {
+                            return Ok(report);
+                        }
                     }
                     self.advance(ApplyPhase::OldMoved, None).await?;
                 }
@@ -1430,9 +1433,7 @@ impl Run<'_> {
         if let Err(error) = installed {
             let detail = format!("installing the new View failed: {error}");
             if old {
-                let (from, to) = (previous.clone(), view.clone());
-                let restored = blocking(move || Ok(rename(&from, &to))).await?;
-                if let Err(restore) = restored {
+                if let Err(restore) = self.restore_old_view().await? {
                     return Err(LibraryError::IdentityConflict(format!(
                         "{detail}; restoring the old View failed too ({restore}); PlateVault \
                          restores it at the next start"
@@ -1450,6 +1451,37 @@ impl Run<'_> {
         self.finish_installed().await
     }
 
+    /// After waiting for a tool, with the old View aside: record the wait,
+    /// and when the catalog moved meanwhile put the old View back and end
+    /// Failed.
+    async fn after_wait(&mut self, reserved: &Reserved) -> Result<Option<ApplyReport>, LibraryError> {
+        self.advance(ApplyPhase::WaitingForRelease, None).await?;
+        if self.still_reserved(reserved).await? {
+            return Ok(None);
+        }
+        if let Err(restore) = self.restore_old_view().await? {
+            return Err(LibraryError::IdentityConflict(format!(
+                "{CATALOG_MOVED}; restoring the old View failed ({restore}); PlateVault \
+                 restores it at the next start"
+            )));
+        }
+        self.end(ApplyOutcome::Failed, CATALOG_MOVED.into()).await.map(Some)
+    }
+
+    /// Whether the catalog, read now, still holds what this Apply reserved.
+    async fn still_reserved(&self, reserved: &Reserved) -> Result<bool, LibraryError> {
+        let now = self.library.catalog().apply_inputs(self.journal.project_id).await?;
+        Ok(reserved.holds(&now, self.journal.operation_id))
+    }
+
+    /// Move the old View back from `View (previous)/`; the rename's error
+    /// when it can't.
+    async fn restore_old_view(&self) -> Result<Result<(), std::io::Error>, LibraryError> {
+        let rename = self.os.rename;
+        let (from, to) = (self.project.join(VIEW_PREVIOUS_FOLDER), self.project.join(VIEW_FOLDER));
+        blocking(move || Ok(rename(&from, &to))).await
+    }
+
     /// From `NewInstalled` on Apply ends Applied: commit the manifest, move
     /// the ticked foreign files and retire the old View.
     async fn finish_installed(&mut self) -> Result<ApplyReport, LibraryError> {
@@ -1462,15 +1494,17 @@ impl Run<'_> {
                 return Ok(report);
             }
         }
+        let inputs = catalog.apply_inputs(self.journal.project_id).await?;
         let mut foreign = catalog.apply_foreign_items(self.journal.operation_id).await?;
         let view = self.project.join(VIEW_FOLDER);
         let previous = self.project.join(VIEW_PREVIOUS_FOLDER);
         if before(self.journal.phase, ApplyPhase::ForeignTransferred) {
             let items = foreign.clone();
+            let placed = inputs.installed.as_ref().map(placed).unwrap_or_default();
             foreign = blocking(move || {
                 Ok(items
                     .iter()
-                    .map(|item| files::move_foreign(&previous, &view, item))
+                    .map(|item| files::move_foreign(&previous, &view, &placed, item))
                     .collect::<Vec<_>>())
             })
             .await?;
@@ -1480,7 +1514,6 @@ impl Run<'_> {
                 return Ok(report);
             }
         }
-        let inputs = catalog.apply_inputs(self.journal.project_id).await?;
         let delivered = inputs
             .installed
             .as_ref()
@@ -1497,11 +1530,7 @@ impl Run<'_> {
                 return Ok(report);
             }
         }
-        let sources: BTreeMap<Uuid, PathBuf> = inputs
-            .sources
-            .iter()
-            .filter_map(|(id, source)| source.path.to_path_buf().ok().map(|path| (*id, path)))
-            .collect();
+        let sources = files::Original::all(&inputs);
         let project = self.project.clone();
         let retired = blocking(move || Ok(files::retire(&project, &old.entries, &sources))).await?;
         catalog.settle_apply(&self.journal, &retired.leftovers, retired.gone, None).await?;

@@ -1173,6 +1173,7 @@ impl Library {
                 {
                     KeptCopy {
                         path: NativePath::from_path(&destination),
+                        root: None,
                         fingerprint,
                         sha256: sha256.clone(),
                     }

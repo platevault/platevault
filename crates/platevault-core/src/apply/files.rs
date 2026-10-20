@@ -28,7 +28,10 @@ use uuid::Uuid;
 
 use super::plan::PlanEntry;
 use super::ApplyControl;
-use crate::custody::{observe_entry, observe_source, same_identity, transfer, verify_source};
+use crate::custody::rooted::{Folder, Unentered};
+use crate::custody::{
+    observe_entry, observe_source, open_source, same_identity, transfer, verify_source,
+};
 use crate::layout::VIEW_PREVIOUS_FOLDER;
 use crate::patched_copy::{self, HeaderPatch, PatchTarget};
 use crate::{
@@ -182,7 +185,7 @@ pub fn place(placing: &Placing) -> Result<Written, ItemReason> {
                 patched_sha256: None,
             })
         }
-        EntryPlacement::Copy | EntryPlacement::Clone => copy(placing, &original, &path),
+        EntryPlacement::Copy | EntryPlacement::Clone => copy(placing, &path),
     }
 }
 
@@ -190,8 +193,8 @@ pub fn place(placing: &Placing) -> Result<Written, ItemReason> {
 /// isolated patched copy the patched-copy seam writes and proves
 /// (PREP-FR-03, PREP-FR-09), which removes one that fails so Retry makes
 /// it again.
-fn copy(placing: &Placing, original: &Path, path: &Path) -> Result<Written, ItemReason> {
-    let Some(header) = &placing.entry.patch else { return plain_copy(placing, original, path) };
+fn copy(placing: &Placing, path: &Path) -> Result<Written, ItemReason> {
+    let Some(header) = &placing.entry.patch else { return plain_copy(placing, path) };
     let patched = patched_copy::patch_copy(&PatchTarget {
         snapshot: &placing.snapshot,
         destination: destination(placing),
@@ -214,9 +217,13 @@ fn destination(placing: &Placing) -> TransferDestination {
 }
 
 /// A clone where the volume makes one, else a verified copy (PREP-FR-04).
-fn plain_copy(placing: &Placing, original: &Path, path: &Path) -> Result<Written, ItemReason> {
+/// Both read the original through a handle reached from its root without
+/// following a link (astro-plan-nlewt): a folder swapped for a link after
+/// the snapshot refuses the entry before any byte is cloned or copied.
+fn plain_copy(placing: &Placing, path: &Path) -> Result<Written, ItemReason> {
     let snapshot = &placing.snapshot;
-    if transfer::clone_file(original, path).is_ok() {
+    let original = open_source(snapshot)?;
+    if transfer::clone_file(&original, path).is_ok() {
         let clone = observe_entry(path)
             .map_err(|error| reason(ReasonCode::DestinationChanged, error.to_string()))?;
         if clone.sha256 == snapshot.sha256 && clone.kind == EntryKind::File {
@@ -232,13 +239,14 @@ fn plain_copy(placing: &Placing, original: &Path, path: &Path) -> Result<Written
             format!("the clone {} differs from its original", path.display()),
         ));
     }
+    drop(original);
     let destination = destination(placing);
     let written = transfer::begin(placing.operation, placing.entry.seq, &destination)?;
-    transfer::write(snapshot, &destination, &written)?;
-    transfer::verify(snapshot, &destination, &written)?;
+    let installed = transfer::write(snapshot, &destination, &written)?;
+    transfer::verify(snapshot, &destination, &installed)?;
     Ok(Written {
         placement: EntryPlacement::Copy,
-        identity: written.identity,
+        identity: installed.identity,
         patched_sha256: None,
     })
 }
@@ -333,24 +341,46 @@ impl Ours {
 /// Empty the `View (building)/` an earlier Apply of this Project left, then
 /// remove it: a symlink holds no data, a partial copy an interrupted write
 /// left is this module's own by its name, and so is every file of `ours`.
+/// So is an unfinished copy of a partial beside it: where the volume has no
+/// no-replace rename (macOS exFAT) the partial is installed as a verified
+/// copy under the entry's name, and an interruption leaves at most the
+/// partial's first bytes there ([`transfer::remove_unfinished_copy`]).
 /// Anything else stays and is returned; the folder then stays too.
 pub fn clear_building(building: &Path, ours: &Ours) -> Vec<PathBuf> {
     let walked = walk(building);
     let mut kept: Vec<PathBuf> = walked.unreadable.into_iter().map(|(path, _)| path).collect();
-    for path in walked.files {
-        let removable = match fs::symlink_metadata(&path) {
-            Ok(metadata) if fs_pathsafe::is_link_or_junction_metadata(&metadata) => true,
+    let is_partial = |path: &Path| {
+        path.file_name().and_then(|name| name.to_str()).is_some_and(transfer::is_partial_name)
+    };
+    let (partials, others): (Vec<PathBuf>, Vec<PathBuf>) =
+        walked.files.into_iter().partition(|path| is_partial(path));
+    for path in others {
+        let removed = match fs::symlink_metadata(&path) {
+            Ok(metadata) if fs_pathsafe::is_link_or_junction_metadata(&metadata) => {
+                fs::remove_file(&path).is_ok()
+            }
             Ok(metadata) if metadata.is_file() => {
-                let partial = path
-                    .file_name()
-                    .and_then(|name| name.to_str())
-                    .is_some_and(transfer::is_partial_name);
                 let relative = path.strip_prefix(building).unwrap_or(&path);
-                partial || observe_entry(&path).is_ok_and(|file| ours.holds(relative, &file))
+                if observe_entry(&path).is_ok_and(|file| ours.holds(relative, &file)) {
+                    fs::remove_file(&path).is_ok()
+                } else {
+                    partials.iter().any(|partial| {
+                        partial.parent() == path.parent()
+                            && transfer::remove_unfinished_copy(&path, partial)
+                    })
+                }
             }
             _ => false,
         };
-        if !(removable && fs::remove_file(&path).is_ok()) {
+        if !removed {
+            kept.push(path);
+        }
+    }
+    for path in partials {
+        let regular = fs::symlink_metadata(&path).is_ok_and(|metadata| {
+            metadata.is_file() || fs_pathsafe::is_link_or_junction_metadata(&metadata)
+        });
+        if !(regular && fs::remove_file(&path).is_ok()) {
             kept.push(path);
         }
     }
@@ -385,62 +415,100 @@ fn unreadable(path: &Path, error: &dyn std::fmt::Display) -> (PathBuf, ItemReaso
 /// below it is read; an absent root holds nothing. Every folder or entry
 /// that can't be read is named, never left out.
 fn walk(root: &Path) -> Walked {
+    walk_from(root, Path::new(""))
+}
+
+/// [`walk`] of `base/relative`, entering `base` and every folder of
+/// `relative` as itself: a link anywhere from `base` down is refused, never
+/// followed. Each folder is listed through its own handle and its
+/// subfolders entered through it, so a folder swapped for a link while the
+/// walk runs is never followed out of `base` (astro-plan-yb133).
+fn walk_from(base: &Path, relative: &Path) -> Walked {
     let mut walked = Walked::default();
-    match fs::symlink_metadata(root) {
-        Err(error) if error.kind() == io::ErrorKind::NotFound => return walked,
-        Err(error) => {
-            walked.unreadable.push(unreadable(root, &error));
-            return walked;
-        }
-        Ok(metadata)
-            if fs_pathsafe::is_link_or_junction_metadata(&metadata) || !metadata.is_dir() =>
-        {
-            walked.unreadable.push((
-                root.to_path_buf(),
-                reason(
-                    ReasonCode::SourceUnavailable,
-                    format!("{} is a link or not a folder; nothing below it is read", root.display()),
-                ),
-            ));
-            return walked;
-        }
-        Ok(_) => {}
-    }
-    let mut folders = vec![root.to_path_buf()];
-    while let Some(folder) = folders.pop() {
-        let entries = match fs::read_dir(&folder) {
-            Ok(entries) => entries,
-            Err(error) => {
-                walked.unreadable.push(unreadable(&folder, &error));
-                continue;
-            }
-        };
-        for entry in entries {
-            let path = match entry {
-                Ok(entry) => entry.path(),
-                Err(error) => {
-                    walked.unreadable.push(unreadable(&folder, &error));
-                    continue;
-                }
-            };
-            match fs::symlink_metadata(&path) {
-                Ok(metadata)
-                    if metadata.is_dir()
-                        && !fs_pathsafe::is_link_or_junction_metadata(&metadata) =>
-                {
-                    folders.push(path);
-                }
-                Ok(_) => walked.files.push(path),
-                // Gone since the folder was listed: nothing to account for.
-                Err(error) if error.kind() == io::ErrorKind::NotFound => {}
-                Err(error) => walked.unreadable.push(unreadable(&path, &error)),
-            }
-        }
+    match enter(base, relative) {
+        Ok(Some(folder)) => walk_below(&folder, &mut walked),
+        Ok(None) => {}
+        Err(refusal) => walked.unreadable.push(refusal),
     }
     walked.files.sort();
     walked.unreadable.sort_by(|left, right| left.0.cmp(&right.0));
     walked.unreadable.dedup_by(|left, right| left.0 == right.0);
     walked
+}
+
+/// `base/relative` entered as itself from `base`; `None` when it is absent.
+///
+/// # Errors
+/// The first folder on the way that is a link, a junction or no folder, or
+/// can't be opened.
+fn enter(base: &Path, relative: &Path) -> Result<Option<Folder>, (PathBuf, ItemReason)> {
+    let opened = |result: Result<Folder, Unentered>, at: &Path| match result {
+        Ok(folder) => Ok(Some(folder)),
+        Err(Unentered::Io(error)) if error.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(Unentered::Io(error)) => Err(unreadable(at, &error)),
+        Err(Unentered::NotAFolder) => Err(not_a_folder(at)),
+    };
+    let Some(mut folder) = opened(Folder::open(base), base)? else { return Ok(None) };
+    for part in relative.components() {
+        let Component::Normal(name) = part else { return Err(not_a_folder(&base.join(relative))) };
+        let at = folder.path().join(name);
+        let Some(child) = opened(folder.child(name), &at)? else { return Ok(None) };
+        folder = child;
+    }
+    Ok(Some(folder))
+}
+
+fn not_a_folder(path: &Path) -> (PathBuf, ItemReason) {
+    (
+        path.to_path_buf(),
+        reason(
+            ReasonCode::SourceUnavailable,
+            format!("{} is a link or not a folder; nothing below it is read", path.display()),
+        ),
+    )
+}
+
+/// The `AppleDouble` header's magic number (RFC 1740), big-endian.
+const APPLE_DOUBLE: [u8; 4] = [0x00, 0x05, 0x16, 0x07];
+
+/// Every file and link below `folder`, through its handle. An `AppleDouble`
+/// companion `._<name>` beside an entry `<name>` is part of that entry and
+/// is left out (astro-plan-cyqdo): macOS keeps one beside each file it
+/// writes on exFAT and other volumes without extended attributes, and
+/// removes or renames it with its entry. `PlateVault` never unlinks one
+/// itself; a `._` file with no entry beside it is listed like any file.
+fn walk_below(folder: &Folder, walked: &mut Walked) {
+    let listed = match folder.list() {
+        Ok(listed) => listed,
+        Err(error) => {
+            walked.unreadable.push(unreadable(folder.path(), &error));
+            return;
+        }
+    };
+    let names: BTreeSet<&std::ffi::OsStr> = listed.iter().map(|entry| entry.name.as_os_str()).collect();
+    for entry in &listed {
+        let path = folder.path().join(&entry.name);
+        if entry.folder {
+            match folder.child(&entry.name) {
+                Ok(child) => walk_below(&child, walked),
+                // Gone since the folder was listed: nothing to account for.
+                Err(Unentered::Io(error)) if error.kind() == io::ErrorKind::NotFound => {}
+                // A link or a file now: an entry of its own, never followed.
+                Err(Unentered::NotAFolder) => walked.files.push(path),
+                Err(Unentered::Io(error)) => walked.unreadable.push(unreadable(&path, &error)),
+            }
+            continue;
+        }
+        let companion = entry
+            .name
+            .to_str()
+            .and_then(|name| name.strip_prefix("._"))
+            .is_some_and(|base| !base.is_empty() && names.contains(std::ffi::OsStr::new(base)))
+            && folder.file_starts_with(&entry.name, &APPLE_DOUBLE);
+        if !companion {
+            walked.files.push(path);
+        }
+    }
 }
 
 /// Remove `root` and every folder below it that holds nothing, deepest
@@ -468,8 +536,13 @@ pub fn remove_empty_folders(root: &Path) {
         }
         index += 1;
     }
+    // macOS removes a folder whose only entries are `._` AppleDouble files,
+    // and those files with it; one with no entry beside it is the user's
+    // (astro-plan-cyqdo), so a folder is removed only once it lists nothing.
     for folder in folders.iter().rev() {
-        let _ = fs::remove_dir(folder);
+        if fs::read_dir(folder).is_ok_and(|mut entries| entries.next().is_none()) {
+            let _ = fs::remove_dir(folder);
+        }
     }
 }
 
@@ -487,14 +560,25 @@ pub fn holds_nothing(folder: &Path) -> bool {
 /// # Errors
 /// The entries that couldn't be read, each with why.
 pub fn files_below(folder: &Path) -> Result<Vec<PathBuf>, Unreadable> {
-    let walked = walk(folder);
+    files_below_from(folder, Path::new(""))
+}
+
+/// [`files_below`] of `base/relative`, entering `base` and every folder of
+/// `relative` as itself, so a link anywhere from `base` down refuses the
+/// list rather than being followed.
+///
+/// # Errors
+/// The entries that couldn't be read, each with why.
+pub fn files_below_from(base: &Path, relative: &Path) -> Result<Vec<PathBuf>, Unreadable> {
+    let walked = walk_from(base, relative);
     if !walked.unreadable.is_empty() {
         return Err(walked.unreadable);
     }
+    let folder = base.join(relative);
     Ok(walked
         .files
         .into_iter()
-        .filter_map(|path| path.strip_prefix(folder).ok().map(Path::to_path_buf))
+        .filter_map(|path| path.strip_prefix(&folder).ok().map(Path::to_path_buf))
         .collect())
 }
 
@@ -519,7 +603,7 @@ pub fn foreign_files(
         if placed.contains(&relative) {
             continue;
         }
-        match observe_entry(&path) {
+        match observe_source(view, &path) {
             Ok(evidence) => found.push((relative, evidence)),
             Err(error) => missed.push(unreadable(&path, &error)),
         }
@@ -533,8 +617,19 @@ pub fn foreign_files(
 
 /// Move one ticked foreign file from `View (previous)/` into the new
 /// `View/` at the same place, once it is still the reviewed entry; never
-/// over an entry the new View placed.
-pub fn move_foreign(previous: &Path, view: &Path, item: &ForeignItem) -> ForeignItem {
+/// over an entry the new View placed (`placed`, relative to `View/`).
+///
+/// Where the volume has no no-replace rename (macOS exFAT) a file moves as a
+/// verified copy, with an identity of its own. A resumed move whose source
+/// is gone therefore accepts the reviewed kind and bytes at the destination,
+/// and one whose copy an interruption left unfinished removes that copy,
+/// which holds nothing the source doesn't, and moves again.
+pub fn move_foreign(
+    previous: &Path,
+    view: &Path,
+    placed: &BTreeSet<PathBuf>,
+    item: &ForeignItem,
+) -> ForeignItem {
     let mut item = item.clone();
     if !item.ticked {
         item.state = ForeignItemState::Stayed;
@@ -542,11 +637,15 @@ pub fn move_foreign(previous: &Path, view: &Path, item: &ForeignItem) -> Foreign
     }
     let outcome = (|| {
         let relative = item.path.relative_path().map_err(|error| error.to_string())?;
+        let taken = || format!("the new View already holds {}", relative.display());
+        if placed.contains(&relative) {
+            return Err(taken());
+        }
         let from = previous.join(&relative);
         let to = view.join(&relative);
-        if !from.exists()
-            && fs::symlink_metadata(&to).is_ok_and(|_| is_reviewed(&to, &item.evidence))
-        {
+        let gone = fs::symlink_metadata(&from)
+            .is_err_and(|error| error.kind() == io::ErrorKind::NotFound);
+        if gone && holds_reviewed_bytes(&to, &item.evidence) {
             return Ok(());
         }
         if !is_reviewed(&from, &item.evidence) {
@@ -554,9 +653,15 @@ pub fn move_foreign(previous: &Path, view: &Path, item: &ForeignItem) -> Foreign
         }
         let folder = relative.parent().unwrap_or_else(|| Path::new(""));
         transfer::ensure_folder(view, folder).map_err(|failure| failure.detail)?;
-        transfer::rename_noreplace(&from, &to).map_err(|error| {
+        let mut moved = transfer::rename_noreplace(&from, &to);
+        if moved.as_ref().is_err_and(|error| error.kind() == io::ErrorKind::AlreadyExists)
+            && transfer::remove_unfinished_copy(&to, &from)
+        {
+            moved = transfer::rename_noreplace(&from, &to);
+        }
+        moved.map_err(|error| {
             if error.kind() == io::ErrorKind::AlreadyExists {
-                format!("the new View already holds {}", relative.display())
+                taken()
             } else {
                 format!("{}: {error}", from.display())
             }
@@ -580,6 +685,12 @@ fn is_reviewed(path: &Path, reviewed: &EntryEvidence) -> bool {
             && now.kind == reviewed.kind
             && now.sha256 == reviewed.sha256
     })
+}
+
+/// Whether `path` holds the reviewed kind and bytes, whatever its identity:
+/// the verified copy a move made where the volume has no no-replace rename.
+fn holds_reviewed_bytes(path: &Path, reviewed: &EntryEvidence) -> bool {
+    observe_entry(path).is_ok_and(|now| now.kind == reviewed.kind && now.sha256 == reviewed.sha256)
 }
 
 // ── The swap ─────────────────────────────────────────────────────────────────
@@ -668,7 +779,7 @@ pub struct Retired {
 pub fn retire(
     project: &Path,
     entries: &[ManifestEntry],
-    sources: &BTreeMap<Uuid, PathBuf>,
+    sources: &BTreeMap<Uuid, Original>,
 ) -> Retired {
     let previous = project.join(VIEW_PREVIOUS_FOLDER);
     let mut reasons: BTreeMap<PathBuf, PreviousItemReason> = BTreeMap::new();
@@ -700,7 +811,7 @@ pub fn retire(
     for path in walk(&previous).files {
         let Ok(relative) = path.strip_prefix(&previous).map(Path::to_path_buf) else { continue };
         let reason = reasons.remove(&relative).unwrap_or(PreviousItemReason::UntickedFile);
-        let Ok(evidence) = observe_entry(&path) else { continue };
+        let Ok(evidence) = observe_source(&previous, &path) else { continue };
         leftovers.push(PreviousItem {
             path: NativePath::from_path(&Path::new(VIEW_PREVIOUS_FOLDER).join(&relative)),
             reason,
@@ -710,6 +821,45 @@ pub fn retire(
     }
     remove_empty_folders(&previous);
     Retired { leftovers, gone: fs::symlink_metadata(&previous).is_err() }
+}
+
+/// Where a placed entry's original is now: its path below its location's
+/// registered root, from which every check reaches it without following a
+/// link (STO-FR-07).
+#[derive(Clone, Debug)]
+pub struct Original {
+    pub root: NativePath,
+    pub path: NativePath,
+}
+
+impl Original {
+    /// Every original `inputs` names, by asset or master id.
+    pub fn all(inputs: &persistence_library::ApplyInputs) -> BTreeMap<Uuid, Self> {
+        inputs
+            .sources
+            .iter()
+            .filter_map(|(id, source)| {
+                let location = inputs.locations.get(&source.location_id)?;
+                Some((*id, Self { root: location.path.clone(), path: source.path.clone() }))
+            })
+            .collect()
+    }
+
+    /// What this original must still be for a copy `entry` placed to go:
+    /// the file, size, modification time and SHA-256 its snapshot recorded
+    /// when the copy was written, at its current path below its root.
+    pub fn as_placed_by(&self, entry: &ManifestEntry) -> EntryEvidence {
+        EntryEvidence {
+            path: self.path.clone(),
+            root: Some(self.root.clone()),
+            kind: EntryKind::File,
+            fingerprint: ObservationFingerprint {
+                content_sha256: None,
+                ..entry.source_fingerprint.clone()
+            },
+            sha256: Some(entry.source_sha256.clone()),
+        }
+    }
 }
 
 /// The asset or master id an entry's original is recorded under.
@@ -733,7 +883,7 @@ const fn unverified(entry: &ManifestEntry) -> PreviousItemReason {
 pub fn old_link(
     path: &Path,
     entry: &ManifestEntry,
-    original: Option<&PathBuf>,
+    original: Option<&Original>,
 ) -> Result<(), PreviousItemReason> {
     let link = observe_entry(path).map_err(|_| PreviousItemReason::UnverifiedLink)?;
     let EntryKind::Link { target } = &link.kind else {
@@ -743,7 +893,7 @@ pub fn old_link(
         .written
         .as_ref()
         .is_some_and(|written| same_identity(&link.fingerprint.identity, written));
-    let points = original.is_some_and(|original| *target == NativePath::from_path(original));
+    let points = original.is_some_and(|original| *target == original.path);
     if ours && points {
         Ok(())
     } else {
@@ -753,22 +903,19 @@ pub fn old_link(
 
 /// An old copy goes once it still holds the bytes `PlateVault` placed, its
 /// original's or, for a patched copy, the digest it was proven to hold when
-/// written, and its original still exists and matches the recorded digest.
+/// written, and its original, reached from its root without following a
+/// link, is still the file its snapshot recorded with those bytes
+/// (astro-plan-9w4qm): the copy is deleted outright, so its original must
+/// be proven where the catalog keeps it.
 fn old_copy(
     path: &Path,
     entry: &ManifestEntry,
-    original: Option<&PathBuf>,
+    original: Option<&Original>,
 ) -> Result<(), PreviousItemReason> {
     if !holds_placed_copy(path, entry) {
         return Err(PreviousItemReason::ChangedCopy);
     }
-    let verified = original.is_some_and(|original| {
-        observe_entry(original).is_ok_and(|now| {
-            now.kind == EntryKind::File
-                && now.sha256.as_deref() == Some(entry.source_sha256.as_str())
-        })
-    });
-    if verified {
+    if original.is_some_and(|original| verify_source(&original.as_placed_by(entry)).is_ok()) {
         Ok(())
     } else {
         Err(PreviousItemReason::UnverifiedCopy)
@@ -927,5 +1074,56 @@ mod tests {
         assert!(!held);
         assert_eq!(files_below(&root).unwrap(), [PathBuf::from("WBPP/registered.xisf")]);
         assert_eq!(files_below(&temp.path().join("absent")).unwrap(), [] as [PathBuf; 0]);
+    }
+
+    /// cyqdo: an `AppleDouble` companion `._X` beside an entry `X` is part of
+    /// it and never listed; a `._` file with no entry beside it, or without
+    /// the `AppleDouble` header, is listed like any file.
+    #[test]
+    fn an_apple_double_companion_is_part_of_its_entry() {
+        let temp = tempfile::tempdir().unwrap();
+        let view = temp.path().join("View");
+        fs::create_dir_all(view.join("Darks")).unwrap();
+        let mut companion = vec![0x00_u8, 0x05, 0x16, 0x07];
+        companion.resize(4096, 0);
+        fs::write(view.join("Darks/Dark_001.fits"), b"placed").unwrap();
+        fs::write(view.join("Darks/._Dark_001.fits"), &companion).unwrap();
+        fs::write(view.join("._Darks"), &companion).unwrap();
+        fs::write(view.join("._Orphan.fits"), &companion).unwrap();
+        fs::write(view.join("notes.txt"), b"the user's").unwrap();
+        fs::write(view.join("._notes.txt"), b"not AppleDouble").unwrap();
+        let placed = BTreeSet::from([PathBuf::from("Darks/Dark_001.fits")]);
+        let foreign: Vec<PathBuf> =
+            foreign_files(&view, &placed).unwrap().into_iter().map(|(path, _)| path).collect();
+        assert_eq!(
+            foreign,
+            [PathBuf::from("._Orphan.fits"), PathBuf::from("._notes.txt"), PathBuf::from("notes.txt")]
+        );
+    }
+
+    /// yb133: a walk lists each folder through its handle and enters a
+    /// subfolder through it, so a folder swapped for a link meanwhile is
+    /// never followed.
+    #[cfg(unix)]
+    #[test]
+    fn a_walk_never_follows_a_folder_swapped_while_it_runs() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("View (previous)");
+        fs::create_dir_all(root.join("night")).unwrap();
+        fs::write(root.join("night/Light_001.fits"), b"inside").unwrap();
+        let outside = temp.path().join("outside");
+        fs::create_dir(&outside).unwrap();
+        fs::write(outside.join("theirs.fits"), b"outside").unwrap();
+
+        let folder = Folder::open(&root).unwrap();
+        let listed = folder.list().unwrap();
+        assert!(listed.iter().any(|entry| entry.name == "night" && entry.folder));
+        fs::rename(root.join("night"), temp.path().join("away")).unwrap();
+        std::os::unix::fs::symlink(&outside, root.join("night")).unwrap();
+        assert!(matches!(folder.child(std::ffi::OsStr::new("night")), Err(Unentered::NotAFolder)));
+
+        let walked = walk(&root);
+        assert_eq!(walked.files, [root.join("night")], "the link is an entry, not followed");
+        assert_eq!(walked.unreadable.len(), 0, "nothing is unreadable");
     }
 }

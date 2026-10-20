@@ -7,11 +7,14 @@
 //! with create-new semantics beside its destination and recorded by identity
 //! before any byte is written. The copy is hashed as it is written and must
 //! match the reviewed SHA-256; it is synced, installed at the destination with
-//! a no-replace link or rename, and the folder is synced. Verification re-reads
-//! the installed copy through a handle proven to be the recorded file. An
-//! existing entry at the destination is never replaced; the only file this
-//! module ever removes is a partial copy it wrote itself, while that name still
-//! holds the recorded identity.
+//! a no-replace rename or link, or, where the volume has neither (macOS exFAT),
+//! as a verified copy onto a file it creates there, and the folder is synced.
+//! Verification re-reads the installed copy through a handle proven to be the
+//! recorded file. An existing entry at the destination is never replaced; the
+//! only files this module ever removes are a partial copy it wrote itself,
+//! while that name still holds the recorded identity, and an unfinished copy
+//! of such a partial that an interrupted install left at its destination,
+//! which holds nothing the partial doesn't.
 
 use std::fs::{self, OpenOptions};
 use std::io::Write as _;
@@ -162,29 +165,51 @@ pub(crate) fn begin(
 
 /// Writing → Installed: stream the reviewed source into the recorded partial
 /// copy, prove the bytes are the snapshot, sync, and install without replacing
-/// anything. A resumed item whose copy was already installed is recognized by
-/// its recorded identity, never by the destination name.
+/// anything ([`install`]); returns the copy now at the destination. A resumed
+/// item whose copy was already installed is recognized by its recorded
+/// identity once the partial name is gone, or as the partial's second link.
+/// While the partial is still a file of its own the install runs again: an
+/// unfinished copy an interrupted install left at the destination is never
+/// taken for the entry, since on a volume without stable file IDs any file
+/// there carries the recorded identity.
 pub(crate) fn write(
     source: &EntryEvidence,
     destination: &TransferDestination,
     written: &WrittenCopy,
-) -> Result<(), ItemReason> {
+) -> Result<WrittenCopy, ItemReason> {
     let partial = written.partial.to_path_buf().map_err(|error| changed(error.to_string()))?;
     let (_, _, file) = layout(destination)?;
-    if holds(&file, &written.identity) {
-        // Installed before an interruption; a link-and-unlink install may
-        // also have left the partial name as a second link.
-        discard(&partial, &written.identity);
-        return Ok(());
-    }
     if !holds(&partial, &written.identity) {
+        if holds(&file, &written.identity) {
+            return Ok(written.clone());
+        }
         return Err(changed(format!(
             "the partial copy {} this item recorded is gone and no copy of it is installed",
             partial.display()
         )));
     }
+    if second_link(&partial, &file) {
+        // A link-and-unlink install stopped before it removed the partial name.
+        discard(&partial, &written.identity);
+        return Ok(written.clone());
+    }
     fill_from_source(source, written)?;
     install(destination, written)
+}
+
+/// Whether `partial` and `file` are two names of one regular file.
+#[cfg(unix)]
+fn second_link(partial: &Path, file: &Path) -> bool {
+    match (fs::symlink_metadata(partial), fs::symlink_metadata(file)) {
+        (Ok(partial), Ok(file)) => partial.is_file() && super::same_entry(&partial, &file),
+        _ => false,
+    }
+}
+
+/// Windows installs by rename only, so a partial never has a second name.
+#[cfg(not(unix))]
+const fn second_link(_partial: &Path, _file: &Path) -> bool {
+    false
 }
 
 /// Whether `name` is a partial copy this module writes (`.pv-…partial`), or
@@ -280,34 +305,46 @@ fn settle(out: &fs::File, partial: &Path, modified_ns: i128) -> Result<(), ItemR
 }
 
 /// Install the recorded partial copy at the destination without replacing
-/// anything, and sync its folder. A partial that can't be installed is
-/// removed.
+/// anything ([`move_noreplace`]) and sync its folder; returns the copy now
+/// there. Where the volume has neither a no-replace rename nor hard links
+/// (macOS exFAT), that is a verified copy of the partial onto a file created
+/// at the destination, with an identity of its own, and the partial goes once
+/// the copy is verified. The transfer journal names the partial and the
+/// destination before the first byte, so an interruption of that copy leaves
+/// at the destination at most an unfinished copy of the partial, which the
+/// next install removes before it copies again ([`remove_unfinished_copy`]).
+/// Anything else there is never replaced. A partial that can't be installed
+/// is removed.
 pub(crate) fn install(
     destination: &TransferDestination,
     written: &WrittenCopy,
-) -> Result<(), ItemReason> {
+) -> Result<WrittenCopy, ItemReason> {
     let partial = written.partial.to_path_buf().map_err(|error| changed(error.to_string()))?;
     let (_, _, file) = layout(destination)?;
-    let mut installing = match tempfile::TempPath::try_from_path(&partial) {
-        Ok(installing) => installing,
+    let mut moved = move_noreplace(&partial, &file);
+    if moved.as_ref().is_err_and(|error| error.kind() == std::io::ErrorKind::AlreadyExists)
+        && remove_unfinished_copy(&file, &partial)
+    {
+        moved = move_noreplace(&partial, &file);
+    }
+    let installed = match moved {
+        Ok(Moved::Renamed) => written.clone(),
+        #[cfg(unix)]
+        Ok(Moved::Copied(identity)) => WrittenCopy { identity, ..written.clone() },
         Err(error) => {
             discard(&partial, &written.identity);
-            return Err(write_failed(&partial, &error));
+            return Err(if error.kind() == std::io::ErrorKind::AlreadyExists {
+                occupied(&file)
+            } else {
+                write_failed(&file, &error)
+            });
         }
     };
-    installing.disable_cleanup(true);
-    if let Err(failure) = installing.persist_noclobber(&file) {
-        discard(&partial, &written.identity);
-        return Err(if failure.error.kind() == std::io::ErrorKind::AlreadyExists {
-            occupied(&file)
-        } else {
-            write_failed(&file, &failure.error)
-        });
-    }
     // A link-and-unlink install may leave the partial name as a second link.
     discard(&partial, &written.identity);
     let folder = file.parent().unwrap_or_else(|| Path::new(""));
-    sync_folder(folder).map_err(|error| write_failed(folder, &error))
+    sync_folder(folder).map_err(|error| write_failed(folder, &error))?;
+    Ok(installed)
 }
 
 fn modified_time(nanos: i128) -> Option<std::time::SystemTime> {
@@ -371,25 +408,25 @@ pub(crate) const fn sync_folder(_folder: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
-/// Make `path` a copy-on-write clone of `source`: APFS `clonefile` on macOS,
-/// the `FICLONE` reflink on Linux. Nothing is copied when the volume or the
-/// platform can't clone; the error says so and `path` stays free.
+/// Make `path` a copy-on-write clone of the file `source` holds open: APFS
+/// `clonefile` on macOS, the `FICLONE` reflink on Linux. The source is the
+/// handle, never a path, so what is cloned is the entry it was opened as.
+/// Nothing is copied when the volume or the platform can't clone; the error
+/// says so and `path` stays free.
 #[cfg(target_os = "macos")]
-pub(crate) fn clone_file(source: &Path, path: &Path) -> std::io::Result<()> {
+pub(crate) fn clone_file(source: &fs::File, path: &Path) -> std::io::Result<()> {
     let folder = path.parent().unwrap_or(path);
     let name = path.file_name().ok_or_else(|| std::io::Error::other("no file name"))?;
-    let source = fs::File::open(source)?;
     let folder = fs::File::open(folder)?;
-    rustix::fs::fclonefileat(&source, &folder, name, rustix::fs::CloneFlags::NOFOLLOW)?;
+    rustix::fs::fclonefileat(source, &folder, name, rustix::fs::CloneFlags::NOFOLLOW)?;
     fs::File::open(path)?.sync_all()
 }
 
 #[cfg(target_os = "linux")]
-pub(crate) fn clone_file(source: &Path, path: &Path) -> std::io::Result<()> {
+pub(crate) fn clone_file(source: &fs::File, path: &Path) -> std::io::Result<()> {
     use std::os::unix::fs::MetadataExt;
-    let source = fs::File::open(source)?;
     let out = fs::OpenOptions::new().write(true).create_new(true).open(path)?;
-    if let Err(error) = rustix::fs::ioctl_ficlone(&out, &source) {
+    if let Err(error) = rustix::fs::ioctl_ficlone(&out, source) {
         // Remove only the empty file this clone created, while it is ours.
         let ours = out.metadata()?;
         if fs::symlink_metadata(path)
@@ -403,7 +440,7 @@ pub(crate) fn clone_file(source: &Path, path: &Path) -> std::io::Result<()> {
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-pub(crate) fn clone_file(_source: &Path, _path: &Path) -> std::io::Result<()> {
+pub(crate) fn clone_file(_source: &fs::File, _path: &Path) -> std::io::Result<()> {
     Err(std::io::Error::new(
         std::io::ErrorKind::Unsupported,
         "this platform makes no verified clone",
@@ -428,8 +465,8 @@ pub(crate) fn clone_file(_source: &Path, _path: &Path) -> std::io::Result<()> {
 ///   isn't used: it first sets the source's attributes through its path,
 ///   which follows a link to an original.
 /// - A Unix volume that answers the no-replace rename as unsupported
-///   (`EINVAL`, `ENOTSUP`, `ENOSYS`: macOS exFAT, some network and FUSE
-///   mounts), and other Unix platforms: [`without_noreplace`]. A folder moves
+///   (`EINVAL`, `ENOTSUP`, `EOPNOTSUPP`, `ENOSYS`: macOS exFAT, some network
+///   and FUSE mounts), and other Unix platforms: [`without_noreplace`]. A folder moves
 ///   over an empty placeholder it claimed itself; the one exception to
 ///   "never replaces" is an empty folder another process swaps in for that
 ///   placeholder before the rename (owner decision of 2026-10-20, so Apply
@@ -450,19 +487,43 @@ pub(crate) fn clone_file(_source: &Path, _path: &Path) -> std::io::Result<()> {
 /// # Errors
 /// `AlreadyExists` when `to` is taken; the platform's rename error.
 pub(crate) fn rename_noreplace(from: &Path, to: &Path) -> std::io::Result<()> {
+    move_noreplace(from, to).map(drop)
+}
+
+/// How [`move_noreplace`] put an entry at its new name.
+#[derive(Debug)]
+pub(crate) enum Moved {
+    /// `to` is `from` under its new name, with its identity.
+    Renamed,
+    /// `to` is a verified copy of the regular file `from`, with this
+    /// identity of its own, and `from` is gone ([`copy_onto_new`]).
+    /// Unix only: Windows always has the no-replace `MoveFileExW`.
+    #[cfg(unix)]
+    Copied(FileIdentity),
+}
+
+/// [`rename_noreplace`], telling whether the entry was renamed or, on a
+/// volume without a no-replace rename or hard links, copied.
+pub(crate) fn move_noreplace(from: &Path, to: &Path) -> std::io::Result<Moved> {
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     {
         use rustix::fs::{renameat_with, RenameFlags, CWD};
         use rustix::io::Errno;
         match renameat_with(CWD, from, CWD, to, RenameFlags::NOREPLACE) {
-            Ok(()) => Ok(()),
-            Err(Errno::INVAL | Errno::NOTSUP | Errno::NOSYS) => without_noreplace(from, to),
+            Ok(()) => Ok(Moved::Renamed),
+            // macOS has both ENOTSUP and EOPNOTSUPP; Linux one value for both.
+            Err(errno)
+                if [Errno::INVAL, Errno::NOTSUP, Errno::OPNOTSUPP, Errno::NOSYS]
+                    .contains(&errno) =>
+            {
+                without_noreplace(from, to)
+            }
             Err(error) => Err(error.into()),
         }
     }
     #[cfg(windows)]
     {
-        fs_noreplace_windows::move_noreplace(from, to)
+        fs_noreplace_windows::move_noreplace(from, to).map(|()| Moved::Renamed)
     }
     #[cfg(all(unix, not(any(target_os = "macos", target_os = "linux"))))]
     {
@@ -470,27 +531,28 @@ pub(crate) fn rename_noreplace(from: &Path, to: &Path) -> std::io::Result<()> {
     }
 }
 
-/// [`rename_noreplace`] where the volume has no no-replace rename. A file
+/// [`move_noreplace`] where the volume has no no-replace rename. A file
 /// goes through tempfile's no-clobber persist, whose hard link refuses an
 /// existing name atomically, and where the volume has no hard links either
 /// is copied by [`copy_onto_new`] and then removed. A folder goes
 /// [`over_placeholder`] once `mkdir` claimed `to`, which fails when anything
 /// is there.
 #[cfg(unix)]
-fn without_noreplace(from: &Path, to: &Path) -> std::io::Result<()> {
+fn without_noreplace(from: &Path, to: &Path) -> std::io::Result<Moved> {
     let metadata = fs::symlink_metadata(from)?;
     if metadata.is_dir() {
         fs::create_dir(to)?;
         let placeholder = fs::symlink_metadata(to)?;
-        return over_placeholder(from, to, &placeholder);
+        return over_placeholder(from, to, &placeholder).map(|()| Moved::Renamed);
     }
     let mut moving = tempfile::TempPath::try_from_path(from)?;
     moving.disable_cleanup(true);
     match moving.persist_noclobber(to) {
-        Ok(()) => Ok(()),
+        Ok(()) => Ok(Moved::Renamed),
         Err(failure) if metadata.is_file() && lacks_links(&failure.error) => {
             let copied = copy_onto_new(from, to)?;
-            remove_source(from, to, &copied)
+            remove_source(from, to, &copied)?;
+            Ok(Moved::Copied(copied.identity))
         }
         Err(failure) => Err(failure.error),
     }
@@ -512,11 +574,12 @@ fn lacks_links(error: &std::io::Error) -> bool {
 }
 
 /// What [`copy_onto_new`] proved: the source entry it read, as a no-follow
-/// observation, and the handle of the file it created.
+/// observation, the handle of the file it created and that file's identity.
 #[cfg(unix)]
 struct Copied {
     source: fs::Metadata,
     created: fs::File,
+    identity: FileIdentity,
 }
 
 /// Copy the regular file `from` onto a file created at `to` with
@@ -525,14 +588,19 @@ struct Copied {
 /// proven to be it and hashed as it is written ([`read_unchanged`]), the copy
 /// takes the source's modification time and is synced with its folder, and
 /// the copy is re-read through a handle proven to be the created file and
-/// must have the source's SHA-256. The transfer's `install` is not reused: it
-/// is the no-clobber persist this volume lacks.
+/// must have the source's SHA-256.
+///
+/// `from` is read by its path: every caller moves an entry of a folder
+/// `PlateVault` keeps itself (a partial copy, a file of `View (previous)/`),
+/// never a catalog source below a registered root, whose reads go through
+/// [`super::rooted`] instead.
 ///
 /// Until the copy is verified, `to` holds an unfinished copy under its final
 /// name, since no other name can be published there without replacing. A
-/// copy that fails is removed while `to` still names the created file; an
-/// interruption leaves it, with the source intact, and a retry is refused
-/// as `to` taken.
+/// copy that fails is removed while `to` still names the created file. An
+/// interruption leaves it with the source intact: `to` reads as taken, and a
+/// caller whose journal names the move removes it with
+/// [`remove_unfinished_copy`] before it moves again.
 ///
 /// The created file is recognised through its open handle, compared each
 /// time: macOS exFAT reports a placeholder inode for an empty file and the
@@ -566,10 +634,10 @@ fn copy_onto_new(from: &Path, to: &Path) -> std::io::Result<Copied> {
                 format!("the re-read of {} differs from the bytes written", to.display()),
             ));
         }
-        Ok(())
+        Ok(identity)
     })();
     match filled {
-        Ok(()) => Ok(Copied { source, created: out }),
+        Ok(identity) => Ok(Copied { source, created: out, identity }),
         Err(error) => {
             if names(to, &out) {
                 let _ = fs::remove_file(to);
@@ -579,25 +647,106 @@ fn copy_onto_new(from: &Path, to: &Path) -> std::io::Result<Copied> {
     }
 }
 
-/// Remove the source of a verified [`copy_onto_new`], only while `from` is
-/// still the entry that was read; another entry there is left alone, and the
-/// copy holds the bytes read. A source that can't be removed keeps it, and
-/// the copy is removed while `to` still names the created file.
+/// Remove the source of a verified [`copy_onto_new`]. `from` first moves to
+/// an unguessable name beside it, so the entry unlinked is the one found
+/// there, which must be the entry that was read: an entry swapped in at
+/// `from` after the copy is never lost, but goes back to `from` and stays,
+/// and the copy holds the bytes read. A source that can't be removed goes
+/// back and keeps its bytes, and the copy is removed while `to` still names
+/// the created file.
 #[cfg(unix)]
 fn remove_source(from: &Path, to: &Path, copied: &Copied) -> std::io::Result<()> {
-    let still_source =
-        fs::symlink_metadata(from).is_ok_and(|now| super::same_entry(&copied.source, &now));
-    if !still_source {
-        return Ok(());
-    }
-    if let Err(error) = fs::remove_file(from) {
+    let drop_copy = || {
         if names(to, &copied.created) {
             let _ = fs::remove_file(to);
         }
+    };
+    // A plain rename: the name is unguessable, and this volume has no other.
+    let aside = from.with_file_name(format!(".pv-{}.removing", Uuid::new_v4().simple()));
+    match fs::rename(from, &aside) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => {
+            drop_copy();
+            return Err(error);
+        }
+    }
+    let put_back = || {
+        rename_noreplace(&aside, from).map_err(|error| {
+            std::io::Error::other(format!(
+                "{} stays at {}: {error}",
+                from.display(),
+                aside.display()
+            ))
+        })
+    };
+    if !fs::symlink_metadata(&aside).is_ok_and(|now| super::same_entry(&copied.source, &now)) {
+        return put_back();
+    }
+    if let Err(error) = fs::remove_file(&aside) {
+        put_back()?;
+        drop_copy();
         return Err(error);
     }
     let _ = sync_folder(from.parent().unwrap_or_else(|| Path::new("")));
     Ok(())
+}
+
+/// Remove `candidate` when it is an unfinished copy of the regular file
+/// `of`: a regular file, never a link, holding no more bytes than `of` and
+/// exactly its first ones, which is what an interrupted [`copy_onto_new`]
+/// of `of` leaves under its final name. It holds nothing `of` doesn't, so
+/// removing it loses nothing. It is compared through one handle and removed
+/// only while `candidate` still names that handle's file; anything else
+/// stays. Returns whether it was removed.
+#[cfg(unix)]
+pub(crate) fn remove_unfinished_copy(candidate: &Path, of: &Path) -> bool {
+    let (Ok(mut held), Ok(mut original)) = (open_no_follow(candidate), open_no_follow(of)) else {
+        return false;
+    };
+    let (Ok(found), Ok(whole)) = (held.metadata(), original.metadata()) else { return false };
+    if !found.is_file()
+        || !whole.is_file()
+        || found.len() > whole.len()
+        || super::same_entry(&found, &whole)
+        || !starts_with(&mut original, &mut held, found.len())
+    {
+        return false;
+    }
+    names(candidate, &held) && fs::remove_file(candidate).is_ok()
+}
+
+/// Windows installs and moves by rename only and makes no unfinished copy.
+#[cfg(not(unix))]
+pub(crate) const fn remove_unfinished_copy(_candidate: &Path, _of: &Path) -> bool {
+    false
+}
+
+#[cfg(unix)]
+fn open_no_follow(path: &Path) -> std::io::Result<fs::File> {
+    use rustix::fs::{open, Mode, OFlags};
+    let flags = OFlags::RDONLY | OFlags::NOFOLLOW | OFlags::CLOEXEC | OFlags::NONBLOCK;
+    Ok(fs::File::from(open(path, flags, Mode::empty())?))
+}
+
+/// Whether the first `len` bytes of `whole` are those `prefix` holds.
+#[cfg(unix)]
+fn starts_with(whole: &mut fs::File, prefix: &mut fs::File, len: u64) -> bool {
+    use std::io::Read as _;
+    const CHUNK: usize = 64 * 1024;
+    let (mut left, mut right) = (vec![0_u8; CHUNK], vec![0_u8; CHUNK]);
+    let mut remaining = len;
+    while remaining > 0 {
+        let step = usize::try_from(remaining).map_or(CHUNK, |rest| rest.min(CHUNK));
+        if whole.read_exact(&mut left[..step]).is_err()
+            || prefix.read_exact(&mut right[..step]).is_err()
+            || left[..step] != right[..step]
+        {
+            return false;
+        }
+        remaining -= step as u64;
+    }
+    true
 }
 
 /// Whether `path` names the file `handle` holds open right now.
@@ -622,8 +771,11 @@ fn over_placeholder(from: &Path, to: &Path, placeholder: &fs::Metadata) -> std::
     let Err(error) = fs::rename(from, to) else {
         return Ok(());
     };
+    // Only while it lists nothing: macOS also removes a folder holding only
+    // `._` AppleDouble files, and them with it.
     if fs::symlink_metadata(to)
         .is_ok_and(|now| now.dev() == placeholder.dev() && now.ino() == placeholder.ino())
+        && fs::read_dir(to).is_ok_and(|mut entries| entries.next().is_none())
     {
         let _ = fs::remove_dir(to);
     }
@@ -643,6 +795,12 @@ mod tests {
     use std::io;
 
     use super::*;
+
+    /// [`without_noreplace`] as a [`Rename`](crate::apply::files::Rename).
+    #[cfg(unix)]
+    fn without_primitive(from: &Path, to: &Path) -> io::Result<()> {
+        without_noreplace(from, to).map(drop)
+    }
 
     /// `View/` holding one file, and the name beside it a rename targets.
     fn view_in(temp: &tempfile::TempDir) -> (PathBuf, PathBuf) {
@@ -833,7 +991,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let (from, to) = file_in(&temp);
         drop(copy_onto_new(&from, &to).unwrap());
-        for retry in [rename_noreplace as fn(&Path, &Path) -> io::Result<()>, without_noreplace] {
+        for retry in [rename_noreplace as fn(&Path, &Path) -> io::Result<()>, without_primitive] {
             let error = retry(&from, &to).unwrap_err();
             assert_eq!(error.kind(), io::ErrorKind::AlreadyExists, "{error}");
             assert_eq!(fs::read(&from).unwrap(), b"the user's notes");
@@ -849,7 +1007,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let (from, to) = file_in(&temp);
         fs::write(&to, b"the user's").unwrap();
-        for retry in [rename_noreplace as fn(&Path, &Path) -> io::Result<()>, without_noreplace] {
+        for retry in [rename_noreplace as fn(&Path, &Path) -> io::Result<()>, without_primitive] {
             let error = retry(&from, &to).unwrap_err();
             assert_eq!(error.kind(), io::ErrorKind::AlreadyExists, "{error}");
             assert_eq!(fs::read(&from).unwrap(), b"the user's notes");
@@ -919,18 +1077,69 @@ mod tests {
             reason: None,
         };
 
+        let none = std::collections::BTreeSet::new();
         fs::create_dir(view.join("notes")).unwrap();
         fs::write(view.join("notes/session.txt"), b"placed").unwrap();
-        let refused = move_foreign(&previous, &view, &item);
+        let refused = move_foreign(&previous, &view, &none, &item);
         assert_eq!(refused.state, ForeignItemState::Failed, "{refused:?}");
         assert_eq!(fs::read(view.join("notes/session.txt")).unwrap(), b"placed");
         assert_eq!(fs::read(previous.join("notes/session.txt")).unwrap(), b"the user's notes");
 
         fs::remove_file(view.join("notes/session.txt")).unwrap();
-        let moved = move_foreign(&previous, &view, &item);
+        let placed = std::collections::BTreeSet::from([PathBuf::from("notes/session.txt")]);
+        let refused = move_foreign(&previous, &view, &placed, &item);
+        assert_eq!(refused.state, ForeignItemState::Failed, "a placed name: {refused:?}");
+        assert!(!view.join("notes/session.txt").exists());
+
+        let moved = move_foreign(&previous, &view, &none, &item);
         assert_eq!(moved.state, ForeignItemState::Moved, "{moved:?}");
         assert!(!previous.join("notes/session.txt").exists());
         assert_eq!(fs::read(view.join("notes/session.txt")).unwrap(), b"the user's notes");
+    }
+
+    /// nfsgg, e6tgr: where a file moves as a verified copy (macOS exFAT), a
+    /// resumed move removes the unfinished copy an interruption left in the
+    /// new View and moves again, and one whose source is gone accepts the
+    /// reviewed bytes there though the copy has an identity of its own.
+    #[cfg(unix)]
+    #[test]
+    fn a_resumed_foreign_move_redoes_an_unfinished_copy_and_accepts_a_finished_one() {
+        use crate::apply::files::{foreign_files, move_foreign};
+        use crate::{ForeignItem, ForeignItemState};
+
+        let temp = tempfile::tempdir().unwrap();
+        let (previous, view) = (temp.path().join("View (previous)"), temp.path().join("View"));
+        fs::create_dir_all(previous.join("notes")).unwrap();
+        fs::create_dir_all(view.join("notes")).unwrap();
+        fs::write(previous.join("notes/session.txt"), b"the user's notes").unwrap();
+        let (path, evidence) = foreign_files(&previous, &std::collections::BTreeSet::new())
+            .unwrap()
+            .into_iter()
+            .find(|(path, _)| path == Path::new("notes/session.txt"))
+            .unwrap();
+        let item = ForeignItem {
+            seq: 0,
+            path: NativePath::from_path(&path),
+            evidence,
+            ticked: true,
+            state: ForeignItemState::Pending,
+            reason: None,
+        };
+        let none = std::collections::BTreeSet::new();
+        let moved_to = view.join("notes/session.txt");
+        fs::write(&moved_to, b"the user's").unwrap();
+        let moved = move_foreign(&previous, &view, &none, &item);
+        assert_eq!(moved.state, ForeignItemState::Moved, "{moved:?}");
+        assert_eq!(fs::read(&moved_to).unwrap(), b"the user's notes");
+        assert!(!previous.join("notes/session.txt").exists());
+
+        // The copy a volume without a no-replace rename makes: same bytes,
+        // another file.
+        fs::remove_file(&moved_to).unwrap();
+        fs::write(&moved_to, b"the user's notes").unwrap();
+        let resumed = move_foreign(&previous, &view, &none, &item);
+        assert_eq!(resumed.state, ForeignItemState::Moved, "{resumed:?}");
+        assert_eq!(fs::read(&moved_to).unwrap(), b"the user's notes");
     }
 
     /// The swap's first step, `View/` → `View (previous)/`, onto a name an
@@ -944,7 +1153,7 @@ mod tests {
         for rename in [
             rename_noreplace as Rename,
             #[cfg(unix)]
-            without_noreplace,
+            without_primitive,
         ] {
             let temp = tempfile::tempdir().unwrap();
             let (view, previous) = view_in(&temp);
@@ -955,5 +1164,93 @@ mod tests {
             kept(&view);
             assert_eq!(fs::read_dir(&previous).unwrap().count(), 0, "the empty folder stays");
         }
+    }
+
+    /// A transfer's destination below `temp`, its file, and a partial copy
+    /// recorded for it holding `bytes`, as `begin` and a fill leave it.
+    #[cfg(unix)]
+    fn partial_for(
+        temp: &tempfile::TempDir,
+        bytes: &[u8],
+    ) -> (TransferDestination, PathBuf, WrittenCopy) {
+        let destination = TransferDestination {
+            root: NativePath::from_path(temp.path()),
+            relative: NativePath::from_path(Path::new("night/Light_001.fits")),
+        };
+        let file = temp.path().join("night/Light_001.fits");
+        let written = begin(Uuid::new_v4(), 1, &destination).unwrap();
+        fill_partial(&written, 0, |out| out.write_all(bytes).map_err(|e| write_failed(&file, &e)))
+            .unwrap();
+        (destination, file, written)
+    }
+
+    /// e6tgr: an install interrupted while it copied left an unfinished copy
+    /// of the partial at the destination. The next install removes it and
+    /// installs; anything else there stays and refuses the install.
+    #[cfg(unix)]
+    #[test]
+    fn an_install_removes_only_the_unfinished_copy_an_interruption_left() {
+        let temp = tempfile::tempdir().unwrap();
+        let (destination, file, written) = partial_for(&temp, b"the frame's bytes");
+        fs::write(&file, b"theirs").unwrap();
+        let refused = install(&destination, &written).unwrap_err();
+        assert_eq!(refused.code, ReasonCode::DestinationOccupied, "{refused:?}");
+        assert_eq!(fs::read(&file).unwrap(), b"theirs", "another file is never replaced");
+        fs::remove_file(&file).unwrap();
+
+        let (destination, file, written) = partial_for(&temp, b"the frame's bytes");
+        fs::write(&file, b"the frame").unwrap();
+        let installed = install(&destination, &written).unwrap();
+        assert_eq!(fs::read(&file).unwrap(), b"the frame's bytes");
+        let digest = hex::encode(<sha2::Sha256 as sha2::Digest>::digest(b"the frame's bytes"));
+        verify_bytes(&destination, &installed, 17, Some(&digest)).unwrap();
+        assert!(!written.partial.to_path_buf().unwrap().exists(), "the partial is gone");
+    }
+
+    /// e6tgr: a resumed `Writing` item whose destination holds an unfinished
+    /// copy never takes it for the installed entry, though its identity may
+    /// match on a volume without stable file IDs: the install runs again.
+    #[cfg(unix)]
+    #[test]
+    fn a_resumed_write_reinstalls_over_an_unfinished_copy() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_path = temp.path().join("Light_001.fits");
+        fs::write(&source_path, b"the frame's bytes").unwrap();
+        let source = crate::custody::observe_entry(&source_path).unwrap();
+        let (destination, file, written) = partial_for(&temp, b"half");
+        fs::write(&file, b"the fr").unwrap();
+        let installed = write(&source, &destination, &written).unwrap();
+        verify(&source, &destination, &installed).unwrap();
+        assert_eq!(fs::read(&file).unwrap(), b"the frame's bytes");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn only_a_prefix_of_the_file_counts_as_its_unfinished_copy() {
+        let temp = tempfile::tempdir().unwrap();
+        let (of, candidate) = (temp.path().join("of"), temp.path().join("candidate"));
+        fs::write(&of, b"the frame's bytes").unwrap();
+        for (theirs, kept) in [
+            (&b"the frame's bytes and more"[..], "longer"),
+            (&b"the frAme"[..], "different bytes"),
+        ] {
+            fs::write(&candidate, theirs).unwrap();
+            assert!(!remove_unfinished_copy(&candidate, &of), "{kept}");
+            assert_eq!(fs::read(&candidate).unwrap(), theirs, "{kept}");
+        }
+        fs::remove_file(&candidate).unwrap();
+        // exFAT makes neither links nor hard links.
+        if std::os::unix::fs::symlink(&of, &candidate).is_ok() {
+            assert!(!remove_unfinished_copy(&candidate, &of), "a link is never removed");
+            fs::remove_file(&candidate).unwrap();
+        }
+        if fs::hard_link(&of, &candidate).is_ok() {
+            assert!(!remove_unfinished_copy(&candidate, &of), "nor the file itself");
+            fs::remove_file(&candidate).unwrap();
+        }
+        fs::write(&candidate, b"the frame").unwrap();
+        assert!(remove_unfinished_copy(&candidate, &of));
+        assert!(!candidate.exists());
+        assert_eq!(fs::read(&of).unwrap(), b"the frame's bytes");
     }
 }

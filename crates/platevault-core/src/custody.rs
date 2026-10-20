@@ -14,7 +14,7 @@
 //! it the entry stays where it is.
 
 pub mod journal;
-mod rooted;
+pub(crate) mod rooted;
 pub mod transfer;
 pub mod trash;
 
@@ -58,9 +58,12 @@ impl Library {
     pub async fn review_kept_copy(&self, path: NativePath) -> Result<KeptCopy, LibraryError> {
         let evidence = self.review_storage_entry(path).await?;
         match (evidence.kind, evidence.sha256) {
-            (EntryKind::File, Some(sha256)) => {
-                Ok(KeptCopy { path: evidence.path, fingerprint: evidence.fingerprint, sha256 })
-            }
+            (EntryKind::File, Some(sha256)) => Ok(KeptCopy {
+                path: evidence.path,
+                root: None,
+                fingerprint: evidence.fingerprint,
+                sha256,
+            }),
             _ => Err(LibraryError::InvalidInput(
                 "a kept copy is a regular file; a link holds no bytes of its own".into(),
             )),
@@ -307,16 +310,19 @@ impl<'a> Expect<'a> {
     }
 }
 
-/// Stream a regular file's bytes through `sink` and return their SHA-256,
-/// proving the open handle is the expected entry and that it did not change
-/// while it was read. Links are never followed. With a root, the handle is
-/// opened through the folders entered from it, so the bytes read are always
-/// those of an entry below the root.
-fn read_unchanged(
-    path: &Path,
-    expect: &Expect<'_>,
-    mut sink: impl FnMut(&[u8]) -> std::io::Result<()>,
-) -> Result<String, Check> {
+/// A regular file opened for reading through a handle proven to be the
+/// expected entry, with the no-follow observation it was proven against
+/// and the folders entered from its root.
+struct Opened {
+    file: File,
+    before: Metadata,
+    below: Option<rooted::Below>,
+}
+
+/// Open the regular file at `path` as [`read_unchanged`] does, without
+/// reading it. With a root, the handle is opened through the folders
+/// entered from it.
+fn open_unchanged(path: &Path, expect: &Expect<'_>) -> Result<Opened, Check> {
     let below = expect.root.map(|root| enter_below(root, path)).transpose()?;
     let before = fs::symlink_metadata(path).map_err(|error| unavailable(path, &error))?;
     if is_link(&before) || !before.is_file() {
@@ -335,13 +341,42 @@ fn read_unchanged(
             path.display()
         )));
     }
-    let mut file = match &below {
+    let file = match &below {
         Some(below) => below.open_entry()?,
         None => File::open(path).map_err(|error| unavailable(path, &error))?,
     };
     if !handle_is(&file, &before, expect.identity) {
         return Err(Check::Changed(format!("{} was replaced while it was opened", path.display())));
     }
+    Ok(Opened { file, before, below })
+}
+
+/// The reviewed source opened for reading, reached from its root without
+/// following a link and proven to be the reviewed entry with its recorded
+/// size and modification time. Its bytes are not read here: whatever reads
+/// them through this handle reads the entry below the root, and proves
+/// their digest itself (a clone, astro-plan-nlewt).
+pub(crate) fn open_source(source: &EntryEvidence) -> Result<File, ItemReason> {
+    let path = path_of(&source.path)?;
+    open_unchanged(&path, &Expect::source(source))
+        .map(|opened| opened.file)
+        .map_err(|check| match check {
+            Check::Unavailable(detail) => ItemReason::new(ReasonCode::SourceUnavailable, detail),
+            Check::Changed(detail) => ItemReason::new(ReasonCode::SourceDrift, detail),
+        })
+}
+
+/// Stream a regular file's bytes through `sink` and return their SHA-256,
+/// proving the open handle is the expected entry and that it did not change
+/// while it was read. Links are never followed. With a root, the handle is
+/// opened through the folders entered from it, so the bytes read are always
+/// those of an entry below the root.
+fn read_unchanged(
+    path: &Path,
+    expect: &Expect<'_>,
+    mut sink: impl FnMut(&[u8]) -> std::io::Result<()>,
+) -> Result<String, Check> {
+    let Opened { mut file, before, below } = open_unchanged(path, expect)?;
     let mut hasher = Sha256::new();
     let mut buffer = vec![0_u8; HASH_BUFFER];
     loop {
@@ -477,10 +512,13 @@ pub(crate) fn verify_source(source: &EntryEvidence) -> Result<(), ItemReason> {
     })
 }
 
-/// D19 for a retained original or kept copy: identity and SHA-256 re-read.
+/// D19 for a retained original or kept copy: identity and SHA-256 re-read,
+/// reached from its registered root without following a link where it has
+/// one.
 fn verify_kept(kept: &KeptCopy) -> Result<(), ItemReason> {
     let path = path_of(&kept.path)?;
-    let digest = read_unchanged(&path, &Expect::recorded(&kept.fingerprint), |_| Ok(()))
+    let expect = Expect { root: kept.root.as_ref(), ..Expect::recorded(&kept.fingerprint) };
+    let digest = read_unchanged(&path, &expect, |_| Ok(()))
         .map_err(|check| ItemReason::new(ReasonCode::KeptCopyUnproven, check.detail()))?;
     if digest == kept.sha256 {
         Ok(())
