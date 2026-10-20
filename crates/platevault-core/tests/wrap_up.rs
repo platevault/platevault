@@ -140,6 +140,42 @@ async fn clean_up_retires_only_the_reviewed_rows_and_never_output() {
     let status = world.library.wrap_up_status(world.project).await.unwrap();
     assert_eq!(status.current, Some(WrapUpStep::Trash));
 }
+/// Clean up removes every View copy without changing originals or work output.
+#[tokio::test]
+async fn clean_up_removes_every_view_copy_without_changing_originals_output_or_processing() {
+    let world = world(ViewMode::Copies).await;
+    world.apply().await;
+    let output = write(&world, "Output/NGC7000_final.xisf");
+    let processing = write(&world, "Processing/WBPP/master/masterLight_Ha.xisf");
+    let output_before = fs::read(&output).unwrap();
+    let processing_before = fs::read(&processing).unwrap();
+    let originals_before = [HA[0], OIII[0]].map(|path| fs::read(world.light(path)).unwrap());
+    let trash = bin(&world);
+
+    let review = world.library.clean_up_review(world.project).await.unwrap();
+    assert!(!review.entries.is_empty(), "the View has copies to remove");
+    assert!(review.entries.iter().all(|entry| entry.preselected), "every Copy is ticked");
+    let request = CleanUpRequest {
+        project_id: world.project,
+        desired_revision: review.desired_revision,
+        generation: review.generation,
+        selected: review.entries.iter().map(|entry| entry.path.clone()).collect(),
+    };
+    let report = world.library.clean_up(&request, trash.dyn_trash()).await.unwrap();
+
+    assert_eq!(report.results.len(), review.entries.len(), "every View copy was handled");
+    assert!(report.results.iter().all(|result| result.outcome == CleanUpOutcome::Trashed));
+    assert!(report.view_removed, "the emptied View is removed");
+    assert!(!world.view().exists());
+    assert_eq!(fs::read(&output).unwrap(), output_before, "Output stays byte-identical");
+    assert_eq!(fs::read(&processing).unwrap(), processing_before, "Processing stays byte-identical");
+    assert_eq!(
+        [HA[0], OIII[0]].map(|path| fs::read(world.light(path)).unwrap()),
+        originals_before,
+        "originals stay byte-identical",
+    );
+}
+
 
 /// STO-FR-04 with PREP-FR-03: Clean up moves an isolated patched copy to the
 /// OS Trash once it still differs from its re-verified original only by its
