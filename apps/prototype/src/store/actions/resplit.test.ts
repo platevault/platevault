@@ -51,6 +51,15 @@ function heldTwice(): { session: Session; open: string[] } {
   })!
   return { session: catalog().sessions[input.sessionId]!, open: [CYGNUS, copy.id] }
 }
+function matchingSession(source: Session, anchorAssetId: AssetId): Session {
+  const id = `${source.id}_matching`
+  const first = catalog().assets[anchorAssetId]!
+  const assetId = `${first.id}_matching`
+  const correction = { id: `cor_${id}`, field: "exposure" as const, observedValue: String(source.exposureS), correctedValue: String(source.exposureS * 2), at: source.startedAt, revision: 1 }
+  const candidate: Session = { ...structuredClone(source), id, assetIds: [assetId], exposureS: source.exposureS * 2, corrections: [correction], previousSessionIds: [], supersededBy: null, reviewReset: false, startedAt: first.observed.dateObs, endedAt: first.observed.dateObs }
+  store.setState((state) => ({ ...state, catalog: { ...state.catalog, assets: { ...state.catalog.assets, [assetId]: { ...first, id: assetId, sessionId: id, observed: { ...first.observed, filter: source.channel, exposureS: source.exposureS * 2 } } }, sessions: { ...state.catalog.sessions, [id]: candidate } } }))
+  return catalog().sessions[id]!
+}
 
 /** Correct the exposure of `assetIds` to twice the session's: a grouping value, so those frames regroup (LIB-FR-12). */
 function correctExposure(session: Session, assetIds: AssetId[]) {
@@ -199,19 +208,40 @@ describe("a regrouping correction re-splits a held session (LIB-FR-12, D-W100)",
     for (const id of removed!.assetIds) expect(placed.has(id)).toBe(false)
     expect(pendingChanges(store.getState(), project(CYGNUS))).toEqual([])
   })
+  it("joins a corrected successor into a matching session and labels Projects holding either", () => {
+    const { session, open } = heldTwice()
+    const target = matchingSession(session, byCapture(session).slice(-1)[0]!)
+    const corrected = byCapture(session).slice(-1)
+    expect(target.exposureS).toBe(session.exposureS * 2)
+    expect(target.channel).toBe(session.channel)
+    expect(target.night).toBe(session.night)
+    expect(catalog().assets[target.assetIds[0]!]!.observed.ra).toBe(catalog().assets[corrected[0]!]!.observed.ra)
+    const originalInput = structuredClone(project(CYGNUS).inputs.find((input) => input.sessionId === session.id)!)
+    const targetInput: ProjectInput = { ...originalInput, sessionId: target.id }
+    const targetOnly: Project = {
+      ...structuredClone(project(CYGNUS)),
+      id: `${CYGNUS}_target_only` as Project["id"],
+      name: "Target only",
+      inputs: [targetInput],
+      view: { ...project(CYGNUS).view!, inputs: [targetInput], calibration: { [target.id]: structuredClone(target.calibration!) }, entries: project(CYGNUS).view!.entries.filter((entry) => entry.source.type === "asset" && target.assetIds.includes(entry.source.assetId)) },
+    }
+    store.setState((state) => ({ ...state, catalog: { ...state.catalog, projects: { ...state.catalog.projects, [targetOnly.id]: targetOnly } } }))
 
-  it("lists each successor, never the superseded session, when every successor is removed; Discard restores the successors", () => {
-    const { session } = heldTwice()
-    expect(correctExposure(session, byCapture(session).slice(-2)).ok).toBe(true)
-    const successors = successorsOf(session.id)
-    const held = project(CYGNUS).inputs.filter((i) => successors.some((s) => s.id === i.sessionId))
-    expect(removeSessions(CYGNUS, successors.map((s) => s.id)).ok).toBe(true)
-    expect(removals(CYGNUS).map((c) => c.sessionId).sort()).toEqual(successors.map((s) => s.id).sort())
-
-    expect(discardChanges(CYGNUS, "all").ok).toBe(true)
-    expect(project(CYGNUS).inputs.some((i) => i.sessionId === session.id)).toBe(false)
-    expect(project(CYGNUS).inputs.filter((i) => successors.some((s) => s.id === i.sessionId))).toEqual(expect.arrayContaining(held))
-    expect(removals(CYGNUS)).toEqual([])
-    expect(resplits(CYGNUS)).toHaveLength(2)
+    expect(correctExposure(session, corrected).ok).toBe(true)
+    const joined = successorsOf(session.id).find((successor) => successor.previousSessionIds.includes(target.id))!
+    expect(joined.assetIds).toContain(corrected[0])
+    expect(joined.previousSessionIds).toEqual(expect.arrayContaining([session.id, target.id]))
+    expect(joined.reviewReset).toBe(true)
+    expect(catalog().sessions[session.id]!.supersededBy).toBe(joined.id)
+    expect(catalog().sessions[target.id]!.supersededBy).toBe(joined.id)
+    expect(sessionReadiness(catalog(), joined)).toBe("needs-review")
+    for (const id of open) {
+      expect(project(id).inputs.some((input) => input.sessionId === joined.id)).toBe(true)
+      expect(pendingChanges(store.getState(), project(id))).toEqual(expect.arrayContaining([expect.objectContaining({ sessionId: joined.id, from: session.id, source: "library", kind: "session-resplit" })]))
+      expect(notReady(id)).toEqual([{ kind: "not-ready", sessions: expect.arrayContaining([expect.objectContaining({ id: joined.id })]) }])
+    }
+    expect(project(targetOnly.id).inputs.some((input) => input.sessionId === joined.id)).toBe(true)
+    expect(pendingChanges(store.getState(), project(targetOnly.id))).toEqual(expect.arrayContaining([expect.objectContaining({ sessionId: joined.id, from: target.id, source: "library", kind: "session-resplit" })]))
+    expect(notReady(targetOnly.id)).toEqual([{ kind: "not-ready", sessions: expect.arrayContaining([expect.objectContaining({ id: joined.id })]) }])
   })
 })
