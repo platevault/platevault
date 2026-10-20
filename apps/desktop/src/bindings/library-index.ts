@@ -4140,6 +4140,12 @@ export type ImportSession_Deserialize = {
 	target: ImportSessionTarget | null,
 	/**  The user chose `target` (or Unclassified) rather than its pointing. */
 	targetChosen: boolean,
+	/**
+	 *  When the session's pointing matches several Targets: the nearest to
+	 *  its field centre, offered for one choice. Unclassified stays
+	 *  preselected and nothing files under it until the user chooses it.
+	 */
+	recommended: ImportSessionTarget | null,
 };
 
 /**
@@ -4178,6 +4184,12 @@ export type ImportSession_Serialize = {
 	target: ImportSessionTarget | null,
 	/**  The user chose `target` (or Unclassified) rather than its pointing. */
 	targetChosen: boolean,
+	/**
+	 *  When the session's pointing matches several Targets: the nearest to
+	 *  its field centre, offered for one choice. Unclassified stays
+	 *  preselected and nothing files under it until the user chooses it.
+	 */
+	recommended: ImportSessionTarget | null,
 };
 
 /**  The CSV file as read. */

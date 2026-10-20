@@ -1349,19 +1349,57 @@ async fn a_merge_made_in_review_sets_the_session_intake_creates() {
 
 /// A saved user Target at the fixtures' first framing, so pointing matches it.
 async fn saved_target_at_the_pointing(library: &Library) -> TargetCandidate {
+    saved_target_north(library, "Pelican West", 0.0).await
+}
+
+/// A saved user Target `arcsec` north of the fixtures' first framing; the
+/// fixture's 12″ field holds it within 6″.
+async fn saved_target_north(library: &Library, designation: &str, arcsec: f64) -> TargetCandidate {
     let candidate = user_target(&UserTargetInput {
-        designation: "Pelican West".into(),
+        designation: designation.into(),
         aliases: Vec::new(),
         common_name: None,
         object_type: ObjectType::Other,
         coordinates: Some(SkyCoordinates {
             ra_deg: POINTING_RA,
-            dec_deg: POINTING_DEC,
+            dec_deg: POINTING_DEC + arcsec / 3600.0,
             frame: ICRS_FRAME.into(),
         }),
     })
     .unwrap();
     library.catalog().save_target(&candidate, None).await.unwrap().candidate
+}
+
+#[tokio::test]
+async fn several_pointing_matches_keep_unclassified_and_recommend_the_nearest() {
+    let fixture = Fixture::new().await;
+    // Designation order is the reverse of distance, so only the ranking
+    // by field-centre separation recommends "Zeta Near".
+    let near = saved_target_north(&fixture.library, "Zeta Near", 1.0).await;
+    saved_target_north(&fixture.library, "Alpha Far", 4.0).await;
+    for minute in 0..2_u32 {
+        Pointed::at(minute).write(&fixture.card.join(format!("lights/both_{minute}.fits")));
+    }
+
+    let preview = fixture.preview().await;
+
+    let [session] = preview.sessions.as_slice() else { panic!("{:?}", preview.sessions) };
+    assert_eq!(session.target, None, "Unclassified stays preselected");
+    assert!(!session.target_chosen);
+    let recommended = session.recommended.as_ref().expect("the nearer Target is recommended");
+    assert_eq!((recommended.id, recommended.designation.as_str()), (near.id, "Zeta Near"));
+    for light in &preview.items {
+        assert!(destination_text(light).starts_with("unclassified"), "nothing files under it");
+        assert_eq!(light.target_id, None);
+    }
+
+    let chosen = fixture
+        .library
+        .choose_import_target(preview.id, preview.revision, session.items[0], Some(recommended.id))
+        .await
+        .unwrap();
+    assert_eq!(chosen.sessions[0].target.as_ref().map(|target| target.id), Some(near.id));
+    assert!(chosen.items.iter().all(|light| destination_text(light).starts_with("Zeta Near")));
 }
 
 /// The Target confirmed on the library session holding `asset_count` frames.

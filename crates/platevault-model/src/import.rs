@@ -418,6 +418,10 @@ pub struct ImportSession {
     pub target: Option<ImportSessionTarget>,
     /// The user chose `target` (or Unclassified) rather than its pointing.
     pub target_chosen: bool,
+    /// When the session's pointing matches several Targets: the nearest to
+    /// its field centre, offered for one choice. Unclassified stays
+    /// preselected and nothing files under it until the user chooses it.
+    pub recommended: Option<ImportSessionTarget>,
 }
 
 /// A session's Target as import review names it.
