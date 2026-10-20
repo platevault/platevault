@@ -5702,7 +5702,7 @@
       }
     }
   ],
-  "project_label_keep_previous": "Keep {name} in View (previous)",
+  "project_label_keep_previous": "Keep {name} for View (kept)",
   "project_label_move_previous": "Move {name} into View",
   "project_label_move_sessions": [
     {
@@ -6405,21 +6405,23 @@
       }
     }
   ],
-  "apply_refused_previous_kept": [
+  "op_apply_moved_kept": [
     {
       "declarations": [
         "input count",
+        "input n",
         "local countPlural = count: plural"
       ],
       "selectors": [
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "View (previous) holds {count} kept file: move it out, or tick every file PlateVault didn't place",
-        "countPlural=*": "View (previous) holds {count} kept files: move them out, or tick every file PlateVault didn't place"
+        "countPlural=one": "{n} kept file moved to View (kept)",
+        "countPlural=*": "{n} kept files moved to View (kept)"
       }
     }
   ],
+  "project_previous_kept": "Kept: moves to View (kept) at the next Apply",
   "apply_refused_space": "Not enough free space",
   "apply_refused_unsettled": [
     {

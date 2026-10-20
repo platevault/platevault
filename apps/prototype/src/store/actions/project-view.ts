@@ -12,11 +12,13 @@
  *   still holds the bytes the plan read (PREP-FR-09);
  * - waiting: a tool holds a file in the View (Windows): Apply waits there
  *   and continues by itself once it is released (PREP-FR-18);
- * - swapping: the new View swaps in. The old View's verified copies are
- *   deleted outright and its links removed; a copy that differs from what
- *   PlateVault placed, a copy whose original cannot be verified and each
- *   unticked file PlateVault didn't place stay in `View (previous)/`; ticked
- *   ones move into the new View (D-W110).
+ * - swapping: the new View swaps in. The files the user kept in
+ *   `View (previous)/` move to `View (kept)/` at their paths from inside the
+ *   View, a name clash taking the next free number. The old View's verified
+ *   copies are deleted outright and its links removed; a copy that differs
+ *   from what PlateVault placed, a copy whose original cannot be verified
+ *   and each unticked file PlateVault didn't place stay in
+ *   `View (previous)/`; ticked ones move into the new View (D-W110).
  * A failure or Cancel before the swap removes `View (building)/` and leaves
  * the old View exactly as it was. One PlateVault operation per Project at a
  * time (`projectOperation`, provisional).
@@ -34,6 +36,7 @@ import {
   entryVerified,
   generatedMasters,
   isDiscardable,
+  keptDestination,
   type PendingChange,
   pendingChanges,
   type PlannedEntry,
@@ -120,22 +123,9 @@ export function outgoingSurvivors(state: Pick<PrototypeState, "disk">, project: 
 }
 
 /**
- * Kept files already in `View (previous)/` while this Apply would leave more
- * there: refused until the kept files are moved out, or every file
- * PlateVault didn't place is ticked (stopgap: what a second swap does with
- * kept files is OPEN, decision record §9, so no merge is encoded here).
- */
-function previousKeptRefusal(state: Pick<PrototypeState, "disk">, project: Project, ticked: ReadonlyArray<string>): MessageRef | null {
-  const kept = project.previous?.leftovers.filter((l) => l.kept) ?? []
-  if (kept.length === 0 || outgoingSurvivors(state, project, ticked).length === 0) return null
-  return msg("apply_refused_previous_kept", { count: kept.length })
-}
-
-/**
  * Apply (VSEL-FR-14, PREP-FR-06): refused when the sheet is stale (it
- * refreshes with the latest changes), for every refusal the plan names, and
- * while kept files in `View (previous)/` would meet new ones. Otherwise the
- * "apply" operation starts; returns its id.
+ * refreshes with the latest changes) and for every refusal the plan names.
+ * Otherwise the "apply" operation starts; returns its id.
  */
 export function startApply(projectId: ProjectId, sheet: ApplySheet): { result: CommitResult; operationId: OperationId | null } {
   const state = store.getState()
@@ -148,8 +138,6 @@ export function startApply(projectId: ProjectId, sheet: ApplySheet): { result: C
   const title = msg("store_refused", { label })
   if (plan.fingerprint !== sheet.fingerprint) return { result: refuse(title, [msg("apply_refused_changed")], viewHref(projectId)), operationId: null }
   const reasons = plan.refusals.map(applyRefusalRef)
-  const kept = previousKeptRefusal(state, project, sheet.tickedUnplaced)
-  if (kept) reasons.push(kept)
   if (reasons.length > 0 || !plan.paths) return { result: refuse(title, reasons.length > 0 ? reasons : [msg("apply_refused_no_folder")], viewHref(projectId)), operationId: null }
   const payload: ApplyPayload = { projectId, phase: "building", mode: plan.mode, paths: plan.paths, layout: plan.plan.layout, planned: plan.plan.entries, next: 0, placed: [], siril: plan.siril, ticked: [...sheet.tickedUnplaced] }
   let operationId: OperationId | null = null
@@ -221,8 +209,6 @@ function verify(state: PrototypeState, op: Operation, payload: ApplyPayload): Pr
     if (fileAt(state.disk, entry.originalPath)?.sha256 !== entry.sha256) return failApply(state, op, payload, msg("op_prep_source_drift", { source: verbatim(entry.originalPath) }), entry.path)
     if (!entryVerified(state.disk, payload.paths.building, entry)) return failApply(state, op, payload, msg("op_prep_reread_failed", { path: `${payload.paths.building}/${entry.path}` }), entry.path)
   }
-  const kept = previousKeptRefusal(state, project, payload.ticked)
-  if (kept) return failApply(state, op, payload, kept, null)
   const phase: ApplyPhase = project.view && state.faults.viewFileHeld ? "waiting" : "swapping"
   const next = patchOperation(state, op.id, {
     items: op.items.map((item) => (item.status === "done" ? { ...item, phase: "verified", detail: msg("op_prep_written_verified") } : item)),
@@ -250,12 +236,25 @@ function linkSirilSets(disk: PrototypeState["disk"], volumeId: VolumeId, paths: 
   return writeFiles(next, links)
 }
 
-/** The swap (PREP-FR-06, D-W110): the new View in, the old one cleared into `View (previous)/`, the applied state recorded. */
+/**
+ * The swap (PREP-FR-06, D-W110): the kept files out of `View (previous)/`
+ * into `View (kept)/`, the new View in, the old one cleared into
+ * `View (previous)/`, the applied state recorded.
+ */
 function swap(state: PrototypeState, op: Operation, payload: ApplyPayload): PrototypeState {
   const project = state.catalog.projects[payload.projectId]!
   const at = nowIso()
   const { paths } = payload
   let disk = state.disk
+  // Kept files leave first, so an outgoing file of the same name never lands on one.
+  const kept = project.previous?.leftovers.filter((l) => l.kept) ?? []
+  let movedKept = 0
+  for (const leftover of kept) {
+    const file = fileAt(disk, `${project.previous!.folderPath}/${leftover.path}`)
+    if (!file) continue
+    disk = moveFile(disk, file, keptDestination({ disk }, paths.kept, leftover.path))
+    movedKept += 1
+  }
   const survivors = outgoingSurvivors(state, project, payload.ticked)
   const toPrevious = new Set(survivors.map((s) => s.path))
   const old = project.view
@@ -285,8 +284,7 @@ function swap(state: PrototypeState, op: Operation, payload: ApplyPayload): Prot
   const volumeId = volumeForPath(disk, paths.root)
   if (volumeId) for (const folder of [paths.view, paths.processing, paths.output]) disk = { ...disk, folders: disk.folders.some((f) => f.volumeId === volumeId && f.path === folder) ? disk.folders : [...disk.folders, { volumeId, path: folder }] }
   if (volumeId && payload.siril) disk = linkSirilSets(disk, volumeId, paths, payload.siril, at)
-  const kept = project.previous?.leftovers.filter((l) => l.kept) ?? []
-  const leftovers: PreviousLeftover[] = [...kept, ...[...survivors, ...clashes].map((l) => ({ ...l, kept: false }))]
+  const leftovers: PreviousLeftover[] = [...survivors, ...clashes].map((l) => ({ ...l, kept: false }))
   const previous = leftovers.length > 0 ? { folderPath: paths.previous, at, leftovers } : null
   const view = appliedViewFor(state, project, paths.view, payload.placed, payload.layout, at, op.id)
   const parent = paths.root.slice(0, paths.root.lastIndexOf("/"))
@@ -297,8 +295,14 @@ function swap(state: PrototypeState, op: Operation, payload: ApplyPayload): Prot
     catalog: { ...state.catalog, projects: { ...state.catalog.projects, [project.id]: { ...project, folderPath: paths.root, view, previous, revision: project.revision + 1 } } },
   }
   next = patchOperation(next, op.id, { payload: { ...payload, phase: "swapping" } as unknown as Record<string, unknown>, progress: { ...op.progress, done: op.progress.total } })
-  const left = leftovers.length - kept.length
-  const summary = joinRefs([msg("op_apply_swapped", { entries: unitCount("entries", payload.placed.length) }), ...(left > 0 ? [msg("op_apply_left_previous", { count: left, n: { count: left } })] : [])], " · ")
+  const summary = joinRefs(
+    [
+      msg("op_apply_swapped", { entries: unitCount("entries", payload.placed.length) }),
+      ...(movedKept > 0 ? [msg("op_apply_moved_kept", { count: movedKept, n: { count: movedKept } })] : []),
+      ...(leftovers.length > 0 ? [msg("op_apply_left_previous", { count: leftovers.length, n: { count: leftovers.length } })] : []),
+    ],
+    " · ",
+  )
   return settleOperation(next, op.id, "succeeded", summary, viewHref(project.id))
 }
 
@@ -384,10 +388,11 @@ export function discardChanges(projectId: ProjectId, changeIds: string[] | "all"
 export type LeftoverDecision = "keep" | "move" | "trash"
 
 /**
- * Review one file in `View (previous)/` (D-W110): Keep leaves it there and
- * it is not asked about again; Move puts it back into the View, refused when
- * the View holds that name; Trash moves it to the OS Trash after review. The
- * record goes once the folder is empty (provisional).
+ * Review one file in `View (previous)/` (D-W110): Keep leaves it there, not
+ * asked about again, until the next Apply moves it to `View (kept)/`; Move
+ * puts it back into the View, refused when the View holds that name; Trash
+ * moves it to the OS Trash after review. The record goes once the folder is
+ * empty (provisional).
  */
 export function reviewLeftover(projectId: ProjectId, path: string, decision: LeftoverDecision): CommitResult {
   const state = store.getState()
