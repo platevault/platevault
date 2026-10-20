@@ -40,12 +40,17 @@ function renderPage() {
   render(<RouterProvider router={router} />)
 }
 
-/** The demo's 600 s dark: in the library and pinned on no session, so it can be hidden. */
-const UNUSED = { id: "mst_cpi4bh", name: "Dark 600 s · 2600MM #1" }
+/**
+ * The demo's 600 s dark: in the library and pinned on no session, so it can be hidden. The seed writes it 91 days before
+ * the demo loads, and a master's id hashes its path, which names that night, so its id changes every day: it is found by
+ * kind and exposure.
+ */
+const UNUSED = { name: "Dark 600 s · 2600MM #1" }
 /** The demo's bias that one open Project uses through its sessions. */
 const USED = { id: "mst_d1zwvk", name: "Bias · 2600MM #2" }
 
 const masterOf = (id: string): CalibrationMaster => store.getState().catalog.masters[id]!
+const unusedMaster = (): CalibrationMaster => Object.values(store.getState().catalog.masters).find((master) => master.kind === "dark" && master.exposureS === 600)!
 
 /** A light session no Project holds: it pins `master`'s only version for darks, as Reassign would. */
 function pinOutsideProjects(master: CalibrationMaster): Session {
@@ -65,7 +70,7 @@ async function detailOf(name: string) {
 describe("Calibration library: Hide, Restore and Move to Trash", () => {
   it("hides a master into Hidden and restores it to Masters, the panel offering only the valid verb", async () => {
     const user = userEvent.setup()
-    const master = masterOf(UNUSED.id)
+    const master = unusedMaster()
     const name = UNUSED.name
     renderPage()
 
@@ -108,7 +113,7 @@ describe("Calibration library: Hide, Restore and Move to Trash", () => {
 
   it("lists the sessions a master is pinned on and each file's SHA-256 before Move to Trash; the sessions then need calibration again", async () => {
     const user = userEvent.setup()
-    const master = masterOf(UNUSED.id)
+    const master = unusedMaster()
     const session = pinOutsideProjects(master)
     const name = UNUSED.name
     renderPage()
