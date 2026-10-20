@@ -498,7 +498,8 @@ export const commands = {
 	/**
 	 *  The Apply sheet: the new View as a folder tree, every reason Apply can't
 	 *  run, the files `PlateVault` didn't place, the copies a tool changed and
-	 *  what `View (previous)/` holds. Writes nothing.
+	 *  what `View (previous)/` holds, with the new View's footprint. Writes
+	 *  nothing but the hidden probes it removes.
 	 * 
 	 *  # Errors
 	 *  `NotFound` for an unknown Project; catalog errors.
@@ -511,7 +512,9 @@ export const commands = {
 	 * 
 	 *  # Errors
 	 *  `Conflict` when the Project or the Library moved since the sheet;
-	 *  `SymlinksUnavailable` when a Symlinks View can't be made here;
+	 *  `SymlinksUnavailable` when Windows Developer Mode is off and
+	 *  `LinksUnsupported` when the processing location holds no links, for a
+	 *  Symlinks View;
 	 *  `InvalidInput` naming every other blocker; `IdentityConflict` when both the
 	 *  install and restoring the old View failed; catalog errors.
 	 */
@@ -525,6 +528,17 @@ export const commands = {
 	 *  `NotFound` when no Apply with that operation runs in this shell.
 	 */
 	projectApplyCancel: (operationId: string) => typedError<null, ErrorResponse>(__TAURI_INVOKE("project_apply_cancel", { operationId })),
+	/**
+	 *  Whether `folder` can hold the symlinks of a Symlinks View (PREP-FR-15):
+	 *  on Windows whether Developer Mode is on, elsewhere whether its
+	 *  filesystem holds links. Setup and Settings check the processing location
+	 *  they choose; the Apply sheet checks it too. Leaves nothing in `folder`.
+	 * 
+	 *  # Errors
+	 *  `NotFound`, `AccessDenied` or `SourceUnavailable`, scoped to `folder`,
+	 *  when it can't hold a file at all.
+	 */
+	libraryCheckSymlinks: (folder: NativePathWire) => typedError<SymlinkCapability, ErrorResponse>(__TAURI_INVOKE("library_check_symlinks", { folder })),
 	/**
 	 *  Copy to Output…: copy the regular file at `source` into the Project's
 	 *  `Output/` as `name`, a path relative to it, and return it listed as Copied
@@ -1690,7 +1704,8 @@ export type AppliedStretch = {
 
 /**
  *  One reason Apply can't run now. The sheet lists every one; Apply refuses
- *  while any holds and changes nothing.
+ *  while any holds and changes nothing. A `detail` is an English diagnostic
+ *  that never carries an OS error's text, which goes to the log only.
  */
 export type ApplyBlocker = 
 /**  A Closing, Closed or Archived Project takes no Apply. */
@@ -1710,10 +1725,17 @@ export type ApplyBlocker =
  */
 { blocker: "project_folder_occupied"; path: NativePathWire } | 
 /**
- *  Symlinks mode where symlinks can't be made: on Windows, Developer
- *  Mode is off. Copies is offered for this Project (PREP-FR-15).
+ *  Symlinks mode where Windows holds back the unprivileged symlink
+ *  right: Developer Mode is off. The sheet offers Open Windows settings,
+ *  Check again and Use copies for this Project (PREP-FR-15, PREP-AC-08).
  */
-{ blocker: "symlinks_unavailable"; detail: string } | 
+{ blocker: "symlinks_unavailable" } | 
+/**
+ *  Symlinks mode where the processing location's filesystem holds no
+ *  links (FAT, exFAT, some network shares): only Copies is offered
+ *  there (PREP-AC-03).
+ */
+{ blocker: "links_unsupported"; path: NativePathWire } | 
 /**
  *  An original the build needs is on a location that is offline now
  *  (VSEL-AC-31, STO-FR-08).
@@ -1793,10 +1815,10 @@ export type ApplyPreview_Deserialize = {
 	/**  The new View as a folder tree, in path order. */
 	entries: ViewPlanEntry[],
 	/**
-	 *  Bytes the Copies build writes (clones may take less). The old View
-	 *  stays until the swap, so Copies needs room for both.
+	 *  The new View's footprint (PREP-FR-04): what the entries above take.
+	 *  The old View stays until the swap, so Copies needs room for both.
 	 */
-	copyBytes: number,
+	footprint: ViewFootprint,
 	foreign: ForeignFile_Deserialize[],
 	/**
 	 *  Copies in the current View that differ from what `PlateVault`
@@ -1823,10 +1845,10 @@ export type ApplyPreview_Serialize = {
 	/**  The new View as a folder tree, in path order. */
 	entries: ViewPlanEntry[],
 	/**
-	 *  Bytes the Copies build writes (clones may take less). The old View
-	 *  stays until the swap, so Copies needs room for both.
+	 *  The new View's footprint (PREP-FR-04): what the entries above take.
+	 *  The old View stays until the swap, so Copies needs room for both.
 	 */
-	copyBytes: number,
+	footprint: ViewFootprint,
 	foreign: ForeignFile_Serialize[],
 	/**
 	 *  Copies in the current View that differ from what `PlateVault`
@@ -1871,6 +1893,15 @@ export type ApplyReport_Deserialize = {
 	 *  to differ from its original only by its corrected header.
 	 */
 	patchedCopies: number,
+	/**
+	 *  The installed View's footprint, as the build placed it; zero unless
+	 *  Applied.
+	 */
+	footprint: ViewFootprint,
+	/**
+	 *  Why the Apply failed or was canceled: an English diagnostic that
+	 *  never carries an OS error's text, which goes to the log only.
+	 */
 	error: string | null,
 };
 
@@ -1901,6 +1932,15 @@ export type ApplyReport_Serialize = {
 	 *  to differ from its original only by its corrected header.
 	 */
 	patchedCopies: number,
+	/**
+	 *  The installed View's footprint, as the build placed it; zero unless
+	 *  Applied.
+	 */
+	footprint: ViewFootprint,
+	/**
+	 *  Why the Apply failed or was canceled: an English diagnostic that
+	 *  never carries an OS error's text, which goes to the log only.
+	 */
 	error: string | null,
 };
 
@@ -4471,7 +4511,7 @@ export type KeywordNames = {
  *  `err_<code>`. The wire strings are the kinds the catalog also records for
  *  run issues, so they don't change.
  */
-export type LibraryErrorCode = "invalid_input" | "not_found" | "conflict" | "identity_conflict" | "access_denied" | "source_unavailable" | "unsupported_format" | "metadata_unreadable" | "provider_unavailable" | "persistence_failure" | "no_byte_proof" | "symlinks_unavailable" | "canceled" | 
+export type LibraryErrorCode = "invalid_input" | "not_found" | "conflict" | "identity_conflict" | "access_denied" | "source_unavailable" | "unsupported_format" | "metadata_unreadable" | "provider_unavailable" | "persistence_failure" | "no_byte_proof" | "symlinks_unavailable" | "links_unsupported" | "canceled" | 
 /**
  *  A recorded correction no patched copy can carry: a value FITS can't
  *  hold, or a header that can't take it.
@@ -7259,6 +7299,24 @@ export type SubscriptionState =
 /**  Explicitly disabled. */
 "disabled";
 
+/**
+ *  Whether a folder can hold the symlinks of a Symlinks View (PREP-FR-15),
+ *  which setup, Settings and the Apply sheet check.
+ */
+export type SymlinkCapability = 
+/**  Symlinks can be made there. */
+"available" | 
+/**
+ *  Windows holds back the unprivileged symlink right: Developer Mode is
+ *  off (PREP-AC-08).
+ */
+"developer_mode_off" | 
+/**
+ *  The folder's filesystem holds no links (FAT, exFAT, some network
+ *  shares): only Copies can be made there (PREP-AC-03).
+ */
+"unsupported";
+
 export type TargetAlias = {
 	text: string,
 	normalized: string,
@@ -7975,6 +8033,23 @@ export type Verdict = "compatible" | "incompatible" | "unknown";
 export type Verification = "current" | "last_observed";
 
 /**
+ *  What a View takes (PREP-FR-04): "Linked · 0 B" while it holds only
+ *  symlinks, else "N frames copied · X GB", followed by "(cloned)" when the
+ *  copies are copy-on-write clones of their originals.
+ */
+export type ViewFootprint = {
+	/**
+	 *  The entries that are files of their own: copies, clones and
+	 *  isolated patched copies.
+	 */
+	frames: number,
+	/**  Their bytes. */
+	bytes: number,
+	/**  How many of `frames` are copy-on-write clones. */
+	cloned: number,
+};
+
+/**
  *  How the View holds its inputs (PREP-FR-04, D-W81, D-W98). Copies are
  *  clones wherever the volume supports them; switching goes through Apply.
  */
@@ -7984,7 +8059,11 @@ export type ViewMode = "symlinks" | "copies";
 export type ViewPlanEntry = {
 	path: NativePathWire,
 	source: EntrySource,
-	/**  Copies may become clones as they are built. */
+	/**
+	 *  A Copies entry the sheet expects to be a copy-on-write clone is
+	 *  `Clone`: its original and the Project folder are on one volume that
+	 *  clones (PREP-FR-04). The build still copies one the volume refuses.
+	 */
 	placement: EntryPlacement,
 	sizeBytes: number,
 };

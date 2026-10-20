@@ -41,6 +41,7 @@ fn every_variant() -> Vec<LibraryError> {
         LibraryError::PersistenceFailure(text()),
         LibraryError::NoByteProof(text()),
         LibraryError::SymlinksUnavailable(text()),
+        LibraryError::LinksUnsupported(text()),
         LibraryError::Canceled,
         LibraryError::Context {
             error: Box::new(LibraryError::SourceUnavailable(text())),
@@ -74,12 +75,13 @@ fn every_variant() -> Vec<LibraryError> {
         LibraryError::PersistenceFailure(_) => 10,
         LibraryError::NoByteProof(_) => 11,
         LibraryError::SymlinksUnavailable(_) => 12,
-        LibraryError::Canceled => 13,
-        LibraryError::Context { .. } => 14,
-        LibraryError::CorrectionUndeliverable { .. } => 15,
+        LibraryError::LinksUnsupported(_) => 13,
+        LibraryError::Canceled => 14,
+        LibraryError::Context { .. } => 15,
+        LibraryError::CorrectionUndeliverable { .. } => 16,
     };
     let seen: BTreeSet<usize> = errors.iter().map(variant).collect();
-    assert_eq!(seen, (0..=15).collect(), "one error per variant");
+    assert_eq!(seen, (0..=16).collect(), "one error per variant");
     errors
 }
 
@@ -98,9 +100,10 @@ const fn code_index(code: LibraryErrorCode) -> usize {
         LibraryErrorCode::PersistenceFailure => 9,
         LibraryErrorCode::NoByteProof => 10,
         LibraryErrorCode::SymlinksUnavailable => 11,
-        LibraryErrorCode::Canceled => 12,
-        LibraryErrorCode::CorrectionUnpatchable => 13,
-        LibraryErrorCode::CorrectionFormatUnpatchable => 14,
+        LibraryErrorCode::LinksUnsupported => 12,
+        LibraryErrorCode::Canceled => 13,
+        LibraryErrorCode::CorrectionUnpatchable => 14,
+        LibraryErrorCode::CorrectionFormatUnpatchable => 15,
     }
 }
 
@@ -160,5 +163,5 @@ fn every_library_error_has_a_code_every_catalogue_words() {
         }
         codes.insert(code_index(code));
     }
-    assert_eq!(codes, (0..=14).collect(), "every code is some variant's");
+    assert_eq!(codes, (0..=15).collect(), "every code is some variant's");
 }

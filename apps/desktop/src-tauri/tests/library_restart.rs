@@ -521,7 +521,15 @@ fn first_life(layout: &Layout) -> Value {
     assert_eq!(sheet["mode"], "copies");
     assert_eq!(sheet["appliedGeneration"], Value::Null, "the first Apply");
     let entries = sheet["entries"].as_array().expect("sheet entries");
-    assert!(entries.iter().all(|entry| entry["placement"]["kind"] == "copy"), "{sheet:#}");
+    // On one clone-capable volume a Copies entry is a clone (PREP-FR-04).
+    let own_files = ["copy", "clone"];
+    assert!(
+        entries
+            .iter()
+            .all(|entry| own_files.iter().any(|kind| entry["placement"]["kind"] == *kind)),
+        "{sheet:#}"
+    );
+    assert_eq!(sheet["footprint"]["frames"], entries.len(), "{sheet:#}");
     let lights = entries.iter().filter(|entry| entry["source"]["source"] == "light").count();
     assert_eq!(lights, 2, "{sheet:#}");
     for kind in ["dark", "flat", "bias"] {
