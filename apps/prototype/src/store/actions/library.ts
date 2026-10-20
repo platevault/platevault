@@ -14,12 +14,12 @@ import { calibrateSessions } from "@/domain/calibration"
 import { correctedExposureS } from "@/domain/corrections"
 import { isLocked, isTrashedSession, liveAssetIds, sessionNamingValues, unreviewedAssetIds } from "@/domain/derive"
 import { fileKey, removeFile, writeFiles } from "@/domain/disk"
+import type { Asset, AssetCopy, AssetId, Catalog, CatalogCorrection, IsoDateTime, Location, OpticalTrainId, QualityValue, Session, SessionId, Target, TargetId } from "@/domain/types"
 import { capturedRigVersionId, confirmedEvidence, isUnder, type RegroupField, resplitSession } from "@/domain/indexing"
 import { type CatalogueEntry, entryKeys, targetFromEntry } from "@/domain/sky"
-import { sessionDefaultRef, sessionRef, successorInput } from "@/domain/membership"
-import { namingTemplate, type NamingValues, resolveNamingTemplate } from "@/domain/templates"
-import type { Asset, AssetCopy, AssetId, Catalog, CatalogCorrection, IsoDateTime, Location, OpticalTrainId, QualityValue, Session, SessionId, Target, TargetId } from "@/domain/types"
+import { framesRef, sessionDefaultRef, sessionLongRef, sessionRef, successorInput } from "@/domain/membership"
 import { type MessageRef, msg, verbatim } from "@/lib/i18n"
+import { namingTemplate, type NamingValues, resolveNamingTemplate } from "@/domain/templates"
 import { type CommitResult, commit, nowIso, type PrototypeState, store, withCatalog } from "@/store/core"
 import { freshId, MISSING, recordSaved, refuse } from "./shared"
 
@@ -293,21 +293,36 @@ export function confirmMetadata(sessionId: SessionId, assetIds: AssetId[], field
           return { ...c, sessions: { ...c.sessions, [sessionId]: next } }
         }
         const next: Catalog = { ...c, sessions: { ...c.sessions }, assets: { ...c.assets }, projects: { ...c.projects } }
-        const successors = resplitSession(next, sessionId, corrected, entry, at)
+        const { successors } = resplitSession(next, sessionId, corrected, entry, s.settings.matching.framing, at)
+        const successorByPrevious = new Map<SessionId, Session[]>()
+        for (const successor of successors) {
+          for (const previous of successor.previousSessionIds) {
+            const list = successorByPrevious.get(previous) ?? []
+            list.push(successor)
+            successorByPrevious.set(previous, list)
+          }
+        }
         for (const project of Object.values(c.projects)) {
-          if (isLocked(project) || !project.inputs.some((i) => i.sessionId === sessionId)) continue
-          const inputs = project.inputs.flatMap((input) =>
-            input.sessionId === sessionId
-              ? successors.map((successor) => successorInput(input, successor))
-              : [input],
-          )
+          if (isLocked(project)) continue
+          const inputs = project.inputs.flatMap((input) => {
+            const replacements = successorByPrevious.get(input.sessionId)
+            return replacements ? replacements.map((successor) => successorInput(input, successor)) : [input]
+          })
           next.projects[project.id] = { ...project, inputs }
         }
         return next
       }),
     { expect: { collection: "sessions", id: sessionId, revision: expectRevision }, href },
   )
-  if (result.ok) recordSaved(whole ? msg("store_saved_frames_corrected", { name: sessionRef(session) }) : msg("store_saved_session_resplit", { name: sessionRef(session) }), null, href)
+  if (result.ok) {
+    const replacement = whole ? undefined : catalog.sessions[sessionId]?.supersededBy
+    const successor = replacement ? catalog.sessions[replacement] : undefined
+    const detail = successor?.previousSessionIds.includes(sessionId)
+      ? msg("project_change_session_resplit", { session: sessionLongRef(successor), from: sessionLongRef(session), frames: framesRef(corrected.size) })
+      : whole ? null : msg("session_frames_moved", { count: assetIds.length, n: { count: assetIds.length } })
+    recordSaved(whole ? msg("store_saved_frames_corrected", { name: sessionRef(session) }) : msg("store_saved_session_resplit", { name: sessionRef(session) }), detail, href)
+
+  }
   return result
 }
 

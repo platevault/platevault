@@ -12,12 +12,12 @@
  * `routeRawCalibration`); masters in a Calibration location become dated
  * versions of library masters (CAL-FR-14).
  */
+import { correctedExposureS } from "./corrections"
+import { isRetiredAsset } from "./library"
 import { formatDegrees } from "@/lib/format"
 import { type MessageRef, msg, verbatim } from "@/lib/i18n"
 import { calibrateSessions, emptyCalibration, factsOf, masterRecordKey, sameMasterCamera } from "./calibration"
 import { routeRawCalibration } from "./calibration-process"
-import { correctedExposureS } from "./corrections"
-import { isRetiredAsset } from "./library"
 import { angularSeparationDeg, BUNDLED_CATALOGUE, bundledEntryFor, normalizeName, targetFromEntry } from "./sky"
 import type {
   AppSettings,
@@ -531,7 +531,7 @@ export function inCaptureOrder<T>(items: readonly T[], header: (item: T) => Fram
  * framing rejoins it. A framing without an anchor (Framing unknown) never
  * takes a pointed frame.
  */
-function nearestFraming<G extends { anchor: Framing | null }>(framings: readonly G[], framing: Framing, margins: FramingMargins): G | undefined {
+export function nearestFraming<G extends { anchor: Framing | null }>(framings: readonly G[], framing: Framing, margins: FramingMargins): G | undefined {
   let nearest: G | undefined
   let nearestDeg = Number.POSITIVE_INFINITY
   let nearestRotationDeg: number | null = null
@@ -576,7 +576,7 @@ export function splitByFraming<T>(items: readonly T[], header: (item: T) => Fram
 }
 
 /** A light session's anchor (D-W107): the framing of its first pointed frame in capture order; null for one with no pointing (Framing unknown) and for calibration frames. */
-function sessionAnchor(catalog: Catalog, session: Session): Framing | null {
+export function sessionAnchor(catalog: Catalog, session: Session): Framing | null {
   if (session.imageType !== "light") return null
   const pointed = session.assetIds.flatMap((id) => {
     const header = catalog.assets[id]?.observed
@@ -797,58 +797,115 @@ function readFiles(source: Catalog, location: Location, files: DiskFile[], now: 
   return catalog
 }
 
-/** The grouping values a correction carries into the capture key (`sessionKeyOf`), so correcting some frames re-splits their session (LIB-FR-12). */
+/** Grouping values a correction carries into the effective capture key (LIB-FR-12). */
 export type RegroupField = Extract<CorrectionField, "exposure" | "filter">
 
 /**
- * A regrouping correction of `field` on some frames of a session, the 064
- * contract's library_confirm_metadata (LIB-FR-12, D15): the session is
- * superseded and its frames split into successors by the corrected capture
- * key, the corrected frames in one and the rest in the other. The
- * predecessor keeps its record and frames for traceability; each successor
- * names it in `previousSessionIds`, and `supersededBy` names the successor
- * holding the first frame, which keeps the session's name and notes while
- * the others take the derived name (owner's answer, 2026-10-20). A
- * successor inherits the Target, rig, calibration and every frame's mark,
- * since all its frames share them, and its Review step reads Needs review
- * until Finish review (D-W100). Source headers never change. Returns the
- * successors, first-frame holder first; the catalog is mutated in place
- * (callers pass a copy, as `withCatalog` does).
+ * Re-group corrected frames into immutable session successors. Existing
+ * sessions with the corrected key are candidate anchors, but incoming frames
+ * are always compared to those existing first frames, never to earlier
+ * corrected frames (D-W107, LIB-FR-12, D15). A joined existing session keeps
+ * its name and notes; the predecessor's details go to the predecessor-based
+ * part holding its first frame, or to the remainder when that frame joins an
+ * existing session. Every other predecessor-based part gets a derived name
+ * and empty notes. The predecessor's supersededBy points to the part carrying
+ * its details, or to the first-frame holder when none does; each joined target
+ * points to its joined successor.
  */
-export function resplitSession(catalog: Catalog, sessionId: SessionId, corrected: ReadonlySet<AssetId>, correction: Omit<CatalogCorrection, "revision">, now: IsoDateTime): Session[] {
+export interface ResplitResult {
+  successors: Session[]
+  joined: Map<SessionId, AssetId[]>
+}
+
+export function resplitSession(
+  catalog: Catalog,
+  sessionId: SessionId,
+  corrected: ReadonlySet<AssetId>,
+  correction: Omit<CatalogCorrection, "revision">,
+  margins: FramingMargins,
+  now: IsoDateTime,
+): ResplitResult {
   const predecessor = catalog.sessions[sessionId]!
   const revision = predecessor.revision + 1
-  const taken = new Set<SessionId>()
-  for (const s of Object.values(catalog.sessions)) {
-    taken.add(s.id)
-    for (const previous of s.previousSessionIds) taken.add(previous)
+  const correctedDraft: Session = {
+    ...predecessor,
+    channel: correction.field === "filter" ? correction.correctedValue : predecessor.channel,
+    corrections: [...predecessor.corrections, { ...correction, revision }],
   }
-  const first = [...predecessor.assetIds].sort((a, b) => catalog.assets[a]!.observed.dateObs.localeCompare(catalog.assets[b]!.observed.dateObs))[0]!
-  const parts = [predecessor.assetIds.filter((id) => !corrected.has(id)), predecessor.assetIds.filter((id) => corrected.has(id))].sort((a, b) => Number(b.includes(first)) - Number(a.includes(first)))
-  const successors = parts.map((assetIds, i) => {
-    const isCorrected = assetIds.some((id) => corrected.has(id))
+  const candidates = Object.values(catalog.sessions)
+    .filter((candidate) => candidate.id !== predecessor.id && !candidate.supersededBy && sessionKeyOf(candidate) === sessionKeyOf(correctedDraft))
+    .map((session) => ({ session, anchor: sessionAnchor(catalog, session) }))
+    .sort((a, b) => a.session.startedAt.localeCompare(b.session.startedAt) || a.session.id.localeCompare(b.session.id))
+  const joined = new Map<SessionId, AssetId[]>()
+  const unmatched: AssetId[] = []
+  for (const assetId of inCaptureOrder([...corrected], (id) => catalog.assets[id]!.observed)) {
+    const frame = framingOf(catalog.assets[assetId]!.observed)
+    const nearest = frame ? nearestFraming(candidates, frame, margins) : candidates.find((candidate) => candidate.anchor === null)
+    if (!nearest) {
+      unmatched.push(assetId)
+      continue
+    }
+    joined.set(nearest.session.id, [...(joined.get(nearest.session.id) ?? []), assetId])
+  }
+
+  const parts: Array<{ base: Session; assetIds: AssetId[]; previousSessionIds: SessionId[]; corrected: boolean }> = []
+  const sourceRemainder = predecessor.assetIds.filter((id) => !corrected.has(id))
+  if (sourceRemainder.length > 0) parts.push({ base: predecessor, assetIds: sourceRemainder, previousSessionIds: [predecessor.id], corrected: false })
+  if (unmatched.length > 0) parts.push({ base: correctedDraft, assetIds: unmatched, previousSessionIds: [predecessor.id], corrected: true })
+  for (const [targetId, assetIds] of joined) {
+    const target = catalog.sessions[targetId]!
+    parts.push({
+      base: { ...target, channel: correction.field === "filter" ? correction.correctedValue : target.channel },
+      assetIds: [...target.assetIds, ...assetIds],
+      previousSessionIds: [target.id, predecessor.id],
+      corrected: true,
+    })
+  }
+
+  const taken = new Set<SessionId>()
+  for (const session of Object.values(catalog.sessions)) {
+    taken.add(session.id)
+    for (const previous of session.previousSessionIds) taken.add(previous)
+  }
+  const firstId = inCaptureOrder(predecessor.assetIds, (id) => catalog.assets[id]!.observed)[0]!
+  const joinedFirstFrame = [...joined.values()].some((assetIds) => assetIds.includes(firstId))
+  const detailsPart = parts.find(({ base, assetIds }) => base.id === predecessor.id && assetIds.includes(firstId))
+    ?? (joinedFirstFrame ? parts.find(({ base }) => base.id === predecessor.id) : undefined)
+  const heirPart = detailsPart ?? parts.find(({ assetIds }) => assetIds.includes(firstId))
+  const heir = heirPart ? parts.indexOf(heirPart) : -1
+  const successorByTarget = new Map<SessionId, Session>()
+  const successors = parts.map(({ base, assetIds, previousSessionIds, corrected: hasCorrection }, index) => {
+    const isMerged = previousSessionIds.length > 1
+    const carriesPredecessorDetails = detailsPart !== undefined && parts.indexOf(detailsPart) === index && base.id === predecessor.id
     const draft: Session = {
-      ...predecessor,
-      revision,
+      ...base,
+      revision: base.id === predecessor.id ? revision : base.revision + Number(isMerged),
       assetIds,
-      channel: isCorrected && correction.field === "filter" ? correction.correctedValue : predecessor.channel,
-      corrections: isCorrected ? [...predecessor.corrections, { ...correction, revision }] : predecessor.corrections,
-      name: i === 0 ? predecessor.name : null,
-      notes: i === 0 ? predecessor.notes : "",
-      previousSessionIds: [predecessor.id],
+      corrections: hasCorrection && !base.corrections.some((item) => item.id === correction.id)
+        ? [...base.corrections, { ...correction, revision: base.revision + Number(isMerged) }]
+        : base.corrections,
+      name: base.id === predecessor.id ? (carriesPredecessorDetails ? predecessor.name : null) : base.name,
+      notes: base.id === predecessor.id ? (carriesPredecessorDetails ? predecessor.notes : "") : base.notes,
+      previousSessionIds,
       supersededBy: null,
       reviewReset: true,
     }
     const id = freshSessionId(sessionKeyOf(draft), taken)
     taken.add(id)
-    return rebuildSession(catalog, { ...draft, id }, now)
+    const successor = rebuildSession(catalog, { ...draft, id }, now)
+    if (isMerged) successorByTarget.set(base.id, successor)
+    return successor
   })
-  for (const successor of successors) {
+  const ordered = successors.sort((a, b) => a.startedAt.localeCompare(b.startedAt) || a.id.localeCompare(b.id))
+  for (const successor of ordered) {
     catalog.sessions[successor.id] = successor
-    for (const id of successor.assetIds) catalog.assets[id] = { ...catalog.assets[id]!, sessionId: successor.id }
+    for (const assetId of successor.assetIds) catalog.assets[assetId] = { ...catalog.assets[assetId]!, sessionId: successor.id }
   }
-  catalog.sessions[sessionId] = { ...predecessor, supersededBy: successors[0]!.id }
-  return successors
+  catalog.sessions[predecessor.id] = { ...predecessor, supersededBy: heir < 0 ? null : successors[heir]!.id }
+  for (const [targetId, replacement] of successorByTarget) {
+    catalog.sessions[targetId] = { ...catalog.sessions[targetId]!, supersededBy: replacement.id }
+  }
+  return { successors: ordered, joined }
 }
 
 /** For an ingestion that links no master file to a camera: scans, and imports with no camera choice. */
