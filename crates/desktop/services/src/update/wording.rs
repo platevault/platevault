@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
+use super::install::InstallWording;
 use crate::locale::{self, ActiveLocale, ShippedMessages};
 use crate::notifications::Notice;
 
@@ -28,6 +29,10 @@ pub struct Wording {
     installed_title: String,
     #[serde(rename = "update_notification_installed_kept_body")]
     installed_kept: String,
+    /// Provisional copy: what a bundle the install keeps aside is called
+    /// after the app's name (astro-plan-rx07l).
+    #[serde(rename = "update_kept_aside_name")]
+    set_aside: String,
 }
 
 static WORDING_BY_LOCALE: ShippedMessages<Wording> = ShippedMessages::new();
@@ -46,8 +51,13 @@ impl Wording {
         Self::for_locale(locale)
     }
 
-    pub(super) fn admin_prompt(&self, version: &str) -> String {
-        locale::fill(&self.admin_prompt, &[("version", version)])
+    /// The words the install of `version` shows the user, or gives what it
+    /// keeps aside.
+    pub(super) fn install(&self, version: &str) -> InstallWording {
+        InstallWording {
+            admin_prompt: locale::fill(&self.admin_prompt, &[("version", version)]),
+            set_aside: self.set_aside.clone(),
+        }
     }
 
     /// The notice of an install that failed and kept the previous app at

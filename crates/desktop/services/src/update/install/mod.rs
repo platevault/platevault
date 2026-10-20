@@ -64,17 +64,42 @@ impl Installed {
     }
 }
 
+/// The words an install shows the user, or gives what it keeps, in the
+/// user's language. Only the macOS install reads them.
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(all(not(target_os = "macos"), not(test)), allow(dead_code))]
+pub struct InstallWording {
+    /// The text of the administrator prompt an install that needs more
+    /// rights shows, where the OS lets the app word it (macOS).
+    pub admin_prompt: String,
+    /// What the macOS install calls a bundle it keeps aside rather than
+    /// delete, in parentheses after the app's name: `PlateVault (set
+    /// aside).app`. It says that the bundle was set aside, not what it is:
+    /// the previous app or whatever else was found in the app's place.
+    pub set_aside: String,
+}
+
+#[cfg(test)]
+impl InstallWording {
+    /// The base locale's name for what an install keeps aside, which tests
+    /// install with.
+    pub const TEST_SET_ASIDE: &'static str = "set aside";
+
+    /// What tests install with: no prompt, and [`Self::TEST_SET_ASIDE`].
+    pub fn for_tests() -> Self {
+        Self { admin_prompt: String::new(), set_aside: Self::TEST_SET_ASIDE.to_owned() }
+    }
+}
+
 /// The OS side of the updater: the platform installer in the app, a fake in
 /// tests.
 pub trait Installer: Send + Sync {
-    /// Install `payload`. `admin_prompt` is the text of the administrator
-    /// prompt an install that needs more rights shows, where the OS lets the
-    /// app word it (macOS); in the user's language.
+    /// Install `payload`, with `wording` for what the user sees.
     fn install(
         &self,
         payload: Payload<'_>,
         mode: InstallMode,
-        admin_prompt: &str,
+        wording: &InstallWording,
     ) -> Result<Installed, UpdateError>;
 }
 
@@ -127,7 +152,7 @@ impl Installer for OsInstaller {
         &self,
         mut payload: Payload<'_>,
         mode: InstallMode,
-        admin_prompt: &str,
+        wording: &InstallWording,
     ) -> Result<Installed, UpdateError> {
         let Some(package) = self.package else {
             return Err(UpdateError::Unsupported(
@@ -140,7 +165,7 @@ impl Installer for OsInstaller {
             Package::Nsis | Package::Msi => windows::launch_installer(&mut payload, package, mode),
             #[cfg(target_os = "macos")]
             Package::App => {
-                bundle::install_launched_app(self.launched.bundle()?, &mut payload, admin_prompt)
+                bundle::install_launched_app(self.launched.bundle()?, &mut payload, wording)
             }
             #[cfg(target_os = "linux")]
             Package::AppImage => linux::replace_appimage(payload.reader()),
@@ -184,7 +209,9 @@ fn check_format(file: &mut File, package: Package) -> Result<(), UpdateError> {
 mod tests {
     use std::io::{Read as _, Write as _};
 
-    use super::{check_format, InstallMode, Installer as _, LaunchedApp, OsInstaller};
+    use super::{
+        check_format, InstallMode, InstallWording, Installer as _, LaunchedApp, OsInstaller,
+    };
     use crate::update::{Package, UpdateError};
 
     const PACKAGES: [(Package, &[u8]); 6] = [
@@ -243,7 +270,11 @@ mod tests {
     async fn a_build_without_a_package_cannot_install() {
         let staged = staged(Package::AppImage, b"\x7fELF").await;
         let error = OsInstaller::new(None, LaunchedApp::record())
-            .install(staged.reverify().expect("verified"), InstallMode::Now, "")
+            .install(
+                staged.reverify().expect("verified"),
+                InstallMode::Now,
+                &InstallWording::for_tests(),
+            )
             .expect_err("no package");
         assert!(matches!(error, UpdateError::Unsupported(_)), "{error}");
     }
@@ -254,7 +285,11 @@ mod tests {
         let bytes = PACKAGES.iter().find(|(package, _)| *package == foreign).expect("bytes").1;
         let staged = staged(foreign, bytes).await;
         let error = OsInstaller::new(Some(foreign), LaunchedApp::record())
-            .install(staged.reverify().expect("verified"), InstallMode::Now, "")
+            .install(
+                staged.reverify().expect("verified"),
+                InstallMode::Now,
+                &InstallWording::for_tests(),
+            )
             .expect_err("foreign package");
         assert!(
             matches!(&error, UpdateError::Unsupported(message) if message.contains(foreign.manifest_name())),
@@ -270,7 +305,11 @@ mod tests {
         let bytes = PACKAGES[0].1;
         let staged = staged(Package::App, bytes).await;
         let error = OsInstaller::new(Some(Package::App), LaunchedApp::record())
-            .install(staged.reverify().expect("verified"), InstallMode::Now, "")
+            .install(
+                staged.reverify().expect("verified"),
+                InstallMode::Now,
+                &InstallWording::for_tests(),
+            )
             .expect_err("not in a bundle");
         assert!(
             matches!(&error, UpdateError::Install(message) if message.contains("not inside an app bundle")),

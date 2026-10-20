@@ -18,7 +18,7 @@ use semver::Version;
 use serde_json::json;
 
 use super::http::{BoxFuture, ChunkSink, Source};
-use super::install::{InstallMode, Installed, Installer};
+use super::install::{InstallMode, InstallWording, Installed, Installer};
 use super::manifest::Release;
 use super::signature::{self, Payload, Staged, TrustedKey};
 use super::{
@@ -157,7 +157,7 @@ impl Source for Arc<FakeSource> {
 struct FakeInstaller {
     results: Mutex<VecDeque<Result<Installed, UpdateError>>>,
     calls: Mutex<Vec<(InstallMode, Vec<u8>)>>,
-    prompts: Mutex<Vec<String>>,
+    wordings: Mutex<Vec<InstallWording>>,
     gate: Mutex<Option<mpsc::Receiver<()>>>,
 }
 
@@ -176,8 +176,8 @@ impl FakeInstaller {
         self.calls.lock().expect("calls").clone()
     }
 
-    fn prompts(&self) -> Vec<String> {
-        self.prompts.lock().expect("prompts").clone()
+    fn wordings(&self) -> Vec<InstallWording> {
+        self.wordings.lock().expect("wordings").clone()
     }
 }
 
@@ -186,12 +186,12 @@ impl Installer for Arc<FakeInstaller> {
         &self,
         mut payload: Payload<'_>,
         mode: InstallMode,
-        admin_prompt: &str,
+        wording: &InstallWording,
     ) -> Result<Installed, UpdateError> {
         let mut bytes = Vec::new();
         payload.reader().read_to_end(&mut bytes).expect("staged payload");
         self.calls.lock().expect("calls").push((mode, bytes));
-        self.prompts.lock().expect("prompts").push(admin_prompt.to_owned());
+        self.wordings.lock().expect("wordings").push(wording.clone());
         let gate = self.gate.lock().expect("gate").take();
         if let Some(gate) = gate {
             let _ = gate.recv();
@@ -606,7 +606,7 @@ impl Installer for Arc<TamperingInstaller> {
         &self,
         payload: Payload<'_>,
         _mode: InstallMode,
-        _admin_prompt: &str,
+        _wording: &InstallWording,
     ) -> Result<Installed, UpdateError> {
         self.calls.fetch_add(1, Ordering::SeqCst);
         let path = payload.path().to_owned();
@@ -876,7 +876,7 @@ async fn a_failed_install_at_quit_still_exits() {
 
 // ── What the updater says outside the webview (dwwup, gffqm) ────────────────
 
-const KEPT: &str = "/Applications/PlateVault (previous version).app";
+const KEPT: &str = "/Applications/PlateVault (set aside).app";
 
 fn previous_app_not_restored() -> UpdateError {
     UpdateError::PreviousAppNotRestored {
@@ -927,14 +927,29 @@ fn updater_wording_is_cached_from_every_shipped_locale() {
     let kept = std::path::Path::new(KEPT);
     for shipped in &crate::locale::SHIPPED_LOCALES {
         let wording = super::wording::Wording::from_locale(shipped);
-        let prompt = wording.admin_prompt("0.7.0");
-        let expected_prompt = if shipped.tag == "pt-BR" {
-            "O PlateVault precisa do nome e da senha de um administrador para instalar a atualização 0.7.0."
+        let install = wording.install("0.7.0");
+        let (expected_prompt, expected_set_aside) = if shipped.tag == "pt-BR" {
+            (
+                "O PlateVault precisa do nome e da senha de um administrador para instalar a atualização 0.7.0.",
+                "posto de lado",
+            )
         } else {
-            "PlateVault needs an administrator's name and password to install update 0.7.0."
+            (
+                "PlateVault needs an administrator's name and password to install update 0.7.0.",
+                "set aside",
+            )
         };
-        assert_eq!(prompt, expected_prompt);
-        assert!(!prompt.contains('{'), "{}: {prompt}", shipped.tag);
+        assert_eq!(install.admin_prompt, expected_prompt);
+        assert!(!install.admin_prompt.contains('{'), "{}: {}", shipped.tag, install.admin_prompt);
+        // Part of a file name root renames to: one name, no placeholder, and
+        // no character that ends it or the parentheses around it.
+        assert_eq!(install.set_aside, expected_set_aside);
+        assert!(
+            !install.set_aside.contains(['/', ':', '{', '(', ')']),
+            "{}: {}",
+            shipped.tag,
+            install.set_aside
+        );
 
         let expected_failed = if shipped.tag == "pt-BR" {
             "Atualização não instalada"
@@ -1176,8 +1191,10 @@ async fn install_now_over_a_replaced_app_shows_the_kept_path_in_the_app() {
     );
 }
 
+/// The administrator prompt and the name of what an install keeps aside are
+/// the active language's (astro-plan-rx07l).
 #[tokio::test]
-async fn each_install_asks_for_administrator_rights_in_the_active_language() {
+async fn each_install_is_worded_in_the_active_language() {
     let signer = Signer::new();
     let source = FakeSource::release(&signer, b"new AppImage");
     let installer = FakeInstaller::answering(vec![Err(UpdateError::Install("denied".to_owned()))]);
@@ -1192,14 +1209,20 @@ async fn each_install_asks_for_administrator_rights_in_the_active_language() {
     assert_eq!(rig.next_host_call(), HostCall::Exit);
 
     assert_eq!(
-        installer.prompts(),
+        installer.wordings(),
         [
-            format!(
-                "PlateVault needs an administrator's name and password to install update {RELEASE}."
-            ),
-            format!(
-                "O PlateVault precisa do nome e da senha de um administrador para instalar a atualização {RELEASE}."
-            ),
+            InstallWording {
+                admin_prompt: format!(
+                    "PlateVault needs an administrator's name and password to install update {RELEASE}."
+                ),
+                set_aside: "set aside".to_owned(),
+            },
+            InstallWording {
+                admin_prompt: format!(
+                    "O PlateVault precisa do nome e da senha de um administrador para instalar a atualização {RELEASE}."
+                ),
+                set_aside: "posto de lado".to_owned(),
+            },
         ]
     );
 }
@@ -1285,18 +1308,13 @@ fn every_error_reaches_the_ui_as_a_code() {
 #[test]
 fn a_previous_app_that_was_not_put_back_is_named_to_the_ui() {
     let error = UpdateError::PreviousAppNotRestored {
-        kept: std::path::PathBuf::from("/Applications/PlateVault (previous version).app"),
+        kept: std::path::PathBuf::from(KEPT),
         cause: Box::new(UpdateError::Install("disk full".to_owned())),
     };
-    assert_eq!(
-        error.failure(),
-        UpdateFailure::PreviousAppNotRestored {
-            kept_at: "/Applications/PlateVault (previous version).app".to_owned()
-        }
-    );
+    assert_eq!(error.failure(), UpdateFailure::PreviousAppNotRestored { kept_at: KEPT.to_owned() });
     assert_eq!(
         error.to_string(),
-        "disk full; the previous app could not be put back and is kept at /Applications/PlateVault (previous version).app"
+        format!("disk full; the previous app could not be put back and is kept at {KEPT}")
     );
 }
 
@@ -1709,7 +1727,7 @@ mod bundle {
             &LaunchedBundle::at(installed.clone()).expect("launch"),
             &mut staged.reverify().expect("verified"),
             &signing,
-            "",
+            &crate::update::install::InstallWording::for_tests(),
         )
         .expect_err("refused");
         assert!(

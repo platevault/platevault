@@ -129,6 +129,7 @@ mod tests {
 
     use super::{probe_bundle as bundle, CodeSigning, Codesign, Identity};
     use crate::update::install::bundle::{install_bundle, LaunchedBundle};
+    use crate::update::install::InstallWording;
     use crate::update::{Package, UpdateError};
 
     /// The designated requirement of Apple's `/usr/bin/true`.
@@ -211,7 +212,8 @@ mod tests {
         let staged = staged_archive(&update).await;
 
         let launched = LaunchedBundle::at(installed.clone()).expect("launch");
-        install_bundle(&launched, &mut staged.reverify().expect("verified"), &Codesign, "")
+        let mut payload = staged.reverify().expect("verified");
+        install_bundle(&launched, &mut payload, &Codesign, &InstallWording::for_tests())
             .expect("install");
 
         assert_eq!(marker(&installed), "dev.example.update");
@@ -235,8 +237,9 @@ mod tests {
         let staged = staged_archive(&update).await;
 
         let launched = LaunchedBundle::at(installed.clone()).expect("launch");
+        let mut payload = staged.reverify().expect("verified");
         let error =
-            install_bundle(&launched, &mut staged.reverify().expect("verified"), &Codesign, "")
+            install_bundle(&launched, &mut payload, &Codesign, &InstallWording::for_tests())
                 .expect_err("refused");
 
         assert!(

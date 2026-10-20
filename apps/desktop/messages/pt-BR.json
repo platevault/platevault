@@ -1595,6 +1595,7 @@
   "update_notification_install_failed_title": "Atualização não instalada",
   "update_notification_installed_title": "Atualização instalada",
   "update_notification_installed_kept_body": "O PlateVault encontrou outro aplicativo no lugar dele durante a atualização. Ele está salvo em {path}.",
+  "update_kept_aside_name": "posto de lado",
   "notification_target_resolution_title": "Resolução de alvos concluída",
   "notification_target_resolution_body": "Alvos da fila resolvidos: {count}.",
   "notification_target_resolution_body_singular": "Alvo da fila resolvido: {count}.",
