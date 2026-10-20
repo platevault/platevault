@@ -94,11 +94,16 @@ function localResults(m: Messages, catalog: Catalog, query: string): { mine: Res
   const mineIds = new Set(mine.map((t) => t.target.id))
   const own = mine
     .filter(({ target }) => matches(query, target.name, target.aliases))
-    .map(({ target, projects }): Result => ({
+    .map(({ target, projects, sessions }): Result => ({
       id: `target:${target.id}`,
       pick: pickFromTarget(target),
       aliases: target.aliases,
-      kind: projects.length > 0 ? m.project_search_subject_of({ names: projects.map((p) => p.name).join(", ") }) : m.project_search_favourite(),
+      kind:
+        projects.length > 0
+          ? m.project_search_subject_of({ names: projects.map((p) => p.name).join(", ") })
+          : target.favourite
+            ? m.project_search_favourite()
+            : m.session_count({ count: sessions }),
     }))
   const byName = new Map(Object.values(catalog.targets).map((t) => [t.name, t]))
   const bundled = BUNDLED_CATALOGUE.filter((o) => matches(query, o.designation, o.aliases) && !mineIds.has(byName.get(o.designation)?.id ?? "")).map((o): Result => {

@@ -13,7 +13,7 @@
  * deadline or season window carry their planning priority
  * (`planningPriorities`, C7), which rises as the window's last night nears.
  */
-import { bandUnion, formatHours, liveLightSessions, myTargets, panelGroups, planningPriorities, rigRef, type SubjectPriority, sessionTargetId, targetFit, type Fit, fitsNicely, isMosaicCandidate } from "@/domain/derive"
+import { bandUnion, formatHours, myTargets, panelGroups, planningPriorities, rigRef, type SubjectPriority, sessionTargetId, targetFit, type Fit, fitsNicely, isMosaicCandidate } from "@/domain/derive"
 import { BANDS, DEFAULT_MOON_AVOIDANCE, NARROW_BANDS } from "@/domain/labels"
 import { targetCoverage } from "@/domain/library"
 import type { MoonAvoidance, Stretch, Tonight } from "@/domain/planning"
@@ -60,7 +60,7 @@ export interface TargetRow {
   sizeDeg: { width: number; height: number } | null
   /** Open Projects that have it as a subject (D-W60 badge). */
   projects: Project[]
-  /** In My targets: ★ favourite or an open-Project subject. */
+  /** In My targets (D-W125): ★ favourite, an open-Project subject, or a Target with a session. */
   mine: boolean
   /** A mosaic panel's row: the Target whose mosaic it belongs to (D-W63); null for every other row. */
   panelOf: TargetId | null
@@ -364,16 +364,6 @@ export function priorityOrder(views: RowView[]): RowView[] {
     if (ra !== rb) return ra < rb ? -1 : 1
     return collator.compare(a.row.designation, b.row.designation)
   })
-}
-
-/** Live (not Trashed) light sessions per confirmed or associated Target (PLAN-TGT-FR-08). */
-export function sessionCountsByTarget(catalog: Catalog): Map<string, number> {
-  const counts = new Map<string, number>()
-  for (const session of liveLightSessions(catalog)) {
-    const id = sessionTargetId(session)
-    if (id) counts.set(id, (counts.get(id) ?? 0) + 1)
-  }
-  return counts
 }
 
 // ---------------------------------------------------------------------------

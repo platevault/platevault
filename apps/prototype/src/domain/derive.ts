@@ -58,6 +58,7 @@ import type {
   Subject,
   SubjectConditions,
   Target,
+  TargetId,
 } from "./types"
 import { formatCount, formatDecimal } from "@/lib/format"
 import { joinRefs, type MessageRef, type Messages, msg, nightRef, say, verbatim } from "@/lib/i18n"
@@ -1010,16 +1011,41 @@ export function runningWork(operations: Record<string, Operation>): Operation[] 
 // Targets: My targets, Fit and the band strip (D-W18, D-W23, D-W60 to D-W62)
 // ---------------------------------------------------------------------------
 
-/** My targets: ★ favourites plus every subject of an open Project, with its Project badges (D-W60). */
-export function myTargets(catalog: Catalog): Array<{ target: Target; projects: Project[] }> {
-  const out = new Map<string, { target: Target; projects: Project[] }>()
-  for (const target of Object.values(catalog.targets)) if (target.favourite) out.set(target.id, { target, projects: [] })
+/** Live (not Trashed) light sessions per confirmed or associated Target (PLAN-TGT-FR-08); a Target only suggested for a session counts none (D-W124). */
+export function sessionCountsByTarget(catalog: Catalog): Map<TargetId, number> {
+  const counts = new Map<TargetId, number>()
+  for (const session of liveLightSessions(catalog)) {
+    const id = sessionTargetId(session)
+    if (id) counts.set(id, (counts.get(id) ?? 0) + 1)
+  }
+  return counts
+}
+
+export interface MyTarget {
+  target: Target
+  /** Open Projects that have it as a subject (the D-W60 badges). */
+  projects: Project[]
+  /** Its sessions, counted as `sessionCountsByTarget` counts them. */
+  sessions: number
+}
+
+/**
+ * My targets (D-W60, D-W125): ★ favourites, every subject of an open
+ * Project, and every Target with at least one session
+ * (`sessionCountsByTarget`), so a Target appears as soon as its sessions
+ * are indexed.
+ */
+export function myTargets(catalog: Catalog): MyTarget[] {
+  const sessions = sessionCountsByTarget(catalog)
+  const out = new Map<TargetId, MyTarget>()
+  const entryOf = (target: Target) => out.get(target.id) ?? { target, projects: [], sessions: sessions.get(target.id) ?? 0 }
+  for (const target of Object.values(catalog.targets)) if (target.favourite || sessions.has(target.id)) out.set(target.id, entryOf(target))
   for (const project of Object.values(catalog.projects)) {
     if (project.state !== "open") continue
     for (const subject of project.subjects) {
       const target = catalog.targets[subject.targetId]
       if (!target) continue
-      const entry = out.get(target.id) ?? { target, projects: [] }
+      const entry = entryOf(target)
       if (!entry.projects.includes(project)) entry.projects.push(project)
       out.set(target.id, entry)
     }
