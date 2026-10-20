@@ -1,6 +1,7 @@
 import { beforeAll, beforeEach, describe, expect, it } from "vitest"
 import { calibrateSessions } from "@/domain/calibration"
 import { sessionIntakeLink, sessionReadiness } from "@/domain/derive"
+import { qualityApplicability } from "@/domain/library"
 import { applyPlan, pendingChanges } from "@/domain/project-view"
 import { createSeed } from "@/domain/seed"
 import type { Project, Session } from "@/domain/types"
@@ -80,6 +81,14 @@ describe("a reopened review (D-W100, VSEL-FR-12, PIX-FR-18)", () => {
       expect(reopened(project)).toEqual([])
       expect(notReady(project)).toEqual([])
     }
+  })
+
+  it("is no frame whose bytes changed after review: it keeps its decision (ChangedContent, LIB-FR-09), so no review set it back", () => {
+    // The seed's M 31 L frame that changed on disk after review, in open M 31 LRGB.
+    const m31 = catalog().projects.prj_m31!
+    const drifted = m31.inputs.flatMap((i) => catalog().sessions[i.sessionId]!.assetIds).find((id) => qualityApplicability(catalog().assets[id]!) === "changed-content")!
+    expect(catalog().assets[drifted]!.quality.value).toBe("usable")
+    expect(reopened(m31)).toEqual([])
   })
 
   it("never reaches a Closed Project holding the session", () => {

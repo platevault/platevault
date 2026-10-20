@@ -6157,6 +6157,8 @@
   "help_tip_marks_library": "P, X and U mark the frame in the library, so every Project reads the same mark: an open Project gets it as a pending change, a Closed one keeps its snapshot.",
   "catalogue_f4_duplicates_desc": "The badge a session row carries when the latest duplicate scan found extra byte-identical copies of its frames. Display only.",
   "catalogue_f4_duplicates_counts": "one extra copy, and twelve",
+  "catalogue_f4_readiness_desc": "Where a session's intake stands, as one status word on every session row: Ready, or the step it still needs. A held session a reopened review set back to Unreviewed reads Needs review in its Projects.",
+  "catalogue_f4_readiness_states": "Ready, needs a Target, needs a rig, one frame unreviewed, and Trashed",
   "import_column_files": "Files",
   "import_column_state": "State",
   "import_skip_imported_before": "Imported before",
