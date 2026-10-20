@@ -451,8 +451,8 @@ async fn retire_review_blocks_pinned_calibration_and_names_projects_holding_sess
     assert_eq!(review.blocked.len(), 1, "one current blocker per pinned session");
     assert!(matches!(
         &review.blocked[0],
-        platevault_model::RetireBlock::PinnedCalibration { session_id, kinds, .. }
-            if *session_id == light && kinds == &[InputKind::Dark]
+        platevault_model::RetireBlock::PinnedCalibration { session_id, capture_key, kinds, .. }
+            if *session_id == light && capture_key.starts_with("capture-v1|") && kinds == &[InputKind::Dark]
     ));
     assert!(review.projects.is_empty(), "no Project holds this session yet");
     let refusal = catalog
@@ -607,12 +607,13 @@ async fn retire_review_projects_include_open_closed_and_archived_pin_holders() {
             review.projects
         );
     }
-    let [platevault_model::RetireBlock::PinnedCalibration { session_id, projects, .. }] =
+    let [platevault_model::RetireBlock::PinnedCalibration { session_id, capture_key, projects, .. }] =
         review.blocked.as_slice()
     else {
         panic!("{:#?}", review.blocked)
     };
     assert_eq!(*session_id, light);
+    assert!(capture_key.starts_with("capture-v1|"));
     assert_eq!(projects.len(), 3);
     for (id, lifecycle) in &expected_projects {
         assert!(projects.iter().any(

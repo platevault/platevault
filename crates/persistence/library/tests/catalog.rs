@@ -6,6 +6,8 @@
 //! the probe reads actual no-follow file and folder metadata.
 #![cfg(unix)]
 
+#[path = "support/membership.rs"]
+mod membership_support;
 mod support;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -1717,16 +1719,6 @@ fn read_references(assets: &[Asset], references: Vec<AssetReference>) -> Locatio
     }
 }
 
-/// A Project holding `assets` at its `revision`.
-fn holding_project(assets: &[Asset], revision: Revision) -> AssetReference {
-    AssetReference {
-        kind: ReferenceKind::Project,
-        id: Uuid::from_u128(0x7000),
-        name: "NGC 7000 Ha".into(),
-        revision,
-        asset_ids: ids_of(assets).into_iter().collect(),
-    }
-}
 
 fn ids_of(assets: &[Asset]) -> BTreeSet<Uuid> {
     assets.iter().map(|asset| asset.id).collect()
@@ -1746,17 +1738,38 @@ async fn a_reviewed_retire_names_every_reference_and_changes_no_file() {
     let session = catalog.list_sessions(&SessionQuery::default()).await.unwrap()[0].session.clone();
     let saved = catalog.save_target(&target("NGC 7000", "ngc 7000"), None).await.unwrap();
     catalog.associate_target(&[expected_session(&session)], saved.candidate.id).await.unwrap();
-
-    // The location goes offline; a Project holds its copies.
+    let equipment = catalog.save_equipment(
+        &platevault_model::Equipment {
+            id: Uuid::new_v4(), name: "RedCat".into(), camera: Some("ASI2600MM".into()),
+            telescope: Some("RedCat".into()), focal_length_mm: Some(250.0), pixel_size_um: Some(3.76),
+            sensor_width_px: None, sensor_height_px: None, color_kind: None, decision_revision: 0,
+            state: AssociationState::Confirmed, provenance: Provenance::User,
+        },
+        None,
+    ).await.unwrap();
+    catalog.confirm_equipment(
+        &[expected_session(&catalog.session(session.id).await.unwrap().summary.session)], equipment.id,
+    ).await.unwrap();
+    let current = catalog.session(session.id).await.unwrap().summary.session;
+    catalog.finish_session_review(session.id, current.grouping_revision).await.unwrap();
+    for kind in [platevault_model::InputKind::Bias, platevault_model::InputKind::Dark, platevault_model::InputKind::Flat] {
+        let generation = catalog.session_calibration(session.id).await.unwrap().calibration.generation;
+        catalog.decline_calibration(&[(session.id, generation)], kind).await.unwrap();
+    }
+    let project = catalog.create_project(&platevault_model::ProjectInput {
+        name: "NGC 7000 Ha".into(), notes: None,
+        subjects: vec![platevault_model::SubjectInput { target_id: saved.candidate.id, name: None }],
+        rig_ids: vec![equipment.id], goals: Vec::new(),
+    }).await.unwrap();
+    membership_support::hold(&catalog, project.id, session.id, equipment.id).await;
+    let reference = AssetReference {
+        kind: ReferenceKind::Project, id: project.id, name: project.name.clone(),
+        revision: project.revision, asset_ids: ids_of(&assets).into_iter().collect(),
+    };
+    let references = read_references(&assets, vec![reference.clone()]);
     let unplugged = fx.root.with_extension("unplugged");
     std::fs::rename(&fx.root, &unplugged).unwrap();
-    let location = catalog
-        .mark_location_unavailable(location.id, Availability::Offline, "unplugged")
-        .await
-        .unwrap();
-    let assets = catalog.location_assets(location.id).await.unwrap();
-    let project = holding_project(&assets, 3);
-    let references = read_references(&assets, vec![project.clone()]);
+    let location = catalog.mark_location_unavailable(location.id, Availability::Offline, "unplugged").await.unwrap();
     let review = catalog.review_retire_location(location.id, &references).await.unwrap();
     assert_eq!(
         (review.location_id, review.location_name.as_str(), &review.root),
@@ -1771,7 +1784,7 @@ async fn a_reviewed_retire_names_every_reference_and_changes_no_file() {
     assert_eq!(review.sessions.len(), 1, "{:?}", review.sessions);
     assert_eq!(review.sessions[0].session_id, session.id);
     assert_eq!(review.sessions[0].grouping_revision, session.grouping_revision);
-    assert_eq!(review.references, vec![project.clone()]);
+    assert_eq!(review.references, vec![reference.clone()]);
     assert_eq!(review.consulted, references.consulted);
     assert!(
         review.statement.contains("deletes, moves or modifies no file"),
@@ -1785,7 +1798,8 @@ async fn a_reviewed_retire_names_every_reference_and_changes_no_file() {
     let stale = location.decision_revision + 1;
     let error = catalog.retire_location(review.id, location.id, stale, &references).await;
     assert_eq!(kind(&error.unwrap_err()), "conflict");
-    let refreshed = read_references(&assets, vec![holding_project(&assets, 4)]);
+    let changed = AssetReference { revision: reference.revision + 1, ..reference.clone() };
+    let refreshed = read_references(&assets, vec![changed]);
     let error =
         catalog.retire_location(review.id, location.id, review.expected_revision, &refreshed);
     assert_eq!(kind(&error.await.unwrap_err()), "conflict");
