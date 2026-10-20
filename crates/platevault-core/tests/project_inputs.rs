@@ -80,10 +80,19 @@ fn framing_at(anchor: Uuid, ra_deg: f64, rotator_deg: f64) -> SessionFraming {
         ra_deg,
         dec_deg: 44.3,
         rotator_deg: Some(rotator_deg),
-        sky_angle_deg: Some(rotator_deg),
+        sky_angle_deg: None,
         field: Some(FieldOfView { width_deg: 3.0, height_deg: 2.0 }),
         label: None,
     }
+}
+
+fn framing_with_sky_angle(
+    anchor: Uuid,
+    ra_deg: f64,
+    rotator_deg: f64,
+    sky_angle_deg: f64,
+) -> SessionFraming {
+    SessionFraming { sky_angle_deg: Some(sky_angle_deg), ..framing_at(anchor, ra_deg, rotator_deg) }
 }
 
 async fn subject_target(world: &World, project: Uuid) -> Uuid {
@@ -448,7 +457,7 @@ async fn manual_groups_names_panels_and_keywords_hold() {
     let oiii = world.admissible(OIII[0]).await;
     let anchor = |session: &Session| session.asset_ids[0];
     frame(&world, ha.id, &framing_at(anchor(&ha), 314.0, 10.0)).await;
-    frame(&world, oiii.id, &framing_at(anchor(&oiii), 316.5, 10.0)).await;
+    frame(&world, oiii.id, &framing_with_sky_angle(anchor(&oiii), 316.5, 10.0, 37.0)).await;
 
     let added = add(&world, &[ha.id, oiii.id]).await.unwrap();
     let names: Vec<&str> = added.groups.iter().map(|group| group.name.as_str()).collect();
@@ -465,7 +474,7 @@ async fn manual_groups_names_panels_and_keywords_hold() {
         .await
         .unwrap();
     let panel = marked.groups.iter().find(|group| group.id == second).unwrap();
-    assert_eq!(panel.name.as_str(), "Panel 1", "a mosaic panel's default");
+    assert_eq!((panel.name.as_str(), panel.panel), ("Panel 1", true), "a mosaic panel's default");
     let mut settings = marked.settings.clone();
     settings.keywords = Some(GroupKeywords::new("SET", "TILE").unwrap());
     let keyed = world
@@ -480,7 +489,7 @@ async fn manual_groups_names_panels_and_keywords_hold() {
     assert_eq!(inputs.panels.len(), 1, "known panel framing has a map outline");
     assert_eq!(inputs.panels[0].group_id, second);
     assert_eq!(inputs.panels[0].corners.len(), 4);
-    assert!((inputs.panels[0].sky_angle_deg - 10.0).abs() < 0.01);
+    assert!((inputs.panels[0].sky_angle_deg - 37.0).abs() < 0.01);
     let split = world
         .library
         .split_project_group(world.project, keyed.revision, first, &[ha.id], None)
