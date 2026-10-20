@@ -1,9 +1,11 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
-import { goalProgress, type GoalProgress, isLocked, planningSite } from "@/domain/derive"
+import { canJoinProject, goalProgress, type GoalProgress, isLocked, planningSite, projectGoalSet, projectSessionIds, sessionTargetId } from "@/domain/derive"
+import { openWork } from "@/domain/home"
 import { upcomingNight } from "@/domain/planning"
+import { projectNext } from "@/domain/project-view"
 import { createSeed } from "@/domain/seed"
 import { BUILT_IN_GOAL_TEMPLATES, DEFAULT_SUBJECT_CONDITIONS, qualityBarFor } from "@/domain/templates"
-import type { Asset, Project, Session } from "@/domain/types"
+import type { Asset, Goal, Project, Session } from "@/domain/types"
 import { m, msg, say } from "@/lib/i18n"
 import { type CommitResult, nowIso, type PrototypeState, SCHEMA_VERSION, store } from "@/store/core"
 import { initialSliceStates, sliceVersions } from "@/store/slices"
@@ -150,6 +152,97 @@ describe("Project keyword overrides (PRJ-FR-28)", () => {
     expect(project(CYGNUS).settings.keywords).toBeNull()
     expect(setProjectSettings(CYGNUS, { keywords: { group: "SET", panel: "TILE" } }).ok).toBe(true)
     expect(project(CYGNUS).settings.keywords).toEqual({ group: "SET", panel: "TILE" })
+  })
+})
+
+describe("a removed subject's goals stay hidden until it comes back (D-W128)", () => {
+  const MOSAIC = "prj_ic5070"
+  const now = () => Date.parse(nowIso())
+  const next = (id: string) => projectNext(store.getState(), project(id), now())?.label ?? null
+  const WRAP_UP = msg("wrapup_action")
+  const openGoals = (id: string) => {
+    const row = openWork(store.getState(), now(), "2026-10-13").find((r) => r.kind === "project" && r.project.id === id)
+    return row?.kind === "project" ? row.goals.total : null
+  }
+  const goalsOf = (id: string, targetId: string) => {
+    const subject = project(id).subjects.find((s) => s.targetId === targetId)
+    return project(id).goals.filter((g) => g.subjectId === subject?.id)
+  }
+  /** The goals as kept: everything but the subject id, which a subject added back changes. */
+  const kept = (goals: Goal[]) => goals.map(({ subjectId: _, ...goal }) => goal)
+  const remove = (id: string, targetId: string) => projects.removeSubject(id, project(id).subjects.find((s) => s.targetId === targetId)!.id, project(id).revision)
+
+  /** IC 5070's Target joins M 31 as a subject with goals from M 31's goal set, each then edited to an hour more. */
+  function editedSecondSubject(): { targetId: string; edited: Goal[] } {
+    const targetId = project(MOSAIC).subjects[0]!.targetId
+    expect(projects.addSubject(M31, targetId, project(M31).revision).ok).toBe(true)
+    const ids = new Set(goalsOf(M31, targetId).map((g) => g.id))
+    expect(ids.size).toBeGreaterThan(0)
+    expect(setGoals(M31, project(M31).goals.map((g) => (ids.has(g.id) ? { ...g, integrationS: (g.integrationS ?? 0) + 3600 } : g)), project(M31).revision).ok).toBe(true)
+    return { targetId, edited: goalsOf(M31, targetId) }
+  }
+
+  it("counts them in no Project progress, Home Open work or Next step, and changes no session", () => {
+    // M 31's own goals all met, so its Next is Wrap up while only they count.
+    expect(setGoals(M31, project(M31).goals.map((g) => (g.id === "goal_m31_l" ? { ...g, integrationS: 60 } : g)), project(M31).revision).ok).toBe(true)
+    expect(progress(M31).every((p) => p.met)).toBe(true)
+    expect(next(M31)).toEqual(WRAP_UP)
+    const own = { progress: progress(M31).length, open: openGoals(M31)!, inputs: project(M31).inputs }
+
+    const { targetId, edited } = editedSecondSubject()
+    expect(progress(M31)).toHaveLength(own.progress + edited.length)
+    expect(openGoals(M31)).toBe(own.open + edited.length)
+    expect(next(M31)).not.toEqual(WRAP_UP)
+
+    expect(remove(M31, targetId).ok).toBe(true)
+    const hidden = new Set(edited.map((g) => g.id))
+    expect(project(M31).goals.some((g) => hidden.has(g.id))).toBe(false)
+    expect(progress(M31).some((p) => hidden.has(p.goal.id))).toBe(false)
+    expect(progress(M31)).toHaveLength(own.progress)
+    expect(openGoals(M31)).toBe(own.open)
+    expect(next(M31)).toEqual(WRAP_UP)
+    expect(project(M31).inputs).toEqual(own.inputs)
+    expect(project(M31).hiddenGoals?.map((g) => g.id)).toEqual(edited.map((g) => g.id))
+  })
+
+  it("restores the edited goals, not the template's, when added back as a subject or through one of its sessions", () => {
+    const { targetId, edited } = editedSecondSubject()
+    const inputs = project(M31).inputs
+    const template = projectGoalSet(project(M31)).map((v) => v.integrationS)
+    expect(edited.map((g) => g.integrationS)).not.toEqual(template)
+
+    expect(remove(M31, targetId).ok).toBe(true)
+    expect(projects.addSubject(M31, targetId, project(M31).revision).ok).toBe(true)
+    expect(kept(goalsOf(M31, targetId))).toEqual(kept(edited))
+    expect(project(M31).hiddenGoals).toEqual([])
+    expect(project(M31).inputs).toEqual(inputs)
+
+    expect(remove(M31, targetId).ok).toBe(true)
+    const { catalog } = store.getState()
+    const held = projectSessionIds(project(M31))
+    const session = Object.values(catalog.sessions).find((s) => sessionTargetId(s) === targetId && !held.has(s.id) && canJoinProject(catalog, s))!
+    expect(projects.addSessionToProject(session.id, M31).result.ok).toBe(true)
+    expect(kept(goalsOf(M31, targetId))).toEqual(kept(edited))
+    expect(project(M31).hiddenGoals).toEqual([])
+  })
+
+  it("drops a kept panel goal whose group is gone or no longer a panel when its subject comes back", () => {
+    const targetId = project(MOSAIC).subjects[0]!.targetId
+    const [p1, p2] = project(MOSAIC).groups
+    const created = projects.createGroup(MOSAIC, "Panel 4", false)
+    const p4 = created.groupId!
+    expect(projects.setGroupPanel(MOSAIC, p4, true).ok).toBe(true)
+    expect(setGoals(MOSAIC, project(MOSAIC).goals.map((g) => (g.groupId === p2!.id && g.channel === "Ha" ? { ...g, integrationS: 7 * 3600 } : g)), project(MOSAIC).revision).ok).toBe(true)
+    const before = project(MOSAIC).goals
+    expect(before.some((g) => g.groupId === p4)).toBe(true)
+
+    expect(remove(MOSAIC, targetId).ok).toBe(true)
+    expect(project(MOSAIC).goals).toEqual([])
+    expect(projects.setGroupPanel(MOSAIC, p1!.id, false).ok).toBe(true)
+    expect(projects.removeGroup(MOSAIC, p4).ok).toBe(true)
+    expect(projects.addSubject(MOSAIC, targetId, project(MOSAIC).revision).ok).toBe(true)
+    expect(kept(goalsOf(MOSAIC, targetId))).toEqual(kept(before.filter((g) => g.groupId !== p1!.id && g.groupId !== p4)))
+    expect(project(MOSAIC).hiddenGoals).toEqual([])
   })
 })
 

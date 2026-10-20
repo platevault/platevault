@@ -617,6 +617,13 @@ export interface Goal {
   qualityBar: QualityBar | null
 }
 
+/**
+ * A removed subject's goal, kept hidden by its Target with its id and edited
+ * values (D-W128): it shows and counts nowhere until that Target is a subject
+ * again, when it comes back unless its panel group is gone or no longer a panel.
+ */
+export type HiddenGoal = Omit<Goal, "subjectId"> & { targetId: TargetId }
+
 /** The three Wrap up steps, in their strict order (PRJ-FR-14, C3): Clean up → Trash → Archive, whose last action is Close project. */
 export type WrapUpStepId = "cleanup" | "trash" | "archive"
 
@@ -811,6 +818,8 @@ export interface Project {
   /** Rigs taking part; suggestions are sessions on one of them (D-W37). */
   rigIds: OpticalTrainId[]
   goals: Goal[]
+  /** The goals of removed subjects, kept hidden (D-W128). Absent reads as none. */
+  hiddenGoals?: HiddenGoal[]
   /** The sessions it holds (desired state), each in one group. */
   inputs: ProjectInput[]
   groups: ProjectGroup[]
