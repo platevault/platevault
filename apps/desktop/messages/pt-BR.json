@@ -287,6 +287,7 @@
   "err_library_source_unavailable": "Este arquivo ou pasta não está acessível no momento. Verifique se a unidade está conectada e tente novamente.",
   "err_library_symlinks_unavailable": "Não é possível aplicar · os links simbólicos exigem o Modo de Desenvolvedor do Windows. Ative-o nas configurações do Windows e verifique novamente, ou use cópias para este projeto.",
   "err_library_unsupported_format": "O formato deste arquivo não é suportado.",
+  "apply_report_kept_missing": "{path} não estava mais no disco, então não pôde ser movido para View (kept)/. Você o tinha mantido em View (previous)/; verifique se ele foi movido ou excluído.",
   "err_lifecycle_last_confirmed_source": "Você não pode remover a última fonte confirmada.",
   "err_lifecycle_read_only": "Este item é somente leitura e não pode ser alterado.",
   "err_macos_quarantine_detected": "O macOS colocou esta aplicação em quarentena. Aprove-a em Ajustes do Sistema e tente novamente.",

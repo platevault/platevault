@@ -65,10 +65,6 @@ pub enum ApplyBlocker {
     EntryNameRefused { path: NativePath, name: String },
     /// `View (previous)/` holds leftovers the user hasn't reviewed (D-W110).
     LeftoversPending { count: u64 },
-    /// `View (previous)/` still holds kept files. What the next outgoing View
-    /// does with them is open with the owner (decision record §9), so Apply
-    /// refuses until they are moved or trashed.
-    PreviousHoldsKeptFiles { paths: Vec<NativePath> },
     /// `View (building)/` holds files this Project's Apply didn't place.
     BuildingOccupied { path: NativePath },
     /// A held frame's recorded correction can't reach the application: no
@@ -186,10 +182,6 @@ impl ApplyBlocker {
             Self::LeftoversPending { count } => {
                 format!("review the {count} file(s) left in View (previous)/ first")
             }
-            Self::PreviousHoldsKeptFiles { paths } => format!(
-                "View (previous)/ still holds {} kept file(s); move or trash them first",
-                paths.len()
-            ),
             Self::BuildingOccupied { path } => {
                 format!("{} holds files PlateVault didn't place", path.display())
             }
@@ -296,6 +288,11 @@ pub struct ApplyReport {
     pub foreign: Vec<ForeignItem>,
     /// What `View (previous)/` still holds for review.
     pub leftovers: Vec<PreviousItem>,
+    /// The files the user kept in `View (previous)/`, relative to the
+    /// Project folder, that were gone from disk when this Apply came to
+    /// move them to `View (kept)/`: named, never skipped (D-W110, D-W137),
+    /// each worded by the catalogues' `apply_report_kept_missing`.
+    pub kept_missing: Vec<NativePath>,
     /// "N corrected values written to patched copies" (PREP-FR-03, D-W122):
     /// the corrected fields of the held sessions, one per session and
     /// field, that the installed View's patched copies carry; 0 unless

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! Apply's file work (spec 069 PREP-FR-03/04/09/15/18, 071 STO-FR-10; D19,
-//! D-W81, D-W98, D-W100, D-W122): blocking, no catalog access.
+//! D-W81, D-W98, D-W100, D-W110, D-W122): blocking, no catalog access.
 //!
 //! Every entry is made from an original whose bytes were just snapshotted,
 //! never from an entry of the current or previous View: a symlink to the
@@ -15,7 +15,8 @@
 //! Old entries leave `View (previous)/` only once proven: a link that is
 //! still the one `PlateVault` placed and points at its original, a copy
 //! that still holds the bytes `PlateVault` placed while its original still
-//! holds them too. Everything else stays, named, for the user's review.
+//! holds them too. Everything else stays, named, for the user's review, and
+//! what the user kept moves on to `View (kept)/` at the next Apply.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -32,7 +33,7 @@ use crate::custody::rooted::{Folder, Unentered};
 use crate::custody::{
     observe_entry, observe_source, open_source, same_identity, transfer, verify_source,
 };
-use crate::layout::VIEW_PREVIOUS_FOLDER;
+use crate::layout::{self, VIEW_KEPT_FOLDER, VIEW_PREVIOUS_FOLDER};
 use crate::patched_copy::{self, HeaderPatch, PatchTarget};
 use crate::{
     EntryEvidence, EntryKind, EntryPlacement, FileIdentity, ForeignItem, ForeignItemState,
@@ -763,6 +764,131 @@ fn is_reviewed(path: &Path, reviewed: &EntryEvidence) -> bool {
 /// the verified copy a move made where the volume has no no-replace rename.
 fn holds_reviewed_bytes(path: &Path, reviewed: &EntryEvidence) -> bool {
     observe_entry(path).is_ok_and(|now| now.kind == reviewed.kind && now.sha256 == reviewed.sha256)
+}
+
+// ── Kept files ───────────────────────────────────────────────────────────────
+
+/// What moving `View (previous)/`'s files to `View (kept)/` did.
+#[derive(Debug, Default)]
+pub struct KeptMoves {
+    /// The files that left `View (previous)/`, relative to it.
+    pub moved: Vec<PathBuf>,
+    /// Files gone from `View (previous)/` before they could move (D-W137),
+    /// relative to it.
+    pub missing: Vec<PathBuf>,
+    /// The files that couldn't be moved, or whose new name in `View (kept)/`
+    /// doesn't hold what left, each with why.
+    pub failed: Vec<(PathBuf, ItemReason)>,
+    /// `View (previous)/` is gone now.
+    pub gone: bool,
+}
+
+/// Move every file `<project>/View (previous)/` holds, which by now the
+/// user has kept, to `<project>/View (kept)/` at the same path from inside
+/// the View (D-W110). A name `View (kept)/` already holds takes the next
+/// free number ([`layout::kept_name`]); nothing there is replaced or
+/// removed. Each move is proven: the entry at its new name is the one that
+/// left, with its kind and bytes. An emptied `View (previous)/` is removed.
+///
+/// # Errors
+/// When `View (previous)/` is a link or anything in it can't be read, what
+/// couldn't be, and nothing moves.
+pub fn move_kept(project: &Path) -> Result<KeptMoves, Unreadable> {
+    let previous = project.join(VIEW_PREVIOUS_FOLDER);
+    let mut moves = KeptMoves::default();
+    if !holds_nothing(&previous) {
+        let kept = project.join(VIEW_KEPT_FOLDER);
+        for relative in files_below(&previous)? {
+            let from = previous.join(&relative);
+            match move_one_kept(&from, &kept, &relative) {
+                Kept::Moved => moves.moved.push(relative),
+                Kept::Unproven(to, reason) => {
+                    moves.failed.push((to, reason));
+                    moves.moved.push(relative);
+                }
+                Kept::Missing => moves.missing.push(relative),
+                Kept::Failed(reason) => moves.failed.push((from, reason)),
+            }
+        }
+    }
+    if holds_nothing(&previous) {
+        remove_empty_folders(&previous);
+    }
+    moves.gone = fs::symlink_metadata(&previous).is_err();
+    Ok(moves)
+}
+
+/// How moving one kept file ended.
+enum Kept {
+    Moved,
+    /// Moved to this name, which doesn't hold the file that left.
+    Unproven(PathBuf, ItemReason),
+    Missing,
+    /// Still in `View (previous)/`.
+    Failed(ItemReason),
+}
+
+fn move_one_kept(from: &Path, kept: &Path, relative: &Path) -> Kept {
+    let gone = |path: &Path| {
+        fs::symlink_metadata(path).is_err_and(|error| error.kind() == io::ErrorKind::NotFound)
+    };
+    let before = match observe_entry(from) {
+        Ok(before) => before,
+        Err(_) if gone(from) => return Kept::Missing,
+        Err(error) => {
+            tracing::warn!(path = %from.display(), %error, "a kept file couldn't be read");
+            return Kept::Failed(reason(
+                ReasonCode::SourceUnavailable,
+                format!("{} couldn't be read", from.display()),
+            ));
+        }
+    };
+    let Some(name) = relative.file_name() else {
+        return Kept::Failed(reason(ReasonCode::SourceUnavailable, "a kept entry has no name"));
+    };
+    match fs::create_dir(kept) {
+        Ok(()) => {}
+        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
+        Err(error) => return Kept::Failed(failed(kept, &error)),
+    }
+    let folder = relative.parent().unwrap_or_else(|| Path::new(""));
+    let into = match transfer::ensure_folder(kept, folder) {
+        Ok(into) => into,
+        Err(reason) => return Kept::Failed(reason),
+    };
+    // An earlier kept file, or a copy an interruption left unfinished,
+    // keeps its name: the move takes the next free one and removes nothing.
+    let mut number = 1;
+    let (to, moved) = loop {
+        let to = into.join(layout::kept_name(name, number));
+        match transfer::move_noreplace(from, &to) {
+            Ok(moved) => break (to, moved),
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
+                let Some(next) = number.checked_add(1) else {
+                    return Kept::Failed(failed(&to, &error));
+                };
+                number = next;
+            }
+            Err(_) if gone(from) => return Kept::Missing,
+            Err(error) => return Kept::Failed(failed(&to, &error)),
+        }
+    };
+    let identity = match &moved {
+        transfer::Moved::Renamed => &before.fingerprint.identity,
+        #[cfg(unix)]
+        transfer::Moved::Copied(identity) => identity,
+    };
+    let proven = observe_entry(&to).is_ok_and(|now| {
+        same_identity(&now.fingerprint.identity, identity)
+            && now.kind == before.kind
+            && now.sha256 == before.sha256
+    });
+    if proven {
+        Kept::Moved
+    } else {
+        let detail = format!("{} isn't the kept file that moved there", to.display());
+        Kept::Unproven(to, reason(ReasonCode::DestinationMismatch, detail))
+    }
 }
 
 // ── The swap ─────────────────────────────────────────────────────────────────

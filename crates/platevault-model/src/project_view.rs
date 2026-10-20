@@ -639,9 +639,9 @@ impl PreviousItemReview {
 }
 
 /// One leftover of an Apply with its recorded review. The path is relative to
-/// the Project folder (`<Project>/`): today the file sits in
-/// `View (previous)/`, and where kept files go when the next outgoing View
-/// arrives is still open with the owner (decision record §9).
+/// the Project folder (`<Project>/`): the file sits in `View (previous)/`
+/// until the next Apply moves a kept one to `View (kept)/` at its path from
+/// inside the View (D-W110).
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]

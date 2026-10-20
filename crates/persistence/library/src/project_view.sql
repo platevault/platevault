@@ -272,8 +272,8 @@ CREATE TABLE IF NOT EXISTS apply_foreign_items (
 -- unticked files and links that failed the no-follow check, today in
 -- `View (previous)/`. Apply waits until the user has reviewed each (D-W110),
 -- and a kept file is not asked about again (decision record §9). Paths are
--- relative to the Project folder: where kept files go when the next outgoing
--- View arrives is still open with the owner.
+-- relative to the Project folder; the next Apply moves kept files on to
+-- `View (kept)/` and records them moved (D-W110).
 CREATE TABLE IF NOT EXISTS view_previous_items (
     project_id TEXT NOT NULL REFERENCES projects (id),
     path_key BLOB NOT NULL,

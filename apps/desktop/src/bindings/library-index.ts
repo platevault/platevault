@@ -1775,12 +1775,6 @@ export type ApplyBlocker =
 { blocker: "entry_name_refused"; path: NativePathWire; name: string } | 
 /**  `View (previous)/` holds leftovers the user hasn't reviewed (D-W110). */
 { blocker: "leftovers_pending"; count: number } | 
-/**
- *  `View (previous)/` still holds kept files. What the next outgoing View
- *  does with them is open with the owner (decision record §9), so Apply
- *  refuses until they are moved or trashed.
- */
-{ blocker: "previous_holds_kept_files"; paths: NativePathWire[] } | 
 /**  `View (building)/` holds files this Project's Apply didn't place. */
 { blocker: "building_occupied"; path: NativePathWire } | 
 /**
@@ -1895,6 +1889,13 @@ export type ApplyReport_Deserialize = {
 	/**  What `View (previous)/` still holds for review. */
 	leftovers: PreviousItem_Deserialize[],
 	/**
+	 *  The files the user kept in `View (previous)/`, relative to the
+	 *  Project folder, that were gone from disk when this Apply came to
+	 *  move them to `View (kept)/`: named, never skipped (D-W110, D-W137),
+	 *  each worded by the catalogues' `apply_report_kept_missing`.
+	 */
+	keptMissing: NativePathWire[],
+	/**
 	 *  "N corrected values written to patched copies" (PREP-FR-03, D-W122):
 	 *  the corrected fields of the held sessions, one per session and
 	 *  field, that the installed View's patched copies carry; 0 unless
@@ -1933,6 +1934,13 @@ export type ApplyReport_Serialize = {
 	foreign: ForeignItem_Serialize[],
 	/**  What `View (previous)/` still holds for review. */
 	leftovers: PreviousItem_Serialize[],
+	/**
+	 *  The files the user kept in `View (previous)/`, relative to the
+	 *  Project folder, that were gone from disk when this Apply came to
+	 *  move them to `View (kept)/`: named, never skipped (D-W110, D-W137),
+	 *  each worded by the catalogues' `apply_report_kept_missing`.
+	 */
+	keptMissing: NativePathWire[],
 	/**
 	 *  "N corrected values written to patched copies" (PREP-FR-03, D-W122):
 	 *  the corrected fields of the held sessions, one per session and
@@ -5433,9 +5441,9 @@ export type PreviewTile = {
 
 /**
  *  One leftover of an Apply with its recorded review. The path is relative to
- *  the Project folder (`<Project>/`): today the file sits in
- *  `View (previous)/`, and where kept files go when the next outgoing View
- *  arrives is still open with the owner (decision record §9).
+ *  the Project folder (`<Project>/`): the file sits in `View (previous)/`
+ *  until the next Apply moves a kept one to `View (kept)/` at its path from
+ *  inside the View (D-W110).
  */
 export type PreviousItem = PreviousItem_Serialize | PreviousItem_Deserialize;
 
@@ -5467,9 +5475,9 @@ export type PreviousItemReview = "pending" | "kept" | "moved" | "trashed";
 
 /**
  *  One leftover of an Apply with its recorded review. The path is relative to
- *  the Project folder (`<Project>/`): today the file sits in
- *  `View (previous)/`, and where kept files go when the next outgoing View
- *  arrives is still open with the owner (decision record §9).
+ *  the Project folder (`<Project>/`): the file sits in `View (previous)/`
+ *  until the next Apply moves a kept one to `View (kept)/` at its path from
+ *  inside the View (D-W110).
  */
 export type PreviousItem_Deserialize = {
 	path: NativePathWire,
@@ -5480,9 +5488,9 @@ export type PreviousItem_Deserialize = {
 
 /**
  *  One leftover of an Apply with its recorded review. The path is relative to
- *  the Project folder (`<Project>/`): today the file sits in
- *  `View (previous)/`, and where kept files go when the next outgoing View
- *  arrives is still open with the owner (decision record §9).
+ *  the Project folder (`<Project>/`): the file sits in `View (previous)/`
+ *  until the next Apply moves a kept one to `View (kept)/` at its path from
+ *  inside the View (D-W110).
  */
 export type PreviousItem_Serialize = {
 	path: NativePathWire,

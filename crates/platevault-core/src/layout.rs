@@ -7,10 +7,13 @@
 //! The Project folder is `<Processing location>/<Project>/` with `View/`,
 //! `Processing/<Tool>/` and `Output/`. Apply builds `View (building)/` beside
 //! `View/` and keeps the replaced View as `View (previous)/` until it is
-//! empty. Folder tokens keep only what WBPP reads in a keyword value, and
+//! empty; the next Apply moves the files the user kept there to
+//! `View (kept)/` at their paths from inside the View (D-W110). Folder
+//! tokens keep only what WBPP reads in a keyword value, and
 //! every generated folder and entry name fits one path component of the
 //! platform, shortened with a deterministic suffix when it would not.
 
+use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 
 use sha2::{Digest, Sha256};
@@ -25,6 +28,9 @@ pub const VIEW_FOLDER: &str = "View";
 pub const VIEW_BUILDING_FOLDER: &str = "View (building)";
 /// The View an Apply replaced, until everything it holds is retired.
 pub const VIEW_PREVIOUS_FOLDER: &str = "View (previous)";
+/// The files the user kept from a replaced View (D-W110), each at its path
+/// from inside the View.
+pub const VIEW_KEPT_FOLDER: &str = "View (kept)";
 /// Each tool's working and output folder, `Processing/<Tool>/`.
 pub const PROCESSING_FOLDER: &str = "Processing";
 /// The Project's Results; tools never write here.
@@ -42,6 +48,24 @@ pub fn component_len(name: &str) -> usize {
     } else {
         name.len()
     }
+}
+
+/// The `number`-th name a kept file tries in `View (kept)/` (D-W110): its
+/// own name first, then `-2`, `-3` … before its extension, so
+/// `notes.txt` becomes `notes-2.txt`.
+#[must_use]
+pub fn kept_name(name: &OsStr, number: u32) -> OsString {
+    if number <= 1 {
+        return name.to_owned();
+    }
+    let path = Path::new(name);
+    let mut numbered = path.file_stem().unwrap_or(name).to_owned();
+    numbered.push(format!("-{number}"));
+    if let Some(extension) = path.extension() {
+        numbered.push(".");
+        numbered.push(extension);
+    }
+    numbered
 }
 
 /// `<parent>/<Project>/`, the Project folder Apply, Copy to Output and Wrap
@@ -233,4 +257,20 @@ pub fn segment(label: &str, raw: &str) -> Result<String, LibraryError> {
 #[must_use]
 pub fn inside(path: &Path, folder: &Path) -> bool {
     path.starts_with(folder)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_kept_name_is_numbered_before_its_extension_from_two_on() {
+        let named = |name: &str, number| kept_name(OsStr::new(name), number);
+        assert_eq!(named("notes.txt", 1), "notes.txt");
+        assert_eq!(named("notes.txt", 2), "notes-2.txt");
+        assert_eq!(named("notes.txt", 3), "notes-3.txt");
+        assert_eq!(named("Light_001.Info.txt", 2), "Light_001.Info-2.txt");
+        assert_eq!(named("README", 2), "README-2");
+        assert_eq!(named(".DS_Store", 2), ".DS_Store-2");
+    }
 }

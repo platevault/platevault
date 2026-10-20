@@ -317,18 +317,10 @@ async fn the_swap_retires_verified_copies_and_keeps_changed_unknown_and_unverifi
             .await
             .unwrap();
     }
-    // A kept file is never asked about again, but while it sits in
-    // View (previous)/ the next Apply refuses (open with the owner).
+    // A kept file is never asked about again, and the next Apply doesn't
+    // wait for it (D-W110).
     let kept = world.preview().await;
-    assert!(
-        kept.blockers.iter().any(|blocker| matches!(blocker, ApplyBlocker::PreviousHoldsKeptFiles { paths } if paths.len() == 1)),
-        "{:#?}",
-        kept.blockers
-    );
-    assert!(!kept
-        .blockers
-        .iter()
-        .any(|blocker| matches!(blocker, ApplyBlocker::LeftoversPending { .. })));
+    assert!(kept.blockers.is_empty(), "{:#?}", kept.blockers);
     world
         .library
         .review_view_leftover(
@@ -343,6 +335,113 @@ async fn the_swap_retires_verified_copies_and_keeps_changed_unknown_and_unverifi
     assert!(!world.previous().exists(), "an empty View (previous)/ is removed");
     let report = world.apply().await;
     assert_eq!(report.outcome, Some(ApplyOutcome::Applied), "{report:#?}");
+}
+
+const HA_DIR: &str = "NIGHT_2026-10-12/Lights/Ha_300s/";
+
+/// The user saves `files` in `View/`, leaves them unticked at the next
+/// Apply and keeps each in `View (previous)/` (D-W110).
+async fn keep(world: &World, files: &[(&str, &[u8])]) {
+    for (relative, bytes) in files {
+        let path = world.view().join(relative);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, bytes).unwrap();
+    }
+    world.bump().await;
+    let report = world.apply().await;
+    assert_eq!(report.outcome, Some(ApplyOutcome::Applied), "{report:#?}");
+    assert_eq!(report.leftovers.len(), files.len(), "{:#?}", report.leftovers);
+    let trash = FolderTrash(world.temp.path().join("Trash"));
+    for (relative, _) in files {
+        let path = NativePath::from_path(&Path::new("View (previous)").join(relative));
+        world
+            .library
+            .review_view_leftover(world.project, path, PreviousItemReview::Kept, &trash)
+            .await
+            .unwrap();
+    }
+}
+
+fn kept_folder(world: &World) -> PathBuf {
+    world.folder().join("View (kept)")
+}
+
+#[tokio::test]
+async fn the_next_apply_moves_a_kept_file_to_view_kept_at_its_view_path() {
+    let world = world(ViewMode::Copies).await;
+    world.apply().await;
+    let note = format!("{HA_DIR}notes.txt");
+    keep(&world, &[(&note, b"my notes")]).await;
+    let inode = fs::symlink_metadata(world.previous().join(&note)).unwrap().ino();
+
+    // Apply doesn't wait for a file already kept.
+    world.bump().await;
+    let preview = world.preview().await;
+    assert!(preview.blockers.is_empty(), "{:#?}", preview.blockers);
+    let report = world.library.apply(&World::request(&preview), &Unattended).await.unwrap();
+    assert_eq!(report.outcome, Some(ApplyOutcome::Applied), "{report:#?}");
+    assert!(report.kept_missing.is_empty(), "{:#?}", report.kept_missing);
+
+    let moved = kept_folder(&world).join(&note);
+    assert_eq!(fs::read(&moved).unwrap(), b"my notes");
+    assert_eq!(fs::symlink_metadata(&moved).unwrap().ino(), inode, "moved, never copied");
+    assert!(!world.previous().exists(), "{:?}", World::tree(&world.previous()));
+    // A later sheet doesn't list it, and a later Apply leaves it alone.
+    world.bump().await;
+    let later = world.preview().await;
+    assert!(later.leftovers.is_empty(), "{:#?}", later.leftovers);
+    assert_eq!(world.apply().await.outcome, Some(ApplyOutcome::Applied));
+    assert_eq!(fs::read(&moved).unwrap(), b"my notes");
+}
+
+#[tokio::test]
+async fn a_kept_file_whose_name_view_kept_holds_takes_the_next_free_number() {
+    let world = world(ViewMode::Copies).await;
+    world.apply().await;
+    let note = format!("{HA_DIR}notes.txt");
+    for bytes in [b"first" as &[u8], b"second", b"third"] {
+        keep(&world, &[(&note, bytes)]).await;
+        world.bump().await;
+        let report = world.apply().await;
+        assert_eq!(report.outcome, Some(ApplyOutcome::Applied), "{report:#?}");
+    }
+    let kept = kept_folder(&world).join(HA_DIR);
+    assert_eq!(fs::read(kept.join("notes.txt")).unwrap(), b"first");
+    assert_eq!(fs::read(kept.join("notes-2.txt")).unwrap(), b"second");
+    assert_eq!(fs::read(kept.join("notes-3.txt")).unwrap(), b"third");
+    assert_eq!(World::tree(&kept).len(), 3);
+}
+
+#[tokio::test]
+async fn a_kept_file_gone_from_disk_is_named_in_the_apply_outcome() {
+    let world = world(ViewMode::Copies).await;
+    world.apply().await;
+    let (gone, stays) = (format!("{HA_DIR}notes.txt"), format!("{HA_DIR}todo.txt"));
+    keep(&world, &[(&gone, b"my notes"), (&stays, b"my todo")]).await;
+    fs::remove_file(world.previous().join(&gone)).unwrap();
+    world.bump().await;
+    let report = world.apply().await;
+    assert_eq!(report.outcome, Some(ApplyOutcome::Applied), "{report:#?}");
+    let named = NativePath::from_path(&Path::new("View (previous)").join(&gone));
+    assert_eq!(report.kept_missing, vec![named]);
+    assert_eq!(fs::read(kept_folder(&world).join(&stays)).unwrap(), b"my todo");
+
+    // The only kept file gone: View (previous)/ then holds nothing at all.
+    let last = format!("{HA_DIR}last.txt");
+    keep(&world, &[(&last, b"last")]).await;
+    fs::remove_file(world.previous().join(&last)).unwrap();
+    world.bump().await;
+    let report = world.apply().await;
+    assert_eq!(report.outcome, Some(ApplyOutcome::Applied), "{report:#?}");
+    let named = NativePath::from_path(&Path::new("View (previous)").join(&last));
+    assert_eq!(report.kept_missing, vec![named]);
+
+    // Named once: the next sheet and Apply no longer hold it.
+    world.bump().await;
+    let leftovers = world.preview().await.leftovers;
+    assert!(leftovers.is_empty(), "{leftovers:#?}");
+    let report = world.apply().await;
+    assert!(report.kept_missing.is_empty(), "{report:#?}");
 }
 
 #[tokio::test]
