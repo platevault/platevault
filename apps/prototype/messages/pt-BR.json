@@ -6073,6 +6073,7 @@
   "project_change_source_calibration": "Calibração",
   "project_change_source_library": "Biblioteca",
   "project_change_source_project": "Projeto",
+  "project_change_successor_removed": "Removida: {session} ({frames}), dividida de novo a partir de {from}",
   "project_copy_to_output": "Copiar para Output",
   "project_discard": "Descartar",
   "project_discard_own": [

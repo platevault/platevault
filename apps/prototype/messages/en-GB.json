@@ -5665,6 +5665,7 @@
   "project_change_source_calibration": "Calibration",
   "project_change_source_library": "Library",
   "project_change_source_project": "Project",
+  "project_change_successor_removed": "Removed {session} ({frames}), re-split from {from}",
   "project_copy_to_output": "Copy to Output",
   "project_discard": "Discard",
   "project_discard_own": [

@@ -54,7 +54,7 @@ import { fakeSha256, fileAt, filesUnder, freeBytes, makeFile, trashRefusal, volu
 import { deniedAncestor, isUnder, sameFraming, sessionFraming, sessionRigVersion, stableHash } from "./indexing"
 import { WRAP_UP_NAME, WRAP_UP_STEPS } from "./labels"
 import { assetAvailability, preferredCopy } from "./library"
-import { frameOut, framesRef, sessionExposureS, sessionLongRef } from "./membership"
+import { frameOut, framesRef, sessionExposureS, sessionLongRef, successorInput } from "./membership"
 import { bestWindowTonight, defaultCriteria } from "./planning"
 import { keptCopy, type TrashBlock, trashBlock, type TrashItem, viewLinks } from "./storage"
 import type {
@@ -731,7 +731,7 @@ interface ChangeBase {
 export type PendingChange = ChangeBase &
   (
     | { kind: "session-added"; sessionId: SessionId; groupId: ProjectGroupId }
-    | { kind: "session-removed"; sessionId: SessionId }
+    | { kind: "session-removed"; sessionId: SessionId; /** The applied session it re-split from (LIB-FR-12), or null for an applied session. */ from: SessionId | null }
     | { kind: "session-resplit"; sessionId: SessionId; from: SessionId; groupId: ProjectGroupId }
     | { kind: "session-moved"; sessionId: SessionId; from: ProjectGroupId; to: ProjectGroupId }
     | { kind: "frames-excluded" | "frames-included" | "frames-rejected" | "frames-restored"; sessionId: SessionId; assetIds: AssetId[] }
@@ -783,6 +783,21 @@ function appliedPredecessor(catalog: Catalog, sessionId: SessionId, applied: Rea
   return null
 }
 
+/** The live sessions an applied session re-split into (LIB-FR-12), through every later re-split; empty when it was never superseded. */
+function liveSuccessors(catalog: Catalog, sessionId: SessionId): Session[] {
+  if (!catalog.sessions[sessionId]?.supersededBy) return []
+  const out: Session[] = []
+  const queue = [sessionId]
+  for (const id of queue) {
+    for (const session of Object.values(catalog.sessions)) {
+      if (!session.previousSessionIds.includes(id)) continue
+      if (session.supersededBy) queue.push(session.id)
+      else out.push(session)
+    }
+  }
+  return out
+}
+
 /**
  * Every difference between the desired state and the applied View, with its
  * source (VSEL-FR-12). Empty before the first Apply (it builds the View
@@ -793,7 +808,9 @@ function appliedPredecessor(catalog: Catalog, sessionId: SessionId, applied: Rea
  * bytes changed after review keeps its decision (ChangedContent, LIB-FR-09):
  * no review set it back, so it is no change here. A regrouping correction
  * that re-split a held session is the Library's change once per successor
- * the Project now holds, not an addition and a removal (LIB-FR-12, D-W100).
+ * the Project now holds, not an addition and a removal (LIB-FR-12, D-W100);
+ * each successor it no longer holds is the Project's removal, named with
+ * its frames, so no frame leaves silently (owner's answer, 2026-10-19).
  */
 export function pendingChanges(world: Pick<World, "catalog" | "disk">, project: Project): PendingChange[] {
   const view = project.view
@@ -881,9 +898,26 @@ export function pendingChanges(world: Pick<World, "catalog" | "disk">, project: 
       }
     }
   }
-  const resplitFrom = new Set(out.flatMap((c) => (c.kind === "session-resplit" ? [c.from] : [])))
-  for (const sessionId of applied.keys()) {
-    if (!desired.has(sessionId) && !resplitFrom.has(sessionId)) out.push({ id: `remove|${sessionId}`, kind: "session-removed", sessionId, source: "project", label: msg("project_change_session_removed", { session: sessionLabel(catalog, sessionId) }), link: null })
+  for (const [sessionId, input] of applied) {
+    if (desired.has(sessionId)) continue
+    const successors = liveSuccessors(catalog, sessionId)
+    if (successors.length === 0) {
+      out.push({ id: `remove|${sessionId}`, kind: "session-removed", sessionId, from: null, source: "project", label: msg("project_change_session_removed", { session: sessionLabel(catalog, sessionId) }), link: null })
+      continue
+    }
+    for (const successor of successors) {
+      if (desired.has(successor.id)) continue
+      const frames = inFrames(catalog, successorInput(input, successor)).size
+      out.push({
+        id: `remove|${successor.id}`,
+        kind: "session-removed",
+        sessionId: successor.id,
+        from: sessionId,
+        source: "project",
+        label: msg("project_change_successor_removed", { session: sessionLabel(catalog, successor.id), from: sessionLabel(catalog, sessionId), frames: framesRef(frames) }),
+        link: null,
+      })
+    }
   }
   for (const group of project.groups) {
     const before = view.groups.find((g) => g.id === group.id)

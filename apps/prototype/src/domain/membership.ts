@@ -51,6 +51,12 @@ export function frameOut(catalog: Catalog, input: Pick<ProjectInput, "excluded" 
   return null
 }
 
+/** A held session's input carried onto a successor it re-split into (LIB-FR-12): the same group, with the Project's choices on the successor's frames. */
+export function successorInput(input: ProjectInput, successor: Pick<Session, "id" | "assetIds">): ProjectInput {
+  const own = (id: AssetId) => successor.assetIds.includes(id)
+  return { ...input, sessionId: successor.id, excluded: input.excluded.filter(own), included: input.included.filter(own) }
+}
+
 export function inputFrames(disk: Disk, catalog: Catalog, input: Pick<ProjectInput, "sessionId" | "excluded" | "included">): InputFrames {
   const out: InputFrames = { included: [], unresolved: [], excluded: [], rejected: [], trashed: [] }
   for (const id of catalog.sessions[input.sessionId]?.assetIds ?? []) {

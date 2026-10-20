@@ -50,7 +50,8 @@ import {
   unreviewedLeftovers,
   viewDrift,
 } from "@/domain/project-view"
-import type { DiskFile, InputMode, Operation, OperationId, OutputKind, PreviousLeftover, Project, ProjectId, ViewEntry, ViewLayout, VolumeId } from "@/domain/types"
+import { successorInput } from "@/domain/membership"
+import type { Catalog, DiskFile, InputMode, Operation, OperationId, OutputKind, PreviousLeftover, Project, ProjectId, ViewEntry, ViewLayout, VolumeId } from "@/domain/types"
 import { fileName } from "@/lib/format"
 import { joinRefs, type MessageRef, msg, verbatim } from "@/lib/i18n"
 import { type CommitResult, commit, nowIso, type PrototypeState, store, withCatalog } from "@/store/core"
@@ -329,16 +330,22 @@ const applyHandler: OperationHandler = {
 // Pending changes (VSEL-FR-12, D-W109)
 // ---------------------------------------------------------------------------
 
-/** Project with one of its own pending edits undone against the applied View. */
-function undo(project: Project, change: PendingChange): Project {
+/**
+ * Project with one of its own pending edits undone against the applied View.
+ * A removed successor of a re-split applied session comes back as the
+ * re-split left it: the applied input carried onto its frames (LIB-FR-12).
+ */
+function undo(catalog: Catalog, project: Project, change: PendingChange): Project {
   const view = project.view!
   const applied = (sessionId: string) => view.inputs.find((i) => i.sessionId === sessionId)
   switch (change.kind) {
     case "session-added":
       return { ...project, inputs: project.inputs.filter((i) => i.sessionId !== change.sessionId) }
     case "session-removed": {
-      const input = applied(change.sessionId)
-      return input ? { ...project, inputs: [...project.inputs, structuredClone(input)] } : project
+      const input = applied(change.from ?? change.sessionId)
+      const successor = catalog.sessions[change.sessionId]
+      const restored = change.from ? input && successor && successorInput(input, successor) : input
+      return restored ? { ...project, inputs: [...project.inputs, structuredClone(restored)] } : project
     }
     case "session-moved":
       return { ...project, inputs: project.inputs.map((i) => (i.sessionId === change.sessionId ? { ...i, groupId: change.from } : i)) }
@@ -380,7 +387,7 @@ export function discardChanges(projectId: ProjectId, changeIds: string[] | "all"
   const own = changes.filter(isDiscardable)
   if (own.length === 0) return { ok: true }
   return editProject(projectId, label, project.revision, (p) => {
-    const undone = own.reduce(undo, p)
+    const undone = own.reduce((next, change) => undo(state.catalog, next, change), p)
     const applied = new Set(p.view?.groups.map((g) => g.id) ?? [])
     const used = new Set(undone.inputs.map((i) => i.groupId))
     return { ...undone, groups: undone.groups.filter((g) => applied.has(g.id) || used.has(g.id)) }

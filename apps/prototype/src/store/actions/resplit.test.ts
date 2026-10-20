@@ -5,15 +5,17 @@
  */
 import { beforeAll, beforeEach, describe, expect, it } from "vitest"
 import { sessionIntakeLink, sessionIntakeState, sessionReadiness } from "@/domain/derive"
-import { frameOut } from "@/domain/membership"
+import { frameOut, framesRef, sessionLongRef } from "@/domain/membership"
 import { applyPlan, pendingChanges } from "@/domain/project-view"
 import { createSeed } from "@/domain/seed"
-import type { AssetId, Project, Session, SessionId } from "@/domain/types"
+import type { AssetId, Project, ProjectInput, Session, SessionId } from "@/domain/types"
+import { msg } from "@/lib/i18n"
 import { type PrototypeState, SCHEMA_VERSION, store } from "@/store/core"
 import { isSettled, registerOperationHandlers } from "@/store/operations"
 import { initialSliceStates, sliceVersions } from "@/store/slices"
 import { confirmMetadata, editSessionDetails, finishReview } from "./library"
-import { PROJECT_VIEW_HANDLERS, startApply } from "./project-view"
+import { discardChanges, PROJECT_VIEW_HANDLERS, startApply } from "./project-view"
+import { removeSessions } from "./projects"
 
 const CYGNUS = "prj_cygnus"
 const OIII = "prj_ngc_oiii"
@@ -34,6 +36,9 @@ const successorsOf = (id: SessionId): Session[] => Object.values(catalog().sessi
 const byCapture = (session: Session): AssetId[] => [...session.assetIds].sort((a, b) => catalog().assets[a]!.observed.dateObs.localeCompare(catalog().assets[b]!.observed.dateObs))
 const notReady = (id: string) => applyPlan(store.getState(), project(id)).refusals.filter((r) => r.kind === "not-ready")
 const resplits = (id: string) => pendingChanges(store.getState(), project(id)).filter((c) => c.kind === "session-resplit")
+const removals = (id: string) => pendingChanges(store.getState(), project(id)).filter((c) => c.kind === "session-removed")
+const framesIn = (input: ProjectInput) => catalog().sessions[input.sessionId]!.assetIds.filter((id) => frameOut(catalog(), input, id) === null)
+const placedFrames = (id: string) => new Set(project(id).view!.entries.flatMap((e) => (e.role === "light" && e.source.type === "asset" ? [e.source.assetId] : [])))
 
 /** A Ready session Cygnus holds with at least three frames, held also by a second open Project (a copy of Cygnus with its View). */
 function heldTwice(): { session: Session; open: string[] } {
@@ -157,5 +162,56 @@ describe("a regrouping correction re-splits a held session (LIB-FR-12, D-W100)",
     store.setState((s) => ({ ...s, catalog: { ...s.catalog, assets: { ...s.catalog.assets, [frame]: { ...s.catalog.assets[frame]!, quality: { value: "unreviewed", decidedAt: null, basisSha256: null } } } } }))
     expect(finishReview(successor!.id, successor!.revision)).toMatchObject({ ok: false, reason: "refused" })
     expect(catalog().sessions[successor!.id]!.reviewReset).toBe(true)
+  })
+
+  it("lists removing a successor before Apply as the Project's pending change naming it and its frames; Discard restores it, and Apply holds only what was kept", () => {
+    const { session } = heldTwice()
+    expect(correctExposure(session, byCapture(session).slice(-2)).ok).toBe(true)
+    const [kept, removed] = successorsOf(session.id)
+    const held = project(CYGNUS).inputs.find((i) => i.sessionId === removed!.id)!
+    expect(framesIn(held).length).toBeGreaterThan(0)
+
+    expect(removeSessions(CYGNUS, [removed!.id]).ok).toBe(true)
+    // No frame silently leaves (owner's answer, 2026-10-19): the removal is the Project's own, named with its frames.
+    expect(removals(CYGNUS)).toEqual([
+      expect.objectContaining({
+        kind: "session-removed",
+        sessionId: removed!.id,
+        source: "project",
+        label: msg("project_change_successor_removed", { session: sessionLongRef(removed!), from: sessionLongRef(catalog().sessions[session.id]!), frames: framesRef(framesIn(held).length) }),
+      }),
+    ])
+    expect(resplits(CYGNUS).map((c) => c.sessionId)).toEqual([kept!.id])
+
+    // Discard (D-W109) restores the successor as the re-split left it.
+    expect(discardChanges(CYGNUS, removals(CYGNUS).map((c) => c.id)).ok).toBe(true)
+    expect(project(CYGNUS).inputs.find((i) => i.sessionId === removed!.id)).toEqual(held)
+    expect(removals(CYGNUS)).toEqual([])
+    expect(resplits(CYGNUS)).toHaveLength(2)
+
+    expect(removeSessions(CYGNUS, [removed!.id]).ok).toBe(true)
+    expect(finishReview(kept!.id, catalog().sessions[kept!.id]!.revision).ok).toBe(true)
+    runApply(CYGNUS)
+    expect(project(CYGNUS).view!.inputs.map((i) => i.sessionId)).toEqual(expect.arrayContaining([kept!.id]))
+    expect(project(CYGNUS).view!.inputs.some((i) => i.sessionId === removed!.id || i.sessionId === session.id)).toBe(false)
+    const placed = placedFrames(CYGNUS)
+    for (const id of framesIn(project(CYGNUS).inputs.find((i) => i.sessionId === kept!.id)!)) expect(placed.has(id)).toBe(true)
+    for (const id of removed!.assetIds) expect(placed.has(id)).toBe(false)
+    expect(pendingChanges(store.getState(), project(CYGNUS))).toEqual([])
+  })
+
+  it("lists each successor, never the superseded session, when every successor is removed; Discard restores the successors", () => {
+    const { session } = heldTwice()
+    expect(correctExposure(session, byCapture(session).slice(-2)).ok).toBe(true)
+    const successors = successorsOf(session.id)
+    const held = project(CYGNUS).inputs.filter((i) => successors.some((s) => s.id === i.sessionId))
+    expect(removeSessions(CYGNUS, successors.map((s) => s.id)).ok).toBe(true)
+    expect(removals(CYGNUS).map((c) => c.sessionId).sort()).toEqual(successors.map((s) => s.id).sort())
+
+    expect(discardChanges(CYGNUS, "all").ok).toBe(true)
+    expect(project(CYGNUS).inputs.some((i) => i.sessionId === session.id)).toBe(false)
+    expect(project(CYGNUS).inputs.filter((i) => successors.some((s) => s.id === i.sessionId))).toEqual(expect.arrayContaining(held))
+    expect(removals(CYGNUS)).toEqual([])
+    expect(resplits(CYGNUS)).toHaveLength(2)
   })
 })

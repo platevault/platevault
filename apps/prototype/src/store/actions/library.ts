@@ -16,7 +16,7 @@ import { isLocked, isTrashedSession, liveAssetIds, sessionNamingValues, unreview
 import { fileKey, removeFile, writeFiles } from "@/domain/disk"
 import { capturedRigVersionId, confirmedEvidence, isUnder, type RegroupField, resplitSession } from "@/domain/indexing"
 import { type CatalogueEntry, entryKeys, targetFromEntry } from "@/domain/sky"
-import { sessionDefaultRef, sessionRef } from "@/domain/membership"
+import { sessionDefaultRef, sessionRef, successorInput } from "@/domain/membership"
 import { namingTemplate, type NamingValues, resolveNamingTemplate } from "@/domain/templates"
 import type { Asset, AssetCopy, AssetId, Catalog, CatalogCorrection, IsoDateTime, Location, OpticalTrainId, QualityValue, Session, SessionId, Target, TargetId } from "@/domain/types"
 import { type MessageRef, msg, verbatim } from "@/lib/i18n"
@@ -298,7 +298,7 @@ export function confirmMetadata(sessionId: SessionId, assetIds: AssetId[], field
           if (isLocked(project) || !project.inputs.some((i) => i.sessionId === sessionId)) continue
           const inputs = project.inputs.flatMap((input) =>
             input.sessionId === sessionId
-              ? successors.map((successor) => ({ ...input, sessionId: successor.id, excluded: input.excluded.filter((id) => successor.assetIds.includes(id)), included: input.included.filter((id) => successor.assetIds.includes(id)) }))
+              ? successors.map((successor) => successorInput(input, successor))
               : [input],
           )
           next.projects[project.id] = { ...project, inputs }
