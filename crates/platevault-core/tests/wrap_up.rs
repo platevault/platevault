@@ -16,6 +16,7 @@ mod apply_support;
 mod cleanup_support;
 
 use std::fs;
+use std::io::Write as _;
 use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -477,4 +478,169 @@ async fn archive_refuses_a_session_another_open_project_holds() {
         .items
         .iter()
         .all(|item| item.destination.as_ref().is_some_and(|destination| destination.root == root)));
+}
+
+/// Put a new, empty folder at `root`'s path, the old one moved beside it:
+/// what a remount or a replaced folder leaves at a registered path.
+fn replace_folder(root: &Path) {
+    fs::rename(root, root.with_file_name("Archive-T7 (old)")).unwrap();
+    fs::create_dir(root).unwrap();
+}
+
+/// Close with Archive of every reviewed session to `archive`.
+async fn close_all(world: &World, archive: &Location, review: &ArchiveReview) -> CloseRequest {
+    CloseRequest {
+        project_id: world.project,
+        desired_revision: revision(world).await,
+        archive: Some(ArchiveSelection {
+            destination: archive.id,
+            sessions: review.sessions.iter().map(|offer| offer.session_id).collect(),
+            digest: review.digest.clone(),
+        }),
+    }
+}
+
+/// Whether the catalog still records `asset` at the captures location.
+async fn catalogued_at_source(world: &World, asset: Uuid) -> bool {
+    let assets = world.catalog().location_assets(world.captures.id).await.unwrap();
+    assets.iter().any(|record| record.id == asset)
+}
+
+/// Every kept-View link of the review still reads a captures original.
+fn links_read_originals(world: &World, review: &ArchiveReview) {
+    let captures = world.captures.path.to_path_buf().unwrap();
+    for link in &review.links {
+        let path = link.link.to_path_buf().unwrap();
+        let target = fs::read_link(&path).unwrap();
+        assert!(target.starts_with(&captures), "{} reads {}", path.display(), target.display());
+    }
+}
+
+/// STO-FR-06/07 (C5): a folder replaced at the destination's path is not
+/// the registered location. Close refuses the reviewed archive before
+/// anything is written, and a fresh review holds every session on it.
+#[tokio::test]
+async fn archive_refuses_a_destination_folder_replaced_at_its_path() {
+    let world = world(ViewMode::Symlinks).await;
+    world.apply().await;
+    let (archive, archive_root) = archive_location(&world).await;
+    let trash = bin(&world);
+    skip_to_archive(&world, &trash).await;
+    let review = world.library.wrap_up_archive_review(world.project, archive.id).await.unwrap();
+    assert!(review.sessions.iter().all(|offer| offer.hold.is_none()), "{review:#?}");
+    replace_folder(&archive_root);
+
+    let request = close_all(&world, &archive, &review).await;
+    let refused =
+        world.library.close_project(&request, trash.dyn_trash(), &Unattended).await.unwrap_err();
+    assert!(matches!(refused, LibraryError::Conflict { .. }), "{refused}");
+    assert_eq!(World::tree(&archive_root), Vec::<String>::new(), "nothing is written");
+    let status = world.library.wrap_up_status(world.project).await.unwrap();
+    assert_eq!(status.lifecycle, ProjectLifecycle::Open);
+    assert!(world.light(HA[0]).exists() && world.light(OIII[0]).exists(), "nothing moved");
+    links_read_originals(&world, &review);
+
+    let again = world.library.wrap_up_archive_review(world.project, archive.id).await.unwrap();
+    assert!(
+        again.sessions.iter().all(|offer| offer
+            .hold
+            .as_ref()
+            .is_some_and(|hold| hold.code == ReasonCode::DestinationChanged)),
+        "{again:#?}"
+    );
+}
+
+/// STO-FR-06/07 (C5): the destination root is checked again before each
+/// write. A folder replaced while Close was stopped receives nothing: every
+/// file is Blocked with its source catalogued and its links unchanged, and
+/// the Project closes without an archive.
+#[tokio::test]
+async fn a_resumed_archive_writes_nothing_into_a_replaced_destination_folder() {
+    let mut world = world(ViewMode::Symlinks).await;
+    world.apply().await;
+    let (archive, archive_root) = archive_location(&world).await;
+    let trash = bin(&world);
+    skip_to_archive(&world, &trash).await;
+    let review = world.library.wrap_up_archive_review(world.project, archive.id).await.unwrap();
+    let request = close_all(&world, &archive, &review).await;
+    let stop = StopAfter(AtomicUsize::new(1));
+    let report = world.library.close_project(&request, trash.dyn_trash(), &stop).await.unwrap();
+    assert_eq!(report.lifecycle, ProjectLifecycle::Closing, "{report:#?}");
+    assert_eq!(World::tree(&archive_root), Vec::<String>::new(), "stopped before any write");
+    replace_folder(&archive_root);
+
+    world.reopen().await;
+    let settled = world.library.recover_wrap_up(trash.dyn_trash()).await.unwrap();
+    let [progress] = settled.as_slice() else { panic!("{settled:#?}") };
+    assert!(progress.settled, "{progress:#?}");
+    for step in &progress.moves {
+        assert_eq!(step.outcome, Some(ArchiveMoveOutcome::Blocked), "{step:#?}");
+        assert_eq!(
+            step.reason.as_ref().map(|reason| reason.code),
+            Some(ReasonCode::DestinationChanged)
+        );
+        assert!(!step.repointed);
+        assert!(catalogued_at_source(&world, step.file.asset_id).await, "{step:#?}");
+    }
+    assert_eq!(World::tree(&archive_root), Vec::<String>::new(), "nothing is written");
+    let status = world.library.wrap_up_status(world.project).await.unwrap();
+    assert_eq!(status.lifecycle, ProjectLifecycle::Closed);
+    assert!(world.light(HA[0]).exists() && world.light(OIII[0]).exists(), "originals stay");
+    assert_eq!(trash.moved(), Vec::<std::path::PathBuf>::new());
+    links_read_originals(&world, &review);
+}
+
+/// STO-FR-06/07 (C6): the archive copy is hashed again through a handle
+/// proven to be it before its record or any kept-View link moves. A copy
+/// changed in place after its verification is refused: the original stays
+/// catalogued and at its path, and every link still reads it.
+#[tokio::test]
+async fn a_copy_changed_after_its_verification_moves_no_record_or_link() {
+    let mut world = world(ViewMode::Symlinks).await;
+    world.apply().await;
+    let (archive, _) = archive_location(&world).await;
+    let trash = bin(&world);
+    skip_to_archive(&world, &trash).await;
+    let review = world.library.wrap_up_archive_review(world.project, archive.id).await.unwrap();
+    let request = close_all(&world, &archive, &review).await;
+    // Stops with the first file installed, before its verification.
+    let installed = StopAfter(AtomicUsize::new(3));
+    let report =
+        world.library.close_project(&request, trash.dyn_trash(), &installed).await.unwrap();
+    let progress = report.archive.unwrap();
+    let first = progress.moves[0].clone();
+    let operation = world
+        .library
+        .step_storage_operation(progress.storage_operation_id, trash.dyn_trash())
+        .await
+        .unwrap();
+    let item = operation.items.iter().find(|item| item.seq == first.seq).unwrap();
+    assert_eq!(item.phase, ItemPhase::DestinationVerified, "{item:#?}");
+    // The verified copy is rewritten in place: same file, same size.
+    let copy = first.file.to.to_path_buf().unwrap();
+    let mut bytes = fs::read(&copy).unwrap();
+    bytes[0] ^= 0xFF;
+    fs::OpenOptions::new().write(true).open(&copy).unwrap().write_all(&bytes).unwrap();
+
+    world.reopen().await;
+    let settled = world.library.recover_wrap_up(trash.dyn_trash()).await.unwrap();
+    let [progress] = settled.as_slice() else { panic!("{settled:#?}") };
+    let step = progress.moves.iter().find(|step| step.seq == first.seq).unwrap();
+    assert_eq!(step.outcome, Some(ArchiveMoveOutcome::Blocked), "{step:#?}");
+    assert_eq!(
+        step.reason.as_ref().map(|reason| reason.code),
+        Some(ReasonCode::DestinationMismatch)
+    );
+    assert!(!step.repointed, "the record never moved to the changed copy");
+    assert!(catalogued_at_source(&world, step.file.asset_id).await, "{step:#?}");
+    assert!(first.file.from.to_path_buf().unwrap().exists(), "the original stays");
+    let captures = world.captures.path.to_path_buf().unwrap();
+    for link in review.links.iter().filter(|link| link.asset_id == step.file.asset_id) {
+        let target = fs::read_link(link.link.to_path_buf().unwrap()).unwrap();
+        assert!(target.starts_with(&captures), "{} was repointed", link.link.display());
+    }
+    assert!(
+        !progress.repointed_links.iter().any(|link| link.asset_id == step.file.asset_id),
+        "{progress:#?}"
+    );
 }
