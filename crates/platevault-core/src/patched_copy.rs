@@ -575,9 +575,9 @@ fn install(
     size_bytes: u64,
     sha256: String,
 ) -> Result<Patched, ItemReason> {
-    transfer::install(&target.destination, written)?;
+    let written = transfer::install(&target.destination, written)?;
     if let Err(failure) =
-        transfer::verify_bytes(&target.destination, written, size_bytes, Some(&sha256))
+        transfer::verify_bytes(&target.destination, &written, size_bytes, Some(&sha256))
     {
         if let (Ok(root), Ok(relative)) =
             (target.destination.root.to_path_buf(), target.destination.relative.relative_path())
@@ -586,7 +586,7 @@ fn install(
         }
         return Err(failure);
     }
-    Ok(Patched { identity: written.identity.clone(), sha256 })
+    Ok(Patched { identity: written.identity, sha256 })
 }
 
 /// Whether `file`, found in a `View (building)/` where the build plans the
