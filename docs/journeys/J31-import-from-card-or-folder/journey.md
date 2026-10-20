@@ -177,13 +177,13 @@ folder is added in place. Done means:
 
 ### S10a — Review a framing split, merge it and split it again {#S10a}
 
-- **Do:** Connect `Card-4`. Choose it as the source and `Astro-T7 captures` as the Captures location, and read the preview's sessions. Merge the two Ha sessions and read the preview, then re-split the merged session. Choose **Copy** and start the import.
+- **Do:** Connect `Card-4`. Choose it as the source and `Astro-T7 captures` as the Captures location. Read the initial preview. The capture order is 14 lights at framing A, 10 at framing B, then 10 returning to A. Framing B follows a meridian flip, sits 12′ from A and differs by 4° in rotation. Set the centre slider to 12′ and read the one-session preview. Set the rotation slider to 3° and read the two-session preview of 24 and 10 lights. Restore D-W114's default limits. Merge the Ha sessions and read the preview. Re-split them. Choose **Copy** and start the import.
 - **Expect:**
-  - The preview lists two sessions with Target NGC 7000 prefilled from their pointing: "NGC 7000 · Ha · 300 s · 6 Oct" with the 24 lights from either side of the meridian flip, and "NGC 7000 · Ha · 300 s · 6 Oct · framing 2" with the other 10. Both list their lights under `NGC 7000/Ha/2026-10-06/light/`. A frame that returns to an earlier framing rejoins that session (owner's answer, 2026-10-20).
-  - After the merge, the preview lists one session of 34 lights. Moving the centre slider or the rotation slider recalculates the split live without saving. After the re-split, the two sessions of 24 and 10 lights return with the same names (owner's answer, 2026-10-20).
-  - The summary reads `34 frames · <size> · 2 sessions`, and Sessions lists both sessions with their frame counts.
-- **Expect (negative):** Until the user starts the import, the preview writes no files. Slider changes, merging and re-splitting also write nothing (owner's answer, 2026-10-20). The meridian flip starts no session.
-- **Trace:** Import · STO-IMP-FR-03 · LIB-FR-04, LIB-FR-24 · LIB-AC-31 · D-W107, owner's answer, 2026-10-20
+  - The initial preview lists two sessions with Target NGC 7000 prefilled from their pointing. "NGC 7000 · Ha · 300 s · 6 Oct" holds 24 A lights from both sides of the meridian flip. "NGC 7000 · Ha · 300 s · 6 Oct · framing 2" holds the 10 B lights. Both list their lights under `NGC 7000/Ha/2026-10-06/light/`. The 10 returning A lights rejoin the first session, so A A B B A A forms two sessions (D-W107; owner's answer, 2026-10-20).
+  - Setting the centre slider to 12′ recalculates the split live without saving and shows one session of 34 lights. B is within the default 5° rotation limit. Setting rotation to 3° recalculates the split live to two sessions of 24 and 10. Restoring D-W114's defaults returns the original split. The manual merge shows one session of 34 lights; re-splitting restores both sessions with their original names.
+- **Expect:** The import summary reads `34 frames · <size> · 2 sessions`. Sessions lists the two sessions with their frame counts.
+- **Expect (negative):** Before the user starts the import, the preview writes no files. Slider changes, merging and re-splitting also write nothing (owner's answer, 2026-10-20). The meridian flip starts no session.
+- **Trace:** Import · STO-IMP-FR-03 · LIB-FR-04, LIB-FR-24 · LIB-AC-31 · D-W107 · D-W114 · (owner's answer, 2026-10-20)
 
 ### S11 — Add an existing library folder {#S11}
 
