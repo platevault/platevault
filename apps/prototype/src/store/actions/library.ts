@@ -227,7 +227,7 @@ export function confirmRig(sessionId: SessionId, rigId: OpticalTrainId, expectRe
   return result
 }
 
-/** ★ toggles My targets membership (D-W60); open-Project subjects stay listed either way. */
+/** ★ toggles My targets membership (D-W60); open-Project subjects and Targets with a session stay listed either way (D-W125). */
 export function setFavourite(targetId: TargetId, favourite: boolean): CommitResult {
   const target = store.getState().catalog.targets[targetId]
   if (!target) return MISSING

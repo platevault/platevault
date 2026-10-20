@@ -6,9 +6,9 @@
  *   tonight, `?night=`) and the planning site (SitePicker) beside the title,
  *   with the night's darkness and Moon; every planning value follows them.
  *   Actions: Moon limits…, and on Planned, Reminders… and Export calendar….
- * - Views (tabs): My targets (favourites and open-Project subjects, the
- *   default), Browse catalogues (`?mode=browse`) and Planned (`?view=planned`,
- *   the chosen night's plan).
+ * - Views (tabs): My targets (favourites, open-Project subjects and every
+ *   Target with a session, D-W125; the default), Browse catalogues
+ *   (`?mode=browse`) and Planned (`?view=planned`, the chosen night's plan).
  * - Toolbar: search (My targets, the library, the bundled catalogues and
  *   SIMBAD), the facets Catalogues (Browse), Suitable filters (any picked
  *   filter good or marginal under its Moon curve, C2/C6; Q16) and Rig, and
@@ -45,7 +45,7 @@ import { GradeBadges } from "@/components/domain/grade-badges"
 import { AltitudeSpark, DarkLine, MoonLine } from "@/components/domain/sky-lines"
 import type { PageDetail } from "@/components/templates/detail-panel"
 import { ListPage } from "@/components/templates/list-page"
-import { goalProgress } from "@/domain/derive"
+import { goalProgress, sessionCountsByTarget } from "@/domain/derive"
 import { objectTypeRef } from "@/domain/labels"
 import { nightPlan } from "@/domain/planning"
 import { CATALOGUES, type CatalogueId } from "@/domain/sky"
@@ -85,7 +85,6 @@ import {
   type SortSpec,
   searchRows,
   selectionBands,
-  sessionCountsByTarget,
   sortValue,
 } from "./targets-model"
 import { deletePreset, savedPresetUnavailable, savePreset, VIEW_KEYS } from "./targets-presets"

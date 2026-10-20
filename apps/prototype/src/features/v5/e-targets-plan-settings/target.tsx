@@ -28,7 +28,7 @@ import { DuplicatesBadge } from "@/components/domain/duplicates-badge"
 import { GradeBadges } from "@/components/domain/grade-badges"
 import { AltitudeSpark, DarkLine, MoonLine } from "@/components/domain/sky-lines"
 import { DetailPage, type DetailSection } from "@/components/templates/detail-page"
-import { formatHours, liveLightSessions, rigFieldOfView, rigName, sessionRigId, sessionTargetId, subjectProgress } from "@/domain/derive"
+import { formatHours, liveLightSessions, rigFieldOfView, rigName, sessionCountsByTarget, sessionRigId, sessionTargetId, subjectProgress } from "@/domain/derive"
 import { objectTypeRef } from "@/domain/labels"
 import { captureSite, targetCoverage } from "@/domain/library"
 import { nightPlan } from "@/domain/planning"
@@ -40,7 +40,7 @@ import type { SearchParams } from "@/routes"
 import { useStore } from "@/store/core"
 import { useIssues } from "@/store/issues"
 import { addToProjectMenu, clockRange, criteriaText, fitText, keepSearch, myTargetsAction, newProjectAction, planAction, planNight, useSkyContext } from "./parts"
-import { allRows, imgTimeText, prioritiesByTarget, type RigFit, rowView, sessionCountsByTarget, type TargetRow } from "./targets-model"
+import { allRows, imgTimeText, prioritiesByTarget, type RigFit, rowView, type TargetRow } from "./targets-model"
 
 /** Integration as "2h 10m"; "–" for none. */
 function hoursOrDash(seconds: number): string {
