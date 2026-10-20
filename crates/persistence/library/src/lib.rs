@@ -2462,7 +2462,7 @@ async fn retire_blocks(
 ) -> Result<Vec<RetireBlock>> {
     let mut blocked = Vec::with_capacity(pin_kinds.len());
     for (session_id, kinds) in pin_kinds {
-        let session_name: String =
+        let capture_key: String =
             sqlx::query_scalar("SELECT capture_key FROM sessions WHERE id = ?1")
                 .bind(session_id.to_string())
                 .fetch_one(&mut *conn)
@@ -2470,7 +2470,7 @@ async fn retire_blocks(
         let projects = retire_session_projects(conn, session_id).await?;
         blocked.push(RetireBlock::PinnedCalibration {
             session_id,
-            session_name,
+            capture_key,
             kinds: kinds.into_iter().collect(),
             projects,
         });
@@ -2510,22 +2510,13 @@ async fn retire_projects(
         let row = sqlx::query("SELECT id, name, lifecycle FROM projects WHERE id = ?1")
             .bind(reference.id.to_string())
             .fetch_optional(&mut *conn)
-            .await?;
-        if let Some(row) = row {
-            projects.push(RetirePinProject {
-                project_id: parse_uuid(&row.try_get::<String, _>("id")?)?,
-                name: row.try_get("name")?,
-                lifecycle: from_text(&row.try_get::<String, _>("lifecycle")?)?,
-            });
-        } else {
-            // Persistence callers may supply a summarized Project reference that
-            // is maintained by another source; absent lifecycle data is Open.
-            projects.push(RetirePinProject {
-                project_id: reference.id,
-                name: reference.name.clone(),
-                lifecycle: platevault_model::ProjectLifecycle::Open,
-            });
-        }
+            .await?
+            .ok_or_else(|| conflict(reference.id, reference.revision))?;
+        projects.push(RetirePinProject {
+            project_id: parse_uuid(&row.try_get::<String, _>("id")?)?,
+            name: row.try_get("name")?,
+            lifecycle: from_text(&row.try_get::<String, _>("lifecycle")?)?,
+        });
     }
     Ok(projects)
 }

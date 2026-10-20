@@ -1589,7 +1589,9 @@ pub enum RetireBlock {
     /// A pinned calibration file is held at the location.
     PinnedCalibration {
         session_id: Uuid,
-        session_name: String,
+        /// Internal capture-grouping key, not a display label.
+        /// The UI must resolve and render the session's display label.
+        capture_key: String,
         kinds: Vec<InputKind>,
         projects: Vec<RetirePinProject>,
     },
