@@ -29,8 +29,8 @@ use uuid::Uuid;
 use super::library::{fail, Reply};
 
 /// The Sessions step: what the Project holds, the keywords in effect, each
-/// group's folder in the next View, the pending changes and the suggestions.
-/// Read-only.
+/// group's folder and panel-map outline, the pending changes and the
+/// suggestions. Read-only.
 ///
 /// # Errors
 /// `NotFound` for an unknown Project; `PersistenceFailure` for a corrupt record.

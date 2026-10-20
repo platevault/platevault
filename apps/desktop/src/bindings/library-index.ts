@@ -389,8 +389,8 @@ export const commands = {
 	projectProgress: (projectId: string) => typedError<ProjectProgress, ErrorResponse>(__TAURI_INVOKE("project_progress", { projectId })),
 	/**
 	 *  The Sessions step: what the Project holds, the keywords in effect, each
-	 *  group's folder in the next View, the pending changes and the suggestions.
-	 *  Read-only.
+	 *  group's folder and panel-map outline, the pending changes and the
+	 *  suggestions. Read-only.
 	 * 
 	 *  # Errors
 	 *  `NotFound` for an unknown Project; `PersistenceFailure` for a corrupt record.
@@ -4807,6 +4807,12 @@ export type OpticsSignature = {
 	reducer: string | null,
 };
 
+/**  One corner of a [`PanelOutline`], in ICRS degrees. */
+export type OutlineCorner = {
+	raDeg: number | null,
+	decDeg: number | null,
+};
+
 /**  What a Result is; the user picks it from a dropdown when it isn't known. */
 export type OutputKind = { kind: "final_image" } | { kind: "linear_integration" } | { kind: "channel_product" } | { kind: "calibration_master"; input: InputKind } | { kind: "other"; label: string };
 
@@ -4864,6 +4870,17 @@ export type PanelGaps = {
 	/**  The panel's anchor framing; `None` reads "Framing unknown". */
 	framing: FramingEvidence | null,
 	gaps: GoalGap[],
+};
+
+/**
+ *  A panel group's outline on a mosaic's panel map (decision record §2): the
+ *  anchor's field around the anchor centre, turned by the anchor's sky
+ *  position angle east of north. Nothing is stitched.
+ */
+export type PanelOutline = {
+	groupId: string,
+	corners: OutlineCorner[],
+	skyAngleDeg: number | null,
 };
 
 /**
@@ -5513,15 +5530,15 @@ export type ProjectInput = {
 
 /**
  *  A Project's Sessions step (PRJ-FR-07, VSEL-FR-02): what it holds, the
- *  keyword names in effect, each group's folder, its pending changes with
- *  their sources, and its suggestions.
+ *  keyword names in effect, each group's folder and panel-map outline, the
+ *  pending changes with their sources and its suggestions.
  */
 export type ProjectInputs = ProjectInputs_Serialize | ProjectInputs_Deserialize;
 
 /**
  *  A Project's Sessions step (PRJ-FR-07, VSEL-FR-02): what it holds, the
- *  keyword names in effect, each group's folder, its pending changes with
- *  their sources, and its suggestions.
+ *  keyword names in effect, each group's folder and panel-map outline, the
+ *  pending changes with their sources and its suggestions.
  */
 export type ProjectInputs_Deserialize = {
 	desired: ProjectDesired_Deserialize,
@@ -5529,12 +5546,13 @@ export type ProjectInputs_Deserialize = {
 	folders: GroupFolder[],
 	pending: PendingChange_Deserialize[],
 	suggestions: ProjectSuggestion[],
+	panels: PanelOutline[],
 };
 
 /**
  *  A Project's Sessions step (PRJ-FR-07, VSEL-FR-02): what it holds, the
- *  keyword names in effect, each group's folder, its pending changes with
- *  their sources, and its suggestions.
+ *  keyword names in effect, each group's folder and panel-map outline, the
+ *  pending changes with their sources and its suggestions.
  */
 export type ProjectInputs_Serialize = {
 	desired: ProjectDesired_Serialize,
@@ -5542,6 +5560,7 @@ export type ProjectInputs_Serialize = {
 	folders: GroupFolder[],
 	pending: PendingChange_Serialize[],
 	suggestions: ProjectSuggestion[],
+	panels: PanelOutline[],
 };
 
 /**  Where a Project is in its life. */

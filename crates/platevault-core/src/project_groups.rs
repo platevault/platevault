@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! Where a Project's sessions go (spec 065 PRJ-FR-27 to PRJ-FR-31; D-W95,
-//! D-W107, D-W114): automatic groups by rig, optics and framing, the default
-//! group names, the group folders and the panel map's outlines. Pure: the
-//! caller reads one Project and the sessions to add, and the catalog records
-//! the result under the Project revision it read.
+//! D-W107, D-W114): automatic groups by rig, optics and framing and the
+//! default group names and group folders. Pure: the caller reads one Project
+//! and the sessions to add, and the catalog records the result under the
+//! Project revision it read.
 //!
 //! A group holds one rig with one optical setup (a rig version starts a new
 //! group only when its optics change) and one framing. A new session joins
@@ -282,20 +282,20 @@ pub fn group_folders(
         })
         .collect()
 }
-
 /// One corner of a [`PanelOutline`], in ICRS degrees.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct OutlineCorner {
     pub ra_deg: f64,
     pub dec_deg: f64,
 }
-
 /// A panel group's outline on a mosaic's panel map (decision record §2): the
 /// anchor's field around the anchor centre, turned by the anchor's sky
 /// position angle east of north. Nothing is stitched.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct PanelOutline {
     pub group_id: Uuid,
     pub corners: Vec<OutlineCorner>,

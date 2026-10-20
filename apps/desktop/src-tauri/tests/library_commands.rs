@@ -206,6 +206,9 @@ fn project_inputs_family_takes_its_arguments() {
     assert!(misnamed.is_string(), "Tauri refuses the arguments itself: {misnamed}");
 
     shell.refuses("project_inputs", &json!({ "projectId": project }), NOT_FOUND, project);
+    let project = shell.open_project();
+    let inputs = shell.call("project_inputs", &json!({ "projectId": project }));
+    assert_eq!(inputs["panels"], json!([]), "a new Project has no panel outlines");
     shell.refuses(
         "project_add_sessions",
         &json!({

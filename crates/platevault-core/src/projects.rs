@@ -13,6 +13,10 @@
 //! group's removal) need no core rule and are called directly. No edit
 //! touches the View: once it exists, each reads as a pending change until
 //! Apply (D-W100).
+//!
+//! A panel map derives its display geometry from groups' anchor framings
+//! (PRJ-FR-29; VSEL-FR-07), alongside the Sessions step's derived data.
+//!
 
 use std::collections::BTreeSet;
 use std::sync::Arc;
@@ -55,8 +59,8 @@ pub struct GroupFolder {
 }
 
 /// A Project's Sessions step (PRJ-FR-07, VSEL-FR-02): what it holds, the
-/// keyword names in effect, each group's folder, its pending changes with
-/// their sources, and its suggestions.
+/// keyword names in effect, each group's folder and panel-map outline, the
+/// pending changes with their sources and its suggestions.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
@@ -66,6 +70,7 @@ pub struct ProjectInputs {
     pub folders: Vec<GroupFolder>,
     pub pending: Vec<PendingChange>,
     pub suggestions: Vec<ProjectSuggestion>,
+    pub panels: Vec<crate::project_groups::PanelOutline>,
 }
 
 const UNKNOWN_OPTICS: OpticsSignature =
@@ -85,9 +90,10 @@ impl Library {
             .into_iter()
             .map(|(group_id, folder)| GroupFolder { group_id, folder })
             .collect();
+        let panels = desired.groups.iter().filter_map(crate::project_groups::panel_outline).collect();
         let pending = catalog.project_pending_changes(id).await?;
         let suggestions = catalog.project_suggestions(id).await?;
-        Ok(ProjectInputs { desired, keywords, folders, pending, suggestions })
+        Ok(ProjectInputs { desired, keywords, folders, pending, suggestions, panels })
     }
 
     /// Add whole sessions to Project `id` in one edit (PRJ-FR-08): each into
