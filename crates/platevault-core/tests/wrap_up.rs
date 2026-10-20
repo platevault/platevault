@@ -168,14 +168,17 @@ async fn clean_up_removes_every_view_copy_without_changing_originals_output_or_p
     assert!(report.view_removed, "the emptied View is removed");
     assert!(!world.view().exists());
     assert_eq!(fs::read(&output).unwrap(), output_before, "Output stays byte-identical");
-    assert_eq!(fs::read(&processing).unwrap(), processing_before, "Processing stays byte-identical");
+    assert_eq!(
+        fs::read(&processing).unwrap(),
+        processing_before,
+        "Processing stays byte-identical"
+    );
     assert_eq!(
         [HA[0], OIII[0]].map(|path| fs::read(world.light(path)).unwrap()),
         originals_before,
         "originals stay byte-identical",
     );
 }
-
 
 /// STO-FR-04 with PREP-FR-03: Clean up moves an isolated patched copy to the
 /// OS Trash once it still differs from its re-verified original only by its

@@ -22,9 +22,9 @@ use uuid::Uuid;
 use super::{applied_stretch, container_of, now, pixel_error, FrameReview, BASE64};
 use crate::library::{blocking, InventoryProbe};
 use crate::{
-    availability_reason, Availability, FrameThumbnail, LibraryError,
-    LibraryErrorCode, MeasurementFailureParameters, ObservationFingerprint, PreviewTile,
-    ThumbnailEntry, ThumbnailState,
+    availability_reason, Availability, FrameThumbnail, LibraryError, LibraryErrorCode,
+    MeasurementFailureParameters, ObservationFingerprint, PreviewTile, ThumbnailEntry,
+    ThumbnailState,
 };
 
 /// Thumbnails decoded at once; each holds one decoded frame in memory.

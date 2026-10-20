@@ -973,10 +973,7 @@ pub enum ThumbnailState {
     Pending,
     /// The decode failed, with its stable library failure code and safe
     /// structured localization parameters; raw diagnostic text is log-only.
-    Unreadable {
-        code: crate::LibraryErrorCode,
-        parameters: MeasurementFailureParameters,
-    },
+    Unreadable { code: crate::LibraryErrorCode, parameters: MeasurementFailureParameters },
     /// Not thumbnailed: a Retired or Trashed frame, or an unavailable copy
     /// without a cached thumbnail, named by its availability.
     Unavailable { reason: String },
