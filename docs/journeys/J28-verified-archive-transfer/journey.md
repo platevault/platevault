@@ -31,7 +31,7 @@ The user archives the sessions of Project `NGC 7000 HOO` from the Archive step o
 - P5: For one named 26 Sep frame, a backup of its original bytes and nanosecond mtime and a replacement file of identical size with different bytes, kept outside PlateVault. A fault control pauses that item after destination verification and before source retirement (G5).
 - P6: Before S1, the `4 Oct M 33` session is added under `Astro-T7/Captures/M33/2026-10-04/` and indexed: 16 Ha 300 s `RedCat` lights with Target M 33 and rig `RedCat` Confirmed. M 33 is a subject of no Project, and no Project holds the session. A SHA-256 list of its files is recorded.
 - P7: Closed Project `NGC 7000 first light` holds the 24 Sep session. It was closed with no Archive and kept its Symlinks View, which holds 20 symlinks to 24 Sep frames under `Astro-T7/Captures/`. Its sessions, goals, Close snapshot and Wrap up record are recorded outside PlateVault.
-- P8: Calibration location `Astro-T7/Darks` was registered and indexed before S1. It holds the dark master `D-300`, and 28 Sep's darks are pinned to `D-300`; no other session pins a file in `Astro-T7/Darks`.
+- P8: Calibration location `Astro-T7/Darks` was registered and indexed before S1. It holds one raw set of 20 darks at 300 s whose camera and settings match the 28 Sep lights, and no session pins a file there.
 
 ## Steps
 
@@ -191,10 +191,10 @@ The user archives the sessions of Project `NGC 7000 HOO` from the Archive step o
 
 ### S14 — Review retiring a location with pinned calibration {#S14}
 
-- **Do:** In Settings › Locations, choose `Astro-T7/Darks` and choose **Retire location**. Read the review and try to confirm it.
-- **Expect:** Before confirmation, the review shows that retiring is blocked because 28 Sep pins `D-300` there. It lists 28 Sep and counts 2 Projects holding it, `NGC 7000 HOO` and `NGC 7000 Ha deep`. Confirmation is refused and names 28 Sep and both Projects.
-- **Expect (negative):** `Astro-T7/Darks` doesn't read Retired, `D-300` reads neither Retired nor Missing, and 28 Sep's darks stay pinned to it. No file changes.
-- **Trace:** flow A4 · LIB-FR-15 · LIB-AC-16 · D11, D-W138
+- **Do:** In Sessions, open 28 Sep, use **Reassign…** on its darks and choose the raw dark set in `Astro-T7/Darks`. Then, in Settings › Locations, choose `Astro-T7/Darks` and choose **Retire location**. Read the review and try to confirm it.
+- **Expect:** 28 Sep's darks are pinned to the raw set. Open Project `NGC 7000 Ha deep` lists a pending calibration change labelled as a session reassignment, and the Archived `NGC 7000 HOO` takes none. Before confirmation, the retire review shows that retiring is blocked because 28 Sep pins files there. It lists 28 Sep and the two Projects holding it, `NGC 7000 HOO`, marked Archived, and `NGC 7000 Ha deep`, and counts 2 Projects. Confirmation is refused and names 28 Sep and both Projects.
+- **Expect (negative):** `Astro-T7/Darks` doesn't read Retired, and its darks read neither Retired nor Missing. 28 Sep's darks stay pinned to the raw set, and no file changes.
+- **Trace:** flow A4 · LIB-FR-15, LIB-FR-23, LIB-FR-25 · LIB-AC-16 · CAL-FR-04 · VSEL-FR-12 · PRJ-FR-25 · D11, D-W106, D-W138
 
 ## Success criteria
 
@@ -211,7 +211,7 @@ The user archives the sessions of Project `NGC 7000 HOO` from the Archive step o
 - SC11: Make default moves 0 files, and the archive goes to the Project's chosen `Archive/NGC7000`, with 0 to paths under the Default `Archive/Long-term` (S1a, S5).
 - SC12: Archiving `4 Oct M 33` from Sessions moves exactly 16 files, all to the Default `Archive/Long-term`, retires 0 sources before their destination verifies and changes 0 Projects. Closing its review first moves 0 files, and 28 Sep can't be selected there (S9b, S9c).
 - SC13: All 20 symlinks of the View that Closed Project `NGC 7000 first light` kept point to `Archive/NGC7000` after S9a, Activity records 1 repoint for it, and its sessions, goals, snapshot and Wrap up record change 0 times (S4, S9a).
-- SC14: Retiring `Astro-T7/Darks`, which 28 Sep pins, is blocked in the review, which counts 2 Projects, and 0 locations are retired (S14).
+- SC14: After 28 Sep's darks are reassigned to `Astro-T7/Darks`, retiring that location is blocked in the review, which counts 2 Projects, the Archived `NGC 7000 HOO` among them, and 0 locations are retired (S14).
 
 ## Known gaps
 
