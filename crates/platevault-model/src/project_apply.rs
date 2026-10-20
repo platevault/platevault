@@ -21,7 +21,8 @@ use crate::{
 };
 
 /// One reason Apply can't run now. The sheet lists every one; Apply refuses
-/// while any holds and changes nothing.
+/// while any holds and changes nothing. A `detail` is an English diagnostic
+/// that never carries an OS error's text, which goes to the log only.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "blocker", rename_all = "snake_case", rename_all_fields = "camelCase")]
 #[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
@@ -38,9 +39,14 @@ pub enum ApplyBlocker {
     /// Before the first Apply the Project folder already holds something
     /// `PlateVault` didn't make (PREP-AC-02).
     ProjectFolderOccupied { path: NativePath },
-    /// Symlinks mode where symlinks can't be made: on Windows, Developer
-    /// Mode is off. Copies is offered for this Project (PREP-FR-15).
-    SymlinksUnavailable { detail: String },
+    /// Symlinks mode where Windows holds back the unprivileged symlink
+    /// right: Developer Mode is off. The sheet offers Open Windows settings,
+    /// Check again and Use copies for this Project (PREP-FR-15, PREP-AC-08).
+    SymlinksUnavailable,
+    /// Symlinks mode where the processing location's filesystem holds no
+    /// links (FAT, exFAT, some network shares): only Copies is offered
+    /// there (PREP-AC-03).
+    LinksUnsupported { path: NativePath },
     /// An original the build needs is on a location that is offline now
     /// (VSEL-AC-31, STO-FR-08).
     OriginalOffline { path: NativePath, location_id: Uuid },
@@ -159,8 +165,11 @@ impl ApplyBlocker {
                 "{} already holds files PlateVault didn't place; choose another name or location",
                 path.display()
             ),
-            Self::SymlinksUnavailable { detail } => {
-                format!("Can't apply · symlinks need Windows Developer Mode ({detail})")
+            Self::SymlinksUnavailable => {
+                "Can't apply · symlinks need Windows Developer Mode".into()
+            }
+            Self::LinksUnsupported { path } => {
+                format!("{} can't hold symlinks; only copies can be made there", path.display())
             }
             Self::OriginalOffline { path, .. } => format!("{} is offline", path.display()),
             Self::OriginalChanged { path, detail } => format!("{}: {detail}", path.display()),
@@ -203,7 +212,9 @@ impl ApplyBlocker {
 pub struct ViewPlanEntry {
     pub path: NativePath,
     pub source: EntrySource,
-    /// Copies may become clones as they are built.
+    /// A Copies entry the sheet expects to be a copy-on-write clone is
+    /// `Clone`: its original and the Project folder are on one volume that
+    /// clones (PREP-FR-04). The build still copies one the volume refuses.
     pub placement: EntryPlacement,
     pub size_bytes: u64,
 }
@@ -236,9 +247,9 @@ pub struct ApplyPreview {
     pub mode: ViewMode,
     /// The new View as a folder tree, in path order.
     pub entries: Vec<ViewPlanEntry>,
-    /// Bytes the Copies build writes (clones may take less). The old View
-    /// stays until the swap, so Copies needs room for both.
-    pub copy_bytes: u64,
+    /// The new View's footprint (PREP-FR-04): what the entries above take.
+    /// The old View stays until the swap, so Copies needs room for both.
+    pub footprint: ViewFootprint,
     pub foreign: Vec<ForeignFile>,
     /// Copies in the current View that differ from what `PlateVault`
     /// placed; they stay in `View (previous)/` (VSEL-AC-28).
@@ -295,5 +306,61 @@ pub struct ApplyReport {
     /// frame with a recorded correction; 0 unless Applied. Each was re-read
     /// to differ from its original only by its corrected header.
     pub patched_copies: u64,
+    /// The installed View's footprint, as the build placed it; zero unless
+    /// Applied.
+    pub footprint: ViewFootprint,
+    /// Why the Apply failed or was canceled: an English diagnostic that
+    /// never carries an OS error's text, which goes to the log only.
     pub error: Option<String>,
+}
+
+/// What a View takes (PREP-FR-04): "Linked · 0 B" while it holds only
+/// symlinks, else "N frames copied · X GB", followed by "(cloned)" when the
+/// copies are copy-on-write clones of their originals.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
+pub struct ViewFootprint {
+    /// The entries that are files of their own: copies, clones and
+    /// isolated patched copies.
+    pub frames: u64,
+    /// Their bytes.
+    pub bytes: u64,
+    /// How many of `frames` are copy-on-write clones.
+    pub cloned: u64,
+}
+
+impl ViewFootprint {
+    /// The footprint of entries placed as `placement`, each of its size.
+    #[must_use]
+    pub fn of(entries: impl IntoIterator<Item = (EntryPlacement, u64)>) -> Self {
+        let mut footprint = Self::default();
+        for (placement, size_bytes) in entries {
+            if placement == EntryPlacement::Symlink {
+                continue;
+            }
+            footprint.frames += 1;
+            footprint.bytes = footprint.bytes.saturating_add(size_bytes);
+            if placement == EntryPlacement::Clone {
+                footprint.cloned += 1;
+            }
+        }
+        footprint
+    }
+}
+
+/// Whether a folder can hold the symlinks of a Symlinks View (PREP-FR-15),
+/// which setup, Settings and the Apply sheet check.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
+pub enum SymlinkCapability {
+    /// Symlinks can be made there.
+    Available,
+    /// Windows holds back the unprivileged symlink right: Developer Mode is
+    /// off (PREP-AC-08).
+    DeveloperModeOff,
+    /// The folder's filesystem holds no links (FAT, exFAT, some network
+    /// shares): only Copies can be made there (PREP-AC-03).
+    Unsupported,
 }

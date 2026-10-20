@@ -102,6 +102,24 @@ async fn a_copies_apply_on_exfat_places_every_entry_as_a_verified_copy() {
     assert!(!folder.join("View (previous)").exists(), "{:#?}", files(&folder));
 }
 
+/// PREP-AC-25: the originals stay on the host volume and the Project folder
+/// is on exFAT, another volume, so the entries are full copies and neither
+/// the sheet's footprint nor the report's says "(cloned)".
+#[tokio::test]
+#[ignore = "needs an exFAT volume: PLATEVAULT_TEST_EXFAT=<mounted folder>"]
+async fn a_copies_apply_onto_another_volume_has_no_cloned_footprint() {
+    let world = world(ViewMode::Copies).await;
+    on_exfat(&world).await;
+    let preview = world.preview().await;
+    assert!(preview.entries.iter().all(|entry| entry.placement == EntryPlacement::Copy));
+    let frames = u64::try_from(preview.entries.len()).unwrap();
+    assert_eq!(preview.footprint.frames, frames);
+    assert_eq!(preview.footprint.cloned, 0, "no (cloned)");
+    let report = world.apply().await;
+    assert_eq!(report.outcome, Some(ApplyOutcome::Applied), "{report:#?}");
+    assert_eq!(report.footprint, preview.footprint);
+}
+
 /// cyqdo: whether macOS keeps `._` companions beside the entries Apply
 /// writes, and that a companion goes with its entry: it is never listed
 /// as foreign or as a leftover, while a `._` file with no entry beside it

@@ -41,7 +41,7 @@ async fn the_first_apply_builds_the_night_layout_from_symlinks_to_the_originals(
     let preview = world.preview().await;
     assert!(preview.blockers.is_empty(), "{:#?}", preview.blockers);
     assert_eq!(preview.applied_generation, None);
-    assert_eq!(preview.copy_bytes, 0, "Linked · 0 B");
+    assert_eq!(preview.footprint, ViewFootprint::default(), "Linked · 0 B");
 
     let report = world.library.apply(&World::request(&preview), &Unattended).await.unwrap();
     assert_eq!(report.outcome, Some(ApplyOutcome::Applied), "{report:#?}");
@@ -84,8 +84,9 @@ async fn copies_place_every_entry_as_its_own_file_and_never_hard_link() {
     world.hold(HA_GAIN_0).await;
     let preview = world.preview().await;
     let footprint: u64 = preview.entries.iter().map(|entry| entry.size_bytes).sum();
-    assert!(preview.entries.iter().all(|entry| entry.placement == EntryPlacement::Copy));
-    assert_eq!(preview.copy_bytes, footprint, "the footprint counts each copy");
+    assert!(preview.entries.iter().all(|entry| entry.placement != EntryPlacement::Symlink));
+    assert_eq!(preview.footprint.bytes, footprint, "the footprint counts each copy");
+    assert_eq!(preview.footprint.frames, u64::try_from(preview.entries.len()).unwrap());
     let report = world.apply().await;
     assert_eq!(report.outcome, Some(ApplyOutcome::Applied), "{report:#?}");
 
@@ -1026,11 +1027,16 @@ async fn a_symlinks_view_holds_patched_copies_of_its_corrected_frames() {
         .iter()
         .map(|relative| fs::metadata(world.light(relative)).unwrap().len())
         .sum();
-    assert_eq!(preview.copy_bytes, corrected_bytes, "the footprint counts the patched copies");
+    assert_eq!(
+        preview.footprint,
+        ViewFootprint { frames: 2, bytes: corrected_bytes, cloned: 0 },
+        "the footprint counts the patched copies, never as clones"
+    );
 
     let report = world.apply().await;
     assert_eq!(report.outcome, Some(ApplyOutcome::Applied), "{report:#?}");
     assert_eq!(report.patched_copies, 2);
+    assert_eq!(report.footprint, preview.footprint);
     let (sep24, sep28) = (placed(&world, SEP24), placed(&world, SEP28));
     for copy in [&sep24, &sep28] {
         assert!(fs::symlink_metadata(copy).unwrap().is_file(), "{} is a copy", copy.display());
@@ -1079,4 +1085,124 @@ async fn a_corrected_input_neither_fits_nor_xisf_refuses_apply_naming_it() {
         json!({ "field": "object", "refusal": "unsupported_format" })
     );
     nothing_built(&world);
+}
+
+/// PREP-FR-04, PREP-AC-25: with the originals and the Project folder on one
+/// APFS volume, every Copies entry is a clone, and the sheet says so before
+/// the build makes them.
+#[cfg(target_os = "macos")]
+#[tokio::test]
+async fn copies_on_one_clone_capable_volume_are_cloned_in_the_sheet_and_the_report() {
+    let world = world(ViewMode::Copies).await;
+    let preview = world.preview().await;
+    assert_ne!(preview.entries.len(), 0);
+    assert!(
+        preview.entries.iter().all(|entry| entry.placement == EntryPlacement::Clone),
+        "{:#?}",
+        preview.entries
+    );
+    let frames = u64::try_from(preview.entries.len()).unwrap();
+    let bytes = preview.entries.iter().map(|entry| entry.size_bytes).sum();
+    assert_eq!(preview.footprint, ViewFootprint { frames, bytes, cloned: frames }, "(cloned)");
+    let report = world.apply().await;
+    assert_eq!(report.outcome, Some(ApplyOutcome::Applied), "{report:#?}");
+    assert_eq!(report.footprint, preview.footprint, "the build cloned what the sheet said");
+    let installed = world.catalog().apply_inputs(world.project).await.unwrap().installed.unwrap();
+    assert!(installed.entries.iter().all(|entry| entry.placement == EntryPlacement::Clone));
+}
+
+/// Text an OS error carries; none of it may reach an Apply response (CT3).
+fn assert_no_os_text(response: &impl serde::Serialize, sentinel: &Path) {
+    let text = serde_json::to_string(response).unwrap();
+    for os in ["os error", "Permission denied", "No such file or directory"] {
+        assert!(!text.contains(os), "{os:?} reached the response: {text}");
+    }
+    let sentinel = sentinel.display().to_string();
+    assert!(!text.contains(&sentinel), "{sentinel} reached the response: {text}");
+}
+
+/// Point the Project's processing location at `parent`.
+async fn process_in(world: &World, parent: &Path) {
+    let parent = serde_json::to_string(&NativePath::from_path(parent)).unwrap();
+    world
+        .sql(
+            "UPDATE projects SET processing_parent = ?2 WHERE id = ?1",
+            &[&world.project.to_string(), &parent],
+        )
+        .await;
+}
+
+fn set_mode(path: &Path, mode: u32) {
+    use std::os::unix::fs::PermissionsExt;
+    fs::set_permissions(path, fs::Permissions::from_mode(mode)).unwrap();
+}
+
+/// CT3: an original whose folder can't be searched and a processing
+/// location that is gone are blockers that name the path, never the OS
+/// error text.
+#[tokio::test]
+async fn no_blocker_carries_os_error_text() {
+    let world = world(ViewMode::Copies).await;
+    let night = world.light(HA[0]).parent().unwrap().to_path_buf();
+    let gone = world.temp.path().join("SENTINEL-gone/Processing");
+    process_in(&world, &gone).await;
+    set_mode(&night, 0o000);
+    let preview = world.preview().await;
+    set_mode(&night, 0o755);
+    let tags: Vec<Value> = preview
+        .blockers
+        .iter()
+        .map(|blocker| serde_json::to_value(blocker).unwrap()["blocker"].clone())
+        .collect();
+    assert!(tags.contains(&json!("original_changed")), "{:#?}", preview.blockers);
+    assert!(tags.contains(&json!("processing_location_unavailable")), "{:#?}", preview.blockers);
+    assert_no_os_text(&preview.blockers, Path::new("/SENTINEL-unused"));
+}
+
+/// Makes the Project folder read-only once the build is verified, so moving
+/// the old View aside fails on the OS.
+struct ReadOnlyAtSwap(PathBuf);
+
+impl ApplyControl for ReadOnlyAtSwap {
+    fn interrupted(&self, phase: ApplyPhase) -> bool {
+        if phase == ApplyPhase::BuildVerified {
+            set_mode(&self.0, 0o555);
+        }
+        false
+    }
+}
+
+/// CT3: an original that can't be read when Apply snapshots it is a named
+/// failure, and a swap the OS refuses ends Failed; neither the report's
+/// failures nor its error carry the OS text or the absolute Project folder
+/// (the sentinel) it named.
+#[tokio::test]
+async fn an_apply_the_os_refuses_reports_no_os_text() {
+    let world = world(ViewMode::Symlinks).await;
+    let sentinel = world.temp.path().join("SENTINEL-9f3c/Processing");
+    fs::create_dir_all(&sentinel).unwrap();
+    let sentinel = fs::canonicalize(sentinel).unwrap();
+    process_in(&world, &sentinel).await;
+    let folder = sentinel.join(apply_support::PROJECT);
+
+    let original = world.light(HA[0]);
+    let preview = world.preview().await;
+    assert!(preview.blockers.is_empty(), "{:#?}", preview.blockers);
+    set_mode(&original, 0o000);
+    let unread = world.library.apply(&World::request(&preview), &Unattended).await.unwrap();
+    set_mode(&original, 0o644);
+    assert_eq!(unread.outcome, Some(ApplyOutcome::Failed), "{unread:#?}");
+    assert!(!unread.failures.is_empty(), "{unread:#?}");
+    assert_no_os_text(&unread, &folder);
+
+    let first = world.apply().await;
+    assert_eq!(first.outcome, Some(ApplyOutcome::Applied), "{first:#?}");
+    let preview = world.preview().await;
+    let control = ReadOnlyAtSwap(folder.clone());
+    let refused = world.library.apply(&World::request(&preview), &control).await;
+    set_mode(&folder, 0o755);
+    let refused = refused.unwrap();
+    assert_eq!(refused.outcome, Some(ApplyOutcome::Failed), "{refused:#?}");
+    assert!(refused.error.is_some(), "{refused:#?}");
+    assert_no_os_text(&refused, &folder);
 }

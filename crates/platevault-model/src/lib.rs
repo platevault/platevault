@@ -188,6 +188,11 @@ pub enum LibraryError {
     /// tried (PREP-FR-15, PREP-AC-08).
     #[error("symlinks unavailable: {0}")]
     SymlinksUnavailable(String),
+    /// The processing location's filesystem holds no links (FAT, exFAT,
+    /// some network shares): Apply in Symlinks mode refuses and only Copies
+    /// is offered there (PREP-AC-03). The response's scope names the folder.
+    #[error("links unsupported: {0}")]
+    LinksUnsupported(String),
     #[error("operation canceled")]
     Canceled,
     /// A recorded correction can't reach the application: no isolated
@@ -233,6 +238,7 @@ pub enum LibraryErrorCode {
     PersistenceFailure,
     NoByteProof,
     SymlinksUnavailable,
+    LinksUnsupported,
     Canceled,
     /// A recorded correction no patched copy can carry: a value FITS can't
     /// hold, or a header that can't take it.
@@ -258,6 +264,7 @@ impl LibraryErrorCode {
             Self::PersistenceFailure => "persistence_failure",
             Self::NoByteProof => "no_byte_proof",
             Self::SymlinksUnavailable => "symlinks_unavailable",
+            Self::LinksUnsupported => "links_unsupported",
             Self::Canceled => "canceled",
             Self::CorrectionUnpatchable => "correction_unpatchable",
             Self::CorrectionFormatUnpatchable => "correction_format_unpatchable",
@@ -279,6 +286,7 @@ impl LibraryErrorCode {
             | Self::MetadataUnreadable
             | Self::NoByteProof
             | Self::SymlinksUnavailable
+            | Self::LinksUnsupported
             | Self::CorrectionUnpatchable
             | Self::CorrectionFormatUnpatchable => RetryAction::Review,
             Self::UnsupportedFormat | Self::Canceled => RetryAction::None,
@@ -383,6 +391,7 @@ impl LibraryError {
             Self::PersistenceFailure(_) => LibraryErrorCode::PersistenceFailure,
             Self::NoByteProof(_) => LibraryErrorCode::NoByteProof,
             Self::SymlinksUnavailable(_) => LibraryErrorCode::SymlinksUnavailable,
+            Self::LinksUnsupported(_) => LibraryErrorCode::LinksUnsupported,
             Self::Canceled => LibraryErrorCode::Canceled,
             Self::CorrectionUndeliverable { refusal: PatchRefusal::UnsupportedFormat, .. } => {
                 LibraryErrorCode::CorrectionFormatUnpatchable

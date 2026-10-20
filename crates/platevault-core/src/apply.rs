@@ -46,7 +46,7 @@ use std::time::Duration;
 use persistence_library::{ApplyInputs, ApplyReservation};
 use uuid::Uuid;
 
-use self::files::{Aside, Ours, PlannedPatch, Rename, SymlinkProbe};
+use self::files::{Aside, Ours, PlannedPatch, Rename};
 use self::plan::{Plan, PlanEntry, PlanInput};
 use crate::custody::trash::{self, OsTrash, Retirement};
 use crate::custody::{observe_entry, same_identity, transfer};
@@ -58,8 +58,8 @@ use crate::{
     ApplyBlocker, ApplyFailure, ApplyJournal, ApplyOutcome, ApplyPhase, ApplyPreview, ApplyReport,
     ApplyRequest, EntryEvidence, EntryPlacement, ExpectedTree, FileIdentity, ForeignFile,
     ForeignItem, ForeignItemState, InputKind, ItemReason, LibraryError, ManifestEntry, NativePath,
-    PinHealth, PreviousItem, PreviousItemReview, ReasonCode, Revision, ViewManifest, ViewMode,
-    ViewPlanEntry,
+    PinHealth, PreviousItem, PreviousItemReview, ReasonCode, Revision, SymlinkCapability,
+    ViewFootprint, ViewManifest, ViewMode, ViewPlanEntry,
 };
 
 /// What Apply asks while it runs (PREP-FR-09, PREP-FR-18).
@@ -95,12 +95,14 @@ impl ApplyControl for Unattended {}
 const RELEASE_POLL: Duration = Duration::from_millis(500);
 
 /// The operating-system boundary Apply crosses: renaming the View folders,
-/// how long to wait for a tool, and the symlink probe.
+/// how long to wait for a tool, and the symlink and clone probes.
 #[derive(Clone, Copy)]
 struct Os {
     rename: Rename,
     poll: Duration,
-    symlinks: fn(&Path) -> Result<(), SymlinkProbe>,
+    symlinks: fn(&Path) -> std::io::Result<SymlinkCapability>,
+    /// Whether a copy of an original made in a folder becomes a clone.
+    clones: fn(&Path, &Path) -> bool,
 }
 
 impl Os {
@@ -111,6 +113,7 @@ impl Os {
         rename: pacing::rename,
         poll: RELEASE_POLL,
         symlinks: files::probe_symlinks,
+        clones: files::probe_clone,
     };
 }
 
@@ -175,27 +178,30 @@ pub mod pacing {
 
 impl Library {
     /// Whether `folder` can hold the symlinks of a Symlinks View: on Windows,
-    /// whether Developer Mode is on. Setup and Settings show it.
+    /// whether Developer Mode is on; elsewhere, whether its filesystem holds
+    /// links (PREP-FR-15). Setup, Settings and the Apply sheet check it.
     ///
     /// # Errors
-    /// `SymlinksUnavailable` when it can't; `AccessDenied` when `folder`
-    /// can't hold a file at all.
-    pub async fn check_symlinks(&self, folder: NativePath) -> Result<(), LibraryError> {
-        let folder = folder.to_path_buf()?;
+    /// `NotFound`, `AccessDenied` or `SourceUnavailable`, scoped to
+    /// `folder`, when it can't hold a file at all.
+    pub async fn check_symlinks(
+        &self,
+        folder: NativePath,
+    ) -> Result<SymlinkCapability, LibraryError> {
+        let path = folder.to_path_buf()?;
         blocking(move || {
-            (Os::SYSTEM.symlinks)(&folder).map_err(|probe| match probe {
-                SymlinkProbe::Unwritable(detail) => LibraryError::AccessDenied(detail),
-                SymlinkProbe::Unsupported(detail) => LibraryError::SymlinksUnavailable(detail),
-            })
+            (Os::SYSTEM.symlinks)(&path).map_err(|error| LibraryError::from_io(&path, &error))
         })
         .await
     }
 
     /// The Apply sheet's backend part (VSEL-FR-14): the new View as a folder
     /// tree, every reason Apply can't run, the files `PlateVault` didn't
-    /// place, the copies a tool changed, and what `View (previous)/` holds.
+    /// place, the copies a tool changed, and what `View (previous)/` holds,
+    /// with the footprint of the new View: which copies become clones.
     /// Reads originals' fingerprints, and only the primary header of a
-    /// corrected FITS original, never their other bytes; writes nothing.
+    /// corrected FITS original, never their other bytes; writes nothing but
+    /// the hidden symlink and clone probes it removes.
     ///
     /// # Errors
     /// `NotFound` for an unknown Project; catalog errors.
@@ -209,7 +215,9 @@ impl Library {
     ///
     /// # Errors
     /// `Conflict` when the Project or the Library moved since the sheet;
-    /// `SymlinksUnavailable` when the Symlinks View can't be made here;
+    /// `SymlinksUnavailable` when Windows Developer Mode is off and
+    /// `LinksUnsupported` when the processing location holds no links, for
+    /// a Symlinks View;
     /// `CorrectionUndeliverable` naming a held frame whose recorded
     /// correction no patched copy can carry; `InvalidInput` naming every
     /// other blocker; `IdentityConflict` when
@@ -426,14 +434,25 @@ const fn before(phase: ApplyPhase, other: ApplyPhase) -> bool {
     phase.rank() < other.rank()
 }
 
-/// The Apply refusal: `SymlinksUnavailable` when Symlinks can't be made
-/// here (PREP-FR-15), else `CorrectionUndeliverable` for the first held
-/// frame whose correction no patched copy can carry (PREP-FR-03), else
-/// `InvalidInput`, naming every blocker.
+/// The Apply refusal: `SymlinksUnavailable` when Windows Developer Mode is
+/// off (PREP-FR-15, PREP-AC-08), else `LinksUnsupported` scoped to a
+/// processing location that holds no links (PREP-AC-03), else
+/// `CorrectionUndeliverable` for the first held frame whose correction no
+/// patched copy can carry (PREP-FR-03), else `InvalidInput`, naming every
+/// blocker.
 fn refusal(blockers: &[ApplyBlocker]) -> LibraryError {
     let message = blockers.iter().map(ApplyBlocker::describe).collect::<Vec<_>>().join("; ");
-    if blockers.iter().any(|blocker| matches!(blocker, ApplyBlocker::SymlinksUnavailable { .. })) {
+    if blockers.contains(&ApplyBlocker::SymlinksUnavailable) {
         return LibraryError::SymlinksUnavailable(message);
+    }
+    for blocker in blockers {
+        if let ApplyBlocker::LinksUnsupported { path } = blocker {
+            return LibraryError::Context {
+                error: Box::new(LibraryError::LinksUnsupported(message)),
+                scope: Some(path.clone()),
+                identity: None,
+            };
+        }
     }
     for blocker in blockers {
         if let ApplyBlocker::CorrectionUndeliverable { session_id, path, field, refusal } = blocker
@@ -472,6 +491,11 @@ struct Checked {
 
 fn preview(inputs: &ApplyInputs, os: Os) -> ApplyPreview {
     let checked = check(inputs, os);
+    let mut clones = Clones {
+        folder: checked.project.as_deref().and_then(Path::parent),
+        probe: os.clones,
+        volumes: BTreeMap::new(),
+    };
     let entries: Vec<ViewPlanEntry> = checked
         .plan
         .iter()
@@ -479,15 +503,12 @@ fn preview(inputs: &ApplyInputs, os: Os) -> ApplyPreview {
         .map(|entry| ViewPlanEntry {
             path: NativePath::from_path(&entry.path),
             source: entry.source,
-            placement: entry.placement,
+            placement: clones.placement(entry, &inputs.sources),
             size_bytes: entry.basis.size_bytes,
         })
         .collect();
-    let copy_bytes = entries
-        .iter()
-        .filter(|entry| entry.placement == EntryPlacement::Copy)
-        .map(|entry| entry.size_bytes)
-        .sum();
+    let footprint =
+        ViewFootprint::of(entries.iter().map(|entry| (entry.placement, entry.size_bytes)));
     let changed_copies = match (&checked.project, &inputs.installed) {
         (Some(project), Some(installed)) => changed_copies(&project.join(VIEW_FOLDER), installed),
         _ => Vec::new(),
@@ -505,11 +526,48 @@ fn preview(inputs: &ApplyInputs, os: Os) -> ApplyPreview {
         project_folder: checked.project.as_deref().map(NativePath::from_path),
         mode: inputs.basis.mode,
         entries,
-        copy_bytes,
+        footprint,
         foreign,
         changed_copies,
         leftovers: inputs.leftovers.clone(),
         blockers: checked.blockers,
+    }
+}
+
+/// Which Copies entries the build makes as copy-on-write clones
+/// (PREP-FR-04, PREP-AC-25): those whose original clones into the
+/// processing location, probed once per volume the originals are on.
+struct Clones<'a> {
+    folder: Option<&'a Path>,
+    probe: fn(&Path, &Path) -> bool,
+    volumes: BTreeMap<u64, bool>,
+}
+
+impl Clones<'_> {
+    /// `entry`'s placement as the build makes it: a Copies entry is a clone
+    /// where its original's volume clones into the processing location; a
+    /// patched copy never is.
+    fn placement(
+        &mut self,
+        entry: &PlanEntry,
+        sources: &BTreeMap<Uuid, persistence_library::SourcePath>,
+    ) -> EntryPlacement {
+        if entry.placement != EntryPlacement::Copy || entry.patch.is_some() {
+            return entry.placement;
+        }
+        let Some(folder) = self.folder else { return entry.placement };
+        let Some(original) =
+            sources.get(&entry.source_id).and_then(|source| source.path.to_path_buf().ok())
+        else {
+            return entry.placement;
+        };
+        let Some(volume) = files::clone_volume(&original) else { return entry.placement };
+        let probe = self.probe;
+        if *self.volumes.entry(volume).or_insert_with(|| probe(&original, folder)) {
+            EntryPlacement::Clone
+        } else {
+            entry.placement
+        }
     }
 }
 
@@ -587,17 +645,8 @@ fn check(inputs: &ApplyInputs, os: Os) -> Checked {
             Ok((parent, folder)) => {
                 found = folder_blockers(inputs, &folder, pending > 0, &mut blockers);
                 if inputs.basis.mode == ViewMode::Symlinks {
-                    match (os.symlinks)(&parent) {
-                        Ok(()) => {}
-                        Err(SymlinkProbe::Unsupported(detail)) => {
-                            blockers.push(ApplyBlocker::SymlinksUnavailable { detail });
-                        }
-                        Err(SymlinkProbe::Unwritable(detail)) => {
-                            blockers.push(ApplyBlocker::ProcessingLocationUnavailable {
-                                path: NativePath::from_path(&parent),
-                                detail,
-                            });
-                        }
+                    if let Some(blocker) = symlink_blocker(&parent, (os.symlinks)(&parent)) {
+                        blockers.push(blocker);
                     }
                 }
                 project = Some(folder);
@@ -678,11 +727,37 @@ fn location(parent: &NativePath, name: &str) -> Result<(PathBuf, PathBuf), Apply
     match fs::metadata(&path) {
         Ok(metadata) if metadata.is_dir() => {}
         Ok(_) => return Err(unavailable("it is not a folder".into())),
-        Err(error) => return Err(unavailable(error.to_string())),
+        Err(error) => {
+            tracing::warn!(path = %path.display(), %error, "the processing location can't be read");
+            return Err(unavailable("it is missing or can't be read".into()));
+        }
     }
     let folder =
         layout::project_folder(&path, name).map_err(|error| unavailable(error.to_string()))?;
     Ok((path, folder))
+}
+
+/// The blocker a Symlinks View meets in `parent`, by what the probe found
+/// there: Windows Developer Mode off (PREP-AC-08), a filesystem without
+/// links (PREP-AC-03), or a folder that can't hold a file at all.
+fn symlink_blocker(
+    parent: &Path,
+    probed: std::io::Result<SymlinkCapability>,
+) -> Option<ApplyBlocker> {
+    match probed {
+        Ok(SymlinkCapability::Available) => None,
+        Ok(SymlinkCapability::DeveloperModeOff) => Some(ApplyBlocker::SymlinksUnavailable),
+        Ok(SymlinkCapability::Unsupported) => {
+            Some(ApplyBlocker::LinksUnsupported { path: NativePath::from_path(parent) })
+        }
+        Err(error) => {
+            tracing::warn!(path = %parent.display(), %error, "the processing location can't hold a file");
+            Some(ApplyBlocker::ProcessingLocationUnavailable {
+                path: NativePath::from_path(parent),
+                detail: "it can't hold a file".into(),
+            })
+        }
+    }
 }
 
 /// What the Project folder holds that the sheet reports.
@@ -803,10 +878,13 @@ fn choose_copies(
                     path: source.path.clone(),
                     detail: "changed since it was added to the Project".into(),
                 }),
-                Err(error) => blockers.push(ApplyBlocker::OriginalChanged {
-                    path: source.path.clone(),
-                    detail: format!("can't be read: {error}"),
-                }),
+                Err(error) => {
+                    tracing::warn!(path = %path.display(), %error, "an original can't be read");
+                    blockers.push(ApplyBlocker::OriginalChanged {
+                        path: source.path.clone(),
+                        detail: "can't be read".into(),
+                    });
+                }
             }
             chosen.insert(capture.capture_key, copy.asset_id);
             placed = true;
@@ -959,13 +1037,15 @@ fn recover_folders(
     Recovered::NotInstalled(interrupted.into())
 }
 
-/// What an installed View delivers as isolated patched copies
-/// (PREP-FR-03): "N corrected values written to patched copies".
+/// What an installed View delivers: its isolated patched copies
+/// (PREP-FR-03), "N corrected values written to patched copies", and its
+/// footprint as the build placed it (PREP-FR-04).
 #[derive(Clone, Copy, Debug, Default)]
 struct Delivered {
     /// One per held session and corrected field.
     corrected_values: u64,
     patched_copies: u64,
+    footprint: ViewFootprint,
 }
 
 impl Delivered {
@@ -994,13 +1074,25 @@ impl Delivered {
             })
             .collect();
         let count = |n: usize| u64::try_from(n).unwrap_or(u64::MAX);
-        Self { corrected_values: count(values.len()), patched_copies: count(patched.len()) }
+        Self {
+            corrected_values: count(values.len()),
+            patched_copies: count(patched.len()),
+            footprint: ViewFootprint::of(
+                manifest
+                    .entries
+                    .iter()
+                    .map(|entry| (entry.placement, entry.source_fingerprint.size_bytes)),
+            ),
+        }
     }
 }
 
 /// Why an Apply fails when the catalog moved past what it built.
 const CATALOG_MOVED: &str =
     "the Project or the Library changed during the build; the current View is unchanged";
+
+/// Why an Apply fails when the OS refused to move the old View aside.
+const ASIDE_FAILED: &str = "the old View couldn't be moved aside; the current View is unchanged";
 
 /// The catalog state one Apply builds against, read right after its
 /// reservation, which the swap reads again (plan §3): any desired-state
@@ -1101,6 +1193,7 @@ impl Run<'_> {
             leftovers,
             corrected_values: delivered.corrected_values,
             patched_copies: delivered.patched_copies,
+            footprint: delivered.footprint,
             error: self.journal.error.clone(),
         }
     }
@@ -1151,11 +1244,10 @@ impl Run<'_> {
     /// Record each failure for the report; how many there were.
     fn record(&mut self, failures: Vec<(PathBuf, ItemReason)>) -> usize {
         let count = failures.len();
-        self.failures.extend(
-            failures
-                .into_iter()
-                .map(|(path, reason)| ApplyFailure { path: NativePath::from_path(&path), reason }),
-        );
+        self.failures.extend(failures.into_iter().map(|(path, reason)| ApplyFailure {
+            reason: files::reported(&path, &reason),
+            path: NativePath::from_path(&path),
+        }));
         count
     }
 
@@ -1416,7 +1508,7 @@ impl Run<'_> {
                     self.advance(ApplyPhase::OldMoved, None).await?;
                 }
                 Aside::Canceled => return self.cancel().await,
-                Aside::Failed(detail) => return self.end(ApplyOutcome::Failed, detail).await,
+                Aside::Failed => return self.end(ApplyOutcome::Failed, ASIDE_FAILED.into()).await,
             }
             if let Some(report) = self.interrupted() {
                 return Ok(report);
@@ -1426,7 +1518,7 @@ impl Run<'_> {
         let (from, to) = (building.clone(), view.clone());
         let installed = blocking(move || Ok(rename(&from, &to))).await?;
         if let Err(error) = installed {
-            let detail = format!("installing the new View failed: {error}");
+            let detail = not_installed(&view, &error);
             if old {
                 if let Err(restore) = self.restore_old_view().await? {
                     return Err(LibraryError::IdentityConflict(format!(
@@ -1536,6 +1628,13 @@ impl Run<'_> {
     }
 }
 
+/// The OS refused to install the new View: its error goes to the log, and
+/// the report says only what failed.
+fn not_installed(view: &Path, error: &std::io::Error) -> &'static str {
+    tracing::warn!(view = %view.display(), %error, "the new View couldn't be installed");
+    "installing the new View failed"
+}
+
 /// The Project folder and `View/` are still the ones this Apply recorded,
 /// and `View (previous)/` is free, right before the swap.
 fn swap_ready(
@@ -1594,8 +1693,14 @@ mod tests {
     use super::*;
     use crate::{GroupKeywords, ProjectBasis, ProjectLifecycle};
 
-    fn no_symlinks(_folder: &Path) -> Result<(), SymlinkProbe> {
-        Err(SymlinkProbe::Unsupported("a required privilege is not held by the client".into()))
+    #[allow(clippy::unnecessary_wraps)]
+    fn developer_mode_off(_folder: &Path) -> std::io::Result<SymlinkCapability> {
+        Ok(SymlinkCapability::DeveloperModeOff)
+    }
+
+    #[allow(clippy::unnecessary_wraps)]
+    fn no_links(_folder: &Path) -> std::io::Result<SymlinkCapability> {
+        Ok(SymlinkCapability::Unsupported)
     }
 
     fn inputs(parent: &Path, mode: ViewMode) -> ApplyInputs {
@@ -1624,15 +1729,11 @@ mod tests {
     /// Windows with Developer Mode off: a Symlinks Project is refused with
     /// its own error and no other link kind is tried; Copies isn't.
     #[test]
-    fn symlinks_mode_without_symlinks_refuses_with_its_own_error() {
+    fn symlinks_mode_without_developer_mode_refuses_with_its_own_error() {
         let temp = tempfile::tempdir().unwrap();
-        let os = Os { symlinks: no_symlinks, ..Os::SYSTEM };
+        let os = Os { symlinks: developer_mode_off, ..Os::SYSTEM };
         let checked = check(&inputs(temp.path(), ViewMode::Symlinks), os);
-        assert!(
-            matches!(checked.blockers.as_slice(), [ApplyBlocker::SymlinksUnavailable { .. }]),
-            "{:?}",
-            checked.blockers
-        );
+        assert_eq!(checked.blockers, [ApplyBlocker::SymlinksUnavailable]);
         let error = refusal(&checked.blockers);
         assert!(matches!(error, LibraryError::SymlinksUnavailable(_)));
         assert_eq!(error.code().as_str(), "symlinks_unavailable");
@@ -1641,13 +1742,111 @@ mod tests {
         assert!(fs::read_dir(temp.path()).unwrap().next().is_none(), "nothing was built");
     }
 
+    /// PREP-AC-03, distinct from PREP-AC-08: a processing location whose
+    /// filesystem holds no links is its own blocker and code, naming the
+    /// folder and never Developer Mode; Copies is still offered there.
     #[test]
-    fn the_symlink_probe_leaves_nothing_behind() {
+    fn symlinks_mode_on_a_volume_without_links_refuses_naming_the_folder() {
         let temp = tempfile::tempdir().unwrap();
-        files::probe_symlinks(temp.path()).unwrap();
-        assert!(fs::read_dir(temp.path()).unwrap().next().is_none());
+        let os = Os { symlinks: no_links, ..Os::SYSTEM };
+        let checked = check(&inputs(temp.path(), ViewMode::Symlinks), os);
+        let parent = NativePath::from_path(temp.path());
+        assert_eq!(checked.blockers, [ApplyBlocker::LinksUnsupported { path: parent.clone() }]);
+        assert!(!checked.blockers[0].describe().contains("Developer Mode"));
+        let error = refusal(&checked.blockers);
+        assert_eq!(error.code().as_str(), "links_unsupported");
+        assert_eq!(error.response(None, None).scope, Some(parent));
+        assert_eq!(check(&inputs(temp.path(), ViewMode::Copies), os).blockers, Vec::new());
+    }
+
+    /// A blocker's wire tag is its refusal's code, so the sheet words both
+    /// symlink blockers by their `err_library_<code>` messages.
+    #[test]
+    fn each_symlink_blocker_is_tagged_as_its_refusal_code() {
+        let path = NativePath::from_path(Path::new("/Volumes/EXFAT/Processing"));
+        for blocker in [ApplyBlocker::SymlinksUnavailable, ApplyBlocker::LinksUnsupported { path }]
+        {
+            let tag = serde_json::to_value(&blocker).unwrap()["blocker"].clone();
+            let code = refusal(std::slice::from_ref(&blocker)).code();
+            assert_eq!(tag, code.as_str());
+        }
+    }
+
+    #[test]
+    fn a_folder_that_holds_no_file_is_an_unavailable_location_without_os_text() {
+        let temp = tempfile::tempdir().unwrap();
         let missing = temp.path().join("missing");
-        assert!(matches!(files::probe_symlinks(&missing), Err(SymlinkProbe::Unwritable(_))));
+        let blocker = symlink_blocker(&missing, files::probe_symlinks(&missing)).unwrap();
+        let ApplyBlocker::ProcessingLocationUnavailable { detail, .. } = blocker else {
+            panic!("{blocker:?}")
+        };
+        assert!(!detail.contains("os error"), "{detail}");
+    }
+
+    #[test]
+    fn the_footprint_counts_clones_apart_from_copies() {
+        let footprint = ViewFootprint::of([
+            (EntryPlacement::Symlink, 7),
+            (EntryPlacement::Clone, 10),
+            (EntryPlacement::Copy, 5),
+        ]);
+        assert_eq!(footprint, ViewFootprint { frames: 2, bytes: 15, cloned: 1 });
+    }
+
+    /// PREP-AC-25: a Copies entry is a clone in the sheet only where its
+    /// original's volume clones into the processing location; a second
+    /// volume, or a Symlinks entry, is never one. One probe per volume.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    #[test]
+    fn the_sheet_counts_a_copy_as_a_clone_only_where_its_volume_clones() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        static PROBES: AtomicUsize = AtomicUsize::new(0);
+        fn same_volume(_original: &Path, _folder: &Path) -> bool {
+            PROBES.fetch_add(1, Ordering::SeqCst);
+            true
+        }
+        fn other_volume(_original: &Path, _folder: &Path) -> bool {
+            false
+        }
+        let temp = tempfile::tempdir().unwrap();
+        let original = temp.path().join("Light_001.fits");
+        fs::write(&original, b"light").unwrap();
+        let asset = Uuid::new_v4();
+        let sources = BTreeMap::from([(
+            asset,
+            persistence_library::SourcePath {
+                location_id: Uuid::new_v4(),
+                path: NativePath::from_path(&original),
+            },
+        )]);
+        let entry = |placement| PlanEntry {
+            seq: 0,
+            path: PathBuf::from("Lights/Light_001.fits"),
+            group_id: None,
+            night: None,
+            source: crate::EntrySource::Light { capture_key: asset, asset_id: asset },
+            source_id: asset,
+            placement,
+            basis: inventory::probe_fingerprint(&original).unwrap(),
+            sha256: None,
+            patch: None,
+        };
+        let clones = |probe: fn(&Path, &Path) -> bool, folder| Clones {
+            folder,
+            probe,
+            volumes: BTreeMap::new(),
+        };
+        let mut same = clones(same_volume, Some(temp.path()));
+        assert_eq!(same.placement(&entry(EntryPlacement::Copy), &sources), EntryPlacement::Clone);
+        assert_eq!(same.placement(&entry(EntryPlacement::Copy), &sources), EntryPlacement::Clone);
+        assert_eq!(PROBES.load(Ordering::SeqCst), 1, "one probe per volume");
+        let symlink = same.placement(&entry(EntryPlacement::Symlink), &sources);
+        assert_eq!(symlink, EntryPlacement::Symlink);
+        let mut other = clones(other_volume, Some(temp.path()));
+        assert_eq!(other.placement(&entry(EntryPlacement::Copy), &sources), EntryPlacement::Copy);
+        let mut unchosen = clones(same_volume, None);
+        let unplaced = unchosen.placement(&entry(EntryPlacement::Copy), &sources);
+        assert_eq!(unplaced, EntryPlacement::Copy);
     }
 
     #[test]
