@@ -303,7 +303,7 @@ export function useHeldSection(project: Project): DetailSection {
 
   const label = (r: HeldRow) => `${sessionSubjectName(m, catalog, project, r.session)} · ${sessionLine(m, r.session)}`
   const rigOf = (r: HeldRow) => rigName(m, catalog, sessionRigId(r.session))
-  const framing = (r: HeldRow) => framingLine(m, catalog, r.session)
+  const framing = (r: HeldRow) => framingLine(m, r.session)
   const pending = (r: HeldRow) => pendingCell(m, project, changes, ofSession(r.session.id))
   const columns: Column<HeldRow>[] = [
     { id: "session", header: m.project_col_session(), cell: (r) => <HeldSessionCell session={r.session} />, sortValue: (r) => r.session.night, rowHeader: true },
@@ -521,7 +521,7 @@ export function useSuggestionsSection(project: Project): DetailSection | null {
   const columns: Column<Suggestion>[] = [
     { id: "session", header: m.project_col_session(), cell: (r) => <SessionCell session={r.session} />, sortValue: (r) => r.session.night, rowHeader: true },
     { id: "match", header: m.project_col_match(), cell: reason, sortValue: reason, truncate: true },
-    { id: "framing", header: m.project_col_framing(), cell: (r) => framingLine(m, catalog, r.session), sortValue: (r) => framingLine(m, catalog, r.session), truncate: true },
+    { id: "framing", header: m.project_col_framing(), cell: (r) => framingLine(m, r.session), sortValue: (r) => framingLine(m, r.session), truncate: true },
     { id: "frames", header: m.goal_frames(), cell: (r) => formatCount(liveAssetIds(catalog, r.session).length), sortValue: (r) => liveAssetIds(catalog, r.session).length, align: "right" },
     { id: "status", header: m.dialog_col_status(), cell: status, sortValue: status, truncate: true },
   ]

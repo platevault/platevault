@@ -1457,8 +1457,8 @@ export interface MatchingSettings {
   framing: {
     /** Same framing: footprints overlap at least this much. */
     overlapPct: number
-    /** Same framing: centres within this share of the field. */
-    centrePct: number
+    /** Same framing: centres at most this many arcminutes apart, whatever the field (default 5′). */
+    centreArcmin: number
     /** Same framing: ROTATANG within this many degrees; a meridian flip (180°) is the same framing. */
     rotationDeg: number
     /** Mosaic panels overlap between these. */
@@ -1484,6 +1484,9 @@ export interface MatchingSettings {
     temperatureWarnC: number
   }
 }
+
+/** The two limits intake splits a capture's frames by (D-W107): Settings holds the defaults, and import review can override them for one import. */
+export type FramingMargins = Pick<MatchingSettings["framing"], "centreArcmin" | "rotationDeg">
 
 export interface SimulationFaults {
   /** The next durable catalog write fails and stays unsaved. */

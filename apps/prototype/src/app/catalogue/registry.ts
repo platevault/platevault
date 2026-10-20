@@ -91,6 +91,8 @@ export const CATALOGUE: CatalogueEntry[] = [
       "TextAreaField",
       "FieldGroup",
       "NumberField",
+      "SliderField",
+      "Slider",
       "SelectField",
       "ComboboxField",
       "SegmentedField",

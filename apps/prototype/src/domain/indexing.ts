@@ -33,10 +33,10 @@ import type {
   DiskFile,
   Evidence,
   FrameHeader,
+  FramingMargins,
   IsoDateTime,
   Location,
   MasterVersion,
-  MatchingSettings,
   NightDate,
   OpticalTrain,
   OpticalTrainId,
@@ -483,34 +483,28 @@ function assetForFile(catalog: Catalog, location: Location, file: DiskFile): Ass
 // Framing (D-W107, LIB-FR-04)
 // ---------------------------------------------------------------------------
 
-/** Where a frame points: its centre, ROTATANG and the field its rig sees (the larger side, degrees). */
+/** Where a frame points: its centre and ROTATANG. */
 export interface Framing {
   ra: number
   dec: number
   rotationDeg: number | null
-  fieldDeg: number | null
 }
 
 /** The framing a header records; null without RA/DEC. */
 export function framingOf(h: FrameHeader): Framing | null {
   if (h.ra === null || h.dec === null) return null
-  const fieldDeg = h.focalLengthMm && h.pixelSizeUm ? (((Math.max(h.widthPx, h.heightPx) * h.pixelSizeUm) / 1000 / h.focalLengthMm) * 180) / Math.PI : null
-  return { ra: h.ra, dec: h.dec, rotationDeg: h.rotationDeg, fieldDeg }
+  return { ra: h.ra, dec: h.dec, rotationDeg: h.rotationDeg }
 }
 
-/** The Settings margins two framings are compared with (D-W114). */
-type FramingMargins = Pick<MatchingSettings["framing"], "centrePct" | "rotationDeg">
-
 /**
- * The same framing (D-W107, PRJ-FR-31): the centres within `centrePct` of
- * the field and ROTATANG within `rotationDeg`, a meridian flip (180°)
- * counting as the same. Missing pointing or field evidence never splits
- * (provisional, LIB-FR-04).
+ * The same framing (D-W107, PRJ-FR-31): the centres at most `centreArcmin`
+ * apart, an angle whatever the field, and ROTATANG within `rotationDeg`, a
+ * meridian flip (180°) counting as the same. Missing pointing or rotation
+ * evidence never splits.
  */
 export function sameFraming(a: Framing | null, b: Framing | null, margins: FramingMargins): boolean {
   if (!a || !b) return true
-  const field = a.fieldDeg ?? b.fieldDeg
-  if (field !== null && angularSeparationDeg(a.ra, a.dec, b.ra, b.dec) > (field * margins.centrePct) / 100) return false
+  if (angularSeparationDeg(a.ra, a.dec, b.ra, b.dec) * 60 > margins.centreArcmin) return false
   if (a.rotationDeg !== null && b.rotationDeg !== null) {
     const d = Math.abs(a.rotationDeg - b.rotationDeg) % 180
     if (Math.min(d, 180 - d) > margins.rotationDeg) return false
@@ -580,11 +574,10 @@ function sessionAnchor(catalog: Catalog, session: Session): Framing | null {
   return first ? framingOf(first) : null
 }
 
-/** A session's framing: its mean pointing and rotation, with its first frame's field. */
-export function sessionFraming(catalog: Catalog, session: Session): Framing | null {
+/** A session's framing: its mean pointing and rotation. */
+export function sessionFraming(session: Session): Framing | null {
   if (!session.pointing) return null
-  const first = session.assetIds.map((id) => catalog.assets[id]).find((a) => a !== undefined)
-  return { ra: session.pointing.ra, dec: session.pointing.dec, rotationDeg: session.pointing.rotationDeg, fieldDeg: first ? (framingOf(first.observed)?.fieldDeg ?? null) : null }
+  return { ra: session.pointing.ra, dec: session.pointing.dec, rotationDeg: session.pointing.rotationDeg }
 }
 
 // ---------------------------------------------------------------------------
@@ -693,7 +686,7 @@ function newSession(id: SessionId, header: FrameHeader, framing: number): Sessio
  * Returns a new catalog object (collections are shallow-copied). Every
  * ingestion goes through `ingestFiles`, which matches calibration after it.
  */
-function readFiles(source: Catalog, location: Location, files: DiskFile[], now: IsoDateTime, margins: MatchingSettings["framing"], masterCameras: ReadonlyMap<string, CameraId>): Catalog {
+function readFiles(source: Catalog, location: Location, files: DiskFile[], now: IsoDateTime, margins: FramingMargins, masterCameras: ReadonlyMap<string, CameraId>): Catalog {
   const catalog: Catalog = {
     ...source,
     assets: { ...source.assets },

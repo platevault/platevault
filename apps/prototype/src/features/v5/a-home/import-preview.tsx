@@ -4,6 +4,11 @@
  *
  * - Copy or Move, and the destination per role with its space and
  *   writability (each a chip in the gate when it refuses).
+ * - Session split: the centre limit (an angle, arcminutes) and the rotation
+ *   limit this import splits its captures by, Settings' to begin with. Moving
+ *   either slider, or both, re-plans the sessions below at once; nothing is
+ *   saved, Settings keep their values, and Import… uses the values shown
+ *   (the owner's answer of 2026-10-20). Use Settings limits returns to them.
  * - The destinations table: lights become sessions, split by framing as
  *   intake splits them (a second framing reads "framing 2", frames with no
  *   pointing a session of their own flagged Framing unknown, D-W107); the
@@ -33,7 +38,7 @@ import { ActionBar } from "@/components/app/actions"
 import type { Action, Column, ConfirmSpec, MenuItem } from "@/components/app/contracts"
 import { KeyValueList } from "@/components/app/data"
 import { DataTable } from "@/components/app/data-table"
-import { SegmentedField, SelectField } from "@/components/app/fields"
+import { SegmentedField, SelectField, SliderField } from "@/components/app/fields"
 import { FolderPicker } from "@/components/app/folder-picker"
 import { FormDialog } from "@/components/app/form-dialog"
 import { Section } from "@/components/app/page"
@@ -42,15 +47,16 @@ import { type TargetOption, TargetPicker } from "@/components/app/pickers"
 import { StatusBadge } from "@/components/app/status"
 import { CalibrationChoices, type CalibrationChoiceRow, calibrationChoiceRows } from "@/components/domain/calibration-choices"
 import { isUnder, nightOf } from "@/domain/indexing"
+import { FRAMING_LIMIT_RANGE } from "@/domain/labels"
 import { sessionLongLabel } from "@/domain/membership"
 import { matchesQuery } from "@/domain/sky"
-import type { CalibrationSource, Catalog, DiskFile, ImageType, LocationId, PinKind, Session, TargetId } from "@/domain/types"
-import { formatBytes, formatCount, formatExposure, formatNight } from "@/lib/format"
+import type { AppSettings, CalibrationSource, Catalog, DiskFile, FramingMargins, ImageType, LocationId, PinKind, Session, TargetId } from "@/domain/types"
+import { formatBytes, formatCount, formatDecimal, formatExposure, formatNight } from "@/lib/format"
 import { joinRefs, type MessageRef, type Messages, msg } from "@/lib/i18n"
 import type { SessionKind } from "@/store/actions/calibration"
 import { nowIso, type PrototypeState, updateSlice } from "@/store/core"
 import type { ImportCalibrationChoice, ImportDraft } from "@/store/slices/a"
-import { type DestinationGroup, destinationLocations, type ImportPlan, type ImportPreview, previewImport, routeLabel, TYPEABLE, typeLabel, withChoice } from "./import-model"
+import { type DestinationGroup, destinationLocations, type ImportPlan, type ImportPreview, previewImport, routeLabel, splitLimits, TYPEABLE, typeLabel, withChoice } from "./import-model"
 import { CalibrationSummary } from "./session"
 
 function setDraft(patch: Partial<ImportDraft>) {
@@ -73,12 +79,17 @@ function setTyped(paths: string[], type: ImageType | null) {
   })
 }
 
-/** Merge framings (true) or Re-split (false): the capture's framings import as one session, or split by the Settings margins (D-W107). */
+/** Merge framings (true) or Re-split (false): the capture's framings import as one session, or split by the import's limits (D-W107). */
 function setMerged(captureKey: string, merged: boolean) {
   updateSlice("a", (a) => {
     const rest = a.importDraft.merged.filter((key) => key !== captureKey)
     return { ...a, importDraft: { ...a.importDraft, merged: merged ? [...rest, captureKey] : rest } }
   })
+}
+
+/** This import's split limits; null returns to Settings'. Only the draft changes: the plan and its preview follow, and nothing is saved. */
+function setLimits(limits: FramingMargins | null) {
+  setDraft({ limits })
 }
 
 /** Keep a calibration choice for these incoming sessions' kinds until the import reads their frames. */
@@ -128,6 +139,7 @@ export function PreviewStep({ state, plan, draft, editable }: { state: Prototype
     <>
       <ModeSection plan={plan} draft={draft} editable={editable} />
       <DestinationSection state={state} plan={plan} editable={editable} />
+      {plan.groups.some((g) => g.session) ? <SplitLimitsSection settings={settings} plan={plan} editable={editable} /> : null}
       <GroupsSection state={state} plan={plan} preview={preview} editable={editable} />
       <CalibrationSection state={state} plan={plan} draft={draft} preview={preview} editable={editable} />
       <HeldSection plan={plan} draft={draft} editable={editable} />
@@ -179,6 +191,43 @@ function DestinationSection({ state, plan, editable }: { state: PrototypeState; 
           />
         )
       })}
+    </Section>
+  )
+}
+
+const limitNumber = (value: number) => formatDecimal(value, value % 1 === 0 ? 0 : 1)
+
+/** The centre and rotation limits the sessions below are split by, one slider each; they start at Settings' and apply to this import only. */
+function SplitLimitsSection({ settings, plan, editable }: { settings: Pick<AppSettings, "matching">; plan: ImportPlan; editable: boolean }) {
+  const m = useMessages()
+  const defaults = splitLimits(settings, { limits: null })
+  const { centreArcmin, rotationDeg } = plan.limits
+  const overridden = centreArcmin !== defaults.centreArcmin || rotationDeg !== defaults.rotationDeg
+  // Always shown, unavailable while the limits are Settings', so focus stays on it after it returns them.
+  const label = m.import_split_use_settings()
+  const useSettings: Action = { id: "split-use-settings", label, icon: RotateCcw, unavailable: overridden ? undefined : { action: label, reason: m.import_split_settings_in_use(), blockers: [] }, run: () => setLimits(null) }
+  return (
+    <Section title={m.import_split_limits()} description={m.import_split_help()} actions={editable ? <ActionBar actions={[useSettings]} /> : undefined}>
+      <SliderField
+        label={m.import_split_centre()}
+        value={centreArcmin}
+        {...FRAMING_LIMIT_RANGE.centreArcmin}
+        disabled={!editable}
+        format={(value) => `${limitNumber(value)}′`}
+        valueText={(value) => m.import_split_arcmin({ count: value, value: limitNumber(value) })}
+        description={m.import_split_settings({ value: `${limitNumber(defaults.centreArcmin)}′` })}
+        onChange={(value) => setLimits({ centreArcmin: value, rotationDeg })}
+      />
+      <SliderField
+        label={m.import_split_rotation()}
+        value={rotationDeg}
+        {...FRAMING_LIMIT_RANGE.rotationDeg}
+        disabled={!editable}
+        format={(value) => `${limitNumber(value)}°`}
+        valueText={(value) => m.import_split_degrees({ count: value, value: limitNumber(value) })}
+        description={m.import_split_settings({ value: `${limitNumber(defaults.rotationDeg)}°` })}
+        onChange={(value) => setLimits({ centreArcmin, rotationDeg: value })}
+      />
     </Section>
   )
 }

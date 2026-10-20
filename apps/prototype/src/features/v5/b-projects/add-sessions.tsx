@@ -103,7 +103,6 @@ const NO_FILTERS: Filters = { match: "", channel: "", rig: "" }
 export function AddSessionsDialog({ project, open, onOpenChange }: { project: Project; open: boolean; onOpenChange: (open: boolean) => void }) {
   const m = useMessages()
   const follow = useFollowLink()
-  const catalog = useStore((s) => s.catalog)
   const rows = useStore((s) => (open ? addRows(m, s, project) : []))
   const waiting = useStore((s) => (open ? projectSessionsNeedingReview(s.catalog, project).length : 0))
   const [query, setQuery] = useState("")
@@ -158,7 +157,7 @@ export function AddSessionsDialog({ project, open, onOpenChange }: { project: Pr
         { label: m.project_col_match(), value: match(r) },
         { label: m.project_col_joins(), value: joins(r) },
         { label: m.goal_frames(), value: formatCount(r.frames) },
-        { label: m.project_col_framing(), value: framingLine(m, catalog, r.session) },
+        { label: m.project_col_framing(), value: framingLine(m, r.session) },
       ]}
     />
   )

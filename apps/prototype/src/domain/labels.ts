@@ -7,7 +7,7 @@
 import { formatCount, formatDecimal } from "@/lib/format"
 import { type MessageRef, msg, nightRef, verbatim } from "@/lib/i18n"
 import type { MoonAvoidance } from "./planning"
-import type { ApplicationProfile, Band, Catalog, GoalChannel, GroupKeywords, InputMode, MatchingSettings, OperationUnit, OutputKind, SubjectWindow, WindowRule, WrapUpStepId } from "./types"
+import type { ApplicationProfile, Band, Catalog, FramingMargins, GoalChannel, GroupKeywords, InputMode, MatchingSettings, OperationUnit, OutputKind, SubjectWindow, WindowRule, WrapUpStepId } from "./types"
 
 /**
  * The catalogue's object types (sky.ts) in the reader's language. A type a
@@ -107,17 +107,24 @@ export const DEFAULT_MOON_AVOIDANCE: Record<Band, MoonAvoidance> = {
 
 /**
  * The matching defaults the owner settled (D-W114), each adjustable in
- * Settings: same framing at ≥ 90% overlap, centres within 5% of the field
- * and ROTATANG within 5°; mosaic panels overlap 5-40%; flats fine within 2°,
+ * Settings: same framing at ≥ 90% overlap, centres within 5′ (an angle,
+ * the owner's answer of 2026-10-20) and ROTATANG within 5°; mosaic panels
+ * overlap 5-40%; flats fine within 2°,
  * a warning to 5° and the same or next night; darks and bias within 365
  * days by capture time; the 2 °C temperature warning is the legacy matcher's
  * (provisional).
  */
 export const DEFAULT_MATCHING: MatchingSettings = {
-  framing: { overlapPct: 90, centrePct: 5, rotationDeg: 5, panelOverlapMinPct: 5, panelOverlapMaxPct: 40 },
+  framing: { overlapPct: 90, centreArcmin: 5, rotationDeg: 5, panelOverlapMinPct: 5, panelOverlapMaxPct: 40 },
   flats: { fineDeg: 2, warnDeg: 5, windowNights: 1 },
   darks: { windowDays: 365, temperatureWarnC: 2 },
   bias: { windowDays: 365, temperatureWarnC: 2 },
+}
+
+/** The range each split limit takes, in Settings and in import review's sliders: the centre up to 60′, ROTATANG up to 90° (a meridian flip folds a larger difference back). */
+export const FRAMING_LIMIT_RANGE: Record<keyof FramingMargins, { min: number; max: number; step: number }> = {
+  centreArcmin: { min: 0, max: 60, step: 0.5 },
+  rotationDeg: { min: 0, max: 90, step: 0.5 },
 }
 
 /** The GROUP and PANEL keyword names (PRJ-FR-28), Settings' defaults. */

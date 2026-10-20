@@ -45,6 +45,7 @@ import type {
   Catalog,
   Disk,
   DiskFile,
+  FramingMargins,
   ImageType,
   ImportSource,
   IsoDateTime,
@@ -132,7 +133,7 @@ export interface IncomingSession {
   captureKey: string
   /** 1 for the capture key's first framing, 2 for "framing 2" and so on (D-W107); the Framing unknown session numbers after them. */
   framing: number
-  /** How many framings the capture's pointed frames split into by the Settings margins; above 1 they can be merged. */
+  /** How many framings the capture's pointed frames split into by the import's limits (`splitLimits`); above 1 they can be merged. */
   framings: number
   /** The user merged the capture's framings: its pointed frames import as one session, read with its Framing unknown session in one batch. */
   merged: boolean
@@ -190,6 +191,8 @@ export interface ImportPlan {
   folders: Array<{ path: string; extra: boolean; online: boolean }>
   items: PlanItem[]
   groups: DestinationGroup[]
+  /** The centre and rotation limits the light sessions are split by, as review shows them; the import uses these (`splitLimits`). */
+  limits: FramingMargins
   held: { unclassified: UnclassifiedHold[]; settling: DiskFile[] }
   skipped: {
     duplicate: Array<{ file: DiskFile; assetId: AssetId; sessionId: SessionId | null }>
@@ -326,21 +329,27 @@ function lightKey(file: DiskFile): string {
   return sessionGroupingKey({ ...file.header!, imageType: "light" })
 }
 
+/** The centre and rotation limits an import splits its captures by: the ones review set, else Settings' (D-W107, the owner's answer of 2026-10-20). */
+export function splitLimits(settings: Pick<AppSettings, "matching">, draft: Pick<ImportDraft, "limits">): FramingMargins {
+  const { centreArcmin, rotationDeg } = draft.limits ?? settings.matching.framing
+  return { centreArcmin, rotationDeg }
+}
+
 /**
  * The incoming light sessions (P-IMP2) of each light, by file path: grouped
- * by key, then split by framing with the Settings margins as intake splits
+ * by key, then split by framing with the import's limits as intake splits
  * them (`splitByFraming`), unless the user merged the capture's framings,
  * and its frames with no pointing as one Framing unknown session after
  * them; each prefilled with the Target its mean pointing associates, unless
  * the draft chose another Target or Unclassified (null).
  */
-function incomingSessions(state: ImportWorld, draft: ImportDraft, lights: DiskFile[]): Map<string, IncomingSession> {
+function incomingSessions(state: ImportWorld, draft: ImportDraft, limits: FramingMargins, lights: DiskFile[]): Map<string, IncomingSession> {
   const { catalog } = state
   const byKey = new Map<string, DiskFile[]>()
   for (const file of lights) byKey.set(lightKey(file), [...(byKey.get(lightKey(file)) ?? []), file])
   const out = new Map<string, IncomingSession>()
   for (const [captureKey, all] of byKey) {
-    const { framings, unpointed } = splitByFraming(all, (f) => f.header!, state.settings.matching.framing)
+    const { framings, unpointed } = splitByFraming(all, (f) => f.header!, limits)
     const merged = framings.length > 1 && draft.merged.includes(captureKey)
     const sessions = merged ? [framings.flat()] : framings
     ;(unpointed.length > 0 ? [...sessions, unpointed] : sessions).forEach((files, i) => {
@@ -398,6 +407,7 @@ export function planImport(m: Messages, state: ImportWorld, draft: ImportDraft):
     folders: [{ path: source.path, extra: false, online }, ...extras.map((path) => ({ path, extra: true, online: sourceOnline(disk, path) }))],
     items: [],
     groups: [],
+    limits: splitLimits(state.settings, draft),
     held: { unclassified: [], settling: [] },
     skipped: { duplicate: [], imported: [], notImage: [], nameTaken: [] },
     destinations: [],
@@ -456,6 +466,7 @@ export function planImport(m: Messages, state: ImportWorld, draft: ImportDraft):
   const sessions = incomingSessions(
     state,
     draft,
+    plan.limits,
     accepted.filter((a) => a.type === "light").map((a) => a.file),
   )
   for (const { file, type, typed, role, location } of accepted) {
@@ -511,8 +522,13 @@ export function planImport(m: Messages, state: ImportWorld, draft: ImportDraft):
 // Ingestion: what Import does once its copies verified, previewed in review
 // ---------------------------------------------------------------------------
 
-/** Margins under which every frame of a capture is one framing (a rotation difference is at most 90°): a merged capture imports as one session (D-W107). */
-const ONE_FRAMING = { centrePct: Number.POSITIVE_INFINITY, rotationDeg: 90 }
+/** Limits under which every frame of a capture is one framing (a rotation difference is at most 90°): a merged capture imports as one session (D-W107). */
+const ONE_FRAMING: FramingMargins = { centreArcmin: Number.POSITIVE_INFINITY, rotationDeg: 90 }
+
+/** The settings ingestion reads, with intake's split limits replaced by `limits`. */
+function withLimits(settings: Pick<AppSettings, "matching">, limits: FramingMargins): Pick<AppSettings, "matching"> {
+  return { matching: { ...settings.matching, framing: { ...settings.matching.framing, ...limits } } }
+}
 
 /** The verified copy Import writes at `dest`: the source's bytes and header. */
 export function copiedFile(source: DiskFile, dest: string, volumeId: Volume["id"], at: IsoDateTime): DiskFile {
@@ -553,17 +569,19 @@ export function importBatches(catalog: Catalog, disk: Disk, entries: ImportedEnt
  * Read the import's copies into the library through C's ingestion
  * (`ingestFiles`, which matches calibration after each batch): calibration
  * locations first, so lights are matched against the batch's calibration as
- * well as the library's, then captures, merged captures last with every
- * frame in one framing. Import never waits for calibration: whatever stays
- * unsettled waits in Needs calibration (LIB-FR-23).
+ * well as the library's, then captures, split by the import's `limits`,
+ * merged captures last with every frame in one framing. Import never waits
+ * for calibration: whatever stays unsettled waits in Needs calibration
+ * (LIB-FR-23).
  */
-export function ingestImport(catalog: Catalog, disk: Disk, settings: Pick<AppSettings, "matching">, batches: ImportBatch[], at: IsoDateTime): Catalog {
+export function ingestImport(catalog: Catalog, disk: Disk, settings: Pick<AppSettings, "matching">, limits: FramingMargins, batches: ImportBatch[], at: IsoDateTime): Catalog {
   const order = (b: ImportBatch) => (b.location.role === "captures" ? 1 : 0) + (b.merged ? 1 : 0)
-  const oneFraming = { matching: { ...settings.matching, framing: { ...settings.matching.framing, ...ONE_FRAMING } } }
+  const split = withLimits(settings, limits)
+  const oneFraming = withLimits(settings, ONE_FRAMING)
   return [...batches]
     .filter((b) => b.files.length > 0)
     .sort((a, b) => order(a) - order(b))
-    .reduce((next, b) => ingestFiles(next, disk, b.merged ? oneFraming : settings, b.location, b.files, at, NO_MASTER_CAMERAS), catalog)
+    .reduce((next, b) => ingestFiles(next, disk, b.merged ? oneFraming : split, b.location, b.files, at, NO_MASTER_CAMERAS), catalog)
 }
 
 /** Calibration chosen in review for one incoming session, by kind. */
@@ -648,7 +666,7 @@ export function previewImport(state: ImportWorld, plan: ImportPlan, draft: Impor
     plan.items.map((i) => copiedFile(i.file, i.destPath, i.location.volumeId, at)),
   )
   const entries = plan.items.map((i): ImportedEntry => ({ dest: i.destPath, locationId: i.location.id, type: i.type, merged: i.session?.merged ?? false }))
-  const ingested = ingestImport(state.catalog, disk, state.settings, importBatches(state.catalog, disk, entries), at)
+  const ingested = ingestImport(state.catalog, disk, state.settings, plan.limits, importBatches(state.catalog, disk, entries), at)
   const landed = sessionsAt(ingested, new Set(plan.items.map((i) => i.destPath)))
   const items = plan.items.map((i) => ({ destPath: i.destPath, sessionKey: i.session?.key ?? null }))
   const catalog = applyImportChoices(ingested, disk, state.settings, choicePicks(items, landed, draft.calibration), at)

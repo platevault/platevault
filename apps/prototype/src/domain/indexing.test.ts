@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 import { m } from "@/lib/i18n"
 import type { World } from "./derive"
 import { makeFile, writeFiles } from "./disk"
-import { framingOf, ingestFiles, isUnder, listLocation, NO_MASTER_CAMERAS, sessionFraming, splitByFraming } from "./indexing"
+import { ingestFiles, isUnder, listLocation, NO_MASTER_CAMERAS, sessionFraming, splitByFraming } from "./indexing"
 import { sessionLongLabel } from "./membership"
 import { arrivalFiles, createSeed } from "./seed"
 import type { DiskFile, FrameHeader, Location, Session } from "./types"
@@ -17,9 +17,9 @@ function header(minute: number, offset: number | null): FrameHeader {
   return { ...base, imageType: "light", filter: "SII", exposureS: 300, dateObs: time, ra: offset === null ? null : base.ra, dec: offset === null ? null : base.dec! + offset * marginDeg(), rotationDeg: offset === null ? null : base.rotationDeg }
 }
 
-/** The centre margin of the template rig's field, in degrees. */
+/** The centre limit in degrees (Settings' 5′). */
 function marginDeg(): number {
-  return (framingOf(arrivalFiles()[0]!.header!)!.fieldDeg! * MARGINS.centrePct) / 100
+  return MARGINS.centreArcmin / 60
 }
 
 describe("splitByFraming: each frame compared with its framing's first frame in capture order (D-W107)", () => {
@@ -51,6 +51,36 @@ describe("splitByFraming: each frame compared with its framing's first frame in 
     const { framings, unpointed } = splitByFraming(frames, (h) => h, MARGINS)
     expect(framings.map((f) => f.map((h) => frames.indexOf(h)))).toEqual([[1, 3]])
     expect(unpointed.map((h) => frames.indexOf(h))).toEqual([0, 2])
+  })
+})
+
+describe("splitByFraming: the centre limit is an angle, the rotation limit degrees (the owner's answer of 2026-10-20)", () => {
+  /** A pointed light `centreArcmin` north of the template frame's centre, ROTATANG `rotationDelta` past it, with the given focal length. */
+  function pointed(minute: number, centreArcmin: number, rotationDelta = 0, focalLengthMm: number | null = arrivalFiles()[0]!.header!.focalLengthMm): FrameHeader {
+    const base = header(minute, 0)
+    return { ...base, dec: base.dec! + centreArcmin / 60, rotationDeg: base.rotationDeg! + rotationDelta, focalLengthMm }
+  }
+  const split = (frames: FrameHeader[], centreArcmin: number, rotationDeg: number) => splitByFraming(frames, (h) => h, { centreArcmin, rotationDeg }).framings.map((f) => f.map((h) => frames.indexOf(h)))
+
+  it("splits centres 0′, 3′ and 7′ apart into three framings at 2′, two at 5′ and one at 10′", () => {
+    const frames = [pointed(0, 0), pointed(10, 3), pointed(20, 7)]
+    expect(split(frames, 2, 5)).toEqual([[0], [1], [2]])
+    expect(split(frames, 5, 5)).toEqual([[0, 1], [2]])
+    expect(split(frames, 10, 5)).toEqual([[0, 1, 2]])
+  })
+
+  it("splits a 4° rotation at 3° and keeps it at 5°, the default", () => {
+    const frames = [pointed(0, 0), pointed(10, 0, 4), pointed(20, 0, 180)]
+    expect(split(frames, 5, 3)).toEqual([[0, 2], [1]])
+    expect(split(frames, 5, 5)).toEqual([[0, 1, 2]])
+    expect(MARGINS).toMatchObject({ centreArcmin: 5, rotationDeg: 5 })
+  })
+
+  it("splits by the same angle whatever the field, and without field evidence", () => {
+    const wide = [pointed(0, 0, 0, 250), pointed(10, 6, 0, 250)]
+    const narrow = [pointed(0, 0, 0, 2000), pointed(10, 6, 0, 2000)]
+    const unknown = [pointed(0, 0, 0, null), pointed(10, 6, 0, null)]
+    for (const frames of [wide, narrow, unknown]) expect(split(frames, 5, 5)).toEqual([[0], [1]])
   })
 })
 
@@ -100,7 +130,7 @@ describe("Intake: the same split when files are read into the library (D-W107, L
       [3, [7, 8]],
     ])
     // The session with no pointing reads as Framing unknown: no framing to place it by.
-    expect(sessions.map((s) => sessionFraming(w.catalog, s.session) === null)).toEqual([false, false, true])
+    expect(sessions.map((s) => sessionFraming(s.session) === null)).toEqual([false, false, true])
     expect(sessionLongLabel(m, sessions[2]!.session)).toMatch(new RegExp(`${m.domain_session_framing_unknown()}$`))
 
     const preview = splitByFraming(files, (f) => f.header!, w.settings.matching.framing)
@@ -119,6 +149,6 @@ describe("Intake: the same split when files are read into the library (D-W107, L
     w.catalog = ingestFiles(w.catalog, w.disk, w.settings, location, later, NOW, NO_MASTER_CAMERAS)
     const all = [...first, ...later]
     expect(sessionsOf(w, all).map((s) => s.frames)).toEqual([[0, 1], [2], [3]])
-    expect(sessionFraming(w.catalog, sessionsOf(w, all)[1]!.session)).toBeNull()
+    expect(sessionFraming(sessionsOf(w, all)[1]!.session)).toBeNull()
   })
 })
