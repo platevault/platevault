@@ -496,6 +496,13 @@ export function framingOf(h: FrameHeader): Framing | null {
   return { ra: h.ra, dec: h.dec, rotationDeg: h.rotationDeg }
 }
 
+/** Rotation separation, treating a meridian flip as equivalent; null means the evidence is unknown. */
+function rotationDifferenceDeg(a: Framing, b: Framing): number | null {
+  if (a.rotationDeg === null || b.rotationDeg === null) return null
+  const d = Math.abs(a.rotationDeg - b.rotationDeg) % 180
+  return Math.min(d, 180 - d)
+}
+
 /**
  * The same framing (D-W107, PRJ-FR-31): the centres at most `centreArcmin`
  * apart, an angle whatever the field, and ROTATANG within `rotationDeg`, a
@@ -505,11 +512,8 @@ export function framingOf(h: FrameHeader): Framing | null {
 export function sameFraming(a: Framing | null, b: Framing | null, margins: FramingMargins): boolean {
   if (!a || !b) return true
   if (angularSeparationDeg(a.ra, a.dec, b.ra, b.dec) * 60 > margins.centreArcmin) return false
-  if (a.rotationDeg !== null && b.rotationDeg !== null) {
-    const d = Math.abs(a.rotationDeg - b.rotationDeg) % 180
-    if (Math.min(d, 180 - d) > margins.rotationDeg) return false
-  }
-  return true
+  const rotationDifference = rotationDifferenceDeg(a, b)
+  return rotationDifference === null || rotationDifference <= margins.rotationDeg
 }
 
 /** Frames in capture order (D-W107): by DATE-OBS, a tie keeping the order given. */
@@ -520,22 +524,28 @@ export function inCaptureOrder<T>(items: readonly T[], header: (item: T) => Fram
 /**
  * The framing a pointed frame joins (D-W107): the one whose anchor, its
  * first pointed frame in capture order, lies nearest within the margins,
- * the earlier framing on a tie. A frame is compared with anchors only, never
- * with the frame before it, so a slow drift splits instead of chaining, and
- * a frame back at an earlier framing rejoins it. A framing without an anchor
- * (Framing unknown) never takes a pointed frame.
+ * the earlier framing on a full tie. A frame is compared with anchors only,
+ * so a slow drift splits instead of chaining and a frame back at an earlier
+ * framing rejoins it. A framing without an anchor (Framing unknown) never
+ * takes a pointed frame.
  */
 function nearestFraming<G extends { anchor: Framing | null }>(framings: readonly G[], framing: Framing, margins: FramingMargins): G | undefined {
   let nearest: G | undefined
   let nearestDeg = Number.POSITIVE_INFINITY
+  let nearestRotationDeg: number | null = null
   for (const candidate of framings) {
     const anchor = candidate.anchor
     if (!anchor || !sameFraming(anchor, framing, margins)) continue
     const separation = angularSeparationDeg(anchor.ra, anchor.dec, framing.ra, framing.dec)
-    if (separation < nearestDeg) {
-      nearest = candidate
-      nearestDeg = separation
+    const rotation = rotationDifferenceDeg(anchor, framing)
+    if (separation > nearestDeg) continue
+    if (separation === nearestDeg) {
+      if (nearestRotationDeg !== null && (rotation === null || rotation >= nearestRotationDeg)) continue
+      if (nearestRotationDeg === null && rotation === null) continue
     }
+    nearest = candidate
+    nearestDeg = separation
+    nearestRotationDeg = rotation
   }
   return nearest
 }
