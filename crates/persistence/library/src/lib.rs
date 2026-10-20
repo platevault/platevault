@@ -88,10 +88,12 @@ const SCHEMA: &str = schema_modules![
 /// greenfield catalog (D-W115): no earlier catalog is upgraded. That refuses
 /// main's version 17 (remap reviews' `proposed_volume_kind`) and F4's own 18,
 /// whose `project_sessions_admit_ready` trigger predates D-W124. Version 20
-/// records each session's intake split limits in its framing JSON, which a
-/// version 19 framing lacks. Bump it with any DDL change that `IF NOT EXISTS`
-/// would leave stale in an existing catalog, and with any stored JSON shape
-/// an existing catalog's rows can't be read as.
+/// records each session's intake split limits in framing JSON and changes
+/// `measurement_run_issues` to store issue codes/parameters and measurement
+/// outcomes to store failure codes/parameters; version 19 has neither shape.
+/// Bump it with any DDL change that `IF NOT EXISTS` would leave stale in an
+/// existing catalog, and with any stored JSON shape an existing catalog's rows
+/// can't be read as.
 pub const SCHEMA_VERSION: i64 = 20;
 const BUSY_TIMEOUT: Duration = Duration::from_secs(10);
 const READER_CONNECTIONS: u32 = 4;

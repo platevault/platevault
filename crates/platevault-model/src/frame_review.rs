@@ -548,7 +548,7 @@ pub struct StarRecord {
 pub enum MeasurementFailureCode {
     UnsupportedFormat,
     MalformedData,
-    SourceUnavailable,
+    MultichannelUnqualified,
 }
 
 impl MeasurementFailureCode {
@@ -557,7 +557,7 @@ impl MeasurementFailureCode {
         match self {
             Self::UnsupportedFormat => "unsupported_format",
             Self::MalformedData => "malformed_data",
-            Self::SourceUnavailable => "source_unavailable",
+            Self::MultichannelUnqualified => "multichannel_unqualified",
         }
     }
 }
