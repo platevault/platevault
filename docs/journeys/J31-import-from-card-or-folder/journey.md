@@ -1,7 +1,7 @@
 ---
 id: J31
 title: Import from a card or folder with Copy or Move and templated paths
-version: 8
+version: 9
 status: draft
 last_reviewed: 2026-10-06
 actors: [primary-user]
@@ -56,7 +56,7 @@ folder is added in place. Done means:
 - P5: An SMB share that macOS has already mounted at `/Volumes/astro-share` holds `incoming/` with 20 NGC 7000 OIII 300 s RedCat lights from the night of 2026-10-05, with OBJECT `NGC 7000` and pointing within NGC 7000's footprint. Removing a file on this share deletes it immediately; the share has no OS Trash.
 - P6: `Astro-T7/Archive-2025/` is an organized folder of 2025 light sessions outside every registered location.
 - P7: Manifests (relative path, size, SHA-256) of `Card-1`, `Card-2`, `Card-4`, `astro-share/incoming`, `Archive-2025` and both destination locations, recorded outside PlateVault before S1. No file on `Card-2`, `Card-4`, `astro-share/incoming` or `Archive-2025` is byte-identical to a library frame or to another of these files.
-- P8: Removable volume `Card-4` supports the OS Trash and is not connected before S10a. In an ASIAIR layout it holds 34 NGC 7000 Ha 300 s RedCat lights from the night of 2026-10-06. They have OBJECT `NGC 7000`, one ROTATANG throughout and pointing within NGC 7000's footprint. The first 16 share one framing, 8 more keep it after a meridian flip, and the last 10 have their centre 12 % of the field away.
+- P8: Removable volume `Card-4` supports the OS Trash and is not connected before S10a. In an ASIAIR layout it holds 34 NGC 7000 Ha 300 s RedCat lights from the night of 2026-10-06. They have OBJECT `NGC 7000` and pointing within NGC 7000's footprint. The first 14 are at framing A, the next 10 at framing B after the meridian flip, with B's centre 12′ from A's and a rotation difference of 6°, and the last 10 return to A.
 
 ## Steps
 
@@ -177,13 +177,17 @@ folder is added in place. Done means:
 
 ### S10a — Review a framing split, merge it and split it again {#S10a}
 
-- **Do:** Connect `Card-4`. Choose it as the source and `Astro-T7 captures` as the Captures location, and read the preview's sessions. Merge the two Ha sessions and read the preview, then re-split the merged session. Choose **Copy** and start the import.
+- **Do:** Connect `Card-4`. Choose it as the source and `Astro-T7 captures` as the Captures location, and read the preview's sessions. Merge the two Ha sessions and read the preview, then re-split the merged session. Set the centre limit to 12′ and read the preview, then raise the rotation limit to 6° and read it again. Choose **Copy** and start the import with both limits still set. Then, in Settings, open the global Project grouping preferences and read the framing limits.
 - **Expect:**
   - The preview lists two sessions with Target NGC 7000 prefilled from their pointing: "NGC 7000 · Ha · 300 s · 6 Oct" with the 24 lights from either side of the meridian flip, and "NGC 7000 · Ha · 300 s · 6 Oct · framing 2" with the other 10. Both list their lights under `NGC 7000/Ha/2026-10-06/light/`.
+  - The first session's 24 lights include the 10 that return to framing A after framing B.
   - After the merge, the preview lists one session of 34 lights. After the re-split, the two sessions of 24 and 10 lights return with the same names.
-  - The summary reads `34 frames · <size> · 2 sessions`, and Sessions lists both sessions with their frame counts.
-- **Expect (negative):** The meridian flip starts no session. Merging and re-splitting write nothing, and no file is written before the import starts.
-- **Trace:** Import · STO-IMP-FR-03 · LIB-FR-04, LIB-FR-24 · LIB-AC-31 · D-W107
+  - With a centre limit of 12′, the preview still shows sessions of 24 and 10, because framing B's rotation differs by 6°.
+  - With the centre limit at 12′ and the rotation limit at 6°, the preview shows one session of 34.
+  - The import splits with the limits set when it started, so the summary reads `34 frames · <size> · 1 session`, and Sessions lists one session, "NGC 7000 · Ha · 300 s · 6 Oct", with 34 frames. This needs both import limits: under either Settings limit, framing B starts a second session.
+  - Settings still reads the default limits, a centre limit of 5′ and rotation within 5°.
+- **Expect (negative):** The meridian flip starts no session. Merging and re-splitting write nothing, and no file is written before the import starts. Slider changes also write nothing.
+- **Trace:** Import · STO-IMP-FR-03 · LIB-FR-04, LIB-FR-24 · LIB-AC-31 · D-W107 · D-W114
 
 ### S11 — Add an existing library folder {#S11}
 
@@ -214,8 +218,8 @@ folder is added in place. Done means:
 - SC6: S11 copies, renames or moves 0 files.
 - SC7: At S12, 100% of imported destination files match their source's SHA-256, and 0 files were permanently deleted or overwritten.
 - SC8: Card-1 reads ASIAIR (S1) and Card-2 reads USB device (S9). 0 duplicate-copies issues are raised after S6, S8, S9, S10, S10a or S11, and 0 duplicates warnings name a `Card-1` file.
-- SC9: The 6 imported light sessions land with the Target their preview showed: 5 with NGC 7000 Confirmed (`2 Oct Ha`, `5 Oct OIII` and the two 6 Oct sessions of S10a prefilled from pointing, `2 Oct OIII` changed at S5a) and 1 with no Target under `unclassified/`, where Unclassified was preselected (`4 Oct Ha`, S9; owner's answer, 2026-10-19, astro-plan-rzbzu.1). 0 Targets and 0 folders come from OBJECT, and 0 files move after an import (S10a, S12).
-- SC10: At S10a the preview lists exactly 2 sessions, of 24 and 10 lights. The merge shows 1 session of 34, the re-split restores the 2 sessions, and 0 bytes are written before the import starts.
+- SC9: The 5 imported light sessions land with the Target their preview showed: 4 with NGC 7000 Confirmed (`2 Oct Ha`, `5 Oct OIII` and the 6 Oct session of S10a prefilled from pointing, `2 Oct OIII` changed at S5a) and 1 with no Target under `unclassified/`, where Unclassified was preselected (`4 Oct Ha`, S9; owner's answer, 2026-10-19, astro-plan-rzbzu.1). 0 Targets and 0 folders come from OBJECT, and 0 files move after an import (S10a, S12).
+- SC10: At S10a the preview lists exactly 2 sessions, of 24 and 10 lights. The merge shows 1 session of 34, the re-split restores the 2 sessions, and 0 bytes are written before the import starts. The import, started with a 12′ centre limit and a 6° rotation limit, lands 1 session of 34, and Settings still reads 5′ and 5°.
 
 ## Known gaps
 
@@ -254,3 +258,6 @@ folder is added in place. Done means:
 - **Δ8** 2026-10-19 · S3, S9, SC9 · behavior-change
   When a session has no pointing or no matching Target, the preview preselects Unclassified so Import is available; choosing a Target only files it under that Target.
   Evidence: STO-IMP-FR-03 · owner's answer of 2026-10-19 in astro-plan-rzbzu.1 · by: OwnerAnswersDocsFix (intent-gated)
+- **Δ9** 2026-10-20 · P8, S10a, SC9, SC10 · behavior-change
+  The centre limit is an angle, 5′ by default, and lights that return to an earlier framing rejoin its session, so P8 has 14 lights at framing A, 10 at framing B and 10 back at A. In the import preview the user moves the centre and rotation sliders, and the split recalculates live without saving. S10a starts the import with a 12′ centre limit and a 6° rotation limit, which only together keep B in the session, so it lands one 6 Oct session of 34 and SC9 counts 5 imported light sessions, while Settings keeps the defaults.
+  Evidence: D-W107 and D-W114 (owner's answers of 2026-10-20) in PR #1850, LIB-FR-04, LIB-FR-24, LIB-AC-31 · by: Main (intent-gated)

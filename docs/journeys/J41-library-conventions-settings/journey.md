@@ -1,7 +1,7 @@
 ---
 id: J41
 title: Set library and Project conventions in Settings for naming, goals, grouping, locations and applications
-version: 6
+version: 7
 status: draft
 last_reviewed: 2026-10-12
 actors: [primary-user]
@@ -169,7 +169,7 @@ The user sets how imported files are named, which goals a new Project starts wit
 ### S16b — Read global Project grouping defaults {#S16b}
 
 - **Do:** In Settings, open the global Project grouping preferences. Read the framing and mosaic-panel thresholds and the GROUP and PANEL keyword names.
-- **Expect:** The same-framing defaults are coverage of at least 90 %, centres within 5 % of the field and rotation within 5°, and each is adjustable. The mosaic-panel overlap default is 5 % to 40 %. GROUP is the default folder keyword and PANEL is used for a mosaic-panel group; both keyword names are configurable globally and per Project. The group folder level appears only when a Project has several groups, so a one-group Project has none, even when its group is a mosaic panel.
+- **Expect:** The same-framing defaults are coverage of at least 90 %, a centre limit of 5′ and rotation within 5°, and each is adjustable. The mosaic-panel overlap default is 5 % to 40 %. GROUP is the default folder keyword and PANEL is used for a mosaic-panel group; both keyword names are configurable globally and per Project. The group folder level appears only when a Project has several groups, so a one-group Project has none, even when its group is a mosaic panel.
 - **Expect (negative):** Reading these defaults changes no existing Project group or View.
 - **Trace:** PRJ-FR-31 · PRJ-FR-28 · PRJ-FR-29 · PREP-FR-16 · D-W95 · D-W100 · D-W114
 
@@ -225,3 +225,6 @@ The user sets how imported files are named, which goals a new Project starts wit
 - **Δ6** 2026-10-17 · S9, S10, S11, +S11a, S12 · behavior-change
   Each goal is time or frames, never both, with an optional quality bar: `HOO deep` now holds Ha 15h and OIII 120 frames, each with FWHM ≤ 3.5″, and the Project copies them unchanged. New S11a sets a Finish by date on the subject, whose progress then shows the nights left.
   Evidence: HARNESS-V5-FEEDBACK-R1.md Round 9 C7 and "Goals, grilling round 4" · D-W90 · PRJ-FR-03, PRJ-FR-23, PRJ-AC-32, PRJ-AC-33 · by: JourneysR9c (intent-gated)
+- **Δ7** 2026-10-20 · S16b · behavior-change
+  The same-framing centre default is an angle, a centre limit of 5′, rather than a share of the field.
+  Evidence: D-W114 (owner's answer of 2026-10-20) in PR #1850, PRJ-FR-31 · by: Main (intent-gated)
