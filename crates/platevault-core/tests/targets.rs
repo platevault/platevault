@@ -1,7 +1,9 @@
 //! Offline target catalog, provider adapter and association evidence, exercised
 //! against the real bundled seed and a loopback SIMBAD TAP endpoint.
 
+// Included whole; import.rs, not this test, calls `separation_from_deg`.
 #[path = "../src/targets.rs"]
+#[allow(dead_code)]
 mod targets;
 
 use std::io::{Read, Write};

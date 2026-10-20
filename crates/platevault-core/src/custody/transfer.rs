@@ -906,6 +906,7 @@ mod tests {
         fs::write(previous.join("notes/session.txt"), b"the user's notes").unwrap();
         // macOS also writes `._` AppleDouble files beside these on exFAT.
         let (path, evidence) = foreign_files(&previous, &std::collections::BTreeSet::new())
+            .unwrap()
             .into_iter()
             .find(|(path, _)| path == Path::new("notes/session.txt"))
             .unwrap();
