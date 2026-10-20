@@ -130,7 +130,8 @@ pub async fn require_admission(
     Ok(basis)
 }
 
-async fn read_intake(conn: &mut SqliteConnection, session_id: Uuid) -> Result<SessionIntake> {
+/// The session's intake facts in the caller's snapshot.
+pub async fn read_intake(conn: &mut SqliteConnection, session_id: Uuid) -> Result<SessionIntake> {
     let mut row = load_session_row(conn, session_id).await?;
     let grouping_revision = row.session.grouping_revision;
     let superseded = row.superseded_by.is_some();
@@ -149,11 +150,14 @@ async fn read_intake(conn: &mut SqliteConnection, session_id: Uuid) -> Result<Se
     let review_finished = reviewed.map(revision).transpose()? == Some(grouping_revision);
     let assets = scoped_members(conn, &mut row, Members::Live).await?;
     let view = CaptureView::read(conn, &[session_id], &assets).await?;
-    let unreviewed = view
-        .members(&assets)
-        .iter()
-        .filter(|member| member.applicable_quality == ApplicableQuality::Unreviewed)
-        .count();
+    let (mut unreviewed, mut changed) = (0_usize, 0_usize);
+    for member in view.members(&assets) {
+        match member.applicable_quality {
+            ApplicableQuality::Unreviewed => unreviewed += 1,
+            ApplicableQuality::ChangedContent { .. } => changed += 1,
+            _ => {}
+        }
+    }
     Ok(SessionIntake {
         session_id,
         grouping_revision,
@@ -162,6 +166,7 @@ async fn read_intake(conn: &mut SqliteConnection, session_id: Uuid) -> Result<Se
         rig_id,
         review_finished,
         unreviewed_frames: u64::try_from(unreviewed).unwrap_or(u64::MAX),
+        changed_frames: u64::try_from(changed).unwrap_or(u64::MAX),
     })
 }
 

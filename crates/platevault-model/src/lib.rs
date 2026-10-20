@@ -210,6 +210,11 @@ pub enum LibraryError {
         field: String,
         refusal: PatchRefusal,
     },
+    /// A session an open Project holds isn't Ready: Apply waits until it is
+    /// Ready again (FR-034, VSEL-FR-12; D-W100, D-W140). The response's
+    /// identity names the session.
+    #[error("session not ready: {0}")]
+    SessionNotReady(String),
     /// `error` concerning the record `identity`, the native path `scope`, or
     /// both; the innermost context that names one wins.
     #[error("{error}")]
@@ -245,6 +250,8 @@ pub enum LibraryErrorCode {
     CorrectionUnpatchable,
     /// A recorded correction on an input neither FITS nor XISF.
     CorrectionFormatUnpatchable,
+    /// A session the Project holds isn't Ready, so Apply waits.
+    SessionNotReady,
 }
 
 impl LibraryErrorCode {
@@ -268,6 +275,7 @@ impl LibraryErrorCode {
             Self::Canceled => "canceled",
             Self::CorrectionUnpatchable => "correction_unpatchable",
             Self::CorrectionFormatUnpatchable => "correction_format_unpatchable",
+            Self::SessionNotReady => "session_not_ready",
         }
     }
 
@@ -288,7 +296,8 @@ impl LibraryErrorCode {
             | Self::SymlinksUnavailable
             | Self::LinksUnsupported
             | Self::CorrectionUnpatchable
-            | Self::CorrectionFormatUnpatchable => RetryAction::Review,
+            | Self::CorrectionFormatUnpatchable
+            | Self::SessionNotReady => RetryAction::Review,
             Self::UnsupportedFormat | Self::Canceled => RetryAction::None,
         }
     }
@@ -393,6 +402,7 @@ impl LibraryError {
             Self::SymlinksUnavailable(_) => LibraryErrorCode::SymlinksUnavailable,
             Self::LinksUnsupported(_) => LibraryErrorCode::LinksUnsupported,
             Self::Canceled => LibraryErrorCode::Canceled,
+            Self::SessionNotReady(_) => LibraryErrorCode::SessionNotReady,
             Self::CorrectionUndeliverable { refusal: PatchRefusal::UnsupportedFormat, .. } => {
                 LibraryErrorCode::CorrectionFormatUnpatchable
             }

@@ -247,6 +247,7 @@ fn ready_intake(session: Uuid) -> SessionIntake {
         rig_id: Some(id(60)),
         review_finished: true,
         unreviewed_frames: 0,
+        changed_frames: 0,
     }
 }
 
@@ -601,8 +602,11 @@ fn readiness_follows_the_intake_flow_target_then_rig_then_review() {
     let mut intake = ready.clone();
     intake.unreviewed_frames = 1;
     assert_eq!(intake.readiness(), SessionReadiness::NeedsReview, "no Unreviewed frame left");
-    intake.review_finished = false;
     intake.unreviewed_frames = 0;
+    intake.changed_frames = 1;
+    assert_eq!(intake.readiness(), SessionReadiness::NeedsReview, "a frame changed after review");
+    intake.changed_frames = 0;
+    intake.review_finished = false;
     assert_eq!(intake.readiness(), SessionReadiness::NeedsReview);
     intake.rig_id = None;
     assert_eq!(intake.readiness(), SessionReadiness::NeedsRig);
