@@ -56,7 +56,7 @@ folder is added in place. Done means:
 - P5: An SMB share that macOS has already mounted at `/Volumes/astro-share` holds `incoming/` with 20 NGC 7000 OIII 300 s RedCat lights from the night of 2026-10-05, with OBJECT `NGC 7000` and pointing within NGC 7000's footprint. Removing a file on this share deletes it immediately; the share has no OS Trash.
 - P6: `Astro-T7/Archive-2025/` is an organized folder of 2025 light sessions outside every registered location.
 - P7: Manifests (relative path, size, SHA-256) of `Card-1`, `Card-2`, `Card-4`, `astro-share/incoming`, `Archive-2025` and both destination locations, recorded outside PlateVault before S1. No file on `Card-2`, `Card-4`, `astro-share/incoming` or `Archive-2025` is byte-identical to a library frame or to another of these files.
-- P8: Removable volume `Card-4` supports the OS Trash and is not connected before S10a. In an ASIAIR layout it holds 34 NGC 7000 Ha 300 s RedCat lights from the night of 2026-10-06. They have OBJECT `NGC 7000`, one ROTATANG throughout and pointing within NGC 7000's footprint. The first 16 share one framing, 8 more keep it after a meridian flip, and the last 10 have their centre 12 % of the field away.
+- P8: Removable volume `Card-4` supports the OS Trash and is not connected before S10a. In an ASIAIR layout it holds 34 NGC 7000 Ha 300 s RedCat lights from the night of 2026-10-06. They have OBJECT `NGC 7000`, one ROTATANG throughout and pointing within NGC 7000's footprint. The first 16 share one framing, 8 more keep it after a meridian flip, and the last 10 have their centre 12′ from the first framing's centre (owner's answer, 2026-10-20).
 
 ## Steps
 
@@ -179,11 +179,11 @@ folder is added in place. Done means:
 
 - **Do:** Connect `Card-4`. Choose it as the source and `Astro-T7 captures` as the Captures location, and read the preview's sessions. Merge the two Ha sessions and read the preview, then re-split the merged session. Choose **Copy** and start the import.
 - **Expect:**
-  - The preview lists two sessions with Target NGC 7000 prefilled from their pointing: "NGC 7000 · Ha · 300 s · 6 Oct" with the 24 lights from either side of the meridian flip, and "NGC 7000 · Ha · 300 s · 6 Oct · framing 2" with the other 10. Both list their lights under `NGC 7000/Ha/2026-10-06/light/`.
-  - After the merge, the preview lists one session of 34 lights. After the re-split, the two sessions of 24 and 10 lights return with the same names.
+  - The preview lists two sessions with Target NGC 7000 prefilled from their pointing: "NGC 7000 · Ha · 300 s · 6 Oct" with the 24 lights from either side of the meridian flip, and "NGC 7000 · Ha · 300 s · 6 Oct · framing 2" with the other 10. Both list their lights under `NGC 7000/Ha/2026-10-06/light/`. A frame that returns to an earlier framing rejoins that session (owner's answer, 2026-10-20).
+  - After the merge, the preview lists one session of 34 lights. Moving the centre slider or the rotation slider recalculates the split live without saving. After the re-split, the two sessions of 24 and 10 lights return with the same names (owner's answer, 2026-10-20).
   - The summary reads `34 frames · <size> · 2 sessions`, and Sessions lists both sessions with their frame counts.
-- **Expect (negative):** The meridian flip starts no session. Merging and re-splitting write nothing, and no file is written before the import starts.
-- **Trace:** Import · STO-IMP-FR-03 · LIB-FR-04, LIB-FR-24 · LIB-AC-31 · D-W107
+- **Expect (negative):** Until the user starts the import, the preview writes no files. Slider changes, merging and re-splitting also write nothing (owner's answer, 2026-10-20). The meridian flip starts no session.
+- **Trace:** Import · STO-IMP-FR-03 · LIB-FR-04, LIB-FR-24 · LIB-AC-31 · D-W107, owner's answer, 2026-10-20
 
 ### S11 — Add an existing library folder {#S11}
 
