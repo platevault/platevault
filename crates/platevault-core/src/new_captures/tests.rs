@@ -1565,6 +1565,127 @@ async fn a_removed_volume_goes_offline_at_once_and_returns_at_a_sweep() {
     watchers_are(&watch, 1).await;
 }
 
+/// Reselecting an offline location at the path it is back at checks its
+/// root at once: it is counted live without waiting for a sweep.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn reselecting_an_offline_root_at_its_path_watches_it_without_a_sweep() {
+    let fx = fixture().await;
+    let root = fx.base.join("Captures");
+    let location = captures(&fx.library, &root).await;
+    frame(&root.join("Ha_001.fits"));
+    // No sweep runs after the start.
+    let slow = Settings { sweep: Duration::from_secs(3600), ..FAST };
+    let probe = Arc::new(Probe::default());
+    let watch =
+        CaptureWatch::start_with(&fx.library, slow, Arc::clone(&probe) as Arc<dyn RootProbe>);
+    count_is(&watch, location.id, 1).await;
+    // Ejected: offline at once.
+    watch.release(location.id, &root).await;
+    watch.gone(location.id, &root);
+    until(&watch, <[NewCaptureCount]>::is_empty).await;
+    let swept = sweeps(watch.observed()).load(Ordering::SeqCst);
+
+    // Plugged back in at the same path, and reselected there.
+    let current = fx.library.catalog().location(location.id).await.unwrap();
+    fx.library
+        .reselect_location(location.id, current.decision_revision, NativePath::from_path(&root))
+        .await
+        .unwrap();
+
+    live_count_is(&watch, location.id, 1).await;
+    watchers_are(&watch, 1).await;
+    assert_eq!(sweeps(watch.observed()).load(Ordering::SeqCst), swept, "no sweep started it");
+}
+
+/// What discovery did through `probe`: root `stat`s, root validations and
+/// watcher starts.
+fn touches(probe: &Probe) -> [usize; 3] {
+    [&probe.stats, &probe.validations, &probe.watches].map(|count| count.load(Ordering::SeqCst))
+}
+
+/// A Captures location remapped while the removal of its old root's volume
+/// is pending.
+struct RemappedInRemoval {
+    fx: Fixture,
+    watch: CaptureWatch,
+    location: Location,
+    old: PathBuf,
+    copy: PathBuf,
+}
+
+impl RemappedInRemoval {
+    /// Watch a location with `settings`, release its root, remap it, and
+    /// check that the new root, which may be on the volume being removed,
+    /// is left alone: nothing touches it, and only the old root stays named,
+    /// so the removal's outcome still arrives for it.
+    async fn start(settings: Settings) -> Self {
+        let fx = fixture().await;
+        let old = fx.base.join("Captures");
+        let location = captures(&fx.library, &old).await;
+        frame(&old.join("Ha_001.fits"));
+        assert_eq!(scan_to_end(&fx.library, location.id).await.state, ScanState::Completed);
+        let probe = Arc::new(Probe::default());
+        let watch = CaptureWatch::start_with(
+            &fx.library,
+            settings,
+            Arc::clone(&probe) as Arc<dyn RootProbe>,
+        );
+        live_count_is(&watch, location.id, 0).await;
+        watch.release(location.id, &old).await;
+        let (touched, walked) = (touches(&probe), walks(&watch));
+
+        let copy = copy_of(&old, &fx.base.join("Captures copy"));
+        remap(&fx.library, location.id, &copy).await;
+        // Applied: the old root's count leaves.
+        until(&watch, <[NewCaptureCount]>::is_empty).await;
+        assert_eq!(
+            (touches(&probe), walks(&watch), watchers(&watch)),
+            (touched, walked, 0),
+            "the new root was touched while the removal was pending"
+        );
+        assert_eq!(*watch.subscribe_roots().borrow(), [named_root(&location, &old)]);
+        Self { fx, watch, location, old, copy }
+    }
+
+    /// The new root is watched and counted live, and named alone.
+    async fn watched_at_the_new_root(&self) {
+        let id = self.location.id;
+        live_count_is(&self.watch, id, 0).await;
+        watchers_are(&self.watch, 1).await;
+        let remapped = self.fx.library.catalog().location(id).await.unwrap();
+        assert_eq!(*self.watch.subscribe_roots().borrow(), [named_root(&remapped, &self.copy)]);
+        frame(&self.copy.join("Ha_002.fits"));
+        live_count_is(&self.watch, id, 1).await;
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_root_change_during_a_pending_removal_starts_once_the_removal_is_refused() {
+    // No sweep runs after the start: only the notice ends the wait.
+    let remapped =
+        RemappedInRemoval::start(Settings { sweep: Duration::from_secs(3600), ..FAST }).await;
+    remapped.watch.reattach(remapped.location.id, &remapped.old);
+    remapped.watched_at_the_new_root().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_root_change_during_a_pending_removal_starts_once_the_volume_is_gone() {
+    let remapped =
+        RemappedInRemoval::start(Settings { sweep: Duration::from_secs(3600), ..FAST }).await;
+    remapped.watch.gone(remapped.location.id, &remapped.old);
+    remapped.watched_at_the_new_root().await;
+}
+
+/// No notice may ever come (the eject window ends the registration of a
+/// root its location no longer follows): the wait ends a sweep after the
+/// change at most.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_root_change_during_a_pending_removal_waits_a_sweep_at_most() {
+    let remapped =
+        RemappedInRemoval::start(Settings { sweep: Duration::from_secs(1), ..FAST }).await;
+    remapped.watched_at_the_new_root().await;
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn no_watcher_outlives_shutdown_or_the_handle() {
     let fx = fixture().await;
@@ -1670,6 +1791,7 @@ fn counted(location: Location, root: &Path) -> Watched {
         listed: true,
         cataloged: true,
         released: false,
+        moved: None,
     }
 }
 

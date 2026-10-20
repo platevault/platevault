@@ -44,7 +44,8 @@
 //! Lifecycle:
 //! - An Active Captures location is watched while its root is online: the
 //!   registered folder on the registered volume. A change through the
-//!   [`Library`] (register, reselect, remap, retire) is applied at once;
+//!   [`Library`] (register, reselect, remap, retire) is applied at once, and
+//!   an offline location reselected at the same root is checked at once;
 //!   anything else the catalog lists differently, a removal included, at the
 //!   next sweep.
 //! - Every sweep each root is checked once without following links, and so
@@ -107,10 +108,15 @@
 //!   refused, and [`CaptureWatch::gone`] once the volume is removed, which
 //!   takes the location offline without waiting for a sweep. A notice about
 //!   a root its location no longer follows leaves the location alone. A
-//!   release returns once discovery is asked to stop, so app exit never
-//!   waits on one. A watcher close or walk still in flight a sweep after
-//!   discovery let go of it is logged once, with its root. macOS and Linux
-//!   need none of this.
+//!   location reselected or remapped while the removal of its root's volume
+//!   is pending touches neither root and keeps the old one named, so the
+//!   shell keeps its registration and the removal's notices still arrive;
+//!   its new root, which may be on that volume, is watched once the removal
+//!   was refused or completed, or after a sweep at most when no notice
+//!   comes. A release returns once discovery is asked to stop, so app exit
+//!   never waits on one. A watcher close or walk still in flight a sweep
+//!   after discovery let go of it is logged once, with its root. macOS and
+//!   Linux need none of this.
 //!
 //! [`CaptureWatch::shutdown`], or dropping the [`CaptureWatch`], stops every
 //! watcher. Shutdown waits a short grace at most. A `stat` of a network mount
@@ -297,11 +303,13 @@ impl CaptureWatch {
     ///
     /// Until [`reattach`](Self::reattach) or [`gone`](Self::gone), the
     /// location keeps the count it had, with `live: false`, and nothing
-    /// touches its root, a sweep included. A location that no longer follows
-    /// `root` (a remapped location's old root) is left alone: this only
-    /// waits. Discovery handles one thing at a time, so this also waits out a
-    /// file-system call it is making. It returns at once when discovery
-    /// stopped, and as soon as it is asked to stop
+    /// touches its root, a sweep included. A reselect or remap meanwhile
+    /// takes it out of the counts and touches the new root only after that
+    /// notice, or a sweep at most when none comes. A location that no longer
+    /// follows `root` (a remapped location's old root) is left alone: this
+    /// only waits. Discovery handles one thing at a time, so this also waits
+    /// out a file-system call it is making. It returns at once when
+    /// discovery stopped, and as soon as it is asked to stop
     /// ([`shutdown`](Self::shutdown)), so app exit never waits on a removal
     /// whose walk or watcher close hangs.
     pub async fn release(&self, location: Uuid, root: &Path) {
@@ -646,6 +654,16 @@ struct Watched {
     /// Its volume is being removed ([`CaptureWatch::release`]): it holds no
     /// watcher or walk, and nothing touches its root.
     released: bool,
+    /// Where the location moved (reselected or remapped) while it was
+    /// released ([`Run::moved_in_removal`]).
+    moved: Option<Moved>,
+}
+
+/// The record of a released location at the root it moved to, and when it
+/// moved.
+struct Moved {
+    to: Location,
+    since: Instant,
 }
 
 impl Watched {
@@ -895,9 +913,10 @@ impl Watched {
         });
     }
 
-    /// Whether the count is known: a walk finished and the catalog was read.
+    /// Whether the count is known: a walk finished and the catalog was read,
+    /// at the root the location follows.
     const fn counted(&self) -> bool {
-        self.listed && self.cataloged
+        self.listed && self.cataloged && self.moved.is_none()
     }
 
     fn count(&self) -> NewCaptureCount {
@@ -1196,9 +1215,12 @@ impl Run {
             }
         };
         // Removed, retired and re-roled locations stop; reselected and
-        // remapped ones start again at their new root.
+        // remapped ones start again at their new root, once the removal of
+        // their old root's volume is no longer pending (`follow`).
         for (_, mut watched) in self.locations.extract_if(|id, watched| {
-            !wanted.get(id).is_some_and(|location| same_root(location, &watched.location))
+            !wanted
+                .get(id)
+                .is_some_and(|location| watched.released || same_root(location, &watched.location))
         }) {
             self.draining.let_go(&mut watched);
         }
@@ -1211,15 +1233,25 @@ impl Run {
     }
 
     /// Keep, release or start one Active Captures location. Outside a sweep
-    /// only locations not seen before are checked; a sweep also restarts a
-    /// watcher that did not fully start. A released location's root is not
-    /// touched.
+    /// only locations not seen before, and offline ones reselected, are
+    /// checked; a sweep also restarts a watcher that did not fully start. A
+    /// released location's root is not touched, nor is the root it moved to.
     async fn follow(&mut self, location: Location, sweep: bool) {
         let id = location.id;
+        if self
+            .locations
+            .get(&id)
+            .is_some_and(|watched| watched.released && !same_root(&location, &watched.location))
+        {
+            self.moved_in_removal(location, sweep).await;
+            return;
+        }
         let refused = if let Some(released) = self.locations.get(&id).map(|w| w.released) {
             if !sweep || released || self.unchanged(id).await {
                 if let Some(watched) = self.locations.get_mut(&id) {
                     watched.location = location;
+                    // Back at its old root, if it moved away.
+                    watched.moved = None;
                 }
                 if sweep && !released {
                     self.retry_watcher(id).await;
@@ -1229,14 +1261,51 @@ impl Run {
             self.go_offline(id);
             None
         } else if let Some(offline) = self.offline.get(&id) {
-            if !sweep {
+            // A decision committed on the location since it went offline (a
+            // reselection at the same root) has it checked at once, even
+            // when its folder was refused before; otherwise only a sweep
+            // checks it.
+            let reselected = offline.location.decision_revision != location.decision_revision;
+            if !sweep && !reselected {
                 return;
             }
-            offline.refused
+            offline.refused.filter(|_| !reselected)
         } else {
             None
         };
         self.try_start(location, refused).await;
+    }
+
+    /// `location` moved (reselected or remapped) while the removal of its
+    /// old root's volume is pending. Its new root may be on that volume, so
+    /// nothing touches it, and the old root stays named, so the eject window
+    /// keeps that root's registration and the removal's outcome still
+    /// arrives: [`Run::reattach`] or [`Run::gone`] then start the location at
+    /// its new root ([`Run::move_on`]). A notice may never come, so a sweep
+    /// at least a sweep period after the move starts it there as well.
+    async fn moved_in_removal(&mut self, location: Location, sweep: bool) {
+        let id = location.id;
+        let Some(watched) = self.locations.get_mut(&id) else {
+            return;
+        };
+        let since = watched.moved.as_ref().map_or_else(Instant::now, |moved| moved.since);
+        watched.moved = Some(Moved { to: location, since });
+        if sweep && since.elapsed() >= self.settings.sweep {
+            tracing::warn!(location = %id, "new captures: the removal of the old root's volume was not decided in time; the new root is watched");
+            self.move_on(id).await;
+        }
+    }
+
+    /// Stop following the old root of `id`, a location that moved while its
+    /// volume was being removed, and start it at the root it moved to.
+    async fn move_on(&mut self, id: Uuid) {
+        let Some(mut watched) = self.locations.remove(&id) else {
+            return;
+        };
+        self.draining.let_go(&mut watched);
+        if let Some(moved) = watched.moved {
+            self.try_start(moved.to, None).await;
+        }
     }
 
     /// At a sweep, restart a watcher that did not start or misses a folder a
@@ -1324,6 +1393,7 @@ impl Run {
                 listed: false,
                 cataloged: false,
                 released: false,
+                moved: None,
             },
         );
         // Named before its watcher holds anything on the volume.
@@ -1391,11 +1461,7 @@ impl Run {
                 self.release(location, &root, released);
             }
             Notice::Reattach { location, root } => self.reattach(location, &root).await,
-            Notice::Gone { location, root } => {
-                if self.locations.get(&location).is_some_and(|watched| watched.root == root) {
-                    self.go_offline(location);
-                }
-            }
+            Notice::Gone { location, root } => self.gone(location, &root).await,
         }
     }
 
@@ -1433,7 +1499,7 @@ impl Run {
     }
 
     /// The removal a release made way for did not happen: watch the location
-    /// again and walk it.
+    /// again and walk it, at the root it moved to meanwhile if it did.
     async fn reattach(&mut self, id: Uuid, root: &Path) {
         let Some(watched) =
             self.locations.get_mut(&id).filter(|watched| watched.released && watched.root == root)
@@ -1441,8 +1507,26 @@ impl Run {
             return;
         };
         watched.released = false;
+        if watched.moved.is_some() {
+            tracing::info!(location = %id, "new captures: volume stays; the location's new root is watched");
+            self.move_on(id).await;
+            return;
+        }
         tracing::info!(location = %id, "new captures: volume stays; watched again");
         self.rescan(id).await;
+    }
+
+    /// The volume holding `root`, a root of `id`, was removed: the location
+    /// goes offline, or starts at the root it moved to meanwhile.
+    async fn gone(&mut self, id: Uuid, root: &Path) {
+        let Some(watched) = self.locations.get(&id).filter(|watched| watched.root == root) else {
+            return;
+        };
+        if watched.moved.is_some() {
+            self.move_on(id).await;
+        } else {
+            self.go_offline(id);
+        }
     }
 
     /// The root's continuity stamp, from a `stat` on a blocking thread; `None`
