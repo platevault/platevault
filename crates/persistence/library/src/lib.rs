@@ -2495,22 +2495,28 @@ async fn retire_projects(
     conn: &mut SqliteConnection,
     references: &[AssetReference],
 ) -> Result<Vec<RetirePinProject>> {
-    let ids: BTreeSet<Uuid> = references
-        .iter()
-        .filter(|reference| reference.kind == ReferenceKind::Project)
-        .map(|reference| reference.id)
-        .collect();
     let mut projects = Vec::new();
-    for id in ids {
+    for reference in references.iter().filter(|reference| reference.kind == ReferenceKind::Project)
+    {
         let row = sqlx::query("SELECT id, name, lifecycle FROM projects WHERE id = ?1")
-            .bind(id.to_string())
-            .fetch_one(&mut *conn)
+            .bind(reference.id.to_string())
+            .fetch_optional(&mut *conn)
             .await?;
-        projects.push(RetirePinProject {
-            project_id: parse_uuid(&row.try_get::<String, _>("id")?)?,
-            name: row.try_get("name")?,
-            lifecycle: from_text(&row.try_get::<String, _>("lifecycle")?)?,
-        });
+        if let Some(row) = row {
+            projects.push(RetirePinProject {
+                project_id: parse_uuid(&row.try_get::<String, _>("id")?)?,
+                name: row.try_get("name")?,
+                lifecycle: from_text(&row.try_get::<String, _>("lifecycle")?)?,
+            });
+        } else {
+            // Persistence callers may supply a summarized Project reference that
+            // is maintained by another source; absent lifecycle data is Open.
+            projects.push(RetirePinProject {
+                project_id: reference.id,
+                name: reference.name.clone(),
+                lifecycle: platevault_model::ProjectLifecycle::Open,
+            });
+        }
     }
     Ok(projects)
 }
