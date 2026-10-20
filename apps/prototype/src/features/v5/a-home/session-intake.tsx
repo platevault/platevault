@@ -15,8 +15,10 @@
  *   confirms it, or files an Unclassified session's frames under it (File
  *   into Target, with its moves in the confirm). A Target associated by
  *   agreeing pointing already counts as settled (`sessionTargetId`).
- * - Rig: the rig select with its header evidence; a FILTER value the rig does
- *   not list links to Equipment.
+ * - Rig: the rig select with its header evidence. A FILTER value the
+ *   session's confirmed rig does not list shows as unknown, with "Add {value}
+ *   to {rig}": Settings › Equipment's filter dialog (injected by the route,
+ *   D-W127, PLAN-EQ-FR-04), prefilled with the bands it likely passes.
  * - Both list the corrections intake recorded, recorded beside corrected (C15).
  * - Review: the review workspace, hosted as the step body (`review`, injected
  *   by the route so features stay apart). Finish review needs 0 Unreviewed,
@@ -33,7 +35,7 @@ import { MissingRecord } from "@/app/missing-record"
 import { useMessages } from "@/app/preferences"
 import { useFollowLink } from "@/components/app/links"
 import { ActionBar, useAction } from "@/components/app/actions"
-import type { Action, Column, SessionReviewProps, StepFlow } from "@/components/app/contracts"
+import type { Action, AddFilterToRigProps, Column, SessionReviewProps, StepFlow } from "@/components/app/contracts"
 import { KeyValueList } from "@/components/app/data"
 import { DataTable } from "@/components/app/data-table"
 import { EvidenceList } from "@/components/app/evidence-list"
@@ -62,6 +64,9 @@ import { projectsHolding } from "./session-model"
 /** The intake Review step's body: the review workspace for one session (`SessionReview`, injected by the route). */
 export type SessionReviewBody = ComponentType<SessionReviewProps>
 
+/** The Rig step's "Add {value} to {rig}" dialog (`AddFilterToRigDialog` of Settings › Equipment, injected by the route; D-W127). */
+export type AddFilterToRigBody = ComponentType<AddFilterToRigProps>
+
 const TARGET_FIELDS: CorrectionField[] = ["target"]
 const RIG_FIELDS: CorrectionField[] = ["equipment", "filter", "exposure", "focal-length"]
 
@@ -69,7 +74,7 @@ function stepOf(value: unknown): SessionIntakeStepId | null {
   return SESSION_INTAKE_STEPS.find((id) => id === value) ?? null
 }
 
-export function SessionIntakePage({ review }: { review: SessionReviewBody }) {
+export function SessionIntakePage({ review, addFilter }: { review: SessionReviewBody; addFilter: AddFilterToRigBody }) {
   const { sessionId = "" } = useParams({ strict: false }) as { sessionId?: string }
   const session = useStore((s) => s.catalog.sessions[sessionId])
   const m = useMessages()
@@ -77,7 +82,7 @@ export function SessionIntakePage({ review }: { review: SessionReviewBody }) {
   // Raw calibration frames have no intake: they are input to a calibration process (P-CAL3).
   if (session.imageType !== "light") return <SessionPage />
   // Keyed by session: the pickers start from this session's own values, never the previous session's.
-  return <SessionIntake key={session.id} session={session} review={review} />
+  return <SessionIntake key={session.id} session={session} review={review} addFilter={addFilter} />
 }
 
 /** The picker's first Target: the session's own association, else the Target its pointing falls in (P-IMP2). */
@@ -86,7 +91,7 @@ function initialTarget(state: PrototypeState, session: Session): TargetId | null
   return session.pointing ? (targetAtPointing(state.catalog, session.pointing.ra, session.pointing.dec)?.id ?? null) : null
 }
 
-function SessionIntake({ session, review: Review }: { session: Session; review: SessionReviewBody }) {
+function SessionIntake({ session, review: Review, addFilter }: { session: Session; review: SessionReviewBody; addFilter: AddFilterToRigBody }) {
   const m = useMessages()
   const follow = useFollowLink()
   const search = useSearch({ strict: false }) as { step?: string }
@@ -104,7 +109,7 @@ function SessionIntake({ session, review: Review }: { session: Session; review: 
     viewing === "target" ? (
       <TargetStep state={state} session={session} targetId={targetId} onTarget={setTargetId} current={flow.current === "target"} />
     ) : viewing === "rig" ? (
-      <RigStep state={state} session={session} rigId={rigId} onRig={setRigId} current={flow.current === "rig"} />
+      <RigStep state={state} session={session} rigId={rigId} onRig={setRigId} current={flow.current === "rig"} addFilter={addFilter} />
     ) : (
       <>
         <Review sessionId={session.id} onFinished={() => proceed && runner.run(proceed)} />
@@ -269,20 +274,27 @@ function TargetStep({ state, session, targetId, onTarget, current }: { state: Pr
 // ---------------------------------------------------------------------------
 
 const NO_RIG = "none"
+const RIG_SECTION = "session-rig"
 
-function RigStep({ state, session, rigId, onRig, current }: { state: PrototypeState; session: Session; rigId: OpticalTrainId | null; onRig: (id: OpticalTrainId) => void; current: boolean }) {
+function RigStep({ state, session, rigId, onRig, current, addFilter: AddFilter }: { state: PrototypeState; session: Session; rigId: OpticalTrainId | null; onRig: (id: OpticalTrainId) => void; current: boolean; addFilter: AddFilterToRigBody }) {
   const m = useMessages()
   const follow = useFollowLink()
+  const [request, setRequest] = useState<AddFilterToRigProps["request"]>(null)
   const rigs = Object.values(state.catalog.opticalTrains).sort((a, b) => a.name.localeCompare(b.name))
   const rig = rigId ? state.catalog.opticalTrains[rigId] : undefined
   const channel = session.channel
-  const unknownFilter = rig !== undefined && channel !== null && rigFilterFor(state.catalog, rig, channel) === null
+  // Unknown only against the session's confirmed rig: no prompt names a rig before then (LIB-FR-05, J15 S4b).
+  const confirmedRig = rig !== undefined && session.equipment.status === "confirmed" && session.equipment.value === rig.id ? rig : undefined
+  const unknownFilter = confirmedRig !== undefined && channel !== null && rigFilterFor(state.catalog, confirmedRig, channel) === null ? channel : null
   const changed = rig !== undefined && (sessionRigId(session) !== rig.id || session.equipment.status !== "confirmed")
   const confirm: Action | null = !current && changed && rig ? { id: "confirm-rig", label: m.session_confirm_rig(), icon: Check, run: () => confirmRig(session.id, rig.id, session.revision) } : null
+  // D-W127: the same filter dialog as Settings › Equipment, prefilled with the value's guessed bands; the value stays unknown until it is added.
+  const add: Action | null =
+    unknownFilter !== null && confirmedRig ? { id: "add-filter-to-rig", label: m.equipment_add_value_to_rig({ value: unknownFilter, rig: confirmedRig.name }), opensDialog: true, run: () => setRequest({ value: unknownFilter, rigId: confirmedRig.id }) } : null
   const equipment: Action = { id: "equipment", label: m.session_open_equipment(), icon: Settings2, run: () => follow({ to: "/settings/equipment" }) }
   return (
     <>
-      <Section title={m.sessions_column_rig()} actions={<ActionBar actions={confirm ? [confirm, equipment] : [equipment]} />}>
+      <Section id={RIG_SECTION} title={m.sessions_column_rig()} actions={<ActionBar actions={[confirm, add, equipment].filter((a): a is Action => a !== null)} />}>
         <SelectField
           label={m.sessions_column_rig()}
           value={rigId ?? NO_RIG}
@@ -297,7 +309,7 @@ function RigStep({ state, session, rigId, onRig, current }: { state: PrototypeSt
             { label: m.session_telescope(), value: session.telescopeName ?? m.status_unknown() },
             {
               label: m.session_filter(),
-              value: unknownFilter ? <StatusBadge kind="association" value="unresolved" label={m.session_unknown_filter({ value: channel ?? "" })} /> : (channel ?? m.session_none()),
+              value: unknownFilter !== null ? <StatusBadge kind="association" value="unresolved" label={m.session_unknown_filter({ value: unknownFilter })} /> : (channel ?? m.session_none()),
             },
           ]}
         />
@@ -306,6 +318,8 @@ function RigStep({ state, session, rigId, onRig, current }: { state: PrototypeSt
         <EvidenceList evidence={session.equipment.evidence} caption={m.session_rig_evidence({ name: sessionLongLabel(m, session) })} />
       </Section>
       <Corrections session={session} fields={RIG_FIELDS} />
+      {/* Adding removes the prompt that opened the dialog, so focus lands on the Rig heading, above the filter it now names. */}
+      <AddFilter request={request} onClose={() => setRequest(null)} focusAfterConfirm={() => document.getElementById(`${RIG_SECTION}-title`)} />
     </>
   )
 }
