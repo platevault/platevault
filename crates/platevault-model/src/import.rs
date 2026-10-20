@@ -17,6 +17,7 @@ use uuid::Uuid;
 use crate::{
     Availability, CaptureKey, CaptureMetadata, EntryEvidence, FileIdentity, ItemReason,
     LocationRole, NamingFallback, NamingFrameType, NativePath, ObservationFingerprint, Revision,
+    SplitLimits,
 };
 
 /// A source folder saved under a name, for Import new.
@@ -206,6 +207,14 @@ pub struct ImportItem {
     /// [`crate::FRAMING_LABEL_FIELD`] correction (LIB-FR-24, D-W107).
     #[serde(default)]
     pub framing_label: Option<String>,
+    /// The Target the user chose for the light's session in import review;
+    /// `None` keeps the one its pointing matches (D-W129).
+    #[serde(default)]
+    pub target_choice: Option<ImportTargetChoice>,
+    /// The Target the light's session files under, as its route named
+    /// `{target}` from it; `None` is Unclassified. Never OBJECT.
+    #[serde(default)]
+    pub target_id: Option<Uuid>,
     pub excluded: bool,
     pub role: Option<LocationRole>,
     pub destination_location_id: Option<Uuid>,
@@ -233,6 +242,16 @@ impl ImportItem {
     pub fn frame_type(&self) -> Option<NamingFrameType> {
         self.user_type.or(self.classification)
     }
+}
+
+/// The Target a user chose for a session in import review (D-W129): one to
+/// file it under, or Unclassified.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", rename_all_fields = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
+pub enum ImportTargetChoice {
+    Unclassified,
+    Target { target_id: Uuid },
 }
 
 /// The last settle check of a source file.
@@ -288,6 +307,9 @@ pub struct ImportRecord {
     pub mode: Option<ImportMode>,
     pub state: ImportState,
     pub choices: Vec<ImportChoice>,
+    /// The import's own centre and rotation limits; `None` splits with the
+    /// Settings default (CF2).
+    pub split_override: Option<SplitLimits>,
     pub revision: Revision,
     pub items: Vec<ImportItemRecord>,
     pub created_at: String,
@@ -382,13 +404,31 @@ pub struct ImportSession {
     /// The user merged it: its items carry one framing label.
     pub merged: bool,
     /// What a default name shows: OBJECT, FILTER, the exposure and the night
-    /// of its first item.
+    /// of its first item. OBJECT is only a hint: it never chooses or names
+    /// the session's Target (D-W129, J31 S3).
     pub object: Option<String>,
     pub filter: Option<String>,
     pub exposure_seconds: Option<f64>,
     #[cfg_attr(feature = "wire", specta(type = Option<String>), schemars(with = "Option<String>"))]
     #[serde(default, with = "crate::iso_date::option")]
     pub night: Option<Date>,
+    /// The Target the session files under: the user's choice, else the one
+    /// Target its pointing matches; `None` is Unclassified, preselected when
+    /// it has no pointing or no matching Target.
+    pub target: Option<ImportSessionTarget>,
+    /// The user chose `target` (or Unclassified) rather than its pointing.
+    pub target_chosen: bool,
+}
+
+/// A session's Target as import review names it.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
+pub struct ImportSessionTarget {
+    pub id: Uuid,
+    /// What `{target}` names its folder with.
+    pub designation: String,
+    pub common_name: Option<String>,
 }
 
 /// An import as Import shows it: the preview before it starts, then its
@@ -413,6 +453,10 @@ pub struct ImportOperation {
     /// The sessions the import's lights form; merge and re-split change them
     /// until the import starts.
     pub sessions: Vec<ImportSession>,
+    /// The centre and rotation limits the sessions split with: the import's
+    /// own when `split_overridden`, else the Settings default (CF2).
+    pub split_limits: SplitLimits,
+    pub split_overridden: bool,
     pub created_at: String,
     pub updated_at: String,
     pub settled_at: Option<String>,

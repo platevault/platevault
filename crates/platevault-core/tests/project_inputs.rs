@@ -359,21 +359,21 @@ fn empty_project() -> ProjectDesired {
 }
 
 /// PRJ-FR-27, PRJ-FR-31, D-W107: sessions group by rig, optics and framing
-/// with the intake margins (centre within 5 % of the 3.6° field diagonal,
-/// rotation within 5°), anchors compared non-transitively; a session without
-/// pointing joins its rig's group flagged Framing unknown; new groups take
-/// the rig's name, then "<Rig> · Framing N".
+/// with the intake limits (centre within 5′ whatever the field, rotation
+/// within 5°; CF2, owner 2026-10-20), anchors compared non-transitively; a
+/// session without pointing joins its rig's group flagged Framing unknown;
+/// new groups take the rig's name, then "<Rig> · Framing N".
 #[test]
 fn sessions_group_by_rig_optics_and_framing_without_chaining() {
     let redcat = (Uuid::from_u128(1), "RedCat");
     let esprit = (Uuid::from_u128(2), "Esprit 100");
     let sessions = [
         to_place(10, redcat, optics(250.0), Some(evidence(100.0, Some(10.0), None))),
-        // 0.14° from the anchor (5 % of the field's 3.6° diagonal is 0.18°)
-        // and 3° turned: the same framing.
-        to_place(11, redcat, optics(250.0), Some(evidence(100.2, Some(13.0), None))),
-        // 0.29° from the anchor, 0.14° from the session before: no chain.
-        to_place(12, redcat, optics(250.0), Some(evidence(100.4, Some(10.0), None))),
+        // 3.4′ from the anchor and 3° turned: the same framing, though 5 %
+        // of the 3.6° field's diagonal would have been 10.8′.
+        to_place(11, redcat, optics(250.0), Some(evidence(100.08, Some(13.0), None))),
+        // 6.9′ from the anchor, 3.4′ from the session before: no chain.
+        to_place(12, redcat, optics(250.0), Some(evidence(100.16, Some(10.0), None))),
         // Same centre, ROTATANG 8° apart: another framing.
         to_place(13, redcat, optics(250.0), Some(evidence(100.0, Some(18.0), None))),
         // No pointing: the rig's first group of these optics.

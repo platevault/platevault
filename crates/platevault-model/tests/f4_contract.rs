@@ -352,7 +352,7 @@ fn workflow_defaults_are_the_owner_approved_starting_values() {
         serde_json::json!({
             "framing": {
                 "minOverlapPercent": 90.0,
-                "maxCentreOffsetPercent": 5.0,
+                "maxCentreOffsetArcmin": 5.0,
                 "maxRotationDeg": 5.0,
                 "panelOverlapPercent": [5.0, 40.0],
             },
@@ -371,8 +371,13 @@ fn workflow_defaults_are_the_owner_approved_starting_values() {
     panels.framing.panel_overlap_percent = (40.0, 5.0);
     assert!(panels.validate().is_err(), "panel overlap is a range");
     let mut nan = WorkflowSettings::default();
-    nan.framing.max_rotation_deg = f64::NAN;
+    nan.framing.split.max_rotation_deg = f64::NAN;
     assert!(nan.validate().is_err());
+    for centre in [0.0, -1.0, f64::INFINITY, 10_800.0] {
+        let mut limits = WorkflowSettings::default();
+        limits.framing.split.max_centre_offset_arcmin = centre;
+        assert!(limits.validate().is_err(), "the centre limit is an angle: {centre}");
+    }
 }
 
 #[test]

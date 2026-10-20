@@ -31,20 +31,56 @@ fn require_angle(field: &str, value: f64) -> Result<(), LibraryError> {
     }
 }
 
+/// When two frames are one framing (LIB-FR-04, PRJ-FR-31, D-W107; CF2,
+/// owner 2026-10-20): their centres within an angle on the sky, so the limit
+/// is the same whatever the field, and their rotation within an angle. The
+/// Settings default is 5′ and 5°; an import may carry its own.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
+pub struct SplitLimits {
+    /// Largest centre offset, in arcminutes.
+    pub max_centre_offset_arcmin: f64,
+    /// Largest rotation difference in degrees. A meridian flip leaves
+    /// ROTATANG unchanged; with only the sky angle known, 180° reads as the
+    /// same framing.
+    pub max_rotation_deg: f64,
+}
+
+impl Default for SplitLimits {
+    fn default() -> Self {
+        Self { max_centre_offset_arcmin: 5.0, max_rotation_deg: 5.0 }
+    }
+}
+
+impl SplitLimits {
+    /// A centre offset in (0, 10 800) arcminutes and a rotation in [0, 180)
+    /// degrees.
+    ///
+    /// # Errors
+    /// `InvalidInput` naming the field.
+    pub fn validate(&self) -> Result<(), LibraryError> {
+        let centre = self.max_centre_offset_arcmin;
+        if !(centre.is_finite() && centre > 0.0 && centre < 10_800.0) {
+            return Err(invalid(format!(
+                "maxCentreOffsetArcmin {centre} must be an angle in (0, 10800) arcminutes"
+            )));
+        }
+        require_angle("maxRotationDeg", self.max_rotation_deg)
+    }
+}
+
 /// When two framings are the same and when they are panels of one mosaic
 /// (PRJ-FR-29/31). Intake splits sessions with the same centre and rotation
-/// margins (LIB-FR-04).
+/// limits (LIB-FR-04).
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FramingMargins {
     /// Least coverage, in percent, of the same framing.
     pub min_overlap_percent: f64,
-    /// Largest centre offset, in percent of the field.
-    pub max_centre_offset_percent: f64,
-    /// Largest rotation difference in degrees. A meridian flip leaves
-    /// ROTATANG unchanged; with only the sky angle known, 180° reads as the
-    /// same framing.
-    pub max_rotation_deg: f64,
+    /// The centre and rotation limits of one framing.
+    #[serde(flatten)]
+    pub split: SplitLimits,
     /// The overlap range, in percent, that offers two framings as panels.
     pub panel_overlap_percent: (f64, f64),
 }
@@ -53,23 +89,21 @@ impl Default for FramingMargins {
     fn default() -> Self {
         Self {
             min_overlap_percent: 90.0,
-            max_centre_offset_percent: 5.0,
-            max_rotation_deg: 5.0,
+            split: SplitLimits::default(),
             panel_overlap_percent: (5.0, 40.0),
         }
     }
 }
 
 impl FramingMargins {
-    /// Percentages in (0, 100], an angle in [0, 180), and a panel range below
+    /// Percentages in (0, 100], the split limits, and a panel range below
     /// the same-framing overlap, so no pair is both one framing and panels.
     ///
     /// # Errors
     /// `InvalidInput` naming the field.
     pub fn validate(&self) -> Result<(), LibraryError> {
         require_percent("minOverlapPercent", self.min_overlap_percent)?;
-        require_percent("maxCentreOffsetPercent", self.max_centre_offset_percent)?;
-        require_angle("maxRotationDeg", self.max_rotation_deg)?;
+        self.split.validate()?;
         let (low, high) = self.panel_overlap_percent;
         require_percent("panelOverlapPercent", low)?;
         require_percent("panelOverlapPercent", high)?;

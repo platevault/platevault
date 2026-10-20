@@ -128,7 +128,7 @@ async fn intake_reads_the_recorded_workflow_settings_else_the_defaults() {
     assert_eq!(catalog.workflow_settings().await.unwrap(), (WorkflowSettings::default(), 0));
 
     let mut wide = WorkflowSettings::default();
-    wide.framing.max_centre_offset_percent = 15.0;
+    wide.framing.split.max_centre_offset_arcmin = 15.0;
     let mut raw = SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(&fx.db))
         .await
         .unwrap();
@@ -143,7 +143,7 @@ async fn intake_reads_the_recorded_workflow_settings_else_the_defaults() {
     assert_eq!(catalog.workflow_settings().await.unwrap(), (wide.clone(), 3));
 
     let mut invalid = wide;
-    invalid.framing.max_rotation_deg = 400.0;
+    invalid.framing.split.max_rotation_deg = 400.0;
     sqlx::query("UPDATE workflow_settings SET settings = ?1, revision = 4 WHERE id = 1")
         .bind(serde_json::to_string(&invalid).unwrap())
         .execute(&mut raw)
