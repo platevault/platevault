@@ -52,7 +52,7 @@ beforeEach(() => {
 // P-KBD1 in Review: the frame list's current row is the current frame, and focus moves with it.
 describe("Review frame list keyboard (P-KBD1)", () => {
   it("Tab enters on the current frame; ↓, End and Home move the current frame and focus together", async () => {
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     renderReview()
     const table = await list()
     const rows = frameRows(table)
@@ -71,7 +71,7 @@ describe("Review frame list keyboard (P-KBD1)", () => {
   })
 
   it("Tab from the list leaves after the current row's checkbox and ⋯", async () => {
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     renderReview()
     const table = await list()
     await tabTo(user, currentRow(table)!)
@@ -90,7 +90,7 @@ describe("Review frame list keyboard (P-KBD1)", () => {
   })
 
   it("Space ticks the current frame with single-key shortcuts on; with them off only its checkbox takes Space", async () => {
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     renderReview()
     const table = await list()
     const row = currentRow(table)!

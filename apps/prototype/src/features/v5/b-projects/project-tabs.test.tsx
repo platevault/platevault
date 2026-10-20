@@ -1,5 +1,5 @@
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } from "@tanstack/react-router"
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react"
+import { render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest"
 import { closeSheet } from "@/app/ui-state"
@@ -23,6 +23,8 @@ function renderProject(projectId: string, search = "") {
   return router
 }
 
+const DEMO_PROJECT_TABS = Object.keys(createSeed("demo").catalog.projects).flatMap((projectId) => PROJECT_TABS.map((tab) => ({ projectId, tab })))
+
 const projects = () => Object.values(store.getState().catalog.projects)
 
 describe("Project page on the F4 model", () => {
@@ -39,14 +41,10 @@ describe("Project page on the F4 model", () => {
     globalThis.ResizeObserver = original
   })
 
-  it("renders every tab of every demo Project, open and closed", async () => {
-    for (const project of projects()) {
-      for (const tab of PROJECT_TABS) {
-        renderProject(project.id, tab === "sessions" ? "" : `?stage=${tab}`)
-        expect(await screen.findByRole("heading", { level: 1, name: project.name })).toBeInTheDocument()
-        cleanup()
-      }
-    }
+  it.each(DEMO_PROJECT_TABS)("renders $projectId on the $tab tab", async ({ projectId, tab }) => {
+    const project = projects().find((candidate) => candidate.id === projectId)!
+    renderProject(projectId, tab === "sessions" ? "" : `?stage=${tab}`)
+    expect(await screen.findByRole("heading", { level: 1, name: project.name })).toBeInTheDocument()
   })
 
   it("lists a group's held sessions and Duplicate… creates an independent open Project with no View", async () => {
