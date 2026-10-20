@@ -1333,7 +1333,7 @@
   "goal_remove_goal": "Remover meta de {channel}",
   "goal_remove_title": "Remover a meta de {channel} de {subject}?",
   "project_remove_from_title": "Remover {name} de {project}?",
-  "project_remove_subject_goals": [
+  "project_remove_subject_goals_kept": [
     {
       "declarations": [
         "input count",
@@ -1344,9 +1344,9 @@
         "countPlural"
       ],
       "match": {
-        "count=0, countPlural=*": "Também remove {count} metas.",
-        "count=*, countPlural=one": "Também remove {count} meta.",
-        "count=*, countPlural=*": "Também remove {count} metas."
+        "count=0, countPlural=*": "Suas {count} metas ficam ocultas e voltam se você o adicionar de novo.",
+        "count=*, countPlural=one": "Sua {count} meta fica oculta e volta se você o adicionar de novo.",
+        "count=*, countPlural=*": "Suas {count} metas ficam ocultas e voltam se você o adicionar de novo."
       }
     }
   ],

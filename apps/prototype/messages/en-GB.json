@@ -1233,7 +1233,7 @@
   "goal_remove_goal": "Remove {channel} goal",
   "goal_remove_title": "Remove the {channel} goal of {subject}?",
   "project_remove_from_title": "Remove {name} from {project}?",
-  "project_remove_subject_goals": [
+  "project_remove_subject_goals_kept": [
     {
       "declarations": [
         "input count",
@@ -1243,8 +1243,8 @@
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Also removes {count} goal.",
-        "countPlural=*": "Also removes {count} goals."
+        "countPlural=one": "Its {count} goal is kept hidden and comes back if you add it again.",
+        "countPlural=*": "Its {count} goals are kept hidden and come back if you add it again."
       }
     }
   ],

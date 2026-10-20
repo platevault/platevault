@@ -191,12 +191,28 @@ export function updateProjectDetails(projectId: ProjectId, details: { name: stri
   return editProject(projectId, label, expectRevision, (p) => ({ ...p, name: details.name.trim(), notes: details.notes }))
 }
 
-/** Add a subject, with goals copied from the Project's goal set (`projectGoalSet`), per panel in a mosaic. */
+/**
+ * `subject` joins the Project. A Target removed before gets the goals it had
+ * then back, with their ids and edited values, less a panel goal whose group is
+ * gone or no longer a panel (D-W128); any other Target gets goals copied from
+ * the Project's goal set (`projectGoalSet`), per panel in a mosaic. No session
+ * membership changes.
+ */
+function withSubject(p: Project, subject: Subject): Project {
+  const hidden = p.hiddenGoals ?? []
+  const kept = hidden.filter((h) => h.targetId === subject.targetId)
+  const panels = panelIds(p)
+  const goals: Goal[] =
+    kept.length > 0
+      ? kept.filter((h) => h.groupId === null || panels.includes(h.groupId)).map(({ targetId: _, ...goal }) => ({ ...goal, subjectId: subject.id }))
+      : goalsFromValues(projectGoalSet(p), subject.id, panels)
+  return { ...p, subjects: [...p.subjects, subject], goals: [...p.goals, ...goals], hiddenGoals: hidden.filter((h) => h.targetId !== subject.targetId) }
+}
+
+/** Add a subject (`withSubject`); a Target that is already a subject changes nothing. */
 export function addSubject(projectId: ProjectId, targetId: TargetId, expectRevision: number): CommitResult {
   const subject: Subject = { id: freshId("sub", targetId), targetId }
-  return editProject(projectId, msg("store_label_add_subject"), expectRevision, (p) =>
-    p.subjects.some((s) => s.targetId === targetId) ? p : { ...p, subjects: [...p.subjects, subject], goals: [...p.goals, ...goalsFromValues(projectGoalSet(p), subject.id, panelIds(p))] },
-  )
+  return editProject(projectId, msg("store_label_add_subject"), expectRevision, (p) => (p.subjects.some((s) => s.targetId === targetId) ? p : withSubject(p, subject)))
 }
 
 /**
@@ -214,9 +230,18 @@ export function changeSubjectTarget(projectId: ProjectId, subjectId: string, tar
   return editProject(projectId, label, expectRevision, (p) => ({ ...p, subjects: p.subjects.map((s) => (s.id === subjectId ? { ...s, targetId } : s)) }))
 }
 
-/** Remove a subject and its goals; the sessions the Project holds stay held, only suggestions change. */
+/**
+ * Remove a subject. Its goals are kept hidden by its Target, counted and shown
+ * nowhere until it is added back (D-W128); the sessions the Project holds stay
+ * held, only suggestions change.
+ */
 export function removeSubject(projectId: ProjectId, subjectId: string, expectRevision: number): CommitResult {
-  return editProject(projectId, msg("store_label_remove_subject"), expectRevision, (p) => ({ ...p, subjects: p.subjects.filter((s) => s.id !== subjectId), goals: p.goals.filter((g) => g.subjectId !== subjectId) }))
+  return editProject(projectId, msg("store_label_remove_subject"), expectRevision, (p) => {
+    const subject = p.subjects.find((s) => s.id === subjectId)
+    if (!subject) return p
+    const hidden = p.goals.filter((g) => g.subjectId === subjectId).map(({ subjectId: _, ...goal }) => ({ ...goal, targetId: subject.targetId }))
+    return { ...p, subjects: p.subjects.filter((s) => s.id !== subjectId), goals: p.goals.filter((g) => g.subjectId !== subjectId), hiddenGoals: [...(p.hiddenGoals ?? []), ...hidden] }
+  })
 }
 
 /** Adding a rig changes suggestions only (PRJ-FR-02). */
@@ -624,9 +649,10 @@ export function closingOnSuccess(handler: OperationHandler): OperationHandler {
 
 /**
  * Add to Project for a "Not in any Project" session (D-W59, PRJ-FR-19):
- * adds its Target as a subject and its rig when the Project lacks them, then
- * the session itself, which must be Ready and settled. The returned note
- * names the added rig to show before saving.
+ * adds its Target as a subject (`withSubject`, so a removed one gets its kept
+ * goals back, D-W128) and its rig when the Project lacks them, then the
+ * session itself, which must be Ready and settled. The returned note names
+ * the added rig to show before saving.
  */
 export function addSessionToProject(sessionId: SessionId, projectId: ProjectId): { result: CommitResult; note: string | null } {
   const state = store.getState()
@@ -644,8 +670,8 @@ export function addSessionToProject(sessionId: SessionId, projectId: ProjectId):
   const note = addsRig ? m.store_note_adds_rig({ rig: catalog.opticalTrains[rigId]?.name ?? rigId, project: project.name }) : null
   const subject: Subject = { id: freshId("sub", targetId), targetId }
   const result = editProject(projectId, label, project.revision, (p) => {
-    const withSubject = p.subjects.some((s) => s.targetId === targetId) ? p : { ...p, subjects: [...p.subjects, subject], goals: [...p.goals, ...goalsFromValues(projectGoalSet(p), subject.id, panelIds(p))] }
-    const withRig = addsRig ? { ...withSubject, rigIds: [...withSubject.rigIds, rigId] } : withSubject
+    const withTarget = p.subjects.some((s) => s.targetId === targetId) ? p : withSubject(p, subject)
+    const withRig = addsRig ? { ...withTarget, rigIds: [...withTarget.rigIds, rigId] } : withTarget
     return { ...withRig, ...joined(store.getState(), withRig, [sessionId], null) }
   })
   return { result, note }

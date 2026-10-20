@@ -335,7 +335,7 @@ export function useSubjectsSection(project: Project): DetailSection {
               kind: "destructive" as const,
               confirm: {
                 title: m.project_remove_from_title({ name: r.target, project: project.name }),
-                summary: goals > 0 ? m.project_remove_subject_goals({ count: goals }) : undefined,
+                summary: goals > 0 ? m.project_remove_subject_goals_kept({ count: goals }) : undefined,
                 confirm: { label: m.project_remove(), kind: "destructive" as const },
               },
               run: () => removeSubject(project.id, subject.id, project.revision),
