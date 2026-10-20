@@ -88,6 +88,8 @@ function pendingWhat(m: Messages, project: Project, change: PendingChange): stri
   switch (change.kind) {
     case "session-added":
       return m.project_pending_added()
+    case "session-resplit":
+      return m.project_pending_resplit()
     case "session-moved":
       return m.project_pending_moved({ group: (project.view?.groups ?? project.groups).find((g) => g.id === change.from)?.name ?? m.project_group_missing() })
     case "frames-excluded":

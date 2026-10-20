@@ -2,16 +2,19 @@
  * Library writes shared by every screen (foundation-owned): library quality
  * (P/X/U, library-wide, P-REJ2; D-W54), Confirm Target and Confirm rig
  * (LIB-FR-05), File into Target for a session imported as Unclassified
- * (P-IMP2), a session's Edit… (its name and notes, D-W76) and ★ favourites
+ * (P-IMP2), a regrouping correction that may re-split a session (LIB-FR-12),
+ * Finish review on a session a re-split reset (D-W100), a session's Edit…
+ * (its name and notes, D-W76) and ★ favourites
  * (D-W60). Catalog only, except File into Target, which moves the session's
  * frames: source headers never change. A Project reads these writes as
  * pending changes from the Library on its next Apply (VSEL-FR-12); a Closed
  * Project reads its Close snapshot and never changes.
  */
 import { calibrateSessions } from "@/domain/calibration"
-import { isTrashedSession, liveAssetIds, sessionNamingValues, unreviewedAssetIds } from "@/domain/derive"
+import { correctedExposureS } from "@/domain/corrections"
+import { isLocked, isTrashedSession, liveAssetIds, sessionNamingValues, unreviewedAssetIds } from "@/domain/derive"
 import { fileKey, removeFile, writeFiles } from "@/domain/disk"
-import { capturedRigVersionId, confirmedEvidence, isUnder } from "@/domain/indexing"
+import { capturedRigVersionId, confirmedEvidence, isUnder, type RegroupField, resplitSession } from "@/domain/indexing"
 import { type CatalogueEntry, entryKeys, targetFromEntry } from "@/domain/sky"
 import { sessionDefaultRef, sessionRef } from "@/domain/membership"
 import { namingTemplate, type NamingValues, resolveNamingTemplate } from "@/domain/templates"
@@ -252,6 +255,82 @@ export function confirmRig(sessionId: SessionId, rigId: OpticalTrainId, expectRe
     { expect: { collection: "sessions", id: sessionId, revision: expectRevision }, href },
   )
   if (result.ok) recordSaved(msg("session_rig_confirmed", { name: sessionRef(session) }), msg("store_catalog_only_detail", { name: rig.name }), href)
+  return result
+}
+
+/**
+ * A regrouping correction (LIB-FR-12, D15): `field` of the named frames of a
+ * session reads `value`, the 064 contract's library_confirm_metadata.
+ * Correcting every frame corrects the session in place. Correcting some
+ * re-splits it into successors (`resplitSession`), and every open Project
+ * holding it holds each successor in the session's group, with its frames
+ * left out or included as before, so no frame leaves the Project; each reads
+ * as the Library's pending change and Apply waits until every successor is
+ * Ready (D-W100; owner's answer, 2026-10-19). A Closed or Archived Project
+ * keeps the session it froze. Catalog only: source headers never change. A
+ * stale revision is refused and nothing is saved (LIB-FR-11).
+ */
+export function confirmMetadata(sessionId: SessionId, assetIds: AssetId[], field: RegroupField, value: string, expectRevision: number): CommitResult {
+  const { catalog } = store.getState()
+  const session = catalog.sessions[sessionId]
+  if (!session || session.supersededBy) return MISSING
+  const label = msg("store_label_correct_frames", { name: sessionRef(session) })
+  const href = `/sessions/${sessionId}`
+  if (isTrashedSession(catalog, session)) return refuse(msg("store_refused", { label }), [msg("store_reason_session_trashed")], href)
+  const corrected = new Set(assetIds.filter((id) => session.assetIds.includes(id)))
+  const observed = field === "exposure" ? String(correctedExposureS(session) ?? session.exposureS) : session.channel
+  if (corrected.size === 0 || observed === value) return { ok: true }
+  const at = nowIso()
+  const entry = { id: freshId("cor", session.id), field, observedValue: observed, correctedValue: value, at }
+  const whole = corrected.size === session.assetIds.length
+  const result = commit(
+    label,
+    (s) =>
+      withCatalog(s, (c) => {
+        const current = c.sessions[sessionId]!
+        if (whole) {
+          const next: Session = { ...current, channel: field === "filter" ? value : current.channel, corrections: [...current.corrections, { ...entry, revision: current.revision }] }
+          return { ...c, sessions: { ...c.sessions, [sessionId]: next } }
+        }
+        const next: Catalog = { ...c, sessions: { ...c.sessions }, assets: { ...c.assets }, projects: { ...c.projects } }
+        const successors = resplitSession(next, sessionId, corrected, entry, at)
+        for (const project of Object.values(c.projects)) {
+          if (isLocked(project) || !project.inputs.some((i) => i.sessionId === sessionId)) continue
+          const inputs = project.inputs.flatMap((input) =>
+            input.sessionId === sessionId
+              ? successors.map((successor) => ({ ...input, sessionId: successor.id, excluded: input.excluded.filter((id) => successor.assetIds.includes(id)), included: input.included.filter((id) => successor.assetIds.includes(id)) }))
+              : [input],
+          )
+          next.projects[project.id] = { ...project, inputs }
+        }
+        return next
+      }),
+    { expect: { collection: "sessions", id: sessionId, revision: expectRevision }, href },
+  )
+  if (result.ok) recordSaved(whole ? msg("store_saved_frames_corrected", { name: sessionRef(session) }) : msg("store_saved_session_resplit", { name: sessionRef(session) }), null, href)
+  return result
+}
+
+/**
+ * Finish review on a session a re-split reset (LIB-FR-12, D-W100): its
+ * frames keep their marks, so it needs no re-marking, and the session is
+ * Ready again. Refused while a frame is Unreviewed (C10); a session with
+ * nothing reset writes nothing.
+ */
+export function finishReview(sessionId: SessionId, expectRevision: number): CommitResult {
+  const { catalog } = store.getState()
+  const session = catalog.sessions[sessionId]
+  if (!session) return MISSING
+  const label = msg("stepflow_finish_review")
+  const href = `/sessions/${sessionId}?step=review`
+  const unreviewed = unreviewedAssetIds(catalog, session).length
+  if (unreviewed > 0) return refuse(msg("store_refused", { label }), [msg("flow_frames_unreviewed", { count: unreviewed })], href)
+  if (!session.reviewReset) return { ok: true }
+  const result = commit(label, (s) => withCatalog(s, (c) => ({ ...c, sessions: { ...c.sessions, [sessionId]: { ...c.sessions[sessionId]!, reviewReset: false } } })), {
+    expect: { collection: "sessions", id: sessionId, revision: expectRevision },
+    href,
+  })
+  if (result.ok) recordSaved(msg("store_saved_review_finished", { name: sessionRef(session) }), null, href)
   return result
 }
 

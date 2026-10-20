@@ -3891,6 +3891,10 @@
   "store_saved_label_name": "{label}: {name}",
   "store_label_project_details": "Detalhes do projeto",
   "store_label_session_details": "Nome e notas da sessão",
+  "store_label_correct_frames": "Corrigir frames de {name}",
+  "store_saved_frames_corrected": "Frames de {name} corrigidos",
+  "store_saved_session_resplit": "{name} dividida de novo",
+  "store_saved_review_finished": "Revisão de {name} concluída",
   "store_label_add_subject": "Adicionar objeto",
   "store_label_remove_subject": "Remover objeto",
   "store_label_edit_subject": "Editar objeto",
@@ -6064,6 +6068,7 @@
   "project_change_session_added": "Adicionada: {session} ({frames})",
   "project_change_session_moved": "Movida: {session}, de {from} para {to}",
   "project_change_session_removed": "Removida: {session}",
+  "project_change_session_resplit": "Dividida de novo a partir de {from}: {session} ({frames})",
   "project_change_source": "Origem",
   "project_change_source_calibration": "Calibração",
   "project_change_source_library": "Biblioteca",
@@ -7509,6 +7514,7 @@
   "apply_refused_no_symlinks": "{name} não aceita links simbólicos: escolha outro local de processamento",
   "project_pending_with_source": "{change} ({source})",
   "project_pending_added": "Adicionada",
+  "project_pending_resplit": "Dividida de novo",
   "project_pending_moved": "Movida de {group}",
   "project_pending_frames": [
     {

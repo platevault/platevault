@@ -44,7 +44,7 @@ import type { CalibrationProcess, CalibrationStepId, OperationId, OpticalTrainId
 import { joinRefs, type MessageRef, type Messages, msg, say } from "@/lib/i18n"
 import { type CommitResult, store } from "@/store/core"
 import { detectMasters, discardRaws, importMaster, keepRaws, startStack } from "./calibration"
-import { confirmRig, confirmTarget, filedUnclassified, fileIntoTarget } from "./library"
+import { confirmRig, confirmTarget, filedUnclassified, fileIntoTarget, finishReview } from "./library"
 import { recordWrapUpStep, reopenWrapUpStep, wrapUpRefusal } from "./projects"
 import { refuse } from "./shared"
 import { trashFileRows } from "./trash"
@@ -125,8 +125,8 @@ function intakeProceed(session: Session, step: SessionIntakeStepId, host: Sessio
     if (!host.rigId) return refuse(msg("store_refused", { label: msg("stepflow_proceed") }), [msg("flow_confirm_rig")], href)
     return confirmRig(session.id, host.rigId, session.revision)
   }
-  // Finish review writes nothing: a session is Ready once every frame is Usable or Unusable, and the gate holds Proceed until then.
-  return { ok: true }
+  // Finish review: Ready once every frame is Usable or Unusable, and the gate holds Proceed until then; it writes only to clear a Review a re-split reset (LIB-FR-12, D-W100).
+  return finishReview(session.id, session.revision)
 }
 
 // ---------------------------------------------------------------------------
