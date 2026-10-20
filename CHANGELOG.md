@@ -56,7 +56,7 @@
 
 ### Bug Fixes
 
-* return mosaic panel map outlines with Project inputs (PRJ-FR-29, VSEL-FR-07)
+* offer mosaic panel groups from framing overlap in Project inputs, using the adjustable Settings range (astro-plan-o50o7; PRJ-FR-29, D-W114)
 
 * a light with coordinates but no OBJECT header no longer needs review ([#1355](https://github.com/platevault/platevault/issues/1355)) ([a8aaff2](https://github.com/platevault/platevault/commit/a8aaff22836ba5289a55dcf411ca6c319462098d))
 * **a11y:** retune ink3/ink4 to AA on darkest surfaces; add contrast CI gate; keyboard Home/End on table rows ([#1175](https://github.com/platevault/platevault/issues/1175)) ([972e343](https://github.com/platevault/platevault/commit/972e343fc7d25a264e3c7b90ecf627937aec2a3c)), closes [#1138](https://github.com/platevault/platevault/issues/1138)

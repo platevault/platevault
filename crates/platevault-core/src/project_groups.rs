@@ -309,7 +309,13 @@ pub struct PanelOutline {
 #[must_use]
 pub fn panel_outline(group: &ProjectGroup) -> Option<PanelOutline> {
     let framing = group.framing.filter(|_| group.panel)?;
-    let (field, angle_deg) = (framing.field?, framing.sky_angle_deg?);
+    panel_group_outline(group, framing.sky_angle_deg?)
+}
+
+/// Shared footprint outline keeps the sky projection identical to the panel map.
+fn panel_group_outline(group: &ProjectGroup, angle_deg: f64) -> Option<PanelOutline> {
+    let framing = group.framing?;
+    let field = framing.field?;
     let anchor = Equatorial::j2000(
         Angle::from_degrees(framing.ra_deg),
         Angle::from_degrees(framing.dec_deg),
@@ -333,11 +339,205 @@ pub fn panel_outline(group: &ProjectGroup) -> Option<PanelOutline> {
         .collect::<Option<Vec<_>>>()?;
     Some(PanelOutline { group_id: group.id, corners, sky_angle_deg: angle_deg })
 }
+/// A suggestion that two group framings could be panels of one mosaic.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
+pub struct PanelOffer {
+    pub left_group_id: Uuid,
+    pub right_group_id: Uuid,
+    pub overlap_percent: f64,
+}
+
+/// Groups whose framing footprints overlap within the adjustable panel range.
+#[must_use]
+pub fn panel_offers(groups: &[ProjectGroup], margins: &FramingMargins) -> Vec<PanelOffer> {
+    let footprints: Vec<Option<target_match::SkyFootprint>> =
+        groups.iter().map(panel_footprint).collect();
+    let (minimum, maximum) = margins.panel_overlap_percent;
+    let mut offers = Vec::new();
+    for left in 0..groups.len() {
+        let Some(left_footprint) = footprints[left].as_ref() else { continue };
+        for right in left + 1..groups.len() {
+            let Some(right_footprint) = footprints[right].as_ref() else { continue };
+            let Ok(comparison) = target_match::compare_footprints(left_footprint, right_footprint)
+            else {
+                continue;
+            };
+            let overlap_percent = comparison.normalized_coverage * 100.0;
+            if overlap_percent.is_finite() && (minimum..=maximum).contains(&overlap_percent) {
+                offers.push(PanelOffer {
+                    left_group_id: groups[left].id,
+                    right_group_id: groups[right].id,
+                    overlap_percent,
+                });
+            }
+        }
+    }
+    offers
+}
+/// Construct the anchor framing's footprint, using sky position angle only.
+/// ROTATANG alone is not an orientation on the sky.
+fn panel_footprint(group: &ProjectGroup) -> Option<target_match::SkyFootprint> {
+    let framing = group.framing?;
+    let angle_deg = framing.sky_angle_deg?;
+    let outline = panel_group_outline(group, angle_deg)?;
+    let anchor = target_match::skymath::Equatorial::j2000(
+        target_match::skymath::Angle::from_degrees(framing.ra_deg),
+        target_match::skymath::Angle::from_degrees(framing.dec_deg),
+    )
+    .ok()?;
+    let corners = outline
+        .corners
+        .into_iter()
+        .map(|corner| {
+            target_match::skymath::Equatorial::j2000(
+                target_match::skymath::Angle::from_degrees(corner.ra_deg),
+                target_match::skymath::Angle::from_degrees(corner.dec_deg),
+            )
+            .ok()
+        })
+        .collect::<Option<Vec<_>>>()?;
+    target_match::SkyFootprint::new(
+        anchor,
+        corners,
+        target_match::skymath::Angle::from_degrees(angle_deg),
+        target_match::ImageParity::Direct,
+        target_match::FootprintProvenance::new(group.id.to_string()).ok()?,
+    )
+    .ok()
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::FieldOfView;
+    use target_match::{compare_footprints, FootprintProvenance, ImageParity, SkyFootprint};
+
+    fn framing(dec_deg: f64) -> FramingEvidence {
+        FramingEvidence {
+            ra_deg: 100.0,
+            dec_deg,
+            rotator_deg: None,
+            sky_angle_deg: Some(0.0),
+            field: Some(FieldOfView { width_deg: 3.0, height_deg: 2.0 }),
+        }
+    }
+
+    fn footprint(framing: FramingEvidence) -> SkyFootprint {
+        let anchor = target_match::skymath::Equatorial::j2000(
+            target_match::skymath::Angle::from_degrees(framing.ra_deg),
+            target_match::skymath::Angle::from_degrees(framing.dec_deg),
+        )
+        .unwrap();
+        let field = framing.field.unwrap();
+        let (half_x, half_y) = (
+            (field.width_deg / 2.0).to_radians().tan(),
+            (field.height_deg / 2.0).to_radians().tan(),
+        );
+        let corners = [(-half_x, -half_y), (half_x, -half_y), (half_x, half_y), (-half_x, half_y)]
+            .into_iter()
+            .map(|(east, north)| {
+                target_match::skymath::gnomonic_unproject(
+                    anchor,
+                    target_match::skymath::GnomonicPoint { east, north },
+                )
+                .unwrap()
+            })
+            .collect();
+        SkyFootprint::new(
+            anchor,
+            corners,
+            target_match::skymath::Angle::from_degrees(0.0),
+            ImageParity::Direct,
+            FootprintProvenance::new("test").unwrap(),
+        )
+        .unwrap()
+    }
+
+    fn framing_pair_at_coverage(percent: f64) -> [ProjectGroup; 2] {
+        let left = framing(44.3);
+        let left_footprint = footprint(left);
+        let mut low = 0.0;
+        let mut high = 2.0;
+        for _ in 0..48 {
+            let middle = f64::midpoint(low, high);
+            let coverage = compare_footprints(&left_footprint, &footprint(framing(44.3 + middle)))
+                .unwrap()
+                .normalized_coverage;
+            if coverage * 100.0 > percent {
+                low = middle;
+            } else {
+                high = middle;
+            }
+        }
+        let group = |id, framing| ProjectGroup {
+            id: Uuid::from_u128(id),
+            rig_id: Uuid::from_u128(9),
+            name: GroupName::new("Group").unwrap(),
+            panel: false,
+            origin: GroupOrigin::Framing,
+            optics: OpticsSignature::new(None, None, None).unwrap(),
+            framing: Some(framing),
+            position: 0,
+        };
+        [group(1, left), group(2, framing(44.3 + f64::midpoint(low, high)))]
+    }
+
+    fn overlap_percent(groups: &[ProjectGroup; 2]) -> f64 {
+        compare_footprints(
+            &footprint(groups[0].framing.unwrap()),
+            &footprint(groups[1].framing.unwrap()),
+        )
+        .unwrap()
+        .normalized_coverage
+            * 100.0
+    }
+
+    #[test]
+    fn panel_offers_follow_inclusive_settings_range_without_marking_groups() {
+        for percent in [5.0, 40.0] {
+            let groups = framing_pair_at_coverage(percent);
+            assert!((overlap_percent(&groups) - percent).abs() < 1e-8);
+            let offers = panel_offers(&groups, &FramingMargins::default());
+            assert_eq!(offers.len(), 1, "overlap {percent}%");
+            assert_eq!(
+                (offers[0].left_group_id, offers[0].right_group_id),
+                (groups[0].id, groups[1].id)
+            );
+            assert!((offers[0].overlap_percent - percent).abs() < 1e-8);
+            assert!(groups.iter().all(|group| !group.panel), "offers are suggestions only");
+
+            let measured = overlap_percent(&groups);
+            let lower_edge = FramingMargins {
+                panel_overlap_percent: (measured, measured + 1.0),
+                ..FramingMargins::default()
+            };
+            let upper_edge = FramingMargins {
+                panel_overlap_percent: (measured - 1.0, measured),
+                ..FramingMargins::default()
+            };
+            assert_eq!(panel_offers(&groups, &lower_edge).len(), 1, "inclusive lower bound");
+            assert_eq!(panel_offers(&groups, &upper_edge).len(), 1, "inclusive upper bound");
+        }
+
+        for percent in [4.0, 41.0] {
+            assert!(
+                panel_offers(&framing_pair_at_coverage(percent), &FramingMargins::default(),)
+                    .is_empty(),
+                "overlap {percent}% is outside the default offer range"
+            );
+        }
+
+        let groups = framing_pair_at_coverage(15.0);
+        assert_eq!(panel_offers(&groups, &FramingMargins::default()).len(), 1);
+        let changed =
+            FramingMargins { panel_overlap_percent: (20.0, 30.0), ..FramingMargins::default() };
+        assert!(
+            panel_offers(&groups, &changed).is_empty(),
+            "changed Settings range changes offers"
+        );
+    }
 
     fn group(panel: bool, sky_angle_deg: Option<f64>) -> ProjectGroup {
         ProjectGroup {

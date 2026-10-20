@@ -59,9 +59,9 @@ pub struct GroupFolder {
     pub folder: Option<String>,
 }
 
-/// A Project's Sessions step (PRJ-FR-07, VSEL-FR-02): what it holds, the
-/// keyword names in effect, each group's folder and panel-map outline, the
-/// pending changes with their sources and its suggestions.
+/// A Project's Sessions step (PRJ-FR-07, VSEL-FR-02): its inputs, derived
+/// folders and panel outlines, pending changes, suggestions and adjustable
+/// mosaic panel offers.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
@@ -72,6 +72,7 @@ pub struct ProjectInputs {
     pub pending: Vec<PendingChange>,
     pub suggestions: Vec<ProjectSuggestion>,
     pub panels: Vec<crate::project_groups::PanelOutline>,
+    pub panel_offers: Vec<crate::project_groups::PanelOffer>,
 }
 
 const UNKNOWN_OPTICS: OpticsSignature =
@@ -86,16 +87,19 @@ impl Library {
     pub async fn project_inputs(&self, id: Uuid) -> Result<ProjectInputs, LibraryError> {
         let catalog = self.catalog();
         let desired = catalog.project_desired(id).await?;
-        let keywords = self.keywords_of(&desired).await?;
+        let workflow = catalog.workflow_settings().await?.0;
+        let keywords =
+            desired.settings.keywords.clone().unwrap_or_else(|| workflow.keywords.clone());
         let folders = group_folders(&desired, &keywords)?
             .into_iter()
             .map(|(group_id, folder)| GroupFolder { group_id, folder })
             .collect();
         let panels =
             desired.groups.iter().filter_map(crate::project_groups::panel_outline).collect();
+        let panel_offers = crate::project_groups::panel_offers(&desired.groups, &workflow.framing);
         let pending = catalog.project_pending_changes(id).await?;
         let suggestions = catalog.project_suggestions(id).await?;
-        Ok(ProjectInputs { desired, keywords, folders, pending, suggestions, panels })
+        Ok(ProjectInputs { desired, keywords, folders, pending, suggestions, panels, panel_offers })
     }
 
     /// Add whole sessions to Project `id` in one edit (PRJ-FR-08): each into
@@ -354,13 +358,6 @@ impl Library {
             layout::require_absolute_processing_location(&parent.to_path_buf()?)?;
         }
         self.catalog().set_project_view_settings(id, expected, settings).await
-    }
-
-    async fn keywords_of(&self, desired: &ProjectDesired) -> Result<GroupKeywords, LibraryError> {
-        match &desired.settings.keywords {
-            Some(keywords) => Ok(keywords.clone()),
-            None => Ok(self.catalog().workflow_settings().await?.0.keywords),
-        }
     }
 
     /// What placement reads about one session to add: its confirmed rig,
