@@ -11,6 +11,7 @@
 import type { LucideIcon } from "lucide-react"
 import type { ReactNode } from "react"
 import type { StepLink } from "@/domain/derive"
+import type { OpticalTrainId } from "@/domain/types"
 import type { CommitResult } from "@/store/core"
 
 /** One visible style per role. "destructive" is for irreversible actions only and is never primary. */
@@ -199,4 +200,20 @@ export interface SessionReviewProps {
   sessionId: string
   /** The host's Finish review; the workspace's Finish command (⌘↵) calls it once no frame is Unreviewed. */
   onFinished?: () => void
+}
+
+/**
+ * "Add {value} to {rig}" in a session (PLAN-EQ-FR-04, D-W127): the filter
+ * dialog of Settings › Equipment for a FILTER value no filter of the
+ * session's confirmed rig matches, prefilled with the value and the bands it
+ * likely passes, which adds the new filter to that rig. The intake Rig step
+ * (P3) hosts it; slice E implements it (`AddFilterToRigDialog`), and the
+ * route injects it.
+ */
+export interface AddFilterToRigProps {
+  /** The FILTER value and the rig it goes onto; null while the dialog is closed. */
+  request: { value: string; rigId: OpticalTrainId } | null
+  onClose: () => void
+  /** Where focus goes once the filter is added: adding removes the prompt that opened the dialog. */
+  focusAfterConfirm: () => HTMLElement | null
 }

@@ -12,13 +12,14 @@
  * A FILTER value on a rig's sessions that matches none of its filters is
  * listed under Unknown filters (PLAN-EQ-AC-03/04): "Add {filter} to {rig}"
  * when a filter record already matches it, else "Add filter…" prefilled
- * from the value, which creates the record on that rig.
+ * from the value, which creates the record on that rig. A session offers
+ * the same dialog as "Add {value} to {rig}" (`AddFilterToRigDialog`, D-W127).
  */
 import { useNavigate, useSearch } from "@tanstack/react-router"
 import { Filter as FilterIcon } from "lucide-react"
 import { useState } from "react"
 import { useMessages } from "@/app/preferences"
-import type { Action, Column, MenuItem } from "@/components/app/contracts"
+import type { Action, AddFilterToRigProps, Column, MenuItem } from "@/components/app/contracts"
 import { EmptyState } from "@/components/app/feedback"
 import { ChoiceListField, TextField } from "@/components/app/fields"
 import { blockedByErrors, type FieldErrors, FormDialog, useDialogForm } from "@/components/app/form-dialog"
@@ -73,7 +74,7 @@ interface FilterForm {
 }
 
 /** Add filter… or Edit a filter: its name, the FILTER values it matches and the bands it passes. Which rigs carry it is set on each rig. */
-function FilterDialog({ draft, onClose }: { draft: FilterDraft | null; onClose: () => void }) {
+function FilterDialog({ draft, onClose, focusAfterConfirm }: { draft: FilterDraft | null; onClose: () => void; focusAfterConfirm?: () => HTMLElement | null }) {
   const m = useMessages()
   const open = draft !== null
   const filter = draft?.filter ?? null
@@ -100,12 +101,23 @@ function FilterDialog({ draft, onClose }: { draft: FilterDraft | null; onClose: 
     },
   }
   return (
-    <FormDialog open={open} onOpenChange={(next) => !next && onClose()} title={title} confirm={confirm}>
+    <FormDialog open={open} onOpenChange={(next) => !next && onClose()} title={title} confirm={confirm} focusAfterConfirm={focusAfterConfirm}>
       <TextField label={m.equipment_name()} value={values.name} onChange={(next) => set({ name: next })} error={shown(errors, "name")} autoFocus />
       <TextField label={m.equipment_matches_filter()} description={m.equipment_comma_separated()} value={values.matches} onChange={(matches) => set({ matches })} placeholder={name || undefined} mono />
       <ChoiceListField label={m.equipment_bands()} value={values.bands} options={BANDS.map((band) => ({ value: band, label: band }))} onChange={(bands) => set({ bands })} error={shown(errors, "bands")} />
     </FormDialog>
   )
+}
+
+/** A new filter for a FILTER value no filter of `rig` matches: named and matching the value, with its guessed bands, going onto that rig. */
+function unknownValueDraft(value: string, rig: OpticalTrain): FilterDraft {
+  return { filter: null, prefill: { name: value, bands: guessBands(value) }, onRig: rig }
+}
+
+/** "Add {value} to {rig}" from a session (D-W127, PLAN-EQ-FR-04): the same dialog as Unknown filters' Add filter, injected by the route. */
+export function AddFilterToRigDialog({ request, onClose, focusAfterConfirm }: AddFilterToRigProps) {
+  const rig = useStore((s) => (request ? s.catalog.opticalTrains[request.rigId] : undefined))
+  return <FilterDialog draft={request && rig ? unknownValueDraft(request.value, rig) : null} onClose={onClose} focusAfterConfirm={focusAfterConfirm} />
 }
 
 /** Every filter record: name, bands, the FILTER values it matches and the rigs that carry it. */
@@ -163,7 +175,7 @@ function UnknownFiltersSection({ onAdd }: { onAdd: (draft: FilterDraft) => void 
   if (rows.length === 0) return null
   const actionsFor = (u: UnknownValue): Action[] => [
     ...u.known.map((f): Action => ({ id: `add-${f.id}`, label: m.equipment_add_value({ value: filterName(f, u.known) }), run: () => addFilterToRig(u.rig.id, f.id) })),
-    { id: "add-filter", label: m.equipment_add_filter(), opensDialog: true, run: () => onAdd({ filter: null, prefill: { name: u.value, bands: guessBands(u.value) }, onRig: u.rig }) },
+    { id: "add-filter", label: m.equipment_add_filter(), opensDialog: true, run: () => onAdd(unknownValueDraft(u.value, u.rig)) },
   ]
   const columns: Column<UnknownValue>[] = [
     { id: "value", header: m.equipment_filter_value(), rowHeader: true, truncate: true, sortValue: (u) => u.value, cell: (u) => u.value },
