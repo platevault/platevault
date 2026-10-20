@@ -1,7 +1,7 @@
 ---
 id: J31
 title: Import from a card or folder with Copy or Move and templated paths
-version: 8
+version: 9
 status: draft
 last_reviewed: 2026-10-06
 actors: [primary-user]
@@ -177,15 +177,16 @@ folder is added in place. Done means:
 
 ### S10a — Review a framing split, merge it and split it again {#S10a}
 
-- **Do:** Connect `Card-4`. Choose it as the source and `Astro-T7 captures` as the Captures location, and read the preview's sessions. Merge the two Ha sessions and read the preview, then re-split the merged session. Set the centre limit to 12′, read the preview, then set it back; set the rotation limit to 3°. Choose **Copy** and start the import.
+- **Do:** Connect `Card-4`. Choose it as the source and `Astro-T7 captures` as the Captures location, and read the preview's sessions. Merge the two Ha sessions and read the preview, then re-split the merged session. Set the centre limit to 12′ and read the preview, then lower the rotation limit to 3° and read it again, then set both limits back to their defaults. Choose **Copy** and start the import.
 - **Expect:**
   - The preview lists two sessions with Target NGC 7000 prefilled from their pointing: "NGC 7000 · Ha · 300 s · 6 Oct" with the 24 lights from either side of the meridian flip, and "NGC 7000 · Ha · 300 s · 6 Oct · framing 2" with the other 10. Both list their lights under `NGC 7000/Ha/2026-10-06/light/`.
+  - The first session's 24 lights include the 10 that return to framing A after framing B.
   - After the merge, the preview lists one session of 34 lights. After the re-split, the two sessions of 24 and 10 lights return with the same names.
   - The summary reads `34 frames · <size> · 2 sessions`, and Sessions lists both sessions with their frame counts.
-  - With a centre limit of 12′, the preview shows one session of 34. Returning frames at A rejoin the first session, so the 10 A frames join the first 14.
-  - With a rotation limit of 3°, the preview shows sessions of 24 and 10.
+  - With a centre limit of 12′, the preview shows one session of 34.
+  - With the centre limit at 12′ and the rotation limit at 3°, the preview shows sessions of 24 and 10, because framing B's rotation differs by 4°.
 - **Expect (negative):** The meridian flip starts no session. Merging and re-splitting write nothing, and no file is written before the import starts. Slider changes also write nothing.
-- **Trace:** Import · STO-IMP-FR-03 · LIB-FR-04, LIB-FR-24 · LIB-AC-31 · D-W107 · D-W114 · (owner's answer, 2026-10-20)
+- **Trace:** Import · STO-IMP-FR-03 · LIB-FR-04, LIB-FR-24 · LIB-AC-31 · D-W107 · D-W114
 
 ### S11 — Add an existing library folder {#S11}
 
@@ -256,3 +257,6 @@ folder is added in place. Done means:
 - **Δ8** 2026-10-19 · S3, S9, SC9 · behavior-change
   When a session has no pointing or no matching Target, the preview preselects Unclassified so Import is available; choosing a Target only files it under that Target.
   Evidence: STO-IMP-FR-03 · owner's answer of 2026-10-19 in astro-plan-rzbzu.1 · by: OwnerAnswersDocsFix (intent-gated)
+- **Δ9** 2026-10-20 · P8, S10a · behavior-change
+  The centre limit is an angle, 5′ by default, and lights that return to an earlier framing rejoin its session, so P8 has 14 lights at framing A, 10 at framing B and 10 back at A. In the import preview the user moves the centre and rotation sliders, and the split recalculates live without saving.
+  Evidence: D-W107 and D-W114 (owner's answers of 2026-10-20) in PR #1850, LIB-FR-04, LIB-FR-24, LIB-AC-31 · by: Main (intent-gated)
