@@ -251,6 +251,7 @@ impl CaptureWatch {
             publish,
             publish_roots,
             draining: Draining::default(),
+            left: HashMap::new(),
             next_walk: 0,
             #[cfg(test)]
             observed: Arc::clone(&observed),
@@ -309,10 +310,13 @@ impl CaptureWatch {
     /// location keeps the count it had, with `live: false`, and nothing
     /// touches its root, a sweep included. A reselect or remap meanwhile
     /// takes it out of the counts and touches the new root only after that
-    /// notice, or after a bounded wait when none comes. A location that no
-    /// longer follows `root` (a remapped location's old root) is left alone:
-    /// this only waits. Discovery handles one thing at a time, so this also
-    /// waits out a file-system call it is making. It returns at once when
+    /// notice, or after a bounded wait when none comes. A location that
+    /// moved away from `root` (reselected or remapped) before this notice
+    /// arrived is held the same way: its watcher and walk at the root it
+    /// moved to, which may be on the volume, are let go of too, so the
+    /// outcome does not depend on which of the two discovery took first.
+    /// Discovery handles one thing at a time, so this also waits out a
+    /// file-system call it is making. It returns at once when
     /// discovery stopped, and as soon as it is asked to stop
     /// ([`shutdown`](Self::shutdown)), so app exit never waits on a removal
     /// whose walk or watcher close hangs.
@@ -677,7 +681,41 @@ struct Moved {
     since: Instant,
 }
 
+/// Where a location was followed before it moved (reselected or remapped):
+/// the removal of that root's volume may still be requested once the
+/// location follows its new root ([`Run::moved_before_release`]).
+struct Left {
+    location: Location,
+    root: PathBuf,
+    prefixes: Vec<PathBuf>,
+    stamp: RootStamp,
+}
+
 impl Watched {
+    /// `location` at `root`, whose stamp is `stamp`, before its watcher and
+    /// first walk start.
+    fn new(location: Location, root: PathBuf, prefixes: Vec<PathBuf>, stamp: RootStamp) -> Self {
+        Self {
+            location,
+            root,
+            prefixes,
+            stamp,
+            live: None,
+            known: HashSet::new(),
+            vacated: HashMap::new(),
+            new: HashMap::new(),
+            walk: None,
+            unlisted: Vec::new(),
+            rescan: false,
+            recount: false,
+            unreadable: false,
+            listed: false,
+            cataloged: false,
+            released: false,
+            moved: None,
+        }
+    }
+
     fn identity(&self, relative: &Path) -> PathIdentity {
         NativePath::from_path(relative).identity_on(&self.location.identity.volume)
     }
@@ -1126,6 +1164,9 @@ struct Run {
     /// The watchers discovery closed and the walks it canceled, until they
     /// returned.
     draining: Draining,
+    /// Where each location that moved was followed before, until it moves
+    /// again or is no longer listed.
+    left: HashMap<Uuid, Left>,
     next_walk: u64,
     #[cfg(test)]
     observed: Arc<Observed>,
@@ -1236,13 +1277,18 @@ impl Run {
         // Removed, retired and re-roled locations stop; reselected and
         // remapped ones start again at their new root, once the removal of
         // their old root's volume is no longer pending (`follow`).
-        for (_, mut watched) in self.locations.extract_if(|id, watched| {
+        for (id, mut watched) in self.locations.extract_if(|id, watched| {
             !wanted
                 .get(id)
                 .is_some_and(|location| watched.released || same_root(location, &watched.location))
         }) {
             self.draining.let_go(&mut watched);
+            if wanted.contains_key(&id) {
+                let Watched { location, root, prefixes, stamp, .. } = watched;
+                self.left.insert(id, Left { location, root, prefixes, stamp });
+            }
         }
+        self.left.retain(|id, _| wanted.contains_key(id));
         self.offline.retain(|id, offline| {
             wanted.get(id).is_some_and(|location| same_root(location, &offline.location))
         });
@@ -1406,28 +1452,7 @@ impl Run {
         self.offline.remove(&id);
         let mut prefixes = vec![root.clone()];
         prefixes.extend(canonical);
-        self.locations.insert(
-            id,
-            Watched {
-                location,
-                root: root.clone(),
-                prefixes,
-                stamp,
-                live: None,
-                known: HashSet::new(),
-                vacated: HashMap::new(),
-                new: HashMap::new(),
-                walk: None,
-                unlisted: Vec::new(),
-                rescan: false,
-                recount: false,
-                unreadable: false,
-                listed: false,
-                cataloged: false,
-                released: false,
-                moved: None,
-            },
-        );
+        self.locations.insert(id, Watched::new(location, root.clone(), prefixes, stamp));
         // Named before its watcher holds anything on the volume.
         self.publish_roots();
         let live = self.attach(&root, stamp).await;
@@ -1499,13 +1524,16 @@ impl Run {
 
     /// Release every handle discovery holds on the volume of `root`, a root
     /// of `id`: close the location's watcher and cancel its walk when it
-    /// follows `root`, then send `released` once every watcher discovery
-    /// closed and walk it canceled on that volume returned, whichever
-    /// location it served. The volume is the one in the root's folder ID; a
-    /// root with none waits only for what ran on it. Discovery's other
+    /// follows `root`, or follows the root it moved to from `root` before
+    /// this release arrived ([`Run::moved_before_release`]), then send
+    /// `released` once every watcher discovery closed and walk it canceled
+    /// on that volume returned, whichever location it served. The volume is
+    /// the one in the root's folder ID; a root with none waits only for what
+    /// ran on it, and on the root the location moved to. Discovery's other
     /// file-system calls are awaited where they are made, so none is in
     /// flight here.
     fn release(&mut self, id: Uuid, root: &Path, released: oneshot::Sender<()>) {
+        let moved_to = self.moved_before_release(id, root);
         let mut folder = None;
         if let Some(watched) = self.locations.get_mut(&id).filter(|watched| watched.root == root) {
             tracing::info!(location = %id, "new captures: volume to be removed; watch released");
@@ -1515,12 +1543,15 @@ impl Run {
             self.draining.let_go(watched);
         }
         let at_root = |named: &WatchedRoot| named.location_id == id && named.root == root;
+        let at_new_root = |named: &WatchedRoot| {
+            named.location_id == id && moved_to.as_deref() == Some(named.root.as_path())
+        };
         let volume = folder
             .or_else(|| self.draining.roots().find(|&named| at_root(named))?.folder)
             .map(|folder| folder.volume);
         let in_flight = self.draining.on(|named| match volume {
             Some(volume) => named.folder.is_some_and(|folder| folder.volume == volume),
-            None => at_root(named),
+            None => at_root(named) || at_new_root(named),
         });
         tokio::spawn(async move {
             for call in in_flight {
@@ -1528,6 +1559,29 @@ impl Run {
             }
             let _ = released.send(());
         });
+    }
+
+    /// `id` moved (reselected or remapped) away from `root` before the
+    /// removal of `root`'s volume was requested: the move was applied
+    /// before the notice arrived, or won the race with it. The root it moved
+    /// to may be on that volume, so let go of its watcher and walk there,
+    /// and follow the location at `root` again, released and moved, as when
+    /// the removal was requested first ([`Run::moved_in_removal`]). Returns
+    /// the root it moved to.
+    fn moved_before_release(&mut self, id: Uuid, root: &Path) -> Option<PathBuf> {
+        let moved_away = self
+            .locations
+            .get(&id)
+            .is_some_and(|watched| !watched.released && watched.root != root);
+        if !moved_away || self.left.get(&id).is_none_or(|left| left.root != root) {
+            return None;
+        }
+        let (left, mut moved) = (self.left.remove(&id)?, self.locations.remove(&id)?);
+        self.draining.let_go(&mut moved);
+        let mut back = Watched::new(left.location, left.root, left.prefixes, left.stamp);
+        back.moved = Some(Moved { to: moved.location, since: Instant::now() });
+        self.locations.insert(id, back);
+        Some(moved.root)
     }
 
     /// The removal a release made way for did not happen: watch the location
