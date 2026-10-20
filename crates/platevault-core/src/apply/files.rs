@@ -242,7 +242,9 @@ fn plain_copy(placing: &Placing, original: &Path, path: &Path) -> Result<Written
 }
 
 /// Immediately before the swap (PREP-FR-09): each original still holds its
-/// snapshot, and each entry is still the one written.
+/// snapshot, each link is still the one written, and each copy or clone is
+/// still the file written, re-read to its snapshot's digest or, for a
+/// patched copy, to the digest its reviewed patch was proven to give.
 pub fn verify_built(
     building: &Path,
     entries: &[ManifestEntry],
@@ -257,27 +259,49 @@ pub fn verify_built(
     for entry in entries {
         let Ok(relative) = entry.path.relative_path() else { continue };
         let path = building.join(&relative);
-        let holds = entry.written.as_ref().is_some_and(|written| holds_identity(&path, written));
-        if !holds {
-            failures.push((
-                relative,
-                reason(ReasonCode::DestinationChanged, format!("{} changed", path.display())),
-            ));
+        let failure = match entry.placement {
+            EntryPlacement::Symlink => (!entry
+                .written
+                .as_ref()
+                .is_some_and(|written| holds_link(&path, written)))
+            .then(|| reason(ReasonCode::DestinationChanged, format!("{} changed", path.display()))),
+            EntryPlacement::Copy | EntryPlacement::Clone => {
+                (!holds_placed_copy(&path, entry)).then(|| {
+                    reason(
+                        ReasonCode::DestinationMismatch,
+                        format!("{} no longer holds the bytes written", path.display()),
+                    )
+                })
+            }
+        };
+        if let Some(failure) = failure {
+            failures.push((relative, failure));
         }
     }
     failures
 }
 
-/// Whether `path` is still the entry recorded as `identity`, never following
-/// a link.
-fn holds_identity(path: &Path, identity: &FileIdentity) -> bool {
-    match fs::symlink_metadata(path) {
-        Ok(metadata) if fs_pathsafe::is_link_or_junction_metadata(&metadata) => observe_entry(path)
-            .is_ok_and(|link| same_identity(&link.fingerprint.identity, identity)),
-        Ok(_) => crate::inventory::probe_fingerprint(path)
-            .is_ok_and(|observed| same_identity(&observed.identity, identity)),
-        Err(_) => false,
-    }
+/// Whether `path` is still the link written as `identity`, never following
+/// it. A link's target can't change in place, so its identity proves it.
+fn holds_link(path: &Path, identity: &FileIdentity) -> bool {
+    observe_entry(path).is_ok_and(|link| {
+        matches!(link.kind, EntryKind::Link { .. })
+            && same_identity(&link.fingerprint.identity, identity)
+    })
+}
+
+/// Whether `path` still holds the copy `entry` placed: the same file, by its
+/// own identity, re-read to the digest it was proven to hold, its
+/// original's or a patched copy's. Size and time prove nothing (VSEL-FR-14).
+pub fn holds_placed_copy(path: &Path, entry: &ManifestEntry) -> bool {
+    observe_entry(path).is_ok_and(|copy| {
+        copy.kind == EntryKind::File
+            && entry
+                .written
+                .as_ref()
+                .is_some_and(|written| same_identity(&copy.fingerprint.identity, written))
+            && copy.sha256.as_deref() == Some(entry.copy_sha256())
+    })
 }
 
 /// What of a `View (building)/` is this Project's own: a copy holding the
@@ -309,9 +333,9 @@ impl Ours {
 /// left is this module's own by its name, and so is every file of `ours`.
 /// Anything else stays and is returned; the folder then stays too.
 pub fn clear_building(building: &Path, ours: &Ours) -> Vec<PathBuf> {
-    let (files, unreadable) = walk(building);
-    let mut kept: Vec<PathBuf> = unreadable;
-    for path in files {
+    let walked = walk(building);
+    let mut kept: Vec<PathBuf> = walked.unreadable.into_iter().map(|(path, _)| path).collect();
+    for path in walked.files {
         let removable = match fs::symlink_metadata(&path) {
             Ok(metadata) if fs_pathsafe::is_link_or_junction_metadata(&metadata) => true,
             Ok(metadata) if metadata.is_file() => {
@@ -332,19 +356,71 @@ pub fn clear_building(building: &Path, ours: &Ours) -> Vec<PathBuf> {
     kept
 }
 
-/// Every file and link below `root`, never following a link, and the
-/// folders that couldn't be read.
-fn walk(root: &Path) -> (Vec<PathBuf>, Vec<PathBuf>) {
-    let mut files = Vec::new();
-    let mut unreadable = Vec::new();
+/// Entries the walkers couldn't account for, each with why: the walk's
+/// root itself when it is a link, a junction or no folder, and every
+/// folder or entry below it that couldn't be read.
+pub type Unreadable = Vec<(PathBuf, ItemReason)>;
+
+/// What one no-follow walk below a root found.
+#[derive(Default)]
+struct Walked {
+    /// Every file and link, sorted.
+    files: Vec<PathBuf>,
+    unreadable: Unreadable,
+}
+
+/// An entry a walk couldn't read. The OS error goes to the log only.
+fn unreadable(path: &Path, error: &dyn std::fmt::Display) -> (PathBuf, ItemReason) {
+    tracing::warn!(path = %path.display(), %error, "an entry can't be read; it is refused");
+    (
+        path.to_path_buf(),
+        reason(ReasonCode::SourceUnavailable, format!("{} can't be read", path.display())),
+    )
+}
+
+/// Every file and link below `root`, never following a link (STO-FR-04/05/16).
+/// A root that is a link, a junction or no folder is refused and nothing
+/// below it is read; an absent root holds nothing. Every folder or entry
+/// that can't be read is named, never left out.
+fn walk(root: &Path) -> Walked {
+    let mut walked = Walked::default();
+    match fs::symlink_metadata(root) {
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return walked,
+        Err(error) => {
+            walked.unreadable.push(unreadable(root, &error));
+            return walked;
+        }
+        Ok(metadata)
+            if fs_pathsafe::is_link_or_junction_metadata(&metadata) || !metadata.is_dir() =>
+        {
+            walked.unreadable.push((
+                root.to_path_buf(),
+                reason(
+                    ReasonCode::SourceUnavailable,
+                    format!("{} is a link or not a folder; nothing below it is read", root.display()),
+                ),
+            ));
+            return walked;
+        }
+        Ok(_) => {}
+    }
     let mut folders = vec![root.to_path_buf()];
     while let Some(folder) = folders.pop() {
-        let Ok(entries) = fs::read_dir(&folder) else {
-            unreadable.push(folder);
-            continue;
+        let entries = match fs::read_dir(&folder) {
+            Ok(entries) => entries,
+            Err(error) => {
+                walked.unreadable.push(unreadable(&folder, &error));
+                continue;
+            }
         };
-        for entry in entries.flatten() {
-            let path = entry.path();
+        for entry in entries {
+            let path = match entry {
+                Ok(entry) => entry.path(),
+                Err(error) => {
+                    walked.unreadable.push(unreadable(&folder, &error));
+                    continue;
+                }
+            };
             match fs::symlink_metadata(&path) {
                 Ok(metadata)
                     if metadata.is_dir()
@@ -352,19 +428,29 @@ fn walk(root: &Path) -> (Vec<PathBuf>, Vec<PathBuf>) {
                 {
                     folders.push(path);
                 }
-                Ok(_) => files.push(path),
-                Err(_) => unreadable.push(path),
+                Ok(_) => walked.files.push(path),
+                // Gone since the folder was listed: nothing to account for.
+                Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+                Err(error) => walked.unreadable.push(unreadable(&path, &error)),
             }
         }
     }
-    files.sort();
-    (files, unreadable)
+    walked.files.sort();
+    walked.unreadable.sort_by(|left, right| left.0.cmp(&right.0));
+    walked.unreadable.dedup_by(|left, right| left.0 == right.0);
+    walked
 }
 
 /// Remove `root` and every folder below it that holds nothing, deepest
 /// first. A folder that holds anything stays; nothing is removed
-/// recursively.
+/// recursively, and a root that is a link or no folder is left alone.
 pub fn remove_empty_folders(root: &Path) {
+    let real_folder = fs::symlink_metadata(root).is_ok_and(|metadata| {
+        metadata.is_dir() && !fs_pathsafe::is_link_or_junction_metadata(&metadata)
+    });
+    if !real_folder {
+        return;
+    }
     let mut folders = vec![root.to_path_buf()];
     let mut index = 0;
     while index < folders.len() {
@@ -385,19 +471,29 @@ pub fn remove_empty_folders(root: &Path) {
     }
 }
 
-/// Whether `folder` holds no file or link at any depth.
+/// Whether `folder` is absent or a real folder holding no file or link at
+/// any depth, with nothing below it unreadable.
 pub fn holds_nothing(folder: &Path) -> bool {
-    let (files, unreadable) = walk(folder);
-    files.is_empty() && unreadable.is_empty()
+    let walked = walk(folder);
+    walked.files.is_empty() && walked.unreadable.is_empty()
 }
 
-/// Every file `folder` holds, relative to it, never following a link.
-pub fn files_below(folder: &Path) -> Vec<PathBuf> {
-    walk(folder)
-        .0
+/// Every file `folder` holds, relative to it, never following a link; or,
+/// when `folder` is a link or anything below it can't be read, what
+/// couldn't be read, never a partial list.
+///
+/// # Errors
+/// The entries that couldn't be read, each with why.
+pub fn files_below(folder: &Path) -> Result<Vec<PathBuf>, Unreadable> {
+    let walked = walk(folder);
+    if !walked.unreadable.is_empty() {
+        return Err(walked.unreadable);
+    }
+    Ok(walked
+        .files
         .into_iter()
         .filter_map(|path| path.strip_prefix(folder).ok().map(Path::to_path_buf))
-        .collect()
+        .collect())
 }
 
 // ── Foreign files ────────────────────────────────────────────────────────────
@@ -405,18 +501,32 @@ pub fn files_below(folder: &Path) -> Vec<PathBuf> {
 /// The files in `view` that `PlateVault` didn't place (VSEL-FR-20): every
 /// file or link not at a path of `placed`, with folders expanded to their
 /// files, with its no-follow evidence.
-pub fn foreign_files(view: &Path, placed: &BTreeSet<PathBuf>) -> Vec<(PathBuf, EntryEvidence)> {
-    walk(view)
-        .0
-        .into_iter()
-        .filter_map(|path| {
-            let relative = path.strip_prefix(view).ok()?.to_path_buf();
-            if placed.contains(&relative) {
-                return None;
-            }
-            observe_entry(&path).ok().map(|evidence| (relative, evidence))
-        })
-        .collect()
+///
+/// # Errors
+/// When `view` is a link or anything in it can't be read or observed, what
+/// couldn't be, never a partial inventory.
+pub fn foreign_files(
+    view: &Path,
+    placed: &BTreeSet<PathBuf>,
+) -> Result<Vec<(PathBuf, EntryEvidence)>, Unreadable> {
+    let walked = walk(view);
+    let mut missed = walked.unreadable;
+    let mut found = Vec::new();
+    for path in walked.files {
+        let Ok(relative) = path.strip_prefix(view).map(Path::to_path_buf) else { continue };
+        if placed.contains(&relative) {
+            continue;
+        }
+        match observe_entry(&path) {
+            Ok(evidence) => found.push((relative, evidence)),
+            Err(error) => missed.push(unreadable(&path, &error)),
+        }
+    }
+    if missed.is_empty() {
+        Ok(found)
+    } else {
+        Err(missed)
+    }
 }
 
 /// Move one ticked foreign file from `View (previous)/` into the new
@@ -583,9 +693,11 @@ pub fn retire(
         }
     }
     let mut leftovers = Vec::new();
-    for relative in files_below(&previous) {
+    // An entry that can't be read stays, and so does the folder: the next
+    // sheet names it as unreadable before any Apply.
+    for path in walk(&previous).files {
+        let Ok(relative) = path.strip_prefix(&previous).map(Path::to_path_buf) else { continue };
         let reason = reasons.remove(&relative).unwrap_or(PreviousItemReason::UntickedFile);
-        let path = previous.join(&relative);
         let Ok(evidence) = observe_entry(&path) else { continue };
         leftovers.push(PreviousItem {
             path: NativePath::from_path(&Path::new(VIEW_PREVIOUS_FOLDER).join(&relative)),
@@ -645,13 +757,7 @@ fn old_copy(
     entry: &ManifestEntry,
     original: Option<&PathBuf>,
 ) -> Result<(), PreviousItemReason> {
-    let copy = observe_entry(path).map_err(|_| PreviousItemReason::ChangedCopy)?;
-    let placed = copy.kind == EntryKind::File
-        && entry
-            .written
-            .as_ref()
-            .is_some_and(|written| same_identity(&copy.fingerprint.identity, written));
-    if !placed || copy.sha256.as_deref() != Some(entry.copy_sha256()) {
+    if !holds_placed_copy(path, entry) {
         return Err(PreviousItemReason::ChangedCopy);
     }
     let verified = original.is_some_and(|original| {
@@ -770,5 +876,54 @@ mod tests {
         let error = transfer::rename_noreplace(&from, &to).unwrap_err();
         assert_eq!(error.kind(), io::ErrorKind::AlreadyExists);
         assert!(from.exists() && to.exists());
+    }
+
+    /// C3: a root that is a link is refused unread; nothing below it is
+    /// listed, cleared or removed.
+    #[cfg(unix)]
+    #[test]
+    fn a_linked_root_is_refused_and_never_walked() {
+        let temp = tempfile::tempdir().unwrap();
+        let elsewhere = temp.path().join("elsewhere");
+        fs::create_dir_all(elsewhere.join("empty")).unwrap();
+        fs::write(elsewhere.join("notes.txt"), b"not ours").unwrap();
+        let root = temp.path().join("View (previous)");
+        std::os::unix::fs::symlink(&elsewhere, &root).unwrap();
+
+        let refused = files_below(&root).unwrap_err();
+        assert_eq!(refused.len(), 1, "{refused:?}");
+        assert_eq!(refused[0].0, root);
+        assert_eq!(refused[0].1.code, ReasonCode::SourceUnavailable);
+        assert!(!holds_nothing(&root));
+        assert!(foreign_files(&root, &BTreeSet::new()).is_err());
+        let ours = Ours { digests: BTreeSet::new(), patches: Arc::default() };
+        assert_eq!(clear_building(&root, &ours), [root.clone()]);
+        remove_empty_folders(&root);
+        assert!(elsewhere.join("empty").is_dir(), "nothing below the link is removed");
+        assert!(elsewhere.join("notes.txt").exists());
+    }
+
+    /// C10: a folder that can't be read is named, and `files_below` gives
+    /// no partial list; an absent root holds nothing.
+    #[cfg(unix)]
+    #[test]
+    fn an_unreadable_entry_is_named_never_omitted() {
+        use std::os::unix::fs::PermissionsExt;
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("Processing");
+        fs::create_dir_all(root.join("WBPP")).unwrap();
+        fs::write(root.join("WBPP/registered.xisf"), b"registered").unwrap();
+        let hidden = root.join("Siril");
+        fs::create_dir(&hidden).unwrap();
+        fs::set_permissions(&hidden, fs::Permissions::from_mode(0o000)).unwrap();
+
+        let refused = files_below(&root);
+        let held = holds_nothing(&root);
+        fs::set_permissions(&hidden, fs::Permissions::from_mode(0o755)).unwrap();
+        let refused = refused.unwrap_err();
+        assert_eq!(refused.iter().map(|(path, _)| path).collect::<Vec<_>>(), [&hidden]);
+        assert!(!held);
+        assert_eq!(files_below(&root).unwrap(), [PathBuf::from("WBPP/registered.xisf")]);
+        assert_eq!(files_below(&temp.path().join("absent")).unwrap(), [] as [PathBuf; 0]);
     }
 }

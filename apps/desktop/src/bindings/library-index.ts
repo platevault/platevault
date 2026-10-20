@@ -1746,7 +1746,13 @@ export type ApplyBlocker =
  *  (PREP-FR-03). Apply refuses before it builds rather than let the
  *  source value reach the tool.
  */
-{ blocker: "correction_undeliverable"; sessionId: string; path: NativePathWire; field: string; refusal: PatchRefusal };
+{ blocker: "correction_undeliverable"; sessionId: string; path: NativePathWire; field: string; refusal: PatchRefusal } | 
+/**
+ *  An entry in `View/` or `View (previous)/`, or that folder itself,
+ *  can't be read, or the folder is a link: the sheet can't account for
+ *  it, so Apply refuses before it starts (VSEL-FR-20, STO-FR-05/16).
+ */
+{ blocker: "view_unreadable"; path: NativePathWire; reason: ReasonCode };
 
 /**  One input the build could not place. */
 export type ApplyFailure = {
