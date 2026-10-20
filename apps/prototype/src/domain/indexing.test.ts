@@ -62,6 +62,10 @@ describe("splitByFraming: the centre limit is an angle, the rotation limit degre
   }
   const split = (frames: FrameHeader[], centreArcmin: number, rotationDeg: number) => splitByFraming(frames, (h) => h, { centreArcmin, rotationDeg }).framings.map((f) => f.map((h) => frames.indexOf(h)))
 
+  const equidistant = (minute: number, centreArcmin: number, rotationDelta = 0): FrameHeader => {
+    const frame = pointed(minute, 0, rotationDelta)
+    return { ...frame, ra: frame.ra! + centreArcmin / (60 * Math.cos((frame.dec! * Math.PI) / 180)) }
+  }
   it("splits centres 0′, 3′ and 7′ apart into three framings at 2′, two at 5′ and one at 10′", () => {
     const frames = [pointed(0, 0), pointed(10, 3), pointed(20, 7)]
     expect(split(frames, 2, 5)).toEqual([[0], [1], [2]])
@@ -74,6 +78,25 @@ describe("splitByFraming: the centre limit is an angle, the rotation limit degre
     expect(split(frames, 5, 3)).toEqual([[0, 2], [1]])
     expect(split(frames, 5, 5)).toEqual([[0, 1, 2]])
     expect(MARGINS).toMatchObject({ centreArcmin: 5, rotationDeg: 5 })
+  })
+
+  it("joins the nearest-centre tie with the smaller rotation difference", () => {
+    const frames = [equidistant(0, -6), equidistant(10, 6, 7), equidistant(20, 0, 6)]
+    expect(split(frames, 6, 6)).toEqual([[0], [1, 2]])
+  })
+
+  it("keeps the earlier framing when centre and rotation differences fully tie", () => {
+    const frames = [equidistant(0, -6), equidistant(10, 6, 8), equidistant(20, 0, 4)]
+    expect(split(frames, 6, 4)).toEqual([[0, 2], [1]])
+  })
+
+  it("ranks a known rotation difference before missing rotation evidence", () => {
+    const frames = [
+      { ...equidistant(0, -6), rotationDeg: null },
+      equidistant(10, 6, 3),
+      equidistant(20, 0, 4),
+    ]
+    expect(split(frames, 6, 5)).toEqual([[0], [1, 2]])
   })
 
   it("splits by the same angle whatever the field, and without field evidence", () => {
