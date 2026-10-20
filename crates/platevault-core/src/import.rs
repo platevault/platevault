@@ -587,62 +587,86 @@ impl Library {
         saved.iter().find(|candidate| candidate.id == id).cloned().or_else(|| self.seed_target(id))
     }
 
-    /// The one Target the frames' pointing alone matches, by the library's
-    /// target matching: inside every frame's field. OBJECT is left out, so it
-    /// never prefills a Target; none, or several, is no match.
-    fn pointing_target(
+    /// The Targets the frames' pointing alone matches, by the library's
+    /// target matching (inside every frame's field), nearest the mean field
+    /// centre first. OBJECT is left out, so it never prefills a Target.
+    fn pointing_matches(
         &self,
         frames: &[CaptureMetadata],
         saved: &[TargetCandidate],
-    ) -> Option<TargetCandidate> {
+    ) -> Vec<TargetCandidate> {
         let pointing: Vec<CaptureMetadata> =
             frames.iter().map(|frame| CaptureMetadata { object: None, ..frame.clone() }).collect();
-        let mut matched =
-            self.target_index().candidates_for_frames(&pointing, saved).into_iter().filter(
-                |assessment| {
-                    assessment.evidence.iter().any(|evidence| {
-                        matches!(evidence, EvidenceItem::Coordinates { qualified: true, .. })
-                    })
-                },
-            );
-        let only = matched.next()?;
-        matched.next().is_none().then_some(only.candidate)
+        let mut matched: Vec<(f64, TargetCandidate)> = self
+            .target_index()
+            .candidates_for_frames(&pointing, saved)
+            .into_iter()
+            .filter_map(|assessment| {
+                let centre = assessment.evidence.iter().find_map(|evidence| match evidence {
+                    EvidenceItem::Coordinates { ra_deg, dec_deg, qualified: true } => {
+                        Some((*ra_deg, *dec_deg))
+                    }
+                    _ => None,
+                })?;
+                let separation =
+                    crate::targets::separation_from_deg(&assessment.candidate, centre.0, centre.1)
+                        .unwrap_or(f64::INFINITY);
+                Some((separation, assessment.candidate))
+            })
+            .collect();
+        matched.sort_by(|left, right| left.0.total_cmp(&right.0));
+        matched.into_iter().map(|(_, candidate)| candidate).collect()
     }
 
-    /// The Target each formed session files under: the user's choice, else
-    /// the one its pointing matches, else Unclassified.
+    /// Each formed session's Target and recommendation. The Target is the
+    /// user's choice, else the one Target its pointing matches, else
+    /// Unclassified. When its pointing matches several, Unclassified stays
+    /// preselected and the nearest is recommended (owner, 2026-10-20);
+    /// nothing files under a recommendation until the user chooses it.
     async fn session_targets(
         &self,
         formed: &[review::Formed],
-    ) -> Result<Vec<Option<TargetCandidate>>, LibraryError> {
+    ) -> Result<Vec<(Option<TargetCandidate>, Option<TargetCandidate>)>, LibraryError> {
         let saved = self.saved_targets().await?;
         Ok(formed
             .iter()
-            .map(|formed| match formed.choice {
-                Some(ImportTargetChoice::Unclassified) => None,
-                Some(ImportTargetChoice::Target { target_id }) => {
-                    self.known_target(&saved, target_id)
-                }
-                None => self.pointing_target(&formed.frames, &saved),
+            .map(|formed| {
+                let mut matches = self.pointing_matches(&formed.frames, &saved);
+                let (prefill, recommended) = if matches.len() > 1 {
+                    (None, Some(matches.swap_remove(0)))
+                } else {
+                    (matches.pop(), None)
+                };
+                let target = match formed.choice {
+                    Some(ImportTargetChoice::Unclassified) => None,
+                    Some(ImportTargetChoice::Target { target_id }) => {
+                        self.known_target(&saved, target_id)
+                    }
+                    None => prefill,
+                };
+                (target, recommended)
             })
             .collect())
     }
 
-    /// The formed sessions as import review shows them, each with its Target.
+    /// The formed sessions as import review shows them, each with its Target
+    /// and any recommendation.
     async fn targeted(
         &self,
         formed: Vec<review::Formed>,
     ) -> Result<Vec<ImportSession>, LibraryError> {
         let targets = self.session_targets(&formed).await?;
+        let shown = |candidate: TargetCandidate| ImportSessionTarget {
+            id: candidate.id,
+            designation: candidate.designation,
+            common_name: candidate.common_name,
+        };
         Ok(formed
             .into_iter()
             .zip(targets)
-            .map(|(formed, target)| ImportSession {
-                target: target.map(|candidate| ImportSessionTarget {
-                    id: candidate.id,
-                    designation: candidate.designation,
-                    common_name: candidate.common_name,
-                }),
+            .map(|(formed, (target, recommended))| ImportSession {
+                target: target.map(shown),
+                recommended: recommended.map(shown),
                 target_chosen: formed.choice.is_some(),
                 ..formed.session
             })
@@ -848,7 +872,7 @@ impl Library {
         let formed = review::sessions(items, margins, |record| to_place.contains(&record.item.seq));
         let targets = self.session_targets(&formed).await?;
         let mut target_of: HashMap<u32, &TargetCandidate> = HashMap::new();
-        for (formed, target) in formed.iter().zip(&targets) {
+        for (formed, (target, _recommended)) in formed.iter().zip(&targets) {
             if let Some(target) = target {
                 target_of.extend(formed.session.items.iter().map(|seq| (*seq, target)));
             }

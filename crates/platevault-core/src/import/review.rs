@@ -116,6 +116,7 @@ pub(super) fn sessions(
                 night: observing_night(metadata),
                 target: None,
                 target_chosen: false,
+                recommended: None,
             };
             Some(Formed {
                 session,
