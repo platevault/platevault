@@ -84,11 +84,12 @@ const SCHEMA: &str = schema_modules![
 ];
 /// The one version of the whole [`SCHEMA`] list, recorded by `schema.sql`'s
 /// `catalog_meta` row. There are no migrations: a catalog recording any other
-/// version is refused before any module's DDL runs. Version 18 is the F4
-/// greenfield catalog (D-W115): no earlier catalog is upgraded. It is one past
-/// main's version 17 (remap reviews' `proposed_volume_kind`), so a catalog of
-/// that schema is refused too.
-pub const SCHEMA_VERSION: i64 = 18;
+/// version is refused before any module's DDL runs. Version 19 is the F4
+/// greenfield catalog (D-W115): no earlier catalog is upgraded. That refuses
+/// main's version 17 (remap reviews' `proposed_volume_kind`) and F4's own 18,
+/// whose `project_sessions_admit_ready` trigger predates D-W124. Bump it with
+/// any DDL change that `IF NOT EXISTS` would leave stale in an existing catalog.
+pub const SCHEMA_VERSION: i64 = 19;
 const BUSY_TIMEOUT: Duration = Duration::from_secs(10);
 const READER_CONNECTIONS: u32 = 4;
 const MAX_PAGE: u32 = 1000;
