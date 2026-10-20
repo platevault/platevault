@@ -819,7 +819,7 @@ impl Shared {
             }
             Err(error) => {
                 let code = error.code();
-                tracing::warn!(%error, error_code = code.as_str(), asset = %queued.asset, "frame measurement source unavailable");
+                tracing::warn!(%error, error_code = code.as_str(), asset = %queued.asset, "frame measurement settled with an issue");
                 let issue = RunIssue {
                     asset_id: queued.asset,
                     kind: code,
@@ -1133,13 +1133,10 @@ impl PreviewCache {
 fn failed_outcome(error: &PixelError) -> MeasurementOutcome {
     let code = match error {
         PixelError::Unsupported(_) => MeasurementFailureCode::UnsupportedFormat,
-        PixelError::Io(_) => MeasurementFailureCode::SourceUnavailable,
-        PixelError::Malformed(_) | PixelError::InvalidRegion(_) => {
-            MeasurementFailureCode::MalformedData
-        }
-        PixelError::Canceled => MeasurementFailureCode::MalformedData,
+        PixelError::Malformed(_) => MeasurementFailureCode::MalformedData,
+        _ => unreachable!("only Unsupported and Malformed errors are retained as failed outcomes"),
     };
-    tracing::warn!(%error, code = ?code, "frame measurement failed");
+    tracing::warn!(%error, code = ?code, "frame measurement failure recorded");
     MeasurementOutcome::Failed { code, parameters: MeasurementFailureParameters::default() }
 }
 // ---------------------------------------------------------------------------
@@ -1254,8 +1251,12 @@ const fn plane_units(units: measure::PlaneUnits) -> Units {
 
 fn outcome(measurement: Measurement, method: &MeasurementMethod) -> MeasurementOutcome {
     match measurement {
-        Measurement::Failed { message, .. } => {
-            let code = MeasurementFailureCode::MalformedData;
+        Measurement::Failed { reason, message } => {
+            let code = if reason == measure::REASON_MULTICHANNEL_UNQUALIFIED {
+                MeasurementFailureCode::MultichannelUnqualified
+            } else {
+                MeasurementFailureCode::MalformedData
+            };
             tracing::warn!(%message, code = ?code, "frame measurement failed");
             MeasurementOutcome::Failed { code, parameters: MeasurementFailureParameters::default() }
         }

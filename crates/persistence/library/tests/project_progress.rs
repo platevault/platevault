@@ -307,7 +307,7 @@ fn record(
     let outcome = if failed {
         MeasurementOutcome::Failed {
             code: platevault_model::MeasurementFailureCode::UnsupportedFormat,
-            parameters: Default::default(),
+            parameters: std::collections::BTreeMap::new(),
         }
     } else {
         let value = match fwhm {

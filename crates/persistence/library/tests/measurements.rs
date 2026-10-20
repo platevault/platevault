@@ -500,7 +500,7 @@ async fn one_run_runs_at_a_time_and_counters_issues_and_interruption_are_durable
     let issue = RunIssue {
         asset_id: ids[1],
         kind: platevault_model::LibraryErrorCode::SourceUnavailable,
-        parameters: Default::default(),
+        parameters: BTreeMap::new(),
     };
     let run = ix.catalog.record_run_issue(run.operation_id, &issue).await.unwrap();
     assert_eq!((run.counters.unavailable, run.counters.remaining), (1, 1));
