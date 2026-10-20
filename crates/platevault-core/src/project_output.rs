@@ -47,8 +47,8 @@ use crate::layout::{self, OUTPUT_FOLDER, PROCESSING_FOLDER};
 use crate::library::{blocking, Library};
 use crate::{
     CalibrationRules, CaptureMetadata, Classification, EntryKind, ItemOutcome, ItemReason,
-    LibraryError, NativePath, ObservationFingerprint, OutputObservation, OutputOrigin, OutputState,
-    ReasonCode, TransferDestination, OUTPUT_PANELS,
+    LibraryError, MasterOfferState, NativePath, ObservationFingerprint, OutputObservation,
+    OutputOrigin, OutputState, ReasonCode, TransferDestination, OUTPUT_PANELS,
 };
 
 fn invalid(message: impl Into<String>) -> LibraryError {
@@ -494,28 +494,37 @@ impl Library {
     ) -> Result<OutputProtection, LibraryError> {
         let basis = self.catalog().output_basis(project_id).await?;
         let Some(place) = Place::of(&basis)? else {
-            return Ok(OutputProtection { output: None, masters: Vec::new() });
+            return Ok(OutputProtection {
+                output: None,
+                masters: Vec::new(),
+                adopted_sources: Vec::new(),
+            });
         };
         let processing = place.processing();
-        let masters = self
-            .catalog()
-            .processing_master_offers(project_id)
-            .await?
+        let offers = self.catalog().processing_master_offers(project_id).await?;
+        let masters = offers
             .iter()
+            .filter(|offer| offer.state != MasterOfferState::Adopted)
             .map(|offer| Ok(processing.join(offer.path.relative_path()?)))
-            .collect::<Result<_, LibraryError>>()?;
-        Ok(OutputProtection { output: Some(place.output()), masters })
+            .collect::<Result<Vec<_>, LibraryError>>()?;
+        let adopted_sources = offers
+            .into_iter()
+            .filter(|offer| offer.state == MasterOfferState::Adopted)
+            .map(|offer| Ok((processing.join(offer.path.relative_path()?), offer.sha256)))
+            .collect::<Result<Vec<_>, LibraryError>>()?;
+        Ok(OutputProtection { output: Some(place.output()), masters, adopted_sources })
     }
 }
 
 /// The Project's protected files: everything in its `Output/`, and each
-/// master its `Processing/` offered, whatever was decided about it (a
-/// dismissed one stays a candidate in Calibration; an adopted one is the
-/// library's).
+/// master its `Processing/` offered that wasn't adopted (a dismissed one
+/// stays a candidate in Calibration). An adopted master's generated source
+/// is not kept: it is a duplicate of the library's copy (PRJ-AC-28).
 #[derive(Clone, Debug)]
 pub struct OutputProtection {
     output: Option<PathBuf>,
     masters: Vec<PathBuf>,
+    adopted_sources: Vec<(PathBuf, String)>,
 }
 
 impl OutputProtection {
@@ -524,5 +533,14 @@ impl OutputProtection {
     pub fn protects(&self, path: &Path) -> bool {
         self.output.as_deref().is_some_and(|output| layout::inside(path, output))
             || self.masters.iter().any(|master| master == path)
+    }
+
+    /// The digest the offer recorded for the adopted master generated at
+    /// `path`, an absolute path below the Project's `Processing/`.
+    pub(crate) fn adopted_source_digest(&self, path: &Path) -> Option<&str> {
+        self.adopted_sources
+            .iter()
+            .find(|(source, _)| source == path)
+            .map(|(_, digest)| digest.as_str())
     }
 }

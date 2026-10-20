@@ -140,6 +140,42 @@ async fn clean_up_retires_only_the_reviewed_rows_and_never_output() {
     let status = world.library.wrap_up_status(world.project).await.unwrap();
     assert_eq!(status.current, Some(WrapUpStep::Trash));
 }
+/// Clean up removes every View copy without changing originals or work output.
+#[tokio::test]
+async fn clean_up_removes_every_view_copy_without_changing_originals_output_or_processing() {
+    let world = world(ViewMode::Copies).await;
+    world.apply().await;
+    let output = write(&world, "Output/NGC7000_final.xisf");
+    let processing = write(&world, "Processing/WBPP/master/masterLight_Ha.xisf");
+    let output_before = fs::read(&output).unwrap();
+    let processing_before = fs::read(&processing).unwrap();
+    let originals_before = [HA[0], OIII[0]].map(|path| fs::read(world.light(path)).unwrap());
+    let trash = bin(&world);
+
+    let review = world.library.clean_up_review(world.project).await.unwrap();
+    assert!(!review.entries.is_empty(), "the View has copies to remove");
+    assert!(review.entries.iter().all(|entry| entry.preselected), "every Copy is ticked");
+    let request = CleanUpRequest {
+        project_id: world.project,
+        desired_revision: review.desired_revision,
+        generation: review.generation,
+        selected: review.entries.iter().map(|entry| entry.path.clone()).collect(),
+    };
+    let report = world.library.clean_up(&request, trash.dyn_trash()).await.unwrap();
+
+    assert_eq!(report.results.len(), review.entries.len(), "every View copy was handled");
+    assert!(report.results.iter().all(|result| result.outcome == CleanUpOutcome::Trashed));
+    assert!(report.view_removed, "the emptied View is removed");
+    assert!(!world.view().exists());
+    assert_eq!(fs::read(&output).unwrap(), output_before, "Output stays byte-identical");
+    assert_eq!(fs::read(&processing).unwrap(), processing_before, "Processing stays byte-identical");
+    assert_eq!(
+        [HA[0], OIII[0]].map(|path| fs::read(world.light(path)).unwrap()),
+        originals_before,
+        "originals stay byte-identical",
+    );
+}
+
 
 /// STO-FR-04 with PREP-FR-03: Clean up moves an isolated patched copy to the
 /// OS Trash once it still differs from its re-verified original only by its
@@ -255,6 +291,197 @@ async fn trash_moves_a_row_only_when_it_is_ticked() {
     assert!(output.exists());
     let assets = world.library.catalog().session(ha.id).await.unwrap().assets;
     assert!(assets.iter().all(|asset| asset.availability != Availability::Trashed));
+}
+
+/// A Project at the Trash step whose `Processing/WBPP/master/` holds a
+/// generated flat master the user adopted into the calibration library
+/// (`masters/masterFlat_Ha.fit`). Returns the source in `Processing/`.
+async fn adopted_master_at_trash() -> (World, std::path::PathBuf) {
+    let world = world(ViewMode::Symlinks).await;
+    world.apply().await;
+    let processing_root = world.folder().join("Processing");
+    let source_relative = "WBPP/master/masterFlat_Ha.fit";
+    let source = processing_root.join(source_relative);
+    let mut metadata = apply_support::meta("FLAT", Some("Ha"), 2.0, 100.0, "2026-10-12");
+    metadata.stack_count = Some(30);
+    let bytes = apply_support::frame(
+        source_relative,
+        true,
+        &["IMAGETYP= 'FLAT    '", "FILTER  = 'Ha      '", "STACKCNT=                   30"],
+    );
+    fs::create_dir_all(source.parent().unwrap()).unwrap();
+    fs::write(&source, &bytes).unwrap();
+    let location = world
+        .library
+        .register_location(
+            NativePath::from_path(&processing_root),
+            "NGC 7000 Processing".into(),
+            LocationRole::Results,
+        )
+        .await
+        .unwrap();
+    apply_support::scan_files(
+        &world.library,
+        &location,
+        &processing_root,
+        &[(source_relative.into(), metadata, bytes)],
+    )
+    .await;
+    let asset = world
+        .catalog()
+        .location_assets(location.id)
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|asset| asset.relative_path.display() == source_relative)
+        .unwrap();
+    let digest = apply_support::digest(&source);
+    let offer = world
+        .catalog()
+        .offer_processing_master(
+            world.project,
+            &NativePath::from_path(Path::new("WBPP/master/masterFlat_Ha.fit")),
+            &digest,
+            &Classification {
+                kind: InputKind::Flat,
+                master: Some(MasterEvidence {
+                    basis: MasterBasis::HeaderStackCount,
+                    stack_count: Some(30),
+                    detector: "test".into(),
+                }),
+            },
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    fs::create_dir_all(world.calibration.path.to_path_buf().unwrap().join("masters")).unwrap();
+    let adoption = world
+        .library
+        .calibration_review_adoption(
+            &AdoptionSource::Asset {
+                asset_id: asset.id,
+                expected: ExpectedAsset {
+                    asset_id: asset.id,
+                    decision_revision: asset.decision_revision,
+                    fingerprint: asset.fingerprint.clone(),
+                },
+            },
+            &AdoptionDestination {
+                location_id: world.calibration.id,
+                relative_path: NativePath::from_path(Path::new("masters/masterFlat_Ha.fit")),
+            },
+        )
+        .await
+        .unwrap();
+    let adopted = world.library.calibration_adopt(adoption.id, adoption.revision).await.unwrap();
+    assert_eq!(adopted.state, AdoptionState::Completed, "{adopted:#?}");
+    assert_eq!(offer.sha256, digest);
+
+    let cleanup = world.library.clean_up_review(world.project).await.unwrap();
+    world
+        .library
+        .clean_up(
+            &CleanUpRequest {
+                project_id: world.project,
+                desired_revision: cleanup.desired_revision,
+                generation: cleanup.generation,
+                selected: Vec::new(),
+            },
+            bin(&world).dyn_trash(),
+        )
+        .await
+        .unwrap();
+    (world, source)
+}
+
+/// The kept library copy of [`adopted_master_at_trash`].
+fn adopted_copy(world: &World) -> NativePath {
+    NativePath::from_path(
+        &world.calibration.path.to_path_buf().unwrap().join("masters/masterFlat_Ha.fit"),
+    )
+}
+
+/// PRJ-AC-28, D-W70/D-W80/D-W97/D-W98: an adopted master's generated source
+/// is listed as a verified duplicate of its retained Calibration copy.
+#[tokio::test]
+async fn trash_offers_an_adopted_master_source_as_a_duplicate_and_never_output() {
+    let (world, source) = Box::pin(adopted_master_at_trash()).await;
+    let source_native = NativePath::from_path(&source);
+    let output = write(&world, "Output/NGC7000_final.xisf");
+    let registered = write(&world, "Processing/WBPP/registered/r_Ha_0001.xisf");
+    let review = world.library.trash_review(world.project, bin(&world).dyn_trash()).await.unwrap();
+    let processing_group =
+        review.groups.iter().find(|group| group.group == TrashGroup::ProcessingFiles).unwrap();
+    let duplicate =
+        processing_group.items.iter().find(|item| item.files == [source_native.clone()]).unwrap();
+    assert_eq!(
+        duplicate.kept,
+        Some(adopted_copy(&world)),
+        "processing group: {processing_group:#?}"
+    );
+    assert!(!review
+        .groups
+        .iter()
+        .find(|group| group.group == TrashGroup::DuplicateCopies)
+        .unwrap()
+        .items
+        .iter()
+        .any(|item| item.files.contains(&source_native)));
+    assert!(review.protected_masters.is_empty(), "adopted sources are not protected");
+    assert!(output.exists());
+    assert!(processing_group
+        .items
+        .iter()
+        .all(|item| !item.files.iter().any(|path| path.display().contains("Output"))));
+    let intermediate = processing_group
+        .items
+        .iter()
+        .find(|item| item.files == [NativePath::from_path(&registered)])
+        .unwrap();
+    assert_eq!(intermediate.kept, None, "an intermediate names no kept copy");
+    assert_eq!(processing_group.items.len(), 2, "the source counts in N: {review:#?}");
+    let trash = bin(&world);
+    let report = world
+        .library
+        .wrap_up_trash(
+            &TrashRequest {
+                project_id: world.project,
+                digest: review.digest,
+                ticked: vec![TrashGroup::ProcessingFiles],
+            },
+            trash.dyn_trash(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        report.moved.len(),
+        processing_group.items.len(),
+        "all Processing files move under one confirmation: {report:#?}",
+    );
+    assert!(report.moved.contains(&source_native));
+    assert!(!source.exists());
+    assert!(!registered.exists());
+    assert_eq!(fs::read(&output).unwrap(), b"Output/NGC7000_final.xisf");
+    assert!(adopted_copy(&world).to_path_buf().unwrap().exists(), "the adopted copy stays");
+}
+
+/// PRJ-AC-28's verified duplicate is checked against the source's bytes: a
+/// source rewritten after its master was adopted no longer duplicates the
+/// kept copy, so it is refused by name, never offered without one.
+#[tokio::test]
+async fn trash_refuses_an_adopted_master_source_rewritten_since_adoption() {
+    let (world, source) = Box::pin(adopted_master_at_trash()).await;
+    fs::OpenOptions::new().append(true).open(&source).unwrap().write_all(b"rewritten").unwrap();
+    let review = world.library.trash_review(world.project, bin(&world).dyn_trash()).await.unwrap();
+    let processing_group =
+        review.groups.iter().find(|group| group.group == TrashGroup::ProcessingFiles).unwrap();
+    let source_native = NativePath::from_path(&source);
+    assert!(processing_group.items.iter().all(|item| !item.files.contains(&source_native)));
+    assert!(
+        processing_group.refused.iter().any(|refusal| refusal.path == source_native
+            && refusal.reason.code == ReasonCode::SourceDrift),
+        "{processing_group:#?}"
+    );
 }
 
 /// PRJ-FR-25, PRJ-AC-34, PRJ-AC-43: Close freezes the applied basis with the
