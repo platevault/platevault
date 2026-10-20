@@ -6054,10 +6054,26 @@ export type RetireAsset = {
 	relativePath: NativePathWire,
 };
 
+/**  A current blocker to retiring a location. */
+export type RetireBlock =
+/**  A pinned calibration file is held at the location. */
+{ reason: "pinned_calibration"; sessionId: string; sessionName: string; kinds: InputKind[]; projects: RetirePinProject[] };
+
+/**
+ *  The Project holding a session whose pinned calibration file is at a location
+ *  being reviewed for retirement.
+ */
+export type RetirePinProject = {
+	projectId: string,
+	name: string,
+	lifecycle: ProjectLifecycle,
+};
+
 /**
  *  Durable review of Retire location (LIB-FR-15): the location, its root and
  *  availability, and every asset, session, View, Project and Result referencing
- *  its copies. Retiring deletes, moves or modifies no file.
+ *  its copies. Calibration pins add a blocker before confirmation, which
+ *  rechecks them. Retiring deletes, moves or modifies no file.
  */
 export type RetireReview = {
 	id: string,
@@ -6069,6 +6085,10 @@ export type RetireReview = {
 	assets: RetireAsset[],
 	sessions: RetireSession[],
 	references: AssetReference[],
+	/**  Projects holding its copies or holding a session whose pin holds a file. */
+	projects: RetirePinProject[],
+	/**  Pinned calibration sessions as one blocked-state entry each. */
+	blocked: RetireBlock[],
 	/**  Reference kinds whose records were read; a kind not listed was not checked. */
 	consulted: ReferenceKind[],
 	/**  What retiring does and does not change, for the reviewer. */

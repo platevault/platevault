@@ -1529,9 +1529,35 @@ pub struct RetireSession {
     pub asset_ids: Vec<Uuid>,
 }
 
+/// The Project holding a session whose pinned calibration file is at a location
+/// being reviewed for retirement.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
+pub struct RetirePinProject {
+    pub project_id: Uuid,
+    pub name: String,
+    pub lifecycle: ProjectLifecycle,
+}
+
+/// A current blocker to retiring a location.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "reason", rename_all = "snake_case", rename_all_fields = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
+pub enum RetireBlock {
+    /// A pinned calibration file is held at the location.
+    PinnedCalibration {
+        session_id: Uuid,
+        session_name: String,
+        kinds: Vec<InputKind>,
+        projects: Vec<RetirePinProject>,
+    },
+}
+
 /// Durable review of Retire location (LIB-FR-15): the location, its root and
 /// availability, and every asset, session, View, Project and Result referencing
-/// its copies. Retiring deletes, moves or modifies no file.
+/// its copies. Calibration pins add a blocker before confirmation, which
+/// rechecks them. Retiring deletes, moves or modifies no file.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
@@ -1545,6 +1571,10 @@ pub struct RetireReview {
     pub assets: Vec<RetireAsset>,
     pub sessions: Vec<RetireSession>,
     pub references: Vec<AssetReference>,
+    /// Projects holding its copies or holding a session whose pin holds a file.
+    pub projects: Vec<RetirePinProject>,
+    /// Pinned calibration sessions as one blocked-state entry each.
+    pub blocked: Vec<RetireBlock>,
     /// Reference kinds whose records were read; a kind not listed was not checked.
     pub consulted: Vec<ReferenceKind>,
     /// What retiring does and does not change, for the reviewer.

@@ -12,6 +12,7 @@
 mod adoption;
 mod contained_write;
 mod custody;
+pub(super) use custody::pinned_calibration_kinds;
 mod inventory;
 mod sessions;
 
