@@ -172,7 +172,11 @@ fn equivalent_numeric_spellings_and_setpoints_share_one_canonical_key() {
     let zero = asset(header(&with(&[("SET-TEMP", "0")])));
     let negative_zero = asset(header(&with(&[("SET-TEMP", "-0.0")])));
 
-    let result = grouping::regroup_assets(&[plain.clone(), decimals.clone(), exponent.clone(), zero.clone(), negative_zero.clone()], &[], &FramingMargins::default());
+    let result = grouping::regroup_assets(
+        &[plain.clone(), decimals.clone(), exponent.clone(), zero.clone(), negative_zero.clone()],
+        &[],
+        &FramingMargins::default(),
+    );
 
     assert_eq!(result.sessions.len(), 2);
     let session = session_of(&result, plain.id);
@@ -197,13 +201,17 @@ fn header_night_uses_local_noon_then_longitude_then_provisional_utc() {
     ])));
     let utc_only = asset(header(&with(&[("DATE-LOC", ""), ("DATE-OBS", "'2026-09-13T02:00:00'")])));
 
-    let result = grouping::regroup_assets(&[
-        evening.clone(),
-        small_hours.clone(),
-        next_afternoon.clone(),
-        longitude.clone(),
-        utc_only.clone(),
-    ], &[], &FramingMargins::default());
+    let result = grouping::regroup_assets(
+        &[
+            evening.clone(),
+            small_hours.clone(),
+            next_afternoon.clone(),
+            longitude.clone(),
+            utc_only.clone(),
+        ],
+        &[],
+        &FramingMargins::default(),
+    );
 
     let night = session_of(&result, evening.id);
     assert!(night.asset_ids.contains(&small_hours.id));
@@ -241,13 +249,17 @@ fn unknown_or_invalid_evidence_stays_explicit_without_clock_or_zero_fallback() {
     let zero_exposure = asset(header(&with(&[("EXPTIME", "0")])));
     let no_exposure = asset(header(&with(&[("EXPTIME", "")])));
 
-    let result = grouping::regroup_assets(&[
-        undated.clone(),
-        invalid_date.clone(),
-        invalid_exposure.clone(),
-        zero_exposure.clone(),
-        no_exposure.clone(),
-    ], &[], &FramingMargins::default());
+    let result = grouping::regroup_assets(
+        &[
+            undated.clone(),
+            invalid_date.clone(),
+            invalid_exposure.clone(),
+            zero_exposure.clone(),
+            no_exposure.clone(),
+        ],
+        &[],
+        &FramingMargins::default(),
+    );
 
     let undated = session_of(&result, undated.id);
     assert!(undated.key.0.contains("|night?|"), "{}", undated.key.0);
@@ -284,8 +296,16 @@ fn grouping_is_input_order_independent_and_follows_effective_corrections() {
     let mut forged = asset(header(&with(&[("INSTRUME", "")])));
     forged.effective.filter = Some("Ha|camera=ASI2600MM".into());
 
-    let forward = grouping::regroup_assets(&[ha.clone(), oiii.clone(), corrected.clone(), forged.clone()], &[], &FramingMargins::default());
-    let reverse = grouping::regroup_assets(&[forged.clone(), corrected.clone(), oiii.clone(), ha.clone()], &[], &FramingMargins::default());
+    let forward = grouping::regroup_assets(
+        &[ha.clone(), oiii.clone(), corrected.clone(), forged.clone()],
+        &[],
+        &FramingMargins::default(),
+    );
+    let reverse = grouping::regroup_assets(
+        &[forged.clone(), corrected.clone(), oiii.clone(), ha.clone()],
+        &[],
+        &FramingMargins::default(),
+    );
 
     let shape = |result: &GroupingResult| {
         result

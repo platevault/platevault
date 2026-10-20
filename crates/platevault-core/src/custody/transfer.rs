@@ -612,10 +612,9 @@ fn copy_onto_new(from: &Path, to: &Path) -> std::io::Result<Copied> {
     let source = fs::symlink_metadata(from)?;
     let mut out = OpenOptions::new().read(true).write(true).create_new(true).open(to)?;
     let filled = (|| {
-        let digest = read_unchanged(from, &Expect::recorded(&fingerprint), |bytes| {
-            out.write_all(bytes)
-        })
-        .map_err(|check| std::io::Error::other(check.detail().to_owned()))?;
+        let digest =
+            read_unchanged(from, &Expect::recorded(&fingerprint), |bytes| out.write_all(bytes))
+                .map_err(|check| std::io::Error::other(check.detail().to_owned()))?;
         settle(&out, to, fingerprint.modified_ns)
             .map_err(|failed| std::io::Error::other(failed.detail))?;
         sync_folder(to.parent().unwrap_or_else(|| Path::new("")))?;
@@ -1230,10 +1229,9 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let (of, candidate) = (temp.path().join("of"), temp.path().join("candidate"));
         fs::write(&of, b"the frame's bytes").unwrap();
-        for (theirs, kept) in [
-            (&b"the frame's bytes and more"[..], "longer"),
-            (&b"the frAme"[..], "different bytes"),
-        ] {
+        for (theirs, kept) in
+            [(&b"the frame's bytes and more"[..], "longer"), (&b"the frAme"[..], "different bytes")]
+        {
             fs::write(&candidate, theirs).unwrap();
             assert!(!remove_unfinished_copy(&candidate, &of), "{kept}");
             assert_eq!(fs::read(&candidate).unwrap(), theirs, "{kept}");

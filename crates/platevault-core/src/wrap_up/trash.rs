@@ -368,30 +368,32 @@ fn offers(
                     }
                     match processing_file(&path, trash) {
                         Ok(evidence) => {
-                            planned.entry(TrashGroup::ProcessingFiles).or_default().push(
-                                Planned {
-                                    candidate: TrashCandidate {
-                                        id: None,
-                                        files: vec![evidence.path.clone()],
-                                        size_bytes: evidence.fingerprint.size_bytes,
-                                        kept: None,
-                                    },
-                                    items: vec![TrashItemDraft {
-                                        group: TrashGroup::ProcessingFiles,
-                                        item_id: None,
-                                        asset_id: None,
-                                        draft: crate::StorageItemDraft {
-                                            source: evidence,
-                                            relied_on: Vec::new(),
-                                            destination: None,
-                                        },
-                                    }],
+                            planned.entry(TrashGroup::ProcessingFiles).or_default().push(Planned {
+                                candidate: TrashCandidate {
+                                    id: None,
+                                    files: vec![evidence.path.clone()],
+                                    size_bytes: evidence.fingerprint.size_bytes,
+                                    kept: None,
                                 },
-                            );
+                                items: vec![TrashItemDraft {
+                                    group: TrashGroup::ProcessingFiles,
+                                    item_id: None,
+                                    asset_id: None,
+                                    draft: crate::StorageItemDraft {
+                                        source: evidence,
+                                        relied_on: Vec::new(),
+                                        destination: None,
+                                    },
+                                }],
+                            });
                         }
                         Err(reason) => {
                             refused.entry(TrashGroup::ProcessingFiles).or_default().push(
-                                TrashRefusal { id: None, path: NativePath::from_path(&path), reason },
+                                TrashRefusal {
+                                    id: None,
+                                    path: NativePath::from_path(&path),
+                                    reason,
+                                },
                             );
                         }
                     }

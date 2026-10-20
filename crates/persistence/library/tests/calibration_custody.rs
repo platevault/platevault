@@ -420,7 +420,6 @@ async fn references_name_sessions_whose_pins_bind_the_files() {
     assert_eq!(kind(&stale), "conflict", "the pins changed since the review: {stale}");
 }
 
-
 async fn assert_location_pin_refused(world: &Lib, location: &Location, session: Uuid, file: Uuid) {
     let catalog = &world.catalog;
     let generation = catalog.session_calibration(session).await.unwrap().calibration.generation;
@@ -435,7 +434,10 @@ async fn assert_location_pin_refused(world: &Lib, location: &Location, session: 
         )
         .await
         .unwrap();
-    catalog.mark_location_unavailable(location.id, Availability::Offline, "unplugged").await.unwrap();
+    catalog
+        .mark_location_unavailable(location.id, Availability::Offline, "unplugged")
+        .await
+        .unwrap();
     let references = references_for(location, catalog).await;
     let review = catalog.review_retire_location(location.id, &references).await.unwrap();
     assert_eq!(review.blocked.len(), 1, "one current blocker per pinned session");
@@ -473,15 +475,27 @@ async fn retire_review_lists_projects_holding_pinned_sessions_at_all_lifecycles(
     let session = light_session(&world).await;
     let dark = asset_at(catalog, &world.calibration, "darks/Dark_300s_001.fits").await.id;
     let generation = catalog.session_calibration(session).await.unwrap().calibration.generation;
-    catalog.reassign_calibration(session, InputKind::Dark, input_holding(&world, dark).await,
-        generation, &rules(), DiskProbe).await.unwrap();
+    catalog
+        .reassign_calibration(
+            session,
+            InputKind::Dark,
+            input_holding(&world, dark).await,
+            generation,
+            &rules(),
+            DiskProbe,
+        )
+        .await
+        .unwrap();
     let target = catalog.save_target(&support::target("NGC 7000", "ngc 7000"), None).await.unwrap();
     let rig = catalog.save_equipment(&test_rig(), None).await.unwrap();
     let assets = catalog.session(session).await.unwrap().assets;
     let marks: Vec<_> = assets.iter().map(support::expected).collect();
     catalog.set_quality(&marks, platevault_model::Quality::Usable, DiskProbe).await.unwrap();
     let current = catalog.session(session).await.unwrap().summary.session;
-    catalog.associate_target(&[support::expected_session(&current)], target.candidate.id).await.unwrap();
+    catalog
+        .associate_target(&[support::expected_session(&current)], target.candidate.id)
+        .await
+        .unwrap();
     let current = catalog.session(session).await.unwrap().summary.session;
     catalog.confirm_equipment(&[support::expected_session(&current)], rig.id).await.unwrap();
     for kind in [InputKind::Bias, InputKind::Flat] {
@@ -490,16 +504,21 @@ async fn retire_review_lists_projects_holding_pinned_sessions_at_all_lifecycles(
     }
     let current = catalog.session(session).await.unwrap().summary.session;
     catalog.finish_session_review(session, current.grouping_revision).await.unwrap();
-    let expected = project_holders_for_lifecycles(&world, session, target.candidate.id, rig.id).await;
-    let review = catalog.review_retire_location(world.calibration.id,
-        &references_for(&world.calibration, catalog).await).await.unwrap();
+    let expected =
+        project_holders_for_lifecycles(&world, session, target.candidate.id, rig.id).await;
+    let review = catalog
+        .review_retire_location(
+            world.calibration.id,
+            &references_for(&world.calibration, catalog).await,
+        )
+        .await
+        .unwrap();
     assert_project_holders(&review, &expected, session);
 }
 #[tokio::test]
 async fn confirmation_rechecks_pin_added_after_review() {
     assert_pin_change_after_review_conflicts().await;
 }
-
 
 async fn assert_pin_change_after_review_conflicts() {
     let lib = library().await;
@@ -510,28 +529,45 @@ async fn assert_pin_change_after_review_conflicts() {
     assert_eq!(review.blocked, []);
     let session = light_session(&lib).await;
     let generation = catalog.session_calibration(session).await.unwrap().calibration.generation;
-    catalog.reassign_calibration(session, InputKind::Dark, input_holding(&lib, dark).await,
-        generation, &rules(), DiskProbe).await.unwrap();
+    catalog
+        .reassign_calibration(
+            session,
+            InputKind::Dark,
+            input_holding(&lib, dark).await,
+            generation,
+            &rules(),
+            DiskProbe,
+        )
+        .await
+        .unwrap();
     let current = references_for(&lib.calibration, catalog).await;
-    let refused = catalog.retire_location(review.id, lib.calibration.id, review.expected_revision, &current).await.unwrap_err();
+    let refused = catalog
+        .retire_location(review.id, lib.calibration.id, review.expected_revision, &current)
+        .await
+        .unwrap_err();
     assert_eq!(kind(&refused), "conflict");
-    assert_eq!(catalog.location(lib.calibration.id).await.unwrap().lifecycle, platevault_model::LocationLifecycle::Active);
+    assert_eq!(
+        catalog.location(lib.calibration.id).await.unwrap().lifecycle,
+        platevault_model::LocationLifecycle::Active
+    );
 }
-
 
 #[tokio::test]
 async fn retire_review_allows_files_without_pins_to_retire() {
     let lib = library().await;
     let catalog = &lib.catalog;
-    let (location, root) = location_at(catalog, &lib.fx, "Nobody pins", LocationRole::Calibration).await;
+    let (location, root) =
+        location_at(catalog, &lib.fx, "Nobody pins", LocationRole::Calibration).await;
     std::fs::write(root.join("unassigned.fit"), b"not a pinned file").unwrap();
     let file = frame(&root, "unassigned.fit", calibration_frame("DARK", None, 300.0, "2026-09-20"));
     scan_frames(catalog, &location, vec![file]).await;
     let references = references_for(&location, catalog).await;
     let review = catalog.review_retire_location(location.id, &references).await.unwrap();
     assert_eq!(review.blocked, []);
-    let retired = catalog.retire_location(review.id, location.id, review.expected_revision, &references)
-        .await.unwrap();
+    let retired = catalog
+        .retire_location(review.id, location.id, review.expected_revision, &references)
+        .await
+        .unwrap();
     assert_eq!(retired.lifecycle, platevault_model::LocationLifecycle::Retired);
 }
 #[tokio::test]
@@ -540,19 +576,27 @@ async fn retirement_block_reports_capture_key_not_session_display_name() {
     let session = light_session(&lib).await;
     let file = asset_at(&lib.catalog, &lib.calibration, "darks/Dark_300s_001.fits").await.id;
     let generation = lib.catalog.session_calibration(session).await.unwrap().calibration.generation;
-    lib.catalog.reassign_calibration(session, InputKind::Dark, input_holding(&lib, file).await,
-        generation, &rules(), DiskProbe).await.unwrap();
+    lib.catalog
+        .reassign_calibration(
+            session,
+            InputKind::Dark,
+            input_holding(&lib, file).await,
+            generation,
+            &rules(),
+            DiskProbe,
+        )
+        .await
+        .unwrap();
     let references = references_for(&lib.calibration, &lib.catalog).await;
     let review = lib.catalog.review_retire_location(lib.calibration.id, &references).await.unwrap();
-    let [RetireBlock::PinnedCalibration { capture_key, .. }] = review.blocked.as_slice()
-        else { panic!("{:#?}", review.blocked) };
+    let [RetireBlock::PinnedCalibration { capture_key, .. }] = review.blocked.as_slice() else {
+        panic!("{:#?}", review.blocked)
+    };
     assert!(capture_key.starts_with("capture-v1|"));
     let serialized = serde_json::to_value(&review.blocked).unwrap();
     assert_eq!(serialized[0]["captureKey"], capture_key.as_str());
     assert!(serialized[0].get("sessionName").is_none());
 }
-
-
 
 fn test_rig() -> platevault_model::Equipment {
     platevault_model::Equipment {
@@ -573,50 +617,93 @@ fn test_rig() -> platevault_model::Equipment {
 
 async fn references_for(location: &Location, catalog: &Catalog) -> LocationReferences {
     let assets = ids(&catalog.location_assets(location.id).await.unwrap());
-    LocationReferences { references: catalog.calibration_references(&assets).await.unwrap(),
-        assets, consulted: vec![ReferenceKind::Calibration] }
+    LocationReferences {
+        references: catalog.calibration_references(&assets).await.unwrap(),
+        assets,
+        consulted: vec![ReferenceKind::Calibration],
+    }
 }
 
-fn assert_project_holders(review: &platevault_model::RetireReview, expected: &[(Uuid, &'static str)], session: Uuid) {
+fn assert_project_holders(
+    review: &platevault_model::RetireReview,
+    expected: &[(Uuid, &'static str)],
+    session: Uuid,
+) {
     assert_eq!(review.projects.len(), expected.len());
     assert_eq!(review.blocked.len(), 1);
     for (id, lifecycle) in expected {
-        assert!(review.projects.iter().any(|project|
-            project.project_id == *id && project.lifecycle.to_string() == *lifecycle),
-            "missing {lifecycle}: {:?}", review.projects);
+        assert!(
+            review
+                .projects
+                .iter()
+                .any(|project| project.project_id == *id
+                    && project.lifecycle.to_string() == *lifecycle),
+            "missing {lifecycle}: {:?}",
+            review.projects
+        );
     }
-    let [RetireBlock::PinnedCalibration { session_id, capture_key, projects, .. }] = review.blocked.as_slice()
-        else { panic!("{:#?}", review.blocked) };
+    let [RetireBlock::PinnedCalibration { session_id, capture_key, projects, .. }] =
+        review.blocked.as_slice()
+    else {
+        panic!("{:#?}", review.blocked)
+    };
     assert_eq!(*session_id, session);
     assert!(capture_key.starts_with("capture-v1|"));
     assert_eq!(projects.len(), expected.len());
     for (id, lifecycle) in expected {
-        assert!(review.projects.iter().any(|project|
-            project.project_id == *id && project.lifecycle.to_string() == *lifecycle),
-            "missing {lifecycle}: {:?}", review.projects);
-        assert!(projects.iter().any(|project| project.project_id == *id && project.lifecycle.to_string() == *lifecycle));
+        assert!(
+            review
+                .projects
+                .iter()
+                .any(|project| project.project_id == *id
+                    && project.lifecycle.to_string() == *lifecycle),
+            "missing {lifecycle}: {:?}",
+            review.projects
+        );
+        assert!(projects.iter().any(
+            |project| project.project_id == *id && project.lifecycle.to_string() == *lifecycle
+        ));
     }
 }
 
 async fn project_holders_for_lifecycles(
-    world: &Lib, session: Uuid, target: Uuid, rig: Uuid,
+    world: &Lib,
+    session: Uuid,
+    target: Uuid,
+    rig: Uuid,
 ) -> Vec<(Uuid, &'static str)> {
     let mut conn = raw(&world.fx.db).await;
     let mut expected = Vec::new();
     for lifecycle in ["open", "closed", "archived"] {
-        let project = world.catalog.create_project(&ProjectInput {
-            name: format!("{lifecycle} pin holder"), notes: None,
-            subjects: vec![platevault_model::SubjectInput { target_id: target, name: None }],
-            rig_ids: vec![rig], goals: Vec::new(),
-        }).await.unwrap();
-        let desired = world.catalog.create_project_group(project.id, project.revision,
-            &persistence_library::NewGroup {
-                id: Uuid::new_v4(), rig_id: rig,
-                name: platevault_model::GroupName::new(&format!("Rig {lifecycle}")).unwrap(),
-                origin: platevault_model::GroupOrigin::User,
-                optics: platevault_model::OpticsSignature::new(None, Some(250.0), None).unwrap(),
-                framing: None,
-            }, &[]).await.unwrap();
+        let project = world
+            .catalog
+            .create_project(&ProjectInput {
+                name: format!("{lifecycle} pin holder"),
+                notes: None,
+                subjects: vec![platevault_model::SubjectInput { target_id: target, name: None }],
+                rig_ids: vec![rig],
+                goals: Vec::new(),
+            })
+            .await
+            .unwrap();
+        let desired = world
+            .catalog
+            .create_project_group(
+                project.id,
+                project.revision,
+                &persistence_library::NewGroup {
+                    id: Uuid::new_v4(),
+                    rig_id: rig,
+                    name: platevault_model::GroupName::new(&format!("Rig {lifecycle}")).unwrap(),
+                    origin: platevault_model::GroupOrigin::User,
+                    optics: platevault_model::OpticsSignature::new(None, Some(250.0), None)
+                        .unwrap(),
+                    framing: None,
+                },
+                &[],
+            )
+            .await
+            .unwrap();
         sqlx::query("INSERT INTO project_sessions (project_id, session_id, group_id, placement, target_id, grouping_revision, calibration_generation, added_at) VALUES (?1, ?2, ?3, 'user', ?4, (SELECT grouping_revision FROM sessions WHERE id = ?2), (SELECT generation FROM session_calibration WHERE session_id = ?2), '2026-10-20')")
             .bind(project.id.to_string()).bind(session.to_string()).bind(desired.groups[0].id.to_string())
             .bind(target.to_string()).execute(&mut conn).await.unwrap();
@@ -624,15 +711,30 @@ async fn project_holders_for_lifecycles(
             let snapshot = serde_json::json!({"projectId":project.id,"takenAt":"2026-10-20","appliedGeneration":null,"basis":{},"goals":[]});
             sqlx::query("INSERT INTO project_snapshots (project_id, applied_generation, snapshot, taken_at) VALUES (?1, NULL, ?2, '2026-10-20')")
                 .bind(project.id.to_string()).bind(snapshot.to_string()).execute(&mut conn).await.unwrap();
-            for (step, outcome) in [("clean_up", "skipped"), ("trash", "skipped"), ("archive", if lifecycle == "archived" { "finished" } else { "skipped" })] {
+            for (step, outcome) in [
+                ("clean_up", "skipped"),
+                ("trash", "skipped"),
+                ("archive", if lifecycle == "archived" { "finished" } else { "skipped" }),
+            ] {
                 sqlx::query("INSERT INTO project_wrap_up_steps (project_id, step, outcome, recorded_at) VALUES (?1, ?2, ?3, '2026-10-20')")
                     .bind(project.id.to_string()).bind(step).bind(outcome).execute(&mut conn).await.unwrap();
             }
             let state = if lifecycle == "archived" { "closing" } else { "closed" };
-            sqlx::query("UPDATE projects SET lifecycle = ?2, closed_at = '2026-10-20' WHERE id = ?1")
-                .bind(project.id.to_string()).bind(state).execute(&mut conn).await.unwrap();
-            if lifecycle == "archived" { sqlx::query("UPDATE projects SET lifecycle = 'archived' WHERE id = ?1")
-                .bind(project.id.to_string()).execute(&mut conn).await.unwrap(); }
+            sqlx::query(
+                "UPDATE projects SET lifecycle = ?2, closed_at = '2026-10-20' WHERE id = ?1",
+            )
+            .bind(project.id.to_string())
+            .bind(state)
+            .execute(&mut conn)
+            .await
+            .unwrap();
+            if lifecycle == "archived" {
+                sqlx::query("UPDATE projects SET lifecycle = 'archived' WHERE id = ?1")
+                    .bind(project.id.to_string())
+                    .execute(&mut conn)
+                    .await
+                    .unwrap();
+            }
         }
         expected.push((project.id, lifecycle));
     }

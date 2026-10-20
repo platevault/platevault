@@ -275,14 +275,13 @@ pub fn verify_built(
                 .as_ref()
                 .is_some_and(|written| holds_link(&path, written)))
             .then(|| reason(ReasonCode::DestinationChanged, format!("{} changed", path.display()))),
-            EntryPlacement::Copy | EntryPlacement::Clone => {
-                (!holds_placed_copy(&path, entry)).then(|| {
+            EntryPlacement::Copy | EntryPlacement::Clone => (!holds_placed_copy(&path, entry))
+                .then(|| {
                     reason(
                         ReasonCode::DestinationMismatch,
                         format!("{} no longer holds the bytes written", path.display()),
                     )
-                })
-            }
+                }),
         };
         if let Some(failure) = failure {
             failures.push((relative, failure));
@@ -485,7 +484,8 @@ fn walk_below(folder: &Folder, walked: &mut Walked) {
             return;
         }
     };
-    let names: BTreeSet<&std::ffi::OsStr> = listed.iter().map(|entry| entry.name.as_os_str()).collect();
+    let names: BTreeSet<&std::ffi::OsStr> =
+        listed.iter().map(|entry| entry.name.as_os_str()).collect();
     for entry in &listed {
         let path = folder.path().join(&entry.name);
         if entry.folder {
@@ -643,8 +643,8 @@ pub fn move_foreign(
         }
         let from = previous.join(&relative);
         let to = view.join(&relative);
-        let gone = fs::symlink_metadata(&from)
-            .is_err_and(|error| error.kind() == io::ErrorKind::NotFound);
+        let gone =
+            fs::symlink_metadata(&from).is_err_and(|error| error.kind() == io::ErrorKind::NotFound);
         if gone && holds_reviewed_bytes(&to, &item.evidence) {
             return Ok(());
         }
@@ -1097,7 +1097,11 @@ mod tests {
             foreign_files(&view, &placed).unwrap().into_iter().map(|(path, _)| path).collect();
         assert_eq!(
             foreign,
-            [PathBuf::from("._Orphan.fits"), PathBuf::from("._notes.txt"), PathBuf::from("notes.txt")]
+            [
+                PathBuf::from("._Orphan.fits"),
+                PathBuf::from("._notes.txt"),
+                PathBuf::from("notes.txt")
+            ]
         );
     }
 

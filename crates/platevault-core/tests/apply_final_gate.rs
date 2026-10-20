@@ -277,7 +277,10 @@ async fn a_linked_processing_folder_is_refused_and_nothing_below_it_moves() {
         review.groups.iter().find(|group| group.group == TrashGroup::ProcessingFiles).unwrap();
     assert!(processing.items.is_empty(), "{review:#?}");
     assert_eq!(processing.refused.len(), 1, "{review:#?}");
-    assert_eq!(processing.refused[0].path, NativePath::from_path(&world.folder().join("Processing")));
+    assert_eq!(
+        processing.refused[0].path,
+        NativePath::from_path(&world.folder().join("Processing"))
+    );
     assert_eq!(processing.refused[0].reason.code, ReasonCode::SourceUnavailable);
 
     let request = TrashRequest {

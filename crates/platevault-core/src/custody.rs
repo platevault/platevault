@@ -358,12 +358,12 @@ fn open_unchanged(path: &Path, expect: &Expect<'_>) -> Result<Opened, Check> {
 /// their digest itself (a clone, astro-plan-nlewt).
 pub(crate) fn open_source(source: &EntryEvidence) -> Result<File, ItemReason> {
     let path = path_of(&source.path)?;
-    open_unchanged(&path, &Expect::source(source))
-        .map(|opened| opened.file)
-        .map_err(|check| match check {
+    open_unchanged(&path, &Expect::source(source)).map(|opened| opened.file).map_err(|check| {
+        match check {
             Check::Unavailable(detail) => ItemReason::new(ReasonCode::SourceUnavailable, detail),
             Check::Changed(detail) => ItemReason::new(ReasonCode::SourceDrift, detail),
-        })
+        }
+    })
 }
 
 /// Stream a regular file's bytes through `sink` and return their SHA-256,

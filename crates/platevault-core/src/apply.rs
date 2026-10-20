@@ -630,13 +630,7 @@ fn check(inputs: &ApplyInputs, os: Os) -> Checked {
     }
     let mut seen = BTreeSet::new();
     blockers.retain(|blocker| seen.insert(format!("{blocker:?}")));
-    Checked {
-        blockers,
-        plan,
-        project,
-        previous_gone: found.previous_gone,
-        foreign: found.foreign,
-    }
+    Checked { blockers, plan, project, previous_gone: found.previous_gone, foreign: found.foreign }
 }
 
 /// Every held frame placed with a recorded correction is an isolated
@@ -1342,8 +1336,9 @@ impl Run<'_> {
             Ok(foreign) => foreign,
             Err(unreadable) => {
                 let count = self.record(unreadable);
-                let error =
-                    format!("{count} entr(ies) in View/ can't be read; the current View is unchanged");
+                let error = format!(
+                    "{count} entr(ies) in View/ can't be read; the current View is unchanged"
+                );
                 return self.end(ApplyOutcome::Failed, error).await;
             }
         };
@@ -1454,7 +1449,10 @@ impl Run<'_> {
     /// After waiting for a tool, with the old View aside: record the wait,
     /// and when the catalog moved meanwhile put the old View back and end
     /// Failed.
-    async fn after_wait(&mut self, reserved: &Reserved) -> Result<Option<ApplyReport>, LibraryError> {
+    async fn after_wait(
+        &mut self,
+        reserved: &Reserved,
+    ) -> Result<Option<ApplyReport>, LibraryError> {
         self.advance(ApplyPhase::WaitingForRelease, None).await?;
         if self.still_reserved(reserved).await? {
             return Ok(None);

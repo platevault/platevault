@@ -184,13 +184,14 @@ async fn advance(
                 (item.source.clone(), destination(&item)?, written(&item)?);
             // The copy now at the destination: a verified copy where the
             // volume had no no-replace rename carries an identity of its own.
-            let next =
-                match blocking(move || transfer::write(&source, &destination, &written)).await? {
-                    Ok(installed) => {
-                        ItemChange { written: Some(installed), ..change(&item, ItemPhase::Installed) }
-                    }
-                    Err(reason) => settled(&item, ItemOutcome::Blocked, Some(reason)),
-                };
+            let next = match blocking(move || transfer::write(&source, &destination, &written))
+                .await?
+            {
+                Ok(installed) => {
+                    ItemChange { written: Some(installed), ..change(&item, ItemPhase::Installed) }
+                }
+                Err(reason) => settled(&item, ItemOutcome::Blocked, Some(reason)),
+            };
             (next, item)
         }
         (Copy | Move, ItemPhase::Installed) => {

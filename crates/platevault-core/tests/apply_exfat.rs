@@ -35,7 +35,8 @@ const APPLE_DOUBLE: [u8; 4] = [0x00, 0x05, 0x16, 0x07];
 async fn on_exfat(world: &World) -> PathBuf {
     let volume = std::env::var_os("PLATEVAULT_TEST_EXFAT")
         .expect("PLATEVAULT_TEST_EXFAT names a mounted exFAT folder");
-    let parent = Path::new(&volume).join(uuid::Uuid::new_v4().simple().to_string()).join("Processing");
+    let parent =
+        Path::new(&volume).join(uuid::Uuid::new_v4().simple().to_string()).join("Processing");
     fs::create_dir_all(&parent).unwrap();
     let parent = fs::canonicalize(parent).unwrap();
     let parent_json = serde_json::to_string(&NativePath::from_path(&parent)).unwrap();
@@ -113,7 +114,8 @@ async fn apple_double_companions_go_with_their_entries_on_exfat() {
     let report = world.apply().await;
     assert_eq!(report.outcome, Some(ApplyOutcome::Applied), "{report:#?}");
     let view = folder.join("View");
-    let companions: Vec<String> = files(&view).into_iter().filter(|path| is_companion(path)).collect();
+    let companions: Vec<String> =
+        files(&view).into_iter().filter(|path| is_companion(path)).collect();
     eprintln!("AppleDouble companions beside placed entries: {companions:#?}");
 
     let orphan = view.join("._Orphan.fits");
@@ -124,14 +126,12 @@ async fn apple_double_companions_go_with_their_entries_on_exfat() {
     world.bump().await;
     let preview = world.preview().await;
     assert!(preview.blockers.is_empty(), "{:#?}", preview.blockers);
-    let foreign: Vec<String> =
-        preview.foreign.iter().map(|file| file.path.display()).collect();
+    let foreign: Vec<String> = preview.foreign.iter().map(|file| file.path.display()).collect();
     assert_eq!(foreign, ["._Orphan.fits"], "only the companion with no entry is foreign");
 
     let report = world.library.apply(&World::request(&preview), &apply::Unattended).await.unwrap();
     assert_eq!(report.outcome, Some(ApplyOutcome::Applied), "{report:#?}");
-    let left: Vec<String> =
-        report.leftovers.iter().map(|item| item.path.display()).collect();
+    let left: Vec<String> = report.leftovers.iter().map(|item| item.path.display()).collect();
     assert_eq!(left, ["View (previous)/._Orphan.fits"], "the unticked orphan stays, named");
     let previous = files(&folder.join("View (previous)"));
     assert_eq!(previous, ["._Orphan.fits"], "every retired entry took its companion");
