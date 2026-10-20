@@ -1,8 +1,9 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Apply IPC (spec 066 VSEL-FR-14, 069 PREP-FR-04/06/09/18): the Apply sheet,
-//! the Apply that rebuilds the View from the originals, and its Cancel.
+//! Apply IPC (spec 066 VSEL-FR-14, 069 PREP-FR-04/06/09/15/18): the Apply
+//! sheet, the Apply that rebuilds the View from the originals, its Cancel,
+//! and the symlink check setup, Settings and the sheet share.
 //!
 //! Registered only by the isolated rebuilt shell ([`crate::library_shell`])
 //! under its `apply` block. The sheet reads originals' fingerprints and writes
@@ -19,7 +20,9 @@ use std::sync::{Arc, OnceLock};
 
 use platevault_core::apply::ApplyControl;
 use platevault_core::library::Library;
-use platevault_core::{ApplyPreview, ApplyReport, ApplyRequest, LibraryError, NativePath};
+use platevault_core::{
+    ApplyPreview, ApplyReport, ApplyRequest, LibraryError, NativePath, SymlinkCapability,
+};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Runtime, State};
 use uuid::Uuid;
@@ -100,9 +103,27 @@ impl ApplyControl for Attended<'_> {
     }
 }
 
+/// Whether `folder` can hold the symlinks of a Symlinks View (PREP-FR-15):
+/// on Windows whether Developer Mode is on, elsewhere whether its
+/// filesystem holds links. Setup and Settings check the processing location
+/// they choose; the Apply sheet checks it too. Leaves nothing in `folder`.
+///
+/// # Errors
+/// `NotFound`, `AccessDenied` or `SourceUnavailable`, scoped to `folder`,
+/// when it can't hold a file at all.
+#[tauri::command]
+#[specta::specta]
+pub async fn library_check_symlinks(
+    library: State<'_, Arc<Library>>,
+    folder: NativePath,
+) -> Reply<SymlinkCapability> {
+    library.check_symlinks(folder).await.map_err(fail(None))
+}
+
 /// The Apply sheet: the new View as a folder tree, every reason Apply can't
 /// run, the files `PlateVault` didn't place, the copies a tool changed and
-/// what `View (previous)/` holds. Writes nothing.
+/// what `View (previous)/` holds, with the new View's footprint. Writes
+/// nothing but the hidden probes it removes.
 ///
 /// # Errors
 /// `NotFound` for an unknown Project; catalog errors.
@@ -121,7 +142,9 @@ pub async fn project_apply_preview(
 ///
 /// # Errors
 /// `Conflict` when the Project or the Library moved since the sheet;
-/// `SymlinksUnavailable` when a Symlinks View can't be made here;
+/// `SymlinksUnavailable` when Windows Developer Mode is off and
+/// `LinksUnsupported` when the processing location holds no links, for a
+/// Symlinks View;
 /// `InvalidInput` naming every other blocker; `IdentityConflict` when both the
 /// install and restoring the old View failed; catalog errors.
 #[tauri::command]

@@ -37,7 +37,7 @@ use crate::patched_copy::{self, HeaderPatch, PatchTarget};
 use crate::{
     EntryEvidence, EntryKind, EntryPlacement, FileIdentity, ForeignItem, ForeignItemState,
     ItemReason, ManifestEntry, NativePath, ObservationFingerprint, PreviousItem,
-    PreviousItemReason, PreviousItemReview, ReasonCode, TransferDestination,
+    PreviousItemReason, PreviousItemReview, ReasonCode, SymlinkCapability, TransferDestination,
 };
 
 fn reason(code: ReasonCode, detail: impl Into<String>) -> ItemReason {
@@ -51,39 +51,107 @@ fn failed(path: &Path, error: &io::Error) -> ItemReason {
             format!("{} already holds an entry; nothing is replaced", path.display()),
         )
     } else {
-        reason(ReasonCode::WriteFailed, format!("{}: {error}", path.display()))
+        tracing::warn!(path = %path.display(), %error, "an entry couldn't be written");
+        reason(ReasonCode::WriteFailed, format!("{} couldn't be written", path.display()))
     }
 }
 
-// ── Symlink capability ───────────────────────────────────────────────────────
-
-/// Why symlinks can't be probed or made in a folder.
-#[derive(Debug)]
-pub enum SymlinkProbe {
-    /// The folder can't hold even a plain file.
-    Unwritable(String),
-    /// The folder takes files but no symlink: Windows without Developer
-    /// Mode, or a volume without links (FAT, exFAT).
-    Unsupported(String),
+/// `reason` as an Apply response carries it (CT3): its code with a fixed
+/// diagnostic. What its producer wrote, which may hold an OS error's text
+/// or a path the response doesn't name, goes to the log only, as a
+/// `LibraryError`'s `Display` never crosses IPC either.
+pub fn reported(path: &Path, reason: &ItemReason) -> ItemReason {
+    tracing::warn!(
+        path = %path.display(),
+        code = ?reason.code,
+        detail = %reason.detail,
+        "Apply couldn't place an input"
+    );
+    ItemReason::new(reason.code, diagnostic(reason.code))
 }
 
-/// Whether `folder` can hold a symlink: create a probe file and a symlink
-/// to it under fresh hidden names, then remove exactly those.
-pub fn probe_symlinks(folder: &Path) -> Result<(), SymlinkProbe> {
+/// The English diagnostic Apply reports for `code`.
+const fn diagnostic(code: ReasonCode) -> &'static str {
+    match code {
+        ReasonCode::TrashUnsupported => "the volume has no Trash",
+        ReasonCode::TrashFailed => "the Trash refused it",
+        ReasonCode::SourceDrift => "it changed since it was chosen",
+        ReasonCode::SourceUnavailable => "it is missing or can't be read",
+        ReasonCode::KeptCopyUnproven => "it no longer holds the bytes that were kept",
+        ReasonCode::DestinationOccupied => "its place already holds an entry; nothing is replaced",
+        ReasonCode::DestinationMismatch => "the entry written differs from its original",
+        ReasonCode::DestinationChanged => "the entry changed while it was written",
+        ReasonCode::WriteFailed => "its entry couldn't be written",
+        ReasonCode::Interrupted => "an interruption left a state the record can't prove",
+        ReasonCode::Protected => "it is protected",
+    }
+}
+
+// ── Symlink and clone capability ─────────────────────────────────────────────
+
+/// Whether `folder` can hold a symlink (PREP-FR-15): create a probe file and
+/// a symlink to it under fresh hidden names, then remove exactly those.
+///
+/// # Errors
+/// The OS error when `folder` can't hold even a plain file.
+pub fn probe_symlinks(folder: &Path) -> io::Result<SymlinkCapability> {
     let name = format!(".platevault-symlink-probe-{}", Uuid::new_v4().simple());
     let target = folder.join(format!("{name}.file"));
-    fs::OpenOptions::new().write(true).create_new(true).open(&target).map_err(|error| {
-        SymlinkProbe::Unwritable(format!("{} can't hold a file: {error}", folder.display()))
-    })?;
+    fs::OpenOptions::new().write(true).create_new(true).open(&target)?;
     let link = folder.join(format!("{name}.link"));
     let made = fs_pathsafe::create_symlink(&target, &link);
     if made.is_ok() {
         let _ = fs::remove_file(&link);
     }
     let _ = fs::remove_file(&target);
-    made.map_err(|error| {
-        SymlinkProbe::Unsupported(format!("{} can't hold a symlink: {error}", folder.display()))
+    Ok(match made {
+        Ok(()) => SymlinkCapability::Available,
+        Err(error) => {
+            tracing::info!(folder = %folder.display(), %error, "symlinks can't be made here");
+            link_refusal(&error, cfg!(windows))
+        }
     })
+}
+
+/// What a refused symlink says about its folder: on Windows,
+/// `ERROR_PRIVILEGE_NOT_HELD` is the unprivileged symlink right Developer
+/// Mode grants (PREP-AC-08); any other refusal, on Windows or elsewhere, is
+/// a filesystem that holds no links (PREP-AC-03).
+fn link_refusal(error: &io::Error, windows: bool) -> SymlinkCapability {
+    const ERROR_PRIVILEGE_NOT_HELD: i32 = 1314;
+    if windows && error.raw_os_error() == Some(ERROR_PRIVILEGE_NOT_HELD) {
+        SymlinkCapability::DeveloperModeOff
+    } else {
+        SymlinkCapability::Unsupported
+    }
+}
+
+/// Whether a copy of `source` made in `folder` becomes a copy-on-write
+/// clone (PREP-FR-04): the two are on one volume whose filesystem clones
+/// (APFS, Btrfs, XFS). A clone of `source` is made in `folder` under a fresh
+/// hidden name and removed; it shares the original's blocks, so nothing is
+/// read or copied.
+pub fn probe_clone(source: &Path, folder: &Path) -> bool {
+    let Ok(original) = fs::File::open(source) else { return false };
+    let probe = folder.join(format!(".platevault-clone-probe-{}", Uuid::new_v4().simple()));
+    let cloned = transfer::clone_file(&original, &probe).is_ok();
+    if cloned {
+        let _ = fs::remove_file(&probe);
+    }
+    cloned
+}
+
+/// The volume `path` is on, where the platform can clone; `None` elsewhere.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+pub fn clone_volume(path: &Path) -> Option<u64> {
+    use std::os::unix::fs::MetadataExt;
+    fs::symlink_metadata(path).ok().map(|metadata| metadata.dev())
+}
+
+/// The volume `path` is on, where the platform can clone; `None` elsewhere.
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+pub const fn clone_volume(_path: &Path) -> Option<u64> {
+    None
 }
 
 // ── Sources ──────────────────────────────────────────────────────────────────
@@ -649,10 +717,13 @@ pub fn move_foreign(
             return Ok(());
         }
         if !is_reviewed(&from, &item.evidence) {
-            return Err(format!("{} changed after the Apply sheet listed it", from.display()));
+            return Err(format!("{} changed after the Apply sheet listed it", relative.display()));
         }
         let folder = relative.parent().unwrap_or_else(|| Path::new(""));
-        transfer::ensure_folder(view, folder).map_err(|failure| failure.detail)?;
+        transfer::ensure_folder(view, folder).map_err(|failure| {
+            tracing::warn!(path = %to.display(), detail = %failure.detail, "a foreign file's folder couldn't be made");
+            format!("the folder of {} couldn't be made in the new View", relative.display())
+        })?;
         let mut moved = transfer::rename_noreplace(&from, &to);
         if moved.as_ref().is_err_and(|error| error.kind() == io::ErrorKind::AlreadyExists)
             && transfer::remove_unfinished_copy(&to, &from)
@@ -663,7 +734,8 @@ pub fn move_foreign(
             if error.kind() == io::ErrorKind::AlreadyExists {
                 taken()
             } else {
-                format!("{}: {error}", from.display())
+                tracing::warn!(path = %from.display(), %error, "a foreign file couldn't be moved");
+                format!("{} couldn't be moved into the new View", relative.display())
             }
         })
     })();
@@ -714,7 +786,8 @@ pub enum Aside {
     },
     /// Cancel while waiting: nothing moved.
     Canceled,
-    Failed(String),
+    /// The OS refused the move; the log has its error.
+    Failed,
 }
 
 /// Move `from` to `to`, waiting while a tool holds a file in `from`
@@ -747,16 +820,20 @@ pub async fn move_aside(
                     break Aside::Canceled;
                 }
             }
-            Ok(Err(error)) => break Aside::Failed(format!("{}: {error}", from.display())),
-            Err(error) => {
-                break Aside::Failed(format!("the move of {} failed: {error}", from.display()))
-            }
+            Ok(Err(error)) => break aside_failed(from, &error),
+            Err(error) => break aside_failed(from, &error),
         }
     };
     if waited {
         control.waiting(None);
     }
     outcome
+}
+
+/// The OS refused to move the old View aside: its error goes to the log.
+fn aside_failed(from: &Path, error: &dyn std::fmt::Display) -> Aside {
+    tracing::warn!(from = %from.display(), %error, "the old View couldn't be moved aside");
+    Aside::Failed
 }
 
 // ── Retiring the previous View ───────────────────────────────────────────────
@@ -1014,6 +1091,46 @@ mod tests {
         assert!(held_by_a_tool(&io::ErrorKind::ResourceBusy.into()));
         assert!(!held_by_a_tool(&io::ErrorKind::NotFound.into()));
         assert_eq!(held_by_a_tool(&io::Error::from_raw_os_error(32)), cfg!(windows));
+    }
+
+    /// PREP-AC-08 against PREP-AC-03: only Windows' missing symlink right is
+    /// Developer Mode; every other refusal is a filesystem without links.
+    #[test]
+    fn a_refused_symlink_names_its_real_cause() {
+        let privilege = io::Error::from_raw_os_error(1314);
+        assert_eq!(link_refusal(&privilege, true), SymlinkCapability::DeveloperModeOff);
+        assert_eq!(link_refusal(&privilege, false), SymlinkCapability::Unsupported);
+        let unsupported = io::Error::from_raw_os_error(50);
+        assert_eq!(link_refusal(&unsupported, true), SymlinkCapability::Unsupported);
+        let eperm = io::Error::from(io::ErrorKind::PermissionDenied);
+        assert_eq!(link_refusal(&eperm, false), SymlinkCapability::Unsupported);
+    }
+
+    #[test]
+    fn the_symlink_and_clone_probes_leave_nothing_behind() {
+        let temp = tempfile::tempdir().unwrap();
+        let folder = temp.path().join("Processing");
+        fs::create_dir(&folder).unwrap();
+        assert_eq!(probe_symlinks(&folder).unwrap(), SymlinkCapability::Available);
+        let original = temp.path().join("Light_001.fits");
+        fs::write(&original, b"light").unwrap();
+        let cloned = probe_clone(&original, &folder);
+        assert!(cloned || !cfg!(target_os = "macos"), "a macOS temp folder is on APFS");
+        assert!(fs::read_dir(&folder).unwrap().next().is_none());
+        assert!(probe_symlinks(&folder.join("missing")).is_err());
+        assert!(!probe_clone(&temp.path().join("missing"), &folder));
+    }
+
+    /// CT3: a reported reason keeps its code and drops its producer's text.
+    #[test]
+    fn a_reported_reason_carries_no_os_text() {
+        let error = io::Error::from_raw_os_error(13);
+        let produced = failed(Path::new("/SENTINEL/View (building)/Light_001.fits"), &error);
+        assert!(!produced.detail.contains("os error"), "{produced:?}");
+        let raw = reason(ReasonCode::SourceUnavailable, format!("/SENTINEL: {error}"));
+        let reported = reported(Path::new("Light_001.fits"), &raw);
+        assert_eq!(reported.code, ReasonCode::SourceUnavailable);
+        assert!(!reported.detail.contains("SENTINEL") && !reported.detail.contains("os error"));
     }
 
     #[test]

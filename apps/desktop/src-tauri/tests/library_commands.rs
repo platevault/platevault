@@ -75,6 +75,7 @@ impl Shell {
                 desktop_shell::commands::project_inputs::project_set_frames,
                 desktop_shell::commands::project_apply::project_apply_preview,
                 desktop_shell::commands::project_apply::project_apply,
+                desktop_shell::commands::project_apply::library_check_symlinks,
                 desktop_shell::commands::project_output::project_copy_to_output,
                 desktop_shell::commands::project_wrap_up::project_wrap_up_status,
                 desktop_shell::commands::project_wrap_up::project_close,
@@ -288,6 +289,25 @@ fn apply_family_takes_its_arguments() {
         NOT_FOUND,
         project,
     );
+}
+
+/// PREP-FR-15 (J18 S1, J41 S16a): setup and Settings check a chosen folder
+/// for symlinks; a folder that can't hold a file is refused scoped to it.
+#[test]
+fn the_symlink_check_returns_the_folders_capability() {
+    let shell = Shell::new();
+    let folder = tempfile::tempdir().expect("temp dir");
+    let native = |path: &Path| serde_json::to_value(NativePath::from_path(path)).expect("path");
+    let checked = shell.call("library_check_symlinks", &json!({ "folder": native(folder.path()) }));
+    assert_eq!(checked, json!("available"));
+    assert!(std::fs::read_dir(folder.path()).expect("folder").next().is_none(), "no probe stays");
+    let missing = folder.path().join("missing");
+    let refused = shell
+        .invoke("library_check_symlinks", &json!({ "folder": native(&missing) }))
+        .expect_err("a missing folder");
+    assert_eq!(refused["code"], "not_found", "{refused}");
+    assert_eq!(refused["scope"], native(&missing), "{refused}");
+    assert!(!refused.to_string().contains("os error"), "{refused}");
 }
 
 #[test]

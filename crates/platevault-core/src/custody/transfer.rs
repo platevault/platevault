@@ -1158,8 +1158,7 @@ mod tests {
             let (view, previous) = view_in(&temp);
             fs::create_dir(&previous).unwrap();
             let moved = move_aside(rename, poll, &view, &previous, &Unattended).await;
-            let Aside::Failed(detail) = moved else { panic!("not refused: {moved:?}") };
-            assert!(detail.contains(&view.display().to_string()), "{detail}");
+            assert!(matches!(moved, Aside::Failed), "not refused: {moved:?}");
             kept(&view);
             assert_eq!(fs::read_dir(&previous).unwrap().count(), 0, "the empty folder stays");
         }
