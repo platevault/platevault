@@ -1684,7 +1684,9 @@ async fn a_root_change_during_a_pending_removal_starts_once_the_volume_is_gone()
 /// no sweep.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_root_change_during_a_pending_removal_waits_a_bounded_time() {
-    let settings = Settings { removal_wait: Duration::from_secs(1), ..UNTIL_NOTICED };
+    // 3 s, not 1 s: `start` asserts the new root stays untouched after the
+    // remap, and a stalled CI runner must not run the wait out before that.
+    let settings = Settings { removal_wait: Duration::from_secs(3), ..UNTIL_NOTICED };
     let remapped = RemappedInRemoval::start(settings).await;
     let swept = sweeps(remapped.watch.observed()).load(Ordering::SeqCst);
     remapped.watched_at_the_new_root().await;
