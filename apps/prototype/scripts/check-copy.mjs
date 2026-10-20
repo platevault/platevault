@@ -17,7 +17,8 @@
  *      `*_action`) ending in a full stop.
  *   5. button-length: a button longer than 3 words (W2); a `{placeholder}`
  *      counts as one word. A button is a button key (`verb_*`, `*_action`,
- *      `*_button`) or a key an Action in src/ takes as its label.
+ *      `*_button`) or a key an Action in src/ takes as its label. A key in
+ *      SPEC_LONG_BUTTONS, whose wording a cited decision fixes, is exempt.
  *   6. ellipsis: a value ending in "…" whose key does not end in `_ellipsis`,
  *      the convention for a control that opens a dialog (W2).
  *
@@ -147,13 +148,23 @@ function isTitleCase(text) {
   return cased.length > 0 && cased.every((word) => /^\p{Lu}/u.test(word))
 }
 
+/**
+ * Button labels a spec words longer than W2's 3 words, by key, with the
+ * decision that fixes the wording. Only button-length skips them; every
+ * other check still applies. An entry needs a citation, never a preference.
+ */
+export const SPEC_LONG_BUTTONS = Object.freeze({
+  // "Add {value} to {rig}" in the session (PLAN-EQ-FR-04; owner's answer, 2026-10-19, J15 S4b).
+  equipment_add_value_to_rig: "D-W127",
+})
+
 /** Each check, given a key, one text it renders, and whether the key is a button. */
 const CHECKS = {
   "slop-word": (key, text) => SLOP.test(text),
   "prototype-word": (key, text) => !PROTOTYPE_KEYS.test(key) && PROTOTYPE.test(text),
   "title-case": (key, text, button) => (LABEL_KEY.test(key) || button) && isTitleCase(text),
   "label-period": (key, text) => LABEL_KEY.test(key) && /[^.]\.$/.test(text.trim()),
-  "button-length": (key, text, button) => button && words(text.replace(/[…·▸]/g, "")).length > 3,
+  "button-length": (key, text, button) => button && !Object.hasOwn(SPEC_LONG_BUTTONS, key) && words(text.replace(/[…·▸]/g, "")).length > 3,
   ellipsis: (key, text) => !DIALOG_KEY.test(key) && /(…|\.\.\.)$/.test(text.trim()),
 }
 

@@ -2,7 +2,7 @@
 // fixtures. Run: pnpm test:lint-rules.
 import assert from "node:assert/strict"
 import { describe, it } from "node:test"
-import { actionLabelKeys, copyFindings } from "../../scripts/check-copy.mjs"
+import { actionLabelKeys, copyFindings, SPEC_LONG_BUTTONS } from "../../scripts/check-copy.mjs"
 
 const SOURCE = `
 const m = useMessages()
@@ -31,5 +31,12 @@ describe("check-copy Action labels (W2)", () => {
   it("checks an Action label for title case like a button key", () => {
     const findings = copyFindings({ fixture_pick: "Pick Reference Frame" }, actionLabelKeys("fixture.tsx", SOURCE))
     assert.deepEqual(findings["title-case"], ["fixture_pick"])
+  })
+  it("exempts a spec-mandated label from button-length only, and every entry cites a decision", () => {
+    const actions = new Set(["equipment_add_value_to_rig", "fixture_review_new_frames"])
+    const findings = copyFindings({ equipment_add_value_to_rig: "Add {value} Filter to {rig}", fixture_review_new_frames: "Review {n} new frames" }, actions)
+    assert.deepEqual(findings["button-length"], ["fixture_review_new_frames"])
+    assert.deepEqual(findings["title-case"], ["equipment_add_value_to_rig"])
+    for (const [key, decision] of Object.entries(SPEC_LONG_BUTTONS)) assert.match(decision, /^D-W\d+$/, key)
   })
 })
