@@ -268,7 +268,7 @@ fn move_into_place(
             match PrivilegedInstall::new(launched, payload, update, identity)
                 .and_then(|install| install.run(admin_prompt))
             {
-                Ok(()) => return Ok(Vec::new()),
+                Ok(kept) => return Ok(kept),
                 Err(error) => error,
             }
         }
@@ -621,9 +621,13 @@ const APP_CHANGED: i32 = 69;
 const PAYLOAD_SIZE_CHANGED: i32 = 70;
 #[cfg(target_os = "macos")]
 const OUTCOME_UNKNOWN: i32 = 71;
+/// The update is in place, but what root's exchange brought into its
+/// directory stays there: the exchange back failed.
+#[cfg(target_os = "macos")]
+const INSTALLED_KEPT_IN_WORK_DIR: i32 = 72;
 /// What [`PRIVILEGED_INSTALL`] writes before the path of an entry it kept in
 /// its own directory ([`KEPT_IN_WORK_DIR`], [`APP_CHANGED`],
-/// [`OUTCOME_UNKNOWN`]).
+/// [`OUTCOME_UNKNOWN`], [`INSTALLED_KEPT_IN_WORK_DIR`]).
 #[cfg(target_os = "macos")]
 const KEPT_MARKER: &str = "kept:";
 /// The only `PATH` the privileged install's processes see; every program it
@@ -672,9 +676,13 @@ const COPY_SECONDS: u32 = 120;
 ///    would. What a rename brought into root's directory is told by its
 ///    device and inode, which only root can change there: the pinned app, or
 ///    root's own update. Anything else came from a swap at the installed
-///    path after step 1; root renames it back and installs nothing (69). An
-///    entry whose device and inode cannot be read is not renamed again: what
-///    happened is unknown (`OUTCOME_UNKNOWN`, 71).
+///    path after step 1; root renames it back and installs nothing (69).
+///    Should that exchange back fail with the update at the installed path,
+///    the update is installed and the other entry stays in root's directory
+///    (`INSTALLED_KEPT_IN_WORK_DIR`, 72), as the user context counts such a
+///    swap ([`settle_not_launched`]). An entry whose device and inode cannot
+///    be read is not renamed again: what happened is unknown
+///    (`OUTCOME_UNKNOWN`, 71).
 ///
 /// Leaving, whatever the reason, including a signal, root deletes only what
 /// it can tell is its own: its copy of the archive, its unused update, and
@@ -682,7 +690,7 @@ const COPY_SECONDS: u32 = 120;
 /// succeeded. The pinned app at any other time, and anything root cannot
 /// identify, stay in its directory, which is then opened to the user and
 /// named on standard error: the app as `KEPT_IN_WORK_DIR` (68), anything
-/// else with 69 unless root was already leaving with 68 or 71. A previous
+/// else with 69 unless root was already leaving with 68, 71 or 72. A previous
 /// app that cannot be put back is first moved next to the installed app
 /// (`KEPT_NEXT_TO_APP`, 67).
 #[cfg(target_os = "macos")]
@@ -708,7 +716,7 @@ cleanup() {
         keep=$entry status=68
       else
         [ -n "$keep" ] || keep=$entry
-        case "$status" in 68|71) ;; *) status=69;; esac
+        case "$status" in 68|71|72) ;; *) status=69;; esac
       fi
     done
   fi
@@ -742,7 +750,9 @@ case "$(ident "unpacked/$bundle")" in
 "$app") done=yes; exit 0;;
 "$new") ;;
 "") exit 71;;
-*) rn swap "unpacked/$bundle" "../$name"; exit 69;;
+*) rn swap "unpacked/$bundle" "../$name"
+  [ "$(ident "../$name")" = "$new" ] && exit 72
+  exit 69;;
 esac
 rn excl "../$name" previous.app
 there previous.app || exit 1
@@ -870,14 +880,15 @@ impl PrivilegedInstall {
     }
 
     /// Run the install as root once the user authorized it in a dialog that
-    /// says `prompt`.
-    fn run(&self, prompt: &str) -> Result<(), UpdateError> {
+    /// says `prompt`. Where root kept what it found in the app's place when
+    /// the update is in place all the same, as [`Self::outcome`] says.
+    fn run(&self, prompt: &str) -> Result<Vec<PathBuf>, UpdateError> {
         let output =
             osascript().arg("-e").arg(administrator_script(&self.command(), prompt)).output()?;
         if output.status.success() {
-            return Ok(());
+            return Ok(Vec::new());
         }
-        Err(self.failure(String::from_utf8_lossy(&output.stderr).trim()))
+        self.outcome(String::from_utf8_lossy(&output.stderr).trim())
     }
 
     /// The shell command that runs as root: [`PRIVILEGED_INSTALL`] in a fresh
@@ -910,19 +921,44 @@ impl PrivilegedInstall {
         )
     }
 
-    /// The error a failed run's `osascript` `message` stands for.
-    /// `AppleScript` ends it with the shell's exit status, or with
-    /// [`USER_CANCELED`], in parentheses: `0:40: execution error: … (65)`.
-    fn failure(&self, message: &str) -> UpdateError {
-        let status = message
+    /// What a failed run's `osascript` `message` stands for. The update is in
+    /// place with the entry root kept in its directory named
+    /// ([`INSTALLED_KEPT_IN_WORK_DIR`]), as after a swap that
+    /// [`settle_not_launched`] finds installed the update; any other status
+    /// is the [`Self::failure`].
+    fn outcome(&self, message: &str) -> Result<Vec<PathBuf>, UpdateError> {
+        if Self::exit_status(message) == Some(INSTALLED_KEPT_IN_WORK_DIR) {
+            // Should the message not parse, the installed app's directory is
+            // where the script's directory is.
+            return Ok(vec![Self::kept_in_work(message).unwrap_or_else(|| self.parent.clone())]);
+        }
+        Err(self.failure(message))
+    }
+
+    /// The shell's exit status a failed run's `message` ends with, or
+    /// [`USER_CANCELED`], in parentheses: `AppleScript` words it as
+    /// `0:40: execution error: … (65)`.
+    fn exit_status(message: &str) -> Option<i32> {
+        message
             .rsplit_once('(')
             .and_then(|(_, status)| status.strip_suffix(')'))
-            .and_then(|status| status.parse::<i32>().ok());
-        // The entry the script kept in its directory, which it names.
-        let kept_in_work = message
+            .and_then(|status| status.parse::<i32>().ok())
+    }
+
+    /// The entry the script kept in its directory, which `message` names
+    /// after [`KEPT_MARKER`].
+    fn kept_in_work(message: &str) -> Option<PathBuf> {
+        message
             .split_once(KEPT_MARKER)
             .and_then(|(_, rest)| rest.rsplit_once(" ("))
-            .map(|(kept, _)| PathBuf::from(kept));
+            .map(|(kept, _)| PathBuf::from(kept))
+    }
+
+    /// The error a failed run's `message` stands for when the update is not
+    /// in place.
+    fn failure(&self, message: &str) -> UpdateError {
+        let status = Self::exit_status(message);
+        let kept_in_work = Self::kept_in_work(message);
         let not_restored = |kept: PathBuf| UpdateError::PreviousAppNotRestored {
             kept,
             cause: Box::new(UpdateError::Install(
@@ -2224,8 +2260,11 @@ function run(argv) {{
         }
 
         /// The exchange brought another bundle in and the exchange back did
-        /// not happen: root keeps the bundle it cannot identify and names it
-        /// (69) instead of deleting it.
+        /// not happen: the update is at the app's path, which is an install,
+        /// not a refusal (72). Root keeps the bundle it cannot identify in
+        /// its directory and names it instead of deleting it, and the install
+        /// reports it kept aside, as the user context's swap does
+        /// (astro-plan-5n8pn).
         #[test]
         fn an_unidentified_entry_root_could_not_put_back_is_kept_and_named() {
             let dir = tempfile::tempdir().expect("tempdir");
@@ -2243,11 +2282,10 @@ function run(argv) {{
                 .expect("osascript");
 
             let message = String::from_utf8_lossy(&output.stderr);
-            assert!(message.trim_end().ends_with("(69)"), "{message}");
-            let UpdateError::AppReplaced { kept, .. } = install.failure(message.trim()) else {
-                panic!("{message}");
-            };
-            let [kept] = kept.as_slice() else { panic!("{kept:?}") };
+            assert!(message.trim_end().ends_with("(72)"), "{message}");
+            let kept_aside = install.outcome(message.trim()).expect("the update is installed");
+            let [kept] = kept_aside.as_slice() else { panic!("{kept_aside:?}") };
+            assert!(kept.starts_with(&install.parent), "in root's directory: {kept:?}");
             assert_eq!(version(kept), "foreign", "the other bundle is kept, not deleted");
             assert_eq!(version(&dir.path().join("moved-away.app")), "old");
             assert_eq!(version(&installed), "new");
@@ -2566,6 +2604,13 @@ function run(argv) {{
                 kept_in_work,
                 UpdateError::PreviousAppNotRestored { kept, .. } if kept == work
             ));
+            let unidentified = install.parent.join(".platevault-update.abc/unpacked/App.app");
+            let installed_kept = install
+                .outcome(&format!("0:65: execution error: kept:{} (72)", unidentified.display()));
+            assert_eq!(installed_kept.ok(), Some(vec![unidentified]), "installed, kept aside");
+            let unnamed = install.outcome("0:1: execution error: boom (72)");
+            assert_eq!(unnamed.ok(), Some(vec![install.parent.clone()]), "root's directory is there");
+            assert!(install.outcome("0:1: execution error: boom (69)").is_err(), "not installed");
             assert_eq!(version(&installed), "old", "mapping runs nothing");
         }
     }
