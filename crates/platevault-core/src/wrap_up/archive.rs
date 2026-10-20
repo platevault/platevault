@@ -360,6 +360,7 @@ impl Library {
                     draft: StorageItemDraft {
                         source: EntryEvidence {
                             path: NativePath::from_path(&from),
+                            root: locations.get(&asset.location_id).map(|at| at.path.clone()),
                             kind: EntryKind::File,
                             fingerprint: ObservationFingerprint {
                                 content_sha256: None,

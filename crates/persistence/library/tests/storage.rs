@@ -19,6 +19,7 @@ fn evidence(fx: &Fixture, relative: &str) -> EntryEvidence {
     let path = fx.root.join(relative);
     EntryEvidence {
         path: NativePath::from_path(&path),
+        root: None,
         kind: EntryKind::File,
         fingerprint: file_fingerprint(&path).unwrap(),
         sha256: Some(sha_of(&path)),

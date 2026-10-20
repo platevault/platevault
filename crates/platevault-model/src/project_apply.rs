@@ -53,6 +53,10 @@ pub enum ApplyBlocker {
     CalibrationUnsettled { session_id: Uuid, kinds: Vec<InputKind> },
     /// Two groups or two filter values would share one folder.
     FolderClash { detail: String },
+    /// An original's file name is not an entry name on every platform, such
+    /// as the Windows device name `CON.fits` (STO-IMP-AC-08). The original
+    /// keeps its name and nothing is placed under it.
+    EntryNameRefused { path: NativePath, name: String },
     /// `View (previous)/` holds leftovers the user hasn't reviewed (D-W110).
     LeftoversPending { count: u64 },
     /// `View (previous)/` still holds kept files. What the next outgoing View
@@ -163,6 +167,9 @@ impl ApplyBlocker {
                 format!("session {session_id}: choose its {kinds:?} first")
             }
             Self::FolderClash { detail } => detail.clone(),
+            Self::EntryNameRefused { path, name } => {
+                format!("{}: '{name}' can't be an entry name on every platform", path.display())
+            }
             Self::LeftoversPending { count } => {
                 format!("review the {count} file(s) left in View (previous)/ first")
             }

@@ -706,6 +706,7 @@ async fn a_restart_finishes_copies_and_finds_what_arrived_while_closed() {
         let fingerprint = inventory::probe_fingerprint(&source_path).unwrap();
         EntryEvidence {
             path: NativePath::from_path(&source_path),
+            root: None,
             kind: EntryKind::File,
             fingerprint,
             sha256: Some(digest(&source_path)),
@@ -777,6 +778,7 @@ async fn a_pass_read_before_a_copy_started_is_stale() {
     let fingerprint = inventory::probe_fingerprint(&source).unwrap();
     let evidence = EntryEvidence {
         path: NativePath::from_path(&source),
+        root: None,
         kind: EntryKind::File,
         fingerprint,
         sha256: Some(digest(&source)),

@@ -848,6 +848,20 @@ fn entry_names_are_plain_basenames() {
     }
 }
 
+/// STO-IMP-AC-08: a Windows device name is no entry name on any platform,
+/// with or without an extension and in any case; a name that only starts
+/// with one is.
+#[test]
+fn entry_names_refuse_windows_device_names() {
+    let master = EntryInput::Master { master_id: id(900) };
+    for reserved in ["CON.fits", "con.fits", "COM1.json", "NUL", "aux.tar.xisf", "LPT9.fit"] {
+        assert!(EntryName::new(master, reserved).is_err(), "{reserved:?}");
+    }
+    for plain in ["CONSOLE.fits", "Light_CON.fits", "COM10.fits"] {
+        assert!(EntryName::new(master, plain).is_ok(), "{plain:?}");
+    }
+}
+
 #[test]
 fn the_apply_journal_moves_forward_and_settles_only_where_its_outcome_is_true() {
     let order = ApplyPhase::ORDER;
@@ -973,6 +987,7 @@ fn a_processing_master_is_offered_as_a_master_with_its_digest() {
 fn evidence(file: &str) -> EntryEvidence {
     EntryEvidence {
         path: path(file),
+        root: None,
         kind: EntryKind::File,
         fingerprint: fingerprint(60),
         sha256: Some(SHA.into()),

@@ -536,6 +536,7 @@ fn library_copy(
     }
     Ok(EntryEvidence {
         path: NativePath::from_path(&path),
+        root: Some(location.path.clone()),
         kind: EntryKind::File,
         fingerprint: ObservationFingerprint { content_sha256: None, ..copy.fingerprint.clone() },
         sha256: Some(sha256),

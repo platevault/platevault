@@ -23,6 +23,10 @@ CREATE TABLE IF NOT EXISTS storage_items (
     op_id TEXT NOT NULL REFERENCES storage_operations (id),
     seq INTEGER NOT NULL CHECK (seq >= 0),
     path BLOB NOT NULL,
+    -- A catalog source's registered location root, as a native key: custody
+    -- reaches `path` from it without following a link. NULL for an entry
+    -- checked by its path alone.
+    root BLOB,
     -- Entry kind (file, or link with its target text) and no-follow fingerprint.
     identity TEXT NOT NULL,
     sha256 TEXT CHECK (sha256 IS NULL OR length(sha256) = 64),

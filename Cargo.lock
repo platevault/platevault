@@ -4892,6 +4892,7 @@ name = "platevault_model"
 version = "0.1.0"
 dependencies = [
  "metadata_core",
+ "safe-filename",
  "schemars 1.2.1",
  "serde",
  "serde_json",
