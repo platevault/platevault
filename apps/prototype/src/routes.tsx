@@ -41,7 +41,7 @@ import { SessionReview } from "@/features/v5/d-review/review"
 import { ActivityPage } from "@/features/v5/e-targets-plan-settings/activity"
 import { CalibrationPage } from "@/features/v5/e-targets-plan-settings/calibration"
 import { CalibrationProcessPage } from "@/features/v5/e-targets-plan-settings/calibration-process"
-import { AddFilterToRigDialog, EquipmentSettingsPage } from "@/features/v5/e-targets-plan-settings/settings-equipment"
+import { AddFilterToRig, EquipmentSettingsPage } from "@/features/v5/e-targets-plan-settings/settings-equipment"
 import { GoalTemplatesSettingsPage } from "@/features/v5/e-targets-plan-settings/settings-goal-templates"
 import { NamingSettingsPage } from "@/features/v5/e-targets-plan-settings/settings-naming"
 import { TargetPage } from "@/features/v5/e-targets-plan-settings/target"
@@ -118,7 +118,7 @@ const planRoute = createRoute({
 // Its Duplicates facet's review dialog (`?duplicates=review`, P-STO2) is injected here.
 const sessionsRoute = page("/sessions", () => <SessionsPage duplicatesReview={DuplicatesReview} />)
 // `?step=target|rig|review` is session intake; its Review step body is the review workspace (P4), injected here.
-const sessionRoute = page("/sessions/$sessionId", stepFlowOr(SessionPage, () => <SessionIntakePage review={SessionReview} addFilter={AddFilterToRigDialog} />))
+const sessionRoute = page("/sessions/$sessionId", stepFlowOr(SessionPage, () => <SessionIntakePage review={SessionReview} addFilter={AddFilterToRig} />))
 const calibrationRoute = page("/calibration", CalibrationPage)
 const calibrationProcessRoute = page("/calibration/processes/$processId/$step", CalibrationProcessPage)
 const storageRoute = createRoute({

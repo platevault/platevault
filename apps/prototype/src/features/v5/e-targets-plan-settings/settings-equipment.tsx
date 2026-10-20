@@ -19,6 +19,7 @@ import { useNavigate, useSearch } from "@tanstack/react-router"
 import { Filter as FilterIcon } from "lucide-react"
 import { useState } from "react"
 import { useMessages } from "@/app/preferences"
+import { onSuccess } from "@/components/app/actions"
 import type { Action, AddFilterToRigProps, Column, MenuItem } from "@/components/app/contracts"
 import { EmptyState } from "@/components/app/feedback"
 import { ChoiceListField, TextField } from "@/components/app/fields"
@@ -26,8 +27,9 @@ import { blockedByErrors, type FieldErrors, FormDialog, useDialogForm } from "@/
 import { ListSection, SettingsPage } from "@/components/templates/settings-page"
 import { liveLightSessions, sessionRigId, unknownFilterValues } from "@/domain/derive"
 import { BANDS } from "@/domain/labels"
-import type { Band, Filter, OpticalTrain } from "@/domain/types"
+import type { Band, Catalog, Filter, OpticalTrain } from "@/domain/types"
 import { formatCount } from "@/lib/format"
+import type { Messages } from "@/lib/i18n"
 import type { SearchParams } from "@/routes"
 import { useStore } from "@/store/core"
 import { CamerasSection, RigsSection, RigsUsing, recordMenu, ReducersSection, TelescopesSection } from "./equipment-records"
@@ -114,10 +116,46 @@ function unknownValueDraft(value: string, rig: OpticalTrain): FilterDraft {
   return { filter: null, prefill: { name: value, bands: guessBands(value) }, onRig: rig }
 }
 
-/** "Add {value} to {rig}" from a session (D-W127, PLAN-EQ-FR-04): the same dialog as Unknown filters' Add filter, injected by the route. */
-export function AddFilterToRigDialog({ request, onClose, focusAfterConfirm }: AddFilterToRigProps) {
-  const rig = useStore((s) => (request ? s.catalog.opticalTrains[request.rigId] : undefined))
-  return <FilterDialog draft={request && rig ? unknownValueDraft(request.value, rig) : null} onClose={onClose} focusAfterConfirm={focusAfterConfirm} />
+/** Filter records that already match a FILTER value by name or match, case-insensitively, whichever rigs carry them. */
+function filtersMatching(catalog: Catalog, value: string): Filter[] {
+  const key = value.toLowerCase()
+  return Object.values(catalog.filters).filter((f) => [f.name, ...f.matches].some((x) => x.toLowerCase() === key))
+}
+
+/**
+ * What a FILTER value no filter of `rig` matches offers (PLAN-EQ-AC-03): "Add
+ * {filter}" for each record that already matches it, which reuses that record
+ * instead of a duplicate, then a new filter (`newLabel`) through the dialog.
+ */
+function unknownValueActions(m: Messages, catalog: Catalog, rig: OpticalTrain, value: string, newLabel: string, onAdd: (draft: FilterDraft) => void, afterAdd: () => void = () => {}): Action[] {
+  const known = filtersMatching(catalog, value)
+  return [
+    ...known.map((f): Action => ({ id: `add-${f.id}`, label: m.equipment_add_value({ value: filterName(f, known) }), run: () => onSuccess(addFilterToRig(rig.id, f.id), afterAdd) })),
+    { id: "add-filter", label: newLabel, opensDialog: true, run: () => onAdd(unknownValueDraft(value, rig)) },
+  ]
+}
+
+/** "Add {value} to {rig}" in a session (D-W127, PLAN-EQ-FR-04): the same offers and dialog as Unknown filters, injected by the route. */
+export function AddFilterToRig({ unknown, children, focusAfterAdd }: AddFilterToRigProps) {
+  const m = useMessages()
+  const catalog = useStore((s) => s.catalog)
+  const [draft, setDraft] = useState<FilterDraft | null>(null)
+  const rig = unknown ? catalog.opticalTrains[unknown.rigId] : undefined
+  // Reusing a record commits at once and removes its button, so focus moves the way the dialog's does.
+  const focusTarget = () => {
+    const target = focusAfterAdd()
+    if (!target) return
+    if (!target.hasAttribute("tabindex")) target.tabIndex = -1
+    target.focus()
+  }
+  const actions = unknown && rig ? unknownValueActions(m, catalog, rig, unknown.value, m.equipment_add_value_to_rig({ value: unknown.value, rig: rig.name }), setDraft, focusTarget) : []
+  return (
+    <>
+      {children(actions)}
+      {/* Mounted while the value is known again, so the closing dialog can still move focus. */}
+      <FilterDialog draft={draft} onClose={() => setDraft(null)} focusAfterConfirm={focusAfterAdd} />
+    </>
+  )
 }
 
 /** Every filter record: name, bands, the FILTER values it matches and the rigs that carry it. */
@@ -155,8 +193,6 @@ interface UnknownValue {
   rig: OpticalTrain
   value: string
   sessions: number
-  /** Filter records that already match the value, on other rigs. */
-  known: Filter[]
 }
 
 /** FILTER values that match no filter of their rig, each offering to add a filter for it to that rig. Hidden while there are none. */
@@ -169,14 +205,10 @@ function UnknownFiltersSection({ onAdd }: { onAdd: (draft: FilterDraft) => void 
       rig,
       value,
       sessions: sessions.filter((s) => sessionRigId(s) === rig.id && s.channel === value).length,
-      known: Object.values(catalog.filters).filter((f) => [f.name, ...f.matches].some((x) => x.toLowerCase() === value.toLowerCase())),
     })),
   )
   if (rows.length === 0) return null
-  const actionsFor = (u: UnknownValue): Action[] => [
-    ...u.known.map((f): Action => ({ id: `add-${f.id}`, label: m.equipment_add_value({ value: filterName(f, u.known) }), run: () => addFilterToRig(u.rig.id, f.id) })),
-    { id: "add-filter", label: m.equipment_add_filter(), opensDialog: true, run: () => onAdd(unknownValueDraft(u.value, u.rig)) },
-  ]
+  const actionsFor = (u: UnknownValue): Action[] => unknownValueActions(m, catalog, u.rig, u.value, m.equipment_add_filter(), onAdd)
   const columns: Column<UnknownValue>[] = [
     { id: "value", header: m.equipment_filter_value(), rowHeader: true, truncate: true, sortValue: (u) => u.value, cell: (u) => u.value },
     { id: "rig", header: m.project_col_rig(), truncate: true, sortValue: (u) => u.rig.name, cell: (u) => u.rig.name },

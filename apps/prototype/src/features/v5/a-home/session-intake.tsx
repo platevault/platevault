@@ -16,9 +16,10 @@
  *   into Target, with its moves in the confirm). A Target associated by
  *   agreeing pointing already counts as settled (`sessionTargetId`).
  * - Rig: the rig select with its header evidence. A FILTER value the
- *   session's confirmed rig does not list shows as unknown, with "Add {value}
- *   to {rig}": Settings › Equipment's filter dialog (injected by the route,
- *   D-W127, PLAN-EQ-FR-04), prefilled with the bands it likely passes.
+ *   session's confirmed rig does not list shows as unknown, with Settings ›
+ *   Equipment's offers (injected by the route, D-W127, PLAN-EQ-FR-04): "Add
+ *   {filter}" for a matching record of another rig, which it reuses, and "Add
+ *   {value} to {rig}", the filter dialog prefilled with the likely bands.
  * - Both list the corrections intake recorded, recorded beside corrected (C15).
  * - Review: the review workspace, hosted as the step body (`review`, injected
  *   by the route so features stay apart). Finish review needs 0 Unreviewed,
@@ -64,7 +65,7 @@ import { projectsHolding } from "./session-model"
 /** The intake Review step's body: the review workspace for one session (`SessionReview`, injected by the route). */
 export type SessionReviewBody = ComponentType<SessionReviewProps>
 
-/** The Rig step's "Add {value} to {rig}" dialog (`AddFilterToRigDialog` of Settings › Equipment, injected by the route; D-W127). */
+/** The Rig step's offers for an unknown FILTER value (`AddFilterToRig` of Settings › Equipment, injected by the route; D-W127). */
 export type AddFilterToRigBody = ComponentType<AddFilterToRigProps>
 
 const TARGET_FIELDS: CorrectionField[] = ["target"]
@@ -279,7 +280,6 @@ const RIG_SECTION = "session-rig"
 function RigStep({ state, session, rigId, onRig, current, addFilter: AddFilter }: { state: PrototypeState; session: Session; rigId: OpticalTrainId | null; onRig: (id: OpticalTrainId) => void; current: boolean; addFilter: AddFilterToRigBody }) {
   const m = useMessages()
   const follow = useFollowLink()
-  const [request, setRequest] = useState<AddFilterToRigProps["request"]>(null)
   const rigs = Object.values(state.catalog.opticalTrains).sort((a, b) => a.name.localeCompare(b.name))
   const rig = rigId ? state.catalog.opticalTrains[rigId] : undefined
   const channel = session.channel
@@ -288,13 +288,17 @@ function RigStep({ state, session, rigId, onRig, current, addFilter: AddFilter }
   const unknownFilter = confirmedRig !== undefined && channel !== null && rigFilterFor(state.catalog, confirmedRig, channel) === null ? channel : null
   const changed = rig !== undefined && (sessionRigId(session) !== rig.id || session.equipment.status !== "confirmed")
   const confirm: Action | null = !current && changed && rig ? { id: "confirm-rig", label: m.session_confirm_rig(), icon: Check, run: () => confirmRig(session.id, rig.id, session.revision) } : null
-  // D-W127: the same filter dialog as Settings › Equipment, prefilled with the value's guessed bands; the value stays unknown until it is added.
-  const add: Action | null =
-    unknownFilter !== null && confirmedRig ? { id: "add-filter-to-rig", label: m.equipment_add_value_to_rig({ value: unknownFilter, rig: confirmedRig.name }), opensDialog: true, run: () => setRequest({ value: unknownFilter, rigId: confirmedRig.id }) } : null
   const equipment: Action = { id: "equipment", label: m.session_open_equipment(), icon: Settings2, run: () => follow({ to: "/settings/equipment" }) }
+  // D-W127: Settings › Equipment's offers for the unknown value, an existing matching filter or a new one; the value stays unknown until one is added.
+  // Adding removes the prompt, so focus lands on the Rig heading, above the filter it now names.
+  const actions = (
+    <AddFilter unknown={unknownFilter !== null && confirmedRig ? { value: unknownFilter, rigId: confirmedRig.id } : null} focusAfterAdd={() => document.getElementById(`${RIG_SECTION}-title`)}>
+      {(add) => <ActionBar actions={[...(confirm ? [confirm] : []), ...add, equipment]} />}
+    </AddFilter>
+  )
   return (
     <>
-      <Section id={RIG_SECTION} title={m.sessions_column_rig()} actions={<ActionBar actions={[confirm, add, equipment].filter((a): a is Action => a !== null)} />}>
+      <Section id={RIG_SECTION} title={m.sessions_column_rig()} actions={actions}>
         <SelectField
           label={m.sessions_column_rig()}
           value={rigId ?? NO_RIG}
@@ -318,8 +322,6 @@ function RigStep({ state, session, rigId, onRig, current, addFilter: AddFilter }
         <EvidenceList evidence={session.equipment.evidence} caption={m.session_rig_evidence({ name: sessionLongLabel(m, session) })} />
       </Section>
       <Corrections session={session} fields={RIG_FIELDS} />
-      {/* Adding removes the prompt that opened the dialog, so focus lands on the Rig heading, above the filter it now names. */}
-      <AddFilter request={request} onClose={() => setRequest(null)} focusAfterConfirm={() => document.getElementById(`${RIG_SECTION}-title`)} />
     </>
   )
 }
