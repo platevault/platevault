@@ -16,8 +16,8 @@ use uuid::Uuid;
 
 use crate::{
     ApplyOutcome, EntryEvidence, EntryPlacement, EntrySource, ForeignItem, InputKind, ItemReason,
-    NativePath, PinHealth, PreviousItem, ProjectLifecycle, ProjectOperationKind, Revision,
-    ViewMode,
+    NativePath, PinHealth, PreviousItem, ProjectLifecycle, ProjectOperationKind, ReasonCode,
+    Revision, ViewMode,
 };
 
 /// One reason Apply can't run now. The sheet lists every one; Apply refuses
@@ -71,6 +71,10 @@ pub enum ApplyBlocker {
         field: String,
         refusal: PatchRefusal,
     },
+    /// An entry in `View/` or `View (previous)/`, or that folder itself,
+    /// can't be read, or the folder is a link: the sheet can't account for
+    /// it, so Apply refuses before it starts (VSEL-FR-20, STO-FR-05/16).
+    ViewUnreadable { path: NativePath, reason: ReasonCode },
 }
 
 /// Why no isolated patched copy can carry a recorded correction
@@ -178,6 +182,9 @@ impl ApplyBlocker {
                 path.display(),
                 refusal.describe()
             ),
+            Self::ViewUnreadable { path, .. } => {
+                format!("{} can't be read, so Apply can't account for it", path.display())
+            }
         }
     }
 }

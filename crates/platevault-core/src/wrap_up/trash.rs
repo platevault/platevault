@@ -351,42 +351,57 @@ fn offers(
         }
     }
 
-    // Processing files.
+    // Processing files: a `Processing/` that is a link, or holds anything
+    // that can't be read, is refused as such, never offered in part.
     let mut protected_masters = Vec::new();
     if let Some(project) = project_folder(basis.parent.as_ref(), &basis.name)? {
         let processing = project.join(PROCESSING_FOLDER);
-        for relative in files::files_below(&processing) {
-            let path = processing.join(&relative);
-            if protection.protects(&path) {
-                protected_masters.push(NativePath::from_path(&path));
-                continue;
-            }
-            match processing_file(&path, trash) {
-                Ok(evidence) => {
-                    planned.entry(TrashGroup::ProcessingFiles).or_default().push(Planned {
-                        candidate: TrashCandidate {
-                            id: None,
-                            files: vec![evidence.path.clone()],
-                            size_bytes: evidence.fingerprint.size_bytes,
-                            kept: None,
-                        },
-                        items: vec![TrashItemDraft {
-                            group: TrashGroup::ProcessingFiles,
-                            item_id: None,
-                            asset_id: None,
-                            draft: crate::StorageItemDraft {
-                                source: evidence,
-                                relied_on: Vec::new(),
-                                destination: None,
-                            },
-                        }],
-                    });
+        match files::files_below(&processing) {
+            Ok(found) => {
+                for relative in found {
+                    let path = processing.join(&relative);
+                    if protection.protects(&path) {
+                        protected_masters.push(NativePath::from_path(&path));
+                        continue;
+                    }
+                    match processing_file(&path, trash) {
+                        Ok(evidence) => {
+                            planned.entry(TrashGroup::ProcessingFiles).or_default().push(
+                                Planned {
+                                    candidate: TrashCandidate {
+                                        id: None,
+                                        files: vec![evidence.path.clone()],
+                                        size_bytes: evidence.fingerprint.size_bytes,
+                                        kept: None,
+                                    },
+                                    items: vec![TrashItemDraft {
+                                        group: TrashGroup::ProcessingFiles,
+                                        item_id: None,
+                                        asset_id: None,
+                                        draft: crate::StorageItemDraft {
+                                            source: evidence,
+                                            relied_on: Vec::new(),
+                                            destination: None,
+                                        },
+                                    }],
+                                },
+                            );
+                        }
+                        Err(reason) => {
+                            refused.entry(TrashGroup::ProcessingFiles).or_default().push(
+                                TrashRefusal { id: None, path: NativePath::from_path(&path), reason },
+                            );
+                        }
+                    }
                 }
-                Err(reason) => refused
-                    .entry(TrashGroup::ProcessingFiles)
-                    .or_default()
-                    .push(TrashRefusal { id: None, path: NativePath::from_path(&path), reason }),
             }
+            Err(unreadable) => refused.entry(TrashGroup::ProcessingFiles).or_default().extend(
+                unreadable.into_iter().map(|(path, reason)| TrashRefusal {
+                    id: None,
+                    path: NativePath::from_path(&path),
+                    reason,
+                }),
+            ),
         }
     }
 
