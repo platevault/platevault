@@ -1730,6 +1730,12 @@ export type ApplyBlocker =
 { blocker: "calibration_unsettled"; sessionId: string; kinds: InputKind[] } | 
 /**  Two groups or two filter values would share one folder. */
 { blocker: "folder_clash"; detail: string } | 
+/**
+ *  An original's file name is not an entry name on every platform, such
+ *  as the Windows device name `CON.fits` (STO-IMP-AC-08). The original
+ *  keeps its name and nothing is placed under it.
+ */
+{ blocker: "entry_name_refused"; path: NativePathWire; name: string } | 
 /**  `View (previous)/` holds leftovers the user hasn't reviewed (D-W110). */
 { blocker: "leftovers_pending"; count: number } | 
 /**
@@ -3033,6 +3039,13 @@ export type EntryEvidence = EntryEvidence_Serialize | EntryEvidence_Deserialize;
 export type EntryEvidence_Deserialize = {
 	/**  Absolute path of the entry itself. */
 	path: NativePathWire,
+	/**
+	 *  The registered location root a catalog source lies below. Every read
+	 *  and check reaches the entry from it one folder at a time, never
+	 *  following a link, so a folder swapped for a link after indexing is
+	 *  refused (STO-FR-07). `None` for an entry checked by its path alone.
+	 */
+	root?: NativePathWire | null,
 	kind: EntryKind,
 	/**  No-follow identity, size and modification time; never a content digest. */
 	fingerprint: ObservationFingerprint_Deserialize,
@@ -3044,6 +3057,13 @@ export type EntryEvidence_Deserialize = {
 export type EntryEvidence_Serialize = {
 	/**  Absolute path of the entry itself. */
 	path: NativePathWire,
+	/**
+	 *  The registered location root a catalog source lies below. Every read
+	 *  and check reaches the entry from it one folder at a time, never
+	 *  following a link, so a folder swapped for a link after indexing is
+	 *  refused (STO-FR-07). `None` for an entry checked by its path alone.
+	 */
+	root: NativePathWire | null,
 	kind: EntryKind,
 	/**  No-follow identity, size and modification time; never a content digest. */
 	fingerprint: ObservationFingerprint_Serialize,
@@ -4585,7 +4605,7 @@ export type MasterProvenance_Serialize = {
 };
 
 /**  A stable category for a failed frame measurement. */
-export type MeasurementFailureCode = "unsupported_format" | "malformed_data" | "source_unavailable";
+export type MeasurementFailureCode = "unsupported_format" | "malformed_data" | "multichannel_unqualified";
 
 /**  A measurement method and its version. */
 export type MeasurementMethod = {
@@ -6189,7 +6209,12 @@ export type RetireAsset = {
 /**  A current blocker to retiring a location. */
 export type RetireBlock = 
 /**  A pinned calibration file is held at the location. */
-{ reason: "pinned_calibration"; sessionId: string; sessionName: string; kinds: InputKind[]; projects: RetirePinProject[] };
+{ reason: "pinned_calibration"; sessionId: string; 
+/**
+ *  Internal capture-grouping key, not a display label.
+ *  The UI must resolve and render the session's display label.
+ */
+captureKey: string; kinds: InputKind[]; projects: RetirePinProject[] };
 
 /**
  *  The Project holding a session whose pinned calibration file is at a location
