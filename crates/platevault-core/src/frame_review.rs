@@ -32,13 +32,13 @@ use crate::{
     reasons, AppliedStretch, Asset, Availability, CfaEvidence, CfaSource, ConfirmedImport,
     CutoutRequest, DecodedBasis, FrameDetail, FramePreview, FrameStars, FrameState, ImageFormat,
     ImportBasis, ImportCandidate, ImportFormat, ImportReview, ImportSource, ImportedValue,
-    InputBasis, LibraryError, MaskCounts, MeasurementMethod, MeasurementOutcome,
-    MeasurementProgress, MeasurementRecord, MeasurementRun, MetricId, MetricValue, NativePath,
-    ObservationFingerprint, PlaneBasis, PlanePreview, PlaneSummary, PreviewTile, RecordValidity,
-    RegionsRequest, RowMatch, RowResolution, RunIssue, RunState, SampleCategory, SampleFormat,
-    SampleNumber, SampleRequest, SampleValue, SaturationBasis, SaturationSource, Scaling,
-    StarCutouts, StarModel, StarReason, StarRecord, StarState, StarWarning, StoredNumber, Stretch,
-    StretchKind, TileRequest, Units,
+    InputBasis, LibraryError, MaskCounts, MeasurementFailureCode, MeasurementFailureParameters,
+    MeasurementMethod, MeasurementOutcome, MeasurementProgress, MeasurementRecord, MeasurementRun,
+    MetricId, MetricValue, NativePath, ObservationFingerprint, PlaneBasis, PlanePreview,
+    PlaneSummary, PreviewTile, RecordValidity, RegionsRequest, RowMatch, RowResolution, RunIssue,
+    RunState, SampleCategory, SampleFormat, SampleNumber, SampleRequest, SampleValue,
+    SaturationBasis, SaturationSource, Scaling, StarCutouts, StarModel, StarReason, StarRecord,
+    StarState, StarWarning, StoredNumber, Stretch, StretchKind, TileRequest, Units,
 };
 
 mod review_list;
@@ -818,10 +818,12 @@ impl Shared {
                 self.catalog.record_measurement(run, &record).await?
             }
             Err(error) => {
+                let code = error.code();
+                tracing::warn!(%error, error_code = code.as_str(), asset = %queued.asset, "frame measurement source unavailable");
                 let issue = RunIssue {
                     asset_id: queued.asset,
-                    kind: error.code().as_str().into(),
-                    message: error.to_string(),
+                    kind: code,
+                    parameters: MeasurementFailureParameters::default(),
                 };
                 self.catalog.record_run_issue(run, &issue).await?
             }
@@ -1128,6 +1130,18 @@ impl PreviewCache {
 
 // ---------------------------------------------------------------------------
 // Pixel crate to wire model
+fn failed_outcome(error: &PixelError) -> MeasurementOutcome {
+    let code = match error {
+        PixelError::Unsupported(_) => MeasurementFailureCode::UnsupportedFormat,
+        PixelError::Io(_) => MeasurementFailureCode::SourceUnavailable,
+        PixelError::Malformed(_) | PixelError::InvalidRegion(_) => {
+            MeasurementFailureCode::MalformedData
+        }
+        PixelError::Canceled => MeasurementFailureCode::MalformedData,
+    };
+    tracing::warn!(%error, code = ?code, "frame measurement failed");
+    MeasurementOutcome::Failed { code, parameters: MeasurementFailureParameters::default() }
+}
 // ---------------------------------------------------------------------------
 
 fn pixel_error(error: PixelError) -> LibraryError {
@@ -1138,14 +1152,6 @@ fn pixel_error(error: PixelError) -> LibraryError {
         PixelError::InvalidRegion(region) => LibraryError::InvalidInput(region),
         PixelError::Canceled => LibraryError::Canceled,
     }
-}
-
-fn failed_outcome(error: &PixelError) -> MeasurementOutcome {
-    let reason = match error {
-        PixelError::Unsupported(_) => reasons::UNSUPPORTED_FORMAT,
-        _ => reasons::MALFORMED_DATA,
-    };
-    MeasurementOutcome::Failed { reason: reason.to_owned(), message: error.to_string() }
 }
 
 const fn container_of(format: ImageFormat) -> Option<px::Container> {
@@ -1248,8 +1254,10 @@ const fn plane_units(units: measure::PlaneUnits) -> Units {
 
 fn outcome(measurement: Measurement, method: &MeasurementMethod) -> MeasurementOutcome {
     match measurement {
-        Measurement::Failed { reason, message } => {
-            MeasurementOutcome::Failed { reason: reason.to_owned(), message }
+        Measurement::Failed { message, .. } => {
+            let code = MeasurementFailureCode::MalformedData;
+            tracing::warn!(%message, code = ?code, "frame measurement failed");
+            MeasurementOutcome::Failed { code, parameters: MeasurementFailureParameters::default() }
         }
         Measurement::Measured(frame) => MeasurementOutcome::Measured {
             metrics: metrics(&frame, method),

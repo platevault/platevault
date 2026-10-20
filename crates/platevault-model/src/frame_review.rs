@@ -7,6 +7,8 @@
 //! non-finite sample is the string `NaN`, `Infinity` or `-Infinity` through
 //! [`sample_number`], and an unknown value is `null` with a reason.
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use uuid::Uuid;
 
@@ -539,6 +541,30 @@ pub struct StarRecord {
     pub hfr_px: Option<f64>,
 }
 
+/// A stable category for a failed frame measurement.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
+pub enum MeasurementFailureCode {
+    UnsupportedFormat,
+    MalformedData,
+    SourceUnavailable,
+}
+
+impl MeasurementFailureCode {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::UnsupportedFormat => "unsupported_format",
+            Self::MalformedData => "malformed_data",
+            Self::SourceUnavailable => "source_unavailable",
+        }
+    }
+}
+
+/// Safe structured localisation data; raw diagnostics never cross IPC.
+pub type MeasurementFailureParameters = BTreeMap<String, String>;
+
 /// The outcome of measuring one frame.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "outcome", rename_all = "snake_case")]
@@ -551,8 +577,10 @@ pub enum MeasurementOutcome {
         /// Only the brightest candidates were kept.
         truncated: bool,
     },
-    /// The method's reason for the whole frame.
-    Failed { reason: String, message: String },
+    Failed {
+        code: MeasurementFailureCode,
+        parameters: MeasurementFailureParameters,
+    },
 }
 
 /// A cached measurement of one asset.
@@ -637,9 +665,10 @@ pub enum RunState {
 #[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct RunIssue {
     pub asset_id: Uuid,
-    /// The failure's `LibraryErrorCode` wire string.
-    pub kind: String,
-    pub message: String,
+    /// The stable machine code for the failure.
+    pub kind: crate::LibraryErrorCode,
+    /// Safe structured display parameters; raw diagnostic text is log-only.
+    pub parameters: MeasurementFailureParameters,
 }
 
 /// Run counters.
@@ -1322,9 +1351,9 @@ impl FrameState {
                     });
                     state.values.clone_from(metrics);
                 }
-                MeasurementOutcome::Failed { reason, .. } => {
+                MeasurementOutcome::Failed { code, .. } => {
                     state.state = FrameStateKind::Failed;
-                    state.reason = Some(reason.clone());
+                    state.reason = Some(code.as_str().to_owned());
                 }
             }
             return state;

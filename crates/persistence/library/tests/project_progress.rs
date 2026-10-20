@@ -275,8 +275,8 @@ fn record(
     fingerprint.content_sha256 = Some(sha_of(path));
     let outcome = if failed {
         MeasurementOutcome::Failed {
-            reason: reasons::UNSUPPORTED_FORMAT.into(),
-            message: "FITS tile compression".into(),
+            code: platevault_model::MeasurementFailureCode::UnsupportedFormat,
+            parameters: Default::default(),
         }
     } else {
         let value = match fwhm {
