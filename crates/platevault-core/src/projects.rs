@@ -32,9 +32,10 @@ use crate::project_groups::{
     SessionToPlace,
 };
 use crate::{
-    AdmissionBasis, AdmissionRefusal, FramingEvidence, GroupKeywords, GroupName, GroupOrigin,
-    LibraryError, OpticsSignature, PendingChange, ProjectDesired, ProjectGroup, ProjectSuggestion,
-    ProjectViewSettings, ReferenceKind, Revision, SessionPlacement,
+    AdmissionBasis, AdmissionRefusal, ExpectedSession, FramingEvidence, GroupKeywords, GroupName,
+    GroupOrigin, LibraryError, OpticsSignature, PendingChange, Project, ProjectAdded,
+    ProjectDesired, ProjectGroup, ProjectInput, ProjectSuggestion, ProjectViewSettings,
+    ReferenceKind, Revision, SessionPlacement,
 };
 
 /// One session to add, at the admission basis the user saw (`None` takes
@@ -90,7 +91,8 @@ impl Library {
             .into_iter()
             .map(|(group_id, folder)| GroupFolder { group_id, folder })
             .collect();
-        let panels = desired.groups.iter().filter_map(crate::project_groups::panel_outline).collect();
+        let panels =
+            desired.groups.iter().filter_map(crate::project_groups::panel_outline).collect();
         let pending = catalog.project_pending_changes(id).await?;
         let suggestions = catalog.project_suggestions(id).await?;
         Ok(ProjectInputs { desired, keywords, folders, pending, suggestions, panels })
@@ -115,7 +117,71 @@ impl Library {
     ) -> Result<ProjectDesired, LibraryError> {
         let catalog = self.catalog();
         let desired = catalog.project_desired(id).await?;
-        let margins = catalog.workflow_settings().await?.0.framing;
+        let plan = self.placement(&desired.groups, sessions, group).await?;
+        catalog.add_project_sessions(id, expected, &plan.groups, &plan.adds).await
+    }
+
+    /// Add to Project from a session row (LIB-FR-17, PRJ-FR-08, PRJ-FR-19):
+    /// the session joins whole, placed as [`Self::add_project_sessions`]
+    /// places it, with its Target as a subject and its rig when the Project
+    /// lacks them, in one Project revision. Only a session whose calibration
+    /// is settled joins. It commits only on the session and Project revision
+    /// the user previewed (`Catalog::preview_project_addition`).
+    ///
+    /// # Errors
+    /// `InvalidInput` naming every admission blocker, such as the calibration
+    /// kinds to choose first, or for a session with no confirmed rig;
+    /// otherwise as `Catalog::add_session_to_project`.
+    pub async fn add_session_to_project(
+        &self,
+        session: &ExpectedSession,
+        project_id: Uuid,
+        expected_revision: Revision,
+    ) -> Result<ProjectAdded, LibraryError> {
+        let catalog = self.catalog();
+        let desired = catalog.project_desired(project_id).await?;
+        let add = [SessionToAdd { session_id: session.session_id, expected: None }];
+        let plan = self.placement(&desired.groups, &add, None).await?;
+        catalog
+            .add_session_to_project(
+                session,
+                project_id,
+                expected_revision,
+                &plan.groups,
+                &plan.adds,
+            )
+            .await
+    }
+
+    /// Create Project from a session row (LIB-FR-17, PRJ-FR-01): the Project
+    /// `input` describes, as `Catalog::project_prefill` prefills it, holding
+    /// the session in a new group of its rig, all at revision 1. Like Add to
+    /// Project it holds only a session whose calibration is settled;
+    /// otherwise no Project is saved.
+    ///
+    /// # Errors
+    /// As [`Self::add_session_to_project`], and as `Catalog::create_project`
+    /// for the input.
+    pub async fn create_project_from_session(
+        &self,
+        input: &ProjectInput,
+        session: &ExpectedSession,
+    ) -> Result<Project, LibraryError> {
+        let add = [SessionToAdd { session_id: session.session_id, expected: None }];
+        let plan = self.placement(&[], &add, None).await?;
+        self.catalog().create_project_with_session(input, session, &plan.groups, &plan.adds).await
+    }
+
+    /// Where `sessions` go in a Project with `groups`: into `group` when
+    /// given, else as [`place_sessions`] places them, with every group's
+    /// folder still distinct.
+    async fn placement(
+        &self,
+        groups: &[ProjectGroup],
+        sessions: &[SessionToAdd],
+        group: Option<Uuid>,
+    ) -> Result<PlacementPlan, LibraryError> {
+        let margins = self.catalog().workflow_settings().await?.0.framing;
         let mut places = Vec::with_capacity(sessions.len());
         for session in sessions {
             places.push(self.session_to_place(session).await?);
@@ -133,16 +199,12 @@ impl Library {
                     })
                     .collect(),
             },
-            None => place_sessions(&desired, &places, &margins)?,
+            None => place_sessions(groups, &places, &margins)?,
         };
         require_distinct_folders(
-            desired
-                .groups
-                .iter()
-                .map(|group| &group.name)
-                .chain(plan.groups.iter().map(|g| &g.name)),
+            groups.iter().map(|group| &group.name).chain(plan.groups.iter().map(|g| &g.name)),
         )?;
-        catalog.add_project_sessions(id, expected, &plan.groups, &plan.adds).await
+        Ok(plan)
     }
 
     /// Create a group on `rig_id`, named by the user, and move `sessions` of

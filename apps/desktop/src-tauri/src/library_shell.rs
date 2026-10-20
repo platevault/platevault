@@ -121,6 +121,7 @@ macro_rules! library_commands {
             // session filters (064 LIB-FR-17, 065 PRJ-FR-19)
             crate::commands::session_filters::library_session_filter_counts,
             crate::commands::session_filters::project_prefill_from_session,
+            crate::commands::session_filters::project_create_from_session,
             crate::commands::session_filters::project_preview_session_addition,
             crate::commands::session_filters::project_add_session,
             // projects

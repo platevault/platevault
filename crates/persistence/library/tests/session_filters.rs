@@ -16,14 +16,15 @@ mod support;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
-use membership_support::{add, add_at, admit, hold};
+use membership_support::{add, add_at, admit, admit_leaving, hold, place, settle};
 use persistence_library::{
     Catalog, SessionFilter, SessionQuery, SourceProbe, SuggestedAssociation,
 };
 use platevault_model::{
-    AdmissionBasis, AssociationKind, AssociationState, Equipment, EvidenceItem, Location, Project,
-    ProjectInput, ProjectQuery, Provenance, Quality, ScanFile, ScanObservation, ScanProgress,
-    ScanState, Session, SessionFilterCounts, SessionReadiness, SubjectInput, TargetRecord,
+    AdmissionBasis, AssociationKind, AssociationState, Equipment, EvidenceItem, InputKind,
+    Location, Project, ProjectInput, ProjectQuery, Provenance, Quality, ScanFile, ScanObservation,
+    ScanProgress, ScanState, Session, SessionFilterCounts, SessionReadiness, SubjectInput,
+    TargetRecord,
 };
 use sqlx::sqlite::{SqliteConnectOptions, SqliteConnection};
 use sqlx::Connection;
@@ -57,9 +58,17 @@ const FRAMES: [Frame; 8] = [
     Frame { path: RC_G, filter: "G", camera: "ASI2600MM" },
 ];
 
-/// The Project membership tables, in creation order.
-const MEMBERSHIP_TABLES: [&str; 4] =
-    ["project_groups", "project_sessions", "project_captures", "project_capture_copies"];
+/// Every Project table an add writes: the Project, its subjects and rigs,
+/// and its membership, in creation order.
+const PROJECT_TABLES: [&str; 7] = [
+    "projects",
+    "project_subjects",
+    "project_rigs",
+    "project_groups",
+    "project_sessions",
+    "project_captures",
+    "project_capture_copies",
+];
 
 struct World {
     fx: Fixture,
@@ -520,17 +529,16 @@ async fn create_project_prefills_target_and_rig() {
     world.catalog.close().await.unwrap();
 }
 
-/// LIB-FR-17, LIB-AC-18: listing, counting, prefill, preview and Add to
-/// Project join no session to a group: Add to Project makes the session a
-/// candidate, and only a membership add holds it.
+/// LIB-FR-17, LIB-AC-18: listing, counting, prefill and preview join no
+/// session to a Project; only an add does.
 #[tokio::test]
-async fn filters_and_add_to_project_join_no_group() {
+async fn filters_prefill_and_preview_join_no_session() {
     let world = world().await;
     let catalog = &world.catalog;
     let project = world.project("NGC 7000", &[&world.ngc7000], &[world.redcat.id]).await;
     let ha = world.id(RC_HA).await;
     hold(catalog, project.id, ha, world.redcat.id).await;
-    let membership = dump(&world.fx.db, &MEMBERSHIP_TABLES).await;
+    let before = dump(&world.fx.db, &PROJECT_TABLES).await;
 
     for filter in [SessionFilter::NeedsTarget, SessionFilter::NotInAnyProject] {
         world.listed(filter).await;
@@ -538,14 +546,138 @@ async fn filters_and_add_to_project_join_no_group() {
     world.counts().await;
     let esprit_ha = world.id(ES_HA).await;
     catalog.project_prefill(esprit_ha).await.unwrap();
-    let preview = catalog.preview_project_addition(esprit_ha, project.id).await.unwrap();
-    let revision = catalog.project_desired(project.id).await.unwrap().revision;
-    catalog.add_session_to_project(&preview.session, project.id, revision).await.unwrap();
-    let candidates = catalog.project_candidates(project.id).await.unwrap();
-    assert!(candidates.iter().any(|c| c.session_id == esprit_ha), "a candidate now");
+    catalog.preview_project_addition(esprit_ha, project.id).await.unwrap();
 
-    assert_eq!(dump(&world.fx.db, &MEMBERSHIP_TABLES).await, membership, "no membership row");
-    let held = catalog.project_desired(project.id).await.unwrap().sessions;
-    assert_eq!(held.iter().map(|m| m.session_id).collect::<Vec<_>>(), vec![ha], "no member");
+    assert_eq!(dump(&world.fx.db, &PROJECT_TABLES).await, before, "nothing is written");
+    assert!(world.listed(SessionFilter::NotInAnyProject).await.contains(&esprit_ha));
+    world.catalog.close().await.unwrap();
+}
+
+/// LIB-FR-17, PRJ-FR-08, PRJ-FR-19, LIB-AC-18, D-W59: Add to Project from a
+/// session row adds the session whole to a group through admission and,
+/// when the Project lacks them, its Target as a subject and its rig, in one
+/// Project revision; the session leaves "Not in any Project".
+#[tokio::test]
+async fn add_to_project_from_a_row_holds_the_session_with_its_target_and_rig() {
+    let world = world().await;
+    let catalog = &world.catalog;
+    let project = world.project("M 81", &[&world.m81], &[world.esprit.id]).await;
+    let ha = world.id(RC_HA).await;
+    admit(catalog, ha, Quality::Usable).await;
+    let preview = catalog.preview_project_addition(ha, project.id).await.unwrap();
+    assert!(preview.adds_subject, "NGC 7000 is no subject of M 81");
+    assert_eq!(preview.added_rig.as_ref().map(|rig| rig.id), Some(world.redcat.id));
+
+    let (groups, adds) = place(&[], ha, world.redcat.id, None);
+    let added = catalog
+        .add_session_to_project(
+            &preview.session,
+            project.id,
+            preview.project_revision,
+            &groups,
+            &adds,
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(added.project.revision, preview.project_revision + 1, "one Project revision");
+    let targets: Vec<Uuid> = added.project.subjects.iter().map(|s| s.target_id).collect();
+    assert_eq!(targets, vec![world.m81.candidate.id, world.ngc7000.candidate.id]);
+    assert_eq!(added.project.rig_ids, vec![world.esprit.id, world.redcat.id]);
+    assert!(added.addition.adds_subject && added.addition.added_rig.is_some(), "{added:?}");
+    let desired = catalog.project_desired(project.id).await.unwrap();
+    assert_eq!(desired.revision, added.project.revision);
+    let [member] = desired.sessions.as_slice() else { panic!("{desired:#?}") };
+    assert_eq!(member.session_id, ha, "the session is held");
+    let group = desired.groups.iter().find(|group| group.id == member.group_id).unwrap();
+    assert_eq!(group.rig_id, world.redcat.id, "in a group on its own rig");
+    let frames = catalog.session(ha).await.unwrap().assets.len();
+    assert_eq!(desired.captures.len(), frames, "whole, with every capture");
+    assert!(!world.listed(SessionFilter::NotInAnyProject).await.contains(&ha));
+
+    let desired = catalog.project_desired(project.id).await.unwrap();
+    let (groups, adds) = place(&desired.groups, ha, world.redcat.id, None);
+    let error = catalog
+        .add_session_to_project(&preview.session, project.id, desired.revision, &groups, &adds)
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("already in project"), "{error}");
+    world.catalog.close().await.unwrap();
+}
+
+/// LIB-FR-17, LIB-FR-23, PRJ-FR-09: Add to Project adds only a session whose
+/// calibration is settled; otherwise it names the kind to choose first and
+/// writes nothing, not even the subject or rig.
+#[tokio::test]
+async fn add_to_project_from_a_row_refuses_unsettled_calibration_and_writes_nothing() {
+    let world = world().await;
+    let catalog = &world.catalog;
+    let project = world.project("M 81", &[&world.m81], &[world.esprit.id]).await;
+    let ha = world.id(RC_HA).await;
+    admit_leaving(catalog, ha, Quality::Usable, &[InputKind::Flat]).await;
+    let preview = catalog.preview_project_addition(ha, project.id).await.unwrap();
+    let before = dump(&world.fx.db, &PROJECT_TABLES).await;
+
+    let (groups, adds) = place(&[], ha, world.redcat.id, None);
+    let other = place(&[], world.id(RC_L).await, world.redcat.id, None).1;
+    let error = catalog
+        .add_session_to_project(&preview.session, project.id, 1, &groups, &other)
+        .await
+        .unwrap_err();
+    assert_eq!(kind(&error), "invalid_input", "a row adds only its own session: {error}");
+
+    let error = catalog
+        .add_session_to_project(
+            &preview.session,
+            project.id,
+            preview.project_revision,
+            &groups,
+            &adds,
+        )
+        .await
+        .unwrap_err();
+
+    assert_eq!(kind(&error), "invalid_input", "{error}");
+    assert!(error.to_string().contains("choose its flat first"), "{error}");
+    assert_eq!(dump(&world.fx.db, &PROJECT_TABLES).await, before, "nothing is written");
+    assert!(world.listed(SessionFilter::NotInAnyProject).await.contains(&ha));
+    world.catalog.close().await.unwrap();
+}
+
+/// LIB-FR-17, PRJ-FR-01, PRJ-FR-08: Create Project from a session row saves
+/// the prefilled Project holding the session, at revision 1. Like Add to
+/// Project it adds only a session whose calibration is settled: otherwise it
+/// names the kind to choose first and saves no Project.
+#[tokio::test]
+async fn create_project_from_a_row_holds_the_session_only_when_settled() {
+    let world = world().await;
+    let catalog = &world.catalog;
+    let ha = world.id(RC_HA).await;
+    admit_leaving(catalog, ha, Quality::Usable, &[InputKind::Flat]).await;
+    let prefill = catalog.project_prefill(ha).await.unwrap();
+    let session = expected_session(&world.session(RC_HA).await);
+    let before = dump(&world.fx.db, &PROJECT_TABLES).await;
+    let (groups, adds) = place(&[], ha, world.redcat.id, None);
+
+    let error =
+        catalog.create_project_with_session(&prefill, &session, &groups, &adds).await.unwrap_err();
+
+    assert_eq!(kind(&error), "invalid_input", "{error}");
+    assert!(error.to_string().contains("choose its flat first"), "{error}");
+    assert_eq!(dump(&world.fx.db, &PROJECT_TABLES).await, before, "no Project is saved");
+
+    settle(catalog, ha, InputKind::Flat).await;
+    let session = expected_session(&world.session(RC_HA).await);
+    let project =
+        catalog.create_project_with_session(&prefill, &session, &groups, &adds).await.unwrap();
+
+    assert_eq!(project.revision, 1, "created with the session in one revision");
+    assert_eq!(project.name, "NGC 7000");
+    let desired = catalog.project_desired(project.id).await.unwrap();
+    let [member] = desired.sessions.as_slice() else { panic!("{desired:#?}") };
+    assert_eq!(member.session_id, ha, "the session is held");
+    let [group] = desired.groups.as_slice() else { panic!("{desired:#?}") };
+    assert_eq!((group.id, group.rig_id), (member.group_id, world.redcat.id));
+    assert!(!world.listed(SessionFilter::NotInAnyProject).await.contains(&ha));
     world.catalog.close().await.unwrap();
 }

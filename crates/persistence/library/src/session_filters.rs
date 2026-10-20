@@ -2,29 +2,33 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! The Sessions filters "Needs a Target", "Not in any Project" and "Needs
-//! calibration", their counts, Create Project prefill and Add to Project
-//! (LIB-FR-17, PRJ-FR-19, D-W59). The filters are derived on read from
-//! current associations, the sessions Projects hold (`project_sessions`) and
-//! session calibration. A Target associated by agreeing evidence counts as
-//! confirmed here as in readiness (D-W124, [`counts_as_confirmed`]). Add to
-//! Project here writes only the subject and rig rows; a membership add
-//! appends them in its own transaction ([`append_target_and_rig`]).
+//! calibration", their counts, and a session row's Create Project and Add to
+//! Project (LIB-FR-17, PRJ-FR-08, PRJ-FR-19, D-W59). The filters are derived
+//! on read from current associations, the sessions Projects hold
+//! (`project_sessions`) and session calibration. A Target associated by
+//! agreeing evidence counts as confirmed here as in readiness (D-W124,
+//! [`counts_as_confirmed`]). Both row actions hold the session through the
+//! membership add ([`project_inputs::add_members`]), which admits it and
+//! appends its Target and rig ([`append_target_and_rig`]): only a session
+//! whose calibration is settled joins, and a refusal writes nothing.
 
 use std::collections::HashSet;
 
 use platevault_model::{
     counts_as_confirmed, AddedRig, AssociationState, EvidenceItem, ExpectedSession, LibraryError,
-    ProjectAdded, ProjectAddition, ProjectInput, Session, SessionFilterCounts, SubjectInput,
+    Project, ProjectAdded, ProjectAddition, ProjectInput, Revision, Session, SessionFilterCounts,
+    SubjectInput,
 };
 use sqlx::sqlite::SqliteConnection;
 use sqlx::{Connection, Row};
 use uuid::Uuid;
 
-use super::projects::{load_project, require_project};
+use super::project_inputs::{self, NewGroup, SessionAdd};
+use super::projects::{commit_revision, insert_project, load_project, require_project};
 use super::{
-    calibration, check_expected_sessions, conflict, db_revision, from_json, from_text,
-    lineage_successors, listed_sessions, load_equipment, load_session_row, load_target, now,
-    parse_uuid, require_revision, Catalog, Members, Result, SessionFilter,
+    calibration, check_expected_sessions, from_json, from_text, lineage_successors,
+    listed_sessions, load_equipment, load_session_row, load_target, parse_uuid, Catalog, Members,
+    Result, SessionFilter,
 };
 
 /// Every session's Target row naming a Target; [`counts_as_confirmed`]
@@ -105,34 +109,77 @@ impl Catalog {
         Ok(addition)
     }
 
-    /// Add to Project: add the session's confirmed Target as the Project's last
-    /// subject unless it is one, and its confirmed rig as the last rig when the
-    /// Project lacks it, in one Project revision. A session already covered
-    /// writes nothing. Writes only the subject and rig rows: the session
-    /// joins no group (a membership add does that through admission).
+    /// Add to Project from a session row (PRJ-FR-08, PRJ-FR-19): the session
+    /// joins whole through the membership add, which admits it and adds its
+    /// confirmed Target as the Project's last subject unless it is one and
+    /// its confirmed rig as the last rig when the Project lacks it, all in
+    /// one Project revision. `groups` and `adds` are core's placement of this
+    /// one session. It commits only on `expected` and `expected_revision`, as
+    /// previewed, and returns what it added.
     ///
     /// # Errors
     /// `Conflict` for a stale Project revision or a session whose grouping or
-    /// decisions changed since `expected`; `NotFound` for an unknown session or
-    /// Project; `InvalidInput` when the session has no confirmed Target.
+    /// decisions changed since `expected`; `NotFound` for an unknown session,
+    /// Project or group; `InvalidInput` when the session has no confirmed
+    /// Target, for an add of any other session, and as
+    /// [`Catalog::add_project_sessions`] for every admission blocker.
     pub async fn add_session_to_project(
         &self,
         expected: &ExpectedSession,
         project_id: Uuid,
-        expected_revision: platevault_model::Revision,
+        expected_revision: Revision,
+        groups: &[NewGroup],
+        adds: &[SessionAdd],
     ) -> Result<ProjectAdded> {
+        require_only(expected, adds)?;
         let added = write_txn!(self, |conn| {
-            let current = require_project(conn, project_id).await?;
-            require_revision(project_id, current, expected_revision)?;
+            let next = project_inputs::begin_edit(conn, project_id, expected_revision).await?;
             check_expected_sessions(conn, std::slice::from_ref(expected)).await?;
             let basis = SessionBasis::read(conn, expected.session_id).await?;
             let addition = addition(conn, &basis, project_id).await?;
-            if !addition.is_empty() {
-                apply(conn, &addition, current + 1).await?;
-            }
+            project_inputs::add_members(conn, project_id, groups, adds).await?;
+            commit_revision(conn, project_id, next).await?;
             ProjectAdded { project: load_project(conn, project_id).await?, addition }
         });
         Ok(added)
+    }
+
+    /// Create Project from a session row (LIB-FR-17, PRJ-FR-01): a new open
+    /// Project from `input`, prefilled by [`Catalog::project_prefill`],
+    /// holding the session whole through the membership add, all at its
+    /// first revision. Like Add to Project it holds only a session admission
+    /// lets join; otherwise no Project is saved. `groups` and `adds` are
+    /// core's placement of this one session in a Project with no groups.
+    ///
+    /// # Errors
+    /// As [`Catalog::create_project`], and as
+    /// [`Catalog::add_session_to_project`] for the session.
+    pub async fn create_project_with_session(
+        &self,
+        input: &ProjectInput,
+        expected: &ExpectedSession,
+        groups: &[NewGroup],
+        adds: &[SessionAdd],
+    ) -> Result<Project> {
+        require_only(expected, adds)?;
+        let project = write_txn!(self, |conn| {
+            check_expected_sessions(conn, std::slice::from_ref(expected)).await?;
+            let id = insert_project(conn, input).await?;
+            project_inputs::add_members(conn, id, groups, adds).await?;
+            load_project(conn, id).await?
+        });
+        Ok(project)
+    }
+}
+
+/// A session row adds its one session, the one it was read for.
+fn require_only(expected: &ExpectedSession, adds: &[SessionAdd]) -> Result<()> {
+    match adds {
+        [add] if add.session_id == expected.session_id => Ok(()),
+        _ => Err(LibraryError::InvalidInput(format!(
+            "a session row adds only its session {}",
+            expected.session_id
+        ))),
     }
 }
 
@@ -318,25 +365,6 @@ pub async fn append_target_and_rig(
     let addition = addition(conn, &basis, project_id).await?;
     append(conn, &addition).await?;
     Ok(addition)
-}
-
-/// Append the subject and rig the addition names and commit `next`.
-async fn apply(conn: &mut SqliteConnection, addition: &ProjectAddition, next: u64) -> Result<()> {
-    append(conn, addition).await?;
-    let project = addition.project_id.to_string();
-    let updated = sqlx::query(
-        "UPDATE projects SET revision = ?2, updated_at = ?3 WHERE id = ?1 AND revision = ?4",
-    )
-    .bind(&project)
-    .bind(db_revision(next)?)
-    .bind(now()?)
-    .bind(db_revision(addition.project_revision)?)
-    .execute(&mut *conn)
-    .await?;
-    if updated.rows_affected() != 1 {
-        return Err(conflict(addition.project_id, addition.project_revision));
-    }
-    Ok(())
 }
 
 /// Append the subject and rig the addition names.
