@@ -177,6 +177,12 @@ fn unix_path(path: &str) -> Value {
     json!({ "encoding": "unix-bytes", "payload": path.as_bytes() })
 }
 
+/// `path` as this operating system's wire path, which a handler that takes a
+/// real location requires: another OS's encoding is refused as invalid input.
+fn native_path(path: &Path) -> Value {
+    serde_json::to_value(NativePath::from_path(path)).expect("path")
+}
+
 /// Review Clean up and confirm it with nothing selected, as the review's
 /// revisions say; returns the review and the report.
 fn clean_up_nothing(shell: &Shell, project: Uuid) -> (Value, Value) {
@@ -297,16 +303,16 @@ fn apply_family_takes_its_arguments() {
 fn the_symlink_check_returns_the_folders_capability() {
     let shell = Shell::new();
     let folder = tempfile::tempdir().expect("temp dir");
-    let native = |path: &Path| serde_json::to_value(NativePath::from_path(path)).expect("path");
-    let checked = shell.call("library_check_symlinks", &json!({ "folder": native(folder.path()) }));
+    let checked =
+        shell.call("library_check_symlinks", &json!({ "folder": native_path(folder.path()) }));
     assert_eq!(checked, json!("available"));
     assert!(std::fs::read_dir(folder.path()).expect("folder").next().is_none(), "no probe stays");
     let missing = folder.path().join("missing");
     let refused = shell
-        .invoke("library_check_symlinks", &json!({ "folder": native(&missing) }))
+        .invoke("library_check_symlinks", &json!({ "folder": native_path(&missing) }))
         .expect_err("a missing folder");
     assert_eq!(refused["code"], "not_found", "{refused}");
-    assert_eq!(refused["scope"], native(&missing), "{refused}");
+    assert_eq!(refused["scope"], native_path(&missing), "{refused}");
     assert!(!refused.to_string().contains("os error"), "{refused}");
 }
 
@@ -455,6 +461,9 @@ fn project_group_removal_and_view_settings_take_their_arguments() {
         NOT_FOUND,
         project,
     );
+    // An absolute processing location of this OS, so the request is valid and
+    // only the unknown Project refuses it.
+    let parent = native_path(&std::env::temp_dir().join("processing"));
     let settings = |group: &str, panel: &str| {
         json!({
             "projectId": project,
@@ -463,7 +472,7 @@ fn project_group_removal_and_view_settings_take_their_arguments() {
                 "mode": "copies",
                 "keywords": { "group": group, "panel": panel },
                 "profileId": null,
-                "parent": unix_path("/tmp/processing"),
+                "parent": parent,
             },
         })
     };
