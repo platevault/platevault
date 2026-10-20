@@ -315,6 +315,9 @@ impl CaptureWatch {
     /// arrived is held the same way: its watcher and walk at the root it
     /// moved to, which may be on the volume, are let go of too, so the
     /// outcome does not depend on which of the two discovery took first.
+    /// When `root` was no longer named by then, it is not named again, which
+    /// would register a fresh handle on the volume: the root it moved to
+    /// stays named instead, and the outcome is taken for either root.
     /// Discovery handles one thing at a time, so this also waits out a
     /// file-system call it is making. It returns at once when
     /// discovery stopped, and as soon as it is asked to stop
@@ -336,14 +339,15 @@ impl CaptureWatch {
 
     /// The removal [`release`](Self::release) made way for did not happen:
     /// watch `location` again at `root`, if it still follows it there, and
-    /// walk it for what arrived meanwhile.
+    /// walk it for what arrived meanwhile. `root` may also be the root
+    /// named in place of the location's own while the removal was pending.
     pub fn reattach(&self, location: Uuid, root: &Path) {
         let _ = self.notices.send(Notice::Reattach { location, root: root.to_path_buf() });
     }
 
     /// The volume holding `root` was removed: stop counting `location` now,
-    /// if it follows `root`, rather than at the next sweep, which starts it
-    /// again once its root is back.
+    /// if it follows `root` or names it in place of its own, rather than at
+    /// the next sweep, which starts it again once its root is back.
     pub fn gone(&self, location: Uuid, root: &Path) {
         let _ = self.notices.send(Notice::Gone { location, root: root.to_path_buf() });
     }
@@ -670,7 +674,8 @@ struct Watched {
     /// watcher or walk, and nothing touches its root.
     released: bool,
     /// Where the location moved (reselected or remapped) while it was
-    /// released ([`Run::moved_in_removal`]).
+    /// released ([`Run::moved_in_removal`]), or before
+    /// ([`Run::moved_before_release`]).
     moved: Option<Moved>,
 }
 
@@ -679,6 +684,14 @@ struct Watched {
 struct Moved {
     to: Location,
     since: Instant,
+    /// The root named ([`CaptureWatch::subscribe_roots`]) in place of the
+    /// location's own until the removal is decided: the root it moved to, as
+    /// named when the release arrived, when the move was applied first and
+    /// its own root was no longer named by then ([`Run::moved_before_release`]).
+    /// The shell then still holds that root's registration, which brings
+    /// the removal's outcome, and naming the old root again would have it
+    /// register a fresh handle on the volume being removed.
+    in_place: Option<WatchedRoot>,
 }
 
 /// Where a location was followed before it moved (reselected or remapped):
@@ -724,7 +737,7 @@ impl Watched {
         self.prefixes.iter().find_map(|prefix| path.strip_prefix(prefix).ok())
     }
 
-    /// Its root, as [`CaptureWatch::subscribe_roots`] names it.
+    /// Its own root, as [`CaptureWatch::subscribe_roots`] names it.
     fn named(&self) -> WatchedRoot {
         WatchedRoot {
             location_id: self.location.id,
@@ -732,6 +745,24 @@ impl Watched {
             volume_kind: self.location.volume_kind,
             folder: self.stamp.folder(),
         }
+    }
+
+    /// The root it names ([`CaptureWatch::subscribe_roots`]): its own, or
+    /// the one named in its place while a removal is pending
+    /// ([`Moved::in_place`]).
+    fn names(&self) -> WatchedRoot {
+        self.moved.as_ref().and_then(|moved| moved.in_place.clone()).unwrap_or_else(|| self.named())
+    }
+
+    /// Whether the outcome of a removal of `root`'s volume is about this
+    /// location: `root` is its own, or the one named in its place.
+    fn awaits(&self, root: &Path) -> bool {
+        self.root == root
+            || self
+                .moved
+                .as_ref()
+                .and_then(|moved| moved.in_place.as_ref())
+                .is_some_and(|in_place| in_place.root == root)
     }
 
     /// Take the catalog's paths a walk read. When only the catalog failed, the
@@ -1303,11 +1334,14 @@ impl Run {
     /// released location's root is not touched, nor is the root it moved to.
     async fn follow(&mut self, location: Location, sweep: bool) {
         let id = location.id;
-        if self
-            .locations
-            .get(&id)
-            .is_some_and(|watched| watched.released && !same_root(&location, &watched.location))
-        {
+        // One that names another root in place of its own stays moved even
+        // when it is back at its old root: naming that root again would
+        // register a fresh handle on the volume being removed.
+        if self.locations.get(&id).is_some_and(|watched| {
+            watched.released
+                && (!same_root(&location, &watched.location)
+                    || watched.moved.as_ref().is_some_and(|moved| moved.in_place.is_some()))
+        }) {
             self.moved_in_removal(location);
             return;
         }
@@ -1343,16 +1377,21 @@ impl Run {
 
     /// `location` moved (reselected or remapped) while the removal of its
     /// old root's volume is pending. Its new root may be on that volume, so
-    /// nothing touches it, and the old root stays named, so the eject window
-    /// keeps that root's registration and the removal's outcome still
+    /// nothing touches it, and the root it names stays named, so the eject
+    /// window keeps that root's registration and the removal's outcome still
     /// arrives: [`Run::reattach`] or [`Run::gone`] then start the location at
     /// its new root ([`Run::move_on`]). A notice may never come, so it starts
     /// there as well once it waited [`Settings::removal_wait`], at the next
     /// debounce tick ([`Run::waited_out`]).
     fn moved_in_removal(&mut self, location: Location) {
         if let Some(watched) = self.locations.get_mut(&location.id) {
-            let since = watched.moved.as_ref().map_or_else(Instant::now, |moved| moved.since);
-            watched.moved = Some(Moved { to: location, since });
+            match &mut watched.moved {
+                Some(moved) => moved.to = location,
+                None => {
+                    watched.moved =
+                        Some(Moved { to: location, since: Instant::now(), in_place: None });
+                }
+            }
         }
     }
 
@@ -1568,6 +1607,13 @@ impl Run {
     /// and follow the location at `root` again, released and moved, as when
     /// the removal was requested first ([`Run::moved_in_removal`]). Returns
     /// the root it moved to.
+    ///
+    /// `root` stays named only if it still is, its calls there not all
+    /// returned yet. Once it left the named roots, the shell may have ended
+    /// its registration, and naming it again would have the shell register
+    /// a fresh handle on the volume being removed: the root it moved to,
+    /// whose registration the shell still holds, is named in its place
+    /// ([`Moved::in_place`]), and the outcome arrives for that root.
     fn moved_before_release(&mut self, id: Uuid, root: &Path) -> Option<PathBuf> {
         let moved_away = self
             .locations
@@ -1578,17 +1624,24 @@ impl Run {
         }
         let (left, mut moved) = (self.left.remove(&id)?, self.locations.remove(&id)?);
         self.draining.let_go(&mut moved);
+        let still_named = self
+            .publish_roots
+            .borrow()
+            .iter()
+            .any(|named| named.location_id == id && named.root == root);
+        let in_place = (!still_named).then(|| moved.named());
         let mut back = Watched::new(left.location, left.root, left.prefixes, left.stamp);
-        back.moved = Some(Moved { to: moved.location, since: Instant::now() });
+        back.moved = Some(Moved { to: moved.location, since: Instant::now(), in_place });
         self.locations.insert(id, back);
         Some(moved.root)
     }
 
     /// The removal a release made way for did not happen: watch the location
     /// again and walk it, at the root it moved to meanwhile if it did.
+    /// `root` is the location's own or the one named in its place.
     async fn reattach(&mut self, id: Uuid, root: &Path) {
         let Some(watched) =
-            self.locations.get_mut(&id).filter(|watched| watched.released && watched.root == root)
+            self.locations.get_mut(&id).filter(|watched| watched.released && watched.awaits(root))
         else {
             return;
         };
@@ -1602,10 +1655,11 @@ impl Run {
         self.rescan(id).await;
     }
 
-    /// The volume holding `root`, a root of `id`, was removed: the location
-    /// goes offline, or starts at the root it moved to meanwhile.
+    /// The volume holding `root`, a root of `id` or the one named in its
+    /// place, was removed: the location goes offline, or starts at the root
+    /// it moved to meanwhile.
     async fn gone(&mut self, id: Uuid, root: &Path) {
-        let Some(watched) = self.locations.get(&id).filter(|watched| watched.root == root) else {
+        let Some(watched) = self.locations.get(&id).filter(|watched| watched.awaits(root)) else {
             return;
         };
         if watched.moved.is_some() {
@@ -1943,14 +1997,14 @@ impl Run {
         self.publish_roots();
     }
 
-    /// Publish, when they changed, the root of every followed location and
-    /// every root a watcher discovery closed, or a walk it canceled, still
-    /// runs on, once per location and path: a root a location follows again
-    /// stands for its earlier calls there, and carries the folder ID of the
-    /// folder at its path now. A call still in flight a sweep after
-    /// discovery let go of it is logged once: one that never returns keeps
-    /// its root named, and a release of its volume waiting, until discovery
-    /// stops.
+    /// Publish, when they changed, the root every followed location names
+    /// ([`Watched::names`]) and every root a watcher discovery closed, or a
+    /// walk it canceled, still runs on, once per location and path: a root a
+    /// location follows again stands for its earlier calls there, and
+    /// carries the folder ID of the folder at its path now. A call still in
+    /// flight a sweep after discovery let go of it is logged once: one that
+    /// never returns keeps its root named, and a release of its volume
+    /// waiting, until discovery stops.
     fn publish_roots(&mut self) {
         self.draining.prune(self.settings.sweep, |call, stuck| {
             tracing::warn!(
@@ -1968,7 +2022,7 @@ impl Run {
         let mut roots: Vec<WatchedRoot> = self
             .locations
             .values()
-            .map(Watched::named)
+            .map(Watched::names)
             .chain(self.draining.roots().cloned())
             .collect();
         roots.sort_by(|a, b| (a.location_id, &a.root).cmp(&(b.location_id, &b.root)));

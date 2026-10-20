@@ -1659,10 +1659,13 @@ impl RemappedInRemoval {
     }
 
     /// Watch a location with `settings`, remap it and let the remap apply
-    /// in full, watched and walked at the new root, and only then release
-    /// the old root: the removal notice lost the race to the remap. The
-    /// release lets go of the new root too, which may be on the volume being
-    /// removed, and the removal stays pending as in [`Self::start`].
+    /// in full, watched and walked at the new root, with the old root no
+    /// longer named, and only then release the old root: the removal notice
+    /// lost the race to the remap. The release lets go of the new root too,
+    /// which may be on the volume being removed, and the removal stays
+    /// pending as in [`Self::start`]. The old root is not named again, so
+    /// the eject window registers no fresh handle on it: the named roots do
+    /// not change, the new root staying named for the removal's outcome.
     async fn released_after_the_remap(settings: Settings) -> Self {
         let (fx, watch, probe, location, old) = Self::watched(settings).await;
         let copy = copy_of(&old, &fx.base.join("Captures copy"));
@@ -1673,13 +1676,12 @@ impl RemappedInRemoval {
             .await;
         live_count_is(&watch, location.id, 0).await;
         watchers_are(&watch, 1).await;
+        let mut roots = watch.subscribe_roots();
+        roots.borrow_and_update();
 
         watch.release(location.id, &old).await;
         assert_eq!(watchers(&watch), 0, "a watcher holds the new root after the release");
         until(&watch, <[NewCaptureCount]>::is_empty).await;
-        let old_root = [named_root(&location, &old)];
-        eventually("the old root named alone", || *watch.subscribe_roots().borrow() == old_root)
-            .await;
         let (touched, walked) = (touches(&probe), walks(&watch));
         // Debounce ticks pass, and none touches the new root.
         tokio::time::sleep(FAST.debounce * 5).await;
@@ -1688,6 +1690,12 @@ impl RemappedInRemoval {
             (touched, walked, 0),
             "the new root was touched while the removal was pending"
         );
+        assert!(
+            !roots.has_changed().expect("discovery runs"),
+            "the named roots changed while the removal was pending: {:?}",
+            *roots.borrow()
+        );
+        assert_eq!(*roots.borrow(), new_root);
         Self { fx, watch, location, old, copy }
     }
 
@@ -1729,6 +1737,25 @@ async fn a_root_change_during_a_pending_removal_starts_once_the_volume_is_gone()
 async fn a_release_after_a_root_change_lets_go_of_the_new_root_until_refused() {
     let remapped = RemappedInRemoval::released_after_the_remap(UNTIL_NOTICED).await;
     remapped.watch.reattach(remapped.location.id, &remapped.old);
+    remapped.watched_at_the_new_root().await;
+}
+
+/// The release came once the old root had left the named roots, so the
+/// eject window may hold no registration on it any more: the refusal that
+/// arrives through the new root's registration ends the wait.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_release_after_a_root_change_is_refused_through_the_new_root() {
+    let remapped = RemappedInRemoval::released_after_the_remap(UNTIL_NOTICED).await;
+    remapped.watch.reattach(remapped.location.id, &remapped.copy);
+    remapped.watched_at_the_new_root().await;
+}
+
+/// As above, for a removal that went ahead: the notice that the volume is
+/// gone arrives through the new root's registration.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_release_after_a_root_change_ends_once_gone_through_the_new_root() {
+    let remapped = RemappedInRemoval::released_after_the_remap(UNTIL_NOTICED).await;
+    remapped.watch.gone(remapped.location.id, &remapped.copy);
     remapped.watched_at_the_new_root().await;
 }
 
