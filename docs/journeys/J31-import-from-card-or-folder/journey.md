@@ -56,7 +56,7 @@ folder is added in place. Done means:
 - P5: An SMB share that macOS has already mounted at `/Volumes/astro-share` holds `incoming/` with 20 NGC 7000 OIII 300 s RedCat lights from the night of 2026-10-05, with OBJECT `NGC 7000` and pointing within NGC 7000's footprint. Removing a file on this share deletes it immediately; the share has no OS Trash.
 - P6: `Astro-T7/Archive-2025/` is an organized folder of 2025 light sessions outside every registered location.
 - P7: Manifests (relative path, size, SHA-256) of `Card-1`, `Card-2`, `Card-4`, `astro-share/incoming`, `Archive-2025` and both destination locations, recorded outside PlateVault before S1. No file on `Card-2`, `Card-4`, `astro-share/incoming` or `Archive-2025` is byte-identical to a library frame or to another of these files.
-- P8: Removable volume `Card-4` supports the OS Trash and is not connected before S10a. In an ASIAIR layout it holds 34 NGC 7000 Ha 300 s RedCat lights from the night of 2026-10-06. They have OBJECT `NGC 7000`, one ROTATANG throughout and pointing within NGC 7000's footprint. The first 14 are at framing A, the next 10 at framing B after a meridian flip, with B's centre 12′ from A and a rotation difference of 4°, and the last 10 return to A (owner's answer, 2026-10-20).
+- P8: Removable volume `Card-4` supports the OS Trash and is not connected before S10a. In an ASIAIR layout it holds 34 NGC 7000 Ha 300 s RedCat lights from the night of 2026-10-06, with OBJECT `NGC 7000` and pointing within NGC 7000's footprint. The first 14 are at framing A, the next 10 at framing B after a meridian flip, with B's centre 12′ from A and a rotation difference of 4°, and the last 10 return to A (owner's answer, 2026-10-20).
 
 ## Steps
 
@@ -181,7 +181,7 @@ folder is added in place. Done means:
 - **Expect:**
   - The initial preview lists two sessions with Target NGC 7000 prefilled from their pointing. "NGC 7000 · Ha · 300 s · 6 Oct" holds 24 A lights from both sides of the meridian flip. "NGC 7000 · Ha · 300 s · 6 Oct · framing 2" holds the 10 B lights. Both list their lights under `NGC 7000/Ha/2026-10-06/light/`. The 10 returning A lights rejoin the first session, so A A B B A A forms two sessions (D-W107; owner's answer, 2026-10-20).
   - Setting the centre slider to 12′ recalculates the split live without saving and shows one session of 34 lights. B is within the default 5° rotation limit. Setting rotation to 3° recalculates the split live to two sessions of 24 and 10. Restoring D-W114's defaults returns the original split. The manual merge shows one session of 34 lights; re-splitting restores both sessions with their original names.
-- **Expect:** The import summary reads `34 frames · <size> · 2 sessions`. Sessions lists the two sessions with their frame counts.
+  - The import summary reads `34 frames · <size> · 2 sessions`. Sessions lists the two sessions with their frame counts.
 - **Expect (negative):** Before the user starts the import, the preview writes no files. Slider changes, merging and re-splitting also write nothing (owner's answer, 2026-10-20). The meridian flip starts no session.
 - **Trace:** Import · STO-IMP-FR-03 · LIB-FR-04, LIB-FR-24 · LIB-AC-31 · D-W107 · D-W114 · (owner's answer, 2026-10-20)
 
