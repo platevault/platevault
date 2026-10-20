@@ -1,7 +1,8 @@
 /**
  * Catalogue entry (R9-COMPOSITION-PLAN §8.3; F4 prototype plan, unit V): the
  * shared F4 patterns. CalibrationDiagram, CalibrationChoices with its
- * CalibrationChoiceBadge, ViewFolderTree and PlaceLink, on the live sample
+ * CalibrationChoiceBadge, ViewFolderTree, PlaceLink and the session-row
+ * badges (DuplicatesBadge, ReadinessBadge), on the live sample
  * library and on a what-if copy of it that is never written back: there a
  * RedCat session pins the older dark version (mixed versions, darks in the
  * nights), the Framing 2 session joins the RedCat group with another flat
@@ -17,6 +18,7 @@ import { Section } from "@/components/app/page"
 import { CalibrationChoices, type CalibrationChoicesProps, calibrationChoiceRows } from "@/components/domain/calibration-choices"
 import { CalibrationDiagram, calibrationDiagram } from "@/components/domain/calibration-diagram"
 import { DuplicatesBadge } from "@/components/domain/duplicates-badge"
+import { ReadinessBadge } from "@/components/domain/readiness-badge"
 import { ViewFolderTree } from "@/components/domain/view-folder-tree"
 import { Button } from "@/components/ui/button"
 import { calibrationSources, candidatesFor, noChoice, pickChoice } from "@/domain/calibration"
@@ -255,6 +257,22 @@ function Duplicates() {
   )
 }
 
+/** A session row's readiness (C10, D-W100): Ready, each step it still needs, and Trashed. */
+function Readiness() {
+  const m = useMessages()
+  return (
+    <ComponentSection components={["ReadinessBadge"]} description={m.catalogue_f4_readiness_desc()} level={3}>
+      <Specimen caption={m.catalogue_f4_readiness_states()}>
+        <ReadinessBadge readiness="ready" unreviewed={0} trashed={false} />
+        <ReadinessBadge readiness="needs-target" unreviewed={0} trashed={false} />
+        <ReadinessBadge readiness="needs-rig" unreviewed={0} trashed={false} />
+        <ReadinessBadge readiness="needs-review" unreviewed={1} trashed={false} />
+        <ReadinessBadge readiness="ready" unreviewed={0} trashed />
+      </Specimen>
+    </ComponentSection>
+  )
+}
+
 export function F4Catalogue() {
   const m = useMessages()
   const state = useStore((s) => s)
@@ -266,6 +284,7 @@ export function F4Catalogue() {
       <Choices state={state} whatIf={whatIf} />
       <Trees state={state} whatIf={whatIf} />
       <Duplicates />
+      <Readiness />
     </Section>
   )
 }

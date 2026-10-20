@@ -6613,6 +6613,8 @@
   "help_tip_marks_library": "P, X e U marcam o frame na biblioteca, e todo Projeto lê a mesma marcação: um Projeto aberto a recebe como alteração pendente, um fechado mantém o seu instantâneo.",
   "catalogue_f4_duplicates_desc": "O selo de uma linha de sessão quando a última verificação de duplicatas encontrou cópias extras idênticas dos seus frames. Só exibição.",
   "catalogue_f4_duplicates_counts": "uma cópia extra, e doze",
+  "catalogue_f4_readiness_desc": "Onde está a entrada de uma sessão, numa palavra de status em toda linha de sessão: Pronta, ou a etapa que ainda falta. Uma sessão de um Projeto que uma revisão reaberta voltou para Não revisado aparece como Precisa de revisão nos seus Projetos.",
+  "catalogue_f4_readiness_states": "Pronta, sem Alvo, setup pendente, um frame não revisado e na Lixeira",
   "import_column_files": "Arquivos",
   "import_column_state": "Estado",
   "import_skip_imported_before": "Importados antes",

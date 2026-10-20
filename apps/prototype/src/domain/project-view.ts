@@ -45,7 +45,6 @@ import {
   subjectCentre,
   subjectRef,
   subjectTarget,
-  unreviewedAssetIds,
   unsettled,
   viewCorrections,
   type World,
@@ -775,7 +774,9 @@ const FRAMES_CHANGE_KEY = {
  * from the desired state) and for a Closed Project, which takes no incoming
  * changes. A held session's frames that a reopened review set back to
  * Unreviewed are the Library's change until the session is Ready again
- * (D-W100); fixed in the session's Review step.
+ * (D-W100, LIB-FR-20); fixed in the session's Review step. A frame whose
+ * bytes changed after review keeps its decision (ChangedContent, LIB-FR-09):
+ * no review set it back, so it is no change here.
  */
 export function pendingChanges(world: Pick<World, "catalog" | "disk">, project: Project): PendingChange[] {
   const view = project.view
@@ -788,7 +789,7 @@ export function pendingChanges(world: Pick<World, "catalog" | "disk">, project: 
   const sessionLink = (sessionId: SessionId) => ({ to: "/sessions/$sessionId", params: { sessionId } })
   for (const [sessionId, input] of desired) {
     const session = catalog.sessions[sessionId]
-    const reopened = session ? unreviewedAssetIds(catalog, session) : []
+    const reopened = session ? liveAssetIds(catalog, session).filter((id) => catalog.assets[id]?.quality.value === "unreviewed") : []
     if (reopened.length > 0) {
       out.push({ id: `frames-unreviewed|${sessionId}|${reopened.length}`, kind: "frames-unreviewed", sessionId, assetIds: reopened, source: "library", label: msg("project_change_frames_unreviewed", { session: sessionLabel(catalog, sessionId), frames: framesRef(reopened.length) }), link: sessionIntakeLink(sessionId, "review") })
     }
