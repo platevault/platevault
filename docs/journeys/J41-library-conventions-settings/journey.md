@@ -169,9 +169,9 @@ The user sets how imported files are named, which goals a new Project starts wit
 ### S16b — Read global Project grouping defaults {#S16b}
 
 - **Do:** In Settings, open the global Project grouping preferences. Read the framing and mosaic-panel thresholds and the GROUP and PANEL keyword names.
-- **Expect:** The same-framing defaults are coverage of at least 90 %, a centre limit of 5′ and rotation within 5°, and each is adjustable. D-W107 covers import review's centre and rotation limits, the sliders and manual merge. The mosaic-panel overlap default is 5 % to 40 %. GROUP is the default folder keyword and PANEL is used for a mosaic-panel group; both keyword names are configurable globally and per Project. The group folder level appears only when a Project has several groups, so a one-group Project has none, even when its group is a mosaic panel. (PRJ-FR-31; D-W114; owner's answer, 2026-10-20)
+- **Expect:** The same-framing defaults are coverage of at least 90 %, a centre limit of 5′ and rotation within 5°, and each is adjustable. The mosaic-panel overlap default is 5 % to 40 %. GROUP is the default folder keyword and PANEL is used for a mosaic-panel group; both keyword names are configurable globally and per Project. The group folder level appears only when a Project has several groups, so a one-group Project has none, even when its group is a mosaic panel. Import review can set the centre and rotation limits for one import (D-W107).
 - **Expect (negative):** Reading these defaults changes no existing Project group or View.
-- **Trace:** PRJ-FR-31 · PRJ-FR-28 · PRJ-FR-29 · PREP-FR-16 · D-W95 · D-W100 · D-W114
+- **Trace:** PRJ-FR-31 · PRJ-FR-28 · PRJ-FR-29 · PREP-FR-16 · D-W95 · D-W100 · D-W107 · D-W114
 
 ### S17 — Confirm nothing changed on disk {#S17}
 
