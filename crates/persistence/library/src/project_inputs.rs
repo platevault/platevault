@@ -24,13 +24,15 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use platevault_model::{
-    logical_quality, AdmissionBasis, ApplicableQuality, Asset, Availability, BasisCapture,
-    BasisGroup, BasisSession, CaptureInclusion, CopyBasis, ExclusionBasis, FrameChoice,
-    FramingEvidence, GroupKeywords, GroupName, GroupOrigin, InclusionBasis, LibraryError,
-    NativePath, OpticsSignature, PendingChange, ProjectBasis, ProjectCandidate, ProjectCapture,
-    ProjectDesired, ProjectGroup, ProjectLifecycle, ProjectSessionMember, ProjectSuggestion,
-    ProjectViewSettings, Revision, SessionAdmission, SessionPlacement, SessionReadiness, ViewMode,
+    counts_as_confirmed, logical_quality, AdmissionBasis, ApplicableQuality, Asset,
+    AssociationState, Availability, BasisCapture, BasisGroup, BasisSession, CaptureInclusion,
+    CopyBasis, EvidenceItem, ExclusionBasis, FrameChoice, FramingEvidence, GroupKeywords,
+    GroupName, GroupOrigin, InclusionBasis, LibraryError, NativePath, OpticsSignature,
+    PendingChange, ProjectBasis, ProjectCandidate, ProjectCapture, ProjectDesired, ProjectGroup,
+    ProjectLifecycle, ProjectSessionMember, ProjectSuggestion, ProjectViewSettings, Revision,
+    SessionAdmission, SessionPlacement, SessionReadiness, ViewMode,
 };
+
 use sqlx::sqlite::SqliteConnection;
 use sqlx::{Connection, Row};
 use uuid::Uuid;
@@ -1608,10 +1610,9 @@ pub async fn suggested(
 pub struct HeldCapture {
     pub capture: ProjectCapture,
     pub group_id: Uuid,
-    /// The Project subject its goals count it toward: its session's
-    /// confirmed Target's, else the Target's it joined on, so a Library
-    /// re-confirmation as a Target the Project lacks keeps it counting
-    /// (PRJ-AC-26); `None` once neither is a subject.
+    /// The Project subject of the session's Target when it counts as confirmed,
+    /// else the Target it joined on, so a Library association to a Target the
+    /// Project lacks keeps it counting (PRJ-AC-26); `None` once neither is a subject.
     pub subject_id: Option<Uuid>,
 }
 
@@ -1620,25 +1621,39 @@ pub async fn held_captures(conn: &mut SqliteConnection, id: Uuid) -> Result<Vec<
     let project = id.to_string();
     let mut places: BTreeMap<Uuid, (Uuid, Option<Uuid>)> = BTreeMap::new();
     for row in sqlx::query(
-        "SELECT ps.session_id, ps.group_id, coalesce((SELECT sub.id FROM associations a \
-         JOIN project_subjects sub ON sub.project_id = ps.project_id AND sub.target_id = a.target_id \
-         WHERE a.session_id = ps.session_id AND a.kind = 'target' AND a.state = 'confirmed'), \
-         (SELECT sub.id FROM project_subjects sub WHERE sub.project_id = ps.project_id \
-         AND sub.target_id = ps.target_id)) AS subject_id \
-         FROM project_sessions ps WHERE ps.project_id = ?1",
+        "SELECT ps.session_id, ps.group_id, a.state AS target_state, \
+         a.evidence AS target_evidence, associated_subject.id AS associated_subject_id, \
+         joined_subject.id AS joined_subject_id \
+         FROM project_sessions ps LEFT JOIN associations a \
+         ON a.session_id = ps.session_id AND a.kind = 'target' \
+         LEFT JOIN project_subjects associated_subject \
+         ON associated_subject.project_id = ps.project_id AND associated_subject.target_id = a.target_id \
+         LEFT JOIN project_subjects joined_subject \
+         ON joined_subject.project_id = ps.project_id AND joined_subject.target_id = ps.target_id \
+         WHERE ps.project_id = ?1",
     )
     .bind(&project)
     .fetch_all(&mut *conn)
     .await?
     {
+        let associated_subject: Option<String> = row.try_get("associated_subject_id")?;
+        let subject_id = if let Some(state) = row.try_get::<Option<String>, _>("target_state")? {
+            let state: AssociationState = from_text(&state)?;
+            let evidence: Vec<EvidenceItem> =
+                from_json(&row.try_get::<String, _>("target_evidence")?)?;
+            if counts_as_confirmed(&state, &evidence) {
+                associated_subject
+            } else {
+                row.try_get("joined_subject_id")?
+            }
+        } else {
+            row.try_get("joined_subject_id")?
+        };
         places.insert(
             parse_uuid(&row.try_get::<String, _>("session_id")?)?,
             (
                 parse_uuid(&row.try_get::<String, _>("group_id")?)?,
-                row.try_get::<Option<String>, _>("subject_id")?
-                    .as_deref()
-                    .map(parse_uuid)
-                    .transpose()?,
+                subject_id.as_deref().map(parse_uuid).transpose()?,
             ),
         );
     }

@@ -12,15 +12,16 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use platevault_model::{
-    builtin_goal_templates, validate_goals, validate_project_name, validate_rigs,
-    validate_subjects, ApplicableQuality, Asset, AssetReference, Availability, CaptureInclusion,
-    CaptureMetadata, DuplicateRequest, ExclusionBasis, GoalIdentity, GoalInput, GoalProgress,
-    GoalSpec, GoalTally, GoalTemplate, GoalTemplateInput, InclusionBasis, LibraryError,
-    MeasurementMethod, MeasurementOutcome, MeasurementRecord, MetricId, MetricState, MetricValue,
-    Microseconds, Project, ProjectCandidate, ProjectDesired, ProjectGoal, ProjectInput,
-    ProjectQuery, ProjectSubject, ProjectSummary, ProjectViewSettings, QualityCriterion,
-    RecordValidity, ReferenceKind, Revision, SubjectInput, Units,
+    builtin_goal_templates, counts_as_confirmed, validate_goals, validate_project_name,
+    validate_rigs, validate_subjects, ApplicableQuality, Asset, AssetReference, Availability,
+    CaptureInclusion, CaptureMetadata, DuplicateRequest, ExclusionBasis, GoalIdentity, GoalInput,
+    GoalProgress, GoalSpec, GoalTally, GoalTemplate, GoalTemplateInput, InclusionBasis,
+    LibraryError, MeasurementMethod, MeasurementOutcome, MeasurementRecord, MetricId, MetricState,
+    MetricValue, Microseconds, Project, ProjectCandidate, ProjectDesired, ProjectGoal,
+    ProjectInput, ProjectQuery, ProjectSubject, ProjectSummary, ProjectViewSettings,
+    QualityCriterion, RecordValidity, ReferenceKind, Revision, SubjectInput, Units,
 };
+
 use sqlx::sqlite::{SqliteConnection, SqliteRow};
 use sqlx::{Connection, Row};
 use target_match::{Field, Optics};
@@ -262,11 +263,12 @@ impl Catalog {
         Ok(summaries)
     }
 
-    /// The Project's candidates, derived now: every current session whose
-    /// confirmed Target is a subject's Target and whose confirmed rig is a
-    /// Project rig, with its frames outside the Trash, whether the Project
-    /// holds it or not. An OBJECT header or a suggestion confirms nothing. In
-    /// subject, rig and session order.
+    /// The Project's candidates, derived now: every current session whose Target
+    /// counts as confirmed and is a subject's Target, and whose confirmed rig is a
+    /// Project rig, with its frames outside the Trash, whether the Project holds it
+    /// or not. An OBJECT header or an unevidenced suggestion counts for nothing.
+    /// In subject, rig and session order.
+
     ///
     /// # Errors
     /// `NotFound` for an unknown Project.
@@ -885,19 +887,18 @@ async fn goal_inputs(conn: &mut SqliteConnection, project: Uuid) -> Result<Vec<G
 }
 
 /// The Project's candidates on `conn`'s snapshot: current sessions with a
-/// confirmed subject Target and a confirmed Project rig that hold a frame
-/// outside the Trash, each with only those frames.
+/// confirmed-or-evidence-qualified subject Target and a confirmed Project rig
+/// that hold a frame outside the Trash, each with only those frames.
 pub async fn candidates(
     conn: &mut SqliteConnection,
     project: Uuid,
 ) -> Result<Vec<ProjectCandidate>> {
     let rows = sqlx::query(
         "SELECT s.id AS session_id, s.grouping_revision, s.decision_revision, s.date_basis, \
-         ps.id AS subject_id, ea.equipment_id AS rig_id, \
-         (SELECT json_group_array(a.id) FROM live_assets a WHERE a.session_id = s.id) AS asset_ids \
+         ps.id AS subject_id, ea.equipment_id AS rig_id, ta.state AS target_state, \
+         ta.evidence AS target_evidence, (SELECT json_group_array(a.id) FROM live_assets a WHERE a.session_id = s.id) AS asset_ids \
          FROM project_subjects ps \
-         JOIN associations ta ON ta.kind = 'target' AND ta.state = 'confirmed' \
-         AND ta.target_id = ps.target_id \
+         JOIN associations ta ON ta.kind = 'target' AND ta.target_id = ps.target_id \
          JOIN sessions s ON s.id = ta.session_id AND s.superseded_by IS NULL \
          JOIN associations ea ON ea.session_id = s.id AND ea.kind = 'equipment' \
          AND ea.state = 'confirmed' \
@@ -908,22 +909,29 @@ pub async fn candidates(
     .bind(project.to_string())
     .fetch_all(&mut *conn)
     .await?;
-    rows.iter()
-        .map(|row| {
-            let ids: Vec<String> = from_json(&row.try_get::<String, _>("asset_ids")?)?;
-            let mut asset_ids = ids.iter().map(|id| parse_uuid(id)).collect::<Result<Vec<_>>>()?;
-            asset_ids.sort_unstable();
-            Ok(ProjectCandidate {
-                session_id: parse_uuid(&row.try_get::<String, _>("session_id")?)?,
-                grouping_revision: revision(row.try_get("grouping_revision")?)?,
-                decision_revision: revision(row.try_get("decision_revision")?)?,
-                date_basis: row.try_get("date_basis")?,
-                subject_id: parse_uuid(&row.try_get::<String, _>("subject_id")?)?,
-                rig_id: parse_uuid(&row.try_get::<String, _>("rig_id")?)?,
-                asset_ids,
-            })
-        })
-        .collect()
+    let mut candidates = Vec::with_capacity(rows.len());
+    for row in &rows {
+        let state: platevault_model::AssociationState =
+            from_text(&row.try_get::<String, _>("target_state")?)?;
+        let evidence: Vec<platevault_model::EvidenceItem> =
+            from_json(&row.try_get::<String, _>("target_evidence")?)?;
+        if !counts_as_confirmed(&state, &evidence) {
+            continue;
+        }
+        let ids: Vec<String> = from_json(&row.try_get::<String, _>("asset_ids")?)?;
+        let mut asset_ids = ids.iter().map(|id| parse_uuid(id)).collect::<Result<Vec<_>>>()?;
+        asset_ids.sort_unstable();
+        candidates.push(ProjectCandidate {
+            session_id: parse_uuid(&row.try_get::<String, _>("session_id")?)?,
+            grouping_revision: revision(row.try_get("grouping_revision")?)?,
+            decision_revision: revision(row.try_get("decision_revision")?)?,
+            date_basis: row.try_get("date_basis")?,
+            subject_id: parse_uuid(&row.try_get::<String, _>("subject_id")?)?,
+            rig_id: parse_uuid(&row.try_get::<String, _>("rig_id")?)?,
+            asset_ids,
+        });
+    }
+    Ok(candidates)
 }
 
 // ---------------------------------------------------------------------------

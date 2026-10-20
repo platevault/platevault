@@ -418,6 +418,45 @@ async fn object_header_alone_is_never_candidate() {
     assert_eq!(catalog.project(project.id).await.unwrap(), project, "the Project is unchanged");
     world.catalog.close().await.unwrap();
 }
+/// D-W124: an agreeing Target association counts as confirmed for Project candidates,
+/// but a suggestion without its required pointing evidence does not.
+#[tokio::test]
+async fn agreeing_target_evidence_makes_a_project_candidate() {
+    let world = world().await;
+    let catalog = &world.catalog;
+    let project = catalog.create_project(&hoo(&world)).await.unwrap();
+    let oiii = world.session(RC_OIII).await;
+    assert!(
+        catalog
+            .project_candidates(project.id)
+            .await
+            .unwrap()
+            .iter()
+            .all(|candidate| candidate.session_id != oiii.id),
+        "the alias-only suggestion is not a candidate"
+    );
+    let assets = catalog.session(oiii.id).await.unwrap().assets;
+    let suggestion = SuggestedAssociation {
+        session_id: oiii.id,
+        grouping_revision: oiii.grouping_revision,
+        kind: AssociationKind::Target,
+        state: AssociationState::Suggested,
+        subject_id: Some(world.ngc7000.candidate.id),
+        evidence: vec![
+            EvidenceItem::Alias { normalized: "ngc 7000".into(), agrees: true },
+            EvidenceItem::Coordinates { ra_deg: 314.75, dec_deg: 44.33, qualified: true },
+        ],
+        provenance: Provenance::Inferred { rule: "alias-and-coordinates".into() },
+        expected_observations: assets.iter().map(|a| (a.id, a.fingerprint.clone())).collect(),
+        expected_decisions: assets.iter().map(|a| (a.id, a.decision_revision)).collect(),
+        expected_observation_revisions: assets
+            .iter()
+            .map(|a| (a.id, a.observation_revision))
+            .collect(),
+    };
+    catalog.record_suggestions(&[suggestion]).await.unwrap();
+    world.catalog.close().await.unwrap();
+}
 
 /// PRJ-FR-02, PRJ-AC-09, PRJ-AC-25 (without runs): adding a rig adds its
 /// confirmed sessions as candidates and removing it takes them out again; the

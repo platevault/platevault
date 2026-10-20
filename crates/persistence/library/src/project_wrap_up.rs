@@ -21,12 +21,12 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use platevault_model::{
-    ApplicableQuality, ArchiveFile, ArchiveMove, ArchiveMoveOutcome, ArchiveProgress, Asset,
-    Availability, ClosePolicy, ClosedSnapshot, FileIdentity, ItemReason, KeptViewLink,
-    LibraryError, Location, ManifestEntry, MeasurementMethod, NativePath, ObservationFingerprint,
-    ProjectLifecycle, ProjectOperation, ProjectOperationKind, Revision, SettledPin,
-    StorageItemDraft, StorageOperationKind, TrashGroup, WrapUpBlocker, WrapUpOutcome, WrapUpRecord,
-    WrapUpStatus, WrapUpStep,
+    counts_as_confirmed, ApplicableQuality, ArchiveFile, ArchiveMove, ArchiveMoveOutcome,
+    ArchiveProgress, Asset, AssociationState, Availability, ClosePolicy, ClosedSnapshot,
+    EvidenceItem, FileIdentity, ItemReason, KeptViewLink, LibraryError, Location, ManifestEntry,
+    MeasurementMethod, NativePath, ObservationFingerprint, ProjectLifecycle, ProjectOperation,
+    ProjectOperationKind, Revision, SettledPin, StorageItemDraft, StorageOperationKind, TrashGroup,
+    WrapUpBlocker, WrapUpOutcome, WrapUpRecord, WrapUpStatus, WrapUpStep,
 };
 use sqlx::sqlite::{SqliteConnection, SqliteRow};
 use sqlx::{Connection, Row};
@@ -972,8 +972,8 @@ const KEPT_LINKS: &str = "SELECT e.project_id, e.generation, e.seq, e.asset_id, 
 pub struct ArchiveAsset {
     pub session_id: Uuid,
     pub asset: Asset,
-    /// The session's confirmed Target, the template's `{target}` when the
-    /// header names none.
+    /// The session's Target when it counts as confirmed; the template's `{target}`
+    /// when the header names none.
     pub target: Option<String>,
 }
 
@@ -1017,13 +1017,35 @@ impl Catalog {
                     .await?;
             let session_id =
                 parse_uuid(&session.ok_or_else(|| corrupt("archive frame without a session"))?)?;
-            let target: Option<String> = sqlx::query_scalar(
-                "SELECT t.designation FROM associations a JOIN targets t ON t.id = a.target_id \
-                 WHERE a.session_id = ?1 AND a.kind = 'target' AND a.state = 'confirmed'",
+            let association = sqlx::query(
+                "SELECT state, evidence, target_id FROM associations \
+                 WHERE session_id = ?1 AND kind = 'target'",
             )
             .bind(session_id.to_string())
             .fetch_optional(&mut *conn)
             .await?;
+            let target = if let Some(association) = association {
+                let state: AssociationState =
+                    from_text(&association.try_get::<String, _>("state")?)?;
+                let evidence: Vec<EvidenceItem> =
+                    from_json(&association.try_get::<String, _>("evidence")?)?;
+                if counts_as_confirmed(&state, &evidence) {
+                    if let Some(target_id) =
+                        association.try_get::<Option<String>, _>("target_id")?
+                    {
+                        sqlx::query_scalar("SELECT designation FROM targets WHERE id = ?1")
+                            .bind(target_id)
+                            .fetch_optional(&mut *conn)
+                            .await?
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
             assets.push(ArchiveAsset { session_id, asset, target });
         }
         Ok(assets)
