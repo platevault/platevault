@@ -23,6 +23,7 @@ use membership_support::{add, admit, hold, remove};
 use persistence_library::{
     Catalog, LocationRegistration, ProgressBasis, SessionQuery, SourceProbe, TrashedFrame,
 };
+use platevault_model::EvidenceItem;
 use platevault_model::{
     reasons, Asset, AssociationState, CaptureMetadata, DecodedBasis, Equipment, FrameChoice,
     GoalInput, GoalProgress, GoalSpec, GoalTally, ImageFormat, InputBasis, Location, LocationRole,
@@ -32,6 +33,8 @@ use platevault_model::{
     ScanFile, ScanObservation, ScanProgress, ScanState, Session, SubjectInput, TargetRecord, Units,
     VolumeKind,
 };
+use sqlx::sqlite::{SqliteConnectOptions, SqliteConnection};
+use sqlx::Connection;
 use support::*;
 use uuid::Uuid;
 
@@ -379,6 +382,71 @@ async fn in_project_counts_held_sessions_minus_exclusions_rejects_trashed() {
     world.catalog.close().await.unwrap();
 }
 
+/// D-W124: held goal attribution follows an agreeing current Target association,
+/// not only a user's explicit confirmation or the Target used when the session joined.
+#[tokio::test]
+async fn held_session_uses_its_evidence_qualified_target_for_goal_attribution() {
+    let world = world(&[], &[]).await;
+    let ngc = world.ngc.candidate.id;
+    let m81 = world.m81.candidate.id;
+    let project = world
+        .catalog
+        .create_project(&ProjectInput {
+            name: "Two subjects".into(),
+            notes: None,
+            subjects: vec![
+                SubjectInput { target_id: ngc, name: None },
+                SubjectInput { target_id: m81, name: None },
+            ],
+            rig_ids: vec![world.redcat.id],
+            goals: vec![frame_count(ngc, "Ha", 2), frame_count(m81, "Ha", 2)],
+        })
+        .await
+        .unwrap();
+    let session = world.session(HA[0]).await;
+    hold(&world.catalog, project.id, session.id, world.redcat.id).await;
+
+    let mut conn =
+        SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(&world.fx.db))
+            .await
+            .unwrap();
+    let evidence = serde_json::to_string(&[
+        EvidenceItem::Alias { normalized: "m 81".into(), agrees: true },
+        EvidenceItem::Coordinates { ra_deg: 148.9, dec_deg: 69.1, qualified: true },
+    ])
+    .unwrap();
+    sqlx::query(
+        "UPDATE associations SET target_id = ?1, state = 'suggested', evidence = ?2 \
+         WHERE session_id = ?3 AND kind = 'target'",
+    )
+    .bind(m81.to_string())
+    .bind(evidence)
+    .bind(session.id.to_string())
+    .execute(&mut conn)
+    .await
+    .unwrap();
+    conn.close().await.unwrap();
+
+    let basis = world.catalog.project_progress_basis(project.id, &method()).await.unwrap();
+    let ngc_subject = project.subjects.iter().find(|subject| subject.target_id == ngc).unwrap().id;
+    let m81_subject = project.subjects.iter().find(|subject| subject.target_id == m81).unwrap().id;
+    let tally = |subject_id| {
+        basis
+            .goals
+            .iter()
+            .find(|progress| progress.goal.subject_id == subject_id)
+            .unwrap()
+            .in_project
+            .frames
+    };
+    assert_eq!(tally(ngc_subject), 0, "the stale joined Target no longer owns the held frames");
+    assert_eq!(
+        tally(m81_subject),
+        4,
+        "qualified current evidence attributes every held Ha frame to M 81"
+    );
+    world.catalog.close().await.unwrap();
+}
 /// PRJ-FR-04, PRJ-FR-09: "captured" is the frames of the Project's own
 /// sessions plus its suggestions'. A session it removes is a suggestion
 /// again; one re-confirmed as another Target is neither, until it is

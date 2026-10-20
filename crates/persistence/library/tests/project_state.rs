@@ -31,9 +31,13 @@ use platevault_model::{
     WrapUpOutcome, WrapUpStep,
 };
 use project_state_support::{ha_frames, world, World};
+use sqlx::sqlite::{SqliteConnectOptions, SqliteConnection};
+use sqlx::Connection;
+use std::collections::BTreeSet;
 use support::{expected, expected_session, kind, target, DiskProbe};
 use uuid::Uuid;
 
+use serde_json::json;
 fn method() -> MeasurementMethod {
     MeasurementMethod::new("platevault.stars", 1)
 }
@@ -253,5 +257,62 @@ async fn duplicate_continues_a_closed_project_with_its_joined_target() {
     let stray = DuplicateRequest { sessions: vec![Uuid::new_v4()], ..request };
     let refused = catalog.duplicate_project(&stray).await.unwrap_err();
     assert_eq!(kind(&refused), "invalid_input", "{refused}");
+    world.catalog.close().await.unwrap();
+}
+
+/// D-W124: Wrap up's archive naming uses an agreeing Suggested Target exactly
+/// like a user-confirmed Target, but an alias without qualified geometry is ignored.
+#[tokio::test]
+async fn archive_assets_use_only_evidence_qualified_suggested_targets() {
+    let world = world().await;
+    let catalog = &world.catalog;
+    let (_, session) = held(&world).await;
+    let sessions = BTreeSet::from([session]);
+    let archive_target = |assets: &[persistence_library::ArchiveAsset]| {
+        assets.iter().find(|asset| asset.session_id == session).unwrap().target.clone()
+    };
+
+    let mut conn =
+        SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(&world.fx.db))
+            .await
+            .unwrap();
+    sqlx::query(
+        "UPDATE associations SET state = 'suggested', evidence = ?1 \
+         WHERE session_id = ?2 AND kind = 'target'",
+    )
+    .bind(json!([{"kind":"alias","normalized":"ngc 7000","agrees":true}]).to_string())
+    .bind(session.to_string())
+    .execute(&mut conn)
+    .await
+    .unwrap();
+    conn.close().await.unwrap();
+
+    assert_eq!(archive_target(&catalog.archive_assets(&sessions).await.unwrap()), None);
+
+    let mut conn =
+        SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(&world.fx.db))
+            .await
+            .unwrap();
+    sqlx::query(
+        "UPDATE associations SET evidence = ?1 \
+         WHERE session_id = ?2 AND kind = 'target'",
+    )
+    .bind(
+        json!([
+            {"kind":"alias","normalized":"ngc 7000","agrees":true},
+            {"kind":"coordinates","ra_deg":314.75,"dec_deg":44.33,"qualified":true}
+        ])
+        .to_string(),
+    )
+    .bind(session.to_string())
+    .execute(&mut conn)
+    .await
+    .unwrap();
+    conn.close().await.unwrap();
+
+    assert_eq!(
+        archive_target(&catalog.archive_assets(&sessions).await.unwrap()).as_deref(),
+        Some("NGC 7000")
+    );
     world.catalog.close().await.unwrap();
 }
