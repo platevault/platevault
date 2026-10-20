@@ -30,9 +30,11 @@
 //! patched copy can carry refuses Apply before it builds, naming the
 //! session, the frame and the field.
 //!
-//! While `View (previous)/` still holds kept files, Apply refuses: what the
-//! next outgoing View does with them is open with the owner (decision
-//! record §9).
+//! Apply doesn't wait for files the user kept in `View (previous)/`: right
+//! before the old View moves aside, they move to `View (kept)/` at their
+//! paths from inside the View, numbered `-2`, `-3` … where a name is taken,
+//! each move proven and nothing replaced (D-W110). A kept file gone from
+//! disk is named in the report, never skipped (D-W137).
 
 pub(crate) mod files;
 mod plan;
@@ -51,7 +53,9 @@ use self::plan::{Plan, PlanEntry, PlanInput};
 use crate::custody::trash::{self, OsTrash, Retirement};
 use crate::custody::{observe_entry, same_identity, transfer};
 use crate::inventory::{self, observe_folder_identity};
-use crate::layout::{self, VIEW_BUILDING_FOLDER, VIEW_FOLDER, VIEW_PREVIOUS_FOLDER};
+use crate::layout::{
+    self, VIEW_BUILDING_FOLDER, VIEW_FOLDER, VIEW_KEPT_FOLDER, VIEW_PREVIOUS_FOLDER,
+};
 use crate::library::{blocking, Library};
 use crate::patched_copy::{self, HeaderPatch};
 use crate::{
@@ -337,6 +341,7 @@ impl Library {
             return Err(LibraryError::InvalidInput("nothing to apply".into()));
         };
         let previous_gone = checked.previous_gone;
+        let kept_missing = checked.kept_missing;
         let folder = project.clone();
         let expected = blocking(move || prepare_tree(&folder, previous_gone)).await?;
         let reserved = self
@@ -375,6 +380,7 @@ impl Library {
             built: Vec::new(),
             failures: Vec::new(),
             building_made: false,
+            kept_missing,
         };
         // What the reservation left, which the swap reads again (plan §3).
         let after = self.catalog().apply_inputs(request.project_id).await?;
@@ -405,6 +411,7 @@ impl Library {
             built: Vec::new(),
             failures: Vec::new(),
             building_made: false,
+            kept_missing: Vec::new(),
         };
         match installed {
             Recovered::Installed => {
@@ -485,6 +492,8 @@ struct Checked {
     project: Option<PathBuf>,
     /// `View (previous)/` is absent or holds nothing.
     previous_gone: bool,
+    /// The kept files of `View (previous)/` gone from disk (D-W137).
+    kept_missing: Vec<NativePath>,
     /// The current View's files `PlateVault` didn't place (VSEL-FR-20).
     foreign: Vec<(PathBuf, EntryEvidence)>,
 }
@@ -643,7 +652,7 @@ fn check(inputs: &ApplyInputs, os: Os) -> Checked {
         Some(parent) => match location(parent, &inputs.name) {
             Err(blocker) => blockers.push(blocker),
             Ok((parent, folder)) => {
-                found = folder_blockers(inputs, &folder, pending > 0, &mut blockers);
+                found = folder_blockers(inputs, &folder, &mut blockers);
                 if inputs.basis.mode == ViewMode::Symlinks {
                     if let Some(blocker) = symlink_blocker(&parent, (os.symlinks)(&parent)) {
                         blockers.push(blocker);
@@ -679,7 +688,14 @@ fn check(inputs: &ApplyInputs, os: Os) -> Checked {
     }
     let mut seen = BTreeSet::new();
     blockers.retain(|blocker| seen.insert(format!("{blocker:?}")));
-    Checked { blockers, plan, project, previous_gone: found.previous_gone, foreign: found.foreign }
+    Checked {
+        blockers,
+        plan,
+        project,
+        previous_gone: found.previous_gone,
+        kept_missing: found.kept_missing,
+        foreign: found.foreign,
+    }
 }
 
 /// Every held frame placed with a recorded correction is an isolated
@@ -764,26 +780,24 @@ fn symlink_blocker(
 struct Found {
     /// `View (previous)/` is absent or holds nothing.
     previous_gone: bool,
+    /// The files the user kept in `View (previous)/` that are gone from
+    /// disk (D-W137), relative to the Project folder.
+    kept_missing: Vec<NativePath>,
     /// The current View's files `PlateVault` didn't place.
     foreign: Vec<(PathBuf, EntryEvidence)>,
 }
 
 impl Default for Found {
     fn default() -> Self {
-        Self { previous_gone: true, foreign: Vec::new() }
+        Self { previous_gone: true, kept_missing: Vec::new(), foreign: Vec::new() }
     }
 }
 
 /// What the Project folder holds that keeps Apply from running, whether
-/// `View (previous)/` is absent or empty, and the current View's foreign
-/// files; an entry of either View that can't be read is a blocker naming
-/// it, never left out (VSEL-FR-20, STO-FR-05/16).
-fn folder_blockers(
-    inputs: &ApplyInputs,
-    folder: &Path,
-    leftovers_pending: bool,
-    blockers: &mut Vec<ApplyBlocker>,
-) -> Found {
+/// `View (previous)/` is absent or empty, the kept files gone from it and
+/// the current View's foreign files; an entry of either View that can't be
+/// read is a blocker naming it, never left out (VSEL-FR-20, STO-FR-05/16).
+fn folder_blockers(inputs: &ApplyInputs, folder: &Path, blockers: &mut Vec<ApplyBlocker>) -> Found {
     let Ok(metadata) = fs::symlink_metadata(folder) else { return Found::default() };
     if fs_pathsafe::is_link_or_junction_metadata(&metadata) || !metadata.is_dir() {
         blockers.push(ApplyBlocker::ProjectFolderOccupied { path: NativePath::from_path(folder) });
@@ -805,20 +819,11 @@ fn folder_blockers(
     let previous = folder.join(VIEW_PREVIOUS_FOLDER);
     let previous_gone = fs::symlink_metadata(&previous).is_err() || files::holds_nothing(&previous);
     if !previous_gone {
-        match files::files_below(&previous) {
-            Ok(kept) if !leftovers_pending => {
-                let paths = kept
-                    .into_iter()
-                    .map(|relative| {
-                        NativePath::from_path(&Path::new(VIEW_PREVIOUS_FOLDER).join(relative))
-                    })
-                    .collect();
-                blockers.push(ApplyBlocker::PreviousHoldsKeptFiles { paths });
-            }
-            Ok(_) => {}
-            Err(unreadable) => blockers.extend(unreadable_blockers(unreadable)),
+        if let Err(unreadable) = files::files_below(&previous) {
+            blockers.extend(unreadable_blockers(unreadable));
         }
     }
+    let kept_missing = kept_missing(inputs, folder);
     let mut foreign = Vec::new();
     if let Some(installed) = &inputs.installed {
         match files::foreign_files(&folder.join(VIEW_FOLDER), &placed(installed)) {
@@ -836,6 +841,7 @@ fn folder_blockers(
                     | layout::OUTPUT_FOLDER
                     | VIEW_BUILDING_FOLDER
                     | VIEW_PREVIOUS_FOLDER
+                    | VIEW_KEPT_FOLDER
             )
         });
         if occupied {
@@ -843,7 +849,25 @@ fn folder_blockers(
                 .push(ApplyBlocker::ProjectFolderOccupied { path: NativePath::from_path(folder) });
         }
     }
-    Found { previous_gone, foreign }
+    Found { previous_gone, kept_missing, foreign }
+}
+
+/// The files the user kept in `View (previous)/` that are gone from disk,
+/// which Apply names rather than skips (D-W137).
+fn kept_missing(inputs: &ApplyInputs, folder: &Path) -> Vec<NativePath> {
+    let previous = folder.join(VIEW_PREVIOUS_FOLDER);
+    inputs
+        .leftovers
+        .iter()
+        .filter(|item| item.review == PreviousItemReview::Kept)
+        .filter(|item| {
+            files::in_previous(&item.path).is_some_and(|relative| {
+                fs::symlink_metadata(previous.join(relative))
+                    .is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound)
+            })
+        })
+        .map(|item| item.path.clone())
+        .collect()
 }
 
 /// The copy each included capture places: its first copy on an online
@@ -1153,6 +1177,8 @@ struct Run<'a> {
     built: Vec<ManifestEntry>,
     failures: Vec<ApplyFailure>,
     building_made: bool,
+    /// The kept files of `View (previous)/` found gone from disk (D-W137).
+    kept_missing: Vec<NativePath>,
 }
 
 impl Run<'_> {
@@ -1191,6 +1217,7 @@ impl Run<'_> {
             failures: self.failures.clone(),
             foreign,
             leftovers,
+            kept_missing: self.kept_missing.clone(),
             corrected_values: delivered.corrected_values,
             patched_copies: delivered.patched_copies,
             footprint: delivered.footprint,
@@ -1487,6 +1514,9 @@ impl Run<'_> {
             if self.control.canceled() {
                 return self.cancel().await;
             }
+            if let Some(error) = self.move_kept().await? {
+                return self.end(ApplyOutcome::Failed, error).await;
+            }
             let (root, view_path, previous_path) =
                 (self.project.clone(), view.clone(), previous.clone());
             let expected = expected.clone();
@@ -1570,6 +1600,56 @@ impl Run<'_> {
         let rename = self.os.rename;
         let (from, to) = (self.project.join(VIEW_PREVIOUS_FOLDER), self.project.join(VIEW_FOLDER));
         blocking(move || Ok(rename(&from, &to))).await
+    }
+
+    /// Move what the user kept in `View (previous)/` to `View (kept)/`, so
+    /// the old View can take its place (D-W110), and record each kept file
+    /// that left or is gone; one gone from disk is named in the report
+    /// (D-W137). Once the folder is gone its manifest retires. A file that
+    /// can't move fails Apply with the old View in place: why, if so.
+    async fn move_kept(&mut self) -> Result<Option<String>, LibraryError> {
+        let project = self.project.clone();
+        let moves = match blocking(move || Ok(files::move_kept(&project))).await? {
+            Ok(moves) => moves,
+            Err(unreadable) => {
+                let count = self.record(unreadable);
+                return Ok(Some(format!(
+                    "{count} entr(ies) in View (previous)/ can't be read; the current View is \
+                     unchanged"
+                )));
+            }
+        };
+        for relative in &moves.missing {
+            let path = NativePath::from_path(&Path::new(VIEW_PREVIOUS_FOLDER).join(relative));
+            if !self.kept_missing.contains(&path) {
+                self.kept_missing.push(path);
+            }
+        }
+        let catalog = self.library.catalog();
+        let project_id = self.journal.project_id;
+        for item in catalog.previous_items(project_id).await? {
+            let moved_or_gone = files::in_previous(&item.path).is_some_and(|relative| {
+                moves.moved.contains(&relative) || moves.missing.contains(&relative)
+            });
+            if item.review == PreviousItemReview::Kept
+                && (moved_or_gone || self.kept_missing.contains(&item.path))
+            {
+                catalog
+                    .review_previous_item(project_id, &item.path, PreviousItemReview::Moved)
+                    .await?;
+            }
+        }
+        if !moves.failed.is_empty() {
+            let count = self.record(moves.failed);
+            return Ok(Some(format!(
+                "{count} kept file(s) couldn't be moved to {VIEW_KEPT_FOLDER}/; the current View \
+                 is unchanged"
+            )));
+        }
+        if moves.gone {
+            catalog.retire_previous_view(project_id).await?;
+        }
+        Ok(None)
     }
 
     /// From `NewInstalled` on Apply ends Applied: commit the manifest, move

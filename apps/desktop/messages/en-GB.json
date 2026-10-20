@@ -287,6 +287,7 @@
   "err_library_source_unavailable": "This file or folder can't be reached right now. Check that its drive is connected, then try again.",
   "err_library_symlinks_unavailable": "Can't apply · symlinks need Windows Developer Mode. Turn it on in Windows settings and check again, or use copies for this project.",
   "err_library_unsupported_format": "This file's format isn't supported.",
+  "apply_report_kept_missing": "{path} was no longer on disk, so it couldn't be moved to View (kept)/. You had kept it in View (previous)/; check whether it was moved or deleted.",
   "err_lifecycle_last_confirmed_source": "You can't remove the last confirmed source.",
   "err_lifecycle_read_only": "This item is read-only and can't be changed.",
   "err_macos_quarantine_detected": "macOS has quarantined this app. Approve it in System Settings, then try again.",
