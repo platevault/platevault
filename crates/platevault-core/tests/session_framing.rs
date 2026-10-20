@@ -159,7 +159,7 @@ fn lights(shots: &[Shot]) -> Vec<Asset> {
 }
 
 fn group(assets: &[Asset]) -> GroupingResult {
-    grouping::group_assets(assets, &FramingMargins::default())
+    grouping::regroup_assets(assets, &[], &FramingMargins::default())
 }
 
 fn ids(assets: &[Asset]) -> Vec<Uuid> {
@@ -366,7 +366,7 @@ fn the_margins_come_from_the_caller() {
         ..FramingMargins::default()
     };
 
-    let result = grouping::group_assets(&assets, &wide);
+    let result = grouping::regroup_assets(&assets, &[], &wide);
 
     assert_eq!(result.sessions.len(), 1, "8′ is inside a 10′ centre limit");
 }

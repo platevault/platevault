@@ -41,23 +41,18 @@ pub const BASIS_LONGITUDE: &str = "longitude-mean-solar-noon";
 /// Provisional: the UTC calendar date of `DATE-OBS`; no local-night evidence.
 pub const BASIS_UTC: &str = "utc-date-provisional";
 
-/// Group assets into metadata-homogeneous session candidates, splitting each
-/// key's lights by framing within `margins`.
+/// Group assets into metadata-homogeneous session candidates around the
+/// catalog's `standing` sessions: each keeps its members, and a frame joins
+/// it within its own recorded split limits (D-W107). The other frames split
+/// by framing within `margins`, the limits of the intake bringing them in. A
+/// standing session whose members no longer share its capture key stands no
+/// longer: its frames are grouped afresh. With no standing sessions, every
+/// key's lights split within `margins`.
 ///
 /// Pure and deterministic: the result depends only on each asset's ID, file
 /// name and effective metadata, never on input order, storage or the current
 /// time. Sessions are ordered by key, then framing, and their asset IDs
 /// ascending.
-#[must_use]
-pub fn group_assets(assets: &[Asset], margins: &FramingMargins) -> GroupingResult {
-    regroup_assets(assets, &[], margins)
-}
-
-/// [`group_assets`] around the catalog's `standing` sessions: each keeps its
-/// members, and a frame joins it within its own recorded split limits
-/// (D-W107). The other frames split within `margins`, the limits of the
-/// intake bringing them in. A standing session whose members no longer share
-/// its capture key stands no longer: its frames are grouped afresh.
 #[must_use]
 pub fn regroup_assets(
     assets: &[Asset],
