@@ -1955,6 +1955,22 @@
   "location_retire_pinned_by": "{session} pins calibration here · {projects}",
   "location_retire_project_state": "{name} ({state})",
   "location_retire_pin_no_project": "In no Project",
+  "location_retire_pinned": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} session pins calibration here",
+        "countPlural=*": "{n} sessions pin calibration here"
+      }
+    }
+  ],
   "location_remap_same_folder": "{path} is already {name}'s folder",
   "location_remap_overlaps": "{path} overlaps {name}",
   "location_remap_no_frames": "{name} holds no indexed frames",

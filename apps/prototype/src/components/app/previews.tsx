@@ -161,8 +161,8 @@ export interface BlockersPreviewProps {
   children?: ReactElement<{ "aria-describedby"?: string }>
 }
 
-/** The card's body: the blockers as a list, or a table with `columns`, then the actions that resolve them. */
-function BlockersBody({ action, reason, blockers, columns, actions }: Omit<BlockersPreviewProps, "children">) {
+/** The card's body: the blockers as a list, or a table with `columns`, then the actions that resolve them. A ConfirmDialog whose action is blocked shows it in place. */
+export function BlockersBody({ action, reason, blockers, columns, actions }: Omit<BlockersPreviewProps, "children">) {
   return (
     <>
       {blockers.length === 0 ? null : columns ? <BlockerTable caption={`${action} · ${reason}`} blockers={blockers} columns={columns} /> : <Rows rows={blockers} />}

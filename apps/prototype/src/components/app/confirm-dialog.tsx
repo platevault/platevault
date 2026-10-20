@@ -16,11 +16,13 @@
  * focus goes to Cancel when the action is destructive, so Enter on open
  * never runs it, and to the action otherwise. A returned failure keeps the
  * dialog open with the error and Retry; a promise shows the action busy.
+ * While `blocked`, the review lists the blockers above the footer and the
+ * action stays focusable but disabled with that reason (P7).
  *
  * Takes a ConfirmSpec as it is: `<ConfirmDialog {...spec} onConfirm />`.
  */
 import { Link } from "@tanstack/react-router"
-import { ChevronRight } from "lucide-react"
+import { ChevronRight, OctagonX } from "lucide-react"
 import { type ReactElement, useRef } from "react"
 import { useMessages } from "@/app/preferences"
 import {
@@ -39,6 +41,7 @@ import type { Action, Column, ConfirmSpec, FileRow } from "./contracts"
 import { DataTable } from "./data-table"
 import { ActionError } from "./feedback"
 import { DIALOG_DEFAULT_ATTR, type DialogCommit, type DialogCommitOptions, DialogFooter, useDialogCommit } from "./form-dialog"
+import { BlockersBody } from "./previews"
 
 /** One group of files that fold out: "Unusable frames · 12 files · 1.2 GB". */
 export type ConfirmGroup = NonNullable<ConfirmSpec["groups"]>[number]
@@ -54,6 +57,8 @@ export interface ConfirmDialogProps extends DialogCommitOptions {
   groups?: ConfirmGroup[]
   /** The action: its label repeats the verb ("Move to Trash"); `kind: "destructive"` makes it red and puts initial focus on Cancel. */
   confirm: ConfirmSpec["confirm"]
+  /** Why the action is refused now: listed in the dialog, and the action is disabled with it. */
+  blocked?: ConfirmSpec["blocked"]
   /** Runs the action. A failure keeps the dialog open with the error and Retry; a promise shows it busy until it settles. */
   onConfirm: DialogCommit
 }
@@ -66,19 +71,20 @@ interface Shown {
   groups: ConfirmGroup[]
   label: string
   destructive: boolean
+  blocked: ConfirmSpec["blocked"]
 }
 
-export function ConfirmDialog({ trigger, title, summary, groups, onConfirm, confirm, ...options }: ConfirmDialogProps) {
+export function ConfirmDialog({ trigger, title, summary, groups, onConfirm, confirm, blocked, ...options }: ConfirmDialogProps) {
   const m = useMessages()
   const popup = useRef<HTMLDivElement>(null)
   const { isOpen, setOpen, commit, busy, error, finalFocus } = useDialogCommit(options)
   // Confirming usually changes the state the copy is derived from. Keep showing what was
   // confirmed while the dialog animates closed, never a re-derived empty scope.
-  const live: Shown = { title, summary, groups: groups ?? [], label: confirm.label, destructive: confirm.kind === "destructive" }
+  const live: Shown = { title, summary, groups: groups ?? [], label: confirm.label, destructive: confirm.kind === "destructive", blocked }
   const frozen = useRef(live)
   if (isOpen) frozen.current = live
   const shown = isOpen ? live : frozen.current
-  const action: Action = { id: "confirm", label: shown.label, kind: shown.destructive ? "destructive" : "primary", run: onConfirm }
+  const action: Action = { id: "confirm", label: shown.label, kind: shown.destructive ? "destructive" : "primary", unavailable: shown.blocked, run: onConfirm }
   const hasScope = shown.groups.length > 0
 
   return (
@@ -94,7 +100,7 @@ export function ConfirmDialog({ trigger, title, summary, groups, onConfirm, conf
           <AlertDialogTitle className="text-balance">{shown.title}</AlertDialogTitle>
           {shown.summary ? <AlertDialogDescription>{shown.summary}</AlertDialogDescription> : null}
         </AlertDialogHeader>
-        {hasScope || error ? (
+        {hasScope || error || shown.blocked ? (
           <div className="min-w-0 space-y-2 text-sm">
             {hasScope ? (
               <div className="divide-y divide-separator overflow-hidden rounded-[0.3125rem] border border-separator bg-background">
@@ -109,6 +115,15 @@ export function ConfirmDialog({ trigger, title, summary, groups, onConfirm, conf
                   </ul>
                 </section>
               </div>
+            ) : null}
+            {shown.blocked ? (
+              <section aria-label={`${shown.blocked.action} · ${shown.blocked.reason}`} className="flex min-w-0 flex-col gap-2" data-confirm-blocked="">
+                <h3 className="flex items-center gap-1.5 font-medium">
+                  <OctagonX aria-hidden="true" className="size-3.5 shrink-0 text-destructive" />
+                  {shown.blocked.action} · {shown.blocked.reason}
+                </h3>
+                <BlockersBody {...shown.blocked} />
+              </section>
             ) : null}
             {error ? <ActionError message={error} /> : null}
           </div>
