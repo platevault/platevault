@@ -16,7 +16,7 @@ use persistence_library::{Catalog, SessionQuery, SourceProbe};
 use platevault_model::{
     Asset, CaptureKey, CorrectionInput, GroupingResult, LibraryError, Location, ScanBatch,
     ScanObservation, ScanProgress, ScanState, Session, SessionCandidate, SessionFraming,
-    WorkflowSettings, FRAMING_LABEL_FIELD,
+    SplitLimits, WorkflowSettings, FRAMING_LABEL_FIELD,
 };
 use sqlx::sqlite::{SqliteConnectOptions, SqliteConnection};
 use sqlx::Connection;
@@ -62,6 +62,7 @@ fn by_prefix(assets: &[Asset], first_ordinal: u32) -> GroupingResult {
                         sky_angle_deg: None,
                         field: None,
                         label: members[0].effective.framing_label.clone(),
+                        split_limits: SplitLimits::default(),
                     }),
                 }
             })

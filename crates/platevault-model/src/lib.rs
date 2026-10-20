@@ -1090,6 +1090,17 @@ pub struct SessionCandidate {
 pub struct GroupingResult {
     pub sessions: Vec<SessionCandidate>,
 }
+/// A current session a regroup passes to the grouping beside the assets:
+/// its members whose capture evidence did not change, and the framing it
+/// records. The grouping keeps those members in it and compares other
+/// frames with its anchor by its own split limits (D-W107), so a regroup
+/// re-splits no session with limits other than its own.
+#[derive(Clone, Debug)]
+pub struct StandingSession {
+    pub key: CaptureKey,
+    pub asset_ids: Vec<Uuid>,
+    pub framing: Option<SessionFraming>,
+}
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]

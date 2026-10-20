@@ -6187,7 +6187,7 @@ export type RetireAsset = {
 };
 
 /**  A current blocker to retiring a location. */
-export type RetireBlock =
+export type RetireBlock = 
 /**  A pinned calibration file is held at the location. */
 { reason: "pinned_calibration"; sessionId: string; sessionName: string; kinds: InputKind[]; projects: RetirePinProject[] };
 
@@ -6856,6 +6856,11 @@ export type SessionFraming = {
 	field?: FieldOfView | null,
 	/**  The user's framing label when the user merged or split the framing. */
 	label?: string | null,
+	/**
+	 *  The centre and rotation limits intake split the session with: a
+	 *  frame indexed later joins it within these of the anchor.
+	 */
+	splitLimits: SplitLimits,
 };
 
 /**  The facts readiness is computed from, read in one catalog snapshot. */
