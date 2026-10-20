@@ -112,7 +112,7 @@
 //!   is pending touches neither root and keeps the old one named, so the
 //!   shell keeps its registration and the removal's notices still arrive;
 //!   its new root, which may be on that volume, is watched once the removal
-//!   was refused or completed, or after a sweep at most when no notice
+//!   was refused or completed, or after a bounded wait when no notice
 //!   comes. A release returns once discovery is asked to stop, so app exit
 //!   never waits on one. A watcher close or walk still in flight a sweep
 //!   after discovery let go of it is logged once, with its root. macOS and
@@ -162,6 +162,10 @@ const SWEEP: Duration = Duration::from_secs(30);
 const EVENT_CAPACITY: usize = 1024;
 /// How long [`CaptureWatch::shutdown`] waits for discovery to stop.
 const SHUTDOWN_GRACE: Duration = Duration::from_secs(2);
+/// How long a location reselected or remapped while the removal of its
+/// root's volume is pending waits for that removal's outcome, which may never
+/// arrive, before its new root is watched.
+const REMOVAL_WAIT: Duration = Duration::from_secs(30);
 
 /// The new files of one online Captures location.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -305,10 +309,10 @@ impl CaptureWatch {
     /// location keeps the count it had, with `live: false`, and nothing
     /// touches its root, a sweep included. A reselect or remap meanwhile
     /// takes it out of the counts and touches the new root only after that
-    /// notice, or a sweep at most when none comes. A location that no longer
-    /// follows `root` (a remapped location's old root) is left alone: this
-    /// only waits. Discovery handles one thing at a time, so this also waits
-    /// out a file-system call it is making. It returns at once when
+    /// notice, or after a bounded wait when none comes. A location that no
+    /// longer follows `root` (a remapped location's old root) is left alone:
+    /// this only waits. Discovery handles one thing at a time, so this also
+    /// waits out a file-system call it is making. It returns at once when
     /// discovery stopped, and as soon as it is asked to stop
     /// ([`shutdown`](Self::shutdown)), so app exit never waits on a removal
     /// whose walk or watcher close hangs.
@@ -374,11 +378,18 @@ pub(crate) struct Settings {
     pub(crate) sweep: Duration,
     pub(crate) capacity: usize,
     pub(crate) grace: Duration,
+    pub(crate) removal_wait: Duration,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { debounce: DEBOUNCE, sweep: SWEEP, capacity: EVENT_CAPACITY, grace: SHUTDOWN_GRACE }
+        Self {
+            debounce: DEBOUNCE,
+            sweep: SWEEP,
+            capacity: EVENT_CAPACITY,
+            grace: SHUTDOWN_GRACE,
+            removal_wait: REMOVAL_WAIT,
+        }
     }
 }
 
@@ -1161,7 +1172,7 @@ impl Run {
                 reread = indexing.next() => if !self.reread(reread) {
                     break;
                 },
-                _ = debounce.tick() => self.drain().await,
+                _ = debounce.tick() => self.tick().await,
                 _ = sweep.tick() => self.reconcile(true).await,
             }
             self.publish();
@@ -1179,6 +1190,14 @@ impl Run {
         for close in self.draining.closes() {
             close.wait().await;
         }
+    }
+
+    /// At every debounce tick, check the paths live events named, and start
+    /// each location that waited long enough for the removal of its old
+    /// root's volume at the root it moved to.
+    async fn tick(&mut self) {
+        self.drain().await;
+        self.waited_out().await;
     }
 
     /// Read the catalog's paths again as `reread` asks; `false` once the
@@ -1243,7 +1262,7 @@ impl Run {
             .get(&id)
             .is_some_and(|watched| watched.released && !same_root(&location, &watched.location))
         {
-            self.moved_in_removal(location, sweep).await;
+            self.moved_in_removal(location);
             return;
         }
         let refused = if let Some(released) = self.locations.get(&id).map(|w| w.released) {
@@ -1281,16 +1300,29 @@ impl Run {
     /// nothing touches it, and the old root stays named, so the eject window
     /// keeps that root's registration and the removal's outcome still
     /// arrives: [`Run::reattach`] or [`Run::gone`] then start the location at
-    /// its new root ([`Run::move_on`]). A notice may never come, so a sweep
-    /// at least a sweep period after the move starts it there as well.
-    async fn moved_in_removal(&mut self, location: Location, sweep: bool) {
-        let id = location.id;
-        let Some(watched) = self.locations.get_mut(&id) else {
-            return;
-        };
-        let since = watched.moved.as_ref().map_or_else(Instant::now, |moved| moved.since);
-        watched.moved = Some(Moved { to: location, since });
-        if sweep && since.elapsed() >= self.settings.sweep {
+    /// its new root ([`Run::move_on`]). A notice may never come, so it starts
+    /// there as well once it waited [`Settings::removal_wait`], at the next
+    /// debounce tick ([`Run::waited_out`]).
+    fn moved_in_removal(&mut self, location: Location) {
+        if let Some(watched) = self.locations.get_mut(&location.id) {
+            let since = watched.moved.as_ref().map_or_else(Instant::now, |moved| moved.since);
+            watched.moved = Some(Moved { to: location, since });
+        }
+    }
+
+    /// Start every location that waited long enough for the removal of its
+    /// old root's volume at the root it moved to.
+    async fn waited_out(&mut self) {
+        let wait = self.settings.removal_wait;
+        let waited: Vec<Uuid> = self
+            .locations
+            .iter()
+            .filter(|(_, watched)| {
+                watched.moved.as_ref().is_some_and(|m| m.since.elapsed() >= wait)
+            })
+            .map(|(id, _)| *id)
+            .collect();
+        for id in waited {
             tracing::warn!(location = %id, "new captures: the removal of the old root's volume was not decided in time; the new root is watched");
             self.move_on(id).await;
         }

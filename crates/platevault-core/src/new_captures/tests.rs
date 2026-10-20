@@ -34,6 +34,7 @@ const FAST: Settings = Settings {
     sweep: Duration::from_millis(200),
     capacity: 1024,
     grace: SHUTDOWN_GRACE,
+    removal_wait: Duration::from_millis(200),
 };
 
 struct Fixture {
@@ -1659,31 +1660,39 @@ impl RemappedInRemoval {
     }
 }
 
+/// No sweep runs after the start, and the wait for a notice does not run out
+/// before the test ends: only the notice ends the wait.
+const UNTIL_NOTICED: Settings =
+    Settings { sweep: Duration::from_secs(3600), removal_wait: Duration::from_secs(3600), ..FAST };
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_root_change_during_a_pending_removal_starts_once_the_removal_is_refused() {
-    // No sweep runs after the start: only the notice ends the wait.
-    let remapped =
-        RemappedInRemoval::start(Settings { sweep: Duration::from_secs(3600), ..FAST }).await;
+    let remapped = RemappedInRemoval::start(UNTIL_NOTICED).await;
     remapped.watch.reattach(remapped.location.id, &remapped.old);
     remapped.watched_at_the_new_root().await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_root_change_during_a_pending_removal_starts_once_the_volume_is_gone() {
-    let remapped =
-        RemappedInRemoval::start(Settings { sweep: Duration::from_secs(3600), ..FAST }).await;
+    let remapped = RemappedInRemoval::start(UNTIL_NOTICED).await;
     remapped.watch.gone(remapped.location.id, &remapped.old);
     remapped.watched_at_the_new_root().await;
 }
 
 /// No notice may ever come (the eject window ends the registration of a
-/// root its location no longer follows): the wait ends a sweep after the
-/// change at most.
+/// root its location no longer follows): the wait runs out on its own, with
+/// no sweep.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn a_root_change_during_a_pending_removal_waits_a_sweep_at_most() {
-    let remapped =
-        RemappedInRemoval::start(Settings { sweep: Duration::from_secs(1), ..FAST }).await;
+async fn a_root_change_during_a_pending_removal_waits_a_bounded_time() {
+    let settings = Settings { removal_wait: Duration::from_secs(1), ..UNTIL_NOTICED };
+    let remapped = RemappedInRemoval::start(settings).await;
+    let swept = sweeps(remapped.watch.observed()).load(Ordering::SeqCst);
     remapped.watched_at_the_new_root().await;
+    assert_eq!(
+        sweeps(remapped.watch.observed()).load(Ordering::SeqCst),
+        swept,
+        "no sweep started it"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
