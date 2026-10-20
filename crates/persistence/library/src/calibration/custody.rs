@@ -177,6 +177,27 @@ impl Catalog {
     }
 }
 
+/// Pinned calibration kinds whose recorded files intersect `assets`.
+///
+/// Read by Retire location in the same writer transaction as its review or
+/// confirmation so blocker facts and the resulting refusal share a snapshot.
+pub async fn pinned_calibration_kinds(
+    conn: &mut SqliteConnection,
+    assets: &BTreeSet<Uuid>,
+) -> Result<BTreeMap<Uuid, BTreeSet<InputKind>>> {
+    if assets.is_empty() {
+        return Ok(BTreeMap::new());
+    }
+    let rows: Vec<SqliteRow> =
+        sqlx::query(PINNED_FILES).bind(json_ids(assets)?).fetch_all(&mut *conn).await?;
+    let mut sessions: BTreeMap<Uuid, BTreeSet<InputKind>> = BTreeMap::new();
+    for row in &rows {
+        let session_id = parse_uuid(&row.try_get::<String, _>("session_id")?)?;
+        let kind: InputKind = from_text(&row.try_get::<String, _>("kind")?)?;
+        sessions.entry(session_id).or_default().insert(kind);
+    }
+    Ok(sessions)
+}
 /// What one session's pins hold of the asked files.
 struct SessionPins {
     generation: Revision,

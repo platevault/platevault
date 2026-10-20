@@ -25,10 +25,10 @@ use platevault_model::{
     CoverageContribution, DigestEvidence, Equipment, EvidenceItem, ExpectedAsset, ExpectedSession,
     FileIdentity, GroupingResult, LibraryError, LibraryErrorCode, Location, LocationLifecycle,
     LocationRole, NativePath, ObservationFingerprint, PathSensitivity, Provenance, Quality,
-    ReferenceKind, RemapBlock, RemapBlockReason, RemapItem, RemapReview, RetireAsset, RetireReview,
-    RetireSession, Revision, ScanBatch, ScanFile, ScanIssue, ScanObservation, ScanOperation,
-    ScanProgress, ScanState, Session, SessionCandidate, SessionFraming, SessionLineage,
-    TargetCandidate, TargetCone, TargetCoverage, TargetRecord, VolumeIdentity, VolumeKind,
+    ReferenceKind, RemapBlock, RemapBlockReason, RemapItem, RemapReview, RetireAsset, RetireBlock,
+    RetirePinProject, RetireReview, RetireSession, Revision, ScanBatch, ScanFile, ScanIssue,
+    ScanObservation, ScanOperation, ScanProgress, ScanState, Session, SessionCandidate, SessionFraming,
+    SessionLineage, TargetCandidate, TargetCone, TargetCoverage, TargetRecord, VolumeIdentity, VolumeKind,
     NETWORK_ADDRESS_REFUSED,
 };
 use serde::de::DeserializeOwned;
@@ -135,6 +135,7 @@ mod planning;
 mod rigs;
 pub use planning::{DeliveryClaim, DeliveryOutcome, SubscriptionWrite, PLANNING_SETTINGS_ID};
 mod calibration;
+use calibration::pinned_calibration_kinds;
 
 pub use calibration::{
     CalibrationInputDetail, CalibrationInputSummary, HeldLight, InputCopy, InputGroup, InputMember,
@@ -2305,6 +2306,15 @@ impl Catalog {
             if assets.iter().map(|asset| asset.id).collect::<BTreeSet<_>>() != read.assets {
                 return Err(conflict(location.id, location.decision_revision));
             }
+            let pin_kinds = pinned_calibration_kinds(conn, &read.assets).await?;
+            let blocked = retire_blocks(conn, pin_kinds).await?;
+            let mut projects = retire_projects(conn, &read.references).await?;
+            projects.extend(blocked.iter().flat_map(|block| match block {
+                RetireBlock::PinnedCalibration { projects, .. } => projects.clone(),
+            }));
+            projects.sort_by_key(|project| project.project_id);
+            projects.dedup_by_key(|project| project.project_id);
+            let project_count = projects.len();
             let review = RetireReview {
                 id: Uuid::new_v4(),
                 location_id,
@@ -2314,9 +2324,11 @@ impl Catalog {
                 expected_revision: location.decision_revision,
                 assets: retire_assets(&assets),
                 sessions: retire_sessions(conn, location_id).await?,
-                statement: retire_statement(&location, assets.len(), read.references.len()),
-                references: read.references,
+                references: read.references.clone(),
+                projects: projects.clone(),
+                blocked,
                 consulted: read.consulted,
+                statement: retire_statement(&location, assets.len(), project_count),
             };
             insert_retire_review(conn, &review).await?;
             review
@@ -2375,14 +2387,27 @@ impl Catalog {
                 return Err(conflict(op.id, op.revision));
             }
             let assets = location_assets(conn, location_id).await?;
+            let current_pin_kinds = pinned_calibration_kinds(conn, &read.assets).await?;
+            let current_blocked = retire_blocks(conn, current_pin_kinds).await?;
+            let mut current_projects = retire_projects(conn, &read.references).await?;
+            current_projects.extend(current_blocked.iter().flat_map(|block| match block {
+                RetireBlock::PinnedCalibration { projects, .. } => projects.clone(),
+            }));
+            current_projects.sort_by_key(|project| project.project_id);
+            current_projects.dedup_by_key(|project| project.project_id);
             let unchanged = retire_assets(&assets) == review.assets
                 && assets.iter().map(|asset| asset.id).collect::<BTreeSet<_>>() == read.assets
                 && retire_sessions(conn, location_id).await? == review.sessions
+                && current_blocked == review.blocked
+                && current_projects == review.projects
                 && read.references == review.references
                 && read.consulted == review.consulted
                 && location.availability == review.availability;
             if !unchanged {
                 return Err(conflict(location_id, location.decision_revision));
+            }
+            if !current_blocked.is_empty() {
+                return Err(LibraryError::InvalidInput(retire_block_message(&current_blocked)));
             }
             sqlx::query(
                 "UPDATE locations SET lifecycle = 'retired', \
@@ -2402,6 +2427,96 @@ impl Catalog {
         });
         Ok(location)
     }
+}
+
+fn retire_block_message(blocked: &[RetireBlock]) -> String {
+    let mut holders = BTreeSet::new();
+    for block in blocked {
+        let RetireBlock::PinnedCalibration { projects, .. } = block;
+        for project in projects {
+            holders.insert(format!("{} ({})", project.name, project.lifecycle));
+        }
+    }
+    let suffix = if holders.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "; Projects holding those sessions: {}",
+            holders.into_iter().collect::<Vec<_>>().join(", ")
+        )
+    };
+    format!(
+        "cannot retire location while calibration files are pinned on {} session(s); release or reassign the pins first{suffix}",
+        blocked.len()
+    )
+}
+
+async fn retire_blocks(
+    conn: &mut SqliteConnection,
+    pin_kinds: BTreeMap<Uuid, BTreeSet<platevault_model::InputKind>>,
+) -> Result<Vec<RetireBlock>> {
+    let mut blocked = Vec::with_capacity(pin_kinds.len());
+    for (session_id, kinds) in pin_kinds {
+        let session_name: String =
+            sqlx::query_scalar("SELECT capture_key FROM sessions WHERE id = ?1")
+                .bind(session_id.to_string())
+                .fetch_one(&mut *conn)
+                .await?;
+        let projects = retire_session_projects(conn, session_id).await?;
+        blocked.push(RetireBlock::PinnedCalibration {
+            session_id,
+            session_name,
+            kinds: kinds.into_iter().collect(),
+            projects,
+        });
+    }
+    Ok(blocked)
+}
+
+async fn retire_session_projects(
+    conn: &mut SqliteConnection,
+    session_id: Uuid,
+) -> Result<Vec<RetirePinProject>> {
+    sqlx::query(
+        "SELECT p.id AS project_id, p.name, p.lifecycle FROM project_sessions ps \
+         JOIN projects p ON p.id = ps.project_id WHERE ps.session_id = ?1 ORDER BY p.id",
+    )
+    .bind(session_id.to_string())
+    .fetch_all(&mut *conn)
+    .await?
+    .iter()
+    .map(|row| {
+        Ok(RetirePinProject {
+            project_id: parse_uuid(&row.try_get::<String, _>("project_id")?)?,
+            name: row.try_get("name")?,
+            lifecycle: from_text(&row.try_get::<String, _>("lifecycle")?)?,
+        })
+    })
+    .collect()
+}
+
+async fn retire_projects(
+    conn: &mut SqliteConnection,
+    references: &[AssetReference],
+) -> Result<Vec<RetirePinProject>> {
+    let ids: BTreeSet<Uuid> = references
+        .iter()
+        .filter(|reference| reference.kind == ReferenceKind::Project)
+        .map(|reference| reference.id)
+        .collect();
+    let mut projects = Vec::new();
+    for id in ids {
+        let row = sqlx::query("SELECT id, name, lifecycle FROM projects WHERE id = ?1")
+            .bind(id.to_string())
+            .fetch_one(&mut *conn)
+            .await?;
+        projects.push(RetirePinProject {
+            project_id: parse_uuid(&row.try_get::<String, _>("id")?)?,
+            name: row.try_get("name")?,
+            lifecycle: from_text(&row.try_get::<String, _>("lifecycle")?)?,
+        });
+    }
+    Ok(projects)
 }
 
 // ---------------------------------------------------------------------------
