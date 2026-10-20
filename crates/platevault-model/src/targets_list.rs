@@ -255,12 +255,14 @@ pub struct ProjectBadge {
     pub name: String,
 }
 
-/// The ★ favourites and the open-Project subjects with their badges: together
+/// The ★ favourites and open-Project subjects with their badges: together
 /// they make My targets.
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MyTargetMarks {
     pub favourites: BTreeSet<Uuid>,
+    /// Targets with at least one current, qualifying indexed session.
+    pub sessions: BTreeSet<Uuid>,
     /// Open Projects by subject Target, in Project name order.
     pub badges: BTreeMap<Uuid, Vec<ProjectBadge>>,
 }
@@ -269,13 +271,20 @@ impl MyTargetMarks {
     /// Whether the Target is in My targets.
     #[must_use]
     pub fn contains(&self, id: Uuid) -> bool {
-        self.favourites.contains(&id) || self.badges.contains_key(&id)
+        self.favourites.contains(&id)
+            || self.badges.contains_key(&id)
+            || self.sessions.contains(&id)
     }
 
     /// Every Target in My targets.
     #[must_use]
     pub fn ids(&self) -> BTreeSet<Uuid> {
-        self.favourites.iter().chain(self.badges.keys()).copied().collect()
+        self.favourites
+            .iter()
+            .chain(self.badges.keys())
+            .chain(self.sessions.iter())
+            .copied()
+            .collect()
     }
 }
 
