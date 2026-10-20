@@ -424,7 +424,7 @@ fn unique(ids: &[Uuid]) -> Result<BTreeSet<Uuid>> {
 }
 
 fn issue(asset_id: Uuid, kind: LibraryErrorCode) -> RunIssue {
-    RunIssue { asset_id, kind, parameters: Default::default() }
+    RunIssue { asset_id, kind, parameters: BTreeMap::new() }
 }
 
 fn db_count(value: u64) -> Result<i64> {

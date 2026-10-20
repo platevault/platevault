@@ -268,7 +268,6 @@ impl Catalog {
     /// Project rig, with its frames outside the Trash, whether the Project holds it
     /// or not. An OBJECT header or an unevidenced suggestion counts for nothing.
     /// In subject, rig and session order.
-
     ///
     /// # Errors
     /// `NotFound` for an unknown Project.
