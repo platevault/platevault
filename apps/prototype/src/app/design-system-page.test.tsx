@@ -6,7 +6,8 @@ import { createSeed } from "@/domain/seed"
 import { DEFAULT_LOCALE, m } from "@/lib/i18n"
 import { SCHEMA_VERSION, store } from "@/store/core"
 import { initialSliceStates, sliceVersions } from "@/store/slices"
-import { DesignSystemPage } from "./design-system-page"
+import { ControlsCatalogue } from "./catalogue/controls"
+import { FeedbackCatalogue } from "./catalogue/feedback"
 
 // The page's tables measure their room and keep rows in view; jsdom has neither ResizeObserver nor scrollIntoView.
 const original = { resizeObserver: globalThis.ResizeObserver, scrollIntoView: Element.prototype.scrollIntoView }
@@ -32,7 +33,7 @@ afterEach(() => {
 describe("Design system page copy (F4: no Run)", () => {
   it.each(["en-GB", "pt-BR"] as const)("shows the disabled Apply and the Developer Mode warning in F4 words in %s", async (locale) => {
     setLocale(locale)
-    const router = createRouter({ routeTree: createRootRoute({ component: DesignSystemPage }), history: createMemoryHistory({ initialEntries: ["/"] }) })
+    const router = createRouter({ routeTree: createRootRoute({ component: () => <><ControlsCatalogue /><FeedbackCatalogue /></> }), history: createMemoryHistory({ initialEntries: ["/"] }) })
     render(<RouterProvider router={router} />)
     expect(await screen.findByRole("button", { name: m.project_apply({}, { locale }) })).toBeDisabled()
     // Standing state, not a refusal: a status notice whose recovery is Use copies.
