@@ -11,7 +11,9 @@
 //!   kept View doesn't block. Only copies in Captures locations move.
 //! - `Processing/` files: every file and link below the Project's
 //!   `Processing/`, except what the Output protection keeps (the masters it
-//!   offered, which the step names so the user can adopt them first).
+//!   offered and nobody adopted, which the step names so the user can adopt
+//!   them first). An adopted master's generated source is listed as a
+//!   duplicate naming the master it relies on, the kept library copy.
 //!   `Output/` is never walked.
 //! - Duplicate copies: the extra byte-identical copies of the Project's
 //!   light and calibration frames. The kept copy is the one in a Captures or
@@ -42,11 +44,11 @@ use crate::layout::PROCESSING_FOLDER;
 use crate::library::{blocking, Library};
 use crate::project_output::OutputProtection;
 use crate::{
-    ApplicableQuality, Asset, Availability, EntryEvidence, EntryKind, ItemChange, ItemOutcome,
-    ItemPhase, ItemReason, KeptCopy, LibraryError, Location, LocationRole, NativePath,
-    ObservationFingerprint, ReasonCode, StorageItem, StorageOperationState, TrashCandidate,
-    TrashGroup, TrashGroupOffer, TrashRefusal, TrashReport, TrashRequest, TrashReview,
-    TrashSupport, WrapUpOutcome, WrapUpStep,
+    ApplicableQuality, Asset, Availability, CustodyFact, CustodyKind, EntryEvidence, EntryKind,
+    ItemChange, ItemOutcome, ItemPhase, ItemReason, KeptCopy, LibraryError, Location, LocationRole,
+    NativePath, ObservationFingerprint, ReasonCode, StorageItem, StorageOperationState,
+    TrashCandidate, TrashGroup, TrashGroupOffer, TrashRefusal, TrashReport, TrashRequest,
+    TrashReview, TrashSupport, WrapUpOutcome, WrapUpStep,
 };
 
 /// One row's items with what each journals.
@@ -147,7 +149,8 @@ impl Library {
         }
         let basis = self.catalog().trash_basis(project_id).await?;
         let protection = self.output_protection(project_id).await?;
-        blocking(move || offers(&basis, &protection, trash.as_ref())).await
+        let custody = self.calibration_custody_facts().await?;
+        blocking(move || offers(&basis, &protection, &custody, trash.as_ref())).await
     }
 
     /// Run or resume a journaled Trash step until it settles, record the
@@ -283,6 +286,7 @@ fn movable(source: &EntryEvidence, trash: &dyn OsTrash) -> Result<(), ItemReason
 fn offers(
     basis: &TrashBasis,
     protection: &OutputProtection,
+    custody: &[CustodyFact],
     trash: &dyn OsTrash,
 ) -> Result<Offers, LibraryError> {
     let locations: BTreeMap<Uuid, (usize, &Location)> = basis
@@ -366,14 +370,23 @@ fn offers(
                         protected_masters.push(NativePath::from_path(&path));
                         continue;
                     }
-                    match processing_file(&path, trash) {
-                        Ok(evidence) => {
+                    let checked = processing_file(&path, trash).and_then(|evidence| {
+                        let kept = protection
+                            .adopted_source_digest(&path)
+                            .map(|digest| {
+                                adopted_kept_copy(&path, &evidence, digest, custody, &locations)
+                            })
+                            .transpose()?;
+                        Ok((evidence, kept))
+                    });
+                    match checked {
+                        Ok((evidence, kept)) => {
                             planned.entry(TrashGroup::ProcessingFiles).or_default().push(Planned {
                                 candidate: TrashCandidate {
                                     id: None,
                                     files: vec![evidence.path.clone()],
                                     size_bytes: evidence.fingerprint.size_bytes,
-                                    kept: None,
+                                    kept: kept.as_ref().map(|kept| kept.path.clone()),
                                 },
                                 items: vec![TrashItemDraft {
                                     group: TrashGroup::ProcessingFiles,
@@ -381,7 +394,7 @@ fn offers(
                                     asset_id: None,
                                     draft: crate::StorageItemDraft {
                                         source: evidence,
-                                        relied_on: Vec::new(),
+                                        relied_on: kept.into_iter().collect(),
                                         destination: None,
                                     },
                                 }],
@@ -639,5 +652,55 @@ fn kept_copy(
         root,
         fingerprint: ObservationFingerprint { content_sha256: None, ..keeper.fingerprint.clone() },
         sha256,
+    })
+}
+
+/// The kept library copy of the adopted master generated from the
+/// `Processing/` file at `path` (PRJ-AC-28): the master the catalog records
+/// for that source, whose digest `digest` the file's bytes, hashed now, still
+/// hold. Like a duplicate's kept copy it must be online, and it is
+/// re-verified before the move.
+fn adopted_kept_copy(
+    path: &Path,
+    source: &EntryEvidence,
+    digest: &str,
+    custody: &[CustodyFact],
+    locations: &BTreeMap<Uuid, (usize, &Location)>,
+) -> Result<KeptCopy, ItemReason> {
+    let absolute = |location_id: Uuid, relative: &NativePath| {
+        let (_, location) = locations.get(&location_id)?;
+        Some((*location, location.path.to_path_buf().ok()?.join(relative.relative_path().ok()?)))
+    };
+    let unproven = |detail: String| ItemReason::new(ReasonCode::KeptCopyUnproven, detail);
+    let Some(kept) = custody
+        .iter()
+        .filter(|fact| fact.kind == CustodyKind::GeneratedSource)
+        .filter(|fact| {
+            absolute(fact.location_id, &fact.relative_path).is_some_and(|(_, at)| at == path)
+        })
+        .find_map(|fact| {
+            let kept = fact.kept_copy.as_ref()?;
+            (kept.fingerprint.content_sha256.as_deref() == Some(digest)).then_some(kept)
+        })
+    else {
+        return Err(unproven(format!("{} has no adopted master on record", path.display())));
+    };
+    if source.sha256.as_deref() != Some(digest) {
+        return Err(ItemReason::new(
+            ReasonCode::SourceDrift,
+            format!("{} changed after its master was adopted", path.display()),
+        ));
+    }
+    let Some((location, kept_path)) = absolute(kept.location_id, &kept.relative_path) else {
+        return Err(unproven("the adopted master has no registered location".into()));
+    };
+    if location.availability != Availability::Available {
+        return Err(unproven(format!("the adopted master {} is not online", kept_path.display())));
+    }
+    Ok(KeptCopy {
+        path: NativePath::from_path(&kept_path),
+        root: Some(location.path.clone()),
+        fingerprint: ObservationFingerprint { content_sha256: None, ..kept.fingerprint.clone() },
+        sha256: digest.to_owned(),
     })
 }
