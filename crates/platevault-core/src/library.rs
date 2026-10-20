@@ -391,7 +391,7 @@ impl Library {
         relative_scope: Option<NativePath>,
     ) -> Result<ScanOperation, LibraryError> {
         let operation = self.catalog.begin_scan(location_id, relative_scope.clone()).await?;
-        self.supervise_scan(&operation, relative_scope).await;
+        self.supervise_scan(&operation, relative_scope, None).await;
         Ok(operation)
     }
 
@@ -405,14 +405,36 @@ impl Library {
         scope: NativePath,
     ) -> Result<ScanOperation, LibraryError> {
         let operation = self.catalog.retry_scope(location_id, scope.clone()).await?;
-        self.supervise_scan(&operation, Some(scope)).await;
+        self.supervise_scan(&operation, Some(scope), None).await;
         Ok(operation)
     }
 
+    /// Scan a location, or the `scope` folder of it, splitting the sessions
+    /// it forms within `margins` rather than the Settings: an import indexes
+    /// its lights within its own split limits (CF2, owner 2026-10-20).
+    ///
+    /// # Errors
+    /// As [`Self::start_scan`] and [`Self::retry_scope`].
+    pub(crate) async fn scan_within(
+        self: &Arc<Self>,
+        location_id: Uuid,
+        scope: Option<NativePath>,
+        margins: FramingMargins,
+    ) -> Result<ScanOperation, LibraryError> {
+        let operation = match &scope {
+            None => self.catalog.begin_scan(location_id, None).await?,
+            Some(scope) => self.catalog.retry_scope(location_id, scope.clone()).await?,
+        };
+        self.supervise_scan(&operation, scope, Some(margins)).await;
+        Ok(operation)
+    }
+
+    /// `margins` split the sessions the scan forms; `None` reads the Settings.
     async fn supervise_scan(
         self: &Arc<Self>,
         operation: &ScanOperation,
         relative_scope: Option<NativePath>,
+        margins: Option<FramingMargins>,
     ) {
         let canceled = Arc::new(AtomicBool::new(false));
         self.scans.lock().await.insert(
@@ -422,7 +444,7 @@ impl Library {
         let library = Arc::clone(self);
         let id = operation.id;
         tokio::spawn(async move {
-            let outcome = library.run_scan(id, relative_scope, &canceled).await;
+            let outcome = library.run_scan(id, relative_scope, margins, &canceled).await;
             let finished = match outcome {
                 Ok(()) => true,
                 Err(error) => match library.catalog.scan_status(id).await {
@@ -904,11 +926,15 @@ impl Library {
         self: &Arc<Self>,
         id: Uuid,
         relative_scope: Option<NativePath>,
+        margins: Option<FramingMargins>,
         canceled: &Arc<AtomicBool>,
     ) -> Result<(), LibraryError> {
         let operation = self.catalog.scan_status(id).await?;
         let location = self.catalog.location(operation.location_id).await?;
-        let margins = self.framing_margins().await?;
+        let margins = match margins {
+            Some(margins) => margins,
+            None => self.framing_margins().await?,
+        };
         let catalog = Arc::clone(&self.catalog);
         let progress = self.progress.clone();
         let flag = Arc::clone(canceled);
