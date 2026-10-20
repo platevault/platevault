@@ -91,6 +91,8 @@ export interface ConfirmSpec {
   /** File lists that fold out one level. */
   groups?: { label: string; rows: FileRow[]; defaultOpen?: boolean }[]
   confirm: { label: string; kind?: ActionKind }
+  /** The action is refused now: the dialog lists the blockers (a table with `columns`) and its action stays focusable but disabled, previewing them (P7). */
+  blocked?: NonNullable<Action["unavailable"]>
 }
 
 /** One file an operation moves, copies, unlinks or trashes, or one it keeps where it is ("keep": a run's Products on Finish run). */

@@ -20,7 +20,7 @@ import { useState } from "react"
 import { useMessages } from "@/app/preferences"
 import { ActionButton } from "@/components/app/actions"
 import { rowIssues, withIssueItems } from "@/components/app/issue-actions"
-import type { Action, Column, MenuItem } from "@/components/app/contracts"
+import type { Action, Blocker, Column, ConfirmSpec, MenuItem } from "@/components/app/contracts"
 import { KeyValueList, PathText } from "@/components/app/data"
 import { EmptyState, type PageNotice, useSaveState } from "@/components/app/feedback"
 import { SelectField, TextField } from "@/components/app/fields"
@@ -28,11 +28,13 @@ import { FormDialog } from "@/components/app/form-dialog"
 import { SettingsSection } from "@/components/app/settings"
 import { StatusBadge } from "@/components/app/status"
 import { ListSection, SettingsPage } from "@/components/templates/settings-page"
-import { defaultArchiveLocation } from "@/domain/derive"
+import { defaultArchiveLocation, projectLink } from "@/domain/derive"
 import { locationAvailability } from "@/domain/library"
+import { sessionLongRef } from "@/domain/membership"
 import { locationDiskUse } from "@/domain/storage"
 import type { Location, LocationRole } from "@/domain/types"
 import { formatBytes, formatCount, formatDateTime } from "@/lib/format"
+import { say } from "@/lib/i18n"
 import { setDefaultArchiveLocation } from "@/store/actions/settings"
 import { store, useStore } from "@/store/core"
 import { useIssues } from "@/store/issues"
@@ -40,7 +42,7 @@ import { AddLocationFlow } from "../components/add-location-flow"
 import { blockedByErrors } from "@/components/app/form-dialog"
 import { useLocationActions } from "../components/location-actions"
 import { LocationAttentionBadge } from "../components/location-attention"
-import { attentionRank, framesInLocation, indexingLocationIds, locationAttention, type LocationStatus, removeLocation, retireLocation, reviewRetire, ROLE_COPY, ROLE_ORDER, sessionsInLocation, updateLocation, validateLocation } from "../lib/locations"
+import { attentionRank, framesInLocation, indexingLocationIds, locationAttention, type LocationStatus, pinProjectRef, removeLocation, type RetireReview, retireLocation, reviewRetire, ROLE_COPY, ROLE_ORDER, sessionsInLocation, updateLocation, validateLocation } from "../lib/locations"
 
 const HREF = "/settings/locations"
 
@@ -176,6 +178,17 @@ export function LocationsPage() {
     return { id: "rescan", label, icon: never ? Play : RotateCw, unavailable: reason ? { action: label, reason, blockers: [] } : undefined, run: () => actions.retry(row.location) }
   }
 
+  /** The review's blocked state while sessions pin calibration at the location: Session · Project ▸, one row per Project holding each, Closed and Archived marked (LIB-FR-15). */
+  function retireBlocked(review: RetireReview, label: string): ConfirmSpec["blocked"] {
+    if (review.pins.length === 0) return undefined
+    const blockers = review.pins.flatMap(({ session, projects }): Blocker[] => {
+      const item = say(m, sessionLongRef(session))
+      if (projects.length === 0) return [{ label: item, where: m.location_retire_pin_no_project() }]
+      return projects.map((project) => ({ label: item, where: say(m, pinProjectRef(project)), link: projectLink(project.id) }))
+    })
+    return { action: m.actions_blocked({ action: label }), reason: count(m.location_retire_pinned, review.pins.length), blockers, columns: { item: m.session_label(), where: m.project_noun() } }
+  }
+
   function retire(row: LocationRow): Action {
     const label = m.location_retire()
     const review = row.frames > 0 ? reviewRetire(store.getState(), row.location.id) : null
@@ -195,6 +208,7 @@ export function LocationsPage() {
               m.location_no_file_changes(),
             ].join(" · "),
             confirm: { label, kind: "destructive" },
+            blocked: retireBlocked(review, label),
           }
         : undefined,
       run: () => (review ? retireLocation(review, HREF) : undefined),

@@ -77,6 +77,15 @@ describe("Retire location while a session pins a calibration file there (LIB-FR-
     expect(store.getState().catalog.locations[CALIBRATION]!.retiredAt).toBeFalsy()
   })
 
+  it("reviews the pinning sessions, and counts every Project holding them among its Projects, Closed and Archived marked", () => {
+    const { catalog } = store.getState()
+    const review = reviewRetire(store.getState(), CALIBRATION)!
+    expect(review.pins).toEqual(locationPins(catalog, catalog.locations[CALIBRATION]!))
+    expect(review.pins.length).toBeGreaterThan(0)
+    expect(review.projects).toEqual(expect.arrayContaining(["M 31 LRGB (Archived)", "NGC 7000 OIII test (Closed)", "Cygnus HOO 2026", "IC 5070 mosaic"]))
+    expect(review.projects).not.toContain("Heart and Soul")
+  })
+
   it("retires a location where no session pins a file, as before", () => {
     const spare = store.getState().catalog.locations.loc_spare!
     expect(locationPins(store.getState().catalog, spare)).toEqual([])

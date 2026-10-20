@@ -2101,6 +2101,24 @@
   "location_retire_pinned_by": "{session} fixa calibração aqui · {projects}",
   "location_retire_project_state": "{name} ({state})",
   "location_retire_pin_no_project": "Em nenhum Projeto",
+  "location_retire_pinned": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "count",
+        "countPlural"
+      ],
+      "match": {
+        "count=0, countPlural=*": "{n} sessões fixam calibração aqui",
+        "count=*, countPlural=one": "{n} sessão fixa calibração aqui",
+        "count=*, countPlural=*": "{n} sessões fixam calibração aqui"
+      }
+    }
+  ],
   "location_remap_same_folder": "{path} já é a pasta de {name}",
   "location_remap_overlaps": "{path} se sobrepõe a {name}",
   "location_remap_no_frames": "{name} não tem frames indexados",

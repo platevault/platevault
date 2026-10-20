@@ -261,11 +261,13 @@ export interface RetireReview {
   availability: Availability
   frames: number
   sessions: string[]
-  /** Projects, open or Closed, that hold one of those sessions. */
+  /** Projects, open, Closed or Archived (marked), that hold one of those sessions or a session that pins a calibration file there. */
   projects: string[]
+  /** Sessions that pin a calibration file there: retiring is refused while any exists (LIB-FR-15). */
+  pins: LocationPin[]
 }
 
-/** What retiring would affect, read now: its frames, their sessions and the Projects that hold them. Catalog-only: no file bytes are read. */
+/** What retiring would affect, read now: its frames, their sessions, the sessions that pin calibration there and the Projects that hold either. Catalog-only: no file bytes are read. */
 export function reviewRetire(state: PrototypeState, locationId: LocationId): RetireReview | null {
   const { catalog, disk } = state
   const location = catalog.locations[locationId]
@@ -274,7 +276,8 @@ export function reviewRetire(state: PrototypeState, locationId: LocationId): Ret
   const sessions = Object.values(catalog.sessions)
     .filter((s) => !s.supersededBy && s.assetIds.some((id) => assetIds.has(id)))
     .sort((a, b) => a.night.localeCompare(b.night))
-  const sessionIds = new Set(sessions.map((s) => s.id))
+  const pins = locationPins(catalog, location)
+  const sessionIds = new Set([...sessions, ...pins.map((p) => p.session)].map((s) => s.id))
   return {
     locationId,
     displayName: location.displayName,
@@ -284,7 +287,8 @@ export function reviewRetire(state: PrototypeState, locationId: LocationId): Ret
     sessions: sessions.map((s) => [formatNight(s.night), s.channel ?? m.palette_session_no_filter(), formatExposure(s.exposureS)].join(" · ")),
     projects: Object.values(catalog.projects)
       .filter((p) => p.inputs.some((i) => sessionIds.has(i.sessionId)))
-      .map((p) => p.name),
+      .map((p) => say(m, pinProjectRef(p))),
+    pins,
   }
 }
 
@@ -314,8 +318,8 @@ export function locationPins(catalog: Catalog, location: Location): LocationPin[
     .map((session) => ({ session, projects: Object.values(catalog.projects).filter((p) => p.inputs.some((i) => i.sessionId === session.id)) }))
 }
 
-/** A Project as the refusal names it: "NGC 7000 HOO", or "M31 (Closed)" and "M42 (Archived)". */
-function pinProjectRef(project: Project): MessageRef {
+/** A Project as the review and the refusal name it: "NGC 7000 HOO", or "M31 (Closed)" and "M42 (Archived)". */
+export function pinProjectRef(project: Project): MessageRef {
   if (project.state === "open") return verbatim(project.name)
   return msg("location_retire_project_state", { name: project.name, state: msg(project.state === "closed" ? "status_closed" : "status_archived") })
 }
