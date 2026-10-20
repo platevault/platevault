@@ -106,11 +106,15 @@
 //!   still listing on that volume, awaited; nothing touches the root until
 //!   the next notice), [`CaptureWatch::reattach`] when the removal was
 //!   refused, and [`CaptureWatch::gone`] once the volume is removed, which
-//!   takes the location offline without waiting for a sweep. A notice about
-//!   a root its location no longer follows leaves the location alone. A
-//!   location reselected or remapped while the removal of its root's volume
-//!   is pending touches neither root and keeps the old one named, so the
-//!   shell keeps its registration and the removal's notices still arrive;
+//!   takes the location offline without waiting for a sweep. A release of a
+//!   root its location followed before (it moved, went offline or moved on
+//!   from a removal since) lets go of the root it follows now as well, which
+//!   may be on that volume, and holds the location as if the removal had
+//!   been requested first; any other notice about a root its location no
+//!   longer follows leaves the location alone. A location reselected or
+//!   remapped while the removal of its root's volume is pending touches
+//!   neither root and keeps the old one named, so the shell keeps its
+//!   registration and the removal's notices still arrive;
 //!   its new root, which may be on that volume, is watched once the removal
 //!   was refused or completed, or after a bounded wait when no notice
 //!   comes. A release returns once discovery is asked to stop, so app exit
@@ -251,7 +255,7 @@ impl CaptureWatch {
             publish,
             publish_roots,
             draining: Draining::default(),
-            left: HashMap::new(),
+            left: Departures::default(),
             next_walk: 0,
             #[cfg(test)]
             observed: Arc::clone(&observed),
@@ -694,14 +698,46 @@ struct Moved {
     in_place: Option<WatchedRoot>,
 }
 
-/// Where a location was followed before it moved (reselected or remapped):
-/// the removal of that root's volume may still be requested once the
-/// location follows its new root ([`Run::moved_before_release`]).
+/// Where a location was followed before discovery let go of it there, while
+/// it stays listed: it moved (reselected or remapped), went offline, or moved
+/// on from a removal. The removal of that root's volume may still be
+/// requested once the location follows another root
+/// ([`Run::moved_before_release`]).
 struct Left {
     location: Location,
     root: PathBuf,
     prefixes: Vec<PathBuf>,
     stamp: RootStamp,
+}
+
+/// Every root each listed location was let go of at ([`Left`]), once per
+/// root, so a release of any root the shell may still hold a registration
+/// on finds the location, whichever root it follows now. A location returns
+/// to few roots, so each list stays short.
+#[derive(Default)]
+struct Departures(HashMap<Uuid, Vec<Left>>);
+
+impl Departures {
+    /// Remember where `watched`, which discovery let go of, was followed,
+    /// in place of an earlier record at that root.
+    fn record(&mut self, watched: Watched) {
+        let Watched { location, root, prefixes, stamp, .. } = watched;
+        let left = self.0.entry(location.id).or_default();
+        left.retain(|left| left.root != root);
+        left.push(Left { location, root, prefixes, stamp });
+    }
+
+    /// Take where `id` was followed at `root`.
+    fn take(&mut self, id: Uuid, root: &Path) -> Option<Left> {
+        let left = self.0.get_mut(&id)?;
+        let at = left.iter().position(|left| left.root == root)?;
+        Some(left.swap_remove(at))
+    }
+
+    /// Forget the locations no longer listed.
+    fn retain(&mut self, listed: impl Fn(&Uuid) -> bool) {
+        self.0.retain(|id, _| listed(id));
+    }
 }
 
 impl Watched {
@@ -1195,9 +1231,8 @@ struct Run {
     /// The watchers discovery closed and the walks it canceled, until they
     /// returned.
     draining: Draining,
-    /// Where each location that moved was followed before, until it moves
-    /// again or is no longer listed.
-    left: HashMap<Uuid, Left>,
+    /// Where each listed location was followed before.
+    left: Departures,
     next_walk: u64,
     #[cfg(test)]
     observed: Arc<Observed>,
@@ -1315,11 +1350,10 @@ impl Run {
         }) {
             self.draining.let_go(&mut watched);
             if wanted.contains_key(&id) {
-                let Watched { location, root, prefixes, stamp, .. } = watched;
-                self.left.insert(id, Left { location, root, prefixes, stamp });
+                self.left.record(watched);
             }
         }
-        self.left.retain(|id, _| wanted.contains_key(id));
+        self.left.retain(|id| wanted.contains_key(id));
         self.offline.retain(|id, offline| {
             wanted.get(id).is_some_and(|location| same_root(location, &offline.location))
         });
@@ -1414,13 +1448,17 @@ impl Run {
     }
 
     /// Stop following the old root of `id`, a location that moved while its
-    /// volume was being removed, and start it at the root it moved to.
+    /// volume was being removed, and start it at the root it moved to. The
+    /// old root is remembered ([`Departures`]): a release of its volume may
+    /// still arrive, which then lets go of the new root as well.
     async fn move_on(&mut self, id: Uuid) {
         let Some(mut watched) = self.locations.remove(&id) else {
             return;
         };
         self.draining.let_go(&mut watched);
-        if let Some(moved) = watched.moved {
+        let moved = watched.moved.take();
+        self.left.record(watched);
+        if let Some(moved) = moved {
             self.try_start(moved.to, None).await;
         }
     }
@@ -1542,11 +1580,15 @@ impl Run {
     }
 
     /// Stop counting a location whose root went away, releasing its watch.
+    /// The root is remembered ([`Departures`]) for a release of its volume
+    /// that arrives once the location follows another root.
     fn go_offline(&mut self, id: Uuid) {
         if let Some(mut watched) = self.locations.remove(&id) {
             self.draining.let_go(&mut watched);
             tracing::info!(location = %id, "new captures: root went away; watch released");
-            self.offline.insert(id, Offline { location: watched.location, refused: None });
+            let location = watched.location.clone();
+            self.left.record(watched);
+            self.offline.insert(id, Offline { location, refused: None });
         }
     }
 
@@ -1563,8 +1605,8 @@ impl Run {
 
     /// Release every handle discovery holds on the volume of `root`, a root
     /// of `id`: close the location's watcher and cancel its walk when it
-    /// follows `root`, or follows the root it moved to from `root` before
-    /// this release arrived ([`Run::moved_before_release`]), then send
+    /// follows `root`, or follows another root since discovery let go of it
+    /// at `root` ([`Run::moved_before_release`]), then send
     /// `released` once every watcher discovery closed and walk it canceled
     /// on that volume returned, whichever location it served. The volume is
     /// the one in the root's folder ID; a root with none waits only for what
@@ -1600,18 +1642,20 @@ impl Run {
         });
     }
 
-    /// `id` moved (reselected or remapped) away from `root` before the
-    /// removal of `root`'s volume was requested: the move was applied
-    /// before the notice arrived, or won the race with it. The root it moved
-    /// to may be on that volume, so let go of its watcher and walk there,
-    /// and follow the location at `root` again, released and moved, as when
-    /// the removal was requested first ([`Run::moved_in_removal`]). Returns
-    /// the root it moved to.
+    /// `id` follows another root since discovery let go of it at `root`
+    /// ([`Departures`]), before the removal of `root`'s volume was requested:
+    /// it moved (reselected or remapped, once or more), went offline and
+    /// started elsewhere, or moved on from an earlier removal, and the
+    /// notice arrived after that, or won the race with it. The root it
+    /// follows now may be on that volume, so let go of its watcher and walk
+    /// there, and follow the location at `root` again, released and moved,
+    /// as when the removal was requested first ([`Run::moved_in_removal`]).
+    /// Returns the root it followed.
     ///
     /// `root` stays named only if it still is, its calls there not all
     /// returned yet. Once it left the named roots, the shell may have ended
     /// its registration, and naming it again would have the shell register
-    /// a fresh handle on the volume being removed: the root it moved to,
+    /// a fresh handle on the volume being removed: the root it followed,
     /// whose registration the shell still holds, is named in its place
     /// ([`Moved::in_place`]), and the outcome arrives for that root.
     fn moved_before_release(&mut self, id: Uuid, root: &Path) -> Option<PathBuf> {
@@ -1619,10 +1663,11 @@ impl Run {
             .locations
             .get(&id)
             .is_some_and(|watched| !watched.released && watched.root != root);
-        if !moved_away || self.left.get(&id).is_none_or(|left| left.root != root) {
+        if !moved_away {
             return None;
         }
-        let (left, mut moved) = (self.left.remove(&id)?, self.locations.remove(&id)?);
+        let left = self.left.take(id, root)?;
+        let mut moved = self.locations.remove(&id)?;
         self.draining.let_go(&mut moved);
         let still_named = self
             .publish_roots
@@ -1630,10 +1675,12 @@ impl Run {
             .iter()
             .any(|named| named.location_id == id && named.root == root);
         let in_place = (!still_named).then(|| moved.named());
+        let (to, followed) = (moved.location.clone(), moved.root.clone());
+        self.left.record(moved);
         let mut back = Watched::new(left.location, left.root, left.prefixes, left.stamp);
-        back.moved = Some(Moved { to: moved.location, since: Instant::now(), in_place });
+        back.moved = Some(Moved { to, since: Instant::now(), in_place });
         self.locations.insert(id, back);
-        Some(moved.root)
+        Some(followed)
     }
 
     /// The removal a release made way for did not happen: watch the location
