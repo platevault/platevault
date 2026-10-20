@@ -14,15 +14,16 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use platevault_model::{
     builtin_goal_templates, validate_goals, validate_project_name, validate_rigs,
     validate_subjects, ApplicableQuality, Asset, AssetReference, Availability, CaptureInclusion,
-    DuplicateRequest, ExclusionBasis, GoalIdentity, GoalInput, GoalProgress, GoalSpec, GoalTally,
-    GoalTemplate, GoalTemplateInput, InclusionBasis, LibraryError, MeasurementMethod,
-    MeasurementOutcome, MeasurementRecord, MetricId, MetricState, Microseconds, Project,
-    ProjectCandidate, ProjectDesired, ProjectGoal, ProjectInput, ProjectQuery, ProjectSubject,
-    ProjectSummary, ProjectViewSettings, QualityCriterion, RecordValidity, ReferenceKind, Revision,
-    SubjectInput,
+    CaptureMetadata, DuplicateRequest, ExclusionBasis, GoalIdentity, GoalInput, GoalProgress,
+    GoalSpec, GoalTally, GoalTemplate, GoalTemplateInput, InclusionBasis, LibraryError,
+    MeasurementMethod, MeasurementOutcome, MeasurementRecord, MetricId, MetricState, MetricValue,
+    Microseconds, Project, ProjectCandidate, ProjectDesired, ProjectGoal, ProjectInput,
+    ProjectQuery, ProjectSubject, ProjectSummary, ProjectViewSettings, QualityCriterion,
+    RecordValidity, ReferenceKind, Revision, SubjectInput, Units,
 };
 use sqlx::sqlite::{SqliteConnection, SqliteRow};
 use sqlx::{Connection, Row};
+use target_match::{Field, Optics};
 use uuid::Uuid;
 
 use super::admission;
@@ -981,7 +982,9 @@ struct Frame {
     channel: Option<String>,
     exposure: Option<Microseconds>,
     quality: ApplicableQuality,
-    fwhm_median: Option<f64>,
+    /// The median FWHM in arcseconds; `None` without a valid measured value
+    /// or the frame's pixel scale.
+    fwhm_arcsec: Option<f64>,
     /// The subjects whose suggestions hold it.
     candidate_of: BTreeSet<Uuid>,
     holdings: Vec<Holding>,
@@ -1108,7 +1111,8 @@ fn root(parent: &HashMap<String, String>, key: &str) -> String {
 
 /// A frame's facts from its counted copies: image type, channel and exposure
 /// from its primary copy (Available first), applicable quality over every
-/// copy, and the median FWHM of the first copy with a valid measured record.
+/// copy, and the median FWHM in arcseconds of the first copy with a valid
+/// measured record and a known pixel scale.
 fn frame_of(
     copies: &[Asset],
     records: &mut HashMap<Uuid, MeasurementRecord>,
@@ -1121,7 +1125,7 @@ fn frame_of(
         })
         .expect("a frame holds at least one copy");
     let effective = &primary.effective;
-    let fwhm_median = copies.iter().find_map(|copy| {
+    let fwhm_arcsec = copies.iter().find_map(|copy| {
         let record = records.remove(&copy.id)?;
         if measurements::validity(copy, Some(&record), method) != RecordValidity::Valid {
             return None;
@@ -1132,7 +1136,7 @@ fn frame_of(
             .find(|value| {
                 value.metric == MetricId::FwhmMedian && value.state == MetricState::Measured
             })
-            .and_then(|value| value.value)
+            .and_then(|value| fwhm_in_arcsec(&value, &copy.effective))
     });
     Frame {
         light: effective.is_light(),
@@ -1144,10 +1148,41 @@ fn frame_of(
             .map(str::to_owned),
         exposure: effective.exposure_seconds.and_then(Microseconds::from_seconds),
         quality: capture_quality(&copies.iter().collect::<Vec<_>>()),
-        fwhm_median,
+        fwhm_arcsec,
         candidate_of: BTreeSet::new(),
         holdings: Vec::new(),
     }
+}
+
+/// A median FWHM in arcseconds: an arcsecond value as recorded, a pixel value
+/// through the frame's pixel scale, and `None` for another unit, no value or
+/// an unknown scale (PRJ-FR-03).
+fn fwhm_in_arcsec(value: &MetricValue, frame: &CaptureMetadata) -> Option<f64> {
+    let fwhm = value.value?;
+    match value.units {
+        Units::Arcsec => Some(fwhm),
+        Units::Px => Some(fwhm * pixel_scale_arcsec(frame)?),
+        _ => None,
+    }
+}
+
+/// Arcseconds per pixel from the frame's FOCALLEN and XPIXSZ; `None` when
+/// either, or the frame size `target_match` completes the field with, is
+/// unknown. XPIXSZ already includes binning ("physical X dimension of the
+/// sensor's pixels in microns … Includes binning", the `MaxIm DL` FITS File
+/// Header Definitions,
+/// <https://cdn.diffractionlimited.com/help/maximdl/FITS_File_Header_Definitions.htm>),
+/// as N.I.N.A. writes it too, so binning stays 1×1 here.
+fn pixel_scale_arcsec(frame: &CaptureMetadata) -> Option<f64> {
+    let pixel = frame.pixel_size_um?;
+    let field = Field::from_optics(Optics {
+        focal_mm: frame.focal_length_mm?,
+        pixel_um: (pixel, pixel),
+        binning: (1, 1),
+        pixels: (frame.width?, frame.height?),
+    })
+    .ok()?;
+    field.pixel_scale().map(|(x, _)| x)
 }
 
 /// One goal's two numbers over `frames`, each counted once. A frame is
@@ -1214,8 +1249,8 @@ fn admits(bars: &[QualityCriterion], frame: &Frame) -> Option<bool> {
                     return Some(false);
                 }
             }
-            QualityCriterion::MaxFwhmMedian { max_px } => match frame.fwhm_median {
-                Some(value) if value <= *max_px => {}
+            QualityCriterion::MaxFwhmMedian { max_arcsec } => match frame.fwhm_arcsec {
+                Some(value) if value <= *max_arcsec => {}
                 Some(_) => return Some(false),
                 None => unknown = true,
             },

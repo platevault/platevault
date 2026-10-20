@@ -692,7 +692,7 @@ async fn panel_groups_take_their_own_goals() {
             target_id: ngc.candidate.id,
             group_id: None,
             goal: GoalSpec::QualityBar {
-                criterion: QualityCriterion::MaxFwhmMedian { max_px: 3.5 },
+                criterion: QualityCriterion::MaxFwhmMedian { max_arcsec: 3.5 },
             },
         },
     ];
