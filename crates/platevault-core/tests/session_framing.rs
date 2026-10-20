@@ -2,12 +2,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! Sessions split at intake by framing (spec 064 LIB-FR-04, LIB-AC-31/32;
-//! D-W107), on real generated FITS headers: pointing within 5 % of the field
-//! and ROTATANG within 5° stay one session, a meridian flip never splits, the
-//! sky angle alone reads 180° as the same framing, lights without pointing
-//! stay together, exposure still splits, the split is deterministic and
-//! non-transitive, a framing label holds lights together, and rescans keep
-//! every session id.
+//! D-W107), on real generated FITS headers: pointing within 5′ and ROTATANG
+//! within 5° stay one session whatever the field, a meridian flip never
+//! splits, the sky angle alone reads 180° as the same framing, lights without
+//! pointing stay together, exposure still splits, the split is deterministic
+//! and non-transitive, a framing label holds lights together, and rescans
+//! keep every session id.
 
 mod support;
 
@@ -23,7 +23,8 @@ use platevault_core::*;
 use uuid::Uuid;
 
 /// The fixture writer's 4×4 pixels at 3.76 µm behind 250 mm: the field
-/// diagonal the centre margin is a share of, in degrees.
+/// diagonal, in degrees. The centre limit is an angle, so this tiny field
+/// never narrows it.
 fn diagonal_deg() -> f64 {
     let pixel_arcsec = 206.264_806 * 3.76 / 250.0;
     4.0 * pixel_arcsec * std::f64::consts::SQRT_2 / 3600.0
@@ -33,7 +34,7 @@ const RA: f64 = 314.68;
 const DEC: f64 = 44.31;
 
 /// One light of the night of 14 October: `minute` after 19:00 UTC, its centre
-/// `offset` (a share of the field diagonal) north of the first framing.
+/// `offset` arcminutes north of the first framing.
 #[derive(Clone, Copy)]
 struct Shot {
     minute: u32,
@@ -87,7 +88,7 @@ impl Shot {
         ];
         if let Some(offset) = self.offset {
             cards.push(("RA", format!("{RA:.7}")));
-            cards.push(("DEC", format!("{:.9}", DEC + offset * diagonal_deg())));
+            cards.push(("DEC", format!("{:.9}", DEC + offset / 60.0)));
         }
         if let Some(rotatang) = self.rotatang {
             cards.push(("ROTATANG", format!("{rotatang:.3}")));
@@ -172,18 +173,18 @@ fn framing(candidate: &SessionCandidate) -> &SessionFraming {
 
 /// LIB-AC-31's night: 25 frames before a meridian flip, 15 after it at the
 /// same framing (the sky angle turned half a turn, ROTATANG unchanged, the
-/// centre jittering within 1 %), and 20 pointing 12 % of the field away.
+/// centre jittering within 0.4′), and 20 pointing 8′ away.
 fn flip_night() -> Vec<Shot> {
     let mut shots = Vec::new();
     for minute in 60..85 {
-        let jitter = if minute % 2 == 0 { 0.008 } else { -0.006 };
+        let jitter = if minute % 2 == 0 { 0.4 } else { -0.3 };
         shots.push(Shot::at(minute).offset(jitter).sky_angle(12.4));
     }
     for minute in 90..105 {
-        shots.push(Shot::at(minute).offset(0.004).sky_angle(192.4));
+        shots.push(Shot::at(minute).offset(0.2).sky_angle(192.4));
     }
     for minute in 110..130 {
-        shots.push(Shot::at(minute).offset(0.12).sky_angle(12.4));
+        shots.push(Shot::at(minute).offset(8.0).sky_angle(12.4));
     }
     shots
 }
@@ -198,7 +199,7 @@ fn a_night_splits_by_framing_and_a_meridian_flip_does_not() {
     let (first, second) = (&result.sessions[0], &result.sessions[1]);
     assert_eq!(first.key, second.key, "framing joins identity beside the exact capture key");
     assert_eq!(first.asset_ids, ids(&assets[..40]), "the flip does not split");
-    assert_eq!(second.asset_ids, ids(&assets[40..]), "12 % of the field starts a framing");
+    assert_eq!(second.asset_ids, ids(&assets[40..]), "8′ away starts a framing");
     let (first, second) = (framing(first), framing(second));
     assert_eq!((first.ordinal, second.ordinal), (1, 2), "\"framing 2\" is the later framing");
     assert_eq!(first.anchor_asset_id, assets[0].id, "the first frame in capture order anchors");
@@ -255,7 +256,7 @@ fn lights_without_pointing_stay_in_one_session_and_calibration_frames_never_spli
         Shot::at(1).unpointed().rotatang(Some(90.0)),
         Shot::at(2).unpointed().rotatang(None),
     ]);
-    let flats: Vec<Asset> = [Shot::at(3), Shot::at(4).offset(0.5).rotatang(Some(40.0))]
+    let flats: Vec<Asset> = [Shot::at(3), Shot::at(4).offset(30.0).rotatang(Some(40.0))]
         .iter()
         .enumerate()
         .map(|(index, shot)| asset(&format!("flat_{index}.fits"), *shot, "FLAT"))
@@ -333,11 +334,26 @@ fn a_framing_label_holds_lights_together_whatever_their_pointing() {
 #[test]
 fn the_margins_come_from_the_caller() {
     let assets = lights(&flip_night());
-    let wide = FramingMargins { max_centre_offset_percent: 15.0, ..FramingMargins::default() };
+    let wide = FramingMargins {
+        split: SplitLimits { max_centre_offset_arcmin: 10.0, ..SplitLimits::default() },
+        ..FramingMargins::default()
+    };
 
     let result = grouping::group_assets(&assets, &wide);
 
-    assert_eq!(result.sessions.len(), 1, "12 % is inside a 15 % centre margin");
+    assert_eq!(result.sessions.len(), 1, "8′ is inside a 10′ centre limit");
+}
+
+/// CF2 (owner, 2026-10-20): the centre limit is an angle, 5′ by default,
+/// not a share of the field: on this fixture's 17″ field, 4′ is one framing
+/// and 6′ is two, as on any other field.
+#[test]
+fn the_centre_limit_is_an_angle_whatever_the_field() {
+    let near = lights(&[Shot::at(0), Shot::at(1).offset(4.0)]);
+    let far = lights(&[Shot::at(0), Shot::at(1).offset(6.0)]);
+
+    assert_eq!(group(&near).sessions.len(), 1, "4′ is within the 5′ default");
+    assert_eq!(group(&far).sessions.len(), 2, "6′ is beyond it");
 }
 
 // ── Intake: real scans of a Captures location ────────────────────────────────
@@ -412,7 +428,7 @@ async fn intake_splits_by_framing_and_rescans_keep_every_session_id() {
     // An earlier framing indexed later takes ordinal 1; no session is replaced.
     for minute in 0..3 {
         Shot::at(minute)
-            .offset(-0.3)
+            .offset(-8.0)
             .write(&root.join(format!("dusk/dusk_{minute}.fits")), "LIGHT");
     }
     scan(&library, location.id).await;

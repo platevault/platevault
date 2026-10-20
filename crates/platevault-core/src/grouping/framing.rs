@@ -4,19 +4,21 @@
 //! Intake framing split (D-W107, LIB-FR-04): the lights of one night and one
 //! capture key form one session per framing.
 //!
-//! *Provisional rule; the spec leaves the anchor frame and the comparison
-//! order open.* Frames are taken in capture order (`DATE-OBS`, frames without
-//! one last, then file name, then id). A frame joins the framing whose anchor
-//! lies nearest within the framing margins, and otherwise anchors a new
-//! framing; an anchor is the first frame of its framing that has pointing.
-//! Frames are compared with anchors only, never with each other, so a slow
-//! drift cannot chain into one over-wide framing. Framings are numbered in the
+//! Frames are taken in capture order (`DATE-OBS`, frames without one last,
+//! then file name, then id). A frame joins the framing whose anchor lies
+//! nearest within the split limits, and otherwise anchors a new framing; an
+//! anchor is the first frame of its framing that has pointing. A frame that
+//! returns to an earlier framing rejoins that framing's session, however many
+//! frames of other framings came between (D-W107, owner 2026-10-20). Frames
+//! are compared with anchors only, never with each other, so a slow drift
+//! cannot chain into one over-wide framing. Framings are numbered in the
 //! capture order of their anchors.
 //!
-//! A frame is the anchor's framing when its centre lies within the margin's
-//! share of the anchor's field diagonal and its rotation within the margin's
-//! angle: ROTATANG when both record it (a meridian flip leaves it unchanged),
-//! else the sky angle modulo 180°. A margin whose evidence is missing never
+//! A frame is the anchor's framing when its centre lies within the centre
+//! limit, an angle on the sky (5′ by default, whatever the field; CF2, owner
+//! 2026-10-20), and its rotation within the rotation limit (5° by default):
+//! ROTATANG when both record it (a meridian flip leaves it unchanged), else
+//! the sky angle modulo 180°. A rotation whose evidence is missing never
 //! splits. Lights without pointing stay in one session with no framing
 //! (record §9), and lights the user labelled form one framing per label
 //! whatever their pointing.
@@ -33,10 +35,8 @@ use crate::{FieldOfView, FramingEvidence, FramingMargins, SessionFraming};
 
 const NO_POINTING: &str =
     "framing: no pointing (RA/DEC or a plate solve) recorded; these lights stay in one session";
-const FIELD_UNKNOWN: &str = "framing: the anchor frame's field is unknown (FOCALLEN, XPIXSZ, \
-                             NAXIS1, NAXIS2); its centre margin was not applied";
 const ROTATION_UNKNOWN: &str = "framing: the anchor frame records no rotation (ROTATANG or a sky \
-                                angle); its rotation margin was not applied";
+                                angle); its rotation limit was not applied";
 
 /// The frames of one session, as indices into the frames split, with the
 /// framing and notes the session records.
@@ -69,11 +69,10 @@ impl<'a> Evidence<'a> {
     }
 
     /// The angular distance of `frame` from this anchor when it lies within
-    /// the margins.
+    /// the split limits.
     fn offset(&self, frame: &Self, margins: &FramingMargins) -> Option<f64> {
         let separation = sky::separation(self.centre?, frame.centre?).degrees();
-        let share = margins.max_centre_offset_percent / 100.0;
-        if self.field.is_some_and(|field| separation > field.diagonal().degrees() * share) {
+        if separation * 60.0 > margins.split.max_centre_offset_arcmin {
             return None;
         }
         let rotation = match (self.rotator_deg, frame.rotator_deg) {
@@ -83,7 +82,7 @@ impl<'a> Evidence<'a> {
                 _ => None,
             },
         };
-        if rotation.is_some_and(|difference| difference > margins.max_rotation_deg) {
+        if rotation.is_some_and(|difference| difference > margins.split.max_rotation_deg) {
             return None;
         }
         Some(separation)
@@ -111,10 +110,9 @@ impl Evidence<'_> {
 }
 
 /// The angular distance of `other` from the `anchor` framing when it lies
-/// within the margins, by the same rule intake splits sessions with: a
-/// Project groups its sessions by framing with the margins the night was
-/// split with (PRJ-FR-31, LIB-FR-04). The anchor's field sets the centre
-/// margin.
+/// within the split limits, by the same rule intake splits sessions with: a
+/// Project groups its sessions by framing with the limits the night was
+/// split with (PRJ-FR-31, LIB-FR-04).
 pub fn framing_offset(
     anchor: &FramingEvidence,
     other: &FramingEvidence,
@@ -273,9 +271,6 @@ fn finish(
             let record = framing.anchor.and_then(|anchor| {
                 let ordinal = anchors.binary_search(&rank[anchor]).ok()? + 1;
                 let evidence = &evidence[anchor];
-                if evidence.field.is_none() {
-                    notes.insert(FIELD_UNKNOWN.to_owned());
-                }
                 if evidence.rotator_deg.is_none() && evidence.sky_angle_deg.is_none() {
                     notes.insert(ROTATION_UNKNOWN.to_owned());
                 }

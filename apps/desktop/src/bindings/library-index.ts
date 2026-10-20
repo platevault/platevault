@@ -1170,6 +1170,57 @@ export const commands = {
 	 */
 	importStatus: (id: string) => typedError<ImportOperation_Serialize, ErrorResponse>(__TAURI_INVOKE("import_status", { id })),
 	/**
+	 *  Merge the sessions holding `seqs` (an item of each) into one before the
+	 *  import starts; only sessions that differ in framing alone merge.
+	 * 
+	 *  # Errors
+	 *  `InvalidInput` for fewer than two sessions, sessions of different capture
+	 *  keys or an item in no session; `Conflict` for a stale revision.
+	 */
+	importMergeSessions: (id: string, expectedRevision: number, seqs: number[]) => typedError<ImportOperation_Serialize, ErrorResponse>(__TAURI_INVOKE("import_merge_sessions", { id, expectedRevision, seqs })),
+	/**
+	 *  Re-split the merged session holding item `seq` by framing again.
+	 * 
+	 *  # Errors
+	 *  `InvalidInput` for a session that was not merged or an item in no
+	 *  session; `Conflict` for a stale revision.
+	 */
+	importResplitSession: (id: string, expectedRevision: number, seq: number) => typedError<ImportOperation_Serialize, ErrorResponse>(__TAURI_INVOKE("import_resplit_session", { id, expectedRevision, seq })),
+	/**
+	 *  The sessions the import's lights would form with these centre and
+	 *  rotation limits, for the review's sliders. Saves nothing.
+	 * 
+	 *  # Errors
+	 *  `InvalidInput` for limits out of range; `NotFound` for an unknown import.
+	 */
+	importSplitPreview: (id: string, limits: SplitLimits) => typedError<ImportSession_Serialize[], ErrorResponse>(__TAURI_INVOKE("import_split_preview", { id, limits })),
+	/**
+	 *  Give the import its own centre and rotation limits, or (`null`) split it
+	 *  with the Settings default again. Only this import changes.
+	 * 
+	 *  # Errors
+	 *  `InvalidInput` for limits out of range; `Conflict` for a stale revision.
+	 */
+	importSetSplitLimits: (id: string, expectedRevision: number, limits: {
+	/**  Largest centre offset, in arcminutes. */
+	maxCentreOffsetArcmin: number | null,
+	/**
+	 *  Largest rotation difference in degrees. A meridian flip leaves
+	 *  ROTATANG unchanged; with only the sky angle known, 180° reads as the
+	 *  same framing.
+	 */
+	maxRotationDeg: number | null,
+} | null) => typedError<ImportOperation_Serialize, ErrorResponse>(__TAURI_INVOKE("import_set_split_limits", { id, expectedRevision, limits })),
+	/**
+	 *  Choose the Target the session holding item `seq` files under, or
+	 *  Unclassified (`null`), in place of the one its pointing matches.
+	 * 
+	 *  # Errors
+	 *  `NotFound` for an unknown Target; `InvalidInput` for an item in no
+	 *  session; `Conflict` for a stale revision.
+	 */
+	importChooseTarget: (id: string, expectedRevision: number, seq: number, targetId: string | null) => typedError<ImportOperation_Serialize, ErrorResponse>(__TAURI_INVOKE("import_choose_target", { id, expectedRevision, seq, targetId })),
+	/**
 	 *  A rig with its filter list, the bands it captures and its field of view.
 	 * 
 	 *  # Errors
@@ -3805,6 +3856,16 @@ export type ImportItem = {
 	 *  [`crate::FRAMING_LABEL_FIELD`] correction (LIB-FR-24, D-W107).
 	 */
 	framingLabel?: string | null,
+	/**
+	 *  The Target the user chose for the light's session in import review;
+	 *  `None` keeps the one its pointing matches (D-W129).
+	 */
+	targetChoice?: ImportTargetChoice | null,
+	/**
+	 *  The Target the light's session files under, as its route named
+	 *  `{target}` from it; `None` is Unclassified. Never OBJECT.
+	 */
+	targetId?: string | null,
 	excluded: boolean,
 	role: LocationRole | null,
 	destinationLocationId: string | null,
@@ -3903,6 +3964,12 @@ export type ImportOperation_Deserialize = {
 	 *  until the import starts.
 	 */
 	sessions: ImportSession_Deserialize[],
+	/**
+	 *  The centre and rotation limits the sessions split with: the import's
+	 *  own when `split_overridden`, else the Settings default (CF2).
+	 */
+	splitLimits: SplitLimits,
+	splitOverridden: boolean,
 	createdAt: string,
 	updatedAt: string,
 	settledAt: string | null,
@@ -3933,6 +4000,12 @@ export type ImportOperation_Serialize = {
 	 *  until the import starts.
 	 */
 	sessions: ImportSession_Serialize[],
+	/**
+	 *  The centre and rotation limits the sessions split with: the import's
+	 *  own when `split_overridden`, else the Settings default (CF2).
+	 */
+	splitLimits: SplitLimits,
+	splitOverridden: boolean,
 	createdAt: string,
 	updatedAt: string,
 	settledAt: string | null,
@@ -4026,6 +4099,14 @@ export type ImportRow_Serialize = {
  */
 export type ImportSession = ImportSession_Serialize | ImportSession_Deserialize;
 
+/**  A session's Target as import review names it. */
+export type ImportSessionTarget = {
+	id: string,
+	/**  What `{target}` names its folder with. */
+	designation: string,
+	commonName: string | null,
+};
+
 /**
  *  One session the import's lights form at intake, as import review shows it
  *  before the import is confirmed (LIB-FR-04, LIB-FR-24, D-W107): a night's
@@ -4047,12 +4128,21 @@ export type ImportSession_Deserialize = {
 	merged: boolean,
 	/**
 	 *  What a default name shows: OBJECT, FILTER, the exposure and the night
-	 *  of its first item.
+	 *  of its first item. OBJECT is only a hint: it never chooses or names
+	 *  the session's Target (D-W129, J31 S3).
 	 */
 	object: string | null,
 	filter: string | null,
 	exposureSeconds: number | null,
 	night?: string | null,
+	/**
+	 *  The Target the session files under: the user's choice, else the one
+	 *  Target its pointing matches; `None` is Unclassified, preselected when
+	 *  it has no pointing or no matching Target.
+	 */
+	target: ImportSessionTarget | null,
+	/**  The user chose `target` (or Unclassified) rather than its pointing. */
+	targetChosen: boolean,
 };
 
 /**
@@ -4076,12 +4166,21 @@ export type ImportSession_Serialize = {
 	merged: boolean,
 	/**
 	 *  What a default name shows: OBJECT, FILTER, the exposure and the night
-	 *  of its first item.
+	 *  of its first item. OBJECT is only a hint: it never chooses or names
+	 *  the session's Target (D-W129, J31 S3).
 	 */
 	object: string | null,
 	filter: string | null,
 	exposureSeconds: number | null,
 	night: string | null,
+	/**
+	 *  The Target the session files under: the user's choice, else the one
+	 *  Target its pointing matches; `None` is Unclassified, preselected when
+	 *  it has no pointing or no matching Target.
+	 */
+	target: ImportSessionTarget | null,
+	/**  The user chose `target` (or Unclassified) rather than its pointing. */
+	targetChosen: boolean,
 };
 
 /**  The CSV file as read. */
@@ -4128,6 +4227,12 @@ export type ImportSummary = {
 	sourcesKept: number,
 	uncertain: number,
 };
+
+/**
+ *  The Target a user chose for a session in import review (D-W129): one to
+ *  file it under, or Unclassified.
+ */
+export type ImportTargetChoice = { kind: "unclassified" } | { kind: "target"; targetId: string };
 
 /**  Imported values are never verified. */
 export type ImportVerification = "unverified";
@@ -6704,8 +6809,9 @@ export type SessionFraming = {
 	 */
 	skyAngleDeg?: number | null,
 	/**
-	 *  The anchor's field from its header optics; the centre margin is a
-	 *  share of its diagonal. `None` when the header cannot give it.
+	 *  The anchor's field from its header optics, for the overlap of two
+	 *  framings; the centre limit is an angle and never reads it. `None`
+	 *  when the header cannot give it.
 	 */
 	field?: FieldOfView | null,
 	/**  The user's framing label when the user merged or split the framing. */
@@ -6909,6 +7015,23 @@ export type SortDirection = "asc" | "desc";
 export type SourcedValue = {
 	value: string,
 	source: string,
+};
+
+/**
+ *  When two frames are one framing (LIB-FR-04, PRJ-FR-31, D-W107; CF2,
+ *  owner 2026-10-20): their centres within an angle on the sky, so the limit
+ *  is the same whatever the field, and their rotation within an angle. The
+ *  Settings default is 5′ and 5°; an import may carry its own.
+ */
+export type SplitLimits = {
+	/**  Largest centre offset, in arcminutes. */
+	maxCentreOffsetArcmin: number | null,
+	/**
+	 *  Largest rotation difference in degrees. A meridian flip leaves
+	 *  ROTATANG unchanged; with only the sky angle known, 180° reads as the
+	 *  same framing.
+	 */
+	maxRotationDeg: number | null,
 };
 
 /**

@@ -42,8 +42,9 @@ pub struct SessionFraming {
     /// the same framing.
     #[serde(default)]
     pub sky_angle_deg: Option<f64>,
-    /// The anchor's field from its header optics; the centre margin is a
-    /// share of its diagonal. `None` when the header cannot give it.
+    /// The anchor's field from its header optics, for the overlap of two
+    /// framings; the centre limit is an angle and never reads it. `None`
+    /// when the header cannot give it.
     #[serde(default)]
     pub field: Option<FieldOfView>,
     /// The user's framing label when the user merged or split the framing.
