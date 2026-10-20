@@ -20,6 +20,7 @@ import { FormDialog } from "@/components/app/form-dialog"
 import { useFollowLink } from "@/components/app/links"
 import { DuplicatesBadge } from "@/components/domain/duplicates-badge"
 import { MosaicField, mosaicFieldModel } from "@/components/domain/mosaic-field"
+import { ReadinessBadge } from "@/components/domain/readiness-badge"
 import type { DetailSection } from "@/components/templates/detail-page"
 import { KIND_NAME } from "@/domain/calibration"
 import {
@@ -33,6 +34,7 @@ import {
   projectSuggestions,
   rigName,
   sessionIntakeLink,
+  sessionReadiness,
   sessionRigId,
   sessionUnreviewedFrames,
   subjectName,
@@ -64,6 +66,18 @@ function SessionCell({ session }: { session: Session }) {
   )
 }
 
+/** A held session's own cell: a session that is not Ready (a reopened review set frames back to Unreviewed) reads Needs review here too (D-W100). */
+function HeldSessionCell({ session }: { session: Session }) {
+  const readiness = useStore((s) => sessionReadiness(s.catalog, session))
+  const unreviewed = useStore((s) => sessionUnreviewedFrames(s.catalog, session))
+  if (readiness === "ready") return <SessionCell session={session} />
+  return (
+    <>
+      <SessionCell session={session} /> <ReadinessBadge readiness={readiness} unreviewed={unreviewed} trashed={false} />
+    </>
+  )
+}
+
 /** A pending change in its row's own terms, with its source: "Moved from RedCat 51 (Project)", "Dark changed (Calibration)". */
 function pendingLine(m: Messages, project: Project, change: PendingChange): string {
   const source = say(m, CHANGE_SOURCE_NAME[change.source])
@@ -81,6 +95,8 @@ function pendingWhat(m: Messages, project: Project, change: PendingChange): stri
     case "frames-rejected":
     case "frames-restored":
       return m.project_pending_frames({ count: change.assetIds.length, n: formatCount(change.assetIds.length) })
+    case "frames-unreviewed":
+      return m.flow_frames_unreviewed({ count: change.assetIds.length })
     case "calibration-changed":
       return m.project_pending_calibration({ kind: say(m, KIND_NAME[change.pinKind]) })
     case "group-renamed":
@@ -290,7 +306,7 @@ export function useHeldSection(project: Project): DetailSection {
   const framing = (r: HeldRow) => framingLine(m, catalog, r.session)
   const pending = (r: HeldRow) => pendingCell(m, project, changes, ofSession(r.session.id))
   const columns: Column<HeldRow>[] = [
-    { id: "session", header: m.project_col_session(), cell: (r) => <SessionCell session={r.session} />, sortValue: (r) => r.session.night, rowHeader: true },
+    { id: "session", header: m.project_col_session(), cell: (r) => <HeldSessionCell session={r.session} />, sortValue: (r) => r.session.night, rowHeader: true },
     { id: "subject", header: m.project_col_subject(), cell: (r) => sessionSubjectName(m, catalog, project, r.session), sortValue: (r) => sessionSubjectName(m, catalog, project, r.session), truncate: true },
     { id: "rig", header: m.project_col_rig(), cell: rigOf, sortValue: rigOf, truncate: true },
     { id: "framing", header: m.project_col_framing(), cell: framing, sortValue: framing, truncate: true },

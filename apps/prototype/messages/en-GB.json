@@ -5588,6 +5588,23 @@
   "project_change_frames_included": "Took back {frames} of {session}",
   "project_change_frames_rejected": "Rejected {frames} of {session}",
   "project_change_frames_restored": "Restored {frames} of {session}",
+  "project_change_frames_unreviewed": "Set {frames} of {session} back to Unreviewed",
+  "apply_refused_not_ready": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} session needs review",
+        "countPlural=*": "{count} sessions need review"
+      }
+    }
+  ],
+  "view_blocker_not_ready": "Finish review of {name}",
   "project_change_group_renamed": "Renamed group {from} to {to}",
   "project_change_keywords": "Group keywords changed",
   "project_change_mode": "Input mode changes to {mode}",

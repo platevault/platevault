@@ -7,9 +7,11 @@
  * The Project's inputs, groups and settings are the desired state; its
  * `view` is the applied state the last Apply built. Every difference is a
  * pending change labelled with its source: the Project's own edits, which
- * it can discard, and changes from the Library (a rejected frame) or a
- * session's calibration (a reassigned pin), fixed at their source or by
- * removing the session (D-W109). Apply builds a complete `View (building)/`
+ * it can discard, and changes from the Library (a rejected frame, or a
+ * frame a reopened review set back to Unreviewed) or a session's
+ * calibration (a reassigned pin), fixed at their source or by removing the
+ * session (D-W100, D-W109). Apply waits until every held session is Ready
+ * (D-W100), then builds a complete `View (building)/`
  * from the originals only, verifies it and swaps it in; the old View
  * becomes `View (previous)/`, whose leftovers the next Apply waits on
  * (D-W110). Tools work in `Processing/<Tool>/`; Results live in `Output/`.
@@ -35,12 +37,14 @@ import {
   rigName,
   runningGate,
   sessionIntakeLink,
+  sessionReadiness,
   sessionRigId,
   sessionUnreviewedFrames,
   type StepLink,
   subjectCentre,
   subjectRef,
   subjectTarget,
+  unreviewedAssetIds,
   unsettled,
   viewCorrections,
   type World,
@@ -701,7 +705,7 @@ export function appliedViewFor(world: Pick<World, "catalog">, project: Project, 
 // Pending changes (VSEL-FR-12, D-W109)
 // ---------------------------------------------------------------------------
 
-/** Who made a pending change: the Project's own edit, the Library (a rejected or trashed frame), or a session's calibration. */
+/** Who made a pending change: the Project's own edit, the Library (a rejected or trashed frame, or a frame set back to Unreviewed), or a session's calibration. */
 export type ChangeSource = "project" | "library" | "calibration"
 
 export const CHANGE_SOURCE_NAME: Record<ChangeSource, MessageRef> = {
@@ -726,6 +730,7 @@ export type PendingChange = ChangeBase &
     | { kind: "session-removed"; sessionId: SessionId }
     | { kind: "session-moved"; sessionId: SessionId; from: ProjectGroupId; to: ProjectGroupId }
     | { kind: "frames-excluded" | "frames-included" | "frames-rejected" | "frames-restored"; sessionId: SessionId; assetIds: AssetId[] }
+    | { kind: "frames-unreviewed"; sessionId: SessionId; assetIds: AssetId[] }
     | { kind: "calibration-changed"; sessionId: SessionId; pinKind: PinKind; from: CalibrationChoice; to: CalibrationChoice }
     | { kind: "group-renamed"; groupId: ProjectGroupId; from: string; to: string }
     | { kind: "mode-changed"; from: InputMode; to: InputMode }
@@ -764,7 +769,9 @@ const FRAMES_CHANGE_KEY = {
  * Every difference between the desired state and the applied View, with its
  * source (VSEL-FR-12). Empty before the first Apply (it builds the View
  * from the desired state) and for a Closed Project, which takes no incoming
- * changes.
+ * changes. A held session's frames that a reopened review set back to
+ * Unreviewed are the Library's change until the session is Ready again
+ * (D-W100); fixed in the session's Review step.
  */
 export function pendingChanges(world: Pick<World, "catalog" | "disk">, project: Project): PendingChange[] {
   const view = project.view
@@ -776,6 +783,11 @@ export function pendingChanges(world: Pick<World, "catalog" | "disk">, project: 
   const placed = new Set(view.entries.flatMap((e) => (e.role === "light" && e.source.type === "asset" ? [e.source.assetId] : [])))
   const sessionLink = (sessionId: SessionId) => ({ to: "/sessions/$sessionId", params: { sessionId } })
   for (const [sessionId, input] of desired) {
+    const session = catalog.sessions[sessionId]
+    const reopened = session ? unreviewedAssetIds(catalog, session) : []
+    if (reopened.length > 0) {
+      out.push({ id: `frames-unreviewed|${sessionId}|${reopened.length}`, kind: "frames-unreviewed", sessionId, assetIds: reopened, source: "library", label: msg("project_change_frames_unreviewed", { session: sessionLabel(catalog, sessionId), frames: framesRef(reopened.length) }), link: sessionIntakeLink(sessionId, "review") })
+    }
     const before = applied.get(sessionId)
     if (!before) {
       const frames = inFrames(catalog, input).size
@@ -903,6 +915,7 @@ export type ApplyRefusal =
   | { kind: "no-folder" }
   | { kind: "no-inputs" }
   | { kind: "nothing-to-apply" }
+  | { kind: "not-ready"; sessions: Session[] }
   | { kind: "unsettled"; sessions: Session[] }
   | { kind: "offline"; paths: string[] }
   | { kind: "pin-drift"; problems: Array<PinProblem & { session: Session }> }
@@ -984,6 +997,7 @@ export function applyPlan(world: World, project: Project): ApplyPlan {
   const free = volumeId ? freeBytes(disk, volumeId) : 0
   const refusals: ApplyRefusal[] = []
   const busy = projectOperation(world, project.id)
+  const notReady = project.inputs.map((i) => catalog.sessions[i.sessionId]).filter((s): s is Session => s !== undefined && sessionReadiness(catalog, s) !== "ready")
   const unsettledSessions = project.inputs.map((i) => catalog.sessions[i.sessionId]).filter((s): s is Session => s !== undefined && !PIN_KINDS.every((k) => s.calibration?.[k].state === "pinned" || s.calibration?.[k].state === "none"))
   const pinProblems = project.inputs.flatMap((i) => {
     const session = catalog.sessions[i.sessionId]
@@ -995,6 +1009,7 @@ export function applyPlan(world: World, project: Project): ApplyPlan {
   if (!paths) refusals.push({ kind: "no-folder" })
   if (project.inputs.length === 0 && !project.view) refusals.push({ kind: "no-inputs" })
   if (project.view && changes.length === 0 && drift.changed.length === 0) refusals.push({ kind: "nothing-to-apply" })
+  if (notReady.length > 0) refusals.push({ kind: "not-ready", sessions: notReady })
   if (unsettledSessions.length > 0) refusals.push({ kind: "unsettled", sessions: unsettledSessions })
   if (pinProblems.length > 0) refusals.push({ kind: "pin-drift", problems: pinProblems })
   if (offline.length > 0) refusals.push({ kind: "offline", paths: offline })
@@ -1045,6 +1060,8 @@ export function applyRefusalRef(refusal: ApplyRefusal): MessageRef {
       return msg("apply_refused_no_inputs")
     case "nothing-to-apply":
       return msg("apply_refused_nothing")
+    case "not-ready":
+      return msg("apply_refused_not_ready", { count: refusal.sessions.length })
     case "unsettled":
       return msg("apply_refused_unsettled", { count: refusal.sessions.length })
     case "offline":

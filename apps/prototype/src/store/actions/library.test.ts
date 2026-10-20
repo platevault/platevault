@@ -1,8 +1,9 @@
 import { beforeAll, beforeEach, describe, expect, it } from "vitest"
 import { calibrateSessions } from "@/domain/calibration"
-import { pendingChanges } from "@/domain/project-view"
+import { sessionIntakeLink, sessionReadiness } from "@/domain/derive"
+import { applyPlan, pendingChanges } from "@/domain/project-view"
 import { createSeed } from "@/domain/seed"
-import type { Session } from "@/domain/types"
+import type { Project, Session } from "@/domain/types"
 import { nowIso, type PrototypeState, SCHEMA_VERSION, store } from "@/store/core"
 import { initialSliceStates, sliceVersions } from "@/store/slices"
 import { confirmRig, markFrames } from "./library"
@@ -41,6 +42,52 @@ describe("library marks (PIX-FR-13, D-W54)", () => {
     expect(markFrames([frame], "unusable", "/sessions").ok).toBe(true)
     expect(catalog().projects[OIII]).toEqual(closed)
     expect(pendingChanges(store.getState(), closed)).toEqual([])
+  })
+})
+
+describe("a reopened review (D-W100, VSEL-FR-12, PIX-FR-18)", () => {
+  const holding = (state: "open" | "closed", sessionId: string) =>
+    Object.values(catalog().projects).filter((p) => (state === "open" ? p.state === "open" : p.state !== "open") && p.view !== null && p.inputs.some((i) => i.sessionId === sessionId))
+  const reopened = (project: Project) => pendingChanges(store.getState(), catalog().projects[project.id]!).filter((c) => c.kind === "frames-unreviewed")
+  const notReady = (project: Project) => applyPlan(store.getState(), catalog().projects[project.id]!).refusals.filter((r) => r.kind === "not-ready")
+
+  it("reaches every open Project holding the session as the Library's pending change, the session reads Needs review, and Apply waits until it is Ready", () => {
+    // Two open Projects with a View hold the session: Cygnus and a copy of it.
+    const cygnus = catalog().projects[CYGNUS]!
+    const copy: Project = { ...structuredClone(cygnus), id: `${cygnus.id}_copy` as Project["id"], name: `${cygnus.name} 2` }
+    store.setState((s) => ({ ...s, catalog: { ...s.catalog, projects: { ...s.catalog.projects, [copy.id]: copy } } }))
+    const session = catalog().sessions[cygnus.inputs.find((i) => sessionReadiness(catalog(), catalog().sessions[i.sessionId]!) === "ready")!.sessionId]!
+    const open = holding("open", session.id)
+    expect(open.map((p) => p.id)).toEqual(expect.arrayContaining([CYGNUS, copy.id]))
+    const frame = session.assetIds.find((id) => catalog().assets[id]!.quality.value === "usable")!
+    for (const project of open) {
+      expect(reopened(project)).toEqual([])
+      expect(notReady(project)).toEqual([])
+    }
+
+    expect(markFrames([frame], "unreviewed", `/sessions/${session.id}?step=review`).ok).toBe(true)
+    expect(sessionReadiness(catalog(), catalog().sessions[session.id]!)).toBe("needs-review")
+    for (const project of open) {
+      expect(reopened(project)).toEqual([
+        expect.objectContaining({ sessionId: session.id, assetIds: [frame], source: "library", label: expect.objectContaining({ key: "project_change_frames_unreviewed" }), link: sessionIntakeLink(session.id, "review") }),
+      ])
+      expect(notReady(project)).toEqual([{ kind: "not-ready", sessions: [expect.objectContaining({ id: session.id })] }])
+    }
+
+    // Ready again with the same mark: nothing pending from the review, and Apply no longer waits on it.
+    expect(markFrames([frame], "usable", `/sessions/${session.id}?step=review`).ok).toBe(true)
+    for (const project of open) {
+      expect(reopened(project)).toEqual([])
+      expect(notReady(project)).toEqual([])
+    }
+  })
+
+  it("never reaches a Closed Project holding the session", () => {
+    const session = lights((s) => holding("closed", s.id).length > 0)[0]!
+    const closed = holding("closed", session.id)
+    const frame = session.assetIds.find((id) => catalog().assets[id]!.quality.value !== "unreviewed")!
+    expect(markFrames([frame], "unreviewed", `/sessions/${session.id}?step=review`).ok).toBe(true)
+    for (const project of closed) expect(pendingChanges(store.getState(), catalog().projects[project.id]!)).toEqual([])
   })
 })
 
