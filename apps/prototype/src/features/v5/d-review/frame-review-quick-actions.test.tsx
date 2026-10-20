@@ -99,32 +99,38 @@ describe("Review: a mark on more than 20 frames under the Quick actions switch (
   })
 })
 
-describe("Review: Mark rest usable under the Quick actions switch (A4)", () => {
-  it("One-click marks at once with an Undo notice, and Undo sets those frames back to Unreviewed", async () => {
-    const before = buckets()
-    const rest = count("unreviewed")
-    const user = userEvent.setup()
-    renderReview()
-
-    await user.click(await screen.findByRole("button", { name: m.review_mark_rest_usable() }))
-    expect(screen.queryByRole("alertdialog")).toBeNull()
-    expect(count("unreviewed")).toBe(0)
-
-    await user.click(await undoOf(m.store_saved_frames_marked({ ...frameCount(rest), quality: m.status_usable() })))
-    expect(buckets()).toEqual(before)
-  })
-
-  it("Open page keeps the confirm, worded as every bulk mark's, and marks with no Undo notice", async () => {
-    setFault("quickActions", "open-page")
-    const rest = count("unreviewed")
-    const user = userEvent.setup()
-    renderReview()
-
+describe("Review: Mark rest usable asks in both modes of the Quick actions switch (D-W118)", () => {
+  const modes = ["one-click", "open-page"] as const
+  /** Opens Mark rest usable's confirm and returns it; nothing is marked yet. */
+  async function openConfirm(user: ReturnType<typeof userEvent.setup>, rest: number): Promise<HTMLElement> {
     await user.click(await screen.findByRole("button", { name: `${m.review_mark_rest_usable()}…` }))
-    const dialog = await screen.findByRole("alertdialog", { name: m.review_bulk_mark_title({ ...frameCount(rest), quality: m.status_usable() }) })
+    const dialog = await screen.findByRole("alertdialog", { name: m.review_mark_rest_title({ ...frameCount(rest), quality: m.status_usable() }) })
     expect(count("unreviewed")).toBe(rest)
+    return dialog
+  }
+
+  it.each(modes)("%s: the confirm names the remaining count, and Mark marks them with no Undo notice", async (mode) => {
+    setFault("quickActions", mode)
+    const rest = count("unreviewed")
+    expect(rest).toBeGreaterThan(0)
+    const user = userEvent.setup()
+    renderReview()
+
+    const dialog = await openConfirm(user, rest)
     await user.click(within(dialog).getByRole("button", { name: m.store_label_mark_frames({ ...frameCount(rest), quality: m.status_usable() }) }))
     await waitFor(() => expect(count("unreviewed")).toBe(0))
     expect(screen.queryByText(m.store_saved_frames_marked({ ...frameCount(rest), quality: m.status_usable() }))).toBeNull()
+  })
+
+  it.each(modes)("%s: Cancel marks nothing", async (mode) => {
+    setFault("quickActions", mode)
+    const before = buckets()
+    const user = userEvent.setup()
+    renderReview()
+
+    const dialog = await openConfirm(user, count("unreviewed"))
+    await user.click(within(dialog).getByRole("button", { name: m.verb_cancel() }))
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull())
+    expect(buckets()).toEqual(before)
   })
 })

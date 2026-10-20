@@ -4292,6 +4292,23 @@
   "review_note_samples_of": "{count} of {total}, region shown",
   "review_mark_rest_usable": "Mark rest usable",
   "review_mark_rest_none": "No frame is unreviewed",
+  "review_mark_rest_title": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input quality",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Mark {n} remaining frame {quality}?",
+        "countPlural=*": "Mark {n} remaining frames {quality}?"
+      }
+    }
+  ],
   "review_plot_coverage": "{count} of {total} measured",
   "review_plot_point": "{name}: {value}",
   "review_readout": "x {x} y {y} · {value} ADU",
@@ -4889,7 +4906,7 @@
   "simulation_this_project_title": "This Project: {name}",
   "simulation_actions_title": "Actions",
   "simulation_quick_actions": "Quick actions",
-  "simulation_quick_actions_detail": "One-click runs marks on more than 20 frames, Mark rest usable, and Home's Add to Project, Add to Plan, Scan and Rescan where they are, with Undo where they have one. Open page sends each to the page that owns it.",
+  "simulation_quick_actions_detail": "One-click runs marks on more than 20 frames, and Home's Add to Project, Add to Plan, Scan and Rescan where they are, with Undo where they have one. Open page sends each to the page that owns it. Mark rest usable asks first in both.",
   "simulation_quick_one_click": "One-click",
   "simulation_quick_open_page": "Open page",
   "ds_operation_title": "Operation",

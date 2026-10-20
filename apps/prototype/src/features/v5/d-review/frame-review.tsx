@@ -11,8 +11,9 @@
  * - Selection swaps the table's toolbar for its batch bar (Usable ·
  *   Unusable · Unreviewed, the STATUS words); "Select by threshold…" and
  *   "Mark rest usable" sit in that toolbar. A mark on more than 20 frames
- *   and Mark rest usable ask first under the Quick actions switch's Open
- *   page; One-click runs them at once with an Undo notice (astro-plan-zzjlz).
+ *   asks first under the Quick actions switch's Open page; One-click runs it
+ *   at once with an Undo notice (astro-plan-zzjlz). Mark rest usable asks
+ *   first in both modes, naming the remaining count (D-W118).
  * - Hotkeys (PIX-FR-13) act the same in the table, the filmstrip and the
  *   grid, never while a field or a menu has focus, and follow the app's
  *   single-key setting (WCAG 2.1.4). They are listed on the Help page.
@@ -41,14 +42,14 @@ import { Plate, type PlateImage, type PlateView, STRETCH_LABEL, STRETCHES, type 
 import { detectedStars, frameField, renderWindow, sampleAt, type StarRecord, type ViewWindow } from "@/components/domain/raster"
 import { type PlotSeries, SessionPlots } from "@/components/domain/session-plots"
 import { type WorkspaceAside, type WorkspacePane, Workspace } from "@/components/templates/workspace"
-import { sessionUnreviewedFrames, unreviewedAssetIds } from "@/domain/derive"
+import { sessionUnreviewedFrames } from "@/domain/derive"
 import { currentFile, formatMetricFixed, previewUnavailableReason } from "@/domain/membership"
 import type { AssetId, QualityValue } from "@/domain/types"
 import { formatCount } from "@/lib/format"
 import { type Messages, say } from "@/lib/i18n"
 import { METRIC_LABEL } from "@/store/actions/measure"
-import { markFrames, markRestUsable } from "@/store/actions/library"
-import { type CommitResult, store, useStore } from "@/store/core"
+import { markRestUsable } from "@/store/actions/library"
+import { type CommitResult, useStore } from "@/store/core"
 import { setFrameUi } from "./actions"
 import { frameColumns } from "./columns"
 import { registerReviewCommands } from "./commands"
@@ -501,23 +502,14 @@ export function ReviewWorkspace({ context, onFinished }: ReviewWorkspaceProps) {
   const emptyList = <EmptyState icon={ImageOff} title={emptyTitle} action={filter !== "all" ? <ActionButton action={{ id: "show-all", label: m.review_show_all(), run: () => setFilter("all") }} /> : null} />
 
   const selectByThreshold: Action = { id: "threshold", label: m.review_select_by_threshold_ellipsis(), opensDialog: true, run: () => setThreshold({ metric: "fwhm", direction: "above", value: null, add: false }) }
-  /** The frames Mark rest usable is about to mark, as they are now, and their way back to Unreviewed. */
-  const restUnreviewed = (): QuickUndo => {
-    const ids = session ? unreviewedAssetIds(store.getState().catalog, session) : []
-    return {
-      message: m.store_saved_frames_marked({ count: ids.length, n: ids.length, quality: markLabel.usable }),
-      run: () => markFrames(ids, "unreviewed", scope.href),
-    }
-  }
-  // The owner's "Mark rest usable" (C10); its confirm reads as every bulk mark's ("Mark 120 frames Unusable?").
+  // The owner's "Mark rest usable" (C10): it always asks, naming the remaining count ("Mark 37 remaining frames Usable?", D-W118),
+  // so the Quick actions switch leaves it as declared.
   const restSaid = { count: unreviewed, n: unreviewed, quality: markLabel.usable }
   const markRest: Action = {
     id: "mark-rest-usable",
     label: m.review_mark_rest_usable(),
     unavailable: unreviewed === 0 ? { action: m.review_mark_rest_usable(), reason: m.review_mark_rest_none(), blockers: [] } : undefined,
-    confirm: { title: m.review_bulk_mark_title(restSaid), confirm: { label: m.store_label_mark_frames(restSaid) } },
-    // Owner tick A4: its Undo sets the frames it marks back to Unreviewed.
-    quick: { oneClick: { undo: () => restUnreviewed() }, openPage: "keep" },
+    confirm: { title: m.review_mark_rest_title(restSaid), confirm: { label: m.store_label_mark_frames(restSaid) } },
     run: () => {
       const result = session ? markRestUsable(session.id) : ({ ok: true } as const)
       if (result.ok) announce(m.review_announce_rest_usable({ count: unreviewed }))

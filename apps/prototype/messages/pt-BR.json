@@ -4622,6 +4622,25 @@
   "review_note_samples_of": "{count} de {total}, região exibida",
   "review_mark_rest_usable": "Marcar o resto como utilizável",
   "review_mark_rest_none": "Nenhum frame não revisado",
+  "review_mark_rest_title": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input quality",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "count",
+        "countPlural"
+      ],
+      "match": {
+        "count=0, countPlural=*": "Marcar {n} frames restantes como {quality}?",
+        "count=*, countPlural=one": "Marcar {n} frame restante como {quality}?",
+        "count=*, countPlural=*": "Marcar {n} frames restantes como {quality}?"
+      }
+    }
+  ],
   "review_plot_coverage": "{count} de {total} medidos",
   "review_plot_point": "{name}: {value}",
   "review_readout": "x {x} y {y} · {value} ADU",
@@ -5257,7 +5276,7 @@
   "simulation_this_project_title": "Este projeto: {name}",
   "simulation_actions_title": "Ações",
   "simulation_quick_actions": "Ações rápidas",
-  "simulation_quick_actions_detail": "Um clique executa marcações em mais de 20 frames, Marcar o resto como utilizável e, no Início, Adicionar ao Projeto, Adicionar ao Plano, Escanear e Reescanear onde estão, com Desfazer quando há um. Abrir página leva cada uma à página que a contém.",
+  "simulation_quick_actions_detail": "Um clique executa marcações em mais de 20 frames e, no Início, Adicionar ao Projeto, Adicionar ao Plano, Escanear e Reescanear onde estão, com Desfazer quando há um. Abrir página leva cada uma à página que a contém. Marcar o resto como utilizável pergunta antes nos dois.",
   "simulation_quick_one_click": "Um clique",
   "simulation_quick_open_page": "Abrir página",
   "ds_operation_title": "Operação",
