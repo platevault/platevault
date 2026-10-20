@@ -88,8 +88,9 @@ function framingSuffix(session: Session): MessageRef[] {
   return [session.pointing ? msg("domain_session_framing", { n: session.framing }) : msg("domain_session_framing_unknown")]
 }
 
-/** "18 Sep Ha"; "18 Sep no filter" without a filter; "18 Sep Ha · framing 2" for a second framing. */
+/** "18 Sep Ha"; "18 Sep no filter" without a filter; "18 Sep Ha · framing 2" for a second framing; the user's name instead once Edit… gave one. */
 export function sessionRef(session: Session): MessageRef {
+  if (session.name) return verbatim(session.name)
   const night = nightRef(session.night)
   const base = session.channel ? joinRefs([night, verbatim(session.channel)], " ") : msg("domain_session_no_filter", { night })
   return session.framing > 1 ? joinRefs([base, ...framingSuffix(session)], " · ") : base
@@ -99,8 +100,13 @@ export function sessionLabel(m: Messages, session: Session): string {
   return say(m, sessionRef(session))
 }
 
-/** "18 Sep · Ha · 300 s", the label calibration and View lists use; "· framing 2" follows a second framing. */
+/** "18 Sep · Ha · 300 s", the label calibration and View lists use; "· framing 2" follows a second framing; the user's name instead once Edit… gave one. */
 export function sessionLongRef(session: Session): MessageRef {
+  return session.name ? verbatim(session.name) : sessionDefaultRef(session)
+}
+
+/** The name a session has until the user gives it one (LIB-FR-04): "18 Sep · Ha · 300 s · framing 2". */
+export function sessionDefaultRef(session: Session): MessageRef {
   const channel = session.channel ? verbatim(session.channel) : msg("palette_session_no_filter")
   return joinRefs([nightRef(session.night), channel, verbatim(formatExposure(sessionExposureS(session))), ...framingSuffix(session)], " · ")
 }

@@ -8,15 +8,17 @@
  * No; LIB-FR-23, LIB-FR-25), the Projects that hold it (an open one lists
  * the pending changes this session brings it; a Closed one keeps its Close
  * snapshot, LIB-AC-30), its frames and its header values (each with where
- * it came from). The Session ▾ menu offers Dismiss issue for the session's
- * issues (drift, a changed pinned file) and Restore issue once dismissed
- * (F7, P-ISS1).
+ * it came from), and its notes once it has some. The Session ▾ menu offers
+ * Edit… (its name and notes, D-W76), Add to Project ▸, Dismiss issue for
+ * the session's issues (drift, a changed pinned file) and Restore issue once
+ * dismissed (F7, P-ISS1).
  *
  * A raw calibration session is not a library session: it reads where its
  * calibration process stands (P-CAL3) and links to the Calibration library.
  */
 import { useNavigate, useParams } from "@tanstack/react-router"
 import { Copy, Eye, ListChecks } from "lucide-react"
+import { useState } from "react"
 import { MissingRecord } from "@/app/missing-record"
 import { useMessages } from "@/app/preferences"
 import { useFollowLink } from "@/components/app/links"
@@ -45,7 +47,8 @@ import { confirmCalibration, pickCalibration, setNoCalibration } from "@/store/a
 import { type PrototypeState, useStore } from "@/store/core"
 import { useIssues } from "@/store/issues"
 import { typeLabel } from "./import-model"
-import { addToProjectItems } from "./parts"
+import { addToProjectItems, editSessionAction } from "./parts"
+import { SessionDetailsDialog } from "./session-details-dialog"
 import { type SessionRow, sessionRows } from "./session-model"
 
 export function SessionPage() {
@@ -87,31 +90,40 @@ function SessionDetail({ session }: { session: Session }) {
   const follow = useFollowLink()
   const state = useStore((s) => s)
   const issueView = useIssues()
+  const [editing, setEditing] = useState(false)
   const row = sessionRows(state).find((r) => r.session.id === session.id)
   if (!row) return null
   const { catalog } = state
   const assets = session.assetIds.map((id) => catalog.assets[id]).filter((a): a is Asset => a !== undefined)
   const review: Action = { id: "review", label: m.session_review_frames(), icon: ListChecks, kind: row.queued ? "primary" : "standard", run: () => follow(sessionIntakeEntry(catalog, session)) }
-  const menu: MenuItem[] = withIssueItems(m, row.trashed ? [] : addToProjectItems(m, catalog, [session.id]), rowIssues(issueView, { kind: "session", id: session.id }))
+  const menu: MenuItem[] = withIssueItems(
+    m,
+    row.trashed ? [] : [editSessionAction(m, () => setEditing(true)), { separator: true }, ...addToProjectItems(m, catalog, [session.id])],
+    rowIssues(issueView, { kind: "session", id: session.id }),
+  )
   const notice: PageNotice | null = row.trashed ? { tone: "warning", title: m.session_in_os_trash() } : null
   const hours = formatHours(row.seconds)
 
   return (
-    <DetailPage
-      path={[{ label: m.nav_sessions(), link: { to: "/sessions" } }]}
-      title={sessionLongLabel(m, session)}
-      status={<ReadinessBadge readiness={row.readiness} unreviewed={row.unreviewed} trashed={row.trashed} />}
-      actions={row.trashed ? [] : [review]}
-      menu={{ label: m.session_label(), items: menu }}
-      notice={notice}
-      sections={[
-        { id: "intake", title: m.session_intake(), content: <IntakeFacts state={state} row={row} />, actions: row.trashed ? [] : intakeActions(m, follow, session) },
-        { id: "calibration", title: m.nav_calibration(), flush: true, content: <SessionCalibrationChoices state={state} session={session} changeable={!row.trashed} /> },
-        { id: "projects", title: m.nav_projects(), count: row.projects.length, flush: true, content: <ProjectsTable state={state} row={row} /> },
-        { id: "frames", title: m.sessions_column_frames(), count: assets.length, flush: true, content: <FramesTable state={state} assets={assets} session={session} reviewable={!row.trashed} /> },
-        { id: "headers", title: m.session_headers(), content: <Metadata state={state} session={session} hours={hours} /> },
-      ]}
-    />
+    <>
+      <DetailPage
+        path={[{ label: m.nav_sessions(), link: { to: "/sessions" } }]}
+        title={sessionLongLabel(m, session)}
+        status={<ReadinessBadge readiness={row.readiness} unreviewed={row.unreviewed} trashed={row.trashed} />}
+        actions={row.trashed ? [] : [review]}
+        menu={{ label: m.session_label(), items: menu }}
+        notice={notice}
+        sections={[
+          ...(session.notes.trim() ? [{ id: "notes", title: m.session_notes(), content: session.notes }] : []),
+          { id: "intake", title: m.session_intake(), content: <IntakeFacts state={state} row={row} />, actions: row.trashed ? [] : intakeActions(m, follow, session) },
+          { id: "calibration", title: m.nav_calibration(), flush: true, content: <SessionCalibrationChoices state={state} session={session} changeable={!row.trashed} /> },
+          { id: "projects", title: m.nav_projects(), count: row.projects.length, flush: true, content: <ProjectsTable state={state} row={row} /> },
+          { id: "frames", title: m.sessions_column_frames(), count: assets.length, flush: true, content: <FramesTable state={state} assets={assets} session={session} reviewable={!row.trashed} /> },
+          { id: "headers", title: m.session_headers(), content: <Metadata state={state} session={session} hours={hours} /> },
+        ]}
+      />
+      <SessionDetailsDialog session={session} open={editing} onOpenChange={setEditing} />
+    </>
   )
 }
 

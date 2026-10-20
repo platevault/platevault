@@ -2,13 +2,15 @@
  * Slice A shared pieces: Add to Project as menu items (D-W59: it also adds
  * the sessions' Targets as subjects and their rigs, then the sessions
  * themselves) with its confirm, for one session or a selection; New
- * Project… prefilled from a session, the label Targets uses; and the terse
- * refusal for a failed write. Used by Home, Sessions and the session detail.
+ * Project… prefilled from a session, the label Targets uses; a session's
+ * Edit… (D-W76); and the terse refusal for a failed write. Used by Home,
+ * Sessions and the session detail.
  * Only a session that is Ready and calibration-settled can join a Project
  * (`canJoinProject`, PRJ-FR-08): otherwise each Project item is unavailable
  * with its `joinBlocker` ("Choose its flats first") and a link to where it is
  * resolved; the store refuses the same on every path.
  */
+import { Pencil } from "lucide-react"
 import type { Action, MenuItem } from "@/components/app/contracts"
 import { toast } from "@/components/app/feedback"
 import { type RefusalProps, refusalFrom } from "@/components/app/refusal"
@@ -36,6 +38,11 @@ function openProjects(catalog: Catalog, sessions: Session[]): Project[] {
 /** New Project…, prefilled with the session's Target and rig (LIB-FR-17); the same item as on Targets. */
 export function newProjectAction(m: Messages, sessionId: SessionId): Action {
   return { id: `new-project-${sessionId}`, label: m.newproject_open_ellipsis(), opensDialog: true, run: () => openSheet({ kind: "new-project", fromSessionId: sessionId }) }
+}
+
+/** Edit… (D-W76; owner's answer, 2026-10-20): the session's name and notes, in `SessionDetailsDialog`. Offered on a session that is not in the OS Trash. */
+export function editSessionAction(m: Messages, edit: () => void): Action {
+  return { id: "edit", label: m.session_edit(), icon: Pencil, opensDialog: true, run: edit }
 }
 
 /** Where a session that cannot join yet is resolved: its intake while it is not Ready, else its calibration on its details. */

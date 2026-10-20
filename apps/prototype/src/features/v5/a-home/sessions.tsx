@@ -13,9 +13,11 @@
  *   (kept per table, `sessions`), so the table fits a 1280 px window.
  * - A row opens the session; its ⋯ and context menu offer Review frames
  *   (the intake at its first open step; review stays open once Ready),
- *   Choose Target and Choose rig while it lacks one, then Add to Project ▸
- *   (D-W59), which is unavailable with its reason until the session is
- *   Ready and settled (PRJ-FR-08), and New Project…, as on Targets. A session
+ *   Choose Target and Choose rig while it lacks one, Edit… (the session's
+ *   name and notes, D-W76), then Add to Project ▸ (D-W59), which is
+ *   unavailable with its reason until the session is Ready and settled
+ *   (PRJ-FR-08), and New Project…, as on Targets. A named session reads
+ *   its name in the Session column. A session
  *   with an issue (drift, a changed pinned file) offers Dismiss issue there,
  *   and Restore issue once dismissed; the Issues facet (With issues ·
  *   Dismissed, `?issues=`) is Show dismissed. The Library counts that open
@@ -62,8 +64,9 @@ import { moveToOsTrash } from "@/store/actions/trash"
 import { type PrototypeState, useStore } from "@/store/core"
 import { useIssues } from "@/store/issues"
 import type { ImportPayload } from "./import-run"
-import { addToProjectItems } from "./parts"
+import { addToProjectItems, editSessionAction } from "./parts"
 import { CalibrationSummary, ReadinessBadge } from "./session"
+import { SessionDetailsDialog } from "./session-details-dialog"
 import { filterCounts, filterLabel, matchesFilter, openHolder, parseFilter, SESSION_FILTERS, type SessionFilter, type SessionRow, sessionRows } from "./session-model"
 
 function emptyTitle(m: Messages, filter: SessionFilter): string {
@@ -252,6 +255,8 @@ export function SessionsPage({ duplicatesReview: DuplicatesReview }: { duplicate
   const importId = search.import
   const importOp = importId ? state.operations[importId] : undefined
   const [selected, setSelected] = useState<string[]>([])
+  const [editing, setEditing] = useState<string | null>(null)
+  const editingSession = editing ? catalog.sessions[editing] : undefined
 
   const imported = new Set(importOp ? (importOp.payload as unknown as ImportPayload).sessionIds : [])
   const counts = filterCounts(rows)
@@ -270,7 +275,7 @@ export function SessionsPage({ duplicatesReview: DuplicatesReview }: { duplicate
   const shown = rows.filter((r) => {
     if (!matchesFilter(r, filter) || !matchesIssueFilter(issuesOf(r), issueFilter)) return false
     if (!needle) return true
-    return [r.session.objectLabel, r.targetName, r.rig && say(m, r.rig), r.session.channel, formatNight(r.session.night, true), r.session.cameraName].some((v) => v?.toLowerCase().includes(needle))
+    return [r.session.name, r.session.objectLabel, r.targetName, r.rig && say(m, r.rig), r.session.channel, formatNight(r.session.night, true), r.session.cameraName].some((v) => v?.toLowerCase().includes(needle))
   })
   // Imported sessions first while their highlight is on.
   if (imported.size > 0) shown.sort((a, b) => Number(imported.has(b.session.id)) - Number(imported.has(a.session.id)))
@@ -291,6 +296,7 @@ export function SessionsPage({ duplicatesReview: DuplicatesReview }: { duplicate
             reviewAction(m, catalog, [r], follow),
             ...(r.needsTarget ? [intakeStepAction(m, [r], "target", follow)] : []),
             ...(r.rig === null ? [intakeStepAction(m, [r], "rig", follow)] : []),
+            editSessionAction(m, () => setEditing(r.session.id)),
             { separator: true } as const,
             ...addToProjectItems(m, catalog, [r.session.id]),
           ]),
@@ -317,7 +323,7 @@ export function SessionsPage({ duplicatesReview: DuplicatesReview }: { duplicate
       sortValue: (r) => `${r.session.night}|${r.session.channel ?? ""}`,
       cell: (r) => (
         <>
-          {`${formatNight(r.session.night, true)} · ${r.session.channel ?? m.palette_session_no_filter()}`}
+          {r.session.name ?? `${formatNight(r.session.night, true)} · ${r.session.channel ?? m.palette_session_no_filter()}`}
           {imported.has(r.session.id) ? <Pill tone="info">{m.sessions_new()}</Pill> : null}
           {r.duplicates > 0 ? <DuplicatesBadge count={r.duplicates} /> : null}
         </>
@@ -443,6 +449,7 @@ export function SessionsPage({ duplicatesReview: DuplicatesReview }: { duplicate
         }}
       />
       {DuplicatesReview ? <DuplicatesReview open={search.duplicates === "review"} onClose={() => setParams({ duplicates: undefined })} /> : null}
+      {editingSession ? <SessionDetailsDialog session={editingSession} open onOpenChange={(next) => !next && setEditing(null)} /> : null}
     </>
   )
 }

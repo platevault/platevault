@@ -860,6 +860,10 @@
   "session_open_calibration": "Open Calibration",
   "session_step_failed": "{step} failed",
   "session_in_os_trash": "In the OS Trash",
+  "session_edit": "Edit",
+  "session_edit_name": "Name",
+  "session_edit_name_help": "Leave empty to use {name}.",
+  "session_notes": "Notes",
   "session_rig_evidence": "Rig evidence for {name}",
   "session_needs_target_first": "Needs a Target first",
   "session_none": "None",
@@ -3387,6 +3391,7 @@
   "store_record_missing": "This record no longer exists in the catalog. Reload the page to see the current library.",
   "store_refused": "{label} refused",
   "store_reason_project_closed": "{project} is closed: duplicate it to continue",
+  "store_reason_session_trashed": "Its frames are in the OS Trash",
   "store_label_add_sessions": [
     {
       "declarations": [
@@ -3613,6 +3618,7 @@
   "store_saved_project_created": "Project created: {name}",
   "store_saved_label_name": "{label}: {name}",
   "store_label_project_details": "Project details",
+  "store_label_session_details": "Session name and notes",
   "store_label_add_subject": "Add subject",
   "store_label_remove_subject": "Remove subject",
   "store_label_edit_subject": "Edit subject",

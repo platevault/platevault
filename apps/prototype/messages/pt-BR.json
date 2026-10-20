@@ -914,6 +914,10 @@
   "session_open_calibration": "Abrir Calibração",
   "session_step_failed": "{step} falhou",
   "session_in_os_trash": "Na Lixeira do sistema",
+  "session_edit": "Editar",
+  "session_edit_name": "Nome",
+  "session_edit_name_help": "Deixe vazio para usar {name}.",
+  "session_notes": "Notas",
   "session_rig_evidence": "Evidências de setup de {name}",
   "session_needs_target_first": "Precisa de um Alvo antes",
   "session_none": "Nenhum",
@@ -3645,6 +3649,7 @@
   "store_record_missing": "Este registro não existe mais no catálogo. Recarregue a página para ver a biblioteca atual.",
   "store_refused": "Recusado: {label}",
   "store_reason_project_closed": "{project} está fechado: duplique-o para continuar",
+  "store_reason_session_trashed": "Os frames dela estão na Lixeira do sistema",
   "store_label_add_sessions": [
     {
       "declarations": [
@@ -3885,6 +3890,7 @@
   "store_saved_project_created": "Projeto criado: {name}",
   "store_saved_label_name": "{label}: {name}",
   "store_label_project_details": "Detalhes do projeto",
+  "store_label_session_details": "Nome e notas da sessão",
   "store_label_add_subject": "Adicionar objeto",
   "store_label_remove_subject": "Remover objeto",
   "store_label_edit_subject": "Editar objeto",

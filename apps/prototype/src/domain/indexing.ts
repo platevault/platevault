@@ -664,6 +664,8 @@ function newSession(id: SessionId, header: FrameHeader, framing: number): Sessio
     startedAt: header.dateObs,
     endedAt: header.dateObs,
     objectLabel: header.object,
+    name: null,
+    notes: "",
     pointing: null,
     target: { value: null, status: "unresolved", evidence: [], confirmedAt: null },
     equipment: { value: null, status: "unresolved", evidence: [], confirmedAt: null },
