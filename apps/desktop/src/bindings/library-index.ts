@@ -5019,6 +5019,13 @@ export type PanelGaps = {
 	gaps: GoalGap[],
 };
 
+/**  A suggestion that two group framings could be panels of one mosaic. */
+export type PanelOffer = {
+	leftGroupId: string,
+	rightGroupId: string,
+	overlapPercent: number | null,
+};
+
 /**
  *  A panel group's outline on a mosaic's panel map (decision record §2): the
  *  anchor's field around the anchor centre, turned by the anchor's sky
@@ -5677,16 +5684,16 @@ export type ProjectInput = {
 };
 
 /**
- *  A Project's Sessions step (PRJ-FR-07, VSEL-FR-02): what it holds, the
- *  keyword names in effect, each group's folder and panel-map outline, the
- *  pending changes with their sources and its suggestions.
+ *  A Project's Sessions step (PRJ-FR-07, VSEL-FR-02): its inputs, derived
+ *  folders and panel outlines, pending changes, suggestions and adjustable
+ *  mosaic panel offers.
  */
 export type ProjectInputs = ProjectInputs_Serialize | ProjectInputs_Deserialize;
 
 /**
- *  A Project's Sessions step (PRJ-FR-07, VSEL-FR-02): what it holds, the
- *  keyword names in effect, each group's folder and panel-map outline, the
- *  pending changes with their sources and its suggestions.
+ *  A Project's Sessions step (PRJ-FR-07, VSEL-FR-02): its inputs, derived
+ *  folders and panel outlines, pending changes, suggestions and adjustable
+ *  mosaic panel offers.
  */
 export type ProjectInputs_Deserialize = {
 	desired: ProjectDesired_Deserialize,
@@ -5695,12 +5702,13 @@ export type ProjectInputs_Deserialize = {
 	pending: PendingChange_Deserialize[],
 	suggestions: ProjectSuggestion[],
 	panels: PanelOutline[],
+	panelOffers: PanelOffer[],
 };
 
 /**
- *  A Project's Sessions step (PRJ-FR-07, VSEL-FR-02): what it holds, the
- *  keyword names in effect, each group's folder and panel-map outline, the
- *  pending changes with their sources and its suggestions.
+ *  A Project's Sessions step (PRJ-FR-07, VSEL-FR-02): its inputs, derived
+ *  folders and panel outlines, pending changes, suggestions and adjustable
+ *  mosaic panel offers.
  */
 export type ProjectInputs_Serialize = {
 	desired: ProjectDesired_Serialize,
@@ -5709,6 +5717,7 @@ export type ProjectInputs_Serialize = {
 	pending: PendingChange_Serialize[],
 	suggestions: ProjectSuggestion[],
 	panels: PanelOutline[],
+	panelOffers: PanelOffer[],
 };
 
 /**  Where a Project is in its life. */

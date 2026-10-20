@@ -448,6 +448,36 @@ fn group_folders_are_distinct_hyphenated_and_only_with_several_groups() {
     assert_eq!(folders, [Some("PANEL_Panel-1".into()), Some("GROUP_RedCat-51-Framing-2".into())]);
 }
 
+/// PRJ-FR-29, D-W114: qualifying framing pairs appear as adjustable mosaic
+/// suggestions in `ProjectInputs` and never become panels without user action.
+#[tokio::test]
+async fn project_inputs_offer_overlapping_framings_without_marking_panels() {
+    let world = world().await;
+    let ha = world.admissible(HA[0]).await;
+    let oiii = world.admissible(OIII[0]).await;
+    frame(&world, ha.id, &framing_with_sky_angle(ha.asset_ids[0], 100.0, 10.0, 0.0)).await;
+    frame(&world, oiii.id, &framing_with_sky_angle(oiii.asset_ids[0], 103.5, 10.0, 0.0)).await;
+
+    let added = add(&world, &[ha.id, oiii.id]).await.unwrap();
+    assert_eq!(added.groups.len(), 2);
+    assert!(added.groups.iter().all(|group| !group.panel));
+    let inputs = world.library.project_inputs(world.project).await.unwrap();
+    assert_eq!(inputs.panel_offers.len(), 1);
+    assert_eq!(
+        (inputs.panel_offers[0].left_group_id, inputs.panel_offers[0].right_group_id),
+        (added.groups[0].id, added.groups[1].id),
+    );
+    assert!(added.groups.iter().all(|group| !group.panel), "reading offers does not mark panels");
+
+    let (mut settings, revision) = world.catalog().workflow_settings().await.unwrap();
+    settings.framing.panel_overlap_percent = (20.0, 30.0);
+    world.catalog().save_workflow_settings(revision, &settings).await.unwrap();
+    assert!(
+        world.library.project_inputs(world.project).await.unwrap().panel_offers.is_empty(),
+        "the Settings range controls ProjectInputs offers",
+    );
+    assert!(desired(&world).await.groups.iter().all(|group| !group.panel));
+}
 /// PRJ-FR-27/28/29/31: sessions with two framings form two named groups;
 /// the user's split, rename, move, panel mark and keyword names hold, and a
 /// later add only ever joins framing groups.
