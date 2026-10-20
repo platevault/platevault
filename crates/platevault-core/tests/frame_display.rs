@@ -332,6 +332,34 @@ async fn thumbnail_cached_by_sha_and_redecoded_on_change() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn thumbnail_failure_response_excludes_path_and_os_diagnostic() {
+    let shelf = Shelf::new(|root| write_star_frames(root, 1)).await;
+    let asset = shelf.assets()[0];
+    let sentinel = shelf.path(0);
+    let sentinel_text = sentinel.display().to_string();
+    std::fs::remove_file(&sentinel).unwrap();
+    let os_error_text = std::fs::File::open(&sentinel).unwrap_err().to_string();
+
+    let entries = shelf.review().thumbnails(&[asset]).await.unwrap();
+    assert_eq!(entries[0].state, ThumbnailState::Pending);
+    let entries = settled(shelf.review(), &[asset]).await;
+    let response = serde_json::to_value(&entries[0]).unwrap();
+    let response_text = response.to_string();
+
+    assert!(
+        !response_text.contains(&sentinel_text),
+        "thumbnail IPC disclosed the source path: {response_text}"
+    );
+    assert!(
+        !response_text.contains(&os_error_text),
+        "thumbnail IPC disclosed OS error text: {response_text}"
+    );
+    assert_eq!(response["state"], "unreadable");
+    assert_eq!(response["code"], "not_found");
+    assert!(response["parameters"].is_object());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn thumbnail_never_starts_measurement() {
     let shelf = Shelf::new(|root| write_star_frames(root, 3)).await;
     let ids = shelf.assets();

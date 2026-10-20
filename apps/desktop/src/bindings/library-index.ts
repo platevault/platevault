@@ -7630,36 +7630,36 @@ export type ThumbnailState = ThumbnailState_Serialize | ThumbnailState_Deseriali
 /**  A frame's thumbnail as frame review shows it. */
 export type ThumbnailState_Deserialize = 
 /**  Cached for the frame's current observation and recorded digest. */
-({ state: "ready"; thumbnail: FrameThumbnail_Deserialize }) & { message?: never; reason?: never } | 
+({ state: "ready"; thumbnail: FrameThumbnail_Deserialize }) & { code?: never; parameters?: never; reason?: never } | 
 /**  Not decoded for the current bytes yet; a decode is under way. */
-({ state: "pending" }) & { message?: never; reason?: never; thumbnail?: never } | 
+({ state: "pending" }) & { code?: never; parameters?: never; reason?: never; thumbnail?: never } | 
 /**
- *  The decode failed, with the failure's kind and message: never a blank
- *  or substitute image.
+ *  The decode failed, with its stable library failure code and safe
+ *  structured localization parameters; raw diagnostic text is log-only.
  */
-({ state: "unreadable"; reason: string; message: string }) & { thumbnail?: never } | 
+({ state: "unreadable"; code: LibraryErrorCode; parameters: { [key in string]: string } }) & { reason?: never; thumbnail?: never } | 
 /**
  *  Not thumbnailed: a Retired or Trashed frame, or an unavailable copy
  *  without a cached thumbnail, named by its availability.
  */
-({ state: "unavailable"; reason: string }) & { message?: never; thumbnail?: never };
+({ state: "unavailable"; reason: string }) & { code?: never; parameters?: never; thumbnail?: never };
 
 /**  A frame's thumbnail as frame review shows it. */
 export type ThumbnailState_Serialize = 
 /**  Cached for the frame's current observation and recorded digest. */
-({ state: "ready"; thumbnail: FrameThumbnail_Serialize }) & { message?: never; reason?: never } | 
+({ state: "ready"; thumbnail: FrameThumbnail_Serialize }) & { code?: never; parameters?: never; reason?: never } | 
 /**  Not decoded for the current bytes yet; a decode is under way. */
-({ state: "pending" }) & { message?: never; reason?: never; thumbnail?: never } | 
+({ state: "pending" }) & { code?: never; parameters?: never; reason?: never; thumbnail?: never } | 
 /**
- *  The decode failed, with the failure's kind and message: never a blank
- *  or substitute image.
+ *  The decode failed, with its stable library failure code and safe
+ *  structured localization parameters; raw diagnostic text is log-only.
  */
-({ state: "unreadable"; reason: string; message: string }) & { thumbnail?: never } | 
+({ state: "unreadable"; code: LibraryErrorCode; parameters: { [key in string]: string } }) & { reason?: never; thumbnail?: never } | 
 /**
  *  Not thumbnailed: a Retired or Trashed frame, or an unavailable copy
  *  without a cached thumbnail, named by its availability.
  */
-({ state: "unavailable"; reason: string }) & { message?: never; thumbnail?: never };
+({ state: "unavailable"; reason: string }) & { code?: never; parameters?: never; thumbnail?: never };
 
 /**  Exact comparison only (D13); the wire states it on every row. */
 export type Tolerance = "none";

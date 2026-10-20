@@ -971,9 +971,12 @@ pub enum ThumbnailState {
     Ready { thumbnail: Box<FrameThumbnail> },
     /// Not decoded for the current bytes yet; a decode is under way.
     Pending,
-    /// The decode failed, with the failure's kind and message: never a blank
-    /// or substitute image.
-    Unreadable { reason: String, message: String },
+    /// The decode failed, with its stable library failure code and safe
+    /// structured localization parameters; raw diagnostic text is log-only.
+    Unreadable {
+        code: crate::LibraryErrorCode,
+        parameters: MeasurementFailureParameters,
+    },
     /// Not thumbnailed: a Retired or Trashed frame, or an unavailable copy
     /// without a cached thumbnail, named by its availability.
     Unavailable { reason: String },
