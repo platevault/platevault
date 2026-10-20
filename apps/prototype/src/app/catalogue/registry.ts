@@ -53,7 +53,7 @@ export const CATALOGUE: CatalogueEntry[] = [
   { id: "data", components: ["KeyValueList", "Stat", "PathText", "ChannelCoverage", "FilterChips", "EvidenceList", "UnknownValue"], Entry: DataCatalogue },
   { id: "operation", components: ["OperationPanel", "Label", "Select", "SelectContent", "SelectItem", "SelectTrigger", "SelectValue"], Entry: OperationCatalogue },
   { id: "page", components: ["PageBody", "Section"], Entry: PageCatalogue },
-  { id: "previews", components: ["HoverCard", "HoverCardTrigger", "HoverCardContent", "Preview", "BlockersPreview", "Blockable", "UsedByPreview", "MasterPreview"], Entry: PreviewsCatalogue },
+  { id: "previews", components: ["HoverCard", "HoverCardTrigger", "HoverCardContent", "Preview", "BlockersPreview", "BlockersBody", "Blockable", "UsedByPreview", "MasterPreview"], Entry: PreviewsCatalogue },
   { id: "dialogs", components: ["ConfirmDialog", "FileTable", "FormDialog", "DialogFooter"], Entry: DialogsCatalogue },
   { id: "pickers", components: ["NightPicker", "SitePicker", "SiteLocationField", "TargetPicker", "DisplayMenu"], Entry: PickersCatalogue },
   {
