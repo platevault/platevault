@@ -22,7 +22,7 @@ The user wraps up the open Project `NGC 7000 HOO` through Clean up, Trash and Ar
 ## Preconditions
 
 - P1: Project `NGC 7000 HOO` is open, its View is in Copies mode with 208 entries, and `View (previous)/` holds one copy whose original could not be verified and a notes file left unticked during Apply.
-- P2: A second open Project has a Symlinks View with 35 PlateVault-placed links. Its recorded link identities, target paths and target digests are available for comparison.
+- P2: A second open Project has a Symlinks View with 35 PlateVault-placed links to light frames and 32 PlateVault-placed links to calibration frames. Its recorded link identities, target paths and target digests are available for comparison.
 - P3: A Copies View on `Scratch` contains 111 entries; `Scratch` has no safe OS Trash.
 - P4: Record a baseline inventory of the isolated account's OS Trash and a manifest of the remaining captures, View entries, Processing files, Output files and adopted master. Compare only new Trash entries against that baseline.
 - P5: A helper outside PlateVault saves a selected copy's original bytes and nanosecond mtime, then changes the original in place to same-size different bytes and restores its mtime; it can restore the saved bytes and mtime later.
@@ -51,7 +51,7 @@ The user wraps up the open Project `NGC 7000 HOO` through Clean up, Trash and Ar
 ### S3 — Review Symlinks-mode cleanup offers {#S3}
 
 - **Do:** Open the other Project's Clean up step and read the Symlinks View row.
-- **Expect:** The View removal row starts unselected. Its item count and proposed action identify the 35 links PlateVault placed.
+- **Expect:** The View removal row starts unselected. Its item count and proposed action identify the 35 light links and 32 calibration links PlateVault placed.
 - **Expect (negative):** The View target files and target directories are not included in the selection.
 - **Trace:** STO-FR-01, STO-AC-01 · PRJ-FR-14 · D-W81, D-W97
 
@@ -99,7 +99,7 @@ The user wraps up the open Project `NGC 7000 HOO` through Clean up, Trash and Ar
 
 ### S11 — Remove verified Symlinks {#S11}
 
-- **Do:** In the Symlinks Project, select its View for Clean up, review the 35 link entries and confirm removal.
+- **Do:** In the Symlinks Project, select its View for Clean up, review its 35 light-link entries and 32 calibration-link entries (67 in all) and confirm removal.
 - **Expect:** The operation deletes verified PlateVault-placed symlinks without following them, reports per-entry outcomes and records what remains. The recorded target files remain byte-identical.
 - **Expect (negative):** Symlink targets and target directories are not traversed, changed or sent to the OS Trash.
 - **Trace:** STO-FR-01, STO-FR-04, STO-FR-05 · STO-AC-08, STO-AC-25 · D-W81, D-W97

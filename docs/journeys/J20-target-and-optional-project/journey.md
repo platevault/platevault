@@ -92,9 +92,9 @@ Adding sessions and the first Apply follow in J21. Done means:
 ### S9 — Remove and restore suggestion criteria {#S9}
 
 - **Do:** On the Project page, remove rig `RedCat` and subject NGC 7000 from the suggestion criteria, then add both back. Remove rig `Esprit` and add it back.
-- **Expect:** Removing `RedCat` and subject NGC 7000 changes which sessions the Project suggests, and adding them back restores the five RedCat suggestions. Removing `Esprit` removes the other-camera session from suggestions; adding it back restores that suggestion. The Project still holds no session. NGC 7000's goals stay hidden while its subject is removed and return when it is added again.
+- **Expect:** Removing `RedCat` and subject NGC 7000 changes which sessions the Project suggests, and adding them back restores the five RedCat suggestions. Removing `Esprit` removes the other-camera session from suggestions; adding it back restores that suggestion. The Project still holds no session. NGC 7000's Ha 10h and OIII 12h goals stay hidden while its subject is removed and return with those same values when it is added again.
 - **Expect (negative):** Removing a subject or rig adds or removes no session and builds no View.
-- **Trace:** PRJ-FR-02, PRJ-FR-03, PRJ-FR-04, PRJ-FR-08, PRJ-FR-31 · PRJ-AC-06 · D-W94, D-W95, D-W96 · astro-plan-rzbzu.1
+- **Trace:** PRJ-FR-02, PRJ-FR-03, PRJ-FR-04, PRJ-FR-08, PRJ-FR-31 · PRJ-AC-06 · D-W94, D-W95, D-W96; astro-plan-rzbzu.1; D-W135, owner's answer, 2026-10-20
 
 ## Success criteria
 
@@ -103,7 +103,7 @@ Adding sessions and the first Apply follow in J21. Done means:
 - SC3: Zero source-file or quality-state changes and no View exist through S5.
 - SC4: The S7 windows differ between the two sites, while Project suggestions and session capture-site values are identical, and no site carries the Default pill after S7.
 - SC5: At S8, Home's Open work reads exactly 1 session needing review for `NGC 7000 HOO` and leads to 30 Sep; the Project still holds 0 sessions and no View.
-- SC6: S9 removes and restores RedCat, Esprit and NGC 7000 as suggestion criteria. Afterwards the suggestions are the six of S4, and the Project holds 0 sessions and no View. NGC 7000's goals are restored when it is added back (S9).
+- SC6: S9 removes and restores RedCat, Esprit and NGC 7000 as suggestion criteria. Afterwards the suggestions are the six of S4, and the Project holds 0 sessions and no View. NGC 7000's Ha 10h and OIII 12h goals are restored when it is added back (S9; D-W135, owner's answer, 2026-10-20).
 
 ## Known gaps
 
