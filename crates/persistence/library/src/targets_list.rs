@@ -136,15 +136,20 @@ impl Catalog {
         let mut conn = self.reader().await?;
         let mut snapshot = conn.begin().await?;
         let rows = sqlx::query(
-            "SELECT ta.target_id, s.id AS session_id FROM associations ta \
+            "SELECT ta.target_id, s.id AS session_id, ta.state, ta.evidence FROM associations ta \
              JOIN sessions s ON s.id = ta.session_id AND s.superseded_by IS NULL \
-             WHERE ta.kind = 'target' AND ta.state = 'confirmed' AND ta.target_id IS NOT NULL \
+             WHERE ta.kind = 'target' AND ta.target_id IS NOT NULL \
              ORDER BY ta.target_id, s.id",
         )
         .fetch_all(&mut *snapshot)
         .await?;
         let mut totals: BTreeMap<Uuid, Tally> = BTreeMap::new();
         for row in &rows {
+            let state: AssociationState = from_text(&row.try_get::<String, _>("state")?)?;
+            let evidence: Vec<EvidenceItem> = from_json(&row.try_get::<String, _>("evidence")?)?;
+            if !counts_as_confirmed(&state, &evidence) {
+                continue;
+            }
             let target = parse_uuid(&row.try_get::<String, _>("target_id")?)?;
             let session = parse_uuid(&row.try_get::<String, _>("session_id")?)?;
             let assets = current_member_assets(&mut snapshot, session).await?;

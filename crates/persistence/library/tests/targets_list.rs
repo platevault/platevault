@@ -391,6 +391,56 @@ async fn captured_excludes_trashed() {
     assert_eq!(activity.len(), 1, "only confirmed Targets have activity");
 }
 
+/// D-W124: target activity includes a Suggested Target only when its agreeing
+/// alias and qualified geometry make it count as confirmed.
+#[tokio::test]
+async fn target_activity_counts_evidence_qualified_suggested_target() {
+    let fx = Fixture::new();
+    for frame in &FRAMES {
+        fx.write(frame.path, frame.path.as_bytes());
+    }
+    let catalog = Catalog::open(&fx.db).await.unwrap();
+    let location = catalog.register_location(&fx.registration()).await.unwrap();
+    scan_frames(&catalog, &fx, &location).await;
+    let target = save(&catalog, "IC 1396").await;
+    let session = session_of(&catalog, &location, "m31/OIII_1.fits").await;
+    let detail = catalog.session(session.id).await.unwrap();
+    let suggestion = SuggestedAssociation {
+        session_id: session.id,
+        grouping_revision: session.grouping_revision,
+        kind: AssociationKind::Target,
+        subject_id: Some(target.candidate.id),
+        state: AssociationState::Suggested,
+        evidence: vec![
+            EvidenceItem::Alias { normalized: "ic 1396".into(), agrees: true },
+            EvidenceItem::Coordinates { ra_deg: 314.75, dec_deg: 44.33, qualified: true },
+        ],
+        provenance: Provenance::Inferred { rule: "test-qualified-pointing".into() },
+        expected_observations: detail
+            .assets
+            .iter()
+            .map(|asset| (asset.id, asset.fingerprint.clone()))
+            .collect(),
+        expected_decisions: detail
+            .assets
+            .iter()
+            .map(|asset| (asset.id, asset.decision_revision))
+            .collect(),
+        expected_observation_revisions: detail
+            .assets
+            .iter()
+            .map(|asset| (asset.id, asset.observation_revision))
+            .collect(),
+    };
+    catalog.record_suggestions(&[suggestion]).await.unwrap();
+    let activity = catalog.target_activity().await.unwrap();
+    assert_eq!(
+        activity.get(&target.candidate.id).unwrap(),
+        &TargetActivity { sessions: 1, captured: vec![channel("OIII", 3600.0, 2)] }
+    );
+    catalog.close().await.unwrap();
+}
+
 // ---------------------------------------------------------------------------
 // Saved presets
 // ---------------------------------------------------------------------------

@@ -17,6 +17,7 @@
 mod membership_support;
 mod support;
 
+use std::collections::BTreeMap;
 use std::path::Path;
 
 use membership_support::{add, admit, hold, remove};
@@ -307,7 +308,7 @@ fn record(
     let outcome = if failed {
         MeasurementOutcome::Failed {
             code: platevault_model::MeasurementFailureCode::UnsupportedFormat,
-            parameters: Default::default(),
+            parameters: BTreeMap::new(),
         }
     } else {
         let value = match fwhm {
@@ -514,16 +515,16 @@ async fn in_project_never_exceeds_captured() {
 }
 
 /// PRJ-AC-26, D-W94, D-W96: a session the Project holds whose Target is
-/// re-confirmed as another Target is no longer a candidate, yet stays in
-/// the Project and still counts "in project" and "captured".
+/// re-confirmed as another Target keeps counting toward the joined subject.
 #[tokio::test]
 async fn reconfirmed_held_session_counts_in_both() {
     let world = world(&[], &[]).await;
     let ngc = world.ngc.candidate.id;
+    let m81 = world.m81.candidate.id;
     let project = world.project(vec![integration(ngc, "Ha", 3600)]).await;
     let ha = world.session(HA[0]).await.id;
     hold(&world.catalog, project.id, ha, world.redcat.id).await;
-    world.retarget(HA[0], world.m81.candidate.id).await;
+    world.retarget(HA[0], m81).await;
     let candidates = world.catalog.project_candidates(project.id).await.unwrap();
     assert!(candidates.iter().all(|c| c.session_id != ha), "no longer a candidate");
     let desired = world.catalog.project_desired(project.id).await.unwrap();
