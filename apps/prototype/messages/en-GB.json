@@ -4705,6 +4705,8 @@
   "catalogue_previews_blockable_desc": "A control that turns unavailable and back in place, such as an ActionButton: one wrapper in both states, so a focused control keeps its focus.",
   "catalogue_previews_blockable_toggle": "Archive unavailable",
   "catalogue_previews_blockable_caption": "available ⇄ unavailable",
+  "catalogue_previews_blockers_body_desc": "A preview card's body on its own: the blockers as a list, or as a table with columns, then the actions that resolve them. A blocked ConfirmDialog shows it in place.",
+  "catalogue_previews_blockers_body_caption": "blocked rows · Session · Project",
   "catalogue_previews_empty_reason": "empty (plain reason, no card)",
   "catalogue_previews_used_by_desc": "'Used by N ▸' is a link to the full list; hover or focus previews the users.",
   "catalogue_previews_with_users": "with users",

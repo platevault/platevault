@@ -5065,6 +5065,8 @@
   "catalogue_previews_blockable_desc": "Um controle que fica indisponível e volta no mesmo lugar, como um ActionButton: o mesmo invólucro nos dois estados, então um controle focado mantém o foco.",
   "catalogue_previews_blockable_toggle": "Arquivar indisponível",
   "catalogue_previews_blockable_caption": "disponível ⇄ indisponível",
+  "catalogue_previews_blockers_body_desc": "O corpo do cartão de prévia sozinho: os impedimentos como lista, ou como tabela com colunas, e depois as ações que os resolvem. Um ConfirmDialog bloqueado o mostra no lugar.",
+  "catalogue_previews_blockers_body_caption": "linhas bloqueadas · Sessão · Projeto",
   "catalogue_previews_empty_reason": "vazio (motivo simples, sem cartão)",
   "catalogue_previews_used_by_desc": "'Usado por N ▸' é um link para a lista completa; cursor ou foco mostra uma prévia dos usuários.",
   "catalogue_previews_with_users": "com usuários",

@@ -9,7 +9,7 @@ import { useState } from "react"
 import { useMessages } from "@/app/preferences"
 import { ActionButton } from "@/components/app/actions"
 import { SwitchField } from "@/components/app/fields"
-import { BlockersPreview, MasterPreview, Preview, UsedByPreview } from "@/components/app/previews"
+import { BlockersBody, BlockersPreview, MasterPreview, Preview, UsedByPreview } from "@/components/app/previews"
 import { Button } from "@/components/ui/button"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card"
 import { ComponentSection, Specimen } from "./specimen"
@@ -65,6 +65,14 @@ export function PreviewsCatalogue() {
         <Specimen caption={m.catalogue_previews_blockable_caption()}>
           <ActionButton action={{ id: "archive", label: m.wrapup_archive_title(), icon: Archive, run: () => undefined, unavailable: blocked ? archive : undefined }} />
           <SwitchField label={m.catalogue_previews_blockable_toggle()} checked={blocked} onChange={setBlocked} />
+        </Specimen>
+      </ComponentSection>
+
+      <ComponentSection components={["BlockersBody"]} description={m.catalogue_previews_blockers_body_desc()}>
+        <Specimen caption={m.catalogue_previews_blockers_body_caption()}>
+          <div className="w-full max-w-md">
+            <BlockersBody {...archive} />
+          </div>
         </Specimen>
       </ComponentSection>
 
