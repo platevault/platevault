@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PreviousItemResolution",
+  "description": "The user's review of one file `View (previous)/` still holds (D-W110):\nkeep it where it is, move it into `View/` at the same place, or move it to\nthe OS Trash. The model's `Pending` is the state the catalog records a\nleftover in, and no client sets it.",
+  "type": "string",
+  "enum": [
+    "kept",
+    "moved",
+    "trashed"
+  ]
+}

@@ -2122,6 +2122,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "fs_noreplace_windows"
+version = "0.1.0"
+dependencies = [
+ "tempfile",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "fs_pathsafe"
 version = "0.1.0"
 dependencies = [
@@ -4661,6 +4669,7 @@ dependencies = [
  "skymath 0.7.2",
  "specta",
  "sqlx",
+ "target-match",
  "tempfile",
  "time",
  "tokio",
@@ -4844,6 +4853,7 @@ dependencies = [
  "csv",
  "fs4",
  "fs_inventory",
+ "fs_noreplace_windows",
  "fs_pathsafe",
  "hex",
  "jiff",
@@ -4892,6 +4902,7 @@ name = "platevault_model"
 version = "0.1.0"
 dependencies = [
  "metadata_core",
+ "safe-filename",
  "schemars 1.2.1",
  "serde",
  "serde_json",

@@ -77,7 +77,7 @@ fn expected_session(session: &Session) -> ExpectedSession {
     }
 }
 
-fn target(designation: &str, ra_deg: f64, dec_deg: f64) -> TargetCandidate {
+pub fn target(designation: &str, ra_deg: f64, dec_deg: f64) -> TargetCandidate {
     TargetCandidate {
         id: Uuid::new_v4(),
         designation: designation.into(),

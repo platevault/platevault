@@ -228,6 +228,20 @@ fn candidate_position(candidate: &TargetCandidate) -> Option<match_sky::Equatori
     match_position(coordinates.ra_deg, coordinates.dec_deg)
 }
 
+/// How far, in degrees, the candidate lies from a field centre, by the same
+/// sky math target matching ranks frame candidates with; `None` without an
+/// ICRS position.
+pub(crate) fn separation_from_deg(
+    candidate: &TargetCandidate,
+    ra_deg: f64,
+    dec_deg: f64,
+) -> Option<f64> {
+    Some(
+        match_sky::separation(candidate_position(candidate)?, match_position(ra_deg, dec_deg)?)
+            .degrees(),
+    )
+}
+
 // ── Search ───────────────────────────────────────────────────────────────────
 
 /// Offline target search request: text, a typed cone, or both.
@@ -1082,7 +1096,9 @@ struct Support {
 /// with the candidate, and the candidate inside every frame's inscribed field
 /// (`target-match` [`RadiusPolicy::Inscribed`]) around its plate-solved or
 /// header pointing. Either alone, or with missing or conflicting evidence, is
-/// `NeedsReview`; no agreeing evidence is Unresolved. Never Confirmed.
+/// `NeedsReview`; no agreeing evidence is Unresolved. Never Confirmed: a
+/// Suggested assessment already counts as confirmed for Ready and the Sessions
+/// filters ([`platevault_model::counts_as_confirmed`], D-W124).
 #[must_use]
 pub fn assess_target(candidate: &TargetCandidate, frames: &[CaptureMetadata]) -> TargetAssessment {
     let mut evidence = Vec::new();

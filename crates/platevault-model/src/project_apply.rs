@@ -16,8 +16,8 @@ use uuid::Uuid;
 
 use crate::{
     ApplyOutcome, EntryEvidence, EntryPlacement, EntrySource, ForeignItem, InputKind, ItemReason,
-    NativePath, PinHealth, PreviousItem, ProjectLifecycle, ProjectOperationKind, Revision,
-    ViewMode,
+    NativePath, PinHealth, PreviousItem, ProjectLifecycle, ProjectOperationKind, ReasonCode,
+    Revision, ViewMode,
 };
 
 /// One reason Apply can't run now. The sheet lists every one; Apply refuses
@@ -53,6 +53,10 @@ pub enum ApplyBlocker {
     CalibrationUnsettled { session_id: Uuid, kinds: Vec<InputKind> },
     /// Two groups or two filter values would share one folder.
     FolderClash { detail: String },
+    /// An original's file name is not an entry name on every platform, such
+    /// as the Windows device name `CON.fits` (STO-IMP-AC-08). The original
+    /// keeps its name and nothing is placed under it.
+    EntryNameRefused { path: NativePath, name: String },
     /// `View (previous)/` holds leftovers the user hasn't reviewed (D-W110).
     LeftoversPending { count: u64 },
     /// `View (previous)/` still holds kept files. What the next outgoing View
@@ -71,6 +75,10 @@ pub enum ApplyBlocker {
         field: String,
         refusal: PatchRefusal,
     },
+    /// An entry in `View/` or `View (previous)/`, or that folder itself,
+    /// can't be read, or the folder is a link: the sheet can't account for
+    /// it, so Apply refuses before it starts (VSEL-FR-20, STO-FR-05/16).
+    ViewUnreadable { path: NativePath, reason: ReasonCode },
 }
 
 /// Why no isolated patched copy can carry a recorded correction
@@ -163,6 +171,9 @@ impl ApplyBlocker {
                 format!("session {session_id}: choose its {kinds:?} first")
             }
             Self::FolderClash { detail } => detail.clone(),
+            Self::EntryNameRefused { path, name } => {
+                format!("{}: '{name}' can't be an entry name on every platform", path.display())
+            }
             Self::LeftoversPending { count } => {
                 format!("review the {count} file(s) left in View (previous)/ first")
             }
@@ -178,6 +189,9 @@ impl ApplyBlocker {
                 path.display(),
                 refusal.describe()
             ),
+            Self::ViewUnreadable { path, .. } => {
+                format!("{} can't be read, so Apply can't account for it", path.display())
+            }
         }
     }
 }

@@ -90,6 +90,15 @@ fn main() {
     ) {
         all_ok = false;
     }
+    println!("spec 064 — library inventory request DTOs");
+
+    if !check_schema::<contracts_core::library_requests::PreviousItemResolution>(
+        &root,
+        "064-library-inventory",
+        "library.previous-item-resolution.generated.json",
+    ) {
+        all_ok = false;
+    }
 
     println!();
     if all_ok {

@@ -71,8 +71,14 @@ const LIBRARY_TABLES: [&str; 9] = [
 ];
 
 /// Project tables, children first.
-const PROJECT_TABLES: [&str; 5] =
-    ["project_goals", "project_subjects", "project_rigs", "goal_templates", "projects"];
+const PROJECT_TABLES: [&str; 6] = [
+    "project_hidden_goals",
+    "project_goals",
+    "project_subjects",
+    "project_rigs",
+    "goal_templates",
+    "projects",
+];
 
 struct World {
     fx: Fixture,
@@ -412,6 +418,45 @@ async fn object_header_alone_is_never_candidate() {
     assert_eq!(catalog.project(project.id).await.unwrap(), project, "the Project is unchanged");
     world.catalog.close().await.unwrap();
 }
+/// D-W124: an agreeing Target association counts as confirmed for Project candidates,
+/// but a suggestion without its required pointing evidence does not.
+#[tokio::test]
+async fn agreeing_target_evidence_makes_a_project_candidate() {
+    let world = world().await;
+    let catalog = &world.catalog;
+    let project = catalog.create_project(&hoo(&world)).await.unwrap();
+    let oiii = world.session(RC_OIII).await;
+    assert!(
+        catalog
+            .project_candidates(project.id)
+            .await
+            .unwrap()
+            .iter()
+            .all(|candidate| candidate.session_id != oiii.id),
+        "the alias-only suggestion is not a candidate"
+    );
+    let assets = catalog.session(oiii.id).await.unwrap().assets;
+    let suggestion = SuggestedAssociation {
+        session_id: oiii.id,
+        grouping_revision: oiii.grouping_revision,
+        kind: AssociationKind::Target,
+        state: AssociationState::Suggested,
+        subject_id: Some(world.ngc7000.candidate.id),
+        evidence: vec![
+            EvidenceItem::Alias { normalized: "ngc 7000".into(), agrees: true },
+            EvidenceItem::Coordinates { ra_deg: 314.75, dec_deg: 44.33, qualified: true },
+        ],
+        provenance: Provenance::Inferred { rule: "alias-and-coordinates".into() },
+        expected_observations: assets.iter().map(|a| (a.id, a.fingerprint.clone())).collect(),
+        expected_decisions: assets.iter().map(|a| (a.id, a.decision_revision)).collect(),
+        expected_observation_revisions: assets
+            .iter()
+            .map(|a| (a.id, a.observation_revision))
+            .collect(),
+    };
+    catalog.record_suggestions(&[suggestion]).await.unwrap();
+    world.catalog.close().await.unwrap();
+}
 
 /// PRJ-FR-02, PRJ-AC-09, PRJ-AC-25 (without runs): adding a rig adds its
 /// confirmed sessions as candidates and removing it takes them out again; the
@@ -686,7 +731,7 @@ async fn panel_groups_take_their_own_goals() {
             target_id: ngc.candidate.id,
             group_id: None,
             goal: GoalSpec::QualityBar {
-                criterion: QualityCriterion::MaxFwhmMedian { max_px: 3.5 },
+                criterion: QualityCriterion::MaxFwhmMedian { max_arcsec: 3.5 },
             },
         },
     ];
@@ -769,6 +814,91 @@ async fn removing_subject_or_rig_the_project_holds_is_refused_naming_it() {
         (project.subjects[0].target_id, project.rig_ids.clone()),
         (world.m81.candidate.id, vec![world.esprit.id])
     );
+    world.catalog.close().await.unwrap();
+}
+
+/// `(id, group, goal)` of the goals of `target`'s subject, in goal order.
+fn subject_goals(project: &Project, target: &TargetRecord) -> Vec<(Uuid, Option<Uuid>, GoalSpec)> {
+    let Some(subject) = project.subjects.iter().find(|s| s.target_id == target.candidate.id) else {
+        return Vec::new();
+    };
+    project
+        .goals
+        .iter()
+        .filter(|goal| goal.subject_id == subject.id)
+        .map(|goal| (goal.id, goal.group_id, goal.goal.clone()))
+        .collect()
+}
+
+/// D-W128, PRJ-FR-02/03: removing a subject keeps its goals hidden. They leave
+/// the Project and its goal count while the subject is out, and the Project's
+/// sessions stay. Adding the Target back, as a subject or through one of its
+/// sessions, restores the same goals with their ids and edited values, not a
+/// template's. A panel goal whose group is no longer a panel stays out.
+#[tokio::test]
+#[allow(clippy::too_many_lines, reason = "one scenario over removal and both re-adds")]
+async fn removed_subject_goals_stay_hidden_and_return_when_added_back() {
+    let world = world().await;
+    let catalog = &world.catalog;
+    let (ngc, m81) = (&world.ngc7000, &world.m81);
+    let both = vec![subject(ngc), subject(m81)];
+    let input = ProjectInput { subjects: both.clone(), ..hoo(&world) };
+    let project = catalog.create_project(&input).await.unwrap();
+    let ha = world.session(RC_HA_1).await.id;
+    let desired = hold(catalog, project.id, ha, world.redcat.id).await;
+    let panel = desired.groups[0].id;
+    let name = GroupName::new("Panel 1").unwrap();
+    let desired = catalog
+        .set_project_group_panel(project.id, desired.revision, panel, true, Some(&name))
+        .await
+        .unwrap();
+    let templates = catalog.goal_templates().await.unwrap();
+    let hoo_template = templates.iter().find(|template| template.name == "HOO").unwrap().id;
+    let project = catalog
+        .apply_goal_template(project.id, desired.revision, hoo_template, m81.candidate.id, None)
+        .await
+        .unwrap();
+    let goals = vec![
+        integration(ngc, None, "Ha", 36_000),
+        integration(m81, None, "Ha", 7_200),
+        integration(m81, None, "OIII", 36_000),
+        integration(m81, Some(panel), "Ha", 3_600),
+    ];
+    let project = catalog.set_project_goals(project.id, project.revision, &goals).await.unwrap();
+    let kept = subject_goals(&project, m81);
+    assert_eq!(kept.len(), 3, "{:#?}", project.goals);
+    assert_eq!(kept[0].2, goals[1].goal, "M 81's Ha goal is edited from the template's 10 h");
+    let ngc_goals = subject_goals(&project, ngc);
+    let membership = dump(&world.fx.db, &["project_sessions"]).await;
+
+    // Removed: its goals are hidden from the Project and its goal count.
+    let only_ngc = vec![subject(ngc)];
+    let project =
+        catalog.set_project_subjects(project.id, project.revision, &only_ngc).await.unwrap();
+    assert_eq!(project.goals.len(), 1, "{:#?}", project.goals);
+    assert_eq!(subject_goals(&project, ngc), ngc_goals);
+    assert_eq!(catalog.list_projects(&ProjectQuery::default()).await.unwrap()[0].goal_count, 1);
+    assert_eq!(dump(&world.fx.db, &["project_sessions"]).await, membership, "no session left");
+
+    // Added back as a subject: the same goals, ids and edited values.
+    let project = catalog.set_project_subjects(project.id, project.revision, &both).await.unwrap();
+    assert_eq!(subject_goals(&project, m81), kept, "the hidden goals return");
+    assert_eq!(subject_goals(&project, ngc), ngc_goals);
+    assert_eq!(catalog.list_projects(&ProjectQuery::default()).await.unwrap()[0].goal_count, 4);
+    assert_eq!(dump(&world.fx.db, &["project_sessions"]).await, membership, "no session joined");
+
+    // Removed again, its panel group unmarked, then added back by adding an
+    // M 81 session: the subject's own goals return, the panel goal does not.
+    let project =
+        catalog.set_project_subjects(project.id, project.revision, &only_ngc).await.unwrap();
+    let desired =
+        catalog.set_project_group_panel(project.id, project.revision, panel, false, None).await;
+    assert!(!desired.unwrap().groups[0].panel, "no visible goal keeps the group a panel");
+    let l = world.session(RC_L).await.id;
+    hold(catalog, project.id, l, world.redcat.id).await;
+    let project = catalog.project(project.id).await.unwrap();
+    assert_eq!(subject_goals(&project, m81), kept[..2], "the subject's own goals return");
+    assert_eq!(subject_goals(&project, ngc), ngc_goals);
     world.catalog.close().await.unwrap();
 }
 

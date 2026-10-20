@@ -2,14 +2,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! The Targets list (spec 072 PLAN-TGT-FR-01..13) on the [`Library`]
-//! facade: My targets (★ favourites plus the subjects of open Projects, with
-//! their badges, D-W60), Browse catalogues, unified search over My targets,
-//! the bundled catalogues and SIMBAD, tonight's planning columns, Sessions and
-//! Captured per channel over frames outside the Trash, the built-in and saved
-//! presets, and for the selected rigs the Fit per rig, the Filters strip as
-//! the union of their bands and the rig-dependent presets. Every planning
-//! value comes from [`planning::target_night`], the computation behind the
-//! Plan area windows; nothing is stored.
+//! facade: My targets (★ favourites, qualifying current session Targets, and
+//! the subjects of open Projects, with their badges, D-W60/D-W125), Browse
+//! catalogues, unified search over My targets, the bundled catalogues and
+//! SIMBAD, tonight's planning columns, Sessions and Captured per channel over
+//! frames outside the Trash, built-in and saved presets, and rig-dependent Fit,
+//! Filters and presets. Planning values come from [`planning::target_night`].
 
 use std::cmp::Ordering;
 use std::collections::HashMap;

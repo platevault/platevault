@@ -32,8 +32,8 @@ use crate::layout::{self, name_key, COMPONENT_LIMIT};
 use crate::patched_copy::HeaderPatch;
 use crate::{
     ApplyBlocker, BasisGroup, BasisSession, CaptureMetadata, EntryInput, EntryName, EntryPlacement,
-    EntrySource, InputKind, InputRef, ObservationFingerprint, PinTarget, ProjectBasis, Revision,
-    SettledPin, ViewMode,
+    EntrySource, InputKind, InputRef, NativePath, ObservationFingerprint, PinTarget, ProjectBasis,
+    Revision, SettledPin, ViewMode,
 };
 
 /// Room a filter token may take in a light folder name, leaving the rest
@@ -294,7 +294,9 @@ struct Draft {
 ///
 /// # Errors
 /// [`ApplyBlocker::FolderClash`] for two groups or filter values that would
-/// share a folder, or a name that leaves no folder name.
+/// share a folder, or a name that leaves no folder name;
+/// [`ApplyBlocker::EntryNameRefused`] for an original whose file name is no
+/// entry name on every platform.
 pub fn plan(input: &PlanInput<'_>) -> Result<Plan, ApplyBlocker> {
     let basis = input.basis;
     let lit: Vec<(&BasisGroup, &BasisSession, Settings)> = basis
@@ -360,7 +362,7 @@ pub fn plan(input: &PlanInput<'_>) -> Result<Plan, ApplyBlocker> {
             place_pin(&mut drafts, session.calibration.kind(kind), kind, &target, placed);
         }
     }
-    Ok(finish(input, drafts))
+    finish(input, drafts)
 }
 
 /// Each lit session's night index: 0 for the first flat set of its group,
@@ -463,7 +465,11 @@ fn place_pin(
 /// Name every input, drop repeats of one input in one folder, order by path
 /// and place: links in Symlinks mode, a copy of the original for every entry
 /// in Copies mode.
-fn finish(input: &PlanInput<'_>, drafts: Vec<Draft>) -> Plan {
+///
+/// # Errors
+/// [`ApplyBlocker::EntryNameRefused`] for an original whose file name is no
+/// entry name on every platform; nothing is placed under it.
+fn finish(input: &PlanInput<'_>, drafts: Vec<Draft>) -> Result<Plan, ApplyBlocker> {
     let mut taken: BTreeSet<String> = input.names.values().map(|name| name_key(name)).collect();
     let mut assigned: BTreeMap<EntryInput, String> = BTreeMap::new();
     let mut newcomers: BTreeMap<EntryInput, Uuid> = BTreeMap::new();
@@ -474,24 +480,23 @@ fn finish(input: &PlanInput<'_>, drafts: Vec<Draft>) -> Plan {
     }
     let mut names = Vec::new();
     for (entry_input, source_id) in newcomers {
-        let source = input
-            .sources
-            .get(&source_id)
-            .and_then(|source| source.path.to_path_buf().ok())
+        let original = input.sources.get(&source_id).map(|source| &source.path);
+        let source = original
+            .and_then(|path| path.to_path_buf().ok())
             .and_then(|path| path.file_name().map(|name| name.to_string_lossy().into_owned()))
             .unwrap_or_default();
-        let id = match entry_input {
-            EntryInput::Capture { capture_key } => capture_key,
-            EntryInput::CalibrationFrame { asset_id } => asset_id,
-            EntryInput::Master { master_id } => master_id,
-        };
-        let basename =
-            layout::entry_basename(&source, id, |candidate| taken.contains(&name_key(candidate)));
-        taken.insert(name_key(&basename));
-        if let Ok(name) = EntryName::new(entry_input, &basename) {
-            names.push(name);
-        }
-        assigned.insert(entry_input, basename);
+        let name = layout::entry_name(entry_input, &source, |candidate| {
+            taken.contains(&name_key(candidate))
+        })
+        .map_err(|_| ApplyBlocker::EntryNameRefused {
+            path: original
+                .cloned()
+                .unwrap_or_else(|| NativePath::from_path(std::path::Path::new(&source))),
+            name: source.clone(),
+        })?;
+        taken.insert(name_key(&name.basename));
+        assigned.insert(entry_input, name.basename.clone());
+        names.push(name);
     }
     let mut placed: BTreeMap<PathBuf, Draft> = BTreeMap::new();
     for draft in drafts {
@@ -522,7 +527,7 @@ fn finish(input: &PlanInput<'_>, drafts: Vec<Draft>) -> Plan {
             patch: None,
         });
     }
-    Plan { entries, names }
+    Ok(Plan { entries, names })
 }
 
 #[cfg(test)]
@@ -729,6 +734,25 @@ mod tests {
             ("Red_Cat", vec![session(2, night, &[11], raw(5, &[50], night), SettledPin::Declined)]),
         ]);
         assert!(matches!(plan_of(&layout), Err(ApplyBlocker::FolderClash { .. })));
+    }
+
+    /// STO-IMP-AC-08: an original named after a Windows device is refused
+    /// with its path and name rather than placed under that name.
+    #[test]
+    fn an_original_named_after_a_windows_device_is_refused_not_placed() {
+        let night = date!(2026 - 10 - 12);
+        let mut layout = layout(vec![(
+            "RedCat",
+            vec![session(1, night, &[10], raw(5, &[50], night), SettledPin::Declined)],
+        )]);
+        layout.sources.insert(id(10), source("CON.fits"));
+        assert_eq!(
+            plan_of(&layout),
+            Err(ApplyBlocker::EntryNameRefused {
+                path: NativePath::from_path(Path::new("/library/CON.fits")),
+                name: "CON.fits".into(),
+            })
+        );
     }
 
     #[test]

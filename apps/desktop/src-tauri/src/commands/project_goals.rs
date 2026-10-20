@@ -66,8 +66,8 @@ pub async fn project_update(
 }
 
 /// Replace the subject list; a listed Target keeps its subject and an omitted
-/// subject is removed with its goals. Suggestions follow; no held session
-/// changes.
+/// subject is removed with its goals kept hidden, which return when its Target
+/// is added back (D-W128). Suggestions follow; no held session changes.
 ///
 /// # Errors
 /// `Conflict` for a stale revision; `NotFound` for an unknown Project or an

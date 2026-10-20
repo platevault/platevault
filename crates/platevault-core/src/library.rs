@@ -16,7 +16,7 @@ use tokio::sync::{broadcast, Mutex};
 use uuid::Uuid;
 
 use crate::frame_review::FrameReview;
-use crate::grouping::group_assets;
+use crate::grouping::Intake;
 use crate::inventory;
 use crate::patched_copy::{self, EntryFrame};
 use crate::projects::{CalibrationReferences, ProjectReferences};
@@ -24,7 +24,7 @@ use crate::targets::{
     SimbadConfig, SimbadTargetResolver, TargetAssessment, TargetIndex, TargetQuery, TargetSearchHit,
 };
 use crate::{
-    Asset, AssetReference, AssociationKind, AssociationState, Availability, CorrectionInput,
+    AssetReference, AssociationKind, AssociationState, Availability, CorrectionInput,
     ExpectedAsset, FileIdentity, FramingMargins, LibraryError, Location, LocationRole, NativePath,
     ObservationFingerprint, ReferenceKind, RemapReview, RetireReview, Revision, ScanOperation,
     ScanOptions, ScanState, TargetCandidate,
@@ -580,13 +580,20 @@ impl Library {
         expected: &[ExpectedAsset],
         corrections: &[CorrectionInput],
     ) -> Result<CorrectionPreview, LibraryError> {
-        self.refuse_undeliverable(expected, corrections).await?;
         let margins = self.framing_margins().await?;
-        self.catalog
-            .preview_correction(expected, corrections, |assets: &[Asset]| {
-                group_assets(assets, &margins)
-            })
-            .await
+        self.preview_correction_within(expected, corrections, &margins).await
+    }
+
+    /// [`Self::preview_correction`] within `margins`: the limits a frame
+    /// the correction moves out of its session starts a new one under.
+    pub(crate) async fn preview_correction_within(
+        &self,
+        expected: &[ExpectedAsset],
+        corrections: &[CorrectionInput],
+        margins: &FramingMargins,
+    ) -> Result<CorrectionPreview, LibraryError> {
+        self.refuse_undeliverable(expected, corrections).await?;
+        self.catalog.preview_correction(expected, corrections, Intake(margins)).await
     }
 
     /// Confirm a reviewed correction preview, then re-derive the target suggestion
@@ -603,15 +610,22 @@ impl Library {
         preview_id: Uuid,
         expected: &[crate::ExpectedAsset],
     ) -> Result<ConfirmedCorrection, LibraryError> {
+        let margins = self.framing_margins().await?;
+        self.confirm_correction_within(preview_id, expected, &margins).await
+    }
+
+    /// [`Self::confirm_correction`] within `margins`, as
+    /// [`Self::preview_correction_within`].
+    pub(crate) async fn confirm_correction_within(
+        &self,
+        preview_id: Uuid,
+        expected: &[crate::ExpectedAsset],
+        margins: &FramingMargins,
+    ) -> Result<ConfirmedCorrection, LibraryError> {
         let preview = self.catalog.correction_preview(preview_id).await?;
         self.refuse_undeliverable(expected, &preview.corrections).await?;
-        let margins = self.framing_margins().await?;
-        let outcome = self
-            .catalog
-            .confirm_correction(preview_id, expected, |assets: &[Asset]| {
-                group_assets(assets, &margins)
-            })
-            .await?;
+        let outcome =
+            self.catalog.confirm_correction(preview_id, expected, Intake(margins)).await?;
         let association_refresh = match self.refresh_sessions(&outcome).await {
             Ok(()) => None,
             Err(error) => Some(error.response(Some(preview_id), None)),
@@ -915,7 +929,7 @@ impl Library {
                         id,
                         &identity,
                         &batch,
-                        |assets: &[Asset]| group_assets(assets, &margins),
+                        Intake(&margins),
                     ))?;
                     let _ = progress.send(applied);
                     if batch.progress.metadata_read >= next_assessment {
@@ -940,7 +954,7 @@ impl Library {
                         id,
                         &observation,
                         inventory::validate_location_root,
-                        |assets: &[Asset]| group_assets(assets, &margins),
+                        Intake(&margins),
                     ))
                 })
                 .await?;
@@ -1194,7 +1208,7 @@ mod tests {
                         id,
                         &identity,
                         &batch,
-                        |assets: &[Asset]| group_assets(assets, &FramingMargins::default()),
+                        Intake(&FramingMargins::default()),
                     ))?;
                     Ok(())
                 },

@@ -58,7 +58,8 @@ use crate::{
     ApplyBlocker, ApplyFailure, ApplyJournal, ApplyOutcome, ApplyPhase, ApplyPreview, ApplyReport,
     ApplyRequest, EntryEvidence, EntryPlacement, ExpectedTree, FileIdentity, ForeignFile,
     ForeignItem, ForeignItemState, InputKind, ItemReason, LibraryError, ManifestEntry, NativePath,
-    PinHealth, PreviousItem, PreviousItemReview, ReasonCode, ViewManifest, ViewMode, ViewPlanEntry,
+    PinHealth, PreviousItem, PreviousItemReview, ReasonCode, Revision, ViewManifest, ViewMode,
+    ViewPlanEntry,
 };
 
 /// What Apply asks while it runs (PREP-FR-09, PREP-FR-18).
@@ -367,7 +368,12 @@ impl Library {
             failures: Vec::new(),
             building_made: false,
         };
-        run.build(plan, &ticked).await
+        // What the reservation left, which the swap reads again (plan §3).
+        let after = self.catalog().apply_inputs(request.project_id).await?;
+        let Some(reserved) = Reserved::of(&run.inputs, &after) else {
+            return run.end(ApplyOutcome::Failed, CATALOG_MOVED.into()).await;
+        };
+        run.build(plan, &ticked, &reserved).await
     }
 
     /// Recover one unsettled Apply after a restart.
@@ -460,6 +466,8 @@ struct Checked {
     project: Option<PathBuf>,
     /// `View (previous)/` is absent or holds nothing.
     previous_gone: bool,
+    /// The current View's files `PlateVault` didn't place (VSEL-FR-20).
+    foreign: Vec<(PathBuf, EntryEvidence)>,
 }
 
 fn preview(inputs: &ApplyInputs, os: Os) -> ApplyPreview {
@@ -480,10 +488,15 @@ fn preview(inputs: &ApplyInputs, os: Os) -> ApplyPreview {
         .filter(|entry| entry.placement == EntryPlacement::Copy)
         .map(|entry| entry.size_bytes)
         .sum();
-    let (foreign, changed_copies) = match (&checked.project, &inputs.installed) {
-        (Some(project), Some(installed)) => current_view(&project.join(VIEW_FOLDER), installed),
-        _ => (Vec::new(), Vec::new()),
+    let changed_copies = match (&checked.project, &inputs.installed) {
+        (Some(project), Some(installed)) => changed_copies(&project.join(VIEW_FOLDER), installed),
+        _ => Vec::new(),
     };
+    let foreign = checked
+        .foreign
+        .into_iter()
+        .map(|(path, evidence)| ForeignFile { path: NativePath::from_path(&path), evidence })
+        .collect();
     ApplyPreview {
         project_id: inputs.project_id,
         desired_revision: inputs.desired_revision,
@@ -500,17 +513,25 @@ fn preview(inputs: &ApplyInputs, os: Os) -> ApplyPreview {
     }
 }
 
-/// The current View's foreign files and the copies that differ from what
-/// `PlateVault` placed (VSEL-AC-28, VSEL-AC-32): the bytes it placed, a
-/// patched copy's being the digest it was proven to hold.
-fn current_view(view: &Path, installed: &ViewManifest) -> (Vec<ForeignFile>, Vec<NativePath>) {
-    let placed: BTreeSet<PathBuf> =
-        installed.entries.iter().filter_map(|entry| entry.path.relative_path().ok()).collect();
-    let foreign = files::foreign_files(view, &placed)
-        .into_iter()
-        .map(|(path, evidence)| ForeignFile { path: NativePath::from_path(&path), evidence })
-        .collect();
-    let changed = installed
+/// The paths of `installed`'s entries, relative to `View/`.
+fn placed(installed: &ViewManifest) -> BTreeSet<PathBuf> {
+    installed.entries.iter().filter_map(|entry| entry.path.relative_path().ok()).collect()
+}
+
+/// Each entry a walk couldn't read, as the sheet's blocker naming it.
+fn unreadable_blockers(unreadable: files::Unreadable) -> impl Iterator<Item = ApplyBlocker> {
+    unreadable.into_iter().map(|(path, why)| ApplyBlocker::ViewUnreadable {
+        path: NativePath::from_path(&path),
+        reason: why.code,
+    })
+}
+
+/// The current View's copies that differ from what `PlateVault` placed
+/// (VSEL-AC-28, VSEL-AC-32): each re-read to the bytes it placed, a patched
+/// copy's being the digest it was proven to hold. Only a size change shows
+/// without reading; an equal time proves nothing (VSEL-FR-14).
+fn changed_copies(view: &Path, installed: &ViewManifest) -> Vec<NativePath> {
+    installed
         .entries
         .iter()
         .filter(|entry| entry.placement != EntryPlacement::Symlink)
@@ -518,30 +539,19 @@ fn current_view(view: &Path, installed: &ViewManifest) -> (Vec<ForeignFile>, Vec
             let Ok(relative) = entry.path.relative_path() else { return false };
             let path = view.join(relative);
             match inventory::probe_fingerprint(&path) {
-                Ok(now) => {
-                    let ours = entry
-                        .written
-                        .as_ref()
-                        .is_some_and(|written| same_identity(&now.identity, written));
-                    // A patched copy's header may have grown; its digest decides.
-                    let resized = entry.patched_sha256.is_none()
-                        && now.size_bytes != entry.source_fingerprint.size_bytes;
-                    if !ours || resized {
-                        true
-                    } else if now.modified_ns == entry.source_fingerprint.modified_ns {
-                        false
-                    } else {
-                        observe_entry(&path).map_or(true, |copy| {
-                            copy.sha256.as_deref() != Some(entry.copy_sha256())
-                        })
-                    }
+                // A patched copy's header may have grown; its digest decides.
+                Ok(now)
+                    if entry.patched_sha256.is_none()
+                        && now.size_bytes != entry.source_fingerprint.size_bytes =>
+                {
+                    true
                 }
+                Ok(_) => !files::holds_placed_copy(&path, entry),
                 Err(_) => fs::symlink_metadata(&path).is_ok(),
             }
         })
         .map(|entry| entry.path.clone())
-        .collect();
-    (foreign, changed)
+        .collect()
 }
 
 /// Every reason Apply can't run now, the copies it would place and the
@@ -569,13 +579,13 @@ fn check(inputs: &ApplyInputs, os: Os) -> Checked {
         });
     }
     let mut project = None;
-    let mut previous_gone = true;
+    let mut found = Found::default();
     match &inputs.parent {
         None => blockers.push(ApplyBlocker::NoProcessingLocation),
         Some(parent) => match location(parent, &inputs.name) {
             Err(blocker) => blockers.push(blocker),
             Ok((parent, folder)) => {
-                previous_gone = folder_blockers(inputs, &folder, pending > 0, &mut blockers);
+                found = folder_blockers(inputs, &folder, pending > 0, &mut blockers);
                 if inputs.basis.mode == ViewMode::Symlinks {
                     match (os.symlinks)(&parent) {
                         Ok(()) => {}
@@ -620,7 +630,13 @@ fn check(inputs: &ApplyInputs, os: Os) -> Checked {
     }
     let mut seen = BTreeSet::new();
     blockers.retain(|blocker| seen.insert(format!("{blocker:?}")));
-    Checked { blockers, plan, project, previous_gone }
+    Checked {
+        blockers,
+        plan,
+        project,
+        previous_gone: found.previous_gone,
+        foreign: found.foreign,
+    }
 }
 
 /// Every held frame placed with a recorded correction is an isolated
@@ -675,18 +691,34 @@ fn location(parent: &NativePath, name: &str) -> Result<(PathBuf, PathBuf), Apply
     Ok((path, folder))
 }
 
-/// What the Project folder holds that keeps Apply from running, and
-/// whether `View (previous)/` is absent or empty.
+/// What the Project folder holds that the sheet reports.
+struct Found {
+    /// `View (previous)/` is absent or holds nothing.
+    previous_gone: bool,
+    /// The current View's files `PlateVault` didn't place.
+    foreign: Vec<(PathBuf, EntryEvidence)>,
+}
+
+impl Default for Found {
+    fn default() -> Self {
+        Self { previous_gone: true, foreign: Vec::new() }
+    }
+}
+
+/// What the Project folder holds that keeps Apply from running, whether
+/// `View (previous)/` is absent or empty, and the current View's foreign
+/// files; an entry of either View that can't be read is a blocker naming
+/// it, never left out (VSEL-FR-20, STO-FR-05/16).
 fn folder_blockers(
     inputs: &ApplyInputs,
     folder: &Path,
     leftovers_pending: bool,
     blockers: &mut Vec<ApplyBlocker>,
-) -> bool {
-    let Ok(metadata) = fs::symlink_metadata(folder) else { return true };
+) -> Found {
+    let Ok(metadata) = fs::symlink_metadata(folder) else { return Found::default() };
     if fs_pathsafe::is_link_or_junction_metadata(&metadata) || !metadata.is_dir() {
         blockers.push(ApplyBlocker::ProjectFolderOccupied { path: NativePath::from_path(folder) });
-        return true;
+        return Found::default();
     }
     let building = folder.join(VIEW_BUILDING_FOLDER);
     if fs::symlink_metadata(&building).is_ok() {
@@ -703,15 +735,30 @@ fn folder_blockers(
     }
     let previous = folder.join(VIEW_PREVIOUS_FOLDER);
     let previous_gone = fs::symlink_metadata(&previous).is_err() || files::holds_nothing(&previous);
-    if !previous_gone && !leftovers_pending {
-        let paths = files::files_below(&previous)
-            .into_iter()
-            .map(|relative| NativePath::from_path(&Path::new(VIEW_PREVIOUS_FOLDER).join(relative)))
-            .collect();
-        blockers.push(ApplyBlocker::PreviousHoldsKeptFiles { paths });
+    if !previous_gone {
+        match files::files_below(&previous) {
+            Ok(kept) if !leftovers_pending => {
+                let paths = kept
+                    .into_iter()
+                    .map(|relative| {
+                        NativePath::from_path(&Path::new(VIEW_PREVIOUS_FOLDER).join(relative))
+                    })
+                    .collect();
+                blockers.push(ApplyBlocker::PreviousHoldsKeptFiles { paths });
+            }
+            Ok(_) => {}
+            Err(unreadable) => blockers.extend(unreadable_blockers(unreadable)),
+        }
+    }
+    let mut foreign = Vec::new();
+    if let Some(installed) = &inputs.installed {
+        match files::foreign_files(&folder.join(VIEW_FOLDER), &placed(installed)) {
+            Ok(found) => foreign = found,
+            Err(unreadable) => blockers.extend(unreadable_blockers(unreadable)),
+        }
     }
     if inputs.installed.is_none() {
-        let foreign = fs::read_dir(folder).into_iter().flatten().flatten().any(|entry| {
+        let occupied = fs::read_dir(folder).into_iter().flatten().flatten().any(|entry| {
             let name = entry.file_name();
             let name = name.to_string_lossy();
             !matches!(
@@ -722,12 +769,12 @@ fn folder_blockers(
                     | VIEW_PREVIOUS_FOLDER
             )
         });
-        if foreign {
+        if occupied {
             blockers
                 .push(ApplyBlocker::ProjectFolderOccupied { path: NativePath::from_path(folder) });
         }
     }
-    previous_gone
+    Found { previous_gone, foreign }
 }
 
 /// The copy each included capture places: its first copy on an online
@@ -957,6 +1004,54 @@ impl Delivered {
     }
 }
 
+/// Why an Apply fails when the catalog moved past what it built.
+const CATALOG_MOVED: &str =
+    "the Project or the Library changed during the build; the current View is unchanged";
+
+/// The catalog state one Apply builds against, read right after its
+/// reservation, which the swap reads again (plan §3): any desired-state
+/// edit moves the Project revision, and any global change the basis
+/// carries (a review, a calibration pin, a correction) moves the digest.
+struct Reserved {
+    desired_revision: Revision,
+    /// The basis digest with the entry names the reservation added.
+    basis_digest: String,
+    /// The manifest generation the new View replaces.
+    applied_generation: Option<Revision>,
+}
+
+impl Reserved {
+    /// `after`, read once the reservation committed, when it is still the
+    /// state `before` planned from. Reserving adds only entry names, which
+    /// move the digest, so the parts an edit moves are compared instead: a
+    /// different revision, basis, correction or installed View means an
+    /// edit landed between the two reads.
+    fn of(before: &ApplyInputs, after: &ApplyInputs) -> Option<Self> {
+        let unmoved = after.desired_revision == before.desired_revision
+            && after.basis == before.basis
+            && after.corrected == before.corrected
+            && applied_generation(after) == applied_generation(before);
+        unmoved.then(|| Self {
+            desired_revision: after.desired_revision,
+            basis_digest: after.basis_digest.clone(),
+            applied_generation: applied_generation(after),
+        })
+    }
+
+    /// Whether `now` is still the reserved state, with the Project still
+    /// held by this Apply's operation.
+    fn holds(&self, now: &ApplyInputs, operation_id: Uuid) -> bool {
+        now.desired_revision == self.desired_revision
+            && now.basis_digest == self.basis_digest
+            && applied_generation(now) == self.applied_generation
+            && now.running.as_ref().is_some_and(|running| running.id == operation_id)
+    }
+}
+
+fn applied_generation(inputs: &ApplyInputs) -> Option<Revision> {
+    inputs.installed.as_ref().map(|manifest| manifest.generation)
+}
+
 /// One Apply from its reservation to its settlement.
 struct Run<'a> {
     library: &'a Library,
@@ -1059,13 +1154,19 @@ impl Run<'_> {
         }
     }
 
-    fn failed(&mut self, failures: Vec<(PathBuf, ItemReason)>) -> String {
+    /// Record each failure for the report; how many there were.
+    fn record(&mut self, failures: Vec<(PathBuf, ItemReason)>) -> usize {
         let count = failures.len();
         self.failures.extend(
             failures
                 .into_iter()
                 .map(|(path, reason)| ApplyFailure { path: NativePath::from_path(&path), reason }),
         );
+        count
+    }
+
+    fn failed(&mut self, failures: Vec<(PathBuf, ItemReason)>) -> String {
+        let count = self.record(failures);
         format!("{count} input(s) could not be placed; the current View is unchanged")
     }
 
@@ -1095,26 +1196,30 @@ impl Run<'_> {
         plan: &Plan,
     ) -> Result<Result<BTreeMap<Uuid, EntryEvidence>, Vec<(PathBuf, ItemReason)>>, LibraryError>
     {
-        let mut wanted: BTreeMap<Uuid, (PathBuf, &PlanEntry)> = BTreeMap::new();
+        let mut wanted: BTreeMap<Uuid, (PathBuf, PathBuf, &PlanEntry)> = BTreeMap::new();
         for entry in &plan.entries {
-            if let Some(path) = self
-                .inputs
-                .sources
-                .get(&entry.source_id)
-                .and_then(|source| source.path.to_path_buf().ok())
+            if let Some((root, path)) =
+                self.inputs.sources.get(&entry.source_id).and_then(|source| {
+                    let root =
+                        self.inputs.locations.get(&source.location_id)?.path.to_path_buf().ok()?;
+                    Some((root, source.path.to_path_buf().ok()?))
+                })
             {
-                wanted.entry(entry.source_id).or_insert((path, entry));
+                wanted.entry(entry.source_id).or_insert((root, path, entry));
             }
         }
-        let jobs: Vec<(Uuid, PathBuf, crate::ObservationFingerprint, Option<String>)> = wanted
-            .into_iter()
-            .map(|(id, (path, entry))| (id, path, entry.basis.clone(), entry.sha256.clone()))
-            .collect();
+        let jobs: Vec<(Uuid, PathBuf, PathBuf, crate::ObservationFingerprint, Option<String>)> =
+            wanted
+                .into_iter()
+                .map(|(id, (root, path, entry))| {
+                    (id, root, path, entry.basis.clone(), entry.sha256.clone())
+                })
+                .collect();
         blocking(move || {
             let mut snapshots = BTreeMap::new();
             let mut failures = Vec::new();
-            for (id, path, basis, sha256) in jobs {
-                match files::snapshot(&path, &basis, sha256.as_deref()) {
+            for (id, root, path, basis, sha256) in jobs {
+                match files::snapshot(&root, &path, &basis, sha256.as_deref()) {
                     Ok(snapshot) => {
                         snapshots.insert(id, snapshot);
                     }
@@ -1144,11 +1249,12 @@ impl Run<'_> {
             .collect()
     }
 
-    /// Snapshot, build, verify, swap and settle.
+    /// Snapshot, build, verify, swap against `reserved` and settle.
     async fn build(
         &mut self,
         plan: Plan,
         ticked: &BTreeSet<PathBuf>,
+        reserved: &Reserved,
     ) -> Result<ApplyReport, LibraryError> {
         if let Some(report) = self.interrupted() {
             return Ok(report);
@@ -1232,27 +1338,37 @@ impl Run<'_> {
             let error = self.failed(failures);
             return self.end(ApplyOutcome::Failed, error).await;
         }
-        let foreign = self.foreign_inventory(ticked).await?;
+        let foreign = match self.foreign_inventory(ticked).await? {
+            Ok(foreign) => foreign,
+            Err(unreadable) => {
+                let count = self.record(unreadable);
+                let error =
+                    format!("{count} entr(ies) in View/ can't be read; the current View is unchanged");
+                return self.end(ApplyOutcome::Failed, error).await;
+            }
+        };
         self.library.catalog().record_apply_build(&self.journal, &self.built, &foreign).await?;
         self.journal.phase = ApplyPhase::BuildVerified;
         if let Some(report) = self.interrupted() {
             return Ok(report);
         }
-        self.swap().await
+        self.swap(reserved).await
     }
 
     /// The current View's files `PlateVault` didn't place, with the user's
-    /// ticks.
+    /// ticks; or the entries that can't be read, never a partial inventory.
     async fn foreign_inventory(
         &self,
         ticked: &BTreeSet<PathBuf>,
-    ) -> Result<Vec<ForeignItem>, LibraryError> {
-        let Some(installed) = &self.inputs.installed else { return Ok(Vec::new()) };
-        let placed: BTreeSet<PathBuf> =
-            installed.entries.iter().filter_map(|entry| entry.path.relative_path().ok()).collect();
+    ) -> Result<Result<Vec<ForeignItem>, files::Unreadable>, LibraryError> {
+        let Some(installed) = &self.inputs.installed else { return Ok(Ok(Vec::new())) };
+        let placed = placed(installed);
         let view = self.project.join(VIEW_FOLDER);
-        let found = blocking(move || Ok(files::foreign_files(&view, &placed))).await?;
-        Ok((0_u32..)
+        let found = match blocking(move || Ok(files::foreign_files(&view, &placed))).await? {
+            Ok(found) => found,
+            Err(unreadable) => return Ok(Err(unreadable)),
+        };
+        Ok(Ok((0_u32..)
             .zip(found)
             .map(|(seq, (path, evidence))| ForeignItem {
                 seq,
@@ -1262,12 +1378,18 @@ impl Run<'_> {
                 state: ForeignItemState::Pending,
                 reason: None,
             })
-            .collect())
+            .collect()))
     }
 
     /// Move the old View aside, waiting for a tool that holds a file in it,
-    /// and install the new one; restore the old one if that fails.
-    async fn swap(&mut self) -> Result<ApplyReport, LibraryError> {
+    /// and install the new one; restore the old one if that fails. First the
+    /// catalog is read again: an edit or a global change committed during
+    /// the build fails Apply here, the old View kept (plan §3).
+    async fn swap(&mut self, reserved: &Reserved) -> Result<ApplyReport, LibraryError> {
+        let now = self.library.catalog().apply_inputs(self.journal.project_id).await?;
+        if !reserved.holds(&now, self.journal.operation_id) {
+            return self.end(ApplyOutcome::Failed, CATALOG_MOVED.into()).await;
+        }
         let view = self.project.join(VIEW_FOLDER);
         let previous = self.project.join(VIEW_PREVIOUS_FOLDER);
         let building = self.building();

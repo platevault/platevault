@@ -60,12 +60,15 @@ export const commands = {
 "trashed" | 
 /**
  *  Sessions with no confirmed Target, whatever their automatic Target row
- *  says (Unresolved, Suggested, Needs review or none).
+ *  says (Unresolved, Needs review, Suggested without agreeing evidence or
+ *  none). A Target associated by agreeing evidence counts as confirmed
+ *  (D-W124).
  */
 "needs_target" | 
 /**
- *  Sessions with a confirmed Target that are neither a Project's candidate
- *  nor a member of any Project's run.
+ *  Sessions with a confirmed Target, or one associated by agreeing
+ *  evidence, that are neither a Project's candidate nor a member of any
+ *  Project's run.
  */
 "not_in_any_project" | 
 /**
@@ -299,8 +302,8 @@ export const commands = {
 	projectUpdate: (projectId: string, expectedRevision: number, name: string, notes: string | null) => typedError<Project, ErrorResponse>(__TAURI_INVOKE("project_update", { projectId, expectedRevision, name, notes })),
 	/**
 	 *  Replace the subject list; a listed Target keeps its subject and an omitted
-	 *  subject is removed with its goals. Suggestions follow; no held session
-	 *  changes.
+	 *  subject is removed with its goals kept hidden, which return when its Target
+	 *  is added back (D-W128). Suggestions follow; no held session changes.
 	 * 
 	 *  # Errors
 	 *  `Conflict` for a stale revision; `NotFound` for an unknown Project or an
@@ -1167,6 +1170,57 @@ export const commands = {
 	 */
 	importStatus: (id: string) => typedError<ImportOperation_Serialize, ErrorResponse>(__TAURI_INVOKE("import_status", { id })),
 	/**
+	 *  Merge the sessions holding `seqs` (an item of each) into one before the
+	 *  import starts; only sessions that differ in framing alone merge.
+	 * 
+	 *  # Errors
+	 *  `InvalidInput` for fewer than two sessions, sessions of different capture
+	 *  keys or an item in no session; `Conflict` for a stale revision.
+	 */
+	importMergeSessions: (id: string, expectedRevision: number, seqs: number[]) => typedError<ImportOperation_Serialize, ErrorResponse>(__TAURI_INVOKE("import_merge_sessions", { id, expectedRevision, seqs })),
+	/**
+	 *  Re-split the merged session holding item `seq` by framing again.
+	 * 
+	 *  # Errors
+	 *  `InvalidInput` for a session that was not merged or an item in no
+	 *  session; `Conflict` for a stale revision.
+	 */
+	importResplitSession: (id: string, expectedRevision: number, seq: number) => typedError<ImportOperation_Serialize, ErrorResponse>(__TAURI_INVOKE("import_resplit_session", { id, expectedRevision, seq })),
+	/**
+	 *  The sessions the import's lights would form with these centre and
+	 *  rotation limits, for the review's sliders. Saves nothing.
+	 * 
+	 *  # Errors
+	 *  `InvalidInput` for limits out of range; `NotFound` for an unknown import.
+	 */
+	importSplitPreview: (id: string, limits: SplitLimits) => typedError<ImportSession_Serialize[], ErrorResponse>(__TAURI_INVOKE("import_split_preview", { id, limits })),
+	/**
+	 *  Give the import its own centre and rotation limits, or (`null`) split it
+	 *  with the Settings default again. Only this import changes.
+	 * 
+	 *  # Errors
+	 *  `InvalidInput` for limits out of range; `Conflict` for a stale revision.
+	 */
+	importSetSplitLimits: (id: string, expectedRevision: number, limits: {
+	/**  Largest centre offset, in arcminutes. */
+	maxCentreOffsetArcmin: number | null,
+	/**
+	 *  Largest rotation difference in degrees. A meridian flip leaves
+	 *  ROTATANG unchanged; with only the sky angle known, 180° reads as the
+	 *  same framing.
+	 */
+	maxRotationDeg: number | null,
+} | null) => typedError<ImportOperation_Serialize, ErrorResponse>(__TAURI_INVOKE("import_set_split_limits", { id, expectedRevision, limits })),
+	/**
+	 *  Choose the Target the session holding item `seq` files under, or
+	 *  Unclassified (`null`), in place of the one its pointing matches.
+	 * 
+	 *  # Errors
+	 *  `NotFound` for an unknown Target; `InvalidInput` for an item in no
+	 *  session; `Conflict` for a stale revision.
+	 */
+	importChooseTarget: (id: string, expectedRevision: number, seq: number, targetId: string | null) => typedError<ImportOperation_Serialize, ErrorResponse>(__TAURI_INVOKE("import_choose_target", { id, expectedRevision, seq, targetId })),
+	/**
 	 *  A rig with its filter list, the bands it captures and its field of view.
 	 * 
 	 *  # Errors
@@ -1692,7 +1746,13 @@ export type ApplyBlocker =
  *  (PREP-FR-03). Apply refuses before it builds rather than let the
  *  source value reach the tool.
  */
-{ blocker: "correction_undeliverable"; sessionId: string; path: NativePathWire; field: string; refusal: PatchRefusal };
+{ blocker: "correction_undeliverable"; sessionId: string; path: NativePathWire; field: string; refusal: PatchRefusal } | 
+/**
+ *  An entry in `View/` or `View (previous)/`, or that folder itself,
+ *  can't be read, or the folder is a link: the sheet can't account for
+ *  it, so Apply refuses before it starts (VSEL-FR-20, STO-FR-05/16).
+ */
+{ blocker: "view_unreadable"; path: NativePathWire; reason: ReasonCode };
 
 /**  One input the build could not place. */
 export type ApplyFailure = {
@@ -3802,6 +3862,16 @@ export type ImportItem = {
 	 *  [`crate::FRAMING_LABEL_FIELD`] correction (LIB-FR-24, D-W107).
 	 */
 	framingLabel?: string | null,
+	/**
+	 *  The Target the user chose for the light's session in import review;
+	 *  `None` keeps the one its pointing matches (D-W129).
+	 */
+	targetChoice?: ImportTargetChoice | null,
+	/**
+	 *  The Target the light's session files under, as its route named
+	 *  `{target}` from it; `None` is Unclassified. Never OBJECT.
+	 */
+	targetId?: string | null,
 	excluded: boolean,
 	role: LocationRole | null,
 	destinationLocationId: string | null,
@@ -3900,6 +3970,12 @@ export type ImportOperation_Deserialize = {
 	 *  until the import starts.
 	 */
 	sessions: ImportSession_Deserialize[],
+	/**
+	 *  The centre and rotation limits the sessions split with: the import's
+	 *  own when `split_overridden`, else the Settings default (CF2).
+	 */
+	splitLimits: SplitLimits,
+	splitOverridden: boolean,
 	createdAt: string,
 	updatedAt: string,
 	settledAt: string | null,
@@ -3930,6 +4006,12 @@ export type ImportOperation_Serialize = {
 	 *  until the import starts.
 	 */
 	sessions: ImportSession_Serialize[],
+	/**
+	 *  The centre and rotation limits the sessions split with: the import's
+	 *  own when `split_overridden`, else the Settings default (CF2).
+	 */
+	splitLimits: SplitLimits,
+	splitOverridden: boolean,
 	createdAt: string,
 	updatedAt: string,
 	settledAt: string | null,
@@ -4023,6 +4105,14 @@ export type ImportRow_Serialize = {
  */
 export type ImportSession = ImportSession_Serialize | ImportSession_Deserialize;
 
+/**  A session's Target as import review names it. */
+export type ImportSessionTarget = {
+	id: string,
+	/**  What `{target}` names its folder with. */
+	designation: string,
+	commonName: string | null,
+};
+
 /**
  *  One session the import's lights form at intake, as import review shows it
  *  before the import is confirmed (LIB-FR-04, LIB-FR-24, D-W107): a night's
@@ -4044,12 +4134,27 @@ export type ImportSession_Deserialize = {
 	merged: boolean,
 	/**
 	 *  What a default name shows: OBJECT, FILTER, the exposure and the night
-	 *  of its first item.
+	 *  of its first item. OBJECT is only a hint: it never chooses or names
+	 *  the session's Target (D-W129, J31 S3).
 	 */
 	object: string | null,
 	filter: string | null,
 	exposureSeconds: number | null,
 	night?: string | null,
+	/**
+	 *  The Target the session files under: the user's choice, else the one
+	 *  Target its pointing matches; `None` is Unclassified, preselected when
+	 *  it has no pointing or no matching Target.
+	 */
+	target: ImportSessionTarget | null,
+	/**  The user chose `target` (or Unclassified) rather than its pointing. */
+	targetChosen: boolean,
+	/**
+	 *  When the session's pointing matches several Targets: the nearest to
+	 *  its field centre, offered for one choice. Unclassified stays
+	 *  preselected and nothing files under it until the user chooses it.
+	 */
+	recommended: ImportSessionTarget | null,
 };
 
 /**
@@ -4073,12 +4178,27 @@ export type ImportSession_Serialize = {
 	merged: boolean,
 	/**
 	 *  What a default name shows: OBJECT, FILTER, the exposure and the night
-	 *  of its first item.
+	 *  of its first item. OBJECT is only a hint: it never chooses or names
+	 *  the session's Target (D-W129, J31 S3).
 	 */
 	object: string | null,
 	filter: string | null,
 	exposureSeconds: number | null,
 	night: string | null,
+	/**
+	 *  The Target the session files under: the user's choice, else the one
+	 *  Target its pointing matches; `None` is Unclassified, preselected when
+	 *  it has no pointing or no matching Target.
+	 */
+	target: ImportSessionTarget | null,
+	/**  The user chose `target` (or Unclassified) rather than its pointing. */
+	targetChosen: boolean,
+	/**
+	 *  When the session's pointing matches several Targets: the nearest to
+	 *  its field centre, offered for one choice. Unclassified stays
+	 *  preselected and nothing files under it until the user chooses it.
+	 */
+	recommended: ImportSessionTarget | null,
 };
 
 /**  The CSV file as read. */
@@ -4125,6 +4245,12 @@ export type ImportSummary = {
 	sourcesKept: number,
 	uncertain: number,
 };
+
+/**
+ *  The Target a user chose for a session in import review (D-W129): one to
+ *  file it under, or Unclassified.
+ */
+export type ImportTargetChoice = { kind: "unclassified" } | { kind: "target"; targetId: string };
 
 /**  Imported values are never verified. */
 export type ImportVerification = "unverified";
@@ -4458,6 +4584,9 @@ export type MasterProvenance_Serialize = {
 	adoptedAt: string,
 };
 
+/**  A stable category for a failed frame measurement. */
+export type MeasurementFailureCode = "unsupported_format" | "malformed_data" | "source_unavailable";
+
 /**  A measurement method and its version. */
 export type MeasurementMethod = {
 	name: string,
@@ -4467,9 +4596,7 @@ export type MeasurementMethod = {
 /**  The outcome of measuring one frame. */
 export type MeasurementOutcome = { outcome: "measured"; metrics: MetricValue[]; stars: StarRecord[]; masks: MaskCounts; 
 /**  Only the brightest candidates were kept. */
-truncated: boolean } | 
-/**  The method's reason for the whole frame. */
-{ outcome: "failed"; reason: string; message: string };
+truncated: boolean } | { outcome: "failed"; code: MeasurementFailureCode; parameters: { [key in string]: string } };
 
 /**  A cached measurement of one asset. */
 export type MeasurementRecord = MeasurementRecord_Serialize | MeasurementRecord_Deserialize;
@@ -5491,7 +5618,8 @@ export type ProjectGaps = {
 
 /**
  *  A stored goal; its id stays across edits while its subject, panel group,
- *  kind and channel (or criterion) stay.
+ *  kind and channel (or criterion) stay. A removed subject's goals are hidden
+ *  and return with their ids when its Target is added back (D-W128).
  */
 export type ProjectGoal = {
 	id: string,
@@ -5799,8 +5927,12 @@ export type Quality = "unreviewed" | "usable" | "unusable";
 export type QualityCriterion = 
 /**  Only frames whose applicable library quality is Usable count. */
 { criterion: "usable_only" } | 
-/**  Only frames whose measured median FWHM is at most `max_px` pixels count. */
-{ criterion: "max_fwhm_median"; maxPx: number | null };
+/**
+ *  Only frames whose measured median FWHM, in arcseconds through the
+ *  frame's own pixel scale, is at most `max_arcsec` count. A frame whose
+ *  pixel scale is unknown cannot be judged (PRJ-FR-03).
+ */
+{ criterion: "max_fwhm_median"; maxArcsec: number | null };
 
 /**
  *  The review label of a frame's library quality (PIX-FR-14), in sort
@@ -6055,7 +6187,7 @@ export type RetireAsset = {
 };
 
 /**  A current blocker to retiring a location. */
-export type RetireBlock =
+export type RetireBlock = 
 /**  A pinned calibration file is held at the location. */
 { reason: "pinned_calibration"; sessionId: string; sessionName: string; kinds: InputKind[]; projects: RetirePinProject[] };
 
@@ -6386,9 +6518,10 @@ export type RunCounters = {
  */
 export type RunIssue = {
 	assetId: string,
-	/**  The failure's `LibraryErrorCode` wire string. */
-	kind: string,
-	message: string,
+	/**  The stable machine code for the failure. */
+	kind: LibraryErrorCode,
+	/**  Safe structured display parameters; raw diagnostic text is log-only. */
+	parameters: { [key in string]: string },
 };
 
 /**  A measurement run's state. */
@@ -6662,12 +6795,15 @@ export type SessionFilter =
 "trashed" | 
 /**
  *  Sessions with no confirmed Target, whatever their automatic Target row
- *  says (Unresolved, Suggested, Needs review or none).
+ *  says (Unresolved, Needs review, Suggested without agreeing evidence or
+ *  none). A Target associated by agreeing evidence counts as confirmed
+ *  (D-W124).
  */
 "needs_target" | 
 /**
- *  Sessions with a confirmed Target that are neither a Project's candidate
- *  nor a member of any Project's run.
+ *  Sessions with a confirmed Target, or one associated by agreeing
+ *  evidence, that are neither a Project's candidate nor a member of any
+ *  Project's run.
  */
 "not_in_any_project" | 
 /**
@@ -6713,12 +6849,18 @@ export type SessionFraming = {
 	 */
 	skyAngleDeg?: number | null,
 	/**
-	 *  The anchor's field from its header optics; the centre margin is a
-	 *  share of its diagonal. `None` when the header cannot give it.
+	 *  The anchor's field from its header optics, for the overlap of two
+	 *  framings; the centre limit is an angle and never reads it. `None`
+	 *  when the header cannot give it.
 	 */
 	field?: FieldOfView | null,
 	/**  The user's framing label when the user merged or split the framing. */
 	label?: string | null,
+	/**
+	 *  The centre and rotation limits intake split the session with: a
+	 *  frame indexed later joins it within these of the anchor.
+	 */
+	splitLimits: SplitLimits,
 };
 
 /**  The facts readiness is computed from, read in one catalog snapshot. */
@@ -6727,6 +6869,10 @@ export type SessionIntake = {
 	groupingRevision: number,
 	/**  A regroup replaced the session; its successors are current. */
 	superseded: boolean,
+	/**
+	 *  The session's Target counts as confirmed: the user confirmed it or it
+	 *  is associated by agreeing evidence (D-W124).
+	 */
 	targetConfirmed: boolean,
 	/**  The confirmed rig. */
 	rigId: string | null,
@@ -6914,6 +7060,23 @@ export type SortDirection = "asc" | "desc";
 export type SourcedValue = {
 	value: string,
 	source: string,
+};
+
+/**
+ *  When two frames are one framing (LIB-FR-04, PRJ-FR-31, D-W107; CF2,
+ *  owner 2026-10-20): their centres within an angle on the sky, so the limit
+ *  is the same whatever the field, and their rotation within an angle. The
+ *  Settings default is 5′ and 5°; an import may carry its own.
+ */
+export type SplitLimits = {
+	/**  Largest centre offset, in arcminutes. */
+	maxCentreOffsetArcmin: number | null,
+	/**
+	 *  Largest rotation difference in degrees. A meridian flip leaves
+	 *  ROTATANG unchanged; with only the sky angle known, 180° reads as the
+	 *  same framing.
+	 */
+	maxRotationDeg: number | null,
 };
 
 /**

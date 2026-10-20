@@ -5,15 +5,16 @@
 //! calibration", their counts, Create Project prefill and Add to Project
 //! (LIB-FR-17, PRJ-FR-19, D-W59). The filters are derived on read from
 //! current associations, the sessions Projects hold (`project_sessions`) and
-//! session calibration. Add to Project here writes only the subject and rig
-//! rows; a membership add appends them in its own transaction
-//! ([`append_target_and_rig`]).
+//! session calibration. A Target associated by agreeing evidence counts as
+//! confirmed here as in readiness (D-W124, [`counts_as_confirmed`]). Add to
+//! Project here writes only the subject and rig rows; a membership add
+//! appends them in its own transaction ([`append_target_and_rig`]).
 
 use std::collections::HashSet;
 
 use platevault_model::{
-    AddedRig, ExpectedSession, LibraryError, ProjectAdded, ProjectAddition, ProjectInput, Session,
-    SessionFilterCounts, SubjectInput,
+    counts_as_confirmed, AddedRig, AssociationState, EvidenceItem, ExpectedSession, LibraryError,
+    ProjectAdded, ProjectAddition, ProjectInput, Session, SessionFilterCounts, SubjectInput,
 };
 use sqlx::sqlite::SqliteConnection;
 use sqlx::{Connection, Row};
@@ -21,14 +22,15 @@ use uuid::Uuid;
 
 use super::projects::{load_project, require_project};
 use super::{
-    calibration, check_expected_sessions, conflict, db_revision, lineage_successors,
-    listed_sessions, load_equipment, load_session_row, load_target, now, parse_uuid,
-    require_revision, Catalog, Members, Result, SessionFilter,
+    calibration, check_expected_sessions, conflict, db_revision, from_json, from_text,
+    lineage_successors, listed_sessions, load_equipment, load_session_row, load_target, now,
+    parse_uuid, require_revision, Catalog, Members, Result, SessionFilter,
 };
 
-/// Sessions with a confirmed Target.
-const CONFIRMED_TARGET: &str = "SELECT session_id FROM associations \
-     WHERE kind = 'target' AND state = 'confirmed' AND target_id IS NOT NULL";
+/// Every session's Target row naming a Target; [`counts_as_confirmed`]
+/// decides which count as confirmed.
+const TARGET_ROWS: &str = "SELECT session_id, state, evidence FROM associations \
+     WHERE kind = 'target' AND target_id IS NOT NULL";
 
 /// Sessions a Project holds (PRJ-FR-19): a session is in no Project until
 /// one adds it, whatever its lifecycle; matching a Project's subjects and
@@ -168,7 +170,7 @@ struct Standing {
 impl Standing {
     async fn read(conn: &mut SqliteConnection) -> Result<Self> {
         Ok(Self {
-            confirmed: session_ids(conn, CONFIRMED_TARGET).await?,
+            confirmed: confirmed_targets(conn).await?,
             in_project: session_ids(conn, IN_A_PROJECT).await?,
         })
     }
@@ -189,7 +191,23 @@ async fn session_ids(conn: &mut SqliteConnection, sql: &'static str) -> Result<H
     ids.iter().map(|id| parse_uuid(id)).collect()
 }
 
-/// A current session with its confirmed Target and confirmed rig.
+/// Sessions whose Target counts as confirmed: confirmed by the user or
+/// associated by agreeing evidence (D-W124).
+async fn confirmed_targets(conn: &mut SqliteConnection) -> Result<HashSet<Uuid>> {
+    let rows = sqlx::query(TARGET_ROWS).fetch_all(&mut *conn).await?;
+    let mut confirmed = HashSet::new();
+    for row in &rows {
+        let state: AssociationState = from_text(&row.try_get::<String, _>("state")?)?;
+        let evidence: Vec<EvidenceItem> = from_json(&row.try_get::<String, _>("evidence")?)?;
+        if counts_as_confirmed(&state, &evidence) {
+            confirmed.insert(parse_uuid(&row.try_get::<String, _>("session_id")?)?);
+        }
+    }
+    Ok(confirmed)
+}
+
+/// A current session with its confirmed Target, which may be one associated
+/// by agreeing evidence (D-W124), and its confirmed rig.
 struct SessionBasis {
     session: Session,
     target_id: Uuid,
@@ -207,17 +225,27 @@ impl SessionBasis {
             });
         }
         let rows = sqlx::query(
-            "SELECT kind, target_id, equipment_id FROM associations \
-             WHERE session_id = ?1 AND state = 'confirmed'",
+            "SELECT kind, state, evidence, target_id, equipment_id FROM associations \
+             WHERE session_id = ?1",
         )
         .bind(session_id.to_string())
         .fetch_all(&mut *conn)
         .await?;
         let (mut target_id, mut rig_id) = (None, None);
         for row in &rows {
+            let state: AssociationState = from_text(&row.try_get::<String, _>("state")?)?;
             match row.try_get::<&str, _>("kind")? {
-                "target" => target_id = row.try_get::<Option<String>, _>("target_id")?,
-                _ => rig_id = row.try_get::<Option<String>, _>("equipment_id")?,
+                "target" => {
+                    let evidence: Vec<EvidenceItem> =
+                        from_json(&row.try_get::<String, _>("evidence")?)?;
+                    if counts_as_confirmed(&state, &evidence) {
+                        target_id = row.try_get::<Option<String>, _>("target_id")?;
+                    }
+                }
+                _ if state == AssociationState::Confirmed => {
+                    rig_id = row.try_get::<Option<String>, _>("equipment_id")?;
+                }
+                _ => {}
             }
         }
         let target_id = target_id.ok_or_else(|| {
@@ -325,6 +353,8 @@ async fn append(conn: &mut SqliteConnection, addition: &ProjectAddition) -> Resu
         .bind(addition.target_id.to_string())
         .execute(&mut *conn)
         .await?;
+        super::projects::restore_hidden_goals(conn, addition.project_id, addition.target_id)
+            .await?;
     }
     if let Some(rig) = &addition.added_rig {
         sqlx::query(

@@ -334,6 +334,7 @@ fn remove_placed(
             };
             let copy = EntryEvidence {
                 path: NativePath::from_path(path),
+                root: None,
                 kind: EntryKind::File,
                 fingerprint: ObservationFingerprint { content_sha256: None, ..observed },
                 sha256: Some(entry.copy_sha256().to_owned()),

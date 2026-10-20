@@ -12,17 +12,19 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use platevault_model::{
-    builtin_goal_templates, validate_goals, validate_project_name, validate_rigs,
-    validate_subjects, ApplicableQuality, Asset, AssetReference, Availability, CaptureInclusion,
-    DuplicateRequest, ExclusionBasis, GoalIdentity, GoalInput, GoalProgress, GoalSpec, GoalTally,
-    GoalTemplate, GoalTemplateInput, InclusionBasis, LibraryError, MeasurementMethod,
-    MeasurementOutcome, MeasurementRecord, MetricId, MetricState, Microseconds, Project,
-    ProjectCandidate, ProjectDesired, ProjectGoal, ProjectInput, ProjectQuery, ProjectSubject,
-    ProjectSummary, ProjectViewSettings, QualityCriterion, RecordValidity, ReferenceKind, Revision,
-    SubjectInput,
+    builtin_goal_templates, counts_as_confirmed, validate_goals, validate_project_name,
+    validate_rigs, validate_subjects, ApplicableQuality, Asset, AssetReference, Availability,
+    CaptureInclusion, CaptureMetadata, DuplicateRequest, ExclusionBasis, GoalIdentity, GoalInput,
+    GoalProgress, GoalSpec, GoalTally, GoalTemplate, GoalTemplateInput, InclusionBasis,
+    LibraryError, MeasurementMethod, MeasurementOutcome, MeasurementRecord, MetricId, MetricState,
+    MetricValue, Microseconds, Project, ProjectCandidate, ProjectDesired, ProjectGoal,
+    ProjectInput, ProjectQuery, ProjectSubject, ProjectSummary, ProjectViewSettings,
+    QualityCriterion, RecordValidity, ReferenceKind, Revision, SubjectInput, Units,
 };
+
 use sqlx::sqlite::{SqliteConnection, SqliteRow};
 use sqlx::{Connection, Row};
+use target_match::{Field, Optics};
 use uuid::Uuid;
 
 use super::admission;
@@ -92,8 +94,9 @@ impl Catalog {
     }
 
     /// Replace the subject list. A listed Target keeps its subject; an
-    /// omitted subject is removed with its goals. Suggestions follow at once;
-    /// no held session changes.
+    /// omitted subject is removed and its goals kept hidden, counted nowhere,
+    /// until its Target is a subject again (D-W128). Suggestions follow at
+    /// once; no held session changes.
     ///
     /// # Errors
     /// `Conflict` for a stale revision; `NotFound` for an unknown Project or an
@@ -260,11 +263,11 @@ impl Catalog {
         Ok(summaries)
     }
 
-    /// The Project's candidates, derived now: every current session whose
-    /// confirmed Target is a subject's Target and whose confirmed rig is a
-    /// Project rig, with its frames outside the Trash, whether the Project
-    /// holds it or not. An OBJECT header or a suggestion confirms nothing. In
-    /// subject, rig and session order.
+    /// The Project's candidates, derived now: every current session whose Target
+    /// counts as confirmed and is a subject's Target, and whose confirmed rig is a
+    /// Project rig, with its frames outside the Trash, whether the Project holds it
+    /// or not. An OBJECT header or an unevidenced suggestion counts for nothing.
+    /// In subject, rig and session order.
     ///
     /// # Errors
     /// `NotFound` for an unknown Project.
@@ -467,7 +470,8 @@ async fn subject_ids(conn: &mut SqliteConnection, project: Uuid) -> Result<HashM
     rows.iter().map(|(target, id)| Ok((parse_uuid(target)?, parse_uuid(id)?))).collect()
 }
 
-/// Keep each listed Target's subject and remove the rest with their goals. A
+/// Keep each listed Target's subject and remove the rest, keeping their goals
+/// hidden; a Target listed again gets its hidden goals back (D-W128). A
 /// subject a held session joined on is never removed: the session's joined
 /// Target is fixed and its goals keep counting it (PRJ-AC-26).
 async fn write_subjects(
@@ -496,12 +500,11 @@ async fn write_subjects(
                 if held == 1 { "" } else { "s" }
             )));
         }
-        for statement in [
-            "DELETE FROM project_goals WHERE subject_id = ?1",
-            "DELETE FROM project_subjects WHERE id = ?1",
-        ] {
-            sqlx::query(statement).bind(removed.to_string()).execute(&mut *conn).await?;
-        }
+        hide_goals(conn, *removed, *target).await?;
+        sqlx::query("DELETE FROM project_subjects WHERE id = ?1")
+            .bind(removed.to_string())
+            .execute(&mut *conn)
+            .await?;
     }
     for (position, subject) in (0_i64..).zip(subjects) {
         let id = stored.get(&subject.target_id).copied().unwrap_or_else(Uuid::new_v4);
@@ -517,7 +520,68 @@ async fn write_subjects(
         .bind(position)
         .execute(&mut *conn)
         .await?;
+        if !stored.contains_key(&subject.target_id) {
+            restore_hidden_goals(conn, project, subject.target_id).await?;
+        }
     }
+    Ok(())
+}
+
+/// Move the goals of `subject`, the subject of `target`, into the Project's
+/// hidden goals with their ids (D-W128): no read counts or shows them.
+async fn hide_goals(conn: &mut SqliteConnection, subject: Uuid, target: Uuid) -> Result<()> {
+    sqlx::query(
+        "INSERT INTO project_hidden_goals (id, project_id, target_id, group_id, kind, channel, \
+         goal_seconds, goal_frames, criterion, position) \
+         SELECT id, project_id, ?2, group_id, kind, channel, goal_seconds, goal_frames, \
+         criterion, position FROM project_goals WHERE subject_id = ?1",
+    )
+    .bind(subject.to_string())
+    .bind(target.to_string())
+    .execute(&mut *conn)
+    .await?;
+    sqlx::query("DELETE FROM project_goals WHERE subject_id = ?1")
+        .bind(subject.to_string())
+        .execute(&mut *conn)
+        .await?;
+    Ok(())
+}
+
+/// Give `target`'s subject, just added to `project`, the goals it had when it
+/// was removed, with their ids, after the Project's goals and in their order
+/// (D-W128). A panel goal whose group is gone or no longer a panel is
+/// dropped: no group is left for it.
+pub async fn restore_hidden_goals(
+    conn: &mut SqliteConnection,
+    project: Uuid,
+    target: Uuid,
+) -> Result<()> {
+    let next: i64 = sqlx::query_scalar(
+        "SELECT coalesce(max(position) + 1, 0) FROM project_goals WHERE project_id = ?1",
+    )
+    .bind(project.to_string())
+    .fetch_one(&mut *conn)
+    .await?;
+    sqlx::query(
+        "INSERT INTO project_goals (id, project_id, subject_id, group_id, kind, channel, \
+         goal_seconds, goal_frames, criterion, position) \
+         SELECT h.id, h.project_id, s.id, h.group_id, h.kind, h.channel, h.goal_seconds, \
+         h.goal_frames, h.criterion, ?3 + h.position FROM project_hidden_goals h \
+         JOIN project_subjects s ON s.project_id = h.project_id AND s.target_id = h.target_id \
+         WHERE h.project_id = ?1 AND h.target_id = ?2 AND (h.group_id IS NULL OR EXISTS \
+         (SELECT 1 FROM project_groups g WHERE g.project_id = h.project_id \
+         AND g.id = h.group_id AND g.panel = 1)) ORDER BY h.position",
+    )
+    .bind(project.to_string())
+    .bind(target.to_string())
+    .bind(next)
+    .execute(&mut *conn)
+    .await?;
+    sqlx::query("DELETE FROM project_hidden_goals WHERE project_id = ?1 AND target_id = ?2")
+        .bind(project.to_string())
+        .bind(target.to_string())
+        .execute(&mut *conn)
+        .await?;
     Ok(())
 }
 
@@ -822,19 +886,18 @@ async fn goal_inputs(conn: &mut SqliteConnection, project: Uuid) -> Result<Vec<G
 }
 
 /// The Project's candidates on `conn`'s snapshot: current sessions with a
-/// confirmed subject Target and a confirmed Project rig that hold a frame
-/// outside the Trash, each with only those frames.
+/// confirmed-or-evidence-qualified subject Target and a confirmed Project rig
+/// that hold a frame outside the Trash, each with only those frames.
 pub async fn candidates(
     conn: &mut SqliteConnection,
     project: Uuid,
 ) -> Result<Vec<ProjectCandidate>> {
     let rows = sqlx::query(
         "SELECT s.id AS session_id, s.grouping_revision, s.decision_revision, s.date_basis, \
-         ps.id AS subject_id, ea.equipment_id AS rig_id, \
-         (SELECT json_group_array(a.id) FROM live_assets a WHERE a.session_id = s.id) AS asset_ids \
+         ps.id AS subject_id, ea.equipment_id AS rig_id, ta.state AS target_state, \
+         ta.evidence AS target_evidence, (SELECT json_group_array(a.id) FROM live_assets a WHERE a.session_id = s.id) AS asset_ids \
          FROM project_subjects ps \
-         JOIN associations ta ON ta.kind = 'target' AND ta.state = 'confirmed' \
-         AND ta.target_id = ps.target_id \
+         JOIN associations ta ON ta.kind = 'target' AND ta.target_id = ps.target_id \
          JOIN sessions s ON s.id = ta.session_id AND s.superseded_by IS NULL \
          JOIN associations ea ON ea.session_id = s.id AND ea.kind = 'equipment' \
          AND ea.state = 'confirmed' \
@@ -845,22 +908,29 @@ pub async fn candidates(
     .bind(project.to_string())
     .fetch_all(&mut *conn)
     .await?;
-    rows.iter()
-        .map(|row| {
-            let ids: Vec<String> = from_json(&row.try_get::<String, _>("asset_ids")?)?;
-            let mut asset_ids = ids.iter().map(|id| parse_uuid(id)).collect::<Result<Vec<_>>>()?;
-            asset_ids.sort_unstable();
-            Ok(ProjectCandidate {
-                session_id: parse_uuid(&row.try_get::<String, _>("session_id")?)?,
-                grouping_revision: revision(row.try_get("grouping_revision")?)?,
-                decision_revision: revision(row.try_get("decision_revision")?)?,
-                date_basis: row.try_get("date_basis")?,
-                subject_id: parse_uuid(&row.try_get::<String, _>("subject_id")?)?,
-                rig_id: parse_uuid(&row.try_get::<String, _>("rig_id")?)?,
-                asset_ids,
-            })
-        })
-        .collect()
+    let mut candidates = Vec::with_capacity(rows.len());
+    for row in &rows {
+        let state: platevault_model::AssociationState =
+            from_text(&row.try_get::<String, _>("target_state")?)?;
+        let evidence: Vec<platevault_model::EvidenceItem> =
+            from_json(&row.try_get::<String, _>("target_evidence")?)?;
+        if !counts_as_confirmed(&state, &evidence) {
+            continue;
+        }
+        let ids: Vec<String> = from_json(&row.try_get::<String, _>("asset_ids")?)?;
+        let mut asset_ids = ids.iter().map(|id| parse_uuid(id)).collect::<Result<Vec<_>>>()?;
+        asset_ids.sort_unstable();
+        candidates.push(ProjectCandidate {
+            session_id: parse_uuid(&row.try_get::<String, _>("session_id")?)?,
+            grouping_revision: revision(row.try_get("grouping_revision")?)?,
+            decision_revision: revision(row.try_get("decision_revision")?)?,
+            date_basis: row.try_get("date_basis")?,
+            subject_id: parse_uuid(&row.try_get::<String, _>("subject_id")?)?,
+            rig_id: parse_uuid(&row.try_get::<String, _>("rig_id")?)?,
+            asset_ids,
+        });
+    }
+    Ok(candidates)
 }
 
 // ---------------------------------------------------------------------------
@@ -919,7 +989,9 @@ struct Frame {
     channel: Option<String>,
     exposure: Option<Microseconds>,
     quality: ApplicableQuality,
-    fwhm_median: Option<f64>,
+    /// The median FWHM in arcseconds; `None` without a valid measured value
+    /// or the frame's pixel scale.
+    fwhm_arcsec: Option<f64>,
     /// The subjects whose suggestions hold it.
     candidate_of: BTreeSet<Uuid>,
     holdings: Vec<Holding>,
@@ -1046,7 +1118,8 @@ fn root(parent: &HashMap<String, String>, key: &str) -> String {
 
 /// A frame's facts from its counted copies: image type, channel and exposure
 /// from its primary copy (Available first), applicable quality over every
-/// copy, and the median FWHM of the first copy with a valid measured record.
+/// copy, and the median FWHM in arcseconds of the first copy with a valid
+/// measured record and a known pixel scale.
 fn frame_of(
     copies: &[Asset],
     records: &mut HashMap<Uuid, MeasurementRecord>,
@@ -1059,7 +1132,7 @@ fn frame_of(
         })
         .expect("a frame holds at least one copy");
     let effective = &primary.effective;
-    let fwhm_median = copies.iter().find_map(|copy| {
+    let fwhm_arcsec = copies.iter().find_map(|copy| {
         let record = records.remove(&copy.id)?;
         if measurements::validity(copy, Some(&record), method) != RecordValidity::Valid {
             return None;
@@ -1070,7 +1143,7 @@ fn frame_of(
             .find(|value| {
                 value.metric == MetricId::FwhmMedian && value.state == MetricState::Measured
             })
-            .and_then(|value| value.value)
+            .and_then(|value| fwhm_in_arcsec(&value, &copy.effective))
     });
     Frame {
         light: effective.is_light(),
@@ -1082,10 +1155,41 @@ fn frame_of(
             .map(str::to_owned),
         exposure: effective.exposure_seconds.and_then(Microseconds::from_seconds),
         quality: capture_quality(&copies.iter().collect::<Vec<_>>()),
-        fwhm_median,
+        fwhm_arcsec,
         candidate_of: BTreeSet::new(),
         holdings: Vec::new(),
     }
+}
+
+/// A median FWHM in arcseconds: an arcsecond value as recorded, a pixel value
+/// through the frame's pixel scale, and `None` for another unit, no value or
+/// an unknown scale (PRJ-FR-03).
+fn fwhm_in_arcsec(value: &MetricValue, frame: &CaptureMetadata) -> Option<f64> {
+    let fwhm = value.value?;
+    match value.units {
+        Units::Arcsec => Some(fwhm),
+        Units::Px => Some(fwhm * pixel_scale_arcsec(frame)?),
+        _ => None,
+    }
+}
+
+/// Arcseconds per pixel from the frame's FOCALLEN and XPIXSZ; `None` when
+/// either, or the frame size `target_match` completes the field with, is
+/// unknown. XPIXSZ already includes binning ("physical X dimension of the
+/// sensor's pixels in microns … Includes binning", the `MaxIm DL` FITS File
+/// Header Definitions,
+/// <https://cdn.diffractionlimited.com/help/maximdl/FITS_File_Header_Definitions.htm>),
+/// as N.I.N.A. writes it too, so binning stays 1×1 here.
+fn pixel_scale_arcsec(frame: &CaptureMetadata) -> Option<f64> {
+    let pixel = frame.pixel_size_um?;
+    let field = Field::from_optics(Optics {
+        focal_mm: frame.focal_length_mm?,
+        pixel_um: (pixel, pixel),
+        binning: (1, 1),
+        pixels: (frame.width?, frame.height?),
+    })
+    .ok()?;
+    field.pixel_scale().map(|(x, _)| x)
 }
 
 /// One goal's two numbers over `frames`, each counted once. A frame is
@@ -1152,8 +1256,8 @@ fn admits(bars: &[QualityCriterion], frame: &Frame) -> Option<bool> {
                     return Some(false);
                 }
             }
-            QualityCriterion::MaxFwhmMedian { max_px } => match frame.fwhm_median {
-                Some(value) if value <= *max_px => {}
+            QualityCriterion::MaxFwhmMedian { max_arcsec } => match frame.fwhm_arcsec {
+                Some(value) if value <= *max_arcsec => {}
                 Some(_) => return Some(false),
                 None => unknown = true,
             },

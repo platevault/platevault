@@ -20,6 +20,7 @@ use persistence_library::SessionQuery;
 use platevault_core::custody::trash::OsTrash;
 use platevault_core::import::ImportCheck;
 use platevault_core::library::Library;
+use platevault_core::targets::{user_target, ObjectType, UserTargetInput, ICRS_FRAME};
 use platevault_core::*;
 use support::digest;
 use uuid::Uuid;
@@ -314,9 +315,11 @@ async fn preview_routes_lights_and_calibration_with_templated_paths() {
 
     assert_eq!(preview.state, ImportState::Previewed);
     assert_eq!(preview.items.len(), 6, "every source frame is listed");
+    // The lights have no pointing, so their session has no Target and OBJECT
+    // never names their folder (D-W129, J31 S3).
     for (relative, expected) in [
-        ("lights/NGC7000_Ha_001.fits", "NGC7000/Ha/2026-04-12/light/NGC7000_Ha_001.fits"),
-        ("lights/NGC7000_Ha_002.fits", "NGC7000/Ha/2026-04-12/light/NGC7000_Ha_002.fits"),
+        ("lights/NGC7000_Ha_001.fits", "unclassified/Ha/2026-04-12/light/NGC7000_Ha_001.fits"),
+        ("lights/NGC7000_Ha_002.fits", "unclassified/Ha/2026-04-12/light/NGC7000_Ha_002.fits"),
     ] {
         let light = item(&preview, relative);
         assert_eq!(light.phase, ImportItemPhase::Ready, "{relative}");
@@ -324,7 +327,11 @@ async fn preview_routes_lights_and_calibration_with_templated_paths() {
         assert_eq!(light.role, Some(LocationRole::Captures));
         assert_eq!(light.destination_location_id, Some(fixture.captures_id));
         assert_eq!(destination_text(light), rel(expected).display(), "lights keep their basename");
-        assert!(light.fallbacks.is_empty(), "no fallback for a fully described light");
+        assert_eq!(
+            light.fallbacks,
+            vec![NamingFallback { token: "target".into(), value: "unclassified".into() }],
+            "only the Target's fallback: OBJECT never fills {{target}}"
+        );
         assert_eq!(light.sha256.as_deref(), Some(digest(&card.join(relative)).as_str()));
     }
     let flat = item(&preview, "flats/flat_Ha_001.fits");
@@ -566,7 +573,7 @@ async fn collision_with_different_bytes_blocks_item() {
     let two = light(&card.join("light_002.fits"), Some("NGC7000"), "Ha", "2026-04-12T22:05:00");
     light(&card.join("light_003.fits"), Some("NGC7000"), "Ha", "2026-04-12T22:10:00");
     let folder =
-        fixture.captures.join("NGC7000/Ha/2026-04-12/light".split('/').collect::<PathBuf>());
+        fixture.captures.join("unclassified/Ha/2026-04-12/light".split('/').collect::<PathBuf>());
     fs::create_dir_all(&folder).unwrap();
     let occupant = folder.join("light_001.fits");
     fs::write(&occupant, b"a different frame that happens to share the name").unwrap();
@@ -603,7 +610,7 @@ async fn collision_with_different_bytes_blocks_item() {
     let moved_on = fixture.preview().await;
     let free = item(&moved_on, "light_001.fits");
     assert_eq!(free.phase, ImportItemPhase::Ready);
-    assert_eq!(destination_text(free), rel("NGC7000/2026-04-12/Ha/light_001.fits").display());
+    assert_eq!(destination_text(free), rel("unclassified/2026-04-12/Ha/light_001.fits").display());
     assert_eq!(digest(&one), free.sha256.clone().unwrap());
 }
 
@@ -1124,53 +1131,100 @@ async fn destination_offline_before_indexing_interrupts_until_indexed() {
 
 // ── Import review: sessions split by framing (LIB-FR-04/24, LIB-AC-31) ───────
 
-/// The fixture's 4×4 pixels at 3.76 µm behind 250 mm: the field diagonal the
-/// centre margin is a share of, in degrees.
-fn diagonal_deg() -> f64 {
-    4.0 * (206.264_806 * 3.76 / 250.0) * std::f64::consts::SQRT_2 / 3600.0
+/// A pointed light `minute` after 19:00 UTC on `day` October (14 unless
+/// set), its centre `offset` arcminutes north of the first framing, with the
+/// fixture's 4×4 pixels at 3.76 µm behind 250 mm.
+#[derive(Clone, Copy)]
+struct Pointed {
+    day: u32,
+    minute: u32,
+    offset: f64,
+    rotatang: f64,
+    sky_angle: f64,
+    exposure: u32,
+    object: &'static str,
 }
 
-/// A pointed NGC 7000 light `minute` after 19:00 UTC on 14 October, its centre
-/// `offset` (a share of the field diagonal) north of the first framing.
-fn framed_light(path: &Path, minute: u32, offset: f64, sky_angle: f64, exposure: u32) {
-    let cards = [
-        ("IMAGETYP", "'LIGHT'".to_owned()),
-        ("FILTER", "'Ha'".into()),
-        ("EXPTIME", exposure.to_string()),
-        ("GAIN", "100".into()),
-        ("DATE-OBS", format!("'2026-10-14T{:02}:{:02}:00'", 19 + minute / 60, minute % 60)),
-        ("INSTRUME", CAMERA.into()),
-        ("TELESCOP", TELESCOPE.into()),
-        ("OBJECT", "'NGC7000'".into()),
-        ("FOCALLEN", "250".into()),
-        ("XPIXSZ", "3.76".into()),
-        ("RA", "314.68".into()),
-        ("DEC", format!("{:.9}", 44.31 + offset * diagonal_deg())),
-        ("ROTATANG", "12.4".into()),
-        ("OBJCTROT", format!("{sky_angle:.1}")),
-    ];
-    let cards: Vec<(&str, &str)> =
-        cards.iter().map(|(key, value)| (*key, value.as_str())).collect();
-    frame(path, &cards);
+impl Pointed {
+    const fn at(minute: u32) -> Self {
+        Self {
+            day: 14,
+            minute,
+            offset: 0.0,
+            rotatang: 12.4,
+            sky_angle: 12.4,
+            exposure: 300,
+            object: "NGC7000",
+        }
+    }
+
+    const fn day(self, day: u32) -> Self {
+        Self { day, ..self }
+    }
+
+    const fn offset(self, offset: f64) -> Self {
+        Self { offset, ..self }
+    }
+
+    const fn rotatang(self, rotatang: f64) -> Self {
+        Self { rotatang, ..self }
+    }
+
+    const fn sky_angle(self, sky_angle: f64) -> Self {
+        Self { sky_angle, ..self }
+    }
+
+    const fn exposure(self, exposure: u32) -> Self {
+        Self { exposure, ..self }
+    }
+
+    const fn object(self, object: &'static str) -> Self {
+        Self { object, ..self }
+    }
+
+    fn write(self, path: &Path) {
+        let (day, minute) = (self.day, self.minute);
+        let cards = [
+            ("IMAGETYP", "'LIGHT'".to_owned()),
+            ("FILTER", "'Ha'".into()),
+            ("EXPTIME", self.exposure.to_string()),
+            ("GAIN", "100".into()),
+            (
+                "DATE-OBS",
+                format!("'2026-10-{day:02}T{:02}:{:02}:00'", 19 + minute / 60, minute % 60),
+            ),
+            ("INSTRUME", CAMERA.into()),
+            ("TELESCOP", TELESCOPE.into()),
+            ("OBJECT", format!("'{}'", self.object)),
+            ("FOCALLEN", "250".into()),
+            ("XPIXSZ", "3.76".into()),
+            ("RA", format!("{POINTING_RA:.7}")),
+            ("DEC", format!("{:.9}", POINTING_DEC + self.offset / 60.0)),
+            ("ROTATANG", format!("{:.1}", self.rotatang)),
+            ("OBJCTROT", format!("{:.1}", self.sky_angle)),
+        ];
+        let cards: Vec<(&str, &str)> =
+            cards.iter().map(|(key, value)| (*key, value.as_str())).collect();
+        frame(path, &cards);
+    }
 }
+
+/// Where the first framing of every pointed fixture points.
+const POINTING_RA: f64 = 314.68;
+const POINTING_DEC: f64 = 44.31;
 
 /// LIB-AC-31's night on the card, scaled down to keep the import suite fast
 /// (the grouping tests use its full 25/15/20): 5 lights before a meridian flip,
-/// 3 after it at the same framing, and 4 pointing 12 % of the field away.
+/// 3 after it at the same framing, and 4 pointing 8′ away, beyond the 5′
+/// default centre limit.
 fn flip_night(card: &Path) {
     for index in 0..12_u32 {
-        let (minute, offset, sky_angle) = match index {
-            0..5 => (index, 0.006, 12.4),
-            5..8 => (index + 5, -0.004, 192.4),
-            _ => (index + 10, 0.12, 12.4),
+        let shot = match index {
+            0..5 => Pointed::at(index).offset(0.3),
+            5..8 => Pointed::at(index + 5).offset(-0.2).sky_angle(192.4),
+            _ => Pointed::at(index + 10).offset(8.0),
         };
-        framed_light(
-            &card.join(format!("lights/NGC7000_Ha_{index:03}.fits")),
-            minute,
-            offset,
-            sky_angle,
-            300,
-        );
+        shot.write(&card.join(format!("lights/NGC7000_Ha_{index:03}.fits")));
     }
 }
 
@@ -1188,7 +1242,7 @@ async fn review_shows_the_framing_split_and_merges_and_resplits_before_anything_
     flip_night(&fixture.card);
     for index in 0..2_u32 {
         let path = fixture.card.join(format!("short/NGC7000_Ha_120s_{index}.fits"));
-        framed_light(&path, 130 + index, 0.0, 12.4, 120);
+        Pointed::at(130 + index).exposure(120).write(&path);
     }
     let library = &fixture.library;
 
@@ -1289,4 +1343,280 @@ async fn a_merge_made_in_review_sets_the_session_intake_creates() {
     let assets = fixture.library.catalog().location_assets(fixture.captures_id).await.unwrap();
     assert!(assets.iter().all(|asset| asset.effective.framing_label == framing.label));
     assert!(assets.iter().all(|asset| asset.observed.framing_label.is_none()));
+}
+
+// ── Import review: each session's Target (D-W129, J31 S3/S5a/S9) ────────────
+
+/// A saved user Target at the fixtures' first framing, so pointing matches it.
+async fn saved_target_at_the_pointing(library: &Library) -> TargetCandidate {
+    saved_target_north(library, "Pelican West", 0.0).await
+}
+
+/// A saved user Target `arcsec` north of the fixtures' first framing; the
+/// fixture's 12″ field holds it within 6″.
+async fn saved_target_north(library: &Library, designation: &str, arcsec: f64) -> TargetCandidate {
+    let candidate = user_target(&UserTargetInput {
+        designation: designation.into(),
+        aliases: Vec::new(),
+        common_name: None,
+        object_type: ObjectType::Other,
+        coordinates: Some(SkyCoordinates {
+            ra_deg: POINTING_RA,
+            dec_deg: POINTING_DEC + arcsec / 3600.0,
+            frame: ICRS_FRAME.into(),
+        }),
+    })
+    .unwrap();
+    library.catalog().save_target(&candidate, None).await.unwrap().candidate
+}
+
+#[tokio::test]
+async fn several_pointing_matches_keep_unclassified_and_recommend_the_nearest() {
+    let fixture = Fixture::new().await;
+    // Designation order is the reverse of distance, so only the ranking
+    // by field-centre separation recommends "Zeta Near".
+    let near = saved_target_north(&fixture.library, "Zeta Near", 1.0).await;
+    saved_target_north(&fixture.library, "Alpha Far", 4.0).await;
+    for minute in 0..2_u32 {
+        Pointed::at(minute).write(&fixture.card.join(format!("lights/both_{minute}.fits")));
+    }
+
+    let preview = fixture.preview().await;
+
+    let [session] = preview.sessions.as_slice() else { panic!("{:?}", preview.sessions) };
+    assert_eq!(session.target, None, "Unclassified stays preselected");
+    assert!(!session.target_chosen);
+    let recommended = session.recommended.as_ref().expect("the nearer Target is recommended");
+    assert_eq!((recommended.id, recommended.designation.as_str()), (near.id, "Zeta Near"));
+    for light in &preview.items {
+        assert!(destination_text(light).starts_with("unclassified"), "nothing files under it");
+        assert_eq!(light.target_id, None);
+    }
+
+    let chosen = fixture
+        .library
+        .choose_import_target(preview.id, preview.revision, session.items[0], Some(recommended.id))
+        .await
+        .unwrap();
+    assert_eq!(chosen.sessions[0].target.as_ref().map(|target| target.id), Some(near.id));
+    assert!(chosen.items.iter().all(|light| destination_text(light).starts_with("Zeta Near")));
+}
+
+/// The Target confirmed on the library session holding `asset_count` frames.
+async fn confirmed_targets(fixture: &Fixture) -> Vec<(usize, Option<Uuid>)> {
+    let mut confirmed = Vec::new();
+    for session in light_sessions(fixture).await {
+        let associations = fixture.library.catalog().associations(session.id).await.unwrap();
+        let target = associations
+            .iter()
+            .find(|association| {
+                association.kind == AssociationKind::Target
+                    && association.state == AssociationState::Confirmed
+            })
+            .and_then(|association| association.subject_id);
+        confirmed.push((session.asset_ids.len(), target));
+    }
+    confirmed
+}
+
+#[tokio::test]
+async fn a_pointed_session_is_prefilled_with_the_target_its_pointing_matches() {
+    let fixture = Fixture::new().await;
+    let target = saved_target_at_the_pointing(&fixture.library).await;
+    for minute in 0..3_u32 {
+        let path = fixture.card.join(format!("lights/M31_Ha_{minute}.fits"));
+        Pointed::at(minute).object("M31").write(&path);
+    }
+
+    let preview = fixture.preview().await;
+
+    let [session] = preview.sessions.as_slice() else { panic!("{:?}", preview.sessions) };
+    let prefilled = session.target.as_ref().expect("the pointing matches the saved Target");
+    assert_eq!((prefilled.id, prefilled.designation.as_str()), (target.id, "Pelican West"));
+    assert!(!session.target_chosen, "prefilled, not chosen");
+    assert_eq!(session.object.as_deref(), Some("M31"), "OBJECT is shown, only as a hint");
+    for light in &preview.items {
+        assert!(
+            destination_text(light).starts_with(&rel("Pelican West/Ha/2026-10-14/light").display()),
+            "{{target}} is the Target, never OBJECT: {}",
+            destination_text(light)
+        );
+        assert!(light.fallbacks.is_empty());
+    }
+
+    fixture.run(&preview, ImportMode::Copy, &fixture.trash()).await;
+    assert_eq!(confirmed_targets(&fixture).await, [(3, Some(target.id))], "filed under it");
+}
+
+#[tokio::test]
+async fn a_session_with_no_pointing_or_no_match_imports_under_unclassified() {
+    let fixture = Fixture::new().await;
+    // No Target lies in these lights' field, and OBJECT names a seed Target.
+    for minute in 0..2_u32 {
+        Pointed::at(minute).write(&fixture.card.join(format!("pointed_{minute}.fits")));
+    }
+    light(&fixture.card.join("plain_1.fits"), Some("NGC7000"), "OIII", "2026-10-14T23:00:00");
+    light(&fixture.card.join("plain_2.fits"), Some("NGC7000"), "OIII", "2026-10-14T23:05:00");
+
+    let preview = fixture.preview().await;
+
+    assert_eq!(preview.sessions.len(), 2);
+    for session in &preview.sessions {
+        assert_eq!(session.target, None, "Unclassified is preselected: {session:?}");
+        assert!(!session.target_chosen, "and no Target is chosen");
+        assert_eq!(session.object.as_deref(), Some("NGC7000"), "OBJECT stays a hint");
+    }
+    for light in &preview.items {
+        assert!(destination_text(light).starts_with("unclassified"), "{}", destination_text(light));
+        assert_eq!(
+            light.fallbacks,
+            vec![NamingFallback { token: "target".into(), value: "unclassified".into() }]
+        );
+    }
+    assert_eq!(preview.summary.ready, 4, "Import is available with no Target chosen");
+
+    fixture.run(&preview, ImportMode::Copy, &fixture.trash()).await;
+    let confirmed = confirmed_targets(&fixture).await;
+    assert_eq!(confirmed.len(), 2);
+    assert!(confirmed.iter().all(|(_, target)| target.is_none()), "{confirmed:?}");
+}
+
+#[tokio::test]
+async fn choosing_a_target_files_that_session_under_it() {
+    let fixture = Fixture::new().await;
+    let target = saved_target_at_the_pointing(&fixture.library).await;
+    // One session without pointing, one prefilled from its pointing.
+    light(&fixture.card.join("plain_1.fits"), Some("NGC7000"), "Ha", "2026-10-14T23:00:00");
+    light(&fixture.card.join("plain_2.fits"), Some("NGC7000"), "Ha", "2026-10-14T23:05:00");
+    Pointed::at(0).exposure(120).write(&fixture.card.join("pointed_1.fits"));
+    let library = &fixture.library;
+    let preview = fixture.preview().await;
+    let plain = item(&preview, "plain_1.fits").seq;
+    let pointed = item(&preview, "pointed_1.fits").seq;
+
+    let stale = library.choose_import_target(preview.id, 0, plain, Some(target.id)).await;
+    assert!(matches!(stale, Err(LibraryError::Conflict { .. })), "{stale:?}");
+    let unknown = library
+        .choose_import_target(preview.id, preview.revision, plain, Some(Uuid::new_v4()))
+        .await;
+    assert!(matches!(unknown, Err(LibraryError::NotFound(_))), "{unknown:?}");
+    let chosen = library
+        .choose_import_target(preview.id, preview.revision, plain, Some(target.id))
+        .await
+        .unwrap();
+    let chosen =
+        library.choose_import_target(chosen.id, chosen.revision, pointed, None).await.unwrap();
+
+    let session_of = |seq: u32| {
+        chosen.sessions.iter().find(|session| session.items.contains(&seq)).unwrap().clone()
+    };
+    let (plain_session, pointed_session) = (session_of(plain), session_of(pointed));
+    assert_eq!(plain_session.target.as_ref().map(|t| t.id), Some(target.id));
+    assert!(plain_session.target_chosen);
+    assert_eq!(pointed_session.target, None, "the user picked Unclassified over the prefill");
+    assert!(pointed_session.target_chosen);
+    assert_eq!(
+        destination_text(item(&chosen, "plain_2.fits")),
+        rel("Pelican West/Ha/2026-10-14/light/plain_2.fits").display(),
+        "the whole session moves under the chosen Target at once"
+    );
+    assert!(destination_text(item(&chosen, "pointed_1.fits")).starts_with("unclassified"));
+
+    fixture.run(&chosen, ImportMode::Copy, &fixture.trash()).await;
+    let mut confirmed = confirmed_targets(&fixture).await;
+    confirmed.sort_by_key(|(count, _)| *count);
+    assert_eq!(confirmed, [(1, None), (2, Some(target.id))]);
+}
+
+// ── Import review: the centre and rotation limits (CF2, owner 2026-10-20) ────
+
+/// Lights 0′, 3′ and 7′ from the first framing, and one at the first
+/// framing turned 4°.
+fn spread_night(card: &Path, day: u32) {
+    let shots = [
+        Pointed::at(0),
+        Pointed::at(1).offset(3.0),
+        Pointed::at(2).offset(7.0),
+        Pointed::at(3).rotatang(16.4),
+    ];
+    for (index, shot) in shots.iter().enumerate() {
+        shot.day(day).write(&card.join(format!("spread_{day}_{index}.fits")));
+    }
+}
+
+fn sizes(sessions: &[ImportSession]) -> Vec<usize> {
+    sessions.iter().map(|session| session.items.len()).collect()
+}
+
+const fn limits(centre_arcmin: f64, rotation_deg: f64) -> SplitLimits {
+    SplitLimits { max_centre_offset_arcmin: centre_arcmin, max_rotation_deg: rotation_deg }
+}
+
+#[tokio::test]
+async fn a_split_preview_recalculates_for_each_limit_without_writing_anything() {
+    let fixture = Fixture::new().await;
+    spread_night(&fixture.card, 14);
+    let library = &fixture.library;
+    let preview = fixture.preview().await;
+    assert_eq!(preview.split_limits, limits(5.0, 5.0), "the Settings default");
+    assert_eq!(sizes(&preview.sessions), [3, 1], "5′: the 7′ light is a second framing");
+
+    let split = |centre, rotation| async move {
+        sizes(&library.preview_import_split(preview.id, &limits(centre, rotation)).await.unwrap())
+    };
+    assert_eq!(split(2.0, 5.0).await, [2, 1, 1], "2′: 3′ away is another framing");
+    assert_eq!(split(5.0, 5.0).await, [3, 1]);
+    assert_eq!(split(10.0, 5.0).await, [4], "10′ holds all four");
+    assert_eq!(split(5.0, 3.0).await, [2, 1, 1], "3°: the light turned 4° splits");
+    assert_eq!(split(2.0, 3.0).await, [1, 1, 1, 1], "both limits move together");
+    let invalid = library.preview_import_split(preview.id, &limits(0.0, 5.0)).await;
+    assert!(matches!(invalid, Err(LibraryError::InvalidInput(_))), "{invalid:?}");
+
+    let unchanged = library.import_operation(preview.id).await.unwrap();
+    assert_eq!(unchanged.revision, preview.revision, "a split preview saves nothing");
+    assert_eq!(unchanged.sessions, preview.sessions);
+    assert!(!unchanged.split_overridden);
+    assert!(files_below(&fixture.captures).is_empty(), "and writes nothing");
+}
+
+#[tokio::test]
+async fn the_import_override_changes_only_that_import() {
+    let fixture = Fixture::new().await;
+    spread_night(&fixture.card, 14);
+    let other = fixture.temp.path().join("share").join("card-2");
+    spread_night(&other, 15);
+    let library = &fixture.library;
+    let preview = fixture.preview().await;
+
+    let stale = library.set_import_split_limits(preview.id, 0, Some(limits(10.0, 5.0))).await;
+    assert!(matches!(stale, Err(LibraryError::Conflict { .. })), "{stale:?}");
+    let wide = library
+        .set_import_split_limits(preview.id, preview.revision, Some(limits(10.0, 5.0)))
+        .await
+        .unwrap();
+    assert!(wide.revision > preview.revision);
+    assert_eq!((wide.split_limits, wide.split_overridden), (limits(10.0, 5.0), true));
+    assert_eq!(sizes(&wide.sessions), [4]);
+    assert_eq!(library.framing_margins().await.unwrap().split, limits(5.0, 5.0), "Settings keep");
+    let second = library
+        .preview_import(ImportSourceSpec::Folder { path: native(&other) }, CHECK)
+        .await
+        .unwrap();
+    assert_eq!(second.split_limits, limits(5.0, 5.0), "another import keeps the default");
+    assert_eq!(sizes(&second.sessions), [3, 1]);
+
+    fixture.run(&wide, ImportMode::Copy, &fixture.trash()).await;
+    fixture.run(&second, ImportMode::Copy, &fixture.trash()).await;
+    let mut shape: Vec<(String, usize)> = Vec::new();
+    for session in light_sessions(&fixture).await {
+        let detail = library.catalog().session(session.id).await.unwrap();
+        let night = detail.assets[0].effective.date_obs.clone().unwrap_or_default();
+        shape.push((night[..10].to_owned(), session.asset_ids.len()));
+    }
+    shape.sort();
+    assert_eq!(
+        shape,
+        [("2026-10-14".into(), 4), ("2026-10-15".into(), 1), ("2026-10-15".into(), 3)],
+        "intake splits each import with its own limits"
+    );
 }

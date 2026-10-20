@@ -9,14 +9,20 @@
 //! stay together.
 //!
 //! The framing is that of the session's anchor frame: the first of its frames
-//! in capture order that has pointing. Every other frame lies within the
-//! framing margins of the anchor, or the user put it there with a framing
-//! label (a merge or split in import review, recorded as a correction).
+//! in capture order that has pointing when intake split it. Every other frame
+//! lies within the framing's split limits of the anchor, or the user put it
+//! there with a framing label (a merge or split in import review, recorded as
+//! a correction).
+//!
+//! The split limits are those in force when intake formed the session, and
+//! they stay the session's (D-W107, owner 2026-10-15/16/20): a later frame
+//! joins the session when it lies within them of the anchor, and a later
+//! change of the Settings limits re-splits no session.
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{FieldOfView, LibraryError};
+use crate::{FieldOfView, LibraryError, SplitLimits};
 
 /// The correctable capture field that holds the user's framing label.
 pub const FRAMING_LABEL_FIELD: &str = "framingLabel";
@@ -42,19 +48,24 @@ pub struct SessionFraming {
     /// the same framing.
     #[serde(default)]
     pub sky_angle_deg: Option<f64>,
-    /// The anchor's field from its header optics; the centre margin is a
-    /// share of its diagonal. `None` when the header cannot give it.
+    /// The anchor's field from its header optics, for the overlap of two
+    /// framings; the centre limit is an angle and never reads it. `None`
+    /// when the header cannot give it.
     #[serde(default)]
     pub field: Option<FieldOfView>,
     /// The user's framing label when the user merged or split the framing.
     #[serde(default)]
     pub label: Option<String>,
+    /// The centre and rotation limits intake split the session with: a
+    /// frame indexed later joins it within these of the anchor.
+    pub split_limits: SplitLimits,
 }
 
 impl SessionFraming {
     /// # Errors
     /// `InvalidInput` for an ordinal of 0, a centre or angle outside its
-    /// range, a field that is not positive or a blank label.
+    /// range, a field that is not positive, a blank label or split limits
+    /// that are not valid.
     pub fn validate(&self) -> Result<(), LibraryError> {
         let invalid = |message: String| Err(LibraryError::InvalidInput(message));
         if self.ordinal == 0 {
@@ -85,6 +96,6 @@ impl SessionFraming {
         if self.label.as_deref().is_some_and(|label| label.trim().is_empty()) {
             return invalid("a framing label is not blank".into());
         }
-        Ok(())
+        self.split_limits.validate()
     }
 }

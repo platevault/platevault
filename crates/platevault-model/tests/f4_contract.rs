@@ -352,7 +352,7 @@ fn workflow_defaults_are_the_owner_approved_starting_values() {
         serde_json::json!({
             "framing": {
                 "minOverlapPercent": 90.0,
-                "maxCentreOffsetPercent": 5.0,
+                "maxCentreOffsetArcmin": 5.0,
                 "maxRotationDeg": 5.0,
                 "panelOverlapPercent": [5.0, 40.0],
             },
@@ -371,8 +371,13 @@ fn workflow_defaults_are_the_owner_approved_starting_values() {
     panels.framing.panel_overlap_percent = (40.0, 5.0);
     assert!(panels.validate().is_err(), "panel overlap is a range");
     let mut nan = WorkflowSettings::default();
-    nan.framing.max_rotation_deg = f64::NAN;
+    nan.framing.split.max_rotation_deg = f64::NAN;
     assert!(nan.validate().is_err());
+    for centre in [0.0, -1.0, f64::INFINITY, 10_800.0] {
+        let mut limits = WorkflowSettings::default();
+        limits.framing.split.max_centre_offset_arcmin = centre;
+        assert!(limits.validate().is_err(), "the centre limit is an angle: {centre}");
+    }
 }
 
 #[test]
@@ -848,6 +853,20 @@ fn entry_names_are_plain_basenames() {
     }
 }
 
+/// STO-IMP-AC-08: a Windows device name is no entry name on any platform,
+/// with or without an extension and in any case; a name that only starts
+/// with one is.
+#[test]
+fn entry_names_refuse_windows_device_names() {
+    let master = EntryInput::Master { master_id: id(900) };
+    for reserved in ["CON.fits", "con.fits", "COM1.json", "NUL", "aux.tar.xisf", "LPT9.fit"] {
+        assert!(EntryName::new(master, reserved).is_err(), "{reserved:?}");
+    }
+    for plain in ["CONSOLE.fits", "Light_CON.fits", "COM10.fits"] {
+        assert!(EntryName::new(master, plain).is_ok(), "{plain:?}");
+    }
+}
+
 #[test]
 fn the_apply_journal_moves_forward_and_settles_only_where_its_outcome_is_true() {
     let order = ApplyPhase::ORDER;
@@ -973,6 +992,7 @@ fn a_processing_master_is_offered_as_a_master_with_its_digest() {
 fn evidence(file: &str) -> EntryEvidence {
     EntryEvidence {
         path: path(file),
+        root: None,
         kind: EntryKind::File,
         fingerprint: fingerprint(60),
         sha256: Some(SHA.into()),

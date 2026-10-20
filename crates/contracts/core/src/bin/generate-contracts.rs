@@ -9,11 +9,11 @@
 //! `specs/<NNN>/contracts/<name>.json`. After generation, diff against the
 //! committed JSON; committed JSON is updated only when the drift is intentional.
 //!
-//! Currently covers spec 002's two contracts:
+//! Currently covers spec 002's two contracts and the library-shell request
+//! `PreviousItemResolution`:
 //! - `lifecycle.transition.json` — `TransitionRequest` / `TransitionResponse`
 //! - `provenance.read.json`      — `ProvenanceReadRequest` / `ProvenanceReadResponse`
-//!
-//! Other specs' contracts will be wired here as their Rust DTOs land.
+//! - `library.previous-item-resolution.json` — `PreviousItemResolution`
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -63,6 +63,14 @@ fn main() {
         "002-data-lifecycle-state-model",
         "provenance.read.generated.json",
     );
+
+    write_schema::<contracts_core::library_requests::PreviousItemResolution>(
+        &root,
+        "064-library-inventory",
+        "library.previous-item-resolution.generated.json",
+    );
+
+    println!("spec 064 — library inventory request DTOs");
 
     println!();
     println!("done. diff generated files against committed JSON to verify alignment.");

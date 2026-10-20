@@ -230,6 +230,11 @@ macro_rules! library_commands {
             crate::commands::import::import_start,
             crate::commands::import::import_retry,
             crate::commands::import::import_status,
+            crate::commands::import::import_merge_sessions,
+            crate::commands::import::import_resplit_session,
+            crate::commands::import::import_split_preview,
+            crate::commands::import::import_set_split_limits,
+            crate::commands::import::import_choose_target,
             // planning
             crate::commands::rigs::rig_filters_get,
             crate::commands::rigs::rig_filters_save,

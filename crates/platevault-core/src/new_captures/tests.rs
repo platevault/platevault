@@ -650,6 +650,7 @@ async fn archive_in_flight(
         draft: StorageItemDraft {
             source: EntryEvidence {
                 path: NativePath::from_path(&original),
+                root: None,
                 kind: EntryKind::File,
                 fingerprint: ObservationFingerprint {
                     content_sha256: None,

@@ -2,32 +2,32 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! Targets list records (spec 072 PLAN-TGT-FR-01/03/08/10) on the catalog's
-//! single serialized writer: ★ favourites, the open-Project subjects read
-//! beside them as My targets, "Add to targets", Sessions and Captured per
-//! channel over `live_assets`, and saved presets. A favourite or preset write
-//! changes only its own table; Add to targets also writes the Target record
-//! when it is not saved yet, in the same transaction.
+//! single serialized writer: ★ favourites, current associated session Targets
+//! and open-Project subjects read beside them as My targets, "Add to targets",
+//! Sessions and Captured per channel over `live_assets`, and saved presets. A
+//! favourite or preset write changes only its own table; Add to targets also
+//! writes the Target record when it is not saved yet, in the same transaction.
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use platevault_model::{
-    validate_preset_name, Availability, ChannelIntegration, LibraryError, MyTargetMarks,
-    PresetFilters, ProjectBadge, Revision, SavedPreset, TargetActivity, TargetCandidate,
-    TargetRecord,
+    counts_as_confirmed, validate_preset_name, AssociationState, Availability, ChannelIntegration,
+    EvidenceItem, LibraryError, MyTargetMarks, PresetFilters, ProjectBadge, Revision, SavedPreset,
+    TargetActivity, TargetCandidate, TargetRecord,
 };
 use sqlx::sqlite::SqliteConnection;
 use sqlx::{Connection, Row};
 use uuid::Uuid;
 
 use super::{
-    conflict, current_member_assets, db_revision, from_json, load_target, next_counter, now,
-    parse_uuid, require_revision, revision, to_json, upsert_target, validate_target, Catalog,
+    conflict, current_member_assets, db_revision, from_json, from_text, load_target, next_counter,
+    now, parse_uuid, require_revision, revision, to_json, upsert_target, validate_target, Catalog,
     Result,
 };
 
 impl Catalog {
-    /// The ★ favourites and the subjects of open Projects with their badges,
-    /// read from one snapshot.
+    /// Favourites, qualifying current session Targets with live members, and
+    /// open-Project subjects with badges, read from one snapshot.
     ///
     /// # Errors
     /// `PersistenceFailure` when the catalog cannot be read.
@@ -38,6 +38,25 @@ impl Catalog {
             sqlx::query_scalar("SELECT target_id FROM target_favourites ORDER BY target_id")
                 .fetch_all(&mut *snapshot)
                 .await?;
+        let session_rows = sqlx::query(
+            "SELECT a.target_id, a.state, a.evidence FROM associations a \
+             JOIN sessions s ON s.id = a.session_id AND s.superseded_by IS NULL \
+             WHERE a.kind = 'target' AND a.target_id IS NOT NULL \
+             AND EXISTS (SELECT 1 FROM live_assets la WHERE la.session_id = s.id) \
+             ORDER BY a.target_id, s.id",
+        )
+        .fetch_all(&mut *snapshot)
+        .await?;
+        let mut sessions = BTreeSet::new();
+        for row in &session_rows {
+            let state: AssociationState = from_text(&row.try_get::<String, _>("state")?)?;
+            let evidence: Vec<EvidenceItem> = from_json(&row.try_get::<String, _>("evidence")?)?;
+            if !counts_as_confirmed(&state, &evidence) {
+                continue;
+            }
+            let target = parse_uuid(&row.try_get::<String, _>("target_id")?)?;
+            sessions.insert(target);
+        }
         let rows = sqlx::query(
             "SELECT s.target_id, p.id, p.name FROM project_subjects s \
              JOIN projects p ON p.id = s.project_id WHERE p.lifecycle = 'open' \
@@ -48,6 +67,7 @@ impl Catalog {
         snapshot.rollback().await?;
         let mut marks = MyTargetMarks {
             favourites: favourites.iter().map(|id| parse_uuid(id)).collect::<Result<_>>()?,
+            sessions,
             badges: BTreeMap::new(),
         };
         for row in &rows {
@@ -116,15 +136,20 @@ impl Catalog {
         let mut conn = self.reader().await?;
         let mut snapshot = conn.begin().await?;
         let rows = sqlx::query(
-            "SELECT ta.target_id, s.id AS session_id FROM associations ta \
+            "SELECT ta.target_id, s.id AS session_id, ta.state, ta.evidence FROM associations ta \
              JOIN sessions s ON s.id = ta.session_id AND s.superseded_by IS NULL \
-             WHERE ta.kind = 'target' AND ta.state = 'confirmed' AND ta.target_id IS NOT NULL \
+             WHERE ta.kind = 'target' AND ta.target_id IS NOT NULL \
              ORDER BY ta.target_id, s.id",
         )
         .fetch_all(&mut *snapshot)
         .await?;
         let mut totals: BTreeMap<Uuid, Tally> = BTreeMap::new();
         for row in &rows {
+            let state: AssociationState = from_text(&row.try_get::<String, _>("state")?)?;
+            let evidence: Vec<EvidenceItem> = from_json(&row.try_get::<String, _>("evidence")?)?;
+            if !counts_as_confirmed(&state, &evidence) {
+                continue;
+            }
             let target = parse_uuid(&row.try_get::<String, _>("target_id")?)?;
             let session = parse_uuid(&row.try_get::<String, _>("session_id")?)?;
             let assets = current_member_assets(&mut snapshot, session).await?;

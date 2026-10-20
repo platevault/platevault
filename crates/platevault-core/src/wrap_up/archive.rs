@@ -28,6 +28,7 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fs;
+use std::ops::ControlFlow;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock, Mutex};
 
@@ -38,8 +39,9 @@ use uuid::Uuid;
 
 use super::project_folder;
 use crate::custody::trash::OsTrash;
-use crate::custody::{observe_entry, same_identity};
+use crate::custody::{observe_entry, same_identity, transfer};
 use crate::import::{classify, naming_metadata, writability};
+use crate::inventory::RootRefusal;
 use crate::layout::VIEW_FOLDER;
 use crate::library::{blocking, Library};
 use crate::{
@@ -268,10 +270,9 @@ impl Library {
             .into_iter()
             .map(|location| (location.id, location))
             .collect();
-        let destination_ready = {
-            let root = root.clone();
-            let online = destination.availability == Availability::Available;
-            blocking(move || Ok(online && writability(&root) == Writability::Writable)).await?
+        let destination_refusal = {
+            let destination = destination.clone();
+            blocking(move || Ok(write_refusal(&destination))).await?
         };
         let mut layouts = BTreeMap::new();
         for asset in &assets {
@@ -328,11 +329,8 @@ impl Library {
                         ReasonCode::SourceDrift,
                         format!("{} has no recorded digest", from.display()),
                     ))
-                } else if !destination_ready {
-                    Some((
-                        ReasonCode::WriteFailed,
-                        format!("location '{}' is not online and writable", destination.name),
-                    ))
+                } else if let Some(refusal) = &destination_refusal {
+                    Some((refusal.code, refusal.detail.clone()))
                 } else if fs::symlink_metadata(&to).is_ok() || !claimed.insert(to.clone()) {
                     Some((ReasonCode::DestinationOccupied, format!("{} is taken", to.display())))
                 } else {
@@ -360,6 +358,7 @@ impl Library {
                     draft: StorageItemDraft {
                         source: EntryEvidence {
                             path: NativePath::from_path(&from),
+                            root: locations.get(&asset.location_id).map(|at| at.path.clone()),
                             kind: EntryKind::File,
                             fingerprint: ObservationFingerprint {
                                 content_sha256: None,
@@ -489,8 +488,8 @@ impl Library {
     /// Advance one file to its outcome, stopping at a durable step when
     /// `control` asks.
     // The file's durable steps in their journal order; each early return is a
-    // recorded resume point.
-    #[allow(clippy::too_many_lines)]
+    // recorded resume point. Each journal step and reference move follows a
+    // check of the destination root (STO-FR-06/07).
     async fn archive_one(
         &self,
         run: &ArchiveRun,
@@ -499,9 +498,14 @@ impl Library {
         control: &dyn ArchiveControl,
         locations: &BTreeMap<Uuid, Location>,
     ) -> Result<(), LibraryError> {
-        let catalog = self.catalog();
         let storage = run.storage_operation_id;
         let step = &run.moves[index];
+        let destination = locations.get(&step.to_location_id).ok_or_else(|| {
+            LibraryError::PersistenceFailure(format!(
+                "archive move {} has no destination",
+                step.seq
+            ))
+        })?;
         let item = loop {
             let item = self.journal_item(storage, step.seq).await?;
             if item.outcome.is_some()
@@ -512,95 +516,124 @@ impl Library {
             if control.interrupted() {
                 return Ok(());
             }
+            // Each journal step writes below the destination root.
+            if let Err(reason) = destination_root(destination).await? {
+                return self.keep_source(storage, &item, ArchiveMoveOutcome::Blocked, reason).await;
+            }
             self.step_storage_operation(storage, Arc::clone(trash)).await?;
         };
         if let Some(outcome) = item.outcome {
             return self.settle_move(storage, step.seq, step.repointed, outcome, item.reason).await;
         }
-        if item.phase == ItemPhase::DestinationVerified {
-            let to = absolute(locations, step.to_location_id, &step.to_path).ok_or_else(|| {
-                LibraryError::PersistenceFailure(format!(
-                    "archive move {} has no destination",
-                    step.seq
-                ))
-            })?;
-            if !step.repointed {
-                let Some(fingerprint) = verified_copy(&item, &to).await? else {
-                    let reason = ItemReason::new(
-                        ReasonCode::DestinationChanged,
-                        format!(
-                            "{} changed after it was verified; the original stays",
-                            to.display()
-                        ),
-                    );
-                    return self
-                        .keep_source(storage, &item, ArchiveMoveOutcome::Blocked, reason)
-                        .await;
-                };
-                match catalog.record_archive_repoint(storage, step.seq, &fingerprint).await {
-                    // The record now reads the copy's path: new-capture
-                    // discovery reads the destination again. The source is
-                    // read again once the original settled (`run_archive`).
-                    Ok(()) => self.recorded_paths_changed(step.to_location_id),
-                    Err(LibraryError::IdentityConflict(detail)) => {
-                        let reason = ItemReason::new(
-                            ReasonCode::DestinationOccupied,
-                            format!(
-                                "{detail}; the original stays and {} is left for review",
-                                to.display()
-                            ),
-                        );
-                        return self
-                            .keep_source(storage, &item, ArchiveMoveOutcome::Blocked, reason)
-                            .await;
-                    }
-                    Err(error) => return Err(error),
-                }
-                if control.interrupted() {
-                    return Ok(());
-                }
-            }
-            let from =
-                absolute(locations, step.from_location_id, &step.from_path).ok_or_else(|| {
-                    LibraryError::PersistenceFailure(format!(
-                        "archive move {} has no source",
-                        step.seq
-                    ))
-                })?;
-            let done: BTreeSet<EntryKey> = run.repointed_links.iter().map(key).collect();
-            let records =
-                catalog.kept_view_links(run.project_id, &BTreeSet::from([step.asset_id])).await?;
-            for record in records.iter().filter(|record| !done.contains(&key(&record.link))) {
-                match self.repoint(storage, record, locations, &from, &to).await? {
-                    Ok(identity) => {
-                        let link = absolute_link(record).map_or_else(
-                            || record.link.clone(),
-                            |link| KeptViewLink { link, ..record.link.clone() },
-                        );
-                        catalog
-                            .record_kept_link_repoint(storage, step.seq, &link, &identity)
-                            .await?;
-                    }
-                    Err(reason) => {
-                        return self
-                            .keep_source(storage, &item, ArchiveMoveOutcome::SourceRetained, reason)
-                            .await;
-                    }
-                }
-            }
-            if control.interrupted() {
-                return Ok(());
-            }
+        if item.phase == ItemPhase::DestinationVerified
+            && self.move_references(run, index, &item, control, locations).await?.is_break()
+        {
+            return Ok(());
         }
         let item = loop {
             let item = self.journal_item(storage, step.seq).await?;
             if item.outcome.is_some() {
                 break item;
             }
+            // Retiring settles the file archived on the copy at the root; a
+            // retirement already requested is resumed whatever the root.
+            if item.phase == ItemPhase::DestinationVerified {
+                if let Err(reason) = destination_root(destination).await? {
+                    return self
+                        .keep_source(storage, &item, ArchiveMoveOutcome::SourceRetained, reason)
+                        .await;
+                }
+            }
             self.step_storage_operation(storage, Arc::clone(trash)).await?;
         };
         let outcome = item.outcome.unwrap_or(ItemOutcome::Uncertain);
         self.settle_move(storage, step.seq, true, outcome, item.reason).await
+    }
+
+    /// Move a verified file's catalog record, then each of its kept-View
+    /// links, to the archive copy; `Break` once the file settled without
+    /// retiring its original, or `control` asked to stop.
+    async fn move_references(
+        &self,
+        run: &ArchiveRun,
+        index: usize,
+        item: &StorageItem,
+        control: &dyn ArchiveControl,
+        locations: &BTreeMap<Uuid, Location>,
+    ) -> Result<ControlFlow<()>, LibraryError> {
+        let catalog = self.catalog();
+        let storage = run.storage_operation_id;
+        let step = &run.moves[index];
+        let missing = |what: &str| {
+            LibraryError::PersistenceFailure(format!("archive move {} has no {what}", step.seq))
+        };
+        let destination =
+            locations.get(&step.to_location_id).ok_or_else(|| missing("destination"))?;
+        let to = absolute(locations, step.to_location_id, &step.to_path)
+            .ok_or_else(|| missing("destination"))?;
+        let from = absolute(locations, step.from_location_id, &step.from_path)
+            .ok_or_else(|| missing("source"))?;
+        let settled = |outcome, reason| async move {
+            self.keep_source(storage, item, outcome, reason).await.map(|()| ControlFlow::Break(()))
+        };
+        // The record and every link move only to the registered root's copy
+        // whose bytes were just read again. Refused before the record moved,
+        // the source stays catalogued.
+        let checked = match destination_root(destination).await? {
+            Ok(()) => verified_copy(item, &to).await?,
+            Err(reason) => Err(reason),
+        };
+        let fingerprint = match checked {
+            Ok(fingerprint) => fingerprint,
+            Err(reason) if step.repointed => {
+                return settled(ArchiveMoveOutcome::SourceRetained, reason).await;
+            }
+            Err(reason) => return settled(ArchiveMoveOutcome::Blocked, reason).await,
+        };
+        if !step.repointed {
+            match catalog.record_archive_repoint(storage, step.seq, &fingerprint).await {
+                // The record now reads the copy's path: new-capture discovery
+                // reads the destination again. The source is read again once
+                // the original settled (`run_archive`).
+                Ok(()) => self.recorded_paths_changed(step.to_location_id),
+                Err(LibraryError::IdentityConflict(detail)) => {
+                    let reason = ItemReason::new(
+                        ReasonCode::DestinationOccupied,
+                        format!(
+                            "{detail}; the original stays and {} is left for review",
+                            to.display()
+                        ),
+                    );
+                    return settled(ArchiveMoveOutcome::Blocked, reason).await;
+                }
+                Err(error) => return Err(error),
+            }
+            if control.interrupted() {
+                return Ok(ControlFlow::Break(()));
+            }
+        }
+        let done: BTreeSet<EntryKey> = run.repointed_links.iter().map(key).collect();
+        let records =
+            catalog.kept_view_links(run.project_id, &BTreeSet::from([step.asset_id])).await?;
+        for record in records.iter().filter(|record| !done.contains(&key(&record.link))) {
+            let repointed = match destination_root(destination).await? {
+                Ok(()) => self.repoint(storage, record, locations, &from, &to).await?,
+                Err(reason) => Err(reason),
+            };
+            let identity = match repointed {
+                Ok(identity) => identity,
+                Err(reason) => return settled(ArchiveMoveOutcome::SourceRetained, reason).await,
+            };
+            let link = absolute_link(record).map_or_else(
+                || record.link.clone(),
+                |link| KeptViewLink { link, ..record.link.clone() },
+            );
+            catalog.record_kept_link_repoint(storage, step.seq, &link, &identity).await?;
+        }
+        if control.interrupted() {
+            return Ok(ControlFlow::Break(()));
+        }
+        Ok(ControlFlow::Continue(()))
     }
 
     async fn journal_item(&self, storage: Uuid, seq: u32) -> Result<StorageItem, LibraryError> {
@@ -640,7 +673,10 @@ impl Library {
         self.catalog().settle_archive_move(storage, seq, outcome, reason.as_ref()).await
     }
 
-    /// Settle a verified file without retiring its original.
+    /// Settle a file without retiring its original: a verified copy stays
+    /// beside the source it kept, an unverified one is blocked where the
+    /// journal left it. A journal not yet started starts so its first file
+    /// can settle.
     async fn keep_source(
         &self,
         storage: Uuid,
@@ -648,9 +684,17 @@ impl Library {
         outcome: ArchiveMoveOutcome,
         reason: ItemReason,
     ) -> Result<(), LibraryError> {
+        let kept = if item.phase == ItemPhase::DestinationVerified {
+            ItemOutcome::SourceKept
+        } else {
+            ItemOutcome::Blocked
+        };
+        if item.phase == ItemPhase::Pending {
+            self.catalog().start_storage_operation(storage).await?;
+        }
         let change = ItemChange {
             phase: ItemPhase::Settled,
-            outcome: Some(ItemOutcome::SourceKept),
+            outcome: Some(kept),
             reason: Some(reason.clone()),
             written: item.written.clone(),
         };
@@ -716,30 +760,106 @@ fn absolute_link(record: &KeptLinkRecord) -> Option<NativePath> {
     ))
 }
 
-/// The archive copy's observation with the verified digest, while it is
-/// still the copy the journal wrote; `None` otherwise.
+/// Why `location` can't receive an archive now: not online, not the folder
+/// it was registered as, or not writable; `None` when it can.
+fn write_refusal(location: &Location) -> Option<ItemReason> {
+    let offline = || {
+        ItemReason::new(
+            ReasonCode::WriteFailed,
+            format!("location '{}' is not online and writable", location.name),
+        )
+    };
+    if location.availability != Availability::Available {
+        return Some(offline());
+    }
+    if let Err(reason) = root_refusal(location) {
+        return Some(reason);
+    }
+    let root = location.path.to_path_buf().ok()?;
+    (writability(&root) != Writability::Writable).then(offline)
+}
+
+/// Refuse `location` unless its root is still the registered folder on the
+/// registered volume (STO-FR-06/07): a folder replaced or remounted at the
+/// same path receives nothing.
+fn root_refusal(location: &Location) -> Result<(), ItemReason> {
+    inventory::check_location_root(location).map_err(|refusal| match refusal {
+        RootRefusal::Mismatch(error) => {
+            tracing::info!(location = %location.id, %error, "archive: destination root is not the registered folder");
+            ItemReason::new(
+                ReasonCode::DestinationChanged,
+                format!(
+                    "location '{}' is no longer the folder it was registered as; nothing is \
+                     written to it",
+                    location.name
+                ),
+            )
+        }
+        RootRefusal::Unobserved(error) => {
+            tracing::warn!(location = %location.id, %error, "archive: destination root could not be checked");
+            ItemReason::new(
+                ReasonCode::WriteFailed,
+                format!("location '{}' is not online", location.name),
+            )
+        }
+    })
+}
+
+/// [`root_refusal`] off the async runtime, immediately before an archive
+/// writes below the destination or moves a record or link to it.
+async fn destination_root(location: &Location) -> Result<Result<(), ItemReason>, LibraryError> {
+    let location = location.clone();
+    blocking(move || Ok(root_refusal(&location))).await
+}
+
+/// The archive copy's observation with its digest, hashed again through a
+/// handle proven to be the copy the journal wrote (STO-FR-07): a copy that
+/// is no longer that file, or was rewritten since its verification, even in
+/// place, is refused.
 async fn verified_copy(
     item: &StorageItem,
     destination: &Path,
-) -> Result<Option<ObservationFingerprint>, LibraryError> {
-    let (Some(written), Some(sha256)) = (item.written.clone(), item.source.sha256.clone()) else {
-        return Ok(None);
+) -> Result<Result<ObservationFingerprint, ItemReason>, LibraryError> {
+    let changed = ItemReason::new(
+        ReasonCode::DestinationChanged,
+        format!("{} changed after it was verified; the original stays", destination.display()),
+    );
+    let (Some(written), Some(sha256), Some(target)) =
+        (item.written.clone(), item.source.sha256.clone(), item.destination.clone())
+    else {
+        return Ok(Err(changed));
     };
-    let probe = destination.to_path_buf();
-    let observed = blocking(move || Ok(inventory::probe_fingerprint(&probe))).await?;
-    Ok(observed
-        .ok()
-        .filter(|observed| same_identity(&observed.identity, &written.identity))
-        .map(|observed| ObservationFingerprint { content_sha256: Some(sha256), ..observed }))
+    let (source, path) = (item.source.clone(), destination.to_path_buf());
+    blocking(move || {
+        let observe = || {
+            inventory::probe_fingerprint(&path)
+                .ok()
+                .filter(|observed| same_identity(&observed.identity, &written.identity))
+        };
+        let Some(before) = observe() else { return Ok(Err(changed)) };
+        if let Err(reason) = transfer::verify(&source, &target, &written) {
+            return Ok(Err(reason));
+        }
+        // Unchanged across the re-read: the digest is of these bytes.
+        Ok(match observe() {
+            Some(after) if after == before => {
+                Ok(ObservationFingerprint { content_sha256: Some(sha256), ..after })
+            }
+            _ => Err(changed),
+        })
+    })
+    .await
 }
 
 /// Rebuild the link at `link`, recorded with `identity` and reading
-/// `from`, to read `to` (STO-FR-06): a new link is made beside it and
-/// atomically exchanged with it; the old entry, proven by a no-follow check
-/// to be the recorded link, is then deleted, since a link holds no data.
-/// Anything else at the path is swapped back untouched. A link already
-/// reading `to` is this archive's own after a stop.
-#[cfg(unix)]
+/// `from`, to read `to` (STO-FR-06, D-W111). A new link is made at `staged`
+/// beside it and takes its place: by an atomic exchange on macOS and Linux,
+/// and on Windows by moving the old link aside and installing the new one
+/// under its name, neither rename ever replacing an entry. The old entry,
+/// proven by a no-follow check to be the recorded link, is then deleted,
+/// since a link holds no data; anything else found at the path is put back
+/// untouched. A link already reading `to` is this archive's own after a
+/// stop. Junctions are never made.
 fn repoint_link(
     link: &Path,
     identity: &FileIdentity,
@@ -747,74 +867,345 @@ fn repoint_link(
     to: &Path,
     staged: &Path,
 ) -> Result<FileIdentity, ItemReason> {
-    use rustix::fs::{renameat_with, RenameFlags, CWD};
-
-    let failed = |detail: String| ItemReason::new(ReasonCode::WriteFailed, detail);
-    let changed = || {
-        ItemReason::new(
-            ReasonCode::DestinationChanged,
-            format!("{} changed outside PlateVault; it and its original stay", link.display()),
-        )
-    };
-    let ours = |evidence: &EntryEvidence| {
-        matches!(&evidence.kind, EntryKind::Link { target } if *target == NativePath::from_path(from))
-            && same_identity(&evidence.fingerprint.identity, identity)
-    };
-    let observe = |path: &Path| {
-        observe_entry(path).map_err(|error| failed(format!("{}: {error}", path.display())))
-    };
-    // The old link a stop left beside it after the exchange.
-    if observe_entry(staged).is_ok_and(|old| ours(&old)) {
-        let _ = fs::remove_file(staged);
-    }
-    if fs::read_link(link).is_ok_and(|target| target == to) {
-        return observe(link).map(|now| now.fingerprint.identity);
-    }
-    if !ours(&observe(link)?) {
-        return Err(changed());
-    }
-    std::os::unix::fs::symlink(to, staged)
-        .map_err(|error| failed(format!("{}: {error}", staged.display())))?;
-    let discard = || {
-        if fs::read_link(staged).is_ok_and(|target| target == to) {
-            let _ = fs::remove_file(staged);
-        }
-    };
-    if let Err(error) = renameat_with(CWD, staged, CWD, link, RenameFlags::EXCHANGE) {
-        discard();
-        return Err(failed(format!("{} cannot be exchanged: {error}", link.display())));
-    }
-    if !observe_entry(staged).is_ok_and(|old| ours(&old)) {
-        if renameat_with(CWD, staged, CWD, link, RenameFlags::EXCHANGE).is_ok() {
-            discard();
-            return Err(changed());
-        }
-        return Err(ItemReason::new(
-            ReasonCode::Interrupted,
-            format!(
-                "{} could not be swapped back; the old link is at {}",
-                link.display(),
-                staged.display()
-            ),
-        ));
-    }
-    fs::remove_file(staged).map_err(|error| failed(format!("{}: {error}", staged.display())))?;
-    observe(link).map(|now| now.fingerprint.identity)
+    let repoint = Repoint::new(link, identity, from, to, staged);
+    #[cfg(unix)]
+    let swap = Repoint::exchange;
+    #[cfg(not(unix))]
+    let swap = Repoint::move_aside;
+    repoint.run(swap)
 }
 
-#[cfg(not(unix))]
-fn repoint_link(
-    link: &Path,
-    _identity: &FileIdentity,
-    _from: &Path,
-    _to: &Path,
-    _staged: &Path,
-) -> Result<FileIdentity, ItemReason> {
-    Err(ItemReason::new(
-        ReasonCode::WriteFailed,
-        format!(
-            "repointing the kept View link {} is supported on macOS and Linux only; its original stays",
-            link.display()
-        ),
-    ))
+/// One kept-View link [`repoint_link`] rebuilds.
+struct Repoint<'a> {
+    link: &'a Path,
+    identity: &'a FileIdentity,
+    from: &'a Path,
+    to: &'a Path,
+    staged: &'a Path,
+    /// Where the old link waits while the new one takes its name.
+    aside: PathBuf,
+}
+
+impl<'a> Repoint<'a> {
+    fn new(
+        link: &'a Path,
+        identity: &'a FileIdentity,
+        from: &'a Path,
+        to: &'a Path,
+        staged: &'a Path,
+    ) -> Self {
+        let mut aside = staged.as_os_str().to_owned();
+        aside.push(".old");
+        Self { link, identity, from, to, staged, aside: PathBuf::from(aside) }
+    }
+
+    /// Check the link, stage its replacement and `swap` it in place.
+    fn run(
+        &self,
+        swap: impl Fn(&Self) -> Result<(), ItemReason>,
+    ) -> Result<FileIdentity, ItemReason> {
+        self.settle_leftovers()?;
+        if self.reads_to(self.link) {
+            return link_identity(self.link);
+        }
+        let current = observe_entry(self.link).map_err(|error| write_failed(self.link, &error))?;
+        if !self.recorded(&current) {
+            return Err(self.changed());
+        }
+        fs_pathsafe::create_symlink(self.to, self.staged)
+            .map_err(|error| write_failed(self.staged, &error))?;
+        swap(self)?;
+        link_identity(self.link)
+    }
+
+    /// What a stop left beside the link. The old link, after the new one
+    /// took its name, is deleted; while the name is still free it is put
+    /// back. A new link not yet in place is removed.
+    fn settle_leftovers(&self) -> Result<(), ItemReason> {
+        for old in [self.staged, self.aside.as_path()] {
+            if !self.recorded_at(old) {
+                continue;
+            }
+            if vacant(self.link) {
+                transfer::rename_noreplace(old, self.link)
+                    .map_err(|error| write_failed(self.link, &error))?;
+            } else if self.reads_to(self.link) {
+                let _ = fs::remove_file(old);
+            }
+        }
+        self.discard();
+        Ok(())
+    }
+
+    /// Exchange the staged link with the link atomically, then delete the
+    /// old one once it proves to be the recorded link.
+    #[cfg(unix)]
+    fn exchange(&self) -> Result<(), ItemReason> {
+        use rustix::fs::{renameat_with, RenameFlags, CWD};
+
+        let exchange = || renameat_with(CWD, self.staged, CWD, self.link, RenameFlags::EXCHANGE);
+        if let Err(error) = exchange() {
+            self.discard();
+            return Err(ItemReason::new(
+                ReasonCode::WriteFailed,
+                format!("{} cannot be exchanged: {error}", self.link.display()),
+            ));
+        }
+        if !self.recorded_at(self.staged) {
+            if exchange().is_ok() {
+                self.discard();
+                return Err(self.changed());
+            }
+            return Err(self.stranded(self.staged));
+        }
+        fs::remove_file(self.staged).map_err(|error| write_failed(self.staged, &error))
+    }
+
+    /// Move the link aside, install the staged link under its name, then
+    /// delete the old one, which proved to be the recorded link once aside.
+    /// Windows has no exchange, so this swap is not atomic: between its two
+    /// renames the link's name is free. Neither rename replaces an entry
+    /// ([`transfer::rename_noreplace`]), so a name taken in between fails
+    /// the install, the old link goes back and nothing is lost; a stop in
+    /// between leaves the old link aside, which the next run puts back
+    /// before it checks the link again ([`Self::settle_leftovers`]).
+    #[cfg(any(not(unix), test))]
+    fn move_aside(&self) -> Result<(), ItemReason> {
+        if let Err(error) = transfer::rename_noreplace(self.link, &self.aside) {
+            self.discard();
+            return Err(write_failed(self.link, &error));
+        }
+        let put_back = || transfer::rename_noreplace(&self.aside, self.link).is_ok();
+        if !self.recorded_at(&self.aside) {
+            if put_back() {
+                self.discard();
+                return Err(self.changed());
+            }
+            return Err(self.stranded(&self.aside));
+        }
+        if let Err(error) = transfer::rename_noreplace(self.staged, self.link) {
+            if put_back() {
+                self.discard();
+                return Err(write_failed(self.link, &error));
+            }
+            return Err(self.stranded(&self.aside));
+        }
+        fs::remove_file(&self.aside).map_err(|error| write_failed(&self.aside, &error))
+    }
+
+    /// Whether `evidence` is the recorded link: a link reading `from` with
+    /// the recorded identity.
+    fn recorded(&self, evidence: &EntryEvidence) -> bool {
+        matches!(&evidence.kind, EntryKind::Link { target } if *target == NativePath::from_path(self.from))
+            && same_identity(&evidence.fingerprint.identity, self.identity)
+    }
+
+    /// Whether `path` holds the recorded link, by a no-follow check.
+    fn recorded_at(&self, path: &Path) -> bool {
+        observe_entry(path).is_ok_and(|evidence| self.recorded(&evidence))
+    }
+
+    /// Whether `path` is a link reading the archive copy.
+    fn reads_to(&self, path: &Path) -> bool {
+        fs::read_link(path).is_ok_and(|target| target == self.to)
+    }
+
+    /// Remove the staged link while it is still a link reading `to`.
+    fn discard(&self) {
+        if self.reads_to(self.staged) {
+            let _ = fs::remove_file(self.staged);
+        }
+    }
+
+    fn changed(&self) -> ItemReason {
+        ItemReason::new(
+            ReasonCode::DestinationChanged,
+            format!("{} changed outside PlateVault; it and its original stay", self.link.display()),
+        )
+    }
+
+    fn stranded(&self, at: &Path) -> ItemReason {
+        ItemReason::new(
+            ReasonCode::Interrupted,
+            format!(
+                "{} could not be put back; the entry that was there is at {}",
+                self.link.display(),
+                at.display()
+            ),
+        )
+    }
+}
+
+fn write_failed(path: &Path, error: &impl std::fmt::Display) -> ItemReason {
+    ItemReason::new(ReasonCode::WriteFailed, format!("{}: {error}", path.display()))
+}
+
+/// The no-follow identity of the link at `path`.
+fn link_identity(path: &Path) -> Result<FileIdentity, ItemReason> {
+    observe_entry(path)
+        .map(|now| now.fingerprint.identity)
+        .map_err(|error| write_failed(path, &error))
+}
+
+/// Whether nothing is at `path`.
+fn vacant(path: &Path) -> bool {
+    fs::symlink_metadata(path).is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound)
+}
+
+/// The repoint contract, run with each platform's swap: the atomic exchange
+/// macOS and Linux use, and the no-replace move aside Windows uses, which
+/// is proven here against the same cases.
+#[cfg(all(test, unix))]
+mod tests {
+    use std::os::unix::fs::symlink;
+
+    use super::*;
+
+    /// A captures original, its archive copy and a View link reading the
+    /// original, all on one volume.
+    struct View {
+        _temp: tempfile::TempDir,
+        from: PathBuf,
+        to: PathBuf,
+        link: PathBuf,
+        staged: PathBuf,
+    }
+
+    impl View {
+        fn new() -> Self {
+            let temp = tempfile::tempdir().unwrap();
+            let root = fs::canonicalize(temp.path()).unwrap();
+            for folder in ["captures", "archive", "View"] {
+                fs::create_dir(root.join(folder)).unwrap();
+            }
+            let from = root.join("captures/Light_001.fits");
+            let to = root.join("archive/Light_001.fits");
+            fs::write(&from, b"frame").unwrap();
+            fs::write(&to, b"frame").unwrap();
+            let link = root.join("View/Light_001.fits");
+            symlink(&from, &link).unwrap();
+            let staged = root.join("View/.pv-repoint-op-0");
+            Self { _temp: temp, from, to, link, staged }
+        }
+
+        fn identity(&self) -> FileIdentity {
+            observe_entry(&self.link).unwrap().fingerprint.identity
+        }
+
+        fn aside(&self) -> PathBuf {
+            Repoint::new(&self.link, &self.identity(), &self.from, &self.to, &self.staged).aside
+        }
+
+        fn repoint(
+            &self,
+            identity: &FileIdentity,
+            exchange: bool,
+        ) -> Result<FileIdentity, ItemReason> {
+            let repoint = Repoint::new(&self.link, identity, &self.from, &self.to, &self.staged);
+            if exchange {
+                repoint.run(Repoint::exchange)
+            } else {
+                repoint.run(Repoint::move_aside)
+            }
+        }
+
+        /// Nothing is left beside the link and both files are untouched.
+        fn tidy(&self, aside: &Path) {
+            assert!(vacant(&self.staged) && vacant(aside), "a staged or old link is left");
+            assert_eq!(fs::read(&self.from).unwrap(), b"frame");
+            assert_eq!(fs::read(&self.to).unwrap(), b"frame");
+        }
+    }
+
+    #[test]
+    fn the_recorded_link_is_rebuilt_to_read_the_copy() {
+        for exchange in [true, false] {
+            let view = View::new();
+            let aside = view.aside();
+            let identity = view.repoint(&view.identity(), exchange).unwrap();
+            assert_eq!(fs::read_link(&view.link).unwrap(), view.to, "exchange: {exchange}");
+            assert!(same_identity(&view.identity(), &identity));
+            view.tidy(&aside);
+        }
+    }
+
+    #[test]
+    fn a_link_replaced_since_it_was_recorded_stays() {
+        for exchange in [true, false] {
+            let view = View::new();
+            let aside = view.aside();
+            let recorded = view.identity();
+            fs::remove_file(&view.link).unwrap();
+            // Same target, another link: its identity is not the recorded one.
+            let other = view.link.with_file_name("other");
+            symlink(&view.from, &other).unwrap();
+            fs::rename(&other, &view.link).unwrap();
+            let refused = view.repoint(&recorded, exchange).unwrap_err();
+            assert_eq!(refused.code, ReasonCode::DestinationChanged, "exchange: {exchange}");
+            assert_eq!(fs::read_link(&view.link).unwrap(), view.from);
+            view.tidy(&aside);
+        }
+    }
+
+    #[test]
+    fn a_file_at_the_link_path_is_never_touched() {
+        for exchange in [true, false] {
+            let view = View::new();
+            let aside = view.aside();
+            let recorded = view.identity();
+            fs::remove_file(&view.link).unwrap();
+            fs::write(&view.link, b"user data").unwrap();
+            let refused = view.repoint(&recorded, exchange).unwrap_err();
+            assert_eq!(refused.code, ReasonCode::DestinationChanged, "exchange: {exchange}");
+            assert_eq!(fs::read(&view.link).unwrap(), b"user data");
+            view.tidy(&aside);
+        }
+    }
+
+    #[test]
+    fn a_link_already_reading_the_copy_is_this_archives_own() {
+        for exchange in [true, false] {
+            let view = View::new();
+            let aside = view.aside();
+            let recorded = view.identity();
+            fs::remove_file(&view.link).unwrap();
+            symlink(&view.to, &view.link).unwrap();
+            let identity = view.repoint(&recorded, exchange).unwrap();
+            assert!(same_identity(&view.identity(), &identity), "exchange: {exchange}");
+            view.tidy(&aside);
+        }
+    }
+
+    /// A stop between moving the old link aside and installing the new one
+    /// left the name free: the old link goes back first, then is rebuilt.
+    #[test]
+    fn a_stop_with_the_old_link_aside_puts_it_back_first() {
+        for exchange in [true, false] {
+            let view = View::new();
+            let aside = view.aside();
+            let recorded = view.identity();
+            fs::rename(&view.link, &aside).unwrap();
+            symlink(&view.to, &view.staged).unwrap();
+            view.repoint(&recorded, exchange).unwrap();
+            assert_eq!(fs::read_link(&view.link).unwrap(), view.to, "exchange: {exchange}");
+            view.tidy(&aside);
+        }
+    }
+
+    /// A stop after the new link took the name left the old one beside it,
+    /// where each swap puts it: it is deleted.
+    #[test]
+    fn a_stop_after_the_swap_deletes_the_old_link() {
+        for exchange in [true, false] {
+            let view = View::new();
+            let aside = view.aside();
+            let recorded = view.identity();
+            let beside = if exchange { view.staged.clone() } else { aside.clone() };
+            fs::rename(&view.link, &beside).unwrap();
+            symlink(&view.to, &view.link).unwrap();
+            view.repoint(&recorded, exchange).unwrap();
+            assert_eq!(fs::read_link(&view.link).unwrap(), view.to, "exchange: {exchange}");
+            view.tidy(&aside);
+        }
+    }
 }

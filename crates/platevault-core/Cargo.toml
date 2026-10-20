@@ -65,6 +65,8 @@ test-pacing = []
 
 [target.'cfg(windows)'.dependencies]
 winapi-util = "0.1.11"
+# The folder and file rename that never replaces (`custody::transfer`).
+fs_noreplace_windows = { path = "../fs/noreplace-windows" }
 
 [target.'cfg(unix)'.dependencies]
 rustix = { version = "1.1", features = ["fs", "process"] }

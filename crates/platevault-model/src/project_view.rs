@@ -358,6 +358,18 @@ pub enum EntryInput {
     Master { master_id: Uuid },
 }
 
+impl EntryInput {
+    /// The capture key, asset id or master id the name is reserved by.
+    #[must_use]
+    pub const fn id(self) -> Uuid {
+        match self {
+            Self::Capture { capture_key } => capture_key,
+            Self::CalibrationFrame { asset_id } => asset_id,
+            Self::Master { master_id } => master_id,
+        }
+    }
+}
+
 /// An input's entry basename, fixed for life (PREP-FR-19, D-W114): a newcomer
 /// whose name clashes takes a suffix, and the existing entry keeps its name.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -369,16 +381,19 @@ pub struct EntryName {
 
 impl EntryName {
     /// # Errors
-    /// `InvalidInput` for an empty name, `.` or `..`, a path separator or a
-    /// control character.
+    /// `InvalidInput` for a name that is not one plain path component on
+    /// every platform: empty, holding a path separator or a control
+    /// character, `.` or `..`, or a Windows device name such as `CON.fits`,
+    /// by `safe_filename`'s traversal and reserved-name steps.
     pub fn new(input: EntryInput, basename: &str) -> Result<Self, LibraryError> {
-        let plain = !basename.is_empty()
-            && basename != "."
-            && basename != ".."
-            && !basename.chars().any(|c| c == '/' || c == '\\' || c.is_control());
-        if !plain {
-            return Err(invalid(format!("{basename:?} is not a plain file name")));
+        let refused = |why: &str| invalid(format!("{basename:?} is no entry name: {why}"));
+        if basename.is_empty() || basename.chars().any(|c| c == '/' || c == '\\' || c.is_control())
+        {
+            return Err(refused("it is not a plain file name"));
         }
+        safe_filename::step3_traversal_check(basename)
+            .and_then(|()| safe_filename::step4_reserved_name_check(basename))
+            .map_err(|error| refused(&error.to_string()))?;
         Ok(Self { input, basename: basename.to_owned() })
     }
 }

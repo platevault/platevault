@@ -513,7 +513,6 @@ async fn retire_review_projects_include_open_closed_and_archived_pin_holders() {
         .unwrap();
     let current = catalog.session(light).await.unwrap().summary.session;
     catalog.confirm_equipment(&[support::expected_session(&current)], rig.id).await.unwrap();
-    let current = catalog.session(light).await.unwrap().summary.session;
     for kind in [InputKind::Bias, InputKind::Flat] {
         let current = catalog.session_calibration(light).await.unwrap().calibration.generation;
         catalog.decline_calibration(&[(light, current)], kind).await.unwrap();

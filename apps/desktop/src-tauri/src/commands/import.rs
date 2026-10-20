@@ -2,13 +2,17 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! Import IPC (spec 071 STO-IMP-FR-01..06/08): saved sources, the templated
-//! preview and its choices, Start and Retry, and the import's status.
+//! preview and its choices, import review of the sessions the lights form
+//! (merge, re-split, each session's Target and the import's own split
+//! limits; LIB-FR-04/24, D-W107, D-W129), Start and Retry, and the import's
+//! status.
 //!
 //! Registered only by the isolated rebuilt shell ([`crate::library_shell`]).
-//! Previews and choices write nothing to any location. Start approves the
-//! preview revision the user saw and runs the import in the background on the
-//! host OS Trash; `import_status` reads its durable progress. Retry resumes an
-//! interrupted import from its recorded journal.
+//! Previews and choices write nothing to any location, and the split preview
+//! saves nothing at all. Start approves the preview revision the user saw and
+//! runs the import in the background on the host OS Trash; `import_status`
+//! reads its durable progress. Retry resumes an interrupted import from its
+//! recorded journal.
 
 use std::sync::Arc;
 
@@ -16,8 +20,8 @@ use platevault_core::custody::trash::{OsTrash, SystemTrash};
 use platevault_core::import::ImportCheck;
 use platevault_core::library::Library;
 use platevault_core::{
-    ImportMode, ImportOperation, ImportSourceSpec, LocationRole, NamingFrameType, NativePath,
-    SavedSource, SavedSourceView,
+    ImportMode, ImportOperation, ImportSession, ImportSourceSpec, LocationRole, NamingFrameType,
+    NativePath, SavedSource, SavedSourceView, SplitLimits,
 };
 use tauri::State;
 use uuid::Uuid;
@@ -139,6 +143,91 @@ pub async fn import_choose_location(
 ) -> Reply<ImportOperation> {
     library
         .choose_import_location(id, expected_revision, role, location_id)
+        .await
+        .map_err(fail(Some(id)))
+}
+
+/// Merge the sessions holding `seqs` (an item of each) into one before the
+/// import starts; only sessions that differ in framing alone merge.
+///
+/// # Errors
+/// `InvalidInput` for fewer than two sessions, sessions of different capture
+/// keys or an item in no session; `Conflict` for a stale revision.
+#[tauri::command]
+#[specta::specta]
+pub async fn import_merge_sessions(
+    library: State<'_, Arc<Library>>,
+    id: Uuid,
+    expected_revision: u64,
+    seqs: Vec<u32>,
+) -> Reply<ImportOperation> {
+    library.merge_import_sessions(id, expected_revision, &seqs).await.map_err(fail(Some(id)))
+}
+
+/// Re-split the merged session holding item `seq` by framing again.
+///
+/// # Errors
+/// `InvalidInput` for a session that was not merged or an item in no
+/// session; `Conflict` for a stale revision.
+#[tauri::command]
+#[specta::specta]
+pub async fn import_resplit_session(
+    library: State<'_, Arc<Library>>,
+    id: Uuid,
+    expected_revision: u64,
+    seq: u32,
+) -> Reply<ImportOperation> {
+    library.resplit_import_session(id, expected_revision, seq).await.map_err(fail(Some(id)))
+}
+
+/// The sessions the import's lights would form with these centre and
+/// rotation limits, for the review's sliders. Saves nothing.
+///
+/// # Errors
+/// `InvalidInput` for limits out of range; `NotFound` for an unknown import.
+#[tauri::command]
+#[specta::specta]
+pub async fn import_split_preview(
+    library: State<'_, Arc<Library>>,
+    id: Uuid,
+    limits: SplitLimits,
+) -> Reply<Vec<ImportSession>> {
+    library.preview_import_split(id, &limits).await.map_err(fail(Some(id)))
+}
+
+/// Give the import its own centre and rotation limits, or (`null`) split it
+/// with the Settings default again. Only this import changes.
+///
+/// # Errors
+/// `InvalidInput` for limits out of range; `Conflict` for a stale revision.
+#[tauri::command]
+#[specta::specta]
+pub async fn import_set_split_limits(
+    library: State<'_, Arc<Library>>,
+    id: Uuid,
+    expected_revision: u64,
+    limits: Option<SplitLimits>,
+) -> Reply<ImportOperation> {
+    library.set_import_split_limits(id, expected_revision, limits).await.map_err(fail(Some(id)))
+}
+
+/// Choose the Target the session holding item `seq` files under, or
+/// Unclassified (`null`), in place of the one its pointing matches.
+///
+/// # Errors
+/// `NotFound` for an unknown Target; `InvalidInput` for an item in no
+/// session; `Conflict` for a stale revision.
+#[tauri::command]
+#[specta::specta]
+pub async fn import_choose_target(
+    library: State<'_, Arc<Library>>,
+    id: Uuid,
+    expected_revision: u64,
+    seq: u32,
+    target_id: Option<Uuid>,
+) -> Reply<ImportOperation> {
+    library
+        .choose_import_target(id, expected_revision, seq, target_id)
         .await
         .map_err(fail(Some(id)))
 }

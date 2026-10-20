@@ -162,8 +162,10 @@ pub fn validate_rigs(rig_ids: &[Uuid]) -> Result<(), LibraryError> {
 pub enum QualityCriterion {
     /// Only frames whose applicable library quality is Usable count.
     UsableOnly,
-    /// Only frames whose measured median FWHM is at most `max_px` pixels count.
-    MaxFwhmMedian { max_px: f64 },
+    /// Only frames whose measured median FWHM, in arcseconds through the
+    /// frame's own pixel scale, is at most `max_arcsec` count. A frame whose
+    /// pixel scale is unknown cannot be judged (PRJ-FR-03).
+    MaxFwhmMedian { max_arcsec: f64 },
 }
 
 impl QualityCriterion {
@@ -300,9 +302,11 @@ impl GoalSpec {
                     )));
                 }
             }
-            Self::QualityBar { criterion: QualityCriterion::MaxFwhmMedian { max_px } } => {
-                if !max_px.is_finite() || *max_px <= 0.0 {
-                    return Err(invalid(format!("quality bar maxPx {max_px} must be above 0")));
+            Self::QualityBar { criterion: QualityCriterion::MaxFwhmMedian { max_arcsec } } => {
+                if !max_arcsec.is_finite() || *max_arcsec <= 0.0 {
+                    return Err(invalid(format!(
+                        "quality bar maxArcsec {max_arcsec} must be above 0"
+                    )));
                 }
             }
             Self::QualityBar { criterion: QualityCriterion::UsableOnly } => {}
@@ -452,7 +456,8 @@ pub struct ProjectSubject {
 }
 
 /// A stored goal; its id stays across edits while its subject, panel group,
-/// kind and channel (or criterion) stay.
+/// kind and channel (or criterion) stay. A removed subject's goals are hidden
+/// and return with their ids when its Target is added back (D-W128).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]

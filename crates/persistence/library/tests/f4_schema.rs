@@ -26,8 +26,9 @@ use std::path::Path;
 
 use persistence_library::Catalog;
 use platevault_model::{
-    AdmissionBasis, AdmissionBlocker, ApplyPhase, ExpectedAsset, InputKind, PinState,
-    ProjectLifecycle, ProjectOperationKind, Quality, SessionReadiness,
+    counts_as_confirmed, AdmissionBasis, AdmissionBlocker, ApplyPhase, AssociationState,
+    EvidenceItem, ExpectedAsset, InputKind, PinState, ProjectLifecycle, ProjectOperationKind,
+    Quality, SessionReadiness,
 };
 use project_state_support::{ha_frames, world, World};
 use sqlx::sqlite::{SqliteConnectOptions, SqliteConnection};
@@ -315,8 +316,8 @@ async fn a_fresh_catalog_records_the_f4_schema_version_and_tables() {
             .fetch_one(&mut conn)
             .await
             .unwrap();
-    assert_eq!(version, 18);
-    assert_eq!(persistence_library::SCHEMA_VERSION, 18);
+    assert_eq!(version, 20);
+    assert_eq!(persistence_library::SCHEMA_VERSION, 20);
     let tables: Vec<String> =
         sqlx::query_scalar("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
             .fetch_all(&mut conn)
@@ -436,6 +437,76 @@ async fn sql_admits_only_ready_settled_sessions_at_their_current_basis_once() {
     f4.add_session().await.unwrap();
     let error = f4.add_session().await.unwrap_err();
     assert!(error.contains("UNIQUE"), "a session joins a Project once: {error}");
+}
+
+/// D-W124, LIB-FR-05, LIB-FR-20: a Target associated by agreeing evidence
+/// counts as confirmed. Every evidence combination gets one answer from the
+/// Rust rule, from the admission contract's readiness and from the SQL
+/// trigger that restates the rule: confirmed; Suggested with an agreeing
+/// alias, qualified geometry and no conflict; and each condition missing.
+#[tokio::test]
+async fn an_associated_target_counts_as_confirmed_alike_in_rust_and_sql() {
+    let mut f4 = F4::new().await;
+    f4.admissible().await;
+    let session: Uuid = f4.session.parse().unwrap();
+    let alias = EvidenceItem::Alias { normalized: "ngc 7000".into(), agrees: true };
+    let other_alias = EvidenceItem::Alias { normalized: "ic 5070".into(), agrees: false };
+    let pointing = EvidenceItem::Coordinates { ra_deg: 314.7, dec_deg: 44.3, qualified: true };
+    let wide = EvidenceItem::Coordinates { ra_deg: 300.0, dec_deg: 10.0, qualified: false };
+    let footprint = EvidenceItem::Footprint { overlap: 1.0, qualified: true };
+    let conflict =
+        EvidenceItem::Conflict { field: "object".into(), values: vec!["NGC 7000".into()] };
+    let cases = [
+        ("confirmed", AssociationState::Confirmed, vec![], true),
+        ("agreeing", AssociationState::Suggested, vec![alias.clone(), pointing.clone()], true),
+        ("by footprint", AssociationState::Suggested, vec![alias.clone(), footprint], true),
+        ("no alias", AssociationState::Suggested, vec![pointing.clone()], false),
+        ("other alias", AssociationState::Suggested, vec![other_alias, pointing.clone()], false),
+        ("no geometry", AssociationState::Suggested, vec![alias.clone()], false),
+        ("unqualified", AssociationState::Suggested, vec![alias.clone(), wide], false),
+        (
+            "conflict",
+            AssociationState::Suggested,
+            vec![alias.clone(), pointing.clone(), conflict],
+            false,
+        ),
+        (
+            "needs review",
+            AssociationState::NeedsReview,
+            vec![alias.clone(), pointing.clone()],
+            false,
+        ),
+        ("unresolved", AssociationState::Unresolved, vec![alias, pointing], false),
+    ];
+    for (case, state, evidence, counts) in cases {
+        assert_eq!(counts_as_confirmed(&state, &evidence), counts, "{case}: the Rust rule");
+        let state_text = serde_json::to_value(&state).unwrap();
+        let evidence_text = serde_json::to_string(&evidence).unwrap();
+        ok(
+            &mut f4.conn,
+            "UPDATE associations SET state = ?2, evidence = ?3 \
+             WHERE session_id = ?1 AND kind = 'target'",
+            &[&f4.session, state_text.as_str().unwrap(), &evidence_text],
+        )
+        .await;
+        let readiness =
+            f4.world.catalog.session_admission(session).await.unwrap().intake.readiness();
+        let expected = if counts { SessionReadiness::Ready } else { SessionReadiness::NeedsTarget };
+        assert_eq!(readiness, expected, "{case}: the admission contract");
+        let added = f4.add_session().await;
+        if counts {
+            assert_eq!(added, Ok(()), "{case}: the trigger admits it");
+            ok(
+                &mut f4.conn,
+                "DELETE FROM project_sessions WHERE project_id = ?1 AND session_id = ?2",
+                &[&f4.project, &f4.session],
+            )
+            .await;
+        } else {
+            let error = added.unwrap_err();
+            assert!(error.contains("only a Ready session"), "{case}: the trigger refuses: {error}");
+        }
+    }
 }
 
 // ── Duplicate guards ─────────────────────────────────────────────────────────
@@ -584,6 +655,15 @@ async fn close_needs_its_snapshot_and_wrap_up_and_a_closed_project_is_locked() {
         &mut f4.conn,
         "DELETE FROM project_goals WHERE project_id = ?1",
         &[&f4.project],
+        "Closed Project is locked",
+    )
+    .await;
+    refused(
+        &mut f4.conn,
+        "INSERT INTO project_hidden_goals (id, project_id, target_id, kind, channel, \
+         goal_frames, position) \
+         VALUES ('hidden', ?1, ?2, 'frame_count', 'Ha', 10, 0)",
+        &[&f4.project, &f4.world.ngc.candidate.id.to_string()],
         "Closed Project is locked",
     )
     .await;

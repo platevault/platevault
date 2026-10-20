@@ -254,3 +254,16 @@ CREATE TRIGGER IF NOT EXISTS project_capture_copies_locked_delete
 BEFORE DELETE ON project_capture_copies
 WHEN (SELECT lifecycle FROM projects WHERE id = OLD.project_id) IS NOT 'open'
 BEGIN SELECT RAISE(ABORT, 'a Closed Project is locked'); END;
+
+CREATE TRIGGER IF NOT EXISTS project_hidden_goals_locked_insert
+BEFORE INSERT ON project_hidden_goals
+WHEN (SELECT lifecycle FROM projects WHERE id = NEW.project_id) IS NOT 'open'
+BEGIN SELECT RAISE(ABORT, 'a Closed Project is locked'); END;
+CREATE TRIGGER IF NOT EXISTS project_hidden_goals_locked_update
+BEFORE UPDATE ON project_hidden_goals
+WHEN (SELECT lifecycle FROM projects WHERE id = OLD.project_id) IS NOT 'open'
+BEGIN SELECT RAISE(ABORT, 'a Closed Project is locked'); END;
+CREATE TRIGGER IF NOT EXISTS project_hidden_goals_locked_delete
+BEFORE DELETE ON project_hidden_goals
+WHEN (SELECT lifecycle FROM projects WHERE id = OLD.project_id) IS NOT 'open'
+BEGIN SELECT RAISE(ABORT, 'a Closed Project is locked'); END;

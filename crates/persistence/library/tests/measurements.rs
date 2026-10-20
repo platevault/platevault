@@ -17,10 +17,10 @@ use platevault_model::{
     reasons, Asset, Availability, ColumnClass, DecodedBasis, Drift, ExportLayout, FrameState,
     FrameStateKind, ImageFormat, ImportBasis, ImportCell, ImportColumn, ImportFormat,
     ImportReviewState, ImportRow, ImportSource, ImportVerification, InputBasis, LibraryError,
-    Location, LocationLifecycle, MaskCounts, MeasurementMethod, MeasurementOutcome,
-    MeasurementRecord, MetricId, MetricValue, NativePath, PlaneBasis, PreambleEntry,
-    RecordValidity, ReferenceKind, RowMatch, RowResolution, RunIssue, RunState, SampleFormat,
-    SaturationBasis, SaturationSource, Scaling, Units, Verification,
+    Location, LocationLifecycle, MaskCounts, MeasurementFailureCode, MeasurementFailureParameters,
+    MeasurementMethod, MeasurementOutcome, MeasurementRecord, MetricId, MetricValue, NativePath,
+    PlaneBasis, PreambleEntry, RecordValidity, ReferenceKind, RowMatch, RowResolution, RunIssue,
+    RunState, SampleFormat, SaturationBasis, SaturationSource, Scaling, Units, Verification,
 };
 use sqlx::{Connection, Row};
 use support::{kind, scan, sha_of, DiskProbe, Fixture};
@@ -85,8 +85,8 @@ fn record(
     fingerprint.content_sha256 = Some(sha256.to_owned());
     let outcome = if failed {
         MeasurementOutcome::Failed {
-            reason: reasons::UNSUPPORTED_FORMAT.into(),
-            message: "FITS tile compression".into(),
+            code: MeasurementFailureCode::UnsupportedFormat,
+            parameters: MeasurementFailureParameters::default(),
         }
     } else {
         MeasurementOutcome::Measured {
@@ -497,8 +497,11 @@ async fn one_run_runs_at_a_time_and_counters_issues_and_interruption_are_durable
     let run = ix.catalog.record_measurement(run.operation_id, &measured).await.unwrap();
     assert_eq!((run.counters.measured, run.counters.remaining, run.revision), (1, 2, 3));
     assert_eq!(ix.catalog.measurement(measured.id).await.unwrap(), measured);
-    let issue =
-        RunIssue { asset_id: ids[1], kind: "source_unavailable".into(), message: "offline".into() };
+    let issue = RunIssue {
+        asset_id: ids[1],
+        kind: platevault_model::LibraryErrorCode::SourceUnavailable,
+        parameters: BTreeMap::new(),
+    };
     let run = ix.catalog.record_run_issue(run.operation_id, &issue).await.unwrap();
     assert_eq!((run.counters.unavailable, run.counters.remaining), (1, 1));
     assert_eq!(run.issues, vec![issue.clone()]);
@@ -515,7 +518,7 @@ async fn one_run_runs_at_a_time_and_counters_issues_and_interruption_are_durable
         (1, 2, 0)
     );
     assert_eq!(run.issues[1].asset_id, ids[2]);
-    assert_eq!(run.issues[1].kind, "identity_conflict");
+    assert_eq!(run.issues[1].kind, platevault_model::LibraryErrorCode::IdentityConflict);
     assert_eq!(kind(&ix.catalog.measurement(stale.id).await.unwrap_err()), "not_found");
     assert!(ix.catalog.frame_records(&ids[2..], &method()).await.unwrap()[0].record.is_none());
 
