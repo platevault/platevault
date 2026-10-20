@@ -157,5 +157,21 @@ The owner answered five open product questions on 2026-10-19 (D-W124, D-W125, D-
 - D-W127 (J15 G10, PLAN-EQ-FR-04, `add_filter_to_rig`): Keep Add {value} to {rig} in the session. The unknown filter is shown there and the prompt asks which bands it passes; the prototype needs this control.
 - D-W128 (J20 G9, `readded_goals`): Removing a subject keeps its goals hidden in the Project; adding the subject back restores them.
 - D-W129 (J31 G8, `import_no_target`): Unclassified is preselected when an import session has no pointing or no matching Target, so Import is always available; a Target is chosen only to file the session under it.
+## Owner's answers, 2026-10-20 (second batch)
+
+The owner answered the remaining rebuild questions in astro-plan-rrcz1 and astro-plan-sbdbs. Each answer below records the settled behavior.
+- D-W130 (session editing; owner's answer, 2026-10-20): Edit… changes a session's name and notes, including when a Closed or Archived Project holds the session; those Projects show the new name. A Trashed session is the only session that cannot be edited.
+- D-W131 (re-split identity; owner's answer, 2026-10-20): When a session is re-split, its name and notes stay with the part holding its first frame.
+- D-W132 (unknown filter; owner's answer, 2026-10-20): If an imported FILTER value has no filter on its rig but matches an existing filter record, that record is also offered for the unknown value, as in Settings > Unknown filters.
+- D-W133 (ambiguous import Target; owner's answer, 2026-10-20): When import pointing matches several Targets, Unclassified stays preselected and the preview recommends the Target nearest the field centre.
+- D-W134 (restored goals on Target change; owner's answer, 2026-10-20): Re-pointing a subject to a Target with hidden goals restores them, and the subject's replaced goals are hidden under its old Target (D-W128).
+- D-W135 (removed subject without goals; owner's answer, 2026-10-20): When a subject with no goals is removed and then added back, it returns with the template's goals.
+- D-W136 (orphaned panel goal; owner's answer, 2026-10-20): A hidden panel goal whose group is gone is dropped.
+- D-W137 (kept file missing before Apply; owner's answer, 2026-10-20): If a kept file from View (previous)/ has disappeared from disk before Apply, review reports it as missing.
+- D-W138 (pinned calibration blocks retirement; owner's answer, 2026-10-20): Retiring a location pinned by calibration is refused in review, which lists every Project holding a session that pins a file at the location.
+- D-W139 (filesystem without atomic no-replace rename; owner's answer, 2026-10-20): On a volume without atomic no-replace rename, such as exFAT, a folder moves onto its own empty placeholder and a file moves as a verified copy.
+- D-W140 (Changed content after review; owner's answer, 2026-10-20): If a frame's bytes change after review, its session returns to Needs review until the frame is reconfirmed or its reviewed bytes return. Apply waits in every holding Project. This is not a pending change.
+- D-W141 (corrected successor joins matching session; owner's answer, 2026-10-20, astro-plan-sbdbs): When a metadata correction moves frames into a successor whose corrected capture key and night match an existing session within both framing limits, the frames join the nearest one: centre, then rotation, then the earlier session (D-W107). The joined session changes as well. Every open Project holding either session gets a labelled pending change; the changed sessions read Needs review until Ready, Apply waits, and Activity records the frame lineage (LIB-FR-12, D15).
+
 
 Sources: the legacy facts are in legacy-frontend-facts.md.
