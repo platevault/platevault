@@ -1015,7 +1015,7 @@ function demoSeed(): SeedData {
       leftovers: [
         { path: rewritten.path, reason: "changed-copy", sizeBytes: rewritten.sizeBytes, kept: false },
         { path: "notes-panel-2.txt", reason: "unplaced", sizeBytes: 3_200, kept: false },
-        // Reviewed as Keep: it stays and is not asked about again.
+        // Reviewed as Keep: it is not asked about again, and the next Apply moves it to View (kept)/.
         { path: "framing-sketch.png", reason: "unplaced", sizeBytes: 420_000, kept: true },
       ],
     },

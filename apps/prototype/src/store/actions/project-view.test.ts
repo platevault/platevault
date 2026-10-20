@@ -1,12 +1,12 @@
 import { beforeAll, beforeEach, describe, expect, it } from "vitest"
-import { fileAt, filesUnder } from "@/domain/disk"
+import { fakeSha256, fileAt, filesUnder, makeFile, volumeForPath, writeFiles } from "@/domain/disk"
 import { applyPlan, processingMasters, projectPaths } from "@/domain/project-view"
 import { createSeed } from "@/domain/seed"
 import type { Operation, Project } from "@/domain/types"
 import { m, say } from "@/lib/i18n"
 import { type PrototypeState, SCHEMA_VERSION, store } from "@/store/core"
 import { cancelOperation, isSettled, registerOperationHandlers } from "@/store/operations"
-import { createExternalFile, deleteFileExternally, setViewFileHeld } from "@/store/simulation"
+import { deleteFileExternally, setViewFileHeld } from "@/store/simulation"
 import { initialSliceStates, sliceVersions } from "@/store/slices"
 import { adoptionCheck, adoptProcessingMaster, type ApplyPhase, applyPhase, PROJECT_VIEW_HANDLERS, reviewLeftover, startApply } from "./project-view"
 import { setFramesExcluded } from "./projects"
@@ -120,38 +120,75 @@ describe("a failed or canceled Apply leaves the current View intact (PREP-FR-06)
   })
 })
 
-describe("View (previous)/ holds kept files (D-W110; stopgap while the merge rule is open, decision record §9)", () => {
-  /** Apply once, keep the unticked notes.txt it left in View (previous)/, then make the next Apply's change and a new unplaced file. */
-  function keptThenChanged(): string {
-    runUntil(start())
-    expect(reviewLeftover(CYGNUS, "notes.txt", "keep")).toEqual({ ok: true })
-    const input = project().inputs[0]!
-    expect(setFramesExcluded(CYGNUS, input.sessionId, [store.getState().catalog.sessions[input.sessionId]!.assetIds[0]!], true)).toEqual({ ok: true })
-    createExternalFile(`${paths().view}/tool-log.txt`)
-    return "tool-log.txt"
+describe("the next Apply moves kept files to View (kept)/ at their View paths (D-W110, VSEL-AC-34)", () => {
+  /** A file of the user's under the View with its own bytes (`version`), as a tool or the user writes it there. */
+  function userFile(relative: string, version: number) {
+    store.setState((s) => {
+      const path = `${paths().view}/${relative}`
+      const file = makeFile({ path, volumeId: volumeForPath(s.disk, path)!, sizeBytes: 1_024, kind: "other", sha256: fakeSha256(path, version), modifiedAt: "2026-10-20T12:00:00.000Z" })
+      return { ...s, disk: writeFiles(s.disk, [file]) }
+    })
   }
 
-  it("refuses an Apply that would leave more files beside the kept ones, and keeps the current View", () => {
-    const unplaced = keptThenChanged()
-    const before = { view: project().view, files: folder(paths().view) }
+  /** Every file under View (kept)/ by its path inside it, with its digest. */
+  const keptFiles = () => Object.fromEntries(folder(paths().kept).map((f) => [f.path.slice(paths().kept.length + 1), f.sha256]))
+
+  /** Make a pending change the next Apply carries: one more frame of the first session excluded. */
+  function changeSomething(round: number) {
+    const input = project().inputs[0]!
+    const frame = store.getState().catalog.sessions[input.sessionId]!.assetIds[round]!
+    expect(setFramesExcluded(CYGNUS, input.sessionId, [frame], true)).toEqual({ ok: true })
+  }
+
+  /** Apply with nothing ticked, then keep `path` from what it left in View (previous)/; returns the kept file's digest. */
+  function applyThenKeep(path: string): string {
+    const id = start()
+    expect(runUntil(id).at(-1)).toBe("swapping")
+    expect(operation(id).status).toBe("succeeded")
+    expect(reviewLeftover(CYGNUS, path, "keep")).toEqual({ ok: true })
+    return fileAt(store.getState().disk, `${paths().previous}/${path}`)!.sha256
+  }
+
+  it("does not wait for kept files: the next Apply moves each one to View (kept)/ at its path from inside the View", () => {
+    userFile("Lights/Ha/notes.txt", 1)
+    const notes = applyThenKeep("notes.txt")
+    expect(reviewLeftover(CYGNUS, "Lights/Ha/notes.txt", "keep")).toEqual({ ok: true })
+    const nested = fileAt(store.getState().disk, `${paths().previous}/Lights/Ha/notes.txt`)!.sha256
+    changeSomething(0)
+    // New files PlateVault didn't place, left unticked: one shares the kept file's name.
+    userFile("notes.txt", 2)
+    userFile("tool-log.txt", 1)
+
     const plan = applyPlan(store.getState(), project())
     expect(plan.refusals).toEqual([])
     const { result, operationId } = startApply(CYGNUS, { fingerprint: plan.fingerprint, tickedUnplaced: [] })
-    expect(result).toMatchObject({ ok: false, reason: "refused", reasons: [m.apply_refused_previous_kept({ count: 1 })] })
-    expect(operationId).toBeNull()
-    expect(project().view).toEqual(before.view)
-    expect(folder(paths().view)).toEqual(before.files)
-    expect(project().previous?.leftovers).toContainEqual(expect.objectContaining({ path: "notes.txt", kept: true }))
-    expect(fileAt(store.getState().disk, `${paths().view}/${unplaced}`)).toBeDefined()
+    expect(result).toEqual({ ok: true })
+    expect(runUntil(operationId!)).toEqual(["building", "verifying", "swapping"])
+    expect(operation(operationId!).status).toBe("succeeded")
+    expect(say(m, operation(operationId!).summary!)).toContain(m.op_apply_moved_kept({ count: 2, n: "2" }))
+
+    expect(keptFiles()).toEqual({ "Lights/Ha/notes.txt": nested, "notes.txt": notes })
+    // View (previous)/ now holds only what this Apply left, none of it kept.
+    expect(project().previous?.leftovers.map((l) => ({ path: l.path, kept: l.kept })).sort((a, b) => a.path.localeCompare(b.path))).toEqual([
+      { path: "notes.txt", kept: false },
+      { path: "tool-log.txt", kept: false },
+    ])
+    expect(fileAt(store.getState().disk, `${paths().previous}/notes.txt`)?.sha256).not.toBe(notes)
+    expect(fileAt(store.getState().disk, `${paths().previous}/Lights/Ha/notes.txt`)).toBeUndefined()
   })
 
-  it("goes ahead once every file PlateVault didn't place is ticked, so nothing new joins the kept files", () => {
-    const unplaced = keptThenChanged()
-    const plan = applyPlan(store.getState(), project())
-    const { result, operationId } = startApply(CYGNUS, { fingerprint: plan.fingerprint, tickedUnplaced: [unplaced] })
-    expect(result).toEqual({ ok: true })
-    expect(runUntil(operationId!).at(-1)).toBe("swapping")
-    expect(operation(operationId!).status).toBe("succeeded")
+  it("gives a name View (kept)/ already holds -2, and a further clash the next free number", () => {
+    const digests: string[] = []
+    for (let round = 0; round < 3; round++) {
+      // Each round a new notes.txt the user keeps; the next Apply moves it to View (kept)/.
+      if (round > 0) userFile("notes.txt", round)
+      digests.push(applyThenKeep("notes.txt"))
+      changeSomething(round)
+    }
+    runUntil(start())
+    expect(keptFiles()).toEqual({ "notes.txt": digests[0], "notes-2.txt": digests[1], "notes-3.txt": digests[2] })
+    expect(new Set(digests).size).toBe(3)
+    expect(project().previous).toBeNull()
   })
 })
 

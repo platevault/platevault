@@ -254,7 +254,7 @@ function fieldName(m: Messages, field: CorrectionField): string {
 }
 
 function leftoverReason(m: Messages, leftover: PreviousLeftover): string {
-  if (leftover.kept) return m.status_keep()
+  if (leftover.kept) return m.project_previous_kept()
   return leftover.reason === "changed-copy" ? m.project_previous_changed() : leftover.reason === "unverified-copy" ? m.project_previous_unverified() : m.project_previous_unplaced()
 }
 

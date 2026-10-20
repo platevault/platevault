@@ -11,8 +11,9 @@
  * session's calibration (a reassigned pin), fixed at their source or by
  * removing the session (D-W109). Apply builds a complete `View (building)/`
  * from the originals only, verifies it and swaps it in; the old View
- * becomes `View (previous)/`, whose leftovers the next Apply waits on
- * (D-W110). Tools work in `Processing/<Tool>/`; Results live in `Output/`.
+ * becomes `View (previous)/`, whose leftovers the next Apply waits on, and
+ * the files the user kept there move to `View (kept)/` (D-W110). Tools work
+ * in `Processing/<Tool>/`; Results live in `Output/`.
  */
 import { KIND_NAME, masterKindOf, PIN_KINDS, sameChoice, sessionPinProblems, type CalSource, sourceFor, sourceKey, type PinProblem } from "./calibration"
 import { type OfferEntry, type OfferRefusal, sessionsInTransfer, type TrashOffer, trashOffer, unusableFramesOffer } from "./archive"
@@ -98,6 +99,8 @@ import { joinRefs, m, type MessageRef, type Messages, msg, say, verbatim } from 
 export const VIEW_FOLDER = "View"
 export const BUILDING_FOLDER = "View (building)"
 export const PREVIOUS_FOLDER = "View (previous)"
+/** Where the next Apply moves the files the user kept in `View (previous)/`, at their paths from inside the View (D-W110). */
+export const KEPT_FOLDER = "View (kept)"
 export const PROCESSING_FOLDER = "Processing"
 export const OUTPUT_FOLDER = "Output"
 /** Each mosaic panel's result folder under `Output/` (RES-FR-08). */
@@ -125,6 +128,7 @@ export interface ProjectPaths {
   view: string
   building: string
   previous: string
+  kept: string
   processing: string
   output: string
 }
@@ -134,7 +138,7 @@ export function projectPaths(world: Pick<World, "settings">, project: Pick<Proje
   const parent = project.settings.processingParent ?? world.settings.lastProcessingParent
   const root = project.folderPath ?? (parent ? `${parent}/${projectFolderName(project.name)}` : null)
   if (!root) return null
-  return { root, view: `${root}/${VIEW_FOLDER}`, building: `${root}/${BUILDING_FOLDER}`, previous: `${root}/${PREVIOUS_FOLDER}`, processing: `${root}/${PROCESSING_FOLDER}`, output: `${root}/${OUTPUT_FOLDER}` }
+  return { root, view: `${root}/${VIEW_FOLDER}`, building: `${root}/${BUILDING_FOLDER}`, previous: `${root}/${PREVIOUS_FOLDER}`, kept: `${root}/${KEPT_FOLDER}`, processing: `${root}/${PROCESSING_FOLDER}`, output: `${root}/${OUTPUT_FOLDER}` }
 }
 
 /** A tool's working and output folder, `Processing/<Tool>/` (PREP-FR-07): one per tool, never `Output/`. */
@@ -880,9 +884,24 @@ export function viewDrift(world: Pick<World, "disk">, project: Pick<Project, "vi
   return { changed, unplaced }
 }
 
-/** The leftovers in `View (previous)/` still to review: the next Apply waits on them (D-W110). A kept one is not asked about again (provisional). */
+/** The leftovers in `View (previous)/` still to review: the next Apply waits on them (D-W110). A kept one is not asked about again. */
 export function unreviewedLeftovers(project: Pick<Project, "previous">): PreviousLeftover[] {
   return project.previous?.leftovers.filter((l) => !l.kept) ?? []
+}
+
+/**
+ * Where the next Apply moves a kept leftover (D-W110): `View (kept)/` at its
+ * path from inside the View, such as `View (kept)/Lights/Ha/notes.txt`. A
+ * name the folder already holds takes the next free number, `-2`, `-3` and
+ * on; nothing is asked.
+ */
+export function keptDestination(world: Pick<World, "disk">, keptFolder: string, path: string): string {
+  const slash = path.lastIndexOf("/")
+  const dir = `${keptFolder}/${path.slice(0, slash + 1)}`
+  const name = path.slice(slash + 1)
+  let chosen = `${dir}${name}`
+  for (let n = 2; fileAt(world.disk, chosen); n += 1) chosen = `${dir}${suffixed(name, n)}`
+  return chosen
 }
 
 // ---------------------------------------------------------------------------

@@ -6114,7 +6114,7 @@
       }
     }
   ],
-  "project_label_keep_previous": "Manter {name} em View (previous)",
+  "project_label_keep_previous": "Manter {name} para View (kept)",
   "project_label_move_previous": "Mover {name} para a View",
   "project_label_move_sessions": [
     {
@@ -6867,10 +6867,11 @@
       }
     }
   ],
-  "apply_refused_previous_kept": [
+  "op_apply_moved_kept": [
     {
       "declarations": [
         "input count",
+        "input n",
         "local countPlural = count: plural"
       ],
       "selectors": [
@@ -6878,12 +6879,13 @@
         "countPlural"
       ],
       "match": {
-        "count=0, countPlural=*": "A View (previous) guarda {count} arquivos mantidos: retire-os, ou marque todos os arquivos que o PlateVault não colocou",
-        "count=*, countPlural=one": "A View (previous) guarda {count} arquivo mantido: retire-o, ou marque todos os arquivos que o PlateVault não colocou",
-        "count=*, countPlural=*": "A View (previous) guarda {count} arquivos mantidos: retire-os, ou marque todos os arquivos que o PlateVault não colocou"
+        "count=0, countPlural=*": "{n} arquivos mantidos foram para View (kept)",
+        "count=*, countPlural=one": "{n} arquivo mantido foi para View (kept)",
+        "count=*, countPlural=*": "{n} arquivos mantidos foram para View (kept)"
       }
     }
   ],
+  "project_previous_kept": "Mantido: vai para View (kept) na próxima aplicação",
   "apply_refused_space": "Espaço livre insuficiente",
   "apply_refused_unsettled": [
     {
