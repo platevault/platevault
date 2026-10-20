@@ -31,7 +31,7 @@
 
 mod review;
 
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -50,17 +50,17 @@ use crate::grouping::observing_night;
 use crate::inventory;
 use crate::library::{blocking, root_failure, InventoryProbe, Library};
 use crate::{
-    Availability, CalibrationRules, CaptureMetadata, CorrectionInput, EntryKind, EvidenceItem,
-    ExpectedAsset, FileIdentity, FramingMargins, ImageTypeEvidence, ImportBlock, ImportChoice,
-    ImportDestination, ImportDraft, ImportDuplicate, ImportItem, ImportItemPhase, ImportItemRecord,
-    ImportMode, ImportOperation, ImportRecord, ImportRig, ImportSession, ImportSessionTarget,
-    ImportSourceSpec, ImportState, ImportSummary, ImportTargetChoice, InputKind, ItemOutcome,
-    ItemPhase, ItemReason, KeptCopy, LibraryError, Location, LocationLifecycle, LocationRole,
-    NamingFrameType, NamingMetadata, NativePath, ObservationFingerprint, Provenance, ReasonCode,
-    RigFilters, SavedSource, SavedSourceView, ScanOperation, ScanState, SettleObservation,
-    SplitLimits, StorageItem, StorageItemDraft, StorageOperation, StorageOperationKind,
-    StorageOperationState, StorageRef, TargetCandidate, TransferDestination, UnknownFilter,
-    Writability, FRAMING_LABEL_FIELD,
+    AssociationKind, AssociationState, Availability, CalibrationRules, CaptureMetadata,
+    CorrectionInput, EntryKind, EvidenceItem, ExpectedAsset, ExpectedSession, FileIdentity,
+    FramingMargins, ImageTypeEvidence, ImportBlock, ImportChoice, ImportDestination, ImportDraft,
+    ImportDuplicate, ImportItem, ImportItemPhase, ImportItemRecord, ImportMode, ImportOperation,
+    ImportRecord, ImportRig, ImportSession, ImportSessionTarget, ImportSourceSpec, ImportState,
+    ImportSummary, ImportTargetChoice, InputKind, ItemOutcome, ItemPhase, ItemReason, KeptCopy,
+    LibraryError, Location, LocationLifecycle, LocationRole, NamingFrameType, NamingMetadata,
+    NativePath, ObservationFingerprint, Provenance, ReasonCode, RigFilters, SavedSource,
+    SavedSourceView, ScanOperation, ScanState, SettleObservation, SplitLimits, StorageItem,
+    StorageItemDraft, StorageOperation, StorageOperationKind, StorageOperationState, StorageRef,
+    TargetCandidate, TransferDestination, UnknownFilter, Writability, FRAMING_LABEL_FIELD,
 };
 
 /// How far apart the two settle checks of a source file are, at least.
@@ -1226,15 +1226,18 @@ impl Library {
                 scopes.push((location_id, folder));
             }
         }
+        // The import's lights are indexed within its own split limits, which
+        // the sessions they form record; a light within a standing session's
+        // own limits of its anchor rejoins it (CF2, D-W107, owner 2026-10-20).
+        let margins = self.import_margins(&record).await?;
         let mut offline = HashSet::new();
         for (location_id, folder) in scopes {
             if roots.destination_online(location_id).await? {
-                self.scan_scope(location_id, &folder).await?;
+                self.scan_scope(location_id, &folder, margins).await?;
             } else {
                 offline.insert(location_id);
             }
         }
-        let pinned = self.pinned_labels(&record).await?;
         let mut waiting = false;
         let mut indexed = Vec::new();
         let mut decisions = Vec::new();
@@ -1265,11 +1268,7 @@ impl Library {
                     .item
                     .user_type
                     .filter(|typed| Some(*typed) != record.item.classification),
-                framing_label: record
-                    .item
-                    .framing_label
-                    .clone()
-                    .or_else(|| pinned.get(&record.item.seq).cloned()),
+                framing_label: record.item.framing_label.clone(),
             });
             if let Some(target_id) = record.item.target_id {
                 filed.entry(target_id).or_default().insert(asset_id);
@@ -1278,9 +1277,9 @@ impl Library {
             next.item.indexed = true;
             indexed.push(next);
         }
-        let margins = self.import_margins(&record).await?;
         self.record_decisions(&decisions, &margins).await?;
-        self.file_under_targets(&filed).await?;
+        let landed: BTreeSet<Uuid> = decisions.iter().map(|decision| decision.asset_id).collect();
+        self.file_under_targets(&filed, &landed).await?;
         if !indexed.is_empty() {
             self.catalog().record_import_progress(id, &indexed).await?;
         }
@@ -1290,52 +1289,53 @@ impl Library {
         Ok(waiting)
     }
 
-    /// Framing labels that hold an import's own split at intake. Intake
-    /// splits a night with the Settings limits, so the lights of an import
-    /// that carries its own are labelled per framed review session, as a
-    /// merge labels them; an import with the default needs none, and its
-    /// frames rejoin earlier framings as intake finds them (CF2, D-W107).
-    async fn pinned_labels(
-        &self,
-        record: &ImportRecord,
-    ) -> Result<HashMap<u32, String>, LibraryError> {
-        if record.split_override.is_none() {
-            return Ok(HashMap::new());
-        }
-        let margins = self.import_margins(record).await?;
-        let mut labels = HashMap::new();
-        for formed in review::sessions(&record.items, &margins, review::imported_light) {
-            let session = formed.session;
-            if session.merged || session.framing.is_none() {
-                continue;
-            }
-            let Some(lead) = session.items.first() else { continue };
-            let label = format!("{}/{lead}", record.id);
-            labels.extend(session.items.iter().map(|seq| (*seq, label.clone())));
-        }
-        Ok(labels)
-    }
-
     /// Confirm each Target on the library sessions its imported lights now
     /// form: the Target their review session showed, by the user's choice or
     /// its pointing (D-W129, J31 S6/S7). A bundled Target is saved first.
+    ///
+    /// Lights can rejoin a session already in the catalog (D-W107), so a
+    /// session holding a frame `landed` didn't bring keeps a Target the user
+    /// confirmed on it. A session whose lights were filed under different
+    /// Targets is left as it is: no one choice is the user's.
     async fn file_under_targets(
         &self,
         filed: &HashMap<Uuid, BTreeSet<Uuid>>,
+        landed: &BTreeSet<Uuid>,
     ) -> Result<(), LibraryError> {
-        if filed.is_empty() {
+        let mut holding: BTreeMap<Uuid, (ExpectedSession, BTreeSet<Uuid>)> = BTreeMap::new();
+        for (target_id, assets) in filed {
+            for session in self.catalog().sessions_holding(assets).await? {
+                holding
+                    .entry(session.session_id)
+                    .or_insert_with(|| (session, BTreeSet::new()))
+                    .1
+                    .insert(*target_id);
+            }
+        }
+        let mut by_target: BTreeMap<Uuid, Vec<ExpectedSession>> = BTreeMap::new();
+        for (session_id, (expected, targets)) in holding {
+            let mut targets = targets.into_iter();
+            let (Some(target_id), None) = (targets.next(), targets.next()) else { continue };
+            let detail = self.catalog().session(session_id).await?;
+            let brought = detail.assets.iter().all(|asset| landed.contains(&asset.id));
+            let confirmed = detail.associations.iter().any(|association| {
+                association.kind == AssociationKind::Target
+                    && association.state == AssociationState::Confirmed
+            });
+            if brought || !confirmed {
+                by_target.entry(target_id).or_default().push(expected);
+            }
+        }
+        if by_target.is_empty() {
             return Ok(());
         }
         let saved = self.saved_targets().await?;
-        for (target_id, assets) in filed {
-            let Some(target) = self.known_target(&saved, *target_id) else { continue };
+        for (target_id, sessions) in by_target {
+            let Some(target) = self.known_target(&saved, target_id) else { continue };
             if matches!(target.provenance, Provenance::Seed { .. }) {
                 self.catalog().record_seed_target(&target).await?;
             }
-            let sessions = self.catalog().sessions_holding(assets).await?;
-            if !sessions.is_empty() {
-                self.catalog().associate_target(&sessions, target.id).await?;
-            }
+            self.catalog().associate_target(&sessions, target.id).await?;
         }
         Ok(())
     }
@@ -1383,12 +1383,14 @@ impl Library {
         Ok(())
     }
 
-    /// Scan one destination folder and wait for the scan to end. A scan
-    /// already running on the location is waited for first.
+    /// Scan one destination folder within the import's `margins` and wait
+    /// for the scan to end. A scan already running on the location is
+    /// waited for first.
     async fn scan_scope(
         self: &Arc<Self>,
         location_id: Uuid,
         folder: &Path,
+        margins: FramingMargins,
     ) -> Result<ScanOperation, LibraryError> {
         for _ in 0..SCAN_ATTEMPTS {
             let mut progress = self.subscribe_scan_progress();
@@ -1402,11 +1404,8 @@ impl Library {
                 self.scan_finished(&mut progress, running.id).await?;
                 continue;
             }
-            let started = if folder.as_os_str().is_empty() {
-                self.start_scan(location_id, None).await
-            } else {
-                self.retry_scope(location_id, NativePath::from_path(folder)).await
-            };
+            let scope = (!folder.as_os_str().is_empty()).then(|| NativePath::from_path(folder));
+            let started = self.scan_within(location_id, scope, margins).await;
             match started {
                 Ok(operation) => return self.scan_finished(&mut progress, operation.id).await,
                 // Another scan began between the check and this one.

@@ -1441,7 +1441,7 @@ async fn a_pointed_session_is_prefilled_with_the_target_its_pointing_matches() {
             "{{target}} is the Target, never OBJECT: {}",
             destination_text(light)
         );
-        assert!(light.fallbacks.is_empty());
+        assert_eq!(light.fallbacks, []);
     }
 
     fixture.run(&preview, ImportMode::Copy, &fixture.trash()).await;
@@ -1618,5 +1618,108 @@ async fn the_import_override_changes_only_that_import() {
         shape,
         [("2026-10-14".into(), 4), ("2026-10-15".into(), 1), ("2026-10-15".into(), 3)],
         "intake splits each import with its own limits"
+    );
+}
+
+// ── Imports rejoining sessions already in the catalog (D-W107) ──────────────
+
+/// A second import source with `shots` named `{prefix}_{index}.fits`.
+fn card_with(fixture: &Fixture, name: &str, shots: &[Pointed]) -> PathBuf {
+    let card = fixture.temp.path().join("share").join(name);
+    for (index, shot) in shots.iter().enumerate() {
+        shot.write(&card.join(format!("lights/{name}_{index:03}.fits")));
+    }
+    card
+}
+
+async fn preview_of(fixture: &Fixture, card: &Path) -> ImportOperation {
+    fixture
+        .library
+        .preview_import(ImportSourceSpec::Folder { path: native(card) }, CHECK)
+        .await
+        .unwrap()
+}
+
+/// CF2 and the owner's answer of 2026-10-20: an import's own limits split
+/// only its own lights. A light within an indexed session's limits of its
+/// anchor rejoins that session, whatever the import's limits, and no label
+/// the user never set is recorded.
+#[tokio::test]
+async fn a_later_import_with_its_own_limits_rejoins_a_standing_session() {
+    let fixture = Fixture::new().await;
+    let first = card_with(&fixture, "dusk", &[Pointed::at(0), Pointed::at(1), Pointed::at(2)]);
+    let preview = preview_of(&fixture, &first).await;
+    fixture.run(&preview, ImportMode::Copy, &fixture.trash()).await;
+    let standing = light_sessions(&fixture).await;
+    assert_eq!(standing.len(), 1);
+
+    let shots = [
+        Pointed::at(10).offset(3.0),
+        Pointed::at(11).offset(3.0),
+        Pointed::at(20).offset(8.0),
+        Pointed::at(21).offset(9.5),
+        Pointed::at(22).offset(11.0),
+    ];
+    let second = card_with(&fixture, "late", &shots);
+    let preview = preview_of(&fixture, &second).await;
+    let narrow = fixture
+        .library
+        .set_import_split_limits(preview.id, preview.revision, Some(limits(2.0, 3.0)))
+        .await
+        .unwrap();
+    assert_eq!(sizes(&narrow.sessions), [2, 2, 1], "its own lights split within 2′");
+    fixture.run(&narrow, ImportMode::Copy, &fixture.trash()).await;
+
+    let sessions = light_sessions(&fixture).await;
+    let shape: Vec<(Uuid, usize)> =
+        sessions.iter().map(|session| (session.id, session.asset_ids.len())).collect();
+    assert_eq!(sessions.len(), 3, "{shape:?}");
+    assert_eq!(sessions[0].id, standing[0].id, "the indexed session keeps its id");
+    assert_eq!(sessions[0].asset_ids.len(), 5, "3′ rejoins it within its own 5′");
+    assert_eq!((sessions[1].asset_ids.len(), sessions[2].asset_ids.len()), (2, 1));
+    let recorded = |session: &Session| session.framing.as_ref().unwrap().split_limits;
+    assert_eq!(recorded(&sessions[0]), limits(5.0, 5.0), "it keeps the limits of its intake");
+    assert_eq!(recorded(&sessions[1]), limits(2.0, 3.0), "the import's sessions record its own");
+    let assets = fixture.library.catalog().location_assets(fixture.captures_id).await.unwrap();
+    assert!(
+        assets.iter().all(|asset| asset.effective.framing_label.is_none()),
+        "no framing label the user never set"
+    );
+}
+
+/// D-W129: an import files its lights under their Target, but never over a
+/// different Target the user already confirmed on the session they rejoin.
+#[tokio::test]
+async fn an_import_keeps_the_target_confirmed_on_the_session_its_lights_rejoin() {
+    let fixture = Fixture::new().await;
+    let library = &fixture.library;
+    let pelican = saved_target_at_the_pointing(library).await;
+    let first = card_with(&fixture, "dusk", &[Pointed::at(0), Pointed::at(1)]);
+    let preview = preview_of(&fixture, &first).await;
+    fixture.run(&preview, ImportMode::Copy, &fixture.trash()).await;
+    assert_eq!(confirmed_targets(&fixture).await, [(2, Some(pelican.id))]);
+
+    let chosen = saved_target_north(library, "Zeta Near", 1.0).await;
+    let session = light_sessions(&fixture).await.remove(0);
+    let expected = ExpectedSession {
+        session_id: session.id,
+        grouping_revision: session.grouping_revision,
+        decision_revision: session.decision_revision,
+    };
+    library.catalog().associate_target(&[expected], chosen.id).await.unwrap();
+
+    let second = card_with(&fixture, "late", &[Pointed::at(10), Pointed::at(11)]);
+    let preview = preview_of(&fixture, &second).await;
+    let seq = preview.sessions[0].items[0];
+    let filed = library
+        .choose_import_target(preview.id, preview.revision, seq, Some(pelican.id))
+        .await
+        .unwrap();
+    fixture.run(&filed, ImportMode::Copy, &fixture.trash()).await;
+
+    assert_eq!(
+        confirmed_targets(&fixture).await,
+        [(4, Some(chosen.id))],
+        "the lights rejoin the session and its confirmed Target stands"
     );
 }
