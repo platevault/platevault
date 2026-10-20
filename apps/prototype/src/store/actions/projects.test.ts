@@ -244,6 +244,28 @@ describe("a removed subject's goals stay hidden until it comes back (D-W128)", (
     expect(kept(goalsOf(MOSAIC, targetId))).toEqual(kept(before.filter((g) => g.groupId !== p1!.id && g.groupId !== p4)))
     expect(project(MOSAIC).hiddenGoals).toEqual([])
   })
+
+  it("restores them onto a subject re-pointed at their Target; the goals they replace are kept hidden under the old Target (owner, 2026-10-20)", () => {
+    const { targetId, edited } = editedSecondSubject()
+    expect(remove(M31, targetId).ok).toBe(true)
+    const own = project(M31).subjects[0]!
+    // An Ha goal no restored goal replaces: it stays on the subject.
+    const ha: Goal = { id: "goal_m31_ha", subjectId: own.id, groupId: null, channel: "Ha", integrationS: 3600, frameCount: null, qualityBar: null }
+    expect(setGoals(M31, [...project(M31).goals, ha], project(M31).revision).ok).toBe(true)
+    const replaced = project(M31).goals.filter((g) => g.id !== ha.id)
+    const inputs = project(M31).inputs
+
+    expect(projects.changeSubjectTarget(M31, own.id, targetId, project(M31).revision).ok).toBe(true)
+    expect(project(M31).subjects).toHaveLength(1)
+    expect(goalsOf(M31, targetId)).toEqual([ha, ...edited.map((g) => ({ ...g, subjectId: own.id }))])
+    expect(project(M31).hiddenGoals).toEqual(replaced.map(({ subjectId: _, ...g }) => ({ ...g, targetId: own.targetId })))
+    expect(project(M31).inputs).toEqual(inputs)
+
+    // M 31's Target added back gets the replaced goals, not the goal set's.
+    expect(projects.addSubject(M31, own.targetId, project(M31).revision).ok).toBe(true)
+    expect(kept(goalsOf(M31, own.targetId))).toEqual(kept(replaced))
+    expect(project(M31).hiddenGoals).toEqual([])
+  })
 })
 
 describe("applying a goal template copies its conditions (C7)", () => {
