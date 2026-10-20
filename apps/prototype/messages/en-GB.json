@@ -6422,6 +6422,7 @@
     }
   ],
   "project_previous_kept": "Kept: moves to View (kept) at the next Apply",
+  "op_apply_kept_missing": "Kept file not found, not moved to View (kept): {path}",
   "apply_refused_space": "Not enough free space",
   "apply_refused_unsettled": [
     {

@@ -246,12 +246,17 @@ function swap(state: PrototypeState, op: Operation, payload: ApplyPayload): Prot
   const at = nowIso()
   const { paths } = payload
   let disk = state.disk
-  // Kept files leave first, so an outgoing file of the same name never lands on one.
+  // Kept files leave first, so an outgoing file of the same name never lands on one. One already gone is named in the summary.
   const kept = project.previous?.leftovers.filter((l) => l.kept) ?? []
   let movedKept = 0
+  const missingKept: string[] = []
   for (const leftover of kept) {
-    const file = fileAt(disk, `${project.previous!.folderPath}/${leftover.path}`)
-    if (!file) continue
+    const source = `${project.previous!.folderPath}/${leftover.path}`
+    const file = fileAt(disk, source)
+    if (!file) {
+      missingKept.push(source)
+      continue
+    }
     disk = moveFile(disk, file, keptDestination({ disk }, paths.kept, leftover.path))
     movedKept += 1
   }
@@ -300,6 +305,7 @@ function swap(state: PrototypeState, op: Operation, payload: ApplyPayload): Prot
       msg("op_apply_swapped", { entries: unitCount("entries", payload.placed.length) }),
       ...(movedKept > 0 ? [msg("op_apply_moved_kept", { count: movedKept, n: { count: movedKept } })] : []),
       ...(leftovers.length > 0 ? [msg("op_apply_left_previous", { count: leftovers.length, n: { count: leftovers.length } })] : []),
+      ...missingKept.map((path) => msg("op_apply_kept_missing", { path })),
     ],
     " · ",
   )

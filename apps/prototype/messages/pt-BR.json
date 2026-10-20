@@ -6886,6 +6886,7 @@
     }
   ],
   "project_previous_kept": "Mantido: vai para View (kept) na próxima aplicação",
+  "op_apply_kept_missing": "Arquivo mantido não encontrado, não foi para View (kept): {path}",
   "apply_refused_space": "Espaço livre insuficiente",
   "apply_refused_unsettled": [
     {
