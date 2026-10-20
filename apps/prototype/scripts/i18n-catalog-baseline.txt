@@ -16,3 +16,5 @@ dup-value	actions_for,run_actions_for
 dup-value	project_no_site,simulation_no_site
 # A store refusal reason (store/actions/calibration.ts) reads the same as the masterMatch status word (components/app/status.tsx): two patterns, each owning its key (W8).
 dup-value	status_not_a_master,store_cal_not_a_master
+# Differs by position: a lowercase mid-label fragment after '·' ('18 Sep Ha · framing unknown', next to 'framing {n}') vs a sentence-initial label ('Framing unknown'); the check compares lowercased values.
+dup-value	domain_session_framing_unknown,project_framing_unknown
