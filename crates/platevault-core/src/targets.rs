@@ -1082,7 +1082,9 @@ struct Support {
 /// with the candidate, and the candidate inside every frame's inscribed field
 /// (`target-match` [`RadiusPolicy::Inscribed`]) around its plate-solved or
 /// header pointing. Either alone, or with missing or conflicting evidence, is
-/// `NeedsReview`; no agreeing evidence is Unresolved. Never Confirmed.
+/// `NeedsReview`; no agreeing evidence is Unresolved. Never Confirmed: a
+/// Suggested assessment already counts as confirmed for Ready and the Sessions
+/// filters ([`platevault_model::counts_as_confirmed`], D-W124).
 #[must_use]
 pub fn assess_target(candidate: &TargetCandidate, frames: &[CaptureMetadata]) -> TargetAssessment {
     let mut evidence = Vec::new();
