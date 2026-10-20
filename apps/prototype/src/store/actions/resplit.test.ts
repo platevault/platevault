@@ -208,6 +208,22 @@ describe("a regrouping correction re-splits a held session (LIB-FR-12, D-W100)",
     for (const id of removed!.assetIds) expect(placed.has(id)).toBe(false)
     expect(pendingChanges(store.getState(), project(CYGNUS))).toEqual([])
   })
+  it("keeps joined-target details and gives predecessor details to its remainder", () => {
+    const { session } = heldTwice()
+    const firstFrame = byCapture(session)[0]!
+    expect(editSessionDetails(session.id, { name: "Source label", notes: "Source notes" }, session.revision).ok).toBe(true)
+    const source = catalog().sessions[session.id]!
+    const target = matchingSession(source, firstFrame)
+    expect(editSessionDetails(target.id, { name: "Target label", notes: "Target notes" }, target.revision).ok).toBe(true)
+    expect(correctExposure(source, [firstFrame]).ok).toBe(true)
+
+    const successors = successorsOf(session.id)
+    const joined = successors.find((successor) => successor.previousSessionIds.includes(target.id))!
+    const remainder = successors.find((successor) => successor.id !== joined.id && successor.previousSessionIds.includes(session.id))!
+    expect(joined).toMatchObject({ name: "Target label", notes: "Target notes" })
+    expect(remainder).toMatchObject({ name: "Source label", notes: "Source notes" })
+    expect(catalog().sessions[session.id]!.supersededBy).toBe(joined.id)
+  })
   it("joins a corrected successor into a matching session and labels Projects holding either", () => {
     const { session, open } = heldTwice()
     const target = matchingSession(session, byCapture(session).slice(-1)[0]!)
@@ -232,7 +248,7 @@ describe("a regrouping correction re-splits a held session (LIB-FR-12, D-W100)",
     expect(joined.assetIds).toContain(corrected[0])
     expect(joined.previousSessionIds).toEqual(expect.arrayContaining([session.id, target.id]))
     expect(joined.reviewReset).toBe(true)
-    expect(catalog().sessions[session.id]!.supersededBy).toBe(joined.id)
+    expect(catalog().sessions[session.id]!.supersededBy).not.toBe(joined.id)
     expect(catalog().sessions[target.id]!.supersededBy).toBe(joined.id)
     expect(sessionReadiness(catalog(), joined)).toBe("needs-review")
     for (const id of open) {

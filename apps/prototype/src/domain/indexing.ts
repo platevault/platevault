@@ -804,7 +804,13 @@ export type RegroupField = Extract<CorrectionField, "exposure" | "filter">
  * Re-group corrected frames into immutable session successors. Existing
  * sessions with the corrected key are candidate anchors, but incoming frames
  * are always compared to those existing first frames, never to earlier
- * corrected frames (D-W107, LIB-FR-12, D15).
+ * corrected frames (D-W107, LIB-FR-12, D15). A joined existing session keeps
+ * its name and notes; the predecessor's details go to the predecessor-based
+ * part holding its first frame, or to the remainder when that frame joins an
+ * existing session. Every other predecessor-based part gets a derived name
+ * and empty notes. The predecessor's supersededBy points to the part carrying
+ * its details, or to the first-frame holder when none does; each joined target
+ * points to its joined successor.
  */
 export interface ResplitResult {
   successors: Session[]
@@ -861,10 +867,16 @@ export function resplitSession(
     taken.add(session.id)
     for (const previous of session.previousSessionIds) taken.add(previous)
   }
-  const successors = parts.map(({ base, assetIds, previousSessionIds, corrected: hasCorrection }) => {
-    const firstId = inCaptureOrder(predecessor.assetIds, (id) => catalog.assets[id]!.observed)[0]!
+  const firstId = inCaptureOrder(predecessor.assetIds, (id) => catalog.assets[id]!.observed)[0]!
+  const joinedFirstFrame = [...joined.values()].some((assetIds) => assetIds.includes(firstId))
+  const detailsPart = parts.find(({ base, assetIds }) => base.id === predecessor.id && assetIds.includes(firstId))
+    ?? (joinedFirstFrame ? parts.find(({ base }) => base.id === predecessor.id) : undefined)
+  const heirPart = detailsPart ?? parts.find(({ assetIds }) => assetIds.includes(firstId))
+  const heir = heirPart ? parts.indexOf(heirPart) : -1
+  const successorByTarget = new Map<SessionId, Session>()
+  const successors = parts.map(({ base, assetIds, previousSessionIds, corrected: hasCorrection }, index) => {
     const isMerged = previousSessionIds.length > 1
-    const carriesSourceName = assetIds.includes(firstId)
+    const carriesPredecessorDetails = detailsPart !== undefined && parts.indexOf(detailsPart) === index && base.id === predecessor.id
     const draft: Session = {
       ...base,
       revision: base.id === predecessor.id ? revision : base.revision + Number(isMerged),
@@ -872,27 +884,26 @@ export function resplitSession(
       corrections: hasCorrection && !base.corrections.some((item) => item.id === correction.id)
         ? [...base.corrections, { ...correction, revision: base.revision + Number(isMerged) }]
         : base.corrections,
-      name: carriesSourceName ? predecessor.name : base.id === predecessor.id ? null : base.name,
-      notes: carriesSourceName ? predecessor.notes : base.id === predecessor.id ? "" : base.notes,
+      name: base.id === predecessor.id ? (carriesPredecessorDetails ? predecessor.name : null) : base.name,
+      notes: base.id === predecessor.id ? (carriesPredecessorDetails ? predecessor.notes : "") : base.notes,
       previousSessionIds,
       supersededBy: null,
       reviewReset: true,
     }
     const id = freshSessionId(sessionKeyOf(draft), taken)
     taken.add(id)
-    return rebuildSession(catalog, { ...draft, id }, now)
+    const successor = rebuildSession(catalog, { ...draft, id }, now)
+    if (isMerged) successorByTarget.set(base.id, successor)
+    return successor
   })
   const ordered = successors.sort((a, b) => a.startedAt.localeCompare(b.startedAt) || a.id.localeCompare(b.id))
-  const replacementByPrevious = new Map<SessionId, Session>()
   for (const successor of ordered) {
     catalog.sessions[successor.id] = successor
     for (const assetId of successor.assetIds) catalog.assets[assetId] = { ...catalog.assets[assetId]!, sessionId: successor.id }
-    for (const previous of successor.previousSessionIds) replacementByPrevious.set(previous, successor)
   }
-  catalog.sessions[predecessor.id] = { ...predecessor, supersededBy: replacementByPrevious.get(predecessor.id)?.id ?? null }
-  for (const targetId of joined.keys()) {
-    const replacement = replacementByPrevious.get(targetId)
-    if (replacement) catalog.sessions[targetId] = { ...catalog.sessions[targetId]!, supersededBy: replacement.id }
+  catalog.sessions[predecessor.id] = { ...predecessor, supersededBy: heir < 0 ? null : successors[heir]!.id }
+  for (const [targetId, replacement] of successorByTarget) {
+    catalog.sessions[targetId] = { ...catalog.sessions[targetId]!, supersededBy: replacement.id }
   }
   return { successors: ordered, joined }
 }

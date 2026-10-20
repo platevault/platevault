@@ -293,7 +293,7 @@ export function confirmMetadata(sessionId: SessionId, assetIds: AssetId[], field
           return { ...c, sessions: { ...c.sessions, [sessionId]: next } }
         }
         const next: Catalog = { ...c, sessions: { ...c.sessions }, assets: { ...c.assets }, projects: { ...c.projects } }
-        const { successors, joined } = resplitSession(next, sessionId, corrected, entry, s.settings.matching.framing, at)
+        const { successors } = resplitSession(next, sessionId, corrected, entry, s.settings.matching.framing, at)
         const successorByPrevious = new Map<SessionId, Session[]>()
         for (const successor of successors) {
           for (const previous of successor.previousSessionIds) {
@@ -309,17 +309,6 @@ export function confirmMetadata(sessionId: SessionId, assetIds: AssetId[], field
             return replacements ? replacements.map((successor) => successorInput(input, successor)) : [input]
           })
           next.projects[project.id] = { ...project, inputs }
-        }
-        for (const targetId of joined.keys()) {
-          const target = next.sessions[targetId]!
-          for (const project of Object.values(c.projects)) {
-            const input = project.inputs.find((candidate) => candidate.sessionId === targetId)
-            if (isLocked(project) || !input) continue
-            next.projects[project.id] = {
-              ...next.projects[project.id]!,
-              inputs: next.projects[project.id]!.inputs.map((candidate) => candidate.sessionId === targetId ? successorInput(input, target) : candidate),
-            }
-          }
         }
         return next
       }),
