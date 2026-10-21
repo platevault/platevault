@@ -2535,20 +2535,21 @@ export type Capability =
 "input" | 
 /**  The folder layout it loads. */
 "layout" | 
-/**  How it is configured: exact input lists passed at launch. */
+/**  How it is configured to load the View it is handed. */
 "configuration" | 
 /**  Output it writes that `PlateVault` recognizes. */
 "recognized_output";
 
 /**
  *  A profile's recorded capability evidence (D04). Nothing is claimed
- *  without a proof: read-only input needs an `Input` proof and an input list
- *  a `Configuration` proof.
+ *  without a proof: read-only input needs an `Input` proof.
  */
 export type CapabilityEvidence = {
+	/**
+	 *  What the application does to the files it is handed (D04,
+	 *  PREP-AC-11).
+	 */
 	inputBehavior?: InputBehavior,
-	/**  The application reads the exact input paths passed as `{inputs}`. */
-	inputList?: boolean,
 	proofs?: CapabilityProof[],
 };
 
@@ -5605,14 +5606,16 @@ export type ProfileInput = {
 	kind: ProfileKind,
 	/**  Configured or located by the user; none is assumed. */
 	executable: NativePathWire | null,
-	/**  Launch arguments; `{folder}`, `{results}` and `{inputs}` are expanded. */
+	/**  Launch arguments; `{view}` stands for the Project's `View/`. */
 	args?: string[],
 	capabilityEvidence?: CapabilityEvidence,
 };
 
 /**
- *  The application a profile hands a run to. `Generic` is Open in... with a
- *  configured executable and arguments; it never claims a verified profile.
+ *  The application a Project's View opens in. `Generic` is Open in... with
+ *  a configured executable and arguments. Spec rule (PREP-FR-02, D04): no
+ *  profile is a verified profile without input, layout, configuration and
+ *  recognised-output evidence, and a `Generic` one never is.
  */
 export type ProfileKind = 
 /**  `PixInsight` with its Weighted Batch Preprocessing script. */
