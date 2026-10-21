@@ -433,12 +433,16 @@ pub fn create_symlink(source: &Path, destination: &Path) -> io::Result<()> {
 /// target's NT form back into its plain spelling (`C:\…`) wherever that
 /// names the same entry, whichever spelling the link was made with, so a
 /// link made to `\\?\C:\…` never reads back as that text. Both sides are
-/// therefore compared in their [`long_path`] form, which names one entry
-/// exactly. Elsewhere the target is the bytes the link holds, compared as
-/// they are.
+/// therefore compared, as text, in their [`long_path`] form, which names
+/// one entry exactly. Elsewhere the target is the bytes the link holds,
+/// compared byte for byte: `/a/./b`, `/a//b` and `/a/b/` are not `/a/b`.
 #[must_use]
 pub fn link_reads(target: &Path, path: &Path) -> bool {
-    long_path(target) == long_path(path)
+    if cfg!(windows) {
+        long_path(target).as_os_str() == long_path(path).as_os_str()
+    } else {
+        target.as_os_str() == path.as_os_str()
+    }
 }
 
 /// `path` in the Windows `\\?\` form that lifts the `MAX_PATH` limit and
@@ -903,6 +907,17 @@ mod tests {
     fn unix_paths_stay_as_given() {
         for given in ["/Work/View", "Work/View", r"C:\Work"] {
             assert_eq!(long_path(Path::new(given)), Path::new(given));
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unix_link_targets_compare_byte_for_byte() {
+        let path = Path::new("/a/b");
+        assert!(link_reads(path, path));
+        for other in ["/a/./b", "/a//b", "/a/b/"] {
+            assert!(!link_reads(Path::new(other), path), "{other}");
+            assert!(!link_reads(path, Path::new(other)), "{other}");
         }
     }
 
