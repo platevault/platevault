@@ -543,7 +543,7 @@ fn without_noreplace(from: &Path, to: &Path) -> std::io::Result<Moved> {
     if metadata.is_dir() {
         fs::create_dir(to)?;
         let placeholder = open_no_follow(to)?;
-        return over_placeholder(from, to, &placeholder).map(|()| Moved::Renamed);
+        return over_placeholder(from, to, placeholder).map(|()| Moved::Renamed);
     }
     let mut moving = tempfile::TempPath::try_from_path(from)?;
     moving.disable_cleanup(true);
@@ -551,8 +551,7 @@ fn without_noreplace(from: &Path, to: &Path) -> std::io::Result<Moved> {
         Ok(()) => Ok(Moved::Renamed),
         Err(failure) if metadata.is_file() && lacks_links(&failure.error) => {
             let copied = copy_onto_new(from, to)?;
-            remove_source(from, to, &copied)?;
-            Ok(Moved::Copied(copied.identity))
+            remove_source(from, to, copied).map(Moved::Copied)
         }
         Err(failure) => Err(failure.error),
     }
@@ -575,8 +574,10 @@ fn lacks_links(error: &std::io::Error) -> bool {
 
 /// What [`copy_onto_new`] proved: a no-follow handle on the source entry it
 /// read, the handle of the file it created and that file's identity. Both
-/// stay open, so neither inode can be handed to another entry while the move
-/// runs: ext4 gives a just-freed inode number to the next file created.
+/// stay open until their entry is compared for the last time, so neither
+/// inode can be handed to another entry while the move runs: ext4 gives a
+/// just-freed inode number to the next file created, and macOS exFAT numbers
+/// an entry by its first cluster.
 #[cfg(unix)]
 struct Copied {
     source: fs::File,
@@ -640,7 +641,7 @@ fn copy_onto_new(from: &Path, to: &Path) -> std::io::Result<Copied> {
     match filled {
         Ok(identity) => Ok(Copied { source, created: out, identity }),
         Err(error) => {
-            if names(to, &out) {
+            if names_and_close(to, out) {
                 let _ = fs::remove_file(to);
             }
             Err(error)
@@ -648,17 +649,18 @@ fn copy_onto_new(from: &Path, to: &Path) -> std::io::Result<Copied> {
     }
 }
 
-/// Remove the source of a verified [`copy_onto_new`]. `from` first moves to
-/// an unguessable name beside it, so the entry unlinked is the one found
-/// there, which must be the entry that was read: an entry swapped in at
-/// `from` after the copy is never lost, but goes back to `from` and stays,
-/// and the copy holds the bytes read. A source that can't be removed goes
-/// back and keeps its bytes, and the copy is removed while `to` still names
-/// the created file.
+/// Remove the source of a verified [`copy_onto_new`], returning the copy's
+/// identity. `from` first moves to an unguessable name beside it, so the
+/// entry unlinked is the one found there, which must be the entry that was
+/// read: an entry swapped in at `from` after the copy is never lost, but goes
+/// back to `from` and stays, and the copy holds the bytes read. A source that
+/// can't be removed goes back and keeps its bytes, and the copy is removed
+/// while `to` still names the created file.
 #[cfg(unix)]
-fn remove_source(from: &Path, to: &Path, copied: &Copied) -> std::io::Result<()> {
-    let drop_copy = || {
-        if names(to, &copied.created) {
+fn remove_source(from: &Path, to: &Path, copied: Copied) -> std::io::Result<FileIdentity> {
+    let Copied { source, created, identity } = copied;
+    let drop_copy = |created| {
+        if names_and_close(to, created) {
             let _ = fs::remove_file(to);
         }
     };
@@ -666,9 +668,9 @@ fn remove_source(from: &Path, to: &Path, copied: &Copied) -> std::io::Result<()>
     let aside = from.with_file_name(format!(".pv-{}.removing", Uuid::new_v4().simple()));
     match fs::rename(from, &aside) {
         Ok(()) => {}
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(identity),
         Err(error) => {
-            drop_copy();
+            drop_copy(created);
             return Err(error);
         }
     }
@@ -681,16 +683,16 @@ fn remove_source(from: &Path, to: &Path, copied: &Copied) -> std::io::Result<()>
             ))
         })
     };
-    if !names(&aside, &copied.source) {
-        return put_back();
+    if !names_and_close(&aside, source) {
+        return put_back().map(|()| identity);
     }
     if let Err(error) = fs::remove_file(&aside) {
         put_back()?;
-        drop_copy();
+        drop_copy(created);
         return Err(error);
     }
     let _ = sync_folder(from.parent().unwrap_or_else(|| Path::new("")));
-    Ok(())
+    Ok(identity)
 }
 
 /// Remove `candidate` when it is an unfinished copy of the regular file
@@ -759,16 +761,34 @@ fn names(path: &Path, handle: &fs::File) -> bool {
     }
 }
 
+/// [`names`], closing `handle`. Each caller removes `path` once this holds:
+/// the handle is closed first, since a volume may refuse to remove an entry
+/// that is still open (macOS smbfs answers `EBUSY`), and closing it frees no
+/// inode, as the entry is still linked under `path`.
+#[cfg(unix)]
+fn names_and_close(path: &Path, handle: fs::File) -> bool {
+    let named = names(path, &handle);
+    drop(handle);
+    named
+}
+
 /// Rename the folder `from` over the empty `placeholder` this rename created
 /// at `to` and holds open. Rename replaces only an empty folder, so a file
 /// another process put in the placeholder fails it with `ENOTEMPTY`, and a
 /// file in its place with `ENOTDIR`; either is reported as `to` taken,
 /// nothing moved. A failed rename removes the placeholder while it is still
-/// that folder and empty. The open handle keeps the placeholder's inode from
-/// being reused, so a folder another process made in its place never reads
-/// as it: ext4 gives a just-freed inode number to the next entry created.
+/// that folder and empty, closing it first ([`names_and_close`]). The open
+/// handle keeps the placeholder's inode from being reused until then, so a
+/// folder another process made in its place never reads as it: ext4 gives a
+/// just-freed inode number to the next entry created.
+///
+/// It stays open during the rename, which is when the placeholder may be
+/// swapped: closed before it, nothing would tell a folder made under its
+/// freed number from it afterwards. A volume may refuse to rename over an
+/// open folder (POSIX allows `EBUSY`); that fails closed, with nothing moved
+/// and the placeholder removed.
 #[cfg(unix)]
-fn over_placeholder(from: &Path, to: &Path, placeholder: &fs::File) -> std::io::Result<()> {
+fn over_placeholder(from: &Path, to: &Path, placeholder: fs::File) -> std::io::Result<()> {
     use std::io::ErrorKind;
 
     let Err(error) = fs::rename(from, to) else {
@@ -776,7 +796,8 @@ fn over_placeholder(from: &Path, to: &Path, placeholder: &fs::File) -> std::io::
     };
     // Only while it lists nothing: macOS also removes a folder holding only
     // `._` AppleDouble files, and them with it.
-    if names(to, placeholder) && fs::read_dir(to).is_ok_and(|mut entries| entries.next().is_none())
+    if fs::read_dir(to).is_ok_and(|mut entries| entries.next().is_none())
+        && names_and_close(to, placeholder)
     {
         let _ = fs::remove_dir(to);
     }
@@ -899,7 +920,7 @@ mod tests {
         let (view, previous) = view_in(&temp);
         let placeholder = claimed(&previous);
         fs::write(previous.join("theirs.txt"), b"theirs").unwrap();
-        let error = over_placeholder(&view, &previous, &placeholder).unwrap_err();
+        let error = over_placeholder(&view, &previous, placeholder).unwrap_err();
         assert_eq!(error.kind(), io::ErrorKind::AlreadyExists, "{error}");
         kept(&view);
         assert_eq!(fs::read(previous.join("theirs.txt")).unwrap(), b"theirs");
@@ -913,7 +934,7 @@ mod tests {
         let placeholder = claimed(&previous);
         fs::remove_dir(&previous).unwrap();
         fs::write(&previous, b"theirs").unwrap();
-        let error = over_placeholder(&view, &previous, &placeholder).unwrap_err();
+        let error = over_placeholder(&view, &previous, placeholder).unwrap_err();
         assert_eq!(error.kind(), io::ErrorKind::AlreadyExists, "{error}");
         kept(&view);
         assert_eq!(fs::read(&previous).unwrap(), b"theirs");
@@ -925,14 +946,14 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let (gone, to) = (temp.path().join("gone"), temp.path().join("to"));
         let placeholder = claimed(&to);
-        let error = over_placeholder(&gone, &to, &placeholder).unwrap_err();
+        let error = over_placeholder(&gone, &to, placeholder).unwrap_err();
         assert_eq!(error.kind(), io::ErrorKind::NotFound, "{error}");
         assert!(!to.exists(), "its own empty placeholder is removed");
 
         let placeholder = claimed(&to);
         fs::remove_dir(&to).unwrap();
         claimed(&to);
-        over_placeholder(&gone, &to, &placeholder).unwrap_err();
+        over_placeholder(&gone, &to, placeholder).unwrap_err();
         assert!(to.is_dir(), "another process's folder stays");
     }
 
@@ -967,7 +988,7 @@ mod tests {
         let (from, to) = file_in(&temp);
         let modified = fs::metadata(&from).unwrap().modified().unwrap();
         let copied = copy_onto_new(&from, &to).unwrap();
-        remove_source(&from, &to, &copied).unwrap();
+        remove_source(&from, &to, copied).unwrap();
         assert!(!from.exists());
         assert_eq!(fs::read(&to).unwrap(), b"the user's notes");
         assert_eq!(fs::metadata(&to).unwrap().modified().unwrap(), modified);
@@ -1046,7 +1067,7 @@ mod tests {
         let copied = copy_onto_new(&from, &to).unwrap();
         fs::remove_file(&from).unwrap();
         fs::write(&from, b"another file").unwrap();
-        remove_source(&from, &to, &copied).unwrap();
+        remove_source(&from, &to, copied).unwrap();
         assert_eq!(fs::read(&from).unwrap(), b"another file");
         assert_eq!(fs::read(&to).unwrap(), b"the user's notes");
     }

@@ -12,10 +12,23 @@
 //! number, and is what an NFS server gives out to name a file across its
 //! restarts, so it tells the two apart and stays the same over a remount.
 //!
-//! A filesystem that encodes no handles (cifs, for one) answers
-//! `EOPNOTSUPP`, and a kernel without the call `ENOSYS`: both read as no
-//! handle, `Ok(None)`, and the caller records the inode number alone there.
+//! Where no handle can be read the entry reads as having none, `Ok(None)`,
+//! and the caller records the inode number alone, which can't tell a reused
+//! number apart:
+//! - `EOPNOTSUPP`: the filesystem encodes no handles (cifs, for one);
+//! - `ENOSYS`: the kernel lacks the call;
+//! - `EPERM`: a sandbox forbids it (Docker's default seccomp profile does);
+//! - `EOVERFLOW`: the entry's handle doesn't fit `MAX_HANDLE_SZ`, or it
+//!   can't be encoded at all (an nfs4 automount point not yet mounted).
+//!
 //! Other Unix platforms have no such call and always read no handle.
+//!
+//! XFS encodes another handle type on an `inode32` mount than on an
+//! `inode64` one, so after a remount with the other option no file ID
+//! recorded with a handle matches again: a registered root on that volume
+//! reads as not the registered folder (an identity conflict, no scan), and
+//! its recorded files as changed, until the location is registered again.
+//! An ID recorded without a handle still matches on the inode number.
 //!
 //! The crate allows `unsafe` at that one call, so `platevault_core` and
 //! `persistence_library` keep the workspace `forbid`.
@@ -31,13 +44,14 @@ use std::path::Path;
 ///
 /// # Errors
 /// The entry can't be reached (`NotFound`, `PermissionDenied`, ...), or the
-/// path holds a NUL (`InvalidInput`).
+/// path holds a NUL (`InvalidInput`). An entry whose handle can't be read
+/// (see the crate docs) is `Ok(None)`, not an error.
 pub fn of_path(path: &Path) -> io::Result<Option<String>> {
     #[cfg(target_os = "linux")]
     {
         use std::os::unix::ffi::OsStrExt;
         let path = std::ffi::CString::new(path.as_os_str().as_bytes())?;
-        linux::encode(libc::AT_FDCWD, &path, 0)
+        linux::encode(libc::AT_FDCWD, &path, 0, linux::ROOM)
     }
     #[cfg(not(target_os = "linux"))]
     {
@@ -49,12 +63,13 @@ pub fn of_path(path: &Path) -> io::Result<Option<String>> {
 /// The handle of the entry `file` holds open, encoded as [`of_path`] does.
 ///
 /// # Errors
-/// The handle can't be read for the open entry.
+/// The handle can't be read for the open entry; an entry whose handle can't
+/// be read (see the crate docs) is `Ok(None)`, not an error.
 pub fn of_file(file: &impl AsFd) -> io::Result<Option<String>> {
     #[cfg(target_os = "linux")]
     {
         use std::os::fd::AsRawFd;
-        linux::encode(file.as_fd().as_raw_fd(), c"", libc::AT_EMPTY_PATH)
+        linux::encode(file.as_fd().as_raw_fd(), c"", libc::AT_EMPTY_PATH, linux::ROOM)
     }
     #[cfg(not(target_os = "linux"))]
     {
@@ -72,7 +87,7 @@ mod linux {
 
     /// The room for handle bytes: the kernel's `MAX_HANDLE_SZ`, the largest
     /// handle any filesystem encodes.
-    const ROOM: u32 = 128;
+    pub const ROOM: u32 = 128;
 
     /// A `struct file_handle` followed by room for the largest handle.
     #[repr(C)]
@@ -81,19 +96,31 @@ mod linux {
         bytes: [u8; ROOM as usize],
     }
 
-    /// `name_to_handle_at(dir, path, .., flags)`, encoded as text.
-    pub fn encode(dir: RawFd, path: &CStr, flags: c_int) -> io::Result<Option<String>> {
+    /// Whether `name_to_handle_at` failing with `errno` means the entry has no
+    /// handle that can be read, rather than that it can't be reached.
+    pub const fn no_handle(errno: c_int) -> bool {
+        matches!(errno, libc::EOPNOTSUPP | libc::ENOSYS | libc::EPERM | libc::EOVERFLOW)
+    }
+
+    /// `name_to_handle_at(dir, path, .., flags)` with `room` handle bytes, at
+    /// most [`ROOM`], encoded as text.
+    pub fn encode(dir: RawFd, path: &CStr, flags: c_int, room: u32) -> io::Result<Option<String>> {
         let mut buffer = Buffer {
-            header: libc::file_handle { handle_bytes: ROOM, handle_type: 0, f_handle: [] },
+            header: libc::file_handle {
+                handle_bytes: room.min(ROOM),
+                handle_type: 0,
+                f_handle: [],
+            },
             bytes: [0; ROOM as usize],
         };
         let mut mount_id: c_int = 0;
         // SAFETY: `path` is NUL-terminated and outlives the call. The handle
         // pointer is derived from the whole `buffer`, a `#[repr(C)]`
-        // `struct file_handle` followed by `ROOM` bytes, and `handle_bytes`
-        // tells the kernel it may write no more than those `ROOM` bytes after
-        // the header (it fails with `EOVERFLOW` instead). `mount_id` is a
-        // `c_int` the call writes. Neither pointer is kept past the call.
+        // `struct file_handle` followed by `ROOM` bytes, and `handle_bytes`,
+        // at most `ROOM`, tells the kernel it may write no more than that
+        // many bytes after the header (it fails with `EOVERFLOW` instead).
+        // `mount_id` is a `c_int` the call writes. Neither pointer is kept
+        // past the call.
         #[allow(unsafe_code)]
         let answer = unsafe {
             libc::name_to_handle_at(
@@ -107,7 +134,7 @@ mod linux {
         if answer == -1 {
             let error = io::Error::last_os_error();
             return match error.raw_os_error() {
-                Some(libc::EOPNOTSUPP | libc::ENOSYS) => Ok(None),
+                Some(errno) if no_handle(errno) => Ok(None),
                 _ => Err(error),
             };
         }
@@ -175,5 +202,29 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let error = of_path(&temp.path().join("gone")).unwrap_err();
         assert_eq!(error.kind(), io::ErrorKind::NotFound);
+    }
+
+    /// A handle that doesn't fit the room the call is given fails with
+    /// `EOVERFLOW`, as one larger than `MAX_HANDLE_SZ` does: no handle.
+    #[test]
+    fn a_handle_that_does_not_fit_reads_as_none() {
+        use std::os::unix::ffi::OsStrExt;
+        let temp = tempfile::tempdir().unwrap();
+        let path = std::ffi::CString::new(temp.path().as_os_str().as_bytes()).unwrap();
+        assert!(linux::encode(libc::AT_FDCWD, &path, 0, linux::ROOM).unwrap().is_some());
+        assert_eq!(linux::encode(libc::AT_FDCWD, &path, 0, 0).unwrap(), None);
+    }
+
+    /// A sandbox that forbids the call, a filesystem or kernel without it
+    /// and an entry that can't be encoded read as no handle; an entry that
+    /// can't be reached stays an error.
+    #[test]
+    fn only_an_unreadable_handle_reads_as_none() {
+        for errno in [libc::EPERM, libc::EOVERFLOW, libc::EOPNOTSUPP, libc::ENOSYS] {
+            assert!(linux::no_handle(errno), "{errno}");
+        }
+        for errno in [libc::ENOENT, libc::EACCES, libc::ENOTDIR, libc::ELOOP, libc::EINVAL] {
+            assert!(!linux::no_handle(errno), "{errno}");
+        }
     }
 }
