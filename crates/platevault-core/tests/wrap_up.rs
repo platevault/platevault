@@ -8,7 +8,6 @@
 //! and ticked and never `Output/`; Close locks the Project with the
 //! calibration its View used; Archive repoints the kept View and a stop while
 //! Closing resumes to Archived; Duplicate takes the sessions' current pins.
-#![cfg(unix)]
 
 #[path = "support/apply.rs"]
 mod apply_support;
@@ -223,6 +222,7 @@ async fn clean_up_trashes_a_patched_copy_only_while_it_holds_its_patch() {
 /// still the link `PlateVault` placed to its original; a link the user
 /// retargeted stays, named, and nothing is ever followed.
 #[tokio::test]
+#[cfg(unix)] // The test retargets with std::os::unix::fs::symlink.
 async fn symlinks_are_deleted_after_their_no_follow_check() {
     let world = world(ViewMode::Symlinks).await;
     world.apply().await;
@@ -299,6 +299,10 @@ async fn trash_moves_a_row_only_when_it_is_ticked() {
 /// A Project at the Trash step whose `Processing/WBPP/master/` holds a
 /// generated flat master the user adopted into the calibration library
 /// (`masters/masterFlat_Ha.fit`). Returns the source in `Processing/`.
+/// Unix only, as are the tests that use it: master adoption refuses on any
+/// other platform (`contained_write::require_supported`), since only Unix
+/// syncs the folder after a no-replace install.
+#[cfg(unix)]
 async fn adopted_master_at_trash() -> (World, std::path::PathBuf) {
     let world = world(ViewMode::Symlinks).await;
     world.apply().await;
@@ -398,6 +402,7 @@ async fn adopted_master_at_trash() -> (World, std::path::PathBuf) {
 }
 
 /// The kept library copy of [`adopted_master_at_trash`].
+#[cfg(unix)]
 fn adopted_copy(world: &World) -> NativePath {
     NativePath::from_path(
         &world.calibration.path.to_path_buf().unwrap().join("masters/masterFlat_Ha.fit"),
@@ -407,6 +412,7 @@ fn adopted_copy(world: &World) -> NativePath {
 /// PRJ-AC-28, D-W70/D-W80/D-W97/D-W98: an adopted master's generated source
 /// is listed as a verified duplicate of its retained Calibration copy.
 #[tokio::test]
+#[cfg(unix)] // Adopts a master, which only Unix supports.
 async fn trash_offers_an_adopted_master_source_as_a_duplicate_and_never_output() {
     let (world, source) = Box::pin(adopted_master_at_trash()).await;
     let source_native = NativePath::from_path(&source);
@@ -472,6 +478,7 @@ async fn trash_offers_an_adopted_master_source_as_a_duplicate_and_never_output()
 /// source rewritten after its master was adopted no longer duplicates the
 /// kept copy, so it is refused by name, never offered without one.
 #[tokio::test]
+#[cfg(unix)] // Adopts a master, which only Unix supports.
 async fn trash_refuses_an_adopted_master_source_rewritten_since_adoption() {
     let (world, source) = Box::pin(adopted_master_at_trash()).await;
     fs::OpenOptions::new().append(true).open(&source).unwrap().write_all(b"rewritten").unwrap();
@@ -609,9 +616,8 @@ async fn a_stopped_close_resumes_to_archived_with_its_kept_view_repointed() {
 
     for link in &review.links {
         let path = link.link.to_path_buf().unwrap();
-        let target = fs::read_link(&path).unwrap();
-        assert!(target.starts_with(&archive_root), "{} reads {}", path.display(), target.display());
-        assert!(target.exists());
+        assert!(reads_below(&path, &archive_root), "{} reads outside the archive", path.display());
+        assert!(fs::read_link(&path).unwrap().exists());
     }
     assert!(!world.light(HA[0]).exists() && !world.light(OIII[0]).exists(), "originals retired");
     assert_eq!(trash.moved().len(), 4, "only the four originals went to the OS Trash");
@@ -621,6 +627,69 @@ async fn a_stopped_close_resumes_to_archived_with_its_kept_view_repointed() {
     );
     let after = world.library.catalog().project_desired(world.project).await.unwrap();
     assert_eq!(after.sessions, desired.sessions, "archiving changes no Project's sessions");
+}
+
+/// STO-IMP-FR-07, D-W107, D-W129: `{target}` is the session's confirmed
+/// Target. A different OBJECT stays an informational label.
+#[tokio::test]
+async fn archive_target_folder_uses_confirmed_target_not_object() {
+    let world = world(ViewMode::Copies).await;
+    world.correct(HA[0], &[("object", serde_json::json!("M31"))]).await;
+    let (archive, _) = archive_location(&world).await;
+    let trash = bin(&world);
+    skip_to_archive(&world, &trash).await;
+
+    let session = world.session_of(&world.captures, HA[0]).await;
+    let review = world.library.wrap_up_archive_review(world.project, archive.id).await.unwrap();
+    let offer = review.sessions.iter().find(|offer| offer.session_id == session.id).unwrap();
+    let file = offer
+        .files
+        .iter()
+        .find(|file| file.from.to_path_buf().unwrap() == world.light(HA[0]))
+        .unwrap();
+    assert!(
+        file.to
+            .to_path_buf()
+            .unwrap()
+            .ends_with(Path::new("NGC 7000").join("Ha/2026-10-12/light/Light_001.fits")),
+        "the confirmed Target, not the M31 OBJECT label, names the archive folder: {}",
+        file.to.display()
+    );
+}
+
+/// D-W129: a session without a confirmed Target archives under Unclassified,
+/// even when its OBJECT label names a Target.
+#[tokio::test]
+async fn archive_unclassified_target_uses_unclassified_folder_not_object() {
+    let world = world(ViewMode::Copies).await;
+    world.correct(OIII[0], &[("object", serde_json::json!("M31"))]).await;
+    let session = world.session_of(&world.captures, OIII[0]).await;
+    world
+        .sql(
+            "UPDATE associations SET state = 'unresolved', evidence = '[]' \
+             WHERE session_id = ?1 AND kind = 'target'",
+            &[&session.id.to_string()],
+        )
+        .await;
+    let (archive, _) = archive_location(&world).await;
+    let trash = bin(&world);
+    skip_to_archive(&world, &trash).await;
+
+    let review = world.library.wrap_up_archive_review(world.project, archive.id).await.unwrap();
+    let offer = review.sessions.iter().find(|offer| offer.session_id == session.id).unwrap();
+    let file = offer
+        .files
+        .iter()
+        .find(|file| file.from.to_path_buf().unwrap() == world.light(OIII[0]))
+        .unwrap();
+    assert!(
+        file.to
+            .to_path_buf()
+            .unwrap()
+            .ends_with(Path::new("unclassified").join("OIII/2026-10-13/light/Light_001.fits")),
+        "an Unclassified session uses the import fallback, not its M31 OBJECT label: {}",
+        file.to.display()
+    );
 }
 
 /// STO-FR-13, record §8 line 203 (a session an open Project holds can't be
@@ -741,9 +810,16 @@ fn links_read_originals(world: &World, review: &ArchiveReview) {
     let captures = world.captures.path.to_path_buf().unwrap();
     for link in &review.links {
         let path = link.link.to_path_buf().unwrap();
-        let target = fs::read_link(&path).unwrap();
-        assert!(target.starts_with(&captures), "{} reads {}", path.display(), target.display());
+        assert!(reads_below(&path, &captures), "{} reads outside captures", path.display());
     }
+}
+
+/// Whether the link at `path` reads an entry below `root`, compared in the
+/// form that names one entry exactly: Windows reports a target in its plain
+/// spelling though the roots are canonical `\\?\` paths there.
+fn reads_below(path: &Path, root: &Path) -> bool {
+    let target = fs::read_link(path).unwrap();
+    fs_pathsafe::long_path(&target).starts_with(fs_pathsafe::long_path(root))
 }
 
 /// STO-FR-06/07 (C5): a folder replaced at the destination's path is not
@@ -866,8 +942,8 @@ async fn a_copy_changed_after_its_verification_moves_no_record_or_link() {
     assert!(first.file.from.to_path_buf().unwrap().exists(), "the original stays");
     let captures = world.captures.path.to_path_buf().unwrap();
     for link in review.links.iter().filter(|link| link.asset_id == step.file.asset_id) {
-        let target = fs::read_link(link.link.to_path_buf().unwrap()).unwrap();
-        assert!(target.starts_with(&captures), "{} was repointed", link.link.display());
+        let path = link.link.to_path_buf().unwrap();
+        assert!(reads_below(&path, &captures), "{} was repointed", link.link.display());
     }
     assert!(
         !progress.repointed_links.iter().any(|link| link.asset_id == step.file.asset_id),

@@ -12,6 +12,8 @@ license.workspace = true
 # `MoveFileExW` (`Win32_Storage_FileSystem`); the version
 # `platevault_eject_windows` already locks.
 windows-sys = { version = "0.61.2", features = ["Win32_Storage_FileSystem"] }
+# The `\\?\` form a path reaches `MoveFileExW` in (`long_path`).
+fs_pathsafe = { path = "../pathsafe" }
 
 [target.'cfg(windows)'.dev-dependencies]
 tempfile = { workspace = true }

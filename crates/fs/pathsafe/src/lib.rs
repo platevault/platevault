@@ -24,9 +24,11 @@ pub mod export_dest;
 #[cfg(any(test, feature = "test-fixture"))]
 pub mod test_support;
 
+use std::borrow::Cow;
+use std::ffi::OsString;
 use std::fs::{self, Metadata};
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf, Prefix};
 use std::rc::Rc;
 
 use camino::Utf8Path;
@@ -426,6 +428,64 @@ pub fn create_symlink(source: &Path, destination: &Path) -> io::Result<()> {
     }
 }
 
+/// Whether the target text a link holds, as `fs::read_link` reports it,
+/// names `path` (astro-plan-fmz44). On Windows `read_link` turns the
+/// target's NT form back into its plain spelling (`C:\…`) wherever that
+/// names the same entry, whichever spelling the link was made with, so a
+/// link made to `\\?\C:\…` never reads back as that text. Both sides are
+/// therefore compared, as text, in their [`long_path`] form, which names
+/// one entry exactly. Elsewhere the target is the bytes the link holds,
+/// compared byte for byte: `/a/./b`, `/a//b` and `/a/b/` are not `/a/b`.
+#[must_use]
+pub fn link_reads(target: &Path, path: &Path) -> bool {
+    if cfg!(windows) {
+        long_path(target).as_os_str() == long_path(path).as_os_str()
+    } else {
+        target.as_os_str() == path.as_os_str()
+    }
+}
+
+/// `path` in the Windows `\\?\` form that lifts the `MAX_PATH` limit and
+/// that Win32 passes on without normalizing: `\\?\C:\…` for a drive path,
+/// `\\?\UNC\server\share\…` for a share. It is built only from an absolute
+/// path of plain names, joined with `\`; any other path (relative, holding
+/// `.` or `..`, already verbatim, or a device path) is returned as given,
+/// as is every path on a platform without path prefixes.
+#[must_use]
+pub fn long_path(path: &Path) -> Cow<'_, Path> {
+    let given = Cow::Borrowed(path);
+    let mut components = path.components();
+    let Some(Component::Prefix(prefix)) = components.next() else { return given };
+    let mut long = OsString::new();
+    match prefix.kind() {
+        Prefix::Disk(letter) => {
+            long.push(r"\\?\");
+            long.push(format!("{}:", char::from(letter)));
+        }
+        Prefix::UNC(server, share) => {
+            long.push(r"\\?\UNC\");
+            long.push(server);
+            long.push(r"\");
+            long.push(share);
+        }
+        _ => return given,
+    }
+    if components.next() != Some(Component::RootDir) {
+        return given;
+    }
+    let mut named = false;
+    for component in components {
+        let Component::Normal(name) = component else { return given };
+        long.push(r"\");
+        long.push(name);
+        named = true;
+    }
+    if !named {
+        long.push(r"\");
+    }
+    Cow::Owned(PathBuf::from(long))
+}
+
 // ── Wire-path helpers ─────────────────────────────────────────────────────────
 
 /// Convert `path` to the UTF-8 text wire and contract fields carry, with `/`
@@ -809,6 +869,56 @@ mod tests {
 
         assert!(is_link_or_junction(&link));
         assert_eq!(std::fs::read(&link).unwrap(), b"data");
+    }
+
+    /// astro-plan-fmz44: a link made to its target's canonical spelling,
+    /// which is `\\?\C:\…` on Windows, reads back as naming that target,
+    /// though Windows reports it in its plain spelling.
+    #[test]
+    fn a_link_reads_the_target_it_was_made_with() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = fs::canonicalize(dir.path()).unwrap();
+        let (target, other) = (root.join("target.fits"), root.join("other.fits"));
+        let link = root.join("link.fits");
+        fs::write(&target, b"data").unwrap();
+        create_symlink(&target, &link).unwrap();
+        let reads = fs::read_link(&link).unwrap();
+        assert!(link_reads(&reads, &target), "{} reads {}", link.display(), reads.display());
+        assert!(!link_reads(&reads, &other));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn absolute_paths_take_their_long_form_and_others_stay_as_given() {
+        let long = |path: &str| long_path(Path::new(path)).into_owned();
+        assert_eq!(long(r"C:\Work\View"), PathBuf::from(r"\\?\C:\Work\View"));
+        assert_eq!(long("C:/Work/View"), PathBuf::from(r"\\?\C:\Work\View"));
+        assert_eq!(long(r"\\nas\astro\View"), PathBuf::from(r"\\?\UNC\nas\astro\View"));
+        assert_eq!(long(r"C:\"), PathBuf::from(r"\\?\C:\"));
+        for given in [r"\\?\C:\Work", r"Work\View", r"C:Work", r"C:\Work\..\View", r"\\.\COM1"] {
+            assert_eq!(long(given), PathBuf::from(given), "{given}");
+        }
+        assert!(link_reads(Path::new(r"C:\Work\View"), Path::new(r"\\?\C:\Work\View")));
+        assert!(!link_reads(Path::new(r"C:\Work\View"), Path::new(r"\\?\C:\Work\Other")));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unix_paths_stay_as_given() {
+        for given in ["/Work/View", "Work/View", r"C:\Work"] {
+            assert_eq!(long_path(Path::new(given)), Path::new(given));
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unix_link_targets_compare_byte_for_byte() {
+        let path = Path::new("/a/b");
+        assert!(link_reads(path, path));
+        for other in ["/a/./b", "/a//b", "/a/b/"] {
+            assert!(!link_reads(Path::new(other), path), "{other}");
+            assert!(!link_reads(path, Path::new(other)), "{other}");
+        }
     }
 
     #[cfg(unix)]

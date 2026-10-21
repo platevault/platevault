@@ -2133,6 +2133,7 @@ dependencies = [
 name = "fs_noreplace_windows"
 version = "0.1.0"
 dependencies = [
+ "fs_pathsafe",
  "tempfile",
  "windows-sys 0.61.2",
 ]

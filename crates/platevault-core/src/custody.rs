@@ -115,6 +115,14 @@ pub(crate) fn observe_entry(path: &Path) -> Result<EntryEvidence, LibraryError> 
     observe(path, None)
 }
 
+/// Whether `evidence` is a link reading `path`. Its recorded target is what
+/// `fs::read_link` reported, which on Windows is the plain spelling of a
+/// target the link was made with as `\\?\…` ([`fs_pathsafe::link_reads`]).
+pub(crate) fn link_reads(evidence: &EntryEvidence, path: &Path) -> bool {
+    matches!(&evidence.kind, EntryKind::Link { target }
+        if target.to_path_buf().is_ok_and(|target| fs_pathsafe::link_reads(&target, path)))
+}
+
 /// [`observe_entry`] for a catalog source below its registered `root`
 /// (STO-FR-07): the entry is reached from the root one folder at a time,
 /// never following a link, and its evidence keeps the root so that every

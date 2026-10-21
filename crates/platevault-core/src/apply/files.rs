@@ -31,7 +31,7 @@ use super::plan::PlanEntry;
 use super::ApplyControl;
 use crate::custody::rooted::{Folder, Unentered};
 use crate::custody::{
-    observe_entry, observe_source, open_source, same_identity, transfer, verify_source,
+    link_reads, observe_entry, observe_source, open_source, same_identity, transfer, verify_source,
 };
 use crate::layout::{self, VIEW_KEPT_FOLDER, VIEW_PREVIOUS_FOLDER};
 use crate::patched_copy::{self, HeaderPatch, PatchTarget};
@@ -242,7 +242,7 @@ pub fn place(placing: &Placing) -> Result<Written, ItemReason> {
             fs_pathsafe::create_symlink(&original, &path).map_err(|error| failed(&path, &error))?;
             let link = observe_entry(&path)
                 .map_err(|error| reason(ReasonCode::DestinationChanged, error.to_string()))?;
-            if link.kind != (EntryKind::Link { target: placing.snapshot.path.clone() }) {
+            if !link_reads(&link, &original) {
                 return Err(reason(
                     ReasonCode::DestinationChanged,
                     format!("{} does not point at {}", path.display(), original.display()),
@@ -1236,14 +1236,13 @@ pub fn old_link(
     original: Option<&Original>,
 ) -> Result<(), PreviousItemReason> {
     let link = observe_entry(path).map_err(|_| PreviousItemReason::UnverifiedLink)?;
-    let EntryKind::Link { target } = &link.kind else {
-        return Err(PreviousItemReason::UnverifiedLink);
-    };
     let ours = entry
         .written
         .as_ref()
         .is_some_and(|written| same_identity(&link.fingerprint.identity, written));
-    let points = original.is_some_and(|original| *target == original.path);
+    let points = original
+        .and_then(|original| original.path.to_path_buf().ok())
+        .is_some_and(|original| link_reads(&link, &original));
     if ours && points {
         Ok(())
     } else {

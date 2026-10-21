@@ -972,8 +972,9 @@ const KEPT_LINKS: &str = "SELECT e.project_id, e.generation, e.seq, e.asset_id, 
 pub struct ArchiveAsset {
     pub session_id: Uuid,
     pub asset: Asset,
-    /// The session's Target when it counts as confirmed; the template's `{target}`
-    /// when the header names none.
+    /// The session's confirmed Target, or `None` for Unclassified; archive
+    /// naming uses the confirmed Target or its `unclassified` fallback, never
+    /// the frame's OBJECT label (D-W107, D-W129).
     pub target: Option<String>,
 }
 
