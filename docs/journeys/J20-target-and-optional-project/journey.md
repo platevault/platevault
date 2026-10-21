@@ -1,7 +1,7 @@
 ---
 id: J20
 title: Open a Target and set up its Project with rigs and goals
-version: 5
+version: 6
 status: draft
 last_reviewed: 2026-10-03
 actors: [primary-user]
@@ -92,9 +92,9 @@ Adding sessions and the first Apply follow in J21. Done means:
 ### S9 — Remove and restore suggestion criteria {#S9}
 
 - **Do:** On the Project page, remove rig `RedCat` and subject NGC 7000 from the suggestion criteria, then add both back. Remove rig `Esprit` and add it back.
-- **Expect:** Removing `RedCat` and subject NGC 7000 changes which sessions the Project suggests, and adding them back restores the five RedCat suggestions. Removing `Esprit` removes the other-camera session from suggestions; adding it back restores that suggestion. The Project still holds no session.
-- **Expect (negative):** Removing a subject or rig adds or removes no session and builds no View. Which goals NGC 7000 has after it is removed and added back is G9.
-- **Trace:** PRJ-FR-02, PRJ-FR-04, PRJ-FR-08, PRJ-FR-31 · PRJ-AC-06 · D-W94, D-W95, D-W96 · G9
+- **Expect:** Removing `RedCat` and subject NGC 7000 changes which sessions the Project suggests, and adding them back restores the five RedCat suggestions. Removing `Esprit` removes the other-camera session from suggestions; adding it back restores that suggestion. The Project still holds no session. NGC 7000's goals stay hidden while its subject is removed and return when it is added again.
+- **Expect (negative):** Removing a subject or rig adds or removes no session and builds no View.
+- **Trace:** PRJ-FR-02, PRJ-FR-03, PRJ-FR-04, PRJ-FR-08, PRJ-FR-31 · PRJ-AC-06 · D-W94, D-W95, D-W96 · astro-plan-rzbzu.1
 
 ## Success criteria
 
@@ -103,7 +103,7 @@ Adding sessions and the first Apply follow in J21. Done means:
 - SC3: Zero source-file or quality-state changes and no View exist through S5.
 - SC4: The S7 windows differ between the two sites, while Project suggestions and session capture-site values are identical, and no site carries the Default pill after S7.
 - SC5: At S8, Home's Open work reads exactly 1 session needing review for `NGC 7000 HOO` and leads to 30 Sep; the Project still holds 0 sessions and no View.
-- SC6: S9 removes and restores RedCat, Esprit and NGC 7000 as suggestion criteria; afterwards the suggestions are the six of S4, and the Project holds 0 sessions and no View.
+- SC6: S9 removes and restores RedCat, Esprit and NGC 7000 as suggestion criteria. Afterwards the suggestions are the six of S4, and the Project holds 0 sessions and no View. NGC 7000's goals are restored when it is added back (S9).
 
 ## Known gaps
 
@@ -114,8 +114,9 @@ Adding sessions and the first Apply follow in J21. Done means:
 - G6: (dissolved 2026-10-12): answered by Round 6 "Rename runs and Projects"; S8 now asserts that Start run auto-names the run `NGC 7000 RedCat` and that Rename on the run header renames it to `NGC7000-HOO-Siril` without touching a file or the selection.
 - G7: Out of scope for this journey: the exposure-mismatch warning per subject and channel (PRJ-FR-11, HARNESS-V5-IA.md S3) is not exercised. Its missing-calibration half is gone, because only a session with settled calibration can join a Project (D-W105). Blocks readiness until covered by a step or a journey.
 - G8: Out of scope for this journey: detailed calibration matching thresholds, master-version selection and reassignment are covered by the calibration journeys. S3 reads the Project's calibration diagram but does not change a pinned assignment.
-- G9: Unresolved product question: PRJ-FR-02 says removing a subject changes only the suggestions, and goals are set per subject (PRJ-FR-03). No source says what happens to a subject's goals when it is removed and added back (S9): kept, copied again from the template, or empty. S9 asserts only the suggestions. Blocks readiness.
+- G9: (dissolved 2026-10-19): the owner's answer in astro-plan-rzbzu.1 settles PRJ-FR-02/03: removing NGC 7000 keeps its goals hidden in the Project, and adding the subject back restores them (S9).
 - G10: Rests on provisional F4 items, pending the owner's confirmation in PR #1804: D-W94's rig list that only decides suggestions (S2, S4, S9), and D-W96's matching rule and its "captured" count of every matching suggestion (S3, S4, S9). If the owner changes one, the steps that cite it change.
+- G11: D-W135 not observed: S9 adds back a subject that still has goals, and no step removes a subject that has no goals and adds it back with its template's goals (PRJ-FR-02, PRJ-AC-50; D-W135; owner's answer, 2026-10-20). Blocks readiness until a fixture does.
 
 ## Delta log
 - **Δ2** 2026-10-06 · S1, S2, S3, S4, S5, S6, S7, S8, +S9 · behavior-change
@@ -132,3 +133,6 @@ Adding sessions and the first Apply follow in J21. Done means:
 - **Δ5** 2026-10-15 · S1, S2, S3, S4, S5, S6, S7, S8, S9 · behavior-change
   The Project holds user-added sessions in groups by rig and framing, with suggestions kept separate. The Project page exposes Sessions, Calibrate, View, Output and Wrap up; Apply builds and updates its View from originals. Adding sessions and the first Apply move to J21, so S8 now reads the Project's next step on Home (1 session needs review) instead of adding sessions. 30 Sep still needs review, so the Project suggests five RedCat sessions and OIII reads 6h35 captured. G7 keeps the exposure-mismatch warning open, and G8 to G10 are new.
   Evidence: D-W78, D-W89, D-W93 to D-W106 (F4 Project model, owner's answers of 2026-10-14) in PR #1804, FR-033 to FR-035, CAL-FR-09, LIB-FR-17, LIB-FR-20, LIB-FR-23, PRJ-FR-01 to PRJ-FR-09, PRJ-FR-11, PRJ-FR-12, PRJ-FR-14, PRJ-FR-17, PRJ-FR-18, PRJ-FR-27, PRJ-FR-31, PRJ-FR-32, VSEL-FR-03, VSEL-FR-12, VSEL-FR-14, VSEL-FR-16 · by: SpecF4Writer2 (intent-gated)
+- **Δ6** 2026-10-19 · S9, SC6 · behavior-change
+  Removing a subject keeps its goals hidden in the Project; adding it back restores them.
+  Evidence: owner's answers of 2026-10-19 in astro-plan-rzbzu.1, PRJ-FR-02, PRJ-FR-03 · by: OwnerAnswersDocsFix (intent-gated)

@@ -1,7 +1,7 @@
 ---
 id: J15
 title: Register rigs with their filter lists and observing sites in Settings
-version: 6
+version: 7
 status: draft
 last_reviewed: 2026-07-14
 actors: [primary-user]
@@ -15,8 +15,7 @@ trace: [063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 06
 The user records cameras, telescopes, filters and observing sites in Settings,
 then composes cameras and telescopes into rigs. Two cameras of the same model
 need distinct aliases, and a camera can be set to **Don't use darks** or
-**Don't use bias**. A later session associates with the hand-made rig; which
-version a session captured before the rig existed records is open (G12). A FITS FILTER value that a session's rig does not list prompts
+**Don't use bias**. A later session associates with the hand-made rig; if captured before its first version, it records that first version (PLAN-EQ-FR-07; owner's answer, 2026-10-19, astro-plan-rzbzu.1). A FITS FILTER value that a session's rig does not list prompts
 the user to add a filter to that rig. Sites carry at most one Default pill, set
 only by **Make default**, and removing the default site hands the pill to the
 first remaining site by name. Done means: `RedCat` (mono) and `Esprit` (OSC)
@@ -76,9 +75,9 @@ added and removed with the Default pill moving as stated, and Backyard and
 ### S3b — Index a session shot with the registered gear {#S3b}
 
 - **Do:** Outside PlateVault, copy `Filter-test/Incoming/Halpha-test` into `Filter-test/Captures`. In Settings › Locations, click **Rescan** on the `Filter-test/Captures` row. Open `Halpha-test` in Sessions, then open Settings → Equipment.
-- **Expect:** Sessions lists `Halpha-test` with 10 lights. Its rig evidence lists INSTRUME `ZWO ASI2600MM Pro`, TELESCOP `RedCat 51` and FOCALLEN `250 mm`, and associates the rig `RedCat` without confirming it. The camera alias `ZWO ASI2600MM Pro` identifies camera ASI2600MM. Which rig version the session records, given that it was captured on 2026-10-02, before S3 created `RedCat`, is G12. Settings → Equipment lists exactly the cameras ASI2600MM and ASI533MC, the telescopes RedCat 51 and Esprit 100, and the rigs `RedCat` and `Esprit`.
+- **Expect:** Sessions lists `Halpha-test` with 10 lights. Its rig evidence lists INSTRUME `ZWO ASI2600MM Pro`, TELESCOP `RedCat 51` and FOCALLEN `250 mm`, and associates the rig `RedCat` without confirming it. The camera alias `ZWO ASI2600MM Pro` identifies camera ASI2600MM. Although `Halpha-test` was captured before `RedCat`'s first rig version, it records that first version (PLAN-EQ-FR-07; owner's answer, 2026-10-19, astro-plan-rzbzu.1, D-W126). Settings → Equipment lists exactly the cameras ASI2600MM and ASI533MC, the telescopes RedCat 51 and Esprit 100, and the rigs `RedCat` and `Esprit`.
 - **Expect (negative):** Indexing detects no camera, telescope or rig: no entry reads Detected, and no rig named from the header values appears beside `RedCat`. Indexing changes none of `RedCat`'s fields and leaves its filter list empty. Every `Halpha-test` file still matches its P5 SHA-256.
-- **Trace:** LIB-FR-05, LIB-FR-23, LIB-FR-26 · PLAN-EQ-FR-07, PLAN-EQ-FR-08 · D11, D-W104, D-W105 · HARNESS-V5-FEEDBACK-R1.md §Round 6 "Rigs: detection plus manual add" · G12
+- **Trace:** LIB-FR-05, LIB-FR-23, LIB-FR-26 · PLAN-EQ-FR-07, PLAN-EQ-FR-08 · D11, D-W104, D-W105, D-W126 · owner's answer, 2026-10-19 (astro-plan-rzbzu.1) · HARNESS-V5-FEEDBACK-R1.md §Round 6 "Rigs: detection plus manual add" · G12
 
 ### S4 — Add filters to `RedCat` {#S4}
 
@@ -97,9 +96,9 @@ added and removed with the Default pill moving as stated, and Backyard and
 ### S4b — Confirm the session's rig and meet the unknown filter {#S4b}
 
 - **Do:** In Sessions, open `Halpha-test`. Note its filter, then choose **Confirm rig** with the rig `RedCat`.
-- **Expect:** Before the rig is confirmed, the session reads rig `RedCat` Associated (S3b) and shows the observed FILTER value `Halpha` with no prompt. After confirmation it reads rig `RedCat` Confirmed, shows the filter `Halpha` as unknown, and offers "Add Halpha to RedCat".
+- **Expect:** Before the rig is confirmed, the session reads rig `RedCat` Associated (S3b) and shows the observed FILTER value `Halpha` with no prompt. After confirmation it reads rig `RedCat` Confirmed, shows the filter `Halpha` as unknown, and offers **Add Halpha to RedCat**, which asks for the bands it passes (PLAN-EQ-FR-04; owner's answer, 2026-10-19, astro-plan-rzbzu.1, D-W127).
 - **Expect (negative):** No prompt names a rig before the session's rig is confirmed. Confirming the rig changes no header byte.
-- **Trace:** LIB-FR-05, PLAN-EQ-FR-04 · PLAN-EQ-AC-03, edge case "rig not yet confirmed" · D-W31, D-W37 · HARNESS-V5-IA.md §Screens S12 (Confirm rig) · G10
+- **Trace:** LIB-FR-05, PLAN-EQ-FR-04 · PLAN-EQ-AC-03, edge case "rig not yet confirmed" · D-W31, D-W37, D-W127 · HARNESS-V5-IA.md §Screens S12 (Confirm rig) · owner's answer, 2026-10-19 (astro-plan-rzbzu.1); the prototype still lacks this session control (G10)
 
 ### S4c — Decline the prompt {#S4c}
 
@@ -173,7 +172,7 @@ added and removed with the Default pill moving as stated, and Backyard and
 - SC5: Settings → Goal templates lists the same 5 built-in templates with `RedCat` and with `Esprit` selected (S4e).
 - SC6: 2 sites are saved and 0 are marked default (S6, S7).
 - SC7: Across S5a to S5d at most 1 Default pill shows at any time; 0 sites become default on save; removing the default `Test Zeta` makes `Test Alpha` default; after S5d 0 sites and 0 defaults remain.
-- SC8: After S3b, Settings → Equipment lists exactly 2 cameras, 2 telescopes and 2 rigs, 0 of them Detected, and `Halpha-test` associates `RedCat` (S2, S2a, S3b).
+- SC8: After S3b, Settings → Equipment lists exactly 2 cameras, 2 telescopes and 2 rigs, 0 of them Detected, and `Halpha-test` associates `RedCat` and records its first version although it predates the rig (S2, S2a, S3b; PLAN-EQ-FR-07, D-W126).
 - SC9: In S2a, saving a second ASI2600MM without an alias that no other camera uses is refused once, and removing it leaves exactly 2 cameras (S2a).
 
 ## Known gaps
@@ -187,9 +186,9 @@ added and removed with the Default pill moving as stated, and Backyard and
 - G7: Out of scope for this journey: the unknown-filter prompt in the Import preview (STO-IMP-FR-03) and the Targets Filters strip a rig drives (PLAN-TGT-FR-06) are not exercised here. J35 covers the strip. Blocks readiness until the Import prompt is covered by a step or a journey.
 - G8: (dissolved 2026-10-12): the pane is Settings → Observing sites, and the first saved site does not become the default (S5a, S6).
 - G9: (dissolved 2026-10-12): answered by Round 6 "Rigs: detection plus manual add"; S1 to S3a now assert adding cameras, telescopes and rigs by hand before any session uses them, and S3b asserts that indexing a session shot with that gear associates the hand-made rig and detects no duplicate. J19/S9b covers renaming and editing detected rigs.
-- G10: Unresolved product question (carried from G9, not answered by Round 6): the v5 prototype's session detail offers no "Add {value} to {rig}", and the v5 design (HARNESS-V5-IA.md S16) does not say either way, so S4b and S4c keep the contract text (PLAN-EQ-FR-04). Blocks readiness.
+- G10: (dissolved 2026-10-19): the owner's answer in astro-plan-rzbzu.1 settles PLAN-EQ-FR-04: S4b and S4c keep the session's unknown-filter contract and **Add {value} to {rig}** control; the prototype still lacks that control.
 - G11: Unresolved implementation qualification: the v5 design does not state the rule that matches a header to a camera or telescope added by hand (J37/G3 records the same gap for rigs). S3b assumes the prototype's: INSTRUME equal to a camera's name or one of its aliases, and TELESCOP equal to a telescope's name. Blocks readiness.
-- G12: Out of scope for this journey: rig versions (PLAN-EQ-FR-07) are not walked. S4 to S4d edit `RedCat`'s filters after `Halpha-test` is indexed, but no step asserts the versions those edits create or their start dates, because the fixture fixes no date for them. A camera's Don't use darks and Don't use bias defaults on a session (PLAN-EQ-AC-11) are not exercised either. Unresolved product question, listed open in PR #1804: which version a session captured before a rig's first version gets, and the default start date of a new version. `Halpha-test` was captured on 2026-10-02, before S3 creates `RedCat`, so S3b and SC8 assert no version for it. Blocks readiness until the owner answers and a step or a journey covers it.
+- G12: Out of scope for this journey: S4 to S4d edit `RedCat`'s filters after `Halpha-test` is indexed, but no step asserts the rig versions those edits create or their start dates, which default to today and stay editable (PLAN-EQ-FR-07, D-W126), because the fixture fixes no date for them. A camera's Don't use darks and Don't use bias defaults on a session (PLAN-EQ-AC-11) are not exercised either. Blocks readiness until a step or a journey covers them.
 
 ## Delta log
 
@@ -209,3 +208,6 @@ added and removed with the Default pill moving as stated, and Backyard and
 - **Δ6** 2026-10-17 · S6, +P6, +P7 · behavior-change
   The observing-site editor has a Leaflet and OpenStreetMap map, place search and **Use my location**, which fill the latitude and longitude fields; the fields are the record. New P7 grants location permission with a fixed test location. Offline (new P6), "Map unavailable" replaces the map and the search.
   Evidence: HARNESS-V5-FEEDBACK-R1.md Round 9 C5 · PLAN-FR-01 · prototype pickers (picker_map_unavailable, catalogue_pickers_location_desc) on ui-harness-v5 · by: JourneysR9c (intent-gated)
+- **Δ7** 2026-10-19 · S3b, S4b, SC8 · behavior-change
+  A session captured before its rig's first version records that first version; an unknown FILTER value on a confirmed rig offers **Add {value} to {rig}** in the session and asks which bands it passes. The prototype still lacks the session control.
+  Evidence: owner's answers of 2026-10-19 in astro-plan-rzbzu.1 · by: OwnerAnswersDocsFix (intent-gated)

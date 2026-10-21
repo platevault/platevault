@@ -1,13 +1,15 @@
 ---
 id: J18
 title: Get oriented after setup and make a first import, Project and View
-version: 8
+version: 9
 status: draft
 last_reviewed: 2026-07-19
 actors: [astrophotographer]
 surfaces: [onboarding, shell, home, import, sessions, targets, projects, view, output, settings]
 interfaces: [desktop-ui, desktop-ui-macos]
 trace:
+  - specs/067-frame-review/spec.md (PIX-FR-14; D-W118)
+  - astro-plan-rzbzu.1 (owner's answer of 2026-10-19: Mark rest usable confirmation)
   - specs/056-onboarding-redesign (legacy design of the walk and checklist; PR #1048)
   - specs/056-onboarding-redesign/PENDING_REVIEW_QUESTIONS.md (PQ-004, user directive 2026-07-18: auto-hide when complete, resurface through Settings)
   - specs/063-clean-rebuild-contract/spec.md (FR-020, FR-023)
@@ -99,7 +101,7 @@ first Apply builds the Project's View from the original sessions.
 
 ### S9 — Import real captures and finish their review {#S9}
 
-- **Do:** From the Import navigation entry, choose **Choose folder…**, pick `Untyped/`, read the preview, then close the sheet without importing. Open Import again and choose `Card-1` as the source. Its destination is `Empty/Captures`, the only Captures location. In the preview, confirm NGC 7000 as the incoming session's Target, choosing it there if it is not prefilled. For the session's darks, flats and bias, which read not found, choose **No darks**, **No flats** and **No bias**. Choose **Copy** and click **Import 30 frames**. When the import finishes, choose **Review sessions** (provisional copy, from the prototype). On the Review step it opens, choose **Mark rest usable**, confirming it if PlateVault asks, then choose **Finish review**. Open Home.
+- **Do:** From the Import navigation entry, choose **Choose folder…**, pick `Untyped/`, read the preview, then close the sheet without importing. Open Import again and choose `Card-1` as the source. Its destination is `Empty/Captures`, the only Captures location. In the preview, confirm NGC 7000 as the incoming session's Target, choosing it there if it is not prefilled. For the session's darks, flats and bias, which read not found, choose **No darks**, **No flats** and **No bias**. Choose **Copy** and click **Import 30 frames**. When the import finishes, choose **Review sessions** (provisional copy, from the prototype). On the Review step it opens, choose **Mark rest usable**, read the Unreviewed-frame count in the confirmation and confirm it, then choose **Finish review**. Open Home (D-W118; owner's answer, 2026-10-19, astro-plan-rzbzu.1).
 - **Expect:** For `Untyped/`, the preview holds both frames, the start button is unavailable, and the sheet reads `Only held files`. No session is created.
 - **Expect:** The Card-1 preview shows the session's darks, flats and bias as not found, then as No darks, No flats and No bias after the choices. The import's summary reads `30 frames · <size> · 1 session`, and the session lands with its 30 frames Unreviewed. The finished import offers **Review sessions** (provisional copy), which opens that session's Review step, the first session in the Sessions "Needs review" filter. After **Mark rest usable** all 30 frames read Usable, and **Finish review** makes the session Ready. Sessions then lists one Ready session with confirmed Target NGC 7000 and settled calibration, and it is in neither the Needs review nor the Needs calibration filter.
 - **Expect (negative):** Neither the held-only `Untyped/` source nor closing the sheet creates a session or changes Home. No Inbox and no later filing step appears. The session is not Ready before **Finish review**. No demo or sample session is created: the only frames are the user's own 30 imported ones.
@@ -159,7 +161,7 @@ first Apply builds the Project's View from the original sessions.
 - G5: (dissolved 2026-10-15): D-W89 leaves the setup checklist off Home, so no setup, import, Project or run outcome ticks an item. S9 to S9b assert the import, Project and Apply outcomes themselves.
 - G6: (dissolved 2026-10-15): Home has no setup checklist under PRJ-FR-17 and D-W89; S6, S7 and S7a now assert the current dashboard sections and their empty states.
 - G7: Rests on provisional items, pending the owner's confirmation in PR #1804: D-W96's matching rule, which makes the Ready Card-1 session a suggestion of `First light` (S9b), and D-W100's rule that the first Apply builds the View with no separate Start processing (S9b). D-W117's walk details are provisional too. The walk is modal and driven by Next, Back, Skip and Escape (S2, S3). Its stops are Projects, Targets, Sessions, Calibration, Import, Activity, Settings and Home (S2). If the owner changes one, the steps that cite it change.
-- G8: Unresolved product question, open with the owner (D-W118): whether **Mark rest usable** asks for confirmation. S9 confirms it only if PlateVault asks and asserts the outcome after that, which holds under either answer. Blocks readiness.
+- G8: (dissolved 2026-10-19): the owner's answer in astro-plan-rzbzu.1 settles D-W118: **Mark rest usable** asks for confirmation and names the number of Unreviewed frames. S9 requires and confirms that action.
 
 ## Delta log
 
@@ -214,3 +216,6 @@ steps above were checked against it.
 - **Δ8** 2026-10-17 · S9 · behavior-change
   The finished import offers **Review sessions**, which opens the imported session's Review step, the first in the Sessions "Needs review" queue, so S9 reviews the session there.
   Evidence: HARNESS-V5-FEEDBACK-R1.md Round 9 C14 · D-W78 · LIB-FR-20, PIX-FR-18 · by: JourneysR9c (intent-gated)
+- **Δ9** 2026-10-19 · S9 · behavior-change
+  **Mark rest usable** asks for confirmation and names the number of Unreviewed frames.
+  Evidence: PIX-FR-14 · D-W118 · owner's answer, 2026-10-19 in astro-plan-rzbzu.1 · by: OwnerAnswersDocsFix (intent-gated)

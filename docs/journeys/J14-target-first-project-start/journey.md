@@ -1,7 +1,7 @@
 ---
 id: J14
 title: Add a Target and sessions to an existing Project
-version: 5
+version: 7
 status: draft
 last_reviewed: 2026-07-14
 actors: [primary-user]
@@ -37,7 +37,7 @@ Done means:
 ### S1 — Find NGC 7000 on the Targets page {#S1}
 
 - **Do:** From Home, open **Targets**. Search for `ngc7000`. Open the NGC 7000 result row's menu and choose **Add ★**. In the toolbar rig selector, choose `RedCat`.
-- **Expect:** Targets opens on **My targets**, which lists only NGC 6888, with the badge `Project Cygnus HOO`. The search lists NGC 7000 with its source, and `ngc7000` matches the same Target as `NGC 7000`. After **Add ★**, NGC 7000 is listed under My targets with ★ set. Choosing the rig adds a Fit column, and NGC 7000's Fit reads fits, with its coverage: its major axis is about 2° against the rig's 3.6° shorter side. The Filters column shows one chip per `RedCat` filter, Ha and OIII, each graded good tonight.
+- **Expect:** Targets opens on **My targets**, which lists NGC 6888, with the badge `Project Cygnus HOO`, and NGC 7000, with no ★ and no badge, because it has indexed sessions (PLAN-TGT-FR-01, D-W125; owner's answer, 2026-10-19, astro-plan-rzbzu.1). The search lists NGC 7000 with its source, and `ngc7000` matches the same Target as `NGC 7000`. After **Add ★**, NGC 7000 is listed under My targets with ★ set. Choosing the rig adds a Fit column, and NGC 7000's Fit reads fits, with its coverage: its major axis is about 2° against the rig's 3.6° shorter side. The Filters column shows one chip per `RedCat` filter, Ha and OIII, each graded good tonight.
 - **Expect (negative):** No result row carries an Add button. Starring a Target creates no Project, adds no subject and assigns no session to anything.
 - **Trace:** Targets list · HARNESS-V5-IA.md S10 · HARNESS-V5-FEEDBACK-R1.md Round 5 "Click a result to act", P-PLAN2 · PLAN-TGT-FR-01, PLAN-TGT-FR-03, PLAN-TGT-FR-11, PLAN-TGT-FR-06 · PLAN-TGT-AC-03, PLAN-TGT-AC-11 · D-W17, D-W23, D-W61
 
@@ -61,6 +61,13 @@ Done means:
 - **Expect:** The Project has subjects NGC 6888 and NGC 7000, rig `RedCat`, and the five chosen sessions in groups by rig and framing. The Sessions step shows the other matching RedCat suggestion as Offline, not added. The Apply sheet lists the five additions and the new View folder tree. After applying, `Cygnus HOO/View/` contains the five sessions in the layout for their groups and nights. NGC 7000's goals read Ha `9h15 in project · 9h15 captured · goal 10h` and OIII `8h35 in project · 10h35 captured · goal 10h`; both are unmet.
 - **Expect (negative):** The Project adds no session without the user's action. The offline 12 Sep original is not needed by this Apply; no original is moved, renamed or modified, and no quality state changes. The Project stays Open, and no goal reads "in project" above "captured".
 - **Trace:** PRJ-FR-04, PRJ-FR-07, PRJ-FR-08, PRJ-FR-27, PRJ-FR-31 · VSEL-FR-03, VSEL-FR-12, VSEL-FR-14, VSEL-FR-16 · FR-033, FR-034 · D-W94, D-W95, D-W96, D-W100
+
+### S2c — Change a subject's Target to one with hidden goals {#S2c}
+
+- **Do:** On the Targets page, search `ic5070` and click IC 5070's result row. Choose **Add to Project** and choose `Cygnus HOO`. In the Project, set IC 5070's Ha goal to 8h, delete its OIII goal, then remove IC 5070 as a subject. Change the NGC 7000 subject's Target to IC 5070 and read its goals. Then change it back to NGC 7000 and read its goals again.
+- **Expect:** Pointed at IC 5070, the subject shows its hidden Ha 8h goal again and no OIII goal, and NGC 7000's Ha 10h and OIII 10h goals are hidden. Pointed back at NGC 7000, it shows Ha 10h and OIII 10h again, and IC 5070's Ha 8h goal is hidden.
+- **Expect (negative):** Changing the Target keeps every Project session, changes no session's Target or source file, and never gives one Target's goal values to the other.
+- **Trace:** PRJ-FR-02, PRJ-FR-03 · PRJ-AC-38, PRJ-AC-49 · D-W94, D-W134
 
 ### S5 — Read the Project sessions and groups {#S5}
 
@@ -98,6 +105,7 @@ Done means:
 - SC4: After each S6 rename, the badge, Target page and Project page show the same Project name; the subject NGC 7000 remains linked to the Project.
 - SC5: After S7, the Project has 2 rigs and 6 sessions, including the Esprit session; Ha reads 12h35 in project and 12h35 captured.
 - SC6: The S8 manifest of original J19 files equals P4 for 100% of paths, sizes and hashes, and 0 frames change library quality state.
+- SC7: Pointed at IC 5070, the subject shows 1 goal, Ha 8h, and hides NGC 7000's 2 goals; pointed back, it shows Ha 10h and OIII 10h and hides IC 5070's goal (S2c).
 
 ## Known gaps
 
@@ -123,3 +131,9 @@ Done means:
 - **Δ5** 2026-10-15 · S2, S2a, S2b, S5, S6, S7, S8 · behavior-change
   The Project holds sessions in groups by rig and framing; users add sessions explicitly, and Apply builds the Project's View from originals. Processing no longer uses a separate run, revisions or run folders.
   Evidence: D-W93 to D-W106 (F4 Project model, owner's answers of 2026-10-14) in PR #1804, FR-033 to FR-035, LIB-FR-17, LIB-FR-20, LIB-FR-23, PRJ-FR-01, PRJ-FR-02, PRJ-FR-04, PRJ-FR-05, PRJ-FR-07 to PRJ-FR-09, PRJ-FR-27, PRJ-FR-31, VSEL-FR-03, VSEL-FR-12, VSEL-FR-14, VSEL-FR-16 · by: SpecF4Writer2 (intent-gated)
+- **Δ6** 2026-10-19 · S1 · behavior-change
+  My targets lists every Target with at least one session, so S1 lists NGC 7000 before **Add ★**.
+  Evidence: D-W125, PLAN-TGT-FR-01 · owner's answer, 2026-10-19 in astro-plan-rzbzu.1 · by: Main (intent-gated)
+- **Δ7** 2026-10-20 · +S2c, +SC7 · behavior-change
+  Changing a subject's Target to one with hidden goals restores those goals and hides the subject's previous goals under its old Target.
+  Evidence: D-W134 (owner's answer, 2026-10-20) in PR #1855, PRJ-FR-02, PRJ-AC-49 · by: Main (intent-gated)

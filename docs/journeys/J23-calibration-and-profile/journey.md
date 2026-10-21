@@ -1,7 +1,7 @@
 ---
 id: J23
 title: Review Project calibration and configure its View
-version: 7
+version: 9
 status: draft
 last_reviewed: 2026-10-03
 actors: [primary-user]
@@ -23,6 +23,7 @@ The user checks the pinned calibration for the sessions in Project `NGC 7000 HOO
 ## Preconditions
 
 - P1: J22's frame review is complete. Project `NGC 7000 HOO` holds 208 RedCat lights / 17h 20m in five sessions dated 18, 24, 26, 28 and 30 Sep, has settled calibration for every held session, and has an applied View. Its application is not yet selected in View.
+- P6: The five RedCat light sessions in the J19/P2 fixture, including the 24 and 28 Sep sessions used for corrected-value checks, are FITS files. Each corrected 24 and 28 Sep frame has a primary HDU with `NAXIS` greater than zero. Its primary header has blank cards after `END` within the header block for added correction keywords and has no `CHECKSUM` or `DATASUM` cards. (The primary-HDU patch precondition follows `crates/platevault-core/src/header_patch.rs:197-203`.)
 - P2: The raw sets of J36/P2 were indexed in `Astro-T7/Calibration`; J36 turns them into masters through their calibration processes. The flat age window is set to 30 nights. The Calibration library holds the imported masters in its structured storage:
   - `MasterDark_2026-09-20.xisf` and `MasterBias_2026-09-20.xisf`: camera, dimensions, binning, gain and offset match the J19/P2 RedCat lights, and the dark matches their 300 s exposure.
   - `MasterFlat_2026-09-18.xisf`: Ha, with RedCat optical-train evidence.
@@ -124,16 +125,16 @@ The user checks the pinned calibration for the sessions in Project `NGC 7000 HOO
 ### S10 — Read the corrected values in Apply {#S10}
 
 - **Do:** With the S9 generic application selected in View and the View in Copies mode, open the Apply sheet and read its Corrected values section.
-- **Expect:** The section reads "2 corrected values", the two that held sessions recorded at ingestion in J19/S10. It lists each with its session, its field, the value in the header and the corrected value. 24 Sep's Target reads "–" in the header and NGC 7000 corrected, and 28 Sep's Equipment reads "–" in the header and `RedCat` corrected. Because the generic application reads no corrected values through its configuration, the section names the route as isolated patched copies in the Copies View. The sheet also shows the pending calibration change and the new View as a folder tree.
+- **Expect:** The section reads "2 corrected values", the two that held sessions recorded at ingestion in J19/S10. It lists each with its session, field, header value and corrected value. 24 Sep's Target shows "–" recorded and `NGC 7000` corrected. 28 Sep's Equipment shows "–" recorded and `RedCat` corrected. The section names isolated patched copies in the Copies View because the generic application reads no corrected value through its configuration. The sheet also shows the pending calibration change and the new View as a folder tree.
 - **Expect (negative):** The sheet offers no per-value choice: no accepting the source value and no excluding an input. Apply creates or changes no catalog correction; it only delivers the ones already recorded.
-- **Trace:** PREP-FR-03, PREP-FR-08, PREP-FR-16, PREP-AC-06 · VSEL-FR-14 · LIB-FR-12, LIB-FR-20 · D-W100, D-W122 · HARNESS-V5-FEEDBACK-R1.md Round 9 C15
+- **Trace:** PREP-FR-03, PREP-FR-08, PREP-FR-16, PREP-FR-20, PREP-AC-06, PREP-AC-39 · VSEL-FR-14 · LIB-FR-12, LIB-FR-20 · D-W100, D-W122 · HARNESS-V5-FEEDBACK-R1.md Round 9 C15
 
 ### S11 — Apply the corrected values {#S11}
 
 - **Do:** Apply the reviewed View changes.
-- **Expect:** Apply builds the View from the originals, writes the two corrected values into isolated patched copies of the 24 Sep and 28 Sep frames in the Copies View, and swaps the View in.
-- **Expect (negative):** No original or link target is patched, and no correction is reported as delivered while the application still reads the original value.
-- **Trace:** PREP-FR-03, PREP-FR-06, PREP-FR-09, PREP-AC-06 · D-W100, D-W122 · HARNESS-V5-FEEDBACK-R1.md Round 9 C15
+- **Expect:** Apply patches all 20 corrected 24 Sep FITS lights and all 56 corrected 28 Sep FITS lights in the new Copies View. PlateVault's FITS reader returns `object = "NGC 7000"` for every reopened 24 Sep copy, and all 20 original digests are unchanged. For every reopened 28 Sep copy, it returns `telescope = "RedCat 51"`, `instrument = "ZWO ASI2600MM Pro"`, and `FOCALLEN = 250` millimetres. A `FOCAL` or `FLENGTH` alias card present in a source frame is overwritten: `FOCAL` reads back as 250 millimetres and `FLENGTH` as 0.25 metres. A `HIERARCH TELESCOPE` or `HIERARCH INSTRUMENT` card present in a source frame is patched with the corrected telescope or camera. All 56 original digests are unchanged. J19/P2 lines 34 and 41 give the frame count and state that 28 Sep lacks `TELESCOP` and `FOCALLEN`; no `FOCAL`, `FLENGTH` or HIERARCH card is specified. J15/P2 and J15/S3 give RedCat's 250 mm focal length. Apply reports "2 corrected values written to patched copies". S11 verifies FITS copy metadata, not tool consumption.
+- **Expect (negative):** No original or link target is patched, and no alias card such as `FOCAL` or `FLENGTH` is added to a frame that lacks it. Apply reports only that the corrected values were written to patched copies.
+- **Trace:** PREP-FR-03, PREP-FR-06, PREP-FR-09, PREP-FR-20, PREP-AC-06, PREP-AC-39 · VSEL-FR-14 · LIB-FR-12, LIB-FR-20 · D-W100, D-W122, D-W123 · J19/P2, J15/S3 · HARNESS-V5-FEEDBACK-R1.md Round 9 C15
 
 ## Success criteria
 
@@ -143,20 +144,21 @@ The user checks the pinned calibration for the sessions in Project `NGC 7000 HOO
 - SC4: Dated versions are shown with no Latest label or Update notice, and the 148-day-old dark has `Old · 148 d` while flats have no badge (S7a).
 - SC5: Hiding a master pinned on the Project is refused with the Project named; hiding and restoring an unused master changes no file bytes (S7b, S7c).
 - SC6: Siril and the input mode are chosen in View; an unknown or write-prone profile cannot use Symlinks without a refusal and explicit mode choice (S8, S9).
-- SC7: The Apply sheet reads "2 corrected values" with the route isolated patched copies and offers 0 per-value choices; Apply patches 0 originals (S10, S11).
+- SC7: Apply patches all 20 corrected 24 Sep FITS lights with `OBJECT = 'NGC 7000'`. PlateVault's FITS reader returns that object value from every patched copy, and all 20 original digests remain unchanged (S10, S11).
+- SC8: Apply patches all 56 corrected 28 Sep FITS lights with the RedCat rig values from J19/P2 and J15/S3. PlateVault's reader returns `TELESCOP = 'RedCat 51'`, `INSTRUME = 'ZWO ASI2600MM Pro'` and `FOCALLEN = 250 mm` from every patched copy. Where a source frame contains `FOCAL`, the patched value is 250 mm; where it contains `FLENGTH`, the patched value is 0.25 m. All 56 original digests remain unchanged (S10, S11).
 
 ## Known gaps
 
-- G1: Not validated: the rebuilt application has not been validated against this journey. This journey follows the current contracts in specs 064, 066, 068 and 069 and D-W93 to D-W116.
-- G2: Unresolved implementation qualification: Siril profile capability probes (D04) must exist before S8 can show verified evidence. The PixInsight/WBPP and SETI Astro Suite Pro profiles are not exercised in this journey. Blocks readiness.
+- G1: The rebuilt application has not been validated against this journey. The journey follows specs 064, 066, 068 and 069 and D-W93 to D-W123.
+- G2: Unresolved implementation qualification: Siril profile capability probes (D04) must exist before S8 can show verified evidence. This journey does not test PixInsight/WBPP or SETI Astro Suite Pro. Blocks readiness.
 - G3: Out of scope for this journey: calibration across mosaic panel groups is covered by J33. The Project diagram and pinned-session rules are specified by CAL-FR-09 and CAL-FR-23.
 - G4: (dissolved 2026-10-12): answered by Round 6 "Calibration Off"; S7a now asserts that with **Auto-assign** off the 3 compatible masters read Suggested, none is assigned, and only an accepted one becomes a handoff input.
 - G5: (dissolved 2026-10-12): answered by Round 6 "Rename runs and Projects"; S7 now asserts that the run starts auto-named `NGC 7000 RedCat` and is renamed `24 Sep flat check` on the run header.
 - G6: (dissolved 2026-10-15): D-W101 matches calibration at ingestion and makes the Project's Calibrate step a read-only check, so no Calibrate row offers `Stack from <session>`. Raw sets wait as calibration processes in the Calibration library, which J36 stacks.
 - G7: (dissolved 2026-10-15): PREP-AC-11 (D-W81, D-W83) answers it: for a profile whose input-write behavior is unknown or write-prone, Symlinks is refused with the input-write risk named, and Copies is offered without a silent mode change. S9 asserts that refusal for a generic application.
-- G8: Rests on provisional F4 items, pending the owner's confirmation in PR #1804: D-W106's refusal of Hide on a master an open Project uses through its sessions (S7b, SC5), and D-W102's ranking, which makes the 30 Sep master the best fully compatible flat for 24 Sep (P2, S3). If the owner changes one, the steps that cite it change.
-- G9: Unresolved implementation qualification: D-W122 records Round 9 C15, and 069 PREP-FR-03 and PREP-AC-06 follow it, so the per-value choice is gone and S10 follows the contract. PREP-AC-06 tests a FILTER correction only. No requirement maps a Target or rig association, such as NGC 7000 or `RedCat`, to header keywords and values. S11 therefore can't say which keywords its patched copies write, or show that the application reads them. Blocks readiness until a requirement defines that mapping and a scenario tests it (astro-plan-ysy9m).
-
+- G8: Rests on provisional F4 items pending owner confirmation in PR #1804: D-W106's Hide refusal for a master an open Project uses through its sessions (S7b, SC5), and D-W102's flat ranking (P2, S3). Changes to either decision may change those steps.
+- G9: (dissolved 2026-10-17): PREP-FR-20 and provisional D-W123 map Target and rig corrections to FITS header keywords, and S10, S11 and SC8 read back those values.
+- G10: Open owner question (D-W123), partly answered on 2026-10-19 by the owner's answer in astro-plan-rzbzu.1: every present alias card of a corrected field is overwritten (`FOCAL` in millimetres, `FLENGTH` in metres) and none is added. Present `HIERARCH TELESCOPE` and `HIERARCH INSTRUMENT` cards are patched. A corrected XISF input is patched too. A value FITS cannot hold is refused at entry and again in the backend. Originals are never edited; only the copy's header changes. Apply reports only that "N corrected values written to patched copies". Still open: how Apply handles a corrected input in another non-FITS format that has no profile route (PREP-FR-20). Readiness stays blocked until the owner answers it.
 ## Delta log
 
 - **Δ2** 2026-10-06 · S1, S2, S3, S5, S6, S7, +S7a, S9 · behavior-change
@@ -179,3 +181,9 @@ The user checks the pinned calibration for the sessions in Project `NGC 7000 HOO
 - **Δ7** 2026-10-17 · S10, S11 · behavior-change
   Corrections are recorded at session ingestion, so Apply lists the corrected values with their count ("2 corrected values" from J19/S10) and applies all of them, here as isolated patched copies for the S9 generic application. The per-value choice (accept the source value, exclude the input) is gone. G9 records the conflict with 069 PREP-FR-03.
   Evidence: HARNESS-V5-FEEDBACK-R1.md Round 9 C15 · prototype view-step.tsx Corrected values section (ui-harness-v5) · by: JourneysR9c (intent-gated)
+- **Δ8** 2026-10-17 · S10, S11 · behavior-change
+  Apply maps corrected Target, equipment/rig, Filter and Exposure values to FITS keywords based on the available profile evidence. S10 shows corrected Target and rig values. S11 reads back Target and RedCat telescope, instrument and focal length from the patched copies; they match J19 and J15. G9 dissolves. The mapping and profile support remain provisional pending owner confirmation.
+  Evidence: PREP-FR-20, PREP-FR-21, PREP-AC-39, J19/P2, J15/S3. Code references: `crates/platevault-core/src/header_patch.rs:33-47` and `crates/metadata/fits/src/lib.rs:183-223`. Owner confirmation remains pending in astro-plan-ysy9m. · by: Spec069Keywords (intent-gated)
+- **Δ9** 2026-10-19 · S11 · behavior-change
+  Apply reports "2 corrected values written to patched copies"; its report states the corrected values written, not what the generic application reads. A present `FOCAL` or `FLENGTH` alias card is overwritten, and none is added to a frame that lacks it. G10 keeps only the route for other non-FITS formats open.
+  Evidence: owner's answers of 2026-10-19 in astro-plan-rzbzu.1, D-W123, PREP-FR-20 · by: Main (intent-gated)

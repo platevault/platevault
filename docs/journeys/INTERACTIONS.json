@@ -223,10 +223,10 @@
       "flowStep": "E4",
       "owner": "069-application-handoff",
       "journeyStep": "J23/S10, J23/S11, J24/S14, J24/S16",
-      "spec": "069-application-handoff PREP-FR-03, PREP-FR-08, PREP-FR-09, PREP-AC-06; 064-library-inventory LIB-FR-12, LIB-FR-20; D-W93, D-W98, D-W100, D-W122; HARNESS-V5-FEEDBACK-R1.md Round 9 C15",
-      "action": "Open the Apply sheet and read its Corrected values section, which lists the corrections the held sessions recorded at ingestion, then Apply the reviewed View.",
-      "expect": "The Apply sheet gives the count of corrected values (\"N corrected values\") and lists each with its session, field, header value and corrected value, naming whether the application reads them through its configuration or as isolated patched copies. Apply delivers every already-recorded correction by that route.",
-      "negative": "Apply offers no per-value choice and creates or changes no catalog correction. No original or symlink target is patched, and no correction is claimed as delivered while the tool reads the original value."
+      "spec": "069-application-handoff PREP-FR-03, PREP-FR-08, PREP-FR-09, PREP-FR-20, PREP-FR-21, PREP-AC-06, PREP-AC-39; 064-library-inventory LIB-FR-12, LIB-FR-20; D-W93, D-W98, D-W100, D-W122, D-W123; HARNESS-V5-FEEDBACK-R1.md Round 9 C15",
+      "action": "Open the Apply sheet and read its Corrected values section, which lists corrections recorded at intake, then Apply the reviewed View.",
+      "expect": "The Apply sheet gives the corrected-value count and lists each session, field, header value, corrected value and route. J23/S11 reads the patched FITS copy through PlateVault's metadata reader; this verifies the copy, not whether the selected tool consumes the value. For an application with no evidence about which header keys it reads, Apply reports 'N corrected values written to patched copies' and makes no claim about application reading (D-W123; owner's answer, 2026-10-19, astro-plan-rzbzu.1).",
+      "negative": "Apply offers no per-value choice and creates or changes no catalog correction. Originals are never edited; only patched copies' headers change. No original or symlink target is patched (D-W123; owner's answer, 2026-10-19, astro-plan-rzbzu.1). Under PREP-FR-03, a correction is not reported as delivered while the tool still reads the source value."
     },
     {
       "flowStep": "F1",
@@ -468,7 +468,7 @@
       "journeyStep": "J19/S9a, J19/S10, J19/S10a, J14/S7, J34/S8, J34/S10, J24/S8b",
       "spec": "064-library-inventory LIB-FR-17, LIB-FR-18, LIB-FR-20, LIB-FR-23, LIB-AC-33; 065-project-goals PRJ-FR-16, PRJ-FR-19, PRJ-AC-09; 071-storage-custody STO-FR-14; D-W78, D-W97, D-W105, D-W113",
       "action": "Choose Needs a Target, Needs review, Needs calibration and Not in any Project before and after confirming associations; later choose Trashed to inspect the frame records moved to OS Trash.",
-      "expect": "Each filter lists exactly the sessions or frames its rule names. Needs review is the session intake queue. Needs calibration lists every session whose calibration is unsettled, Ready or not, and every session whose pinned calibration file changed or went missing. Not in any Project offers Create Project or Add to Project. Trashed lists frames with last-observed metadata and the operation that trashed them.",
+      "expect": "Each filter lists exactly the sessions or frames its rule names. Needs review is the session intake queue. Needs calibration lists every session whose calibration is unsettled, Ready or not, and every session whose pinned calibration file changed or went missing. Needs a Target excludes a session whose Target is associated by agreeing pointing evidence; that association counts as confirmed for Ready and Not in any Project (owner's answer, 2026-10-19, astro-plan-rzbzu.1). Not in any Project offers Create Project or Add to Project. Trashed lists frames with last-observed metadata and the operation that trashed them.",
       "negative": "No filter assigns a session to a Project, and no run or Project Trash filter exists. A Trashed frame appears nowhere else except a Closed or Archived Project that held it when trashed."
     },
     {
@@ -801,7 +801,7 @@
       "journeyStep": "J14/S1, J19/S6a, J29/S1, J29/S11, J29/S12, J35/S1, J35/S2, J35/S3, J35/S4, J35/S5, J35/S5a, J35/S5b, J35/S6, J35/S7, J35/S8, J35/S9, J35/S10, J35/S11, J35/S12, J35/S13",
       "spec": "072-observing-plans PLAN-TGT-FR-01, PLAN-TGT-FR-02, PLAN-TGT-FR-03, PLAN-TGT-FR-04, PLAN-TGT-FR-05, PLAN-TGT-FR-06, PLAN-TGT-FR-07, PLAN-TGT-FR-08, PLAN-TGT-FR-09, PLAN-TGT-FR-10, PLAN-TGT-FR-11, PLAN-TGT-FR-12, PLAN-TGT-FR-13, PLAN-TGT-FR-14, PLAN-TGT-AC-01, PLAN-TGT-AC-16, PLAN-FR-10; D-W17, D-W18, D-W19, D-W23, D-W37, D-W60, D-W88",
       "action": "Open Targets on My targets, search and use Add to targets, read and sort columns, open a row's Plan area, browse catalogues, apply and save presets, and select a mono rig, an OSC rig and this Project's rigs. Also read Targets before an observing site exists.",
-      "expect": "My targets lists favourites plus open Projects' subjects with badges. Search names sources; columns show site-based planning values, presets apply and persist, and a selected rig adds Fit and limits the Filters strip. Without a site, planning columns read a dash and offer Add an observing site in Settings.",
+      "expect": "My targets lists favourites, subjects of open Projects and every Target with at least one session; each open-Project subject has its Project badge. Search names sources; columns show site-based planning values, presets apply and persist, and a selected rig adds Fit and limits the Filters strip. Without a site, planning columns read a dash and offer Add an observing site in Settings (owner's answer, 2026-10-19, astro-plan-rzbzu.1).",
       "negative": "Searching and browsing write nothing until Add to targets, and adding a Target creates no Project. No window is computed for an assumed location, built-in presets cannot be edited, and no Avoid tonight preset exists."
     },
     {

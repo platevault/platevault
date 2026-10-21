@@ -1,7 +1,7 @@
 ---
 id: J25
 title: Add sessions and apply Project View changes
-version: 8
+version: 9
 status: draft
 last_reviewed: 2026-10-03
 actors: [primary-user]
@@ -24,6 +24,7 @@ Done means: the Project shows the addition, group and calibration changes as pen
 - P4: The Project holds the 18 Sep session, whose original is on the `Astro-T7` location and can be made offline and restored.
 - P5: One named copy in the current View can be changed in place and restored from a backup. The View also contains a DSS `.Info.txt` file and a user note that PlateVault did not place.
 - P6: `Astro-T7` can be mounted and unmounted. On Windows, a fixture can hold a current View file in use and release it on demand.
+- P7: A helper outside PlateVault records the path of the user note in the separate kept folder after S7c's swap, and can delete that file and restore it with its bytes and mtime.
 
 ## Steps
 
@@ -128,6 +129,13 @@ Done means: the Project shows the addition, group and calibration changes as pen
 - **Expect (negative):** Opening and closing the sheet changes nothing in the View or `View (previous)/`, and the note's bytes are unchanged.
 - **Trace:** VSEL-FR-14 · VSEL-AC-34 · STO-FR-10 · D-W110
 
+### S7e — Open the next Apply after the kept note has gone {#S7e}
+
+- **Do:** Use P7 to delete the note at its recorded path. Open **Apply…**, read it, then close it without applying. Use P7 to restore the note.
+- **Expect:** The sheet lists the frame restored at S7d as a change and names the kept note as missing.
+- **Expect (negative):** The sheet doesn't leave the missing note out silently. Opening and closing the sheet changes nothing in the View, `View (previous)/` or the kept folder.
+- **Trace:** VSEL-FR-14 · STO-FR-10 · STO-AC-30 · D-W137
+
 ## Success criteria
 
 - SC1: Adding the Ha session changes Project membership once by 10 frames, leaves the OIII session out, and changes the View 0 times before Apply (S1, S4).
@@ -140,6 +148,7 @@ Done means: the Project shows the addition, group and calibration changes as pen
 - SC8: Discard is offered for the Project's own changes and refused for the calibration reassignment, which changes 0 pins (S4).
 - SC9: With 2 leftovers in `View (previous)/`, Apply stays disabled until both are reviewed; afterwards 1 file is in the OS Trash, the kept note exists with its bytes unchanged, and 0 numbered `View (previous)` folders exist (S7c).
 - SC10: The note kept at S7c is offered for review 0 times by the next Apply sheet (S7d).
+- SC11: After the kept note is deleted, the next Apply sheet names it as missing (S7e).
 
 ## Known gaps
 
@@ -149,7 +158,7 @@ Done means: the Project shows the addition, group and calibration changes as pen
 - G4: Out of scope for this journey: adding a session while an external application reads the View (VSEL-AC-12) is not exercised, and no frame is an explicit inclusion, so the D09 pinning of manual inclusions is not observed. Blocks readiness until covered by a step or a journey.
 - G5: Covered elsewhere: the Duplicates review and its clean-up (Keep this copy, Move the others to the OS Trash) opened from the S1 warning are exercised by J39 (S2 to S6); this journey only reads the warning.
 - G6: Rests on provisional F4 items, pending the owner's confirmation in PR #1804: D-W96's matching rule and its "captured" count (S1), D-W95's "re-add View in your tool" note (S5), and D-W108's exposure part that ends every light folder name (S5). If the owner changes one, the steps that cite it change.
-- G7: Unresolved product question, open with the owner (D-W110): what the next Apply does with the outgoing View when `View (previous)/` already holds kept files. It may merge it into that folder with a suffix on name clashes, or move kept files to a separate folder. S7c's swap and S7d's sheet assert only what holds under either answer. The kept note keeps its bytes, isn't deleted and isn't asked about again, and no numbered `View (previous)` folder appears. Neither step says where the kept note sits after the swap. Blocks readiness.
+- G7: (dissolved 2026-10-19): the owner's answer, 2026-10-19 (astro-plan-rzbzu.1), settles D-W110: on the next Apply, kept files move to a separate kept folder; a `-2` suffix is added on name clashes. S7c and S7d still assert only that the kept note keeps its bytes, isn't deleted or asked about again, and that no numbered `View (previous)` folder appears; neither asserts the kept folder.
 
 ## Delta log
 - **Δ2** 2026-10-06 · S1, S3, S4, S5, +S2a, +S2b, +S5a · behavior-change
@@ -174,3 +183,6 @@ Done means: the Project shows the addition, group and calibration changes as pen
 - **Δ8** 2026-10-16 · S5, +S7d, +SC10 · behavior-change
   A file the user keeps in `View (previous)/` isn't asked about again: new S7d opens the next Apply sheet and finds no review choice for the note kept at S7c. Light folders end in their exposure (provisional). G6 drops the kept-file rule, and G7 records the open swap rule.
   Evidence: D-W110 and D-W108 as amended by the owner's second batch of 2026-10-16 in PR #1804, VSEL-FR-14, VSEL-AC-34, STO-FR-10, PREP-FR-16 · by: EncodeOwnerAnswers2 (intent-gated)
+- **Δ9** 2026-10-20 · +P7, +S7e, +SC11 · behavior-change
+  When a file the user kept from `View (previous)/` is gone from disk, the next Apply sheet names it as missing.
+  Evidence: D-W137 (owner's answer, 2026-10-20) in PR #1855, STO-FR-10, STO-AC-30 · by: Main (intent-gated)

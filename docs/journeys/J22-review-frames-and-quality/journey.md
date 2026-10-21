@@ -1,7 +1,7 @@
 ---
 id: J22
 title: Review session frames and record quality decisions
-version: 7
+version: 8
 status: draft
 last_reviewed: 2026-10-03
 actors: [primary-user]
@@ -194,17 +194,17 @@ moves or trashes no source file.
 
 ### S15a — Replace a reviewed frame in place {#S15a}
 
-- **Do:** Outside PlateVault, overwrite the P5 frame with its replacement and restore its recorded mtime. Open NGC 7000 and read its usable Ha integration. Index `Astro-T7 captures` again, then reopen the Ready session's Review step and click **Measure frames**.
-- **Expect:** Before the rescan, usable Ha still reads 9h 15m, with the last-verified label it had before this step. After the rescan completes, the frame reads ChangedContent with its previous Picked decision kept as history, and it is listed under the ChangedContent filter. NGC 7000 usable Ha integration reads 9h 10m, labelled as verified at this rescan. In frame review its cached values never read valid, its imported S14 values show as history, its thumbnail is decoded again, and it reads Not measured until **Measure frames**. Then it is measured again from its current bytes, and the earlier cached values show as history for the earlier content.
-- **Expect (negative):** Opening NGC 7000 starts no rehash. The frame counts as neither Usable nor Unreviewed after the rescan. No quality decision is recorded.
-- **Trace:** flow D1 · LIB-FR-09, PIX-FR-01, PIX-FR-06, PIX-FR-12 · LIB-AC-14, PIX-AC-10 · root FR-017 · D10, D19 · J19/G4
+- **Do:** Read `NGC 7000 HOO`'s pending count. Outside PlateVault, overwrite the P5 frame with its replacement and restore its recorded mtime. Open NGC 7000 and read its usable Ha integration. Index `Astro-T7 captures` again, then reopen the 18 Sep session's Review step and click **Measure frames**. Open `NGC 7000 HOO`, read its Sessions step and pending count, then open **Apply…** and close it without applying.
+- **Expect:** Before the rescan, usable Ha still reads 9h 15m, with the last-verified label it had before this step. After the rescan completes, the frame reads ChangedContent with its previous Picked decision kept as history, and it is listed under the ChangedContent filter. NGC 7000 usable Ha integration reads 9h 10m, labelled as verified at this rescan. In frame review its cached values never read valid, its imported S14 values show as history, its thumbnail is decoded again, and it reads Not measured until **Measure frames**. Then it is measured again from its current bytes, and the earlier cached values show as history for the earlier content. 18 Sep reads Needs review in Sessions and on the Project's Sessions step, and the Project's Apply waits for it.
+- **Expect (negative):** Opening NGC 7000 starts no rehash. The frame counts as neither Usable nor Unreviewed after the rescan. No quality decision is recorded. The byte change adds no pending change: the Project's pending count reads as it did before the overwrite.
+- **Trace:** flow D1 · LIB-FR-09, PIX-FR-01, PIX-FR-06, PIX-FR-12 · LIB-AC-14, LIB-AC-36, PIX-AC-10 · root FR-017 · D10, D19, D-W140 · J19/G4
 
 ### S15b — Restore the reviewed bytes {#S15b}
 
-- **Do:** Restore the P5 frame's original bytes and recorded mtime, index `Astro-T7 captures` again, and reopen the Ready session's Review step.
-- **Expect:** The rehash matches the reviewed digest. The frame reads Picked, NGC 7000 usable Ha integration reads 9h 15m, its earlier cached values read valid again, and its imported values read content unverified again. No Closed or Archived Project changes.
+- **Do:** Restore the P5 frame's original bytes and recorded mtime, index `Astro-T7 captures` again, and reopen the Ready session's Review step. Open `NGC 7000 HOO`, then open **Apply…** and close it without applying.
+- **Expect:** The rehash matches the reviewed digest. The frame reads Picked, NGC 7000 usable Ha integration reads 9h 15m, its earlier cached values read valid again, and its imported values read content unverified again. No Closed or Archived Project changes. 18 Sep reads Ready again, and the Project's Apply no longer waits for it.
 - **Expect (negative):** The restoration records no new quality decision. Source bytes equal P4 again.
-- **Trace:** flow D1 · LIB-FR-09, PIX-FR-01 · LIB-AC-14 · J19/G4
+- **Trace:** flow D1 · LIB-FR-09, PIX-FR-01 · LIB-AC-14, LIB-AC-36 · D-W140 · J19/G4
 
 ### S16 — Restart with a pending Project change {#S16}
 
@@ -225,6 +225,7 @@ moves or trashes no source file.
 - SC8: Measurement starts exactly three times, at S1, S4 and S15a, each time from **Measure frames**. Opening Review and the corner inspector (S7b) start 0 measurements, and S7b shows exactly 9 tiles.
 - SC9: The ⌘A **P** on 42 frames at S10 and the threshold **X** at S7a ask for confirmation, and zero frames are marked before a confirmation is accepted or after one is cancelled. Zero single-frame or hand-picked marks ask (S8, S9, S9a, S11a, S13, S16).
 - SC10: 0 files are moved or sent to the OS Trash by any step: the six rejected frames (S8) and F1 (S11a, S13) stay on disk.
+- SC11: With the replacement in place, 18 Sep reads Needs review, `NGC 7000 HOO` gains 0 pending changes and its Apply waits (S15a); after S15b, 18 Sep reads Ready and Apply no longer waits (S15b).
 
 ## Known gaps
 
@@ -235,9 +236,10 @@ moves or trashes no source file.
 - G5: Out of scope for this journey: no frame is trashed before this journey. J34/S7 covers a Trashed frame's absence from frame review (PIX-AC-19). Mosaic panel progress and the panel map are not exercised. Blocks readiness until covered by a step or a journey.
 - G6: (dissolved 2026-10-12): answered by Round 6 "Reject is library-wide by default"; S8, S9, S10, S13 and S16 now assert X as the way a frame leaves the run: it reads "Rejected · Library" (library Unusable), leaves the draft at once, stays on disk, and U or P brings it back, while "Reject for this Project only" stays in the frame menu (S11b, S13).
 - G7: (dissolved 2026-10-12): answered by Round 6 "Large bulk marks need confirmation"; S10 now asserts ⌥4, ⌘A and P on the 42 Unreviewed frames asking for confirmation, with no frame marked before it is accepted.
-- G8: (dissolved 2026-10-16): answered by the owner's D-W118 (PIX-FR-14): every mark on a ⌘A or threshold selection asks, whatever its count, and single-frame and hand-picked marks never ask. S7a asserts the threshold confirmation, S9a a hand-picked two-frame mark with none, and S10 the ⌘A confirmation.
-- G9: (dissolved 2026-10-15): D-W78 moves review into session intake and D-W94 removes runs, so there is no Review draft and no Discard to define. Library marks are durable when made, and reopened Review is allowed on a Ready session. Its marks reach open Projects that hold the session as labelled pending changes (D-W100) and never change a Closed or Archived Project (D-W97; LIB-FR-20, PIX-FR-18, VSEL-FR-12).
+- G8: (dissolved 2026-10-16): answered by the owner's D-W118 (PIX-FR-14): every mark on a ⌘A or threshold selection asks, whatever its count, and single-frame and hand-picked marks never ask. S7a asserts the threshold confirmation, S9a a hand-picked two-frame mark with none, and S10 the ⌘A confirmation. "Mark rest usable" also asks and names the count (owner's answer, 2026-10-19, astro-plan-rzbzu.1); no step exercises it.
+- G9: (dissolved 2026-10-15): D-W78 moves review into session intake and D-W94 removes runs, so there is no Review draft and no Discard to define. Library marks are durable when made, and reopened Review is allowed on a Ready session. Its marks reach open Projects that hold the session as labelled pending changes (D-W100) and never change a Closed or Archived Project (D-W97; LIB-FR-20, PIX-FR-18, VSEL-FR-12). The owner's answer on 2026-10-19 (astro-plan-rzbzu.1) settles that a mark setting a frame to Unreviewed, and a grouping correction that re-splits a held session, reach every open Project holding it as a labelled pending change; there the session reads Needs review, and Apply waits until Ready.
 - G10: Rests on a provisional F4 item, pending the owner's confirmation in PR #1804: D-W96's "captured" count of every matching suggestion (S12). If the owner changes it, S12's captured value changes.
+- G11: D-W140's reconfirmation branch is not observed: S15b ends the wait only by restoring the reviewed bytes, and no step reconfirms the replaced frame in frame review, so no step shows 18 Sep reading Ready and Apply no longer waiting after a reconfirmation (LIB-FR-09, LIB-AC-36; D-W140; owner's answer, 2026-10-20). Blocks readiness until a step does.
 
 ## Delta log
 
@@ -261,3 +263,6 @@ moves or trashes no source file.
 - **Δ7** 2026-10-17 · S7a · behavior-change
   S7a selects the frames through the Review step's **Select by threshold…** action.
   Evidence: HARNESS-V5-FEEDBACK-R1.md Round 9 C10 · D-W78 · PIX-FR-08 · by: JourneysR9c (intent-gated)
+- **Δ8** 2026-10-20 · S15a, S15b, +SC11, +G11 · behavior-change
+  A frame whose bytes change after review puts its session back to Needs review, and the holding Project's Apply waits, with no pending change, until the frame is reconfirmed or its reviewed bytes return. S15b observes the bytes returning, and G11 records reconfirmation as not observed.
+  Evidence: D-W140 (owner's answer, 2026-10-20) in PR #1855, LIB-FR-09, LIB-AC-36 · by: Main (intent-gated)

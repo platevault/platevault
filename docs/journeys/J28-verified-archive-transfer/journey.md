@@ -1,7 +1,7 @@
 ---
 id: J28
 title: Archive Project sessions with verified transfer from Wrap up and Sessions
-version: 8
+version: 10
 status: draft
 last_reviewed: 2026-10-03
 actors: [primary-user]
@@ -31,6 +31,7 @@ The user archives the sessions of Project `NGC 7000 HOO` from the Archive step o
 - P5: For one named 26 Sep frame, a backup of its original bytes and nanosecond mtime and a replacement file of identical size with different bytes, kept outside PlateVault. A fault control pauses that item after destination verification and before source retirement (G5).
 - P6: Before S1, the `4 Oct M 33` session is added under `Astro-T7/Captures/M33/2026-10-04/` and indexed: 16 Ha 300 s `RedCat` lights with Target M 33 and rig `RedCat` Confirmed. M 33 is a subject of no Project, and no Project holds the session. A SHA-256 list of its files is recorded.
 - P7: Closed Project `NGC 7000 first light` holds the 24 Sep session. It was closed with no Archive and kept its Symlinks View, which holds 20 symlinks to 24 Sep frames under `Astro-T7/Captures/`. Its sessions, goals, Close snapshot and Wrap up record are recorded outside PlateVault.
+- P8: Calibration location `Astro-T7/Darks` was registered and indexed before S1. It holds one raw set of 20 darks at 300 s whose camera and settings match the 28 Sep lights, and no session pins a file there.
 
 ## Steps
 
@@ -160,9 +161,9 @@ The user archives the sessions of Project `NGC 7000 HOO` from the Archive step o
 ### S11 — Review retiring the lost archive {#S11}
 
 - **Do:** With `Archive` still unplugged, open Settings › Locations, choose the Offline location `Archive/NGC7000`, and choose **Retire location**.
-- **Expect:** The review names the location, its root and Offline state, and the four sessions with their 158 copies. It also names Project `NGC 7000 HOO` and the affected entries in its View that reference those copies. It states that retiring deletes, moves or modifies no file.
+- **Expect:** The review names the location, its root and Offline state, and the four sessions with their 158 copies. It also names Project `NGC 7000 HOO` and the affected entries in its View that reference those copies. It states that retiring deletes, moves or modifies no file. Any session pinning a calibration file at this location would block retirement and the refusal would list the pinning sessions and Projects; this fixture contains no calibration files there (LIB-FR-15; owner's answer, 2026-10-19, astro-plan-rzbzu.1).
 - **Expect (negative):** Nothing is retired before confirmation.
-- **Trace:** flow A4, cross-flow "Location offline" · HARNESS-V5-IA.md S16 · HARNESS-V5-FEEDBACK-R1.md Round 5 (P-STO2) · LIB-FR-15 · LIB-AC-16 · D11
+- **Trace:** flow A4, cross-flow "Location offline" · HARNESS-V5-IA.md S16 · HARNESS-V5-FEEDBACK-R1.md Round 5 (P-STO2) · LIB-FR-15 · LIB-AC-16 · D11 · owner's answer, 2026-10-19 in astro-plan-rzbzu.1
 
 ### S11a — Confirm after the archive returns {#S11a}
 
@@ -188,6 +189,13 @@ The user archives the sessions of Project `NGC 7000 HOO` from the Archive step o
 - **Expect (negative):** No retired copy is counted again. No session lists OBJECT as Target evidence, and 26 Sep's `Cygnus field` label is no conflict. No retired quality decision, Target or equipment confirmation, or correction transfers. The new sessions add nothing to usable integration, and 24 Sep counts toward no NGC 7000 total until its Target is confirmed again. No Project suggests the new sessions until their rig is confirmed again. The Archived Project still names the frames of its archived sessions unresolved and Retired. The archived files match P3.
 - **Trace:** flow A4 · HARNESS-V5-IA.md S16 · HARNESS-V5-FEEDBACK-R1.md Round 5 (Sessions: OBJECT is a label, P-STO2) · HIGH-LEVEL-DESIGN.md §10 glossary (OBJECT) · LIB-FR-02, LIB-FR-05, LIB-FR-15, PRJ-FR-09, PRJ-FR-25 · LIB-AC-16, STO-IMP-AC-05 · D01, D11
 
+### S14 — Review retiring a location with pinned calibration {#S14}
+
+- **Do:** In Sessions, open 28 Sep, use **Reassign…** on its darks and choose the raw dark set in `Astro-T7/Darks`. Then, in Settings › Locations, choose `Astro-T7/Darks` and choose **Retire location**. Read the review and try to confirm it.
+- **Expect:** 28 Sep's darks are pinned to the raw set. Open Project `NGC 7000 Ha deep` lists a pending calibration change labelled as a session reassignment, and the Archived `NGC 7000 HOO` takes none. Before confirmation, the retire review shows that retiring is blocked because 28 Sep pins files there. It lists 28 Sep and the two Projects holding it, `NGC 7000 HOO`, marked Archived, and `NGC 7000 Ha deep`, and counts 2 Projects. Confirmation is refused and names 28 Sep and both Projects.
+- **Expect (negative):** `Astro-T7/Darks` doesn't read Retired, and its darks read neither Retired nor Missing. The refusal keeps 28 Sep's darks pinned to the raw set and `NGC 7000 Ha deep`'s pending change, and no file changes.
+- **Trace:** flow A4 · LIB-FR-15, LIB-FR-23, LIB-FR-25 · LIB-AC-16 · CAL-FR-04 · VSEL-FR-12 · PRJ-FR-25 · D11, D-W106, D-W138
+
 ## Success criteria
 
 - SC1: 0 sources are retired before their destination hash and all affected references verify (S6, S8, S9).
@@ -203,6 +211,7 @@ The user archives the sessions of Project `NGC 7000 HOO` from the Archive step o
 - SC11: Make default moves 0 files, and the archive goes to the Project's chosen `Archive/NGC7000`, with 0 to paths under the Default `Archive/Long-term` (S1a, S5).
 - SC12: Archiving `4 Oct M 33` from Sessions moves exactly 16 files, all to the Default `Archive/Long-term`, retires 0 sources before their destination verifies and changes 0 Projects. Closing its review first moves 0 files, and 28 Sep can't be selected there (S9b, S9c).
 - SC13: All 20 symlinks of the View that Closed Project `NGC 7000 first light` kept point to `Archive/NGC7000` after S9a, Activity records 1 repoint for it, and its sessions, goals, snapshot and Wrap up record change 0 times (S4, S9a).
+- SC14: After 28 Sep's darks are reassigned to `Astro-T7/Darks`, retiring that location is blocked in the review, which counts 2 Projects, the Archived `NGC 7000 HOO` among them, and 0 locations are retired (S14).
 
 ## Known gaps
 
@@ -243,3 +252,9 @@ The user archives the sessions of Project `NGC 7000 HOO` from the Archive step o
 - **Δ8** 2026-10-16 · S9b, S9c · behavior-change
   Archive from Sessions follows the Wrap up rule: a session that an open Project holds can't be selected and names that Project, a session held only by Closed or Archived Projects is archived with their kept Views repointed, and a suggestion doesn't count. S9b now tries to select 28 Sep. G9 is dissolved.
   Evidence: D-W120 (owner's second batch of 2026-10-16) in PR #1804, LIB-FR-17, STO-FR-06, STO-FR-13, STO-AC-29 · by: EncodeOwnerAnswers2 (intent-gated)
+- **Δ9** 2026-10-19 · S11 · behavior-change
+  Retiring a location with a pinned calibration file there is refused and names the pinning sessions and Projects.
+  Evidence: LIB-FR-15, LIB-AC-16 · owner's answer, 2026-10-19 in astro-plan-rzbzu.1 · by: OwnerAnswersDocsFix (intent-gated)
+- **Δ10** 2026-10-20 · +P8, +S14, +SC14 · behavior-change
+  A Retire location review shows that pinned calibration blocks retiring, and it counts every Project holding a session that pins a file there.
+  Evidence: D-W138 (owner's answer, 2026-10-20) in PR #1855, LIB-FR-15, LIB-AC-16 · by: Main (intent-gated)

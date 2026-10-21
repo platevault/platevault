@@ -1676,6 +1676,7 @@
   "update_notification_install_failed_title": "Update not installed",
   "update_notification_installed_title": "Update installed",
   "update_notification_installed_kept_body": "PlateVault found another app in its place while updating. It's saved at {path}.",
+  "update_kept_aside_name": "set aside",
   "notification_target_resolution_title": "Target resolution finished",
   "notification_target_resolution_body": "Queued targets resolved: {count}.",
   "notification_target_resolution_body_singular": "Queued target resolved: {count}.",
