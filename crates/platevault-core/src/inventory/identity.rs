@@ -17,9 +17,10 @@
 //! number can be reused once the original entry is deleted (ext4 hands it to
 //! the next entry created), so a Linux file ID also carries the entry's
 //! kernel file handle, whose inode generation tells the two apart
-//! ([`FileIdentity::unix_file_id`]). Where the filesystem encodes no handles,
-//! and for an ID recorded before handles were, that residual remains and is
-//! not claimed as collision proof.
+//! ([`FileIdentity::unix_file_id`]). Where the filesystem encodes no handles
+//! that residual remains and is not claimed as collision proof; an ID read
+//! without a handle never matches one recorded with one, or the reverse
+//! ([`file_ids_match`]), so a handle read the kernel refuses fails closed.
 //!
 //! A network share the OS already mounted is identified by the server and
 //! share it was mounted from. Its folders qualify only through server file IDs:

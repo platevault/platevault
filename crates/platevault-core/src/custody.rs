@@ -25,6 +25,8 @@ use std::time::UNIX_EPOCH;
 
 use sha2::{Digest, Sha256};
 
+#[cfg(unix)]
+use crate::file_ids_match;
 use crate::inventory;
 use crate::library::Library;
 use crate::{
@@ -419,10 +421,24 @@ fn same_entry(left: &Metadata, right: &Metadata) -> bool {
     left.file_type() == right.file_type() && left.created().ok() == right.created().ok()
 }
 
-/// Whether an opened handle is the inspected entry rather than a replacement.
+/// Whether an opened handle is the inspected entry rather than a replacement
+/// and, where the volume's file IDs are stable, holds the recorded file ID:
+/// the handle's inode number and, on Linux, the kernel file handle read
+/// through it ([`FileIdentity::unix_file_id`]). A failed handle read proves
+/// nothing, and an ID without a handle never matches one with
+/// ([`file_ids_match`]).
 #[cfg(unix)]
-fn handle_is(file: &File, inspected: &Metadata, _identity: &FileIdentity) -> bool {
-    file.metadata().is_ok_and(|handle| same_entry(inspected, &handle))
+fn handle_is(file: &File, inspected: &Metadata, identity: &FileIdentity) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    let Ok(handle) = file.metadata() else {
+        return false;
+    };
+    same_entry(inspected, &handle)
+        && (!identity.volume.file_ids_stable
+            || fs_file_handle_linux::of_file(file).is_ok_and(|kernel| {
+                let opened = FileIdentity::unix_file_id(handle.ino(), kernel.as_deref());
+                file_ids_match(identity.file_id.as_deref(), Some(&opened))
+            }))
 }
 
 #[cfg(windows)]
