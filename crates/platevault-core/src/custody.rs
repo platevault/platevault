@@ -557,12 +557,16 @@ mod tests {
 
     use super::*;
 
-    /// The recorded identity of the regular file at `path`, from a volume
-    /// whose file IDs are stable, as review records it.
-    fn recorded(path: &Path) -> FileIdentity {
+    /// The recorded identity of the regular file at `path`, as review
+    /// records it; `None`, with the reason printed, where the test folder's
+    /// volume doesn't keep stable file IDs and there is no file ID to check.
+    fn recorded(path: &Path) -> Option<FileIdentity> {
         let identity = inventory::probe_fingerprint(path).unwrap().identity;
-        assert!(identity.volume.file_ids_stable, "the test folder's file IDs are stable");
-        identity
+        if !identity.volume.file_ids_stable {
+            eprintln!("skipped: {} keeps no stable file IDs", identity.volume.filesystem);
+            return None;
+        }
+        Some(identity)
     }
 
     fn with_file_id(identity: &FileIdentity, file_id: String) -> FileIdentity {
@@ -578,7 +582,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("frame.fits");
         fs::write(&path, b"frame").unwrap();
-        let identity = recorded(&path);
+        let Some(identity) = recorded(&path) else { return };
         let before = fs::symlink_metadata(&path).unwrap();
         let file = File::open(&path).unwrap();
         assert!(handle_is(&file, &before, &identity));
@@ -599,10 +603,19 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn a_refused_handle_read_never_reads_a_reused_inode_as_the_recorded_entry() {
+        /// `statfs(2)`'s `f_type` for ext2, ext3 and ext4.
+        const EXT4_SUPER_MAGIC: i128 = 0xEF53;
         let temp = tempfile::tempdir().unwrap();
+        // Only ext4 is known to hand a freed inode number to the next entry
+        // made in the folder; tmpfs and btrfs don't, so nothing is reused.
+        let f_type = rustix::fs::statfs(temp.path()).unwrap().f_type;
+        if i128::from(f_type) != EXT4_SUPER_MAGIC {
+            eprintln!("skipped: the test folder is not on ext4 (f_type {f_type:#x})");
+            return;
+        }
         let path = temp.path().join("frame.fits");
         fs::write(&path, b"frame").unwrap();
-        let identity = recorded(&path);
+        let Some(identity) = recorded(&path) else { return };
         let inode = fs::symlink_metadata(&path).unwrap().ino();
         fs::remove_file(&path).unwrap();
         // ext4 gives the lowest free number in the folder's group: an entry
@@ -616,7 +629,7 @@ mod tests {
             false
         });
         assert!(number_taken_again, "the test folder's filesystem reuses a freed inode number");
-        let observed = recorded(&path);
+        let observed = recorded(&path).unwrap();
         assert!(!observed.is_recorded(&identity), "the kernel handle tells it apart");
         let refused = with_file_id(&observed, FileIdentity::unix_file_id(inode, None));
         assert!(!refused.is_recorded(&identity), "a refused handle read is no proof");
