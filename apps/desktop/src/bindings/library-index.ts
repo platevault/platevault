@@ -5190,9 +5190,11 @@ export type PendingChange_Deserialize = ({ change: "session_added"; sessionId: s
  */
 ({ change: "session_not_ready"; sessionId: string; readiness: SessionReadiness }) & { captureKeys?: never; from?: never; fromGroup?: never; groupId?: never; kind?: never; name?: never; panel?: never; successors?: never; to?: never; toGroup?: never } | 
 /**
- *  A regroup in the Library replaced a held session. The Project keeps
- *  the session and the exact frames it chose and never moves to the
- *  successors by itself; the user removes it and adds a successor.
+ *  A regroup in the Library replaced a session the View holds. The
+ *  Project holds every successor that took one of its frames in its
+ *  place, with exactly the frames and choices it held (D-W100): each
+ *  one reads [`Self::SessionNotReady`] until it is Ready, and Apply
+ *  waits for them.
  */
 ({ change: "session_regrouped"; sessionId: string; successors: string[] }) & { captureKeys?: never; from?: never; fromGroup?: never; groupId?: never; kind?: never; name?: never; panel?: never; readiness?: never; to?: never; toGroup?: never };
 
@@ -5222,9 +5224,11 @@ export type PendingChange_Serialize = ({ change: "session_added"; sessionId: str
  */
 ({ change: "session_not_ready"; sessionId: string; readiness: SessionReadiness }) & { captureKeys?: never; from?: never; fromGroup?: never; groupId?: never; kind?: never; name?: never; panel?: never; successors?: never; to?: never; toGroup?: never } | 
 /**
- *  A regroup in the Library replaced a held session. The Project keeps
- *  the session and the exact frames it chose and never moves to the
- *  successors by itself; the user removes it and adds a successor.
+ *  A regroup in the Library replaced a session the View holds. The
+ *  Project holds every successor that took one of its frames in its
+ *  place, with exactly the frames and choices it held (D-W100): each
+ *  one reads [`Self::SessionNotReady`] until it is Ready, and Apply
+ *  waits for them.
  */
 ({ change: "session_regrouped"; sessionId: string; successors: string[] }) & { captureKeys?: never; from?: never; fromGroup?: never; groupId?: never; kind?: never; name?: never; panel?: never; readiness?: never; to?: never; toGroup?: never };
 

@@ -15,7 +15,10 @@
 -- a current session that is Ready at its current grouping revision, on the
 -- group's rig, with every calibration kind pinned or declined joins, at the
 -- basis it was admitted on. Persistence checks it first and names every
--- blocker; these triggers refuse whatever slips past.
+-- blocker; these triggers refuse whatever slips past. One row joins without
+-- being Ready or settled: a successor a regroup carries into an open Project
+-- that holds its predecessor, in the same transaction, so no frame leaves the
+-- Project; it reads Needs review there and Apply waits for it (D-W100).
 
 CREATE TABLE IF NOT EXISTS project_groups (
     id TEXT PRIMARY KEY NOT NULL,
@@ -75,6 +78,13 @@ BEGIN SELECT RAISE(ABORT, 'a superseded session never joins a Project; add its s
 CREATE TRIGGER IF NOT EXISTS project_sessions_admit_ready
 BEFORE INSERT ON project_sessions
 WHEN NOT EXISTS (
+    SELECT 1 FROM lineage_sessions successor
+    JOIN lineage_sessions predecessor ON predecessor.lineage_id = successor.lineage_id
+        AND predecessor.role = 'predecessor'
+    JOIN project_sessions held ON held.session_id = predecessor.session_id
+        AND held.project_id = NEW.project_id
+    WHERE successor.session_id = NEW.session_id AND successor.role = 'successor'
+) AND (NOT EXISTS (
     SELECT 1 FROM associations a WHERE a.session_id = NEW.session_id AND a.kind = 'target'
         AND a.target_id IS NOT NULL
         AND (a.state = 'confirmed' OR (a.state = 'suggested'
@@ -96,7 +106,7 @@ WHEN NOT EXISTS (
 ) OR NOT EXISTS (
     SELECT 1 FROM session_reviews r JOIN sessions s ON s.id = r.session_id
     WHERE r.session_id = NEW.session_id AND r.grouping_revision = s.grouping_revision
-)
+))
 BEGIN SELECT RAISE(ABORT, 'only a Ready session joins a Project'); END;
 
 CREATE TRIGGER IF NOT EXISTS project_sessions_admit_rig
@@ -113,7 +123,14 @@ BEGIN SELECT RAISE(ABORT, 'a session joins a group on its own rig'); END;
 
 CREATE TRIGGER IF NOT EXISTS project_sessions_admit_settled
 BEFORE INSERT ON project_sessions
-WHEN (
+WHEN NOT EXISTS (
+    SELECT 1 FROM lineage_sessions successor
+    JOIN lineage_sessions predecessor ON predecessor.lineage_id = successor.lineage_id
+        AND predecessor.role = 'predecessor'
+    JOIN project_sessions held ON held.session_id = predecessor.session_id
+        AND held.project_id = NEW.project_id
+    WHERE successor.session_id = NEW.session_id AND successor.role = 'successor'
+) AND (
     SELECT count(*) FROM session_calibration_kinds
     WHERE session_id = NEW.session_id AND state IN ('pinned', 'declined')
 ) < 3

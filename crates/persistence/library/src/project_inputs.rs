@@ -15,11 +15,15 @@
 //! A session joins only through [`Catalog::add_project_sessions`], whole,
 //! after [`admission::require_admission`] in the same transaction: Ready,
 //! settled and not drifted, on the group's rig, at the basis the user saw.
-//! Its exact logical captures and copies are recorded as they stand, so a
-//! later regroup, an availability change or a new matching session never
-//! changes what the Project holds: there is no rekey and no implicit add.
-//! Which group a new session joins and what a new group is called is core's
-//! rule; this module records the groups and placements it is given.
+//! Its exact logical captures and copies are recorded as they stand, so an
+//! availability change or a new matching session never changes what the
+//! Project holds: there is no rekey and no implicit add. The one Library
+//! write here is a regroup's: an open Project holding a session the regroup
+//! replaced holds the successors that took its frames instead, with exactly
+//! those frames and choices ([`carry_regrouped`], D-W100), and reads that as
+//! the Library's pending change. Which group a new session joins and what a
+//! new group is called is core's rule; this module records the groups and
+//! placements it is given.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -30,19 +34,18 @@ use platevault_model::{
     GroupName, GroupOrigin, InclusionBasis, LibraryError, NativePath, OpticsSignature,
     PendingChange, ProjectBasis, ProjectCandidate, ProjectCapture, ProjectDesired, ProjectGroup,
     ProjectLifecycle, ProjectSessionMember, ProjectSuggestion, ProjectViewSettings, Revision,
-    SessionAdmission, SessionIntake, SessionPlacement, SessionReadiness, ViewMode,
+    SessionAdmission, SessionIntake, SessionLineage, SessionPlacement, SessionReadiness, ViewMode,
 };
 
 use sqlx::sqlite::SqliteConnection;
 use sqlx::{Connection, Row};
 use uuid::Uuid;
 
-use super::projects::{candidates, commit_revision, next_project_revision};
+use super::projects::{candidates, commit_revision, next_project_revision, require_project};
 use super::workflow_settings::read_workflow_settings;
 use super::{
     admission, from_json, from_text, load_assets, load_session_row, now, parse_uuid, revision,
-    scoped_members, session_filters, successors_of, to_json, to_text, CaptureView, Catalog,
-    Members, Result,
+    scoped_members, session_filters, to_json, to_text, CaptureView, Catalog, Members, Result,
 };
 
 /// A group an edit creates: a framing group for added sessions, or the
@@ -385,7 +388,8 @@ impl Catalog {
     /// sessions go back to their groups, and its groups, names, mosaic
     /// marks, frame choices, input mode and keywords return to what that
     /// View was built from. A Library change stays pending, because it is
-    /// fixed at its source or by removing the session; goals, subjects,
+    /// fixed at its source or by removing the session, and the successors a
+    /// regroup carried in place of a session stay; goals, subjects,
     /// rigs, notes and the application and processing location are no
     /// View inputs and stay. All or none, one revision.
     ///
@@ -924,6 +928,131 @@ pub async fn insert_capture(
     Ok(())
 }
 
+// ── Regroup carry ────────────────────────────────────────────────────────────
+
+/// A held session's place in the Project, which its successors take.
+struct HeldPlace {
+    session_id: Uuid,
+    group_id: Uuid,
+    placement: SessionPlacement,
+    target_id: Uuid,
+}
+
+/// A regroup that replaced sessions an open Project holds keeps their frames
+/// there (LIB-FR-12, VSEL-FR-12; D-W100): in the regroup's transaction, each
+/// such Project holds every successor that took one of their frames in place
+/// of its predecessor, in the predecessor's group and placement and on the
+/// Target it joined on, and each held capture moves with its choice and
+/// copies, so no frame leaves the Project. A successor that isn't Ready or
+/// settled stays all the same: it reads Needs review there and Apply waits
+/// for it. Each Project takes one revision; a Closing, Closed or Archived
+/// Project keeps what it holds.
+///
+/// # Errors
+/// `PersistenceFailure` for a held capture none of whose copies went to a
+/// successor.
+pub async fn carry_regrouped(conn: &mut SqliteConnection, lineage: &SessionLineage) -> Result<()> {
+    let predecessors: BTreeSet<Uuid> = lineage.predecessors.iter().copied().collect();
+    let rows = sqlx::query(
+        "SELECT ps.project_id, ps.session_id, ps.group_id, ps.placement, ps.target_id \
+         FROM project_sessions ps JOIN projects p ON p.id = ps.project_id \
+         WHERE p.lifecycle = 'open' AND ps.session_id IN (SELECT value FROM json_each(?1)) \
+         ORDER BY ps.project_id, ps.added_at, ps.session_id",
+    )
+    .bind(super::json_ids(&predecessors)?)
+    .fetch_all(&mut *conn)
+    .await?;
+    let mut held: BTreeMap<Uuid, Vec<HeldPlace>> = BTreeMap::new();
+    for row in rows {
+        held.entry(parse_uuid(&row.try_get::<String, _>("project_id")?)?).or_default().push(
+            HeldPlace {
+                session_id: parse_uuid(&row.try_get::<String, _>("session_id")?)?,
+                group_id: parse_uuid(&row.try_get::<String, _>("group_id")?)?,
+                placement: from_text(&row.try_get::<String, _>("placement")?)?,
+                target_id: parse_uuid(&row.try_get::<String, _>("target_id")?)?,
+            },
+        );
+    }
+    for (project, places) in held {
+        carry_into(conn, project, &places, lineage).await?;
+    }
+    Ok(())
+}
+
+/// [`carry_regrouped`] for one Project: the successors join first, while
+/// the predecessors they stand in for are still held, which is what lets
+/// `project_sessions_admit_ready` and `_admit_settled` take them.
+async fn carry_into(
+    conn: &mut SqliteConnection,
+    project: Uuid,
+    places: &[HeldPlace],
+    lineage: &SessionLineage,
+) -> Result<()> {
+    let mut held = read_captures(conn, project).await?;
+    let mut moving = Vec::new();
+    for place in places {
+        for capture in held.remove(&place.session_id).unwrap_or_default() {
+            moving.push((place, capture));
+        }
+    }
+    let copies: BTreeSet<Uuid> = moving
+        .iter()
+        .flat_map(|(_, capture)| capture.copies.iter().map(|copy| copy.asset_id))
+        .collect();
+    let session_of = super::current_session_of(conn, &copies).await?;
+    let mut joins: BTreeMap<Uuid, &HeldPlace> = BTreeMap::new();
+    let mut carried = Vec::with_capacity(moving.len());
+    for (place, capture) in moving {
+        let successor = capture
+            .copies
+            .iter()
+            .filter_map(|copy| session_of.get(&copy.asset_id))
+            .find(|session| lineage.successors.contains(session))
+            .copied()
+            .ok_or_else(|| {
+                LibraryError::PersistenceFailure(format!(
+                    "held capture {} of session {} went to no successor",
+                    capture.capture_key, place.session_id
+                ))
+            })?;
+        joins.entry(successor).or_insert(place);
+        carried.push((successor, capture));
+    }
+    for (successor, place) in joins {
+        let basis = AdmissionBasis {
+            grouping_revision: lineage.grouping_revision,
+            calibration_generation: admission::read_calibration(conn, successor).await?.generation,
+        };
+        insert_member(
+            conn,
+            project,
+            successor,
+            place.group_id,
+            place.placement,
+            place.target_id,
+            &basis,
+        )
+        .await?;
+    }
+    for place in places {
+        delete_member(conn, project, place.session_id).await?;
+    }
+    for (successor, capture) in carried {
+        insert_capture(
+            conn,
+            project,
+            successor,
+            capture.capture_key,
+            &capture.copies,
+            capture.inclusion,
+            capture.quality_when_added,
+        )
+        .await?;
+    }
+    let next = require_project(conn, project).await? + 1;
+    commit_revision(conn, project, next).await
+}
+
 // ── Reads ────────────────────────────────────────────────────────────────────
 
 /// The desired state of Project `id` in the caller's snapshot.
@@ -1191,8 +1320,54 @@ async fn installed_basis(conn: &mut SqliteConnection, id: Uuid) -> Result<Option
     basis.as_deref().map(from_json).transpose()
 }
 
+/// What a regroup carried in place of the basis sessions the Project no
+/// longer holds (D-W100): by basis session, the held sessions the basis
+/// lacks that now hold its captures.
+struct Carried(BTreeMap<Uuid, BTreeSet<Uuid>>);
+
+impl Carried {
+    fn of(desired: &ProjectDesired, applied: &ProjectBasis) -> Self {
+        let basis: Vec<&BasisSession> =
+            applied.groups.iter().flat_map(|group| &group.sessions).collect();
+        let mut carried = BTreeMap::new();
+        for session in &basis {
+            if desired.sessions.iter().any(|member| member.session_id == session.session_id) {
+                continue;
+            }
+            let successors: BTreeSet<Uuid> = desired
+                .captures
+                .iter()
+                .filter(|capture| {
+                    basis.iter().all(|was| was.session_id != capture.session_id)
+                        && session.captures.iter().any(|was| was.capture_key == capture.capture_key)
+                })
+                .map(|capture| capture.session_id)
+                .collect();
+            if !successors.is_empty() {
+                carried.insert(session.session_id, successors);
+            }
+        }
+        Self(carried)
+    }
+
+    /// The basis session a held session stands in for: the one a regroup
+    /// carried it from, else itself.
+    fn basis_of(&self, session: Uuid) -> Uuid {
+        self.0
+            .iter()
+            .find(|(_, successors)| successors.contains(&session))
+            .map_or(session, |(basis, _)| *basis)
+    }
+
+    fn successors(&self, basis: Uuid) -> Option<&BTreeSet<Uuid>> {
+        self.0.get(&basis)
+    }
+}
+
 /// `desired` with the live Library against `applied`: the Project's own
-/// edits first, then the Library's.
+/// edits first, then the Library's. A held session a regroup carried in
+/// place of a basis session is compared with that session's basis, and the
+/// regroup itself is the Library's change (D-W100).
 async fn changes_against(
     conn: &mut SqliteConnection,
     desired: &ProjectDesired,
@@ -1220,10 +1395,12 @@ async fn changes_against(
                 .map(|session| (session.session_id, (group.id, session.captures.as_slice())))
         })
         .collect();
+    let carried = Carried::of(desired, applied);
     let live = live_copies(conn, desired.captures.iter()).await?;
     let mut library = Vec::new();
     for member in &desired.sessions {
-        let Some((group, captures)) = applied_sessions.get(&member.session_id) else {
+        let Some((group, captures)) = applied_sessions.get(&carried.basis_of(member.session_id))
+        else {
             own.push(PendingChange::SessionAdded {
                 session_id: member.session_id,
                 group_id: member.group_id,
@@ -1244,13 +1421,24 @@ async fn changes_against(
         );
     }
     for (session_id, (group, _)) in &applied_sessions {
-        if desired.sessions.iter().all(|member| member.session_id != *session_id) {
+        if let Some(successors) = carried.successors(*session_id) {
+            library.push(PendingChange::SessionRegrouped {
+                session_id: *session_id,
+                successors: successors.iter().copied().collect(),
+            });
+        } else if desired.sessions.iter().all(|member| member.session_id != *session_id) {
             own.push(PendingChange::SessionRemoved { session_id: *session_id, group_id: *group });
         }
     }
     for session in applied.groups.iter().flat_map(|group| &group.sessions) {
-        if desired.sessions.iter().any(|member| member.session_id == session.session_id) {
-            let current = admission::read_calibration(conn, session.session_id).await?;
+        let held = desired.sessions.iter().any(|member| member.session_id == session.session_id);
+        let standing_in: Vec<Uuid> = match carried.successors(session.session_id) {
+            Some(successors) => successors.iter().copied().collect(),
+            None if held => vec![session.session_id],
+            None => Vec::new(),
+        };
+        for session_id in standing_in {
+            let current = admission::read_calibration(conn, session_id).await?;
             library.extend(current.changes_since(&session.calibration));
         }
     }
@@ -1288,19 +1476,16 @@ fn group_changes(desired: &ProjectDesired, applied: &ProjectBasis) -> Vec<Pendin
     own
 }
 
-/// A held session the Library replaced or no longer has Ready. A frame whose
-/// bytes changed after review holds the session back without being a
-/// pending change (LIB-FR-09, D-W140), so only the other causes count here.
+/// A held session the Library no longer has Ready. A frame whose bytes
+/// changed after review holds the session back without being a pending
+/// change (LIB-FR-09, D-W140), so only the other causes count here. A
+/// session a regroup replaced is never held: its successors are, and the
+/// regroup reads against the basis (D-W100).
 async fn session_change(
     conn: &mut SqliteConnection,
     session_id: Uuid,
 ) -> Result<Option<PendingChange>> {
-    let intake = admission::read_admission(conn, session_id).await?.intake;
-    if intake.superseded {
-        let row = load_session_row(conn, session_id).await?;
-        let successors = successors_of(conn, &row).await?;
-        return Ok(Some(PendingChange::SessionRegrouped { session_id, successors }));
-    }
+    let intake = admission::read_intake(conn, session_id).await?;
     let readiness = SessionIntake { changed_frames: 0, ..intake }.readiness();
     Ok((readiness != SessionReadiness::Ready)
         .then_some(PendingChange::SessionNotReady { session_id, readiness }))
@@ -1316,7 +1501,9 @@ type BasisSessions<'a> = BTreeMap<Uuid, (Uuid, &'a BasisSession)>;
 /// sessions go back, created groups go, every group's name, mark and
 /// position return, removed sessions rejoin through admission, held frames'
 /// choices return, then the input mode and keywords. Library state is only
-/// read, so its changes stay pending.
+/// read, so its changes stay pending: the successors a regroup carried in
+/// place of a basis session stay, back in its group with its frames'
+/// choices (D-W100).
 async fn restore_basis(
     conn: &mut SqliteConnection,
     desired: &ProjectDesired,
@@ -1330,8 +1517,9 @@ async fn restore_basis(
             group.sessions.iter().map(move |session| (session.session_id, (group.id, session)))
         })
         .collect();
+    let carried = Carried::of(desired, applied);
     for member in &desired.sessions {
-        if !sessions.contains_key(&member.session_id) {
+        if !sessions.contains_key(&carried.basis_of(member.session_id)) {
             delete_member(conn, project, member.session_id).await?;
         }
     }
@@ -1340,11 +1528,20 @@ async fn restore_basis(
             restore_group(conn, project, group).await?;
         }
     }
-    move_back(conn, desired, &sessions).await?;
+    move_back(conn, desired, &sessions, &carried).await?;
     drop_created_groups(conn, desired, applied).await?;
     restore_group_names(conn, desired, applied).await?;
     for (session_id, (group, session)) in &sessions {
-        if desired.sessions.iter().any(|member| member.session_id == *session_id) {
+        if let Some(successors) = carried.successors(*session_id) {
+            for successor in successors {
+                let current: Vec<&ProjectCapture> = desired
+                    .captures
+                    .iter()
+                    .filter(|capture| capture.session_id == *successor)
+                    .collect();
+                restore_choices(conn, project, session, &current).await?;
+            }
+        } else if desired.sessions.iter().any(|member| member.session_id == *session_id) {
             restore_frames(conn, project, session, &desired.captures).await?;
         } else {
             rejoin(conn, project, *group, session).await?;
@@ -1392,14 +1589,18 @@ async fn restore_group(
 }
 
 /// Held sessions the Project moved go back to their basis group and
-/// placement; a session stays on its rig, so the move is always allowed.
+/// placement, a successor a regroup carried to its predecessor's; a session
+/// stays on its rig, so the move is always allowed.
 async fn move_back(
     conn: &mut SqliteConnection,
     desired: &ProjectDesired,
     sessions: &BasisSessions<'_>,
+    carried: &Carried,
 ) -> Result<()> {
     for member in &desired.sessions {
-        let Some((group, session)) = sessions.get(&member.session_id) else { continue };
+        let Some((group, session)) = sessions.get(&carried.basis_of(member.session_id)) else {
+            continue;
+        };
         if member.group_id != *group || member.placement != session.placement {
             sqlx::query(
                 "UPDATE project_sessions SET group_id = ?3, placement = ?4 \
@@ -1551,6 +1752,17 @@ async fn restore_frames(
             .await?;
         return insert_basis_captures(conn, project, session).await;
     }
+    restore_choices(conn, project, session, &current).await
+}
+
+/// Each of the `current` captures back to the choice the basis `session`
+/// held it with.
+async fn restore_choices(
+    conn: &mut SqliteConnection,
+    project: Uuid,
+    session: &BasisSession,
+    current: &[&ProjectCapture],
+) -> Result<()> {
     for was in &session.captures {
         if current
             .iter()
