@@ -23,7 +23,7 @@ use time::Date;
 use uuid::Uuid;
 
 use crate::{
-    require_sha256, validate_copies, ApplicableQuality, CaptureInclusion, CopyBasis,
+    require_sha256, validate_copies, ApplicableQuality, ApplyStop, CaptureInclusion, CopyBasis,
     CorrectedField, EntryEvidence, FileIdentity, FramingEvidence, GroupKeywords, GroupName,
     GroupOrigin, InputKind, LibraryError, NativePath, ObservationFingerprint, OpticsSignature,
     Revision, SessionPlacement, SettledCalibration, ViewMode,
@@ -487,7 +487,8 @@ pub struct ApplyJournal {
     pub settled_from: Option<ApplyPhase>,
     pub outcome: Option<ApplyOutcome>,
     pub expected: ExpectedTree,
-    pub error: Option<String>,
+    /// Why it ended Failed or Canceled; set exactly then.
+    pub stop: Option<ApplyStop>,
 }
 
 const fn outcome_fits(outcome: ApplyOutcome, from: ApplyPhase) -> bool {
@@ -567,6 +568,24 @@ pub enum ForeignItemState {
     Failed,
 }
 
+/// Why a ticked foreign file stayed in `View (previous)/` instead of moving
+/// into the new View. The catalogues word each code as
+/// `apply_foreign_failed_<code>`, naming the item's path; an OS error's text
+/// goes to the log only.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
+pub enum ForeignItemFailure {
+    /// The new View already holds an entry at its path.
+    NameTaken,
+    /// It changed after the Apply sheet listed it.
+    Changed,
+    /// Its folder couldn't be made in the new View.
+    FolderNotMade,
+    /// The OS refused the move.
+    NotMoved,
+}
+
 /// A file in the View that `PlateVault` didn't place (VSEL-FR-20), with the
 /// user's consent. Only a ticked file moves, and only after the swap.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -579,7 +598,8 @@ pub struct ForeignItem {
     pub evidence: EntryEvidence,
     pub ticked: bool,
     pub state: ForeignItemState,
-    pub reason: Option<String>,
+    /// Why a ticked file didn't move; set exactly when `Failed`.
+    pub reason: Option<ForeignItemFailure>,
 }
 
 impl ForeignItem {

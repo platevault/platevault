@@ -179,7 +179,8 @@ BEGIN SELECT RAISE(ABORT, 'a Closed Project is locked'); END;
 
 -- One Apply's durable journal (`ApplyJournal`): the phase is recorded before
 -- each effect, moves only forward, and settles once with the outcome that is
--- true from where it settled. `expected` is `ExpectedTree` JSON.
+-- true from where it settled. `expected` is `ExpectedTree` JSON; `stop` is
+-- the `ApplyStop` JSON of a Failed or Canceled Apply, a code with its count.
 CREATE TABLE IF NOT EXISTS apply_operations (
     operation_id TEXT PRIMARY KEY NOT NULL,
     project_id TEXT NOT NULL,
@@ -196,7 +197,7 @@ CREATE TABLE IF NOT EXISTS apply_operations (
     )),
     outcome TEXT CHECK (outcome IS NULL OR outcome IN ('applied', 'failed', 'canceled')),
     expected TEXT NOT NULL,
-    error TEXT,
+    stop TEXT CHECK (stop IS NULL OR json_valid(stop)),
     updated_at TEXT NOT NULL,
     FOREIGN KEY (project_id, operation_id) REFERENCES project_operations (project_id, id),
     FOREIGN KEY (project_id, generation) REFERENCES view_manifests (project_id, generation),
@@ -207,7 +208,8 @@ CREATE TABLE IF NOT EXISTS apply_operations (
     CHECK (outcome NOT IN ('failed', 'canceled') OR settled_from IN (
         'reserved', 'sources_verified', 'building', 'build_verified', 'waiting_for_release',
         'old_moved'
-    ))
+    )),
+    CHECK ((stop IS NOT NULL) = (coalesce(outcome, 'applied') <> 'applied'))
 ) STRICT;
 -- A Project's latest Apply (Home's Next action, PRJ-FR-18 rule 2): the
 -- highest generation, since every Apply builds a new manifest.
@@ -253,7 +255,7 @@ BEGIN SELECT RAISE(ABORT, 'an Apply settles its journal first'); END;
 
 -- The files PlateVault didn't place, as the Apply sheet listed them with the
 -- user's tick (VSEL-FR-20); `evidence` is `EntryEvidence` JSON. Only a ticked
--- file moves, after the swap.
+-- file moves, after the swap; `reason` is why one didn't (`ForeignItemFailure`).
 CREATE TABLE IF NOT EXISTS apply_foreign_items (
     operation_id TEXT NOT NULL REFERENCES apply_operations (operation_id),
     seq INTEGER NOT NULL CHECK (seq >= 0),
@@ -261,7 +263,9 @@ CREATE TABLE IF NOT EXISTS apply_foreign_items (
     evidence TEXT NOT NULL,
     ticked INTEGER NOT NULL CHECK (ticked IN (0, 1)),
     state TEXT NOT NULL CHECK (state IN ('pending', 'moved', 'stayed', 'failed')),
-    reason TEXT,
+    reason TEXT CHECK (reason IS NULL OR reason IN (
+        'name_taken', 'changed', 'folder_not_made', 'not_moved'
+    )),
     PRIMARY KEY (operation_id, seq),
     UNIQUE (operation_id, path_key),
     CHECK (state <> 'moved' OR ticked = 1),

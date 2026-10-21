@@ -18,11 +18,11 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use platevault_model::{
-    ApplyJournal, ApplyOutcome, ApplyPhase, Asset, Availability, BasisCapture, BasisGroup,
-    BasisSession, CaptureKey, CaptureMetadata, CopyBasis, EntryEvidence, EntryInput, EntryName,
-    EntryPlacement, EntrySource, ExpectedTree, FileIdentity, ForeignItem, GroupKeywords, GroupName,
-    ImageFormat, InputKind, InputRef, LibraryError, Location, ManifestEntry, ManifestState,
-    NativePath, PreviousItem, PreviousItemReason, PreviousItemReview, ProjectBasis,
+    ApplyJournal, ApplyOutcome, ApplyPhase, ApplyStop, Asset, Availability, BasisCapture,
+    BasisGroup, BasisSession, CaptureKey, CaptureMetadata, CopyBasis, EntryEvidence, EntryInput,
+    EntryName, EntryPlacement, EntrySource, ExpectedTree, FileIdentity, ForeignItem, GroupKeywords,
+    GroupName, ImageFormat, InputKind, InputRef, LibraryError, Location, ManifestEntry,
+    ManifestState, NativePath, PreviousItem, PreviousItemReason, PreviousItemReview, ProjectBasis,
     ProjectLifecycle, ProjectOperation, ProjectOperationKind, Revision, SessionPlacement,
     SessionReadiness, SettledPin, ViewManifest, ViewMode, WorkflowSettings,
 };
@@ -191,22 +191,17 @@ impl Catalog {
     }
 
     /// End an Apply that never installed its View: record what it wrote, if
-    /// anything, discard its manifest, settle its journal Failed or Canceled
-    /// and release the Project.
+    /// anything, discard its manifest, settle its journal Failed or Canceled,
+    /// as `stop` says, with that reason, and release the Project.
     ///
     /// # Errors
-    /// `InvalidInput` for an outcome that isn't Failed or Canceled;
     /// `PersistenceFailure` when the journal is past `NewInstalled`.
     pub async fn discard_apply(
         &self,
         journal: &ApplyJournal,
-        outcome: ApplyOutcome,
-        error: Option<&str>,
+        stop: ApplyStop,
         entries: &[ManifestEntry],
     ) -> Result<()> {
-        if outcome == ApplyOutcome::Applied {
-            return Err(LibraryError::InvalidInput("an Apply ends Applied by settling".into()));
-        }
         write_txn!(self, |conn| {
             let built: i64 = sqlx::query_scalar(
                 "SELECT count(*) FROM view_manifest_entries WHERE project_id = ?1 \
@@ -221,7 +216,7 @@ impl Catalog {
             }
             set_manifest_state(conn, journal.project_id, journal.generation, "discarded", None)
                 .await?;
-            settle_journal(conn, journal.operation_id, outcome, error).await?;
+            settle_journal(conn, journal.operation_id, stop.outcome(), Some(stop)).await?;
             project_operations::settle_operation(conn, journal.operation_id).await?;
         });
         Ok(())
@@ -273,7 +268,7 @@ impl Catalog {
                 .bind(operation_id.to_string())
                 .bind(i64::from(item.seq))
                 .bind(to_text(&item.state)?)
-                .bind(item.reason.as_deref())
+                .bind(item.reason.map(|reason| to_text(&reason)).transpose()?)
                 .execute(&mut *conn)
                 .await?;
             }
@@ -293,7 +288,6 @@ impl Catalog {
         journal: &ApplyJournal,
         leftovers: &[PreviousItem],
         previous_gone: bool,
-        error: Option<&str>,
     ) -> Result<()> {
         write_txn!(self, |conn| {
             let project = journal.project_id.to_string();
@@ -324,7 +318,7 @@ impl Catalog {
                 .execute(&mut *conn)
                 .await?;
             }
-            settle_journal(conn, journal.operation_id, ApplyOutcome::Applied, error).await?;
+            settle_journal(conn, journal.operation_id, ApplyOutcome::Applied, None).await?;
             project_operations::settle_operation(conn, journal.operation_id).await?;
         });
         Ok(())
@@ -418,7 +412,10 @@ impl Catalog {
                     evidence: from_json(&row.try_get::<String, _>("evidence")?)?,
                     ticked: row.try_get::<i64, _>("ticked")? == 1,
                     state: from_text(&row.try_get::<String, _>("state")?)?,
-                    reason: row.try_get("reason")?,
+                    reason: row
+                        .try_get::<Option<String>, _>("reason")?
+                        .map(|text| from_text(&text))
+                        .transpose()?,
                 })
             })
             .collect()
@@ -1045,7 +1042,7 @@ async fn read_manifest(
 
 async fn read_journal(conn: &mut SqliteConnection, operation_id: Uuid) -> Result<ApplyJournal> {
     let row = sqlx::query(
-        "SELECT project_id, generation, phase, settled_from, outcome, expected, error \
+        "SELECT project_id, generation, phase, settled_from, outcome, expected, stop \
          FROM apply_operations WHERE operation_id = ?1",
     )
     .bind(operation_id.to_string())
@@ -1066,7 +1063,7 @@ async fn read_journal(conn: &mut SqliteConnection, operation_id: Uuid) -> Result
             .map(|text| from_text(&text))
             .transpose()?,
         expected: from_json(&row.try_get::<String, _>("expected")?)?,
-        error: row.try_get("error")?,
+        stop: row.try_get::<Option<String>, _>("stop")?.map(|text| from_json(&text)).transpose()?,
     })
 }
 
@@ -1213,15 +1210,15 @@ async fn settle_journal(
     conn: &mut SqliteConnection,
     operation_id: Uuid,
     outcome: ApplyOutcome,
-    error: Option<&str>,
+    stop: Option<ApplyStop>,
 ) -> Result<()> {
     sqlx::query(
         "UPDATE apply_operations SET settled_from = phase, phase = 'settled', outcome = ?2, \
-         error = ?3, updated_at = ?4 WHERE operation_id = ?1 AND phase <> 'settled'",
+         stop = ?3, updated_at = ?4 WHERE operation_id = ?1 AND phase <> 'settled'",
     )
     .bind(operation_id.to_string())
     .bind(to_text(&outcome)?)
-    .bind(error)
+    .bind(stop.map(|stop| to_json(&stop)).transpose()?)
     .bind(now()?)
     .execute(&mut *conn)
     .await?;
@@ -1320,7 +1317,7 @@ async fn insert_foreign(
     .bind(to_json(&item.evidence)?)
     .bind(i64::from(item.ticked))
     .bind(to_text(&item.state)?)
-    .bind(item.reason.as_deref())
+    .bind(item.reason.map(|reason| to_text(&reason)).transpose()?)
     .execute(&mut *conn)
     .await?;
     Ok(())

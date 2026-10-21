@@ -319,8 +319,8 @@ async fn a_fresh_catalog_records_the_f4_schema_version_and_tables() {
             .fetch_one(&mut conn)
             .await
             .unwrap();
-    assert_eq!(version, 21);
-    assert_eq!(persistence_library::SCHEMA_VERSION, 21);
+    assert_eq!(version, 22);
+    assert_eq!(persistence_library::SCHEMA_VERSION, 22);
     let tables: Vec<String> =
         sqlx::query_scalar("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
             .fetch_all(&mut conn)

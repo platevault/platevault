@@ -1713,7 +1713,8 @@ export type AppliedStretch = {
 /**
  *  One reason Apply can't run now. The sheet lists every one; Apply refuses
  *  while any holds and changes nothing. A `detail` is an English diagnostic
- *  that never carries an OS error's text, which goes to the log only.
+ *  for the log that never carries an OS error's text; the sheet words each
+ *  blocker from its tag and its other fields.
  */
 export type ApplyBlocker = 
 /**  A Closing, Closed or Archived Project takes no Apply. */
@@ -1916,10 +1917,10 @@ export type ApplyReport_Deserialize = {
 	 */
 	footprint: ViewFootprint,
 	/**
-	 *  Why the Apply failed or was canceled: an English diagnostic that
-	 *  never carries an OS error's text, which goes to the log only.
+	 *  Why the Apply failed or was canceled; `None` when it was applied or
+	 *  `PlateVault` closed during it.
 	 */
-	error: string | null,
+	stop: ApplyStop | null,
 };
 
 /**
@@ -1962,10 +1963,10 @@ export type ApplyReport_Serialize = {
 	 */
 	footprint: ViewFootprint,
 	/**
-	 *  Why the Apply failed or was canceled: an English diagnostic that
-	 *  never carries an OS error's text, which goes to the log only.
+	 *  Why the Apply failed or was canceled; `None` when it was applied or
+	 *  `PlateVault` closed during it.
 	 */
-	error: string | null,
+	stop: ApplyStop | null,
 };
 
 /**  What the user confirmed in the sheet. */
@@ -1976,6 +1977,62 @@ export type ApplyRequest = {
 	/**  The foreign files, relative to `View/`, that move into the new View. */
 	ticked?: NativePathWire[],
 };
+
+/**
+ *  Why an Apply ended Failed or Canceled, with the old View in place. The
+ *  catalogues word each code as `apply_stop_<code>`; a `count` is what the
+ *  copy names. What the code doesn't say (paths, an OS error's text) goes
+ *  to the log only.
+ */
+export type ApplyStop = 
+/**  The user chose Cancel. */
+{ code: "canceled" } | 
+/**
+ *  `PlateVault` closed before the new View was installed; the next start
+ *  put the old View back.
+ */
+{ code: "interrupted" } | 
+/**
+ *  A Project edit or a Library change (a review, a calibration pin, a
+ *  correction) committed during the build (plan §3).
+ */
+{ code: "catalog_moved" } | 
+/**
+ *  Originals that are missing, can't be read or no longer match the
+ *  basis they were chosen or pinned with (D19), each in `failures`.
+ */
+{ code: "originals_unverified"; count: number } | 
+/**
+ *  `View (building)/` still holds files this Project's Apply didn't
+ *  place, each in `failures`.
+ */
+{ code: "building_not_cleared"; count: number } | 
+/**  An entry couldn't be placed in `View (building)/`; `failures` names it. */
+{ code: "entry_not_placed" } | 
+/**
+ *  Originals or built entries that changed between the build and the
+ *  swap, each in `failures`.
+ */
+{ code: "build_unverified"; count: number } | 
+/**  Entries in `View/` that can't be read, each in `failures`. */
+{ code: "view_unreadable"; count: number } | 
+/**  Entries in `View (previous)/` that can't be read, each in `failures`. */
+{ code: "previous_unreadable"; count: number } | 
+/**
+ *  Files the user kept that couldn't be moved to `View (kept)/`, each in
+ *  `failures` (D-W110).
+ */
+{ code: "kept_not_moved"; count: number } | 
+/**  The Project folder is no longer the one this Apply reviewed. */
+{ code: "project_folder_replaced" } | 
+/**  `View/` is no longer the folder this Apply reviewed. */
+{ code: "view_replaced" } | 
+/**  `View (previous)/` appeared during the build. */
+{ code: "previous_appeared" } | 
+/**  The OS refused to move the old View aside (PREP-FR-18). */
+{ code: "aside_failed" } | 
+/**  The OS refused to install the new View; the old one was put back. */
+{ code: "not_installed" };
 
 /**
  *  The `project_apply_waiting` event: Apply `operationId` of `projectId`
@@ -3352,6 +3409,22 @@ export type ForeignFile_Serialize = {
  */
 export type ForeignItem = ForeignItem_Serialize | ForeignItem_Deserialize;
 
+/**
+ *  Why a ticked foreign file stayed in `View (previous)/` instead of moving
+ *  into the new View. The catalogues word each code as
+ *  `apply_foreign_failed_<code>`, naming the item's path; an OS error's text
+ *  goes to the log only.
+ */
+export type ForeignItemFailure = 
+/**  The new View already holds an entry at its path. */
+"name_taken" | 
+/**  It changed after the Apply sheet listed it. */
+"changed" | 
+/**  Its folder couldn't be made in the new View. */
+"folder_not_made" | 
+/**  The OS refused the move. */
+"not_moved";
+
 /**  What became of a file `PlateVault` didn't place, listed in the Apply sheet. */
 export type ForeignItemState = "pending" | 
 /**  Ticked and moved into the new View after the swap. */
@@ -3370,7 +3443,8 @@ export type ForeignItem_Deserialize = {
 	evidence: EntryEvidence_Deserialize,
 	ticked: boolean,
 	state: ForeignItemState,
-	reason: string | null,
+	/**  Why a ticked file didn't move; set exactly when `Failed`. */
+	reason: ForeignItemFailure | null,
 };
 
 /**
@@ -3384,7 +3458,8 @@ export type ForeignItem_Serialize = {
 	evidence: EntryEvidence_Serialize,
 	ticked: boolean,
 	state: ForeignItemState,
-	reason: string | null,
+	/**  Why a ticked file didn't move; set exactly when `Failed`. */
+	reason: ForeignItemFailure | null,
 };
 
 /**  The basis summary shown with a frame state. */
@@ -4496,8 +4571,14 @@ export type InputState = {
 	drifted?: boolean,
 };
 
+/**
+ *  Why one item didn't finish: a stable `code` the client words, and an
+ *  English `detail` that is diagnostic text for logs and tests, never
+ *  user-facing copy.
+ */
 export type ItemReason = {
 	code: ReasonCode,
+	/**  Diagnostic text, not user-facing: the client words `code`. */
 	detail: string,
 };
 

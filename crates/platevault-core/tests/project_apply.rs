@@ -1336,9 +1336,9 @@ impl ApplyControl for ReadOnlyAtSwap {
 }
 
 /// CT3: an original that can't be read when Apply snapshots it is a named
-/// failure, and a swap the OS refuses ends Failed; neither the report's
-/// failures nor its error carry the OS text or the absolute Project folder
-/// (the sentinel) it named.
+/// failure, and a swap the OS refuses ends Failed; each reports its stop
+/// code, and neither the report's failures nor anything else in it carry
+/// the OS text or the absolute Project folder (the sentinel) it named.
 #[tokio::test]
 async fn an_apply_the_os_refuses_reports_no_os_text() {
     let world = world(ViewMode::Symlinks).await;
@@ -1356,6 +1356,8 @@ async fn an_apply_the_os_refuses_reports_no_os_text() {
     set_mode(&original, 0o644);
     assert_eq!(unread.outcome, Some(ApplyOutcome::Failed), "{unread:#?}");
     assert!(!unread.failures.is_empty(), "{unread:#?}");
+    let count = u64::try_from(unread.failures.len()).unwrap();
+    assert_eq!(unread.stop, Some(ApplyStop::OriginalsUnverified { count }), "{unread:#?}");
     assert_no_os_text(&unread, &folder);
 
     let first = world.apply().await;
@@ -1366,6 +1368,6 @@ async fn an_apply_the_os_refuses_reports_no_os_text() {
     set_mode(&folder, 0o755);
     let refused = refused.unwrap();
     assert_eq!(refused.outcome, Some(ApplyOutcome::Failed), "{refused:#?}");
-    assert!(refused.error.is_some(), "{refused:#?}");
+    assert_eq!(refused.stop, Some(ApplyStop::AsideFailed), "{refused:#?}");
     assert_no_os_text(&refused, &folder);
 }

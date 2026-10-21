@@ -1078,7 +1078,7 @@ mod tests {
     #[test]
     fn apply_moves_a_ticked_foreign_file_and_never_over_an_entry() {
         use crate::apply::files::{foreign_files, move_foreign};
-        use crate::{ForeignItem, ForeignItemState};
+        use crate::{ForeignItem, ForeignItemFailure, ForeignItemState};
 
         let temp = tempfile::tempdir().unwrap();
         let (previous, view) = (temp.path().join("View (previous)"), temp.path().join("View"));
@@ -1104,14 +1104,22 @@ mod tests {
         fs::create_dir(view.join("notes")).unwrap();
         fs::write(view.join("notes/session.txt"), b"placed").unwrap();
         let refused = move_foreign(&previous, &view, &none, &item);
-        assert_eq!(refused.state, ForeignItemState::Failed, "{refused:?}");
+        assert_eq!(
+            (refused.state, refused.reason),
+            (ForeignItemState::Failed, Some(ForeignItemFailure::NameTaken)),
+            "{refused:?}"
+        );
         assert_eq!(fs::read(view.join("notes/session.txt")).unwrap(), b"placed");
         assert_eq!(fs::read(previous.join("notes/session.txt")).unwrap(), b"the user's notes");
 
         fs::remove_file(view.join("notes/session.txt")).unwrap();
         let placed = std::collections::BTreeSet::from([PathBuf::from("notes/session.txt")]);
         let refused = move_foreign(&previous, &view, &placed, &item);
-        assert_eq!(refused.state, ForeignItemState::Failed, "a placed name: {refused:?}");
+        assert_eq!(
+            (refused.state, refused.reason),
+            (ForeignItemState::Failed, Some(ForeignItemFailure::NameTaken)),
+            "a placed name: {refused:?}"
+        );
         assert!(!view.join("notes/session.txt").exists());
 
         let moved = move_foreign(&previous, &view, &none, &item);

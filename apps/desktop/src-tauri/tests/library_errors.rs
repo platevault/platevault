@@ -5,13 +5,18 @@
 //! catalogues word. One error per [`LibraryError`] variant becomes its IPC
 //! `ErrorResponse`, which must carry no English text; its code must have an
 //! `err_library_<code>` message in every shipped locale, whose placeholders
-//! agree across locales and name params that response carries.
+//! agree across locales and name params that response carries. The same
+//! holds for why an Apply stopped ([`ApplyStop`]) and why a foreign file
+//! didn't move ([`ForeignItemFailure`]).
 
 use std::collections::BTreeSet;
 use std::path::Path;
 
-use platevault_core::{LibraryError, LibraryErrorCode, NativePath, PatchRefusal, WindowKey};
-use serde_json::{Map, Value};
+use platevault_core::{
+    ApplyStop, ForeignItemFailure, LibraryError, LibraryErrorCode, NativePath, PatchRefusal,
+    WindowKey,
+};
+use serde_json::{json, Map, Value};
 use uuid::Uuid;
 
 /// The base catalogue first.
@@ -120,20 +125,61 @@ fn catalogue(locale: &str) -> Map<String, Value> {
     }
 }
 
-/// The `{name}` placeholders of one catalogue message.
-fn placeholders(message: &str) -> BTreeSet<String> {
-    message
-        .split('{')
-        .skip(1)
+/// The `{name}` placeholders of one catalogue message: a plain string, or
+/// every variant of a plural message.
+fn placeholders(message: &Value) -> BTreeSet<String> {
+    let variants: Vec<&str> = match message {
+        Value::String(text) => vec![text],
+        Value::Array(branches) => branches
+            .iter()
+            .filter_map(|branch| branch.get("match").and_then(Value::as_object))
+            .flat_map(|cases| cases.values().filter_map(Value::as_str))
+            .collect(),
+        _ => Vec::new(),
+    };
+    assert!(
+        !variants.is_empty() && variants.iter().all(|text| !text.trim().is_empty()),
+        "not a message: {message}"
+    );
+    variants
+        .iter()
+        .flat_map(|text| text.split('{').skip(1))
         .filter_map(|rest| rest.split_once('}'))
         .map(|(name, _)| name.trim().to_owned())
         .collect()
 }
 
+/// `key` has a message in every catalogue, with the same placeholders in
+/// each, and every placeholder names a non-null field of `params`, what
+/// `subject` sends.
+fn worded(catalogues: &[(&str, Map<String, Value>)], key: &str, params: &Value, subject: &str) {
+    let wordings: Vec<(&str, BTreeSet<String>)> = catalogues
+        .iter()
+        .map(|(locale, messages)| {
+            let message =
+                messages.get(key).unwrap_or_else(|| panic!("{locale} has no message {key}"));
+            (*locale, placeholders(message))
+        })
+        .collect();
+    let (base_locale, base) = &wordings[0];
+    for (locale, names) in &wordings {
+        assert_eq!(names, base, "{key}: {locale} placeholders differ from {base_locale}");
+    }
+    for name in base {
+        assert!(
+            params.get(name).is_some_and(|value| !value.is_null()),
+            "{key} names {{{name}}}, which {subject} doesn't carry: {params}"
+        );
+    }
+}
+
+fn catalogues() -> Vec<(&'static str, Map<String, Value>)> {
+    LOCALES.iter().map(|locale| (*locale, catalogue(locale))).collect()
+}
+
 #[test]
 fn every_library_error_has_a_code_every_catalogue_words() {
-    let catalogues: Vec<(&str, Map<String, Value>)> =
-        LOCALES.iter().map(|locale| (*locale, catalogue(locale))).collect();
+    let catalogues = catalogues();
     let mut codes = BTreeSet::new();
     for error in every_variant() {
         let code = error.code();
@@ -141,30 +187,98 @@ fn every_library_error_has_a_code_every_catalogue_words() {
         let Value::Object(params) = &response else { panic!("{error:?}: {response}") };
         assert_eq!(params["code"], code.as_str(), "{error:?}: the code's wire string");
         assert!(!response.to_string().contains(DIAGNOSTIC), "{error:?} sent English: {response}");
-
-        let key = format!("err_library_{}", code.as_str());
-        let wordings: Vec<(&str, BTreeSet<String>)> = catalogues
-            .iter()
-            .map(|(locale, messages)| {
-                let message = messages
-                    .get(&key)
-                    .and_then(Value::as_str)
-                    .filter(|message| !message.trim().is_empty())
-                    .unwrap_or_else(|| panic!("{locale} has no message {key}"));
-                (*locale, placeholders(message))
-            })
-            .collect();
-        let (base_locale, base) = &wordings[0];
-        for (locale, names) in &wordings {
-            assert_eq!(names, base, "{key}: {locale} placeholders differ from {base_locale}");
-        }
-        for name in base {
-            assert!(
-                params.get(name).is_some_and(|value| !value.is_null()),
-                "{key} names {{{name}}}, which {error:?} doesn't carry: {response}"
-            );
-        }
+        worded(
+            &catalogues,
+            &format!("err_library_{}", code.as_str()),
+            &response,
+            &format!("{error:?}"),
+        );
         codes.insert(code_index(code));
     }
     assert_eq!(codes, (0..=16).collect(), "every code is some variant's");
+}
+
+/// One stop per [`ApplyStop`] variant. The match makes a new variant fail to
+/// compile here, and the index check makes each variant appear once.
+fn every_apply_stop() -> Vec<ApplyStop> {
+    let stops = vec![
+        ApplyStop::Canceled,
+        ApplyStop::Interrupted,
+        ApplyStop::CatalogMoved,
+        ApplyStop::OriginalsUnverified { count: 2 },
+        ApplyStop::BuildingNotCleared { count: 1 },
+        ApplyStop::EntryNotPlaced,
+        ApplyStop::BuildUnverified { count: 3 },
+        ApplyStop::ViewUnreadable { count: 1 },
+        ApplyStop::PreviousUnreadable { count: 4 },
+        ApplyStop::KeptNotMoved { count: 2 },
+        ApplyStop::ProjectFolderReplaced,
+        ApplyStop::ViewReplaced,
+        ApplyStop::PreviousAppeared,
+        ApplyStop::AsideFailed,
+        ApplyStop::NotInstalled,
+    ];
+    let variant = |stop: &ApplyStop| match stop {
+        ApplyStop::Canceled => 0,
+        ApplyStop::Interrupted => 1,
+        ApplyStop::CatalogMoved => 2,
+        ApplyStop::OriginalsUnverified { .. } => 3,
+        ApplyStop::BuildingNotCleared { .. } => 4,
+        ApplyStop::EntryNotPlaced => 5,
+        ApplyStop::BuildUnverified { .. } => 6,
+        ApplyStop::ViewUnreadable { .. } => 7,
+        ApplyStop::PreviousUnreadable { .. } => 8,
+        ApplyStop::KeptNotMoved { .. } => 9,
+        ApplyStop::ProjectFolderReplaced => 10,
+        ApplyStop::ViewReplaced => 11,
+        ApplyStop::PreviousAppeared => 12,
+        ApplyStop::AsideFailed => 13,
+        ApplyStop::NotInstalled => 14,
+    };
+    let seen: BTreeSet<usize> = stops.iter().map(variant).collect();
+    assert_eq!(seen, (0..=14).collect(), "one stop per variant");
+    stops
+}
+
+/// Every way an Apply ends Failed or Canceled reaches the client as a code
+/// the catalogues word as `apply_stop_<code>`, naming only what the stop
+/// carries; and every reason a ticked foreign file stayed behind as one
+/// worded as `apply_foreign_failed_<code>`, naming only the item's `path`.
+#[test]
+fn every_apply_stop_and_foreign_failure_has_a_message_every_catalogue_words() {
+    let catalogues = catalogues();
+    let mut codes = BTreeSet::new();
+    for stop in every_apply_stop() {
+        let params = serde_json::to_value(stop).expect("serialize");
+        let code = params["code"].as_str().unwrap_or_else(|| panic!("{stop:?}: {params}"));
+        assert!(codes.insert(code.to_owned()), "{code} is one stop's");
+        worded(&catalogues, &format!("apply_stop_{code}"), &params, &format!("{stop:?}"));
+    }
+
+    let failures = [
+        ForeignItemFailure::NameTaken,
+        ForeignItemFailure::Changed,
+        ForeignItemFailure::FolderNotMade,
+        ForeignItemFailure::NotMoved,
+    ];
+    // Exhaustive, so a new failure fails to compile here.
+    let index = |failure: ForeignItemFailure| match failure {
+        ForeignItemFailure::NameTaken => 0,
+        ForeignItemFailure::Changed => 1,
+        ForeignItemFailure::FolderNotMade => 2,
+        ForeignItemFailure::NotMoved => 3,
+    };
+    let seen: BTreeSet<usize> = failures.into_iter().map(index).collect();
+    assert_eq!(seen, (0..=3).collect(), "one failure per variant");
+    for failure in failures {
+        let code = serde_json::to_value(failure).expect("serialize");
+        let code = code.as_str().unwrap_or_else(|| panic!("{failure:?}: {code}"));
+        let item = json!({ "path": "notes/session.txt", "reason": code });
+        worded(
+            &catalogues,
+            &format!("apply_foreign_failed_{code}"),
+            &item,
+            &format!("{failure:?}"),
+        );
+    }
 }

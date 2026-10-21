@@ -60,10 +60,10 @@ use crate::library::{blocking, Library};
 use crate::patched_copy::{self, HeaderPatch};
 use crate::{
     ApplyBlocker, ApplyFailure, ApplyJournal, ApplyOutcome, ApplyPhase, ApplyPreview, ApplyReport,
-    ApplyRequest, EntryEvidence, EntryPlacement, ExpectedTree, FileIdentity, ForeignFile,
-    ForeignItem, ForeignItemState, InputKind, ItemReason, LibraryError, ManifestEntry, NativePath,
-    PinHealth, PreviousItem, PreviousItemReview, ReasonCode, Revision, SymlinkCapability,
-    ViewFootprint, ViewManifest, ViewMode, ViewPlanEntry,
+    ApplyRequest, ApplyStop, EntryEvidence, EntryPlacement, ExpectedTree, FileIdentity,
+    ForeignFile, ForeignItem, ForeignItemState, InputKind, ItemReason, LibraryError, ManifestEntry,
+    NativePath, PinHealth, PreviousItem, PreviousItemReview, ReasonCode, Revision,
+    SymlinkCapability, ViewFootprint, ViewManifest, ViewMode, ViewPlanEntry,
 };
 
 /// What Apply asks while it runs (PREP-FR-09, PREP-FR-18).
@@ -364,7 +364,7 @@ impl Library {
             settled_from: None,
             outcome: None,
             expected,
-            error: None,
+            stop: None,
         };
         let ticked: BTreeSet<PathBuf> =
             request.ticked.iter().filter_map(|path| path.relative_path().ok()).collect();
@@ -385,7 +385,7 @@ impl Library {
         // What the reservation left, which the swap reads again (plan §3).
         let after = self.catalog().apply_inputs(request.project_id).await?;
         let Some(reserved) = Reserved::of(&run.inputs, &after) else {
-            return run.end(ApplyOutcome::Failed, CATALOG_MOVED.into()).await;
+            return run.end(ApplyStop::CatalogMoved).await;
         };
         run.build(plan, &ticked, &reserved).await
     }
@@ -420,7 +420,7 @@ impl Library {
                 }
                 run.finish_installed().await
             }
-            Recovered::NotInstalled(detail) => run.end(ApplyOutcome::Failed, detail).await,
+            Recovered::NotInstalled => run.end(ApplyStop::Interrupted).await,
             Recovered::Stuck(detail) => Err(LibraryError::IdentityConflict(detail)),
         }
     }
@@ -1033,8 +1033,9 @@ fn prepare_tree(project: &Path, previous_gone: bool) -> Result<ExpectedTree, Lib
 enum Recovered {
     /// The verified new View is `View/`, or was just renamed there.
     Installed,
-    /// The new View was never installed; the old View is in place.
-    NotInstalled(String),
+    /// The new View was never installed; the old View is in place: the
+    /// Apply ends [`ApplyStop::Interrupted`].
+    NotInstalled,
     /// Neither could be proven; nothing was touched.
     Stuck(String),
 }
@@ -1057,10 +1058,8 @@ fn recover_folders(
             observe_folder_identity(path).is_ok_and(|observed| same_identity(&observed, identity))
         })
     };
-    let interrupted =
-        "PlateVault closed before the new View was installed; the current View is unchanged";
     if before(phase, ApplyPhase::BuildVerified) {
-        return Recovered::NotInstalled(interrupted.into());
+        return Recovered::NotInstalled;
     }
     if is(&view, expected.building.as_ref()) {
         return Recovered::Installed;
@@ -1078,11 +1077,11 @@ fn recover_folders(
     }
     if fs::symlink_metadata(&view).is_err() && is(&previous, expected.view.as_ref()) {
         return match rename(&previous, &view) {
-            Ok(()) => Recovered::NotInstalled(interrupted.into()),
+            Ok(()) => Recovered::NotInstalled,
             Err(error) => Recovered::Stuck(format!("restoring {} failed: {error}", view.display())),
         };
     }
-    Recovered::NotInstalled(interrupted.into())
+    Recovered::NotInstalled
 }
 
 /// What an installed View delivers: its isolated patched copies
@@ -1134,13 +1133,6 @@ impl Delivered {
         }
     }
 }
-
-/// Why an Apply fails when the catalog moved past what it built.
-const CATALOG_MOVED: &str =
-    "the Project or the Library changed during the build; the current View is unchanged";
-
-/// Why an Apply fails when the OS refused to move the old View aside.
-const ASIDE_FAILED: &str = "the old View couldn't be moved aside; the current View is unchanged";
 
 /// The catalog state one Apply builds against, read right after its
 /// reservation, which the swap reads again (plan §3): any desired-state
@@ -1245,7 +1237,7 @@ impl Run<'_> {
             corrected_values: delivered.corrected_values,
             patched_copies: delivered.patched_copies,
             footprint: delivered.footprint,
-            error: self.journal.error.clone(),
+            stop: self.journal.stop,
         }
     }
 
@@ -1256,27 +1248,29 @@ impl Run<'_> {
             .then(|| self.report(None, Vec::new(), Vec::new(), Delivered::default()))
     }
 
-    /// End before the new View is installed: the old View stays.
-    async fn end(
-        &mut self,
-        outcome: ApplyOutcome,
-        error: String,
-    ) -> Result<ApplyReport, LibraryError> {
+    /// End before the new View is installed, Failed or Canceled as `stop`
+    /// says: the old View stays. The report carries only the code; what
+    /// led to it was logged where it happened.
+    async fn end(&mut self, stop: ApplyStop) -> Result<ApplyReport, LibraryError> {
+        let outcome = stop.outcome();
+        tracing::info!(
+            operation_id = %self.journal.operation_id,
+            project_id = %self.journal.project_id,
+            ?stop,
+            "Apply ended {outcome:?}; the current View is unchanged"
+        );
         if outcome == ApplyOutcome::Canceled && self.building_made {
             let building = self.building();
             let ours = self.ours();
             blocking(move || Ok(files::clear_building(&building, &ours))).await?;
         }
-        self.journal.error = Some(error);
-        self.library
-            .catalog()
-            .discard_apply(&self.journal, outcome, self.journal.error.as_deref(), &self.built)
-            .await?;
+        self.journal.stop = Some(stop);
+        self.library.catalog().discard_apply(&self.journal, stop, &self.built).await?;
         Ok(self.report(Some(outcome), Vec::new(), Vec::new(), Delivered::default()))
     }
 
     async fn cancel(&mut self) -> Result<ApplyReport, LibraryError> {
-        self.end(ApplyOutcome::Canceled, "canceled; the current View is unchanged".into()).await
+        self.end(ApplyStop::Canceled).await
     }
 
     /// What a `View (building)/` may hold of this Apply's own: copies of the
@@ -1293,18 +1287,13 @@ impl Run<'_> {
     }
 
     /// Record each failure for the report; how many there were.
-    fn record(&mut self, failures: Vec<(PathBuf, ItemReason)>) -> usize {
-        let count = failures.len();
+    fn record(&mut self, failures: Vec<(PathBuf, ItemReason)>) -> u64 {
+        let count = u64::try_from(failures.len()).unwrap_or(u64::MAX);
         self.failures.extend(failures.into_iter().map(|(path, reason)| ApplyFailure {
             reason: files::reported(&path, &reason),
             path: NativePath::from_path(&path),
         }));
         count
-    }
-
-    fn failed(&mut self, failures: Vec<(PathBuf, ItemReason)>) -> String {
-        let count = self.record(failures);
-        format!("{count} input(s) could not be placed; the current View is unchanged")
     }
 
     /// A fresh `View (building)/`, after clearing one an earlier failed
@@ -1399,8 +1388,8 @@ impl Run<'_> {
         match self.snapshot_sources(&plan).await? {
             Ok(snapshots) => self.snapshots = Arc::new(snapshots),
             Err(failures) => {
-                let error = self.failed(failures);
-                return self.end(ApplyOutcome::Failed, error).await;
+                let count = self.record(failures);
+                return self.end(ApplyStop::OriginalsUnverified { count }).await;
             }
         }
         self.patches = Arc::new(self.planned_patches(&plan));
@@ -1419,8 +1408,8 @@ impl Run<'_> {
                         (path, ItemReason::new(ReasonCode::DestinationOccupied, detail))
                     })
                     .collect();
-                let error = self.failed(failures);
-                return self.end(ApplyOutcome::Failed, error).await;
+                let count = self.record(failures);
+                return self.end(ApplyStop::BuildingNotCleared { count }).await;
             }
         };
         self.building_made = true;
@@ -1459,8 +1448,8 @@ impl Run<'_> {
                     });
                 }
                 Err(reason) => {
-                    let error = self.failed(vec![(entry.path, reason)]);
-                    return self.end(ApplyOutcome::Failed, error).await;
+                    self.record(vec![(entry.path, reason)]);
+                    return self.end(ApplyStop::EntryNotPlaced).await;
                 }
             }
         }
@@ -1472,17 +1461,14 @@ impl Run<'_> {
         let failures =
             blocking(move || Ok(files::verify_built(&building, &built, &snapshots))).await?;
         if !failures.is_empty() {
-            let error = self.failed(failures);
-            return self.end(ApplyOutcome::Failed, error).await;
+            let count = self.record(failures);
+            return self.end(ApplyStop::BuildUnverified { count }).await;
         }
         let foreign = match self.foreign_inventory(ticked).await? {
             Ok(foreign) => foreign,
             Err(unreadable) => {
                 let count = self.record(unreadable);
-                let error = format!(
-                    "{count} entr(ies) in View/ can't be read; the current View is unchanged"
-                );
-                return self.end(ApplyOutcome::Failed, error).await;
+                return self.end(ApplyStop::ViewUnreadable { count }).await;
             }
         };
         self.library.catalog().record_apply_build(&self.journal, &self.built, &foreign).await?;
@@ -1527,7 +1513,7 @@ impl Run<'_> {
     /// an edit committed meanwhile puts the old View back and fails Apply.
     async fn swap(&mut self, reserved: &Reserved) -> Result<ApplyReport, LibraryError> {
         if !self.still_reserved(reserved).await? {
-            return self.end(ApplyOutcome::Failed, CATALOG_MOVED.into()).await;
+            return self.end(ApplyStop::CatalogMoved).await;
         }
         let view = self.project.join(VIEW_FOLDER);
         let previous = self.project.join(VIEW_PREVIOUS_FOLDER);
@@ -1538,8 +1524,8 @@ impl Run<'_> {
             if self.control.canceled() {
                 return self.cancel().await;
             }
-            if let Some(error) = self.move_kept().await? {
-                return self.end(ApplyOutcome::Failed, error).await;
+            if let Some(stop) = self.move_kept().await? {
+                return self.end(stop).await;
             }
             let (root, view_path, previous_path) =
                 (self.project.clone(), view.clone(), previous.clone());
@@ -1547,8 +1533,8 @@ impl Run<'_> {
             let ready =
                 blocking(move || Ok(swap_ready(&root, &view_path, &previous_path, &expected)))
                     .await?;
-            if let Err(detail) = ready {
-                return self.end(ApplyOutcome::Failed, detail).await;
+            if let Err(stop) = ready {
+                return self.end(stop).await;
             }
             match files::move_aside(self.os.rename, self.os.poll, &view, &previous, self.control)
                 .await
@@ -1562,7 +1548,7 @@ impl Run<'_> {
                     self.advance(ApplyPhase::OldMoved, None).await?;
                 }
                 Aside::Canceled => return self.cancel().await,
-                Aside::Failed => return self.end(ApplyOutcome::Failed, ASIDE_FAILED.into()).await,
+                Aside::Failed => return self.end(ApplyStop::AsideFailed).await,
             }
             if let Some(report) = self.interrupted() {
                 return Ok(report);
@@ -1581,9 +1567,7 @@ impl Run<'_> {
                     )));
                 }
             }
-            return self
-                .end(ApplyOutcome::Failed, format!("{detail}; the current View is unchanged"))
-                .await;
+            return self.end(ApplyStop::NotInstalled).await;
         }
         self.advance(ApplyPhase::NewInstalled, None).await?;
         if let Some(report) = self.interrupted() {
@@ -1605,11 +1589,11 @@ impl Run<'_> {
         }
         if let Err(restore) = self.restore_old_view().await? {
             return Err(LibraryError::IdentityConflict(format!(
-                "{CATALOG_MOVED}; restoring the old View failed ({restore}); PlateVault \
-                 restores it at the next start"
+                "the Project or the Library changed while Apply waited for a tool; restoring \
+                 the old View failed ({restore}); PlateVault restores it at the next start"
             )));
         }
-        self.end(ApplyOutcome::Failed, CATALOG_MOVED.into()).await.map(Some)
+        self.end(ApplyStop::CatalogMoved).await.map(Some)
     }
 
     /// Whether the catalog, read now, still holds what this Apply reserved.
@@ -1631,16 +1615,13 @@ impl Run<'_> {
     /// that left or is gone; one gone from disk is named in the report
     /// (D-W137). Once the folder is gone its manifest retires. A file that
     /// can't move fails Apply with the old View in place: why, if so.
-    async fn move_kept(&mut self) -> Result<Option<String>, LibraryError> {
+    async fn move_kept(&mut self) -> Result<Option<ApplyStop>, LibraryError> {
         let project = self.project.clone();
         let moves = match blocking(move || Ok(files::move_kept(&project))).await? {
             Ok(moves) => moves,
             Err(unreadable) => {
                 let count = self.record(unreadable);
-                return Ok(Some(format!(
-                    "{count} entr(ies) in View (previous)/ can't be read; the current View is \
-                     unchanged"
-                )));
+                return Ok(Some(ApplyStop::PreviousUnreadable { count }));
             }
         };
         for relative in &moves.missing {
@@ -1665,10 +1646,7 @@ impl Run<'_> {
         }
         if !moves.failed.is_empty() {
             let count = self.record(moves.failed);
-            return Ok(Some(format!(
-                "{count} kept file(s) couldn't be moved to {VIEW_KEPT_FOLDER}/; the current View \
-                 is unchanged"
-            )));
+            return Ok(Some(ApplyStop::KeptNotMoved { count }));
         }
         if moves.gone {
             catalog.retire_previous_view(project_id).await?;
@@ -1715,7 +1693,7 @@ impl Run<'_> {
             .map(Delivered::of)
             .unwrap_or_default();
         let Some(old) = inputs.previous.clone() else {
-            catalog.settle_apply(&self.journal, &[], true, None).await?;
+            catalog.settle_apply(&self.journal, &[], true).await?;
             return Ok(self.report(Some(ApplyOutcome::Applied), foreign, Vec::new(), delivered));
         };
         if before(self.journal.phase, ApplyPhase::RetiringPrevious) {
@@ -1727,37 +1705,43 @@ impl Run<'_> {
         let sources = files::Original::all(&inputs);
         let project = self.project.clone();
         let retired = blocking(move || Ok(files::retire(&project, &old.entries, &sources))).await?;
-        catalog.settle_apply(&self.journal, &retired.leftovers, retired.gone, None).await?;
+        catalog.settle_apply(&self.journal, &retired.leftovers, retired.gone).await?;
         Ok(self.report(Some(ApplyOutcome::Applied), foreign, retired.leftovers, delivered))
     }
 }
 
-/// The OS refused to install the new View: its error goes to the log, and
-/// the report says only what failed.
+/// The OS refused to install the new View: its error goes to the log. The
+/// text returned is for a `LibraryError` message only; the report carries
+/// [`ApplyStop::NotInstalled`].
 fn not_installed(view: &Path, error: &std::io::Error) -> &'static str {
     tracing::warn!(view = %view.display(), %error, "the new View couldn't be installed");
     "installing the new View failed"
 }
 
 /// The Project folder and `View/` are still the ones this Apply recorded,
-/// and `View (previous)/` is free, right before the swap.
+/// and `View (previous)/` is free, right before the swap; else why not, with
+/// the folder logged.
 fn swap_ready(
     root: &Path,
     view: &Path,
     previous: &Path,
     expected: &ExpectedTree,
-) -> Result<(), String> {
+) -> Result<(), ApplyStop> {
     let is = |path: &Path, identity: &FileIdentity| {
         observe_folder_identity(path).is_ok_and(|observed| same_identity(&observed, identity))
     };
+    let refuse = |folder: &Path, stop: ApplyStop| {
+        tracing::warn!(folder = %folder.display(), ?stop, "Apply won't swap the View");
+        Err(stop)
+    };
     if !is(root, &expected.root_identity) {
-        return Err(format!("{} is not the Project folder this Apply reviewed", root.display()));
+        return refuse(root, ApplyStop::ProjectFolderReplaced);
     }
     if !expected.view.as_ref().is_some_and(|identity| is(view, identity)) {
-        return Err(format!("{} is not the View this Apply reviewed", view.display()));
+        return refuse(view, ApplyStop::ViewReplaced);
     }
     if fs::symlink_metadata(previous).is_ok() {
-        return Err(format!("{} appeared during the build; nothing was moved", previous.display()));
+        return refuse(previous, ApplyStop::PreviousAppeared);
     }
     Ok(())
 }

@@ -198,10 +198,7 @@ async fn edited_during_the_build(review: bool) {
     assert!(control.done.load(Ordering::SeqCst), "the edit was committed during the build");
     assert_eq!(report.outcome, Some(ApplyOutcome::Failed), "{report:#?}");
     assert!(report.failures.is_empty(), "every file verified; the catalog moved: {report:#?}");
-    assert!(
-        report.error.as_deref().is_some_and(|error| error.contains("changed during the build")),
-        "{report:#?}"
-    );
+    assert_eq!(report.stop, Some(ApplyStop::CatalogMoved), "{report:#?}");
     assert_eq!(World::tree(&world.view()), before, "the old View stays");
     assert_eq!(digest(&placed(&world, HA[0])), kept);
     assert!(!world.previous().exists());

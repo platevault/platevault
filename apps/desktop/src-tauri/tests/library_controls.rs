@@ -38,9 +38,9 @@ use platevault_core::library::Library;
 use platevault_core::new_captures::CaptureWatch;
 use platevault_core::project_output::OutputWatch;
 use platevault_core::{
-    ApplyOutcome, ApplyPhase, ApplyReport, ArchiveMoveOutcome, ArchiveSelection, CleanUpRequest,
-    CloseReport, CloseRequest, LocationRole, NativePath, OutputObservation, ProjectLifecycle,
-    Quality, TrashRequest, TrashSupport, ViewMode, WrapUpStatus,
+    ApplyOutcome, ApplyPhase, ApplyReport, ApplyStop, ArchiveMoveOutcome, ArchiveSelection,
+    CleanUpRequest, CloseReport, CloseRequest, LocationRole, NativePath, OutputObservation,
+    ProjectLifecycle, Quality, TrashRequest, TrashSupport, ViewMode, WrapUpStatus,
 };
 use serde_json::{json, Value};
 use support::{Ipc, NOT_FOUND};
@@ -210,10 +210,11 @@ fn cancel_stops_a_held_apply_and_its_journal_ends_canceled() {
     });
 
     assert_eq!(report.outcome, Some(ApplyOutcome::Canceled), "{report:#?}");
+    assert_eq!(report.stop, Some(ApplyStop::Canceled), "{report:#?}");
     let journal = block_on(world.journal(report.operation_id));
     assert_eq!(
-        (journal.phase, journal.outcome),
-        (ApplyPhase::Settled, Some(ApplyOutcome::Canceled))
+        (journal.phase, journal.outcome, journal.stop),
+        (ApplyPhase::Settled, Some(ApplyOutcome::Canceled), Some(ApplyStop::Canceled))
     );
     assert_eq!(World::tree(&world.view()), before, "the old View is unchanged");
     assert!(!world.building().exists() && !world.previous().exists());

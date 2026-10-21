@@ -234,7 +234,7 @@ fn journal(phase: ApplyPhase) -> ApplyJournal {
             building: None,
             previous: None,
         },
-        error: None,
+        stop: None,
     }
 }
 

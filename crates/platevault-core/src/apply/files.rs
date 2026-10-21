@@ -36,8 +36,8 @@ use crate::custody::{
 use crate::layout::{self, VIEW_KEPT_FOLDER, VIEW_PREVIOUS_FOLDER};
 use crate::patched_copy::{self, HeaderPatch, PatchTarget};
 use crate::{
-    EntryEvidence, EntryKind, EntryPlacement, FileIdentity, ForeignItem, ForeignItemState,
-    ItemReason, ManifestEntry, NativePath, ObservationFingerprint, PreviousItem,
+    EntryEvidence, EntryKind, EntryPlacement, FileIdentity, ForeignItem, ForeignItemFailure,
+    ForeignItemState, ItemReason, ManifestEntry, NativePath, ObservationFingerprint, PreviousItem,
     PreviousItemReason, PreviousItemReview, ReasonCode, SymlinkCapability, TransferDestination,
 };
 
@@ -705,10 +705,12 @@ pub fn move_foreign(
         return item;
     }
     let outcome = (|| {
-        let relative = item.path.relative_path().map_err(|error| error.to_string())?;
-        let taken = || format!("the new View already holds {}", relative.display());
+        let relative = item.path.relative_path().map_err(|error| {
+            tracing::warn!(path = %item.path.display(), %error, "a foreign file's path is unusable");
+            ForeignItemFailure::NotMoved
+        })?;
         if placed.contains(&relative) {
-            return Err(taken());
+            return Err(ForeignItemFailure::NameTaken);
         }
         let from = previous.join(&relative);
         let to = view.join(&relative);
@@ -718,12 +720,12 @@ pub fn move_foreign(
             return Ok(());
         }
         if !is_reviewed(&from, &item.evidence) {
-            return Err(format!("{} changed after the Apply sheet listed it", relative.display()));
+            return Err(ForeignItemFailure::Changed);
         }
         let folder = relative.parent().unwrap_or_else(|| Path::new(""));
         transfer::ensure_folder(view, folder).map_err(|failure| {
             tracing::warn!(path = %to.display(), detail = %failure.detail, "a foreign file's folder couldn't be made");
-            format!("the folder of {} couldn't be made in the new View", relative.display())
+            ForeignItemFailure::FolderNotMade
         })?;
         let mut moved = transfer::rename_noreplace(&from, &to);
         if moved.as_ref().is_err_and(|error| error.kind() == io::ErrorKind::AlreadyExists)
@@ -733,18 +735,18 @@ pub fn move_foreign(
         }
         moved.map_err(|error| {
             if error.kind() == io::ErrorKind::AlreadyExists {
-                taken()
+                ForeignItemFailure::NameTaken
             } else {
                 tracing::warn!(path = %from.display(), %error, "a foreign file couldn't be moved");
-                format!("{} couldn't be moved into the new View", relative.display())
+                ForeignItemFailure::NotMoved
             }
         })
     })();
     match outcome {
         Ok(()) => item.state = ForeignItemState::Moved,
-        Err(detail) => {
+        Err(failure) => {
             item.state = ForeignItemState::Failed;
-            item.reason = Some(detail);
+            item.reason = Some(failure);
         }
     }
     item
