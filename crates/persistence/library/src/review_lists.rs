@@ -109,12 +109,14 @@ impl Catalog {
             roots.insert(id, path);
         }
         snapshot.rollback().await?;
-        let by_id: HashMap<Uuid, Asset> = assets.into_iter().map(|asset| (asset.id, asset)).collect();
+        let by_id: HashMap<Uuid, Asset> =
+            assets.into_iter().map(|asset| (asset.id, asset)).collect();
         ids.iter()
             .filter_map(|id| by_id.get(id).map(|asset| (id, asset)))
             .map(|(_, asset)| {
-                let root = roots.get(&asset.location_id)
-                    .ok_or_else(|| LibraryError::NotFound(format!("location {}", asset.location_id)))?;
+                let root = roots.get(&asset.location_id).ok_or_else(|| {
+                    LibraryError::NotFound(format!("location {}", asset.location_id))
+                })?;
                 Ok(CorrectionEntryAsset { asset: asset.clone(), root: root.clone() })
             })
             .collect()
@@ -129,15 +131,16 @@ impl Catalog {
     pub fn reset_correction_entry_batch_reads_for_test() {
         CORRECTION_ENTRY_BATCH_READS.with(|reads| reads.set(0));
     }
-
 }
 #[cfg(all(test, feature = "test-counters"))]
 mod tests {
     use super::*;
-    use platevault_model::{CaptureKey, CaptureMetadata, FileIdentity, GroupingResult, ImageFormat,
-        LocationRole, ObservationFingerprint, PathSensitivity, ScanBatch, ScanFile, SessionCandidate,
-        VolumeIdentity, VolumeKind};
     use crate::LocationRegistration;
+    use platevault_model::{
+        CaptureKey, CaptureMetadata, FileIdentity, GroupingResult, ImageFormat, LocationRole,
+        ObservationFingerprint, PathSensitivity, ScanBatch, ScanFile, SessionCandidate,
+        VolumeIdentity, VolumeKind,
+    };
     use std::path::Path;
 
     #[tokio::test]
@@ -147,26 +150,58 @@ mod tests {
         let root = dir.path().join("captures");
         std::fs::create_dir(&root).unwrap();
         let identity = FileIdentity {
-            volume: VolumeIdentity { filesystem: "apfs".into(), stable_id: Some("test-volume".into()),
-                file_ids_stable: false, case: PathSensitivity::Sensitive,
-                normalization: PathSensitivity::Sensitive }, file_id: None,
+            volume: VolumeIdentity {
+                filesystem: "apfs".into(),
+                stable_id: Some("test-volume".into()),
+                file_ids_stable: false,
+                case: PathSensitivity::Sensitive,
+                normalization: PathSensitivity::Sensitive,
+            },
+            file_id: None,
         };
-        let location = catalog.register_location(&LocationRegistration {
-            name: "captures".into(), path: NativePath::from_path(&root),
-            role: LocationRole::Captures, identity: identity.clone(), volume_kind: VolumeKind::Local,
-        }).await.unwrap();
-        let files = ["one.fits", "two.fits"].into_iter().enumerate().map(|(index, name)| ScanFile {
-            relative_path: NativePath::from_path(Path::new(name)),
-            fingerprint: ObservationFingerprint { identity: identity.clone(), size_bytes: 1,
-                modified_ns: index as i128 + 1, content_sha256: None },
-            format: ImageFormat::Fits, metadata: CaptureMetadata::default(),
-        }).collect();
+        let location = catalog
+            .register_location(&LocationRegistration {
+                name: "captures".into(),
+                path: NativePath::from_path(&root),
+                role: LocationRole::Captures,
+                identity: identity.clone(),
+                volume_kind: VolumeKind::Local,
+            })
+            .await
+            .unwrap();
+        let files = ["one.fits", "two.fits"]
+            .into_iter()
+            .enumerate()
+            .map(|(index, name)| ScanFile {
+                relative_path: NativePath::from_path(Path::new(name)),
+                fingerprint: ObservationFingerprint {
+                    identity: identity.clone(),
+                    size_bytes: 1,
+                    modified_ns: index as i128 + 1,
+                    content_sha256: None,
+                },
+                format: ImageFormat::Fits,
+                metadata: CaptureMetadata::default(),
+            })
+            .collect();
         let operation = catalog.begin_scan(location.id, None).await.unwrap();
-        catalog.apply_scan_batch(operation.id, &identity, &ScanBatch { files, ..ScanBatch::default() },
-            |assets: &[Asset]| GroupingResult { sessions: vec![SessionCandidate {
-                key: CaptureKey("test".into()), asset_ids: assets.iter().map(|asset| asset.id).collect(),
-                provisional: Vec::new(), date_basis: None, framing: None,
-            }] }).await.unwrap();
+        catalog
+            .apply_scan_batch(
+                operation.id,
+                &identity,
+                &ScanBatch { files, ..ScanBatch::default() },
+                |assets: &[Asset]| GroupingResult {
+                    sessions: vec![SessionCandidate {
+                        key: CaptureKey("test".into()),
+                        asset_ids: assets.iter().map(|asset| asset.id).collect(),
+                        provisional: Vec::new(),
+                        date_basis: None,
+                        framing: None,
+                    }],
+                },
+            )
+            .await
+            .unwrap();
         let assets = catalog.location_assets(location.id).await.unwrap();
         let ids = [assets[1].id, assets[0].id];
         Catalog::reset_correction_entry_batch_reads_for_test();

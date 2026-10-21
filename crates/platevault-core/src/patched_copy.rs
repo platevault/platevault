@@ -263,10 +263,6 @@ fn shown(value: &serde_json::Value) -> Option<String> {
 pub struct EntryFrame {
     /// What its header holds.
     pub observed: CaptureMetadata,
-    /// Its catalogued format, which picks the patcher.
-    pub format: ImageFormat,
-    /// Its original, when its location's root resolves.
-    pub source: Option<PathBuf>,
     /// Whether telescope/camera have an applicable HIERARCH length-limiting alias.
     pub hierarch_aliases: Option<(bool, bool)>,
 }
@@ -688,12 +684,7 @@ mod tests {
 
     /// A frame whose header holds `observed`, its source unread.
     fn unread(observed: CaptureMetadata) -> EntryFrame {
-        EntryFrame {
-            observed,
-            format: ImageFormat::Fits,
-            source: None,
-            hierarch_aliases: Some((false, false)),
-        }
+        EntryFrame { observed, hierarch_aliases: Some((false, false)) }
     }
 
     /// What no patched copy can deliver is refused when it is recorded: a
@@ -775,12 +766,9 @@ mod tests {
         fs::write(&aliased, fits_light_holding(&cards)).unwrap();
         fs::write(&plain, fits_light()).unwrap();
         let frame = |source: Option<&Path>| {
-            let aliases = source.and_then(|path| metadata_fits::patch::hierarch_aliases(path).ok());
-            EntryFrame {
-                source: source.map(Path::to_path_buf),
-                hierarch_aliases: aliases,
-                ..unread(CaptureMetadata::default())
-            }
+            let evidence =
+                source.and_then(|path| metadata_fits::patch::hierarch_aliases(path).ok());
+            EntryFrame { hierarch_aliases: evidence, ..unread(CaptureMetadata::default()) }
         };
         let refusal = |field: &str, len: usize, source: Option<&Path>| {
             entry_refusal(field, &serde_json::Value::String("x".repeat(len)), &frame(source))

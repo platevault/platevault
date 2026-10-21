@@ -77,7 +77,6 @@ pub struct Library {
     forced_conflicts: std::sync::atomic::AtomicUsize,
 }
 
-
 #[derive(Clone)]
 struct PatchedEntryRefusalBasis {
     expected: Vec<ExpectedAsset>,
@@ -631,7 +630,8 @@ impl Library {
         margins: &FramingMargins,
     ) -> Result<CorrectionPreview, LibraryError> {
         let refusals = self.refuse_undeliverable(expected, corrections, None).await?;
-        let preview = self.catalog.preview_correction(expected, corrections, Intake(margins)).await?;
+        let preview =
+            self.catalog.preview_correction(expected, corrections, Intake(margins)).await?;
         self.patched_entry_refusals.lock().await.insert(
             preview.id,
             PatchedEntryRefusalBasis {
@@ -673,14 +673,18 @@ impl Library {
         let cached = self.patched_entry_refusals.lock().await.remove(&preview_id);
         let cached = cached.filter(|basis| {
             basis.expected.len() == expected.len()
-                && basis.expected.iter().all(|item| expected.iter().any(|candidate| {
-                    candidate.asset_id == item.asset_id
-                        && candidate.decision_revision == item.decision_revision
-                        && candidate.fingerprint.equivalent(&item.fingerprint)
-                }))
+                && basis.expected.iter().all(|item| {
+                    expected.iter().any(|candidate| {
+                        candidate.asset_id == item.asset_id
+                            && candidate.decision_revision == item.decision_revision
+                            && candidate.fingerprint.equivalent(&item.fingerprint)
+                    })
+                })
                 && basis.corrections.len() == preview.corrections.len()
                 && basis.corrections.iter().zip(&preview.corrections).all(|(left, right)| {
-                    left.asset_id == right.asset_id && left.field == right.field && left.value == right.value
+                    left.asset_id == right.asset_id
+                        && left.field == right.field
+                        && left.value == right.value
                 })
         });
         self.refuse_undeliverable(expected, &preview.corrections, cached).await?;
@@ -706,49 +710,64 @@ impl Library {
         basis: Option<PatchedEntryRefusalBasis>,
     ) -> Result<HashMap<(Uuid, String), Option<crate::PatchRefusal>>, LibraryError> {
         let named: HashSet<Uuid> = expected.iter().map(|item| item.asset_id).collect();
-        let correction_ids: Vec<Uuid> = corrections.iter()
+        let correction_ids: Vec<Uuid> = corrections
+            .iter()
             .filter(|item| named.contains(&item.asset_id))
             .map(|item| item.asset_id)
             .collect::<std::collections::BTreeSet<_>>()
-            .into_iter().collect();
+            .into_iter()
+            .collect();
         let entries = self.catalog.correction_entry_assets(&correction_ids).await?;
         let has_basis = basis.is_some();
         let prior = basis.map(|basis| basis.refusals).unwrap_or_default();
         let mut refusals = prior;
         let mut frames = HashMap::with_capacity(entries.len());
         for entry in entries {
-            let source = entry.root.as_deref()
+            let source = entry
+                .root
+                .as_deref()
                 .zip(entry.asset.relative_path.relative_path().ok())
                 .map(|(root, relative)| root.join(relative));
-            let needs_alias_read = !has_basis && ["telescope", "camera"].iter().any(|field| {
-                corrections.iter().any(|item| item.asset_id == entry.asset.id && item.field == *field)
-            });
+            let needs_alias_read = !has_basis
+                && ["telescope", "camera"].iter().any(|field| {
+                    corrections
+                        .iter()
+                        .any(|item| item.asset_id == entry.asset.id && item.field == *field)
+                });
             #[cfg(test)]
             if needs_alias_read && matches!(entry.asset.format, crate::ImageFormat::Fits) {
                 self.patched_entry_header_reads.fetch_add(1, Ordering::Relaxed);
             }
-            let aliases = if needs_alias_read && matches!(entry.asset.format, crate::ImageFormat::Fits) {
+            let aliases = if needs_alias_read
+                && matches!(entry.asset.format, crate::ImageFormat::Fits)
+            {
                 source.as_deref().and_then(|path| metadata_fits::patch::hierarch_aliases(path).ok())
-            } else { None };
+            } else {
+                None
+            };
 
-            frames.insert(entry.asset.id, EntryFrame {
-                observed: entry.asset.observed,
-                format: entry.asset.format,
-                source,
-                hierarch_aliases: aliases,
-            });
+            frames.insert(
+                entry.asset.id,
+                EntryFrame { observed: entry.asset.observed, hierarch_aliases: aliases },
+            );
         }
         for correction in corrections {
-            if !named.contains(&correction.asset_id) { continue; }
+            if !named.contains(&correction.asset_id) {
+                continue;
+            }
             let Some(frame) = frames.get(&correction.asset_id) else { continue };
             let key = (correction.asset_id, correction.field.clone());
-            if refusals.contains_key(&key) { continue; }
+            if refusals.contains_key(&key) {
+                continue;
+            }
             let refusal = patched_copy::entry_refusal(&correction.field, &correction.value, frame);
             refusals.insert(key, refusal);
             if let Some(refusal) = refusal {
                 return Err(LibraryError::CorrectionUndeliverable {
-                    identity: correction.asset_id, path: None,
-                    field: correction.field.clone(), refusal,
+                    identity: correction.asset_id,
+                    path: None,
+                    field: correction.field.clone(),
+                    refusal,
                 });
             }
         }
@@ -1165,11 +1184,14 @@ mod tests {
         assert_eq!(scan_to_end(&library, locations[0].id).await.state, ScanState::Completed);
         let asset = library.catalog.location_assets(locations[0].id).await.unwrap().remove(0);
         let expected = [ExpectedAsset {
-            asset_id: asset.id, decision_revision: asset.decision_revision,
+            asset_id: asset.id,
+            decision_revision: asset.decision_revision,
             fingerprint: asset.fingerprint.clone(),
         }];
         let corrections = [CorrectionInput {
-            asset_id: asset.id, field: "camera".into(), value: serde_json::Value::String("ASI2600".into()),
+            asset_id: asset.id,
+            field: "camera".into(),
+            value: serde_json::Value::String("ASI2600".into()),
         }];
         persistence_library::Catalog::reset_correction_entry_batch_reads_for_test();
         let preview = library.preview_correction(&expected, &corrections).await.unwrap();
@@ -1188,13 +1210,20 @@ mod tests {
         assert_eq!(scan_to_end(&library, locations[0].id).await.state, ScanState::Completed);
         let asset = library.catalog.location_assets(locations[0].id).await.unwrap().remove(0);
         let expected = [ExpectedAsset {
-            asset_id: asset.id, decision_revision: asset.decision_revision,
+            asset_id: asset.id,
+            decision_revision: asset.decision_revision,
             fingerprint: asset.fingerprint.clone(),
         }];
         let corrections = [CorrectionInput {
-            asset_id: asset.id, field: "camera".into(), value: serde_json::Value::String("x".repeat(69)),
+            asset_id: asset.id,
+            field: "camera".into(),
+            value: serde_json::Value::String("x".repeat(69)),
         }];
-        let preview = library.catalog.preview_correction(&expected, &corrections, Intake(&FramingMargins::default())).await.unwrap();
+        let preview = library
+            .catalog
+            .preview_correction(&expected, &corrections, Intake(&FramingMargins::default()))
+            .await
+            .unwrap();
         persistence_library::Catalog::reset_correction_entry_batch_reads_for_test();
         let result = library.confirm_correction(preview.id, &expected).await;
         assert!(matches!(result, Err(LibraryError::CorrectionUndeliverable { .. })));
