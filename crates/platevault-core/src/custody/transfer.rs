@@ -1200,7 +1200,18 @@ mod tests {
         }
         let temp = tempfile::tempdir().unwrap();
         let (from, to) = file_in(&temp);
-        rustix::fs::setxattr(&from, USERS, b"tagged", rustix::fs::XattrFlags::empty()).unwrap();
+        // The precondition, not the behaviour under test: tmpfs before Linux
+        // 6.6 keeps no `user.*` xattrs.
+        match rustix::fs::setxattr(&from, USERS, b"tagged", rustix::fs::XattrFlags::empty()) {
+            Ok(()) => {}
+            Err(errno)
+                if [rustix::io::Errno::NOTSUP, rustix::io::Errno::OPNOTSUPP].contains(&errno) =>
+            {
+                eprintln!("skipped: {} keeps no {USERS} xattr ({errno})", temp.path().display());
+                return;
+            }
+            Err(errno) => panic!("{USERS} can't be set on {}: {errno}", from.display()),
+        }
         let Err(error) = copy_onto_new_with(&from, &to, refuse) else { panic!("not refused") };
         assert_eq!(error.raw_os_error(), Some(rustix::io::Errno::PERM.raw_os_error()), "{error}");
         assert!(!to.exists(), "the copy is removed");
