@@ -147,7 +147,7 @@ async fn index(
         incomplete_scopes: Vec::new(),
         files,
         issues: Vec::new(),
-        complete_scopes: vec![NativePath::UnixBytes(Vec::new())],
+        complete_scopes: vec![NativePath::from_path(Path::new(""))],
         progress,
         state: ScanState::Partial,
     };
