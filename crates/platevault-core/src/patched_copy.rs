@@ -267,6 +267,8 @@ pub struct EntryFrame {
     pub format: ImageFormat,
     /// Its original, when its location's root resolves.
     pub source: Option<PathBuf>,
+    /// Whether telescope/camera have an applicable HIERARCH length-limiting alias.
+    pub hierarch_aliases: Option<(bool, bool)>,
 }
 
 /// Why recording `value` as the corrected `field` of `frame` would leave a
@@ -280,10 +282,9 @@ pub struct EntryFrame {
 /// equal to the header's own is never refused: it reverts a correction,
 /// and Apply writes nothing for it. Nor is clearing a field the header
 /// lacks, which undoes a correction, nor the framing label, a grouping
-/// decision rather than a header correction. What only the rest of the
-/// frame refuses, Apply refuses. Reads the header only for a field with a
-/// HIERARCH alias; a source that can't be read isn't refused here.
-#[must_use]
+/// decision rather than a header correction. What only the rest of the frame
+/// refuses, Apply refuses. A source that can't be read supplies no alias evidence,
+/// so base FITS card rules still apply; preview and confirm share captured evidence.
 pub fn entry_refusal(
     field: &str,
     value: &serde_json::Value,
@@ -315,16 +316,18 @@ pub fn entry_refusal(
     if mapping.hierarch.is_empty() {
         return None;
     }
-    let change = CorrectedField {
-        field: field.to_owned(),
-        keywords: Vec::new(),
-        header: None,
-        catalog: Some(text.to_owned()),
+    let alias = match field {
+        "telescope" => "TELESCOPE",
+        "camera" => "INSTRUMENT",
+        _ => return None,
     };
-    match check(frame.source.as_deref()?, frame.format, &[change]) {
-        Err(Refusal { reason: PatchRefusal::TooLong, .. }) => Some(PatchRefusal::TooLong),
-        _ => None,
-    }
+    let has_alias = frame.hierarch_aliases.is_some_and(|(telescope, camera)| match field {
+        "telescope" => telescope,
+        "camera" => camera,
+        _ => false,
+    });
+    (has_alias && !metadata_fits::patch::hierarch_text_fits(alias, text))
+        .then_some(PatchRefusal::TooLong)
 }
 
 /// Whether a correction's `value` is the header's own `held` value as the
@@ -685,7 +688,12 @@ mod tests {
 
     /// A frame whose header holds `observed`, its source unread.
     fn unread(observed: CaptureMetadata) -> EntryFrame {
-        EntryFrame { observed, format: ImageFormat::Fits, source: None }
+        EntryFrame {
+            observed,
+            format: ImageFormat::Fits,
+            source: None,
+            hierarch_aliases: Some((false, false)),
+        }
     }
 
     /// What no patched copy can deliver is refused when it is recorded: a
@@ -766,9 +774,13 @@ mod tests {
         let cards = ["HIERARCH TELESCOPE = 'Samyang 135'", "HIERARCH INSTRUMENT = 'ASI2600MM'"];
         fs::write(&aliased, fits_light_holding(&cards)).unwrap();
         fs::write(&plain, fits_light()).unwrap();
-        let frame = |source: Option<&Path>| EntryFrame {
-            source: source.map(Path::to_path_buf),
-            ..unread(CaptureMetadata::default())
+        let frame = |source: Option<&Path>| {
+            let aliases = source.and_then(|path| metadata_fits::patch::hierarch_aliases(path).ok());
+            EntryFrame {
+                source: source.map(Path::to_path_buf),
+                hierarch_aliases: aliases,
+                ..unread(CaptureMetadata::default())
+            }
         };
         let refusal = |field: &str, len: usize, source: Option<&Path>| {
             entry_refusal(field, &serde_json::Value::String("x".repeat(len)), &frame(source))

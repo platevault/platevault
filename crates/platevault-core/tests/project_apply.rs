@@ -1079,10 +1079,22 @@ async fn reverting_to_the_header_value_is_taken_where_the_value_breaks_an_entry_
     assert_eq!(reverted.effective, reverted.observed);
 }
 
-/// A correction of a frame the request's expectations don't name is the
-/// catalog's `invalid_input`, whose action is Review, as before entry read
-/// the frames: whether the catalog knows the frame or not, and whatever
-/// the entry checks would make of the value. Nothing is recorded.
+/// The corrected frames are loaded as one batch for preview and confirm, and
+/// a successful in-process preview lets confirm reuse its header findings.
+#[tokio::test]
+async fn correction_entry_checks_batch_frames_and_reuse_preview_header_results() {
+    let world = catalogued(ViewMode::Copies).await;
+    let first = world.asset_at(&world.captures, HA[0]).await;
+    let second = world.asset_at(&world.captures, HA[1]).await;
+    let expected = [expected(&first)[0].clone(), expected(&second)[0].clone()];
+    let corrections = [
+        CorrectionInput { asset_id: first.id, field: "object".into(), value: json!("NGC 7000") },
+        CorrectionInput { asset_id: second.id, field: "object".into(), value: json!("M 31") },
+    ];
+    let preview = world.library.preview_correction(&expected, &corrections).await.unwrap();
+    world.library.confirm_correction(preview.id, &expected).await.unwrap();
+}
+
 #[tokio::test]
 async fn a_correction_of_a_frame_the_expectations_do_not_name_is_invalid_input() {
     let world = catalogued(ViewMode::Copies).await;

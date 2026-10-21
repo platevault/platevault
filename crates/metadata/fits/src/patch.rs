@@ -84,6 +84,31 @@ fn read_header_region(file: &mut File) -> Result<Vec<u8>, PatchError> {
     Err(PatchError::refused(0, Refusal::NoHeader))
 }
 
+/// Whether the FITS header contains the known telescope or camera aliases.
+/// Reads only the primary header and treats unreadable sources as no evidence.
+/// # Errors
+/// `PatchError::Io` when the source cannot be opened, or `PatchError::Refused`
+/// when its primary header is malformed or cannot be read.
+pub fn hierarch_aliases(source: &Path) -> Result<(bool, bool), PatchError> {
+    let mut file = File::open(source)?;
+    let bytes = read_header_region(&mut file)?;
+    let header = Header::parse(&bytes).map_err(|_| PatchError::refused(0, Refusal::NoHeader))?;
+    let has_alias = |alias| {
+        header.iter().any(|card| match &card.kind {
+            RecordKind::Hierarch { keyword, .. } => keyword == alias,
+            _ => false,
+        }) || unaddressable_hierarch(&header, alias)
+    };
+    Ok((has_alias("TELESCOPE"), has_alias("INSTRUMENT")))
+}
+
+/// Whether `text` fits one card for an addressable HIERARCH `alias`.
+#[must_use]
+pub fn hierarch_text_fits(alias: &str, text: &str) -> bool {
+    let value_len = text.replace('\'', "''").len() + 2;
+    HIERARCH_OVERHEAD + alias.len() + value_len <= CARD_LEN
+}
+
 /// Whether the FITS file at `source` can carry `edits`; reads only its
 /// primary header.
 ///
