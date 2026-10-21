@@ -356,12 +356,7 @@ async fn the_swap_retires_verified_copies_and_keeps_changed_unknown_and_unverifi
     ] {
         world
             .library
-            .review_view_leftover(
-                world.project,
-                native(&path),
-                review,
-                &trash,
-            )
+            .review_view_leftover(world.project, native(&path), review, &trash)
             .await
             .unwrap();
     }
