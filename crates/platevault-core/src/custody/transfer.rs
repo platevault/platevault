@@ -589,10 +589,10 @@ struct Copied {
 /// `create_new`, which fails when anything is there, the way a verified
 /// transfer fills its partial copy: the source is streamed through a handle
 /// proven to be it and hashed as it is written ([`read_unchanged`]), the copy
-/// takes the source's extended attributes ([`carry_xattrs`]) and
-/// modification time and is synced with its folder, and
-/// the copy is re-read through a handle proven to be the created file and
-/// must have the source's SHA-256.
+/// takes the source's own extended attributes ([`carry_xattrs`]) and
+/// modification time and is synced with its folder, and the copy is re-read
+/// through a handle proven to be the created file and must have the
+/// source's SHA-256.
 ///
 /// `from` is read by its path: every caller moves an entry of a folder
 /// `PlateVault` keeps itself (a partial copy, a file of `View (previous)/`),
@@ -612,6 +612,13 @@ struct Copied {
 /// longer matches.
 #[cfg(unix)]
 fn copy_onto_new(from: &Path, to: &Path) -> std::io::Result<Copied> {
+    copy_onto_new_with(from, to, set_xattr)
+}
+
+/// [`copy_onto_new`], setting each carried xattr with `set`; tests stand in
+/// a copy that can't take one.
+#[cfg(unix)]
+fn copy_onto_new_with(from: &Path, to: &Path, set: SetXattr) -> std::io::Result<Copied> {
     let fingerprint = inventory::probe_fingerprint(from).map_err(std::io::Error::other)?;
     let source = open_no_follow(from)?;
     let mut out = OpenOptions::new().read(true).write(true).create_new(true).open(to)?;
@@ -619,7 +626,7 @@ fn copy_onto_new(from: &Path, to: &Path) -> std::io::Result<Copied> {
         let digest =
             read_unchanged(from, &Expect::recorded(&fingerprint), |bytes| out.write_all(bytes))
                 .map_err(|check| std::io::Error::other(check.detail().to_owned()))?;
-        carry_xattrs(&source, &out)?;
+        carry_xattrs(&source, &out, set)?;
         settle(&out, to, fingerprint.modified_ns)
             .map_err(|failed| std::io::Error::other(failed.detail))?;
         sync_folder(to.parent().unwrap_or_else(|| Path::new("")))?;
@@ -651,15 +658,25 @@ fn copy_onto_new(from: &Path, to: &Path) -> std::io::Result<Copied> {
     }
 }
 
-/// Give the file `copy` holds every extended attribute of the file `source`
-/// holds, a macOS resource fork among them. A volume without native xattrs
-/// keeps them in the file's `._` `AppleDouble` companion, which macOS
-/// removes with the file, so a copy without them would lose them once its
-/// source is removed. A volume that keeps no xattrs has none to carry; one
-/// the copy can't take fails the copy, which keeps its source.
+/// Set the xattr `name` to `value` on the file a handle holds.
+#[cfg(unix)]
+type SetXattr = fn(&fs::File, &[u8], &[u8]) -> std::io::Result<()>;
+
 #[cfg(any(target_os = "macos", target_os = "linux"))]
-fn carry_xattrs(source: &fs::File, copy: &fs::File) -> std::io::Result<()> {
-    use rustix::fs::{fgetxattr, flistxattr, fsetxattr, XattrFlags};
+fn set_xattr(file: &fs::File, name: &[u8], value: &[u8]) -> std::io::Result<()> {
+    Ok(rustix::fs::fsetxattr(file, name, value, rustix::fs::XattrFlags::empty())?)
+}
+
+/// Give the file `copy` holds every extended attribute of the file `source`
+/// holds that [`carries`] names the user's, each set with `set`. A volume
+/// without native xattrs keeps them in the file's `._` `AppleDouble`
+/// companion, which macOS removes with the file, so a copy without them
+/// would lose them once its source is removed. A volume that keeps no
+/// xattrs has none to carry. A carried one the copy can't take fails the
+/// copy, which keeps its source.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn carry_xattrs(source: &fs::File, copy: &fs::File, set: SetXattr) -> std::io::Result<()> {
+    use rustix::fs::{fgetxattr, flistxattr};
     use rustix::io::Errno;
 
     let names = match sized(|buffer| flistxattr(source, buffer)) {
@@ -667,25 +684,68 @@ fn carry_xattrs(source: &fs::File, copy: &fs::File) -> std::io::Result<()> {
         Err(errno) if [Errno::NOTSUP, Errno::OPNOTSUPP].contains(&errno) => return Ok(()),
         Err(errno) => return Err(errno.into()),
     };
-    for name in names.split(|&byte| byte == 0).filter(|name| !name.is_empty()) {
+    for name in names.split(|&byte| byte == 0).filter(|name| !name.is_empty() && carries(name)) {
         let value = sized(|buffer| fgetxattr(source, name, buffer))?;
-        fsetxattr(copy, name, &value, XattrFlags::empty())?;
+        set(copy, name, &value)?;
     }
     Ok(())
+}
+
+/// Whether the xattr `name` is the user's, so a move carries it. Linux:
+/// only the `user.*` namespace. `security.*`, `trusted.*` and `system.*`
+/// (security-module labels, file capabilities, POSIX ACLs) belong to the
+/// kernel and its security modules, so the copy takes its destination's, as
+/// a plain `cp` leaves them.
+#[cfg(target_os = "linux")]
+fn carries(name: &[u8]) -> bool {
+    name.starts_with(b"user.")
+}
+
+/// Whether the xattr `name` is the user's, so a move carries it. macOS:
+/// every name but those the system owns, which the copy gets from the
+/// system or not at all:
+/// - `com.apple.system.*`, which the kernel keeps private (xnu
+///   `xattr_protected`, `bsd/vfs/vfs_xattr.c`), the ACL among them;
+/// - `com.apple.rootless` (System Integrity Protection) and
+///   `com.apple.macl` (TCC), which only the system may set;
+/// - `com.apple.root.installed`, whose `EPERM` copyfile(3) ignores
+///   (copyfile.c, `XATTR_ROOT_INSTALLED_NAME`);
+/// - `com.apple.provenance`, which the kernel writes on every file a process
+///   creates, the copy included, and a user's write leaves unchanged.
+///
+/// copyfile(3) documents no protected list of its own; it skips
+/// `com.apple.quarantine` only to reapply it through the quarantine API, so
+/// here it is carried, and the copy stays quarantined.
+#[cfg(target_os = "macos")]
+fn carries(name: &[u8]) -> bool {
+    const SYSTEM: [&[u8]; 4] = [
+        b"com.apple.rootless",
+        b"com.apple.macl",
+        b"com.apple.root.installed",
+        b"com.apple.provenance",
+    ];
+    !name.starts_with(b"com.apple.system.") && !SYSTEM.contains(&name)
 }
 
 /// Where the platform has no xattr calls nothing proves a copy carries them,
 /// so the copy fails and its source stays.
 #[cfg(all(unix, not(any(target_os = "macos", target_os = "linux"))))]
-fn carry_xattrs(_source: &fs::File, _copy: &fs::File) -> std::io::Result<()> {
+fn carry_xattrs(_source: &fs::File, _copy: &fs::File, _set: SetXattr) -> std::io::Result<()> {
     Err(std::io::Error::new(
         std::io::ErrorKind::Unsupported,
         "a copy can't carry extended attributes on this platform",
     ))
 }
 
-/// What a sized xattr call fills: asked for the size first, and again when
-/// the value grew in between (`ERANGE`).
+#[cfg(all(unix, not(any(target_os = "macos", target_os = "linux"))))]
+fn set_xattr(_file: &fs::File, _name: &[u8], _value: &[u8]) -> std::io::Result<()> {
+    Err(std::io::ErrorKind::Unsupported.into())
+}
+
+/// What a sized xattr call fills: asked for the size first, then filled,
+/// and asked again whenever the value grew in between: the fill answers
+/// `ERANGE`, or, from a size-0 query on macOS, which passes no buffer, the
+/// new size, longer than the buffer.
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 fn sized(
     mut call: impl FnMut(&mut [u8]) -> rustix::io::Result<usize>,
@@ -693,10 +753,11 @@ fn sized(
     loop {
         let mut buffer = vec![0; call(&mut [])?];
         match call(&mut buffer) {
-            Ok(len) => {
+            Ok(len) if len <= buffer.len() => {
                 buffer.truncate(len);
                 return Ok(buffer);
             }
+            Ok(_) => {}
             Err(errno) if errno == rustix::io::Errno::RANGE => {}
             Err(errno) => return Err(errno),
         }
@@ -1124,6 +1185,73 @@ mod tests {
         remove_source(&from, &to, copied).unwrap();
         assert_eq!(fs::read(&from).unwrap(), b"another file");
         assert_eq!(fs::read(&to).unwrap(), b"the user's notes");
+    }
+
+    /// An xattr name of the user's on this platform.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    const USERS: &str =
+        if cfg!(target_os = "linux") { "user.platevault" } else { "com.platevault" };
+
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    #[test]
+    fn a_copy_that_cant_take_a_carried_xattr_fails_and_keeps_the_source() {
+        fn refuse(_file: &fs::File, _name: &[u8], _value: &[u8]) -> io::Result<()> {
+            Err(rustix::io::Errno::PERM.into())
+        }
+        let temp = tempfile::tempdir().unwrap();
+        let (from, to) = file_in(&temp);
+        rustix::fs::setxattr(&from, USERS, b"tagged", rustix::fs::XattrFlags::empty()).unwrap();
+        let Err(error) = copy_onto_new_with(&from, &to, refuse) else { panic!("not refused") };
+        assert_eq!(error.raw_os_error(), Some(rustix::io::Errno::PERM.raw_os_error()), "{error}");
+        assert!(!to.exists(), "the copy is removed");
+        assert_eq!(fs::read(&from).unwrap(), b"the user's notes");
+        let mut value = [0_u8; 16];
+        let len = rustix::fs::getxattr(&from, USERS, &mut value[..]).unwrap();
+        assert_eq!(&value[..len], b"tagged", "the source keeps its xattr");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn only_the_user_namespace_is_carried() {
+        assert!(carries(b"user.platevault"));
+        for name in ["security.selinux", "trusted.overlay.opaque", "system.posix_acl_access"] {
+            assert!(!carries(name.as_bytes()), "{name}");
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn every_name_but_the_systems_is_carried() {
+        for name in
+            ["com.platevault", "com.apple.metadata:_kMDItemUserTags", "com.apple.quarantine"]
+        {
+            assert!(carries(name.as_bytes()), "{name}");
+        }
+        for name in [
+            "com.apple.system.Security",
+            "com.apple.rootless",
+            "com.apple.macl",
+            "com.apple.root.installed",
+            "com.apple.provenance",
+        ] {
+            assert!(!carries(name.as_bytes()), "{name}");
+        }
+    }
+
+    /// A value that grows after its size-0 query is asked for again, never
+    /// carried empty.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    #[test]
+    fn a_value_that_grew_since_its_size_was_asked_is_read_again() {
+        let mut answers = [Ok(0), Ok(6), Ok(6)].into_iter();
+        let value = sized(|buffer| {
+            answers.next().unwrap_or_else(|| {
+                buffer.copy_from_slice(b"tagged");
+                Ok(6)
+            })
+        })
+        .unwrap();
+        assert_eq!(value, b"tagged");
     }
 
     /// Apply's move of a ticked foreign file from `View (previous)/` into the
