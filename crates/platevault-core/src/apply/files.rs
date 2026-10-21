@@ -694,10 +694,13 @@ pub fn foreign_files(
 /// name. `journaled` says this Apply's journal claimed the destination
 /// before an earlier attempt at this move, which an interruption ended
 /// unrecorded (e6tgr): only then does a move whose source is gone accept
-/// the reviewed kind and bytes at the destination, and only then is a
-/// destination holding an unfinished copy of the source, which holds
-/// nothing the source doesn't, removed before the move runs again. Without
-/// the claim whatever is there stays, and the name is taken.
+/// the reviewed kind and bytes at the destination, removing the source an
+/// interruption left moved aside beside its old name once proven to be it,
+/// its bytes all at the destination (vmv9s,
+/// [`transfer::remove_left_aside`]); and only then is a destination holding
+/// an unfinished copy of the source, which holds nothing the source
+/// doesn't, removed before the move runs again. Without the claim whatever
+/// is there stays, and the name is taken.
 pub fn move_foreign(
     previous: &Path,
     view: &Path,
@@ -723,6 +726,7 @@ pub fn move_foreign(
         let gone =
             fs::symlink_metadata(&from).is_err_and(|error| error.kind() == io::ErrorKind::NotFound);
         if gone && journaled && holds_reviewed_bytes(&to, &item.evidence) {
+            transfer::remove_left_aside(previous, &from, &item.evidence, &to);
             return Ok(());
         }
         if !is_reviewed(&from, &item.evidence) {
@@ -991,7 +995,11 @@ pub enum ClaimedKept {
 /// link, stays there for the next Apply; a copy a volume without a
 /// no-replace rename was making under the claimed kept name, which holds
 /// nothing the file doesn't, is removed (e6tgr), and anything else there
-/// stays. Only the claimed name is ever touched.
+/// stays. A file that left with its kept name holding it may, on such a
+/// volume, still be beside its old name, moved aside and never unlinked;
+/// it is removed once proven to be the file, its bytes all under the kept
+/// name (vmv9s, [`transfer::remove_left_aside`]), so no later Apply keeps
+/// it as a hidden duplicate. Nothing else is ever touched.
 ///
 /// # Errors
 /// The diagnostic when the claim names no file of `View (previous)/` or no
@@ -1015,7 +1023,11 @@ pub fn settle_kept_claim(
         let holds = observe_entry(&to).is_ok_and(|now| {
             now.kind == claim.evidence.kind && now.sha256 == claim.evidence.sha256
         });
-        return Ok(if holds { ClaimedKept::Moved } else { ClaimedKept::Gone });
+        if !holds {
+            return Ok(ClaimedKept::Gone);
+        }
+        transfer::remove_left_aside(&previous, &from, &claim.evidence, &to);
+        return Ok(ClaimedKept::Moved);
     }
     if let Err(error) = observe_source(&previous, &from) {
         return Err(format!("{} isn't read below View (previous)/: {error}", from.display()));
