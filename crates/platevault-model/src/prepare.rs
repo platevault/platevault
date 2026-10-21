@@ -20,8 +20,8 @@ fn invalid(message: impl Into<String>) -> LibraryError {
 // Profiles (PREP-FR-01, PREP-FR-02)
 // ---------------------------------------------------------------------------
 
-/// The application a profile hands a run to. `Generic` is Open in... with a
-/// configured executable and arguments; it never claims a verified profile.
+/// The application a Project's View opens in. `Generic` is Open in... with
+/// a configured executable and arguments; it never claims a verified profile.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
@@ -66,15 +66,10 @@ pub enum Capability {
     Input,
     /// The folder layout it loads.
     Layout,
-    /// How it is configured: exact input lists passed at launch.
+    /// How it is configured to load the View it is handed.
     Configuration,
     /// Output it writes that `PlateVault` recognizes.
     RecognizedOutput,
-}
-
-impl Capability {
-    pub const ALL: [Self; 4] =
-        [Self::Input, Self::Layout, Self::Configuration, Self::RecognizedOutput];
 }
 
 impl fmt::Display for Capability {
@@ -82,7 +77,7 @@ impl fmt::Display for Capability {
         f.write_str(match self {
             Self::Input => "input behaviour",
             Self::Layout => "folder layout",
-            Self::Configuration => "input-list configuration",
+            Self::Configuration => "configuration",
             Self::RecognizedOutput => "recognized output",
         })
     }
@@ -98,17 +93,15 @@ pub struct CapabilityProof {
 }
 
 /// A profile's recorded capability evidence (D04). Nothing is claimed
-/// without a proof: read-only input needs an `Input` proof and an input list
-/// a `Configuration` proof.
+/// without a proof: read-only input needs an `Input` proof.
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct CapabilityEvidence {
+    /// What the application does to the files it is handed (D04,
+    /// PREP-AC-11).
     #[serde(default)]
     pub input_behavior: InputBehavior,
-    /// The application reads the exact input paths passed as `{inputs}`.
-    #[serde(default)]
-    pub input_list: bool,
     #[serde(default)]
     pub proofs: Vec<CapabilityProof>,
 }
@@ -116,12 +109,6 @@ pub struct CapabilityEvidence {
 impl CapabilityEvidence {
     fn proves(&self, capability: Capability) -> bool {
         self.proofs.iter().any(|proof| proof.capability == capability)
-    }
-
-    /// Every capability without recorded evidence, named in the review.
-    #[must_use]
-    pub fn unproven(&self) -> Vec<Capability> {
-        Capability::ALL.into_iter().filter(|capability| !self.proves(*capability)).collect()
     }
 
     /// # Errors
@@ -133,15 +120,14 @@ impl CapabilityEvidence {
         if self.input_behavior == InputBehavior::ReadOnly && !self.proves(Capability::Input) {
             return Err(invalid("read-only input needs recorded input-behaviour evidence"));
         }
-        if self.input_list && !self.proves(Capability::Configuration) {
-            return Err(invalid("an input list needs recorded configuration evidence"));
-        }
         Ok(())
     }
 }
 
-/// The argument placeholders a profile's launch arguments may hold.
-pub const PROFILE_PLACEHOLDERS: [&str; 3] = ["{folder}", "{results}", "{inputs}"];
+/// The argument placeholders a profile's launch arguments may hold: Open
+/// hands the tool the Project's `View/` (PREP-FR-13), never the whole
+/// Project folder or `Output/` (PREP-FR-07).
+pub const PROFILE_PLACEHOLDERS: [&str; 1] = ["{view}"];
 
 /// What the user enters for a profile.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -152,7 +138,7 @@ pub struct ProfileInput {
     pub kind: ProfileKind,
     /// Configured or located by the user; none is assumed.
     pub executable: Option<NativePath>,
-    /// Launch arguments; `{folder}`, `{results}` and `{inputs}` are expanded.
+    /// Launch arguments; `{view}` stands for the Project's `View/`.
     #[serde(default)]
     pub args: Vec<String>,
     #[serde(default)]
@@ -183,9 +169,6 @@ impl ProfileInput {
                 rest = &tail[end + 1..];
             }
         }
-        if self.args.iter().any(|arg| arg.contains("{inputs}") && arg != "{inputs}") {
-            return Err(invalid("{inputs} stands alone: it expands to one argument per input"));
-        }
         self.capability_evidence.validate()
     }
 }
@@ -203,22 +186,6 @@ pub struct Profile {
     pub revision: Revision,
     pub created_at: String,
     pub updated_at: String,
-}
-
-impl Profile {
-    /// A verified-profile claim (D04): a named application with evidence for
-    /// every capability. Generic Open in... never claims one.
-    #[must_use]
-    pub fn verified(&self) -> bool {
-        self.kind != ProfileKind::Generic && self.capability_evidence.unproven().is_empty()
-    }
-
-    /// Whether Linked View and Direct source may hand it library originals:
-    /// only read-only input with recorded evidence does (D04).
-    #[must_use]
-    pub fn reads_only(&self) -> bool {
-        self.capability_evidence.input_behavior == InputBehavior::ReadOnly
-    }
 }
 
 /// One corrected field of an input: the catalog value next to the header
