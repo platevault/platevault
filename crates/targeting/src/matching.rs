@@ -24,6 +24,8 @@ pub struct GeometryThresholds {
 /// bound decisions consistent across platforms and with Project panel offers.
 pub const PANEL_OVERLAP_TOLERANCE_PERCENT: f64 = 1e-6;
 
+/// Inclusive overlap band for accepted mosaic adjacency, bounds held within
+/// [`PANEL_OVERLAP_TOLERANCE_PERCENT`].
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct MosaicThresholds {
     pub overlap_min_percent: f64,
