@@ -332,7 +332,7 @@ async fn library_changes(world: &World, project: Uuid, waiting: &[Uuid]) -> Vec<
 }
 
 /// LIB-FR-12, VSEL-FR-12, FR-034 (D-W100; owner's answer, 2026-10-19,
-/// resplit_held: "Every successor stays in the Project, each labelled as a
+/// `resplit_held`: "Every successor stays in the Project, each labelled as a
 /// pending change. Apply waits until every successor is Ready. No frame
 /// silently leaves the Project.").
 #[tokio::test]
@@ -475,7 +475,11 @@ async fn a_resplit_held_session_stays_whole_and_apply_waits_for_every_successor(
 
     world.admissible(HA[0]).await;
     for ((project, _), (held, keys, lights)) in open.iter().zip(&frames) {
-        assert_eq!(library_changes(&world, *project, &[]).await, [regrouped.clone()], "{project}");
+        assert_eq!(
+            library_changes(&world, *project, &[]).await,
+            std::slice::from_ref(&regrouped),
+            "{project}"
+        );
         assert_eq!(apply(&world, *project).await.unwrap().outcome, Some(ApplyOutcome::Applied));
         assert_eq!(
             world.catalog().project_pending_changes(*project).await.unwrap(),
