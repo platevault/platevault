@@ -1,3 +1,0 @@
-# astro-plan-upd82 diagnosis
-
-Correction previews are persisted with a fresh UUID by `Catalog::preview_correction`, and the preview API has no discard operation. `Library::preview_correction_within` keys a performance-only refusal basis by that UUID; `confirm_correction_within` removes the basis only when that preview is confirmed. Thus unconfirmed previews cannot be reclaimed via replacement, discard, or project revision, and accumulate for the Library lifetime. The least disruptive solution is a fixed-capacity FIFO cache: evict the oldest preview basis when adding a new one at capacity. A cache miss is already safe and merely repeats refusal validation, so eviction preserves correctness and l25yr's batch-read cache-hit behavior whenever the preview remains cached.

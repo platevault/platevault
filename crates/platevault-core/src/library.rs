@@ -123,6 +123,7 @@ impl PatchedEntryRefusalCache {
         Some(basis)
     }
 }
+
 /// Re-reads of one session before a conflicting assessment is reported.
 const ASSESSMENT_ATTEMPTS: usize = 3;
 /// Duplicate candidates hashed and bound per catalog transaction.
@@ -1239,6 +1240,7 @@ mod tests {
         library.patched_entry_header_reads.store(0, Ordering::Relaxed);
         library.confirm_correction(preview.id, &expected).await.unwrap();
         assert_eq!(persistence_library::Catalog::correction_entry_batch_reads_for_test(), 1);
+        assert_eq!(library.patched_entry_header_reads.load(Ordering::Relaxed), 0);
     }
     #[tokio::test]
     async fn correction_entry_refusal_cache_evicts_older_previews() {
