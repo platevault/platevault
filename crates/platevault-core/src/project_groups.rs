@@ -31,6 +31,7 @@ use crate::{
     AdmissionBasis, FramingEvidence, FramingMargins, GroupKeywords, GroupName, GroupOrigin,
     LibraryError, OpticsSignature, ProjectDesired, ProjectGroup, SessionPlacement,
 };
+use targeting::matching::PANEL_OVERLAP_TOLERANCE_PERCENT;
 
 /// What placement reads about one session to add.
 #[derive(Clone, Debug, PartialEq)]
@@ -348,23 +349,6 @@ pub struct PanelOffer {
     pub right_group_id: Uuid,
     pub overlap_percent: f64,
 }
-
-/// How far a measured overlap may sit beyond a bound of the Settings panel
-/// range and still count as on that bound. PRJ-FR-29 offers two framings
-/// "that overlap by 5 % to 40 %", a range with inclusive bounds.
-///
-/// The overlap is measured through trigonometry (tangent-plane projection
-/// and footprint areas), and Rust's `f64` sine, cosine, tangent and arctangent
-/// come from each platform's maths library, whose last bits differ between
-/// macOS, glibc and Windows. An exact comparison would offer a pair on one
-/// platform and not on another when its overlap sits on a bound, such as a
-/// pair at 40 % offered on macOS and refused on Linux. That noise is a
-/// few units in the last place, about 2e-13 percentage points between two
-/// computations of one overlap. 1e-6 percentage points stands far above it and
-/// far below anything a framing records: across a 2° field it is a pointing
-/// shift under 0.0001″. An overlap more than this beyond the range is outside
-/// it on every platform.
-const PANEL_OVERLAP_TOLERANCE_PERCENT: f64 = 1e-6;
 
 /// Groups whose framing footprints overlap within the adjustable panel range,
 /// bounds included within `PANEL_OVERLAP_TOLERANCE_PERCENT` (PRJ-FR-29).
