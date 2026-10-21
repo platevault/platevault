@@ -301,22 +301,15 @@ fn next_action(reads: &ProjectReads, tonight: &Tonight) -> NextAction {
     }
 }
 
-/// What keeps the Project waiting on the user (PRJ-FR-18 rule 2), in rule
-/// order: each suggestion whose calibration isn't settled or drifted, the
-/// latest Apply when it ended Failed or Canceled, and the leftovers in
-/// `View (previous)/` the user hasn't reviewed.
 fn project_waits(reads: &ProjectReads) -> Vec<ProjectWait> {
     let mut waits: Vec<ProjectWait> = reads
         .suggestions
         .iter()
         .filter(|suggestion| {
-            suggestion.blockers.iter().any(|blocker| {
-                matches!(
-                    blocker,
-                    AdmissionBlocker::CalibrationUnsettled { .. }
-                        | AdmissionBlocker::CalibrationDrifted { .. }
-                )
-            })
+            suggestion
+                .blockers
+                .iter()
+                .any(|blocker| matches!(blocker, AdmissionBlocker::CalibrationUnsettled { .. }))
         })
         .map(|suggestion| ProjectWait::SuggestionNeedsCalibration {
             session_id: suggestion.session_id,

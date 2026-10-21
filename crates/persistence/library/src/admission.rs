@@ -72,7 +72,7 @@ pub async fn read_admission(
     let intake = read_intake(conn, session_id).await?;
     let calibration = read_calibration(conn, session_id).await?;
     let health = calibration::read_health(conn, &calibration).await?;
-    let blockers = session_blockers(&intake, &calibration, &health);
+    let blockers = session_blockers(&intake, &calibration);
     Ok(SessionAdmission { intake, calibration, health, blockers })
 }
 
@@ -108,8 +108,8 @@ pub async fn require_admission(
     let group_rig = parse_uuid(&group_rig.ok_or_else(|| {
         LibraryError::NotFound(format!("group {group_id} of project {project_id}"))
     })?)?;
-    let SessionAdmission { intake, calibration, health, .. } =
-        read_admission(conn, session_id).await?;
+    let intake = read_intake(conn, session_id).await?;
+    let calibration = read_calibration(conn, session_id).await?;
     if intake.superseded {
         let row = load_session_row(conn, session_id).await?;
         return Err(LibraryError::Conflict {
@@ -118,7 +118,7 @@ pub async fn require_admission(
             successors: successors_of(conn, &row).await?,
         });
     }
-    let basis = admit_session(lifecycle, group_rig, &intake, &calibration, &health)?;
+    let basis = admit_session(lifecycle, group_rig, &intake, &calibration)?;
     if let Some(expected) = expected.filter(|expected| **expected != basis) {
         let current = if expected.grouping_revision == basis.grouping_revision {
             basis.calibration_generation

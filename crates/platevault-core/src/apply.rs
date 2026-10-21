@@ -940,8 +940,9 @@ fn choose_copies(
     chosen
 }
 
-/// A pinned kind whose file changed or went missing refuses Apply with a
-/// link to reassign it (D-W113); a file on an offline location is offline.
+/// A pinned kind whose file changed or went missing refuses Apply with its
+/// file name and the session's Reassign action (D-W113); an offline file is
+/// reported as offline.
 fn pin_health(inputs: &ApplyInputs, online: &BTreeSet<Uuid>, blockers: &mut Vec<ApplyBlocker>) {
     for session in inputs.basis.groups.iter().flat_map(|group| &group.sessions) {
         if !session.captures.iter().any(|capture| capture.included) {
@@ -950,6 +951,7 @@ fn pin_health(inputs: &ApplyInputs, online: &BTreeSet<Uuid>, blockers: &mut Vec<
         for kind in [InputKind::Bias, InputKind::Dark, InputKind::Flat] {
             let Some(target) = session.calibration.kind(kind).target() else { continue };
             let mut health = PinHealth::Intact;
+            let mut drift_path = None;
             for file in &target.files {
                 let id = match target.input {
                     crate::InputRef::Master { master_id, .. } => master_id,
@@ -975,19 +977,25 @@ fn pin_health(inputs: &ApplyInputs, online: &BTreeSet<Uuid>, blockers: &mut Vec<
                     .ok()
                     .and_then(|path| inventory::probe_fingerprint(&path).ok());
                 match observed {
-                    None => health = PinHealth::Missing,
+                    None => {
+                        health = PinHealth::Missing;
+                        drift_path.get_or_insert_with(|| source.path.clone());
+                    }
                     Some(now) if !files::same_file(&now, &file.fingerprint) => {
                         if health == PinHealth::Intact {
                             health = PinHealth::Changed;
                         }
+                        drift_path.get_or_insert_with(|| source.path.clone());
                     }
                     Some(_) => {}
                 }
             }
             if health.blocks_apply() {
+                let session_id = session.session_id;
                 blockers.push(ApplyBlocker::PinDrift {
-                    session_id: session.session_id,
+                    session_id,
                     kind,
+                    path: drift_path,
                     health,
                 });
             }

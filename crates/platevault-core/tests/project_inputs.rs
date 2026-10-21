@@ -1,11 +1,9 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! A Project's inputs (spec 065 PRJ-FR-02/04/05/08/09, PRJ-FR-25, PRJ-FR-27
-//! to PRJ-FR-31; 066 VSEL-FR-10/12/15; D-W94 to D-W96, D-W100, D-W105,
-//! D-W107, D-W109, D-W114) over real catalogs, FITS files and Views:
-//! - a whole session joins only Ready and settled, atomically, at its basis,
-//!   with its exact captures; nothing joins by itself and nothing is rekeyed;
+//! - a whole session joins when Ready and calibration-settled at its basis;
+//!   a drifted settled pin is allowed; atomically, with exact captures;
+//! - nothing joins by itself and nothing is rekeyed;
 //! - sessions group by rig, optics and framing with the intake margins, and
 //!   the user's groups, splits, moves, names, panels and keywords hold;
 //! - goals on panel groups and per-Project counts, with Target totals
@@ -185,11 +183,11 @@ async fn a_ready_settled_session_joins_whole_with_every_capture_and_copy() {
     }
 }
 
-/// PRJ-FR-08/09, LIB-FR-23, record §9 (provisional drift rule): an add is
-/// refused unless every session is Ready and calibration-settled with no
-/// drifted pin, all or none, and a refused add writes nothing.
+/// PRJ-FR-08/09, LIB-FR-23, D-W113: an add requires Ready and settled
+/// calibration, but changed or missing pins remain settled and do not remove
+/// a session the Project already holds.
 #[tokio::test]
-async fn an_add_is_refused_unless_ready_and_settled_and_a_refusal_writes_nothing() {
+async fn a_settled_drifted_pin_can_join_and_does_not_remove_a_held_session() {
     let world = world().await;
     let ready = world.admissible(HA[0]).await;
     let before = desired(&world).await;
@@ -213,14 +211,23 @@ async fn an_add_is_refused_unless_ready_and_settled_and_a_refusal_writes_nothing
             &[&flat.id.to_string()],
         )
         .await;
-    let error = add(&world, &[oiii.id]).await.unwrap_err();
-    assert!(refusal(&error).contains("pinned flat changed or went missing"), "{error}");
-    assert_eq!(desired(&world).await, before, "no refused add wrote anything");
+    let admission = world.catalog().session_admission(oiii.id).await.unwrap();
+    assert!(admission.blockers.is_empty(), "a missing pinned file is settled for membership");
+    let added = add(&world, &[oiii.id]).await.unwrap();
+    assert_eq!(added.sessions.len(), 1);
+    assert_eq!(added.sessions[0].session_id, oiii.id);
+    assert!(added.revision > before.revision);
 
-    let held = add(&world, &[ready.id]).await.unwrap();
+    add(&world, &[ready.id]).await.unwrap();
     let error = add(&world, &[ready.id]).await.unwrap_err();
     assert!(refusal(&error).contains("already in project"), "{error}");
-    assert_eq!(desired(&world).await, held);
+    let still_held = desired(&world).await;
+    let mut actual: Vec<Uuid> =
+        still_held.sessions.iter().map(|member| member.session_id).collect();
+    actual.sort_unstable();
+    let mut expected = vec![ready.id, oiii.id];
+    expected.sort_unstable();
+    assert_eq!(actual, expected, "both the existing and drifted sessions stay held");
 }
 
 /// The session as a Sessions row read it.

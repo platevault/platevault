@@ -1521,14 +1521,7 @@ export type AdmissionBlocker =
 /**  A group holds sessions of its own rig only. */
 { blocker: "rig_mismatch"; sessionRig: string | null; groupRig: string } | 
 /**  The kinds neither pinned nor No. */
-{ blocker: "calibration_unsettled"; kinds: InputKind[] } | 
-/**
- *  Provisional (lead default 2026-10-16, decision record §9; to confirm
- *  with the owner): pinned kinds whose files changed or went missing.
- *  The session waits in Needs calibration until they are reassigned or
- *  their bytes return; Projects that already hold it keep it.
- */
-{ blocker: "calibration_drifted"; kinds: InputKind[] };
+{ blocker: "calibration_unsettled"; kinds: InputKind[] };
 
 /**
  *  A master adopted into a Calibration location. Library corrections of the
@@ -1760,9 +1753,10 @@ export type ApplyBlocker =
 { blocker: "original_changed"; path: NativePathWire; detail: string } | 
 /**
  *  A pinned calibration file changed or went missing; the pin stays and
- *  the session links to Reassign (D-W113).
+ *  the session links to Reassign (D-W113). `path` names the first such
+ *  file, unless the catalog no longer records where it was.
  */
-{ blocker: "pin_drift"; sessionId: string; kind: InputKind; health: PinHealth } | 
+{ blocker: "pin_drift"; sessionId: string; kind: InputKind; path: NativePathWire | null; health: PinHealth } | 
 /**  A held session's calibration is no longer settled. */
 { blocker: "calibration_unsettled"; sessionId: string; kinds: InputKind[] } | 
 /**  Two groups or two filter values would share one folder. */

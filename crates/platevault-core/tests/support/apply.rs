@@ -74,7 +74,7 @@ pub fn lights() -> Vec<(String, CaptureMetadata)> {
     frames
 }
 
-fn calibration_frames() -> Vec<(String, CaptureMetadata)> {
+pub fn calibration_frames() -> Vec<(String, CaptureMetadata)> {
     let mut frames = Vec::new();
     for path in DARKS {
         frames.push((path.to_owned(), meta("DARK", None, 300.0, 100.0, "2026-10-12")));
