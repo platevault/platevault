@@ -383,13 +383,13 @@
       }
     }
   ],
-  "apply_stop_project_folder_replaced": "A pasta do projeto não é a mesma que foi revisada, então nada foi movido. Verifique onde está a pasta do projeto e aplique novamente.",
-  "apply_stop_view_replaced": "View/ não é a pasta que foi revisada, então nada foi movido. Revise a View e aplique novamente.",
-  "apply_stop_previous_appeared": "View (previous)/ apareceu enquanto a nova View era montada, então nada foi movido. Revise o que ela contém e aplique novamente.",
+  "apply_stop_project_folder_replaced": "A pasta do projeto não é a mesma que foi revisada, então a View atual não foi alterada. Verifique onde está a pasta do projeto e aplique novamente.",
+  "apply_stop_view_replaced": "View/ não é a pasta que foi revisada, então a View atual não foi alterada. Revise a View e aplique novamente.",
+  "apply_stop_previous_appeared": "View (previous)/ apareceu enquanto a nova View era montada, então a View atual não foi alterada. Revise o que ela contém e aplique novamente.",
   "apply_stop_aside_failed": "Não foi possível mover a View atual para o lado, então ela não foi alterada. Verifique se é possível gravar na pasta do projeto e aplique novamente.",
   "apply_stop_not_installed": "Não foi possível instalar a nova View, então a View atual foi restaurada. Verifique se é possível gravar na pasta do projeto e aplique novamente.",
   "apply_foreign_failed_name_taken": "{path} ficou em View (previous)/: a nova View já tem um arquivo nesse caminho.",
-  "apply_foreign_failed_changed": "{path} ficou em View (previous)/: o arquivo mudou depois que a folha de aplicação o listou.",
+  "apply_foreign_failed_changed": "{path} ficou em View (previous)/: o arquivo mudou depois de ser listado para aplicar.",
   "apply_foreign_failed_folder_not_made": "{path} ficou em View (previous)/: não foi possível criar a pasta dele na nova View.",
   "apply_foreign_failed_not_moved": "{path} ficou em View (previous)/: não foi possível movê-lo para a nova View.",
   "err_lifecycle_last_confirmed_source": "Você não pode remover a última fonte confirmada.",

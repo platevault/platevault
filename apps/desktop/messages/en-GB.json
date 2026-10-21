@@ -383,9 +383,9 @@
       }
     }
   ],
-  "apply_stop_project_folder_replaced": "The project folder isn't the one Apply reviewed, so nothing was moved. Check where the project folder is, then apply again.",
-  "apply_stop_view_replaced": "View/ isn't the folder Apply reviewed, so nothing was moved. Review the View, then apply again.",
-  "apply_stop_previous_appeared": "View (previous)/ appeared while Apply was building, so nothing was moved. Review what it holds, then apply again.",
+  "apply_stop_project_folder_replaced": "The project folder isn't the one Apply reviewed, so the current View is unchanged. Check where the project folder is, then apply again.",
+  "apply_stop_view_replaced": "View/ isn't the folder Apply reviewed, so the current View is unchanged. Review the View, then apply again.",
+  "apply_stop_previous_appeared": "View (previous)/ appeared while Apply was building, so the current View is unchanged. Review what it holds, then apply again.",
   "apply_stop_aside_failed": "The current View couldn't be moved aside, so it's unchanged. Check that the project folder can be written to, then apply again.",
   "apply_stop_not_installed": "The new View couldn't be installed, so the current View was put back. Check that the project folder can be written to, then apply again.",
   "apply_foreign_failed_name_taken": "{path} stayed in View (previous)/: the new View already has a file at that path.",

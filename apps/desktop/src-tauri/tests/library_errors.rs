@@ -13,10 +13,11 @@ use std::collections::BTreeSet;
 use std::path::Path;
 
 use platevault_core::{
-    ApplyStop, ForeignItemFailure, LibraryError, LibraryErrorCode, NativePath, PatchRefusal,
-    WindowKey,
+    ApplyStop, EntryEvidence, EntryKind, FileIdentity, ForeignItem, ForeignItemFailure,
+    ForeignItemState, LibraryError, LibraryErrorCode, NativePath, ObservationFingerprint,
+    PatchRefusal, PathSensitivity, VolumeIdentity, WindowKey,
 };
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value};
 use uuid::Uuid;
 
 /// The base catalogue first.
@@ -271,14 +272,49 @@ fn every_apply_stop_and_foreign_failure_has_a_message_every_catalogue_words() {
     let seen: BTreeSet<usize> = failures.into_iter().map(index).collect();
     assert_eq!(seen, (0..=3).collect(), "one failure per variant");
     for failure in failures {
-        let code = serde_json::to_value(failure).expect("serialize");
-        let code = code.as_str().unwrap_or_else(|| panic!("{failure:?}: {code}"));
-        let item = json!({ "path": "notes/session.txt", "reason": code });
+        let item = failed_foreign_item(failure);
+        assert!(item.validate().is_ok(), "{item:?}");
+        let params = serde_json::to_value(&item).expect("serialize");
+        let code = params["reason"].as_str().unwrap_or_else(|| panic!("{failure:?}: {params}"));
         worded(
             &catalogues,
             &format!("apply_foreign_failed_{code}"),
-            &item,
+            &params,
             &format!("{failure:?}"),
         );
+    }
+}
+
+/// A ticked foreign file that stayed in `View (previous)/` for `failure`, as
+/// an Apply report carries it.
+fn failed_foreign_item(failure: ForeignItemFailure) -> ForeignItem {
+    let fingerprint = ObservationFingerprint {
+        identity: FileIdentity {
+            volume: VolumeIdentity {
+                filesystem: "apfs".into(),
+                stable_id: Some("volume".into()),
+                file_ids_stable: true,
+                case: PathSensitivity::Sensitive,
+                normalization: PathSensitivity::Sensitive,
+            },
+            file_id: Some("60".into()),
+        },
+        size_bytes: 16,
+        modified_ns: 1_760_000_000_000_000_000,
+        content_sha256: None,
+    };
+    ForeignItem {
+        seq: 0,
+        path: NativePath::from_path(Path::new("notes/session.txt")),
+        evidence: EntryEvidence {
+            path: NativePath::from_path(Path::new("/Project/View (previous)/notes/session.txt")),
+            root: None,
+            kind: EntryKind::File,
+            fingerprint,
+            sha256: Some("0".repeat(64)),
+        },
+        ticked: true,
+        state: ForeignItemState::Failed,
+        reason: Some(failure),
     }
 }

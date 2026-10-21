@@ -180,7 +180,8 @@ BEGIN SELECT RAISE(ABORT, 'a Closed Project is locked'); END;
 -- One Apply's durable journal (`ApplyJournal`): the phase is recorded before
 -- each effect, moves only forward, and settles once with the outcome that is
 -- true from where it settled. `expected` is `ExpectedTree` JSON; `stop` is
--- the `ApplyStop` JSON of a Failed or Canceled Apply, a code with its count.
+-- the `ApplyStop` JSON of a Failed or Canceled Apply, one of its codes with
+-- its count, and is `canceled` exactly when the outcome is.
 CREATE TABLE IF NOT EXISTS apply_operations (
     operation_id TEXT PRIMARY KEY NOT NULL,
     project_id TEXT NOT NULL,
@@ -197,7 +198,13 @@ CREATE TABLE IF NOT EXISTS apply_operations (
     )),
     outcome TEXT CHECK (outcome IS NULL OR outcome IN ('applied', 'failed', 'canceled')),
     expected TEXT NOT NULL,
-    stop TEXT CHECK (stop IS NULL OR json_valid(stop)),
+    stop TEXT CHECK (stop IS NULL OR (json_valid(stop) AND json_extract(stop, '$.code') IS NOT NULL
+        AND json_extract(stop, '$.code') IN (
+        'canceled', 'interrupted', 'catalog_moved', 'originals_unverified',
+        'building_not_cleared', 'entry_not_placed', 'build_unverified', 'view_unreadable',
+        'previous_unreadable', 'kept_not_moved', 'project_folder_replaced', 'view_replaced',
+        'previous_appeared', 'aside_failed', 'not_installed'
+    ))),
     updated_at TEXT NOT NULL,
     FOREIGN KEY (project_id, operation_id) REFERENCES project_operations (project_id, id),
     FOREIGN KEY (project_id, generation) REFERENCES view_manifests (project_id, generation),
@@ -209,7 +216,9 @@ CREATE TABLE IF NOT EXISTS apply_operations (
         'reserved', 'sources_verified', 'building', 'build_verified', 'waiting_for_release',
         'old_moved'
     )),
-    CHECK ((stop IS NOT NULL) = (coalesce(outcome, 'applied') <> 'applied'))
+    CHECK ((stop IS NOT NULL) = (coalesce(outcome, 'applied') <> 'applied')),
+    CHECK (stop IS NULL
+        OR (json_extract(stop, '$.code') = 'canceled') = (outcome IS 'canceled'))
 ) STRICT;
 -- A Project's latest Apply (Home's Next action, PRJ-FR-18 rule 2): the
 -- highest generation, since every Apply builds a new manifest.
