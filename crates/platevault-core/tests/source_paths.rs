@@ -16,7 +16,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use apply_support::{digest, world, World, HA};
+use apply_support::{digest, link_folder, world, World, HA};
 use cleanup_support::ScopedTrash;
 use platevault_core::apply::Unattended;
 use platevault_core::*;
@@ -36,15 +36,6 @@ fn swap_night_for_link(world: &World) -> PathBuf {
     fs::rename(root.join(NIGHT), &moved).unwrap();
     link_folder(&moved, &root.join(NIGHT));
     moved
-}
-
-/// Leave a link at `link` to the folder `target`. `fs_pathsafe::create_symlink`
-/// makes file links, and a Windows link to a folder is a directory symlink.
-fn link_folder(target: &Path, link: &Path) {
-    #[cfg(unix)]
-    std::os::unix::fs::symlink(target, link).unwrap();
-    #[cfg(windows)]
-    std::os::windows::fs::symlink_dir(target, link).unwrap();
 }
 
 /// The Ha lights where the swap left them, outside every location.
