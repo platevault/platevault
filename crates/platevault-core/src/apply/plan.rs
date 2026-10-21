@@ -713,8 +713,7 @@ mod tests {
             path: NativePath::from_path(&Path::new("/library").join(name)),
         }
     }
-
-    fn plan_of(layout: &Layout) -> Result<Vec<String>, ApplyBlocker> {
+    fn plan_paths(layout: &Layout) -> Result<Vec<PathBuf>, ApplyBlocker> {
         let names = BTreeMap::new();
         let plan = plan(&PlanInput {
             basis: &layout.basis,
@@ -723,7 +722,10 @@ mod tests {
             names: &names,
             chosen: &layout.chosen,
         })?;
-        Ok(plan.entries.iter().map(|entry| entry.path.to_string_lossy().into_owned()).collect())
+        Ok(plan.entries.iter().map(|entry| entry.path.clone()).collect())
+    }
+    fn has_path(paths: &[PathBuf], expected: &Path) -> bool {
+        paths.iter().any(|path| path == expected)
     }
 
     #[test]
@@ -733,7 +735,7 @@ mod tests {
             ("Red Cat", vec![session(1, night, &[10], raw(5, &[50], night), SettledPin::Declined)]),
             ("Red_Cat", vec![session(2, night, &[11], raw(5, &[50], night), SettledPin::Declined)]),
         ]);
-        assert!(matches!(plan_of(&layout), Err(ApplyBlocker::FolderClash { .. })));
+        assert!(matches!(plan_paths(&layout), Err(ApplyBlocker::FolderClash { .. })));
     }
 
     /// STO-IMP-AC-08: an original named after a Windows device is refused
@@ -747,9 +749,9 @@ mod tests {
         )]);
         layout.sources.insert(id(10), source("CON.fits"));
         assert_eq!(
-            plan_of(&layout),
+            plan_paths(&layout),
             Err(ApplyBlocker::EntryNameRefused {
-                path: NativePath::from_path(Path::new("/library/CON.fits")),
+                path: layout.sources[&id(10)].path.clone(),
                 name: "CON.fits".into(),
             })
         );
@@ -764,16 +766,18 @@ mod tests {
             ("RedCat", vec![session(1, night, &[10], raw(5, &[50], night), raw(7, &[70], night))]),
             ("Esprit", vec![esprit]),
         ]);
-        let paths = plan_of(&layout).unwrap();
+        let paths = plan_paths(&layout).unwrap();
         assert!(
-            paths
-                .contains(&"GROUP_RedCat/NIGHT_2026-10-12/Lights/Ha_300s/light-10.fits".to_owned()),
+            has_path(
+                &paths,
+                Path::new("GROUP_RedCat/NIGHT_2026-10-12/Lights/Ha_300s/light-10.fits")
+            ),
             "{paths:#?}"
         );
-        assert!(paths.contains(&"GROUP_RedCat/NIGHT_2026-10-12/Flats/Ha/cal-50.fits".to_owned()));
-        assert!(paths.contains(&"GROUP_RedCat/Darks/cal-70.fits".to_owned()));
-        assert!(paths.contains(&"GROUP_Esprit/Darks/cal-80.fits".to_owned()));
-        assert!(!paths.iter().any(|path| path.starts_with("Darks/")));
+        assert!(has_path(&paths, Path::new("GROUP_RedCat/NIGHT_2026-10-12/Flats/Ha/cal-50.fits")));
+        assert!(has_path(&paths, Path::new("GROUP_RedCat/Darks/cal-70.fits")));
+        assert!(has_path(&paths, Path::new("GROUP_Esprit/Darks/cal-80.fits")));
+        assert!(!paths.iter().any(|path| path.starts_with(Path::new("Darks"))));
     }
 
     #[test]
@@ -794,14 +798,14 @@ mod tests {
                 later,
             ],
         )]);
-        let paths = plan_of(&layout).unwrap();
+        let paths = plan_paths(&layout).unwrap();
         assert!(
-            paths.contains(&"NIGHT_2026-10-14/Lights/Ha_300s/light-10.fits".to_owned()),
+            has_path(&paths, Path::new("NIGHT_2026-10-14/Lights/Ha_300s/light-10.fits")),
             "{paths:#?}"
         );
-        assert!(paths.contains(&"NIGHT_2026-10-14/Flats/Ha/cal-50.fits".to_owned()));
-        assert!(paths.contains(&"NIGHT_2026-10-14-2/Lights/Ha_600s/light-11.fits".to_owned()));
-        assert!(paths.contains(&"NIGHT_2026-10-14-2/Flats/Ha/cal-60.fits".to_owned()));
+        assert!(has_path(&paths, Path::new("NIGHT_2026-10-14/Flats/Ha/cal-50.fits")));
+        assert!(has_path(&paths, Path::new("NIGHT_2026-10-14-2/Lights/Ha_600s/light-11.fits")));
+        assert!(has_path(&paths, Path::new("NIGHT_2026-10-14-2/Flats/Ha/cal-60.fits")));
     }
 
     #[test]
@@ -817,13 +821,13 @@ mod tests {
                 short,
             ],
         )]);
-        let paths = plan_of(&layout).unwrap();
-        assert!(paths.contains(&"NIGHT_2024-10-12/Darks/cal-70.fits".to_owned()), "{paths:#?}");
-        assert!(paths.contains(&"NIGHT_2026-10-13/Darks/cal-80.fits".to_owned()));
-        assert!(paths.contains(&"Darks/cal-90.fits".to_owned()), "another setting stays shared");
-        assert!(!paths
-            .iter()
-            .any(|path| path == "Darks/cal-70.fits" || path == "Darks/cal-80.fits"));
+        let paths = plan_paths(&layout).unwrap();
+        assert!(has_path(&paths, Path::new("NIGHT_2024-10-12/Darks/cal-70.fits")), "{paths:#?}");
+        assert!(has_path(&paths, Path::new("NIGHT_2026-10-13/Darks/cal-80.fits")));
+        assert!(has_path(&paths, Path::new("Darks/cal-90.fits")), "another setting stays shared");
+        assert!(!paths.iter().any(|path| {
+            path == Path::new("Darks/cal-70.fits") || path == Path::new("Darks/cal-80.fits")
+        }));
     }
 
     #[test]
@@ -831,16 +835,21 @@ mod tests {
         let night = date!(2026 - 10 - 12);
         let mut long = session(1, night, &[10], raw(5, &[50], night), SettledPin::Declined);
         long.meta = meta(&"Hydrogen alpha narrowband ".repeat(16), 300.0, "ASI2600MM");
-        let paths = plan_of(&layout(vec![("RedCat", vec![long])])).unwrap();
+        let paths = plan_paths(&layout(vec![("RedCat", vec![long])])).unwrap();
         for path in &paths {
-            for part in Path::new(path).components() {
+            for part in path.components() {
                 let part = part.as_os_str().to_string_lossy();
                 assert!(layout::component_len(&part) <= COMPONENT_LIMIT, "{part}");
             }
         }
         assert!(
-            paths.iter().any(|path| path.contains("Lights/Hydrogen-alpha-narrowband-")
-                && path.contains("_300s/")),
+            paths.iter().any(|path| {
+                path.starts_with(Path::new("NIGHT_2026-10-12/Lights"))
+                    && path.components().any(|part| {
+                        let part = part.as_os_str().to_string_lossy();
+                        part.starts_with("Hydrogen-alpha-narrowband-") && part.ends_with("_300s")
+                    })
+            }),
             "{paths:#?}"
         );
     }
@@ -852,11 +861,12 @@ mod tests {
         greek.meta = meta("Hα", 300.0, "ASI2600MM");
         let mut plain = session(1, night, &[10], raw(5, &[50], night), SettledPin::Declined);
         plain.meta = meta("H", 300.0, "ASI2600MM");
-        let paths = plan_of(&layout(vec![("RedCat", vec![plain, greek])])).unwrap();
+        let paths = plan_paths(&layout(vec![("RedCat", vec![plain, greek])])).unwrap();
         let lights: BTreeSet<&str> = paths
             .iter()
-            .filter_map(|path| path.strip_prefix("NIGHT_2026-10-12/Lights/"))
-            .filter_map(|rest| rest.split('/').next())
+            .filter_map(|path| path.strip_prefix(Path::new("NIGHT_2026-10-12/Lights")).ok())
+            .filter_map(|rest| rest.components().next())
+            .map(|part| part.as_os_str().to_str().unwrap())
             .collect();
         assert_eq!(lights.len(), 2, "{paths:#?}");
         assert!(lights.contains("H_300s"));
