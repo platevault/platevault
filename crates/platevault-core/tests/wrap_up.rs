@@ -299,6 +299,10 @@ async fn trash_moves_a_row_only_when_it_is_ticked() {
 /// A Project at the Trash step whose `Processing/WBPP/master/` holds a
 /// generated flat master the user adopted into the calibration library
 /// (`masters/masterFlat_Ha.fit`). Returns the source in `Processing/`.
+/// Unix only, as are the tests that use it: master adoption refuses on any
+/// other platform (`contained_write::require_supported`), since only Unix
+/// syncs the folder after a no-replace install.
+#[cfg(unix)]
 async fn adopted_master_at_trash() -> (World, std::path::PathBuf) {
     let world = world(ViewMode::Symlinks).await;
     world.apply().await;
@@ -398,6 +402,7 @@ async fn adopted_master_at_trash() -> (World, std::path::PathBuf) {
 }
 
 /// The kept library copy of [`adopted_master_at_trash`].
+#[cfg(unix)]
 fn adopted_copy(world: &World) -> NativePath {
     NativePath::from_path(
         &world.calibration.path.to_path_buf().unwrap().join("masters/masterFlat_Ha.fit"),
@@ -407,6 +412,7 @@ fn adopted_copy(world: &World) -> NativePath {
 /// PRJ-AC-28, D-W70/D-W80/D-W97/D-W98: an adopted master's generated source
 /// is listed as a verified duplicate of its retained Calibration copy.
 #[tokio::test]
+#[cfg(unix)] // Adopts a master, which only Unix supports.
 async fn trash_offers_an_adopted_master_source_as_a_duplicate_and_never_output() {
     let (world, source) = Box::pin(adopted_master_at_trash()).await;
     let source_native = NativePath::from_path(&source);
@@ -472,6 +478,7 @@ async fn trash_offers_an_adopted_master_source_as_a_duplicate_and_never_output()
 /// source rewritten after its master was adopted no longer duplicates the
 /// kept copy, so it is refused by name, never offered without one.
 #[tokio::test]
+#[cfg(unix)] // Adopts a master, which only Unix supports.
 async fn trash_refuses_an_adopted_master_source_rewritten_since_adoption() {
     let (world, source) = Box::pin(adopted_master_at_trash()).await;
     fs::OpenOptions::new().append(true).open(&source).unwrap().write_all(b"rewritten").unwrap();
