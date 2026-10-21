@@ -667,7 +667,8 @@ impl World {
         self.library.apply(&Self::request(&preview), &Unattended).await.unwrap()
     }
 
-    /// Every file and link below `root`, relative, sorted.
+    /// Every file and link below `root`, relative, sorted, as wire text: `/`
+    /// separates its names on every platform ([`fs_pathsafe::wire_path`]).
     pub fn tree(root: &Path) -> Vec<String> {
         let mut found = Vec::new();
         let mut folders = vec![root.to_path_buf()];
@@ -679,7 +680,7 @@ impl World {
                 if metadata.is_dir() {
                     folders.push(path);
                 } else {
-                    found.push(path.strip_prefix(root).unwrap().to_string_lossy().into_owned());
+                    found.push(fs_pathsafe::wire_path(path.strip_prefix(root).unwrap()));
                 }
             }
         }
@@ -700,6 +701,69 @@ impl World {
 /// The SHA-256 of a file.
 pub fn digest(path: &Path) -> String {
     hex::encode(Sha256::digest(fs::read(path).unwrap()))
+}
+
+/// The native form of the relative wire text `wire`: its `/`-separated names
+/// joined with the host's separator, as a walk of the folder records them.
+pub fn native(wire: &str) -> NativePath {
+    NativePath::from_path(&wire.split('/').collect::<PathBuf>())
+}
+
+/// The wire text of `path`, `/` separating its names on every platform.
+pub fn wire(path: &NativePath) -> String {
+    fs_pathsafe::wire_path(&path.to_path_buf().unwrap())
+}
+
+/// Whether the link at `link` reads an entry below `root`, compared in the
+/// form that names one entry exactly: Windows reports a target in its plain
+/// spelling though the roots are canonical `\\?\` paths there.
+pub fn reads_below(link: &Path, root: &Path) -> bool {
+    let target = fs::read_link(link).unwrap();
+    fs_pathsafe::long_path(&target).starts_with(fs_pathsafe::long_path(root))
+}
+
+/// The file `path` names, following a link: its volume and file number
+/// (device and inode on Unix, volume serial and file index on Windows).
+pub fn file_node(path: &Path) -> (u64, u64) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        let metadata = fs::metadata(path).unwrap();
+        (metadata.dev(), metadata.ino())
+    }
+    #[cfg(windows)]
+    {
+        let info = windows_information(path);
+        (info.volume_serial_number(), info.file_index())
+    }
+}
+
+/// How many hard links name the file `path` names, following a link.
+pub fn hard_links(path: &Path) -> u64 {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        fs::metadata(path).unwrap().nlink()
+    }
+    #[cfg(windows)]
+    {
+        windows_information(path).number_of_links()
+    }
+}
+
+#[cfg(windows)]
+fn windows_information(path: &Path) -> winapi_util::file::Information {
+    let handle = winapi_util::Handle::from_path_any(path).unwrap();
+    winapi_util::file::information(&handle).unwrap()
+}
+
+/// Make `link` a symbolic link to the folder `target`. Windows needs the
+/// link's kind up front; windows-latest grants the right in Developer Mode.
+pub fn link_folder(target: &Path, link: &Path) {
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(target, link).unwrap();
+    #[cfg(windows)]
+    std::os::windows::fs::symlink_dir(target, link).unwrap();
 }
 
 // ── J23's corrected frames (spec 069 PREP-AC-39; J23/P6, SC7, SC8) ───────────

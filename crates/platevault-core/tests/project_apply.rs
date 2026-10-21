@@ -7,20 +7,19 @@
 //! only, corrected frames as isolated patched copies, a restart-safe swap,
 //! and old copies deleted only once their originals verify, against a real
 //! catalog and real files.
-#![cfg(unix)]
 
 #[path = "support/apply.rs"]
 mod apply_support;
 
 use std::collections::BTreeSet;
 use std::fs;
-use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use apply_support::{
-    calibration_frames, catalogued, corrected, digest, frame, meta, scan, sep24_frame, world,
-    Recorder, World, DARKS, HA, HA_FLATS, HA_GAIN_0, OIII, SEP24, SEP28,
+    calibration_frames, catalogued, corrected, digest, file_node, frame, hard_links, meta, native,
+    reads_below, scan, sep24_frame, wire, world, Recorder, World, DARKS, HA, HA_FLATS, HA_GAIN_0,
+    OIII, SEP24, SEP28,
 };
 use metadata_core::MetadataExtractor;
 use platevault_core::apply::{ApplyControl, Unattended};
@@ -61,16 +60,17 @@ async fn the_first_apply_builds_the_night_layout_from_symlinks_to_the_originals(
     assert!(!tree.iter().any(|path| path.starts_with("GROUP_")), "one group, no group level");
     assert!(!world.previous().exists() && !world.building().exists());
 
+    let captures = world.captures.path.to_path_buf().unwrap();
+    let calibration = world.calibration.path.to_path_buf().unwrap();
     for entry in &tree {
         let path = world.view().join(entry);
         let metadata = fs::symlink_metadata(&path).unwrap();
         assert!(metadata.file_type().is_symlink(), "{entry} is a symlink");
-        let target = fs::read_link(&path).unwrap();
         assert!(
-            target.starts_with(world.captures.path.to_path_buf().unwrap())
-                || target.starts_with(world.calibration.path.to_path_buf().unwrap())
+            reads_below(&path, &captures) || reads_below(&path, &calibration),
+            "{entry} reads an original"
         );
-        assert_eq!(fs::metadata(&target).unwrap().nlink(), 1, "an original is never hard-linked");
+        assert_eq!(hard_links(&path), 1, "an original is never hard-linked");
     }
 }
 
@@ -106,22 +106,18 @@ async fn copies_place_every_entry_as_its_own_file_and_never_hard_link() {
     assert_eq!(names(&tree, "Darks/GAIN_0/").len(), 2, "{tree:#?}");
 
     for entry in &tree {
-        let metadata = fs::symlink_metadata(world.view().join(entry)).unwrap();
-        assert!(metadata.is_file(), "{entry} is a copy");
-        assert_eq!(metadata.nlink(), 1, "{entry} is no hard link");
+        let path = world.view().join(entry);
+        assert!(fs::symlink_metadata(&path).unwrap().is_file(), "{entry} is a copy");
+        assert_eq!(hard_links(&path), 1, "{entry} is no hard link");
     }
     for (index, flat) in HA_FLATS.iter().enumerate() {
         let original = world.calibration_file(flat);
         let a = world.view().join("NIGHT_2026-10-12/Flats/Ha_GAIN_100").join(&first[index]);
         let b = world.view().join("NIGHT_2026-10-14/Flats/Ha_GAIN_0").join(&second[index]);
-        let (inode_a, inode_b, inode_original) = (
-            fs::metadata(&a).unwrap().ino(),
-            fs::metadata(&b).unwrap().ino(),
-            fs::metadata(&original).unwrap().ino(),
-        );
-        assert_ne!(inode_a, inode_b, "each night's flat is its own file");
-        assert_ne!(inode_a, inode_original, "an original is never hard-linked");
-        assert_eq!(fs::metadata(&original).unwrap().nlink(), 1);
+        let (file_a, file_b, file_original) = (file_node(&a), file_node(&b), file_node(&original));
+        assert_ne!(file_a, file_b, "each night's flat is its own file");
+        assert_ne!(file_a, file_original, "an original is never hard-linked");
+        assert_eq!(hard_links(&original), 1);
         let bytes = fs::read(&b).unwrap();
         fs::write(&a, b"rewritten by a stacking tool").unwrap();
         assert_eq!(fs::read(&b).unwrap(), bytes, "rewriting one night's copy leaves the other");
@@ -274,7 +270,7 @@ async fn a_sheet_the_project_or_the_library_moved_past_is_refused() {
     assert!(matches!(refused, LibraryError::Conflict { .. }));
     let fresh = world.preview().await;
     assert_ne!(fresh.basis_digest, preview.basis_digest);
-    assert!(!fresh.entries.iter().any(|entry| entry.path.display().contains("Lights/Ha_300s")));
+    assert!(!fresh.entries.iter().any(|entry| wire(&entry.path).contains("Lights/Ha_300s")));
     assert!(!world.view().exists(), "nothing was built");
 }
 
@@ -319,11 +315,11 @@ async fn the_swap_retires_verified_copies_and_keeps_changed_unknown_and_unverifi
 
     let preview = world.preview().await;
     assert!(preview.blockers.is_empty(), "{:#?}", preview.blockers);
-    assert_eq!(preview.changed_copies, vec![NativePath::from_path(Path::new(&edited))]);
-    let foreign: Vec<String> = preview.foreign.iter().map(|file| file.path.display()).collect();
+    assert_eq!(preview.changed_copies, vec![native(&edited)]);
+    let foreign: Vec<String> = preview.foreign.iter().map(|file| wire(&file.path)).collect();
     assert_eq!(foreign, [format!("{ha_dir}Light_001.Info.txt"), "notes.txt".to_owned()]);
     let mut request = World::request(&preview);
-    request.ticked = vec![NativePath::from_path(Path::new(&format!("{ha_dir}Light_001.Info.txt")))];
+    request.ticked = vec![native(&format!("{ha_dir}Light_001.Info.txt"))];
     let report = world.library.apply(&request, &Unattended).await.unwrap();
     assert_eq!(report.outcome, Some(ApplyOutcome::Applied), "{report:#?}");
 
@@ -336,7 +332,7 @@ async fn the_swap_retires_verified_copies_and_keeps_changed_unknown_and_unverifi
     // View (previous)/ keeps exactly the changed copy, the unverifiable copy
     // and the unticked note.
     let mut kept: Vec<(String, PreviousItemReason)> =
-        report.leftovers.iter().map(|item| (item.path.display(), item.reason)).collect();
+        report.leftovers.iter().map(|item| (wire(&item.path), item.reason)).collect();
     kept.sort_by(|a, b| a.0.cmp(&b.0));
     let unverified = format!("View (previous)/{ha_dir}{}", ha[1]);
     let mut expected = vec![
@@ -362,7 +358,7 @@ async fn the_swap_retires_verified_copies_and_keeps_changed_unknown_and_unverifi
             .library
             .review_view_leftover(
                 world.project,
-                NativePath::from_path(Path::new(&path)),
+                native(&path),
                 review,
                 &trash,
             )
@@ -377,7 +373,7 @@ async fn the_swap_retires_verified_copies_and_keeps_changed_unknown_and_unverifi
         .library
         .review_view_leftover(
             world.project,
-            NativePath::from_path(Path::new("View (previous)/notes.txt")),
+            native("View (previous)/notes.txt"),
             PreviousItemReview::Moved,
             &trash,
         )
@@ -405,7 +401,7 @@ async fn keep(world: &World, files: &[(&str, &[u8])]) {
     assert_eq!(report.leftovers.len(), files.len(), "{:#?}", report.leftovers);
     let trash = FolderTrash(world.temp.path().join("Trash"));
     for (relative, _) in files {
-        let path = NativePath::from_path(&Path::new("View (previous)").join(relative));
+        let path = native(&format!("View (previous)/{relative}"));
         world
             .library
             .review_view_leftover(world.project, path, PreviousItemReview::Kept, &trash)
@@ -424,7 +420,7 @@ async fn the_next_apply_moves_a_kept_file_to_view_kept_at_its_view_path() {
     world.apply().await;
     let note = format!("{HA_DIR}notes.txt");
     keep(&world, &[(&note, b"my notes")]).await;
-    let inode = fs::symlink_metadata(world.previous().join(&note)).unwrap().ino();
+    let file = file_node(&world.previous().join(&note));
 
     // Apply doesn't wait for a file already kept.
     world.bump().await;
@@ -436,7 +432,7 @@ async fn the_next_apply_moves_a_kept_file_to_view_kept_at_its_view_path() {
 
     let moved = kept_folder(&world).join(&note);
     assert_eq!(fs::read(&moved).unwrap(), b"my notes");
-    assert_eq!(fs::symlink_metadata(&moved).unwrap().ino(), inode, "moved, never copied");
+    assert_eq!(file_node(&moved), file, "moved, never copied");
     assert!(!world.previous().exists(), "{:?}", World::tree(&world.previous()));
     // A later sheet doesn't list it, and a later Apply leaves it alone.
     world.bump().await;
@@ -474,7 +470,7 @@ async fn a_kept_file_gone_from_disk_is_named_in_the_apply_outcome() {
     world.bump().await;
     let report = world.apply().await;
     assert_eq!(report.outcome, Some(ApplyOutcome::Applied), "{report:#?}");
-    let named = NativePath::from_path(&Path::new("View (previous)").join(&gone));
+    let named = native(&format!("View (previous)/{gone}"));
     assert_eq!(report.kept_missing, vec![named]);
     assert_eq!(fs::read(kept_folder(&world).join(&stays)).unwrap(), b"my todo");
 
@@ -485,7 +481,7 @@ async fn a_kept_file_gone_from_disk_is_named_in_the_apply_outcome() {
     world.bump().await;
     let report = world.apply().await;
     assert_eq!(report.outcome, Some(ApplyOutcome::Applied), "{report:#?}");
-    let named = NativePath::from_path(&Path::new("View (previous)").join(&last));
+    let named = native(&format!("View (previous)/{last}"));
     assert_eq!(report.kept_missing, vec![named]);
 
     // Named once: the next sheet and Apply no longer hold it.
@@ -560,14 +556,14 @@ async fn a_file_at_a_ticked_foreign_files_new_path_is_kept_and_its_name_reported
         world.bump().await;
         let preview = world.preview().await;
         let mut request = World::request(&preview);
-        request.ticked = vec![NativePath::from_path(Path::new(&note))];
+        request.ticked = vec![native(&note)];
         let at = world.view().join(&note);
         let control =
             WriteOnInstall { at: at.clone(), bytes: theirs, done: AtomicBool::new(false) };
 
         let report = world.library.apply(&request, &control).await.unwrap();
         assert_eq!(report.outcome, Some(ApplyOutcome::Applied), "{report:#?}");
-        let item = report.foreign.iter().find(|item| item.path.display() == note).unwrap();
+        let item = report.foreign.iter().find(|item| wire(&item.path) == note).unwrap();
         assert_eq!(
             (item.state, item.reason),
             (ForeignItemState::Failed, Some(ForeignItemFailure::NameTaken)),
@@ -614,7 +610,7 @@ async fn a_resumed_foreign_move_never_removes_a_file_that_held_its_path_first() 
     world.bump().await;
     let preview = world.preview().await;
     let mut request = World::request(&preview);
-    request.ticked = vec![NativePath::from_path(Path::new(&note))];
+    request.ticked = vec![native(&note)];
     let at = world.view().join(&note);
     let control =
         WriteOnInstall { at: at.clone(), bytes: b"the user", done: AtomicBool::new(false) };
@@ -626,7 +622,7 @@ async fn a_resumed_foreign_move_never_removes_a_file_that_held_its_path_first() 
     let journal = world.catalog().latest_apply_journal(world.project).await.unwrap().unwrap();
     assert_eq!(journal.outcome, Some(ApplyOutcome::Applied), "{journal:#?}");
     let items = world.catalog().apply_foreign_items(journal.operation_id).await.unwrap();
-    let item = items.iter().find(|item| item.path.display() == note).unwrap();
+    let item = items.iter().find(|item| wire(&item.path) == note).unwrap();
     assert_eq!(
         (item.state, item.reason),
         (ForeignItemState::Failed, Some(ForeignItemFailure::NameTaken)),
@@ -650,7 +646,7 @@ async fn a_resumed_foreign_move_removes_the_source_its_copy_holds() {
     world.bump().await;
     let preview = world.preview().await;
     let mut request = World::request(&preview);
-    request.ticked = vec![NativePath::from_path(Path::new(&note))];
+    request.ticked = vec![native(&note)];
     world.sql(CLOSE_BEFORE_OUTCOME, &[]).await;
     world.library.apply(&request, &Unattended).await.unwrap_err();
     world.sql("DROP TRIGGER closed_before_outcome", &[]).await;
@@ -661,7 +657,7 @@ async fn a_resumed_foreign_move_removes_the_source_its_copy_holds() {
     let journal = world.catalog().latest_apply_journal(world.project).await.unwrap().unwrap();
     assert_eq!(journal.outcome, Some(ApplyOutcome::Applied), "{journal:#?}");
     let items = world.catalog().apply_foreign_items(journal.operation_id).await.unwrap();
-    let item = items.iter().find(|item| item.path.display() == note).unwrap();
+    let item = items.iter().find(|item| wire(&item.path) == note).unwrap();
     assert_eq!(item.state, ForeignItemState::Moved, "{item:#?}");
     assert!(!aside.exists(), "the source its copy holds is removed");
     assert_eq!(fs::read(&at).unwrap(), b"the user's notes");
@@ -1013,10 +1009,9 @@ async fn corrected_frames_reach_a_copies_view_as_isolated_patched_copies() {
         assert_ne!(copied, source, "{} carries the corrected cards", copy.display());
         assert_eq!(copied.len(), source.len());
         assert_eq!(copied[2880..], source[2880..], "only the header differs");
-        let metadata = fs::symlink_metadata(copy).unwrap();
-        assert!(metadata.is_file(), "a patched copy is its own file, never a link");
-        assert_eq!(metadata.nlink(), 1, "never a hard link");
-        assert_ne!(metadata.ino(), fs::metadata(original).unwrap().ino());
+        assert!(fs::symlink_metadata(copy).unwrap().is_file(), "a patched copy is never a link");
+        assert_eq!(hard_links(copy), 1, "never a hard link");
+        assert_ne!(file_node(copy), file_node(original));
     }
 
     // Every other entry is a byte-for-byte copy of its original.
@@ -1562,6 +1557,7 @@ async fn copies_on_one_clone_capable_volume_are_cloned_in_the_sheet_and_the_repo
 }
 
 /// Text an OS error carries; none of it may reach an Apply response (CT3).
+#[cfg(unix)]
 fn assert_no_os_text(response: &impl serde::Serialize, sentinel: &Path) {
     let text = serde_json::to_string(response).unwrap();
     for os in ["os error", "Permission denied", "No such file or directory"] {
@@ -1572,6 +1568,7 @@ fn assert_no_os_text(response: &impl serde::Serialize, sentinel: &Path) {
 }
 
 /// Point the Project's processing location at `parent`.
+#[cfg(unix)]
 async fn process_in(world: &World, parent: &Path) {
     let parent = serde_json::to_string(&NativePath::from_path(parent)).unwrap();
     world
@@ -1582,6 +1579,7 @@ async fn process_in(world: &World, parent: &Path) {
         .await;
 }
 
+#[cfg(unix)]
 fn set_mode(path: &Path, mode: u32) {
     use std::os::unix::fs::PermissionsExt;
     fs::set_permissions(path, fs::Permissions::from_mode(mode)).unwrap();
@@ -1590,6 +1588,8 @@ fn set_mode(path: &Path, mode: u32) {
 /// CT3: an original whose folder can't be searched and a processing
 /// location that is gone are blockers that name the path, never the OS
 /// error text.
+// chmod makes the night folder unsearchable; Windows files have no mode bits.
+#[cfg(unix)]
 #[tokio::test]
 async fn no_blocker_carries_os_error_text() {
     let world = world(ViewMode::Copies).await;
@@ -1611,8 +1611,10 @@ async fn no_blocker_carries_os_error_text() {
 
 /// Makes the Project folder read-only once the build is verified, so moving
 /// the old View aside fails on the OS.
+#[cfg(unix)]
 struct ReadOnlyAtSwap(PathBuf);
 
+#[cfg(unix)]
 impl ApplyControl for ReadOnlyAtSwap {
     fn interrupted(&self, phase: ApplyPhase) -> bool {
         if phase == ApplyPhase::BuildVerified {
@@ -1626,6 +1628,9 @@ impl ApplyControl for ReadOnlyAtSwap {
 /// failure, and a swap the OS refuses ends Failed; each reports its stop
 /// code, and neither the report's failures nor anything else in it carry
 /// the OS text or the absolute Project folder (the sentinel) it named.
+// chmod makes the original unreadable and the Project folder read-only;
+// Windows files have no mode bits.
+#[cfg(unix)]
 #[tokio::test]
 async fn an_apply_the_os_refuses_reports_no_os_text() {
     let world = world(ViewMode::Symlinks).await;

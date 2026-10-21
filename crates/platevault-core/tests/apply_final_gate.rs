@@ -6,7 +6,6 @@
 //! astro-plan-yb133): the gate re-reads every built copy, the swap re-reads
 //! the catalog, the sheet hashes every copy it reports unchanged, and no
 //! walk follows a linked root or leaves out an entry it couldn't read.
-#![cfg(unix)]
 
 #[path = "support/apply.rs"]
 mod apply_support;
@@ -14,12 +13,13 @@ mod apply_support;
 mod cleanup_support;
 
 use std::fs;
+#[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::SystemTime;
 
-use apply_support::{digest, world, World, HA};
+use apply_support::{digest, file_node, link_folder, world, World, HA};
 use cleanup_support::ScopedTrash;
 use platevault_core::apply::{ApplyControl, Unattended};
 use platevault_core::*;
@@ -30,13 +30,12 @@ fn rewrite_in_place(path: &Path, modified: SystemTime) {
     let mut bytes = fs::read(path).unwrap();
     let last = bytes.len() - 1;
     bytes[last] ^= 0xff;
-    let before = fs::symlink_metadata(path).unwrap();
+    let before = (file_node(path), fs::metadata(path).unwrap().len());
     fs::write(path, &bytes).unwrap();
     fs::File::options().write(true).open(path).unwrap().set_modified(modified).unwrap();
-    let after = fs::symlink_metadata(path).unwrap();
     assert_eq!(
-        (std::os::unix::fs::MetadataExt::ino(&after), after.len()),
-        (std::os::unix::fs::MetadataExt::ino(&before), before.len()),
+        (file_node(path), fs::metadata(path).unwrap().len()),
+        before,
         "the rewrite keeps the file and its size"
     );
 }
@@ -271,7 +270,7 @@ async fn a_linked_previous_view_is_refused_and_nothing_below_it_is_listed() {
     let elsewhere = world.temp.path().join("elsewhere");
     fs::create_dir_all(elsewhere.join("night")).unwrap();
     fs::write(elsewhere.join("night/notes.txt"), b"not the Project's").unwrap();
-    std::os::unix::fs::symlink(&elsewhere, world.previous()).unwrap();
+    link_folder(&elsewhere, &world.previous());
 
     let preview = world.preview().await;
     assert!(
@@ -298,7 +297,7 @@ async fn a_linked_processing_folder_is_refused_and_nothing_below_it_moves() {
     fs::create_dir_all(elsewhere.join("WBPP")).unwrap();
     let outside = elsewhere.join("WBPP/registered.xisf");
     fs::write(&outside, b"not the Project's").unwrap();
-    std::os::unix::fs::symlink(&elsewhere, world.folder().join("Processing")).unwrap();
+    link_folder(&elsewhere, &world.folder().join("Processing"));
     let trash = ScopedTrash::new(&world.temp.path().join("bin"));
     // Wrap up runs Clean up before Trash; nothing is selected.
     let clean = world.library.clean_up_review(world.project).await.unwrap();
@@ -333,8 +332,10 @@ async fn a_linked_processing_folder_is_refused_and_nothing_below_it_moves() {
 
 /// Restores a folder's permissions when the test ends, so the temporary
 /// folder can be removed.
+#[cfg(unix)]
 struct Unreadable(PathBuf);
 
+#[cfg(unix)]
 impl Unreadable {
     fn new(folder: &Path) -> Self {
         fs::set_permissions(folder, fs::Permissions::from_mode(0o000)).unwrap();
@@ -342,6 +343,7 @@ impl Unreadable {
     }
 }
 
+#[cfg(unix)]
 impl Drop for Unreadable {
     fn drop(&mut self) {
         let _ = fs::set_permissions(&self.0, fs::Permissions::from_mode(0o755));
@@ -350,6 +352,8 @@ impl Drop for Unreadable {
 
 /// C10, VSEL-FR-20: a folder in `View/` that can't be read is a visible
 /// blocker naming it, not left out of the sheet's inventory.
+// chmod makes the folder unreadable; Windows files have no mode bits.
+#[cfg(unix)]
 #[tokio::test]
 async fn an_unreadable_view_entry_is_a_blocker_not_omitted() {
     let world = world(ViewMode::Copies).await;
@@ -373,6 +377,8 @@ async fn an_unreadable_view_entry_is_a_blocker_not_omitted() {
 
 /// C10, STO-FR-05/16: a folder in `Processing/` that can't be read is a
 /// Trash refusal naming it; the step offers no partial list.
+// chmod makes the folder unreadable; Windows files have no mode bits.
+#[cfg(unix)]
 #[tokio::test]
 async fn an_unreadable_processing_entry_is_a_trash_refusal() {
     let world = world(ViewMode::Symlinks).await;
