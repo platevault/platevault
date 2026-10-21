@@ -642,7 +642,10 @@ async fn archive_target_folder_uses_confirmed_target_not_object() {
         .find(|file| file.from.to_path_buf().unwrap() == world.light(HA[0]))
         .unwrap();
     assert!(
-        file.to.display().contains("NGC 7000/Ha/2026-10-12/light/Light_001.fits"),
+        file.to
+            .to_path_buf()
+            .unwrap()
+            .ends_with(Path::new("NGC 7000").join("Ha/2026-10-12/light/Light_001.fits")),
         "the confirmed Target, not the M31 OBJECT label, names the archive folder: {}",
         file.to.display()
     );
@@ -674,7 +677,10 @@ async fn archive_unclassified_target_uses_unclassified_folder_not_object() {
         .find(|file| file.from.to_path_buf().unwrap() == world.light(OIII[0]))
         .unwrap();
     assert!(
-        file.to.display().contains("unclassified/OIII/2026-10-13/light/Light_001.fits"),
+        file.to
+            .to_path_buf()
+            .unwrap()
+            .ends_with(Path::new("unclassified").join("OIII/2026-10-13/light/Light_001.fits")),
         "an Unclassified session uses the import fallback, not its M31 OBJECT label: {}",
         file.to.display()
     );

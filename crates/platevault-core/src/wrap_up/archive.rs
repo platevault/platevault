@@ -1075,6 +1075,9 @@ mod tests {
     fn create_test_symlink(source: &Path, destination: &Path) -> bool {
         match fs_pathsafe::create_symlink(source, destination) {
             Ok(()) => true,
+            Err(error) if developer_mode_off(&error) && std::env::var_os("CI").is_some() => {
+                panic!("Windows CI must run the repoint contract tests, but Developer Mode is off and file-symlink creation requires elevation: {error}");
+            }
             Err(error) if developer_mode_off(&error) => {
                 eprintln!("skipping repoint contract test: Windows Developer Mode is off, so creating file symlinks requires elevation");
                 false
@@ -1132,8 +1135,6 @@ mod tests {
             if exchange {
                 return repoint.run(Repoint::exchange);
             }
-            #[cfg(unix)]
-            let _ = exchange;
             #[cfg(not(unix))]
             let _ = exchange;
             repoint.run(Repoint::move_aside)
