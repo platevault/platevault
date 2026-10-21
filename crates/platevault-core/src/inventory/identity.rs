@@ -13,9 +13,13 @@
 //! live entry on the volume can hold: APFS/HFS+ object IDs, ext*/XFS/btrfs/
 //! F2FS inode numbers and NTFS file reference numbers (which embed a reuse
 //! sequence). FAT, `exFAT` and `ReFS` (whose 128-bit IDs have no safe query here)
-//! cannot qualify a folder, so their roots are refused. An ext*/XFS inode can
-//! be reused once the original folder is deleted; that residual is not
-//! claimed as collision proof.
+//! cannot qualify a folder, so their roots are refused. An ext*/XFS inode
+//! number can be reused once the original entry is deleted (ext4 hands it to
+//! the next entry created), so a Linux file ID also carries the entry's
+//! kernel file handle, whose inode generation tells the two apart
+//! ([`FileIdentity::unix_file_id`]). Where the filesystem encodes no handles,
+//! and for an ID recorded before handles were, that residual remains and is
+//! not claimed as collision proof.
 //!
 //! A network share the OS already mounted is identified by the server and
 //! share it was mounted from. Its folders qualify only through server file IDs:
@@ -29,8 +33,8 @@ use std::sync::{Mutex, PoisonError};
 use std::time::SystemTime;
 
 use crate::{
-    FileIdentity, LibraryError, Location, NativePath, PathSensitivity, VolumeIdentity, VolumeKind,
-    NETWORK_ADDRESS_REFUSED,
+    file_ids_match, FileIdentity, LibraryError, Location, NativePath, PathSensitivity,
+    VolumeIdentity, VolumeKind, NETWORK_ADDRESS_REFUSED,
 };
 
 /// Root identity plus its same-session continuity stamp.
@@ -235,14 +239,16 @@ pub(super) fn folder_id(path: &Path, meta: &Metadata) -> std::io::Result<Option<
 /// Remount-stable file ID of an entry, recorded only where the volume
 /// qualifies its file IDs as stable.
 ///
-/// Unix uses the decimal inode number. Windows opens the entry itself (never
-/// a reparse target) and uses the 64-bit file index as 16 hex digits after
-/// checking the handle's volume serial against the qualified volume and its
-/// length against `meta`; a file that grew in between fails with the
-/// `CHANGED_WHILE_READ` kind.
-// Only the Windows branch can fail; the shared signature keeps callers uniform.
-#[cfg_attr(unix, allow(clippy::unnecessary_wraps))]
-pub(super) fn file_id(
+/// Unix uses the decimal inode number and, on Linux where the filesystem
+/// encodes one, the entry's own kernel file handle, read without following a
+/// link ([`FileIdentity::unix_file_id`]); the handle tells an entry apart
+/// from one made under its reused inode number. Both are read by path: an
+/// entry swapped in between gives an ID that matches neither. Windows opens
+/// the entry itself (never a reparse target) and uses the 64-bit file index
+/// as 16 hex digits after checking the handle's volume serial against the
+/// qualified volume and its length against `meta`; a file that grew in
+/// between fails with the `CHANGED_WHILE_READ` kind.
+pub fn file_id(
     path: &Path,
     meta: &Metadata,
     volume: &VolumeIdentity,
@@ -253,8 +259,8 @@ pub(super) fn file_id(
     #[cfg(unix)]
     {
         use std::os::unix::fs::MetadataExt;
-        let _ = path;
-        Ok(Some(meta.ino().to_string()))
+        let handle = fs_file_handle_linux::of_path(path)?;
+        Ok(Some(FileIdentity::unix_file_id(meta.ino(), handle.as_deref())))
     }
     #[cfg(windows)]
     {
@@ -273,8 +279,8 @@ pub(super) fn file_id(
 }
 
 /// The error kind of a file-ID read whose entry changed between its metadata
-/// and its handle. No file-ID read reports it for any other reason: Unix
-/// makes no call, and no Windows file error decodes to it.
+/// and its handle. No Windows file error decodes to it; a Unix handle read a
+/// signal interrupts reports it too, and is observed again the same way.
 const CHANGED_WHILE_READ: std::io::ErrorKind = std::io::ErrorKind::Interrupted;
 
 /// Refuse a handle that reports another length than the metadata it was
@@ -416,7 +422,7 @@ pub(super) fn compare(
         )
     } else if !recorded.volume.file_ids_stable
         || recorded.file_id.is_none()
-        || recorded.file_id != observed.identity.file_id
+        || !file_ids_match(recorded.file_id.as_deref(), observed.identity.file_id.as_deref())
     {
         "location root folder is not the registered folder".into()
     } else {

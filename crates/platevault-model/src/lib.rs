@@ -661,6 +661,77 @@ pub struct FileIdentity {
     pub file_id: Option<String>,
 }
 
+/// Separates a Unix file ID's inode number from the kernel file handle.
+const FILE_HANDLE_SEPARATOR: char = ':';
+
+impl FileIdentity {
+    /// The file ID of a Unix entry with inode number `inode` and, where its
+    /// filesystem encodes one, the kernel file handle `handle` as text
+    /// without a `:`.
+    ///
+    /// A Unix file ID is the entry's decimal inode number, followed on Linux
+    /// by `:` and the kernel file handle `name_to_handle_at(2)` encodes for
+    /// it. The handle carries the inode's generation, which ext4, xfs and
+    /// btrfs change whenever they reuse an inode number, so an entry made
+    /// under a just-freed number (ext4 hands it to the next entry created) is
+    /// told apart from the one recorded. A filesystem that encodes no handles
+    /// (cifs, for one) gives the inode number alone, as did every Unix file
+    /// ID recorded before handles were: such an ID is compared on the inode
+    /// number alone ([`file_ids_match`]) and can't tell a reused number
+    /// apart. A Windows file ID is the 64-bit file index as 16 hex digits.
+    #[must_use]
+    pub fn unix_file_id(inode: u64, handle: Option<&str>) -> String {
+        match handle {
+            Some(handle) => format!("{inode}{FILE_HANDLE_SEPARATOR}{handle}"),
+            None => inode.to_string(),
+        }
+    }
+
+    /// The inode number a Unix file ID names; `None` for any other ID.
+    #[must_use]
+    pub fn unix_inode(file_id: &str) -> Option<u64> {
+        split_file_id(file_id).0.parse().ok()
+    }
+
+    /// Whether this observed identity is the `recorded` entry: the same
+    /// volume and, where the recorded volume's file IDs are stable, file IDs
+    /// that match ([`file_ids_match`]).
+    #[must_use]
+    pub fn is_recorded(&self, recorded: &Self) -> bool {
+        self.volume == recorded.volume
+            && (!recorded.volume.file_ids_stable
+                || file_ids_match(self.file_id.as_deref(), recorded.file_id.as_deref()))
+    }
+}
+
+/// Whether two file IDs name the same entry. Their inode numbers, or for an
+/// ID without a handle part (macOS, Windows) the whole ID, must be equal,
+/// and so must their kernel file handles where both carry one. An ID without
+/// a handle matches on the inode number alone, so an ID recorded before
+/// handles were stays readable ([`FileIdentity::unix_file_id`]). Two absent
+/// IDs match.
+#[must_use]
+pub fn file_ids_match(left: Option<&str>, right: Option<&str>) -> bool {
+    match (left, right) {
+        (Some(left), Some(right)) => {
+            let ((left_inode, left_handle), (right_inode, right_handle)) =
+                (split_file_id(left), split_file_id(right));
+            left_inode == right_inode
+                && (left_handle.is_none() || right_handle.is_none() || left_handle == right_handle)
+        }
+        (None, None) => true,
+        _ => false,
+    }
+}
+
+/// A file ID's inode number (or whole ID) and its kernel file handle, if any.
+fn split_file_id(file_id: &str) -> (&str, Option<&str>) {
+    match file_id.split_once(FILE_HANDLE_SEPARATOR) {
+        Some((inode, handle)) => (inode, Some(handle)),
+        None => (file_id, None),
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
@@ -683,7 +754,10 @@ impl ObservationFingerprint {
             && self.modified_ns == other.modified_ns
             && self.content_sha256 == other.content_sha256
             && (!self.identity.volume.file_ids_stable
-                || self.identity.file_id == other.identity.file_id)
+                || file_ids_match(
+                    self.identity.file_id.as_deref(),
+                    other.identity.file_id.as_deref(),
+                ))
     }
 }
 

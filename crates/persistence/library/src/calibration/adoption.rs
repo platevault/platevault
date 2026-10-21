@@ -510,7 +510,7 @@ impl<P: SourceProbe> Attempt<P> {
             return Err(contained_write::occupied(&target));
         };
         let observed = self.probe.fingerprint(&target)?;
-        if observed.identity != installed.identity {
+        if !observed.identity.is_recorded(&installed.identity) {
             return Err(scoped(
                 LibraryError::IdentityConflict(
                     "the destination holds another file than the recorded installed copy; \
@@ -989,9 +989,13 @@ mod tests {
         LibraryError::from_io(path, error)
     }
 
+    /// The identity the product's probe records: the inode number and, on
+    /// Linux, the kernel file handle.
     fn identity(path: &Path) -> Result<FileIdentity, LibraryError> {
         let metadata = std::fs::symlink_metadata(path).map_err(|error| io(path, &error))?;
-        Ok(FileIdentity { volume: volume(), file_id: Some(metadata.ino().to_string()) })
+        let handle = fs_file_handle_linux::of_path(path).map_err(|error| io(path, &error))?;
+        let file_id = FileIdentity::unix_file_id(metadata.ino(), handle.as_deref());
+        Ok(FileIdentity { volume: volume(), file_id: Some(file_id) })
     }
 
     /// A real no-follow probe of the temporary volume.

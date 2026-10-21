@@ -29,6 +29,10 @@ wire = ["dep:specta", "dep:schemars", "platevault_model/wire"]
 [target.'cfg(windows)'.dependencies]
 winapi-util = "0.1.11"
 
+[target.'cfg(unix)'.dependencies]
+# The kernel file handle in a Linux file ID (astro-plan-yju9s).
+fs_file_handle_linux = { path = "../../fs/file-handle-linux" }
+
 [dev-dependencies]
 parking_lot = "0.12"
 

@@ -45,6 +45,7 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use crate::calibration::Rules;
+use crate::custody::same_identity;
 use crate::custody::trash::OsTrash;
 use crate::grouping::observing_night;
 use crate::inventory;
@@ -1619,12 +1620,6 @@ fn same_observation(left: &ObservationFingerprint, right: &ObservationFingerprin
     left.identity == right.identity
         && left.size_bytes == right.size_bytes
         && left.modified_ns == right.modified_ns
-}
-
-/// Same volume, and the same file ID where the volume's IDs are stable.
-fn same_identity(observed: &FileIdentity, recorded: &FileIdentity) -> bool {
-    observed.volume == recorded.volume
-        && (!recorded.volume.file_ids_stable || observed.file_id == recorded.file_id)
 }
 
 fn trimmed(value: Option<&str>) -> Option<String> {

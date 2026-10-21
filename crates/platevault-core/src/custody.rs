@@ -209,16 +209,16 @@ fn link_fingerprint(
 }
 
 /// Remount-stable ID of the entry itself (never a link target), recorded only
-/// where the volume qualifies its file IDs as stable.
+/// where the volume qualifies its file IDs as stable: on Unix the inode
+/// number and, on Linux, the entry's own kernel file handle, as every Unix
+/// entry's ([`inventory::file_id`]).
 #[cfg(unix)]
-#[allow(clippy::unnecessary_wraps)]
 fn entry_file_id(
-    _path: &Path,
+    path: &Path,
     metadata: &Metadata,
     volume: &VolumeIdentity,
 ) -> Result<Option<String>, LibraryError> {
-    use std::os::unix::fs::MetadataExt;
-    Ok(volume.file_ids_stable.then(|| metadata.ino().to_string()))
+    inventory::file_id(path, metadata, volume).map_err(|error| LibraryError::from_io(path, &error))
 }
 
 #[cfg(windows)]
@@ -256,10 +256,10 @@ fn entry_file_id(
     Err(scoped(LibraryError::IdentityConflict("no entry identity on this platform".into()), path))
 }
 
-/// Same volume, and the same file ID where the volume's IDs are stable.
+/// Same volume, and the same file ID where the volume's IDs are stable
+/// ([`FileIdentity::is_recorded`]).
 pub(crate) fn same_identity(observed: &FileIdentity, recorded: &FileIdentity) -> bool {
-    observed.volume == recorded.volume
-        && (!recorded.volume.file_ids_stable || observed.file_id == recorded.file_id)
+    observed.is_recorded(recorded)
 }
 
 /// Why a re-read did not prove the recorded entry.
