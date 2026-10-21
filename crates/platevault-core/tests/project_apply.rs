@@ -496,6 +496,153 @@ async fn a_kept_file_gone_from_disk_is_named_in_the_apply_outcome() {
     assert!(report.kept_missing.is_empty(), "{report:#?}");
 }
 
+/// The Project's manifests in `state`.
+async fn manifests_in(world: &World, state: &str) -> i64 {
+    sqlx::query_scalar("SELECT count(*) FROM view_manifests WHERE project_id = ?1 AND state = ?2")
+        .bind(world.project.to_string())
+        .bind(state)
+        .fetch_one(&mut world.conn().await)
+        .await
+        .unwrap()
+}
+
+/// 5u6x7 (1): with `View/` deleted while `View (previous)/` holds a kept
+/// file, Apply still moves it to `View (kept)/`, retires the previous View
+/// and settles Applied: there is never a second previous manifest.
+#[tokio::test]
+async fn apply_settles_with_view_deleted_and_a_kept_file_in_view_previous() {
+    let world = world(ViewMode::Copies).await;
+    world.apply().await;
+    let note = format!("{HA_DIR}notes.txt");
+    keep(&world, &[(&note, b"my notes")]).await;
+    fs::remove_dir_all(world.view()).unwrap();
+    world.bump().await;
+
+    let report = world.apply().await;
+    assert_eq!(report.outcome, Some(ApplyOutcome::Applied), "{report:#?}");
+    assert_eq!(fs::read(kept_folder(&world).join(&note)).unwrap(), b"my notes");
+    assert!(!world.previous().exists(), "{:?}", World::tree(&world.previous()));
+    assert!(manifests_in(&world, "previous").await <= 1);
+    assert_eq!(manifests_in(&world, "installed").await, 1);
+    world.bump().await;
+    assert_eq!(world.apply().await.outcome, Some(ApplyOutcome::Applied));
+}
+
+/// Writes `bytes` at `at` in the new View once it is installed, before the
+/// ticked foreign files move, as another program could.
+struct WriteOnInstall {
+    at: PathBuf,
+    bytes: &'static [u8],
+    done: AtomicBool,
+}
+
+impl ApplyControl for WriteOnInstall {
+    fn interrupted(&self, phase: ApplyPhase) -> bool {
+        if phase == ApplyPhase::NewInstalled && !self.done.swap(true, Ordering::SeqCst) {
+            fs::create_dir_all(self.at.parent().unwrap()).unwrap();
+            fs::write(&self.at, self.bytes).unwrap();
+        }
+        false
+    }
+}
+
+/// 5u6x7 (2): a file another program put at a ticked foreign file's path
+/// in the new View is never removed, even when it is empty or holds the
+/// foreign file's first bytes: no journal claimed that name. The foreign
+/// file stays in `View (previous)/` and its name is reported taken.
+#[tokio::test]
+async fn a_file_at_a_ticked_foreign_files_new_path_is_kept_and_its_name_reported_taken() {
+    for theirs in [&b""[..], b"the user"] {
+        let world = world(ViewMode::Copies).await;
+        world.apply().await;
+        let note = format!("{HA_DIR}notes.txt");
+        fs::write(world.view().join(&note), b"the user's notes").unwrap();
+        world.bump().await;
+        let preview = world.preview().await;
+        let mut request = World::request(&preview);
+        request.ticked = vec![NativePath::from_path(Path::new(&note))];
+        let at = world.view().join(&note);
+        let control =
+            WriteOnInstall { at: at.clone(), bytes: theirs, done: AtomicBool::new(false) };
+
+        let report = world.library.apply(&request, &control).await.unwrap();
+        assert_eq!(report.outcome, Some(ApplyOutcome::Applied), "{report:#?}");
+        let item = report.foreign.iter().find(|item| item.path.display() == note).unwrap();
+        assert_eq!(
+            (item.state, item.reason),
+            (ForeignItemState::Failed, Some(ForeignItemFailure::NameTaken)),
+            "{item:#?}"
+        );
+        assert_eq!(fs::read(&at).unwrap(), theirs, "their file stays");
+        assert_eq!(fs::read(world.previous().join(&note)).unwrap(), b"the user's notes");
+    }
+}
+
+/// Every review update fails from now on, as `PlateVault` closing right
+/// after a kept file moved and before its move was recorded would leave it.
+const CLOSE_BEFORE_RECORD: &str = "CREATE TRIGGER closed_before_record \
+     BEFORE UPDATE OF review ON view_previous_items \
+     BEGIN SELECT RAISE(ABORT, 'PlateVault closed'); END";
+
+/// Apply the sheet with `PlateVault` closing right after the first kept
+/// file moves, then start again.
+async fn closed_after_a_kept_move(world: &mut World) {
+    world.sql(CLOSE_BEFORE_RECORD, &[]).await;
+    world.bump().await;
+    let preview = world.preview().await;
+    world.library.apply(&World::request(&preview), &Unattended).await.unwrap_err();
+    world.sql("DROP TRIGGER closed_before_record", &[]).await;
+}
+
+/// 5u6x7 (5): `PlateVault` closing between a kept file's move and its
+/// record leaves no kept file reported gone from disk: the next start
+/// records the move, and the next Apply moves the rest.
+#[tokio::test]
+async fn a_kept_move_closed_before_its_record_is_never_reported_missing() {
+    let mut world = world(ViewMode::Copies).await;
+    world.apply().await;
+    let (first, second) = (format!("{HA_DIR}notes.txt"), format!("{HA_DIR}todo.txt"));
+    keep(&world, &[(&first, b"my notes"), (&second, b"my todo")]).await;
+    closed_after_a_kept_move(&mut world).await;
+    world.reopen().await;
+
+    world.bump().await;
+    let report = world.apply().await;
+    assert_eq!(report.outcome, Some(ApplyOutcome::Applied), "{report:#?}");
+    assert!(report.kept_missing.is_empty(), "{:#?}", report.kept_missing);
+    assert_eq!(fs::read(kept_folder(&world).join(&first)).unwrap(), b"my notes");
+    assert_eq!(fs::read(kept_folder(&world).join(&second)).unwrap(), b"my todo");
+    assert_eq!(World::tree(&kept_folder(&world).join(HA_DIR)), ["notes.txt", "todo.txt"]);
+}
+
+/// 5u6x7 (4): where the volume has no no-replace rename (macOS exFAT) a
+/// kept file moves as a copy made under its kept name, so `PlateVault`
+/// closing mid copy leaves that name holding the copy's first bytes and the
+/// file still in `View (previous)/`. Simulated here where the platform
+/// renames: the next start removes the unfinished copy, which the move's
+/// claim names, and the next Apply moves the file to that name. Nothing
+/// unrecorded stays.
+#[tokio::test]
+async fn an_interrupted_kept_copy_leaves_no_unrecorded_partial() {
+    let mut world = world(ViewMode::Copies).await;
+    world.apply().await;
+    let note = format!("{HA_DIR}notes.txt");
+    keep(&world, &[(&note, b"my notes")]).await;
+    closed_after_a_kept_move(&mut world).await;
+    let (from, to) = (world.previous().join(&note), kept_folder(&world).join(&note));
+    fs::create_dir_all(from.parent().unwrap()).unwrap();
+    fs::rename(&to, &from).unwrap();
+    fs::write(&to, b"my no").unwrap();
+    world.reopen().await;
+
+    world.bump().await;
+    let report = world.apply().await;
+    assert_eq!(report.outcome, Some(ApplyOutcome::Applied), "{report:#?}");
+    assert!(report.kept_missing.is_empty(), "{:#?}", report.kept_missing);
+    assert_eq!(World::tree(&kept_folder(&world).join(HA_DIR)), ["notes.txt"]);
+    assert_eq!(fs::read(&to).unwrap(), b"my notes");
+}
+
 #[tokio::test]
 async fn switching_to_copies_unlinks_old_links_without_following_them() {
     let world = world(ViewMode::Symlinks).await;

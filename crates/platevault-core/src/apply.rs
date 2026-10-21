@@ -31,10 +31,13 @@
 //! session, the frame and the field.
 //!
 //! Apply doesn't wait for files the user kept in `View (previous)/`: right
-//! before the old View moves aside, they move to `View (kept)/` at their
-//! paths from inside the View, numbered `-2`, `-3` … where a name is taken,
-//! each move proven and nothing replaced (D-W110). A kept file gone from
-//! disk is named in the report, never skipped (D-W137).
+//! before the old View moves aside, or the new one is installed where no
+//! View is, they move to `View (kept)/` at their paths from inside the View,
+//! numbered `-2`, `-3` … where a name is taken, each move claimed in the
+//! journal before it starts and recorded as it ends, proven, read and moved
+//! below `View (previous)/` without following a link, and nothing replaced
+//! (D-W110). A kept file gone from disk is named in the report, never
+//! skipped (D-W137).
 
 pub(crate) mod files;
 mod plan;
@@ -45,7 +48,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use persistence_library::{ApplyInputs, ApplyReservation};
+use persistence_library::{ApplyInputs, ApplyReservation, KeptMove};
 use uuid::Uuid;
 
 use self::files::{Aside, Ours, PlannedPatch, Rename};
@@ -415,12 +418,16 @@ impl Library {
         };
         match installed {
             Recovered::Installed => {
+                run.settle_kept_claims().await?;
                 if before(run.journal.phase, ApplyPhase::NewInstalled) {
                     run.advance(ApplyPhase::NewInstalled, None).await?;
                 }
                 run.finish_installed().await
             }
-            Recovered::NotInstalled => run.end(ApplyStop::Interrupted).await,
+            Recovered::NotInstalled => {
+                run.settle_kept_claims().await?;
+                run.end(ApplyStop::Interrupted).await
+            }
             Recovered::Stuck(detail) => Err(LibraryError::IdentityConflict(detail)),
         }
     }
@@ -1150,12 +1157,15 @@ impl Reserved {
     /// `after`, read once the reservation committed, when it is still the
     /// state `before` planned from. Reserving adds only entry names, which
     /// move the digest, so the parts an edit moves are compared instead: a
-    /// different revision, basis, correction or installed View means an
-    /// edit landed between the two reads.
+    /// different revision, basis, correction, readiness or installed View
+    /// means an edit landed between the two reads. Readiness is compared on
+    /// its own: a held session that stops being Ready leaves the basis as it
+    /// was (FR-034; D-W100).
     fn of(before: &ApplyInputs, after: &ApplyInputs) -> Option<Self> {
         let unmoved = after.desired_revision == before.desired_revision
             && after.basis == before.basis
             && after.corrected == before.corrected
+            && after.not_ready == before.not_ready
             && applied_generation(after) == applied_generation(before);
         unmoved.then(|| Self {
             desired_revision: after.desired_revision,
@@ -1508,7 +1518,10 @@ impl Run<'_> {
     /// Move the old View aside, waiting for a tool that holds a file in it,
     /// and install the new one; restore the old one if that fails. First the
     /// catalog is read again: an edit or a global change committed during
-    /// the build fails Apply here, the old View kept (plan §3). The wait for
+    /// the build fails Apply here, the old View kept (plan §3). Then the
+    /// kept files leave `View (previous)/`, which retires the previous View,
+    /// whether or not a current View is there to take its place: one the
+    /// user deleted still installs over no previous manifest. The wait for
     /// a tool has no limit, so after one the catalog is read once more, and
     /// an edit committed meanwhile puts the old View back and fails Apply.
     async fn swap(&mut self, reserved: &Reserved) -> Result<ApplyReport, LibraryError> {
@@ -1520,13 +1533,13 @@ impl Run<'_> {
         let building = self.building();
         let expected = self.journal.expected.clone();
         let old = expected.view.is_some();
+        if self.control.canceled() {
+            return self.cancel().await;
+        }
+        if let Some(stop) = self.make_way(old).await? {
+            return self.end(stop).await;
+        }
         if old {
-            if self.control.canceled() {
-                return self.cancel().await;
-            }
-            if let Some(stop) = self.move_kept().await? {
-                return self.end(stop).await;
-            }
             let (root, view_path, previous_path) =
                 (self.project.clone(), view.clone(), previous.clone());
             let expected = expected.clone();
@@ -1610,48 +1623,140 @@ impl Run<'_> {
         blocking(move || Ok(rename(&from, &to))).await
     }
 
+    /// Clear `View (previous)/` for the swap: the kept files leave it
+    /// ([`Run::move_kept`]), which retires its manifest. With no current
+    /// View to move aside (`old` false), it must then be gone, since the
+    /// commit makes the installed manifest previous: why not, if so.
+    async fn make_way(&mut self, old: bool) -> Result<Option<ApplyStop>, LibraryError> {
+        if let Some(stop) = self.move_kept().await? {
+            return Ok(Some(stop));
+        }
+        if old {
+            // `swap_ready` checks the name is free right before the swap.
+            return Ok(None);
+        }
+        let previous = self.project.join(VIEW_PREVIOUS_FOLDER);
+        let there = blocking(move || Ok(fs::symlink_metadata(&previous).is_ok())).await?;
+        Ok(there.then_some(ApplyStop::PreviousAppeared))
+    }
+
     /// Move what the user kept in `View (previous)/` to `View (kept)/`, so
-    /// the old View can take its place (D-W110), and record each kept file
-    /// that left or is gone; one gone from disk is named in the report
-    /// (D-W137). Once the folder is gone its manifest retires. A file that
-    /// can't move fails Apply with the old View in place: why, if so.
+    /// the old View can take its place (D-W110), one file at a time: each
+    /// move is claimed in the journal before it starts and recorded as it
+    /// ends, its kept leftover then Moved, so an interruption leaves no move
+    /// unaccounted for ([`Run::settle_kept_claims`]). One gone from disk is
+    /// named in the report (D-W137). Once the folder is gone its manifest
+    /// retires. A file that can't move fails Apply with the old View in
+    /// place: why, if so.
     async fn move_kept(&mut self) -> Result<Option<ApplyStop>, LibraryError> {
         let project = self.project.clone();
-        let moves = match blocking(move || Ok(files::move_kept(&project))).await? {
-            Ok(moves) => moves,
+        let kept = match blocking(move || Ok(files::kept_files(&project))).await? {
+            Ok(kept) => kept,
             Err(unreadable) => {
                 let count = self.record(unreadable);
                 return Ok(Some(ApplyStop::PreviousUnreadable { count }));
             }
         };
-        for relative in &moves.missing {
-            let path = NativePath::from_path(&Path::new(VIEW_PREVIOUS_FOLDER).join(relative));
-            if !self.kept_missing.contains(&path) {
-                self.kept_missing.push(path);
-            }
-        }
         let catalog = self.library.catalog();
-        let project_id = self.journal.project_id;
-        for item in catalog.previous_items(project_id).await? {
-            let moved_or_gone = files::in_previous(&item.path).is_some_and(|relative| {
-                moves.moved.contains(&relative) || moves.missing.contains(&relative)
-            });
-            if item.review == PreviousItemReview::Kept
-                && (moved_or_gone || self.kept_missing.contains(&item.path))
-            {
-                catalog
-                    .review_previous_item(project_id, &item.path, PreviousItemReview::Moved)
-                    .await?;
-            }
+        let (project_id, operation_id) = (self.journal.project_id, self.journal.operation_id);
+        let mut failed = Vec::new();
+        for relative in kept {
+            let path = NativePath::from_path(&Path::new(VIEW_PREVIOUS_FOLDER).join(&relative));
+            let left = match self.move_one_kept(&relative, &path).await? {
+                files::Kept::Moved => true,
+                files::Kept::Unproven(to, reason) => {
+                    failed.push((to, reason));
+                    true
+                }
+                files::Kept::Missing => {
+                    if !self.kept_missing.contains(&path) {
+                        self.kept_missing.push(path.clone());
+                    }
+                    true
+                }
+                files::Kept::Failed(reason) => {
+                    failed.push((self.project.join(VIEW_PREVIOUS_FOLDER).join(&relative), reason));
+                    false
+                }
+            };
+            catalog.record_kept_move(project_id, operation_id, &path, left).await?;
         }
-        if !moves.failed.is_empty() {
-            let count = self.record(moves.failed);
+        // The kept files the sheet found gone are named once (D-W137).
+        for path in &self.kept_missing {
+            catalog.record_kept_move(project_id, operation_id, path, true).await?;
+        }
+        let project = self.project.clone();
+        let gone = blocking(move || Ok(files::clear_previous(&project))).await?;
+        if !failed.is_empty() {
+            let count = self.record(failed);
             return Ok(Some(ApplyStop::KeptNotMoved { count }));
         }
-        if moves.gone {
+        if gone {
             catalog.retire_previous_view(project_id).await?;
         }
         Ok(None)
+    }
+
+    /// Move the kept file at `relative` in `View (previous)/` (`path` from
+    /// the Project folder) to the first free name in `View (kept)/`, claimed
+    /// before the move starts; a name taken meanwhile is claimed afresh with
+    /// the next number.
+    async fn move_one_kept(
+        &self,
+        relative: &Path,
+        path: &NativePath,
+    ) -> Result<files::Kept, LibraryError> {
+        let mut number = 1;
+        loop {
+            let (project, at) = (self.project.clone(), relative.to_path_buf());
+            let ready =
+                match blocking(move || Ok(files::prepare_kept(&project, &at, number))).await? {
+                    Ok(ready) => ready,
+                    Err(ended) => return Ok(ended),
+                };
+            let claim = KeptMove {
+                path: path.clone(),
+                kept: NativePath::from_path(&Path::new(VIEW_KEPT_FOLDER).join(&ready.kept)),
+                evidence: ready.evidence.clone(),
+            };
+            self.library.catalog().claim_kept_move(self.journal.operation_id, &claim).await?;
+            let tried = ready.number;
+            let project = self.project.clone();
+            if let Ok(ended) = blocking(move || Ok(files::move_one_kept(&project, &ready))).await? {
+                return Ok(ended);
+            }
+            // The kept name was taken meanwhile: claim the next one.
+            let Some(next) = tried.checked_add(1) else {
+                let reason =
+                    ItemReason::new(ReasonCode::DestinationOccupied, "no kept name is left");
+                return Ok(files::Kept::Failed(reason));
+            };
+            number = next;
+        }
+    }
+
+    /// Settle the kept moves this Apply claimed and an interruption left
+    /// unrecorded, before its recovery ends it: a file that left with its
+    /// kept name holding it is recorded Moved; one that left without is
+    /// gone from disk, and its kept leftover stays for the next Apply to
+    /// name (D-W137); one still in `View (previous)/` stays there, the
+    /// unfinished copy an interrupted copy left under its claimed kept name
+    /// removed ([`files::settle_kept_claim`]).
+    async fn settle_kept_claims(&self) -> Result<(), LibraryError> {
+        let catalog = self.library.catalog();
+        let (project_id, operation_id) = (self.journal.project_id, self.journal.operation_id);
+        for claim in catalog.kept_move_claims(operation_id).await? {
+            let (project, claimed) = (self.project.clone(), claim.clone());
+            let settled =
+                blocking(move || Ok(files::settle_kept_claim(&project, &claimed))).await?;
+            let left = match settled {
+                Ok(files::ClaimedKept::Moved) => true,
+                Ok(files::ClaimedKept::Gone | files::ClaimedKept::Stayed) => false,
+                Err(detail) => return Err(LibraryError::IdentityConflict(detail)),
+            };
+            catalog.record_kept_move(project_id, operation_id, &claim.path, left).await?;
+        }
+        Ok(())
     }
 
     /// From `NewInstalled` on Apply ends Applied: commit the manifest, move
@@ -1671,17 +1776,26 @@ impl Run<'_> {
         let view = self.project.join(VIEW_FOLDER);
         let previous = self.project.join(VIEW_PREVIOUS_FOLDER);
         if before(self.journal.phase, ApplyPhase::ForeignTransferred) {
-            let items = foreign.clone();
-            let placed = inputs.installed.as_ref().map(placed).unwrap_or_default();
-            foreign = blocking(move || {
-                Ok(items
-                    .iter()
-                    .map(|item| files::move_foreign(&previous, &view, &placed, item))
-                    .collect::<Vec<_>>())
-            })
-            .await?;
-            catalog.record_apply_foreign(self.journal.operation_id, &foreign).await?;
-            self.journal.phase = ApplyPhase::ForeignTransferred;
+            let placed = Arc::new(inputs.installed.as_ref().map(placed).unwrap_or_default());
+            let claimed = catalog.apply_foreign_claims(self.journal.operation_id).await?;
+            for item in &mut foreign {
+                // Recorded by an earlier attempt at this Apply.
+                if item.state != ForeignItemState::Pending {
+                    continue;
+                }
+                let journaled = claimed.contains(&item.seq);
+                if item.ticked && !journaled {
+                    catalog.claim_apply_foreign(self.journal.operation_id, item.seq).await?;
+                }
+                let (from, into, placed, pending) =
+                    (previous.clone(), view.clone(), Arc::clone(&placed), item.clone());
+                *item = blocking(move || {
+                    Ok(files::move_foreign(&from, &into, &placed, &pending, journaled))
+                })
+                .await?;
+                catalog.record_apply_foreign(self.journal.operation_id, item).await?;
+            }
+            self.advance(ApplyPhase::ForeignTransferred, None).await?;
             if let Some(report) = self.interrupted() {
                 return Ok(report);
             }

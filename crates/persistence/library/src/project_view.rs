@@ -125,6 +125,18 @@ pub struct ApplyReserved {
     pub generation: Revision,
 }
 
+/// One kept file's move from `View (previous)/` to `View (kept)/` (D-W110),
+/// claimed before it starts. Paths are relative to the Project folder.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct KeptMove {
+    /// The file in `View (previous)/`.
+    pub path: NativePath,
+    /// The name it takes in `View (kept)/`.
+    pub kept: NativePath,
+    /// What leaves, read below `View (previous)/` right before the move.
+    pub evidence: EntryEvidence,
+}
+
 impl Catalog {
     /// The inputs one Apply builds from, read in one snapshot.
     ///
@@ -250,29 +262,150 @@ impl Catalog {
         Ok(())
     }
 
-    /// Record how each foreign file ended, at `ForeignTransferred`.
+    /// Claim a pending ticked foreign file's destination before its move
+    /// starts (e6tgr): only a claimed file's destination may lose the
+    /// unfinished copy an interrupted move left there.
+    ///
+    /// # Errors
+    /// `InvalidInput` for a file that isn't ticked and pending.
+    pub async fn claim_apply_foreign(&self, operation_id: Uuid, seq: u32) -> Result<()> {
+        write_txn!(self, |conn| {
+            let claimed = sqlx::query(
+                "UPDATE apply_foreign_items SET claimed = 1 \
+                 WHERE operation_id = ?1 AND seq = ?2 AND ticked = 1 AND state = 'pending'",
+            )
+            .bind(operation_id.to_string())
+            .bind(i64::from(seq))
+            .execute(&mut *conn)
+            .await?;
+            if claimed.rows_affected() != 1 {
+                return Err(LibraryError::InvalidInput(format!(
+                    "foreign file {seq} of Apply {operation_id} isn't a pending ticked file"
+                )));
+            }
+        });
+        Ok(())
+    }
+
+    /// The foreign files of one Apply whose destination it claimed, by seq.
+    ///
+    /// # Errors
+    /// `PersistenceFailure` for a corrupt record.
+    pub async fn apply_foreign_claims(&self, operation_id: Uuid) -> Result<BTreeSet<u32>> {
+        let mut conn = self.reader().await?;
+        let seqs: Vec<i64> = sqlx::query_scalar(
+            "SELECT seq FROM apply_foreign_items WHERE operation_id = ?1 AND claimed = 1",
+        )
+        .bind(operation_id.to_string())
+        .fetch_all(&mut *conn)
+        .await?;
+        seqs.into_iter()
+            .map(|seq| {
+                u32::try_from(seq).map_err(|_| {
+                    LibraryError::PersistenceFailure("corrupt foreign item seq".into())
+                })
+            })
+            .collect()
+    }
+
+    /// Record how one foreign file ended, right after its move.
     ///
     /// # Errors
     /// `PersistenceFailure` for a state the schema refuses.
-    pub async fn record_apply_foreign(
+    pub async fn record_apply_foreign(&self, operation_id: Uuid, item: &ForeignItem) -> Result<()> {
+        write_txn!(self, |conn| {
+            sqlx::query(
+                "UPDATE apply_foreign_items SET state = ?3, reason = ?4 \
+                 WHERE operation_id = ?1 AND seq = ?2",
+            )
+            .bind(operation_id.to_string())
+            .bind(i64::from(item.seq))
+            .bind(to_text(&item.state)?)
+            .bind(item.reason.map(|reason| to_text(&reason)).transpose()?)
+            .execute(&mut *conn)
+            .await?;
+        });
+        Ok(())
+    }
+
+    /// Claim a kept file's move to `View (kept)/` before it starts (D-W110),
+    /// replacing an earlier claim of this Apply for the same file.
+    ///
+    /// # Errors
+    /// `PersistenceFailure` for a kept name another of its claims holds.
+    pub async fn claim_kept_move(&self, operation_id: Uuid, claim: &KeptMove) -> Result<()> {
+        write_txn!(self, |conn| {
+            sqlx::query(
+                "INSERT INTO apply_kept_moves (operation_id, path_key, kept_key, evidence, \
+                 claimed_at) VALUES (?1, ?2, ?3, ?4, ?5) \
+                 ON CONFLICT (operation_id, path_key) DO UPDATE SET kept_key = excluded.kept_key, \
+                 evidence = excluded.evidence, claimed_at = excluded.claimed_at",
+            )
+            .bind(operation_id.to_string())
+            .bind(path_key(&claim.path))
+            .bind(path_key(&claim.kept))
+            .bind(to_json(&claim.evidence)?)
+            .bind(now()?)
+            .execute(&mut *conn)
+            .await?;
+        });
+        Ok(())
+    }
+
+    /// The kept moves one Apply claimed and hasn't recorded.
+    ///
+    /// # Errors
+    /// `PersistenceFailure` for a corrupt record.
+    pub async fn kept_move_claims(&self, operation_id: Uuid) -> Result<Vec<KeptMove>> {
+        let mut conn = self.reader().await?;
+        let rows = sqlx::query(
+            "SELECT path_key, kept_key, evidence FROM apply_kept_moves WHERE operation_id = ?1 \
+             ORDER BY path_key",
+        )
+        .bind(operation_id.to_string())
+        .fetch_all(&mut *conn)
+        .await?;
+        rows.iter()
+            .map(|row| {
+                Ok(KeptMove {
+                    path: path_from_key(&row.try_get::<Vec<u8>, _>("path_key")?)?,
+                    kept: path_from_key(&row.try_get::<Vec<u8>, _>("kept_key")?)?,
+                    evidence: from_json(&row.try_get::<String, _>("evidence")?)?,
+                })
+            })
+            .collect()
+    }
+
+    /// Record how one kept file's move ended, right after it: its claim, if
+    /// any, goes, and when the file left `View (previous)/` (moved, or gone
+    /// from disk) its kept leftover reads Moved (D-W110, D-W137).
+    ///
+    /// # Errors
+    /// `PersistenceFailure` for a review the schema refuses.
+    pub async fn record_kept_move(
         &self,
+        project_id: Uuid,
         operation_id: Uuid,
-        items: &[ForeignItem],
+        path: &NativePath,
+        left: bool,
     ) -> Result<()> {
         write_txn!(self, |conn| {
-            for item in items {
-                sqlx::query(
-                    "UPDATE apply_foreign_items SET state = ?3, reason = ?4 \
-                     WHERE operation_id = ?1 AND seq = ?2",
-                )
+            sqlx::query("DELETE FROM apply_kept_moves WHERE operation_id = ?1 AND path_key = ?2")
                 .bind(operation_id.to_string())
-                .bind(i64::from(item.seq))
-                .bind(to_text(&item.state)?)
-                .bind(item.reason.map(|reason| to_text(&reason)).transpose()?)
+                .bind(path_key(path))
+                .execute(&mut *conn)
+                .await?;
+            if left {
+                sqlx::query(
+                    "UPDATE view_previous_items SET review = 'moved', reviewed_at = ?3 \
+                     WHERE project_id = ?1 AND path_key = ?2 AND review = 'kept'",
+                )
+                .bind(project_id.to_string())
+                .bind(path_key(path))
+                .bind(now()?)
                 .execute(&mut *conn)
                 .await?;
             }
-            advance(conn, operation_id, ApplyPhase::ForeignTransferred, None).await?;
         });
         Ok(())
     }

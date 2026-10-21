@@ -28,6 +28,7 @@ use std::ffi::OsStr;
 use std::fs::File;
 use std::path::{Component, Path, PathBuf};
 
+use super::transfer::{self, Moved};
 use super::{is_link, same_entry, unavailable, Check};
 
 /// The folder holding an entry, entered from the entry's registered root
@@ -319,6 +320,51 @@ impl Folder {
         file.metadata().is_ok_and(|metadata| metadata.is_file())
             && file.read_exact(&mut head).is_ok()
             && head == magic
+    }
+
+    /// Move this folder's entry `name` to `to` without replacing anything
+    /// ([`transfer::move_noreplace`]), the entry named through this folder.
+    /// On macOS and Linux the no-replace rename is made relative to its
+    /// handle, so a folder above it swapped for a link meanwhile is never
+    /// followed. Where the volume has no no-replace rename (macOS exFAT) the
+    /// move goes by path once the path still names this folder, which
+    /// leaves the moment between that check and the move; on Windows the
+    /// caller holds every folder from the root down to this one, none of
+    /// which can be renamed or replaced meanwhile.
+    ///
+    /// # Errors
+    /// `AlreadyExists` when `to` is taken; `NotADirectory` when this
+    /// folder's path no longer names it; the platform's rename error.
+    pub fn move_entry(&self, name: &OsStr, to: &Path) -> std::io::Result<Moved> {
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        {
+            use rustix::fs::{renameat_with, RenameFlags, CWD};
+            use rustix::io::Errno;
+            match renameat_with(&self.handle, name, CWD, to, RenameFlags::NOREPLACE) {
+                Ok(()) => return Ok(Moved::Renamed),
+                // As `transfer::move_noreplace` classifies a volume without it.
+                Err(errno)
+                    if [Errno::INVAL, Errno::NOTSUP, Errno::OPNOTSUPP, Errno::NOSYS]
+                        .contains(&errno) => {}
+                Err(error) => return Err(error.into()),
+            }
+        }
+        if !self.named_by_its_path() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::NotADirectory,
+                format!("{} is no longer the folder entered", self.path.display()),
+            ));
+        }
+        transfer::move_noreplace(&self.path.join(name), to)
+    }
+
+    /// Whether this folder's path, observed without following its last
+    /// component, names the folder this handle holds.
+    fn named_by_its_path(&self) -> bool {
+        match (self.handle.metadata(), std::fs::symlink_metadata(&self.path)) {
+            (Ok(held), Ok(named)) => same_entry(&held, &named) && !is_link(&named),
+            _ => false,
+        }
     }
 }
 

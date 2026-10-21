@@ -96,10 +96,13 @@ const SCHEMA: &str = schema_modules![
 /// it. Version 22 records why an Apply failed or was canceled as an
 /// `ApplyStop` code (`apply_operations.stop`) and why a foreign file didn't
 /// move as a `ForeignItemFailure` code, where version 21 stored English text.
+/// Version 23 journals each ticked foreign file's claim
+/// (`apply_foreign_items.claimed`) and each kept file's move
+/// (`apply_kept_moves`) before the move starts; version 22 has neither.
 /// Bump it with any DDL change that `IF NOT EXISTS` would leave stale in an
 /// existing catalog, and with any stored JSON shape an existing catalog's rows
 /// can't be read as.
-pub const SCHEMA_VERSION: i64 = 22;
+pub const SCHEMA_VERSION: i64 = 23;
 const BUSY_TIMEOUT: Duration = Duration::from_secs(10);
 const READER_CONNECTIONS: u32 = 4;
 const MAX_PAGE: u32 = 1000;
@@ -190,7 +193,9 @@ mod project_operations;
 // Apply's catalog side: its inputs, manifest, journal, foreign files and
 // leftovers (project_view.sql).
 mod project_view;
-pub use project_view::{ApplyInputs, ApplyReservation, ApplyReserved, CorrectedSource, SourcePath};
+pub use project_view::{
+    ApplyInputs, ApplyReservation, ApplyReserved, CorrectedSource, KeptMove, SourcePath,
+};
 // A Project's inputs: whole-session membership through the admission rule,
 // groups, frame choices, View settings, pending changes and suggestions
 // (project_inputs.sql).
