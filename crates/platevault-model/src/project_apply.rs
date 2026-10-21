@@ -53,8 +53,9 @@ pub enum ApplyBlocker {
     /// A light original is missing or no longer matches its recorded basis.
     OriginalChanged { path: NativePath, detail: String },
     /// A pinned calibration file changed or went missing; the pin stays and
-    /// the session links to Reassign (D-W113).
-    PinDrift { session_id: Uuid, kind: InputKind, health: PinHealth },
+    /// the session links to Reassign (D-W113). `path` names the first such
+    /// file, unless the catalog no longer records where it was.
+    PinDrift { session_id: Uuid, kind: InputKind, path: Option<NativePath>, health: PinHealth },
     /// A held session's calibration is no longer settled.
     CalibrationUnsettled { session_id: Uuid, kinds: Vec<InputKind> },
     /// Two groups or two filter values would share one folder.
@@ -174,7 +175,11 @@ impl ApplyBlocker {
             }
             Self::OriginalOffline { path, .. } => format!("{} is offline", path.display()),
             Self::OriginalChanged { path, detail } => format!("{}: {detail}", path.display()),
-            Self::PinDrift { session_id, kind, health } => {
+            Self::PinDrift { session_id, kind, path: Some(path), health } => format!(
+                "session {session_id}: pinned {kind:?} file {} is {health:?}; reassign it",
+                path.display()
+            ),
+            Self::PinDrift { session_id, kind, path: None, health } => {
                 format!("session {session_id}: the pinned {kind:?} is {health:?}; reassign it")
             }
             Self::CalibrationUnsettled { session_id, kinds } => {

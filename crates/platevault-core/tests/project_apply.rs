@@ -19,8 +19,8 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use apply_support::{
-    catalogued, corrected, digest, frame, meta, sep24_frame, world, Recorder, World, DARKS, HA,
-    HA_FLATS, HA_GAIN_0, OIII, SEP24, SEP28,
+    calibration_frames, catalogued, corrected, digest, frame, meta, scan, sep24_frame, world,
+    Recorder, World, DARKS, HA, HA_FLATS, HA_GAIN_0, OIII, SEP24, SEP28,
 };
 use metadata_core::MetadataExtractor;
 use platevault_core::apply::{ApplyControl, Unattended};
@@ -180,30 +180,82 @@ async fn an_offline_original_refuses_apply_and_changes_nothing() {
     assert!(!world.previous().exists() && !world.building().exists());
 }
 
+/// D-W113, CAL-AC-29: changed and missing pinned files block Apply with the
+/// file name and session Reassign guidance; restoring the recorded bytes, or
+/// reassigning the pin, lets it proceed.
 #[tokio::test]
-async fn a_changed_or_missing_pinned_file_refuses_apply_with_its_session() {
+async fn a_drifted_pin_blocks_apply_until_its_bytes_return_or_it_is_reassigned() {
+    const FRESH: [&str; 2] = ["flats/Ha/Flat_Ha_101.fits", "flats/Ha/Flat_Ha_102.fits"];
     let world = catalogued(ViewMode::Symlinks).await;
-    let ha = world.hold(HA[0]).await;
-    fs::write(world.calibration_file(HA_FLATS[1]), b"rewritten in place").unwrap();
+    let session = world.hold(HA[0]).await;
+    let flat = world.calibration_file(HA_FLATS[1]);
+    let recorded = fs::read(&flat).unwrap();
+    let modified = fs::metadata(&flat).unwrap().modified().unwrap();
+
+    fs::write(&flat, vec![b'x'; recorded.len()]).unwrap();
     let preview = world.preview().await;
     assert!(
         preview.blockers.contains(&ApplyBlocker::PinDrift {
-            session_id: ha,
+            session_id: session,
             kind: InputKind::Flat,
+            path: Some(NativePath::from_path(&flat)),
             health: PinHealth::Changed
         }),
         "{:#?}",
         preview.blockers
     );
-    fs::remove_file(world.calibration_file(HA_FLATS[1])).unwrap();
-    let preview = world.preview().await;
-    assert!(preview.blockers.contains(&ApplyBlocker::PinDrift {
-        session_id: ha,
-        kind: InputKind::Flat,
-        health: PinHealth::Missing
-    }));
-    assert!(world.library.apply(&World::request(&preview), &Unattended).await.is_err());
-    assert!(!world.folder().join("View").exists());
+    let refusal = world.library.apply(&World::request(&preview), &Unattended).await.unwrap_err();
+    assert!(refusal.to_string().contains("Flat_Ha_002.fits"), "{refusal}");
+    assert!(refusal.to_string().to_lowercase().contains("reassign"), "{refusal}");
+    assert!(!world.view().exists(), "blocked Apply makes no View");
+
+    fs::write(&flat, &recorded).unwrap();
+    fs::File::options().write(true).open(&flat).unwrap().set_modified(modified).unwrap();
+    let restored = world.preview().await;
+    assert!(!restored.blockers.iter().any(|blocker| matches!(blocker, ApplyBlocker::PinDrift { session_id, kind: InputKind::Flat, .. } if *session_id == session)));
+    assert_eq!(
+        world.library.apply(&World::request(&restored), &Unattended).await.unwrap().outcome,
+        Some(ApplyOutcome::Applied)
+    );
+
+    fs::remove_file(&flat).unwrap();
+    let missing = world.preview().await;
+    assert!(
+        missing.blockers.contains(&ApplyBlocker::PinDrift {
+            session_id: session,
+            kind: InputKind::Flat,
+            path: Some(NativePath::from_path(&flat)),
+            health: PinHealth::Missing
+        }),
+        "{:#?}",
+        missing.blockers
+    );
+    assert!(world.library.apply(&World::request(&missing), &Unattended).await.is_err());
+
+    // The user reassigns the flat to a fresh set of Ha flats.
+    let root = world.calibration.path.to_path_buf().unwrap();
+    let mut frames: Vec<_> =
+        calibration_frames().into_iter().filter(|(path, _)| path != HA_FLATS[1]).collect();
+    frames.extend(
+        FRESH.map(|path| (path.to_owned(), meta("FLAT", Some("Ha"), 2.0, 100.0, "2026-10-11"))),
+    );
+    scan(&world.library, &world.calibration, &root, &frames).await;
+    let flats = world.session_of(&world.calibration, FRESH[0]).await;
+    let input =
+        InputRef::RawSet { session_id: flats.id, grouping_revision: flats.grouping_revision };
+    let generation =
+        world.catalog().session_calibration(session).await.unwrap().calibration.generation;
+    world.library.reassign_calibration(session, InputKind::Flat, input, generation).await.unwrap();
+    let reassigned = world.preview().await;
+    assert!(
+        !reassigned.blockers.iter().any(|blocker| matches!(blocker, ApplyBlocker::PinDrift { .. })),
+        "{:#?}",
+        reassigned.blockers
+    );
+    assert_eq!(
+        world.library.apply(&World::request(&reassigned), &Unattended).await.unwrap().outcome,
+        Some(ApplyOutcome::Applied)
+    );
 }
 
 #[tokio::test]

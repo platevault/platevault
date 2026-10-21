@@ -555,14 +555,6 @@ async fn a_changed_pinned_flat_keeps_its_pin_and_waits_in_needs_calibration() {
     );
     let counts = world.catalog().session_filter_counts().await.unwrap();
     assert_eq!(counts.needs_calibration, 1);
-    let admission = world.catalog().session_admission(light).await.unwrap();
-    assert!(
-        admission
-            .blockers
-            .contains(&AdmissionBlocker::CalibrationDrifted { kinds: vec![InputKind::Flat] }),
-        "provisional: a drifted pin keeps the session out of new joins: {:?}",
-        admission.blockers
-    );
 }
 
 #[tokio::test]

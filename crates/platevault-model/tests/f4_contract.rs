@@ -619,21 +619,14 @@ fn readiness_follows_the_intake_flow_target_then_rig_then_review() {
 fn only_a_ready_settled_current_session_on_the_groups_rig_joins_an_open_project() {
     let session = id(20);
     let calibration = settled_calibration(session);
-    let intact = CalibrationHealth::INTACT;
-    let basis = admit_session(
-        ProjectLifecycle::Open,
-        id(60),
-        &ready_intake(session),
-        &calibration,
-        &intact,
-    )
-    .unwrap();
+    let basis = admit_session(ProjectLifecycle::Open, id(60), &ready_intake(session), &calibration)
+        .unwrap();
     assert_eq!((basis.grouping_revision, basis.calibration_generation), (1, 3));
 
     let mut unsettled = calibration;
     unsettled.dark = PinState::Unresolved;
     assert_eq!(
-        session_blockers(&ready_intake(session), &unsettled, &intact),
+        session_blockers(&ready_intake(session), &unsettled),
         [AdmissionBlocker::CalibrationUnsettled { kinds: vec![InputKind::Dark] }]
     );
 
@@ -641,8 +634,7 @@ fn only_a_ready_settled_current_session_on_the_groups_rig_joins_an_open_project(
     needs_review.review_finished = false;
     needs_review.superseded = true;
     let refusal =
-        admit_session(ProjectLifecycle::Closed, id(61), &needs_review, &unsettled, &intact)
-            .unwrap_err();
+        admit_session(ProjectLifecycle::Closed, id(61), &needs_review, &unsettled).unwrap_err();
     assert_eq!(
         refusal.blockers,
         [
@@ -659,32 +651,36 @@ fn only_a_ready_settled_current_session_on_the_groups_rig_joins_an_open_project(
     round_trip(&refusal);
 }
 
-/// Provisional (decision record §9, lead default 2026-10-16): a drifted pin
-/// keeps the session out of new joins; the pin stays settled.
+/// D-W113: a drifted pin stays settled and needs Reassign, but adds no
+/// admission blocker: the session may still join.
 #[test]
-fn a_drifted_pin_keeps_a_session_out_of_new_joins() {
+fn a_drifted_settled_pin_does_not_block_joining() {
     let session = id(20);
     let calibration = settled_calibration(session);
-    let drifted = CalibrationHealth { flat: PinHealth::Changed, ..CalibrationHealth::INTACT };
-    assert!(calibration.settled().is_some(), "the drifted pin stays pinned");
+    let drifted = CalibrationHealth {
+        flat: PinHealth::Changed,
+        dark: PinHealth::Missing,
+        ..CalibrationHealth::INTACT
+    };
     assert_eq!(
-        session_blockers(&ready_intake(session), &calibration, &drifted),
-        [AdmissionBlocker::CalibrationDrifted { kinds: vec![InputKind::Flat] }]
+        calibration.needs(|kind| drifted.kind(kind)),
+        [
+            CalibrationNeed::PinDrift { kind: InputKind::Dark, health: PinHealth::Missing },
+            CalibrationNeed::PinDrift { kind: InputKind::Flat, health: PinHealth::Changed },
+        ]
     );
-    let refusal = admit_session(
-        ProjectLifecycle::Open,
-        id(60),
-        &ready_intake(session),
-        &calibration,
-        &drifted,
-    )
-    .unwrap_err();
+    assert!(calibration.settled().is_some(), "the drifted pins stay pinned");
+    assert_eq!(session_blockers(&ready_intake(session), &calibration), []);
+    assert!(
+        admit_session(ProjectLifecycle::Open, id(60), &ready_intake(session), &calibration).is_ok()
+    );
+
+    let mut unsettled = calibration;
+    unsettled.flat = PinState::Unresolved;
     assert_eq!(
-        refusal.blockers,
-        [AdmissionBlocker::CalibrationDrifted { kinds: vec![InputKind::Flat] }]
+        session_blockers(&ready_intake(session), &unsettled),
+        [AdmissionBlocker::CalibrationUnsettled { kinds: vec![InputKind::Flat] }]
     );
-    assert!(refusal.to_string().contains("flat changed or went missing"), "{refusal}");
-    round_trip(&refusal);
 }
 
 #[test]

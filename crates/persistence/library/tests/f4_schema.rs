@@ -10,7 +10,8 @@
 //! - one active operation per Project, and none on a Closed one;
 //! - the admission rule: only a current, Ready, calibration-settled session
 //!   on the group's rig joins, at its current basis, through the contract
-//!   function and in SQL;
+//!   function and in SQL; a pinned file that changed or went missing leaves
+//!   the session settled (D-W113);
 //! - Closed for good: no reopen, Close after its snapshot and Wrap up only,
 //!   and a locked Project's inputs refuse every edit;
 //! - the View and Apply journal: one building, installed and previous View,
@@ -18,17 +19,19 @@
 //! - rig versions immutable and never rebound.
 #![cfg(unix)]
 
+#[path = "support/calibration.rs"]
+mod calibration_support;
 #[path = "support/project_state.rs"]
 mod project_state_support;
 mod support;
 
 use std::path::Path;
 
-use persistence_library::Catalog;
+use persistence_library::{Catalog, InputQuery};
 use platevault_model::{
     counts_as_confirmed, AdmissionBasis, AdmissionBlocker, ApplyPhase, AssociationState,
-    EvidenceItem, ExpectedAsset, InputKind, PinState, ProjectLifecycle, ProjectOperationKind,
-    Quality, SessionReadiness,
+    EvidenceItem, ExpectedAsset, InputKind, LocationRole, PinHealth, PinState, ProjectLifecycle,
+    ProjectOperationKind, Quality, SessionReadiness,
 };
 use project_state_support::{ha_frames, world, World};
 use sqlx::sqlite::{SqliteConnectOptions, SqliteConnection};
@@ -393,6 +396,60 @@ async fn the_admission_contract_reports_readiness_calibration_and_basis() {
         .await
         .unwrap_err();
     assert!(error.to_string().contains("rig"), "{error}");
+}
+
+/// D-W113, LIB-FR-23: a settled session whose pinned flat changed or went
+/// missing still joins, through the contract function and in SQL; Apply,
+/// not admission, waits for the pin.
+#[tokio::test]
+async fn a_settled_session_whose_pinned_flat_drifted_still_joins() {
+    const FLAT: &str = "flats/Flat_Ha_001.fits";
+    for drift in [PinHealth::Changed, PinHealth::Missing] {
+        let mut f4 = F4::new().await;
+        f4.admissible().await;
+        let session: Uuid = f4.session.parse().unwrap();
+        let catalog = &f4.world.catalog;
+        let (flats, root) = calibration_support::location_at(
+            catalog,
+            &f4.world.fx,
+            "Astro-T7/Calibration",
+            LocationRole::Calibration,
+        )
+        .await;
+        let flat = || {
+            let metadata =
+                calibration_support::calibration_frame("FLAT", Some("Ha"), 2.0, "2026-09-12");
+            calibration_support::frame(&root, FLAT, metadata)
+        };
+        calibration_support::scan_frames(catalog, &flats, vec![flat()]).await;
+        let rules = calibration_support::TestRules;
+        let inputs = catalog.calibration_inputs(&InputQuery::default(), &rules).await.unwrap();
+        let input = inputs
+            .iter()
+            .find(|row| row.kind == InputKind::Flat)
+            .and_then(|row| row.input.input())
+            .expect("the scanned flat is an input");
+        let generation = catalog.session_calibration(session).await.unwrap().calibration.generation;
+        catalog
+            .reassign_calibration(session, InputKind::Flat, input, generation, &rules, DiskProbe)
+            .await
+            .unwrap();
+        if drift == PinHealth::Changed {
+            std::fs::write(root.join(FLAT), b"rewritten in place").unwrap();
+            calibration_support::scan_frames(catalog, &flats, vec![flat()]).await;
+        } else {
+            std::fs::remove_file(root.join(FLAT)).unwrap();
+            calibration_support::scan_frames(catalog, &flats, Vec::new()).await;
+        }
+
+        let admission = catalog.session_admission(session).await.unwrap();
+        assert!(matches!(admission.calibration.flat, PinState::Pinned { .. }), "the pin stays");
+        assert_eq!(admission.health.flat, drift);
+        assert_eq!(admission.blockers, Vec::<AdmissionBlocker>::new(), "{drift:?} pin");
+        let group: Uuid = f4.group.parse().unwrap();
+        catalog.check_admission(f4.project.parse().unwrap(), group, session, None).await.unwrap();
+        f4.add_session().await.unwrap_or_else(|error| panic!("{drift:?} pin: {error}"));
+    }
 }
 
 /// The same rule in SQL: each refusal while one condition is missing, then
