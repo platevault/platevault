@@ -39,7 +39,7 @@ use uuid::Uuid;
 
 use super::project_folder;
 use crate::custody::trash::OsTrash;
-use crate::custody::{observe_entry, same_identity, transfer};
+use crate::custody::{link_reads, observe_entry, same_identity, transfer};
 use crate::import::{classify, naming_metadata, writability};
 use crate::inventory::RootRefusal;
 use crate::layout::VIEW_FOLDER;
@@ -995,7 +995,7 @@ impl<'a> Repoint<'a> {
     /// Whether `evidence` is the recorded link: a link reading `from` with
     /// the recorded identity.
     fn recorded(&self, evidence: &EntryEvidence) -> bool {
-        matches!(&evidence.kind, EntryKind::Link { target } if *target == NativePath::from_path(self.from))
+        link_reads(evidence, self.from)
             && same_identity(&evidence.fingerprint.identity, self.identity)
     }
 
@@ -1006,7 +1006,7 @@ impl<'a> Repoint<'a> {
 
     /// Whether `path` is a link reading the archive copy.
     fn reads_to(&self, path: &Path) -> bool {
-        fs::read_link(path).is_ok_and(|target| target == self.to)
+        fs::read_link(path).is_ok_and(|target| fs_pathsafe::link_reads(&target, self.to))
     }
 
     /// Remove the staged link while it is still a link reading `to`.
@@ -1146,6 +1146,18 @@ mod tests {
             assert_eq!(fs::read(&self.from).unwrap(), b"frame");
             assert_eq!(fs::read(&self.to).unwrap(), b"frame");
         }
+
+        /// The link reads `target`, in whichever spelling the platform
+        /// reports it ([`fs_pathsafe::link_reads`]).
+        fn assert_reads(&self, target: &Path, exchange: bool) {
+            let reads = fs::read_link(&self.link).unwrap();
+            assert!(
+                fs_pathsafe::link_reads(&reads, target),
+                "exchange: {exchange}: the link reads {}, not {}",
+                reads.display(),
+                target.display()
+            );
+        }
     }
 
     #[test]
@@ -1154,7 +1166,7 @@ mod tests {
             let Some(view) = View::new() else { return };
             let aside = view.aside();
             let identity = view.repoint(&view.identity(), exchange).unwrap();
-            assert_eq!(fs::read_link(&view.link).unwrap(), view.to, "exchange: {exchange}");
+            view.assert_reads(&view.to, exchange);
             assert!(same_identity(&view.identity(), &identity));
             view.tidy(&aside);
         }
@@ -1173,7 +1185,7 @@ mod tests {
             fs::rename(&other, &view.link).unwrap();
             let refused = view.repoint(&recorded, exchange).unwrap_err();
             assert_eq!(refused.code, ReasonCode::DestinationChanged, "exchange: {exchange}");
-            assert_eq!(fs::read_link(&view.link).unwrap(), view.from);
+            view.assert_reads(&view.from, exchange);
             view.tidy(&aside);
         }
     }
@@ -1218,7 +1230,7 @@ mod tests {
             fs::rename(&view.link, &aside).unwrap();
             create_symlink(&view.to, &view.staged);
             view.repoint(&recorded, exchange).unwrap();
-            assert_eq!(fs::read_link(&view.link).unwrap(), view.to, "exchange: {exchange}");
+            view.assert_reads(&view.to, exchange);
             view.tidy(&aside);
         }
     }
@@ -1235,7 +1247,7 @@ mod tests {
             fs::rename(&view.link, &beside).unwrap();
             create_symlink(&view.to, &view.link);
             view.repoint(&recorded, exchange).unwrap();
-            assert_eq!(fs::read_link(&view.link).unwrap(), view.to, "exchange: {exchange}");
+            view.assert_reads(&view.to, exchange);
             view.tidy(&aside);
         }
     }

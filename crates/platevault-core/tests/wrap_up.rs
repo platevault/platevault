@@ -609,9 +609,8 @@ async fn a_stopped_close_resumes_to_archived_with_its_kept_view_repointed() {
 
     for link in &review.links {
         let path = link.link.to_path_buf().unwrap();
-        let target = fs::read_link(&path).unwrap();
-        assert!(target.starts_with(&archive_root), "{} reads {}", path.display(), target.display());
-        assert!(target.exists());
+        assert!(reads_below(&path, &archive_root), "{} reads outside the archive", path.display());
+        assert!(fs::read_link(&path).unwrap().exists());
     }
     assert!(!world.light(HA[0]).exists() && !world.light(OIII[0]).exists(), "originals retired");
     assert_eq!(trash.moved().len(), 4, "only the four originals went to the OS Trash");
@@ -804,9 +803,16 @@ fn links_read_originals(world: &World, review: &ArchiveReview) {
     let captures = world.captures.path.to_path_buf().unwrap();
     for link in &review.links {
         let path = link.link.to_path_buf().unwrap();
-        let target = fs::read_link(&path).unwrap();
-        assert!(target.starts_with(&captures), "{} reads {}", path.display(), target.display());
+        assert!(reads_below(&path, &captures), "{} reads outside captures", path.display());
     }
+}
+
+/// Whether the link at `path` reads an entry below `root`, compared in the
+/// form that names one entry exactly: Windows reports a target in its plain
+/// spelling though the roots are canonical `\\?\` paths there.
+fn reads_below(path: &Path, root: &Path) -> bool {
+    let target = fs::read_link(path).unwrap();
+    fs_pathsafe::long_path(&target).starts_with(fs_pathsafe::long_path(root))
 }
 
 /// STO-FR-06/07 (C5): a folder replaced at the destination's path is not
@@ -929,8 +935,8 @@ async fn a_copy_changed_after_its_verification_moves_no_record_or_link() {
     assert!(first.file.from.to_path_buf().unwrap().exists(), "the original stays");
     let captures = world.captures.path.to_path_buf().unwrap();
     for link in review.links.iter().filter(|link| link.asset_id == step.file.asset_id) {
-        let target = fs::read_link(link.link.to_path_buf().unwrap()).unwrap();
-        assert!(target.starts_with(&captures), "{} was repointed", link.link.display());
+        let path = link.link.to_path_buf().unwrap();
+        assert!(reads_below(&path, &captures), "{} was repointed", link.link.display());
     }
     assert!(
         !progress.repointed_links.iter().any(|link| link.asset_id == step.file.asset_id),
