@@ -8,7 +8,6 @@
 //! and ticked and never `Output/`; Close locks the Project with the
 //! calibration its View used; Archive repoints the kept View and a stop while
 //! Closing resumes to Archived; Duplicate takes the sessions' current pins.
-#![cfg(unix)]
 
 #[path = "support/apply.rs"]
 mod apply_support;
@@ -223,6 +222,7 @@ async fn clean_up_trashes_a_patched_copy_only_while_it_holds_its_patch() {
 /// still the link `PlateVault` placed to its original; a link the user
 /// retargeted stays, named, and nothing is ever followed.
 #[tokio::test]
+#[cfg(unix)] // The test retargets with std::os::unix::fs::symlink.
 async fn symlinks_are_deleted_after_their_no_follow_check() {
     let world = world(ViewMode::Symlinks).await;
     world.apply().await;
@@ -621,6 +621,63 @@ async fn a_stopped_close_resumes_to_archived_with_its_kept_view_repointed() {
     );
     let after = world.library.catalog().project_desired(world.project).await.unwrap();
     assert_eq!(after.sessions, desired.sessions, "archiving changes no Project's sessions");
+}
+
+/// STO-IMP-FR-07, D-W107, D-W129: `{target}` is the session's confirmed
+/// Target. A different OBJECT stays an informational label.
+#[tokio::test]
+async fn archive_target_folder_uses_confirmed_target_not_object() {
+    let world = world(ViewMode::Copies).await;
+    world.correct(HA[0], &[("object", serde_json::json!("M31"))]).await;
+    let (archive, _) = archive_location(&world).await;
+    let trash = bin(&world);
+    skip_to_archive(&world, &trash).await;
+
+    let session = world.session_of(&world.captures, HA[0]).await;
+    let review = world.library.wrap_up_archive_review(world.project, archive.id).await.unwrap();
+    let offer = review.sessions.iter().find(|offer| offer.session_id == session.id).unwrap();
+    let file = offer
+        .files
+        .iter()
+        .find(|file| file.from.to_path_buf().unwrap() == world.light(HA[0]))
+        .unwrap();
+    assert!(
+        file.to.display().contains("NGC 7000/Ha/2026-10-12/light/Light_001.fits"),
+        "the confirmed Target, not the M31 OBJECT label, names the archive folder: {}",
+        file.to.display()
+    );
+}
+
+/// D-W129: a session without a confirmed Target archives under Unclassified,
+/// even when its OBJECT label names a Target.
+#[tokio::test]
+async fn archive_unclassified_target_uses_unclassified_folder_not_object() {
+    let world = world(ViewMode::Copies).await;
+    world.correct(OIII[0], &[("object", serde_json::json!("M31"))]).await;
+    let session = world.session_of(&world.captures, OIII[0]).await;
+    world
+        .sql(
+            "UPDATE associations SET state = 'unresolved', evidence = '[]' \
+             WHERE session_id = ?1 AND kind = 'target'",
+            &[&session.id.to_string()],
+        )
+        .await;
+    let (archive, _) = archive_location(&world).await;
+    let trash = bin(&world);
+    skip_to_archive(&world, &trash).await;
+
+    let review = world.library.wrap_up_archive_review(world.project, archive.id).await.unwrap();
+    let offer = review.sessions.iter().find(|offer| offer.session_id == session.id).unwrap();
+    let file = offer
+        .files
+        .iter()
+        .find(|file| file.from.to_path_buf().unwrap() == world.light(OIII[0]))
+        .unwrap();
+    assert!(
+        file.to.display().contains("unclassified/OIII/2026-10-13/light/Light_001.fits"),
+        "an Unclassified session uses the import fallback, not its M31 OBJECT label: {}",
+        file.to.display()
+    );
 }
 
 /// STO-FR-13, record §8 line 203 (a session an open Project holds can't be

@@ -406,9 +406,10 @@ impl Library {
     }
 
     /// The templated destination of an archived frame (STO-IMP-FR-07): its
-    /// type's template folder, then its file name. `{target}` reads the
-    /// header's OBJECT, else the session's confirmed Target. `Err` names why
-    /// the template can't lay it out.
+    /// type's template folder, then its file name. `{target}` uses the
+    /// session's confirmed Target; without one it falls back to `unclassified`
+    /// as in import (D-W107, D-W129). Header OBJECT is only a label. `Err`
+    /// names why the template can't lay it out.
     pub(crate) async fn archive_layout(
         &self,
         asset: &ArchiveAsset,
@@ -418,9 +419,7 @@ impl Library {
             return Ok(Err("the frame has no frame-type header to choose its template".into()));
         };
         let mut metadata = naming_metadata(&frame.effective, frame_type);
-        if metadata.target.is_none() {
-            metadata.target.clone_from(&asset.target);
-        }
+        metadata.target.clone_from(&asset.target);
         let resolution = match self.resolve_naming(frame_type, &metadata).await {
             Ok(resolution) => resolution,
             Err(LibraryError::InvalidInput(detail)) => return Ok(Err(detail)),
@@ -1052,14 +1051,26 @@ fn vacant(path: &Path) -> bool {
     fs::symlink_metadata(path).is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound)
 }
 
-/// The repoint contract, run with each platform's swap: the atomic exchange
-/// macOS and Linux use, and the no-replace move aside Windows uses, which
-/// is proven here against the same cases.
-#[cfg(all(test, unix))]
+/// The repoint contract covers the current platform's swap. On Windows the
+/// tests exercise `move_aside`; they skip only when Developer Mode is off.
+#[cfg(test)]
 mod tests {
-    use std::os::unix::fs::symlink;
+    use std::io;
 
     use super::*;
+
+    #[cfg(unix)]
+    const SWAPS: &[bool] = &[true, false];
+    #[cfg(not(unix))]
+    const SWAPS: &[bool] = &[false];
+
+    fn create_symlink(source: &Path, destination: &Path) -> io::Result<()> {
+        fs_pathsafe::create_symlink(source, destination)
+    }
+
+    fn developer_mode_off(error: &io::Error) -> bool {
+        cfg!(windows) && error.raw_os_error() == Some(1314)
+    }
 
     /// A captures original, its archive copy and a View link reading the
     /// original, all on one volume.
@@ -1072,7 +1083,7 @@ mod tests {
     }
 
     impl View {
-        fn new() -> Self {
+        fn new() -> Option<Self> {
             let temp = tempfile::tempdir().unwrap();
             let root = fs::canonicalize(temp.path()).unwrap();
             for folder in ["captures", "archive", "View"] {
@@ -1083,9 +1094,15 @@ mod tests {
             fs::write(&from, b"frame").unwrap();
             fs::write(&to, b"frame").unwrap();
             let link = root.join("View/Light_001.fits");
-            symlink(&from, &link).unwrap();
+            if let Err(error) = create_symlink(&from, &link) {
+                if developer_mode_off(&error) {
+                    eprintln!("skipping repoint contract test: Windows Developer Mode is off, so creating file symlinks requires elevation");
+                    return None;
+                }
+                panic!("failed to create test symlink {link:?} -> {from:?}: {error}");
+            }
             let staged = root.join("View/.pv-repoint-op-0");
-            Self { _temp: temp, from, to, link, staged }
+            Some(Self { _temp: temp, from, to, link, staged })
         }
 
         fn identity(&self) -> FileIdentity {
@@ -1102,11 +1119,15 @@ mod tests {
             exchange: bool,
         ) -> Result<FileIdentity, ItemReason> {
             let repoint = Repoint::new(&self.link, identity, &self.from, &self.to, &self.staged);
+            #[cfg(unix)]
             if exchange {
-                repoint.run(Repoint::exchange)
-            } else {
-                repoint.run(Repoint::move_aside)
+                return repoint.run(Repoint::exchange);
             }
+            #[cfg(unix)]
+            let _ = exchange;
+            #[cfg(not(unix))]
+            let _ = exchange;
+            repoint.run(Repoint::move_aside)
         }
 
         /// Nothing is left beside the link and both files are untouched.
@@ -1119,8 +1140,8 @@ mod tests {
 
     #[test]
     fn the_recorded_link_is_rebuilt_to_read_the_copy() {
-        for exchange in [true, false] {
-            let view = View::new();
+        for &exchange in SWAPS {
+            let Some(view) = View::new() else { return };
             let aside = view.aside();
             let identity = view.repoint(&view.identity(), exchange).unwrap();
             assert_eq!(fs::read_link(&view.link).unwrap(), view.to, "exchange: {exchange}");
@@ -1131,14 +1152,14 @@ mod tests {
 
     #[test]
     fn a_link_replaced_since_it_was_recorded_stays() {
-        for exchange in [true, false] {
-            let view = View::new();
+        for &exchange in SWAPS {
+            let Some(view) = View::new() else { return };
             let aside = view.aside();
             let recorded = view.identity();
             fs::remove_file(&view.link).unwrap();
             // Same target, another link: its identity is not the recorded one.
             let other = view.link.with_file_name("other");
-            symlink(&view.from, &other).unwrap();
+            create_symlink(&view.from, &other).unwrap();
             fs::rename(&other, &view.link).unwrap();
             let refused = view.repoint(&recorded, exchange).unwrap_err();
             assert_eq!(refused.code, ReasonCode::DestinationChanged, "exchange: {exchange}");
@@ -1149,8 +1170,8 @@ mod tests {
 
     #[test]
     fn a_file_at_the_link_path_is_never_touched() {
-        for exchange in [true, false] {
-            let view = View::new();
+        for &exchange in SWAPS {
+            let Some(view) = View::new() else { return };
             let aside = view.aside();
             let recorded = view.identity();
             fs::remove_file(&view.link).unwrap();
@@ -1164,12 +1185,12 @@ mod tests {
 
     #[test]
     fn a_link_already_reading_the_copy_is_this_archives_own() {
-        for exchange in [true, false] {
-            let view = View::new();
+        for &exchange in SWAPS {
+            let Some(view) = View::new() else { return };
             let aside = view.aside();
             let recorded = view.identity();
             fs::remove_file(&view.link).unwrap();
-            symlink(&view.to, &view.link).unwrap();
+            create_symlink(&view.to, &view.link).unwrap();
             let identity = view.repoint(&recorded, exchange).unwrap();
             assert!(same_identity(&view.identity(), &identity), "exchange: {exchange}");
             view.tidy(&aside);
@@ -1180,12 +1201,12 @@ mod tests {
     /// left the name free: the old link goes back first, then is rebuilt.
     #[test]
     fn a_stop_with_the_old_link_aside_puts_it_back_first() {
-        for exchange in [true, false] {
-            let view = View::new();
+        for &exchange in SWAPS {
+            let Some(view) = View::new() else { return };
             let aside = view.aside();
             let recorded = view.identity();
             fs::rename(&view.link, &aside).unwrap();
-            symlink(&view.to, &view.staged).unwrap();
+            create_symlink(&view.to, &view.staged).unwrap();
             view.repoint(&recorded, exchange).unwrap();
             assert_eq!(fs::read_link(&view.link).unwrap(), view.to, "exchange: {exchange}");
             view.tidy(&aside);
@@ -1196,13 +1217,13 @@ mod tests {
     /// where each swap puts it: it is deleted.
     #[test]
     fn a_stop_after_the_swap_deletes_the_old_link() {
-        for exchange in [true, false] {
-            let view = View::new();
+        for &exchange in SWAPS {
+            let Some(view) = View::new() else { return };
             let aside = view.aside();
             let recorded = view.identity();
             let beside = if exchange { view.staged.clone() } else { aside.clone() };
             fs::rename(&view.link, &beside).unwrap();
-            symlink(&view.to, &view.link).unwrap();
+            create_symlink(&view.to, &view.link).unwrap();
             view.repoint(&recorded, exchange).unwrap();
             assert_eq!(fs::read_link(&view.link).unwrap(), view.to, "exchange: {exchange}");
             view.tidy(&aside);
