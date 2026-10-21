@@ -8,13 +8,16 @@
 //! [`volume`] asks `GetVolumePathNameW` for the mount point of the volume
 //! holding the path, a drive root such as `C:\` or a mounted folder such as
 //! `C:\Volumes\Captures\`, then reads that root's file system name and serial
-//! (`GetVolumeInformationW`) and its drive type (`GetDriveTypeW`). A mapped
-//! network drive answers with the file system and serial its server reports
-//! for the share. The answer describes the volume the path names; a caller
-//! that needs the volume an entry is actually on compares the serial with the
-//! one a handle on the entry reports.
+//! (`GetVolumeInformationW`), its drive type (`GetDriveTypeW`) and the
+//! `\\?\Volume{GUID}\` name of the local volume mounted there
+//! (`GetVolumeNameForVolumeMountPointW`). A mapped network drive answers with
+//! the file system and serial its server reports for the share, and has no
+//! such name; neither has a SUBST drive. The answer describes the volume the
+//! path names; a caller that needs the volume an entry is actually on
+//! compares the serial with the one a handle on the entry reports.
+//! [`drive_type`] is `GetDriveTypeW` alone, for a drive letter's root.
 //!
-//! The crate allows `unsafe` at those three calls, so `platevault_core` keeps
+//! The crate allows `unsafe` at those four calls, so `platevault_core` keeps
 //! the workspace `forbid`. On every other target it is empty.
 #![cfg(windows)]
 
@@ -26,7 +29,7 @@ use std::path::{Path, PathBuf};
 use fs_pathsafe::long_path;
 
 use windows_sys::Win32::Storage::FileSystem::{
-    GetDriveTypeW, GetVolumeInformationW, GetVolumePathNameW,
+    GetDriveTypeW, GetVolumeInformationW, GetVolumeNameForVolumeMountPointW, GetVolumePathNameW,
 };
 
 /// `MAX_PATH`, the longest name `GetVolumeInformationW` reports.
@@ -46,6 +49,10 @@ pub struct Volume {
     /// The `GetDriveTypeW` answer: 2 removable, 3 fixed, 4 remote (a mapped
     /// share), 5 optical, 6 RAM disk; 0 or 1 where Windows cannot tell.
     pub drive_type: u32,
+    /// The `\\?\Volume{GUID}\` name of the local volume mounted at `root`;
+    /// `None` where `root` is no volume mount point, as for a mapped share or
+    /// a SUBST drive.
+    pub name: Option<OsString>,
 }
 
 /// The volume holding `path`.
@@ -104,12 +111,38 @@ pub fn volume(path: &Path) -> io::Result<Volume> {
     #[allow(unsafe_code)]
     let drive_type = unsafe { GetDriveTypeW(root_z.as_ptr()) };
 
+    let mut name = [0_u16; MAX_PATH as usize + 1];
+    // SAFETY: `root_z` is a NUL-terminated UTF-16 buffer and `name` a
+    // writable one of `MAX_PATH + 1` units; both outlive the call, which only
+    // reads `root_z` and writes at most that many units of `name` during it.
+    #[allow(unsafe_code)]
+    let named = unsafe {
+        GetVolumeNameForVolumeMountPointW(root_z.as_ptr(), name.as_mut_ptr(), MAX_PATH + 1)
+    };
+    let name = until_nul(&name);
+    let prefix = r"\\?\Volume{".encode_utf16();
+    let is_volume_name = name.iter().copied().take(prefix.clone().count()).eq(prefix);
+
     Ok(Volume {
         root: PathBuf::from(OsString::from_wide(root)),
         filesystem: String::from_utf16_lossy(until_nul(&filesystem)),
         serial,
         drive_type,
+        name: (named != 0 && is_volume_name).then(|| OsString::from_wide(name)),
     })
+}
+
+/// The `GetDriveTypeW` answer for `root`, a root with its trailing `\` such
+/// as `Z:\`; 1 (`DRIVE_NO_ROOT_DIR`) where nothing is mounted there.
+///
+/// # Errors
+/// `InvalidInput` when the root holds a NUL.
+pub fn drive_type(root: &Path) -> io::Result<u32> {
+    let root = wide(root.as_os_str())?;
+    // SAFETY: `root` is a NUL-terminated UTF-16 buffer that outlives the
+    // call, which only reads it during it.
+    #[allow(unsafe_code)]
+    Ok(unsafe { GetDriveTypeW(root.as_ptr()) })
 }
 
 /// A `\\?\X:\…` mount point in its plain `X:\…` form, which every volume
@@ -157,6 +190,9 @@ mod tests {
         assert_eq!(volume.drive_type, 3, "{volume:?}");
         assert!(temp.path().starts_with(&volume.root), "{volume:?}");
         assert!(volume.root.as_os_str().to_string_lossy().ends_with('\\'), "{volume:?}");
+        let name = volume.name.as_ref().map(|name| name.to_string_lossy().into_owned());
+        assert!(name.is_some_and(|name| name.starts_with(r"\\?\Volume{")), "{volume:?}");
+        assert_eq!(drive_type(Path::new(&volume.root)).unwrap(), 3, "{volume:?}");
         assert_eq!(volume, super::volume(&volume.root).unwrap(), "the root names itself");
     }
 
