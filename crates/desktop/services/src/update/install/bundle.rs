@@ -757,7 +757,7 @@ case "$(ident "unpacked/$bundle")" in
 "$new") ;;
 "") exit 71;;
 *) rn swap "unpacked/$bundle" "../$name"
-  [ "$(ident "../$name")" = "$new" ] && exit 72
+  [ -n "$new" ] && [ "$(ident "../$name")" = "$new" ] && exit 72
   exit 69;;
 esac
 rn excl "../$name" previous.app
@@ -2353,6 +2353,41 @@ function run(argv) {{
             assert_eq!(version(kept), "foreign", "the other bundle is kept, not deleted");
             assert_eq!(version(&dir.path().join("moved-away.app")), "old");
             assert_eq!(version(&installed), "new");
+        }
+
+        /// A failed exchange back with an unrelated bundle at the installed
+        /// path is not evidence that root's update was installed.
+        #[test]
+        fn a_failed_exchange_back_with_a_replaced_bundle_is_app_replaced() {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let (installed, _, install) = stage(dir.path());
+            let before = format!(
+                r#"{REPLACE_INSTALLED}
+  if (argv[0] === "swap" && $.NSFileManager.defaultManager.fileExistsAtPath("../moved-away.app")) {{
+    if ($.NSFileManager.defaultManager.fileExistsAtPath("exchange-back-attempted")) {{
+      var fm = $.NSFileManager.defaultManager;
+      fm.moveItemAtPathToPathError("../" + installed, "failed-update.app", null);
+      fm.createDirectoryAtPathWithIntermediateDirectoriesAttributesError("replacement.app", false, $(), null);
+      $("foreign").writeToFileAtomicallyEncodingError("replacement.app/version", true, 4, null);
+      fm.moveItemAtPathToPathError("replacement.app", "../" + installed, null);
+      return;
+    }}
+    fm.createFileAtPathContentsAttributes("exchange-back-attempted", $(), $(), null);
+  }}"#
+            );
+
+            let command = install.command_with(&renames_after(&before, true), COPY_SECONDS);
+
+            let output = Command::new("/usr/bin/osascript")
+                .arg("-e")
+                .arg(format!("do shell script {}", applescript_string(&command)))
+                .output()
+                .expect("osascript");
+            let message = String::from_utf8_lossy(&output.stderr);
+            assert!(message.trim_end().ends_with("(69)"), "{message}");
+            let outcome = install.failure(message.trim());
+            assert!(matches!(outcome, UpdateError::AppReplaced { .. }), "{outcome:?}");
+            assert_eq!(version(&installed), "foreign", "the replacement is not the update");
         }
 
         /// A `stat` that fails in root's directory right after the exchange
