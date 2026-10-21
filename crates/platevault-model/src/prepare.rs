@@ -21,7 +21,9 @@ fn invalid(message: impl Into<String>) -> LibraryError {
 // ---------------------------------------------------------------------------
 
 /// The application a Project's View opens in. `Generic` is Open in... with
-/// a configured executable and arguments; it never claims a verified profile.
+/// a configured executable and arguments. Spec rule (PREP-FR-02, D04): no
+/// profile is a verified profile without input, layout, configuration and
+/// recognised-output evidence, and a `Generic` one never is.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]

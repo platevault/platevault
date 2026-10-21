@@ -5532,7 +5532,9 @@ export type ProfileInput = {
 
 /**
  *  The application a Project's View opens in. `Generic` is Open in... with
- *  a configured executable and arguments; it never claims a verified profile.
+ *  a configured executable and arguments. Spec rule (PREP-FR-02, D04): no
+ *  profile is a verified profile without input, layout, configuration and
+ *  recognised-output evidence, and a `Generic` one never is.
  */
 export type ProfileKind = 
 /**  `PixInsight` with its Weighted Batch Preprocessing script. */
