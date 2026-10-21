@@ -319,8 +319,8 @@ async fn a_fresh_catalog_records_the_f4_schema_version_and_tables() {
             .fetch_one(&mut conn)
             .await
             .unwrap();
-    assert_eq!(version, 21);
-    assert_eq!(persistence_library::SCHEMA_VERSION, 21);
+    assert_eq!(version, 22);
+    assert_eq!(persistence_library::SCHEMA_VERSION, 22);
     let tables: Vec<String> =
         sqlx::query_scalar("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
             .fetch_all(&mut conn)
@@ -855,6 +855,34 @@ async fn manifests_entries_and_the_apply_journal_hold_their_invariants() {
     f4.manifest_state("2", "installed").await.unwrap();
     let error = f4.manifest_state("1", "installed").await.unwrap_err();
     assert!(error.contains("View state"), "{error}");
+}
+
+/// A settled Failed or Canceled journal records one of the `ApplyStop` codes,
+/// `canceled` exactly when the outcome is Canceled; an unknown code, a stop
+/// without a code and a code that disagrees with the outcome are refused.
+#[tokio::test]
+async fn an_apply_journal_stops_with_a_known_code_that_agrees_with_its_outcome() {
+    let mut f4 = F4::new().await;
+    let apply = f4.reserve("apply").await.unwrap();
+    f4.building(&apply, "1", "copies").await.unwrap();
+    ok(
+        &mut f4.conn,
+        "INSERT INTO apply_operations (operation_id, project_id, generation, phase, expected, \
+         updated_at) VALUES (?1, ?2, 1, 'reserved', '{}', ?3)",
+        &[&apply, &f4.project, AT],
+    )
+    .await;
+    let settle = "UPDATE apply_operations SET phase = 'settled', settled_from = phase, \
+         outcome = ?2, stop = ?3 WHERE operation_id = ?1";
+    for (outcome, stop) in [
+        ("failed", r#"{"code":"made_up"}"#),
+        ("failed", r#"{"count":2}"#),
+        ("failed", r#"{"code":"canceled"}"#),
+        ("canceled", r#"{"code":"catalog_moved"}"#),
+    ] {
+        refused(&mut f4.conn, settle, &[&apply, outcome, stop], "CHECK").await;
+    }
+    ok(&mut f4.conn, settle, &[&apply, "failed", r#"{"code":"view_unreadable","count":2}"#]).await;
 }
 
 /// PREP-FR-03/04: a Symlinks View places links and, for a corrected frame,

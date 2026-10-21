@@ -22,7 +22,8 @@ use crate::{
 
 /// One reason Apply can't run now. The sheet lists every one; Apply refuses
 /// while any holds and changes nothing. A `detail` is an English diagnostic
-/// that never carries an OS error's text, which goes to the log only.
+/// for the log that never carries an OS error's text; the sheet words each
+/// blocker from its tag and its other fields.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "blocker", rename_all = "snake_case", rename_all_fields = "camelCase")]
 #[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
@@ -127,7 +128,9 @@ pub enum PatchRefusal {
 }
 
 impl PatchRefusal {
-    /// An English diagnostic for logs and the sheet's one-line reason.
+    /// An English diagnostic for logs and `LibraryError` messages, whose
+    /// `Display` never crosses IPC. It is never user-facing text: the
+    /// client words a refusal from its wire code.
     #[must_use]
     pub const fn describe(self) -> &'static str {
         match self {
@@ -151,7 +154,10 @@ impl PatchRefusal {
 }
 
 impl ApplyBlocker {
-    /// The sheet's one-line reason.
+    /// An English diagnostic for logs and the Apply refusal's `LibraryError`
+    /// message, whose `Display` never crosses IPC. It is never user-facing
+    /// text: the sheet words each blocker from its `blocker` tag and fields
+    /// through the catalogues.
     #[must_use]
     pub fn describe(&self) -> String {
         match self {
@@ -287,6 +293,64 @@ pub struct ApplyFailure {
     pub reason: ItemReason,
 }
 
+/// Why an Apply ended Failed or Canceled, with the old View in place. The
+/// catalogues word each code as `apply_stop_<code>`; a `count` is what the
+/// copy names. What the code doesn't say (paths, an OS error's text) goes
+/// to the log only.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[serde(tag = "code", rename_all = "snake_case", rename_all_fields = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
+pub enum ApplyStop {
+    /// The user chose Cancel.
+    Canceled,
+    /// `PlateVault` closed before the new View was installed; the next start
+    /// put the old View back.
+    Interrupted,
+    /// A Project edit or a Library change (a review, a calibration pin, a
+    /// correction) committed during the build (plan §3).
+    CatalogMoved,
+    /// Originals that are missing, can't be read or no longer match the
+    /// basis they were chosen or pinned with (D19), each in `failures`.
+    OriginalsUnverified { count: u64 },
+    /// `View (building)/` still holds files this Project's Apply didn't
+    /// place, each in `failures`.
+    BuildingNotCleared { count: u64 },
+    /// An entry couldn't be placed in `View (building)/`; `failures` names it.
+    EntryNotPlaced,
+    /// Originals or built entries that changed between the build and the
+    /// swap, each in `failures`.
+    BuildUnverified { count: u64 },
+    /// Entries in `View/` that can't be read, each in `failures`.
+    ViewUnreadable { count: u64 },
+    /// Entries in `View (previous)/` that can't be read, each in `failures`.
+    PreviousUnreadable { count: u64 },
+    /// Files the user kept that couldn't be moved to `View (kept)/`, each in
+    /// `failures` (D-W110).
+    KeptNotMoved { count: u64 },
+    /// The Project folder is no longer the one this Apply reviewed.
+    ProjectFolderReplaced,
+    /// `View/` is no longer the folder this Apply reviewed.
+    ViewReplaced,
+    /// `View (previous)/` appeared during the build.
+    PreviousAppeared,
+    /// The OS refused to move the old View aside (PREP-FR-18).
+    AsideFailed,
+    /// The OS refused to install the new View; the old one was put back.
+    NotInstalled,
+}
+
+impl ApplyStop {
+    /// How an Apply that stopped this way ended: Canceled when the user
+    /// chose Cancel, else Failed.
+    #[must_use]
+    pub const fn outcome(self) -> ApplyOutcome {
+        match self {
+            Self::Canceled => ApplyOutcome::Canceled,
+            _ => ApplyOutcome::Failed,
+        }
+    }
+}
+
 /// How one Apply ended, or where it stopped when `PlateVault` closed during
 /// it (`outcome` `None`; the next start finishes or rolls it back).
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -319,9 +383,9 @@ pub struct ApplyReport {
     /// The installed View's footprint, as the build placed it; zero unless
     /// Applied.
     pub footprint: ViewFootprint,
-    /// Why the Apply failed or was canceled: an English diagnostic that
-    /// never carries an OS error's text, which goes to the log only.
-    pub error: Option<String>,
+    /// Why the Apply failed or was canceled; `None` when it was applied or
+    /// `PlateVault` closed during it.
+    pub stop: Option<ApplyStop>,
 }
 
 /// What a View takes (PREP-FR-04): "Linked · 0 B" while it holds only

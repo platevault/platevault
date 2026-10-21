@@ -93,11 +93,13 @@ const SCHEMA: &str = schema_modules![
 /// outcomes to store failure codes/parameters; version 19 has neither shape.
 /// Version 21 lets the admission triggers keep a successor a regroup carries
 /// into an open Project holding its predecessor (D-W100); version 20 refuses
-/// it.
+/// it. Version 22 records why an Apply failed or was canceled as an
+/// `ApplyStop` code (`apply_operations.stop`) and why a foreign file didn't
+/// move as a `ForeignItemFailure` code, where version 21 stored English text.
 /// Bump it with any DDL change that `IF NOT EXISTS` would leave stale in an
 /// existing catalog, and with any stored JSON shape an existing catalog's rows
 /// can't be read as.
-pub const SCHEMA_VERSION: i64 = 21;
+pub const SCHEMA_VERSION: i64 = 22;
 const BUSY_TIMEOUT: Duration = Duration::from_secs(10);
 const READER_CONNECTIONS: u32 = 4;
 const MAX_PAGE: u32 = 1000;

@@ -544,7 +544,7 @@ fn first_life(layout: &Layout) -> Value {
     let applied = shell.apply(&sheet);
     assert_eq!(applied["outcome"], "applied", "{applied:#}");
     assert_eq!(applied["failures"], json!([]), "{applied:#}");
-    assert_eq!(applied["error"], Value::Null, "{applied:#}");
+    assert_eq!(applied["stop"], Value::Null, "{applied:#}");
     let placed = tree(&view_of(&sheet));
     let paths: BTreeSet<PathBuf> = placed.keys().cloned().collect();
     assert_eq!(paths, entry_paths(&sheet), "{placed:#?}");
@@ -630,7 +630,7 @@ fn nothing_to_change(shell: &Shell, record: &Value, sheet: &Value) {
     for empty in ["failures", "foreign", "leftovers"] {
         assert_eq!(reapplied[empty], json!([]), "{empty}: {reapplied:#}");
     }
-    assert_eq!(reapplied["error"], Value::Null, "{reapplied:#}");
+    assert_eq!(reapplied["stop"], Value::Null, "{reapplied:#}");
     let view = view_of(sheet);
     assert_eq!(tree(&view), placed_by(record), "the rebuilt View holds the same copies");
     let previous = view.with_file_name("View (previous)");

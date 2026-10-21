@@ -182,11 +182,15 @@ pub enum ReasonCode {
     Protected,
 }
 
+/// Why one item didn't finish: a stable `code` the client words, and an
+/// English `detail` that is diagnostic text for logs and tests, never
+/// user-facing copy.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ItemReason {
     pub code: ReasonCode,
+    /// Diagnostic text, not user-facing: the client words `code`.
     pub detail: String,
 }
 

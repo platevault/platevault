@@ -289,6 +289,109 @@
   "err_library_symlinks_unavailable": "Can't apply · symlinks need Windows Developer Mode. Turn it on in Windows settings and check again, or use copies for this project.",
   "err_library_unsupported_format": "This file's format isn't supported.",
   "apply_report_kept_missing": "{path} was no longer on disk, so it couldn't be moved to View (kept)/. You had kept it in View (previous)/; check whether it was moved or deleted.",
+  "apply_stop_canceled": "Apply was cancelled. The current View is unchanged.",
+  "apply_stop_interrupted": "PlateVault closed before the new View was installed, so the current View was kept. Apply again when you're ready.",
+  "apply_stop_catalog_moved": "The project or the library changed while Apply was building, so the current View is unchanged. Review the changes, then apply again.",
+  "apply_stop_originals_unverified": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} original is missing, can't be read or changed since it was chosen, so the current View is unchanged. Check the file listed below, then apply again.",
+        "pp=other": "{count} originals are missing, can't be read or changed since they were chosen, so the current View is unchanged. Check the files listed below, then apply again."
+      }
+    }
+  ],
+  "apply_stop_building_not_cleared": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "View (building)/ holds {count} file PlateVault didn't place, so the current View is unchanged. Move or delete it, then apply again.",
+        "pp=other": "View (building)/ holds {count} files PlateVault didn't place, so the current View is unchanged. Move or delete them, then apply again."
+      }
+    }
+  ],
+  "apply_stop_entry_not_placed": "A file couldn't be placed in the new View, so the current View is unchanged. Check the file listed below, then apply again.",
+  "apply_stop_build_unverified": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} file changed while the new View was being built, so the current View is unchanged. Apply again to rebuild it.",
+        "pp=other": "{count} files changed while the new View was being built, so the current View is unchanged. Apply again to rebuild it."
+      }
+    }
+  ],
+  "apply_stop_view_unreadable": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} entry in View/ can't be read, so Apply can't account for it and the current View is unchanged. Check its permissions, then apply again.",
+        "pp=other": "{count} entries in View/ can't be read, so Apply can't account for them and the current View is unchanged. Check their permissions, then apply again."
+      }
+    }
+  ],
+  "apply_stop_previous_unreadable": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} entry in View (previous)/ can't be read, so Apply can't account for it and the current View is unchanged. Check its permissions, then apply again.",
+        "pp=other": "{count} entries in View (previous)/ can't be read, so Apply can't account for them and the current View is unchanged. Check their permissions, then apply again."
+      }
+    }
+  ],
+  "apply_stop_kept_not_moved": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} file you kept couldn't be moved to View (kept)/, so the current View is unchanged. Check the file listed below, then apply again.",
+        "pp=other": "{count} files you kept couldn't be moved to View (kept)/, so the current View is unchanged. Check the files listed below, then apply again."
+      }
+    }
+  ],
+  "apply_stop_project_folder_replaced": "The project folder isn't the one Apply reviewed, so the current View is unchanged. Check where the project folder is, then apply again.",
+  "apply_stop_view_replaced": "View/ isn't the folder Apply reviewed, so the current View is unchanged. Review the View, then apply again.",
+  "apply_stop_previous_appeared": "View (previous)/ appeared while Apply was building, so the current View is unchanged. Review what it holds, then apply again.",
+  "apply_stop_aside_failed": "The current View couldn't be moved aside, so it's unchanged. Check that the project folder can be written to, then apply again.",
+  "apply_stop_not_installed": "The new View couldn't be installed, so the current View was put back. Check that the project folder can be written to, then apply again.",
+  "apply_foreign_failed_name_taken": "{path} stayed in View (previous)/: the new View already has a file at that path.",
+  "apply_foreign_failed_changed": "{path} stayed in View (previous)/: it changed after the Apply sheet listed it.",
+  "apply_foreign_failed_folder_not_made": "{path} stayed in View (previous)/: its folder couldn't be made in the new View.",
+  "apply_foreign_failed_not_moved": "{path} stayed in View (previous)/: it couldn't be moved into the new View.",
   "err_lifecycle_last_confirmed_source": "You can't remove the last confirmed source.",
   "err_lifecycle_read_only": "This item is read-only and can't be changed.",
   "err_macos_quarantine_detected": "macOS has quarantined this app. Approve it in System Settings, then try again.",
