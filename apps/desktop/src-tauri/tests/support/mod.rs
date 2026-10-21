@@ -60,7 +60,10 @@ pub fn invoke(
             cmd: cmd.into(),
             callback: CallbackFn(0),
             error: CallbackFn(1),
-            url: "tauri://localhost".parse().expect("webview url"),
+            // The origin a real webview invokes from is the app URL it loaded:
+            // `tauri://localhost` on macOS and Linux, `http://tauri.localhost`
+            // on Windows. Any other origin is remote, which the ACL refuses.
+            url: webview.url().expect("mock webview URL"),
             body: InvokeBody::Json(args.clone()),
             headers: tauri::http::HeaderMap::default(),
             invoke_key: tauri::test::INVOKE_KEY.into(),
