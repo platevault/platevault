@@ -60,7 +60,7 @@ use tokio::sync::watch;
 
 use self::http::{Http, Source};
 pub use self::install::LaunchedApp;
-use self::install::{InstallMode, Installed, Installer, OsInstaller};
+use self::install::{InstallMode, InstallWording, Installed, Installer, OsInstaller};
 use self::manifest::Release;
 use self::signature::{Staged, TrustedKey};
 use self::wording::Wording;
@@ -561,10 +561,10 @@ impl Updater {
             State::InstallOnQuit { release, staged } => {
                 let staged = Arc::clone(staged);
                 let release = release.clone();
-                let admin_prompt = self.wording().admin_prompt(&release.version_text);
+                let wording = self.wording().install(&release.version_text);
                 self.set(&mut state, State::Installing { release, run: Run::AtQuit });
                 drop(state);
-                self.spawn_install_on_quit(staged, admin_prompt);
+                self.spawn_install_on_quit(staged, wording);
                 QuitDecision::Defer
             }
             State::Installing { run: Run::Now { quit_held }, .. } => {
@@ -693,9 +693,9 @@ impl Updater {
     async fn install_staged_now(&self, release: Release, staged: Arc<Staged>) {
         let inner = Arc::clone(&self.inner);
         let payload = Arc::clone(&staged);
-        let admin_prompt = self.wording().admin_prompt(&release.version_text);
+        let wording = self.wording().install(&release.version_text);
         let installed = tokio::task::spawn_blocking(move || {
-            inner.installer.install(payload.reverify()?, InstallMode::Now, &admin_prompt)
+            inner.installer.install(payload.reverify()?, InstallMode::Now, &wording)
         })
         .await
         .unwrap_or_else(|error| {
@@ -785,15 +785,15 @@ impl Updater {
         }
     }
 
-    /// Run the install at quit on its own thread, asking for administrator
-    /// rights with `admin_prompt` if it must, with a watchdog that exits at
-    /// the ceiling should the install still hold the quit.
-    fn spawn_install_on_quit(&self, staged: Arc<Staged>, admin_prompt: String) {
+    /// Run the install at quit on its own thread with `wording`, which asks
+    /// for administrator rights if it must, with a watchdog that exits at the
+    /// ceiling should the install still hold the quit.
+    fn spawn_install_on_quit(&self, staged: Arc<Staged>, wording: InstallWording) {
         let installing = self.clone();
         let install = std::thread::Builder::new().name("update-install-on-quit".to_owned()).spawn(
             move || {
                 let installed = staged.reverify().and_then(|payload| {
-                    installing.inner.installer.install(payload, InstallMode::OnQuit, &admin_prompt)
+                    installing.inner.installer.install(payload, InstallMode::OnQuit, &wording)
                 });
                 let notice = match installed {
                     Ok(installed) => installing.notice_for_installed(&installed),
