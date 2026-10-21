@@ -1145,8 +1145,10 @@ mod tests {
     }
 
     /// astro-plan-f2di3: a SUBST drive names a folder of another volume, not
-    /// a volume, so it is refused, as the `Win32_Volume` query found no
-    /// volume for it.
+    /// a volume, so its root and the folders below it are refused, as the
+    /// `Win32_Volume` query found no volume for them. Below the root
+    /// `GetVolumePathNameW` already fails (`ERROR_DIRECTORY_NOT_SUBDIRECTORY`
+    /// on windows-latest); otherwise the `\\?\Volume{GUID}\` rule refuses it.
     #[cfg(windows)]
     #[test]
     fn the_windows_probe_refuses_a_subst_drive() {
@@ -1163,11 +1165,11 @@ mod tests {
             eprintln!("skipped: the runner could not create a SUBST drive");
             return;
         };
-        let root = PathBuf::from(format!(r"{}\Captures", drive.name));
-        let meta = fs::symlink_metadata(&root).unwrap();
-        let refused = probe_volume(&root, &meta).unwrap_err();
-        assert_eq!(refused.code().as_str(), "identity_conflict", "{refused}");
-        assert!(refused.to_string().contains("SUBST"), "{refused}");
+        let meta = fs::symlink_metadata(dir.path()).unwrap();
+        for root in [format!(r"{}\", drive.name), format!(r"{}\Captures", drive.name)] {
+            let refused = probe_volume(Path::new(&root), &meta).unwrap_err();
+            assert_eq!(refused.code().as_str(), "identity_conflict", "{root}: {refused}");
+        }
         assert!(probe_volume(&dir.path().join("Captures"), &meta).is_ok(), "its target qualifies");
     }
 
