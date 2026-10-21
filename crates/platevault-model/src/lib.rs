@@ -674,11 +674,12 @@ impl FileIdentity {
     /// it. The handle carries the inode's generation, which ext4, xfs and
     /// btrfs change whenever they reuse an inode number, so an entry made
     /// under a just-freed number (ext4 hands it to the next entry created) is
-    /// told apart from the one recorded. A filesystem that encodes no handles
-    /// (cifs, for one) gives the inode number alone, as did every Unix file
-    /// ID recorded before handles were: such an ID is compared on the inode
-    /// number alone ([`file_ids_match`]) and can't tell a reused number
-    /// apart. A Windows file ID is the 64-bit file index as 16 hex digits.
+    /// told apart from the one recorded. Where no handle is read (a
+    /// filesystem that encodes none, cifs for one, or a read the kernel
+    /// refuses) the ID is the inode number alone: it matches only another ID
+    /// without a handle ([`file_ids_match`]), and two such IDs can't tell a
+    /// reused number apart. A Windows file ID is the 64-bit file index as 16
+    /// hex digits.
     #[must_use]
     pub fn unix_file_id(inode: u64, handle: Option<&str>) -> String {
         match handle {
@@ -690,7 +691,7 @@ impl FileIdentity {
     /// The inode number a Unix file ID names; `None` for any other ID.
     #[must_use]
     pub fn unix_inode(file_id: &str) -> Option<u64> {
-        split_file_id(file_id).0.parse().ok()
+        file_id.split_once(FILE_HANDLE_SEPARATOR).map_or(file_id, |(inode, _)| inode).parse().ok()
     }
 
     /// Whether this observed identity is the `recorded` entry: the same
@@ -704,32 +705,16 @@ impl FileIdentity {
     }
 }
 
-/// Whether two file IDs name the same entry. Their inode numbers, or for an
-/// ID without a handle part (macOS, Windows) the whole ID, must be equal,
-/// and so must their kernel file handles where both carry one. An ID without
-/// a handle matches on the inode number alone, so an ID recorded before
-/// handles were stays readable ([`FileIdentity::unix_file_id`]). Two absent
-/// IDs match.
+/// Whether two file IDs name the same entry: both absent, or both present
+/// and equal. For a Unix ID that is the same inode number and the same
+/// kernel file handle part, both absent or both present and equal
+/// ([`FileIdentity::unix_file_id`]). An ID with a handle never matches one
+/// without: on Linux a handle read the kernel refuses (`EPERM`, `EOVERFLOW`)
+/// gives the inode number alone, which can't prove the recorded inode's
+/// generation, so the pair is an identity conflict.
 #[must_use]
 pub fn file_ids_match(left: Option<&str>, right: Option<&str>) -> bool {
-    match (left, right) {
-        (Some(left), Some(right)) => {
-            let ((left_inode, left_handle), (right_inode, right_handle)) =
-                (split_file_id(left), split_file_id(right));
-            left_inode == right_inode
-                && (left_handle.is_none() || right_handle.is_none() || left_handle == right_handle)
-        }
-        (None, None) => true,
-        _ => false,
-    }
-}
-
-/// A file ID's inode number (or whole ID) and its kernel file handle, if any.
-fn split_file_id(file_id: &str) -> (&str, Option<&str>) {
-    match file_id.split_once(FILE_HANDLE_SEPARATOR) {
-        Some((inode, handle)) => (inode, Some(handle)),
-        None => (file_id, None),
-    }
+    left == right
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

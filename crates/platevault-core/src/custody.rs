@@ -25,6 +25,8 @@ use std::time::UNIX_EPOCH;
 
 use sha2::{Digest, Sha256};
 
+#[cfg(unix)]
+use crate::file_ids_match;
 use crate::inventory;
 use crate::library::Library;
 use crate::{
@@ -419,10 +421,24 @@ fn same_entry(left: &Metadata, right: &Metadata) -> bool {
     left.file_type() == right.file_type() && left.created().ok() == right.created().ok()
 }
 
-/// Whether an opened handle is the inspected entry rather than a replacement.
+/// Whether an opened handle is the inspected entry rather than a replacement
+/// and, where the volume's file IDs are stable, holds the recorded file ID:
+/// the handle's inode number and, on Linux, the kernel file handle read
+/// through it ([`FileIdentity::unix_file_id`]). A failed handle read proves
+/// nothing, and an ID without a handle never matches one with
+/// ([`file_ids_match`]).
 #[cfg(unix)]
-fn handle_is(file: &File, inspected: &Metadata, _identity: &FileIdentity) -> bool {
-    file.metadata().is_ok_and(|handle| same_entry(inspected, &handle))
+fn handle_is(file: &File, inspected: &Metadata, identity: &FileIdentity) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    let Ok(handle) = file.metadata() else {
+        return false;
+    };
+    same_entry(inspected, &handle)
+        && (!identity.volume.file_ids_stable
+            || fs_file_handle_linux::of_file(file).is_ok_and(|kernel| {
+                let opened = FileIdentity::unix_file_id(handle.ino(), kernel.as_deref());
+                file_ids_match(identity.file_id.as_deref(), Some(&opened))
+            }))
 }
 
 #[cfg(windows)]
@@ -533,4 +549,99 @@ fn verify_kept(kept: &KeptCopy) -> Result<(), ItemReason> {
 fn path_of(path: &NativePath) -> Result<PathBuf, ItemReason> {
     path.to_path_buf()
         .map_err(|error| ItemReason::new(ReasonCode::SourceUnavailable, error.to_string()))
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use std::os::unix::fs::MetadataExt;
+
+    use super::*;
+
+    /// The recorded identity of the regular file at `path`, as review
+    /// records it; `None`, with the reason printed, where the test folder's
+    /// volume doesn't keep stable file IDs and there is no file ID to check.
+    fn recorded(path: &Path) -> Option<FileIdentity> {
+        let identity = inventory::probe_fingerprint(path).unwrap().identity;
+        if !identity.volume.file_ids_stable {
+            eprintln!("skipped: {} keeps no stable file IDs", identity.volume.filesystem);
+            return None;
+        }
+        Some(identity)
+    }
+
+    fn with_file_id(identity: &FileIdentity, file_id: String) -> FileIdentity {
+        FileIdentity { file_id: Some(file_id), ..identity.clone() }
+    }
+
+    /// An opened handle is the recorded entry only with its recorded file ID:
+    /// its inode number and, on Linux, its kernel file handle. A recorded
+    /// handle the open entry doesn't have, or a recorded id without the
+    /// handle the open entry has, is another entry.
+    #[test]
+    fn an_open_handle_is_the_recorded_entry_only_with_its_kernel_handle() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("frame.fits");
+        fs::write(&path, b"frame").unwrap();
+        let Some(identity) = recorded(&path) else { return };
+        let before = fs::symlink_metadata(&path).unwrap();
+        let file = File::open(&path).unwrap();
+        assert!(handle_is(&file, &before, &identity));
+        let other = with_file_id(&identity, FileIdentity::unix_file_id(before.ino(), Some("0-00")));
+        assert!(!handle_is(&file, &before, &other), "another kernel handle");
+        if fs_file_handle_linux::of_path(&path).unwrap().is_some() {
+            let refused = with_file_id(&identity, FileIdentity::unix_file_id(before.ino(), None));
+            assert!(!handle_is(&file, &before, &refused), "an id recorded without the handle");
+        }
+    }
+
+    /// astro-plan-clqvu: ext4 hands a removed entry's inode number to the next
+    /// entry made, and only the kernel file handle tells that entry apart. A
+    /// handle read the kernel refuses (`EPERM` under a seccomp sandbox,
+    /// `EOVERFLOW`) gives the inode number alone, as it is built here: such an
+    /// id never reads as the recorded entry, nor does the new entry read as
+    /// one recorded under a refused read.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_refused_handle_read_never_reads_a_reused_inode_as_the_recorded_entry() {
+        /// `statfs(2)`'s `f_type` for ext2, ext3 and ext4.
+        const EXT4_SUPER_MAGIC: i128 = 0xEF53;
+        let temp = tempfile::tempdir().unwrap();
+        // Only ext4 is known to hand a freed inode number to the next entry
+        // made in the folder; tmpfs and btrfs don't, so nothing is reused.
+        let f_type = rustix::fs::statfs(temp.path()).unwrap().f_type;
+        if i128::from(f_type) != EXT4_SUPER_MAGIC {
+            eprintln!("skipped: the test folder is not on ext4 (f_type {f_type:#x})");
+            return;
+        }
+        let path = temp.path().join("frame.fits");
+        fs::write(&path, b"frame").unwrap();
+        let Some(identity) = recorded(&path) else { return };
+        let inode = fs::symlink_metadata(&path).unwrap().ino();
+        fs::remove_file(&path).unwrap();
+        // ext4 gives the lowest free number in the folder's group: an entry
+        // that took a lower one is kept aside until the freed one is reused.
+        let number_taken_again = (0..64).any(|attempt| {
+            fs::write(&path, b"frame").unwrap();
+            if fs::symlink_metadata(&path).unwrap().ino() == inode {
+                return true;
+            }
+            fs::rename(&path, temp.path().join(format!("aside-{attempt}"))).unwrap();
+            false
+        });
+        assert!(number_taken_again, "the test folder's filesystem reuses a freed inode number");
+        let observed = recorded(&path).unwrap();
+        assert!(!observed.is_recorded(&identity), "the kernel handle tells it apart");
+        let refused = with_file_id(&observed, FileIdentity::unix_file_id(inode, None));
+        assert!(!refused.is_recorded(&identity), "a refused handle read is no proof");
+        assert!(!observed.is_recorded(&refused), "nor is an id recorded under one");
+        let before = fs::symlink_metadata(&path).unwrap();
+        let file = File::open(&path).unwrap();
+        assert!(!handle_is(&file, &before, &identity), "the open entry is not the recorded one");
+        assert!(!handle_is(&file, &before, &refused), "nor one recorded without its handle");
+        let expect = Expect { identity: &refused, size_bytes: 5, modified_ns: None, root: None };
+        assert!(
+            matches!(open_unchanged(&path, &expect), Err(Check::Changed(_))),
+            "custody refuses it as another entry"
+        );
+    }
 }

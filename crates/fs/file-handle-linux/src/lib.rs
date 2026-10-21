@@ -14,7 +14,9 @@
 //!
 //! Where no handle can be read the entry reads as having none, `Ok(None)`,
 //! and the caller records the inode number alone, which can't tell a reused
-//! number apart:
+//! number apart and never matches an ID with a handle
+//! (`platevault_model::file_ids_match`), so a read refused at one check
+//! and not another fails closed:
 //! - `EOPNOTSUPP`: the filesystem encodes no handles (cifs, for one);
 //! - `ENOSYS`: the kernel lacks the call;
 //! - `EPERM`: a sandbox forbids it (Docker's default seccomp profile does);
@@ -28,7 +30,7 @@
 //! recorded with a handle matches again: a registered root on that volume
 //! reads as not the registered folder (an identity conflict, no scan), and
 //! its recorded files as changed, until the location is registered again.
-//! An ID recorded without a handle still matches on the inode number.
+//! An ID recorded without a handle matches only an ID read without one.
 //!
 //! The crate allows `unsafe` at that one call, so `platevault_core` and
 //! `persistence_library` keep the workspace `forbid`.
