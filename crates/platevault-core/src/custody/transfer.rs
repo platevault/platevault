@@ -589,7 +589,8 @@ struct Copied {
 /// `create_new`, which fails when anything is there, the way a verified
 /// transfer fills its partial copy: the source is streamed through a handle
 /// proven to be it and hashed as it is written ([`read_unchanged`]), the copy
-/// takes the source's modification time and is synced with its folder, and
+/// takes the source's extended attributes ([`carry_xattrs`]) and
+/// modification time and is synced with its folder, and
 /// the copy is re-read through a handle proven to be the created file and
 /// must have the source's SHA-256.
 ///
@@ -618,6 +619,7 @@ fn copy_onto_new(from: &Path, to: &Path) -> std::io::Result<Copied> {
         let digest =
             read_unchanged(from, &Expect::recorded(&fingerprint), |bytes| out.write_all(bytes))
                 .map_err(|check| std::io::Error::other(check.detail().to_owned()))?;
+        carry_xattrs(&source, &out)?;
         settle(&out, to, fingerprint.modified_ns)
             .map_err(|failed| std::io::Error::other(failed.detail))?;
         sync_folder(to.parent().unwrap_or_else(|| Path::new("")))?;
@@ -645,6 +647,58 @@ fn copy_onto_new(from: &Path, to: &Path) -> std::io::Result<Copied> {
                 let _ = fs::remove_file(to);
             }
             Err(error)
+        }
+    }
+}
+
+/// Give the file `copy` holds every extended attribute of the file `source`
+/// holds, a macOS resource fork among them. A volume without native xattrs
+/// keeps them in the file's `._` `AppleDouble` companion, which macOS
+/// removes with the file, so a copy without them would lose them once its
+/// source is removed. A volume that keeps no xattrs has none to carry; one
+/// the copy can't take fails the copy, which keeps its source.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn carry_xattrs(source: &fs::File, copy: &fs::File) -> std::io::Result<()> {
+    use rustix::fs::{fgetxattr, flistxattr, fsetxattr, XattrFlags};
+    use rustix::io::Errno;
+
+    let names = match sized(|buffer| flistxattr(source, buffer)) {
+        Ok(names) => names,
+        Err(errno) if [Errno::NOTSUP, Errno::OPNOTSUPP].contains(&errno) => return Ok(()),
+        Err(errno) => return Err(errno.into()),
+    };
+    for name in names.split(|&byte| byte == 0).filter(|name| !name.is_empty()) {
+        let value = sized(|buffer| fgetxattr(source, name, buffer))?;
+        fsetxattr(copy, name, &value, XattrFlags::empty())?;
+    }
+    Ok(())
+}
+
+/// Where the platform has no xattr calls nothing proves a copy carries them,
+/// so the copy fails and its source stays.
+#[cfg(all(unix, not(any(target_os = "macos", target_os = "linux"))))]
+fn carry_xattrs(_source: &fs::File, _copy: &fs::File) -> std::io::Result<()> {
+    Err(std::io::Error::new(
+        std::io::ErrorKind::Unsupported,
+        "a copy can't carry extended attributes on this platform",
+    ))
+}
+
+/// What a sized xattr call fills: asked for the size first, and again when
+/// the value grew in between (`ERANGE`).
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn sized(
+    mut call: impl FnMut(&mut [u8]) -> rustix::io::Result<usize>,
+) -> rustix::io::Result<Vec<u8>> {
+    loop {
+        let mut buffer = vec![0; call(&mut [])?];
+        match call(&mut buffer) {
+            Ok(len) => {
+                buffer.truncate(len);
+                return Ok(buffer);
+            }
+            Err(errno) if errno == rustix::io::Errno::RANGE => {}
+            Err(errno) => return Err(errno),
         }
     }
 }

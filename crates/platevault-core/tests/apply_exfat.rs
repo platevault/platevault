@@ -155,3 +155,97 @@ async fn apple_double_companions_go_with_their_entries_on_exfat() {
     assert_eq!(previous, ["._Orphan.fits"], "every retired entry took its companion");
     assert_eq!(fs::read(folder.join("View (previous)/._Orphan.fits")).unwrap(), bytes);
 }
+
+/// The Trash a kept file's review is given; keeping one never uses it.
+#[cfg(target_os = "macos")]
+struct NoTrash;
+
+#[cfg(target_os = "macos")]
+impl platevault_core::custody::trash::OsTrash for NoTrash {
+    fn support(&self, _entry: &Path, _size_bytes: u64) -> TrashSupport {
+        TrashSupport::Supported
+    }
+    fn move_to_trash(&self, entry: &Path) -> Result<(), String> {
+        Err(format!("{} isn't trashed by keeping it", entry.display()))
+    }
+}
+
+/// The extended attributes a user's file carries on exFAT, kept in its `._`
+/// companion: one of its own and Finder tags. (macOS exFAT refuses a
+/// resource fork with `EINVAL`, so no file there has one.)
+#[cfg(target_os = "macos")]
+const XATTRS: [(&str, &[u8]); 2] =
+    [("com.platevault.test", b"tagged"), ("com.apple.metadata:_kMDItemUserTags", b"Red\n6")];
+
+#[cfg(target_os = "macos")]
+fn xattr(path: &Path, name: &str) -> Option<Vec<u8>> {
+    let mut value = vec![0_u8; 64 * 1024];
+    let len = rustix::fs::getxattr(path, name, &mut value[..]).ok()?;
+    value.truncate(len);
+    Some(value)
+}
+
+/// The file at `path` has every one of [`XATTRS`] and a `._` companion
+/// holding them, and `left` has neither the file nor its companion.
+#[cfg(target_os = "macos")]
+fn carried(path: &Path, left: &Path) {
+    for (name, value) in XATTRS {
+        assert_eq!(xattr(path, name).as_deref(), Some(value), "{} keeps {name}", path.display());
+    }
+    let companion =
+        |path: &Path| path.with_file_name(format!("._{}", path.file_name().unwrap().display()));
+    assert!(companion(path).exists(), "{} has its companion", path.display());
+    assert!(!left.exists() && !companion(left).exists(), "{} left whole", left.display());
+}
+
+/// cyqdo, custody finding 6: on exFAT a foreign file and a kept file move
+/// by the copy fallback, as the volume has no no-replace rename and no hard
+/// links, and each takes its extended attributes with it. macOS keeps those
+/// in the file's `._` companion and removes it with the file, so a copy of
+/// the data alone would lose them.
+#[cfg(target_os = "macos")]
+#[tokio::test]
+#[ignore = "needs an exFAT volume: PLATEVAULT_TEST_EXFAT=<mounted folder>"]
+async fn a_foreign_and_a_kept_file_keep_their_extended_attributes_on_exfat() {
+    const HA_DIR: &str = "NIGHT_2026-10-12/Lights/Ha_300s";
+    let world = world(ViewMode::Copies).await;
+    let folder = on_exfat(&world).await;
+    let report = world.apply().await;
+    assert_eq!(report.outcome, Some(ApplyOutcome::Applied), "{report:#?}");
+    let view = folder.join("View");
+    let (foreign, kept) = (format!("{HA_DIR}/foreign.txt"), format!("{HA_DIR}/kept.txt"));
+    for relative in [&foreign, &kept] {
+        let path = view.join(relative);
+        fs::write(&path, relative.as_bytes()).unwrap();
+        for (name, value) in XATTRS {
+            rustix::fs::setxattr(&path, name, value, rustix::fs::XattrFlags::empty()).unwrap();
+        }
+    }
+
+    // The foreign file is ticked and moves into the new View.
+    world.bump().await;
+    let preview = world.preview().await;
+    assert!(preview.blockers.is_empty(), "{:#?}", preview.blockers);
+    let listed: Vec<String> = preview.foreign.iter().map(|file| file.path.display()).collect();
+    assert_eq!(listed, [foreign.as_str(), kept.as_str()], "a companion goes with its file");
+    let mut request = World::request(&preview);
+    request.ticked = vec![NativePath::from_path(Path::new(&foreign))];
+    let report = world.library.apply(&request, &apply::Unattended).await.unwrap();
+    assert_eq!(report.outcome, Some(ApplyOutcome::Applied), "{report:#?}");
+    let previous = folder.join("View (previous)");
+    carried(&view.join(&foreign), &previous.join(&foreign));
+
+    // The unticked one is kept, and the next Apply moves it to View (kept).
+    let leftover = NativePath::from_path(&Path::new("View (previous)").join(&kept));
+    world
+        .library
+        .review_view_leftover(world.project, leftover, PreviousItemReview::Kept, &NoTrash)
+        .await
+        .unwrap();
+    world.bump().await;
+    let report = world.apply().await;
+    assert_eq!(report.outcome, Some(ApplyOutcome::Applied), "{report:#?}");
+    assert!(report.kept_missing.is_empty(), "{:#?}", report.kept_missing);
+    carried(&folder.join("View (kept)").join(&kept), &previous.join(&kept));
+    no_partials(&folder);
+}
