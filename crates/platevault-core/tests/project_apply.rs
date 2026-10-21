@@ -583,6 +583,7 @@ const CLOSE_BEFORE_OUTCOME: &str = "CREATE TRIGGER closed_before_outcome \
 /// `from` to the hidden name it takes before it is unlinked. Simulated here
 /// where the platform renames, so the source keeps its identity. Returns
 /// that name's path.
+#[cfg(unix)]
 fn closed_before_the_source_unlink(from: &Path, moved: &Path) -> PathBuf {
     let aside = from.with_file_name(format!(".pv-{}.removing", uuid::Uuid::new_v4().simple()));
     fs::create_dir_all(aside.parent().unwrap()).unwrap();
@@ -632,6 +633,9 @@ async fn a_resumed_foreign_move_never_removes_a_file_that_held_its_path_first() 
 /// before its source is unlinked. Resumed at the next start, the move
 /// removes the source it proves the copy holds, so nothing hidden stays in
 /// `View (previous)/` for a later Apply to keep.
+// Windows always moves by MoveFileExW rename, so it never leaves a verified
+// copy beside a source moved aside (`transfer::remove_left_aside`).
+#[cfg(unix)]
 #[tokio::test]
 async fn a_resumed_foreign_move_removes_the_source_its_copy_holds() {
     let mut world = world(ViewMode::Copies).await;
@@ -702,6 +706,9 @@ async fn a_kept_move_closed_before_its_record_is_never_reported_missing() {
 /// renames: the next start removes the unfinished copy, which the move's
 /// claim names, and the next Apply moves the file to that name. Nothing
 /// unrecorded stays.
+// Windows always moves by MoveFileExW rename, so it never makes an unfinished
+// copy under a kept name (`transfer::remove_unfinished_copy`).
+#[cfg(unix)]
 #[tokio::test]
 async fn an_interrupted_kept_copy_leaves_no_unrecorded_partial() {
     let mut world = world(ViewMode::Copies).await;
@@ -729,6 +736,9 @@ async fn an_interrupted_kept_copy_leaves_no_unrecorded_partial() {
 /// ([`closed_before_the_source_unlink`]). The next start, which finds the
 /// claimed copy under the kept name, removes the source it proves the copy
 /// holds, so the next Apply keeps no hidden duplicate in `View (kept)/`.
+// Windows always moves by MoveFileExW rename, so it never leaves a verified
+// copy beside a source moved aside (`transfer::remove_left_aside`).
+#[cfg(unix)]
 #[tokio::test]
 async fn a_kept_move_closed_before_its_source_unlink_keeps_no_hidden_duplicate() {
     let mut world = world(ViewMode::Copies).await;
@@ -1034,10 +1044,12 @@ async fn a_reapply_after_a_further_correction_replaces_the_patched_copy() {
     assert_eq!(read_fits(&placed(&world, SEP24)).object.as_deref(), Some("NGC 7000"));
 
     world.correct(SEP24, &[("object", json!("North America Nebula"))]).await;
-    // A tool opens the patched copy for writing and changes nothing but its
-    // modification time, so the sheet reads its bytes.
+    // A tool opens the patched copy for writing, changes nothing but its
+    // modification time and closes it, so the sheet reads its bytes. (A file
+    // still open in View holds the swap on Windows: PREP-FR-18's wait.)
     let touched = fs::File::options().write(true).open(placed(&world, SEP24)).unwrap();
     touched.set_modified(std::time::SystemTime::now()).unwrap();
+    drop(touched);
     let sheet = world.preview().await;
     assert_eq!(sheet.changed_copies, Vec::<NativePath>::new(), "{sheet:#?}");
     let report = world.apply().await;
