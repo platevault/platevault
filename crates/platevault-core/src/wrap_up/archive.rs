@@ -1064,12 +1064,25 @@ mod tests {
     #[cfg(not(unix))]
     const SWAPS: &[bool] = &[false];
 
-    fn create_symlink(source: &Path, destination: &Path) -> io::Result<()> {
-        fs_pathsafe::create_symlink(source, destination)
+    fn create_symlink(source: &Path, destination: &Path) {
+        assert!(create_test_symlink(source, destination));
     }
 
     fn developer_mode_off(error: &io::Error) -> bool {
         cfg!(windows) && error.raw_os_error() == Some(1314)
+    }
+
+    fn create_test_symlink(source: &Path, destination: &Path) -> bool {
+        match fs_pathsafe::create_symlink(source, destination) {
+            Ok(()) => true,
+            Err(error) if developer_mode_off(&error) => {
+                eprintln!("skipping repoint contract test: Windows Developer Mode is off, so creating file symlinks requires elevation");
+                false
+            }
+            Err(error) => {
+                panic!("failed to create test symlink {destination:?} -> {source:?}: {error}")
+            }
+        }
     }
 
     /// A captures original, its archive copy and a View link reading the
@@ -1094,12 +1107,8 @@ mod tests {
             fs::write(&from, b"frame").unwrap();
             fs::write(&to, b"frame").unwrap();
             let link = root.join("View/Light_001.fits");
-            if let Err(error) = create_symlink(&from, &link) {
-                if developer_mode_off(&error) {
-                    eprintln!("skipping repoint contract test: Windows Developer Mode is off, so creating file symlinks requires elevation");
-                    return None;
-                }
-                panic!("failed to create test symlink {link:?} -> {from:?}: {error}");
+            if !create_test_symlink(&from, &link) {
+                return None;
             }
             let staged = root.join("View/.pv-repoint-op-0");
             Some(Self { _temp: temp, from, to, link, staged })
@@ -1159,7 +1168,7 @@ mod tests {
             fs::remove_file(&view.link).unwrap();
             // Same target, another link: its identity is not the recorded one.
             let other = view.link.with_file_name("other");
-            create_symlink(&view.from, &other).unwrap();
+            create_symlink(&view.from, &other);
             fs::rename(&other, &view.link).unwrap();
             let refused = view.repoint(&recorded, exchange).unwrap_err();
             assert_eq!(refused.code, ReasonCode::DestinationChanged, "exchange: {exchange}");
@@ -1190,7 +1199,7 @@ mod tests {
             let aside = view.aside();
             let recorded = view.identity();
             fs::remove_file(&view.link).unwrap();
-            create_symlink(&view.to, &view.link).unwrap();
+            create_symlink(&view.to, &view.link);
             let identity = view.repoint(&recorded, exchange).unwrap();
             assert!(same_identity(&view.identity(), &identity), "exchange: {exchange}");
             view.tidy(&aside);
@@ -1206,7 +1215,7 @@ mod tests {
             let aside = view.aside();
             let recorded = view.identity();
             fs::rename(&view.link, &aside).unwrap();
-            create_symlink(&view.to, &view.staged).unwrap();
+            create_symlink(&view.to, &view.staged);
             view.repoint(&recorded, exchange).unwrap();
             assert_eq!(fs::read_link(&view.link).unwrap(), view.to, "exchange: {exchange}");
             view.tidy(&aside);
@@ -1223,7 +1232,7 @@ mod tests {
             let recorded = view.identity();
             let beside = if exchange { view.staged.clone() } else { aside.clone() };
             fs::rename(&view.link, &beside).unwrap();
-            create_symlink(&view.to, &view.link).unwrap();
+            create_symlink(&view.to, &view.link);
             view.repoint(&recorded, exchange).unwrap();
             assert_eq!(fs::read_link(&view.link).unwrap(), view.to, "exchange: {exchange}");
             view.tidy(&aside);
