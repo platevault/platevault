@@ -110,11 +110,13 @@
 //!   root its location followed before (it moved, went offline or moved on
 //!   from a removal since) lets go of the root it follows now as well, which
 //!   may be on that volume, and holds the location as if the removal had
-//!   been requested first; any other notice about a root its location no
-//!   longer follows leaves the location alone. A location reselected or
-//!   remapped while the removal of its root's volume is pending touches
-//!   neither root and keeps the old one named, so the shell keeps its
-//!   registration and the removal's notices still arrive;
+//!   been requested first; so does one that arrives while the location is
+//!   offline and that root is still named, so a reselection or remap does
+//!   not start it until the removal is decided. Any other notice about a
+//!   root its location no longer follows leaves the location alone. A
+//!   location reselected or remapped while the removal of its root's volume
+//!   is pending touches neither root and keeps the old one named, so the
+//!   shell keeps its registration and the removal's notices still arrive;
 //!   its new root, which may be on that volume, is watched once the removal
 //!   was refused or completed, or after a bounded wait when no notice
 //!   comes. A release returns once discovery is asked to stop, so app exit
@@ -681,6 +683,11 @@ struct Watched {
     /// released ([`Run::moved_in_removal`]), or before
     /// ([`Run::moved_before_release`]).
     moved: Option<Moved>,
+    /// When a release of its root arrived while it was offline
+    /// ([`Run::held_offline`]): it is followed only to hold that release,
+    /// and goes offline again once the removal is decided, or waited for
+    /// [`Settings::removal_wait`], unless it moved meanwhile.
+    held_offline: Option<Instant>,
 }
 
 /// The record of a released location at the root it moved to, and when it
@@ -762,6 +769,7 @@ impl Watched {
             cataloged: false,
             released: false,
             moved: None,
+            held_offline: None,
         }
     }
 
@@ -1430,20 +1438,23 @@ impl Run {
     }
 
     /// Start every location that waited long enough for the removal of its
-    /// old root's volume at the root it moved to.
+    /// old root's volume at the root it moved to, and take one that only
+    /// held a release while offline ([`Watched::held_offline`]) offline
+    /// again.
     async fn waited_out(&mut self) {
         let wait = self.settings.removal_wait;
         let waited: Vec<Uuid> = self
             .locations
             .iter()
             .filter(|(_, watched)| {
-                watched.moved.as_ref().is_some_and(|m| m.since.elapsed() >= wait)
+                let moved = watched.moved.as_ref().map(|moved| moved.since);
+                moved.or(watched.held_offline).is_some_and(|since| since.elapsed() >= wait)
             })
             .map(|(id, _)| *id)
             .collect();
         for id in waited {
-            tracing::warn!(location = %id, "new captures: the removal of the old root's volume was not decided in time; the new root is watched");
-            self.move_on(id).await;
+            tracing::warn!(location = %id, "new captures: the removal of the old root's volume was not decided in time; the location is followed again");
+            self.decided(id).await;
         }
     }
 
@@ -1614,6 +1625,7 @@ impl Run {
     /// file-system calls are awaited where they are made, so none is in
     /// flight here.
     fn release(&mut self, id: Uuid, root: &Path, released: oneshot::Sender<()>) {
+        self.held_offline(id, root);
         let moved_to = self.moved_before_release(id, root);
         let mut folder = None;
         if let Some(watched) = self.locations.get_mut(&id).filter(|watched| watched.root == root) {
@@ -1669,18 +1681,51 @@ impl Run {
         let left = self.left.take(id, root)?;
         let mut moved = self.locations.remove(&id)?;
         self.draining.let_go(&mut moved);
-        let still_named = self
-            .publish_roots
-            .borrow()
-            .iter()
-            .any(|named| named.location_id == id && named.root == root);
-        let in_place = (!still_named).then(|| moved.named());
+        let in_place = (!self.names(id, root)).then(|| moved.named());
         let (to, followed) = (moved.location.clone(), moved.root.clone());
         self.left.record(moved);
         let mut back = Watched::new(left.location, left.root, left.prefixes, left.stamp);
         back.moved = Some(Moved { to, since: Instant::now(), in_place });
         self.locations.insert(id, back);
         Some(followed)
+    }
+
+    /// `id` went offline since discovery let go of it at `root`
+    /// ([`Departures`]), and the removal of `root`'s volume is requested
+    /// while a watcher close or walk discovery let go of there still runs,
+    /// `root` named for it. A reselection or remap would start the location
+    /// at once at its new root, which may be on that volume, so follow it at
+    /// `root` again, to be released there, until the removal is decided or
+    /// waited out ([`Watched::held_offline`]); one that already names
+    /// another root moved. Once `root` left the named roots, the shell may
+    /// have ended its registration, and naming it again would have the shell
+    /// register a fresh handle on the volume: the location stays offline.
+    fn held_offline(&mut self, id: Uuid, root: &Path) {
+        if self.locations.contains_key(&id)
+            || !self.offline.contains_key(&id)
+            || !self.names(id, root)
+        {
+            return;
+        }
+        let (Some(left), Some(offline)) = (self.left.take(id, root), self.offline.remove(&id))
+        else {
+            return;
+        };
+        let mut held = Watched::new(left.location, left.root, left.prefixes, left.stamp);
+        held.held_offline = Some(Instant::now());
+        if !same_root(&offline.location, &held.location) {
+            held.moved =
+                Some(Moved { to: offline.location, since: Instant::now(), in_place: None });
+        }
+        self.locations.insert(id, held);
+    }
+
+    /// Whether `root` of `id` is named ([`CaptureWatch::subscribe_roots`]).
+    fn names(&self, id: Uuid, root: &Path) -> bool {
+        self.publish_roots
+            .borrow()
+            .iter()
+            .any(|named| named.location_id == id && named.root == root)
     }
 
     /// The removal a release made way for did not happen: watch the location
@@ -1698,18 +1743,41 @@ impl Run {
             self.move_on(id).await;
             return;
         }
+        if watched.held_offline.is_some() {
+            self.check_again(id).await;
+            return;
+        }
         tracing::info!(location = %id, "new captures: volume stays; watched again");
         self.rescan(id).await;
+    }
+
+    /// The removal of the volume of `id`'s root, which it held while offline
+    /// ([`Watched::held_offline`]), did not happen: check the root again at
+    /// once. It stays remembered ([`Departures`]) for a later release while
+    /// it is still named.
+    async fn check_again(&mut self, id: Uuid) {
+        tracing::info!(location = %id, "new captures: volume stays; the offline root is checked again");
+        if let Some(held) = self.locations.remove(&id) {
+            let location = held.location.clone();
+            self.left.record(held);
+            self.try_start(location, None).await;
+        }
     }
 
     /// The volume holding `root`, a root of `id` or the one named in its
     /// place, was removed: the location goes offline, or starts at the root
     /// it moved to meanwhile.
     async fn gone(&mut self, id: Uuid, root: &Path) {
-        let Some(watched) = self.locations.get(&id).filter(|watched| watched.awaits(root)) else {
-            return;
-        };
-        if watched.moved.is_some() {
+        if self.locations.get(&id).is_some_and(|watched| watched.awaits(root)) {
+            self.decided(id).await;
+        }
+    }
+
+    /// The removal of the volume of the root `id` was released at is no
+    /// longer waited for: the location starts at the root it moved to
+    /// meanwhile, else goes offline.
+    async fn decided(&mut self, id: Uuid) {
+        if self.locations.get(&id).is_some_and(|watched| watched.moved.is_some()) {
             self.move_on(id).await;
         } else {
             self.go_offline(id);

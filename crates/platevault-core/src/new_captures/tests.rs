@@ -1756,6 +1756,64 @@ impl RemappedInRemoval {
         Self { fx, watch, probe, location, old, copy }
     }
 
+    /// Watch a location with `settings`, move its folder away so a sweep
+    /// takes it offline while its watcher there still closes, release the
+    /// old root, and only then reselect the location at the folder's new
+    /// path, the order Codex review thread `PRRT_kwDOSdTu0s6ugh6G` flagged:
+    /// the new root, which may be on the volume being removed, is left
+    /// alone, and the old root stays named alone for the removal's outcome.
+    async fn released_while_offline(settings: Settings) -> Self {
+        let (fx, watch, probe, location, old) = Self::watched(settings).await;
+        let releases = &watch.observed().releases;
+        let opens = Opens(releases);
+        releases.close();
+        let roots = || watch.subscribe_roots().borrow().clone();
+        let named = roots();
+        let copy = fx.base.join("Captures moved");
+        fs::rename(&old, &copy).unwrap();
+        until(&watch, <[NewCaptureCount]>::is_empty).await;
+        holding(releases).await;
+        assert_eq!(roots(), named, "the old root is named while its watcher closes");
+
+        let (touched, walked) = {
+            let release = watch.release(location.id, &old);
+            tokio::pin!(release);
+            let early = tokio::time::timeout(Duration::from_millis(300), &mut release).await;
+            assert!(early.is_err(), "released while the old root's watcher still closed");
+            let (touched, walked) = (touches(&probe), walks(&watch));
+            let current = fx.library.catalog().location(location.id).await.unwrap();
+            fx.library
+                .reselect_location(
+                    location.id,
+                    current.decision_revision,
+                    NativePath::from_path(&copy),
+                )
+                .await
+                .unwrap();
+            // Sweeps and debounce ticks pass, and none touches the new root.
+            tokio::time::sleep(settings.sweep * 3).await;
+            assert_eq!(
+                (touches(&probe), walks(&watch)),
+                (touched, walked),
+                "the new root was touched while the removal was pending"
+            );
+            releases.open();
+            tokio::time::timeout(Duration::from_secs(5), release)
+                .await
+                .expect("released once closed");
+            (touched, walked)
+        };
+        drop(opens);
+        tokio::time::sleep(settings.sweep * 3).await;
+        assert_eq!(
+            (touches(&probe), walks(&watch), watchers(&watch)),
+            (touched, walked, 0),
+            "the new root was touched while the removal was pending"
+        );
+        assert_eq!(roots(), named, "the named roots changed while the removal was pending");
+        Self { fx, watch, probe, location, old, copy }
+    }
+
     /// The new root is watched and counted live, and named alone.
     async fn watched_at_the_new_root(&self) {
         let id = self.location.id;
@@ -1831,6 +1889,39 @@ async fn a_release_after_two_root_changes_lets_go_of_the_root_followed_now_until
 async fn a_release_after_two_root_changes_lets_go_of_the_root_followed_now_until_gone() {
     let remapped = RemappedInRemoval::released_after_two_remaps(UNTIL_NOTICED).await;
     remapped.watch.gone(remapped.location.id, &remapped.old);
+    remapped.watched_at_the_new_root().await;
+}
+
+/// Sweeps run, so the location goes offline, and only the notice ends the
+/// wait for the removal.
+const SWEEPING_UNTIL_NOTICED: Settings =
+    Settings { removal_wait: Duration::from_secs(3600), ..FAST };
+
+/// The release arrives while the location is offline, its old root's
+/// watcher still closing, and a remap follows: the new root is started only
+/// once the removal is refused.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_release_while_offline_holds_a_later_root_change_until_refused() {
+    let remapped = RemappedInRemoval::released_while_offline(SWEEPING_UNTIL_NOTICED).await;
+    remapped.watch.reattach(remapped.location.id, &remapped.old);
+    remapped.watched_at_the_new_root().await;
+}
+
+/// As above, for a removal that went ahead.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_release_while_offline_holds_a_later_root_change_until_gone() {
+    let remapped = RemappedInRemoval::released_while_offline(SWEEPING_UNTIL_NOTICED).await;
+    remapped.watch.gone(remapped.location.id, &remapped.old);
+    remapped.watched_at_the_new_root().await;
+}
+
+/// As above, with no notice: the wait runs out on its own.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_release_while_offline_holds_a_later_root_change_a_bounded_time() {
+    // 3 s, not 1 s: `released_while_offline` asserts the new root stays
+    // untouched for over a second after the remap.
+    let settings = Settings { removal_wait: Duration::from_secs(3), ..FAST };
+    let remapped = RemappedInRemoval::released_while_offline(settings).await;
     remapped.watched_at_the_new_root().await;
 }
 
@@ -1995,6 +2086,7 @@ fn counted(location: Location, root: &Path) -> Watched {
         cataloged: true,
         released: false,
         moved: None,
+        held_offline: None,
     }
 }
 
