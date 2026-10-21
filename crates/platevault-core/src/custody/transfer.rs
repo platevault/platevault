@@ -1296,7 +1296,7 @@ mod tests {
         let none = std::collections::BTreeSet::new();
         fs::create_dir(view.join("notes")).unwrap();
         fs::write(view.join("notes/session.txt"), b"placed").unwrap();
-        let refused = move_foreign(&previous, &view, &none, &item);
+        let refused = move_foreign(&previous, &view, &none, &item, false);
         assert_eq!(
             (refused.state, refused.reason),
             (ForeignItemState::Failed, Some(ForeignItemFailure::NameTaken)),
@@ -1307,7 +1307,7 @@ mod tests {
 
         fs::remove_file(view.join("notes/session.txt")).unwrap();
         let placed = std::collections::BTreeSet::from([PathBuf::from("notes/session.txt")]);
-        let refused = move_foreign(&previous, &view, &placed, &item);
+        let refused = move_foreign(&previous, &view, &placed, &item, false);
         assert_eq!(
             (refused.state, refused.reason),
             (ForeignItemState::Failed, Some(ForeignItemFailure::NameTaken)),
@@ -1315,16 +1315,18 @@ mod tests {
         );
         assert!(!view.join("notes/session.txt").exists());
 
-        let moved = move_foreign(&previous, &view, &none, &item);
+        let moved = move_foreign(&previous, &view, &none, &item, false);
         assert_eq!(moved.state, ForeignItemState::Moved, "{moved:?}");
         assert!(!previous.join("notes/session.txt").exists());
         assert_eq!(fs::read(view.join("notes/session.txt")).unwrap(), b"the user's notes");
     }
 
     /// nfsgg, e6tgr: where a file moves as a verified copy (macOS exFAT), a
-    /// resumed move removes the unfinished copy an interruption left in the
-    /// new View and moves again, and one whose source is gone accepts the
-    /// reviewed bytes there though the copy has an identity of its own.
+    /// resumed move whose destination this Apply's journal claimed removes
+    /// the unfinished copy an interruption left in the new View and moves
+    /// again, and one whose source is gone accepts the reviewed bytes there
+    /// though the copy has an identity of its own. Without the claim
+    /// (5u6x7), whatever is there stays and the name is taken.
     #[cfg(unix)]
     #[test]
     fn a_resumed_foreign_move_redoes_an_unfinished_copy_and_accepts_a_finished_one() {
@@ -1352,7 +1354,10 @@ mod tests {
         let none = std::collections::BTreeSet::new();
         let moved_to = view.join("notes/session.txt");
         fs::write(&moved_to, b"the user's").unwrap();
-        let moved = move_foreign(&previous, &view, &none, &item);
+        let unclaimed = move_foreign(&previous, &view, &none, &item, false);
+        assert_eq!(unclaimed.reason, Some(crate::ForeignItemFailure::NameTaken), "{unclaimed:?}");
+        assert_eq!(fs::read(&moved_to).unwrap(), b"the user's", "never removed unclaimed");
+        let moved = move_foreign(&previous, &view, &none, &item, true);
         assert_eq!(moved.state, ForeignItemState::Moved, "{moved:?}");
         assert_eq!(fs::read(&moved_to).unwrap(), b"the user's notes");
         assert!(!previous.join("notes/session.txt").exists());
@@ -1361,7 +1366,7 @@ mod tests {
         // another file.
         fs::remove_file(&moved_to).unwrap();
         fs::write(&moved_to, b"the user's notes").unwrap();
-        let resumed = move_foreign(&previous, &view, &none, &item);
+        let resumed = move_foreign(&previous, &view, &none, &item, true);
         assert_eq!(resumed.state, ForeignItemState::Moved, "{resumed:?}");
         assert_eq!(fs::read(&moved_to).unwrap(), b"the user's notes");
     }

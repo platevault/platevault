@@ -265,6 +265,10 @@ BEGIN SELECT RAISE(ABORT, 'an Apply settles its journal first'); END;
 -- The files PlateVault didn't place, as the Apply sheet listed them with the
 -- user's tick (VSEL-FR-20); `evidence` is `EntryEvidence` JSON. Only a ticked
 -- file moves, after the swap; `reason` is why one didn't (`ForeignItemFailure`).
+-- `claimed` is set before a ticked file's move starts and its outcome is
+-- recorded once it ends: only a claimed item still pending, whose move an
+-- interruption may have left unfinished, may lose the unfinished copy at its
+-- destination (e6tgr).
 CREATE TABLE IF NOT EXISTS apply_foreign_items (
     operation_id TEXT NOT NULL REFERENCES apply_operations (operation_id),
     seq INTEGER NOT NULL CHECK (seq >= 0),
@@ -275,10 +279,12 @@ CREATE TABLE IF NOT EXISTS apply_foreign_items (
     reason TEXT CHECK (reason IS NULL OR reason IN (
         'name_taken', 'changed', 'folder_not_made', 'not_moved'
     )),
+    claimed INTEGER NOT NULL DEFAULT 0 CHECK (claimed IN (0, 1)),
     PRIMARY KEY (operation_id, seq),
     UNIQUE (operation_id, path_key),
     CHECK (state <> 'moved' OR ticked = 1),
-    CHECK ((state = 'failed') = (reason IS NOT NULL))
+    CHECK ((state = 'failed') = (reason IS NOT NULL)),
+    CHECK (claimed = 0 OR ticked = 1)
 ) STRICT;
 
 -- What an Apply left behind (STO-FR-10): changed or unverifiable copies,
@@ -317,6 +323,23 @@ WHEN NEW.kind = 'apply' AND EXISTS (
 BEGIN
     SELECT RAISE(ABORT, 'Apply waits until every file left in View (previous)/ is reviewed');
 END;
+
+-- A kept file's move from `View (previous)/` to `View (kept)/` (D-W110),
+-- claimed by the Apply before the move starts and dropped once its outcome
+-- is recorded: the file, the kept name it takes and the `EntryEvidence` JSON
+-- of what leaves. Recovery of the claiming Apply settles what an
+-- interruption left: a move that finished is recorded, and only the claimed
+-- kept name may lose the unfinished copy an interrupted copy left there
+-- (e6tgr). Paths are relative to the Project folder.
+CREATE TABLE IF NOT EXISTS apply_kept_moves (
+    operation_id TEXT NOT NULL REFERENCES apply_operations (operation_id),
+    path_key BLOB NOT NULL,
+    kept_key BLOB NOT NULL,
+    evidence TEXT NOT NULL,
+    claimed_at TEXT NOT NULL,
+    PRIMARY KEY (operation_id, path_key),
+    UNIQUE (operation_id, kept_key)
+) STRICT;
 
 -- A Closed snapshot freezes the last View that was installed, or none when
 -- the Project was never applied.

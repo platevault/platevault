@@ -686,18 +686,24 @@ pub fn foreign_files(
 
 /// Move one ticked foreign file from `View (previous)/` into the new
 /// `View/` at the same place, once it is still the reviewed entry; never
-/// over an entry the new View placed (`placed`, relative to `View/`).
+/// over an entry the new View placed (`placed`, relative to `View/`), nor
+/// over anything else already there.
 ///
 /// Where the volume has no no-replace rename (macOS exFAT) a file moves as a
-/// verified copy, with an identity of its own. A resumed move whose source
-/// is gone therefore accepts the reviewed kind and bytes at the destination,
-/// and one whose copy an interruption left unfinished removes that copy,
-/// which holds nothing the source doesn't, and moves again.
+/// verified copy, with an identity of its own, made under its destination
+/// name. `journaled` says this Apply's journal claimed the destination
+/// before an earlier attempt at this move, which an interruption ended
+/// unrecorded (e6tgr): only then does a move whose source is gone accept
+/// the reviewed kind and bytes at the destination, and only then is a
+/// destination holding an unfinished copy of the source, which holds
+/// nothing the source doesn't, removed before the move runs again. Without
+/// the claim whatever is there stays, and the name is taken.
 pub fn move_foreign(
     previous: &Path,
     view: &Path,
     placed: &BTreeSet<PathBuf>,
     item: &ForeignItem,
+    journaled: bool,
 ) -> ForeignItem {
     let mut item = item.clone();
     if !item.ticked {
@@ -716,7 +722,7 @@ pub fn move_foreign(
         let to = view.join(&relative);
         let gone =
             fs::symlink_metadata(&from).is_err_and(|error| error.kind() == io::ErrorKind::NotFound);
-        if gone && holds_reviewed_bytes(&to, &item.evidence) {
+        if gone && journaled && holds_reviewed_bytes(&to, &item.evidence) {
             return Ok(());
         }
         if !is_reviewed(&from, &item.evidence) {
@@ -729,6 +735,7 @@ pub fn move_foreign(
         })?;
         let mut moved = transfer::rename_noreplace(&from, &to);
         if moved.as_ref().is_err_and(|error| error.kind() == io::ErrorKind::AlreadyExists)
+            && journaled
             && transfer::remove_unfinished_copy(&to, &from)
         {
             moved = transfer::rename_noreplace(&from, &to);
@@ -752,6 +759,15 @@ pub fn move_foreign(
     item
 }
 
+/// Whether the new `View/` already holds an entry at the ticked foreign
+/// file `item`'s path, before its move is claimed; a path that isn't a
+/// plain relative one is left to [`move_foreign`] to refuse.
+pub fn foreign_destination_taken(view: &Path, item: &ForeignItem) -> bool {
+    item.path
+        .relative_path()
+        .is_ok_and(|relative| fs::symlink_metadata(view.join(relative)).is_ok())
+}
+
 /// Whether `path` holds the reviewed entry: the same file and bytes, or the
 /// same link with the same target, by identity rather than by name.
 fn is_reviewed(path: &Path, reviewed: &EntryEvidence) -> bool {
@@ -770,127 +786,244 @@ fn holds_reviewed_bytes(path: &Path, reviewed: &EntryEvidence) -> bool {
 
 // ── Kept files ───────────────────────────────────────────────────────────────
 
-/// What moving `View (previous)/`'s files to `View (kept)/` did.
-#[derive(Debug, Default)]
-pub struct KeptMoves {
-    /// The files that left `View (previous)/`, relative to it.
-    pub moved: Vec<PathBuf>,
-    /// Files gone from `View (previous)/` before they could move (D-W137),
-    /// relative to it.
-    pub missing: Vec<PathBuf>,
-    /// The files that couldn't be moved, or whose new name in `View (kept)/`
-    /// doesn't hold what left, each with why.
-    pub failed: Vec<(PathBuf, ItemReason)>,
-    /// `View (previous)/` is gone now.
-    pub gone: bool,
-}
-
-/// Move every file `<project>/View (previous)/` holds, which by now the
-/// user has kept, to `<project>/View (kept)/` at the same path from inside
-/// the View (D-W110). A name `View (kept)/` already holds takes the next
-/// free number ([`layout::kept_name`]); nothing there is replaced or
-/// removed. Each move is proven: the entry at its new name is the one that
-/// left, with its kind and bytes. An emptied `View (previous)/` is removed.
+/// The files `<project>/View (previous)/` holds, which by now the user has
+/// kept, relative to it: none when it is absent or holds nothing. Each then
+/// moves to `<project>/View (kept)/` at the same path from inside the View
+/// (D-W110), one at a time: [`prepare_kept`], the journal's claim, then
+/// [`move_one_kept`].
 ///
 /// # Errors
 /// When `View (previous)/` is a link or anything in it can't be read, what
 /// couldn't be, and nothing moves.
-pub fn move_kept(project: &Path) -> Result<KeptMoves, Unreadable> {
+pub fn kept_files(project: &Path) -> Result<Vec<PathBuf>, Unreadable> {
     let previous = project.join(VIEW_PREVIOUS_FOLDER);
-    let mut moves = KeptMoves::default();
-    if !holds_nothing(&previous) {
-        let kept = project.join(VIEW_KEPT_FOLDER);
-        for relative in files_below(&previous)? {
-            let from = previous.join(&relative);
-            match move_one_kept(&from, &kept, &relative) {
-                Kept::Moved => moves.moved.push(relative),
-                Kept::Unproven(to, reason) => {
-                    moves.failed.push((to, reason));
-                    moves.moved.push(relative);
-                }
-                Kept::Missing => moves.missing.push(relative),
-                Kept::Failed(reason) => moves.failed.push((from, reason)),
-            }
-        }
+    if holds_nothing(&previous) {
+        return Ok(Vec::new());
     }
+    files_below(&previous)
+}
+
+/// Remove an emptied `<project>/View (previous)/`; whether it is gone now.
+pub fn clear_previous(project: &Path) -> bool {
+    let previous = project.join(VIEW_PREVIOUS_FOLDER);
     if holds_nothing(&previous) {
         remove_empty_folders(&previous);
     }
-    moves.gone = fs::symlink_metadata(&previous).is_err();
-    Ok(moves)
+    fs::symlink_metadata(&previous).is_err()
 }
 
-/// How moving one kept file ended.
-enum Kept {
+/// One kept file ready to move, which the journal claims first.
+#[derive(Clone, Debug)]
+pub struct KeptFile {
+    /// Where it is, relative to `View (previous)/`.
+    pub relative: PathBuf,
+    /// What leaves: its no-follow evidence, read below `View (previous)/`.
+    pub evidence: EntryEvidence,
+    /// The free name it takes, relative to `View (kept)/`.
+    pub kept: PathBuf,
+    /// That name's number ([`layout::kept_name`]).
+    pub number: u32,
+}
+
+/// How one kept file's move ended.
+#[derive(Debug)]
+pub enum Kept {
+    /// It is at its kept name, proven to be what left.
     Moved,
-    /// Moved to this name, which doesn't hold the file that left.
+    /// It left for its kept name, at this path, which doesn't hold it.
     Unproven(PathBuf, ItemReason),
+    /// Gone from `View (previous)/` before it could move (D-W137).
     Missing,
     /// Still in `View (previous)/`.
     Failed(ItemReason),
 }
 
-fn move_one_kept(from: &Path, kept: &Path, relative: &Path) -> Kept {
-    let gone = |path: &Path| {
-        fs::symlink_metadata(path).is_err_and(|error| error.kind() == io::ErrorKind::NotFound)
-    };
-    let before = match observe_entry(from) {
-        Ok(before) => before,
-        Err(_) if gone(from) => return Kept::Missing,
+/// A kept name taken after [`prepare_kept`] found it free; nothing moved.
+#[derive(Debug)]
+pub struct KeptNameTaken;
+
+fn gone(path: &Path) -> bool {
+    fs::symlink_metadata(path).is_err_and(|error| error.kind() == io::ErrorKind::NotFound)
+}
+
+/// Ready the kept file at `relative` in `View (previous)/` to move: read
+/// what leaves below `View (previous)/`, never following a link, and find
+/// the first name numbered `number` or later that `View (kept)/` doesn't
+/// hold, making its folders (D-W110).
+///
+/// # Errors
+/// [`Kept::Missing`] for a file gone from disk; [`Kept::Failed`] for one
+/// that can't be read or a kept name that can't be made.
+pub fn prepare_kept(project: &Path, relative: &Path, number: u32) -> Result<KeptFile, Kept> {
+    let previous = project.join(VIEW_PREVIOUS_FOLDER);
+    let from = previous.join(relative);
+    let evidence = match observe_source(&previous, &from) {
+        Ok(evidence) => evidence,
+        Err(_) if gone(&from) => return Err(Kept::Missing),
         Err(error) => {
             tracing::warn!(path = %from.display(), %error, "a kept file couldn't be read");
-            return Kept::Failed(reason(
+            return Err(Kept::Failed(reason(
                 ReasonCode::SourceUnavailable,
-                format!("{} couldn't be read", from.display()),
-            ));
+                format!("{} couldn't be read below View (previous)/", from.display()),
+            )));
         }
     };
     let Some(name) = relative.file_name() else {
-        return Kept::Failed(reason(ReasonCode::SourceUnavailable, "a kept entry has no name"));
+        return Err(Kept::Failed(reason(
+            ReasonCode::SourceUnavailable,
+            "a kept entry has no name",
+        )));
     };
-    match fs::create_dir(kept) {
+    let kept = project.join(VIEW_KEPT_FOLDER);
+    match fs::create_dir(&kept) {
         Ok(()) => {}
         Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
-        Err(error) => return Kept::Failed(failed(kept, &error)),
+        Err(error) => return Err(Kept::Failed(failed(&kept, &error))),
     }
     let folder = relative.parent().unwrap_or_else(|| Path::new(""));
-    let into = match transfer::ensure_folder(kept, folder) {
-        Ok(into) => into,
-        Err(reason) => return Kept::Failed(reason),
-    };
-    // An earlier kept file, or a copy an interruption left unfinished,
-    // keeps its name: the move takes the next free one and removes nothing.
-    let mut number = 1;
-    let (to, moved) = loop {
-        let to = into.join(layout::kept_name(name, number));
-        match transfer::move_noreplace(from, &to) {
-            Ok(moved) => break (to, moved),
-            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
-                let Some(next) = number.checked_add(1) else {
-                    return Kept::Failed(failed(&to, &error));
-                };
-                number = next;
+    let into = transfer::ensure_folder(&kept, folder).map_err(Kept::Failed)?;
+    // An earlier kept file, or anything else there, keeps its name.
+    let mut number = number;
+    loop {
+        let candidate = layout::kept_name(name, number);
+        match fs::symlink_metadata(into.join(&candidate)) {
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                let kept = folder.join(candidate);
+                return Ok(KeptFile { relative: relative.to_path_buf(), evidence, kept, number });
             }
-            Err(_) if gone(from) => return Kept::Missing,
-            Err(error) => return Kept::Failed(failed(&to, &error)),
+            Err(error) => return Err(Kept::Failed(failed(&into.join(&candidate), &error))),
+            Ok(_) => {}
+        }
+        number = number.checked_add(1).ok_or_else(|| {
+            Kept::Failed(reason(ReasonCode::DestinationOccupied, "no free kept name is left"))
+        })?;
+    }
+}
+
+/// Every folder from `root` down to the one holding `relative`, each
+/// entered through the one above it ([`Folder::child`]) and held, the
+/// entry's own folder last.
+fn enter_below(root: &Path, relative: &Path) -> Result<Vec<Folder>, Unentered> {
+    let mut held = vec![Folder::open(root)?];
+    for part in relative.parent().into_iter().flat_map(Path::components) {
+        let Component::Normal(name) = part else { return Err(Unentered::NotAFolder) };
+        let below = held.last().map(|folder| folder.child(name));
+        held.push(below.unwrap_or(Err(Unentered::NotAFolder))?);
+    }
+    Ok(held)
+}
+
+/// Move the kept file `file` names to its kept name in `View (kept)/`,
+/// never replacing anything there. The file is named through the folders
+/// entered from `View (previous)/` ([`Folder::move_entry`]): one swapped
+/// for a link since `file` was read is refused, and nothing outside the
+/// Project moves. The move is proven: the entry at its new name is the one
+/// that left, with its kind and bytes.
+///
+/// # Errors
+/// [`KeptNameTaken`] when the kept name was taken meanwhile.
+pub fn move_one_kept(project: &Path, file: &KeptFile) -> Result<Kept, KeptNameTaken> {
+    let previous = project.join(VIEW_PREVIOUS_FOLDER);
+    let from = previous.join(&file.relative);
+    let to = project.join(VIEW_KEPT_FOLDER).join(&file.kept);
+    let Some(name) = file.relative.file_name() else {
+        return Ok(Kept::Failed(reason(ReasonCode::SourceUnavailable, "a kept entry has no name")));
+    };
+    let folders = match enter_below(&previous, &file.relative) {
+        Ok(folders) => folders,
+        Err(Unentered::Io(error)) if error.kind() == io::ErrorKind::NotFound => {
+            return Ok(Kept::Missing);
+        }
+        Err(Unentered::Io(error)) => return Ok(Kept::Failed(failed(&from, &error))),
+        Err(Unentered::NotAFolder) => {
+            let detail = format!(
+                "a folder above {} is no longer a folder below View (previous)/; links are not \
+                 followed",
+                from.display()
+            );
+            return Ok(Kept::Failed(reason(ReasonCode::SourceDrift, detail)));
         }
     };
+    let Some(folder) = folders.last() else {
+        let detail = "View (previous)/ wasn't entered";
+        return Ok(Kept::Failed(reason(ReasonCode::SourceUnavailable, detail)));
+    };
+    let moved = match folder.move_entry(name, &to) {
+        Ok(moved) => moved,
+        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => return Err(KeptNameTaken),
+        Err(_) if gone(&from) => return Ok(Kept::Missing),
+        Err(error) => return Ok(Kept::Failed(failed(&to, &error))),
+    };
+    drop(folders);
     let identity = match &moved {
-        transfer::Moved::Renamed => &before.fingerprint.identity,
+        transfer::Moved::Renamed => &file.evidence.fingerprint.identity,
         #[cfg(unix)]
         transfer::Moved::Copied(identity) => identity,
     };
     let proven = observe_entry(&to).is_ok_and(|now| {
         same_identity(&now.fingerprint.identity, identity)
-            && now.kind == before.kind
-            && now.sha256 == before.sha256
+            && now.kind == file.evidence.kind
+            && now.sha256 == file.evidence.sha256
     });
     if proven {
-        Kept::Moved
-    } else {
-        let detail = format!("{} isn't the kept file that moved there", to.display());
-        Kept::Unproven(to, reason(ReasonCode::DestinationMismatch, detail))
+        return Ok(Kept::Moved);
     }
+    let detail = format!("{} isn't the kept file that moved there", to.display());
+    Ok(Kept::Unproven(to, reason(ReasonCode::DestinationMismatch, detail)))
+}
+
+/// What an interruption left of one kept move its Apply claimed and never
+/// recorded.
+#[derive(Debug, Eq, PartialEq)]
+pub enum ClaimedKept {
+    /// The file left `View (previous)/` and its kept name holds what left.
+    Moved,
+    /// The file left `View (previous)/`, and its kept name doesn't hold it:
+    /// it is gone from disk (D-W137).
+    Gone,
+    /// The file is still in `View (previous)/`, and its kept name holds no
+    /// unfinished copy of it any more.
+    Stayed,
+}
+
+/// Settle a kept move `claim` names that an interruption left unrecorded.
+/// A file still in `View (previous)/`, read below it without following a
+/// link, stays there for the next Apply; a copy a volume without a
+/// no-replace rename was making under the claimed kept name, which holds
+/// nothing the file doesn't, is removed (e6tgr), and anything else there
+/// stays. Only the claimed name is ever touched.
+///
+/// # Errors
+/// The diagnostic when the claim names no file of `View (previous)/` or no
+/// kept name, or the file is no longer read below `View (previous)/`.
+pub fn settle_kept_claim(
+    project: &Path,
+    claim: &persistence_library::KeptMove,
+) -> Result<ClaimedKept, String> {
+    let (Some(relative), Some(kept)) =
+        (in_previous(&claim.path), in_folder(&claim.kept, VIEW_KEPT_FOLDER))
+    else {
+        return Err(format!(
+            "a kept move claims {} as {}",
+            claim.path.display(),
+            claim.kept.display()
+        ));
+    };
+    let previous = project.join(VIEW_PREVIOUS_FOLDER);
+    let (from, to) = (previous.join(relative), project.join(VIEW_KEPT_FOLDER).join(kept));
+    if gone(&from) {
+        let holds = observe_entry(&to).is_ok_and(|now| {
+            now.kind == claim.evidence.kind && now.sha256 == claim.evidence.sha256
+        });
+        return Ok(if holds { ClaimedKept::Moved } else { ClaimedKept::Gone });
+    }
+    if let Err(error) = observe_source(&previous, &from) {
+        return Err(format!("{} isn't read below View (previous)/: {error}", from.display()));
+    }
+    if fs::symlink_metadata(&to).is_ok() {
+        transfer::remove_unfinished_copy(&to, &from);
+    }
+    Ok(ClaimedKept::Stayed)
 }
 
 // ── The swap ─────────────────────────────────────────────────────────────────
@@ -1130,10 +1263,15 @@ fn old_copy(
 /// `path` relative to the Project folder's `View (previous)/`, refusing
 /// anything else.
 pub fn in_previous(path: &NativePath) -> Option<PathBuf> {
+    in_folder(path, VIEW_PREVIOUS_FOLDER)
+}
+
+/// `path` relative to the Project folder's `folder`, refusing anything else.
+fn in_folder(path: &NativePath, folder: &str) -> Option<PathBuf> {
     let relative = path.relative_path().ok()?;
     let mut parts = relative.components();
     match parts.next() {
-        Some(Component::Normal(first)) if first == VIEW_PREVIOUS_FOLDER => {
+        Some(Component::Normal(first)) if first == folder => {
             let rest: PathBuf = parts.collect();
             (!rest.as_os_str().is_empty()).then_some(rest)
         }
@@ -1374,5 +1512,33 @@ mod tests {
         let walked = walk(&root);
         assert_eq!(walked.files, [root.join("night")], "the link is an entry, not followed");
         assert_eq!(walked.unreadable.len(), 0, "nothing is unreadable");
+    }
+
+    /// 5u6x7 (3): a kept file's folder swapped for a link after the file
+    /// was read is refused when it moves, and nothing outside
+    /// `View (previous)/` moves; read after the swap, it is refused too.
+    #[cfg(unix)]
+    #[test]
+    fn a_kept_move_never_follows_a_folder_swapped_for_a_link() {
+        let temp = tempfile::tempdir().unwrap();
+        let project = temp.path().join("NGC 7000");
+        let previous = project.join(VIEW_PREVIOUS_FOLDER);
+        fs::create_dir_all(previous.join("night")).unwrap();
+        fs::write(previous.join("night/notes.txt"), b"the user's notes").unwrap();
+        let outside = temp.path().join("outside");
+        fs::create_dir(&outside).unwrap();
+        fs::write(outside.join("notes.txt"), b"not the Project's").unwrap();
+        let relative = Path::new("night/notes.txt");
+        let ready = prepare_kept(&project, relative, 1).unwrap();
+
+        fs::rename(previous.join("night"), temp.path().join("away")).unwrap();
+        std::os::unix::fs::symlink(&outside, previous.join("night")).unwrap();
+        let moved = move_one_kept(&project, &ready).unwrap();
+        assert!(matches!(moved, Kept::Failed(ref why) if why.code == ReasonCode::SourceDrift));
+        assert!(matches!(prepare_kept(&project, relative, 1), Err(Kept::Failed(_))));
+        assert_eq!(fs::read(outside.join("notes.txt")).unwrap(), b"not the Project's");
+        assert_eq!(fs::read(temp.path().join("away/notes.txt")).unwrap(), b"the user's notes");
+        let kept = project.join(VIEW_KEPT_FOLDER);
+        assert!(walk(&kept).files.is_empty(), "nothing moved into View (kept)/");
     }
 }

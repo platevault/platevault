@@ -43,8 +43,9 @@ const AT: &str = "2026-10-16T08:00:00Z";
 const SHA: &str = "a3f1c2d4e5b6a7980123456789abcdef0123456789abcdef0123456789abcdef";
 const OPTICS: &str = r#"{"cameraId":null,"focalLengthMm":"250","reducer":null}"#;
 
-const F4_TABLES: [&str; 22] = [
+const F4_TABLES: [&str; 23] = [
     "apply_foreign_items",
+    "apply_kept_moves",
     "apply_operations",
     "cameras",
     "processing_master_offers",
@@ -319,8 +320,8 @@ async fn a_fresh_catalog_records_the_f4_schema_version_and_tables() {
             .fetch_one(&mut conn)
             .await
             .unwrap();
-    assert_eq!(version, 22);
-    assert_eq!(persistence_library::SCHEMA_VERSION, 22);
+    assert_eq!(version, 23);
+    assert_eq!(persistence_library::SCHEMA_VERSION, 23);
     let tables: Vec<String> =
         sqlx::query_scalar("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
             .fetch_all(&mut conn)

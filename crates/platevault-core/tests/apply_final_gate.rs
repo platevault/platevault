@@ -221,6 +221,47 @@ async fn a_review_during_the_build_fails_apply_before_the_swap() {
     edited_during_the_build(true).await;
 }
 
+/// Reopens a held session's review once Apply reserved the Project, before
+/// it reads the catalog again: a readiness change the basis doesn't carry.
+struct ReopenOnReserve<'a> {
+    world: &'a World,
+    session: uuid::Uuid,
+    done: AtomicBool,
+}
+
+impl ApplyControl for ReopenOnReserve<'_> {
+    fn reserved(&self, _operation_id: uuid::Uuid) {
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async {
+                self.world.catalog().reopen_session_review(self.session).await.unwrap();
+            });
+        });
+        self.done.store(true, Ordering::SeqCst);
+    }
+}
+
+/// 5u6x7 (6), FR-034 (D-W100): a held session that stops being Ready
+/// between the reservation and the catalog's second read fails Apply
+/// before the swap, with the old View intact.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_readiness_change_after_the_reservation_fails_apply_before_the_swap() {
+    let world = world(ViewMode::Copies).await;
+    world.apply().await;
+    let before = World::tree(&world.view());
+    world.bump().await;
+    let preview = world.preview().await;
+    assert!(preview.blockers.is_empty(), "{:#?}", preview.blockers);
+    let session = world.session_of(&world.captures, HA[0]).await.id;
+
+    let control = ReopenOnReserve { world: &world, session, done: AtomicBool::new(false) };
+    let report = world.library.apply(&World::request(&preview), &control).await.unwrap();
+    assert!(control.done.load(Ordering::SeqCst), "the review was reopened after the reservation");
+    assert_eq!(report.stop, Some(ApplyStop::CatalogMoved), "{report:#?}");
+    assert_eq!(report.outcome, Some(ApplyOutcome::Failed), "{report:#?}");
+    assert_eq!(World::tree(&world.view()), before, "the old View stays");
+    assert!(!world.previous().exists());
+}
+
 /// C3, STO-FR-04/05/16: a `View (previous)/` that is a link is never walked:
 /// the sheet names it as unreadable and lists nothing below it.
 #[tokio::test]
