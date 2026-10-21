@@ -818,7 +818,7 @@ fn probe_volume(root: &Path, _meta: &Metadata) -> Result<Probed, LibraryError> {
     // drive reports the serial its server gives the share.
     let info = windows_handle::information(root)
         .map_err(|error| unqualified(root, &format!("volume handle {error}")))?;
-    if volume.serial != info.volume_serial_number() {
+    if u64::from(volume.serial) != info.volume_serial_number() {
         return Err(unqualified(
             root,
             &format!("the volume at {} does not hold the entry", volume.root.display()),
