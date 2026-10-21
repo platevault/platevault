@@ -76,6 +76,7 @@ trash.workspace = true
 
 [dev-dependencies]
 parking_lot = "0.12.5"
+persistence_library = { path = "../persistence/library", features = ["test-counters"] }
 platevault_pixels = { path = "../platevault-pixels", features = ["fixtures"] }
 
 [lints]

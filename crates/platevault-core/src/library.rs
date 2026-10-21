@@ -3,10 +3,9 @@
 
 //! Application operations over the clean catalog. Image paths are read-only.
 
-use std::collections::hash_map::Entry;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::future::Future;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -51,6 +50,9 @@ pub trait AssetReferences: Send + Sync + 'static {
 }
 
 pub struct Library {
+    /// Patched-copy entry refusals established by preview, keyed by preview id.
+    /// This is a performance cache only: a miss at confirm repeats validation.
+    patched_entry_refusals: Mutex<HashMap<Uuid, PatchedEntryRefusalBasis>>,
     catalog: Arc<Catalog>,
     targets: Arc<TargetIndex>,
     provider: Option<SimbadTargetResolver>,
@@ -68,8 +70,19 @@ pub struct Library {
     frame_review: FrameReview,
     /// Test-only: the next N assessments are refused as if a concurrent writer
     /// had committed between the session read and the record.
+    /// Test-only counters for patched-copy entry-check I/O boundaries.
+    #[cfg(test)]
+    patched_entry_header_reads: std::sync::atomic::AtomicUsize,
     #[cfg(test)]
     forced_conflicts: std::sync::atomic::AtomicUsize,
+}
+
+
+#[derive(Clone)]
+struct PatchedEntryRefusalBasis {
+    expected: Vec<ExpectedAsset>,
+    corrections: Vec<CorrectionInput>,
+    refusals: HashMap<(Uuid, String), Option<crate::PatchRefusal>>,
 }
 
 /// Re-reads of one session before a conflicting assessment is reported.
@@ -150,6 +163,7 @@ impl Library {
             Arc::new(CalibrationReferences { catalog: Arc::clone(&catalog) });
         let frame_review = FrameReview::new(Arc::clone(&catalog));
         let library = Arc::new(Self {
+            patched_entry_refusals: Mutex::new(HashMap::new()),
             catalog,
             targets: Arc::new(targets),
             provider,
@@ -161,6 +175,8 @@ impl Library {
             planning,
             references: tokio::sync::RwLock::new(vec![projects, calibration]),
             frame_review,
+            #[cfg(test)]
+            patched_entry_header_reads: std::sync::atomic::AtomicUsize::new(0),
             #[cfg(test)]
             forced_conflicts: std::sync::atomic::AtomicUsize::new(0),
         });
@@ -614,8 +630,17 @@ impl Library {
         corrections: &[CorrectionInput],
         margins: &FramingMargins,
     ) -> Result<CorrectionPreview, LibraryError> {
-        self.refuse_undeliverable(expected, corrections).await?;
-        self.catalog.preview_correction(expected, corrections, Intake(margins)).await
+        let refusals = self.refuse_undeliverable(expected, corrections, None).await?;
+        let preview = self.catalog.preview_correction(expected, corrections, Intake(margins)).await?;
+        self.patched_entry_refusals.lock().await.insert(
+            preview.id,
+            PatchedEntryRefusalBasis {
+                expected: expected.to_vec(),
+                corrections: corrections.to_vec(),
+                refusals,
+            },
+        );
+        Ok(preview)
     }
 
     /// Confirm a reviewed correction preview, then re-derive the target suggestion
@@ -645,7 +670,20 @@ impl Library {
         margins: &FramingMargins,
     ) -> Result<ConfirmedCorrection, LibraryError> {
         let preview = self.catalog.correction_preview(preview_id).await?;
-        self.refuse_undeliverable(expected, &preview.corrections).await?;
+        let cached = self.patched_entry_refusals.lock().await.remove(&preview_id);
+        let cached = cached.filter(|basis| {
+            basis.expected.len() == expected.len()
+                && basis.expected.iter().all(|item| expected.iter().any(|candidate| {
+                    candidate.asset_id == item.asset_id
+                        && candidate.decision_revision == item.decision_revision
+                        && candidate.fingerprint.equivalent(&item.fingerprint)
+                }))
+                && basis.corrections.len() == preview.corrections.len()
+                && basis.corrections.iter().zip(&preview.corrections).all(|(left, right)| {
+                    left.asset_id == right.asset_id && left.field == right.field && left.value == right.value
+                })
+        });
+        self.refuse_undeliverable(expected, &preview.corrections, cached).await?;
         let outcome =
             self.catalog.confirm_correction(preview_id, expected, Intake(margins)).await?;
         let association_refresh = match self.refresh_sessions(&outcome).await {
@@ -657,59 +695,65 @@ impl Library {
 
     /// The first of `corrections` no isolated patched copy can deliver, as
     /// a coded refusal naming its frame and field (PREP-FR-03, D-W123).
-    /// Each frame is the catalog's record of it; its header is read off the
-    /// runtime, only where the refusal depends on it. A correction of a
-    /// frame `expected` doesn't name, or the catalog doesn't know, is left
-    /// to the catalog, which refuses it with its own code.
+    /// Each corrected frame is loaded in one batch; header evidence is captured
+    /// at preview and reused on confirm while the preview inputs still match.
+    /// Unknown frames remain the catalog correction transaction's responsibility;
+    /// cache misses, including after restart, recompute validation before confirmation.
     async fn refuse_undeliverable(
         &self,
         expected: &[ExpectedAsset],
         corrections: &[CorrectionInput],
-    ) -> Result<(), LibraryError> {
+        basis: Option<PatchedEntryRefusalBasis>,
+    ) -> Result<HashMap<(Uuid, String), Option<crate::PatchRefusal>>, LibraryError> {
         let named: HashSet<Uuid> = expected.iter().map(|item| item.asset_id).collect();
-        let mut frames: HashMap<Uuid, Option<EntryFrame>> = HashMap::new();
-        let mut roots: HashMap<Uuid, Option<PathBuf>> = HashMap::new();
-        for correction in corrections.iter().filter(|item| named.contains(&item.asset_id)) {
-            let Entry::Vacant(slot) = frames.entry(correction.asset_id) else { continue };
-            let asset = match self.catalog.asset(correction.asset_id).await {
-                Ok(asset) => asset,
-                Err(LibraryError::NotFound(_)) => {
-                    slot.insert(None);
-                    continue;
-                }
-                Err(error) => return Err(error),
-            };
-            if let Entry::Vacant(root) = roots.entry(asset.location_id) {
-                root.insert(
-                    self.catalog.location(asset.location_id).await?.path.to_path_buf().ok(),
-                );
-            }
-            let source = roots[&asset.location_id]
-                .as_deref()
-                .zip(asset.relative_path.relative_path().ok())
+        let correction_ids: Vec<Uuid> = corrections.iter()
+            .filter(|item| named.contains(&item.asset_id))
+            .map(|item| item.asset_id)
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter().collect();
+        let entries = self.catalog.correction_entry_assets(&correction_ids).await?;
+        let has_basis = basis.is_some();
+        let prior = basis.map(|basis| basis.refusals).unwrap_or_default();
+        let mut refusals = prior;
+        let mut frames = HashMap::with_capacity(entries.len());
+        for entry in entries {
+            let source = entry.root.as_deref()
+                .zip(entry.asset.relative_path.relative_path().ok())
                 .map(|(root, relative)| root.join(relative));
-            let frame = EntryFrame { observed: asset.observed, format: asset.format, source };
-            slot.insert(Some(frame));
-        }
-        let corrections = corrections.to_vec();
-        blocking(move || {
-            corrections.iter().try_for_each(|correction| {
-                let Some(Some(frame)) = frames.get(&correction.asset_id) else { return Ok(()) };
-                match patched_copy::entry_refusal(&correction.field, &correction.value, frame) {
-                    Some(refusal) => Err(LibraryError::CorrectionUndeliverable {
-                        identity: correction.asset_id,
-                        path: None,
-                        field: correction.field.clone(),
-                        refusal,
-                    }),
-                    None => Ok(()),
-                }
-            })
-        })
-        .await
-    }
+            let needs_alias_read = !has_basis && ["telescope", "camera"].iter().any(|field| {
+                corrections.iter().any(|item| item.asset_id == entry.asset.id && item.field == *field)
+            });
+            #[cfg(test)]
+            if needs_alias_read && matches!(entry.asset.format, crate::ImageFormat::Fits) {
+                self.patched_entry_header_reads.fetch_add(1, Ordering::Relaxed);
+            }
+            let aliases = if needs_alias_read && matches!(entry.asset.format, crate::ImageFormat::Fits) {
+                source.as_deref().and_then(|path| metadata_fits::patch::hierarch_aliases(path).ok())
+            } else { None };
 
-    /// Refresh every resulting session; the first failure is reported after the
+            frames.insert(entry.asset.id, EntryFrame {
+                observed: entry.asset.observed,
+                format: entry.asset.format,
+                source,
+                hierarch_aliases: aliases,
+            });
+        }
+        for correction in corrections {
+            if !named.contains(&correction.asset_id) { continue; }
+            let Some(frame) = frames.get(&correction.asset_id) else { continue };
+            let key = (correction.asset_id, correction.field.clone());
+            if refusals.contains_key(&key) { continue; }
+            let refusal = patched_copy::entry_refusal(&correction.field, &correction.value, frame);
+            refusals.insert(key, refusal);
+            if let Some(refusal) = refusal {
+                return Err(LibraryError::CorrectionUndeliverable {
+                    identity: correction.asset_id, path: None,
+                    field: correction.field.clone(), refusal,
+                });
+            }
+        }
+        Ok(refusals)
+    }
     /// others were attempted.
     async fn refresh_sessions(&self, outcome: &CorrectionOutcome) -> Result<(), LibraryError> {
         let saved = self.saved_targets().await?;
@@ -1114,6 +1158,49 @@ mod tests {
         }
     }
 
+    #[tokio::test]
+    async fn correction_entry_preview_batches_and_confirm_reuses_header_results() {
+        let temp = tempfile::tempdir().unwrap();
+        let (library, locations, _) = scanned_library(&temp, &["captures"]).await;
+        assert_eq!(scan_to_end(&library, locations[0].id).await.state, ScanState::Completed);
+        let asset = library.catalog.location_assets(locations[0].id).await.unwrap().remove(0);
+        let expected = [ExpectedAsset {
+            asset_id: asset.id, decision_revision: asset.decision_revision,
+            fingerprint: asset.fingerprint.clone(),
+        }];
+        let corrections = [CorrectionInput {
+            asset_id: asset.id, field: "camera".into(), value: serde_json::Value::String("ASI2600".into()),
+        }];
+        persistence_library::Catalog::reset_correction_entry_batch_reads_for_test();
+        let preview = library.preview_correction(&expected, &corrections).await.unwrap();
+        assert_eq!(persistence_library::Catalog::correction_entry_batch_reads_for_test(), 1);
+        persistence_library::Catalog::reset_correction_entry_batch_reads_for_test();
+        library.patched_entry_header_reads.store(0, Ordering::Relaxed);
+        library.confirm_correction(preview.id, &expected).await.unwrap();
+        assert_eq!(persistence_library::Catalog::correction_entry_batch_reads_for_test(), 1);
+        assert_eq!(library.patched_entry_header_reads.load(Ordering::Relaxed), 0);
+    }
+
+    #[tokio::test]
+    async fn correction_entry_confirm_without_preview_cache_revalidates_headers() {
+        let temp = tempfile::tempdir().unwrap();
+        let (library, locations, _) = scanned_library(&temp, &["captures"]).await;
+        assert_eq!(scan_to_end(&library, locations[0].id).await.state, ScanState::Completed);
+        let asset = library.catalog.location_assets(locations[0].id).await.unwrap().remove(0);
+        let expected = [ExpectedAsset {
+            asset_id: asset.id, decision_revision: asset.decision_revision,
+            fingerprint: asset.fingerprint.clone(),
+        }];
+        let corrections = [CorrectionInput {
+            asset_id: asset.id, field: "camera".into(), value: serde_json::Value::String("x".repeat(69)),
+        }];
+        let preview = library.catalog.preview_correction(&expected, &corrections, Intake(&FramingMargins::default())).await.unwrap();
+        persistence_library::Catalog::reset_correction_entry_batch_reads_for_test();
+        let result = library.confirm_correction(preview.id, &expected).await;
+        assert!(matches!(result, Err(LibraryError::CorrectionUndeliverable { .. })));
+        assert_eq!(persistence_library::Catalog::correction_entry_batch_reads_for_test(), 1);
+        assert_eq!(library.patched_entry_header_reads.load(Ordering::Relaxed), 1);
+    }
     /// A writer committing between the session read and the record of its
     /// assessment is the scan-time race; it is injected here deterministically.
     #[tokio::test]

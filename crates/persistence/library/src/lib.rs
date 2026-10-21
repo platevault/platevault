@@ -156,7 +156,7 @@ pub use projects::ProgressBasis;
 pub use frame_thumbnails::{StoredThumbnail, ThumbnailBasis};
 pub use measurements::{FrameRecordBasis, ImportReviewInput};
 mod review_lists;
-pub use review_lists::{ReviewAsset, ReviewBasis, ReviewCapture};
+pub use review_lists::{CorrectionEntryAsset, ReviewAsset, ReviewBasis, ReviewCapture};
 mod import;
 mod session_filters;
 mod storage;
