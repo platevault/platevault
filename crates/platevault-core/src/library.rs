@@ -3,7 +3,7 @@
 
 //! Application operations over the clean catalog. Image paths are read-only.
 
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 use std::future::Future;
 use std::path::Path;
 use std::pin::Pin;
@@ -50,9 +50,9 @@ pub trait AssetReferences: Send + Sync + 'static {
 }
 
 pub struct Library {
-    /// Patched-copy entry refusals established by preview, keyed by preview id.
-    /// This is a performance cache only: a miss at confirm repeats validation.
-    patched_entry_refusals: Mutex<HashMap<Uuid, PatchedEntryRefusalBasis>>,
+    /// Patched-copy entry refusals established by recent correction previews.
+    /// Cache misses at confirm repeat validation; the bounded eviction is safe.
+    patched_entry_refusals: Mutex<PatchedEntryRefusalCache>,
     catalog: Arc<Catalog>,
     targets: Arc<TargetIndex>,
     provider: Option<SimbadTargetResolver>,
@@ -82,6 +82,46 @@ struct PatchedEntryRefusalBasis {
     expected: Vec<ExpectedAsset>,
     corrections: Vec<CorrectionInput>,
     refusals: HashMap<(Uuid, String), Option<crate::PatchRefusal>>,
+}
+
+/// Maximum number of correction previews whose refusal basis stays cached.
+/// Older previews remain confirmable; a cache miss repeats validation.
+const PATCHED_ENTRY_REFUSAL_CACHE_CAPACITY: usize = 64;
+
+struct PatchedEntryRefusalCache {
+    entries: HashMap<Uuid, PatchedEntryRefusalBasis>,
+    insertion_order: VecDeque<Uuid>,
+}
+
+impl PatchedEntryRefusalCache {
+    fn new() -> Self {
+        Self { entries: HashMap::new(), insertion_order: VecDeque::new() }
+    }
+
+    fn insert(&mut self, preview_id: Uuid, basis: PatchedEntryRefusalBasis) {
+        if let std::collections::hash_map::Entry::Occupied(mut entry) =
+            self.entries.entry(preview_id)
+        {
+            entry.insert(basis);
+            return;
+        }
+
+        if self.entries.len() == PATCHED_ENTRY_REFUSAL_CACHE_CAPACITY {
+            if let Some(oldest) = self.insertion_order.pop_front() {
+                self.entries.remove(&oldest);
+            }
+        }
+        self.entries.insert(preview_id, basis);
+        self.insertion_order.push_back(preview_id);
+    }
+
+    fn remove(&mut self, preview_id: &Uuid) -> Option<PatchedEntryRefusalBasis> {
+        let basis = self.entries.remove(preview_id)?;
+        if let Some(index) = self.insertion_order.iter().position(|id| id == preview_id) {
+            self.insertion_order.remove(index);
+        }
+        Some(basis)
+    }
 }
 
 /// Re-reads of one session before a conflicting assessment is reported.
@@ -162,7 +202,7 @@ impl Library {
             Arc::new(CalibrationReferences { catalog: Arc::clone(&catalog) });
         let frame_review = FrameReview::new(Arc::clone(&catalog));
         let library = Arc::new(Self {
-            patched_entry_refusals: Mutex::new(HashMap::new()),
+            patched_entry_refusals: Mutex::new(PatchedEntryRefusalCache::new()),
             catalog,
             targets: Arc::new(targets),
             provider,
@@ -1201,6 +1241,36 @@ mod tests {
         library.confirm_correction(preview.id, &expected).await.unwrap();
         assert_eq!(persistence_library::Catalog::correction_entry_batch_reads_for_test(), 1);
         assert_eq!(library.patched_entry_header_reads.load(Ordering::Relaxed), 0);
+    }
+    #[tokio::test]
+    async fn correction_entry_refusal_cache_evicts_older_previews() {
+        let temp = tempfile::tempdir().unwrap();
+        let (library, locations, _) = scanned_library(&temp, &["captures"]).await;
+        assert_eq!(scan_to_end(&library, locations[0].id).await.state, ScanState::Completed);
+        let asset = library.catalog.location_assets(locations[0].id).await.unwrap().remove(0);
+        let expected = [ExpectedAsset {
+            asset_id: asset.id,
+            decision_revision: asset.decision_revision,
+            fingerprint: asset.fingerprint.clone(),
+        }];
+        let corrections = [CorrectionInput {
+            asset_id: asset.id,
+            field: "camera".into(),
+            value: serde_json::Value::String("ASI2600".into()),
+        }];
+        let mut oldest_preview = None;
+        let mut newest_preview = None;
+        for _ in 0..(PATCHED_ENTRY_REFUSAL_CACHE_CAPACITY * 2) {
+            let preview = library.preview_correction(&expected, &corrections).await.unwrap();
+            oldest_preview.get_or_insert(preview.id);
+            newest_preview = Some(preview.id);
+        }
+
+        let cache = library.patched_entry_refusals.lock().await;
+        assert_eq!(cache.entries.len(), PATCHED_ENTRY_REFUSAL_CACHE_CAPACITY);
+        assert!(!cache.entries.contains_key(&oldest_preview.unwrap()));
+        assert!(cache.entries.contains_key(&newest_preview.unwrap()));
+        assert_eq!(cache.insertion_order.len(), PATCHED_ENTRY_REFUSAL_CACHE_CAPACITY);
     }
 
     #[tokio::test]
