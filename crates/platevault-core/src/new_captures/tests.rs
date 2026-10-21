@@ -1925,6 +1925,77 @@ async fn a_release_while_offline_holds_a_later_root_change_a_bounded_time() {
     remapped.watched_at_the_new_root().await;
 }
 
+/// Reselect `id` at `at`.
+async fn reselect(library: &Arc<Library>, id: Uuid, at: &Path) {
+    let current = library.catalog().location(id).await.unwrap();
+    library
+        .reselect_location(id, current.decision_revision, NativePath::from_path(at))
+        .await
+        .unwrap();
+}
+
+/// Reselect `id` at `root` while a release holds it: the root is not walked.
+async fn reselected_untouched(library: &Arc<Library>, watch: &CaptureWatch, id: Uuid, root: &Path) {
+    let walked = walks(watch);
+    reselect(library, id, root).await;
+    tokio::time::sleep(FAST.debounce * 5).await;
+    assert_eq!(walks(watch), walked, "the root was walked during the hold");
+}
+
+/// A location is ejected while its watcher still closes, so it goes offline
+/// with its root still named, and a release of that root arrives again: it
+/// is held, with no root change, until the wait runs out. A reselection at
+/// the same root, during the hold (`during`) or after it, is then checked
+/// at once, with no sweep, as for any reselected offline location.
+async fn reselected_once_a_hold_while_offline_ends(during: bool) {
+    // No sweep runs after the start; 3 s leaves room for the steps below.
+    let settings = Settings { removal_wait: Duration::from_secs(3), ..UNTIL_NOTICED };
+    let (fx, watch, _probe, location, root) = RemappedInRemoval::watched(settings).await;
+    let id = location.id;
+    let releases = &watch.observed().releases;
+    let opens = Opens(releases);
+    releases.close();
+    let early = Duration::from_millis(300);
+
+    let first = watch.release(id, &root);
+    tokio::pin!(first);
+    assert!(tokio::time::timeout(early, &mut first).await.is_err(), "the close still runs");
+    holding(releases).await;
+    watch.gone(id, &root);
+    until(&watch, <[NewCaptureCount]>::is_empty).await;
+    assert_eq!(*watch.subscribe_roots().borrow(), [named_root(&location, &root)]);
+
+    let second = watch.release(id, &root);
+    tokio::pin!(second);
+    assert!(tokio::time::timeout(early, &mut second).await.is_err(), "the close still runs");
+    if during {
+        reselected_untouched(&fx.library, &watch, id, &root).await;
+    }
+    releases.open();
+    tokio::time::timeout(Duration::from_secs(5), first).await.expect("released once closed");
+    tokio::time::timeout(Duration::from_secs(5), second).await.expect("released once closed");
+    drop(opens);
+    let swept = sweeps(watch.observed()).load(Ordering::SeqCst);
+    if !during {
+        eventually("the hold ends", || watch.subscribe_roots().borrow().is_empty()).await;
+        reselect(&fx.library, id, &root).await;
+    }
+
+    live_count_is(&watch, id, 0).await;
+    watchers_are(&watch, 1).await;
+    assert_eq!(sweeps(watch.observed()).load(Ordering::SeqCst), swept, "no sweep started it");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_reselection_during_a_hold_while_offline_is_checked_once_the_hold_ends() {
+    reselected_once_a_hold_while_offline_ends(true).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_reselection_after_a_hold_while_offline_is_checked_at_once() {
+    reselected_once_a_hold_while_offline_ends(false).await;
+}
+
 /// The removal was refused and the location moved on to its new root, and
 /// only then does a release of its old root arrive, sent before the eject
 /// window ended that root's registration: the new root, which may be on that
