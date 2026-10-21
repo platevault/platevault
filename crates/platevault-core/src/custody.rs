@@ -591,7 +591,7 @@ mod tests {
         fs::remove_file(&path).unwrap();
         // ext4 gives the lowest free number in the folder's group: an entry
         // that took a lower one is kept aside until the freed one is reused.
-        let reused = (0..64).any(|attempt| {
+        let number_taken_again = (0..64).any(|attempt| {
             fs::write(&path, b"frame").unwrap();
             if fs::symlink_metadata(&path).unwrap().ino() == inode {
                 return true;
@@ -599,7 +599,7 @@ mod tests {
             fs::rename(&path, temp.path().join(format!("aside-{attempt}"))).unwrap();
             false
         });
-        assert!(reused, "the test folder's filesystem reuses a freed inode number");
+        assert!(number_taken_again, "the test folder's filesystem reuses a freed inode number");
         let observed = recorded(&path);
         assert!(!observed.is_recorded(&identity), "the kernel handle tells it apart");
         let refused = with_file_id(&observed, FileIdentity::unix_file_id(inode, None));
