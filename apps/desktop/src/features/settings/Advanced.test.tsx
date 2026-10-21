@@ -301,13 +301,13 @@ describe('Advanced — Software Update section', () => {
       version: '0.7.0',
       error: {
         code: 'previous-app-not-restored',
-        keptAt: '/Applications/PlateVault (previous version).app',
+        keptAt: '/Applications/PlateVault (set aside).app',
       },
     });
     render(<Advanced save={vi.fn()} />);
 
     expect(await screen.findByTestId('update-status')).toHaveTextContent(
-      "Could not install update: the previous version couldn't be put back. It's saved at /Applications/PlateVault (previous version).app.",
+      "Could not install update: the previous version couldn't be put back. It's saved at /Applications/PlateVault (set aside).app.",
     );
   });
 
