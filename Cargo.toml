@@ -30,6 +30,7 @@ members = [
   "crates/fs/inventory",
   "crates/fs/noreplace-windows",
   "crates/fs/pathsafe",
+  "crates/fs/volume-windows",
   "crates/metadata/core",
   "crates/metadata/fits",
   "crates/metadata/video",

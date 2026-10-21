@@ -6,8 +6,9 @@
 //! Device numbers and mount paths are session-local, so they never become
 //! stable identity; they only provide same-session continuity [`Stamp`]s and
 //! nested-volume boundaries. Each platform asks the operating system for the
-//! volume UUID or serial through a bounded read-only query. Anything that
-//! cannot be qualified fails closed with `IdentityConflict`.
+//! volume UUID or serial through a read-only query, bounded where it runs a
+//! system tool. Anything that cannot be qualified fails closed with
+//! `IdentityConflict`.
 //!
 //! A root folder is qualified only by a remount-stable file ID that no other
 //! live entry on the volume can hold: APFS/HFS+ object IDs, ext*/XFS/btrfs/
@@ -80,8 +81,8 @@ impl VolumeProbe for OsVolumes {
     }
 
     /// Windows reads the serial `GetFileInformationByHandle` reports, which
-    /// the CIM probe has to agree with. Unix device numbers are session-local
-    /// rather than remount-stable, so Unix has no such read.
+    /// the volume probe has to agree with. Unix device numbers are
+    /// session-local rather than remount-stable, so Unix has no such read.
     fn handle_volume_id(&self, path: &Path) -> Option<String> {
         #[cfg(windows)]
         {
@@ -108,7 +109,7 @@ impl VolumeProbe for OsVolumes {
 /// exists every lookup probes: Unix device numbers are session-local, so they
 /// cannot stand in for the volume UUID.
 ///
-/// Windows reads the serial the CIM probe already has to agree with, so a
+/// Windows reads the serial the volume probe already has to agree with, so a
 /// reused probe differs from a fresh one only for a volume that changes its
 /// filesystem or drive type while keeping its serial. A miss probes while it
 /// holds the cache, so the concurrent readers of one run share one probe.
@@ -780,79 +781,50 @@ fn share_address(scheme: &str, source: &str) -> Option<String> {
     Some(format!("{scheme}://{}{path}", host.to_ascii_lowercase()))
 }
 
-// ── Windows: Win32_Volume serial via bounded PowerShell CIM query ────────────
-
-#[cfg(windows)]
-const WINDOWS_VOLUME_QUERY: &str = r"$ErrorActionPreference = 'Stop'
-$p = $env:PLATEVAULT_IDENTITY_PATH
-if ($p.StartsWith('\\?\UNC\')) { exit 3 }
-if ($p.StartsWith('\\?\')) { $p = $p.Substring(4) }
-$p = [System.IO.Path]::GetFullPath($p)
-if (-not $p.EndsWith('\')) { $p = $p + '\' }
-$v = Get-CimInstance -ClassName Win32_Volume |
-  Where-Object { $_.Name -and $p.StartsWith($_.Name, [System.StringComparison]::OrdinalIgnoreCase) } |
-  Sort-Object -Property { $_.Name.Length } -Descending |
-  Select-Object -First 1
-if ($null -ne $v) {
-  @{ fileSystem = $v.FileSystem; serialNumber = $v.SerialNumber; driveType = $v.DriveType } | ConvertTo-Json -Compress
-  exit 0
-}
-$d = Get-CimInstance -ClassName Win32_LogicalDisk -Filter 'DriveType = 4' |
-  Where-Object { $_.DeviceID -and $_.VolumeSerialNumber -and $p.StartsWith($_.DeviceID + '\', [System.StringComparison]::OrdinalIgnoreCase) } |
-  Select-Object -First 1
-if ($null -eq $d) { exit 3 }
-@{ fileSystem = $d.FileSystem; serialNumber = [Convert]::ToUInt32($d.VolumeSerialNumber, 16); driveType = 4 } | ConvertTo-Json -Compress";
+// ── Windows: the volume root's Win32 information, checked against the handle ─
 
 /// Win32 drive type: 2 removable, 4 network (a mapped share), 5 optical.
 #[cfg(any(windows, test))]
-const fn windows_kind(drive_type: Option<u32>) -> VolumeKind {
+const fn windows_kind(drive_type: u32) -> VolumeKind {
     match drive_type {
-        Some(2 | 5) => VolumeKind::Removable,
-        Some(4) => VolumeKind::Network,
+        2 | 5 => VolumeKind::Removable,
+        4 => VolumeKind::Network,
         _ => VolumeKind::Local,
     }
 }
 
 #[cfg(windows)]
 fn probe_volume(root: &Path, _meta: &Metadata) -> Result<Probed, LibraryError> {
-    use std::os::windows::process::CommandExt;
-    use std::process::Command;
+    use std::path::{Component, Prefix};
 
-    /// The desktop release build is a GUI-subsystem process; without this
-    /// flag every console child it spawns opens a visible console window.
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-
-    #[derive(serde::Deserialize)]
-    #[serde(rename_all = "camelCase")]
-    struct Volume {
-        file_system: Option<String>,
-        serial_number: Option<u32>,
-        drive_type: Option<u32>,
+    // Only a drive path names a volume of this host, a mapped network drive
+    // included. A share (`\\server\share`, `\\?\UNC\…`), a device path or a
+    // volume GUID path is refused.
+    let path = std::path::absolute(root)
+        .map_err(|error| unqualified(root, &format!("absolute path {error}")))?;
+    let on_drive = matches!(
+        path.components().next(),
+        Some(Component::Prefix(prefix))
+            if matches!(prefix.kind(), Prefix::Disk(_) | Prefix::VerbatimDisk(_))
+    );
+    if !on_drive {
+        return Err(unqualified(root, "the path is not on a drive of this host"));
     }
+    let volume = fs_volume_windows::volume(&path)
+        .map_err(|error| unqualified(root, &format!("volume query {error}")))?;
 
-    let system_root =
-        std::env::var_os("SystemRoot").ok_or_else(|| unqualified(root, "SystemRoot is not set"))?;
-    let shell = Path::new(&system_root).join(r"System32\WindowsPowerShell\v1.0\powershell.exe");
-    let mut query = Command::new(shell);
-    query
-        .args(["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", WINDOWS_VOLUME_QUERY])
-        .env("PLATEVAULT_IDENTITY_PATH", root)
-        .creation_flags(CREATE_NO_WINDOW);
-    let output = run_bounded(query, std::time::Duration::from_secs(30))
-        .map_err(|why| unqualified(root, &format!("Win32_Volume query {why}")))?;
-    let volume: Volume = serde_json::from_slice(output.trim_ascii())
-        .map_err(|error| unqualified(root, &format!("Win32_Volume answer {error}")))?;
-    let filesystem = volume.file_system.unwrap_or_default().trim().to_ascii_lowercase();
-    let stable_id = volume.serial_number.map(|serial| format!("{serial:08X}"));
-
-    // The CIM answer must describe the volume the entry itself is on: the
-    // no-follow handle's serial has to agree with it. A mapped network drive
-    // reports the serial its server gives the share.
+    // The volume root's answer must describe the volume the entry itself is
+    // on: the no-follow handle's serial has to agree with it. A mapped network
+    // drive reports the serial its server gives the share.
     let info = windows_handle::information(root)
         .map_err(|error| unqualified(root, &format!("volume handle {error}")))?;
-    if stable_id.as_deref() != Some(windows_handle::serial(&info).as_str()) {
-        return Err(unqualified(root, "Win32_Volume does not describe the entry's volume"));
+    if volume.serial != info.volume_serial_number() {
+        return Err(unqualified(
+            root,
+            &format!("the volume at {} does not hold the entry", volume.root.display()),
+        ));
     }
+    let filesystem = volume.filesystem.trim().to_ascii_lowercase();
 
     // Windows stores names without Unicode normalization and compares case
     // insensitively on these filesystems. Only NTFS file reference numbers
@@ -868,7 +840,7 @@ fn probe_volume(root: &Path, _meta: &Metadata) -> Result<Probed, LibraryError> {
         volume: VolumeIdentity {
             file_ids_stable: filesystem == "ntfs",
             filesystem,
-            stable_id,
+            stable_id: Some(windows_handle::serial(&info)),
             case,
             normalization,
         },
@@ -904,7 +876,7 @@ mod windows_handle {
         Ok(info)
     }
 
-    /// Volume serial in the `Win32_Volume.SerialNumber` encoding.
+    /// Volume serial as eight upper-case hex digits.
     pub(super) fn serial(info: &winapi_util::file::Information) -> String {
         format!("{:08X}", info.volume_serial_number())
     }
@@ -916,7 +888,7 @@ fn probe_volume(root: &Path, _meta: &Metadata) -> Result<Probed, LibraryError> {
 }
 
 /// Run a read-only system query with a deadline; stdout only, capped at 1 MiB.
-#[cfg(any(target_os = "macos", windows))]
+#[cfg(target_os = "macos")]
 fn run_bounded(
     mut command: std::process::Command,
     timeout: std::time::Duration,
@@ -1048,10 +1020,37 @@ mod tests {
 
     #[test]
     fn windows_drive_types_name_removable_and_mapped_network_drives() {
-        assert_eq!(windows_kind(Some(3)), VolumeKind::Local);
-        assert_eq!(windows_kind(Some(2)), VolumeKind::Removable);
-        assert_eq!(windows_kind(Some(4)), VolumeKind::Network);
-        assert_eq!(windows_kind(None), VolumeKind::Local);
+        assert_eq!(windows_kind(3), VolumeKind::Local);
+        assert_eq!(windows_kind(2), VolumeKind::Removable);
+        assert_eq!(windows_kind(5), VolumeKind::Removable);
+        assert_eq!(windows_kind(4), VolumeKind::Network);
+        assert_eq!(windows_kind(0), VolumeKind::Local, "DRIVE_UNKNOWN");
+    }
+
+    /// astro-plan-f2di3: the Win32 probe qualifies a folder on a host drive,
+    /// in its plain and its `\\?\` spelling alike, and refuses the same folder
+    /// reached through a share however that is spelled, as the CIM query did.
+    #[cfg(windows)]
+    #[test]
+    fn the_windows_probe_qualifies_a_drive_folder_and_refuses_its_share() {
+        let dir = tempfile::tempdir().unwrap();
+        let meta = fs::symlink_metadata(dir.path()).unwrap();
+        let probed = probe_volume(dir.path(), &meta).unwrap();
+        assert_eq!(probed.volume.filesystem, "ntfs", "{probed:?}");
+        assert!(probed.volume.file_ids_stable);
+        assert_eq!(probed.kind, VolumeKind::Local);
+        assert_eq!(probed.volume.stable_id, OsVolumes.handle_volume_id(dir.path()));
+        let verbatim = fs::canonicalize(dir.path()).unwrap();
+        assert_eq!(probe_volume(&verbatim, &meta).unwrap().volume, probed.volume);
+
+        let text = dir.path().to_str().unwrap();
+        let (drive, rest) = (&text[..1], &text[2..]);
+        for share in
+            [format!(r"\\localhost\{drive}${rest}"), format!(r"\\?\UNC\localhost\{drive}${rest}")]
+        {
+            let refused = probe_volume(Path::new(&share), &meta).unwrap_err();
+            assert_eq!(refused.code().as_str(), "identity_conflict", "{share}: {refused}");
+        }
     }
 
     #[test]

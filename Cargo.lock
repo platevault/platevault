@@ -2151,6 +2151,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "fs_volume_windows"
+version = "0.1.0"
+dependencies = [
+ "fs_pathsafe",
+ "tempfile",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "fsevent-sys"
 version = "4.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4866,6 +4875,7 @@ dependencies = [
  "fs_inventory",
  "fs_noreplace_windows",
  "fs_pathsafe",
+ "fs_volume_windows",
  "hex",
  "jiff",
  "metadata_core",
