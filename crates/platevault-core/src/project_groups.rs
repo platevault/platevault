@@ -349,12 +349,32 @@ pub struct PanelOffer {
     pub overlap_percent: f64,
 }
 
-/// Groups whose framing footprints overlap within the adjustable panel range.
+/// How far a measured overlap may sit beyond a bound of the Settings panel
+/// range and still count as on that bound. PRJ-FR-29 offers two framings
+/// "that overlap by 5 % to 40 %", a range with inclusive bounds.
+///
+/// The overlap is measured through trigonometry (tangent-plane projection
+/// and footprint areas), and Rust's `f64` sine, cosine, tangent and arctangent
+/// come from each platform's maths library, whose last bits differ between
+/// macOS, glibc and Windows. An exact comparison would offer a pair on one
+/// platform and not on another when its overlap sits on a bound, such as a
+/// pair at 40 % offered on macOS and refused on Linux. That noise is a
+/// few units in the last place, about 2e-13 percentage points between two
+/// computations of one overlap. 1e-6 percentage points stands far above it and
+/// far below anything a framing records: across a 2° field it is a pointing
+/// shift under 0.0001″. An overlap more than this beyond the range is outside
+/// it on every platform.
+const PANEL_OVERLAP_TOLERANCE_PERCENT: f64 = 1e-6;
+
+/// Groups whose framing footprints overlap within the adjustable panel range,
+/// bounds included within `PANEL_OVERLAP_TOLERANCE_PERCENT` (PRJ-FR-29).
 #[must_use]
 pub fn panel_offers(groups: &[ProjectGroup], margins: &FramingMargins) -> Vec<PanelOffer> {
     let footprints: Vec<Option<target_match::SkyFootprint>> =
         groups.iter().map(panel_footprint).collect();
     let (minimum, maximum) = margins.panel_overlap_percent;
+    let offered =
+        (minimum - PANEL_OVERLAP_TOLERANCE_PERCENT)..=(maximum + PANEL_OVERLAP_TOLERANCE_PERCENT);
     let mut offers = Vec::new();
     for left in 0..groups.len() {
         let Some(left_footprint) = footprints[left].as_ref() else { continue };
@@ -365,7 +385,7 @@ pub fn panel_offers(groups: &[ProjectGroup], margins: &FramingMargins) -> Vec<Pa
                 continue;
             };
             let overlap_percent = comparison.normalized_coverage * 100.0;
-            if overlap_percent.is_finite() && (minimum..=maximum).contains(&overlap_percent) {
+            if offered.contains(&overlap_percent) {
                 offers.push(PanelOffer {
                     left_group_id: groups[left].id,
                     right_group_id: groups[right].id,
@@ -537,6 +557,26 @@ mod tests {
             panel_offers(&groups, &changed).is_empty(),
             "changed Settings range changes offers"
         );
+    }
+
+    /// PRJ-FR-29's bounds are inclusive up to `PANEL_OVERLAP_TOLERANCE_PERCENT`:
+    /// an overlap less than that past a bound is on it, twice that is outside.
+    #[test]
+    fn panel_range_bounds_hold_within_the_float_tolerance_and_not_beyond() {
+        let groups = framing_pair_at_coverage(20.0);
+        let measured = overlap_percent(&groups);
+        let offered = |range: (f64, f64)| {
+            let margins =
+                FramingMargins { panel_overlap_percent: range, ..FramingMargins::default() };
+            panel_offers(&groups, &margins).len() == 1
+        };
+        let within = PANEL_OVERLAP_TOLERANCE_PERCENT / 2.0;
+        let beyond = PANEL_OVERLAP_TOLERANCE_PERCENT * 2.0;
+
+        assert!(offered((measured + within, measured + 1.0)), "just inside the lower bound");
+        assert!(!offered((measured + beyond, measured + 1.0)), "just outside the lower bound");
+        assert!(offered((measured - 1.0, measured - within)), "just inside the upper bound");
+        assert!(!offered((measured - 1.0, measured - beyond)), "just outside the upper bound");
     }
 
     fn group(panel: bool, sky_angle_deg: Option<f64>) -> ProjectGroup {
