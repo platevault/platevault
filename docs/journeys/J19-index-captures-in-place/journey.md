@@ -232,6 +232,8 @@ opens on Home, the control-panel dashboard. Done means:
 - G9: Unresolved implementation qualification (carried from G2 unchanged): same-asset locate/remap (LIB-FR-07, D11) and "locate a known copy" are not exercised in this journey. Blocks readiness.
 - G10: (dissolved 2026-10-19): the owner's answer in astro-plan-rzbzu.1 settles My targets: favourites, subjects of open Projects, and every Target that has at least one session. S6a now asserts that My targets lists NGC 7000 once its sessions are indexed, and that its search result shows it is in My targets.
 - G11: (dissolved 2026-10-19): the owner's answer in astro-plan-rzbzu.1: a Target associated by agreeing pointing counts as confirmed for Needs a Target, Not in any Project and Ready. S9a, S10, S15 and SC8 now assert it for the sessions whose Target is associated by pointing. J14, J20, J28 and J35 already assumed this answer.
+- G12: D-W141 is not observed: no fixture has a correction whose successor matches another session of that night. LIB-AC-37 states the rule. Blocks readiness until a fixture does (D-W141, owner's answer, 2026-10-20).
+- G13: D-W131 not observed: no fixture re-splits a session with a user-set name and notes through a metadata correction, so no step shows the name and notes staying with the part that holds its first frame (LIB-FR-12, LIB-FR-28, LIB-AC-38; D-W131; owner's answer, 2026-10-20). Blocks readiness until a fixture does.
 
 ## Delta log
 

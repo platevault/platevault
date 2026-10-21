@@ -162,6 +162,7 @@ The user organizes the seven in-scope Veil sessions in Project `Veil Mosaic HOO`
 - G6: (dissolved 2026-10-12): answered by Round 6 "Mosaic: an excluded panel keeps its goals"; S2 and S2a now assert that Panel 5 keeps its goals on the subject, shown as unmet on the Project's Goals and Home's Goals box, with no panel run, and stays includable in the mosaic editor.
 - G7: (dissolved 2026-10-15): P4 now sets the 17 Aug session to No flats (D-W105), so no master flat without optical-train evidence is needed, and S7 only reads the calibration pinned on each session (D-W101).
 - G8: Rests on provisional F4 items, pending the owner's confirmation in PR #1804: PRJ-FR-31's "Framing unknown" flag for a session without pointing (D-W107, S1b, S1c), D-W99's provisional WBPP layout (S8, S10), and D-W108's exposure part that ends every light folder name (S8). If the owner changes one, the steps that cite it change.
+- G9: D-W136 not observed: no step removes a panel group while one of its goals is hidden, so the journey doesn't show that goal being dropped (PRJ-FR-02, PRJ-AC-50; D-W136; owner's answer, 2026-10-20). Blocks readiness until a fixture does.
 
 ## Delta log
 - **Δ2** 2026-10-12 · S1, +S1a, +S1b, +S1c, S2, S3, S5, +S5a, S7, S8 · behavior-change

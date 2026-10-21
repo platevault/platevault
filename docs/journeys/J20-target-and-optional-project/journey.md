@@ -116,6 +116,7 @@ Adding sessions and the first Apply follow in J21. Done means:
 - G8: Out of scope for this journey: detailed calibration matching thresholds, master-version selection and reassignment are covered by the calibration journeys. S3 reads the Project's calibration diagram but does not change a pinned assignment.
 - G9: (dissolved 2026-10-19): the owner's answer in astro-plan-rzbzu.1 settles PRJ-FR-02/03: removing NGC 7000 keeps its goals hidden in the Project, and adding the subject back restores them (S9).
 - G10: Rests on provisional F4 items, pending the owner's confirmation in PR #1804: D-W94's rig list that only decides suggestions (S2, S4, S9), and D-W96's matching rule and its "captured" count of every matching suggestion (S3, S4, S9). If the owner changes one, the steps that cite it change.
+- G11: D-W135 not observed: S9 adds back a subject that still has goals, and no step removes a subject that has no goals and adds it back with its template's goals (PRJ-FR-02, PRJ-AC-50; D-W135; owner's answer, 2026-10-20). Blocks readiness until a fixture does.
 
 ## Delta log
 - **Δ2** 2026-10-06 · S1, S2, S3, S4, S5, S6, S7, S8, +S9 · behavior-change

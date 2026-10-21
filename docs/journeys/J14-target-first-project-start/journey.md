@@ -1,7 +1,7 @@
 ---
 id: J14
 title: Add a Target and sessions to an existing Project
-version: 6
+version: 7
 status: draft
 last_reviewed: 2026-07-14
 actors: [primary-user]
@@ -62,6 +62,13 @@ Done means:
 - **Expect (negative):** The Project adds no session without the user's action. The offline 12 Sep original is not needed by this Apply; no original is moved, renamed or modified, and no quality state changes. The Project stays Open, and no goal reads "in project" above "captured".
 - **Trace:** PRJ-FR-04, PRJ-FR-07, PRJ-FR-08, PRJ-FR-27, PRJ-FR-31 · VSEL-FR-03, VSEL-FR-12, VSEL-FR-14, VSEL-FR-16 · FR-033, FR-034 · D-W94, D-W95, D-W96, D-W100
 
+### S2c — Change a subject's Target to one with hidden goals {#S2c}
+
+- **Do:** On the Targets page, search `ic5070` and click IC 5070's result row. Choose **Add to Project** and choose `Cygnus HOO`. In the Project, set IC 5070's Ha goal to 8h, delete its OIII goal, then remove IC 5070 as a subject. Change the NGC 7000 subject's Target to IC 5070 and read its goals. Then change it back to NGC 7000 and read its goals again.
+- **Expect:** Pointed at IC 5070, the subject shows its hidden Ha 8h goal again and no OIII goal, and NGC 7000's Ha 10h and OIII 10h goals are hidden. Pointed back at NGC 7000, it shows Ha 10h and OIII 10h again, and IC 5070's Ha 8h goal is hidden.
+- **Expect (negative):** Changing the Target keeps every Project session, changes no session's Target or source file, and never gives one Target's goal values to the other.
+- **Trace:** PRJ-FR-02, PRJ-FR-03 · PRJ-AC-38, PRJ-AC-49 · D-W94, D-W134
+
 ### S5 — Read the Project sessions and groups {#S5}
 
 - **Do:** On the Project's Sessions step, read the groups, their sessions and the suggestions.
@@ -98,6 +105,7 @@ Done means:
 - SC4: After each S6 rename, the badge, Target page and Project page show the same Project name; the subject NGC 7000 remains linked to the Project.
 - SC5: After S7, the Project has 2 rigs and 6 sessions, including the Esprit session; Ha reads 12h35 in project and 12h35 captured.
 - SC6: The S8 manifest of original J19 files equals P4 for 100% of paths, sizes and hashes, and 0 frames change library quality state.
+- SC7: Pointed at IC 5070, the subject shows 1 goal, Ha 8h, and hides NGC 7000's 2 goals; pointed back, it shows Ha 10h and OIII 10h and hides IC 5070's goal (S2c).
 
 ## Known gaps
 
@@ -126,3 +134,6 @@ Done means:
 - **Δ6** 2026-10-19 · S1 · behavior-change
   My targets lists every Target with at least one session, so S1 lists NGC 7000 before **Add ★**.
   Evidence: D-W125, PLAN-TGT-FR-01 · owner's answer, 2026-10-19 in astro-plan-rzbzu.1 · by: Main (intent-gated)
+- **Δ7** 2026-10-20 · +S2c, +SC7 · behavior-change
+  Changing a subject's Target to one with hidden goals restores those goals and hides the subject's previous goals under its old Target.
+  Evidence: D-W134 (owner's answer, 2026-10-20) in PR #1855, PRJ-FR-02, PRJ-AC-49 · by: Main (intent-gated)

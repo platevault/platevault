@@ -1,7 +1,7 @@
 ---
 id: J34
 title: Wrap up and close a Project after trashing rejected frames and Processing files
-version: 7
+version: 8
 status: draft
 last_reviewed: 2026-10-06
 actors: [primary-user]
@@ -19,7 +19,7 @@ The user wraps up Project `NGC 7000 HOO` after its View changes have been applie
 - **Close project…**, Archive's Proceed, transfers 18, 24, 26 and 30 Sep to `Archive/NGC7000`. 28 Sep stays on `Astro-T7` because another open Project holds it.
 - Sources retire only after the destination and affected references verify, and the View's symlinks follow the archived sessions.
 - `Output/` is kept, and the Project reads Archived after the transfer succeeds.
-- The Archived Project is locked for good: no Reopen, no restore of archived sessions, and no library or calibration change reaches it. **Duplicate…** is the way to continue it.
+- The Archived Project is locked for good: no Reopen, no restore of archived sessions, and no library or calibration change reaches it except a renamed session's new name. **Duplicate…** is the way to continue it.
 
 ## Preconditions
 
@@ -187,15 +187,16 @@ The user wraps up Project `NGC 7000 HOO` after its View changes have been applie
 
 ### S12 — Confirm the Archived Project is locked {#S12}
 
-- **Do:** On the Archived Project page, inspect its menu, Edit… control, Wrap up, goals, sessions and View. In Sessions, change the library quality of one 24 Sep frame, and on the 24 Sep session's calibration choose No darks. Return to the Project.
+- **Do:** On the Archived Project page, inspect its menu, Edit… control, Wrap up, goals, sessions and View. In Sessions, change the library quality of one 24 Sep frame, and on the 24 Sep session's calibration choose No darks. With the 26 Sep session's **Edit…**, rename it `26 Sep East`, set its notes to `Cedar field` and save. Return to the Project.
 - **Expect:**
   - Edit… is disabled with "Project closed · Duplicate ▸", and the menu offers no Reopen or restore action.
   - The Project still reads Archived, and its Wrap up record is read-only. Its View and `Output/` remain available for inspection, and **Open in {app}** still opens the kept View.
   - Its sessions and goals show the figures frozen at Close, and its calibration for 24 Sep is the one recorded at Close.
   - Its sessions list the six frames still Trashed, marked "Trashed".
   - The Project page lists 18, 24, 26 and 30 Sep as Archived at their `Archive/NGC7000` paths, with no Restore action.
-  - **Expect (negative):** The quality change and the No darks choice add no pending change to the Archived Project and change none of its figures. No Reopen or restore action is available.
-- **Trace:** HARNESS-V5-IA.md S3, S9 · PRJ-FR-16, PRJ-FR-25 · PRJ-AC-27, PRJ-AC-34 · LIB-AC-30 · CAL-FR-05 · VSEL-FR-12 · STO-FR-13 · D-W69, D-W97, D-W106
+  - Its session list shows 26 Sep under its new name `26 Sep East`. In Sessions, the session's **Edit…** shows that name and the notes `Cedar field`.
+  - **Expect (negative):** The quality change, the No darks choice and the rename add no pending change to the Archived Project and change none of its figures. No Reopen or restore action is available.
+- **Trace:** HARNESS-V5-IA.md S3, S9 · PRJ-FR-16, PRJ-FR-25 · PRJ-AC-27, PRJ-AC-34 · LIB-FR-28 · LIB-AC-30 · CAL-FR-05 · VSEL-FR-12 · STO-FR-13 · D-W69, D-W97, D-W106, D-W130
 
 ### S12a — Duplicate the Archived Project to continue {#S12a}
 
@@ -218,6 +219,7 @@ The user wraps up Project `NGC 7000 HOO` after its View changes have been applie
 - SC10: Skipping Clean up twice moves 0 files, and the Project's View keeps every symlink (S3b).
 - SC11: The Project reads Closing during Archive's transfer and Archived after it succeeds. The Archived Project offers 0 Reopen or Restore actions, takes 0 pending changes from the library or calibration, and offers Duplicate… (S11, S11a, S12, S12a).
 - SC12: After Archive, every View symlink to a transferred frame, including 35 of 35 to the 26 Sep frames, points at its `Archive/NGC7000` path. 0 View entries change kind, and 0 reference-mode choices are offered (S11).
+- SC13: After Close, renaming the 26 Sep session in Sessions shows `26 Sep East` in the Archived Project's session list and adds 0 pending changes to it (S12).
 
 ## Known gaps
 
@@ -229,6 +231,7 @@ The user wraps up Project `NGC 7000 HOO` after its View changes have been applie
 - G7: Out of scope for this journey: approving Clean up's View removal is not exercised, because S3b skips it so that the View's symlinks remain for Archive to repoint. J27 covers View removal.
 - G8: (dissolved 2026-10-12): answered by Round 8 P-TRASH2. S4 refuses F-prep while the View of open Project `NGC 7000 Ha deep` links it. The Project's own View holds no link to its library-Unusable frames once their Library removals are applied (P3), so S6 moves no View entry.
 - G9: Rests on provisional F4 copy, pending the owner's confirmation in PR #1804: "Project closed · Duplicate ▸" (PRJ-FR-25, S11a), "Move N processing files to Trash (size)" (PRJ-FR-15, S4 to S6) and the Clean up offer with Copies ticked and Symlinks unticked (D-W97, S3b). If the owner changes them, those steps change.
+- G10: D-W130 is observed only in part: no session in this journey has every frame Trashed, so no step shows that a Trashed session can't be edited (LIB-FR-18, LIB-FR-28; D-W130; owner's answer, 2026-10-20). Blocks readiness until a fixture does.
 
 ## Delta log
 
@@ -253,3 +256,6 @@ The user wraps up Project `NGC 7000 HOO` after its View changes have been applie
 - **Δ7** 2026-10-16 · S12a · behavior-change
   Duplicate uses each session's current calibration pins, not the original's Close snapshot, so the duplicate's 24 Sep reads the No darks choice made after Close.
   Evidence: D-W112 (owner's answers of 2026-10-15/16) in PR #1804, PRJ-FR-30, PRJ-AC-43, FR-036 · by: SpecF4Answers (intent-gated)
+- **Δ8** 2026-10-20 · S12, +SC13, +G10 · behavior-change
+  Session Edit… renames a session that the Archived Project holds, and the Project shows the new name without taking a pending change.
+  Evidence: D-W130 (owner's answer, 2026-10-20) in PR #1855, LIB-FR-28, PRJ-FR-25 · by: Main (intent-gated)
