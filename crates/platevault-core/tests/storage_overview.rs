@@ -8,7 +8,6 @@
 //! entry the application wrote blocks that item. A Project's footprint is its
 //! Apply sheet's, so Storage lists none (record §2 line 20). Whose archive a
 //! transfer is (`ArchiveOwner`) is covered by `wrap_up.rs`.
-#![cfg(unix)]
 
 #[path = "support/apply.rs"]
 mod apply_support;

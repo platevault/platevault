@@ -6,7 +6,6 @@
 //! never following a link, every time it is read or moved. A folder of the
 //! location that becomes a link after indexing is refused by Apply, Trash and
 //! Archive, and nothing outside the registered root is read or moved.
-#![cfg(unix)]
 
 #[path = "support/apply.rs"]
 mod apply_support;
@@ -35,8 +34,17 @@ fn swap_night_for_link(world: &World) -> PathBuf {
     fs::create_dir_all(&outside).unwrap();
     let moved = outside.join(NIGHT);
     fs::rename(root.join(NIGHT), &moved).unwrap();
-    std::os::unix::fs::symlink(&moved, root.join(NIGHT)).unwrap();
+    link_folder(&moved, &root.join(NIGHT));
     moved
+}
+
+/// Leave a link at `link` to the folder `target`. `fs_pathsafe::create_symlink`
+/// makes file links, and a Windows link to a folder is a directory symlink.
+fn link_folder(target: &Path, link: &Path) {
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(target, link).unwrap();
+    #[cfg(windows)]
+    std::os::windows::fs::symlink_dir(target, link).unwrap();
 }
 
 /// The Ha lights where the swap left them, outside every location.
@@ -272,7 +280,10 @@ async fn clean_up_keeps_a_copy_whose_original_is_reached_through_a_link() {
         .entries
         .iter()
         .map(|entry| entry.path.clone())
-        .filter(|path| path.display().contains("NIGHT_2026-10-12/Lights"))
+        .filter(|path| {
+            fs_pathsafe::wire_path(&path.relative_path().unwrap())
+                .contains("NIGHT_2026-10-12/Lights")
+        })
         .collect();
     assert_eq!(ha.len(), HA.len(), "{review:#?}");
     let request = CleanUpRequest {
@@ -305,7 +316,7 @@ async fn trash_offers_nothing_through_a_linked_project_folder() {
     fs::rename(world.folder(), &away).unwrap();
     fs::create_dir_all(away.join("Processing")).unwrap();
     fs::write(away.join("Processing/registered.xisf"), b"elsewhere").unwrap();
-    std::os::unix::fs::symlink(&away, world.folder()).unwrap();
+    link_folder(&away, &world.folder());
 
     let review = world.library.trash_review(world.project, trash.dyn_trash()).await.unwrap();
     let offered = review

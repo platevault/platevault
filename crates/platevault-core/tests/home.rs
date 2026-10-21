@@ -8,7 +8,6 @@
 //! Projects only, and the running work of every kind. Projects hold sessions
 //! through the membership writer or the Apply world; a suggestion holds
 //! nothing.
-#![cfg(unix)]
 
 #[path = "support/apply.rs"]
 mod apply_support;
