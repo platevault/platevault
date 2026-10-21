@@ -4,8 +4,6 @@
 //! Session-intake Finish/reopen Review entry points (spec 064 LIB-FR-17/20/23/24,
 //! 067 PIX-FR-18; D-W78, D-W97, D-W100). Marks update library quality only.
 
-#![cfg(unix)]
-
 use std::sync::Arc;
 
 use persistence_library::SessionQuery;

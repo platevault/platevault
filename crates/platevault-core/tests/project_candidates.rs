@@ -6,7 +6,6 @@
 //! the Project's candidate sessions with their library quality, and the
 //! Unreviewed filter keeps only those still unreviewed. A mark is the
 //! library's decision at its source; listing changes nothing.
-#![cfg(unix)]
 
 #[path = "support/apply.rs"]
 mod apply_support;

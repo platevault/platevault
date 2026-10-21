@@ -8,7 +8,6 @@
 //! calendar export of a reviewed snapshot. Every fixture file is only ever
 //! read. The Plan area's Target overview with Project gaps is rewritten on the
 //! amended Project contract (U24) and is not exercised here.
-#![cfg(unix)]
 
 mod support;
 

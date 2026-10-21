@@ -9,13 +9,11 @@
 //! overwriting, a tool rerun changing no Output byte, the once-only
 //! Processing master offer, protection, a Closed Project read-only, and
 //! restart.
-#![cfg(unix)]
 
 mod support;
 
 use std::collections::BTreeMap;
 use std::fs;
-use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
@@ -227,8 +225,10 @@ async fn rig(library: &Library) -> Uuid {
     library.catalog().save_equipment(&rig, None).await.unwrap().id
 }
 
+/// `path`, written with `/`, in the host's spelling: the watcher and Copy to
+/// Output name a file below `Output/` with the platform's separator.
 fn native(path: &str) -> NativePath {
-    NativePath::from_path(Path::new(path))
+    NativePath::from_path(&path.split('/').collect::<PathBuf>())
 }
 
 fn write(path: &Path, bytes: &[u8]) {
@@ -249,8 +249,12 @@ fn find<'a>(outputs: &'a [OutputObservation], path: &str) -> &'a OutputObservati
         .unwrap_or_else(|| panic!("{path} not listed in {outputs:#?}"))
 }
 
+/// Each Output's path as wire text, separated by `/` on every platform.
 fn paths(outputs: &[OutputObservation]) -> Vec<String> {
-    outputs.iter().map(|output| output.path.display()).collect()
+    outputs
+        .iter()
+        .map(|output| fs_pathsafe::wire_path(&output.path.to_path_buf().unwrap()))
+        .collect()
 }
 
 fn refused(error: &LibraryError, needle: &str) {
@@ -346,14 +350,19 @@ async fn removal_leaves_the_table_and_an_unreadable_folder_keeps_its_files() {
     let listed = world.settled(&watch).await;
     assert_eq!(paths(&listed), ["b.fit", "drafts/a.fit"]);
 
-    let drafts = world.output().join("drafts");
-    fs::set_permissions(&drafts, fs::Permissions::from_mode(0o000)).unwrap();
-    let readable = fs::read_dir(&drafts).is_ok();
-    let outputs = watch.rescan(world.project).await.unwrap();
-    fs::set_permissions(&drafts, fs::Permissions::from_mode(0o755)).unwrap();
-    if !readable {
-        assert_eq!(paths(&outputs), ["b.fit", "drafts/a.fit"], "unknown, not removed");
-        assert_eq!(find(&outputs, "drafts/a.fit").state, OutputState::Unreadable);
+    // Unix only: a folder is made unreadable with chmod.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let drafts = world.output().join("drafts");
+        fs::set_permissions(&drafts, fs::Permissions::from_mode(0o000)).unwrap();
+        let readable = fs::read_dir(&drafts).is_ok();
+        let outputs = watch.rescan(world.project).await.unwrap();
+        fs::set_permissions(&drafts, fs::Permissions::from_mode(0o755)).unwrap();
+        if !readable {
+            assert_eq!(paths(&outputs), ["b.fit", "drafts/a.fit"], "unknown, not removed");
+            assert_eq!(find(&outputs, "drafts/a.fit").state, OutputState::Unreadable);
+        }
     }
 
     fs::remove_file(world.output().join("b.fit")).unwrap();
@@ -507,7 +516,7 @@ async fn copy_to_output_never_overwrites() {
         .unwrap_err();
     refused(&error, "already in Output/");
     let link = world.processing().join("WBPP/link.xisf");
-    std::os::unix::fs::symlink(&source, &link).unwrap();
+    fs_pathsafe::create_symlink(&source, &link).unwrap();
     let error = world
         .library
         .copy_to_output(world.project, &NativePath::from_path(&link), &native("link.xisf"))
@@ -515,9 +524,10 @@ async fn copy_to_output_never_overwrites() {
         .unwrap_err();
     refused(&error, "links are not followed");
     for name in ["../escape.xisf", "/abs.xisf"] {
+        let as_given = NativePath::from_path(Path::new(name));
         let result = world
             .library
-            .copy_to_output(world.project, &NativePath::from_path(&source), &native(name))
+            .copy_to_output(world.project, &NativePath::from_path(&source), &as_given)
             .await;
         assert!(result.is_err(), "{name} leaves Output/");
     }

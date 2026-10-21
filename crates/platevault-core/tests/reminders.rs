@@ -7,7 +7,6 @@
 //! reminder for windows at another site, durable suppression across restart,
 //! permission re-read before each submission, the 30 s wall-clock re-check and
 //! no scan or inventory activity.
-#![cfg(unix)]
 
 use std::future::Future;
 use std::path::{Path, PathBuf};
