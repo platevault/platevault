@@ -64,9 +64,9 @@ use crate::patched_copy::{self, HeaderPatch};
 use crate::{
     ApplyBlocker, ApplyFailure, ApplyJournal, ApplyOutcome, ApplyPhase, ApplyPreview, ApplyReport,
     ApplyRequest, ApplyStop, EntryEvidence, EntryPlacement, ExpectedTree, FileIdentity,
-    ForeignFile, ForeignItem, ForeignItemState, InputKind, ItemReason, LibraryError, ManifestEntry,
-    NativePath, PinHealth, PreviousItem, PreviousItemReview, ReasonCode, Revision,
-    SymlinkCapability, ViewFootprint, ViewManifest, ViewMode, ViewPlanEntry,
+    ForeignFile, ForeignItem, ForeignItemFailure, ForeignItemState, InputKind, ItemReason,
+    LibraryError, ManifestEntry, NativePath, PinHealth, PreviousItem, PreviousItemReview,
+    ReasonCode, Revision, SymlinkCapability, ViewFootprint, ViewManifest, ViewMode, ViewPlanEntry,
 };
 
 /// What Apply asks while it runs (PREP-FR-09, PREP-FR-18).
@@ -1759,6 +1759,46 @@ impl Run<'_> {
         Ok(())
     }
 
+    /// Move each pending ticked foreign file into the new View, recording
+    /// its outcome right after (e6tgr). Its destination is claimed before
+    /// the move starts, and only when it is free, as `begin()` does: a file
+    /// already there is never claimed, so a resumed move can't take it for
+    /// its own unfinished copy, and the name is taken.
+    async fn move_foreign_items(
+        &self,
+        foreign: &mut [ForeignItem],
+        placed: BTreeSet<PathBuf>,
+    ) -> Result<(), LibraryError> {
+        let catalog = self.library.catalog();
+        let operation_id = self.journal.operation_id;
+        let (view, previous) =
+            (self.project.join(VIEW_FOLDER), self.project.join(VIEW_PREVIOUS_FOLDER));
+        let placed = Arc::new(placed);
+        let claimed = catalog.apply_foreign_claims(operation_id).await?;
+        // An item an earlier attempt at this Apply recorded stays as it is.
+        for item in foreign.iter_mut().filter(|item| item.state == ForeignItemState::Pending) {
+            let journaled = claimed.contains(&item.seq);
+            if item.ticked && !journaled {
+                let (into, pending) = (view.clone(), item.clone());
+                if blocking(move || Ok(files::foreign_destination_taken(&into, &pending))).await? {
+                    item.state = ForeignItemState::Failed;
+                    item.reason = Some(ForeignItemFailure::NameTaken);
+                    catalog.record_apply_foreign(operation_id, item).await?;
+                    continue;
+                }
+                catalog.claim_apply_foreign(operation_id, item.seq).await?;
+            }
+            let (from, into, placed, pending) =
+                (previous.clone(), view.clone(), Arc::clone(&placed), item.clone());
+            *item = blocking(move || {
+                Ok(files::move_foreign(&from, &into, &placed, &pending, journaled))
+            })
+            .await?;
+            catalog.record_apply_foreign(operation_id, item).await?;
+        }
+        Ok(())
+    }
+
     /// From `NewInstalled` on Apply ends Applied: commit the manifest, move
     /// the ticked foreign files and retire the old View.
     async fn finish_installed(&mut self) -> Result<ApplyReport, LibraryError> {
@@ -1773,28 +1813,9 @@ impl Run<'_> {
         }
         let inputs = catalog.apply_inputs(self.journal.project_id).await?;
         let mut foreign = catalog.apply_foreign_items(self.journal.operation_id).await?;
-        let view = self.project.join(VIEW_FOLDER);
-        let previous = self.project.join(VIEW_PREVIOUS_FOLDER);
         if before(self.journal.phase, ApplyPhase::ForeignTransferred) {
-            let placed = Arc::new(inputs.installed.as_ref().map(placed).unwrap_or_default());
-            let claimed = catalog.apply_foreign_claims(self.journal.operation_id).await?;
-            for item in &mut foreign {
-                // Recorded by an earlier attempt at this Apply.
-                if item.state != ForeignItemState::Pending {
-                    continue;
-                }
-                let journaled = claimed.contains(&item.seq);
-                if item.ticked && !journaled {
-                    catalog.claim_apply_foreign(self.journal.operation_id, item.seq).await?;
-                }
-                let (from, into, placed, pending) =
-                    (previous.clone(), view.clone(), Arc::clone(&placed), item.clone());
-                *item = blocking(move || {
-                    Ok(files::move_foreign(&from, &into, &placed, &pending, journaled))
-                })
-                .await?;
-                catalog.record_apply_foreign(self.journal.operation_id, item).await?;
-            }
+            let placed = inputs.installed.as_ref().map(placed).unwrap_or_default();
+            self.move_foreign_items(&mut foreign, placed).await?;
             self.advance(ApplyPhase::ForeignTransferred, None).await?;
             if let Some(report) = self.interrupted() {
                 return Ok(report);

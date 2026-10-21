@@ -759,6 +759,15 @@ pub fn move_foreign(
     item
 }
 
+/// Whether the new `View/` already holds an entry at the ticked foreign
+/// file `item`'s path, before its move is claimed; a path that isn't a
+/// plain relative one is left to [`move_foreign`] to refuse.
+pub fn foreign_destination_taken(view: &Path, item: &ForeignItem) -> bool {
+    item.path
+        .relative_path()
+        .is_ok_and(|relative| fs::symlink_metadata(view.join(relative)).is_ok())
+}
+
 /// Whether `path` holds the reviewed entry: the same file and bytes, or the
 /// same link with the same target, by identity rather than by name.
 fn is_reviewed(path: &Path, reviewed: &EntryEvidence) -> bool {

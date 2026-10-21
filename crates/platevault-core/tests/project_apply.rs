@@ -578,6 +578,48 @@ async fn a_file_at_a_ticked_foreign_files_new_path_is_kept_and_its_name_reported
     }
 }
 
+/// 5u6x7 review: `PlateVault` closing after a ticked foreign file's
+/// attempt and before its outcome is recorded, where another program's
+/// prefix of it already held the new path. Resumed at the next start, the
+/// move never takes that file for its own unfinished copy: it stays, and
+/// the name is reported taken.
+#[tokio::test]
+async fn a_resumed_foreign_move_never_removes_a_file_that_held_its_path_first() {
+    let mut world = world(ViewMode::Copies).await;
+    world.apply().await;
+    let note = format!("{HA_DIR}notes.txt");
+    fs::write(world.view().join(&note), b"the user's notes").unwrap();
+    world.bump().await;
+    let preview = world.preview().await;
+    let mut request = World::request(&preview);
+    request.ticked = vec![NativePath::from_path(Path::new(&note))];
+    let at = world.view().join(&note);
+    let control =
+        WriteOnInstall { at: at.clone(), bytes: b"the user", done: AtomicBool::new(false) };
+    world
+        .sql(
+            "CREATE TRIGGER closed_before_outcome BEFORE UPDATE OF state ON apply_foreign_items \
+             BEGIN SELECT RAISE(ABORT, 'PlateVault closed'); END",
+            &[],
+        )
+        .await;
+    world.library.apply(&request, &control).await.unwrap_err();
+    world.sql("DROP TRIGGER closed_before_outcome", &[]).await;
+    world.reopen().await;
+
+    let journal = world.catalog().latest_apply_journal(world.project).await.unwrap().unwrap();
+    assert_eq!(journal.outcome, Some(ApplyOutcome::Applied), "{journal:#?}");
+    let items = world.catalog().apply_foreign_items(journal.operation_id).await.unwrap();
+    let item = items.iter().find(|item| item.path.display() == note).unwrap();
+    assert_eq!(
+        (item.state, item.reason),
+        (ForeignItemState::Failed, Some(ForeignItemFailure::NameTaken)),
+        "{item:#?}"
+    );
+    assert_eq!(fs::read(&at).unwrap(), b"the user", "their file stays");
+    assert_eq!(fs::read(world.previous().join(&note)).unwrap(), b"the user's notes");
+}
+
 /// Every review update fails from now on, as `PlateVault` closing right
 /// after a kept file moved and before its move was recorded would leave it.
 const CLOSE_BEFORE_RECORD: &str = "CREATE TRIGGER closed_before_record \
