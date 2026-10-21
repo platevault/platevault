@@ -4876,6 +4876,7 @@ dependencies = [
  "specta",
  "sqlx",
  "target-match",
+ "targeting",
  "tempfile",
  "thiserror 2.0.19",
  "time",

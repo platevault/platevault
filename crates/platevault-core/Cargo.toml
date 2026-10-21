@@ -18,6 +18,8 @@ fs_pathsafe = { path = "../fs/pathsafe" }
 # Output watcher also reuses the stable-size rule (spec 070 RES-FR-01, F4 OUTPUT).
 fs_inventory = { path = "../fs/inventory" }
 workflow_artifacts = { path = "../workflow/artifacts" }
+# Shared PRJ-FR-29 panel overlap band tolerance.
+targeting = { version = "0.1.0", path = "../targeting" }
 camino.workspace = true
 tracing.workspace = true
 patterns = { path = "../patterns" }
