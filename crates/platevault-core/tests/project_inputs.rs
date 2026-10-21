@@ -10,7 +10,6 @@
 //!   counting a session once;
 //! - no edit touches the View: each reads as a pending change labelled with
 //!   its source, and a Closed Project takes none.
-#![cfg(unix)]
 
 #[path = "support/apply.rs"]
 mod apply_support;

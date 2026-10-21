@@ -8,7 +8,6 @@
 //! Projects only, and the running work of every kind. Projects hold sessions
 //! through the membership writer or the Apply world; a suggestion holds
 //! nothing.
-#![cfg(unix)]
 
 #[path = "support/apply.rs"]
 mod apply_support;
@@ -249,7 +248,8 @@ async fn rule4_add_open_or_apply_then_rule2_previous_view_holds() {
     // A regular file where a dark's link was stays behind when the View
     // switches to copies.
     let tree = World::tree(&world.view());
-    let replaced = tree.iter().find(|path| path.starts_with("Darks/")).unwrap();
+    let replaced =
+        tree.iter().find(|path| std::path::Path::new(path.as_str()).starts_with("Darks")).unwrap();
     std::fs::remove_file(world.view().join(replaced)).unwrap();
     std::fs::write(world.view().join(replaced), DARKS[0]).unwrap();
     world

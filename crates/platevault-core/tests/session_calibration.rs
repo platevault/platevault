@@ -11,7 +11,6 @@
 //! only kinds still waiting; a restart finishes what was left pending; the
 //! user confirms, says No or reassigns against the generation they saw; a
 //! changed pinned file keeps its pin and waits in Needs calibration.
-#![cfg(unix)]
 
 #[path = "support/apply.rs"]
 mod apply_support;
@@ -148,7 +147,7 @@ async fn index(
         incomplete_scopes: Vec::new(),
         files,
         issues: Vec::new(),
-        complete_scopes: vec![NativePath::UnixBytes(Vec::new())],
+        complete_scopes: vec![NativePath::from_path(Path::new(""))],
         progress,
         state: ScanState::Partial,
     };
