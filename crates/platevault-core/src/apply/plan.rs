@@ -728,7 +728,6 @@ mod tests {
         paths.iter().any(|path| path == expected)
     }
 
-
     #[test]
     fn two_groups_that_would_share_a_folder_are_refused() {
         let night = date!(2026 - 10 - 12);
@@ -769,7 +768,10 @@ mod tests {
         ]);
         let paths = plan_paths(&layout).unwrap();
         assert!(
-            has_path(&paths, Path::new("GROUP_RedCat/NIGHT_2026-10-12/Lights/Ha_300s/light-10.fits")),
+            has_path(
+                &paths,
+                Path::new("GROUP_RedCat/NIGHT_2026-10-12/Lights/Ha_300s/light-10.fits")
+            ),
             "{paths:#?}"
         );
         assert!(has_path(&paths, Path::new("GROUP_RedCat/NIGHT_2026-10-12/Flats/Ha/cal-50.fits")));
