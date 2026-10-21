@@ -239,6 +239,7 @@ moves or trashes no source file.
 - G8: (dissolved 2026-10-16): answered by the owner's D-W118 (PIX-FR-14): every mark on a ⌘A or threshold selection asks, whatever its count, and single-frame and hand-picked marks never ask. S7a asserts the threshold confirmation, S9a a hand-picked two-frame mark with none, and S10 the ⌘A confirmation. "Mark rest usable" also asks and names the count (owner's answer, 2026-10-19, astro-plan-rzbzu.1); no step exercises it.
 - G9: (dissolved 2026-10-15): D-W78 moves review into session intake and D-W94 removes runs, so there is no Review draft and no Discard to define. Library marks are durable when made, and reopened Review is allowed on a Ready session. Its marks reach open Projects that hold the session as labelled pending changes (D-W100) and never change a Closed or Archived Project (D-W97; LIB-FR-20, PIX-FR-18, VSEL-FR-12). The owner's answer on 2026-10-19 (astro-plan-rzbzu.1) settles that a mark setting a frame to Unreviewed, and a grouping correction that re-splits a held session, reach every open Project holding it as a labelled pending change; there the session reads Needs review, and Apply waits until Ready.
 - G10: Rests on a provisional F4 item, pending the owner's confirmation in PR #1804: D-W96's "captured" count of every matching suggestion (S12). If the owner changes it, S12's captured value changes.
+- G11: D-W140's reconfirmation branch is not observed: S15b ends the wait only by restoring the reviewed bytes, and no step reconfirms the replaced frame in frame review, so no step shows 18 Sep reading Ready and Apply no longer waiting after a reconfirmation (LIB-FR-09, LIB-AC-36; D-W140; owner's answer, 2026-10-20). Blocks readiness until a step does.
 
 ## Delta log
 
@@ -262,6 +263,6 @@ moves or trashes no source file.
 - **Δ7** 2026-10-17 · S7a · behavior-change
   S7a selects the frames through the Review step's **Select by threshold…** action.
   Evidence: HARNESS-V5-FEEDBACK-R1.md Round 9 C10 · D-W78 · PIX-FR-08 · by: JourneysR9c (intent-gated)
-- **Δ8** 2026-10-20 · S15a, S15b, +SC11 · behavior-change
-  A frame whose bytes change after review puts its session back to Needs review, and the holding Project's Apply waits, with no pending change, until the frame is reconfirmed or its reviewed bytes return.
+- **Δ8** 2026-10-20 · S15a, S15b, +SC11, +G11 · behavior-change
+  A frame whose bytes change after review puts its session back to Needs review, and the holding Project's Apply waits, with no pending change, until the frame is reconfirmed or its reviewed bytes return. S15b observes the bytes returning, and G11 records reconfirmation as not observed.
   Evidence: D-W140 (owner's answer, 2026-10-20) in PR #1855, LIB-FR-09, LIB-AC-36 · by: Main (intent-gated)
