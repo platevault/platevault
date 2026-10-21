@@ -51,6 +51,8 @@ use crate::{
     ScanProgress, ScanState, VolumeIdentity, VolumeKind,
 };
 
+#[cfg(unix)]
+pub(crate) use identity::file_id;
 pub use identity::FolderId;
 #[cfg(test)]
 pub(crate) use identity::Probed;

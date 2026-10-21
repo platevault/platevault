@@ -20,16 +20,16 @@ use std::sync::Arc;
 use std::time::{Duration, UNIX_EPOCH};
 
 use platevault_model::{
-    counts_as_confirmed, logical_quality, ApplicableQuality, Asset, AssetReference, Association,
-    AssociationKind, AssociationState, Availability, CaptureKey, CaptureMetadata, CorrectionInput,
-    CoverageContribution, DigestEvidence, Equipment, EvidenceItem, ExpectedAsset, ExpectedSession,
-    FileIdentity, GroupingResult, LibraryError, LibraryErrorCode, Location, LocationLifecycle,
-    LocationRole, NativePath, ObservationFingerprint, PathSensitivity, Provenance, Quality,
-    ReferenceKind, RemapBlock, RemapBlockReason, RemapItem, RemapReview, RetireAsset, RetireBlock,
-    RetirePinProject, RetireReview, RetireSession, Revision, ScanBatch, ScanFile, ScanIssue,
-    ScanObservation, ScanOperation, ScanProgress, ScanState, Session, SessionCandidate,
-    SessionFraming, SessionLineage, StandingSession, TargetCandidate, TargetCone, TargetCoverage,
-    TargetRecord, VolumeIdentity, VolumeKind, NETWORK_ADDRESS_REFUSED,
+    counts_as_confirmed, file_ids_match, logical_quality, ApplicableQuality, Asset, AssetReference,
+    Association, AssociationKind, AssociationState, Availability, CaptureKey, CaptureMetadata,
+    CorrectionInput, CoverageContribution, DigestEvidence, Equipment, EvidenceItem, ExpectedAsset,
+    ExpectedSession, FileIdentity, GroupingResult, LibraryError, LibraryErrorCode, Location,
+    LocationLifecycle, LocationRole, NativePath, ObservationFingerprint, PathSensitivity,
+    Provenance, Quality, ReferenceKind, RemapBlock, RemapBlockReason, RemapItem, RemapReview,
+    RetireAsset, RetireBlock, RetirePinProject, RetireReview, RetireSession, Revision, ScanBatch,
+    ScanFile, ScanIssue, ScanObservation, ScanOperation, ScanProgress, ScanState, Session,
+    SessionCandidate, SessionFraming, SessionLineage, StandingSession, TargetCandidate, TargetCone,
+    TargetCoverage, TargetRecord, VolumeIdentity, VolumeKind, NETWORK_ADDRESS_REFUSED,
 };
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -2680,7 +2680,7 @@ fn same_volume(left: &VolumeIdentity, right: &VolumeIdentity) -> bool {
 fn same_root(registered: &FileIdentity, observed: &FileIdentity) -> bool {
     same_volume(&registered.volume, &observed.volume)
         && match (&registered.file_id, &observed.file_id) {
-            (Some(registered), Some(observed)) => registered == observed,
+            (Some(registered), Some(observed)) => file_ids_match(Some(registered), Some(observed)),
             (Some(_), None) => false,
             (None, _) => !registered.volume.file_ids_stable,
         }
@@ -2691,7 +2691,7 @@ fn root_proven(registered: &FileIdentity, observed: &FileIdentity) -> bool {
     same_volume(&registered.volume, &observed.volume)
         && registered.volume.file_ids_stable
         && registered.file_id.is_some()
-        && registered.file_id == observed.file_id
+        && file_ids_match(registered.file_id.as_deref(), observed.file_id.as_deref())
 }
 
 fn require_revision(id: Uuid, current: Revision, expected: Revision) -> Result<()> {
@@ -3073,7 +3073,7 @@ impl CanonicalRoot {
         if !recorded.volume.file_ids_stable {
             return None;
         }
-        Some((device, recorded.file_id.as_deref()?.parse().ok()?))
+        Some((device, FileIdentity::unix_inode(recorded.file_id.as_deref()?)?))
     }
 }
 
@@ -3994,7 +3994,8 @@ async fn find_asset(
     let qualified =
         |asset: &Asset| observed_id.is_some() && asset.fingerprint.identity.file_id.is_some();
     if let Some(index) = variants.iter().position(|asset| {
-        qualified(asset) && asset.fingerprint.identity.file_id.as_deref() == observed_id
+        qualified(asset)
+            && file_ids_match(asset.fingerprint.identity.file_id.as_deref(), observed_id)
     }) {
         return Ok(AssetMatch::Existing(Box::new(variants.swap_remove(index))));
     }
@@ -7234,7 +7235,7 @@ fn open_contained(root: &SourceRoot, relative: &Path) -> Result<(std::fs::File, 
     };
     let mut current = root.path.clone();
     let root_metadata = real_directory(&current)?;
-    if !file_id_matches(&root.location.identity, &root_metadata) {
+    if !file_id_matches(&root.location.identity, &current, &root_metadata) {
         return Err(scoped(
             LibraryError::IdentityConflict("root folder is not the registered folder".into()),
             root.location.path.clone(),
@@ -7311,23 +7312,42 @@ fn device_of(metadata: &std::fs::Metadata) -> u64 {
     metadata.dev()
 }
 
-/// Unix file ids are recorded as decimal `st_ino` on remount-stable volumes.
+/// Whether `identity` names the entry at `path`, whose no-follow metadata is
+/// `metadata`. Unix file ids are the decimal `st_ino` and, on Linux, the
+/// kernel file handle, read by path ([`FileIdentity::unix_file_id`]).
 #[cfg(unix)]
-fn file_id_matches(identity: &FileIdentity, metadata: &std::fs::Metadata) -> bool {
-    use std::os::unix::fs::MetadataExt;
+fn file_id_matches(identity: &FileIdentity, path: &Path, metadata: &std::fs::Metadata) -> bool {
     !identity.volume.file_ids_stable
-        || identity.file_id.as_deref() == Some(metadata.ino().to_string().as_str())
+        || unix_id_matches(identity, metadata, fs_file_handle_linux::of_path(path))
 }
 
 /// Whether an opened source handle is the recorded file. Unix compares the
-/// handle's `st_ino`; `open_contained` already holds it to the root's device.
+/// handle's `st_ino` and, on Linux, its kernel file handle; `open_contained`
+/// already holds it to the root's device.
 #[cfg(unix)]
 fn handle_matches(
-    _file: &std::fs::File,
+    file: &std::fs::File,
     handle: &std::fs::Metadata,
     identity: &FileIdentity,
 ) -> bool {
-    file_id_matches(identity, handle)
+    !identity.volume.file_ids_stable
+        || unix_id_matches(identity, handle, fs_file_handle_linux::of_file(file))
+}
+
+/// Whether the recorded file id matches the entry with `metadata` and the
+/// kernel file handle `kernel` read for it; a handle that can't be read
+/// proves nothing.
+#[cfg(unix)]
+fn unix_id_matches(
+    identity: &FileIdentity,
+    metadata: &std::fs::Metadata,
+    kernel: std::io::Result<Option<String>>,
+) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    kernel.is_ok_and(|kernel| {
+        let observed = FileIdentity::unix_file_id(metadata.ino(), kernel.as_deref());
+        file_ids_match(identity.file_id.as_deref(), Some(&observed))
+    })
 }
 
 // Without stable std handle identity, non-unix hosts rely on the probe for the
@@ -7347,7 +7367,11 @@ const fn device_of(_metadata: &std::fs::Metadata) -> u64 {
 }
 
 #[cfg(not(unix))]
-const fn file_id_matches(_identity: &FileIdentity, _metadata: &std::fs::Metadata) -> bool {
+const fn file_id_matches(
+    _identity: &FileIdentity,
+    _path: &Path,
+    _metadata: &std::fs::Metadata,
+) -> bool {
     true
 }
 
@@ -7978,6 +8002,8 @@ mod tests {
         };
         assert!(!root("/D/x").descends_from(&recorded), "no ancestry, no identity claim");
         assert!(unix.descends_from(&recorded));
+        let with_handle = FileIdentity { file_id: Some("2:1-0a0b".into()), ..recorded };
+        assert!(unix.descends_from(&with_handle), "the inode number of a Linux file id");
     }
 
     /// A real folder registered on a volume with remount-stable folder ids.
@@ -7985,13 +8011,14 @@ mod tests {
     fn stable_registration(path: &Path) -> LocationRegistration {
         use std::os::unix::fs::MetadataExt;
         let inode = std::fs::symlink_metadata(path).unwrap().ino();
+        let handle = fs_file_handle_linux::of_path(path).unwrap();
         LocationRegistration {
             name: path.file_name().unwrap().to_string_lossy().into_owned(),
             path: NativePath::from_path(path),
             role: LocationRole::Captures,
             identity: FileIdentity {
                 volume: VolumeIdentity { file_ids_stable: true, ..plan_volume("search-vol") },
-                file_id: Some(inode.to_string()),
+                file_id: Some(FileIdentity::unix_file_id(inode, handle.as_deref())),
             },
             volume_kind: VolumeKind::Local,
         }

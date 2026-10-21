@@ -26,6 +26,7 @@ members = [
   "crates/desktop/services",
   "crates/domain/core",
   "crates/fs/executor",
+  "crates/fs/file-handle-linux",
   "crates/fs/inventory",
   "crates/fs/noreplace-windows",
   "crates/fs/pathsafe",
