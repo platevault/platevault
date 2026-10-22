@@ -818,7 +818,7 @@ async fn a_same_stat_replaced_copy_is_rehashed_and_names_the_pair_conflicting_co
 }
 
 #[tokio::test]
-async fn a_replaced_copy_never_carries_another_copys_decision() {
+async fn a_replaced_copy_never_inherits_another_copy_decision() {
     let temp = tempfile::tempdir().unwrap();
     let (library, locations, target) = copied_library(&temp).await;
     let catalog = library.catalog();

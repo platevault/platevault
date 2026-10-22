@@ -2680,7 +2680,7 @@ function run(argv) {{
         /// A FIFO in the archive's place blocks root's open of it until the
         /// copy's time limit ends the copy.
         #[test]
-        fn an_archive_swapped_for_a_fifo_ends_at_the_copys_time_limit() {
+        fn an_archive_swapped_for_a_fifo_ends_at_the_copy_operation_time_limit() {
             let dir = tempfile::tempdir().expect("tempdir");
             let (installed, archive, install) = stage(dir.path());
             fs::remove_file(&archive).expect("remove the archive");
