@@ -209,6 +209,8 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn capacity_includes_space_beyond_the_callers_quota() {
+        use windows_sys::Win32::Storage::FileSystem::GetDiskFreeSpaceExW;
+
         let temp = tempfile::tempdir().unwrap();
         let root = volume(temp.path()).unwrap().root;
         let mut caller_total = 0_u64;
