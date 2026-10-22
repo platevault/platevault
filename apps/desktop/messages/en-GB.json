@@ -277,6 +277,7 @@
   "err_library_correction_format_unpatchable": "A corrected value is on a frame that isn't a FITS or XISF file, so it can't be written into a copy's header. Review the session's corrections.",
   "err_library_correction_unpatchable": "A corrected value can't be written into the header of this frame's copy. Review the session's corrections.",
   "err_library_identity_conflict": "A file or folder isn't the one the library recorded. Review it before continuing.",
+  "err_library_input_write_risk": "Can't apply with symlinks · this project's application isn't known to leave its input files unchanged, so through symlinks it could change your originals. Use copies for this project.",
   "err_library_invalid_input": "Some of what was entered isn't valid. Check it and try again.",
   "err_library_links_unsupported": "This folder's drive can't hold symlinks, so only copies can be made here. Use copies for this project, or choose another processing location.",
   "err_library_metadata_unreadable": "This file's header couldn't be read. Review the file before using it.",

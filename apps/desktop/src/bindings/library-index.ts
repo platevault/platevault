@@ -527,6 +527,7 @@ export const commands = {
 	 * 
 	 *  # Errors
 	 *  `Conflict` when the Project or the Library moved since the sheet;
+	 *  `InputWriteRisk` when the Project's profile isn't evidenced read-only,
 	 *  `SymlinksUnavailable` when Windows Developer Mode is off and
 	 *  `LinksUnsupported` when the processing location holds no links, for a
 	 *  Symlinks View;
@@ -1745,6 +1746,17 @@ export type ApplyBlocker =
  *  there (PREP-AC-03).
  */
 { blocker: "links_unsupported"; path: NativePathWire } | 
+/**
+ *  Symlinks mode where the profile the Project's View opens in isn't
+ *  evidenced to leave its inputs unchanged: its input behaviour is
+ *  unknown, write-prone, or read-only without a recorded proof (D04).
+ *  Through a symlink the application could change an original, so the
+ *  input-write risk is named, Symlinks is refused, and the sheet offers
+ *  Use copies for this Project without switching the mode
+ *  (PREP-FR-02, PREP-AC-11; D-W81). A Project with no profile set meets
+ *  no such refusal.
+ */
+{ blocker: "input_write_risk"; profileId: string; inputBehavior: InputBehavior } | 
 /**
  *  An original the build needs is on a location that is offline now
  *  (VSEL-AC-31, STO-FR-08).
@@ -4626,7 +4638,12 @@ export type LibraryErrorCode = "invalid_input" | "not_found" | "conflict" | "ide
 /**  A recorded correction on an input neither FITS nor XISF. */
 "correction_format_unpatchable" | 
 /**  A session the Project holds isn't Ready, so Apply waits. */
-"session_not_ready";
+"session_not_ready" | 
+/**
+ *  The Project's profile isn't evidenced read-only, so Symlinks is
+ *  refused and Copies offered.
+ */
+"input_write_risk";
 
 export type LibrarySession = LibrarySession_Serialize | LibrarySession_Deserialize;
 

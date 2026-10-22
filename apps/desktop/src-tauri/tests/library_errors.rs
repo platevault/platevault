@@ -67,6 +67,7 @@ fn every_variant() -> Vec<LibraryError> {
             refusal: PatchRefusal::UnsupportedFormat,
         },
         LibraryError::SessionNotReady(text()),
+        LibraryError::InputWriteRisk(text()),
     ];
     let variant = |error: &LibraryError| match error {
         LibraryError::InvalidInput(_) => 0,
@@ -87,9 +88,10 @@ fn every_variant() -> Vec<LibraryError> {
         LibraryError::Context { .. } => 15,
         LibraryError::CorrectionUndeliverable { .. } => 16,
         LibraryError::SessionNotReady(_) => 17,
+        LibraryError::InputWriteRisk(_) => 18,
     };
     let seen: BTreeSet<usize> = errors.iter().map(variant).collect();
-    assert_eq!(seen, (0..=17).collect(), "one error per variant");
+    assert_eq!(seen, (0..=18).collect(), "one error per variant");
     errors
 }
 
@@ -113,6 +115,7 @@ const fn code_index(code: LibraryErrorCode) -> usize {
         LibraryErrorCode::CorrectionUnpatchable => 14,
         LibraryErrorCode::CorrectionFormatUnpatchable => 15,
         LibraryErrorCode::SessionNotReady => 16,
+        LibraryErrorCode::InputWriteRisk => 17,
     }
 }
 
@@ -196,7 +199,7 @@ fn every_library_error_has_a_code_every_catalogue_words() {
         );
         codes.insert(code_index(code));
     }
-    assert_eq!(codes, (0..=16).collect(), "every code is some variant's");
+    assert_eq!(codes, (0..=17).collect(), "every code is some variant's");
 }
 
 /// One stop per [`ApplyStop`] variant. The match makes a new variant fail to
