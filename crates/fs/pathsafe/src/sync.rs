@@ -51,6 +51,7 @@ fn full_sync_or_fsync(
 
 #[cfg(test)]
 mod tests {
+    #[cfg(target_os = "macos")]
     use super::*;
 
     /// A volume without a full sync (macOS smbfs answers `F_FULLFSYNC` with
