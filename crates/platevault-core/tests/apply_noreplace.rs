@@ -4,7 +4,6 @@
 //! F4 Apply's swap never replaces a folder (STO-FR-12, PREP-FR-06;
 //! astro-plan-nfsgg): a folder that takes `View/` after the old View moved
 //! aside refuses the install, and the old View is kept and restored.
-#![cfg(unix)]
 
 #[path = "support/apply.rs"]
 mod apply_support;

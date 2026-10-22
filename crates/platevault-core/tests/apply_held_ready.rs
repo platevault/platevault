@@ -16,7 +16,6 @@
 //!   change: each successor reads Needs review until it is Ready, Apply
 //!   waits until every one is, and no frame leaves the Project; a Closed or
 //!   Archived Project keeps the session it holds.
-#![cfg(unix)]
 
 #[path = "support/apply.rs"]
 mod apply_support;
