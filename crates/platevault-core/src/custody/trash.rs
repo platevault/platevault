@@ -774,22 +774,6 @@ mod tests {
         assert!(volume.name.is_some(), "{volume:?}");
         assert_eq!(bin.drive_type, Some(3));
         assert!(bin.capacity.is_some_and(|capacity| capacity > 0));
-        let mut caller_total = 0_u64;
-        let root: Vec<u16> = volume.root.as_os_str().encode_wide().chain([0]).collect();
-        // SAFETY: `root` is NUL-terminated UTF-16 and `caller_total` is writable
-        // for the duration of the Win32 call; the other outputs are optional.
-        #[allow(unsafe_code)]
-        let queried = unsafe {
-            windows_sys::Win32::Storage::FileSystem::GetDiskFreeSpaceExW(
-                root.as_ptr(),
-                std::ptr::null_mut(),
-                &raw mut caller_total,
-                std::ptr::null_mut(),
-            )
-        };
-        assert_ne!(queried, 0);
-        let capacity = bin.capacity.expect("fixed volume capacity is reported");
-        assert!(caller_total > 0 && capacity >= caller_total, "{capacity} < {caller_total}");
     }
 
     fn reason(support: &TrashSupport) -> Option<TrashUnsupported> {

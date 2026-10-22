@@ -206,6 +206,30 @@ mod tests {
 
     use super::*;
 
+    #[cfg(windows)]
+    #[test]
+    fn capacity_includes_space_beyond_the_callers_quota() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = volume(temp.path()).unwrap().root;
+        let mut caller_total = 0_u64;
+        let root_wide: Vec<u16> = root.as_os_str().encode_wide().chain([0]).collect();
+        // SAFETY: `root_wide` is NUL-terminated UTF-16 and `caller_total` is
+        // writable; the other outputs are optional and null.
+        #[allow(unsafe_code)]
+        let queried = unsafe {
+            GetDiskFreeSpaceExW(
+                root_wide.as_ptr(),
+                std::ptr::null_mut(),
+                &raw mut caller_total,
+                std::ptr::null_mut(),
+            )
+        };
+        assert_ne!(queried, 0);
+
+        let capacity = capacity(&root).unwrap();
+        assert!(caller_total > 0 && capacity >= caller_total, "{capacity} < {caller_total}");
+    }
+
     #[test]
     fn a_temp_folder_is_on_a_fixed_ntfs_drive_root() {
         let temp = tempfile::tempdir().unwrap();
