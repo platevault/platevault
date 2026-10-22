@@ -16,7 +16,7 @@ tempfile.workspace = true
 
 # Classifies the errno of a volume without no-replace rename or hard links.
 [target.'cfg(unix)'.dependencies]
-rustix = "1.1"
+rustix = { version = "1.1", features = ["fs"] }
 
 [features]
 # Enables `test_support` for crates that build containment fixtures in their own
