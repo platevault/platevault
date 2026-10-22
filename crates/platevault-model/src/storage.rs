@@ -17,6 +17,7 @@ use crate::{FileIdentity, NativePath, ObservationFingerprint, Revision};
 /// What one storage operation does with each of its items.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum StorageOperationKind {
     /// Move each entry to the OS Trash.
     Trash,
@@ -43,6 +44,7 @@ pub enum StorageOperationState {
 /// target text; its target is never opened, hashed or followed.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum EntryKind {
     File,
     Link { target: NativePath },
@@ -51,9 +53,16 @@ pub enum EntryKind {
 /// Reviewed evidence of one entry, re-verified immediately before it moves (D19).
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct EntryEvidence {
     /// Absolute path of the entry itself.
     pub path: NativePath,
+    /// The registered location root a catalog source lies below. Every read
+    /// and check reaches the entry from it one folder at a time, never
+    /// following a link, so a folder swapped for a link after indexing is
+    /// refused (STO-FR-07). `None` for an entry checked by its path alone.
+    #[serde(default)]
+    pub root: Option<NativePath>,
     pub kind: EntryKind,
     /// No-follow identity, size and modification time; never a content digest.
     pub fingerprint: ObservationFingerprint,
@@ -67,6 +76,11 @@ pub struct EntryEvidence {
 #[serde(rename_all = "camelCase")]
 pub struct KeptCopy {
     pub path: NativePath,
+    /// The registered location root a library copy lies below, reached from
+    /// it one folder at a time as [`EntryEvidence::root`] is. `None` for a
+    /// copy checked by its path alone.
+    #[serde(default)]
+    pub root: Option<NativePath>,
     pub fingerprint: ObservationFingerprint,
     pub sha256: String,
 }
@@ -141,6 +155,7 @@ pub enum ItemOutcome {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum ReasonCode {
     /// The volume has no OS Trash, or its OS removal deletes immediately.
     TrashUnsupported,
@@ -162,15 +177,20 @@ pub enum ReasonCode {
     WriteFailed,
     /// After an interruption the recorded evidence cannot prove what happened.
     Interrupted,
-    /// A library frame, an original source, or a run group's Results another
-    /// run uses as an input: run Clean up and Empty Trash never touch it.
+    /// A library frame, an original source, a file in `Output/` or a master
+    /// `Processing/` offered: Clean up, Trash and Close never touch it.
     Protected,
 }
 
+/// Why one item didn't finish: a stable `code` the client words, and an
+/// English `detail` that is diagnostic text for logs and tests, never
+/// user-facing copy.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ItemReason {
     pub code: ReasonCode,
+    /// Diagnostic text, not user-facing: the client words `code`.
     pub detail: String,
 }
 

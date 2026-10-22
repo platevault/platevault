@@ -219,13 +219,14 @@ pub async fn insert_operation(
             fingerprint: draft.source.fingerprint.clone(),
         };
         sqlx::query(
-            "INSERT INTO storage_items (op_id, seq, path, identity, sha256, relied_on, \
+            "INSERT INTO storage_items (op_id, seq, path, root, identity, sha256, relied_on, \
              destination, written, phase, outcome, reason, revision, updated_at) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL, 'pending', NULL, NULL, 1, ?8)",
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, NULL, 'pending', NULL, NULL, 1, ?9)",
         )
         .bind(id.to_string())
         .bind(seq)
         .bind(path_key(&draft.source.path))
+        .bind(draft.source.root.as_ref().map(path_key))
         .bind(to_json(&identity)?)
         .bind(draft.source.sha256.as_deref())
         .bind(to_json(&draft.relied_on)?)
@@ -235,26 +236,6 @@ pub async fn insert_operation(
         .await?;
     }
     Ok(id)
-}
-
-/// Delete a reviewed operation that never started, inside the caller's write
-/// transaction: nothing on disk was written or moved for it, so a review the
-/// user replaced leaves no unsettled work behind.
-///
-/// # Errors
-/// `InvalidInput` once the operation has started; `NotFound` for an unknown
-/// operation.
-pub async fn withdraw_reviewed_operation(conn: &mut SqliteConnection, id: Uuid) -> Result<()> {
-    if operation_state(conn, id).await? != StorageOperationState::Reviewed {
-        return Err(invalid("only a reviewed storage operation that never started is withdrawn"));
-    }
-    for statement in [
-        "DELETE FROM storage_items WHERE op_id = ?1",
-        "DELETE FROM storage_operations WHERE id = ?1",
-    ] {
-        sqlx::query(statement).bind(id.to_string()).execute(&mut *conn).await?;
-    }
-    Ok(())
 }
 
 fn invalid(message: &str) -> LibraryError {
@@ -429,8 +410,8 @@ async fn load_operation(conn: &mut SqliteConnection, id: Uuid) -> Result<Storage
     .await?
     .ok_or_else(|| LibraryError::NotFound(format!("storage operation {id}")))?;
     let rows = sqlx::query(
-        "SELECT seq, path, identity, sha256, relied_on, destination, written, phase, outcome, \
-         reason, revision, updated_at FROM storage_items WHERE op_id = ?1 ORDER BY seq",
+        "SELECT seq, path, root, identity, sha256, relied_on, destination, written, phase, \
+         outcome, reason, revision, updated_at FROM storage_items WHERE op_id = ?1 ORDER BY seq",
     )
     .bind(id.to_string())
     .fetch_all(&mut *conn)
@@ -448,8 +429,8 @@ async fn load_operation(conn: &mut SqliteConnection, id: Uuid) -> Result<Storage
 
 async fn load_item(conn: &mut SqliteConnection, id: Uuid, seq: u32) -> Result<StorageItem> {
     let row = sqlx::query(
-        "SELECT seq, path, identity, sha256, relied_on, destination, written, phase, outcome, \
-         reason, revision, updated_at FROM storage_items WHERE op_id = ?1 AND seq = ?2",
+        "SELECT seq, path, root, identity, sha256, relied_on, destination, written, phase, \
+         outcome, reason, revision, updated_at FROM storage_items WHERE op_id = ?1 AND seq = ?2",
     )
     .bind(id.to_string())
     .bind(i64::from(seq))
@@ -468,6 +449,11 @@ fn item_from_row(row: &SqliteRow) -> Result<StorageItem> {
             .map_err(|_| LibraryError::PersistenceFailure(format!("corrupt item {seq}")))?,
         source: EntryEvidence {
             path: path_from_key(&row.try_get::<Vec<u8>, _>("path")?)?,
+            root: row
+                .try_get::<Option<Vec<u8>>, _>("root")?
+                .as_deref()
+                .map(path_from_key)
+                .transpose()?,
             kind: identity.kind,
             fingerprint: identity.fingerprint,
             sha256: optional("sha256")?,

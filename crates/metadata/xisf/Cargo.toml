@@ -9,7 +9,14 @@ path = "src/lib.rs"
 
 [dependencies]
 metadata_core = { path = "../core" }
-xisf-header = "0.4.4"
+# 0.4.5 (nightwatch-astro/xisf-header#33): `update_file` edits files with
+# several attachments, such as an Image with a Thumbnail.
+xisf-header = "0.4.5"
+# The SHA-256 of a patched copy once it is proven against its original.
+sha2.workspace = true
+
+[dev-dependencies]
+tempfile = { workspace = true }
 
 [lints]
 workspace = true

@@ -12,11 +12,11 @@
 use std::collections::HashMap;
 
 use platevault_model::{
-    CaptureMetadata, EntryEvidence, FileIdentity, ImportBlock, ImportChoice, ImportDraft,
-    ImportDuplicate, ImportItem, ImportItemPhase, ImportItemRecord, ImportMode, ImportRecord,
-    ImportRig, ImportState, ItemReason, LibraryError, LocationRole, NamingFallback,
-    NamingFrameType, NativePath, ObservationFingerprint, Revision, SavedSource, SettleObservation,
-    StorageRef, UnknownFilter,
+    CaptureMetadata, EntryEvidence, ExpectedSession, FileIdentity, ImportBlock, ImportChoice,
+    ImportDraft, ImportDuplicate, ImportItem, ImportItemPhase, ImportItemRecord, ImportMode,
+    ImportRecord, ImportRig, ImportState, ImportTargetChoice, ItemReason, LibraryError,
+    LocationRole, NamingFallback, NamingFrameType, NativePath, ObservationFingerprint, Revision,
+    SavedSource, SettleObservation, SplitLimits, StorageRef, UnknownFilter,
 };
 use serde::{Deserialize, Serialize};
 use sqlx::sqlite::{SqliteConnection, SqliteRow};
@@ -36,6 +36,12 @@ struct StoredDetail {
     size_bytes: u64,
     image_type: Option<String>,
     excluded: bool,
+    #[serde(default)]
+    framing_label: Option<String>,
+    #[serde(default)]
+    target_choice: Option<ImportTargetChoice>,
+    #[serde(default)]
+    target_id: Option<Uuid>,
     role: Option<LocationRole>,
     fallbacks: Vec<NamingFallback>,
     rig: Option<ImportRig>,
@@ -163,8 +169,12 @@ impl Catalog {
         expected: Revision,
         source_identity: &FileIdentity,
         choices: &[ImportChoice],
+        split_override: Option<&SplitLimits>,
         items: &[ImportItemRecord],
     ) -> Result<ImportRecord> {
+        if let Some(limits) = split_override {
+            limits.validate()?;
+        }
         check_sequence(items)?;
         let record = write_txn!(self, |conn| {
             let (state, current) = operation_head(conn, id).await?;
@@ -185,12 +195,13 @@ impl Catalog {
             }
             sqlx::query(
                 "UPDATE import_operations SET source_identity = ?2, choices = ?3, \
-                 revision = revision + 1, updated_at = ?4 WHERE id = ?1",
+                 split_override = ?5, revision = revision + 1, updated_at = ?4 WHERE id = ?1",
             )
             .bind(id.to_string())
             .bind(to_json(source_identity)?)
             .bind(to_json(choices)?)
             .bind(now()?)
+            .bind(split_override.map(to_json).transpose()?)
             .execute(&mut *conn)
             .await?;
             load_import(conn, id).await?
@@ -451,6 +462,35 @@ impl Catalog {
         })
         .transpose()
     }
+
+    /// The current sessions holding any of these frames, as a Target
+    /// confirmation expects them: the sessions an import's lights formed.
+    ///
+    /// # Errors
+    /// `PersistenceFailure` for an unreadable catalog.
+    pub async fn sessions_holding(
+        &self,
+        asset_ids: &std::collections::BTreeSet<Uuid>,
+    ) -> Result<Vec<ExpectedSession>> {
+        let mut conn = self.reader().await?;
+        let rows = sqlx::query(
+            "SELECT DISTINCT s.id, s.grouping_revision, s.decision_revision FROM assets a \
+             JOIN sessions s ON s.id = a.session_id WHERE s.superseded_by IS NULL \
+             AND a.id IN (SELECT value FROM json_each(?1)) ORDER BY s.id",
+        )
+        .bind(super::json_ids(asset_ids)?)
+        .fetch_all(&mut *conn)
+        .await?;
+        rows.iter()
+            .map(|row| {
+                Ok(ExpectedSession {
+                    session_id: parse_uuid(&row.try_get::<String, _>("id")?)?,
+                    grouping_revision: revision(row.try_get("grouping_revision")?)?,
+                    decision_revision: revision(row.try_get("decision_revision")?)?,
+                })
+            })
+            .collect()
+    }
 }
 
 fn check_sequence(items: &[ImportItemRecord]) -> Result<()> {
@@ -502,6 +542,9 @@ fn detail_of(record: &ImportItemRecord) -> StoredDetail {
         size_bytes: item.size_bytes,
         image_type: item.image_type.clone(),
         excluded: item.excluded,
+        framing_label: item.framing_label.clone(),
+        target_choice: item.target_choice,
+        target_id: item.target_id,
         role: item.role,
         fallbacks: item.fallbacks.clone(),
         rig: item.rig.clone(),
@@ -579,8 +622,8 @@ async fn update_item(
 
 async fn load_import(conn: &mut SqliteConnection, id: Uuid) -> Result<ImportRecord> {
     let row = sqlx::query(
-        "SELECT source_id, source_path, source_identity, mode, state, choices, revision, \
-         created_at, updated_at, settled_at FROM import_operations WHERE id = ?1",
+        "SELECT source_id, source_path, source_identity, mode, state, choices, split_override, \
+         revision, created_at, updated_at, settled_at FROM import_operations WHERE id = ?1",
     )
     .bind(id.to_string())
     .fetch_optional(&mut *conn)
@@ -606,6 +649,11 @@ async fn load_import(conn: &mut SqliteConnection, id: Uuid) -> Result<ImportReco
         mode: row.try_get::<Option<String>, _>("mode")?.as_deref().map(from_text).transpose()?,
         state: from_text(&row.try_get::<String, _>("state")?)?,
         choices: from_json(&row.try_get::<String, _>("choices")?)?,
+        split_override: row
+            .try_get::<Option<String>, _>("split_override")?
+            .as_deref()
+            .map(from_json)
+            .transpose()?,
         revision: revision(row.try_get("revision")?)?,
         items: rows.iter().map(item_from_row).collect::<Result<_>>()?,
         created_at: row.try_get("created_at")?,
@@ -654,6 +702,9 @@ fn item_from_row(row: &SqliteRow) -> Result<ImportItemRecord> {
             classification: frame_type_of(row.try_get("classification")?)?,
             user_type: frame_type_of(row.try_get("user_type")?)?,
             excluded: detail.excluded,
+            framing_label: detail.framing_label,
+            target_choice: detail.target_choice,
+            target_id: detail.target_id,
             role: detail.role,
             destination_location_id: row
                 .try_get::<Option<String>, _>("destination_location_id")?

@@ -2,15 +2,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! Shared calibration model types (spec 068): the stack count a master
-//! determination reads, the Calibration reference kind, required kinds, adoption
-//! destinations and the PREP handoff projection.
+//! determination reads, the F4 reference kinds, the calibration kinds' wire
+//! names and adoption destinations.
 
 mod support;
 
 use metadata_core::MetadataExtractor;
-use platevault_core::{
-    CaptureMetadata, FileIdentity, LibraryError, NativePath, ObservationFingerprint, VolumeIdentity,
-};
+use platevault_core::{CaptureMetadata, LibraryError, NativePath};
 use uuid::Uuid;
 
 #[test]
@@ -36,18 +34,23 @@ fn capture_metadata_carries_the_stack_count_and_keeps_an_absent_count_unknown() 
     assert_eq!(read.stack_count, None);
 }
 
+/// F4 references are a Project's held copies and calibration records
+/// (adopted masters and session pins); runs, Views and Results hold none.
 #[test]
-fn calibration_references_are_a_new_kind_and_older_kinds_keep_their_wire_names() {
+fn references_are_project_or_calibration() {
     use platevault_core::ReferenceKind;
-    for (kind, wire) in [
-        (ReferenceKind::Calibration, "calibration"),
-        (ReferenceKind::View, "view"),
-        (ReferenceKind::Project, "project"),
-        (ReferenceKind::Result, "result"),
-    ] {
+    for (kind, wire) in
+        [(ReferenceKind::Project, "project"), (ReferenceKind::Calibration, "calibration")]
+    {
         let text = serde_json::to_value(kind).unwrap();
         assert_eq!(text, serde_json::json!(wire));
         assert_eq!(serde_json::from_value::<ReferenceKind>(text).unwrap(), kind);
+    }
+    for gone in ["view", "result"] {
+        assert!(
+            serde_json::from_value::<ReferenceKind>(serde_json::json!(gone)).is_err(),
+            "{gone}"
+        );
     }
 }
 
@@ -56,15 +59,8 @@ fn names_field(error: &LibraryError, field: &str) -> bool {
 }
 
 #[test]
-fn required_kinds_are_bias_dark_and_flat_without_duplicates() {
-    use platevault_core::{required_kinds, InputKind};
-    let error = required_kinds(&[InputKind::Dark, InputKind::Flat, InputKind::Dark]).unwrap_err();
-    assert!(names_field(&error, "kinds"), "{error:?}");
-    assert_eq!(required_kinds(&[]).unwrap(), Vec::<InputKind>::new());
-    assert_eq!(
-        required_kinds(&[InputKind::Flat, InputKind::Bias]).unwrap(),
-        vec![InputKind::Bias, InputKind::Flat]
-    );
+fn calibration_kinds_are_bias_dark_and_flat() {
+    use platevault_core::InputKind;
     for wire in ["dark_flat", "darkflat", "light", ""] {
         let parsed = serde_json::from_value::<InputKind>(serde_json::json!(wire))
             .map_err(LibraryError::from);
@@ -108,127 +104,4 @@ fn an_adoption_destination_names_a_new_file_below_the_location_root() {
         let back: AdoptionDestination = serde_json::from_value(wire).unwrap();
         assert_eq!(back, lossy);
     }
-}
-
-#[test]
-#[expect(clippy::too_many_lines)]
-fn the_handoff_projects_only_accepted_and_excepted_assignments() {
-    use platevault_core::{
-        CalibrationDecision, CalibrationInputFile, CalibrationViewPlan, EffectiveDecision,
-        InputKind, InputRef, Requirement, RequirementState, Resolution, UnresolvedReason,
-    };
-    let fingerprint = ObservationFingerprint {
-        identity: FileIdentity {
-            volume: VolumeIdentity {
-                filesystem: "apfs".into(),
-                stable_id: Some("vol".into()),
-                file_ids_stable: true,
-                case: platevault_core::PathSensitivity::Insensitive,
-                normalization: platevault_core::PathSensitivity::Insensitive,
-            },
-            file_id: Some("41".into()),
-        },
-        size_bytes: 2880,
-        modified_ns: 1,
-        content_sha256: Some("ab".repeat(32)),
-    };
-    let group = |session: u128| platevault_core::LightGroupKey {
-        channel: Some(format!("s{session}")),
-        light_type_known: true,
-        ..platevault_core::LightGroupKey::default()
-    };
-    let decision = |session: u128, kind, resolution, reason: Option<&str>| CalibrationDecision {
-        id: Uuid::from_u128(session * 10),
-        view_id: Uuid::from_u128(1),
-        view_revision: 1,
-        light_group: group(session),
-        light_session_ids: [Uuid::from_u128(session)].into(),
-        light_asset_ids: [Uuid::from_u128(session + 100)].into(),
-        kind,
-        resolution,
-        input: Some(InputRef::RawSet { session_id: Uuid::from_u128(50), grouping_revision: 2 }),
-        inputs: vec![CalibrationInputFile {
-            asset_id: Some(Uuid::from_u128(51)),
-            master_id: None,
-            location_id: Uuid::from_u128(5),
-            relative_path: NativePath::UnixBytes(b"darks/dark_300s_001.fits".to_vec()),
-            fingerprint: fingerprint.clone(),
-        }],
-        criteria: Vec::new(),
-        reason: reason.map(str::to_owned),
-        plan_revision: 2,
-        decided_at: "2026-10-05T10:00:00Z".into(),
-    };
-    let requirement =
-        |session: u128, kind, state, reason, effective: Option<CalibrationDecision>| Requirement {
-            light_group: group(session),
-            light_session_ids: vec![Uuid::from_u128(session)],
-            light_asset_ids: [Uuid::from_u128(session + 100)].into(),
-            kind,
-            state,
-            reason,
-            preselected: None,
-            automatic: None,
-            candidates: Vec::new(),
-            unadopted: Vec::new(),
-            effective: effective.map(|decision| EffectiveDecision {
-                decided_at_revision: decision.view_revision,
-                decision,
-                applicable: true,
-            }),
-        };
-    let accepted = requirement(
-        2,
-        InputKind::Dark,
-        RequirementState::Accepted,
-        None,
-        Some(decision(2, InputKind::Dark, Resolution::Accepted, None)),
-    );
-    let excepted = requirement(
-        3,
-        InputKind::Flat,
-        RequirementState::Excepted,
-        None,
-        Some(decision(3, InputKind::Flat, Resolution::Exception, Some("Same rotation"))),
-    );
-    let suggested = requirement(4, InputKind::Dark, RequirementState::Suggested, None, None);
-    let unknown = requirement(
-        4,
-        InputKind::Flat,
-        RequirementState::NeedsReview,
-        Some(UnresolvedReason::CriterionUnknown),
-        None,
-    );
-    let plan = |requirements| CalibrationViewPlan {
-        view_id: Uuid::from_u128(1),
-        view_revision: 1,
-        plan_revision: 2,
-        policy: platevault_core::CalibrationPolicy::Automatic,
-        required_kinds: vec![InputKind::Dark, InputKind::Flat],
-        requirements,
-    };
-    let open = plan(vec![accepted.clone(), excepted.clone(), suggested, unknown]).handoff();
-    assert!(!open.ready);
-    let assigned: Vec<_> =
-        open.assignments.iter().map(|a| (a.light_session_ids[0], a.kind)).collect();
-    assert_eq!(
-        assigned,
-        [(Uuid::from_u128(2), InputKind::Dark), (Uuid::from_u128(3), InputKind::Flat)]
-    );
-    assert_eq!(open.assignments[1].reason.as_deref(), Some("Same rotation"));
-    assert_eq!(open.assignments[0].inputs.len(), 1);
-    assert_eq!(open.assignments[0].decided_at_revision, 1);
-    let unresolved: Vec<_> =
-        open.unresolved.iter().map(|u| (u.light_session_ids[0], u.kind, u.reason)).collect();
-    assert_eq!(
-        unresolved,
-        [
-            (Uuid::from_u128(4), InputKind::Dark, UnresolvedReason::SuggestionUnaccepted),
-            (Uuid::from_u128(4), InputKind::Flat, UnresolvedReason::CriterionUnknown),
-        ],
-        "a suggestion is never an assignment"
-    );
-    let ready = plan(vec![accepted, excepted]).handoff();
-    assert!(ready.ready);
-    assert_eq!(ready.unresolved, [] as [platevault_core::UnresolvedRequirement; 0]);
 }

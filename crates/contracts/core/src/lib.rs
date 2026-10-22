@@ -19,6 +19,7 @@ pub mod inbox;
 pub mod ingestion;
 pub mod inventory;
 pub mod inventory_frame;
+pub mod library_requests;
 pub mod lifecycle;
 pub mod log;
 pub mod manifests;
@@ -519,6 +520,13 @@ mod tests {
             assert_schema_matches::<crate::provenance::ProvenanceReadRequest>(
                 "002-data-lifecycle-state-model",
                 "provenance.read.generated.json",
+            );
+        }
+        #[test]
+        fn previous_item_resolution_schema_no_drift() {
+            assert_schema_matches::<crate::library_requests::PreviousItemResolution>(
+                "064-library-inventory",
+                "library.previous-item-resolution.generated.json",
             );
         }
     }

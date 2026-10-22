@@ -6,16 +6,22 @@
 //! Device numbers and mount paths are session-local, so they never become
 //! stable identity; they only provide same-session continuity [`Stamp`]s and
 //! nested-volume boundaries. Each platform asks the operating system for the
-//! volume UUID or serial through a bounded read-only query. Anything that
-//! cannot be qualified fails closed with `IdentityConflict`.
+//! volume UUID or serial through a read-only query, bounded where it runs a
+//! system tool. Anything that cannot be qualified fails closed with
+//! `IdentityConflict`.
 //!
 //! A root folder is qualified only by a remount-stable file ID that no other
 //! live entry on the volume can hold: APFS/HFS+ object IDs, ext*/XFS/btrfs/
 //! F2FS inode numbers and NTFS file reference numbers (which embed a reuse
 //! sequence). FAT, `exFAT` and `ReFS` (whose 128-bit IDs have no safe query here)
-//! cannot qualify a folder, so their roots are refused. An ext*/XFS inode can
-//! be reused once the original folder is deleted; that residual is not
-//! claimed as collision proof.
+//! cannot qualify a folder, so their roots are refused. An ext*/XFS inode
+//! number can be reused once the original entry is deleted (ext4 hands it to
+//! the next entry created), so a Linux file ID also carries the entry's
+//! kernel file handle, whose inode generation tells the two apart
+//! ([`FileIdentity::unix_file_id`]). Where the filesystem encodes no handles
+//! that residual remains and is not claimed as collision proof; an ID read
+//! without a handle never matches one recorded with one, or the reverse
+//! ([`file_ids_match`]), so a handle read the kernel refuses fails closed.
 //!
 //! A network share the OS already mounted is identified by the server and
 //! share it was mounted from. Its folders qualify only through server file IDs:
@@ -29,8 +35,8 @@ use std::sync::{Mutex, PoisonError};
 use std::time::SystemTime;
 
 use crate::{
-    FileIdentity, LibraryError, Location, NativePath, PathSensitivity, VolumeIdentity, VolumeKind,
-    NETWORK_ADDRESS_REFUSED,
+    file_ids_match, FileIdentity, LibraryError, Location, NativePath, PathSensitivity,
+    VolumeIdentity, VolumeKind, NETWORK_ADDRESS_REFUSED,
 };
 
 /// Root identity plus its same-session continuity stamp.
@@ -75,8 +81,8 @@ impl VolumeProbe for OsVolumes {
     }
 
     /// Windows reads the serial `GetFileInformationByHandle` reports, which
-    /// the CIM probe has to agree with. Unix device numbers are session-local
-    /// rather than remount-stable, so Unix has no such read.
+    /// the volume probe has to agree with. Unix device numbers are
+    /// session-local rather than remount-stable, so Unix has no such read.
     fn handle_volume_id(&self, path: &Path) -> Option<String> {
         #[cfg(windows)]
         {
@@ -103,7 +109,7 @@ impl VolumeProbe for OsVolumes {
 /// exists every lookup probes: Unix device numbers are session-local, so they
 /// cannot stand in for the volume UUID.
 ///
-/// Windows reads the serial the CIM probe already has to agree with, so a
+/// Windows reads the serial the volume probe already has to agree with, so a
 /// reused probe differs from a fresh one only for a volume that changes its
 /// filesystem or drive type while keeping its serial. A miss probes while it
 /// holds the cache, so the concurrent readers of one run share one probe.
@@ -235,14 +241,16 @@ pub(super) fn folder_id(path: &Path, meta: &Metadata) -> std::io::Result<Option<
 /// Remount-stable file ID of an entry, recorded only where the volume
 /// qualifies its file IDs as stable.
 ///
-/// Unix uses the decimal inode number. Windows opens the entry itself (never
-/// a reparse target) and uses the 64-bit file index as 16 hex digits after
-/// checking the handle's volume serial against the qualified volume and its
-/// length against `meta`; a file that grew in between fails with the
-/// `CHANGED_WHILE_READ` kind.
-// Only the Windows branch can fail; the shared signature keeps callers uniform.
-#[cfg_attr(unix, allow(clippy::unnecessary_wraps))]
-pub(super) fn file_id(
+/// Unix uses the decimal inode number and, on Linux where the filesystem
+/// encodes one, the entry's own kernel file handle, read without following a
+/// link ([`FileIdentity::unix_file_id`]); the handle tells an entry apart
+/// from one made under its reused inode number. Both are read by path: an
+/// entry swapped in between gives an ID that matches neither. Windows opens
+/// the entry itself (never a reparse target) and uses the 64-bit file index
+/// as 16 hex digits after checking the handle's volume serial against the
+/// qualified volume and its length against `meta`; a file that grew in
+/// between fails with the `CHANGED_WHILE_READ` kind.
+pub fn file_id(
     path: &Path,
     meta: &Metadata,
     volume: &VolumeIdentity,
@@ -253,8 +261,8 @@ pub(super) fn file_id(
     #[cfg(unix)]
     {
         use std::os::unix::fs::MetadataExt;
-        let _ = path;
-        Ok(Some(meta.ino().to_string()))
+        let handle = fs_file_handle_linux::of_path(path)?;
+        Ok(Some(FileIdentity::unix_file_id(meta.ino(), handle.as_deref())))
     }
     #[cfg(windows)]
     {
@@ -273,8 +281,8 @@ pub(super) fn file_id(
 }
 
 /// The error kind of a file-ID read whose entry changed between its metadata
-/// and its handle. No file-ID read reports it for any other reason: Unix
-/// makes no call, and no Windows file error decodes to it.
+/// and its handle. No Windows file error decodes to it; a Unix handle read a
+/// signal interrupts reports it too, and is observed again the same way.
 const CHANGED_WHILE_READ: std::io::ErrorKind = std::io::ErrorKind::Interrupted;
 
 /// Refuse a handle that reports another length than the metadata it was
@@ -306,7 +314,7 @@ pub(super) fn file_id_error(path: &Path, error: &std::io::Error) -> LibraryError
 pub(super) fn scoped(error: LibraryError, path: &Path) -> LibraryError {
     LibraryError::Context {
         error: Box::new(error),
-        scope: NativePath::from_path(path),
+        scope: Some(NativePath::from_path(path)),
         identity: None,
     }
 }
@@ -416,7 +424,7 @@ pub(super) fn compare(
         )
     } else if !recorded.volume.file_ids_stable
         || recorded.file_id.is_none()
-        || recorded.file_id != observed.identity.file_id
+        || !file_ids_match(recorded.file_id.as_deref(), observed.identity.file_id.as_deref())
     {
         "location root folder is not the registered folder".into()
     } else {
@@ -773,79 +781,95 @@ fn share_address(scheme: &str, source: &str) -> Option<String> {
     Some(format!("{scheme}://{}{path}", host.to_ascii_lowercase()))
 }
 
-// ── Windows: Win32_Volume serial via bounded PowerShell CIM query ────────────
+// ── Windows: the volume root's Win32 information, checked against the handle ─
 
-#[cfg(windows)]
-const WINDOWS_VOLUME_QUERY: &str = r"$ErrorActionPreference = 'Stop'
-$p = $env:PLATEVAULT_IDENTITY_PATH
-if ($p.StartsWith('\\?\UNC\')) { exit 3 }
-if ($p.StartsWith('\\?\')) { $p = $p.Substring(4) }
-$p = [System.IO.Path]::GetFullPath($p)
-if (-not $p.EndsWith('\')) { $p = $p + '\' }
-$v = Get-CimInstance -ClassName Win32_Volume |
-  Where-Object { $_.Name -and $p.StartsWith($_.Name, [System.StringComparison]::OrdinalIgnoreCase) } |
-  Sort-Object -Property { $_.Name.Length } -Descending |
-  Select-Object -First 1
-if ($null -ne $v) {
-  @{ fileSystem = $v.FileSystem; serialNumber = $v.SerialNumber; driveType = $v.DriveType } | ConvertTo-Json -Compress
-  exit 0
-}
-$d = Get-CimInstance -ClassName Win32_LogicalDisk -Filter 'DriveType = 4' |
-  Where-Object { $_.DeviceID -and $_.VolumeSerialNumber -and $p.StartsWith($_.DeviceID + '\', [System.StringComparison]::OrdinalIgnoreCase) } |
-  Select-Object -First 1
-if ($null -eq $d) { exit 3 }
-@{ fileSystem = $d.FileSystem; serialNumber = [Convert]::ToUInt32($d.VolumeSerialNumber, 16); driveType = 4 } | ConvertTo-Json -Compress";
-
-/// Win32 drive type: 2 removable, 4 network (a mapped share), 5 optical.
+/// Win32 drive type: 2 removable, 3 fixed, 4 remote (a mapped share),
+/// 5 optical, 6 RAM disk; `None` for 0 (unknown) and 1 (no root).
 #[cfg(any(windows, test))]
-const fn windows_kind(drive_type: Option<u32>) -> VolumeKind {
+const fn windows_kind(drive_type: u32) -> Option<VolumeKind> {
     match drive_type {
-        Some(2 | 5) => VolumeKind::Removable,
-        Some(4) => VolumeKind::Network,
-        _ => VolumeKind::Local,
+        2 | 5 => Some(VolumeKind::Removable),
+        3 | 6 => Some(VolumeKind::Local),
+        4 => Some(VolumeKind::Network),
+        _ => None,
     }
 }
 
+/// The volume holding `root`, qualified as the `Win32_Volume` and
+/// `Win32_LogicalDisk` query it replaces did (astro-plan-f2di3):
+///
+/// - Only a drive path names a volume. A share (`\\server\share`,
+///   `\\?\UNC\…`), a device path or a volume GUID path is refused.
+/// - A mapped network drive, whose letter `GetDriveTypeW` answers as
+///   `DRIVE_REMOTE`, is a Network volume with the file system and serial its
+///   server reports for the share.
+/// - Any other drive qualifies only where its volume root is on the same
+///   letter, is named `\\?\Volume{GUID}\` (a local volume's mount point) and
+///   is removable, fixed, optical or a RAM disk. A SUBST drive is no volume
+///   mount point, and a drive Windows cannot type is not trusted, so both are
+///   refused.
+///
+/// In every case the volume serial must be the one the no-follow handle on
+/// the entry reports.
 #[cfg(windows)]
 fn probe_volume(root: &Path, _meta: &Metadata) -> Result<Probed, LibraryError> {
-    use std::os::windows::process::CommandExt;
-    use std::process::Command;
+    use std::path::{Component, Prefix};
 
-    /// The desktop release build is a GUI-subsystem process; without this
-    /// flag every console child it spawns opens a visible console window.
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    /// `GetDriveTypeW` for a mapped share.
+    const DRIVE_REMOTE: u32 = 4;
 
-    #[derive(serde::Deserialize)]
-    #[serde(rename_all = "camelCase")]
-    struct Volume {
-        file_system: Option<String>,
-        serial_number: Option<u32>,
-        drive_type: Option<u32>,
-    }
+    let path = std::path::absolute(root)
+        .map_err(|error| unqualified(root, &format!("absolute path {error}")))?;
+    let letter_of = |path: &Path| match path.components().next() {
+        Some(Component::Prefix(prefix)) => match prefix.kind() {
+            Prefix::Disk(letter) | Prefix::VerbatimDisk(letter) => {
+                Some(letter.to_ascii_uppercase())
+            }
+            _ => None,
+        },
+        _ => None,
+    };
+    let letter = letter_of(&path)
+        .ok_or_else(|| unqualified(root, "the path is not on a drive of this host"))?;
+    let drive = PathBuf::from(format!(r"{}:\", char::from(letter)));
+    let drive_type = fs_volume_windows::drive_type(&drive)
+        .map_err(|error| unqualified(root, &format!("drive type {error}")))?;
+    let volume = fs_volume_windows::volume(&path)
+        .map_err(|error| unqualified(root, &format!("volume query {error}")))?;
+    let kind = if drive_type == DRIVE_REMOTE {
+        VolumeKind::Network
+    } else {
+        match windows_kind(volume.drive_type) {
+            Some(kind @ (VolumeKind::Local | VolumeKind::Removable))
+                if volume.name.is_some() && letter_of(&volume.root) == Some(letter) =>
+            {
+                kind
+            }
+            _ => {
+                return Err(unqualified(
+                    root,
+                    &format!(
+                        "{} is not a local volume's drive (a SUBST drive, or one Windows \
+                         cannot type)",
+                        drive.display()
+                    ),
+                ))
+            }
+        }
+    };
 
-    let system_root =
-        std::env::var_os("SystemRoot").ok_or_else(|| unqualified(root, "SystemRoot is not set"))?;
-    let shell = Path::new(&system_root).join(r"System32\WindowsPowerShell\v1.0\powershell.exe");
-    let mut query = Command::new(shell);
-    query
-        .args(["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", WINDOWS_VOLUME_QUERY])
-        .env("PLATEVAULT_IDENTITY_PATH", root)
-        .creation_flags(CREATE_NO_WINDOW);
-    let output = run_bounded(query, std::time::Duration::from_secs(30))
-        .map_err(|why| unqualified(root, &format!("Win32_Volume query {why}")))?;
-    let volume: Volume = serde_json::from_slice(output.trim_ascii())
-        .map_err(|error| unqualified(root, &format!("Win32_Volume answer {error}")))?;
-    let filesystem = volume.file_system.unwrap_or_default().trim().to_ascii_lowercase();
-    let stable_id = volume.serial_number.map(|serial| format!("{serial:08X}"));
-
-    // The CIM answer must describe the volume the entry itself is on: the
-    // no-follow handle's serial has to agree with it. A mapped network drive
-    // reports the serial its server gives the share.
+    // The volume root's answer must describe the volume the entry itself is
+    // on: the no-follow handle's serial has to agree with it. A mapped network
+    // drive reports the serial its server gives the share.
     let info = windows_handle::information(root)
         .map_err(|error| unqualified(root, &format!("volume handle {error}")))?;
-    if stable_id.as_deref() != Some(windows_handle::serial(&info).as_str()) {
-        return Err(unqualified(root, "Win32_Volume does not describe the entry's volume"));
+    if u64::from(volume.serial) != info.volume_serial_number() {
+        return Err(unqualified(
+            root,
+            &format!("the volume at {} does not hold the entry", volume.root.display()),
+        ));
     }
+    let filesystem = volume.filesystem.trim().to_ascii_lowercase();
 
     // Windows stores names without Unicode normalization and compares case
     // insensitively on these filesystems. Only NTFS file reference numbers
@@ -861,11 +885,11 @@ fn probe_volume(root: &Path, _meta: &Metadata) -> Result<Probed, LibraryError> {
         volume: VolumeIdentity {
             file_ids_stable: filesystem == "ntfs",
             filesystem,
-            stable_id,
+            stable_id: Some(windows_handle::serial(&info)),
             case,
             normalization,
         },
-        kind: windows_kind(volume.drive_type),
+        kind,
     })
 }
 
@@ -897,7 +921,7 @@ mod windows_handle {
         Ok(info)
     }
 
-    /// Volume serial in the `Win32_Volume.SerialNumber` encoding.
+    /// Volume serial as eight upper-case hex digits.
     pub(super) fn serial(info: &winapi_util::file::Information) -> String {
         format!("{:08X}", info.volume_serial_number())
     }
@@ -909,7 +933,7 @@ fn probe_volume(root: &Path, _meta: &Metadata) -> Result<Probed, LibraryError> {
 }
 
 /// Run a read-only system query with a deadline; stdout only, capped at 1 MiB.
-#[cfg(any(target_os = "macos", windows))]
+#[cfg(target_os = "macos")]
 fn run_bounded(
     mut command: std::process::Command,
     timeout: std::time::Duration,
@@ -1041,10 +1065,146 @@ mod tests {
 
     #[test]
     fn windows_drive_types_name_removable_and_mapped_network_drives() {
-        assert_eq!(windows_kind(Some(3)), VolumeKind::Local);
-        assert_eq!(windows_kind(Some(2)), VolumeKind::Removable);
-        assert_eq!(windows_kind(Some(4)), VolumeKind::Network);
-        assert_eq!(windows_kind(None), VolumeKind::Local);
+        assert_eq!(windows_kind(3), Some(VolumeKind::Local));
+        assert_eq!(windows_kind(6), Some(VolumeKind::Local), "RAM disk");
+        assert_eq!(windows_kind(2), Some(VolumeKind::Removable));
+        assert_eq!(windows_kind(5), Some(VolumeKind::Removable));
+        assert_eq!(windows_kind(4), Some(VolumeKind::Network));
+        assert_eq!(windows_kind(0), None, "DRIVE_UNKNOWN");
+        assert_eq!(windows_kind(1), None, "DRIVE_NO_ROOT_DIR");
+    }
+
+    /// astro-plan-f2di3: the Win32 probe qualifies a folder on a host drive,
+    /// in its plain and its `\\?\` spelling alike, and refuses the same folder
+    /// reached through a share however that is spelled, as the CIM query did.
+    #[cfg(windows)]
+    #[test]
+    fn the_windows_probe_qualifies_a_drive_folder_and_refuses_its_share() {
+        let dir = tempfile::tempdir().unwrap();
+        let meta = fs::symlink_metadata(dir.path()).unwrap();
+        let probed = probe_volume(dir.path(), &meta).unwrap();
+        assert_eq!(probed.volume.filesystem, "ntfs", "{probed:?}");
+        assert!(probed.volume.file_ids_stable);
+        assert_eq!(probed.kind, VolumeKind::Local);
+        assert_eq!(probed.volume.stable_id, OsVolumes.handle_volume_id(dir.path()));
+        let verbatim = fs::canonicalize(dir.path()).unwrap();
+        assert_eq!(probe_volume(&verbatim, &meta).unwrap().volume, probed.volume);
+
+        let text = dir.path().to_str().unwrap();
+        let (drive, rest) = (&text[..1], &text[2..]);
+        for share in
+            [format!(r"\\localhost\{drive}${rest}"), format!(r"\\?\UNC\localhost\{drive}${rest}")]
+        {
+            let refused = probe_volume(Path::new(&share), &meta).unwrap_err();
+            assert_eq!(refused.code().as_str(), "identity_conflict", "{share}: {refused}");
+        }
+    }
+
+    /// A drive letter mapped for one test, unmapped on drop.
+    #[cfg(windows)]
+    struct MappedDrive {
+        name: String,
+        unmap: fn(&str),
+    }
+
+    #[cfg(windows)]
+    impl Drop for MappedDrive {
+        fn drop(&mut self) {
+            (self.unmap)(&self.name);
+        }
+    }
+
+    /// Map the first free letter of `letters` with `map`; `None` where the
+    /// runner maps none. Each test gets its own letters, as nextest runs them
+    /// at once and a mapping is shared by the logon session.
+    #[cfg(windows)]
+    fn map_drive(
+        letters: &str,
+        map: impl Fn(&str) -> bool,
+        unmap: fn(&str),
+    ) -> Option<MappedDrive> {
+        letters
+            .chars()
+            .map(|letter| format!("{letter}:"))
+            .find(|name| {
+                fs_volume_windows::drive_type(Path::new(&format!(r"{name}\")))
+                    .is_ok_and(|kind| kind == 1)
+                    && map(name)
+            })
+            .map(|name| MappedDrive { name, unmap })
+    }
+
+    /// A drive test the runner cannot set up skips off CI; on CI it fails, so
+    /// a green run proves it ran.
+    #[cfg(windows)]
+    fn skip_off_ci(why: &str) {
+        assert!(std::env::var_os("CI").is_none(), "Windows CI must run this test, but {why}");
+        eprintln!("skipped: {why}");
+    }
+
+    #[cfg(windows)]
+    fn quietly(program: &str, args: &[&str]) -> bool {
+        std::process::Command::new(program)
+            .args(args)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .is_ok_and(|status| status.success())
+    }
+
+    /// astro-plan-f2di3: a SUBST drive names a folder of another volume, not
+    /// a volume, so its root and the folders below it are refused, as the
+    /// `Win32_Volume` query found no volume for them. Below the root
+    /// `GetVolumePathNameW` already fails (`ERROR_DIRECTORY_NOT_SUBDIRECTORY`
+    /// on windows-latest); otherwise the `\\?\Volume{GUID}\` rule refuses it.
+    #[cfg(windows)]
+    #[test]
+    fn the_windows_probe_refuses_a_subst_drive() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir(dir.path().join("Captures")).unwrap();
+        let target = dir.path().to_str().unwrap();
+        let Some(drive) = map_drive(
+            "PQRS",
+            |name| quietly("subst", &[name, target]),
+            |name| {
+                let _ = quietly("subst", &[name, "/D"]);
+            },
+        ) else {
+            skip_off_ci("the runner could not create a SUBST drive");
+            return;
+        };
+        let meta = fs::symlink_metadata(dir.path()).unwrap();
+        for root in [format!(r"{}\", drive.name), format!(r"{}\Captures", drive.name)] {
+            let refused = probe_volume(Path::new(&root), &meta).unwrap_err();
+            assert_eq!(refused.code().as_str(), "identity_conflict", "{root}: {refused}");
+        }
+        assert!(probe_volume(&dir.path().join("Captures"), &meta).is_ok(), "its target qualifies");
+    }
+
+    /// astro-plan-f2di3: a mapped network drive qualifies as a Network volume
+    /// with the serial its server reports, which the entry's handle reports
+    /// too, as the `Win32_LogicalDisk` fallback of the CIM query did.
+    #[cfg(windows)]
+    #[test]
+    fn the_windows_probe_qualifies_a_mapped_drive_as_a_network_volume() {
+        let dir = tempfile::tempdir().unwrap();
+        let text = dir.path().to_str().unwrap();
+        let share = format!(r"\\localhost\{}$", &text[..1]);
+        let Some(drive) = map_drive(
+            "WXYZ",
+            |name| quietly("net", &["use", name, &share]),
+            |name| {
+                let _ = quietly("net", &["use", name, "/delete", "/y"]);
+            },
+        ) else {
+            skip_off_ci(&format!("the runner could not map {share}"));
+            return;
+        };
+        let root = PathBuf::from(format!("{}{}", drive.name, &text[2..]));
+        let meta = fs::symlink_metadata(&root).unwrap();
+        let probed = probe_volume(&root, &meta).unwrap();
+        assert_eq!(probed.kind, VolumeKind::Network, "{probed:?}");
+        assert_eq!(probed.volume.stable_id, OsVolumes.handle_volume_id(&root), "{probed:?}");
     }
 
     #[test]
@@ -1057,7 +1217,7 @@ mod tests {
         let folder_meta = fs::symlink_metadata(folder.path()).unwrap();
         assert!(unchanged_length(&folder_meta, folder_meta.len() + 1).is_ok(), "folders differ");
 
-        let kind = |error: &std::io::Error| file_id_error(&path, error).response(None, None).kind;
+        let kind = |error: &std::io::Error| file_id_error(&path, error).code().as_str();
         let grew = unchanged_length(&meta, meta.len() + 2880).unwrap_err();
         assert_eq!(kind(&grew), "identity_conflict", "a file still being written settles again");
         let elsewhere = std::io::Error::other("entry is not on the qualified volume");
@@ -1102,7 +1262,7 @@ mod tests {
         };
         let root = Path::new("/mnt/nas");
         assert!(compare(&location, &registered, root).is_ok());
-        let kind = |error: LibraryError| error.response(None, None).kind;
+        let kind = |error: LibraryError| error.code().as_str();
 
         // The mount point folder left on the local disk: the share is unmounted.
         let mut left_behind = observation("LOCAL-UUID", VolumeKind::Local);
@@ -1124,7 +1284,7 @@ mod tests {
     fn share_addresses_are_refused_before_the_filesystem_is_touched() {
         for address in ["smb://nas/astro", "//nas/astro", "afp://nas/astro"] {
             let refused = observe(Path::new(address), &OsVolumes).err().unwrap();
-            assert_eq!(refused.response(None, None).kind, "invalid_input", "{address}");
+            assert_eq!(refused.code().as_str(), "invalid_input", "{address}");
             assert!(refused.to_string().contains("mounts no share"), "{address}: {refused}");
         }
     }

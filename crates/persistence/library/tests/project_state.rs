@@ -1,183 +1,318 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Project state (spec 065 PRJ-FR-14, PRJ-AC-21, PRJ-AC-22, PRJ-AC-27; D-W26,
-//! D-W46, D-W48, D-W69, D-W72). Only the user marks a Project Done, and Mark
-//! Done is refused while any run outside the Project's Trash is not Complete,
-//! naming each. Reopen returns a Done Project to open, moving no file and
-//! leaving its runs, goals and members as they were. Done Projects are listed
-//! only when "Show done" is on.
+//! A Project's lifecycle in the catalog (spec 065 PRJ-FR-14/25/30, PRJ-AC-15,
+//! PRJ-AC-21, PRJ-AC-34, PRJ-AC-43; D-W80, D-W97, D-W112): Wrap up records
+//! Clean up, Trash, then Archive, each once and in order, and Close takes the
+//! Closed snapshot and locks the Project for good. Reaching every goal never
+//! closes a Project, there is no Reopen, and Duplicate continues a Closed
+//! Project as a new open one.
+//!
+//! Rewritten for the F4 Project model. The run-era tests
+//! `mark_done_names_non_complete_runs_and_refuses`,
+//! `reopen_restores_open_with_runs_goals_members` and
+//! `done_projects_hidden_unless_show_done` asserted Mark Done over runs,
+//! Reopen of a Done Project and the Done list; the decision record removed
+//! all three (§2: "Remove runs as separate prepared folders", "[PROVISIONAL]
+//! There is no Reopen"; §5 Removed: "the Finish and Reopen gates on
+//! preparation"), so they are deleted. `goals_met_never_mark_done` keeps its
+//! behaviour as `goals_met_never_close_the_project`.
 #![cfg(unix)]
 
+#[path = "support/membership.rs"]
+mod membership_support;
 #[path = "support/project_state.rs"]
 mod project_state_support;
 mod support;
 
-use persistence_library::Catalog;
+use persistence_library::{Catalog, ClosedProject};
 use platevault_model::{
-    MeasurementMethod, ProjectQuery, ProjectState, RunCompletion, RunStage, ViewQuery,
+    DuplicateRequest, MeasurementMethod, ProjectLifecycle, Quality, SettledPin, WrapUpBlocker,
+    WrapUpOutcome, WrapUpStep,
 };
 use project_state_support::{ha_frames, world, World};
-use support::{kind, tree};
+use sqlx::sqlite::{SqliteConnectOptions, SqliteConnection};
+use sqlx::Connection;
+use std::collections::BTreeSet;
+use support::{expected, expected_session, kind, target, DiskProbe};
 use uuid::Uuid;
 
-async fn listed(catalog: &Catalog, show_done: bool, target_id: Option<Uuid>) -> Vec<Uuid> {
-    let query = ProjectQuery { show_done, target_id, ..ProjectQuery::default() };
-    catalog.list_projects(&query).await.unwrap().into_iter().map(|summary| summary.id).collect()
+use serde_json::json;
+fn method() -> MeasurementMethod {
+    MeasurementMethod::new("platevault.stars", 1)
 }
 
-async fn runs(world: &World, project: Uuid) -> Vec<platevault_model::ViewListing> {
-    let query = ViewQuery { project_id: Some(project), ..ViewQuery::default() };
-    world.catalog.list_views(&query).await.unwrap()
+/// A Project on NGC 7000 and the `RedCat` with an Ha goal of 2 frames,
+/// holding the fixture's one session.
+async fn held(world: &World) -> (Uuid, Uuid) {
+    let project = world.project("NGC 7000 Ha", vec![ha_frames(world.ngc.candidate.id, 2)]).await;
+    let session = world.session().await.id;
+    membership_support::hold(&world.catalog, project.id, session, world.redcat.id).await;
+    (project.id, session)
 }
 
-/// PRJ-FR-14, PRJ-AC-21: Mark Done names each run outside the Trash that is not
-/// Complete, with its stage, and the Project stays open until each is completed
-/// or moved to the Trash. A Complete run and a run already in the Trash are
-/// never named.
+async fn revision(catalog: &Catalog, project: Uuid) -> u64 {
+    catalog.wrap_up_status(project).await.unwrap().desired_revision
+}
+
+/// Proceed through Clean up and Trash with nothing selected, then Close
+/// project… with no archive.
+async fn close(catalog: &Catalog, project: Uuid) -> ClosedProject {
+    let revision = revision(catalog, project).await;
+    for step in [WrapUpStep::CleanUp, WrapUpStep::Trash] {
+        catalog.record_wrap_up_step(project, revision, step, WrapUpOutcome::Skipped).await.unwrap();
+    }
+    catalog.close_project(project, revision, &method(), &[]).await.unwrap()
+}
+
+/// PRJ-FR-14, PRJ-AC-15: only the user closes a Project. Every goal met
+/// leaves it open, at the start of its Wrap up, with no snapshot.
 #[tokio::test]
-async fn mark_done_names_non_complete_runs_and_refuses() {
+async fn goals_met_never_close_the_project() {
     let world = world().await;
-    let project = world.project("NGC 7000 Ha", Vec::new()).await;
-    let complete = world.run(&project, "Finished", RunStage::Results).await;
-    world.complete(complete).await;
-    let trashed = world.run(&project, "Abandoned", RunStage::Review).await;
-    world.trash(trashed).await;
-    let preparing = world.run(&project, "Preparing", RunStage::Prepare).await;
-    let selecting = world.run(&project, "Selecting", RunStage::Select).await;
+    let catalog = &world.catalog;
+    let (project, _) = held(&world).await;
+    let before = revision(catalog, project).await;
+    let progress = catalog.project_progress_basis(project, &method()).await.unwrap();
+    assert!(progress.goals.iter().all(|goal| goal.met), "{progress:#?}");
 
-    let refused = world.catalog.mark_project_done(project.id, project.revision).await.unwrap_err();
+    let status = catalog.wrap_up_status(project).await.unwrap();
+    assert_eq!(status.lifecycle, ProjectLifecycle::Open);
+    assert_eq!((status.blocker, status.current), (None, Some(WrapUpStep::CleanUp)));
+    assert_eq!(status.records, Vec::<platevault_model::WrapUpRecord>::new());
+    assert_eq!(status.desired_revision, before, "nothing wrote the Project");
+    assert!(catalog.closed_snapshot(project).await.unwrap().is_none());
+
+    let closed = close(catalog, project).await;
+    assert_eq!(closed.lifecycle, ProjectLifecycle::Closed, "the user's Close is the only way");
+    world.catalog.close().await.unwrap();
+}
+
+/// PRJ-FR-25, PRJ-AC-34: Close records the snapshot of the basis and the
+/// calibration each session used, and locks the Project for good. A later
+/// Library rejection changes neither the snapshot nor its sessions, adds no
+/// pending change, every edit is refused, and nothing reopens it.
+#[tokio::test]
+async fn close_locks_for_good_with_a_calibration_snapshot() {
+    let world = world().await;
+    let catalog = &world.catalog;
+    let (project, session) = held(&world).await;
+    let closed = close(catalog, project).await;
+
+    assert_eq!(closed.lifecycle, ProjectLifecycle::Closed, "nothing was archived");
+    let snapshot = catalog.closed_snapshot(project).await.unwrap().expect("Close took it");
+    assert_eq!(snapshot, closed.snapshot);
+    assert!(snapshot.never_applied(), "a Project never applied freezes its desired basis");
+    let frozen = &snapshot.basis.groups[0].sessions[0];
+    assert_eq!(frozen.session_id, session);
+    assert_eq!(
+        [&frozen.calibration.dark, &frozen.calibration.flat, &frozen.calibration.bias],
+        [&SettledPin::Declined; 3],
+        "the No answers are recorded as the calibration used"
+    );
+    assert!(snapshot.goals.iter().all(|goal| goal.met), "goals freeze at Close");
+
+    let assets = catalog.session(session).await.unwrap().assets;
+    catalog.set_quality(&[expected(&assets[0])], Quality::Unusable, DiskProbe).await.unwrap();
+    assert_eq!(catalog.closed_snapshot(project).await.unwrap().unwrap(), snapshot);
+    let pending = catalog.project_pending_changes(project).await.unwrap();
+    assert_eq!(pending, Vec::<platevault_model::PendingChange>::new());
+
+    let desired = catalog.project_desired(project).await.unwrap();
+    let refused =
+        catalog.remove_project_sessions(project, desired.revision, &[session]).await.unwrap_err();
     assert_eq!(kind(&refused), "invalid_input", "{refused}");
-    let message = refused.to_string();
-    for named in [
-        format!("'Preparing' ({preparing}) at Prepare"),
-        format!("'Selecting' ({selecting}) at Select"),
-    ] {
-        assert!(message.contains(&named), "{named} missing from: {message}");
-    }
-    assert!(message.contains("complete it or move it to the Trash"), "{message}");
-    for silent in ["Finished", "Abandoned"] {
-        assert!(!message.contains(silent), "{silent} named in: {message}");
-    }
-    let unchanged = world.catalog.project(project.id).await.unwrap();
-    assert_eq!(unchanged, project, "a refused Mark Done changes nothing");
+    assert_eq!(catalog.project_desired(project).await.unwrap().sessions.len(), 1);
 
-    world.complete(preparing).await;
-    let refused = world.catalog.mark_project_done(project.id, project.revision).await.unwrap_err();
-    let message = refused.to_string();
-    assert!(message.contains(&selecting.to_string()), "{message}");
-    assert!(!message.contains("Preparing"), "a completed run is no longer named: {message}");
-    assert_eq!(world.catalog.project(project.id).await.unwrap().state, ProjectState::Open);
+    assert!(ProjectLifecycle::Closed.transition(ProjectLifecycle::Open).is_err(), "no Reopen");
+    let reopen = catalog.reopen_wrap_up_step(project, WrapUpStep::CleanUp).await.unwrap_err();
+    assert_eq!(kind(&reopen), "invalid_input", "{reopen}");
+    let again = catalog.close_project(project, desired.revision, &method(), &[]).await.unwrap_err();
+    assert_eq!(kind(&again), "invalid_input", "{again}");
 
-    world.trash(selecting).await;
-    let done = world.catalog.mark_project_done(project.id, project.revision).await.unwrap();
-    assert_eq!(done.state, ProjectState::Done);
-    assert!(done.done_at.is_some());
-    assert_eq!(done.revision, project.revision + 1);
-    assert_eq!(world.catalog.project(project.id).await.unwrap(), done);
-
-    let again = world.catalog.mark_project_done(project.id, done.revision).await.unwrap_err();
-    assert_eq!(kind(&again), "invalid_input", "a Done Project is not marked Done twice");
-    let stale = world.catalog.mark_project_done(project.id, project.revision).await.unwrap_err();
-    assert_eq!(kind(&stale), "conflict", "{stale}");
+    let status = catalog.wrap_up_status(project).await.unwrap();
+    assert_eq!(
+        status.blocker,
+        Some(WrapUpBlocker::NotOpen { lifecycle: ProjectLifecycle::Closed })
+    );
+    assert_eq!(status.current, None, "the Wrap up tab is a read-only record");
+    let steps: Vec<_> = status.records.iter().map(|record| (record.step, record.outcome)).collect();
+    assert_eq!(
+        steps,
+        [
+            (WrapUpStep::CleanUp, WrapUpOutcome::Skipped),
+            (WrapUpStep::Trash, WrapUpOutcome::Skipped),
+            (WrapUpStep::Archive, WrapUpOutcome::Skipped),
+        ]
+    );
     world.catalog.close().await.unwrap();
 }
 
-/// PRJ-AC-21, PRJ-AC-27: Reopen moves no file and returns the Done Project to
-/// open with its subjects, rigs, goals, runs and members unchanged.
+/// PRJ-FR-14: Clean up, Trash, then Archive, each once; reopening a step
+/// removes it and the later ones; nothing records while an operation runs
+/// or at a stale revision.
 #[tokio::test]
-async fn reopen_restores_open_with_runs_goals_members() {
+async fn wrap_up_runs_its_steps_in_order_and_reopens_back_to_front() {
     let world = world().await;
-    let ngc = world.ngc.candidate.id;
-    let project = world.project("NGC 7000 Ha", vec![ha_frames(ngc, 2)]).await;
-    let finished = world.run(&project, "Finished", RunStage::Results).await;
-    world.complete(finished).await;
-    let trashed = world.run(&project, "Abandoned", RunStage::Select).await;
-    world.trash(trashed).await;
+    let catalog = &world.catalog;
+    let (project, _) = held(&world).await;
+    let revision = revision(catalog, project).await;
 
-    let refused = world.catalog.reopen_project(project.id, project.revision).await.unwrap_err();
-    assert_eq!(kind(&refused), "invalid_input", "an open Project is not reopened");
-
-    let done = world.catalog.mark_project_done(project.id, project.revision).await.unwrap();
-    let files = tree(&world.fx.root);
-    let views = runs(&world, project.id).await;
-    let members = world.catalog.project_members(project.id).await.unwrap();
-    let in_trash = world.catalog.trashed_views(project.id).await.unwrap();
-    assert_eq!(
-        (members.len(), members[0].view_ids.as_slice()),
-        (1, [finished].as_slice()),
-        "the Ha session is a member of the Complete run only"
-    );
-
-    let open = world.catalog.reopen_project(project.id, done.revision).await.unwrap();
-    assert_eq!(open.state, ProjectState::Open);
-    assert_eq!(open.done_at, None);
-    assert_eq!(open.revision, done.revision + 1);
-    assert_eq!(
-        (&open.name, &open.notes, &open.subjects, &open.rig_ids, &open.goals),
-        (&project.name, &project.notes, &project.subjects, &project.rig_ids, &project.goals),
-        "subjects, rigs and goals are unchanged"
-    );
-    assert_eq!(world.catalog.project(project.id).await.unwrap(), open);
-    assert_eq!(runs(&world, project.id).await, views, "runs keep their stage and completion");
-    assert_eq!(views[0].completion, RunCompletion::Complete, "the run stays Complete");
-    assert_eq!(world.catalog.project_members(project.id).await.unwrap(), members);
-    assert_eq!(world.catalog.trashed_views(project.id).await.unwrap(), in_trash);
-    assert_eq!(tree(&world.fx.root), files, "Reopen moves no file");
-
-    let stale = world.catalog.reopen_project(project.id, done.revision).await.unwrap_err();
+    let early = catalog
+        .record_wrap_up_step(project, revision, WrapUpStep::Trash, WrapUpOutcome::Skipped)
+        .await
+        .unwrap_err();
+    assert_eq!(kind(&early), "invalid_input", "{early}");
+    let stale = catalog
+        .record_wrap_up_step(project, revision + 1, WrapUpStep::CleanUp, WrapUpOutcome::Skipped)
+        .await
+        .unwrap_err();
     assert_eq!(kind(&stale), "conflict", "{stale}");
-    world.catalog.close().await.unwrap();
-}
+    let closing = catalog.close_project(project, revision, &method(), &[]).await.unwrap_err();
+    assert_eq!(kind(&closing), "invalid_input", "{closing}");
 
-/// PRJ-AC-22, D-W48: the list holds only open Projects until "Show done" is on,
-/// with or without a subject filter; a reopened Project is listed again.
-#[tokio::test]
-async fn done_projects_hidden_unless_show_done() {
-    let world = world().await;
-    let open = world.project("A open", Vec::new()).await;
-    let finished = world.project("B finished", Vec::new()).await;
-    let done = world.catalog.mark_project_done(finished.id, finished.revision).await.unwrap();
-    let ngc = Some(world.ngc.candidate.id);
-
-    assert_eq!(listed(&world.catalog, false, None).await, vec![open.id]);
-    assert_eq!(listed(&world.catalog, false, ngc).await, vec![open.id]);
-    assert_eq!(listed(&world.catalog, true, None).await, vec![open.id, finished.id]);
-    assert_eq!(listed(&world.catalog, true, ngc).await, vec![open.id, finished.id]);
-    let shown = world
-        .catalog
-        .list_projects(&ProjectQuery { show_done: true, ..ProjectQuery::default() })
+    let operation = catalog.begin_clean_up(project, revision).await.unwrap();
+    let status = catalog.wrap_up_status(project).await.unwrap();
+    assert_eq!(
+        status.blocker,
+        Some(WrapUpBlocker::OperationRunning {
+            kind: platevault_model::ProjectOperationKind::CleanUp
+        })
+    );
+    let busy = catalog
+        .record_wrap_up_step(project, revision, WrapUpStep::CleanUp, WrapUpOutcome::Skipped)
+        .await
+        .unwrap_err();
+    assert_eq!(kind(&busy), "invalid_input", "{busy}");
+    let record = catalog.finish_clean_up(&operation, false).await.unwrap();
+    assert_eq!(
+        (record.outcome, record.operation_id),
+        (WrapUpOutcome::Finished, Some(operation.id))
+    );
+    catalog
+        .record_wrap_up_step(project, revision, WrapUpStep::Trash, WrapUpOutcome::Skipped)
         .await
         .unwrap();
-    assert_eq!(shown[1].state, ProjectState::Done);
 
-    world.catalog.reopen_project(finished.id, done.revision).await.unwrap();
-    assert_eq!(listed(&world.catalog, false, None).await, vec![open.id, finished.id]);
+    let reopened = catalog.reopen_wrap_up_step(project, WrapUpStep::CleanUp).await.unwrap();
+    assert!(reopened.records.is_empty(), "Trash went with Clean up: {reopened:#?}");
+    assert_eq!(reopened.current, Some(WrapUpStep::CleanUp));
     world.catalog.close().await.unwrap();
 }
 
-/// PRJ-FR-14: only the user marks a Project Done. Every goal met, by a run that
-/// is itself Complete, leaves the Project open and listed.
+/// PRJ-FR-30, PRJ-AC-43: Duplicate of a Closed Project is a new open Project
+/// with the same session in a copy of its group, on the Target it joined on
+/// (not the one the Library confirms now), its goals and notes, no View and
+/// no link; the original keeps its snapshot and sessions.
 #[tokio::test]
-async fn goals_met_never_mark_done() {
+async fn duplicate_continues_a_closed_project_with_its_joined_target() {
     let world = world().await;
-    let ngc = world.ngc.candidate.id;
-    let project = world.project("NGC 7000 Ha", vec![ha_frames(ngc, 2)]).await;
-    let run = world.run(&project, "Finished", RunStage::Results).await;
-    let method = MeasurementMethod::new("platevault.stars", 1);
-    let progress = world.catalog.project_progress_basis(project.id, &method).await.unwrap();
-    assert!(progress.goals.iter().all(|goal| goal.met), "{progress:#?}");
-    assert_eq!(world.catalog.project(project.id).await.unwrap().state, ProjectState::Open);
+    let catalog = &world.catalog;
+    let (project, session) = held(&world).await;
+    let renamed = catalog
+        .update_project(project, revision(catalog, project).await, "NGC 7000 Ha", Some("season 1"))
+        .await
+        .unwrap();
+    let joined = catalog.project_desired(project).await.unwrap().sessions[0].target_id;
+    let closed = close(catalog, project).await;
+    let other = catalog.save_target(&target("NGC 7000 East", "ngc 7000 east"), None).await.unwrap();
+    let current = catalog.session(session).await.unwrap().summary.session;
+    catalog.associate_target(&[expected_session(&current)], other.candidate.id).await.unwrap();
 
-    world.complete(run).await;
-    let progress = world.catalog.project_progress_basis(project.id, &method).await.unwrap();
-    assert!(progress.goals.iter().all(|goal| goal.met), "{progress:#?}");
-    let current = world.catalog.project(project.id).await.unwrap();
-    assert_eq!((current.state, current.done_at.as_deref()), (ProjectState::Open, None));
-    assert_eq!(current.revision, project.revision, "nothing wrote the Project");
-    assert_eq!(listed(&world.catalog, false, None).await, vec![project.id]);
+    let request = DuplicateRequest {
+        project_id: project,
+        name: "NGC 7000 Ha · 2".into(),
+        sessions: vec![session],
+        goals: true,
+        notes: true,
+        settings: true,
+    };
+    let duplicate = catalog.duplicate_project(&request).await.unwrap();
 
-    let done = world.catalog.mark_project_done(project.id, current.revision).await.unwrap();
-    assert_eq!(done.state, ProjectState::Done, "the user's Mark Done is the only way to Done");
+    assert_ne!(duplicate.id, project);
+    assert_eq!(duplicate.notes.as_deref(), Some("season 1"));
+    assert_eq!(duplicate.rig_ids, renamed.rig_ids);
+    assert_eq!(duplicate.subjects[0].target_id, renamed.subjects[0].target_id);
+    assert_eq!(
+        duplicate.goals.iter().map(|goal| &goal.goal).collect::<Vec<_>>(),
+        renamed.goals.iter().map(|goal| &goal.goal).collect::<Vec<_>>()
+    );
+    let copied = catalog.project_desired(duplicate.id).await.unwrap();
+    let source = catalog.project_desired(project).await.unwrap();
+    assert_eq!(copied.lifecycle, ProjectLifecycle::Open);
+    assert_eq!(copied.groups.len(), 1);
+    assert_ne!(copied.groups[0].id, source.groups[0].id, "fresh ids, no link");
+    assert_eq!(
+        (&copied.groups[0].name, copied.groups[0].rig_id),
+        (&source.groups[0].name, source.groups[0].rig_id)
+    );
+    assert_eq!(copied.sessions[0].session_id, session);
+    assert_eq!(copied.sessions[0].target_id, joined, "Duplicate copies the joined Target");
+    assert_ne!(joined, other.candidate.id);
+    assert_eq!(copied.captures.len(), source.captures.len());
+    assert!(catalog.apply_inputs(duplicate.id).await.unwrap().installed.is_none(), "no View");
+
+    assert_eq!(catalog.closed_snapshot(project).await.unwrap().unwrap(), closed.snapshot);
+    assert_eq!(source.lifecycle, ProjectLifecycle::Closed);
+    let stray = DuplicateRequest { sessions: vec![Uuid::new_v4()], ..request };
+    let refused = catalog.duplicate_project(&stray).await.unwrap_err();
+    assert_eq!(kind(&refused), "invalid_input", "{refused}");
+    world.catalog.close().await.unwrap();
+}
+
+/// D-W124: Wrap up's archive naming uses an agreeing Suggested Target exactly
+/// like a user-confirmed Target, but an alias without qualified geometry is ignored.
+#[tokio::test]
+async fn archive_assets_use_only_evidence_qualified_suggested_targets() {
+    let world = world().await;
+    let catalog = &world.catalog;
+    let (_, session) = held(&world).await;
+    let sessions = BTreeSet::from([session]);
+    let archive_target = |assets: &[persistence_library::ArchiveAsset]| {
+        assets.iter().find(|asset| asset.session_id == session).unwrap().target.clone()
+    };
+
+    let mut conn =
+        SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(&world.fx.db))
+            .await
+            .unwrap();
+    sqlx::query(
+        "UPDATE associations SET state = 'suggested', evidence = ?1 \
+         WHERE session_id = ?2 AND kind = 'target'",
+    )
+    .bind(json!([{"kind":"alias","normalized":"ngc 7000","agrees":true}]).to_string())
+    .bind(session.to_string())
+    .execute(&mut conn)
+    .await
+    .unwrap();
+    conn.close().await.unwrap();
+
+    assert_eq!(archive_target(&catalog.archive_assets(&sessions).await.unwrap()), None);
+
+    let mut conn =
+        SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(&world.fx.db))
+            .await
+            .unwrap();
+    sqlx::query(
+        "UPDATE associations SET evidence = ?1 \
+         WHERE session_id = ?2 AND kind = 'target'",
+    )
+    .bind(
+        json!([
+            {"kind":"alias","normalized":"ngc 7000","agrees":true},
+            {"kind":"coordinates","ra_deg":314.75,"dec_deg":44.33,"qualified":true}
+        ])
+        .to_string(),
+    )
+    .bind(session.to_string())
+    .execute(&mut conn)
+    .await
+    .unwrap();
+    conn.close().await.unwrap();
+
+    assert_eq!(
+        archive_target(&catalog.archive_assets(&sessions).await.unwrap()).as_deref(),
+        Some("NGC 7000")
+    );
     world.catalog.close().await.unwrap();
 }

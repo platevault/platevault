@@ -11,16 +11,19 @@
 //! the execution all decide from the same recorded evidence.
 
 use serde::{Deserialize, Serialize};
+use time::Date;
 use uuid::Uuid;
 
 use crate::{
-    Availability, CaptureMetadata, EntryEvidence, FileIdentity, ItemReason, LocationRole,
-    NamingFallback, NamingFrameType, NativePath, ObservationFingerprint, Revision,
+    Availability, CaptureKey, CaptureMetadata, EntryEvidence, FileIdentity, ItemReason,
+    LocationRole, NamingFallback, NamingFrameType, NativePath, ObservationFingerprint, Revision,
+    SplitLimits,
 };
 
 /// A source folder saved under a name, for Import new.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct SavedSource {
     pub id: Uuid,
     pub name: String,
@@ -34,6 +37,7 @@ pub struct SavedSource {
 /// A saved source with whether its folder can be read now.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct SavedSourceView {
     #[serde(flatten)]
     pub source: SavedSource,
@@ -44,6 +48,7 @@ pub struct SavedSourceView {
 /// What a preview reads: a saved source (Import new) or any mounted folder.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum ImportSourceSpec {
     Saved { id: Uuid },
     Folder { path: NativePath },
@@ -52,6 +57,7 @@ pub enum ImportSourceSpec {
 /// Copy keeps every source; Move sends each re-verified source to the OS Trash.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum ImportMode {
     Copy,
     Move,
@@ -59,6 +65,7 @@ pub enum ImportMode {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum ImportState {
     /// Previewed; nothing has been written.
     Previewed,
@@ -74,6 +81,7 @@ pub enum ImportState {
 /// Where an item stands, from the preview through execution.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum ImportItemPhase {
     /// Routed; starting the import approves it.
     Ready,
@@ -118,6 +126,7 @@ impl ImportItemPhase {
 /// What a skipped duplicate matches.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", rename_all_fields = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum ImportDuplicate {
     /// A frame already indexed in the library.
     IndexedFrame { asset_id: Uuid },
@@ -132,6 +141,7 @@ pub enum ImportDuplicate {
 /// Why a preview item is held.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", rename_all_fields = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum ImportBlock {
     /// No active location has the role; register one (LIB-FR-01).
     MissingRole { role: LocationRole },
@@ -156,6 +166,7 @@ pub enum ImportBlock {
 /// A light's confirmed rig, named in the preview.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ImportRig {
     pub equipment_id: Uuid,
     pub name: String,
@@ -165,6 +176,7 @@ pub struct ImportRig {
 /// "Add {value} to {rig}" prompt of PLAN-EQ-FR-04. It holds nothing back.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct UnknownFilter {
     pub equipment_id: Uuid,
     pub rig_name: String,
@@ -174,6 +186,7 @@ pub struct UnknownFilter {
 /// One source file of an import.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ImportItem {
     pub seq: u32,
     /// Absolute path of the source file.
@@ -189,6 +202,19 @@ pub struct ImportItem {
     pub classification: Option<NamingFrameType>,
     /// The frame type the user set; it overrides the header.
     pub user_type: Option<NamingFrameType>,
+    /// The framing label a merge in import review gave the light: lights with
+    /// one label form one session. Indexing records it as the frame's
+    /// [`crate::FRAMING_LABEL_FIELD`] correction (LIB-FR-24, D-W107).
+    #[serde(default)]
+    pub framing_label: Option<String>,
+    /// The Target the user chose for the light's session in import review;
+    /// `None` keeps the one its pointing matches (D-W129).
+    #[serde(default)]
+    pub target_choice: Option<ImportTargetChoice>,
+    /// The Target the light's session files under, as its route named
+    /// `{target}` from it; `None` is Unclassified. Never OBJECT.
+    #[serde(default)]
+    pub target_id: Option<Uuid>,
     pub excluded: bool,
     pub role: Option<LocationRole>,
     pub destination_location_id: Option<Uuid>,
@@ -216,6 +242,16 @@ impl ImportItem {
     pub fn frame_type(&self) -> Option<NamingFrameType> {
         self.user_type.or(self.classification)
     }
+}
+
+/// The Target a user chose for a session in import review (D-W129): one to
+/// file it under, or Unclassified.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", rename_all_fields = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
+pub enum ImportTargetChoice {
+    Unclassified,
+    Target { target_id: Uuid },
 }
 
 /// The last settle check of a source file.
@@ -271,6 +307,9 @@ pub struct ImportRecord {
     pub mode: Option<ImportMode>,
     pub state: ImportState,
     pub choices: Vec<ImportChoice>,
+    /// The import's own centre and rotation limits; `None` splits with the
+    /// Settings default (CF2).
+    pub split_override: Option<SplitLimits>,
     pub revision: Revision,
     pub items: Vec<ImportItemRecord>,
     pub created_at: String,
@@ -290,6 +329,7 @@ pub struct ImportDraft {
 /// Whether a destination folder can take new files, checked without writing.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "state", rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum Writability {
     Writable,
     NotWritable {
@@ -306,6 +346,7 @@ pub enum Writability {
 /// One location an import may write to, with what the import puts there.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ImportDestination {
     pub role: LocationRole,
     pub location_id: Uuid,
@@ -324,6 +365,7 @@ pub struct ImportDestination {
 /// Exact per-item counts of an import (STO-IMP-FR-06).
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ImportSummary {
     pub ready: u64,
     /// Destinations that hold a verified copy.
@@ -345,10 +387,59 @@ pub struct ImportSummary {
     pub uncertain: u64,
 }
 
+/// One session the import's lights form at intake, as import review shows it
+/// before the import is confirmed (LIB-FR-04, LIB-FR-24, D-W107): a night's
+/// lights of one capture key split by framing, merged or re-split by the user.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
+pub struct ImportSession {
+    pub key: CaptureKey,
+    /// The items, in capture order; the first stands for the session in a
+    /// merge or re-split.
+    pub items: Vec<u32>,
+    /// 1 for the night's first framing of the key, 2 for "framing 2", and so
+    /// on; `None` for lights without pointing, which stay in one session.
+    pub framing: Option<u32>,
+    /// The user merged it: its items carry one framing label.
+    pub merged: bool,
+    /// What a default name shows: OBJECT, FILTER, the exposure and the night
+    /// of its first item. OBJECT is only a hint: it never chooses or names
+    /// the session's Target (D-W129, J31 S3).
+    pub object: Option<String>,
+    pub filter: Option<String>,
+    pub exposure_seconds: Option<f64>,
+    #[cfg_attr(feature = "wire", specta(type = Option<String>), schemars(with = "Option<String>"))]
+    #[serde(default, with = "crate::iso_date::option")]
+    pub night: Option<Date>,
+    /// The Target the session files under: the user's choice, else the one
+    /// Target its pointing matches; `None` is Unclassified, preselected when
+    /// it has no pointing or no matching Target.
+    pub target: Option<ImportSessionTarget>,
+    /// The user chose `target` (or Unclassified) rather than its pointing.
+    pub target_chosen: bool,
+    /// When the session's pointing matches several Targets: the nearest to
+    /// its field centre, offered for one choice. Unclassified stays
+    /// preselected and nothing files under it until the user chooses it.
+    pub recommended: Option<ImportSessionTarget>,
+}
+
+/// A session's Target as import review names it.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
+pub struct ImportSessionTarget {
+    pub id: Uuid,
+    /// What `{target}` names its folder with.
+    pub designation: String,
+    pub common_name: Option<String>,
+}
+
 /// An import as Import shows it: the preview before it starts, then its
 /// progress and outcomes.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ImportOperation {
     pub id: Uuid,
     pub source_id: Option<Uuid>,
@@ -363,6 +454,13 @@ pub struct ImportOperation {
     pub items: Vec<ImportItem>,
     pub destinations: Vec<ImportDestination>,
     pub summary: ImportSummary,
+    /// The sessions the import's lights form; merge and re-split change them
+    /// until the import starts.
+    pub sessions: Vec<ImportSession>,
+    /// The centre and rotation limits the sessions split with: the import's
+    /// own when `split_overridden`, else the Settings default (CF2).
+    pub split_limits: SplitLimits,
+    pub split_overridden: bool,
     pub created_at: String,
     pub updated_at: String,
     pub settled_at: Option<String>,

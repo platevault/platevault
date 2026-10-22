@@ -3,27 +3,26 @@
 
 //! Calibration inputs (spec 068): Tier 1 calibration rows in the clean catalog.
 //!
-//! Raw sets, detected candidates, evaluations, requirement states and the
-//! handoff are recomputed on read from one reader snapshot and never stored;
-//! reads hash nothing. The product rules arrive as a [`CalibrationRules`]
-//! implementation, the way the grouping callback does, so the semantics stay
-//! pure and outside storage.
+//! Raw sets, detected candidates and evaluations are recomputed on read from
+//! one reader snapshot and never stored; reads hash nothing. Calibration is
+//! matched at ingestion and pinned on the session (`sessions`). The product
+//! rules arrive as a [`CalibrationRules`] implementation, the way the
+//! grouping callback does, so the semantics stay pure and outside storage.
 
 mod adoption;
 mod contained_write;
 mod custody;
-mod decisions;
+pub use custody::pinned_calibration_kinds;
 mod inventory;
-mod offers;
+mod sessions;
 
 use std::collections::BTreeSet;
 
 use platevault_model::{
     AdoptedMaster, ApplicableQuality, AssociationKind, AssociationState, Availability,
-    CalibrationPlan, CalibrationPolicy, CalibrationRules, CalibrationViewBasis, CandidateRef,
-    CaptureEvidence, CaptureKey, EvidenceField, ExpectedSession, InputForm, InputKind, InputState,
-    LibraryError, LightBasis, LightEvidence, MasterEvidence, MasterOrigin, MasterProvenance,
-    NativePath, ObservationFingerprint, Requirement,
+    CalibrationRules, CandidateRef, CaptureEvidence, CaptureKey, EvidenceField, InputForm,
+    InputKind, InputState, LibraryError, MasterEvidence, MasterOrigin, MasterProvenance,
+    NativePath, ObservationFingerprint,
 };
 use serde::{Deserialize, Serialize};
 use sqlx::sqlite::{SqliteConnection, SqliteRow};
@@ -31,14 +30,15 @@ use sqlx::{Connection, Row};
 use uuid::Uuid;
 
 use super::{
-    check_expected_sessions, from_json, from_text, load_assets, load_associations,
-    load_session_row, parse_uuid, path_from_key, revision, Catalog, Result, MAX_PAGE,
+    from_json, from_text, load_assets, load_associations, load_session_row, parse_uuid,
+    path_from_key, revision, Catalog, Result, MAX_PAGE,
 };
 
 pub use adoption::recover_adoptions;
-pub use decisions::group_policy_changed;
-use inventory::Listed;
-pub use offers::{offer_master, open_offers};
+pub use sessions::{
+    calibration_arrived, master_adopted, read_health, rig_recorded, session_ingested,
+    session_needs, HeldLight, ProjectDarkBasis,
+};
 
 // ---------------------------------------------------------------------------
 // Wire types of the inventory reads
@@ -64,6 +64,7 @@ pub struct InputQuery {
 /// dimensions/binning. `None` is the unknown value, never a default.
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct InputGroup {
     pub kind: InputKind,
     pub camera: Option<String>,
@@ -77,6 +78,7 @@ pub struct InputGroup {
 /// One recorded copy of an input member.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct InputCopy {
     pub asset_id: Uuid,
     pub location_id: Uuid,
@@ -88,6 +90,7 @@ pub struct InputCopy {
 /// One logical capture (D16) of an input with every recorded copy.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct InputMember {
     pub member_key: Uuid,
     pub quality: ApplicableQuality,
@@ -97,6 +100,7 @@ pub struct InputMember {
 /// One listed input: a raw set, an adopted master or a detected candidate.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct CalibrationInputSummary {
     pub input: CandidateRef,
     pub kind: InputKind,
@@ -121,6 +125,7 @@ pub struct CalibrationInputSummary {
 /// One input with its members and its Library-Unusable members.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct CalibrationInputDetail {
     #[serde(flatten)]
     pub summary: CalibrationInputSummary,
@@ -183,57 +188,19 @@ impl Catalog {
             excluded: listed.excluded,
         })
     }
-
-    /// Per light group and kind of these current Sessions, every listed
-    /// candidate with its criteria and the single top input. Takes no run,
-    /// assigns nothing and writes nothing.
-    ///
-    /// # Errors
-    /// `Conflict` (with successors) for a stale or superseded Session;
-    /// `InvalidInput` for repeated sessions or kinds.
-    pub async fn calibration_match<R: CalibrationRules + ?Sized>(
-        &self,
-        sessions: &[ExpectedSession],
-        kinds: &[InputKind],
-        rules: &R,
-    ) -> Result<Vec<Requirement>> {
-        let kinds = platevault_model::required_kinds(kinds)?;
-        let mut conn = self.reader().await?;
-        let mut snapshot = conn.begin().await?;
-        let mut lights = Vec::new();
-        for session in check_expected_sessions(&mut snapshot, sessions).await? {
-            let members: BTreeSet<Uuid> = session.asset_ids.iter().copied().collect();
-            lights.extend(light_basis(&mut snapshot, session.id, &members).await?);
-        }
-        let listed = inventory::list_inputs(&mut snapshot, rules).await?;
-        snapshot.rollback().await?;
-        let basis = CalibrationViewBasis {
-            view_id: Uuid::nil(),
-            view_revision: 0,
-            plan: CalibrationPlan {
-                required_kinds: kinds,
-                policy: CalibrationPolicy::Manual,
-                ..CalibrationPlan::unplanned(Uuid::nil())
-            },
-            lights,
-            candidates: listed.iter().map(Listed::candidate).collect(),
-            decisions: Vec::new(),
-        };
-        Ok(rules.plan(&basis).requirements)
-    }
 }
 
 // ---------------------------------------------------------------------------
 // Evidence helpers
 // ---------------------------------------------------------------------------
 
-/// The light side of one Session from the given member copies: `None` when the
-/// Session's own type is known and not a light.
-pub async fn light_basis(
+/// The capture evidence of one light Session from the given member copies:
+/// `None` unless the Session's own type is known to be a light.
+pub async fn light_capture(
     conn: &mut SqliteConnection,
     session_id: Uuid,
     assets: &BTreeSet<Uuid>,
-) -> Result<Option<LightBasis>> {
+) -> Result<Option<CaptureEvidence>> {
     let row = load_session_row(conn, session_id).await?;
     let loaded = load_assets(conn, assets).await?;
     let Some(asset) = loaded
@@ -243,27 +210,15 @@ pub async fn light_basis(
     else {
         return Ok(None);
     };
-    let light_type_known = match asset.effective.is_light() {
-        Some(true) => true,
-        Some(false) => return Ok(None),
-        None => false,
-    };
-    let capture = CaptureEvidence::from_metadata(
+    if asset.effective.is_light() != Some(true) {
+        return Ok(None);
+    }
+    Ok(Some(CaptureEvidence::from_metadata(
         &asset.effective,
         &corrected_fields(conn, asset.id).await?,
         night_of(&row.session.key).as_deref(),
         confirmed_equipment(conn, session_id).await?,
-    );
-    Ok(Some(LightBasis {
-        evidence: LightEvidence {
-            session_id,
-            grouping_revision: row.session.grouping_revision,
-            capture,
-        },
-        included_assets: assets.clone(),
-        light_type_known,
-        product: false,
-    }))
+    )))
 }
 
 /// The `night` value of a `capture-v1` Session key, e.g. `2026-09-18@date-loc-noon`.

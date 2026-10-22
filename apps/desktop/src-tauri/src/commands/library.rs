@@ -8,6 +8,12 @@
 //! state. Every handler returns only after its catalog transaction commits and
 //! reports failures as [`ErrorResponse`] naming the affected identity and scope.
 //! Source images are only ever read.
+//!
+//! `Reply` is every library-shell command's reply, and `fail`/`fail_at` its
+//! conversion: a [`LibraryError`] reaches the client as its stable
+//! [`platevault_core::LibraryErrorCode`] with structured params, worded by the
+//! desktop catalogues' `err_library_<code>` messages. The error's English
+//! `Display` goes to the log only.
 
 use std::sync::Arc;
 
@@ -16,7 +22,6 @@ use persistence_library::{
     CorrectionPreview, LocationFailure, SessionFilter, SessionQuery, SessionSummary, TrashedAsset,
     TrashedQuery,
 };
-use platevault_core::grouping::group_assets;
 use platevault_core::library::{ConfirmedCorrection, InventoryProbe, Library, LibrarySession};
 use platevault_core::new_captures::CaptureWatch;
 use platevault_core::targets::{user_target, TargetQuery, TargetSearchHit, UserTargetInput};
@@ -51,13 +56,18 @@ fn report(
     scope: Option<NativePath>,
 ) -> ErrorResponse {
     let response = error.response(identity, scope);
-    tracing::warn!(kind = %response.kind, identity = ?response.identity, "{}", response.message);
+    tracing::warn!(
+        code = response.code.as_str(),
+        identity = ?response.identity,
+        "{error}"
+    );
     response
 }
 
 /// A registered location with its last recorded access failure, if any.
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[derive(specta::Type)]
 pub struct LocationState {
     pub location: Location,
     pub failure: Option<LocationFailure>,
@@ -68,6 +78,7 @@ pub struct LocationState {
 /// fresh resolve, user candidates from the shared user-target rules.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(tag = "source", rename_all = "snake_case")]
+#[derive(specta::Type)]
 pub enum TargetInput {
     Seed { id: Uuid },
     User(UserTargetInput),
@@ -77,6 +88,7 @@ pub enum TargetInput {
 /// Explicit camera/optical-train fields. `id` is absent on create.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[derive(specta::Type)]
 pub struct EquipmentInput {
     pub id: Option<Uuid>,
     pub name: String,
@@ -95,6 +107,7 @@ pub struct EquipmentInput {
 /// `InvalidInput`/`Conflict` for an invalid or overlapping root, source errors
 /// when the root identity cannot be observed.
 #[tauri::command]
+#[specta::specta]
 pub async fn library_register_location(
     library: State<'_, Arc<Library>>,
     path: NativePath,
@@ -110,6 +123,7 @@ pub async fn library_register_location(
 /// # Errors
 /// `PersistenceFailure` when the catalog cannot be read.
 #[tauri::command]
+#[specta::specta]
 pub async fn library_list_locations(library: State<'_, Arc<Library>>) -> Reply<Vec<LocationState>> {
     let catalog = library.catalog();
     let locations = catalog.list_locations().await.map_err(fail(None))?;
@@ -127,6 +141,7 @@ pub async fn library_list_locations(library: State<'_, Arc<Library>>) -> Reply<V
 /// # Errors
 /// `InvalidInput` when a scan is already running; `NotFound` for an unknown location.
 #[tauri::command]
+#[specta::specta]
 pub async fn library_start_scan(
     library: State<'_, Arc<Library>>,
     location_id: Uuid,
@@ -139,6 +154,7 @@ pub async fn library_start_scan(
 /// # Errors
 /// `NotFound` for an unknown operation.
 #[tauri::command]
+#[specta::specta]
 pub async fn library_scan_status(
     library: State<'_, Arc<Library>>,
     operation_id: Uuid,
@@ -151,6 +167,7 @@ pub async fn library_scan_status(
 /// # Errors
 /// `NotFound` for an unknown operation; `SourceUnavailable` when its supervisor is gone.
 #[tauri::command]
+#[specta::specta]
 pub async fn library_cancel_scan(
     library: State<'_, Arc<Library>>,
     operation_id: Uuid,
@@ -162,12 +179,14 @@ pub async fn library_cancel_scan(
 /// lists light sessions of Captures locations; `filter` `trashed` lists the
 /// sessions holding Trashed frames, summarized over those frames (LIB-FR-16/18).
 /// `needs_target` lists the sessions with no confirmed Target and
-/// `not_in_any_project` those with one that are no Project's candidate and no
-/// run's member (LIB-FR-17); neither assigns anything to a run.
+/// `not_in_any_project` those with one that no Project holds
+/// (`project_sessions`, LIB-FR-17, PRJ-FR-19); matching a Project's subjects
+/// and rigs only makes a session a suggestion, and neither filter adds one.
 ///
 /// # Errors
 /// `PersistenceFailure` when the catalog cannot be read.
 #[tauri::command]
+#[specta::specta]
 pub async fn library_list_sessions(
     library: State<'_, Arc<Library>>,
     location_id: Option<Uuid>,
@@ -192,6 +211,7 @@ pub async fn library_list_sessions(
 /// # Errors
 /// `PersistenceFailure` when the catalog cannot be read.
 #[tauri::command]
+#[specta::specta]
 pub async fn library_trashed_assets(
     library: State<'_, Arc<Library>>,
     session_id: Option<Uuid>,
@@ -208,6 +228,7 @@ pub async fn library_trashed_assets(
 /// # Errors
 /// `NotFound` for an unknown session.
 #[tauri::command]
+#[specta::specta]
 pub async fn library_session(
     library: State<'_, Arc<Library>>,
     session_id: Uuid,
@@ -221,25 +242,24 @@ pub async fn library_session(
 /// # Errors
 /// `Conflict` for stale expectations; `InvalidInput` for an unknown field or value type.
 #[tauri::command]
+#[specta::specta]
 pub async fn library_preview_metadata(
     library: State<'_, Arc<Library>>,
     expected: Vec<ExpectedAsset>,
     field: String,
-    value: serde_json::Value,
+    // `JsonAny` is `serde_json::Value` on the wire; the bindings can't type a
+    // bare `Value` argument (specta inlines its recursive shape forever).
+    value: contracts_core::JsonAny,
 ) -> Reply<CorrectionPreview> {
     let corrections = expected
         .iter()
         .map(|asset| CorrectionInput {
             asset_id: asset.asset_id,
             field: field.clone(),
-            value: value.clone(),
+            value: value.0.clone(),
         })
         .collect::<Vec<_>>();
-    library
-        .catalog()
-        .preview_correction(&expected, &corrections, group_assets)
-        .await
-        .map_err(fail(None))
+    library.preview_correction(&expected, &corrections).await.map_err(fail(None))
 }
 
 /// Apply a reviewed plan atomically with regroup and lineage, then re-derive the
@@ -249,6 +269,7 @@ pub async fn library_preview_metadata(
 /// `Conflict` with no changes when any expectation is stale or differs from the plan.
 /// A suggestion refresh failure after commit is reported in `associationRefresh`.
 #[tauri::command]
+#[specta::specta]
 pub async fn library_confirm_metadata(
     library: State<'_, Arc<Library>>,
     preview_id: Uuid,
@@ -262,6 +283,7 @@ pub async fn library_confirm_metadata(
 /// # Errors
 /// `Conflict` for stale expectations; `IdentityConflict` when source bytes changed.
 #[tauri::command]
+#[specta::specta]
 pub async fn library_set_quality(
     library: State<'_, Arc<Library>>,
     expected: Vec<ExpectedAsset>,
@@ -279,6 +301,7 @@ pub async fn library_set_quality(
 /// # Errors
 /// `InvalidInput` for a zero limit, unsearchable text, an invalid cone or neither filter.
 #[tauri::command]
+#[specta::specta]
 pub async fn library_search_targets(
     library: State<'_, Arc<Library>>,
     query: Option<String>,
@@ -293,6 +316,7 @@ pub async fn library_search_targets(
 /// # Errors
 /// `ProviderUnavailable` when offline or unconfigured; `NotFound`/`InvalidInput` otherwise.
 #[tauri::command]
+#[specta::specta]
 pub async fn library_resolve_target(
     library: State<'_, Arc<Library>>,
     query: String,
@@ -306,6 +330,7 @@ pub async fn library_resolve_target(
 /// `NotFound` for an unknown seed id; `Conflict` for a stale or duplicate revision;
 /// resolver errors for provider targets.
 #[tauri::command]
+#[specta::specta]
 pub async fn library_save_target(
     library: State<'_, Arc<Library>>,
     target: TargetInput,
@@ -334,6 +359,7 @@ pub async fn library_save_target(
 /// `Conflict` (with successors) for stale or superseded sessions; `NotFound` for an
 /// unsaved target.
 #[tauri::command]
+#[specta::specta]
 pub async fn library_associate_target(
     library: State<'_, Arc<Library>>,
     expected: Vec<ExpectedSession>,
@@ -348,6 +374,7 @@ pub async fn library_associate_target(
 /// `InvalidInput` for invalid fields or an update without an id; `Conflict` for a
 /// stale revision.
 #[tauri::command]
+#[specta::specta]
 pub async fn library_save_equipment(
     library: State<'_, Arc<Library>>,
     equipment: EquipmentInput,
@@ -387,6 +414,7 @@ pub async fn library_save_equipment(
 /// `Conflict` (with successors) for stale or superseded sessions; `NotFound` for
 /// unknown equipment.
 #[tauri::command]
+#[specta::specta]
 pub async fn library_confirm_equipment(
     library: State<'_, Arc<Library>>,
     expected: Vec<ExpectedSession>,
@@ -406,6 +434,7 @@ pub async fn library_confirm_equipment(
 /// # Errors
 /// `NotFound` for an unknown target.
 #[tauri::command]
+#[specta::specta]
 pub async fn library_target_coverage(
     library: State<'_, Arc<Library>>,
     target_id: Uuid,
@@ -420,6 +449,7 @@ pub async fn library_target_coverage(
 /// `NotFound` for an unknown location; source errors when the proposed root
 /// cannot be observed.
 #[tauri::command]
+#[specta::specta]
 pub async fn library_review_remap(
     library: State<'_, Arc<Library>>,
     location_id: Uuid,
@@ -439,6 +469,7 @@ pub async fn library_review_remap(
 /// # Errors
 /// `Conflict`/`IdentityConflict`/`NoByteProof` leave every path unchanged.
 #[tauri::command]
+#[specta::specta]
 pub async fn library_apply_remap(
     library: State<'_, Arc<Library>>,
     review_id: Uuid,
@@ -450,6 +481,7 @@ pub async fn library_apply_remap(
 /// New files per online Captures location, the same payload the
 /// `library_new_captures` event carries after every change.
 #[tauri::command]
+#[specta::specta]
 #[must_use]
 #[allow(clippy::needless_pass_by_value)] // Tauri injects the managed state by value
 pub fn library_new_captures(captures: State<'_, CaptureWatch>) -> NewCaptures {
@@ -461,6 +493,7 @@ pub fn library_new_captures(captures: State<'_, CaptureWatch>) -> NewCaptures {
 /// # Errors
 /// `Conflict` for a stale revision; `InvalidInput` for an empty name.
 #[tauri::command]
+#[specta::specta]
 pub async fn library_update_location(
     library: State<'_, Arc<Library>>,
     location_id: Uuid,
@@ -479,6 +512,7 @@ pub async fn library_update_location(
 /// # Errors
 /// `InvalidInput` for the root or an escaping scope, or when a scan is running.
 #[tauri::command]
+#[specta::specta]
 pub async fn library_retry_scope(
     library: State<'_, Arc<Library>>,
     location_id: Uuid,
@@ -498,6 +532,7 @@ pub async fn library_retry_scope(
 /// `IdentityConflict` when the root differs (remap review required); `Conflict`
 /// for a stale revision.
 #[tauri::command]
+#[specta::specta]
 pub async fn library_reselect_location(
     library: State<'_, Arc<Library>>,
     location_id: Uuid,
@@ -512,13 +547,14 @@ pub async fn library_reselect_location(
 }
 
 /// Durable Retire location review naming the location, root, availability and
-/// decision revision and every asset, session, View, Project and Result that
-/// references its copies. Retiring deletes, moves or modifies no file.
+/// decision revision and the Projects and calibration records that hold its
+/// copies. Retiring deletes, moves or modifies no file.
 ///
 /// # Errors
 /// `InvalidInput` for a retired location; `Conflict` when its copies changed while
 /// references were read; `NotFound` for an unknown location.
 #[tauri::command]
+#[specta::specta]
 pub async fn library_review_retire_location(
     library: State<'_, Arc<Library>>,
     location_id: Uuid,
@@ -526,16 +562,17 @@ pub async fn library_review_retire_location(
     library.review_retire_location(location_id).await.map_err(fail(Some(location_id)))
 }
 
-/// Confirm a reviewed Retire location: the location is re-read, copies read
-/// Retired and leave integration totals, fixed Views name them unresolved and the
-/// root stops blocking registration. Reads and changes no file bytes, so no
-/// rehash applies.
+/// Confirm a reviewed Retire location: the location and every reference are
+/// re-read, copies read Retired and leave integration totals, and the root
+/// stops blocking registration. Reads and changes no file bytes, so no rehash
+/// applies.
 ///
 /// # Errors
 /// `Conflict` for a stale review or revision, for availability that differs from
 /// the review, or while a scan of the location is Running; `InvalidInput` for an
 /// applied review or a retired location.
 #[tauri::command]
+#[specta::specta]
 pub async fn library_retire_location(
     library: State<'_, Arc<Library>>,
     review_id: Uuid,
@@ -553,6 +590,7 @@ pub async fn library_retire_location(
 /// # Errors
 /// `PersistenceFailure` when the catalog cannot be read.
 #[tauri::command]
+#[specta::specta]
 pub async fn library_list_operations(
     library: State<'_, Arc<Library>>,
     location_id: Option<Uuid>,

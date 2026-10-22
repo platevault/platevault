@@ -1,9 +1,15 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Rig filter lists (spec 072 PLAN-EQ-FR-01, -04, -06): each saved equipment
+//! Rigs (spec 072 PLAN-EQ-FR-01, -04, -06, -07, -08): each saved equipment
 //! row's list of filters, replaced whole in one writer transaction, and the
-//! FILTER values observed on the sessions confirmed to each rig.
+//! FILTER values observed on the sessions confirmed to each rig. Physical
+//! cameras and calibration camera links live in [`cameras`]; rig versions
+//! and the version each session recorded in [`versions`]. Their
+//! connection-level functions run inside other units' transactions.
+
+pub mod cameras;
+pub mod versions;
 
 use platevault_model::{
     normalize_rig_filters, LibraryError, Revision, RigFilter, RigFilterValue, RigFilterValues,

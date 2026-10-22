@@ -39,7 +39,12 @@ CREATE TABLE IF NOT EXISTS adopted_masters (
     source_asset_id TEXT REFERENCES assets (id),
     provenance TEXT NOT NULL,
     adopted_at TEXT NOT NULL,
-    UNIQUE (location_id, path_key)
+    -- F4 (LIB-FR-26, D-W104): the physical camera a master was taken with,
+    -- by model while the rigs hold one camera of it, or confirmed at import.
+    camera_id TEXT REFERENCES cameras (id),
+    camera_basis TEXT CHECK (camera_basis IN ('model', 'confirmed')),
+    UNIQUE (location_id, path_key),
+    CHECK ((camera_id IS NULL) = (camera_basis IS NULL))
 ) STRICT;
 CREATE INDEX IF NOT EXISTS adopted_masters_source ON adopted_masters (source_asset_id)
     WHERE source_asset_id IS NOT NULL;

@@ -15,8 +15,17 @@ pub struct GeometryThresholds {
     pub center_separation_max_percent: f64,
     pub rotation_max_deg: f64,
 }
+/// Percentage-point tolerance for platform-dependent footprint overlap rounding.
+///
+/// PRJ-FR-29 and targeting spec 062 FR-033 define the mosaic band as an inclusive
+/// configurable range. Footprint math uses platform `f64` trig operations,
+/// whose last bits can differ (about 2e-13 percentage points). This tolerance
+/// is far above that noise and far below a meaningful pointing change, keeping
+/// bound decisions consistent across platforms and with Project panel offers.
+pub const PANEL_OVERLAP_TOLERANCE_PERCENT: f64 = 1e-6;
 
-/// Inclusive overlap band for accepted mosaic adjacency.
+/// Inclusive overlap band for accepted mosaic adjacency, bounds held within
+/// [`PANEL_OVERLAP_TOLERANCE_PERCENT`].
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct MosaicThresholds {
     pub overlap_min_percent: f64,
@@ -146,8 +155,8 @@ fn evaluate_relation(
 ) -> target_match::Result<GeometryEvidence> {
     let comparison = compare_footprints(left, right)?;
     let mosaic_band = CoverageBand::new(
-        settings.mosaic.overlap_min_percent / 100.0,
-        settings.mosaic.overlap_max_percent / 100.0,
+        (settings.mosaic.overlap_min_percent - PANEL_OVERLAP_TOLERANCE_PERCENT) / 100.0,
+        (settings.mosaic.overlap_max_percent + PANEL_OVERLAP_TOLERANCE_PERCENT) / 100.0,
     )?;
     let cap = settings.mosaic.residual_sky_rotation_cap_deg;
     let allowed_mosaic_rotations = coverage_rotation_intervals(
@@ -225,8 +234,16 @@ fn mosaic_threshold_snapshot(
 ) -> Vec<ThresholdMeasurement> {
     let coverage = comparison.normalized_coverage * 100.0;
     vec![
-        minimum_measurement("coverage_percent", coverage, thresholds.overlap_min_percent),
-        maximum_measurement("coverage_percent", coverage, thresholds.overlap_max_percent),
+        minimum_measurement(
+            "coverage_percent",
+            coverage,
+            thresholds.overlap_min_percent - PANEL_OVERLAP_TOLERANCE_PERCENT,
+        ),
+        maximum_measurement(
+            "coverage_percent",
+            coverage,
+            thresholds.overlap_max_percent + PANEL_OVERLAP_TOLERANCE_PERCENT,
+        ),
         maximum_measurement(
             "residual_sky_rotation_deg",
             comparison.residual_sky_rotation.degrees().abs(),
@@ -273,8 +290,8 @@ fn geometry_passes(comparison: &FootprintComparison, thresholds: GeometryThresho
 
 fn mosaic_band_contains(comparison: &FootprintComparison, thresholds: MosaicThresholds) -> bool {
     let coverage = comparison.normalized_coverage * 100.0;
-    coverage >= thresholds.overlap_min_percent
-        && coverage <= thresholds.overlap_max_percent
+    coverage >= thresholds.overlap_min_percent - PANEL_OVERLAP_TOLERANCE_PERCENT
+        && coverage <= thresholds.overlap_max_percent + PANEL_OVERLAP_TOLERANCE_PERCENT
         && comparison.residual_sky_rotation.degrees().abs()
             <= thresholds.residual_sky_rotation_cap_deg
 }
@@ -388,10 +405,14 @@ mod tests {
         comparison.intersection_area = 0.4;
         assert!(mosaic_band_contains(&comparison, thresholds));
 
-        comparison.normalized_coverage = 0.05 - 1e-12;
-        assert!(!mosaic_band_contains(&comparison, thresholds));
-        comparison.normalized_coverage = 0.4 + 1e-12;
-        assert!(!mosaic_band_contains(&comparison, thresholds));
+        comparison.normalized_coverage = 0.05 - PANEL_OVERLAP_TOLERANCE_PERCENT / 2.0 / 100.0;
+        assert!(mosaic_band_contains(&comparison, thresholds), "just inside the lower bound");
+        comparison.normalized_coverage = 0.05 - PANEL_OVERLAP_TOLERANCE_PERCENT * 2.0 / 100.0;
+        assert!(!mosaic_band_contains(&comparison, thresholds), "just outside the lower bound");
+        comparison.normalized_coverage = 0.4 + PANEL_OVERLAP_TOLERANCE_PERCENT / 2.0 / 100.0;
+        assert!(mosaic_band_contains(&comparison, thresholds), "just inside the upper bound");
+        comparison.normalized_coverage = 0.4 + PANEL_OVERLAP_TOLERANCE_PERCENT * 2.0 / 100.0;
+        assert!(!mosaic_band_contains(&comparison, thresholds), "just outside the upper bound");
         comparison.normalized_coverage = 0.2;
         comparison.residual_sky_rotation = tm_skymath::Angle::from_degrees(10.0 + 1e-12);
         assert!(!mosaic_band_contains(&comparison, thresholds));

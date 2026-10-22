@@ -14,10 +14,10 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use platevault_model::{
     Asset, Availability, ColumnClass, ConfirmedImport, Drift, ExportLayout, ImportBasis,
     ImportCandidate, ImportColumn, ImportFormat, ImportReview, ImportReviewState, ImportRow,
-    ImportSource, ImportVerification, ImportedValue, LibraryError, Location, MeasurementMethod,
-    MeasurementOutcome, MeasurementRecord, MeasurementRun, NativePath, ObservationFingerprint,
-    PreambleEntry, RecordValidity, RowMatch, RowResolution, RunCounters, RunIssue, RunState, Units,
-    ValueSource,
+    ImportSource, ImportVerification, ImportedValue, LibraryError, LibraryErrorCode, Location,
+    MeasurementMethod, MeasurementOutcome, MeasurementRecord, MeasurementRun, NativePath,
+    ObservationFingerprint, PreambleEntry, RecordValidity, RowMatch, RowResolution, RunCounters,
+    RunIssue, RunState, Units, ValueSource,
 };
 use serde::{Deserialize, Serialize};
 use sqlx::sqlite::{SqliteConnection, SqliteRow};
@@ -29,9 +29,9 @@ use super::{
     load_location, now, parse_uuid, revision, to_json, to_text, Catalog, Result, MAX_PAGE,
 };
 
-/// The `ErrorResponse` kinds of issues the catalog records itself.
-const CHANGED_ISSUE: &str = "identity_conflict";
-const RETIRED_ISSUE: &str = "source_unavailable";
+/// The stable codes of issues the catalog records itself.
+const CHANGED_ISSUE: LibraryErrorCode = LibraryErrorCode::IdentityConflict;
+const RETIRED_ISSUE: LibraryErrorCode = LibraryErrorCode::SourceUnavailable;
 
 /// The label suffix of every imported value.
 const IMPORTED_LABEL: &str = "SubframeSelector";
@@ -254,13 +254,11 @@ impl Catalog {
             require_unsettled(conn, &current, record.asset_id).await?;
             let asset = load_asset(conn, record.asset_id).await?;
             if asset.availability == Availability::Retired {
-                let message = "the asset's location was retired before its record was stored";
-                add_issue(conn, run, &issue(asset.id, RETIRED_ISSUE, message)).await?;
+                add_issue(conn, run, &issue(asset.id, RETIRED_ISSUE)).await?;
             } else if fingerprint_matches(&asset.fingerprint, &record.basis.fingerprint) {
                 store_record(conn, record).await?;
             } else {
-                let message = "the source changed after it was read; no record was stored";
-                add_issue(conn, run, &issue(asset.id, CHANGED_ISSUE, message)).await?;
+                add_issue(conn, run, &issue(asset.id, CHANGED_ISSUE)).await?;
             }
             settle(conn, run, record.asset_id).await?;
             load_run(conn, run).await?
@@ -273,13 +271,11 @@ impl Catalog {
     ///
     /// # Errors
     /// `Conflict` when the run is not Running or the frame is already settled;
-    /// `InvalidInput` for an empty kind or message, or an asset the run does
-    /// not hold; `NotFound` for an unknown run.
+    /// `InvalidInput` for an empty kind or an asset the run does not hold;
+    /// `NotFound` for an unknown run.
     pub async fn record_run_issue(&self, run: Uuid, issue: &RunIssue) -> Result<MeasurementRun> {
-        if issue.kind.trim().is_empty() || issue.message.trim().is_empty() {
-            return Err(LibraryError::InvalidInput(
-                "a run issue needs a kind and a message".into(),
-            ));
+        if issue.kind.as_str().is_empty() {
+            return Err(LibraryError::InvalidInput("a run issue needs a kind".into()));
         }
         let run = write_txn!(self, |conn| {
             let current = load_run(conn, run).await?;
@@ -427,8 +423,8 @@ fn unique(ids: &[Uuid]) -> Result<BTreeSet<Uuid>> {
     Ok(seen)
 }
 
-fn issue(asset_id: Uuid, kind: &str, message: &str) -> RunIssue {
-    RunIssue { asset_id, kind: kind.into(), message: message.into() }
+fn issue(asset_id: Uuid, kind: LibraryErrorCode) -> RunIssue {
+    RunIssue { asset_id, kind, parameters: BTreeMap::new() }
 }
 
 fn db_count(value: u64) -> Result<i64> {
@@ -471,7 +467,7 @@ async fn load_run(conn: &mut SqliteConnection, id: Uuid) -> Result<MeasurementRu
     .await?
     .ok_or_else(|| LibraryError::NotFound(format!("measurement run {id}")))?;
     let issues = sqlx::query(
-        "SELECT asset_id, kind, message FROM measurement_run_issues WHERE run_id = ?1 \
+        "SELECT asset_id, kind, parameters FROM measurement_run_issues WHERE run_id = ?1 \
          ORDER BY position",
     )
     .bind(id.to_string())
@@ -481,8 +477,8 @@ async fn load_run(conn: &mut SqliteConnection, id: Uuid) -> Result<MeasurementRu
     .map(|row| {
         Ok(RunIssue {
             asset_id: parse_uuid(&row.try_get::<String, _>("asset_id")?)?,
-            kind: row.try_get("kind")?,
-            message: row.try_get("message")?,
+            kind: from_text(&row.try_get::<String, _>("kind")?)?,
+            parameters: serde_json::from_str(&row.try_get::<String, _>("parameters")?)?,
         })
     })
     .collect::<Result<Vec<_>>>()?;
@@ -579,14 +575,14 @@ async fn settle(conn: &mut SqliteConnection, run: Uuid, asset: Uuid) -> Result<(
 
 async fn add_issue(conn: &mut SqliteConnection, run: Uuid, issue: &RunIssue) -> Result<()> {
     sqlx::query(
-        "INSERT INTO measurement_run_issues (run_id, position, asset_id, kind, message) \
+        "INSERT INTO measurement_run_issues (run_id, position, asset_id, kind, parameters) \
          VALUES (?1, (SELECT COALESCE(MAX(position), 0) + 1 FROM measurement_run_issues \
          WHERE run_id = ?1), ?2, ?3, ?4)",
     )
     .bind(run.to_string())
     .bind(issue.asset_id.to_string())
-    .bind(&issue.kind)
-    .bind(&issue.message)
+    .bind(issue.kind.as_str())
+    .bind(to_json(&issue.parameters)?)
     .execute(&mut *conn)
     .await?;
     sqlx::query("UPDATE measurement_runs SET unavailable = unavailable + 1 WHERE id = ?1")
@@ -1295,6 +1291,7 @@ mod tests {
                     asset_ids: assets.iter().map(|asset| asset.id).collect(),
                     provisional: Vec::new(),
                     date_basis: None,
+                    framing: None,
                 }],
             })
             .await
@@ -1426,7 +1423,7 @@ mod tests {
     }
 
     fn kind(error: &LibraryError) -> String {
-        error.response(None, None).kind
+        error.code().as_str().into()
     }
 
     /// A disposable `max_page_count` catalog: each write reports

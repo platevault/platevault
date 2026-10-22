@@ -9,13 +9,15 @@
 //! lists each panel with its own gaps, on the Project page and in the Target's
 //! Plan area.
 
+#[path = "support/membership.rs"]
+mod membership_support;
 mod support;
 
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
-use persistence_library::SessionQuery;
+use persistence_library::{NewGroup, SessionQuery};
 use platevault_core::library::Library;
 use platevault_core::planning_project::{
     GapLabel, GapRemaining, GoalGap, ProjectPlanning, ProjectPlanningQuery,
@@ -83,7 +85,7 @@ fn rig(name: &str) -> Equipment {
 }
 
 fn subject(target_id: Uuid) -> SubjectInput {
-    SubjectInput { target_id, name: None, mosaic: false, panels: Vec::new() }
+    SubjectInput { target_id, name: None }
 }
 
 fn ids(planning: &ProjectPlanning) -> Vec<Uuid> {
@@ -262,70 +264,67 @@ async fn scanned_ngc7000(root: &Path) -> (Arc<Library>, TargetCandidate, Uuid, U
         .id;
     (library, ngc7000, redcat, oiii)
 }
-/// PLAN-FR-02, D-W36, D-W66: NGC 7000 has 2 Ha lights of 300 s and 2 OIII
-/// lights of 120 s on the Project's rig, and the saved run "Ha only" leaves
-/// the OIII session out. The Ha gap names 600 s "in project" and 600 s
-/// "captured" with 3000 s to go; the OIII gap names 0 frames "in project" and
-/// 2 "captured" with 10 to go. The mosaic subject IC 1396 lists each panel by
-/// number with its own goal gap. The Target's Plan area reads the same gaps
-/// for the open Project.
+/// PLAN-FR-02, D-W36, D-W96: the Project holds two Ha frames in a panel group;
+/// subject-level OIII and Ha goals also count suggestions, while a separate
+/// panel goal counts only held frames. The Target's Plan area reads the same gaps.
 #[tokio::test]
 async fn gap_names_in_project_and_captured() {
     let temp = tempfile::tempdir().unwrap();
     let (library, ngc7000, redcat, oiii) = scanned_ngc7000(temp.path()).await;
     let ic1396 = seed(&library, "IC 1396").await;
     let catalog = library.catalog();
-    let panels = (1..=2)
-        .map(|number| PanelInput {
-            number,
-            ra_deg: 312.0 + f64::from(number),
-            dec_deg: 60.0,
-            rotation_deg: None,
-        })
-        .collect();
-    let goal = |target_id, panel, goal| GoalInput { target_id, panel, goal };
     let project = catalog
         .create_project(&ProjectInput {
             name: "Summer nebulae".into(),
             notes: None,
-            subjects: vec![
-                subject(ngc7000.id),
-                SubjectInput { target_id: ic1396.id, name: None, mosaic: true, panels },
-            ],
+            subjects: vec![subject(ngc7000.id), subject(ic1396.id)],
             rig_ids: vec![redcat],
             goals: vec![
-                goal(
-                    ngc7000.id,
-                    None,
-                    GoalSpec::Integration { channel: Some("Ha".into()), goal_seconds: 3600 },
-                ),
-                goal(
-                    ngc7000.id,
-                    None,
-                    GoalSpec::FrameCount { channel: Some("OIII".into()), goal_frames: 10 },
-                ),
-                goal(
-                    ic1396.id,
-                    Some(2),
-                    GoalSpec::Integration { channel: Some("Ha".into()), goal_seconds: 7200 },
-                ),
+                GoalInput {
+                    target_id: ngc7000.id,
+                    group_id: None,
+                    goal: GoalSpec::Integration { channel: Some("Ha".into()), goal_seconds: 3600 },
+                },
+                GoalInput {
+                    target_id: ngc7000.id,
+                    group_id: None,
+                    goal: GoalSpec::FrameCount { channel: Some("OIII".into()), goal_frames: 10 },
+                },
             ],
         })
         .await
         .unwrap();
-    let run = NewView {
-        project_id: project.id,
-        subject_id: project.subjects[0].id,
+    let sessions = catalog.list_sessions(&SessionQuery::default()).await.unwrap();
+    let ha = sessions.iter().map(|summary| summary.session.id).find(|id| *id != oiii).unwrap();
+    membership_support::review(&library, ha).await;
+    let reviewed = membership_support::hold(&library, project.id, ha).await;
+    membership_support::review(&library, oiii).await;
+    let [plain_group] = reviewed.groups.as_slice() else { panic!("{reviewed:#?}") };
+    let panel_group = NewGroup {
+        id: Uuid::new_v4(),
         rig_id: redcat,
-        name: "Ha only".into(),
+        name: GroupName::new("Panel 1").unwrap(),
+        origin: GroupOrigin::User,
+        optics: plain_group.optics.clone(),
+        framing: plain_group.framing,
     };
-    let run = catalog.create_view(&run).await.unwrap().view.id;
-    let deselect = DraftEdit::DeselectSessions { session_ids: vec![oiii] };
-    catalog.edit_view_draft(run, 1, &deselect).await.unwrap();
-    catalog.save_view(run, 0, 2).await.unwrap();
-
+    let grouped = catalog
+        .create_project_group(project.id, reviewed.revision, &panel_group, &[ha])
+        .await
+        .unwrap();
+    let panel = library
+        .set_project_group_panel(project.id, grouped.revision, panel_group.id, true, None)
+        .await
+        .unwrap();
+    let group_id = panel_group.id;
+    let goal = GoalInput {
+        target_id: ngc7000.id,
+        group_id: None,
+        goal: GoalSpec::Integration { channel: Some("Ha".into()), goal_seconds: 3600 },
+    };
+    catalog.set_project_goals(project.id, panel.revision, &[goal]).await.unwrap();
     let planning = library.project_planning(&planning_query(project.id, None)).await.unwrap();
-    let [nebula, mosaic] = planning.subjects.as_slice() else { panic!("{planning:#?}") };
+    let [nebula, ic1396] = planning.subjects.as_slice() else { panic!("{planning:#?}") };
     let seconds = |whole| Microseconds::from_whole_seconds(whole).unwrap();
 
     let ha = channel_gap(&nebula.subject.gaps, "Ha");
@@ -334,33 +333,20 @@ async fn gap_names_in_project_and_captured() {
     assert_eq!((ha.in_project.tally.frames, ha.in_project.tally.seconds), (2, seconds(600)));
     assert_eq!((ha.captured.tally.frames, ha.captured.tally.seconds), (2, seconds(600)));
     assert_eq!(ha.remaining, GapRemaining::Integration { seconds: seconds(3000) });
-    assert!(!ha.met);
-    let oiii_gap = channel_gap(&nebula.subject.gaps, "OIII");
-    assert_eq!((oiii_gap.in_project.tally.frames, oiii_gap.captured.tally.frames), (0, 2));
-    assert_eq!(oiii_gap.remaining, GapRemaining::FrameCount { frames: 10 });
-    assert!(nebula.subject.panels.is_empty() && !nebula.subject.mosaic);
-
+    assert!(nebula.subject.gaps.iter().all(|gap| gap.goal.goal.channel() != Some("OIII")));
+    assert!(nebula.subject.mosaic && ic1396.subject.panels.is_empty());
     let wire = serde_json::to_value(ha).unwrap();
     assert_eq!(wire["inProject"]["label"], "in project");
     assert_eq!(wire["captured"]["label"], "captured");
     assert_eq!((GapLabel::InProject.text(), GapLabel::Captured.text()), ("in project", "captured"));
 
-    assert!(mosaic.subject.mosaic && mosaic.subject.gaps.is_empty());
-    let numbers: Vec<u32> = mosaic.subject.panels.iter().map(|panel| panel.number).collect();
-    assert_eq!(numbers, [1, 2], "a mosaic lists each panel");
-    assert_eq!(
-        mosaic.subject.panels[0].gaps,
-        [] as [platevault_core::planning_project::GoalGap; 0]
-    );
-    let [panel_two] = mosaic.subject.panels[1].gaps.as_slice() else { panic!("{mosaic:#?}") };
-    assert_eq!(panel_two.goal.panel_id, Some(project.subjects[1].panels[1].id));
-    assert_eq!(panel_two.remaining, GapRemaining::Integration { seconds: seconds(7200) });
-    assert_eq!(panel_two.in_project.label, GapLabel::InProject);
-
+    let [panel] = nebula.subject.panels.as_slice() else { panic!("{nebula:#?}") };
+    assert_eq!(panel.group_id, group_id);
+    assert_eq!(panel.name.as_str(), "Panel 1");
     let plan_area = library.target_project_gaps(ngc7000.id).await.unwrap();
     let [entry] = plan_area.as_slice() else { panic!("{plan_area:#?}") };
     assert_eq!((entry.project_id, entry.project_name.as_str()), (project.id, "Summer nebulae"));
     assert_eq!(entry.subject, nebula.subject, "the Plan area reads the same gaps");
-    let panels = library.target_project_gaps(ic1396.id).await.unwrap();
-    assert_eq!(panels[0].subject, mosaic.subject);
+    let panels = library.target_project_gaps(ngc7000.id).await.unwrap();
+    assert_eq!(panels[0].subject, nebula.subject);
 }

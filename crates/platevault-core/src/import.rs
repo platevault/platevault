@@ -25,8 +25,13 @@
 //! Retry resumes from the recorded journal, never from file names. Landed
 //! copies are indexed by a scan of their destination folder; while one waits
 //! for its offline destination the import stays Interrupted.
+//!
+//! Import review shows the sessions the lights form, split by framing, and
+//! the user can merge or re-split them before the import starts.
 
-use std::collections::{HashMap, HashSet};
+mod review;
+
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -40,20 +45,23 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use crate::calibration::Rules;
+use crate::custody::same_identity;
 use crate::custody::trash::OsTrash;
-use crate::grouping::{group_assets, observing_night};
+use crate::grouping::observing_night;
 use crate::inventory;
 use crate::library::{blocking, root_failure, InventoryProbe, Library};
 use crate::{
-    Availability, CalibrationRules, CaptureMetadata, CorrectionInput, EntryKind, ExpectedAsset,
-    FileIdentity, ImageTypeEvidence, ImportBlock, ImportChoice, ImportDestination, ImportDraft,
+    AssociationKind, AssociationState, Availability, CalibrationRules, CaptureMetadata,
+    CorrectionInput, EntryKind, EvidenceItem, ExpectedAsset, ExpectedSession, FileIdentity,
+    FramingMargins, ImageTypeEvidence, ImportBlock, ImportChoice, ImportDestination, ImportDraft,
     ImportDuplicate, ImportItem, ImportItemPhase, ImportItemRecord, ImportMode, ImportOperation,
-    ImportRecord, ImportRig, ImportSourceSpec, ImportState, ImportSummary, InputKind, ItemOutcome,
-    ItemPhase, ItemReason, KeptCopy, LibraryError, Location, LocationLifecycle, LocationRole,
-    NamingFrameType, NamingMetadata, NativePath, ObservationFingerprint, ReasonCode, RigFilters,
-    SavedSource, SavedSourceView, ScanOperation, ScanState, SettleObservation, StorageItem,
+    ImportRecord, ImportRig, ImportSession, ImportSessionTarget, ImportSourceSpec, ImportState,
+    ImportSummary, ImportTargetChoice, InputKind, ItemOutcome, ItemPhase, ItemReason, KeptCopy,
+    LibraryError, Location, LocationLifecycle, LocationRole, NamingFrameType, NamingMetadata,
+    NativePath, ObservationFingerprint, Provenance, ReasonCode, RigFilters, SavedSource,
+    SavedSourceView, ScanOperation, ScanState, SettleObservation, SplitLimits, StorageItem,
     StorageItemDraft, StorageOperation, StorageOperationKind, StorageOperationState, StorageRef,
-    TransferDestination, UnknownFilter, Writability,
+    TargetCandidate, TransferDestination, UnknownFilter, Writability, FRAMING_LABEL_FIELD,
 };
 
 /// How far apart the two settle checks of a source file are, at least.
@@ -163,7 +171,8 @@ impl Library {
         };
         let (root, source_identity) = observe_source(&source_path).await?;
         let mut items = self.settle_source(&root, Vec::new(), check).await?;
-        self.route(source_id, Uuid::nil(), &[], &mut items).await?;
+        let margins = self.framing_margins().await?;
+        self.route(source_id, Uuid::nil(), &[], &margins, &mut items).await?;
         let draft = ImportDraft { source_id, source_path, source_identity, items };
         let record = self.catalog().record_import(&draft).await?;
         self.import_view(record).await
@@ -186,11 +195,19 @@ impl Library {
     ) -> Result<ImportOperation, LibraryError> {
         let record = self.preview_record(id, expected_revision).await?;
         let (root, source_identity) = observe_source(&record.source_path).await?;
+        let margins = self.import_margins(&record).await?;
         let mut items = self.settle_source(&root, record.items, check).await?;
-        self.route(record.source_id, id, &record.choices, &mut items).await?;
+        self.route(record.source_id, id, &record.choices, &margins, &mut items).await?;
         let record = self
             .catalog()
-            .revise_import(id, expected_revision, &source_identity, &record.choices, &items)
+            .revise_import(
+                id,
+                expected_revision,
+                &source_identity,
+                &record.choices,
+                record.split_override.as_ref(),
+                &items,
+            )
             .await?;
         self.import_view(record).await
     }
@@ -208,8 +225,8 @@ impl Library {
         seq: u32,
         frame_type: Option<NamingFrameType>,
     ) -> Result<ImportOperation, LibraryError> {
-        self.revise_preview(id, expected_revision, None, |items| {
-            preview_item(items, id, seq)?.item.user_type = frame_type;
+        self.revise_preview(id, expected_revision, |record, _| {
+            preview_item(&mut record.items, id, seq)?.item.user_type = frame_type;
             Ok(())
         })
         .await
@@ -226,8 +243,8 @@ impl Library {
         seq: u32,
         excluded: bool,
     ) -> Result<ImportOperation, LibraryError> {
-        self.revise_preview(id, expected_revision, None, |items| {
-            preview_item(items, id, seq)?.item.excluded = excluded;
+        self.revise_preview(id, expected_revision, |record, _| {
+            preview_item(&mut record.items, id, seq)?.item.excluded = excluded;
             Ok(())
         })
         .await
@@ -255,8 +272,124 @@ impl Library {
                 location.name
             )));
         }
-        self.revise_preview(id, expected_revision, Some(ImportChoice { role, location_id }), |_| {
+        self.revise_preview(id, expected_revision, |record, _| {
+            record.choices.retain(|chosen| chosen.role != role);
+            record.choices.push(ImportChoice { role, location_id });
             Ok(())
+        })
+        .await
+    }
+
+    /// Choose the Target the session holding item `seq` files under, or
+    /// Unclassified (`None`), in place of the one its pointing matches
+    /// (D-W129, J31 S5a/S9). The choice alone files the session: its lights'
+    /// `{target}` folder and, once indexed, the Target confirmed on the
+    /// sessions they form. Nothing is written to any location.
+    ///
+    /// # Errors
+    /// `NotFound` for a Target neither saved nor in the bundled index;
+    /// `InvalidInput` for an item in no session; otherwise as
+    /// [`Self::set_import_type`].
+    pub async fn choose_import_target(
+        &self,
+        id: Uuid,
+        expected_revision: u64,
+        seq: u32,
+        target_id: Option<Uuid>,
+    ) -> Result<ImportOperation, LibraryError> {
+        let choice = match target_id {
+            Some(target_id) => {
+                if self.known_target(&self.saved_targets().await?, target_id).is_none() {
+                    return Err(LibraryError::NotFound(format!("target {target_id}")));
+                }
+                ImportTargetChoice::Target { target_id }
+            }
+            None => ImportTargetChoice::Unclassified,
+        };
+        self.revise_preview(id, expected_revision, |record, margins| {
+            review::choose_target(&mut record.items, seq, margins, choice)
+        })
+        .await
+    }
+
+    /// Give this import its own centre and rotation limits, or (`None`) split
+    /// it with the Settings default again (CF2). Only this import's sessions
+    /// change; the Settings default and every other import keep theirs.
+    ///
+    /// # Errors
+    /// `InvalidInput` for limits out of range; otherwise as
+    /// [`Self::set_import_type`].
+    pub async fn set_import_split_limits(
+        &self,
+        id: Uuid,
+        expected_revision: u64,
+        limits: Option<SplitLimits>,
+    ) -> Result<ImportOperation, LibraryError> {
+        if let Some(limits) = &limits {
+            limits.validate()?;
+        }
+        self.revise_preview(id, expected_revision, |record, _| {
+            record.split_override = limits;
+            Ok(())
+        })
+        .await
+    }
+
+    /// The sessions the import's lights would form with `limits`, for import
+    /// review to recalculate live as its sliders move (CF2). Reads the
+    /// recorded preview and saves nothing.
+    ///
+    /// # Errors
+    /// `InvalidInput` for limits out of range; `NotFound` for an unknown
+    /// import.
+    pub async fn preview_import_split(
+        &self,
+        id: Uuid,
+        limits: &SplitLimits,
+    ) -> Result<Vec<ImportSession>, LibraryError> {
+        limits.validate()?;
+        let record = self.catalog().import_record(id).await?;
+        let margins = FramingMargins { split: *limits, ..self.framing_margins().await? };
+        let formed = review::sessions(&record.items, &margins, review::imported_light);
+        self.targeted(formed).await
+    }
+
+    /// Merge sessions of the import's lights into one before the import
+    /// starts (LIB-FR-24, D-W107). `seqs` name an item of each session; only
+    /// sessions that differ in framing alone merge. Nothing is written to any
+    /// location or session: indexing records the merge on the frames.
+    ///
+    /// # Errors
+    /// `InvalidInput` for fewer than two sessions, sessions of different
+    /// capture keys or an item in no session; otherwise as
+    /// [`Self::set_import_type`].
+    pub async fn merge_import_sessions(
+        &self,
+        id: Uuid,
+        expected_revision: u64,
+        seqs: &[u32],
+    ) -> Result<ImportOperation, LibraryError> {
+        let label = Uuid::new_v4().to_string();
+        self.revise_preview(id, expected_revision, |record, margins| {
+            review::merge(&mut record.items, seqs, margins, &label)
+        })
+        .await
+    }
+
+    /// Re-split the merged session holding item `seq`: its lights split by
+    /// framing again.
+    ///
+    /// # Errors
+    /// `InvalidInput` for a session that was not merged or an item in no
+    /// session; otherwise as [`Self::set_import_type`].
+    pub async fn resplit_import_session(
+        &self,
+        id: Uuid,
+        expected_revision: u64,
+        seq: u32,
+    ) -> Result<ImportOperation, LibraryError> {
+        self.revise_preview(id, expected_revision, |record, margins| {
+            review::resplit(&mut record.items, seq, margins)
         })
         .await
     }
@@ -414,20 +547,20 @@ impl Library {
         Ok(record)
     }
 
+    /// Apply `change` to a preview, given the margins its lights split with
+    /// before the change, then route it again with the margins after it.
     async fn revise_preview(
         &self,
         id: Uuid,
         expected_revision: u64,
-        choice: Option<ImportChoice>,
-        change: impl FnOnce(&mut [ImportItemRecord]) -> Result<(), LibraryError>,
+        change: impl FnOnce(&mut ImportRecord, &FramingMargins) -> Result<(), LibraryError>,
     ) -> Result<ImportOperation, LibraryError> {
         let mut record = self.preview_record(id, expected_revision).await?;
-        change(&mut record.items)?;
-        if let Some(choice) = choice {
-            record.choices.retain(|chosen| chosen.role != choice.role);
-            record.choices.push(choice);
-        }
-        self.route(record.source_id, id, &record.choices, &mut record.items).await?;
+        let defaults = self.framing_margins().await?;
+        let before = import_margins(&defaults, &record);
+        change(&mut record, &before)?;
+        let margins = import_margins(&defaults, &record);
+        self.route(record.source_id, id, &record.choices, &margins, &mut record.items).await?;
         let record = self
             .catalog()
             .revise_import(
@@ -435,10 +568,110 @@ impl Library {
                 expected_revision,
                 &record.source_identity,
                 &record.choices,
+                record.split_override.as_ref(),
                 &record.items,
             )
             .await?;
         self.import_view(record).await
+    }
+
+    /// The margins an import's lights split with: the Settings default with
+    /// the import's own centre and rotation limits, if it has them (CF2).
+    async fn import_margins(&self, record: &ImportRecord) -> Result<FramingMargins, LibraryError> {
+        Ok(import_margins(&self.framing_margins().await?, record))
+    }
+
+    // ── Session Targets (D-W129, J31 S3) ─────────────────────────────────────
+
+    /// A saved Target, else one of the bundled index.
+    fn known_target(&self, saved: &[TargetCandidate], id: Uuid) -> Option<TargetCandidate> {
+        saved.iter().find(|candidate| candidate.id == id).cloned().or_else(|| self.seed_target(id))
+    }
+
+    /// The Targets the frames' pointing alone matches, by the library's
+    /// target matching (inside every frame's field), nearest the mean field
+    /// centre first. OBJECT is left out, so it never prefills a Target.
+    fn pointing_matches(
+        &self,
+        frames: &[CaptureMetadata],
+        saved: &[TargetCandidate],
+    ) -> Vec<TargetCandidate> {
+        let pointing: Vec<CaptureMetadata> =
+            frames.iter().map(|frame| CaptureMetadata { object: None, ..frame.clone() }).collect();
+        let mut matched: Vec<(f64, TargetCandidate)> = self
+            .target_index()
+            .candidates_for_frames(&pointing, saved)
+            .into_iter()
+            .filter_map(|assessment| {
+                let centre = assessment.evidence.iter().find_map(|evidence| match evidence {
+                    EvidenceItem::Coordinates { ra_deg, dec_deg, qualified: true } => {
+                        Some((*ra_deg, *dec_deg))
+                    }
+                    _ => None,
+                })?;
+                let separation =
+                    crate::targets::separation_from_deg(&assessment.candidate, centre.0, centre.1)
+                        .unwrap_or(f64::INFINITY);
+                Some((separation, assessment.candidate))
+            })
+            .collect();
+        matched.sort_by(|left, right| left.0.total_cmp(&right.0));
+        matched.into_iter().map(|(_, candidate)| candidate).collect()
+    }
+
+    /// Each formed session's Target and recommendation. The Target is the
+    /// user's choice, else the one Target its pointing matches, else
+    /// Unclassified. When its pointing matches several, Unclassified stays
+    /// preselected and the nearest is recommended (owner, 2026-10-20);
+    /// nothing files under a recommendation until the user chooses it.
+    async fn session_targets(
+        &self,
+        formed: &[review::Formed],
+    ) -> Result<Vec<(Option<TargetCandidate>, Option<TargetCandidate>)>, LibraryError> {
+        let saved = self.saved_targets().await?;
+        Ok(formed
+            .iter()
+            .map(|formed| {
+                let mut matches = self.pointing_matches(&formed.frames, &saved);
+                let (prefill, recommended) = if matches.len() > 1 {
+                    (None, Some(matches.swap_remove(0)))
+                } else {
+                    (matches.pop(), None)
+                };
+                let target = match formed.choice {
+                    Some(ImportTargetChoice::Unclassified) => None,
+                    Some(ImportTargetChoice::Target { target_id }) => {
+                        self.known_target(&saved, target_id)
+                    }
+                    None => prefill,
+                };
+                (target, recommended)
+            })
+            .collect())
+    }
+
+    /// The formed sessions as import review shows them, each with its Target
+    /// and any recommendation.
+    async fn targeted(
+        &self,
+        formed: Vec<review::Formed>,
+    ) -> Result<Vec<ImportSession>, LibraryError> {
+        let targets = self.session_targets(&formed).await?;
+        let shown = |candidate: TargetCandidate| ImportSessionTarget {
+            id: candidate.id,
+            designation: candidate.designation,
+            common_name: candidate.common_name,
+        };
+        Ok(formed
+            .into_iter()
+            .zip(targets)
+            .map(|(formed, (target, recommended))| ImportSession {
+                target: target.map(shown),
+                recommended: recommended.map(shown),
+                target_chosen: formed.choice.is_some(),
+                ..formed.session
+            })
+            .collect())
     }
 
     // ── Settle checks ────────────────────────────────────────────────────────
@@ -605,12 +838,15 @@ impl Library {
 
     /// Route every preview item from its recorded evidence: holds, duplicates,
     /// destination location and templated path, collisions, and the light's
-    /// confirmed rig with any unknown FILTER value.
+    /// confirmed rig with any unknown FILTER value. A light's `{target}` is
+    /// its session's Target, its sessions split within `margins`; never
+    /// OBJECT (D-W129).
     async fn route(
         &self,
         source_id: Option<Uuid>,
         operation_id: Uuid,
         choices: &[ImportChoice],
+        margins: &FramingMargins,
         items: &mut [ImportItemRecord],
     ) -> Result<(), LibraryError> {
         let locations = self.active_locations().await?;
@@ -626,17 +862,41 @@ impl Library {
             claimed: HashMap::new(),
             rigs: HashMap::new(),
         };
-        for record in items.iter_mut() {
-            self.route_item(record, &mut context).await?;
+        let mut placing = Vec::new();
+        for (index, record) in items.iter_mut().enumerate() {
+            if let Some(frame_type) = self.route_item(record, &mut context).await? {
+                placing.push((index, frame_type));
+            }
+        }
+        let to_place: HashSet<u32> =
+            placing.iter().map(|&(index, _)| items[index].item.seq).collect();
+        let formed = review::sessions(items, margins, |record| to_place.contains(&record.item.seq));
+        let targets = self.session_targets(&formed).await?;
+        let mut target_of: HashMap<u32, &TargetCandidate> = HashMap::new();
+        for (formed, (target, _recommended)) in formed.iter().zip(&targets) {
+            if let Some(target) = target {
+                target_of.extend(formed.session.items.iter().map(|seq| (*seq, target)));
+            }
+        }
+        for (index, frame_type) in placing {
+            let record = &mut items[index];
+            let target = target_of.get(&record.item.seq).copied();
+            record.item.target_id = target.map(|target| target.id);
+            let target = target.map(|target| target.designation.as_str());
+            match self.place(record, frame_type, target, &mut context).await? {
+                Some(hold) => hold.apply(&mut record.item),
+                None => record.item.phase = ImportItemPhase::Ready,
+            }
         }
         Ok(())
     }
 
+    /// Hold the item, or return the frame type it is placed as.
     async fn route_item(
         &self,
         record: &mut ImportItemRecord,
         context: &mut RouteContext<'_>,
-    ) -> Result<(), LibraryError> {
+    ) -> Result<Option<NamingFrameType>, LibraryError> {
         clear_route(&mut record.item);
         record.item.phase = if record.item.excluded {
             ImportItemPhase::Excluded
@@ -646,35 +906,26 @@ impl Library {
             ImportItemPhase::Settling
         };
         if record.item.phase != ImportItemPhase::Settling {
-            return Ok(());
+            return Ok(None);
         }
         let (Some(evidence), Some(metadata)) = (&record.evidence, &record.metadata) else {
-            return Ok(());
+            return Ok(None);
         };
-        let Some(sha256) = evidence.sha256.clone() else { return Ok(()) };
-        let size_bytes = evidence.fingerprint.size_bytes;
-        if let Some(hold) = self.existing_copy(&record.item, &sha256, metadata, context).await? {
+        let Some(sha256) = evidence.sha256.as_deref() else { return Ok(None) };
+        if let Some(hold) = self.existing_copy(&record.item, sha256, metadata, context).await? {
             hold.apply(&mut record.item);
-            return Ok(());
+            return Ok(None);
         }
         let Some(frame_type) = record.item.frame_type() else {
             record.item.phase = ImportItemPhase::Unclassified;
-            return Ok(());
+            return Ok(None);
         };
         if frame_type == NamingFrameType::Light {
             let (rig, unknown) = self.light_rig(metadata, &mut context.rigs).await?;
             record.item.rig = rig;
             record.item.unknown_filter = unknown;
         }
-        let metadata = metadata.clone();
-        match self
-            .place(&mut record.item, frame_type, &metadata, size_bytes, &sha256, context)
-            .await?
-        {
-            Some(hold) => hold.apply(&mut record.item),
-            None => record.item.phase = ImportItemPhase::Ready,
-        }
-        Ok(())
+        Ok(Some(frame_type))
     }
 
     /// A copy of these bytes the library or this import already has: a frame
@@ -711,16 +962,23 @@ impl Library {
 
     /// Route a typed item to its role's location and templated path, held
     /// when the location is missing, unchosen or unwritable, the template
-    /// refuses it, or its destination is taken.
+    /// refuses it, or its destination is taken. `{target}` is `target`, the
+    /// light's session's Target; OBJECT never fills it (D-W129).
     async fn place(
         &self,
-        item: &mut ImportItem,
+        record: &mut ImportItemRecord,
         frame_type: NamingFrameType,
-        metadata: &CaptureMetadata,
-        size_bytes: u64,
-        sha256: &str,
+        target: Option<&str>,
         context: &mut RouteContext<'_>,
     ) -> Result<Option<Hold>, LibraryError> {
+        let (Some(evidence), Some(metadata)) = (&record.evidence, &record.metadata) else {
+            return Err(missing_evidence(&record.item));
+        };
+        let size_bytes = evidence.fingerprint.size_bytes;
+        let sha256 = evidence.sha256.clone().ok_or_else(|| missing_evidence(&record.item))?;
+        let mut naming = naming_metadata(metadata, frame_type);
+        naming.target = target.map(str::to_owned);
+        let item = &mut record.item;
         let role = role_of(frame_type);
         item.role = Some(role);
         let location = match chosen_location(&context.locations, context.choices, role) {
@@ -733,14 +991,13 @@ impl Library {
             let block = ImportBlock::DestinationUnwritable { location_id: location.id, detail };
             return Ok(Some(Hold::Block(block)));
         }
-        let resolution =
-            match self.resolve_naming(frame_type, &naming_metadata(metadata, frame_type)).await {
-                Ok(resolution) => resolution,
-                Err(LibraryError::InvalidInput(detail)) => {
-                    return Ok(Some(Hold::Block(ImportBlock::Naming { detail })));
-                }
-                Err(error) => return Err(error),
-            };
+        let resolution = match self.resolve_naming(frame_type, &naming).await {
+            Ok(resolution) => resolution,
+            Err(LibraryError::InvalidInput(detail)) => {
+                return Ok(Some(Hold::Block(ImportBlock::Naming { detail })));
+            }
+            Err(error) => return Err(error),
+        };
         let source = item.source_path.to_path_buf()?;
         let name = source.file_name().ok_or_else(|| {
             LibraryError::InvalidInput(format!("{} names no file", source.display()))
@@ -756,7 +1013,7 @@ impl Library {
         if let Some(seq) = context.claimed.get(&destination) {
             return Ok(Some(Hold::Block(ImportBlock::CollidesWithItem { seq: *seq })));
         }
-        let (probe_path, digest) = (destination.clone(), sha256.to_owned());
+        let (probe_path, digest) = (destination.clone(), sha256);
         let path = NativePath::from_path(&destination);
         match blocking(move || Ok(occupant(&probe_path, size_bytes, &digest))).await? {
             Occupant::Vacant => {
@@ -917,6 +1174,7 @@ impl Library {
                 {
                     KeptCopy {
                         path: NativePath::from_path(&destination),
+                        root: None,
                         fingerprint,
                         sha256: sha256.clone(),
                     }
@@ -950,10 +1208,10 @@ impl Library {
 
     /// Index every landed, unindexed copy: one scan per destination folder,
     /// then each copy counts as indexed once the catalog holds a frame at its
-    /// path with the identity the transfer wrote. A frame type the user set is
-    /// recorded as the frame's IMAGETYP correction. Returns whether a landed
-    /// copy still waits for its offline destination; only a scan of that
-    /// destination can index it and record its type (STO-IMP-FR-08).
+    /// path with the identity the transfer wrote. What the user set in review
+    /// is recorded on the frames. Returns whether a landed copy still waits
+    /// for its offline destination; only a scan of that destination can index
+    /// it and record what the user set (STO-IMP-FR-08).
     async fn index_landed(self: &Arc<Self>, id: Uuid, roots: &Roots) -> Result<bool, LibraryError> {
         let record = self.catalog().import_record(id).await?;
         let landed: Vec<&ImportItemRecord> =
@@ -970,16 +1228,22 @@ impl Library {
                 scopes.push((location_id, folder));
             }
         }
+        // The import's lights are indexed within its own split limits, which
+        // the sessions they form record; a light within a standing session's
+        // own limits of its anchor rejoins it (CF2, D-W107, owner 2026-10-20).
+        let margins = self.import_margins(&record).await?;
         let mut offline = HashSet::new();
         for (location_id, folder) in scopes {
             if roots.destination_online(location_id).await? {
-                self.scan_scope(location_id, &folder).await?;
+                self.scan_scope(location_id, &folder, margins).await?;
             } else {
                 offline.insert(location_id);
             }
         }
         let mut waiting = false;
         let mut indexed = Vec::new();
+        let mut decisions = Vec::new();
+        let mut filed: HashMap<Uuid, BTreeSet<Uuid>> = HashMap::new();
         for record in landed {
             let (Some(location_id), Some(path), Some(written)) = (
                 record.item.destination_location_id,
@@ -1000,51 +1264,135 @@ impl Library {
             if !same_identity(&identity, written) {
                 continue;
             }
-            if let Some(frame_type) =
-                record.item.user_type.filter(|typed| Some(*typed) != record.item.classification)
-            {
-                self.record_frame_type(asset_id, frame_type).await?;
+            decisions.push(ReviewDecision {
+                asset_id,
+                frame_type: record
+                    .item
+                    .user_type
+                    .filter(|typed| Some(*typed) != record.item.classification),
+                framing_label: record.item.framing_label.clone(),
+            });
+            if let Some(target_id) = record.item.target_id {
+                filed.entry(target_id).or_default().insert(asset_id);
             }
             let mut next = record.clone();
             next.item.indexed = true;
             indexed.push(next);
         }
+        self.record_decisions(&decisions, &margins).await?;
+        let landed: BTreeSet<Uuid> = decisions.iter().map(|decision| decision.asset_id).collect();
+        self.file_under_targets(&filed, &landed).await?;
         if !indexed.is_empty() {
             self.catalog().record_import_progress(id, &indexed).await?;
         }
+        // The review's frame types regroup the frames: match the sessions
+        // that regroup made, after its commit. Import never waits on it.
+        self.match_calibration_after_commit().await;
         Ok(waiting)
     }
 
-    /// Record the type the user gave an untyped frame as its IMAGETYP
-    /// correction; the header bytes are untouched.
-    async fn record_frame_type(
+    /// Confirm each Target on the library sessions its imported lights now
+    /// form: the Target their review session showed, by the user's choice or
+    /// its pointing (D-W129, J31 S6/S7). A bundled Target is saved first.
+    ///
+    /// Lights can rejoin a session already in the catalog (D-W107), so a
+    /// session holding a frame `landed` didn't bring keeps a Target the user
+    /// confirmed on it. A session whose lights were filed under different
+    /// Targets is left as it is: no one choice is the user's.
+    async fn file_under_targets(
         &self,
-        asset_id: Uuid,
-        frame_type: NamingFrameType,
+        filed: &HashMap<Uuid, BTreeSet<Uuid>>,
+        landed: &BTreeSet<Uuid>,
     ) -> Result<(), LibraryError> {
-        let asset = self.catalog().asset(asset_id).await?;
-        let expected = [ExpectedAsset {
-            asset_id,
-            decision_revision: asset.decision_revision,
-            fingerprint: asset.fingerprint,
-        }];
-        let corrections = [CorrectionInput {
-            asset_id,
-            field: "imageType".into(),
-            value: serde_json::Value::String(image_type_text(frame_type).into()),
-        }];
-        let preview =
-            self.catalog().preview_correction(&expected, &corrections, group_assets).await?;
-        self.confirm_correction(preview.id, &expected).await?;
+        let mut holding: BTreeMap<Uuid, (ExpectedSession, BTreeSet<Uuid>)> = BTreeMap::new();
+        for (target_id, assets) in filed {
+            for session in self.catalog().sessions_holding(assets).await? {
+                holding
+                    .entry(session.session_id)
+                    .or_insert_with(|| (session, BTreeSet::new()))
+                    .1
+                    .insert(*target_id);
+            }
+        }
+        let mut by_target: BTreeMap<Uuid, Vec<ExpectedSession>> = BTreeMap::new();
+        for (session_id, (expected, targets)) in holding {
+            let mut targets = targets.into_iter();
+            let (Some(target_id), None) = (targets.next(), targets.next()) else { continue };
+            let detail = self.catalog().session(session_id).await?;
+            let brought = detail.assets.iter().all(|asset| landed.contains(&asset.id));
+            let confirmed = detail.associations.iter().any(|association| {
+                association.kind == AssociationKind::Target
+                    && association.state == AssociationState::Confirmed
+            });
+            if brought || !confirmed {
+                by_target.entry(target_id).or_default().push(expected);
+            }
+        }
+        if by_target.is_empty() {
+            return Ok(());
+        }
+        let saved = self.saved_targets().await?;
+        for (target_id, sessions) in by_target {
+            let Some(target) = self.known_target(&saved, target_id) else { continue };
+            if matches!(target.provenance, Provenance::Seed { .. }) {
+                self.catalog().record_seed_target(&target).await?;
+            }
+            self.catalog().associate_target(&sessions, target.id).await?;
+        }
         Ok(())
     }
 
-    /// Scan one destination folder and wait for the scan to end. A scan
-    /// already running on the location is waited for first.
+    /// Record what the user set in review on the indexed frames, in one
+    /// reviewed correction so they regroup once: a frame type as the frame's
+    /// IMAGETYP correction and a merge as its framing label. The header bytes
+    /// are untouched. A session the regroup forms is split within the
+    /// import's `margins`, which it records as its own (D-W107).
+    async fn record_decisions(
+        &self,
+        decisions: &[ReviewDecision],
+        margins: &FramingMargins,
+    ) -> Result<(), LibraryError> {
+        let mut expected = Vec::new();
+        let mut corrections = Vec::new();
+        for decision in decisions {
+            let mut fields = Vec::new();
+            if let Some(frame_type) = decision.frame_type {
+                fields.push(("imageType", image_type_text(frame_type).to_owned()));
+            }
+            if let Some(label) = &decision.framing_label {
+                fields.push((FRAMING_LABEL_FIELD, label.clone()));
+            }
+            if fields.is_empty() {
+                continue;
+            }
+            let asset = self.catalog().asset(decision.asset_id).await?;
+            expected.push(ExpectedAsset {
+                asset_id: asset.id,
+                decision_revision: asset.decision_revision,
+                fingerprint: asset.fingerprint,
+            });
+            corrections.extend(fields.into_iter().map(|(field, value)| CorrectionInput {
+                asset_id: asset.id,
+                field: field.into(),
+                value: serde_json::Value::String(value),
+            }));
+        }
+        if corrections.is_empty() {
+            return Ok(());
+        }
+        let preview = self.preview_correction_within(&expected, &corrections, margins).await?;
+        self.confirm_correction_within(preview.id, &expected, margins).await?;
+        Ok(())
+    }
+
+    /// Scan one destination folder within the import's `margins` and wait
+    /// for the scan to end. A scan already running on the location is
+    /// waited for first.
     async fn scan_scope(
         self: &Arc<Self>,
         location_id: Uuid,
         folder: &Path,
+        margins: FramingMargins,
     ) -> Result<ScanOperation, LibraryError> {
         for _ in 0..SCAN_ATTEMPTS {
             let mut progress = self.subscribe_scan_progress();
@@ -1058,11 +1406,8 @@ impl Library {
                 self.scan_finished(&mut progress, running.id).await?;
                 continue;
             }
-            let started = if folder.as_os_str().is_empty() {
-                self.start_scan(location_id, None).await
-            } else {
-                self.retry_scope(location_id, NativePath::from_path(folder)).await
-            };
+            let scope = (!folder.as_os_str().is_empty()).then(|| NativePath::from_path(folder));
+            let started = self.scan_within(location_id, scope, margins).await;
             match started {
                 Ok(operation) => return self.scan_finished(&mut progress, operation.id).await,
                 // Another scan began between the check and this one.
@@ -1109,6 +1454,9 @@ impl Library {
 
     async fn import_view(&self, record: ImportRecord) -> Result<ImportOperation, LibraryError> {
         let locations = self.active_locations().await?;
+        let margins = self.import_margins(&record).await?;
+        let formed = review::sessions(&record.items, &margins, review::imported_light);
+        let sessions = self.targeted(formed).await?;
         let source = record.source_path.to_path_buf();
         let identity = record.source_identity.clone();
         let probes = locations.clone();
@@ -1161,6 +1509,9 @@ impl Library {
             summary: summarize(&items),
             items,
             destinations,
+            sessions,
+            split_limits: margins.split,
+            split_overridden: record.split_override.is_some(),
             created_at: record.created_at,
             updated_at: record.updated_at,
             settled_at: record.settled_at,
@@ -1169,6 +1520,14 @@ impl Library {
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
+
+/// What the user set in review on one indexed frame.
+struct ReviewDecision {
+    asset_id: Uuid,
+    /// The frame type the user set, when it differs from the header's.
+    frame_type: Option<NamingFrameType>,
+    framing_label: Option<String>,
+}
 
 /// The roots an import reads from and writes to, with the identity each must
 /// still have: the source as the preview observed it, and each destination
@@ -1263,14 +1622,13 @@ fn same_observation(left: &ObservationFingerprint, right: &ObservationFingerprin
         && left.modified_ns == right.modified_ns
 }
 
-/// Same volume, and the same file ID where the volume's IDs are stable.
-fn same_identity(observed: &FileIdentity, recorded: &FileIdentity) -> bool {
-    observed.volume == recorded.volume
-        && (!recorded.volume.file_ids_stable || observed.file_id == recorded.file_id)
-}
-
 fn trimmed(value: Option<&str>) -> Option<String> {
     value.map(str::trim).filter(|value| !value.is_empty()).map(str::to_owned)
+}
+
+/// An import's margins: `defaults` with the import's own split limits.
+fn import_margins(defaults: &FramingMargins, record: &ImportRecord) -> FramingMargins {
+    FramingMargins { split: record.split_override.unwrap_or(defaults.split), ..*defaults }
 }
 
 fn new_record(seq: u32, source_path: NativePath, relative_path: NativePath) -> ImportItemRecord {
@@ -1284,6 +1642,9 @@ fn new_record(seq: u32, source_path: NativePath, relative_path: NativePath) -> I
             image_type: None,
             classification: None,
             user_type: None,
+            framing_label: None,
+            target_choice: None,
+            target_id: None,
             excluded: false,
             role: None,
             destination_location_id: None,
@@ -1366,6 +1727,7 @@ fn clear_route(item: &mut ImportItem) {
     item.role = None;
     item.destination_location_id = None;
     item.destination_path = None;
+    item.target_id = None;
     item.fallbacks = Vec::new();
     item.rig = None;
     item.unknown_filter = None;
@@ -1581,7 +1943,7 @@ async fn observe_source(path: &NativePath) -> Result<(PathBuf, FileIdentity), Li
             error: Box::new(LibraryError::SourceUnavailable(format!(
                 "the import source is {availability:?}; PlateVault mounts nothing"
             ))),
-            scope: path.clone(),
+            scope: Some(path.clone()),
             identity: None,
         }),
     }

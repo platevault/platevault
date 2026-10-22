@@ -1,51 +1,50 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! The Sessions filters "Needs a Target" and "Not in any Project", their
-//! counts, Create Project prefill and Add to Project (LIB-FR-17, PRJ-FR-19,
-//! D-W59). The filters are derived on read from current associations, Project
-//! subjects and rigs, and run memberships. Nothing here writes a run row; Add
-//! to Project writes only Project rows and adds one to the Project revision.
+//! The Sessions filters "Needs a Target", "Not in any Project" and "Needs
+//! calibration", their counts, and a session row's Create Project and Add to
+//! Project (LIB-FR-17, PRJ-FR-08, PRJ-FR-19, D-W59). The filters are derived
+//! on read from current associations, the sessions Projects hold
+//! (`project_sessions`) and session calibration. A Target associated by
+//! agreeing evidence counts as confirmed here as in readiness (D-W124,
+//! [`counts_as_confirmed`]). Both row actions hold the session through the
+//! membership add ([`project_inputs::add_members`]), which admits it and
+//! appends its Target and rig ([`append_target_and_rig`]): only a session
+//! whose calibration is settled joins, and a refusal writes nothing.
 
 use std::collections::HashSet;
 
 use platevault_model::{
-    AddedRig, ExpectedSession, LibraryError, ProjectAdded, ProjectAddition, ProjectInput, Session,
-    SessionFilterCounts, SubjectInput,
+    counts_as_confirmed, AddedRig, AssociationState, EvidenceItem, ExpectedSession, LibraryError,
+    Project, ProjectAdded, ProjectAddition, ProjectInput, Revision, Session, SessionFilterCounts,
+    SubjectInput,
 };
 use sqlx::sqlite::SqliteConnection;
 use sqlx::{Connection, Row};
 use uuid::Uuid;
 
-use super::projects::{load_project, require_project};
+use super::project_inputs::{self, NewGroup, SessionAdd};
+use super::projects::{commit_revision, insert_project, load_project, require_project};
 use super::{
-    check_expected_sessions, conflict, db_revision, lineage_successors, listed_sessions,
-    load_equipment, load_session_row, load_target, now, parse_uuid, require_revision, Catalog,
-    Members, Result, SessionFilter,
+    calibration, check_expected_sessions, from_json, from_text, lineage_successors,
+    listed_sessions, load_equipment, load_session_row, load_target, parse_uuid, Catalog, Members,
+    Result, SessionFilter,
 };
 
-/// Sessions with a confirmed Target.
-const CONFIRMED_TARGET: &str = "SELECT session_id FROM associations \
-     WHERE kind = 'target' AND state = 'confirmed' AND target_id IS NOT NULL";
+/// Every session's Target row naming a Target; [`counts_as_confirmed`]
+/// decides which count as confirmed.
+const TARGET_ROWS: &str = "SELECT session_id, state, evidence FROM associations \
+     WHERE kind = 'target' AND target_id IS NOT NULL";
 
-/// Sessions in a Project: a candidate of any Project (its confirmed Target is
-/// a subject and its confirmed rig one of that Project's rigs), or selected in
-/// the latest committed revision of any run outside the Trash, as
-/// `Catalog::project_members` reads membership.
-const IN_A_PROJECT: &str = "SELECT ta.session_id FROM associations ta \
-     JOIN project_subjects ps ON ps.target_id = ta.target_id \
-     JOIN associations ea ON ea.session_id = ta.session_id AND ea.kind = 'equipment' \
-     AND ea.state = 'confirmed' \
-     JOIN project_rigs pr ON pr.project_id = ps.project_id AND pr.equipment_id = ea.equipment_id \
-     WHERE ta.kind = 'target' AND ta.state = 'confirmed' \
-     UNION SELECT c.session_id FROM views v \
-     JOIN view_revisions r ON r.view_id = v.id AND r.revision = v.revision \
-     JOIN view_session_choices c ON c.revision_row = r.id AND c.state = 'selected' \
-     WHERE v.trashed_at IS NULL";
+/// Sessions a Project holds (PRJ-FR-19): a session is in no Project until
+/// one adds it, whatever its lifecycle; matching a Project's subjects and
+/// rigs only makes it a suggestion.
+const IN_A_PROJECT: &str = "SELECT DISTINCT session_id FROM project_sessions";
 
 impl Catalog {
-    /// The lengths of the "Needs a Target" and "Not in any Project" lists over
-    /// the default Sessions scope, from one catalog snapshot. Read-only.
+    /// The lengths of the "Needs a Target", "Not in any Project" and "Needs
+    /// calibration" lists over the default Sessions scope, from one catalog
+    /// snapshot. Read-only.
     ///
     /// # Errors
     /// `PersistenceFailure` when the catalog cannot be read.
@@ -54,11 +53,18 @@ impl Catalog {
         let mut snapshot = conn.begin().await?;
         let listed = listed_sessions(&mut snapshot, false, None, Members::Live).await?;
         let standing = Standing::read(&mut snapshot).await?;
+        let mut needs_calibration = 0;
+        for id in &listed {
+            if !calibration::session_needs(&mut snapshot, *id).await?.is_empty() {
+                needs_calibration += 1;
+            }
+        }
         snapshot.rollback().await?;
         let count = |filter| listed.iter().filter(|id| standing.holds(filter, **id)).count() as u64;
         Ok(SessionFilterCounts {
             needs_target: count(SessionFilter::NeedsTarget),
             not_in_any_project: count(SessionFilter::NotInAnyProject),
+            needs_calibration,
         })
     }
 
@@ -78,12 +84,7 @@ impl Catalog {
         Ok(ProjectInput {
             name: target.candidate.designation,
             notes: None,
-            subjects: vec![SubjectInput {
-                target_id: basis.target_id,
-                name: None,
-                mosaic: false,
-                panels: Vec::new(),
-            }],
+            subjects: vec![SubjectInput { target_id: basis.target_id, name: None }],
             rig_ids: basis.rig_id.into_iter().collect(),
             goals: Vec::new(),
         })
@@ -108,33 +109,77 @@ impl Catalog {
         Ok(addition)
     }
 
-    /// Add to Project: add the session's confirmed Target as the Project's last
-    /// subject unless it is one, and its confirmed rig as the last rig when the
-    /// Project lacks it, in one Project revision. A session already covered
-    /// writes nothing. Writes only Project rows; no run membership changes.
+    /// Add to Project from a session row (PRJ-FR-08, PRJ-FR-19): the session
+    /// joins whole through the membership add, which admits it and adds its
+    /// confirmed Target as the Project's last subject unless it is one and
+    /// its confirmed rig as the last rig when the Project lacks it, all in
+    /// one Project revision. `groups` and `adds` are core's placement of this
+    /// one session. It commits only on `expected` and `expected_revision`, as
+    /// previewed, and returns what it added.
     ///
     /// # Errors
     /// `Conflict` for a stale Project revision or a session whose grouping or
-    /// decisions changed since `expected`; `NotFound` for an unknown session or
-    /// Project; `InvalidInput` when the session has no confirmed Target.
+    /// decisions changed since `expected`; `NotFound` for an unknown session,
+    /// Project or group; `InvalidInput` when the session has no confirmed
+    /// Target, for an add of any other session, and as
+    /// [`Catalog::add_project_sessions`] for every admission blocker.
     pub async fn add_session_to_project(
         &self,
         expected: &ExpectedSession,
         project_id: Uuid,
-        expected_revision: platevault_model::Revision,
+        expected_revision: Revision,
+        groups: &[NewGroup],
+        adds: &[SessionAdd],
     ) -> Result<ProjectAdded> {
+        require_only(expected, adds)?;
         let added = write_txn!(self, |conn| {
-            let current = require_project(conn, project_id).await?;
-            require_revision(project_id, current, expected_revision)?;
+            let next = project_inputs::begin_edit(conn, project_id, expected_revision).await?;
             check_expected_sessions(conn, std::slice::from_ref(expected)).await?;
             let basis = SessionBasis::read(conn, expected.session_id).await?;
             let addition = addition(conn, &basis, project_id).await?;
-            if !addition.is_empty() {
-                apply(conn, &addition, current + 1).await?;
-            }
+            project_inputs::add_members(conn, project_id, groups, adds).await?;
+            commit_revision(conn, project_id, next).await?;
             ProjectAdded { project: load_project(conn, project_id).await?, addition }
         });
         Ok(added)
+    }
+
+    /// Create Project from a session row (LIB-FR-17, PRJ-FR-01): a new open
+    /// Project from `input`, prefilled by [`Catalog::project_prefill`],
+    /// holding the session whole through the membership add, all at its
+    /// first revision. Like Add to Project it holds only a session admission
+    /// lets join; otherwise no Project is saved. `groups` and `adds` are
+    /// core's placement of this one session in a Project with no groups.
+    ///
+    /// # Errors
+    /// As [`Catalog::create_project`], and as
+    /// [`Catalog::add_session_to_project`] for the session.
+    pub async fn create_project_with_session(
+        &self,
+        input: &ProjectInput,
+        expected: &ExpectedSession,
+        groups: &[NewGroup],
+        adds: &[SessionAdd],
+    ) -> Result<Project> {
+        require_only(expected, adds)?;
+        let project = write_txn!(self, |conn| {
+            check_expected_sessions(conn, std::slice::from_ref(expected)).await?;
+            let id = insert_project(conn, input).await?;
+            project_inputs::add_members(conn, id, groups, adds).await?;
+            load_project(conn, id).await?
+        });
+        Ok(project)
+    }
+}
+
+/// A session row adds its one session, the one it was read for.
+fn require_only(expected: &ExpectedSession, adds: &[SessionAdd]) -> Result<()> {
+    match adds {
+        [add] if add.session_id == expected.session_id => Ok(()),
+        _ => Err(LibraryError::InvalidInput(format!(
+            "a session row adds only its session {}",
+            expected.session_id
+        ))),
     }
 }
 
@@ -145,9 +190,18 @@ pub async fn retain(
     filter: Option<SessionFilter>,
     mut listed: Vec<Uuid>,
 ) -> Result<Vec<Uuid>> {
-    let Some(filter @ (SessionFilter::NeedsTarget | SessionFilter::NotInAnyProject)) = filter
-    else {
-        return Ok(listed);
+    let filter = match filter {
+        Some(SessionFilter::NeedsCalibration) => {
+            let mut queue = Vec::with_capacity(listed.len());
+            for id in listed {
+                if !calibration::session_needs(conn, id).await?.is_empty() {
+                    queue.push(id);
+                }
+            }
+            return Ok(queue);
+        }
+        Some(filter @ (SessionFilter::NeedsTarget | SessionFilter::NotInAnyProject)) => filter,
+        Some(SessionFilter::Trashed) | None => return Ok(listed),
     };
     let standing = Standing::read(conn).await?;
     listed.retain(|id| standing.holds(filter, *id));
@@ -163,7 +217,7 @@ struct Standing {
 impl Standing {
     async fn read(conn: &mut SqliteConnection) -> Result<Self> {
         Ok(Self {
-            confirmed: session_ids(conn, CONFIRMED_TARGET).await?,
+            confirmed: confirmed_targets(conn).await?,
             in_project: session_ids(conn, IN_A_PROJECT).await?,
         })
     }
@@ -174,7 +228,7 @@ impl Standing {
             SessionFilter::NotInAnyProject => {
                 self.confirmed.contains(&id) && !self.in_project.contains(&id)
             }
-            SessionFilter::Trashed => true,
+            SessionFilter::Trashed | SessionFilter::NeedsCalibration => true,
         }
     }
 }
@@ -184,7 +238,23 @@ async fn session_ids(conn: &mut SqliteConnection, sql: &'static str) -> Result<H
     ids.iter().map(|id| parse_uuid(id)).collect()
 }
 
-/// A current session with its confirmed Target and confirmed rig.
+/// Sessions whose Target counts as confirmed: confirmed by the user or
+/// associated by agreeing evidence (D-W124).
+async fn confirmed_targets(conn: &mut SqliteConnection) -> Result<HashSet<Uuid>> {
+    let rows = sqlx::query(TARGET_ROWS).fetch_all(&mut *conn).await?;
+    let mut confirmed = HashSet::new();
+    for row in &rows {
+        let state: AssociationState = from_text(&row.try_get::<String, _>("state")?)?;
+        let evidence: Vec<EvidenceItem> = from_json(&row.try_get::<String, _>("evidence")?)?;
+        if counts_as_confirmed(&state, &evidence) {
+            confirmed.insert(parse_uuid(&row.try_get::<String, _>("session_id")?)?);
+        }
+    }
+    Ok(confirmed)
+}
+
+/// A current session with its confirmed Target, which may be one associated
+/// by agreeing evidence (D-W124), and its confirmed rig.
 struct SessionBasis {
     session: Session,
     target_id: Uuid,
@@ -202,17 +272,27 @@ impl SessionBasis {
             });
         }
         let rows = sqlx::query(
-            "SELECT kind, target_id, equipment_id FROM associations \
-             WHERE session_id = ?1 AND state = 'confirmed'",
+            "SELECT kind, state, evidence, target_id, equipment_id FROM associations \
+             WHERE session_id = ?1",
         )
         .bind(session_id.to_string())
         .fetch_all(&mut *conn)
         .await?;
         let (mut target_id, mut rig_id) = (None, None);
         for row in &rows {
+            let state: AssociationState = from_text(&row.try_get::<String, _>("state")?)?;
             match row.try_get::<&str, _>("kind")? {
-                "target" => target_id = row.try_get::<Option<String>, _>("target_id")?,
-                _ => rig_id = row.try_get::<Option<String>, _>("equipment_id")?,
+                "target" => {
+                    let evidence: Vec<EvidenceItem> =
+                        from_json(&row.try_get::<String, _>("evidence")?)?;
+                    if counts_as_confirmed(&state, &evidence) {
+                        target_id = row.try_get::<Option<String>, _>("target_id")?;
+                    }
+                }
+                _ if state == AssociationState::Confirmed => {
+                    rig_id = row.try_get::<Option<String>, _>("equipment_id")?;
+                }
+                _ => {}
             }
         }
         let target_id = target_id.ok_or_else(|| {
@@ -272,13 +352,28 @@ async fn addition(
     ))
 }
 
-/// Append the subject and rig the addition names and commit `next`.
-async fn apply(conn: &mut SqliteConnection, addition: &ProjectAddition, next: u64) -> Result<()> {
+/// Inside a membership add (PRJ-FR-02, PRJ-FR-19): the session's confirmed
+/// Target becomes the Project's last subject unless it is one, and its
+/// confirmed rig the last rig when the Project lacks it. The caller commits
+/// the Project revision.
+pub async fn append_target_and_rig(
+    conn: &mut SqliteConnection,
+    project_id: Uuid,
+    session_id: Uuid,
+) -> Result<ProjectAddition> {
+    let basis = SessionBasis::read(conn, session_id).await?;
+    let addition = addition(conn, &basis, project_id).await?;
+    append(conn, &addition).await?;
+    Ok(addition)
+}
+
+/// Append the subject and rig the addition names.
+async fn append(conn: &mut SqliteConnection, addition: &ProjectAddition) -> Result<()> {
     let project = addition.project_id.to_string();
     if addition.adds_subject {
         sqlx::query(
-            "INSERT INTO project_subjects (id, project_id, target_id, mosaic, name, position) \
-             VALUES (?1, ?2, ?3, 0, NULL, (SELECT coalesce(max(position) + 1, 0) \
+            "INSERT INTO project_subjects (id, project_id, target_id, name, position) \
+             VALUES (?1, ?2, ?3, NULL, (SELECT coalesce(max(position) + 1, 0) \
              FROM project_subjects WHERE project_id = ?2))",
         )
         .bind(Uuid::new_v4().to_string())
@@ -286,6 +381,8 @@ async fn apply(conn: &mut SqliteConnection, addition: &ProjectAddition, next: u6
         .bind(addition.target_id.to_string())
         .execute(&mut *conn)
         .await?;
+        super::projects::restore_hidden_goals(conn, addition.project_id, addition.target_id)
+            .await?;
     }
     if let Some(rig) = &addition.added_rig {
         sqlx::query(
@@ -296,18 +393,6 @@ async fn apply(conn: &mut SqliteConnection, addition: &ProjectAddition, next: u6
         .bind(rig.id.to_string())
         .execute(&mut *conn)
         .await?;
-    }
-    let updated = sqlx::query(
-        "UPDATE projects SET revision = ?2, updated_at = ?3 WHERE id = ?1 AND revision = ?4",
-    )
-    .bind(&project)
-    .bind(db_revision(next)?)
-    .bind(now()?)
-    .bind(db_revision(addition.project_revision)?)
-    .execute(&mut *conn)
-    .await?;
-    if updated.rows_affected() != 1 {
-        return Err(conflict(addition.project_id, addition.project_revision));
     }
     Ok(())
 }

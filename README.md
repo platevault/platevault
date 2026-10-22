@@ -41,6 +41,8 @@ how it maps to targets and projects, and what's safe to clean up.
 
 See `docs/journeys/` for the full set of supported user workflows.
 
+For developer-focused backend behaviour, see the [F4 library recovery note](docs/development/f4-library-recovery.md).
+
 ## Screenshots
 
 | Library overview | Inbox review and confirm | Cleanup plan |

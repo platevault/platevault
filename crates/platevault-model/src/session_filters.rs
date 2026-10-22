@@ -3,25 +3,30 @@
 
 //! The Sessions filters' counts and the Add to Project addition (LIB-FR-17,
 //! PRJ-FR-19, D-W59). Both derive from current associations, Project subjects
-//! and rigs, and run memberships, and assign nothing to a run.
+//! and rigs, and the sessions Projects hold.
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{ExpectedSession, Project, Revision};
 
-/// The lengths of the "Needs a Target" and "Not in any Project" lists, which
-/// Home's top line reports as "N sessions need a Target · M not in any Project".
+/// The lengths of the "Needs a Target", "Not in any Project" and "Needs
+/// calibration" lists, which Home's top line and Pending work report.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct SessionFilterCounts {
     pub needs_target: u64,
     pub not_in_any_project: u64,
+    /// Sessions whose calibration is not settled, or whose pinned file
+    /// changed or went missing (LIB-FR-17, LIB-FR-24).
+    pub needs_calibration: u64,
 }
 
 /// The session's rig that Add to Project adds because the Project lacks it.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct AddedRig {
     pub id: Uuid,
     pub name: String,
@@ -32,6 +37,7 @@ pub struct AddedRig {
 /// Project lacks it, named by a visible note before saving (D-W59).
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ProjectAddition {
     pub project_id: Uuid,
     /// The Project revision the addition was computed against; the write
@@ -63,18 +69,13 @@ impl ProjectAddition {
             .map(|rig| format!("Also adds the rig {} to this Project.", rig.name));
         Self { project_id, project_revision, session, target_id, adds_subject, added_rig, note }
     }
-
-    /// Nothing to write: the Target is a subject and the rig is on the Project
-    /// or unconfirmed.
-    #[must_use]
-    pub const fn is_empty(&self) -> bool {
-        !self.adds_subject && self.added_rig.is_none()
-    }
 }
 
-/// The committed Project and the addition the write applied.
+/// The committed Project holding the session a row's Add to Project added,
+/// and the subject and rig it added with it.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ProjectAdded {
     pub project: Project,
     pub addition: ProjectAddition,

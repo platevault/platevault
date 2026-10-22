@@ -33,6 +33,7 @@ fn invalid(message: String) -> LibraryError {
 /// What the Targets page lists: My targets (the default) or Browse catalogues.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum TargetsShow {
     #[default]
     MyTargets,
@@ -43,6 +44,7 @@ pub enum TargetsShow {
 /// "Avoid tonight".
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum BuiltinPreset {
     BestTonightBroadband,
     NarrowbandMoonUp,
@@ -150,6 +152,7 @@ impl BuiltinPreset {
 /// A sortable column; ★ is not sortable.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum TargetsColumn {
     #[default]
     Designation,
@@ -167,6 +170,7 @@ pub enum TargetsColumn {
 /// in either direction.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct TargetsSort {
     pub column: TargetsColumn,
     #[serde(default)]
@@ -179,6 +183,7 @@ pub struct TargetsSort {
 /// preset's sort, else Designation ascending) and an optional page.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct TargetsQuery {
     #[serde(default)]
     pub show: TargetsShow,
@@ -188,6 +193,7 @@ pub struct TargetsQuery {
     pub preset: Option<BuiltinPreset>,
     #[serde(default)]
     pub site_id: Option<Uuid>,
+    #[cfg_attr(feature = "wire", specta(type = Option<String>), schemars(with = "Option<String>"))]
     #[serde(default, with = "iso_date::option")]
     pub night: Option<Date>,
     pub criteria: PlanCriteria,
@@ -207,6 +213,7 @@ pub struct TargetsQuery {
 /// from Settings > Equipment, or "this Project's rigs" in a Project's context.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", rename_all_fields = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum RigSelection {
     #[default]
     None,
@@ -242,17 +249,20 @@ impl TargetsQuery {
 /// The open Project a My targets subject belongs to (D-W60).
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ProjectBadge {
     pub project_id: Uuid,
     pub name: String,
 }
 
-/// The ★ favourites and the open-Project subjects with their badges: together
+/// The ★ favourites and open-Project subjects with their badges: together
 /// they make My targets.
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MyTargetMarks {
     pub favourites: BTreeSet<Uuid>,
+    /// Targets with at least one current, qualifying indexed session.
+    pub sessions: BTreeSet<Uuid>,
     /// Open Projects by subject Target, in Project name order.
     pub badges: BTreeMap<Uuid, Vec<ProjectBadge>>,
 }
@@ -261,19 +271,27 @@ impl MyTargetMarks {
     /// Whether the Target is in My targets.
     #[must_use]
     pub fn contains(&self, id: Uuid) -> bool {
-        self.favourites.contains(&id) || self.badges.contains_key(&id)
+        self.favourites.contains(&id)
+            || self.badges.contains_key(&id)
+            || self.sessions.contains(&id)
     }
 
     /// Every Target in My targets.
     #[must_use]
     pub fn ids(&self) -> BTreeSet<Uuid> {
-        self.favourites.iter().chain(self.badges.keys()).copied().collect()
+        self.favourites
+            .iter()
+            .chain(self.badges.keys())
+            .chain(self.sessions.iter())
+            .copied()
+            .collect()
     }
 }
 
 /// Why a row's planning columns read "-".
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum PlanningUnknownReason {
     /// "Add an observing site in Settings".
     NoSite,
@@ -285,6 +303,7 @@ pub enum PlanningUnknownReason {
 /// Why tonight's Img time is zero (PLAN-TGT-FR-05).
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum ImgTimeZeroReason {
     /// The Target does not clear the altitude criterion long enough in darkness.
     Altitude,
@@ -297,6 +316,7 @@ pub enum ImgTimeZeroReason {
 /// One band of the Filters strip: viable tonight, or limited by the Moon.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct BandState {
     pub band: Band,
     pub viable: bool,
@@ -305,6 +325,7 @@ pub struct BandState {
 /// The Filters strip's recommendation label.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum Recommendation {
     BroadbandOk,
     NarrowbandOnly,
@@ -315,6 +336,7 @@ pub enum Recommendation {
 /// frames name none.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ChannelIntegration {
     pub channel: Option<String>,
     pub seconds: f64,
@@ -344,6 +366,7 @@ impl TargetActivity {
 /// computed. Img time equals the total of the Plan area windows for the night.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct TargetRow {
     pub target: TargetCandidate,
     /// Whether the Target is a saved library record.
@@ -360,6 +383,7 @@ pub struct TargetRow {
     /// The Filters strip's bands (the page's `bands`); empty when unknown.
     pub bands: Vec<BandState>,
     pub recommendation: Option<Recommendation>,
+    #[cfg_attr(feature = "wire", specta(type = Option<String>), schemars(with = "Option<String>"))]
     #[serde(with = "iso_date::option")]
     pub next_opposition: Option<Date>,
     pub unknown_reason: Option<PlanningUnknownReason>,
@@ -381,6 +405,7 @@ pub const FITS_NICELY_MAX_COVERAGE: f64 = 0.90;
 /// A selected rig as the Targets page plans for it.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct TargetsRig {
     pub equipment_id: Uuid,
     pub name: String,
@@ -393,6 +418,7 @@ pub struct TargetsRig {
 /// Why Fit reads "-".
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum FitUnknownReason {
     /// The Target has no catalogued angular size.
     SizeUnknown,
@@ -415,6 +441,7 @@ impl FitUnknownReason {
 /// Target's major axis as a share of the field's shorter side.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "state", rename_all = "snake_case", rename_all_fields = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum Fit {
     /// Fits one field with coverage of at least 25%.
     Fits { coverage: f64 },
@@ -463,6 +490,7 @@ impl Fit {
 /// One rig's Fit for a row, labeled with the rig name.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct RigFit {
     pub equipment_id: Uuid,
     pub rig_name: String,
@@ -472,9 +500,11 @@ pub struct RigFit {
 /// What a page's planning values were computed for.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct TargetsBasis {
     pub site: SiteBasis,
     pub time_zone: String,
+    #[cfg_attr(feature = "wire", specta(type = String), schemars(with = "String"))]
     #[serde(with = "iso_date")]
     pub night: Date,
     pub criteria: PlanCriteria,
@@ -486,6 +516,7 @@ pub struct TargetsBasis {
 /// `planningUnavailable` names the reason.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct TargetsPage {
     pub basis: Option<TargetsBasis>,
     pub moon: Option<NightMoon>,
@@ -509,6 +540,7 @@ pub struct TargetsPage {
 /// Where a search result comes from.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum TargetsSearchSource {
     MyTargets,
     /// A saved library Target outside My targets.
@@ -521,6 +553,7 @@ pub enum TargetsSearchSource {
 /// One search result. A result outside My targets offers "Add to targets".
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct TargetsSearchResult {
     pub target: TargetCandidate,
     pub source: TargetsSearchSource,
@@ -531,6 +564,7 @@ pub struct TargetsSearchResult {
 /// Whether SIMBAD was searched.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "state", rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum SimbadSearch {
     Searched,
     NotSearched { reason: String },
@@ -539,6 +573,7 @@ pub enum SimbadSearch {
 /// Search results over My targets, the bundled catalogues and SIMBAD.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct TargetsSearchResults {
     pub results: Vec<TargetsSearchResult>,
     pub simbad: SimbadSearch,
@@ -547,6 +582,7 @@ pub struct TargetsSearchResults {
 /// The Target "Add to targets" writes into the library and My targets.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "source", rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum AddTarget {
     /// A saved library Target.
     Saved { id: Uuid },
@@ -563,6 +599,7 @@ pub enum AddTarget {
 /// The filters a saved preset restores.
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct PresetFilters {
     #[serde(default)]
     pub show: TargetsShow,
@@ -577,6 +614,7 @@ pub struct PresetFilters {
 /// A built-in preset with its name and definition.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct BuiltinPresetInfo {
     pub preset: BuiltinPreset,
     pub name: String,
@@ -586,6 +624,7 @@ pub struct BuiltinPresetInfo {
 /// A saved preset at its revision, starting at 1.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct SavedPreset {
     pub id: Uuid,
     pub name: String,
@@ -596,6 +635,7 @@ pub struct SavedPreset {
 /// The built-ins, then the saved presets by name.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct TargetsPresets {
     pub builtin: Vec<BuiltinPresetInfo>,
     pub saved: Vec<SavedPreset>,
@@ -604,6 +644,7 @@ pub struct TargetsPresets {
 /// A preset a rename or delete names.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum PresetRef {
     Builtin { preset: BuiltinPreset },
     Saved { id: Uuid },

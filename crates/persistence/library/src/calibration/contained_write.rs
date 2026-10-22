@@ -70,7 +70,7 @@ impl Folder {
         };
         let mut current = root.path.clone();
         let root_metadata = real_directory(&current)?;
-        if !file_id_matches(&root.location.identity, &root_metadata) {
+        if !file_id_matches(&root.location.identity, &current, &root_metadata) {
             return Err(scoped(
                 LibraryError::IdentityConflict("root folder is not the registered folder".into()),
                 root.location.path.clone(),
@@ -341,7 +341,7 @@ pub fn rehash_installed<P: SourceProbe>(
 ) -> Result<String> {
     root.verify(probe)?;
     let target = root.path.join(relative);
-    if probe.fingerprint(&target)?.identity != installed.identity {
+    if !probe.fingerprint(&target)?.identity.is_recorded(&installed.identity) {
         return Err(scoped(
             LibraryError::IdentityConflict(
                 "the destination no longer holds the recorded installed copy".into(),
@@ -384,7 +384,7 @@ pub fn discard_recorded<P: SourceProbe>(
         return Ok(false);
     }
     let provable = recorded.identity.volume.file_ids_stable && recorded.identity.file_id.is_some();
-    if !provable || probe.fingerprint(&path)?.identity != recorded.identity {
+    if !provable || !probe.fingerprint(&path)?.identity.is_recorded(&recorded.identity) {
         return Ok(false);
     }
     let stamp = stamp_of(&lstat(&path)?);

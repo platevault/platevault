@@ -2,14 +2,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! Project state fixture (spec 065 PRJ-FR-14): two Ha frames of NGC 7000 on
-//! one confirmed rig in one confirmed session, and helpers to build Projects
-//! and runs on them. Fixture files are real and only read.
+//! one confirmed rig in one confirmed session, and a helper to build Projects
+//! on them. Fixture files are real and only read.
 #![allow(dead_code)]
 
 use persistence_library::{Catalog, SessionQuery};
 use platevault_model::{
     AssociationState, Equipment, GoalInput, GoalSpec, Location, Project, ProjectInput, Provenance,
-    RunStage, Session, SubjectInput, TargetRecord,
+    Session, SubjectInput, TargetRecord,
 };
 use uuid::Uuid;
 
@@ -46,7 +46,7 @@ fn rig() -> Equipment {
 pub fn ha_frames(target: Uuid, goal_frames: u64) -> GoalInput {
     GoalInput {
         target_id: target,
-        panel: None,
+        group_id: None,
         goal: GoalSpec::FrameCount { channel: Some("Ha".into()), goal_frames },
     }
 }
@@ -87,42 +87,10 @@ impl World {
         let input = ProjectInput {
             name: name.into(),
             notes: None,
-            subjects: vec![SubjectInput {
-                target_id: self.ngc.candidate.id,
-                name: None,
-                mosaic: false,
-                panels: Vec::new(),
-            }],
+            subjects: vec![SubjectInput { target_id: self.ngc.candidate.id, name: None }],
             rig_ids: vec![self.redcat.id],
             goals,
         };
         self.catalog.create_project(&input).await.unwrap()
-    }
-
-    /// A run named `name` with every candidate selected and saved, moved to
-    /// `stage`.
-    pub async fn run(&self, project: &Project, name: &str, stage: RunStage) -> Uuid {
-        let input = platevault_model::NewView {
-            project_id: project.id,
-            subject_id: project.subjects[0].id,
-            rig_id: self.redcat.id,
-            name: name.into(),
-        };
-        let id = self.catalog.create_view(&input).await.unwrap().view.id;
-        self.catalog.save_view(id, 0, 1).await.unwrap();
-        if stage != RunStage::Select {
-            self.catalog.set_view_stage(id, stage).await.unwrap();
-        }
-        id
-    }
-
-    /// Mark the run Complete with no Running operation affecting it.
-    pub async fn complete(&self, run: Uuid) {
-        self.catalog.complete_view(run, |_| async { Ok(Vec::new()) }).await.unwrap();
-    }
-
-    /// Move the run to its Project's Trash with no blocker.
-    pub async fn trash(&self, run: Uuid) {
-        self.catalog.trash_view(run, |_| async { Ok(Vec::new()) }).await.unwrap();
     }
 }

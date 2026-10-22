@@ -302,6 +302,53 @@ impl Indexed {
     }
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn measurement_failures_return_codes_without_source_paths_or_os_messages() {
+    let indexed = Indexed::new(|root| write_frames(root, 1)).await;
+    let asset_id = indexed.id("n0_000.fits");
+    let issue_path = indexed.root.join("n0_000.fits");
+    std::fs::remove_file(&issue_path).unwrap();
+    let run = indexed.review().start_measurement(&[asset_id], &[]).await.unwrap();
+    let status = finished(indexed.review(), run.operation_id).await;
+    let wire = serde_json::to_string(&status).unwrap();
+    assert!(!wire.contains(&indexed.temp.path().display().to_string()), "{wire}");
+    assert!(!wire.contains("No such file"), "{wire}");
+    assert!(!wire.contains("The system cannot find the file"), "{wire}");
+    assert_eq!(status.issues[0].kind, LibraryErrorCode::NotFound);
+    assert_eq!(status.issues[0].parameters, BTreeMap::new());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn multichannel_measurement_failure_has_its_own_stable_ipc_code() {
+    let indexed = Indexed::new(|root| {
+        let frame = star_frame(42);
+        let plane = frame.render();
+        let samples =
+            quantize(&[plane.clone(), plane.clone(), plane].concat(), StoredFormat::I16, BZERO);
+        let cards = header("L", 0, 0);
+        let bytes = write_fits(&FitsImage {
+            width: frame.width,
+            height: frame.height,
+            channels: 3,
+            samples: &samples,
+            scaling: BZERO,
+            blank: None,
+            cards: &cards,
+        })
+        .unwrap();
+        std::fs::write(root.join("colour.fits"), bytes).unwrap();
+        vec!["colour.fits".to_owned()]
+    })
+    .await;
+
+    let run = indexed.measure_all().await;
+    let detail = indexed.review().frame_detail(indexed.id("colour.fits")).await.unwrap();
+    let wire = serde_json::to_value(detail.record.unwrap()).unwrap();
+    assert_eq!(wire["outcome"], "failed");
+    assert_eq!(wire["code"], "multichannel_unqualified");
+    assert_eq!(run.counters.failed, 1);
+}
+
 fn counters(requested: u64, already_cached: u64, measured: u64, remaining: u64) -> RunCounters {
     RunCounters { requested, already_cached, measured, failed: 0, unavailable: 0, remaining }
 }

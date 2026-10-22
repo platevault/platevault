@@ -130,8 +130,7 @@ impl Duplicates {
             .await
             .unwrap();
         assert_eq!(trashed.items[0].outcome, Some(ItemOutcome::Trashed), "{trashed:?}");
-        let frame =
-            TrashedFrame { asset_id: assets[2], sha256: sha256.clone(), complete_view_ids: vec![] };
+        let frame = TrashedFrame { asset_id: assets[2], sha256: sha256.clone() };
         library.catalog().record_trashed(cleanup, &[frame]).await.unwrap();
         Self { sha256, locations, paths, assets, cleanup }
     }

@@ -1,21 +1,15 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Review lists (spec 067 PIX-FR-14, PIX-FR-16, PIX-FR-17, PIX-FR-18, D-W41,
-//! D-W42, D-W43, D-W54). Review frames opens on a run's Review step, on a run
-//! group's Review all or on a Project's candidate sessions; each lists the
-//! context's live logical captures with two-level labels, filtered and
-//! sorted, and every Trashed frame is left out of the list and its counts.
-//! Review all spans every panel run with a Panel column and a Panel filter.
-//! Names render through the naming resolver and rename nothing. A mark
-//! routes through the run's Review step transaction while the run is open,
-//! and otherwise writes the library or Project-only decision alone; a Review
-//! all mark routes as its frame's panel run's Review step would. Listing
-//! reads no source and starts no measurement.
+//! Review lists (spec 067 PIX-FR-14/16/18; D-W42, D-W78, D-W97, D-W100): a
+//! Project's candidate sessions and a session's own intake list, each the
+//! live logical captures with their library quality. Quality is global: a
+//! mark is the frame copy's library decision, and a Project leaves frames
+//! out through its own frame choices, never through a review label.
 
 use std::cmp::Ordering;
 
-use persistence_library::ReviewCapture;
+use persistence_library::{ReviewCapture, SessionReviewBasis};
 use uuid::Uuid;
 
 use super::FrameReview;
@@ -23,98 +17,67 @@ use crate::import::{classify, naming_metadata};
 use crate::library::{InventoryProbe, Library};
 use crate::{
     Asset, DisplayName, LibraryError, NameTemplate, NamingFrameType, NativePath, QualityLabel,
-    ReviewContext, ReviewCounts, ReviewDecision, ReviewFilter, ReviewFrame, ReviewList, ReviewMark,
-    ReviewMarked, ReviewSort, ReviewSortKey, Revision, RunCompletion, SortDirection,
+    ReviewContext, ReviewCounts, ReviewFilter, ReviewFrame, ReviewList, ReviewMark, ReviewMarked,
+    ReviewSort, ReviewSortKey, Revision, SortDirection,
 };
 
+/// A session's intake review list.
+#[derive(Clone, Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
+pub struct SessionReviewList {
+    pub session_id: Uuid,
+    pub grouping_revision: Revision,
+    pub filter: ReviewFilter,
+    pub counts: ReviewCounts,
+    pub frames: Vec<ReviewFrame>,
+}
+
 impl FrameReview {
-    /// The context's frames `filter` and the Panel filter `panel` admit,
-    /// ordered by `sort` and named by `names`, with per-label counts over the
-    /// frames the Panel filter admits. A run lists its open draft's members,
-    /// else its latest committed revision's; a run group lists each panel
-    /// run's frames that way, each with its panel; a Project lists its
-    /// candidate sessions' frames. Labels read the capture's library quality
-    /// first and then the listed Project's rejection. Trashed frames are
-    /// never listed or counted. Starts no measurement and writes nothing.
+    /// The context's frames `filter` admits, ordered by `sort` and named by
+    /// `names`, with per-label counts over the whole context. A session's
+    /// own intake list is [`Self::session_review_list`].
     ///
     /// # Errors
-    /// `NotFound` for an unknown run, run group or Project; `InvalidInput`
-    /// for a run in the Project's Trash, a Panel filter naming no listed
-    /// panel run's panel, or a display template the naming resolver refuses;
-    /// `PersistenceFailure`.
+    /// `NotFound` for an unknown Project; `InvalidInput` for an invalid
+    /// display template; `PersistenceFailure` for an unreadable catalog.
     pub async fn review_list(
         &self,
         context: ReviewContext,
         filter: ReviewFilter,
-        panel: Option<Uuid>,
         sort: &ReviewSort,
         names: &NameTemplate,
     ) -> Result<ReviewList, LibraryError> {
-        let mut basis = self.shared.catalog.review_basis(context).await?;
-        if let Some(panel) = panel {
-            if !basis.panels.iter().any(|run| run.panel_id == panel) {
-                return Err(LibraryError::InvalidInput(format!(
-                    "panel {panel} has no panel run in this review"
-                )));
-            }
-            basis.captures.retain(|capture| capture.panel.is_some_and(|p| p.panel_id == panel));
-        }
-        let ids: Vec<Uuid> = basis.captures.iter().map(|capture| capture.asset.id).collect();
-        let states = self.shared.frame_states(&ids).await?;
-        let mut counts = ReviewCounts::default();
-        let mut frames = Vec::with_capacity(ids.len());
-        for (capture, state) in basis.captures.into_iter().zip(states) {
-            let label = QualityLabel::of(&capture.quality, capture.project_rejected);
-            counts.count(label);
-            if !filter.admits(label) {
-                continue;
-            }
-            let ReviewCapture {
-                asset,
-                path,
-                session_id,
-                quality,
-                project,
-                other_copies,
-                member,
-                panel: frame_panel,
-                ..
-            } = capture;
-            let display = display_name(&asset, path, names)?;
-            frames.push(ReviewFrame {
-                asset,
-                session_id,
-                display,
-                label,
-                quality,
-                project,
-                other_copies,
-                member,
-                panel: frame_panel,
-                state,
-            });
-        }
-        sort_frames(&mut frames, *sort);
-        Ok(ReviewList {
-            context,
-            project_id: basis.project_id,
-            run: basis.run,
-            panels: basis.panels,
-            filter,
-            panel_filter: panel,
-            counts,
-            frames,
-        })
+        let basis = self.shared.catalog.review_basis(context).await?;
+        let (counts, frames) = listed(self, basis.captures, filter, sort, names).await?;
+        Ok(ReviewList { context, project_id: basis.project_id, filter, counts, frames })
+    }
+
+    /// Session intake's live logical captures, filtered and sorted by the same
+    /// frame-list rules as other Review surfaces.
+    ///
+    /// # Errors
+    /// `NotFound` for an unknown session; `InvalidInput` for a superseded
+    /// session or invalid display template; `PersistenceFailure` for a catalog error.
+    pub async fn session_review_list(
+        &self,
+        session_id: Uuid,
+        filter: ReviewFilter,
+        sort: &ReviewSort,
+        names: &NameTemplate,
+    ) -> Result<SessionReviewList, LibraryError> {
+        let SessionReviewBasis { session_id, grouping_revision, captures } =
+            self.shared.catalog.session_review_basis(session_id).await?;
+        let (counts, frames) = listed(self, captures, filter, sort, names).await?;
+        Ok(SessionReviewList { session_id, grouping_revision, filter, counts, frames })
     }
 
     /// Each frame's name under `names`, in request order, with its absolute
-    /// path. The file name is the default; a token template resolves each
-    /// frame's metadata with the naming resolver's fallbacks. Display only:
-    /// no file and no record changes.
+    /// path. Display only: no file and no record changes.
     ///
     /// # Errors
-    /// `InvalidInput` for an asset listed twice, a Trashed frame or a
-    /// template the naming resolver refuses; `NotFound` for an unknown asset.
+    /// `InvalidInput` for an asset listed twice or a trashed frame; `NotFound`
+    /// for an unknown asset; `PersistenceFailure` when the catalog cannot be read.
     pub async fn display_names(
         &self,
         assets: &[Uuid],
@@ -129,87 +92,84 @@ impl FrameReview {
             .collect()
     }
 
-    /// Apply one P, X, U, Reject for this Project only or Clear Project
-    /// reject. In an open run the run's Review step writes the decision and
-    /// moves the frame's draft member in one transaction (D-W54), against
-    /// `expected_draft` (0 starts a draft). Otherwise the library decision
-    /// (`library_set_quality`) or the Project-only decision of the context's
-    /// Project (`project_set_rejection`) is written alone, and a Complete
-    /// run's fixed membership stays. In a run group's Review all the mark
-    /// routes through the panel run whose membership holds the frame, against
-    /// that run's draft revision, so only that frame's decision and that panel
-    /// run's member change (PIX-FR-17).
+    /// Apply a durable library-quality mark from a Project's candidates.
     ///
     /// # Errors
-    /// As the route's write: `Conflict` for a stale draft, asset or Project
-    /// decision; `InvalidInput` for a run in the Trash, a frame that is no
-    /// member, a Review all frame no single panel run holds, or a Retired or
-    /// Trashed copy; `NotFound` for an unknown run, run group, Project or
-    /// asset; source access errors and `IdentityConflict` when a P or X mark
-    /// hashes the source.
-    pub async fn review_mark(
-        &self,
-        context: ReviewContext,
-        expected_draft: Revision,
-        mark: &ReviewMark,
-    ) -> Result<ReviewMarked, LibraryError> {
-        let catalog = &self.shared.catalog;
-        let view_id = match context {
-            ReviewContext::Run { view_id } => view_id,
-            ReviewContext::ViewGroup { group_id } => {
-                let asset = match mark {
-                    ReviewMark::Library { asset, .. } => asset.asset_id,
-                    ReviewMark::Project { mark } => mark.asset_id,
-                };
-                catalog.review_group_run(group_id, asset).await?
-            }
-            ReviewContext::ProjectCandidates { project_id } => {
-                return self.decide(project_id, mark).await;
-            }
-        };
-        let record = catalog.view(view_id).await?;
-        // A run in the Trash takes the Review step route, which refuses it.
-        if record.view.completion == RunCompletion::Open || record.view.trashed_at.is_some() {
-            let outcome = catalog
-                .view_review_mark(view_id, expected_draft, mark, InventoryProbe::default())
-                .await?;
-            return Ok(ReviewMarked {
-                decision: outcome.decision,
-                member: Some(outcome.member),
-                draft_revision: outcome.record.draft.map(|draft| draft.draft_revision),
-            });
-        }
-        self.decide(record.view.project_id, mark).await
+    /// Source identity and persistence errors from the catalog.
+    pub async fn review_mark(&self, mark: &ReviewMark) -> Result<ReviewMarked, LibraryError> {
+        self.decide_library(mark).await
     }
 
-    /// Write the mark's library decision, or its Project-only decision in
-    /// `project`, alone.
-    async fn decide(&self, project: Uuid, mark: &ReviewMark) -> Result<ReviewMarked, LibraryError> {
-        let catalog = &self.shared.catalog;
-        let missing = || LibraryError::PersistenceFailure("the decision was not read back".into());
-        let decision = match mark {
-            ReviewMark::Library { asset, quality } => {
-                let decided = catalog
-                    .set_quality(std::slice::from_ref(asset), *quality, InventoryProbe::default())
-                    .await?
-                    .pop()
-                    .ok_or_else(missing)?;
-                ReviewDecision::Library { asset: Box::new(decided) }
-            }
-            ReviewMark::Project { mark } => {
-                let rejection = catalog
-                    .set_project_rejection(project, std::slice::from_ref(mark))
-                    .await?
-                    .pop()
-                    .ok_or_else(missing)?;
-                ReviewDecision::Project { rejection }
-            }
-        };
-        Ok(ReviewMarked { decision, member: None, draft_revision: None })
+    /// Write a library-quality mark for a frame in the session's intake Review.
+    ///
+    /// # Errors
+    /// `NotFound` for an unknown session; `InvalidInput` when the asset is not
+    /// a live frame in the session; source identity and persistence errors
+    /// propagate from the catalog.
+    pub async fn session_review_mark(
+        &self,
+        session_id: Uuid,
+        mark: &ReviewMark,
+    ) -> Result<ReviewMarked, LibraryError> {
+        let session = self.shared.catalog.session(session_id).await?;
+        if !session.assets.iter().any(|candidate| candidate.id == mark.asset.asset_id) {
+            return Err(LibraryError::InvalidInput(format!(
+                "asset {} is not a live frame of session {session_id}",
+                mark.asset.asset_id
+            )));
+        }
+        self.decide_library(mark).await
+    }
+
+    async fn decide_library(&self, mark: &ReviewMark) -> Result<ReviewMarked, LibraryError> {
+        let asset = self
+            .shared
+            .catalog
+            .set_quality(std::slice::from_ref(&mark.asset), mark.quality, InventoryProbe::default())
+            .await?
+            .pop()
+            .ok_or_else(|| {
+                LibraryError::PersistenceFailure("the decision was not read back".into())
+            })?;
+        Ok(ReviewMarked { asset })
     }
 }
 
-/// The frame's displayed name under `names`.
+/// The per-label counts over every capture and the frames `filter` admits,
+/// sorted.
+async fn listed(
+    review: &FrameReview,
+    captures: Vec<ReviewCapture>,
+    filter: ReviewFilter,
+    sort: &ReviewSort,
+    names: &NameTemplate,
+) -> Result<(ReviewCounts, Vec<ReviewFrame>), LibraryError> {
+    let ids: Vec<Uuid> = captures.iter().map(|capture| capture.asset.id).collect();
+    let states = review.shared.frame_states(&ids).await?;
+    let mut counts = ReviewCounts::default();
+    let mut frames = Vec::with_capacity(ids.len());
+    for (capture, state) in captures.into_iter().zip(states) {
+        let label = QualityLabel::of(&capture.quality);
+        counts.count(label);
+        if !filter.admits(label) {
+            continue;
+        }
+        let ReviewCapture { asset, path, session_id, quality, other_copies } = capture;
+        let display = display_name(&asset, path, names)?;
+        frames.push(ReviewFrame {
+            asset,
+            session_id,
+            display,
+            label,
+            quality,
+            other_copies,
+            state,
+        });
+    }
+    sort_frames(&mut frames, *sort);
+    Ok((counts, frames))
+}
+
 fn display_name(
     asset: &Asset,
     path: NativePath,
@@ -257,12 +217,6 @@ fn sort_frames(frames: &mut [ReviewFrame], sort: ReviewSort) {
                 b.asset.effective.exposure_seconds,
                 direction,
                 f64::total_cmp,
-            ),
-            ReviewSortKey::Panel => present(
-                a.panel.map(|panel| panel.number),
-                b.panel.map(|panel| panel.number),
-                direction,
-                Ord::cmp,
             ),
             ReviewSortKey::Metric { metric } => {
                 let value = |frame: &ReviewFrame| {

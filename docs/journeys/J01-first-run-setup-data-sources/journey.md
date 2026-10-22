@@ -246,9 +246,9 @@ produces both a visible answer-back and a durable audit record.
   damaged file, or a non-astronomical one that merely carries the extension —
   becomes a metadata error for that file and the scan continues over the rest
   of the folder.
-- **Trace (robustness):** `crates/metadata/fits/Cargo.toml:12`
-  (`fits-header = "0.4.3"` — each field is sliced from the raw card bytes, so no
-  offset can land inside a multi-byte character; PR #1733);
+- **Trace (robustness):** `crates/metadata/fits/Cargo.toml:14`
+  (`fits-header = "0.5.0"`; since 0.4.3 each field is sliced from the raw card
+  bytes, so no offset can land inside a multi-byte character; PR #1733);
   `crates/metadata/fits/src/lib.rs:83` and `crates/metadata/xisf/src/lib.rs:60`
   (parsing additionally runs under `catch_unwind`, so any surviving panic
   becomes `MetadataExtractError::Parse`, which every caller already handles;

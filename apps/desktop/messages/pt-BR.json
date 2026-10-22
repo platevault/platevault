@@ -267,7 +267,131 @@
   "err_item_not_pending": "Este item não está mais pendente.",
   "err_key_unknown": "Essa configuração não é reconhecida.",
   "err_key_unoverridable": "Esta configuração não pode ser substituída.",
+  "measurement_failure_malformed_data": "Não foi possível medir os dados deste quadro. Revise o arquivo antes de usá-lo.",
+  "measurement_failure_multichannel_unqualified": "Este quadro colorido tem vários canais, que este método de medição não consegue analisar.",
+  "measurement_failure_unsupported_format": "O formato deste quadro não é compatível.",
   "err_launch_failed": "Não foi possível iniciar a ferramenta externa.",
+  "err_library_access_denied": "A permissão para ler este arquivo ou pasta foi negada. Verifique as permissões e tente novamente.",
+  "err_library_canceled": "A operação foi cancelada antes de terminar.",
+  "err_library_conflict": "Isso mudou desde que você o abriu. Recarregue e faça a alteração novamente.",
+  "err_library_correction_format_unpatchable": "Um valor corrigido está em um quadro que não é um arquivo FITS nem XISF, então não pode ser gravado no cabeçalho de uma cópia. Revise as correções da sessão.",
+  "err_library_correction_unpatchable": "Não é possível gravar um valor corrigido no cabeçalho da cópia deste quadro. Revise as correções da sessão.",
+  "err_library_identity_conflict": "Um arquivo ou pasta não é o que a biblioteca registrou. Revise-o antes de continuar.",
+  "err_library_invalid_input": "Parte do que foi informado não é válida. Verifique e tente novamente.",
+  "err_library_links_unsupported": "A unidade desta pasta não aceita links simbólicos, então aqui só é possível criar cópias. Use cópias para este projeto ou escolha outro local de processamento.",
+  "err_library_metadata_unreadable": "Não foi possível ler o cabeçalho deste arquivo. Revise o arquivo antes de usá-lo.",
+  "err_library_no_byte_proof": "Não há um resumo verificado para comparar, então não é possível confirmar que esses arquivos são iguais. Revise-os primeiro.",
+  "err_library_not_found": "Esse registro não está mais na biblioteca. Atualize e tente novamente.",
+  "err_library_persistence_failure": "Não foi possível salvar no catálogo da biblioteca. Nada foi alterado — tente novamente.",
+  "err_library_provider_unavailable": "O serviço de consulta online não está disponível no momento. Tente novamente mais tarde.",
+  "err_library_session_not_ready": "Uma sessão deste projeto precisa de revisão novamente, então a aplicação aguarda e nada foi alterado. Conclua a sessão em Sessões e depois aplique.",
+  "err_library_source_unavailable": "Este arquivo ou pasta não está acessível no momento. Verifique se a unidade está conectada e tente novamente.",
+  "err_library_symlinks_unavailable": "Não é possível aplicar · os links simbólicos exigem o Modo de Desenvolvedor do Windows. Ative-o nas configurações do Windows e verifique novamente, ou use cópias para este projeto.",
+  "err_library_unsupported_format": "O formato deste arquivo não é suportado.",
+  "apply_report_kept_missing": "{path} não estava mais no disco, então não pôde ser movido para View (kept)/. Você o tinha mantido em View (previous)/; verifique se ele foi movido ou excluído.",
+  "apply_stop_canceled": "A aplicação foi cancelada. A View atual não foi alterada.",
+  "apply_stop_interrupted": "O PlateVault foi fechado antes de a nova View ser instalada, então a View atual foi mantida. Aplique novamente quando quiser.",
+  "apply_stop_catalog_moved": "O projeto ou a biblioteca mudou enquanto a nova View era montada, então a View atual não foi alterada. Revise as alterações e aplique novamente.",
+  "apply_stop_originals_unverified": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} original está ausente, não pode ser lido ou mudou desde que foi escolhido, então a View atual não foi alterada. Verifique o arquivo listado abaixo e aplique novamente.",
+        "pp=other": "{count} originais estão ausentes, não podem ser lidos ou mudaram desde que foram escolhidos, então a View atual não foi alterada. Verifique os arquivos listados abaixo e aplique novamente."
+      }
+    }
+  ],
+  "apply_stop_building_not_cleared": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "View (building)/ contém {count} arquivo que o PlateVault não colocou, então a View atual não foi alterada. Mova ou exclua esse arquivo e aplique novamente.",
+        "pp=other": "View (building)/ contém {count} arquivos que o PlateVault não colocou, então a View atual não foi alterada. Mova ou exclua esses arquivos e aplique novamente."
+      }
+    }
+  ],
+  "apply_stop_entry_not_placed": "Um arquivo não pôde ser colocado na nova View, então a View atual não foi alterada. Verifique o arquivo listado abaixo e aplique novamente.",
+  "apply_stop_build_unverified": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} arquivo mudou enquanto a nova View era montada, então a View atual não foi alterada. Aplique novamente para montá-la outra vez.",
+        "pp=other": "{count} arquivos mudaram enquanto a nova View era montada, então a View atual não foi alterada. Aplique novamente para montá-la outra vez."
+      }
+    }
+  ],
+  "apply_stop_view_unreadable": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} item em View/ não pode ser lido, então não é possível verificá-lo e a View atual não foi alterada. Confira as permissões dele e aplique novamente.",
+        "pp=other": "{count} itens em View/ não podem ser lidos, então não é possível verificá-los e a View atual não foi alterada. Confira as permissões deles e aplique novamente."
+      }
+    }
+  ],
+  "apply_stop_previous_unreadable": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} item em View (previous)/ não pode ser lido, então não é possível verificá-lo e a View atual não foi alterada. Confira as permissões dele e aplique novamente.",
+        "pp=other": "{count} itens em View (previous)/ não podem ser lidos, então não é possível verificá-los e a View atual não foi alterada. Confira as permissões deles e aplique novamente."
+      }
+    }
+  ],
+  "apply_stop_kept_not_moved": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} arquivo que você manteve não pôde ser movido para View (kept)/, então a View atual não foi alterada. Verifique o arquivo listado abaixo e aplique novamente.",
+        "pp=other": "{count} arquivos que você manteve não puderam ser movidos para View (kept)/, então a View atual não foi alterada. Verifique os arquivos listados abaixo e aplique novamente."
+      }
+    }
+  ],
+  "apply_stop_project_folder_replaced": "A pasta do projeto não é a mesma que foi revisada, então a View atual não foi alterada. Verifique onde está a pasta do projeto e aplique novamente.",
+  "apply_stop_view_replaced": "View/ não é a pasta que foi revisada, então a View atual não foi alterada. Revise a View e aplique novamente.",
+  "apply_stop_previous_appeared": "View (previous)/ apareceu enquanto a nova View era montada, então a View atual não foi alterada. Revise o que ela contém e aplique novamente.",
+  "apply_stop_aside_failed": "Não foi possível mover a View atual para o lado, então ela não foi alterada. Verifique se é possível gravar na pasta do projeto e aplique novamente.",
+  "apply_stop_not_installed": "Não foi possível instalar a nova View, então a View atual foi restaurada. Verifique se é possível gravar na pasta do projeto e aplique novamente.",
+  "apply_foreign_failed_name_taken": "{path} ficou em View (previous)/: a nova View já tem um arquivo nesse caminho.",
+  "apply_foreign_failed_changed": "{path} ficou em View (previous)/: o arquivo mudou depois de ser listado para aplicar.",
+  "apply_foreign_failed_folder_not_made": "{path} ficou em View (previous)/: não foi possível criar a pasta dele na nova View.",
+  "apply_foreign_failed_not_moved": "{path} ficou em View (previous)/: não foi possível movê-lo para a nova View.",
   "err_lifecycle_last_confirmed_source": "Você não pode remover a última fonte confirmada.",
   "err_lifecycle_read_only": "Este item é somente leitura e não pode ser alterado.",
   "err_macos_quarantine_detected": "O macOS colocou esta aplicação em quarentena. Aprove-a em Ajustes do Sistema e tente novamente.",

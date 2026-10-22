@@ -2,13 +2,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! Storage overview reads (spec 071 STO-FR-11, D16): the library-wide
-//! content-identity duplicate copies, the archive transfers, and the runs
-//! and run groups with a recorded footprint. Every query here only reads;
-//! none records an operation or changes a decision.
+//! content-identity duplicate copies and the verified transfers, each with
+//! the archive it carries. Every query here only reads; none records an
+//! operation or changes a decision.
 
-use platevault_model::{
-    Availability, LibraryError, NativePath, ProjectName, StorageOperation, TransferArchive,
-};
+use platevault_model::{Availability, LibraryError, NativePath, StorageOperation};
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use uuid::Uuid;
@@ -42,12 +40,21 @@ const DUPLICATE_COPIES: &str = "WITH copies AS ( \
      ) \
      ORDER BY content_sha256, location_created_at, location_id, path_key";
 
-/// A verified transfer with the Archive or restore transfer it carries, if
-/// one does.
+/// A verified transfer with the archive it carries, if it is one.
 #[derive(Clone, Debug)]
 pub struct VerifiedTransfer {
     pub operation: StorageOperation,
-    pub archive: Option<TransferArchive>,
+    pub archive: Option<ArchiveOwner>,
+}
+
+/// Whose archive a transfer is (STO-FR-06, STO-FR-13).
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", rename_all_fields = "camelCase")]
+pub enum ArchiveOwner {
+    /// A Project's Wrap up archive.
+    Project { project_id: Uuid, project_name: String },
+    /// Sessions > Archive, which no Project runs.
+    Sessions,
 }
 
 impl Catalog {
@@ -78,8 +85,8 @@ impl Catalog {
     }
 
     /// Every verified transfer that is not an Import's, newest first, with
-    /// its items' recorded phases and the Archive or restore transfer it
-    /// carries. Import transfers are listed by Import.
+    /// its items' recorded phases and the archive it carries. Import
+    /// transfers are listed by Import.
     ///
     /// # Errors
     /// `PersistenceFailure` when the journal cannot be read.
@@ -87,10 +94,11 @@ impl Catalog {
         let rows = {
             let mut conn = self.reader().await?;
             sqlx::query(
-                "SELECT o.id, a.id AS transfer_id, a.kind, a.project_id, p.name AS project_name \
-                 FROM storage_operations o \
-                 LEFT JOIN archive_transfers a ON a.storage_op_id = o.id \
-                 LEFT JOIN projects p ON p.id = a.project_id \
+                "SELECT o.id, m.storage_operation_id AS archive, m.project_id, \
+                 p.name AS project_name FROM storage_operations o \
+                 LEFT JOIN (SELECT DISTINCT storage_operation_id, project_id FROM archive_moves) m \
+                 ON m.storage_operation_id = o.id \
+                 LEFT JOIN projects p ON p.id = m.project_id \
                  WHERE o.kind IN ('copy', 'move') \
                  AND NOT EXISTS (SELECT 1 FROM import_items i WHERE i.storage_op_id = o.id) \
                  ORDER BY o.created_at DESC, o.id",
@@ -100,52 +108,20 @@ impl Catalog {
         };
         let mut transfers = Vec::with_capacity(rows.len());
         for row in &rows {
-            let archive = match row.try_get::<Option<String>, _>("transfer_id")? {
-                Some(transfer_id) => Some(TransferArchive {
-                    transfer_id: parse_uuid(&transfer_id)?,
-                    kind: from_text(&row.try_get::<String, _>("kind")?)?,
-                    project: ProjectName {
-                        id: parse_uuid(&row.try_get::<String, _>("project_id")?)?,
-                        name: row.try_get("project_name")?,
-                    },
+            let archive = match (
+                row.try_get::<Option<String>, _>("archive")?,
+                row.try_get::<Option<String>, _>("project_id")?,
+            ) {
+                (None, _) => None,
+                (Some(_), None) => Some(ArchiveOwner::Sessions),
+                (Some(_), Some(project_id)) => Some(ArchiveOwner::Project {
+                    project_id: parse_uuid(&project_id)?,
+                    project_name: row.try_get("project_name")?,
                 }),
-                None => None,
             };
             let operation = self.storage_operation(parse_uuid(row.try_get("id")?)?).await?;
             transfers.push(VerifiedTransfer { operation, archive });
         }
         Ok(transfers)
-    }
-
-    /// The runs with a recorded preparation revision or Results folder.
-    ///
-    /// # Errors
-    /// `PersistenceFailure` when the catalog cannot be read.
-    pub async fn runs_with_footprint(&self) -> Result<Vec<Uuid>> {
-        let mut conn = self.reader().await?;
-        let ids: Vec<String> = sqlx::query_scalar(
-            "SELECT view_id FROM preparation_revisions \
-             UNION SELECT view_id FROM results_folders WHERE view_id IS NOT NULL \
-             ORDER BY view_id",
-        )
-        .fetch_all(&mut *conn)
-        .await?;
-        ids.iter().map(|id| parse_uuid(id)).collect()
-    }
-
-    /// The run groups with a recorded Prepare all or Assembled folder.
-    ///
-    /// # Errors
-    /// `PersistenceFailure` when the catalog cannot be read.
-    pub async fn groups_with_footprint(&self) -> Result<Vec<Uuid>> {
-        let mut conn = self.reader().await?;
-        let ids: Vec<String> = sqlx::query_scalar(
-            "SELECT group_id FROM group_preparations \
-             UNION SELECT group_id FROM results_folders WHERE group_id IS NOT NULL \
-             ORDER BY group_id",
-        )
-        .fetch_all(&mut *conn)
-        .await?;
-        ids.iter().map(|id| parse_uuid(id)).collect()
     }
 }

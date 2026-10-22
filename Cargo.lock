@@ -1083,6 +1083,7 @@ version = "0.1.0"
 dependencies = [
  "calibration_core",
  "domain_core",
+ "platevault_model",
  "schemars 1.2.1",
  "serde",
  "serde_json",
@@ -1516,10 +1517,12 @@ dependencies = [
  "contracts_core",
  "desktop_services",
  "domain_core",
+ "fits_fixtures",
  "fs_executor",
  "fs_inventory",
  "fs_pathsafe",
  "futures-util",
+ "hex",
  "persistence_core",
  "persistence_inbox",
  "persistence_library",
@@ -1532,6 +1535,7 @@ dependencies = [
  "semver",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "simbad-resolver",
  "skymath 0.7.2",
  "specta",
@@ -1949,9 +1953,9 @@ checksum = "5baebc0774151f905a1a2cc41989300b1e6fbb29aff0ceffa1064fdd3088d582"
 
 [[package]]
 name = "fits-header"
-version = "0.4.3"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "969ed073af9c306b26221d182a258167934916fc249caf9f3fd08fe5bc091431"
+checksum = "5e2ba2c109f4f44f1fe28aa0d4a3d568c4e6049bb919ea1e29e1305f99594348"
 dependencies = [
  "skymath 0.6.0",
  "thiserror 2.0.19",
@@ -2102,6 +2106,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "42703706b716c37f96a77aea830392ad231f44c9e9a67872fa5548707e11b11c"
 
 [[package]]
+name = "fs_file_handle_linux"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "tempfile",
+]
+
+[[package]]
 name = "fs_inventory"
 version = "0.1.0"
 dependencies = [
@@ -2118,6 +2130,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "fs_noreplace_windows"
+version = "0.1.0"
+dependencies = [
+ "fs_pathsafe",
+ "tempfile",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "fs_pathsafe"
 version = "0.1.0"
 dependencies = [
@@ -2127,6 +2148,15 @@ dependencies = [
  "rustix",
  "safe-filename",
  "tempfile",
+]
+
+[[package]]
+name = "fs_volume_windows"
+version = "0.1.0"
+dependencies = [
+ "fs_pathsafe",
+ "tempfile",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3636,6 +3666,7 @@ version = "0.1.0"
 dependencies = [
  "fits-header",
  "metadata_core",
+ "sha2 0.10.9",
  "tempfile",
 ]
 
@@ -3648,6 +3679,8 @@ name = "metadata_xisf"
 version = "0.1.0"
 dependencies = [
  "metadata_core",
+ "sha2 0.10.9",
+ "tempfile",
  "xisf-header",
 ]
 
@@ -4643,15 +4676,19 @@ dependencies = [
 name = "persistence_library"
 version = "0.1.0"
 dependencies = [
+ "fs_file_handle_linux",
  "fs_pathsafe",
  "hex",
  "parking_lot",
  "platevault_model",
+ "schemars 1.2.1",
  "serde",
  "serde_json",
  "sha2 0.10.9",
  "skymath 0.7.2",
+ "specta",
  "sqlx",
+ "target-match",
  "tempfile",
  "time",
  "tokio",
@@ -4834,8 +4871,11 @@ dependencies = [
  "camino",
  "csv",
  "fs4",
+ "fs_file_handle_linux",
  "fs_inventory",
+ "fs_noreplace_windows",
  "fs_pathsafe",
+ "fs_volume_windows",
  "hex",
  "jiff",
  "metadata_core",
@@ -4848,13 +4888,16 @@ dependencies = [
  "platevault_pixels",
  "rustix",
  "safe-filename",
+ "schemars 1.2.1",
  "serde",
  "serde_json",
  "sha2 0.10.9",
  "simbad-resolver",
  "skymath 0.7.2",
+ "specta",
  "sqlx",
  "target-match",
+ "targeting",
  "tempfile",
  "thiserror 2.0.19",
  "time",
@@ -4864,6 +4907,7 @@ dependencies = [
  "unicode-normalization",
  "uuid",
  "winapi-util",
+ "workflow_artifacts",
 ]
 
 [[package]]
@@ -4880,8 +4924,11 @@ name = "platevault_model"
 version = "0.1.0"
 dependencies = [
  "metadata_core",
+ "safe-filename",
+ "schemars 1.2.1",
  "serde",
  "serde_json",
+ "specta",
  "sqlx",
  "thiserror 2.0.19",
  "time",
@@ -9019,9 +9066,9 @@ dependencies = [
 
 [[package]]
 name = "xisf-header"
-version = "0.4.4"
+version = "0.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "63302fc2304740b741a7f5cc136a2c27ae14b18b18c3614acb786a9d29281348"
+checksum = "17f5443240bf08e7ef894fe9100090421d7cee0b9c414354fd5c9bf77f9e68c5"
 dependencies = [
  "quick-xml",
  "skymath 0.6.0",

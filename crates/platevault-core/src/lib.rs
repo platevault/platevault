@@ -3,14 +3,13 @@
 
 //! Local-first library records and lossless application contracts.
 
+pub mod apply;
 pub mod calendar;
 pub mod calibration;
 pub mod calibration_inputs;
 pub mod custody;
-pub mod done_archive;
 pub mod frame_review;
 pub mod grouping;
-mod header_patch;
 pub mod home;
 pub mod import;
 pub mod inventory;
@@ -21,21 +20,19 @@ pub mod naming;
 pub mod new_captures;
 pub mod notifier;
 pub mod observing_plans;
+mod patched_copy;
 pub mod planning;
 pub mod planning_project;
-pub mod prepare;
+pub mod project_groups;
+pub mod project_output;
 pub mod project_progress;
 pub mod projects;
 pub mod reminders;
-pub mod results;
 pub mod rig;
-pub mod run_lifecycle;
 pub mod storage;
 pub mod subframe_csv;
 pub mod targets;
 pub mod targets_list;
 pub mod tonight;
-pub mod view_geometry;
-pub mod view_groups;
-pub mod view_selection;
+pub mod wrap_up;
 pub use model::*;

@@ -1,14 +1,13 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Frame review (spec 067): the measurement queue, the memory-only preview
-//! cache and `SubframeSelector` import review over the catalog's measurement
-//! tables.
+//! Frame review (spec 067) computes, previews and imports measurements, and
+//! supplies the Review step for a session's Target → Rig → Review intake (spec
+//! 064 LIB-FR-20, PIX-FR-18; D-W78). Quality marks are durable library decisions;
+//! Finish and reopen write the session's grouping-revision-bound intake record.
 //!
 //! Sources are read only through `Catalog::open_contained`, which hashes every
-//! byte it hands out. Measuring, previewing and importing write measurement
-//! rows only: never a source file, a preview file, or an asset, quality,
-//! session, association, correction, View or Project record.
+//! byte it hands out. Measurement/import operations never change source files.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use std::io::Read;
@@ -33,17 +32,19 @@ use crate::{
     reasons, AppliedStretch, Asset, Availability, CfaEvidence, CfaSource, ConfirmedImport,
     CutoutRequest, DecodedBasis, FrameDetail, FramePreview, FrameStars, FrameState, ImageFormat,
     ImportBasis, ImportCandidate, ImportFormat, ImportReview, ImportSource, ImportedValue,
-    InputBasis, LibraryError, MaskCounts, MeasurementMethod, MeasurementOutcome,
-    MeasurementProgress, MeasurementRecord, MeasurementRun, MetricId, MetricValue, NativePath,
-    ObservationFingerprint, PlaneBasis, PlanePreview, PlaneSummary, PreviewTile, RecordValidity,
-    RegionsRequest, RowMatch, RowResolution, RunIssue, RunState, SampleCategory, SampleFormat,
-    SampleNumber, SampleRequest, SampleValue, SaturationBasis, SaturationSource, Scaling,
-    StarCutouts, StarModel, StarReason, StarRecord, StarState, StarWarning, StoredNumber, Stretch,
-    StretchKind, TileRequest, Units,
+    InputBasis, LibraryError, MaskCounts, MeasurementFailureCode, MeasurementFailureParameters,
+    MeasurementMethod, MeasurementOutcome, MeasurementProgress, MeasurementRecord, MeasurementRun,
+    MetricId, MetricValue, NativePath, ObservationFingerprint, PlaneBasis, PlanePreview,
+    PlaneSummary, PreviewTile, RecordValidity, RegionsRequest, RowMatch, RowResolution, RunIssue,
+    RunState, SampleCategory, SampleFormat, SampleNumber, SampleRequest, SampleValue,
+    SaturationBasis, SaturationSource, Scaling, StarCutouts, StarModel, StarReason, StarRecord,
+    StarState, StarWarning, StoredNumber, Stretch, StretchKind, TileRequest, Units,
 };
 
 mod review_list;
 mod thumbnails;
+
+pub use review_list::SessionReviewList;
 
 /// Memory budget of the frames the measurement workers decode and measure at
 /// once, in MiB, charged per frame from its header (R14).
@@ -149,6 +150,38 @@ impl FrameReview {
     /// twice; `PersistenceFailure` for an unreadable catalog.
     pub async fn frame_states(&self, assets: &[Uuid]) -> Result<Vec<FrameState>, LibraryError> {
         self.shared.frame_states(assets).await
+    }
+
+    /// The session's readiness, calibration pins and admission blockers.
+    ///
+    /// # Errors
+    /// `NotFound` for an unknown session; catalog corruption and read errors propagate.
+    pub async fn session_intake(
+        &self,
+        session_id: Uuid,
+    ) -> Result<platevault_model::SessionAdmission, LibraryError> {
+        self.shared.catalog.session_admission(session_id).await
+    }
+
+    /// Finish Review at the grouping revision the caller reviewed.
+    ///
+    /// # Errors
+    /// `Conflict` for a stale grouping revision; `InvalidInput` for remaining
+    /// Unreviewed live captures or a superseded session; `NotFound` for an unknown session.
+    pub async fn finish_review(
+        &self,
+        session_id: Uuid,
+        expected_grouping_revision: platevault_model::Revision,
+    ) -> Result<platevault_model::Revision, LibraryError> {
+        self.shared.catalog.finish_session_review(session_id, expected_grouping_revision).await
+    }
+
+    /// Reopen Review for a Ready session, deleting only its session review row.
+    ///
+    /// # Errors
+    /// `NotFound` for an unknown session; `InvalidInput` unless the session is Ready.
+    pub async fn reopen_review(&self, session_id: Uuid) -> Result<(), LibraryError> {
+        self.shared.catalog.reopen_session_review(session_id).await
     }
 
     /// The Running run, if any.
@@ -785,10 +818,12 @@ impl Shared {
                 self.catalog.record_measurement(run, &record).await?
             }
             Err(error) => {
+                let code = error.code();
+                tracing::warn!(%error, error_code = code.as_str(), asset = %queued.asset, "frame measurement settled with an issue");
                 let issue = RunIssue {
                     asset_id: queued.asset,
-                    kind: error.response(None, None).kind,
-                    message: error.to_string(),
+                    kind: code,
+                    parameters: MeasurementFailureParameters::default(),
                 };
                 self.catalog.record_run_issue(run, &issue).await?
             }
@@ -1095,6 +1130,15 @@ impl PreviewCache {
 
 // ---------------------------------------------------------------------------
 // Pixel crate to wire model
+fn failed_outcome(error: &PixelError) -> MeasurementOutcome {
+    let code = match error {
+        PixelError::Unsupported(_) => MeasurementFailureCode::UnsupportedFormat,
+        PixelError::Malformed(_) => MeasurementFailureCode::MalformedData,
+        _ => unreachable!("only Unsupported and Malformed errors are retained as failed outcomes"),
+    };
+    tracing::warn!(%error, code = ?code, "frame measurement failure recorded");
+    MeasurementOutcome::Failed { code, parameters: MeasurementFailureParameters::default() }
+}
 // ---------------------------------------------------------------------------
 
 fn pixel_error(error: PixelError) -> LibraryError {
@@ -1105,14 +1149,6 @@ fn pixel_error(error: PixelError) -> LibraryError {
         PixelError::InvalidRegion(region) => LibraryError::InvalidInput(region),
         PixelError::Canceled => LibraryError::Canceled,
     }
-}
-
-fn failed_outcome(error: &PixelError) -> MeasurementOutcome {
-    let reason = match error {
-        PixelError::Unsupported(_) => reasons::UNSUPPORTED_FORMAT,
-        _ => reasons::MALFORMED_DATA,
-    };
-    MeasurementOutcome::Failed { reason: reason.to_owned(), message: error.to_string() }
 }
 
 const fn container_of(format: ImageFormat) -> Option<px::Container> {
@@ -1216,7 +1252,13 @@ const fn plane_units(units: measure::PlaneUnits) -> Units {
 fn outcome(measurement: Measurement, method: &MeasurementMethod) -> MeasurementOutcome {
     match measurement {
         Measurement::Failed { reason, message } => {
-            MeasurementOutcome::Failed { reason: reason.to_owned(), message }
+            let code = if reason == measure::REASON_MULTICHANNEL_UNQUALIFIED {
+                MeasurementFailureCode::MultichannelUnqualified
+            } else {
+                MeasurementFailureCode::MalformedData
+            };
+            tracing::warn!(%message, code = ?code, "frame measurement failed");
+            MeasurementOutcome::Failed { code, parameters: MeasurementFailureParameters::default() }
         }
         Measurement::Measured(frame) => MeasurementOutcome::Measured {
             metrics: metrics(&frame, method),

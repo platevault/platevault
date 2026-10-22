@@ -4,17 +4,22 @@
 //! Isolated rebuilt library shell (spec 064): its own Tauri runtime over the
 //! clean catalog.
 //!
-//! It boots only [`Library`] and the [`crate::commands::library`] and
-//! [`crate::commands::observing_plans`] IPC surfaces, with the catalog in its
-//! own data directory. The dialog and opener plugins serve the planning
-//! handlers' Rust calls, and the platform reminder notifier with the system
-//! clock is attached before any command runs. [`CaptureWatch`] counts new
-//! captures in every online Captures location (a start-up walk and a live
-//! folder watcher each) and is stopped in the exit step. On Windows the
+//! It boots only [`Library`] and the library-shell IPC surfaces registered
+//! below, with the catalog in its own data directory. The dialog and opener
+//! plugins serve the planning handlers' Rust calls, and the platform reminder
+//! notifier with the system clock is attached before any command runs. At
+//! start the shell also resumes Wrap up through the host Trash (the headless
+//! double in an `e2e` build), starts the Output watcher, which Rescan reaches
+//! as managed state, and starts [`CaptureWatch`], which counts new captures in
+//! every online Captures location (a start-up walk and a live folder watcher
+//! each). It manages the running Applies, which Cancel stops and whose waits
+//! for a tool it emits as `project_apply_waiting`, and the running Closes,
+//! which Stop interrupts. Both watchers stop in the exit step. On Windows the
 //! removal notices of each watched volume that is not a network share reach
-//! it, so the drive can eject, and they end after it stops. The one window is
-//! labelled `library`, so it holds `capabilities/library.json` (plus the dev
-//! bridge grant with `dev-tools`) and none of the legacy `default.json`.
+//! the capture watcher, so the drive can eject, and they end after it stops.
+//! The one window is labelled `library`, so it holds
+//! `capabilities/library.json` (plus the dev bridge grant with `dev-tools`) and
+//! none of the legacy `default.json`.
 //! Nothing from the legacy composition root runs here: no `AppState`, legacy
 //! database, bootstrap job, legacy watcher or legacy command registration. The
 //! legacy code stays archivable and is never booted by this binary.
@@ -46,10 +51,13 @@ use desktop_services::captures::NewCapturesFeed;
 use desktop_services::jobs::{MeasurementProgressFeed, ScanProgressFeed};
 use platevault_core::library::Library;
 use platevault_core::new_captures::CaptureWatch;
+use platevault_core::project_output::OutputWatch;
 use platevault_core::targets::SimbadConfig;
-use tauri::Manager;
+use tauri::{Manager, RunEvent};
 
 use crate::commands::library as ipc;
+use crate::commands::project_apply::ApplyRuns;
+use crate::commands::project_wrap_up::{CloseRuns, WrapUpTrash};
 
 /// Catalog directory override, used verbatim.
 pub const DATA_DIR_ENV: &str = "PV_LIBRARY_DATA_DIR";
@@ -68,6 +76,219 @@ pub const SCAN_PROGRESS_EVENT: &str = "library_scan_progress";
 #[cfg(feature = "dev-tools")]
 pub const BRIDGE_BIND_ENV: &str = "PV_MCP_BRIDGE_BIND";
 
+/// The library-shell IPC command list, spliced into `$mac![…]`.
+///
+/// The single list both `tauri::generate_handler!` (in [`run`]) and
+/// `collect_commands!` (in [`library_specta_builder`]) consume, so the
+/// registered handlers and the generated `library-index.ts` cannot drift.
+/// The callback takes the macro by name because neither consumer accepts a
+/// nested macro invocation as its token list.
+///
+/// One labelled block per feature. A feature adds its handlers under its own
+/// label only, by full path (`crate::commands::<feature>::<handler>`), so
+/// features register without touching each other's lines or the imports.
+macro_rules! library_commands {
+    ($mac:ident) => {
+        $mac![
+            // library (064)
+            ipc::library_register_location,
+            ipc::library_list_locations,
+            ipc::library_start_scan,
+            ipc::library_scan_status,
+            ipc::library_cancel_scan,
+            ipc::library_list_sessions,
+            ipc::library_trashed_assets,
+            ipc::library_session,
+            ipc::library_preview_metadata,
+            ipc::library_confirm_metadata,
+            ipc::library_set_quality,
+            ipc::library_search_targets,
+            ipc::library_resolve_target,
+            ipc::library_save_target,
+            ipc::library_associate_target,
+            ipc::library_save_equipment,
+            ipc::library_confirm_equipment,
+            ipc::library_target_coverage,
+            ipc::library_review_remap,
+            ipc::library_apply_remap,
+            ipc::library_update_location,
+            ipc::library_retry_scope,
+            ipc::library_reselect_location,
+            ipc::library_review_retire_location,
+            ipc::library_retire_location,
+            ipc::library_list_operations,
+            ipc::library_new_captures,
+            // session filters (064 LIB-FR-17, 065 PRJ-FR-19)
+            crate::commands::session_filters::library_session_filter_counts,
+            crate::commands::session_filters::project_prefill_from_session,
+            crate::commands::session_filters::project_create_from_session,
+            crate::commands::session_filters::project_preview_session_addition,
+            crate::commands::session_filters::project_add_session,
+            // projects
+            crate::commands::project_goals::project_create,
+            crate::commands::project_goals::project_update,
+            crate::commands::project_goals::project_set_subjects,
+            crate::commands::project_goals::project_set_rigs,
+            crate::commands::project_goals::project_set_goals,
+            crate::commands::project_goals::project_apply_goal_template,
+            crate::commands::project_goals::project_list,
+            crate::commands::project_goals::project_candidates,
+            crate::commands::project_goals::goal_template_list,
+            crate::commands::project_goals::goal_template_save,
+            crate::commands::project_goals::goal_template_delete,
+            crate::commands::project_progress::project_progress,
+            // project inputs (065 PRJ-FR-07/08/27/29/31, 066 VSEL-FR-02/10/15)
+            crate::commands::project_inputs::project_inputs,
+            crate::commands::project_inputs::project_add_sessions,
+            crate::commands::project_inputs::project_remove_sessions,
+            crate::commands::project_inputs::project_move_sessions,
+            crate::commands::project_inputs::project_create_group,
+            crate::commands::project_inputs::project_split_group,
+            crate::commands::project_inputs::project_rename_group,
+            crate::commands::project_inputs::project_set_group_panel,
+            crate::commands::project_inputs::project_set_frames,
+            crate::commands::project_inputs::project_remove_group,
+            crate::commands::project_inputs::project_set_view_settings,
+            // apply (066 VSEL-FR-14, 069 PREP-FR-18)
+            crate::commands::project_apply::project_apply_preview,
+            crate::commands::project_apply::project_apply,
+            crate::commands::project_apply::project_apply_cancel,
+            crate::commands::project_apply::library_check_symlinks,
+            // output (070 RES-FR-01/02)
+            crate::commands::project_output::project_copy_to_output,
+            crate::commands::project_output::project_output_rescan,
+            // wrap up (065 PRJ-FR-14/25/30, 071)
+            crate::commands::project_wrap_up::project_wrap_up_status,
+            crate::commands::project_wrap_up::project_close,
+            crate::commands::project_wrap_up::project_close_stop,
+            crate::commands::project_wrap_up::project_duplicate,
+            crate::commands::project_wrap_up::project_reopen_wrap_up_step,
+            crate::commands::project_wrap_up::project_closed_snapshot,
+            crate::commands::project_wrap_up::project_clean_up_review,
+            crate::commands::project_wrap_up::project_clean_up,
+            crate::commands::project_wrap_up::project_trash_review,
+            crate::commands::project_wrap_up::project_wrap_up_trash,
+            crate::commands::project_wrap_up::project_wrap_up_archive_review,
+            // sessions archive (064 LIB-FR-17, 071 STO-FR-13)
+            crate::commands::sessions_archive::sessions_archive_review,
+            crate::commands::sessions_archive::sessions_archive,
+            // view previous (066, 071 STO-FR-10; D-W110)
+            crate::commands::view_previous::project_previous_items,
+            crate::commands::view_previous::project_review_previous_item,
+            // frame review
+            crate::commands::frame_review::pix_review_frames,
+            crate::commands::frame_review::pix_start_measurement,
+            crate::commands::frame_review::pix_prioritize_measurement,
+            crate::commands::frame_review::pix_measurement_status,
+            crate::commands::frame_review::pix_cancel_measurement,
+            crate::commands::frame_review::pix_list_measurement_runs,
+            crate::commands::frame_review::pix_open_frame,
+            crate::commands::frame_review::pix_preview_tile,
+            crate::commands::frame_review::pix_compare_regions,
+            crate::commands::frame_review::pix_sample_region,
+            crate::commands::frame_review::pix_frame_stars,
+            crate::commands::frame_review::pix_star_cutouts,
+            crate::commands::frame_review::pix_frame_detail,
+            crate::commands::frame_review::pix_review_import,
+            crate::commands::frame_review::pix_import_review,
+            crate::commands::frame_review::pix_confirm_import,
+            crate::commands::frame_review::pix_thumbnails,
+            crate::commands::frame_review::pix_review_list,
+            crate::commands::frame_review::pix_display_names,
+            crate::commands::frame_review::pix_review_mark,
+            // session intake (064 LIB-FR-04/24)
+            crate::commands::frame_review::pix_session_intake,
+            crate::commands::frame_review::pix_session_review_list,
+            crate::commands::frame_review::pix_session_review_mark,
+            crate::commands::frame_review::pix_finish_review,
+            crate::commands::frame_review::pix_reopen_review,
+            // calibration
+            crate::commands::calibration_inputs::calibration_list_inputs,
+            crate::commands::calibration_inputs::calibration_input,
+            crate::commands::calibration_inputs::calibration_review_adoption,
+            crate::commands::calibration_inputs::calibration_adopt,
+            crate::commands::calibration_inputs::calibration_list_adoptions,
+            crate::commands::calibration_inputs::calibration_custody_facts,
+            crate::commands::session_calibration::calibration_needs,
+            crate::commands::session_calibration::calibration_reassign,
+            crate::commands::session_calibration::calibration_confirm,
+            crate::commands::session_calibration::calibration_decline,
+            // profiles
+            crate::commands::profiles::prepare_profiles,
+            crate::commands::profiles::prepare_profile_create,
+            crate::commands::profiles::prepare_profile_update,
+            // import
+            crate::commands::naming::naming_get,
+            crate::commands::naming::naming_save,
+            crate::commands::naming::naming_restore_defaults,
+            crate::commands::naming::naming_preview,
+            crate::commands::import::import_sources_list,
+            crate::commands::import::import_source_save,
+            crate::commands::import::import_preview,
+            crate::commands::import::import_recheck,
+            crate::commands::import::import_set_type,
+            crate::commands::import::import_set_excluded,
+            crate::commands::import::import_choose_location,
+            crate::commands::import::import_start,
+            crate::commands::import::import_retry,
+            crate::commands::import::import_status,
+            crate::commands::import::import_merge_sessions,
+            crate::commands::import::import_resplit_session,
+            crate::commands::import::import_split_preview,
+            crate::commands::import::import_set_split_limits,
+            crate::commands::import::import_choose_target,
+            // planning
+            crate::commands::rigs::rig_filters_get,
+            crate::commands::rigs::rig_filters_save,
+            crate::commands::rigs::rig_unknown_filters,
+            crate::commands::observing_plans::planning_list_sites,
+            crate::commands::observing_plans::planning_save_site,
+            crate::commands::observing_plans::planning_set_default_site,
+            crate::commands::observing_plans::planning_compute_windows,
+            crate::commands::observing_plans::planning_set_planned,
+            crate::commands::observing_plans::planning_review_reminders,
+            crate::commands::observing_plans::planning_enable_reminders,
+            crate::commands::observing_plans::planning_disable_reminders,
+            crate::commands::observing_plans::planning_reminder_status,
+            crate::commands::observing_plans::planning_open_notification_settings,
+            crate::commands::observing_plans::planning_review_calendar_export,
+            crate::commands::observing_plans::planning_export_calendar,
+            crate::commands::observing_plans::planning_tonight,
+            crate::commands::observing_plans::planning_project_windows,
+            crate::commands::observing_plans::planning_target_gaps,
+            // targets
+            crate::commands::targets_list::planning_target_rows,
+            crate::commands::targets_list::targets_search,
+            crate::commands::targets_list::targets_add,
+            crate::commands::targets_list::targets_set_favourite,
+            crate::commands::targets_list::targets_presets_list,
+            crate::commands::targets_list::targets_preset_save,
+            crate::commands::targets_list::targets_preset_rename,
+            crate::commands::targets_list::targets_preset_delete,
+            // home
+            crate::commands::home::home_dashboard,
+        ]
+    };
+}
+
+/// The tauri-specta builder over the library-shell command list; its export
+/// is `apps/desktop/src/bindings/library-index.ts` (`tests/library_bindings.rs`).
+#[must_use]
+pub fn library_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
+    use tauri_specta::collect_commands;
+    tauri_specta::Builder::<tauri::Wry>::new()
+        // As in the legacy builder: `serde_json::Value` is registered as a
+        // named type so its self-referential shape is emitted once rather than
+        // inlined forever, and 64-bit integers (sizes, counts, revisions) are
+        // JSON numbers on this wire, so they export as `number`.
+        .dangerously_cast_bigints_to_number()
+        .typ::<serde_json::Value>()
+        // Events are named by Rust constants, not tauri-specta events, so a
+        // payload no command returns is registered on its own.
+        .typ::<crate::commands::project_apply::ApplyWaiting>()
+        .commands(library_commands!(collect_commands))
+}
+
 /// Build the shell, open its catalog and run the event loop.
 ///
 /// # Errors
@@ -76,228 +297,10 @@ pub const BRIDGE_BIND_ENV: &str = "PV_MCP_BRIDGE_BIND";
 /// (including a foreign or legacy database), reminder subscriptions that
 /// cannot be read when the notifier attaches, or the Tauri runtime itself.
 /// A removal notice window that Windows refuses is logged, not returned.
-#[expect(clippy::too_many_lines, reason = "the handler list holds one labelled block per feature")]
 pub fn run() -> Result<(), Box<dyn Error>> {
+    use tauri::generate_handler;
     let provider = provider_config()?;
-    // One labelled block per feature. A feature adds its handlers under its own
-    // label only, by full path (`crate::commands::<feature>::<handler>`), so
-    // features register without touching each other's lines or the imports.
-    let builder = tauri::Builder::default().invoke_handler(tauri::generate_handler![
-        // library (064)
-        ipc::library_register_location,
-        ipc::library_list_locations,
-        ipc::library_start_scan,
-        ipc::library_scan_status,
-        ipc::library_cancel_scan,
-        ipc::library_list_sessions,
-        ipc::library_trashed_assets,
-        ipc::library_session,
-        ipc::library_preview_metadata,
-        ipc::library_confirm_metadata,
-        ipc::library_set_quality,
-        ipc::library_search_targets,
-        ipc::library_resolve_target,
-        ipc::library_save_target,
-        ipc::library_associate_target,
-        ipc::library_save_equipment,
-        ipc::library_confirm_equipment,
-        ipc::library_target_coverage,
-        ipc::library_review_remap,
-        ipc::library_apply_remap,
-        ipc::library_update_location,
-        ipc::library_retry_scope,
-        ipc::library_reselect_location,
-        ipc::library_review_retire_location,
-        ipc::library_retire_location,
-        ipc::library_list_operations,
-        ipc::library_new_captures,
-        // session filters (064 LIB-FR-17, 065 PRJ-FR-19)
-        crate::commands::session_filters::library_session_filter_counts,
-        crate::commands::session_filters::project_prefill_from_session,
-        crate::commands::session_filters::project_preview_session_addition,
-        crate::commands::session_filters::project_add_session,
-        // projects
-        crate::commands::project_goals::project_create,
-        crate::commands::project_goals::project_update,
-        crate::commands::project_goals::project_set_subjects,
-        crate::commands::project_goals::project_set_rigs,
-        crate::commands::project_goals::project_set_goals,
-        crate::commands::project_goals::project_apply_goal_template,
-        crate::commands::project_goals::project_set_rejection,
-        crate::commands::project_goals::project_list,
-        crate::commands::project_goals::project_mark_done,
-        crate::commands::project_goals::project_reopen,
-        crate::commands::project_goals::project_done_archive_review,
-        crate::commands::project_goals::project_detail,
-        crate::commands::project_goals::project_candidates,
-        crate::commands::project_goals::goal_template_list,
-        crate::commands::project_goals::goal_template_save,
-        crate::commands::project_goals::goal_template_delete,
-        crate::commands::project_progress::project_progress,
-        // runs
-        crate::commands::view_selection::view_create,
-        crate::commands::view_selection::view_list,
-        crate::commands::view_selection::view_detail,
-        crate::commands::view_selection::view_candidates,
-        crate::commands::view_selection::view_new_candidate_count,
-        crate::commands::view_selection::view_set_stage,
-        crate::commands::view_selection::view_rename,
-        crate::commands::view_selection::view_select_sessions,
-        crate::commands::view_selection::view_select_matching,
-        crate::commands::view_selection::view_deselect_sessions,
-        crate::commands::view_selection::view_clear_selection,
-        crate::commands::view_selection::view_set_frames,
-        crate::commands::view_selection::view_save,
-        crate::commands::view_selection::view_discard_draft,
-        crate::commands::view_selection::view_refresh,
-        crate::commands::view_selection::view_apply_refresh,
-        crate::commands::view_selection::view_quality_scope,
-        crate::commands::view_selection::view_apply_quality,
-        crate::commands::view_selection::view_review_mark,
-        crate::commands::view_selection::view_revision,
-        crate::commands::view_selection::project_members,
-        crate::commands::view_lifecycle::view_mark_complete,
-        crate::commands::view_lifecycle::view_reopen,
-        crate::commands::view_lifecycle::view_move_to_trash,
-        crate::commands::view_lifecycle::view_restore,
-        crate::commands::view_lifecycle::view_trash_list,
-        crate::commands::view_lifecycle::view_empty_trash_review,
-        crate::commands::view_groups::view_group_create,
-        crate::commands::view_groups::view_group_detail,
-        crate::commands::view_groups::view_group_assign_panel,
-        crate::commands::view_groups::view_group_set_setup,
-        // frame review
-        crate::commands::frame_review::pix_review_frames,
-        crate::commands::frame_review::pix_start_measurement,
-        crate::commands::frame_review::pix_prioritize_measurement,
-        crate::commands::frame_review::pix_measurement_status,
-        crate::commands::frame_review::pix_cancel_measurement,
-        crate::commands::frame_review::pix_list_measurement_runs,
-        crate::commands::frame_review::pix_open_frame,
-        crate::commands::frame_review::pix_preview_tile,
-        crate::commands::frame_review::pix_compare_regions,
-        crate::commands::frame_review::pix_sample_region,
-        crate::commands::frame_review::pix_frame_stars,
-        crate::commands::frame_review::pix_star_cutouts,
-        crate::commands::frame_review::pix_frame_detail,
-        crate::commands::frame_review::pix_review_import,
-        crate::commands::frame_review::pix_import_review,
-        crate::commands::frame_review::pix_confirm_import,
-        crate::commands::frame_review::pix_thumbnails,
-        crate::commands::frame_review::pix_review_list,
-        crate::commands::frame_review::pix_display_names,
-        crate::commands::frame_review::pix_review_mark,
-        // calibration
-        crate::commands::calibration_inputs::calibration_list_inputs,
-        crate::commands::calibration_inputs::calibration_input,
-        crate::commands::calibration_inputs::calibration_match,
-        crate::commands::calibration_inputs::calibration_view_plan,
-        crate::commands::calibration_inputs::calibration_readiness,
-        crate::commands::calibration_inputs::calibration_group_readiness,
-        crate::commands::calibration_inputs::calibration_handoff,
-        crate::commands::calibration_inputs::calibration_set_required_kinds,
-        crate::commands::calibration_inputs::calibration_set_policy,
-        crate::commands::calibration_inputs::calibration_assign,
-        crate::commands::calibration_inputs::calibration_accept,
-        crate::commands::calibration_inputs::calibration_record_exception,
-        crate::commands::calibration_inputs::calibration_exclude,
-        crate::commands::calibration_inputs::calibration_withdraw,
-        crate::commands::calibration_inputs::calibration_project_evidence,
-        crate::commands::calibration_inputs::calibration_review_adoption,
-        crate::commands::calibration_inputs::calibration_adopt,
-        crate::commands::calibration_inputs::calibration_list_adoptions,
-        crate::commands::calibration_inputs::calibration_custody_facts,
-        // preparation
-        crate::commands::prepare::prepare_profiles,
-        crate::commands::prepare::prepare_profile_create,
-        crate::commands::prepare::prepare_profile_update,
-        crate::commands::prepare::prepare_review,
-        crate::commands::prepare::prepare_run,
-        crate::commands::prepare::prepare_retry,
-        crate::commands::prepare::prepare_stop,
-        crate::commands::prepare::prepare_list,
-        crate::commands::prepare::prepare_outcome,
-        crate::commands::prepare::prepare_blocker,
-        crate::commands::prepare::prepare_open,
-        crate::commands::prepare::prepare_group_review,
-        crate::commands::prepare::prepare_group_run,
-        crate::commands::prepare::prepare_group_retry,
-        crate::commands::prepare::prepare_group_stop,
-        crate::commands::prepare::prepare_group_list,
-        crate::commands::prepare::prepare_group_outcome,
-        crate::commands::prepare::prepare_group_open,
-        // results
-        crate::commands::results::results_list,
-        crate::commands::results::results_rescan,
-        crate::commands::results::results_attach,
-        crate::commands::results::results_accept,
-        crate::commands::results::results_accepted,
-        crate::commands::results::results_inputs,
-        crate::commands::results::view_create_with_products,
-        crate::commands::results::view_add_product_inputs,
-        crate::commands::results::view_product_inputs,
-        crate::commands::results::results_master_dismiss,
-        crate::commands::results::calibration_result_masters,
-        // storage
-        crate::commands::storage::storage_overview,
-        crate::commands::storage::cleanup_review,
-        crate::commands::storage::cleanup_execute,
-        crate::commands::storage::empty_trash_execute,
-        // storage: Done / Archive (U31)
-        crate::commands::storage::archive_review,
-        crate::commands::storage::archive_restore_review,
-        crate::commands::storage::archive_execute,
-        crate::commands::storage::archive_status,
-        crate::commands::storage::session_archive_state,
-        crate::commands::storage::trash_rejected_execute,
-        crate::commands::storage::trash_intermediates_execute,
-        crate::commands::storage::trash_duplicates_execute,
-        // import
-        crate::commands::naming::naming_get,
-        crate::commands::naming::naming_save,
-        crate::commands::naming::naming_restore_defaults,
-        crate::commands::naming::naming_preview,
-        crate::commands::import::import_sources_list,
-        crate::commands::import::import_source_save,
-        crate::commands::import::import_preview,
-        crate::commands::import::import_recheck,
-        crate::commands::import::import_set_type,
-        crate::commands::import::import_set_excluded,
-        crate::commands::import::import_choose_location,
-        crate::commands::import::import_start,
-        crate::commands::import::import_retry,
-        crate::commands::import::import_status,
-        // planning
-        crate::commands::rigs::rig_filters_get,
-        crate::commands::rigs::rig_filters_save,
-        crate::commands::rigs::rig_unknown_filters,
-        crate::commands::observing_plans::planning_list_sites,
-        crate::commands::observing_plans::planning_save_site,
-        crate::commands::observing_plans::planning_set_default_site,
-        crate::commands::observing_plans::planning_compute_windows,
-        crate::commands::observing_plans::planning_set_planned,
-        crate::commands::observing_plans::planning_review_reminders,
-        crate::commands::observing_plans::planning_enable_reminders,
-        crate::commands::observing_plans::planning_disable_reminders,
-        crate::commands::observing_plans::planning_reminder_status,
-        crate::commands::observing_plans::planning_open_notification_settings,
-        crate::commands::observing_plans::planning_review_calendar_export,
-        crate::commands::observing_plans::planning_export_calendar,
-        crate::commands::observing_plans::planning_tonight,
-        crate::commands::observing_plans::planning_project_windows,
-        crate::commands::observing_plans::planning_target_gaps,
-        // targets
-        crate::commands::targets_list::planning_target_rows,
-        crate::commands::targets_list::targets_search,
-        crate::commands::targets_list::targets_add,
-        crate::commands::targets_list::targets_set_favourite,
-        crate::commands::targets_list::targets_presets_list,
-        crate::commands::targets_list::targets_preset_save,
-        crate::commands::targets_list::targets_preset_rename,
-        crate::commands::targets_list::targets_preset_delete,
-        // home
-        crate::commands::home::home_dashboard,
-    ]);
+    let builder = tauri::Builder::default().invoke_handler(library_commands!(generate_handler));
     // The planning handlers call these through their Rust APIs, which need no
     // grant; window `library` holds only `capabilities/library.json`.
     let builder = builder.plugin(tauri_plugin_dialog::init()).plugin(tauri_plugin_opener::init());
@@ -343,6 +346,29 @@ pub fn run() -> Result<(), Box<dyn Error>> {
             );
         },
     ));
+    // CLOSE (071): settle what a stop left of Wrap up (an interrupted Clean
+    // up, a Trash step, every unsettled archive) through the host Trash (the
+    // headless double in an `e2e` build). It can move whole archives, so it
+    // runs beside the event loop; until it settles them, a Closing Project
+    // stays locked and its operation reserved.
+    let trash = WrapUpTrash::host();
+    tauri::async_runtime::spawn({
+        let library = Arc::clone(&library);
+        let trash = trash.get();
+        async move {
+            match library.recover_wrap_up(trash).await {
+                Ok(settled) => tracing::info!(archives = settled.len(), "wrap up recovered"),
+                Err(error) => {
+                    tracing::error!(%error, "wrap up recovery stopped; the next start resumes it");
+                }
+            }
+        }
+    });
+    // OUTPUT (RES-FR-01): follow every open Project's `Output/` and
+    // `Processing/` while the app runs; its first pass finishes interrupted
+    // Copy to Output. It spawns on the runtime, so it starts inside it; Rescan
+    // reaches it as managed state, and the exit step below stops it.
+    let output_watch = tauri::async_runtime::block_on(async { OutputWatch::start(&library) });
     // New captures in every online Captures location: a start-up walk and a
     // live watcher each (astro-plan-ef440). The task runs on the async
     // runtime, so it starts inside it; the exit step below stops it.
@@ -354,7 +380,13 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         |_, error| tracing::error!(%error, "new captures event not delivered"),
     ));
     app.manage(library);
+    app.manage(trash);
+    app.manage(output_watch);
     app.manage(captures);
+    // Apply's Cancel and its waiting event, and Close's Stop (069 PREP-FR-18,
+    // 071 STO-FR-08).
+    app.manage(ApplyRuns::emitting(app.handle().clone()));
+    app.manage(CloseRuns::default());
     // Windows ejects a Captures drive only once discovery's watcher lets go
     // of it (astro-plan-ef440). Without the notices, which `start` logs, the
     // app still starts; only that release is lost.
@@ -362,7 +394,8 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     let mut eject = crate::eject::EjectNotices::start(app.handle());
     app.run(move |handle, event| {
         // No watcher outlives the app: every OS watch is released before exit.
-        if let tauri::RunEvent::Exit = event {
+        if let RunEvent::Exit = event {
+            tauri::async_runtime::block_on(handle.state::<OutputWatch>().shutdown());
             tauri::async_runtime::block_on(handle.state::<CaptureWatch>().shutdown());
             // Once discovery is stopping, a removal request that waited on it
             // has returned, so dropping the notices never waits on one.

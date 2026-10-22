@@ -6,6 +6,8 @@ license.workspace = true
 
 [dependencies]
 metadata_core = { path = "../metadata/core" }
+# Entry names pass the shared traversal and reserved-name steps (STO-IMP-AC-08).
+safe-filename = { path = "../safe-filename" }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
@@ -13,6 +15,14 @@ sqlx.workspace = true
 uuid.workspace = true
 time.workspace = true
 unicode-normalization.workspace = true
+specta = { workspace = true, optional = true }
+schemars = { workspace = true, optional = true }
+
+[features]
+# IPC type derives (`specta::Type`, `JsonSchema`) on the types that cross the
+# library-shell boundary. Off by default; only contracts_core and desktop_shell
+# enable it.
+wire = ["dep:specta", "dep:schemars"]
 
 [lints]
 workspace = true

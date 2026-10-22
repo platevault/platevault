@@ -10,17 +10,15 @@
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
-use parking_lot::Mutex;
 use persistence_library::{Catalog, LocationRegistration, SourceProbe};
 use platevault_model::{
-    Asset, CalibrationRules, CalibrationViewBasis, CalibrationViewPlan, CandidateEvaluation,
-    CaptureEvidence, CaptureKey, CaptureMetadata, Classification, CriterionId, CriterionResult,
-    Evaluation, EvidenceField, GroupingResult, ImageFormat, InputEvidence, InputKind,
-    LightEvidence, Location, LocationRole, MasterBasis, MasterEvidence, NativePath, Requirement,
-    RequirementState, ScanBatch, ScanFile, ScanIssue, ScanObservation, ScanOperation, ScanProgress,
-    ScanState, SessionCandidate, Tolerance, UnresolvedReason, Verdict,
+    Asset, CalibrationRules, CaptureEvidence, CaptureKey, CaptureMetadata, Classification,
+    CriterionId, CriterionResult, Evaluation, EvidenceField, GroupingResult, ImageFormat,
+    InputEvidence, InputKind, KindMatch, LightEvidence, Location, LocationRole, MasterBasis,
+    MasterEvidence, MatchCaution, MatchOffer, NativePath, PinTarget, ScanBatch, ScanFile,
+    ScanIssue, ScanObservation, ScanOperation, ScanProgress, ScanState, SessionCandidate,
+    SessionInput, SessionLight, Tolerance, Verdict, WorkflowSettings,
 };
 use uuid::Uuid;
 
@@ -185,6 +183,7 @@ pub fn group_by_night(assets: &[Asset]) -> GroupingResult {
                     asset_ids,
                     provisional: Vec::new(),
                     date_basis: Some("date-loc-noon".into()),
+                    framing: None,
                 }
             })
             .collect(),
@@ -224,19 +223,9 @@ pub fn with_train(mut metadata: CaptureMetadata) -> CaptureMetadata {
 }
 
 /// A small behavioral rule set for catalog tests: kinds by IMAGETYP, masters by
-/// a count above 1 or a `MASTER` IMAGETYP, a handful of exact criteria and a
-/// plan that preselects the first available compatible reusable candidate. It
-/// records every basis it is given.
-#[derive(Clone, Default)]
-pub struct TestRules {
-    pub seen: Arc<Mutex<Vec<CalibrationViewBasis>>>,
-}
-
-impl TestRules {
-    pub fn last_basis(&self) -> CalibrationViewBasis {
-        self.seen.lock().last().cloned().expect("plan was called")
-    }
-}
+/// a count above 1 or a `MASTER` IMAGETYP and a handful of exact criteria.
+#[derive(Clone, Copy, Default)]
+pub struct TestRules;
 
 fn test_row(
     criterion: CriterionId,
@@ -259,14 +248,6 @@ fn test_row(
         input_source: i.map(|v| v.source.clone()),
         tolerance: Tolerance::None,
         note: None,
-    }
-}
-
-fn verdict_rank(verdict: Verdict) -> u8 {
-    match verdict {
-        Verdict::Compatible => 0,
-        Verdict::Unknown => 1,
-        Verdict::Incompatible => 2,
     }
 }
 
@@ -336,90 +317,48 @@ impl CalibrationRules for TestRules {
         Evaluation::new(criteria, Vec::new())
     }
 
-    fn plan(&self, basis: &CalibrationViewBasis) -> CalibrationViewPlan {
-        self.seen.lock().push(basis.clone());
-        let mut requirements = Vec::new();
-        for group in platevault_model::light_groups(&basis.lights) {
-            for &kind in &basis.plan.required_kinds {
-                requirements.push(test_requirement(self, basis, &group, kind));
-            }
-        }
-        CalibrationViewPlan {
-            view_id: basis.view_id,
-            view_revision: basis.view_revision,
-            plan_revision: basis.plan.revision,
-            policy: basis.plan.policy,
-            required_kinds: basis.plan.required_kinds.clone(),
-            requirements,
-        }
-    }
-}
-
-/// One requirement of `light` for `kind`: every candidate evaluated, reusable
-/// ones ranked compatible first, and the first available compatible one
-/// preselected, evaluated against the group's first session. The catalog
-/// tests of this module record no decision.
-fn test_requirement(
-    rules: &TestRules,
-    basis: &CalibrationViewBasis,
-    group: &platevault_model::LightGroup<'_>,
-    kind: InputKind,
-) -> Requirement {
-    let session = &group.lights[0].evidence;
-    let mut requirement = Requirement {
-        light_group: group.key.clone(),
-        light_session_ids: group.session_ids(),
-        light_asset_ids: group.asset_ids(),
-        kind,
-        state: RequirementState::NeedsReview,
-        reason: None,
-        preselected: None,
-        automatic: None,
-        candidates: Vec::new(),
-        unadopted: Vec::new(),
-        effective: None,
-    };
-    if !group.key.light_type_known {
-        requirement.reason = Some(UnresolvedReason::LightTypeUnknown);
-        return requirement;
-    }
-    for candidate in basis.candidates.iter().filter(|c| c.evidence.kind == kind) {
-        let evaluated = CandidateEvaluation {
-            candidate: candidate.candidate,
-            kind,
-            evaluation: rules.evaluate(kind, session, &candidate.evidence),
-            night_distance_days: None,
-            state: candidate.state.clone(),
-            preselected: false,
-            master: candidate.master.clone(),
-            origin: candidate.origin.clone(),
+    /// Each input of the kind the test criteria don't refuse, in input
+    /// order: pinnable when every criterion is compatible. The ranking and
+    /// window rules are the product's (core); these tests cover the
+    /// catalog's writes.
+    fn match_session(
+        &self,
+        kind: InputKind,
+        light: &SessionLight,
+        inputs: &[SessionInput],
+        _settings: &WorkflowSettings,
+    ) -> KindMatch {
+        let lights = LightEvidence {
+            session_id: light.session_id,
+            grouping_revision: 0,
+            capture: light.capture.clone(),
         };
-        if candidate.candidate.input().is_some() {
-            requirement.candidates.push(evaluated);
-        } else {
-            requirement.unadopted.push(evaluated);
-        }
+        let offers = inputs
+            .iter()
+            .filter(|input| input.kind == kind)
+            .filter_map(|input| {
+                let evidence = InputEvidence {
+                    kind: input.kind,
+                    form: input.input.form(),
+                    capture: input.capture.clone(),
+                };
+                let evaluation = self.evaluate(kind, &lights, &evidence);
+                let cautions = match evaluation.verdict {
+                    Verdict::Incompatible => return None,
+                    Verdict::Unknown => {
+                        vec![MatchCaution::CriterionUnknown { criteria: evaluation.blocking() }]
+                    }
+                    Verdict::Compatible => Vec::new(),
+                };
+                let target = PinTarget {
+                    input: input.input,
+                    captured: input.captured,
+                    files: input.files.clone(),
+                    evaluation,
+                };
+                Some(MatchOffer { target, cautions })
+            })
+            .collect();
+        KindMatch { kind, offers }
     }
-    requirement.candidates.sort_by_key(|c| (verdict_rank(c.evaluation.verdict), c.candidate.id()));
-    if let Some(first) = requirement
-        .candidates
-        .iter_mut()
-        .find(|c| c.evaluation.verdict == Verdict::Compatible && c.state.available())
-    {
-        first.preselected = true;
-        requirement.preselected = Some(first.candidate);
-        requirement.state = RequirementState::Suggested;
-        return requirement;
-    }
-    let has = |verdict| requirement.candidates.iter().any(|c| c.evaluation.verdict == verdict);
-    requirement.reason = Some(if requirement.candidates.is_empty() {
-        UnresolvedReason::NoCandidate
-    } else if has(Verdict::Compatible) {
-        UnresolvedReason::InputUnavailable
-    } else if has(Verdict::Unknown) {
-        UnresolvedReason::CriterionUnknown
-    } else {
-        UnresolvedReason::CriterionIncompatible
-    });
-    requirement
 }

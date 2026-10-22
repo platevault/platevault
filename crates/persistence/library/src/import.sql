@@ -28,6 +28,9 @@ CREATE TABLE IF NOT EXISTS import_operations (
     state TEXT NOT NULL CHECK (state IN ('previewed', 'running', 'interrupted', 'settled')),
     -- The location chosen per role where a role has several.
     choices TEXT NOT NULL,
+    -- The import's own centre and rotation limits (JSON of the model's
+    -- SplitLimits); NULL splits with the workflow settings' default.
+    split_override TEXT,
     revision INTEGER NOT NULL CHECK (revision > 0),
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,

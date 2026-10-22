@@ -14,15 +14,15 @@ use std::sync::Arc;
 use platevault_model::{
     AdoptedMaster, AdoptionDestination, AdoptionOperation, AdoptionPhase, AdoptionReview,
     AdoptionSource, AdoptionState, Availability, CalibrationRules, CandidateRef, Classification,
-    CreatedFile, LibraryError, Location, LocationRole, MasterProvenance, NativePath,
-    ObservationFingerprint, ReviewState, ReviewedSource, Revision,
+    CreatedFile, LibraryError, LibraryErrorCode, Location, LocationRole, MasterProvenance,
+    NativePath, ObservationFingerprint, ReviewState, ReviewedSource, Revision,
 };
 use sqlx::sqlite::{SqliteConnection, SqliteRow};
 use sqlx::{Connection, Row};
 use uuid::Uuid;
 
 use super::contained_write::{self, Folder, InstallFailure, Temporary};
-use super::{inventory, load_master, offers};
+use super::{inventory, load_master};
 use crate::{
     blocking, check_expected_assets, conflict, current_digest, db_revision, from_json, from_text,
     load_location, now, parse_uuid, path_from_key, path_key, require_active, require_revision,
@@ -36,19 +36,15 @@ impl Catalog {
     /// The source is hashed off the writer lock against its expected
     /// observation; the destination folder must be a chain of real directories
     /// in an Active, online Calibration location with nothing at the target
-    /// path. No file is written and no library row changes. A Result source is
-    /// a generated master Results discovery offered (CAL-FR-06), dismissed or
-    /// not, reviewed at its offered digest below the registered location
-    /// holding it.
+    /// path. No file is written and no library row changes.
     ///
     /// # Errors
     /// `InvalidInput` for an invalid destination path, a source that is not a
     /// listed master candidate (a raw frame, an adopted source or a Retired
-    /// copy), a Result that is no offered master or lies outside every
-    /// registered location, or a destination that is not a Calibration
-    /// location; `Conflict` for a stale source; `NotFound` for a missing folder;
-    /// `SourceUnavailable` for an offline location; `IdentityConflict` scoped to
-    /// an existing destination entry or a source that changed.
+    /// copy), or a destination that is not a Calibration location; `Conflict`
+    /// for a stale source; `NotFound` for a missing folder; `SourceUnavailable`
+    /// for an offline location; `IdentityConflict` scoped to an existing
+    /// destination entry or a source that changed.
     pub async fn review_adoption<R, P>(
         &self,
         source: &AdoptionSource,
@@ -62,19 +58,12 @@ impl Catalog {
     {
         contained_write::require_supported()?;
         let relative = destination.validate()?;
-        let expected = match source {
-            AdoptionSource::Asset { asset_id, expected } if expected.asset_id == *asset_id => {
-                expected
-            }
-            AdoptionSource::Asset { asset_id, .. } => {
-                return Err(LibraryError::InvalidInput(format!(
-                    "expected names another asset than source {asset_id}"
-                )));
-            }
-            AdoptionSource::Result { result_id } => {
-                return self.review_result_adoption(*result_id, destination, relative, probe).await;
-            }
-        };
+        let AdoptionSource::Asset { asset_id, expected } = source;
+        if expected.asset_id != *asset_id {
+            return Err(LibraryError::InvalidInput(format!(
+                "expected names another asset than source {asset_id}"
+            )));
+        }
         let (asset, listed, source_location, target) = {
             let mut conn = self.reader().await?;
             let mut snapshot = conn.begin().await?;
@@ -131,7 +120,6 @@ impl Catalog {
             state: ReviewState::Open,
             source: ReviewedSource {
                 asset_id: Some(asset.id),
-                result_id: None,
                 location_id: asset.location_id,
                 relative_path: asset.relative_path.clone(),
                 fingerprint,
@@ -146,83 +134,6 @@ impl Catalog {
         write_txn!(self, |conn| {
             check_expected_assets(conn, std::slice::from_ref(expected)).await?;
             require_unadopted(conn, asset.id, &asset.relative_path).await?;
-            require_destination(&load_location(conn, destination.location_id).await?)?;
-            require_unregistered(conn, destination).await?;
-            insert_review(conn, &review).await?;
-        });
-        Ok(review)
-    }
-
-    /// Review adopting the generated master Result `result_id` (CAL-FR-06):
-    /// its offer at the Result's current digest, not yet adopted, is the
-    /// evidence; the bytes are hashed against the inspected fingerprint and
-    /// must still be the offered digest. The classification, observed header
-    /// and run origin come from the offer, bound to that digest.
-    async fn review_result_adoption<P: SourceProbe>(
-        &self,
-        result_id: Uuid,
-        destination: &AdoptionDestination,
-        relative: PathBuf,
-        probe: P,
-    ) -> Result<AdoptionReview> {
-        let (source, target) = {
-            let mut conn = self.reader().await?;
-            let mut snapshot = conn.begin().await?;
-            let source = offers::offered_source(&mut snapshot, result_id).await?;
-            let target = load_location(&mut snapshot, destination.location_id).await?;
-            snapshot.rollback().await?;
-            (source, target)
-        };
-        require_destination(&target)?;
-        let source_relative = source.relative_path.relative_path()?;
-        let source_root = SourceRoot::new(source.location.clone())?;
-        let target_root = SourceRoot::new(target)?;
-        let reviewed = source.fingerprint.clone();
-        let sha256 = blocking(move || {
-            verify_online(&target_root, &probe)?;
-            contained_write::require_vacant(&target_root, &relative)?;
-            source_root.verify(&probe)?;
-            let sha256 = current_digest(&source_root, &source_relative, &reviewed, &probe)
-                .map_err(|error| {
-                    scoped(error, source_root.source(&source_relative), Some(result_id))
-                })?;
-            source_root.verify(&probe)?;
-            Ok(sha256)
-        })
-        .await?;
-        let offer = source.offer;
-        if sha256 != offer.sha256 {
-            return Err(scoped(
-                LibraryError::IdentityConflict(
-                    "the master no longer hashes to its offered digest; rescan its run's Results"
-                        .into(),
-                ),
-                offer.path,
-                Some(result_id),
-            ));
-        }
-        let mut fingerprint = source.fingerprint;
-        fingerprint.content_sha256 = Some(sha256.clone());
-        let review = AdoptionReview {
-            id: Uuid::new_v4(),
-            revision: 1,
-            state: ReviewState::Open,
-            source: ReviewedSource {
-                asset_id: None,
-                result_id: Some(result_id),
-                location_id: source.location.id,
-                relative_path: source.relative_path,
-                fingerprint,
-                sha256,
-            },
-            classification: offer.classification,
-            observed: offer.observed,
-            origin: offer.origin,
-            destination: destination.clone(),
-            created_at: now()?,
-        };
-        write_txn!(self, |conn| {
-            offers::require_unadopted_offer(conn, offer.id).await?;
             require_destination(&load_location(conn, destination.location_id).await?)?;
             require_unregistered(conn, destination).await?;
             insert_review(conn, &review).await?;
@@ -530,8 +441,8 @@ impl Catalog {
     }
 
     /// Settle the operation `failed` at its last recorded phase. An installed
-    /// copy is named in the recorded error and left in place; the file the
-    /// failure was scoped to, such as a drifted source, stays named in the message.
+    /// copy is the recorded error's scope and is left in place, unregistered;
+    /// a drifted source stays named by the review the operation names.
     async fn fail(
         &self,
         id: Uuid,
@@ -540,16 +451,7 @@ impl Catalog {
     ) -> Result<AdoptionOperation> {
         let mut response = error.response(None, None);
         if let Some(target) = installed_at {
-            let copy = NativePath::from_path(target);
-            let cause = match response.scope.take().filter(|scope| *scope != copy) {
-                Some(scope) => format!("{} ({})", response.message, scope.display()),
-                None => response.message.clone(),
-            };
-            response.scope = Some(copy);
-            response.message = format!(
-                "{cause}; the installed copy {} is left in place and not registered",
-                target.display()
-            );
+            response.scope = Some(NativePath::from_path(target));
         }
         Ok(write_txn!(self, |conn| {
             let updated = sqlx::query(
@@ -608,7 +510,7 @@ impl<P: SourceProbe> Attempt<P> {
             return Err(contained_write::occupied(&target));
         };
         let observed = self.probe.fingerprint(&target)?;
-        if observed.identity != installed.identity {
+        if !observed.identity.is_recorded(&installed.identity) {
             return Err(scoped(
                 LibraryError::IdentityConflict(
                     "the destination holds another file than the recorded installed copy; \
@@ -720,7 +622,7 @@ fn require_destination(location: &Location) -> Result<()> {
 /// The destination root must still be the registered, reachable folder.
 fn verify_online<P: SourceProbe>(root: &SourceRoot, probe: &P) -> Result<()> {
     root.verify(probe).map_err(|error| {
-        if error.response(None, None).kind == "identity_conflict" {
+        if error.code() == LibraryErrorCode::IdentityConflict {
             return error;
         }
         scoped(
@@ -891,10 +793,9 @@ async fn register(
     .bind(review.id.to_string())
     .execute(&mut *conn)
     .await?;
-    if let Some(result_id) = review.source.result_id {
-        offers::mark_adopted(conn, result_id, &review.source.sha256, &master.provenance.adopted_at)
-            .await?;
-    }
+    // Processing offers of these bytes read adopted, and sessions still
+    // waiting are matched again (CAL-FR-06, LIB-FR-25).
+    super::master_adopted(conn, &review.source.sha256).await?;
     let updated = sqlx::query(
         "UPDATE adoption_operations SET state = 'completed', phase = 'registered', \
          finished_at = ?1, master_id = ?2 WHERE id = ?3 AND state = 'running'",
@@ -1062,11 +963,11 @@ mod tests {
 
     use platevault_model::{
         AdoptionDestination, AdoptionPhase, AdoptionSource, AdoptionState, Asset, CalibrationRules,
-        CalibrationViewBasis, CalibrationViewPlan, CaptureKey, CaptureMetadata, Classification,
-        Evaluation, ExpectedAsset, FileIdentity, GroupingResult, ImageFormat, InputEvidence,
-        InputForm, InputKind, LibraryError, LightEvidence, Location, LocationRole, MasterBasis,
-        MasterEvidence, NativePath, ObservationFingerprint, PathSensitivity, ScanBatch, ScanFile,
-        ScanObservation, ScanProgress, ScanState, SessionCandidate, VolumeIdentity,
+        CaptureKey, CaptureMetadata, Classification, Evaluation, ExpectedAsset, FileIdentity,
+        GroupingResult, ImageFormat, InputEvidence, InputForm, InputKind, LibraryError,
+        LibraryErrorCode, LightEvidence, Location, LocationRole, MasterBasis, MasterEvidence,
+        NativePath, ObservationFingerprint, PathSensitivity, ScanBatch, ScanFile, ScanObservation,
+        ScanProgress, ScanState, SessionCandidate, VolumeIdentity,
     };
     use sha2::{Digest, Sha256};
     use uuid::Uuid;
@@ -1088,9 +989,13 @@ mod tests {
         LibraryError::from_io(path, error)
     }
 
+    /// The identity the product's probe records: the inode number and, on
+    /// Linux, the kernel file handle.
     fn identity(path: &Path) -> Result<FileIdentity, LibraryError> {
         let metadata = std::fs::symlink_metadata(path).map_err(|error| io(path, &error))?;
-        Ok(FileIdentity { volume: volume(), file_id: Some(metadata.ino().to_string()) })
+        let handle = fs_file_handle_linux::of_path(path).map_err(|error| io(path, &error))?;
+        let file_id = FileIdentity::unix_file_id(metadata.ino(), handle.as_deref());
+        Ok(FileIdentity { volume: volume(), file_id: Some(file_id) })
     }
 
     /// A real no-follow probe of the temporary volume.
@@ -1119,7 +1024,7 @@ mod tests {
     }
 
     /// Classification only: a stack count above 1 on a flat is a master flat.
-    /// Adoption never evaluates or plans, so those calls fail the test.
+    /// Adoption never evaluates or matches, so those calls fail the test.
     struct Rules;
 
     impl CalibrationRules for Rules {
@@ -1142,8 +1047,14 @@ mod tests {
         fn evaluate(&self, _: InputKind, _: &LightEvidence, _: &InputEvidence) -> Evaluation {
             unreachable!("adoption evaluates no criterion")
         }
-        fn plan(&self, _: &CalibrationViewBasis) -> CalibrationViewPlan {
-            unreachable!("adoption plans no View")
+        fn match_session(
+            &self,
+            _: InputKind,
+            _: &platevault_model::SessionLight,
+            _: &[platevault_model::SessionInput],
+            _: &platevault_model::WorkflowSettings,
+        ) -> platevault_model::KindMatch {
+            unreachable!("adoption matches no session")
         }
     }
 
@@ -1156,6 +1067,7 @@ mod tests {
                 asset_ids: ids,
                 provisional: Vec::new(),
                 date_basis: Some("date-loc-noon".into()),
+                framing: None,
             }],
         }
     }
@@ -1292,15 +1204,15 @@ mod tests {
         );
         assert!(operation.master.is_none() && operation.master_id.is_none());
         let error = operation.error.clone().unwrap();
-        assert_eq!(error.kind, "identity_conflict", "{error:?}");
+        assert_eq!(error.code, LibraryErrorCode::IdentityConflict, "{error:?}");
         assert_eq!(error.scope, Some(NativePath::from_path(&copy)), "the installed copy is named");
-        assert!(error.message.contains("left in place"), "{}", error.message);
+        assert!(operation.installed.is_some(), "the installed copy is recorded");
         assert!(copy.exists(), "the installed copy is left in place");
         assert_eq!(masters(&lib.catalog).await, 0, "nothing is registered");
 
         let corrupted = std::fs::read(&copy).unwrap();
         let retry = lib.catalog.adopt_master(review.id, review.revision, Probe).await.unwrap_err();
-        assert_eq!(retry.response(None, None).kind, "identity_conflict", "{retry}");
+        assert_eq!(retry.code(), LibraryErrorCode::IdentityConflict, "{retry}");
         assert!(retry.to_string().contains("no longer hashes"), "{retry}");
         assert_eq!(std::fs::read(&copy).unwrap(), corrupted, "the retry replaced nothing");
         assert_eq!(masters(&lib.catalog).await, 0);
@@ -1370,7 +1282,7 @@ mod tests {
         std::fs::write(&copy, &bytes).unwrap();
 
         let error = lib.catalog.adopt_master(review.id, review.revision, Probe).await.unwrap_err();
-        assert_eq!(error.response(None, None).kind, "identity_conflict", "{error}");
+        assert_eq!(error.code(), LibraryErrorCode::IdentityConflict, "{error}");
         assert_eq!(error.response(None, None).scope, Some(NativePath::from_path(&copy)));
         assert_eq!(std::fs::read(&copy).unwrap(), bytes, "the other file is left as it was");
         assert_eq!(masters(&lib.catalog).await, 0);
@@ -1388,7 +1300,7 @@ mod tests {
             .unwrap();
         set_hook(Hook::FullBeforeRegister);
         let error = lib.catalog.adopt_master(review.id, review.revision, Probe).await.unwrap_err();
-        assert_eq!(error.response(None, None).kind, "persistence_failure", "{error}");
+        assert_eq!(error.code(), LibraryErrorCode::PersistenceFailure, "{error}");
 
         let lib = reopen(lib).await;
         let copy = lib.calibration_root.join("masters/master_flat_Ha.fit");
@@ -1433,14 +1345,10 @@ mod tests {
         assert!(operation.master.is_none());
         let copy = lib.calibration_root.join("masters/master_flat_Ha.fit");
         let error = operation.error.expect("the drift is recorded");
-        assert_eq!(error.kind, "identity_conflict", "{error:?}");
+        assert_eq!(error.code, LibraryErrorCode::IdentityConflict, "{error:?}");
         assert_eq!(error.scope, Some(NativePath::from_path(&copy)), "the copy is named");
-        assert!(
-            error.message.contains(&source_path.display().to_string()),
-            "the drifted source is named: {}",
-            error.message
-        );
-        assert!(error.message.contains("not registered"), "{}", error.message);
+        assert_eq!(operation.review_id, review.id, "the review names the drifted source");
+        assert!(operation.installed.is_some(), "the verified copy is recorded, not registered");
         assert_eq!(sha_of(&copy), reviewed_sha, "the verified copy stays in place");
         assert_eq!(masters(&lib.catalog).await, 0, "nothing is registered");
         let query = InputQuery { form: Some(InputForm::Master), ..InputQuery::default() };

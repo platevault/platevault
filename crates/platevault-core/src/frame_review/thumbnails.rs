@@ -22,8 +22,9 @@ use uuid::Uuid;
 use super::{applied_stretch, container_of, now, pixel_error, FrameReview, BASE64};
 use crate::library::{blocking, InventoryProbe};
 use crate::{
-    availability_reason, reasons, Availability, FrameThumbnail, LibraryError,
-    ObservationFingerprint, PreviewTile, ThumbnailEntry, ThumbnailState,
+    availability_reason, Availability, FrameThumbnail, LibraryError, LibraryErrorCode,
+    MeasurementFailureParameters, ObservationFingerprint, PreviewTile, ThumbnailEntry,
+    ThumbnailState,
 };
 
 /// Thumbnails decoded at once; each holds one decoded frame in memory.
@@ -47,8 +48,8 @@ struct Jobs {
 
 struct Failure {
     fingerprint: ObservationFingerprint,
-    reason: String,
-    message: String,
+    code: LibraryErrorCode,
+    parameters: MeasurementFailureParameters,
 }
 
 impl Default for ThumbnailWork {
@@ -91,8 +92,8 @@ impl ThumbnailWork {
             state
         } else {
             ThumbnailState::Unreadable {
-                reason: reasons::UNSUPPORTED_FORMAT.into(),
-                message: format!("asset {asset_id} is not FITS or XISF"),
+                code: LibraryErrorCode::UnsupportedFormat,
+                parameters: MeasurementFailureParameters::default(),
             }
         };
         ThumbnailEntry { asset_id, state }
@@ -106,8 +107,8 @@ impl ThumbnailWork {
             jobs.failed.get(&asset_id).filter(|failure| failure.fingerprint == *recorded)
         {
             let state = ThumbnailState::Unreadable {
-                reason: failure.reason.clone(),
-                message: failure.message.clone(),
+                code: failure.code,
+                parameters: failure.parameters.clone(),
             };
             drop(jobs);
             return (state, false);
@@ -128,13 +129,14 @@ impl ThumbnailWork {
             }
             Err(LibraryError::Canceled) => {}
             Err(error) => {
-                let response = error.response(Some(decode.asset_id), None);
+                let code = error.code();
+                tracing::warn!(%error, error_code = code.as_str(), asset = %decode.asset_id, "thumbnail decode failed");
                 jobs.failed.insert(
                     decode.asset_id,
                     Failure {
                         fingerprint: decode.recorded.clone(),
-                        reason: response.kind,
-                        message: response.message,
+                        code,
+                        parameters: MeasurementFailureParameters::default(),
                     },
                 );
             }

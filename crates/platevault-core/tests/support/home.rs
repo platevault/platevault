@@ -3,26 +3,27 @@
 
 //! Shared fixtures for the Home tests (spec 065 PRJ-FR-17..19): indexed light
 //! sessions in every new-sessions group with two Projects, and helpers over
-//! the PREP world (`support/prepare.rs`) that review its frames, set goals and
-//! a default site, block a run each way and start one Running operation of
-//! each kind. Included with `#[path = "support/home.rs"] mod home_support;`
-//! beside `prepare_support`.
+//! the F4 Apply world (`support/apply.rs`) that quiet its candidates, set a
+//! goal and a default site and start one Running operation of each kind.
+//! Included with `#[path = "support/home.rs"] mod home_support;` beside
+//! `apply_support` and `membership_support`.
 #![allow(dead_code)]
 
 use std::fs;
 use std::sync::Arc;
 use std::time::Duration;
 
-use persistence_library::{NewPreparation, NewPreparedEntry, SessionQuery};
+use persistence_library::SessionQuery;
 use platevault_core::import::ImportCheck;
-use platevault_core::library::{InventoryProbe, Library};
+use platevault_core::library::Library;
 use platevault_core::tonight::TonightQuery;
 use platevault_core::*;
 use time::macros::date;
 use time::Date;
 use uuid::Uuid;
 
-use crate::prepare_support::{World, HA_LIGHTS, OIII_LIGHTS};
+use crate::apply_support::{World, AT, HA_GAIN_0};
+use crate::membership_support;
 use crate::support;
 
 /// A night NGC 7000 is well up at Backyard (52.09 N, 5.12 E).
@@ -54,18 +55,24 @@ pub async fn default_site(library: &Library) {
     library.set_default_site(Some(id), settings).await.unwrap();
 }
 
-async fn terminal(library: &Library, id: Uuid) -> ScanOperation {
+/// Scan `location` and wait for its terminal event. The durable status turns
+/// terminal at the scan's commit; calibration matching runs after that commit
+/// (LIB-FR-23/24) and advances each matched session's calibration generation,
+/// and the terminal event is published only after it. Waiting on the durable
+/// status alone races that matching against the fixture's own writes.
+async fn scan_to_end(library: &Arc<Library>, location: Uuid) -> ScanOperation {
+    let mut progress = library.subscribe_scan_progress();
+    let started = library.start_scan(location, None).await.unwrap();
     tokio::time::timeout(Duration::from_secs(20), async {
         loop {
-            let operation = library.catalog().scan_status(id).await.unwrap();
-            if operation.state != ScanState::Running {
+            let operation = progress.recv().await.unwrap();
+            if operation.id == started.id && operation.state != ScanState::Running {
                 return operation;
             }
-            tokio::time::sleep(Duration::from_millis(10)).await;
         }
     })
     .await
-    .expect("scan must reach a durable terminal state")
+    .expect("scan must publish its terminal state")
 }
 
 fn expected_session(session: &Session) -> ExpectedSession {
@@ -76,7 +83,7 @@ fn expected_session(session: &Session) -> ExpectedSession {
     }
 }
 
-fn target(designation: &str, ra_deg: f64, dec_deg: f64) -> TargetCandidate {
+pub fn target(designation: &str, ra_deg: f64, dec_deg: f64) -> TargetCandidate {
     TargetCandidate {
         id: Uuid::new_v4(),
         designation: designation.into(),
@@ -113,24 +120,30 @@ fn rig() -> Equipment {
     }
 }
 
-/// Six indexed light sessions, one per night: three with no confirmed
-/// Target, two confirmed IC 1396 (no Project's subject), one confirmed NGC
-/// 7000 on the rig, a candidate of "Summer nebulae". "Andromeda" is the
-/// second Project.
+/// Eight indexed light sessions, one per night: three with no confirmed
+/// Target, two confirmed IC 1396 (no Project's subject) and three confirmed
+/// NGC 7000 on the rig, candidates of "Summer nebulae": one it holds, one
+/// with its frames still Unreviewed, and one Ready and settled that it only
+/// suggests. "Andromeda" is the second Project.
 pub struct Indexed {
     pub temp: tempfile::TempDir,
     pub library: Arc<Library>,
     pub needs_target: Vec<Uuid>,
+    /// Confirmed sessions no Project holds: the two IC 1396 ones, the
+    /// unreviewed candidate and the suggestion.
     pub not_in_project: Vec<Uuid>,
-    pub candidate: Uuid,
+    pub held: Uuid,
+    pub unreviewed: Uuid,
+    pub suggested: Uuid,
     pub nebulae: Project,
     pub galaxies: Project,
 }
 
+#[allow(clippy::cognitive_complexity, reason = "one fixture building every new-sessions group")]
 pub async fn indexed() -> Indexed {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path().join("Astro-T7/Captures");
-    for day in 1..=6 {
+    for day in 1..=8 {
         let path = root.join(format!("2026-09-0{day}/Ha_001.fits"));
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         let start = format!("'2026-09-0{day}T22:00:00'");
@@ -151,8 +164,7 @@ pub async fn indexed() -> Indexed {
         .register_location(NativePath::from_path(&root), "Captures".into(), LocationRole::Captures)
         .await
         .unwrap();
-    let scan = library.start_scan(location.id, None).await.unwrap();
-    assert_eq!(terminal(&library, scan.id).await.state, ScanState::Completed);
+    assert_eq!(scan_to_end(&library, location.id).await.state, ScanState::Completed);
     let catalog = library.catalog();
     let mut sessions: Vec<Session> = catalog
         .list_sessions(&SessionQuery::default())
@@ -161,8 +173,12 @@ pub async fn indexed() -> Indexed {
         .into_iter()
         .map(|summary| summary.session)
         .collect();
-    assert_eq!(sessions.len(), 6, "one session per night");
+    assert_eq!(sessions.len(), 8, "one session per night");
     sessions.sort_by_key(|session| session.id);
+    for session in &sessions {
+        let calibration = catalog.session_admission(session.id).await.unwrap().calibration;
+        assert!(!calibration.matching_pending, "scan-time matching left {} pending", session.id);
+    }
     let ngc = catalog.save_target(&target("NGC 7000", 314.75, 44.33), None).await.unwrap();
     let ic = catalog.save_target(&target("IC 1396", 324.74, 57.5), None).await.unwrap();
     let m31 = catalog.save_target(&target("M 31", 10.68, 41.27), None).await.unwrap();
@@ -170,7 +186,7 @@ pub async fn indexed() -> Indexed {
     let project = |name: &str, target_id: Uuid| ProjectInput {
         name: name.into(),
         notes: None,
-        subjects: vec![SubjectInput { target_id, name: None, mosaic: false, panels: Vec::new() }],
+        subjects: vec![SubjectInput { target_id, name: None }],
         rig_ids: vec![redcat.id],
         goals: Vec::new(),
     };
@@ -180,148 +196,57 @@ pub async fn indexed() -> Indexed {
     for (session, target) in [(&sessions[3], ic.candidate.id), (&sessions[4], ic.candidate.id)] {
         catalog.associate_target(&[expected_session(session)], target).await.unwrap();
     }
-    catalog.associate_target(&[expected_session(&sessions[5])], ngc.candidate.id).await.unwrap();
-    let candidate = catalog.session(sessions[5].id).await.unwrap().summary.session;
-    catalog.confirm_equipment(&[expected_session(&candidate)], redcat.id).await.unwrap();
+    for session in &sessions[5..] {
+        catalog.associate_target(&[expected_session(session)], ngc.candidate.id).await.unwrap();
+        let session = catalog.session(session.id).await.unwrap().summary.session;
+        catalog.confirm_equipment(&[expected_session(&session)], redcat.id).await.unwrap();
+    }
+    let (held, unreviewed, suggested) = (sessions[5].id, sessions[6].id, sessions[7].id);
+    membership_support::hold(&library, nebulae.id, held).await;
+    membership_support::admit(&library, suggested).await;
+    let nebulae = catalog.project(nebulae.id).await.unwrap();
     Indexed {
         temp,
         library,
         needs_target: sessions[..3].iter().map(|session| session.id).collect(),
-        not_in_project: vec![sessions[3].id, sessions[4].id],
-        candidate: candidate.id,
+        not_in_project: vec![sessions[3].id, sessions[4].id, unreviewed, suggested],
+        held,
+        unreviewed,
+        suggested,
         nebulae,
         galaxies,
     }
 }
 
-/// The PREP world's Project.
-pub async fn project(world: &World) -> Project {
-    let project = world.view().await.project_id;
-    world.catalog().project(project).await.unwrap()
+/// Mark the Apply world's unheld gain 0 session Usable without finishing
+/// its review: no candidate frame reads Unreviewed and nothing is suggested.
+pub async fn quiet(world: &World) {
+    let session = world.session_of(&world.captures, HA_GAIN_0).await;
+    world.mark(&session, Quality::Usable).await;
 }
 
-/// The world's light at `path` below its Captures location.
-pub async fn light(world: &World, path: &str) -> Asset {
-    world
-        .catalog()
-        .location_assets(world.captures.id)
-        .await
-        .unwrap()
-        .into_iter()
-        .find(|asset| asset.relative_path.display() == path)
-        .unwrap()
-}
-
-/// Mark every light of the world Usable: no candidate frame reads Unreviewed.
-pub async fn review_all(world: &World) {
-    let mut expected = Vec::new();
-    for path in HA_LIGHTS.iter().chain(OIII_LIGHTS.iter()) {
-        let asset = light(world, path).await;
-        expected.push(ExpectedAsset {
-            asset_id: asset.id,
-            decision_revision: asset.decision_revision,
-            fingerprint: asset.fingerprint,
-        });
-    }
-    world
-        .catalog()
-        .set_quality(&expected, Quality::Usable, InventoryProbe::default())
-        .await
-        .unwrap();
-}
-
-/// One frame-count goal on the Ha channel of the world's subject.
+/// One frame-count goal on the Ha channel of the Apply world's subject.
 pub async fn ha_goal(world: &World, goal_frames: u64) {
-    let project = project(world).await;
+    let project = world.catalog().project(world.project).await.unwrap();
     let goals = [GoalInput {
         target_id: project.subjects[0].target_id,
-        panel: None,
+        group_id: None,
         goal: GoalSpec::FrameCount { channel: Some("Ha".into()), goal_frames },
     }];
     world.catalog().set_project_goals(project.id, project.revision, &goals).await.unwrap();
 }
 
-/// A second run on the world's subject and rig, saved with every candidate
-/// and moved to `stage` without running its automatic calibration match:
-/// every light group still awaits an acceptance.
-pub async fn unmatched_run(world: &World, stage: RunStage) -> Uuid {
-    let view = world.view().await;
-    let record = world
-        .catalog()
-        .create_view(&NewView {
-            project_id: view.project_id,
-            subject_id: view.subject_id,
-            rig_id: view.rig_id,
-            name: "Calibration check".into(),
-        })
-        .await
-        .unwrap();
-    let id = record.view.id;
-    world.catalog().save_view(id, 0, 1).await.unwrap();
-    world.catalog().set_view_stage(id, stage).await.unwrap();
-    id
-}
-
-/// Record a preparation revision of the world's run Running, as Prepare
-/// records it before writing any entry; nothing is written to disk and
-/// nothing settles, so no entry carries a basis.
-pub async fn running_preparation(world: &World) -> PreparationRevision {
-    let profile = world.siril("exit 0").await;
-    let request = world.request(&profile, InputMode::Copy, None);
-    let review = world.library.review_preparation(world.run, &request).await.unwrap();
-    let location = review.location.clone().unwrap();
-    let entries = review
-        .entries
-        .iter()
-        .map(|entry| NewPreparedEntry {
-            member_key: entry.member_key,
-            asset_id: entry.asset_id,
-            master_id: entry.master_id,
-            input: entry.input,
-            kind: entry.kind,
-            path: entry.path.clone(),
-            source: Some(entry.source.clone()),
-            size_bytes: entry.size_bytes,
-            basis: None,
-            header_changes: Vec::new(),
-            blocked: None,
-        })
-        .collect();
-    let input = NewPreparation {
-        view_id: world.run,
-        n: review.preparation_number,
-        membership_revision: review.membership_revision,
-        profile_id: profile.id,
-        mode: review.mode,
-        link: review.link,
-        output: location.output,
-        folder: location.folder,
-        results_folder: location.results,
-        canonical_folder: None,
-        canonical_results: None,
-        entries,
-    };
-    world.catalog().start_preparation(&input).await.unwrap().revision
-}
-
-/// A preparation revision of the world's run that ended Failed.
-pub async fn failed_preparation(world: &World) -> PreparationRevision {
-    let running = running_preparation(world).await;
+/// A Copy to Output the Apply world's Project reserved and never settled.
+pub async fn running_project_operation(world: &World) -> Uuid {
+    let id = Uuid::new_v4();
     world
-        .catalog()
-        .finish_preparation(running.id, PreparationState::Failed, Some("the profile crashed"))
-        .await
-        .unwrap()
-        .revision
-}
-
-/// Take the world's Captures location offline: its root is renamed and a scan
-/// finds it gone, so every light reads Offline.
-pub async fn captures_offline(world: &World) {
-    let root = world.captures.path.to_path_buf().unwrap();
-    fs::rename(&root, root.with_file_name("Captures unplugged")).unwrap();
-    let scan = world.library.start_scan(world.captures.id, None).await.unwrap();
-    assert_eq!(terminal(&world.library, scan.id).await.state, ScanState::Failed);
+        .sql(
+            "INSERT INTO project_operations (id, project_id, kind, state, reserved_at) \
+             VALUES (?1, ?2, 'copy_to_output', 'active', ?3)",
+            &[&id.to_string(), &world.project.to_string(), AT],
+        )
+        .await;
+    id
 }
 
 /// A previewed import of one light from a card folder, started: Running

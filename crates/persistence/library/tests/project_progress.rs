@@ -2,31 +2,37 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! Project goal progress (spec 065: PRJ-FR-03, PRJ-FR-04, PRJ-FR-21, PRJ-AC-01,
-//! PRJ-AC-03, PRJ-AC-07, PRJ-AC-08, PRJ-AC-26, PRJ-AC-29; root FR-019, FR-023;
-//! D-W36, D-W44, D-W45, D-W66, D-W72). "in project" counts the latest saved
-//! membership of each run outside the Project's Trash, each content-identical
-//! frame once, minus run exclusions, Project-only rejects, Trashed frames,
-//! drifted frames and frames the quality bar does not admit. "captured" counts
-//! the candidates plus those runs' members, Trashed frames aside, so "in
-//! project" never exceeds "captured". Fixture files are real and only read,
-//! except where a scenario rewrites or trashes one.
+//! PRJ-AC-03, PRJ-AC-07, PRJ-AC-26; root FR-019, FR-023; D-W36, D-W44, D-W94,
+//! D-W96). "in project" counts the frames of the sessions the Project holds
+//! (`project_sessions`), each content-identical frame once, minus the
+//! Project's exclusions, Library rejections, Trashed frames and frames the
+//! quality bar does not admit. "captured" adds the frames of its
+//! suggestions, Trashed frames aside, so "in project" never exceeds
+//! "captured". Sessions join through the membership writer once Ready and
+//! settled. Fixture files are real and only read, except where a scenario
+//! rewrites or trashes one.
 #![cfg(unix)]
 
+#[path = "support/membership.rs"]
+mod membership_support;
 mod support;
 
+use std::collections::BTreeMap;
 use std::path::Path;
 
+use membership_support::{add, admit, hold, remove};
 use persistence_library::{
     Catalog, LocationRegistration, ProgressBasis, SessionQuery, SourceProbe, TrashedFrame,
 };
+use platevault_model::EvidenceItem;
 use platevault_model::{
-    reasons, Asset, AssociationState, DecodedBasis, DraftEdit, Equipment, GoalInput, GoalProgress,
-    GoalSpec, GoalTally, ImageFormat, InputBasis, Location, LocationRole, MaskCounts,
-    MeasurementMethod, MeasurementOutcome, MeasurementRecord, MemberState, MetricId, MetricValue,
-    Microseconds, NativePath, NewView, PlaneBasis, Project, ProjectInput, ProjectState, Provenance,
-    Quality, QualityCriterion, RejectionMark, RunState, SampleFormat, SaturationBasis,
-    SaturationSource, Scaling, ScanFile, ScanObservation, ScanProgress, ScanState, Session,
-    SubjectInput, TargetRecord, Units, VolumeKind,
+    reasons, Asset, AssociationState, CaptureMetadata, DecodedBasis, Equipment, FrameChoice,
+    GoalInput, GoalProgress, GoalSpec, GoalTally, ImageFormat, InputBasis, Location, LocationRole,
+    MaskCounts, MeasurementMethod, MeasurementOutcome, MeasurementRecord, MetricId, MetricValue,
+    Microseconds, NativePath, PlaneBasis, Project, ProjectInput, ProjectLifecycle, Provenance,
+    Quality, QualityCriterion, RunState, SampleFormat, SaturationBasis, SaturationSource, Scaling,
+    ScanFile, ScanObservation, ScanProgress, ScanState, Session, SubjectInput, TargetRecord, Units,
+    VolumeKind,
 };
 use sqlx::sqlite::{SqliteConnectOptions, SqliteConnection};
 use sqlx::Connection;
@@ -58,6 +64,18 @@ fn rig() -> Equipment {
     }
 }
 
+/// A confirmed rig of `camera` behind a `focal_mm` telescope named `name`.
+fn equipment(name: &str, camera: &str, focal_mm: f64, pixel_um: f64) -> Equipment {
+    Equipment {
+        name: name.into(),
+        camera: Some(camera.into()),
+        telescope: Some(name.into()),
+        focal_length_mm: Some(focal_mm),
+        pixel_size_um: Some(pixel_um),
+        ..rig()
+    }
+}
+
 fn seconds(value: u64) -> Microseconds {
     Microseconds::from_whole_seconds(value).unwrap()
 }
@@ -70,7 +88,7 @@ fn frames(frames: u64) -> GoalTally {
 fn integration(target: Uuid, channel: &str, goal_seconds: u64) -> GoalInput {
     GoalInput {
         target_id: target,
-        panel: None,
+        group_id: None,
         goal: GoalSpec::Integration { channel: Some(channel.into()), goal_seconds },
     }
 }
@@ -78,13 +96,13 @@ fn integration(target: Uuid, channel: &str, goal_seconds: u64) -> GoalInput {
 fn frame_count(target: Uuid, channel: &str, goal_frames: u64) -> GoalInput {
     GoalInput {
         target_id: target,
-        panel: None,
+        group_id: None,
         goal: GoalSpec::FrameCount { channel: Some(channel.into()), goal_frames },
     }
 }
 
 fn bar(target: Uuid, criterion: QualityCriterion) -> GoalInput {
-    GoalInput { target_id: target, panel: None, goal: GoalSpec::QualityBar { criterion } }
+    GoalInput { target_id: target, group_id: None, goal: GoalSpec::QualityBar { criterion } }
 }
 
 struct World {
@@ -122,15 +140,9 @@ async fn world(extra: &[(&str, &str)], copies: &[&str]) -> World {
         for name in copies {
             std::fs::copy(fx.root.join(name), nas.join(name)).unwrap();
         }
-        let registration = LocationRegistration {
-            name: "NAS".into(),
-            path: NativePath::from_path(&nas),
-            role: LocationRole::Captures,
-            identity: folder_identity(&nas).unwrap(),
-            volume_kind: VolumeKind::Local,
-        };
-        let backup = catalog.register_location(&registration).await.unwrap();
-        scan_copies(&catalog, &backup, &nas, copies).await;
+        let backup = register_folder(&catalog, &nas, "NAS").await;
+        let files: Vec<_> = copies.iter().map(|name| (*name, metadata_for(name))).collect();
+        scan_folder(&catalog, &backup, &nas, &files).await;
         Some(backup)
     };
     let ngc = catalog.save_target(&target("NGC 7000", "ngc 7000"), None).await.unwrap();
@@ -149,16 +161,34 @@ async fn world(extra: &[(&str, &str)], copies: &[&str]) -> World {
     world
 }
 
-/// A complete scan of the copies in a second location.
-async fn scan_copies(catalog: &Catalog, location: &Location, root: &Path, names: &[&str]) {
+/// A Captures location on the existing folder `root`.
+async fn register_folder(catalog: &Catalog, root: &Path, name: &str) -> Location {
+    let registration = LocationRegistration {
+        name: name.into(),
+        path: NativePath::from_path(root),
+        role: LocationRole::Captures,
+        identity: folder_identity(root).unwrap(),
+        volume_kind: VolumeKind::Local,
+    };
+    catalog.register_location(&registration).await.unwrap()
+}
+
+/// A complete scan of the files in a second location, each with the
+/// metadata its header records.
+async fn scan_folder(
+    catalog: &Catalog,
+    location: &Location,
+    root: &Path,
+    files: &[(&str, CaptureMetadata)],
+) {
     let operation = catalog.begin_scan(location.id, None).await.unwrap();
-    let files = names
+    let files = files
         .iter()
-        .map(|name| ScanFile {
+        .map(|(name, metadata)| ScanFile {
             relative_path: NativePath::from_path(Path::new(name)),
             fingerprint: file_fingerprint(&root.join(name)).unwrap(),
             format: ImageFormat::Fits,
-            metadata: metadata_for(name),
+            metadata: metadata.clone(),
         })
         .collect();
     let observation = ScanObservation {
@@ -188,9 +218,7 @@ impl World {
     }
 
     async fn session(&self, name: &str) -> Session {
-        let asset = self.asset(name).await.id;
-        let summaries = self.catalog.list_sessions(&SessionQuery::default()).await.unwrap();
-        summaries.into_iter().map(|s| s.session).find(|s| s.asset_ids.contains(&asset)).unwrap()
+        session_holding(&self.catalog, self.asset(name).await.id).await
     }
 
     /// Confirm the Target of the session holding `name`.
@@ -203,53 +231,22 @@ impl World {
         let input = ProjectInput {
             name: "NGC 7000 HOO".into(),
             notes: None,
-            subjects: vec![SubjectInput {
-                target_id: self.ngc.candidate.id,
-                name: None,
-                mosaic: false,
-                panels: Vec::new(),
-            }],
+            subjects: vec![SubjectInput { target_id: self.ngc.candidate.id, name: None }],
             rig_ids: vec![self.redcat.id],
             goals,
         };
         self.catalog.create_project(&input).await.unwrap()
     }
 
-    /// A run on the subject and rig, starting with every candidate selected,
-    /// with `edits` applied to its first draft before Save.
-    async fn saved_run(&self, project: &Project, name: &str, edits: &[DraftEdit]) -> Uuid {
-        let input = NewView {
-            project_id: project.id,
-            subject_id: project.subjects[0].id,
-            rig_id: self.redcat.id,
-            name: name.into(),
-        };
-        let id = self.catalog.create_view(&input).await.unwrap().view.id;
-        let mut draft = 1;
-        for edit in edits {
-            self.catalog.edit_view_draft(id, draft, edit).await.unwrap();
-            draft += 1;
+    /// The Project's choice for the frames at `names`, at its current
+    /// revision.
+    async fn choose(&self, project: Uuid, names: &[&str], choice: FrameChoice) {
+        let mut keys = Vec::new();
+        for name in names {
+            keys.push(self.asset(name).await.id);
         }
-        self.catalog.save_view(id, 0, draft).await.unwrap();
-        id
-    }
-
-    async fn exclude(&self, name: &str) -> DraftEdit {
-        DraftEdit::SetFrames {
-            member_keys: vec![self.asset(name).await.id],
-            state: MemberState::Excluded,
-        }
-    }
-
-    async fn reject_for_project(&self, project: Uuid, name: &str) {
-        let asset = self.asset(name).await;
-        let mark = RejectionMark {
-            asset_id: asset.id,
-            fingerprint: asset.fingerprint.clone(),
-            expected_revision: 0,
-            rejected: true,
-        };
-        self.catalog.set_project_rejection(project, &[mark]).await.unwrap();
+        let revision = self.catalog.project_desired(project).await.unwrap().revision;
+        self.catalog.set_project_frames(project, revision, &keys, choice).await.unwrap();
     }
 
     /// Move one frame to the fixture's OS Trash and record it Trashed.
@@ -260,7 +257,7 @@ impl World {
         let bin = self.fx.temp.path().join("Trash");
         std::fs::create_dir_all(&bin).unwrap();
         std::fs::rename(&source, bin.join(name)).unwrap();
-        let frame = TrashedFrame { asset_id: asset.id, sha256, complete_view_ids: Vec::new() };
+        let frame = TrashedFrame { asset_id: asset.id, sha256 };
         self.catalog.record_trashed(Uuid::new_v4(), &[frame]).await.unwrap();
     }
 
@@ -272,19 +269,12 @@ impl World {
     async fn progress(&self, project: Uuid) -> ProgressBasis {
         self.catalog.project_progress_basis(project, &method()).await.unwrap()
     }
+}
 
-    /// Run SQL a later unit's write owns (U16 Move to Trash and Restore) directly.
-    async fn raw_sql(mut self, statement: &str) -> Self {
-        self.catalog.close().await.unwrap();
-        let mut conn =
-            SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(&self.fx.db))
-                .await
-                .unwrap();
-        sqlx::query(sqlx::AssertSqlSafe(statement.to_owned())).execute(&mut conn).await.unwrap();
-        conn.close().await.unwrap();
-        self.catalog = Catalog::open(&self.fx.db).await.unwrap();
-        self
-    }
+/// The session that holds `asset`.
+async fn session_holding(catalog: &Catalog, asset: Uuid) -> Session {
+    let summaries = catalog.list_sessions(&SessionQuery::default()).await.unwrap();
+    summaries.into_iter().map(|s| s.session).find(|s| s.asset_ids.contains(&asset)).unwrap()
 }
 
 fn goal<'a>(basis: &'a ProgressBasis, channel: &str) -> &'a GoalProgress {
@@ -317,8 +307,8 @@ fn record(
     fingerprint.content_sha256 = Some(sha_of(path));
     let outcome = if failed {
         MeasurementOutcome::Failed {
-            reason: reasons::UNSUPPORTED_FORMAT.into(),
-            message: "FITS tile compression".into(),
+            code: platevault_model::MeasurementFailureCode::UnsupportedFormat,
+            parameters: BTreeMap::new(),
         }
     } else {
         let value = match fwhm {
@@ -365,83 +355,134 @@ fn record(
     }
 }
 
-/// PRJ-FR-04, D-W44, root FR-019: the latest saved membership counts, an unsaved
-/// draft does not; the run's exclusion, the Project-only reject and the Trashed
-/// frame leave "in project", and only the Trashed one leaves "captured".
+/// PRJ-FR-04, D-W44, root FR-019: the sessions the Project holds count; its
+/// exclusion, a Library rejection and a Trashed frame leave "in project",
+/// and only the Trashed one leaves "captured". A Ready session it doesn't
+/// hold yet is captured only, and progress reads the committed edits.
 #[tokio::test]
-async fn in_project_counts_saved_memberships_minus_exclusions_rejects_trashed() {
+async fn in_project_counts_held_sessions_minus_exclusions_rejects_trashed() {
     let world = world(&[], &[]).await;
     let ngc = world.ngc.candidate.id;
     let project = world.project(vec![integration(ngc, "Ha", 3600)]).await;
+    let ha = world.session(HA[0]).await.id;
+    admit(&world.catalog, ha, Quality::Usable).await;
     let before = world.progress(project.id).await;
-    assert_eq!(goal(&before, "Ha").in_project, GoalTally::default(), "no run, nothing in project");
-    assert_eq!(goal(&before, "Ha").captured, frames(4), "every candidate frame is captured");
+    assert_eq!(goal(&before, "Ha").in_project, GoalTally::default(), "a suggestion is not held");
+    assert_eq!(goal(&before, "Ha").captured, frames(4), "the suggestion's frames are captured");
 
-    let run = world.saved_run(&project, "HOO", &[world.exclude(HA[0]).await]).await;
-    world.reject_for_project(project.id, HA[1]).await;
+    add(&world.catalog, project.id, ha, world.redcat.id).await.unwrap();
+    world.choose(project.id, &[HA[0]], FrameChoice::Exclude).await;
+    world.set_quality(HA[1], Quality::Unusable).await;
     world.trash(HA[2]).await;
     let progress = world.progress(project.id).await;
-    let ha = goal(&progress, "Ha");
-    assert_eq!(ha.in_project, frames(1), "only Ha_004 is left in project");
-    assert_eq!(ha.captured, frames(3), "the excluded and rejected frames are still captured");
-    assert_eq!((progress.project_id, progress.revision), (project.id, project.revision));
-
-    // A draft is no saved membership.
-    world.catalog.edit_view_draft(run, 0, &world.exclude(HA[3]).await).await.unwrap();
-    assert_eq!(goal(&world.progress(project.id).await, "Ha").in_project, frames(1));
+    let row = goal(&progress, "Ha");
+    assert_eq!(row.in_project, frames(1), "only Ha_004 is left in project");
+    assert_eq!(row.captured, frames(3), "the excluded and rejected frames are still captured");
+    let committed = world.catalog.project_desired(project.id).await.unwrap().revision;
+    assert_eq!((progress.project_id, progress.revision), (project.id, committed));
     world.catalog.close().await.unwrap();
 }
 
-/// D-W66, D-W72, PRJ-AC-29: "captured" is the candidates plus the members of
-/// the runs outside the Project's Trash. A trashed run's members count in
-/// neither unless they are still candidates, and count again after Restore.
+/// D-W124: held goal attribution follows an agreeing current Target association,
+/// not only a user's explicit confirmation or the Target used when the session joined.
 #[tokio::test]
-async fn captured_is_candidates_plus_members() {
+async fn held_session_uses_its_evidence_qualified_target_for_goal_attribution() {
+    let world = world(&[], &[]).await;
+    let ngc = world.ngc.candidate.id;
+    let m81 = world.m81.candidate.id;
+    let project = world
+        .catalog
+        .create_project(&ProjectInput {
+            name: "Two subjects".into(),
+            notes: None,
+            subjects: vec![
+                SubjectInput { target_id: ngc, name: None },
+                SubjectInput { target_id: m81, name: None },
+            ],
+            rig_ids: vec![world.redcat.id],
+            goals: vec![frame_count(ngc, "Ha", 2), frame_count(m81, "Ha", 2)],
+        })
+        .await
+        .unwrap();
+    let session = world.session(HA[0]).await;
+    hold(&world.catalog, project.id, session.id, world.redcat.id).await;
+
+    let mut conn =
+        SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(&world.fx.db))
+            .await
+            .unwrap();
+    let evidence = serde_json::to_string(&[
+        EvidenceItem::Alias { normalized: "m 81".into(), agrees: true },
+        EvidenceItem::Coordinates { ra_deg: 148.9, dec_deg: 69.1, qualified: true },
+    ])
+    .unwrap();
+    sqlx::query(
+        "UPDATE associations SET target_id = ?1, state = 'suggested', evidence = ?2 \
+         WHERE session_id = ?3 AND kind = 'target'",
+    )
+    .bind(m81.to_string())
+    .bind(evidence)
+    .bind(session.id.to_string())
+    .execute(&mut conn)
+    .await
+    .unwrap();
+    conn.close().await.unwrap();
+
+    let basis = world.catalog.project_progress_basis(project.id, &method()).await.unwrap();
+    let ngc_subject = project.subjects.iter().find(|subject| subject.target_id == ngc).unwrap().id;
+    let m81_subject = project.subjects.iter().find(|subject| subject.target_id == m81).unwrap().id;
+    let tally = |subject_id| {
+        basis
+            .goals
+            .iter()
+            .find(|progress| progress.goal.subject_id == subject_id)
+            .unwrap()
+            .in_project
+            .frames
+    };
+    assert_eq!(tally(ngc_subject), 0, "the stale joined Target no longer owns the held frames");
+    assert_eq!(
+        tally(m81_subject),
+        4,
+        "qualified current evidence attributes every held Ha frame to M 81"
+    );
+    world.catalog.close().await.unwrap();
+}
+/// PRJ-FR-04, PRJ-FR-09: "captured" is the frames of the Project's own
+/// sessions plus its suggestions'. A session it removes is a suggestion
+/// again; one re-confirmed as another Target is neither, until it is
+/// confirmed back and added again.
+#[tokio::test]
+async fn captured_is_suggestions_plus_held_sessions() {
     let world = world(&[], &[]).await;
     let ngc = world.ngc.candidate.id;
     let project = world.project(vec![frame_count(ngc, "OIII", 2)]).await;
     let oiii = world.session(OIII[0]).await.id;
-    let deselect = DraftEdit::DeselectSessions { session_ids: vec![oiii] };
-    world.saved_run(&project, "Ha-only", &[deselect]).await;
-    let progress = world.progress(project.id).await;
-    let row = goal(&progress, "OIII");
-    assert_eq!(
-        (row.in_project.frames, row.captured.frames),
-        (0, 2),
-        "a candidate only is captured"
-    );
+    admit(&world.catalog, oiii, Quality::Usable).await;
+    let tally = |progress: &ProgressBasis| {
+        let row = goal(progress, "OIII");
+        (row.in_project.frames, row.captured.frames)
+    };
+    assert_eq!(tally(&world.progress(project.id).await), (0, 2), "a suggestion only is captured");
 
-    let hoo = world.saved_run(&project, "HOO", &[]).await;
-    let progress = world.progress(project.id).await;
-    assert_eq!(
-        (goal(&progress, "OIII").in_project.frames, goal(&progress, "OIII").captured.frames),
-        (2, 2)
-    );
+    add(&world.catalog, project.id, oiii, world.redcat.id).await.unwrap();
+    assert_eq!(tally(&world.progress(project.id).await), (2, 2));
 
-    let world = world
-        .raw_sql(&format!(
-            "UPDATE views SET trashed_at = '2026-10-07T12:00:00Z' WHERE id = '{hoo}'"
-        ))
-        .await;
-    let progress = world.progress(project.id).await;
-    let row = goal(&progress, "OIII");
-    assert_eq!((row.in_project.frames, row.captured.frames), (0, 2), "still candidates");
+    remove(&world.catalog, project.id, oiii).await;
+    assert_eq!(tally(&world.progress(project.id).await), (0, 2), "a suggestion again");
 
-    // Re-confirmed elsewhere and only held by the trashed run: in neither.
     world.retarget(OIII[0], world.m81.candidate.id).await;
-    let progress = world.progress(project.id).await;
-    assert_eq!(goal(&progress, "OIII").captured, GoalTally::default());
+    assert_eq!(tally(&world.progress(project.id).await), (0, 0), "neither held nor suggested");
 
-    let world =
-        world.raw_sql(&format!("UPDATE views SET trashed_at = NULL WHERE id = '{hoo}'")).await;
-    let progress = world.progress(project.id).await;
-    let row = goal(&progress, "OIII");
-    assert_eq!((row.in_project.frames, row.captured.frames), (2, 2), "Restore counts them again");
+    world.retarget(OIII[0], ngc).await;
+    add(&world.catalog, project.id, oiii, world.redcat.id).await.unwrap();
+    assert_eq!(tally(&world.progress(project.id).await), (2, 2), "added again, it counts again");
     world.catalog.close().await.unwrap();
 }
 
-/// FR-023, PRJ-FR-21: whatever runs, rejects, re-confirmations, Trashed frames,
-/// trashed runs and bars hold, no goal shows "in project" above "captured".
+/// FR-023, PRJ-FR-21: whatever the Project holds, excludes or removes and
+/// whatever the Library rejects, re-confirms or Trashes, with a bar, no goal
+/// shows "in project" above "captured".
 #[tokio::test]
 async fn in_project_never_exceeds_captured() {
     let world = world(&[], &[]).await;
@@ -454,44 +495,44 @@ async fn in_project_never_exceeds_captured() {
         ])
         .await;
     assert_never_exceeds(&world.progress(project.id).await);
-    let oiii = world.session(OIII[0]).await.id;
-    let ha_only = world
-        .saved_run(&project, "Ha-only", &[DraftEdit::DeselectSessions { session_ids: vec![oiii] }])
-        .await;
-    world.saved_run(&project, "HOO", &[world.exclude(HA[1]).await]).await;
-    world.set_quality(HA[0], Quality::Usable).await;
-    world.set_quality(OIII[1], Quality::Usable).await;
+    let (ha, oiii) = (world.session(HA[0]).await.id, world.session(OIII[0]).await.id);
+    hold(&world.catalog, project.id, ha, world.redcat.id).await;
+    admit(&world.catalog, oiii, Quality::Usable).await;
     assert_never_exceeds(&world.progress(project.id).await);
-    world.reject_for_project(project.id, HA[0]).await;
+    add(&world.catalog, project.id, oiii, world.redcat.id).await.unwrap();
+    world.choose(project.id, &[HA[1]], FrameChoice::Exclude).await;
+    world.set_quality(HA[0], Quality::Unusable).await;
+    world.set_quality(OIII[0], Quality::Unusable).await;
+    assert_never_exceeds(&world.progress(project.id).await);
     world.retarget(OIII[0], world.m81.candidate.id).await;
     assert_never_exceeds(&world.progress(project.id).await);
     world.trash(HA[2]).await;
-    let world = world
-        .raw_sql(&format!(
-            "UPDATE views SET trashed_at = '2026-10-07T12:00:00Z' WHERE id = '{ha_only}'"
-        ))
-        .await;
+    remove(&world.catalog, project.id, ha).await;
     let progress = world.progress(project.id).await;
     assert_never_exceeds(&progress);
-    assert_eq!(goal(&progress, "OIII").in_project.frames, 1, "the Usable OIII member");
+    assert_eq!(goal(&progress, "OIII").in_project.frames, 1, "the Usable OIII frame it holds");
     world.catalog.close().await.unwrap();
 }
 
-/// D-W45, PRJ-AC-26: a member whose Target is re-confirmed as another Target is
-/// no longer a candidate, yet still counts "in project" and "captured".
+/// PRJ-AC-26, D-W94, D-W96: a session the Project holds whose Target is
+/// re-confirmed as another Target keeps counting toward the joined subject.
 #[tokio::test]
-async fn reconfirmed_member_counts_in_both() {
+async fn reconfirmed_held_session_counts_in_both() {
     let world = world(&[], &[]).await;
     let ngc = world.ngc.candidate.id;
+    let m81 = world.m81.candidate.id;
     let project = world.project(vec![integration(ngc, "Ha", 3600)]).await;
-    world.saved_run(&project, "HOO", &[]).await;
-    world.retarget(HA[0], world.m81.candidate.id).await;
     let ha = world.session(HA[0]).await.id;
+    hold(&world.catalog, project.id, ha, world.redcat.id).await;
+    world.retarget(HA[0], m81).await;
     let candidates = world.catalog.project_candidates(project.id).await.unwrap();
     assert!(candidates.iter().all(|c| c.session_id != ha), "no longer a candidate");
+    let desired = world.catalog.project_desired(project.id).await.unwrap();
+    assert!(desired.sessions.iter().any(|member| member.session_id == ha), "it stays held");
     let progress = world.progress(project.id).await;
     assert_eq!(goal(&progress, "Ha").in_project, frames(4));
     assert_eq!(goal(&progress, "Ha").captured, frames(4));
+    assert_never_exceeds(&progress);
     world.catalog.close().await.unwrap();
 }
 
@@ -503,95 +544,199 @@ async fn goal_met_uses_in_project_only() {
     let ngc = world.ngc.candidate.id;
     let project =
         world.project(vec![integration(ngc, "Ha", 1200), frame_count(ngc, "OIII", 2)]).await;
+    let (ha, oiii) = (world.session(HA[0]).await.id, world.session(OIII[0]).await.id);
+    admit(&world.catalog, ha, Quality::Usable).await;
+    admit(&world.catalog, oiii, Quality::Usable).await;
     let progress = world.progress(project.id).await;
-    let ha = goal(&progress, "Ha");
-    assert_eq!(ha.captured, frames(4), "the captured frames would meet it");
-    assert!(!ha.met && !goal(&progress, "OIII").met);
+    let row = goal(&progress, "Ha");
+    assert_eq!(row.captured, frames(4), "the captured frames would meet it");
+    assert!(!row.met && !goal(&progress, "OIII").met);
 
-    let run = world.saved_run(&project, "HOO", &[world.exclude(HA[0]).await]).await;
+    add(&world.catalog, project.id, ha, world.redcat.id).await.unwrap();
+    add(&world.catalog, project.id, oiii, world.redcat.id).await.unwrap();
+    world.choose(project.id, &[HA[0]], FrameChoice::Exclude).await;
     let progress = world.progress(project.id).await;
-    let ha = goal(&progress, "Ha");
-    assert_eq!((ha.in_project.seconds, ha.captured.seconds), (seconds(900), seconds(1200)));
-    assert!(!ha.met, "900 s in project of 1200 s");
+    let row = goal(&progress, "Ha");
+    assert_eq!((row.in_project.seconds, row.captured.seconds), (seconds(900), seconds(1200)));
+    assert!(!row.met, "900 s in project of 1200 s");
     assert!(goal(&progress, "OIII").met);
 
-    let include = DraftEdit::SetFrames {
-        member_keys: vec![world.asset(HA[0]).await.id],
-        state: MemberState::Included,
-    };
-    world.catalog.edit_view_draft(run, 0, &include).await.unwrap();
-    world.catalog.save_view(run, 1, 1).await.unwrap();
+    world.choose(project.id, &[HA[0]], FrameChoice::FollowLibrary).await;
     let progress = world.progress(project.id).await;
     assert!(goal(&progress, "Ha").met, "1200 s in project");
-    assert_eq!(world.catalog.project(project.id).await.unwrap().state, ProjectState::Open);
+    let desired = world.catalog.project_desired(project.id).await.unwrap();
+    assert_eq!(desired.lifecycle, ProjectLifecycle::Open, "met goals never close the Project");
     world.catalog.close().await.unwrap();
 }
 
-/// PRJ-FR-03, PRJ-AC-07: a Usable-only bar admits only Usable members; a median
-/// FWHM limit admits measured members within it, and a member without a valid
-/// measured median reads unknown and counts toward no goal. Captured stays.
+/// PRJ-FR-03, PRJ-AC-07: a Usable-only bar admits only Usable frames, even
+/// ones the Project includes explicitly. Captured stays.
 #[tokio::test]
-async fn quality_bar_usable_only_and_fwhm_median_limit_unknown_when_unmeasured() {
+async fn quality_bar_usable_only_admits_only_usable_frames() {
     let world = world(&[], &[]).await;
     let ngc = world.ngc.candidate.id;
     let project = world
         .project(vec![integration(ngc, "Ha", 3600), bar(ngc, QualityCriterion::UsableOnly)])
         .await;
-    world.saved_run(&project, "HOO", &[]).await;
+    let ha = world.session(HA[0]).await.id;
     world.set_quality(HA[0], Quality::Usable).await;
-    world.set_quality(HA[2], Quality::Unusable).await;
+    admit(&world.catalog, ha, Quality::Unusable).await;
+    add(&world.catalog, project.id, ha, world.redcat.id).await.unwrap();
+    world.choose(project.id, &HA[1..], FrameChoice::Include).await;
     let progress = world.progress(project.id).await;
-    let ha = goal(&progress, "Ha");
-    assert_eq!(ha.quality_bars, [QualityCriterion::UsableOnly]);
-    assert_eq!((ha.in_project, ha.captured, ha.unknown_for_bar), (frames(1), frames(4), 0));
+    let row = goal(&progress, "Ha");
+    assert_eq!(row.quality_bars, [QualityCriterion::UsableOnly]);
+    assert_eq!((row.in_project, row.captured, row.unknown_for_bar), (frames(1), frames(4), 0));
     assert!(progress.goals.iter().all(|row| row.goal.goal.counts_frames()), "a bar is no row");
+    world.catalog.close().await.unwrap();
+}
 
-    let limit = QualityCriterion::MaxFwhmMedian { max_px: 3.0 };
-    let goals = [integration(ngc, "Ha", 3600), bar(ngc, limit.clone())];
-    world.catalog.set_project_goals(project.id, project.revision, &goals).await.unwrap();
-    let ids: Vec<Uuid> = {
-        let mut ids = Vec::new();
-        for name in &HA[..3] {
-            ids.push(world.asset(name).await.id);
-        }
-        ids
-    };
+// --- Median-FWHM bar in arcseconds (PRJ-FR-03) ------------------------------
+
+/// An Ha light on `camera` whose header records FOCALLEN `focal_mm`, XPIXSZ
+/// `pixel_um` (the binned pixel, as `MaxIm DL` and N.I.N.A. write it),
+/// XBINNING/YBINNING `binning` and the binned frame size.
+fn light_with_optics(
+    name: &str,
+    camera: &str,
+    focal_mm: Option<f64>,
+    pixel_um: f64,
+    binning: u32,
+) -> CaptureMetadata {
+    CaptureMetadata {
+        camera: Some(camera.into()),
+        focal_length_mm: focal_mm,
+        pixel_size_um: Some(pixel_um),
+        binning_x: Some(binning),
+        binning_y: Some(binning),
+        width: Some(6248 / binning),
+        height: Some(4176 / binning),
+        ..metadata_for(name)
+    }
+}
+
+/// The median FWHM in pixels that reads `arcsec` at `focal_mm` and
+/// `pixel_um`, written out here rather than through the code under test.
+fn fwhm_px(arcsec: f64, focal_mm: f64, pixel_um: f64) -> f64 {
+    arcsec / (pixel_um / 1000.0 / focal_mm * 206_264.806)
+}
+
+/// PRJ-FR-03, PRJ-AC-07: the median-FWHM bar is set and read in arcseconds.
+/// Each frame's pixel median converts through its own pixel scale (FOCALLEN
+/// and XPIXSZ, which already includes binning), so a 2.5″ bar admits 2.4″ and
+/// refuses 2.6″ on two rigs of different scale, and a bin-2 frame is not
+/// doubled. A frame without FOCALLEN, a failed frame and an unmeasured one
+/// read unknown and count toward no goal; another method version is no
+/// evidence. Captured stays.
+#[tokio::test]
+async fn fwhm_bar_in_arcseconds_converts_through_each_frames_pixel_scale() {
+    let world = world(&[], &[]).await;
+    let ngc = world.ngc.candidate.id;
+    let limit = QualityCriterion::MaxFwhmMedian { max_arcsec: 2.5 };
+    assert_eq!(
+        serde_json::to_value(&limit).unwrap(),
+        serde_json::json!({ "criterion": "max_fwhm_median", "maxArcsec": 2.5 }),
+        "the bar crosses IPC in arcseconds",
+    );
+    let project = world.project(vec![integration(ngc, "Ha", 3600), bar(ngc, limit.clone())]).await;
+
+    // Esprit 100 at 550 mm on an ASI6200MM (3.76 µm, 1.41″/px), at bin 1 and
+    // bin 2 (XPIXSZ 7.52 µm); FRA400 at 400 mm on an ASI183MM (2.4 µm,
+    // 1.24″/px).
+    let (esprit, fra) = ("ASI6200MM", "ASI183MM");
+    let lights: [(&str, CaptureMetadata, Option<f64>, bool); 8] = [
+        (
+            "E_24.fits",
+            light_with_optics("E_24", esprit, Some(550.0), 3.76, 1),
+            Some(fwhm_px(2.4, 550.0, 3.76)),
+            false,
+        ),
+        (
+            "E_26.fits",
+            light_with_optics("E_26", esprit, Some(550.0), 3.76, 1),
+            Some(fwhm_px(2.6, 550.0, 3.76)),
+            false,
+        ),
+        (
+            "E_bin2_24.fits",
+            light_with_optics("E_bin2", esprit, Some(550.0), 7.52, 2),
+            Some(fwhm_px(2.4, 550.0, 7.52)),
+            false,
+        ),
+        ("E_failed.fits", light_with_optics("E_failed", esprit, Some(550.0), 3.76, 1), None, true),
+        (
+            "E_unmeasured.fits",
+            light_with_optics("E_unmeasured", esprit, Some(550.0), 3.76, 1),
+            None,
+            false,
+        ),
+        (
+            "F_24.fits",
+            light_with_optics("F_24", fra, Some(400.0), 2.4, 1),
+            Some(fwhm_px(2.4, 400.0, 2.4)),
+            false,
+        ),
+        (
+            "F_26.fits",
+            light_with_optics("F_26", fra, Some(400.0), 2.4, 1),
+            Some(fwhm_px(2.6, 400.0, 2.4)),
+            false,
+        ),
+        ("F_no_focal.fits", light_with_optics("F_no_focal", fra, None, 2.4, 1), Some(1.0), false),
+    ];
+    let root = world.fx.temp.path().join("Rigs");
+    std::fs::create_dir_all(&root).unwrap();
+    for (name, ..) in &lights {
+        std::fs::write(root.join(name), format!("light {name}")).unwrap();
+    }
+    let rigs = register_folder(&world.catalog, &root, "Rigs").await;
+    let files: Vec<_> = lights.iter().map(|(name, meta, ..)| (*name, meta.clone())).collect();
+    scan_folder(&world.catalog, &rigs, &root, &files).await;
+    let assets = world.catalog.location_assets(rigs.id).await.unwrap();
+
+    for (first, rig) in [
+        ("E_24.fits", equipment("Esprit 100", esprit, 550.0, 3.76)),
+        ("F_24.fits", equipment("FRA400", fra, 400.0, 2.4)),
+    ] {
+        let rig = world.catalog.save_equipment(&rig, None).await.unwrap();
+        let session = session_holding(&world.catalog, by_name(&assets, first).id).await;
+        world.catalog.associate_target(&[expected_session(&session)], ngc).await.unwrap();
+        let session = session_holding(&world.catalog, by_name(&assets, first).id).await;
+        world.catalog.confirm_equipment(&[expected_session(&session)], rig.id).await.unwrap();
+        hold(&world.catalog, project.id, session.id, rig.id).await;
+    }
+
+    let ids: Vec<Uuid> = lights.iter().map(|(name, ..)| by_name(&assets, name).id).collect();
     let run = world.catalog.begin_measurement_run(&method(), &ids, 0).await.unwrap();
-    for (sequence, (name, fwhm, failed)) in
-        [(HA[0], Some(2.5), false), (HA[1], Some(3.5), false), (HA[2], None, true)]
-            .into_iter()
-            .enumerate()
-    {
-        let asset = world.asset(name).await;
-        let record = record(
-            &asset,
-            &world.fx.root.join(name),
-            run.operation_id,
-            sequence as u64 + 1,
-            fwhm,
-            failed,
-        );
+    for (sequence, (name, _, fwhm, failed)) in lights.iter().enumerate() {
+        let asset = by_name(&assets, name);
+        let record =
+            record(asset, &root.join(name), run.operation_id, sequence as u64 + 1, *fwhm, *failed);
         world.catalog.record_measurement(run.operation_id, &record).await.unwrap();
     }
     world.catalog.finish_measurement_run(run.operation_id, RunState::Completed).await.unwrap();
+
     let progress = world.progress(project.id).await;
-    let ha = goal(&progress, "Ha");
-    assert_eq!(ha.quality_bars, [limit]);
-    assert_eq!(ha.in_project, frames(1), "2.5 px is within 3 px, 3.5 px is not");
-    assert_eq!(ha.unknown_for_bar, 2, "a failed and an unmeasured frame read unknown");
-    assert_eq!(ha.captured, frames(4));
+    let row = goal(&progress, "Ha");
+    assert_eq!(row.quality_bars, [limit], "the bar is stored in arcseconds");
+    assert_eq!(row.in_project, frames(3), "2.4″ on each rig and at bin 2 count; 2.6″ does not");
+    assert_eq!(
+        row.unknown_for_bar, 3,
+        "no FOCALLEN, a failed and an unmeasured frame read unknown"
+    );
+    assert_eq!(row.captured, frames(8), "every held frame is captured, whatever the bar");
 
     // Another method version's record is not valid evidence.
     let other = MeasurementMethod::new("platevault.stars", 2);
     let stale = world.catalog.project_progress_basis(project.id, &other).await.unwrap();
-    assert_eq!((goal(&stale, "Ha").in_project.frames, goal(&stale, "Ha").unknown_for_bar), (0, 4));
+    assert_eq!((goal(&stale, "Ha").in_project.frames, goal(&stale, "Ha").unknown_for_bar), (0, 8));
     world.catalog.close().await.unwrap();
 }
 
-/// PRJ-FR-04: a frame held by two runs, a byte-identical copy in another
-/// location and a byte-identical duplicate file each count once.
+/// PRJ-FR-04: a byte-identical copy in another location and a byte-identical
+/// duplicate file count once, suggested or held.
 #[tokio::test]
-async fn content_identical_frame_in_two_runs_counts_once() {
+async fn content_identical_frame_counts_once() {
     let world = world(&[("Ha_dup.fits", "frame Ha_001.fits")], &[HA[1]]).await;
     let backup = world.backup.as_ref().unwrap().id;
     let copy = world.catalog.location_assets(backup).await.unwrap().remove(0);
@@ -605,25 +750,27 @@ async fn content_identical_frame_in_two_runs_counts_once() {
     }
     let ngc = world.ngc.candidate.id;
     let project = world.project(vec![integration(ngc, "Ha", 3600)]).await;
+    let ha = world.session(HA[0]).await.id;
+    admit(&world.catalog, ha, Quality::Usable).await;
     let before = world.progress(project.id).await;
     assert_eq!(goal(&before, "Ha").captured, frames(4), "six Ha files, four frames");
 
-    world.saved_run(&project, "Ha-only", &[]).await;
-    world.saved_run(&project, "HOO", &[]).await;
+    add(&world.catalog, project.id, ha, world.redcat.id).await.unwrap();
     let progress = world.progress(project.id).await;
     assert_eq!(goal(&progress, "Ha").in_project, frames(4));
     assert_eq!(goal(&progress, "Ha").captured, frames(4));
     world.catalog.close().await.unwrap();
 }
 
-/// R16, D19: a member whose bytes changed since the saved revision chose it
+/// R16, D19: a held frame whose bytes changed since the Project chose it
 /// leaves "in project" and stays "captured".
 #[tokio::test]
 async fn drifted_frame_leaves_in_project() {
     let world = world(&[], &[]).await;
     let ngc = world.ngc.candidate.id;
     let project = world.project(vec![integration(ngc, "Ha", 3600)]).await;
-    world.saved_run(&project, "HOO", &[]).await;
+    let ha = world.session(HA[0]).await.id;
+    hold(&world.catalog, project.id, ha, world.redcat.id).await;
     assert_eq!(goal(&world.progress(project.id).await, "Ha").in_project, frames(4));
 
     world.fx.write(HA[1], b"frame Ha_002.fits, rewritten by another tool");

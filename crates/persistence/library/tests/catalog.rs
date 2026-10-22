@@ -6,6 +6,8 @@
 //! the probe reads actual no-follow file and folder metadata.
 #![cfg(unix)]
 
+#[path = "support/membership.rs"]
+mod membership_support;
 mod support;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -1713,18 +1715,7 @@ fn read_references(assets: &[Asset], references: Vec<AssetReference>) -> Locatio
     LocationReferences {
         assets: assets.iter().map(|asset| asset.id).collect(),
         references,
-        consulted: vec![ReferenceKind::View, ReferenceKind::Project, ReferenceKind::Result],
-    }
-}
-
-/// A fixed View membership holding `assets` at `revision`.
-fn fixed_view(assets: &[Asset], revision: Revision) -> AssetReference {
-    AssetReference {
-        kind: ReferenceKind::View,
-        id: Uuid::from_u128(0x7000),
-        name: "NGC 7000 Ha".into(),
-        revision,
-        asset_ids: ids_of(assets).into_iter().collect(),
+        consulted: vec![ReferenceKind::Project, ReferenceKind::Calibration],
     }
 }
 
@@ -1742,21 +1733,14 @@ async fn a_reviewed_retire_names_every_reference_and_changes_no_file() {
     let location = catalog.register_location(&fx.registration()).await.unwrap();
     scan(&catalog, &fx, &location, &["Ha_001.fits", "Ha_002.fits"]).await;
     let assets = catalog.location_assets(location.id).await.unwrap();
-    catalog.set_quality(&[expected(&assets[0])], Quality::Usable, DiskProbe).await.unwrap();
-    let session = catalog.list_sessions(&SessionQuery::default()).await.unwrap()[0].session.clone();
-    let saved = catalog.save_target(&target("NGC 7000", "ngc 7000"), None).await.unwrap();
-    catalog.associate_target(&[expected_session(&session)], saved.candidate.id).await.unwrap();
-
-    // The location goes offline; its copies are fixed View members.
+    let (session, target, reference) = create_project_reference(&catalog, &assets).await;
+    let references = read_references(&assets, vec![reference.clone()]);
     let unplugged = fx.root.with_extension("unplugged");
     std::fs::rename(&fx.root, &unplugged).unwrap();
     let location = catalog
         .mark_location_unavailable(location.id, Availability::Offline, "unplugged")
         .await
         .unwrap();
-    let assets = catalog.location_assets(location.id).await.unwrap();
-    let view = fixed_view(&assets, 3);
-    let references = read_references(&assets, vec![view.clone()]);
     let review = catalog.review_retire_location(location.id, &references).await.unwrap();
     assert_eq!(
         (review.location_id, review.location_name.as_str(), &review.root),
@@ -1771,7 +1755,10 @@ async fn a_reviewed_retire_names_every_reference_and_changes_no_file() {
     assert_eq!(review.sessions.len(), 1, "{:?}", review.sessions);
     assert_eq!(review.sessions[0].session_id, session.id);
     assert_eq!(review.sessions[0].grouping_revision, session.grouping_revision);
-    assert_eq!(review.references, vec![view.clone()]);
+    assert_eq!(review.references, vec![reference.clone()]);
+    assert_eq!(review.projects.len(), 1);
+    assert_eq!(review.projects[0].project_id, reference.id);
+    assert_eq!(review.projects[0].lifecycle, platevault_model::ProjectLifecycle::Open);
     assert_eq!(review.consulted, references.consulted);
     assert!(
         review.statement.contains("deletes, moves or modifies no file"),
@@ -1780,12 +1767,12 @@ async fn a_reviewed_retire_names_every_reference_and_changes_no_file() {
     );
     let stored = catalog.retire_review(review.id).await.unwrap();
     assert_eq!((stored.references, stored.assets.len()), (review.references.clone(), 2), "durable");
-
-    // A stale revision, or a View that changed since the review, is refused.
     let stale = location.decision_revision + 1;
     let error = catalog.retire_location(review.id, location.id, stale, &references).await;
     assert_eq!(kind(&error.unwrap_err()), "conflict");
-    let refreshed = read_references(&assets, vec![fixed_view(&assets, 4)]);
+    // A stale revision, or a Project that changed since the review, is refused.
+    let changed = AssetReference { revision: reference.revision + 1, ..reference.clone() };
+    let refreshed = read_references(&assets, vec![changed]);
     let error =
         catalog.retire_location(review.id, location.id, review.expected_revision, &refreshed);
     assert_eq!(kind(&error.await.unwrap_err()), "conflict");
@@ -1795,12 +1782,8 @@ async fn a_reviewed_retire_names_every_reference_and_changes_no_file() {
         (LocationLifecycle::Active, location.decision_revision),
         "refusals change nothing"
     );
-    assert!(catalog
-        .location_assets(location.id)
-        .await
-        .unwrap()
-        .iter()
-        .all(|asset| asset.availability == Availability::Offline));
+    let offline_assets = catalog.location_assets(location.id).await.unwrap();
+    assert!(offline_assets.iter().all(|asset| asset.availability == Availability::Offline));
 
     let retired = catalog
         .retire_location(review.id, location.id, review.expected_revision, &references)
@@ -1809,36 +1792,132 @@ async fn a_reviewed_retire_names_every_reference_and_changes_no_file() {
     assert_eq!(retired.lifecycle, LocationLifecycle::Retired);
     assert_eq!(retired.decision_revision, location.decision_revision + 1);
     assert_eq!(retired.availability, Availability::Offline, "last-observed state kept");
-
-    // Its copies read Retired, never Missing, and keep their decisions as history.
     let history = catalog.location_assets(location.id).await.unwrap();
     assert_eq!(ids_of(&history), ids_of(&assets));
     assert!(history.iter().all(|asset| asset.availability == Availability::Retired));
     assert_eq!(catalog.asset(assets[0].id).await.unwrap().quality, Quality::Usable);
-
-    // They leave every integration total; the session keeps its exact membership.
-    let coverage = catalog.target_coverage(saved.candidate.id).await.unwrap();
+    let coverage = catalog.target_coverage(target).await.unwrap();
     assert!(
         coverage.contributions.is_empty()
             && coverage.covered_location_ids.is_empty()
             && !coverage.provisional,
         "{coverage:?}"
     );
+    // They leave every integration total; the session keeps its exact membership.
     let detail = catalog.session(session.id).await.unwrap();
     assert_eq!(detail.summary.session.asset_ids, session.asset_ids, "membership unchanged");
     assert_eq!(
         (detail.summary.capture_count, detail.summary.availability, detail.summary.provisional),
         (0, Availability::Retired, false)
     );
-
-    // The review is single-use, and a retired location is never reselected,
-    // rescanned, remapped or decided on, even where its folder returns.
     let again =
         catalog.retire_location(review.id, location.id, retired.decision_revision, &references);
     assert_eq!(kind(&again.await.unwrap_err()), "invalid_input");
+    // The review is single-use, and a retired location is never reselected,
+    // rescanned, remapped or decided on, even where its folder returns.
     std::fs::rename(&unplugged, &fx.root).unwrap();
     refuses_reuse_of_retired(&catalog, &fx, &retired, &history[1]).await;
     assert_eq!(tree(&fx.root), before, "originals unchanged");
+}
+
+/// Create a real Project in `catalog` that references its Captures assets.
+async fn create_project_reference(
+    catalog: &Catalog,
+    assets: &[Asset],
+) -> (Session, Uuid, AssetReference) {
+    let session = catalog.list_sessions(&SessionQuery::default()).await.unwrap()[0].session.clone();
+    let target = catalog.save_target(&target("NGC 7000", "ngc 7000"), None).await.unwrap();
+    catalog.associate_target(&[expected_session(&session)], target.candidate.id).await.unwrap();
+    let equipment = catalog
+        .save_equipment(
+            &platevault_model::Equipment {
+                id: Uuid::new_v4(),
+                name: "RedCat".into(),
+                camera: Some("ASI2600MM".into()),
+                telescope: Some("RedCat".into()),
+                focal_length_mm: Some(250.0),
+                pixel_size_um: Some(3.76),
+                sensor_width_px: None,
+                sensor_height_px: None,
+                color_kind: None,
+                decision_revision: 0,
+                state: AssociationState::Confirmed,
+                provenance: Provenance::User,
+            },
+            None,
+        )
+        .await
+        .unwrap();
+    let session = catalog.session(session.id).await.unwrap().summary.session;
+    catalog.confirm_equipment(&[expected_session(&session)], equipment.id).await.unwrap();
+    let project = catalog
+        .create_project(&platevault_model::ProjectInput {
+            name: "NGC 7000 Ha".into(),
+            notes: None,
+            subjects: vec![platevault_model::SubjectInput {
+                target_id: target.candidate.id,
+                name: None,
+            }],
+            rig_ids: vec![equipment.id],
+            goals: Vec::new(),
+        })
+        .await
+        .unwrap();
+    membership_support::admit(catalog, session.id, Quality::Usable).await;
+    let revision = catalog.project_desired(project.id).await.unwrap().revision;
+    let adds = [persistence_library::SessionAdd {
+        session_id: session.id,
+        group_id: Uuid::new_v4(),
+        placement: platevault_model::SessionPlacement::FramingUnknown,
+        expected: None,
+    }];
+    let groups = [persistence_library::NewGroup {
+        id: adds[0].group_id,
+        rig_id: equipment.id,
+        name: platevault_model::GroupName::new("RedCat").unwrap(),
+        origin: platevault_model::GroupOrigin::Framing,
+        optics: platevault_model::OpticsSignature::new(None, Some(250.0), None).unwrap(),
+        framing: None,
+    }];
+    catalog.add_project_sessions(project.id, revision, &groups, &adds).await.unwrap();
+    let project = catalog.project(project.id).await.unwrap();
+    let reference = AssetReference {
+        kind: ReferenceKind::Project,
+        id: project.id,
+        name: project.name,
+        revision: project.revision,
+        asset_ids: ids_of(assets).into_iter().collect(),
+    };
+    (session, target.candidate.id, reference)
+}
+
+#[tokio::test]
+async fn a_missing_project_reference_makes_retire_review_conflict() {
+    let fx = Fixture::new();
+    fx.write("Ha_001.fits", b"frame one bytes");
+    let catalog = Catalog::open(&fx.db).await.unwrap();
+    let location = catalog.register_location(&fx.registration()).await.unwrap();
+    scan(&catalog, &fx, &location, &["Ha_001.fits"]).await;
+    let assets = catalog.location_assets(location.id).await.unwrap();
+    let (_, _, reference) = create_project_reference(&catalog, &assets).await;
+
+    let mut conn = raw_connection(&fx.db).await;
+    sqlx::query("PRAGMA foreign_keys = OFF").execute(&mut conn).await.unwrap();
+    sqlx::query("DELETE FROM projects WHERE id = ?1")
+        .bind(reference.id.to_string())
+        .execute(&mut conn)
+        .await
+        .unwrap();
+    conn.close().await.unwrap();
+
+    let references = read_references(&assets, vec![reference]);
+    let error = catalog.review_retire_location(location.id, &references).await.unwrap_err();
+    assert_eq!(kind(&error), "conflict", "{error:?}");
+    assert_eq!(
+        catalog.location(location.id).await.unwrap().lifecycle,
+        LocationLifecycle::Active,
+        "a stale Project reference does not retire its location"
+    );
 }
 
 /// A retired location is never reselected, rescanned, remapped or decided on,
@@ -1911,7 +1990,7 @@ async fn a_retire_review_whose_availability_changed_is_refused() {
         .unwrap_err();
     let response = error.response(None, None);
     assert_eq!(
-        (response.kind.as_str(), response.identity, response.retry),
+        (response.code.as_str(), response.identity, response.retry),
         ("conflict", Some(location.id), RetryAction::Review)
     );
     let unchanged = catalog.location(location.id).await.unwrap();
@@ -1985,7 +2064,7 @@ async fn a_decision_on_a_retired_copy_is_refused_before_its_root_is_read() {
                     catalog.set_quality(&[expected(copy)], quality, probe).await.unwrap_err();
                 let response = error.response(None, None);
                 assert_eq!(
-                    (response.kind.as_str(), response.identity, response.retry),
+                    (response.code.as_str(), response.identity, response.retry),
                     ("invalid_input", Some(copy.id), RetryAction::Review),
                     "{stage}: {error}"
                 );
@@ -2049,7 +2128,7 @@ async fn a_retired_folder_registers_again_and_counts_each_capture_once() {
         .await
         .unwrap_err();
     let response = error.response(None, None);
-    assert_eq!((response.kind.as_str(), response.identity), ("conflict", Some(operation.id)));
+    assert_eq!((response.code.as_str(), response.identity), ("conflict", Some(operation.id)));
     catalog.abort_scan(operation.id, ScanState::Failed, "volume gone").await.unwrap();
     catalog
         .retire_location(review.id, location.id, review.expected_revision, &references)

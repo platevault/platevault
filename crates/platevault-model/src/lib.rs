@@ -12,6 +12,30 @@ use metadata_core::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+/// Gives a type with a hand-written `Serialize` the IPC type of the value it
+/// writes, for the `wire` derives (a derive would describe its fields instead).
+#[cfg(feature = "wire")]
+macro_rules! wire_as {
+    ($ty:ty => $wire:ty) => {
+        impl specta::Type for $ty {
+            fn definition(types: &mut specta::Types) -> specta::datatype::DataType {
+                <$wire as specta::Type>::definition(types)
+            }
+        }
+        impl schemars::JsonSchema for $ty {
+            fn inline_schema() -> bool {
+                <$wire as schemars::JsonSchema>::inline_schema()
+            }
+            fn schema_name() -> std::borrow::Cow<'static, str> {
+                <$wire as schemars::JsonSchema>::schema_name()
+            }
+            fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+                <$wire as schemars::JsonSchema>::json_schema(generator)
+            }
+        }
+    };
+}
+
 pub mod naming;
 pub use naming::*;
 pub mod rig;
@@ -30,35 +54,102 @@ mod catalogue;
 pub use catalogue::*;
 mod volume;
 pub use volume::*;
-mod view;
-pub use view::*;
 pub mod import;
 pub use import::*;
 mod session_filters;
 pub use session_filters::*;
 mod targets_list;
 pub use targets_list::*;
-mod run_lifecycle;
-pub use run_lifecycle::*;
-mod view_group;
-pub use view_group::*;
 mod prepare;
 pub use prepare::*;
 mod home;
 pub use home::*;
-mod results;
-pub use results::*;
-mod cleanup;
-pub use cleanup::*;
-mod done_archive;
-pub use done_archive::*;
-mod archive;
-pub use archive::*;
-mod trash_moves;
-pub use trash_moves::*;
+
+// The F4 Project model (D-W93 to D-W116): canonical types and invariants the
+// persistence schema and every F4 unit share.
+mod workflow_settings;
+pub use workflow_settings::*;
+mod rig_version;
+pub use rig_version::*;
+mod session_calibration;
+pub use session_calibration::*;
+mod session_matching;
+pub use session_matching::*;
+mod session_intake;
+pub use session_intake::*;
+mod session_framing;
+pub use session_framing::*;
+mod project_inputs;
+pub use project_inputs::*;
+mod project_view;
+pub use project_view::*;
+mod project_lifecycle;
+pub use project_lifecycle::*;
+mod project_output;
+pub use project_output::*;
+mod project_apply;
+pub use project_apply::*;
+mod project_wrap_up;
+pub use project_wrap_up::*;
+
+time::serde::format_description!(pub(crate) iso_date, Date, "[year]-[month]-[day]");
+
+/// Comparison key of user text such as a FILTER value, a group name or a
+/// camera alias: trimmed, NFC and lowercase.
+pub(crate) fn comparison_key(value: &str) -> String {
+    use unicode_normalization::UnicodeNormalization;
+    value.trim().nfc().collect::<String>().to_lowercase()
+}
+
+/// Refuse a `field` that is not a SHA-256 digest in lowercase hex.
+pub(crate) fn require_sha256(field: &str, value: &str) -> Result<(), LibraryError> {
+    let hex =
+        value.len() == 64 && value.bytes().all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'));
+    if hex {
+        Ok(())
+    } else {
+        Err(LibraryError::InvalidInput(format!("{field} is not a lowercase SHA-256 digest")))
+    }
+}
+
+/// The parts of a path relative to a folder `PlateVault` owns, refusing an
+/// empty path, an absolute one and parent traversal.
+pub(crate) fn relative_parts(field: &str, path: &NativePath) -> Result<Vec<String>, LibraryError> {
+    let relative = path.relative_path()?;
+    let parts: Vec<String> = relative
+        .components()
+        .filter_map(|part| match part {
+            Component::Normal(name) => Some(name.to_string_lossy().into_owned()),
+            _ => None,
+        })
+        .collect();
+    if parts.is_empty() {
+        return Err(LibraryError::InvalidInput(format!("{field} is empty")));
+    }
+    Ok(parts)
+}
+
+/// A logical capture's key and copies (D16): at least one copy, each once in
+/// asset id order, the key the smallest.
+pub(crate) fn validate_copies(key: Uuid, copies: &[CopyBasis]) -> Result<(), LibraryError> {
+    let invalid = |message: String| Err(LibraryError::InvalidInput(message));
+    let Some(first) = copies.first() else {
+        return invalid(format!("capture {key} names no copy"));
+    };
+    if first.asset_id != key {
+        return invalid(format!("capture {key} is keyed by its smallest copy"));
+    }
+    if copies.windows(2).any(|pair| pair[0].asset_id >= pair[1].asset_id) {
+        return invalid(format!("capture {key} lists its copies once, in order"));
+    }
+    Ok(())
+}
 
 pub type Revision = u64;
 
+/// A library failure. `Display` is an English diagnostic for logs and tests;
+/// it never crosses IPC. The client gets [`ErrorResponse`], whose
+/// [`LibraryErrorCode`] the desktop catalogues word.
 #[derive(Debug, thiserror::Error)]
 pub enum LibraryError {
     #[error("invalid input: {0}")]
@@ -68,7 +159,7 @@ pub enum LibraryError {
     #[error("revision conflict for {id}; current revision {current}")]
     Conflict { id: Uuid, current: Revision, successors: Vec<Uuid> },
     /// A selected window `key` is not among the windows recomputed at `site`;
-    /// `current` is its Target's revision. The wire kind is `conflict`.
+    /// `current` is its Target's revision. The wire code is `conflict`.
     #[error(
         "window {key} at site {site} is not among the recomputed windows; Target {} is at \
          revision {current}",
@@ -91,30 +182,169 @@ pub enum LibraryError {
     PersistenceFailure(String),
     #[error("no verified byte proof: {0}")]
     NoByteProof(String),
+    /// Symlinks can't be made where the View goes: on Windows, Developer
+    /// Mode (the unprivileged symlink right) is off. Apply in Symlinks mode
+    /// refuses and offers Copies for this Project; no other link kind is
+    /// tried (PREP-FR-15, PREP-AC-08).
+    #[error("symlinks unavailable: {0}")]
+    SymlinksUnavailable(String),
+    /// The processing location's filesystem holds no links (FAT, exFAT,
+    /// some network shares): Apply in Symlinks mode refuses and only Copies
+    /// is offered there (PREP-AC-03). The response's scope names the folder.
+    #[error("links unsupported: {0}")]
+    LinksUnsupported(String),
     #[error("operation canceled")]
     Canceled,
+    /// A recorded correction can't reach the application: no isolated
+    /// patched copy can carry `field` (PREP-FR-03, D-W123). Apply refuses
+    /// before it builds, naming the held session as `identity` and the
+    /// original as `path`; recording a value no FITS card can hold is
+    /// refused too, naming the frame as `identity`. The wire code is
+    /// `correction_format_unpatchable` for an input neither FITS nor XISF,
+    /// else `correction_unpatchable`; the response names the identity, the
+    /// path, the field and the refusal.
+    #[error("{identity}: the corrected {field} can't be delivered: {}", .refusal.describe())]
+    CorrectionUndeliverable {
+        identity: Uuid,
+        path: Option<NativePath>,
+        field: String,
+        refusal: PatchRefusal,
+    },
+    /// A session an open Project holds isn't Ready: Apply waits until it is
+    /// Ready again (FR-034, VSEL-FR-12; D-W100, D-W140). The response's
+    /// identity names the session.
+    #[error("session not ready: {0}")]
+    SessionNotReady(String),
+    /// `error` concerning the record `identity`, the native path `scope`, or
+    /// both; the innermost context that names one wins.
     #[error("{error}")]
-    Context { error: Box<Self>, scope: NativePath, identity: Option<Uuid> },
+    Context { error: Box<Self>, scope: Option<NativePath>, identity: Option<Uuid> },
+}
+
+/// The stable machine code of a [`LibraryError`]: what the client switches on
+/// and the key of its user-facing message. The desktop catalogues
+/// (`apps/desktop/messages/<locale>.json`) word each code as
+/// `err_library_<code>`, as they word a `contracts_core` `ErrorCode` as
+/// `err_<code>`. The wire strings are the kinds the catalog also records for
+/// run issues, so they don't change.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
+pub enum LibraryErrorCode {
+    InvalidInput,
+    NotFound,
+    Conflict,
+    IdentityConflict,
+    AccessDenied,
+    SourceUnavailable,
+    UnsupportedFormat,
+    MetadataUnreadable,
+    ProviderUnavailable,
+    PersistenceFailure,
+    NoByteProof,
+    SymlinksUnavailable,
+    LinksUnsupported,
+    Canceled,
+    /// A recorded correction no patched copy can carry: a value FITS can't
+    /// hold, or a header that can't take it.
+    CorrectionUnpatchable,
+    /// A recorded correction on an input neither FITS nor XISF.
+    CorrectionFormatUnpatchable,
+    /// A session the Project holds isn't Ready, so Apply waits.
+    SessionNotReady,
+}
+
+impl LibraryErrorCode {
+    /// The wire string serde writes.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::InvalidInput => "invalid_input",
+            Self::NotFound => "not_found",
+            Self::Conflict => "conflict",
+            Self::IdentityConflict => "identity_conflict",
+            Self::AccessDenied => "access_denied",
+            Self::SourceUnavailable => "source_unavailable",
+            Self::UnsupportedFormat => "unsupported_format",
+            Self::MetadataUnreadable => "metadata_unreadable",
+            Self::ProviderUnavailable => "provider_unavailable",
+            Self::PersistenceFailure => "persistence_failure",
+            Self::NoByteProof => "no_byte_proof",
+            Self::SymlinksUnavailable => "symlinks_unavailable",
+            Self::LinksUnsupported => "links_unsupported",
+            Self::Canceled => "canceled",
+            Self::CorrectionUnpatchable => "correction_unpatchable",
+            Self::CorrectionFormatUnpatchable => "correction_format_unpatchable",
+            Self::SessionNotReady => "session_not_ready",
+        }
+    }
+
+    /// What the client offers for a failure with this code.
+    #[must_use]
+    pub const fn retry(self) -> RetryAction {
+        match self {
+            Self::NotFound
+            | Self::AccessDenied
+            | Self::SourceUnavailable
+            | Self::ProviderUnavailable
+            | Self::PersistenceFailure => RetryAction::Retry,
+            Self::InvalidInput
+            | Self::Conflict
+            | Self::IdentityConflict
+            | Self::MetadataUnreadable
+            | Self::NoByteProof
+            | Self::SymlinksUnavailable
+            | Self::LinksUnsupported
+            | Self::CorrectionUnpatchable
+            | Self::CorrectionFormatUnpatchable
+            | Self::SessionNotReady => RetryAction::Review,
+            Self::UnsupportedFormat | Self::Canceled => RetryAction::None,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum RetryAction {
     Retry,
     Review,
     None,
 }
 
+/// The IPC form of a [`LibraryError`]: its stable code plus the structured
+/// params the client words it with. No English text crosses IPC; the client
+/// shows the catalogue message for `code`.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ErrorResponse {
-    pub kind: String,
+    pub code: LibraryErrorCode,
+    /// The record the failure concerns.
     pub identity: Option<Uuid>,
+    /// The native path the failure concerns.
     pub scope: Option<NativePath>,
     pub retry: RetryAction,
-    pub message: String,
+    /// A `conflict`'s current revision.
     pub current_revision: Option<Revision>,
+    /// The records that superseded a `conflict`'s record.
     pub successors: Vec<Uuid>,
+    /// The selected window a `conflict` found missing from the windows
+    /// recomputed at its site; the key names the Target and the site.
+    pub window: Option<WindowKey>,
+    /// The corrected field a `correction_*` refusal names and why no
+    /// isolated patched copy can carry it; boxed so the response stays
+    /// below the workspace's `large-error-threshold`.
+    pub correction: Option<Box<UndeliverableCorrection>>,
+}
+
+/// A corrected capture field no isolated patched copy can carry, and why.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
+pub struct UndeliverableCorrection {
+    pub field: String,
+    pub refusal: PatchRefusal,
 }
 
 impl LibraryError {
@@ -127,50 +357,101 @@ impl LibraryError {
             std::io::ErrorKind::NotFound => Self::NotFound(message),
             _ => Self::SourceUnavailable(message),
         };
-        Self::Context { error: Box::new(error), scope: NativePath::from_path(path), identity: None }
+        Self::Context {
+            error: Box::new(error),
+            scope: Some(NativePath::from_path(path)),
+            identity: None,
+        }
+    }
+
+    /// This failure naming `identity` as the record it concerns, unless it
+    /// names one already: a conflict names its own record and a context keeps
+    /// its identity. A request over many records uses it to say which failed.
+    #[must_use]
+    pub fn concerning(self, identity: Uuid) -> Self {
+        match self {
+            Self::Context { error, scope, identity: None } => {
+                Self::Context { error, scope, identity: Some(identity) }
+            }
+            error @ (Self::Context { .. }
+            | Self::Conflict { .. }
+            | Self::WindowConflict { .. }
+            | Self::CorrectionUndeliverable { .. }) => error,
+            error => {
+                Self::Context { error: Box::new(error), scope: None, identity: Some(identity) }
+            }
+        }
+    }
+
+    /// The stable code the client words this failure by; a [`Self::Context`]
+    /// has its inner error's.
+    #[must_use]
+    pub fn code(&self) -> LibraryErrorCode {
+        match self {
+            Self::InvalidInput(_) => LibraryErrorCode::InvalidInput,
+            Self::NotFound(_) => LibraryErrorCode::NotFound,
+            Self::Conflict { .. } | Self::WindowConflict { .. } => LibraryErrorCode::Conflict,
+            Self::IdentityConflict(_) => LibraryErrorCode::IdentityConflict,
+            Self::AccessDenied(_) => LibraryErrorCode::AccessDenied,
+            Self::SourceUnavailable(_) => LibraryErrorCode::SourceUnavailable,
+            Self::UnsupportedFormat(_) => LibraryErrorCode::UnsupportedFormat,
+            Self::MetadataUnreadable(_) => LibraryErrorCode::MetadataUnreadable,
+            Self::ProviderUnavailable(_) => LibraryErrorCode::ProviderUnavailable,
+            Self::PersistenceFailure(_) => LibraryErrorCode::PersistenceFailure,
+            Self::NoByteProof(_) => LibraryErrorCode::NoByteProof,
+            Self::SymlinksUnavailable(_) => LibraryErrorCode::SymlinksUnavailable,
+            Self::LinksUnsupported(_) => LibraryErrorCode::LinksUnsupported,
+            Self::Canceled => LibraryErrorCode::Canceled,
+            Self::SessionNotReady(_) => LibraryErrorCode::SessionNotReady,
+            Self::CorrectionUndeliverable { refusal: PatchRefusal::UnsupportedFormat, .. } => {
+                LibraryErrorCode::CorrectionFormatUnpatchable
+            }
+            Self::CorrectionUndeliverable { .. } => LibraryErrorCode::CorrectionUnpatchable,
+            Self::Context { error, .. } => error.code(),
+        }
     }
 
     /// Attach affected identity/scope to the stable IPC failure shape.
     #[must_use]
     pub fn response(&self, identity: Option<Uuid>, scope: Option<NativePath>) -> ErrorResponse {
         if let Self::Context { error, scope: stored_scope, identity: stored_identity } = self {
-            return error.response(stored_identity.or(identity), Some(stored_scope.clone()));
+            return error.response(stored_identity.or(identity), stored_scope.clone().or(scope));
         }
-        let (kind, retry) = match self {
-            Self::InvalidInput(_) => ("invalid_input", RetryAction::Review),
-            Self::NotFound(_) => ("not_found", RetryAction::Retry),
-            Self::Conflict { .. } | Self::WindowConflict { .. } => {
-                ("conflict", RetryAction::Review)
-            }
-            Self::IdentityConflict(_) => ("identity_conflict", RetryAction::Review),
-            Self::AccessDenied(_) => ("access_denied", RetryAction::Retry),
-            Self::SourceUnavailable(_) => ("source_unavailable", RetryAction::Retry),
-            Self::UnsupportedFormat(_) => ("unsupported_format", RetryAction::None),
-            Self::MetadataUnreadable(_) => ("metadata_unreadable", RetryAction::Review),
-            Self::ProviderUnavailable(_) => ("provider_unavailable", RetryAction::Retry),
-            Self::PersistenceFailure(_) => ("persistence_failure", RetryAction::Retry),
-            Self::NoByteProof(_) => ("no_byte_proof", RetryAction::Review),
-            Self::Canceled => ("canceled", RetryAction::None),
-            Self::Context { .. } => unreachable!("context handled before variant mapping"),
-        };
-        let (identity, current_revision, successors) = match self {
-            Self::Conflict { id, current, successors } => {
-                (Some(*id), Some(*current), successors.clone())
-            }
-            Self::WindowConflict { key, current, .. } => {
-                (Some(key.target_id()), Some(*current), Vec::new())
-            }
-            _ => (identity, None, Vec::new()),
-        };
-        ErrorResponse {
-            kind: kind.into(),
+        let code = self.code();
+        let mut response = ErrorResponse {
+            code,
             identity,
             scope,
-            retry,
-            message: self.to_string(),
-            current_revision,
-            successors,
+            retry: code.retry(),
+            current_revision: None,
+            successors: Vec::new(),
+            window: None,
+            correction: None,
+        };
+        match self {
+            Self::Conflict { id, current, successors } => {
+                response.identity = Some(*id);
+                response.current_revision = Some(*current);
+                response.successors.clone_from(successors);
+            }
+            Self::WindowConflict { key, current, .. } => {
+                response.identity = Some(key.target_id());
+                response.current_revision = Some(*current);
+                response.window = Some(*key);
+            }
+            Self::CorrectionUndeliverable { identity, path, field, refusal } => {
+                response.identity = Some(*identity);
+                if path.is_some() {
+                    response.scope.clone_from(path);
+                }
+                response.correction = Some(Box::new(UndeliverableCorrection {
+                    field: field.clone(),
+                    refusal: *refusal,
+                }));
+            }
+            _ => {}
         }
+        response
     }
 }
 
@@ -196,6 +477,20 @@ pub enum NativePath {
     UnixBytes(Vec<u8>),
     WindowsUtf16(Vec<u16>),
 }
+
+/// The record [`NativePath`]'s `Serialize` writes: the native payload plus its
+/// display text. Deserialize never reads `display`.
+#[cfg(feature = "wire")]
+#[derive(specta::Type, schemars::JsonSchema)]
+#[serde(rename = "NativePath", tag = "encoding", rename_all = "kebab-case")]
+#[allow(dead_code, reason = "only the IPC type derives read it")]
+enum NativePathWire {
+    UnixBytes { payload: Vec<u8>, display: String },
+    WindowsUtf16 { payload: Vec<u16>, display: String },
+}
+
+#[cfg(feature = "wire")]
+wire_as!(NativePath => NativePathWire);
 
 impl Serialize for NativePath {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
@@ -279,6 +574,7 @@ impl NativePath {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct VolumeIdentity {
     pub filesystem: String,
     pub stable_id: Option<String>,
@@ -289,6 +585,7 @@ pub struct VolumeIdentity {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum PathSensitivity {
     Sensitive,
     Insensitive,
@@ -358,16 +655,75 @@ impl NativePath {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct FileIdentity {
     pub volume: VolumeIdentity,
     pub file_id: Option<String>,
 }
 
+/// Separates a Unix file ID's inode number from the kernel file handle.
+const FILE_HANDLE_SEPARATOR: char = ':';
+
+impl FileIdentity {
+    /// The file ID of a Unix entry with inode number `inode` and, where its
+    /// filesystem encodes one, the kernel file handle `handle` as text
+    /// without a `:`.
+    ///
+    /// A Unix file ID is the entry's decimal inode number, followed on Linux
+    /// by `:` and the kernel file handle `name_to_handle_at(2)` encodes for
+    /// it. The handle carries the inode's generation, which ext4, xfs and
+    /// btrfs change whenever they reuse an inode number, so an entry made
+    /// under a just-freed number (ext4 hands it to the next entry created) is
+    /// told apart from the one recorded. Where no handle is read (a
+    /// filesystem that encodes none, cifs for one, or a read the kernel
+    /// refuses) the ID is the inode number alone: it matches only another ID
+    /// without a handle ([`file_ids_match`]), and two such IDs can't tell a
+    /// reused number apart. A Windows file ID is the 64-bit file index as 16
+    /// hex digits.
+    #[must_use]
+    pub fn unix_file_id(inode: u64, handle: Option<&str>) -> String {
+        match handle {
+            Some(handle) => format!("{inode}{FILE_HANDLE_SEPARATOR}{handle}"),
+            None => inode.to_string(),
+        }
+    }
+
+    /// The inode number a Unix file ID names; `None` for any other ID.
+    #[must_use]
+    pub fn unix_inode(file_id: &str) -> Option<u64> {
+        file_id.split_once(FILE_HANDLE_SEPARATOR).map_or(file_id, |(inode, _)| inode).parse().ok()
+    }
+
+    /// Whether this observed identity is the `recorded` entry: the same
+    /// volume and, where the recorded volume's file IDs are stable, file IDs
+    /// that match ([`file_ids_match`]).
+    #[must_use]
+    pub fn is_recorded(&self, recorded: &Self) -> bool {
+        self.volume == recorded.volume
+            && (!recorded.volume.file_ids_stable
+                || file_ids_match(self.file_id.as_deref(), recorded.file_id.as_deref()))
+    }
+}
+
+/// Whether two file IDs name the same entry: both absent, or both present
+/// and equal. For a Unix ID that is the same inode number and the same
+/// kernel file handle part, both absent or both present and equal
+/// ([`FileIdentity::unix_file_id`]). An ID with a handle never matches one
+/// without: on Linux a handle read the kernel refuses (`EPERM`, `EOVERFLOW`)
+/// gives the inode number alone, which can't prove the recorded inode's
+/// generation, so the pair is an identity conflict.
+#[must_use]
+pub fn file_ids_match(left: Option<&str>, right: Option<&str>) -> bool {
+    left == right
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ObservationFingerprint {
     pub identity: FileIdentity,
     pub size_bytes: u64,
+    #[cfg_attr(feature = "wire", specta(type = String), schemars(with = "String"))]
     #[serde(with = "decimal_i128")]
     pub modified_ns: i128,
     #[serde(default)]
@@ -383,7 +739,10 @@ impl ObservationFingerprint {
             && self.modified_ns == other.modified_ns
             && self.content_sha256 == other.content_sha256
             && (!self.identity.volume.file_ids_stable
-                || self.identity.file_id == other.identity.file_id)
+                || file_ids_match(
+                    self.identity.file_id.as_deref(),
+                    other.identity.file_id.as_deref(),
+                ))
     }
 }
 
@@ -409,6 +768,7 @@ mod decimal_i128 {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum LocationRole {
     Captures,
     Calibration,
@@ -416,6 +776,7 @@ pub enum LocationRole {
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum Availability {
     Available,
     Offline,
@@ -432,6 +793,7 @@ pub enum Availability {
 }
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum Quality {
     #[default]
     Unreviewed,
@@ -441,6 +803,7 @@ pub enum Quality {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum ApplicableQuality {
     Unreviewed,
     Usable,
@@ -462,6 +825,7 @@ pub enum ApplicableQuality {
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum ImageFormat {
     Fits,
     Xisf,
@@ -473,6 +837,7 @@ pub enum ImageFormat {
 /// remapped, and its root no longer blocks registering an overlapping folder.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum LocationLifecycle {
     Active,
     Retired,
@@ -480,6 +845,7 @@ pub enum LocationLifecycle {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct Location {
     pub id: Uuid,
     pub name: String,
@@ -500,6 +866,7 @@ pub struct Location {
 /// Raw values survive separately; non-finite/invalid scalars remain unknown.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct CaptureMetadata {
     pub raw: BTreeMap<String, String>,
     pub image_type: Option<String>,
@@ -533,6 +900,12 @@ pub struct CaptureMetadata {
     /// Integration count: `STACKCNT`, else `NCOMBINE`. Absent stays `None`, never 0.
     #[serde(default)]
     pub stack_count: Option<u32>,
+    /// The user's framing label ([`FRAMING_LABEL_FIELD`]): lights of one night
+    /// and key with the same label are one framing whatever their pointing
+    /// (D-W107). No header holds it; only a correction sets it, when the user
+    /// merges or splits sessions.
+    #[serde(default)]
+    pub framing_label: Option<String>,
 }
 
 fn finite(value: Option<f64>) -> Option<f64> {
@@ -613,6 +986,7 @@ impl From<&RawFileMetadata> for CaptureMetadata {
             focal_length_mm: finite(raw.focal_length_mm),
             pixel_size_um: finite(raw.pixel_size_um),
             stack_count: raw.stack_count,
+            framing_label: None,
         }
     }
 }
@@ -673,6 +1047,7 @@ impl CaptureMetadata {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct Asset {
     pub id: Uuid,
     pub location_id: Uuid,
@@ -759,6 +1134,7 @@ pub fn logical_quality(copies: &[&Asset]) -> ApplicableQuality {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ExpectedAsset {
     pub asset_id: Uuid,
     pub decision_revision: Revision,
@@ -766,12 +1142,14 @@ pub struct ExpectedAsset {
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ExpectedSession {
     pub session_id: Uuid,
     pub grouping_revision: Revision,
     pub decision_revision: Revision,
 }
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct CaptureKey(pub String);
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -780,14 +1158,30 @@ pub struct SessionCandidate {
     pub asset_ids: Vec<Uuid>,
     pub provisional: Vec<String>,
     pub date_basis: Option<String>,
+    /// The framing intake split the session by; `None` for frames without
+    /// pointing and for frames that are not lights (D-W107).
+    #[serde(default)]
+    pub framing: Option<SessionFraming>,
 }
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GroupingResult {
     pub sessions: Vec<SessionCandidate>,
 }
+/// A current session a regroup passes to the grouping beside the assets:
+/// its members whose capture evidence did not change, and the framing it
+/// records. The grouping keeps those members in it and compares other
+/// frames with its anchor by its own split limits (D-W107), so a regroup
+/// re-splits no session with limits other than its own.
+#[derive(Clone, Debug)]
+pub struct StandingSession {
+    pub key: CaptureKey,
+    pub asset_ids: Vec<Uuid>,
+    pub framing: Option<SessionFraming>,
+}
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct Session {
     pub id: Uuid,
     pub key: CaptureKey,
@@ -796,9 +1190,13 @@ pub struct Session {
     pub asset_ids: Vec<Uuid>,
     pub provisional: Vec<String>,
     pub date_basis: Option<String>,
+    /// The framing the session was split by at intake; `None` without pointing.
+    #[serde(default)]
+    pub framing: Option<SessionFraming>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct SessionLineage {
     pub correction_id: Uuid,
     pub predecessors: Vec<Uuid>,
@@ -809,6 +1207,7 @@ pub struct SessionLineage {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum AssociationState {
     Unresolved,
     Suggested,
@@ -818,6 +1217,7 @@ pub enum AssociationState {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum AssociationKind {
     Target,
     Equipment,
@@ -825,6 +1225,7 @@ pub enum AssociationKind {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "source", rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum Provenance {
     Seed { dataset: String },
     User,
@@ -835,6 +1236,7 @@ pub enum Provenance {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum EvidenceItem {
     Alias { normalized: String, agrees: bool },
     Coordinates { ra_deg: f64, dec_deg: f64, qualified: bool },
@@ -843,8 +1245,39 @@ pub enum EvidenceItem {
     Unknown { field: String },
     Conflict { field: String, values: Vec<String> },
 }
+
+/// Whether an association in `state` with `evidence` counts as confirmed for
+/// Needs a Target, Not in any Project, Ready and coverage (LIB-FR-05,
+/// LIB-FR-17, LIB-FR-20, D-W124): confirmed by the user, or associated by
+/// agreeing evidence, a Suggested row with an agreeing `OBJECT` alias and
+/// qualified pointing geometry and no conflict. The admission trigger
+/// `project_sessions_admit_ready` restates this rule in SQL.
+#[must_use]
+pub fn counts_as_confirmed(state: &AssociationState, evidence: &[EvidenceItem]) -> bool {
+    match state {
+        AssociationState::Confirmed => true,
+        AssociationState::Suggested => {
+            let alias = evidence
+                .iter()
+                .any(|item| matches!(item, EvidenceItem::Alias { agrees: true, .. }));
+            let geometry = evidence.iter().any(|item| {
+                matches!(
+                    item,
+                    EvidenceItem::Coordinates { qualified: true, .. }
+                        | EvidenceItem::Footprint { qualified: true, .. }
+                )
+            });
+            let conflicting =
+                evidence.iter().any(|item| matches!(item, EvidenceItem::Conflict { .. }));
+            alias && geometry && !conflicting
+        }
+        AssociationState::Unresolved | AssociationState::NeedsReview => false,
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct Association {
     pub session_id: Uuid,
     pub kind: AssociationKind,
@@ -857,14 +1290,35 @@ pub struct Association {
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct CorrectionInput {
     pub asset_id: Uuid,
     pub field: String,
+    #[cfg_attr(feature = "wire", specta(type = JsonValueWire))]
     pub value: serde_json::Value,
+}
+
+/// Any JSON value as a named type: the bindings reference it rather than
+/// inline `serde_json::Value`'s self-referential shape, which specta refuses.
+#[cfg(feature = "wire")]
+#[derive(specta::Type, schemars::JsonSchema)]
+#[serde(rename = "JsonValue", untagged)]
+#[allow(dead_code, reason = "only the IPC type derives read it")]
+enum JsonValueWire {
+    Null(()),
+    Bool(bool),
+    Number(f64),
+    String(String),
+    // The derives expand into nested items, where `Self` doesn't resolve.
+    #[allow(clippy::use_self)]
+    Array(Vec<JsonValueWire>),
+    #[allow(clippy::use_self)]
+    Object(BTreeMap<String, JsonValueWire>),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum ScanState {
     Running,
     Completed,
@@ -874,6 +1328,7 @@ pub enum ScanState {
 }
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ScanProgress {
     pub discovered: u64,
     pub metadata_read: u64,
@@ -909,6 +1364,7 @@ pub struct ScanFile {
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ScanIssue {
     pub relative_path: NativePath,
     pub reason: String,
@@ -935,6 +1391,7 @@ pub struct ScanObservation {
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ScanOperation {
     pub id: Uuid,
     #[serde(default)]
@@ -961,6 +1418,7 @@ impl Default for ScanOptions {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct TargetAlias {
     pub text: String,
     pub normalized: String,
@@ -969,6 +1427,7 @@ pub struct TargetAlias {
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct TargetCandidate {
     pub id: Uuid,
     pub designation: String,
@@ -988,6 +1447,7 @@ pub struct TargetCandidate {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct SkyCoordinates {
     pub ra_deg: f64,
     pub dec_deg: f64,
@@ -995,12 +1455,14 @@ pub struct SkyCoordinates {
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct TargetRecord {
     pub candidate: TargetCandidate,
     pub decision_revision: Revision,
 }
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct TargetCone {
     pub ra_deg: f64,
     pub dec_deg: f64,
@@ -1026,6 +1488,7 @@ impl TargetCone {
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct Equipment {
     pub id: Uuid,
     pub name: String,
@@ -1044,6 +1507,7 @@ pub struct Equipment {
 /// Coverage is split by session, location and availability, not just session.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct CoverageContribution {
     pub session_id: Uuid,
     pub location_id: Uuid,
@@ -1072,6 +1536,7 @@ pub struct CoverageContribution {
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct TargetCoverage {
     pub target_id: Uuid,
     pub covered_location_ids: Vec<Uuid>,
@@ -1085,12 +1550,14 @@ pub struct TargetCoverage {
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct DigestEvidence {
     pub sha256: String,
     pub fingerprint: ObservationFingerprint,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct RemapItem {
     pub asset_id: Uuid,
     pub original_digest: DigestEvidence,
@@ -1100,6 +1567,7 @@ pub struct RemapItem {
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct RemapReview {
     pub id: Uuid,
     pub location_id: Uuid,
@@ -1115,6 +1583,7 @@ pub struct RemapReview {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct RemapBlock {
     pub asset_id: Option<Uuid>,
     pub reason: RemapBlockReason,
@@ -1122,6 +1591,7 @@ pub struct RemapBlock {
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum RemapBlockReason {
     NoByteProof,
     Mismatch,
@@ -1133,13 +1603,12 @@ pub enum RemapBlockReason {
 /// Kind of a record outside the library that holds library asset ids.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum ReferenceKind {
-    /// A fixed View membership or one of its prepared revisions (VSEL, PREP).
-    View,
+    /// A Project holding copies of the captures it holds (PRJ).
     Project,
-    /// A Result's recorded lineage.
-    Result,
-    /// An adopted master's provenance record (CAL).
+    /// An adopted master's provenance record, or a session's calibration pins
+    /// (CAL).
     Calibration,
 }
 
@@ -1147,11 +1616,13 @@ pub enum ReferenceKind {
 /// library reads these to review Retire location and never writes them.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct AssetReference {
     pub kind: ReferenceKind,
     pub id: Uuid,
     pub name: String,
-    /// The record's own revision, such as a View's membership or prepared revision.
+    /// The record's own revision: a Project's or a master's revision, or a
+    /// session's calibration generation.
     pub revision: Revision,
     /// The referenced assets among those asked about.
     pub asset_ids: Vec<Uuid>,
@@ -1160,6 +1631,7 @@ pub struct AssetReference {
 /// A recorded copy of a location under a Retire location review.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct RetireAsset {
     pub asset_id: Uuid,
     pub relative_path: NativePath,
@@ -1168,6 +1640,7 @@ pub struct RetireAsset {
 /// A current session holding copies of a location under a Retire location review.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct RetireSession {
     pub session_id: Uuid,
     pub grouping_revision: Revision,
@@ -1175,11 +1648,40 @@ pub struct RetireSession {
     pub asset_ids: Vec<Uuid>,
 }
 
+/// The Project holding a session whose pinned calibration file is at a location
+/// being reviewed for retirement.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
+pub struct RetirePinProject {
+    pub project_id: Uuid,
+    pub name: String,
+    pub lifecycle: ProjectLifecycle,
+}
+
+/// A current blocker to retiring a location.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "reason", rename_all = "snake_case", rename_all_fields = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
+pub enum RetireBlock {
+    /// A pinned calibration file is held at the location.
+    PinnedCalibration {
+        session_id: Uuid,
+        /// Internal capture-grouping key, not a display label.
+        /// The UI must resolve and render the session's display label.
+        capture_key: String,
+        kinds: Vec<InputKind>,
+        projects: Vec<RetirePinProject>,
+    },
+}
+
 /// Durable review of Retire location (LIB-FR-15): the location, its root and
 /// availability, and every asset, session, View, Project and Result referencing
-/// its copies. Retiring deletes, moves or modifies no file.
+/// its copies. Calibration pins add a blocker before confirmation, which
+/// rechecks them. Retiring deletes, moves or modifies no file.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct RetireReview {
     pub id: Uuid,
     pub location_id: Uuid,
@@ -1190,6 +1692,10 @@ pub struct RetireReview {
     pub assets: Vec<RetireAsset>,
     pub sessions: Vec<RetireSession>,
     pub references: Vec<AssetReference>,
+    /// Projects holding its copies or holding a session whose pin holds a file.
+    pub projects: Vec<RetirePinProject>,
+    /// Pinned calibration sessions as one blocked-state entry each.
+    pub blocked: Vec<RetireBlock>,
     /// Reference kinds whose records were read; a kind not listed was not checked.
     pub consulted: Vec<ReferenceKind>,
     /// What retiring does and does not change, for the reviewer.

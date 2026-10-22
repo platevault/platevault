@@ -1,14 +1,14 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Trashed frames (LIB-FR-18, D-W43, D-W52). The storage custody moves a frame to
-//! the OS Trash and records it here. The catalog keeps the record, with its
+//! Trashed frames (LIB-FR-18, D-W43). The storage custody moves a frame to the
+//! OS Trash and records it here. The catalog keeps the record, with its
 //! identity, digest, last-observed metadata and quality history, in the state
 //! Trashed, and every list and total leaves it out through `live_assets`. Each
-//! trash is one episode: the operation, the SHA-256 it verified before the move,
-//! and the runs that were Complete then, whose fixed membership still shows the
-//! frame marked Trashed. The app restores nothing itself; a rescan that finds
-//! the recorded path again closes the episode, which stays as history.
+//! trash is one episode: the operation and the SHA-256 it verified before the
+//! move. A Closed Project's frozen snapshot is never touched (D-W97). The app
+//! restores nothing itself; a rescan that finds the recorded path again closes
+//! the episode, which stays as history.
 
 use std::collections::BTreeSet;
 
@@ -19,8 +19,7 @@ use sqlx::{Connection, Row, SqliteConnection};
 use uuid::Uuid;
 
 use super::{
-    from_json, listed_sessions, load_asset, now, parse_uuid, scoped, to_json, Catalog, Members,
-    Result, MAX_PAGE,
+    listed_sessions, load_asset, now, parse_uuid, scoped, Catalog, Members, Result, MAX_PAGE,
 };
 
 /// One frame the storage custody moved to the OS Trash.
@@ -30,21 +29,18 @@ pub struct TrashedFrame {
     pub asset_id: Uuid,
     /// SHA-256 of the bytes the custody verified immediately before the move (D19).
     pub sha256: String,
-    /// The runs that were Complete when the frame was trashed (D-W52).
-    pub complete_view_ids: Vec<Uuid>,
 }
 
 /// One stay of a frame in the OS Trash.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct TrashEpisode {
     pub asset_id: Uuid,
     /// The storage operation that trashed the frame.
     pub storage_operation_id: Uuid,
     pub sha256: String,
     pub trashed_at: String,
-    /// The runs that were Complete at trash time, sorted.
-    pub complete_view_ids: Vec<Uuid>,
     /// When a rescan found the recorded path again and the record left Trashed.
     pub put_back_at: Option<String>,
 }
@@ -52,6 +48,7 @@ pub struct TrashEpisode {
 /// A Trashed frame as the Sessions "Trashed" filter lists it.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct TrashedAsset {
     /// The kept record: identity, digest, last-observed metadata and quality.
     pub asset: Asset,
@@ -137,9 +134,6 @@ impl Catalog {
                         Some(asset.id),
                     ));
                 }
-                let mut views = frame.complete_view_ids.clone();
-                views.sort_unstable();
-                views.dedup();
                 sqlx::query(
                     "UPDATE assets SET availability = 'trashed', verification_pending = 0 \
                      WHERE id = ?1",
@@ -149,13 +143,12 @@ impl Catalog {
                 .await?;
                 sqlx::query(
                     "INSERT INTO asset_trash_episodes (asset_id, storage_operation_id, sha256, \
-                     trashed_at, complete_view_ids) VALUES (?1, ?2, ?3, ?4, ?5)",
+                     trashed_at) VALUES (?1, ?2, ?3, ?4)",
                 )
                 .bind(asset.id.to_string())
                 .bind(storage_operation_id.to_string())
                 .bind(&frame.sha256)
                 .bind(&trashed_at)
-                .bind(to_json(&views)?)
                 .execute(&mut *conn)
                 .await?;
                 let episode = TrashEpisode {
@@ -163,7 +156,6 @@ impl Catalog {
                     storage_operation_id,
                     sha256: frame.sha256.clone(),
                     trashed_at: trashed_at.clone(),
-                    complete_view_ids: views,
                     put_back_at: None,
                 };
                 let session_id = session_of(conn, asset.id).await?;
@@ -278,7 +270,6 @@ fn episode_from_row(row: &SqliteRow) -> Result<TrashEpisode> {
         storage_operation_id: parse_uuid(&row.try_get::<String, _>("storage_operation_id")?)?,
         sha256: row.try_get("sha256")?,
         trashed_at: row.try_get("trashed_at")?,
-        complete_view_ids: from_json(&row.try_get::<String, _>("complete_view_ids")?)?,
         put_back_at: row.try_get("put_back_at")?,
     })
 }

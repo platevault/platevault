@@ -371,6 +371,37 @@ async fn missing_retained_original_blocks_removal() {
     assert_eq!(trash.moved(), [] as [std::path::PathBuf; 0]);
 }
 
+/// 9w4qm: a kept copy below a registered root is re-verified from that root
+/// without following a link, so a folder of it swapped for a link to the
+/// same bytes elsewhere proves nothing and the duplicate stays.
+#[cfg(unix)]
+#[tokio::test]
+async fn a_kept_copy_reached_through_a_link_proves_nothing() {
+    let temp = tempfile::tempdir().unwrap();
+    let base = fs::canonicalize(temp.path()).unwrap();
+    let library = library(&base).await;
+    let root = base.join("Captures");
+    let keeper = write_file(&root.join("2026-10-12/light_004.fits"), b"the kept bytes");
+    let duplicate = write_file(&base.join("Copies/light_004.fits"), b"the kept bytes");
+    let mut item = draft(&library, &duplicate).await;
+    let mut kept = library.review_kept_copy(native(&keeper)).await.unwrap();
+    kept.root = Some(native(&root));
+    item.relied_on = vec![kept];
+    let trash = Arc::new(FakeTrash::new(&base.join("bin")));
+    let id = record(&library, StorageOperationKind::Trash, vec![item]).await;
+    let outside = base.join("outside");
+    fs::create_dir_all(&outside).unwrap();
+    fs::rename(root.join("2026-10-12"), outside.join("2026-10-12")).unwrap();
+    std::os::unix::fs::symlink(outside.join("2026-10-12"), root.join("2026-10-12")).unwrap();
+
+    let operation = library.run_storage_operation(id, as_dyn(&trash)).await.unwrap();
+
+    assert_eq!(operation.items[0].outcome, Some(ItemOutcome::Blocked));
+    assert_eq!(code(&operation.items[0]), Some(ReasonCode::KeptCopyUnproven));
+    assert!(duplicate.exists(), "the duplicate stays");
+    assert_eq!(trash.moved(), [] as [std::path::PathBuf; 0]);
+}
+
 #[tokio::test]
 async fn journal_resumes_after_interruption_without_filename_presence() {
     let temp = tempfile::tempdir().unwrap();

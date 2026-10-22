@@ -1,37 +1,38 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Project records (spec 065, amended D-W1..D-W74) on the catalog's single
-//! serialized writer. Every Project write is one `BEGIN IMMEDIATE` transaction
-//! that checks the expected Project revision and every record it names, writes
-//! only the Project tables and adds one to the revision. A Project-only reject
-//! checks only its own asset's latest decision and leaves the Project revision
-//! alone, so rapid marks never chain. Candidates are derived on read over
-//! `live_assets`. Nothing here reads or writes an image file or changes a
+//! Project records (spec 065) on the catalog's single serialized writer. Every
+//! Project write is one `BEGIN IMMEDIATE` transaction that checks the expected
+//! Project revision and every record it names, writes only the Project tables
+//! and adds one to the revision. Suggestions (candidates) are derived on read
+//! over `live_assets`; the sessions a Project holds are its inputs
+//! (`project_inputs`). Nothing here reads or writes an image file or changes a
 //! library record.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use platevault_model::{
-    builtin_goal_templates, validate_goals, validate_project_name, validate_rigs,
-    validate_subjects, ApplicableQuality, Asset, AssetReference, Availability, GoalIdentity,
-    GoalInput, GoalProgress, GoalSpec, GoalTally, GoalTemplate, GoalTemplateInput, LibraryError,
-    MeasurementMethod, MeasurementOutcome, MeasurementRecord, MemberBasis, MemberState, Membership,
-    MetricId, MetricState, Microseconds, PanelInput, Project, ProjectCandidate, ProjectDetail,
-    ProjectGoal, ProjectInput, ProjectQuery, ProjectRejection, ProjectState, ProjectSubject,
-    ProjectSummary, QualityCriterion, RecordValidity, ReferenceKind, RejectionMark, Revision,
-    RunStage, SubjectInput, SubjectPanel,
+    builtin_goal_templates, counts_as_confirmed, validate_goals, validate_project_name,
+    validate_rigs, validate_subjects, ApplicableQuality, Asset, AssetReference, Availability,
+    CaptureInclusion, CaptureMetadata, DuplicateRequest, ExclusionBasis, GoalIdentity, GoalInput,
+    GoalProgress, GoalSpec, GoalTally, GoalTemplate, GoalTemplateInput, InclusionBasis,
+    LibraryError, MeasurementMethod, MeasurementOutcome, MeasurementRecord, MetricId, MetricState,
+    MetricValue, Microseconds, Project, ProjectCandidate, ProjectDesired, ProjectGoal,
+    ProjectInput, ProjectQuery, ProjectSubject, ProjectSummary, ProjectViewSettings,
+    QualityCriterion, RecordValidity, ReferenceKind, Revision, SubjectInput, Units,
 };
+
 use sqlx::sqlite::{SqliteConnection, SqliteRow};
 use sqlx::{Connection, Row};
+use target_match::{Field, Optics};
 use uuid::Uuid;
 
-use super::views::{self, RunUse};
+use super::admission;
+use super::project_inputs::{self, NewGroup};
 use super::{
-    capture_quality, conflict, db_revision, fingerprint_matches, from_json, from_text, json_ids,
-    load_asset, load_assets, load_equipment, load_target, measurements, next_revision, now,
-    parse_uuid, require_decidable, require_revision, revision, to_json, to_text, CaptureView,
-    Catalog, Result, MAX_PAGE,
+    capture_quality, db_revision, from_json, from_text, json_ids, load_assets, load_equipment,
+    load_target, measurements, next_revision, now, parse_uuid, require_revision, revision, to_json,
+    to_text, CaptureView, Catalog, Result, MAX_PAGE,
 };
 
 impl Catalog {
@@ -43,24 +44,8 @@ impl Catalog {
     /// Target, unknown equipment, or a goal naming a Target or panel the input
     /// does not list.
     pub async fn create_project(&self, input: &ProjectInput) -> Result<Project> {
-        input.validate()?;
         let project = write_txn!(self, |conn| {
-            let id = Uuid::new_v4();
-            let at = now()?;
-            sqlx::query(
-                "INSERT INTO projects (id, name, notes, state, revision, created_at, updated_at) \
-                 VALUES (?1, ?2, ?3, ?4, 1, ?5, ?5)",
-            )
-            .bind(id.to_string())
-            .bind(input.name.trim())
-            .bind(notes(input.notes.as_deref()))
-            .bind(to_text(&ProjectState::Open)?)
-            .bind(&at)
-            .execute(&mut *conn)
-            .await?;
-            write_subjects(conn, id, &input.subjects).await?;
-            write_rigs(conn, id, &input.rig_ids).await?;
-            write_goals(conn, id, &input.goals).await?;
+            let id = insert_project(conn, input).await?;
             load_project(conn, id).await?
         });
         Ok(project)
@@ -93,14 +78,15 @@ impl Catalog {
         Ok(project)
     }
 
-    /// Replace the subject list. A listed Target keeps its subject and a listed
-    /// panel number keeps its panel; an omitted subject or panel is removed with
-    /// its goals, and so is each goal its subject's new kind no longer takes.
-    /// Candidates follow at once; no run membership changes.
+    /// Replace the subject list. A listed Target keeps its subject; an
+    /// omitted subject is removed and its goals kept hidden, counted nowhere,
+    /// until its Target is a subject again (D-W128). Suggestions follow at
+    /// once; no held session changes.
     ///
     /// # Errors
     /// `Conflict` for a stale revision; `NotFound` for an unknown Project or an
-    /// unsaved Target; `InvalidInput` for an invalid subject list.
+    /// unsaved Target; `InvalidInput` for an invalid subject list or for
+    /// removing a subject a held session joined on.
     pub async fn set_project_subjects(
         &self,
         id: Uuid,
@@ -118,11 +104,12 @@ impl Catalog {
     }
 
     /// Replace the rig list. Adding a rig adds its confirmed sessions to the
-    /// candidates and removing one takes them out; no run membership changes.
+    /// suggestions and removing one takes them out; no held session changes.
     ///
     /// # Errors
     /// `Conflict` for a stale revision; `NotFound` for an unknown Project or
-    /// equipment; `InvalidInput` for an empty or repeated rig list.
+    /// equipment; `InvalidInput` for an empty or repeated rig list, or for
+    /// removing a rig a group of the Project is on.
     pub async fn set_project_rigs(
         &self,
         id: Uuid,
@@ -139,14 +126,14 @@ impl Catalog {
         Ok(project)
     }
 
-    /// Replace the goal list. A goal keeps its id while its subject, panel, kind
-    /// and channel (or criterion) stay.
+    /// Replace the goal list. A goal keeps its id while its subject, panel
+    /// group, kind and channel (or criterion) stay.
     ///
     /// # Errors
-    /// `Conflict` for a stale revision; `NotFound` for an unknown Project or a
-    /// goal naming a Target that is no subject or an unknown panel;
-    /// `InvalidInput` for an invalid value, a repeated goal or a panel scope the
-    /// subject does not take.
+    /// `Conflict` for a stale revision; `NotFound` for an unknown Project, a
+    /// goal naming a Target that is no subject or an unknown group;
+    /// `InvalidInput` for an invalid value, a repeated goal or a group that is
+    /// not a mosaic panel.
     pub async fn set_project_goals(
         &self,
         id: Uuid,
@@ -163,45 +150,41 @@ impl Catalog {
         Ok(project)
     }
 
-    /// Copy a built-in or user template's values into the goals of one subject:
-    /// of `panel` on a mosaic subject, or of every panel when `panel` is `None`.
-    /// A copied value replaces the same goal's value and adds the others; the
-    /// Project keeps no link to the template. Templates are never filtered by rig.
+    /// Copy a built-in or user template's values into the goals of one
+    /// subject: of the mosaic panel group `group_id`, or the subject's own
+    /// goals when `None`. A copied value replaces the same goal's value and
+    /// adds the others; the Project keeps no link to the template. Templates
+    /// are never filtered by rig.
     ///
     /// # Errors
     /// `Conflict` for a stale revision; `NotFound` for an unknown Project,
-    /// template or panel, or a Target that is no subject; `InvalidInput` for a
-    /// panel on a single-Target subject.
+    /// template or group, or a Target that is no subject; `InvalidInput` for
+    /// a group that is not a mosaic panel.
     pub async fn apply_goal_template(
         &self,
         id: Uuid,
         expected: Revision,
         template_id: Uuid,
         target_id: Uuid,
-        panel: Option<u32>,
+        group_id: Option<Uuid>,
     ) -> Result<Project> {
         let project = write_txn!(self, |conn| {
             let next = next_project_revision(conn, id, expected).await?;
             let template = load_template(conn, template_id).await?;
-            let subjects = subject_rows(conn, id).await?;
-            let subject = subjects.get(&target_id).ok_or_else(|| not_a_subject(id, target_id))?;
-            let panels: Vec<Option<u32>> = match panel {
-                None if subject.mosaic => subject.panels.keys().copied().map(Some).collect(),
-                panel => vec![panel],
-            };
+            if !subject_ids(conn, id).await?.contains_key(&target_id) {
+                return Err(not_a_subject(id, target_id));
+            }
             let mut goals = goal_inputs(conn, id).await?;
-            for panel in panels {
-                for goal in &template.goals {
-                    let item = GoalInput { target_id, panel, goal: goal.normalized() };
-                    let same = |existing: &GoalInput| {
-                        existing.target_id == target_id
-                            && existing.panel == panel
-                            && existing.goal.identity() == goal.identity()
-                    };
-                    match goals.iter_mut().find(|existing| same(existing)) {
-                        Some(existing) => *existing = item,
-                        None => goals.push(item),
-                    }
+            for goal in &template.goals {
+                let item = GoalInput { target_id, group_id, goal: goal.normalized() };
+                let same = |existing: &GoalInput| {
+                    existing.target_id == target_id
+                        && existing.group_id == group_id
+                        && existing.goal.identity() == goal.identity()
+                };
+                match goals.iter_mut().find(|existing| same(existing)) {
+                    Some(existing) => *existing = item,
+                    None => goals.push(item),
                 }
             }
             validate_goals(&goals)?;
@@ -212,22 +195,6 @@ impl Catalog {
         Ok(project)
     }
 
-    /// Record one Project-only decision per asset, all or nothing. Each mark is
-    /// checked against its own asset's latest decision and the observation the
-    /// user reviewed; the Project revision, library quality, candidates and every
-    /// other Project stay unchanged and nothing is rehashed.
-    ///
-    /// # Errors
-    /// See [`write_rejections`].
-    pub async fn set_project_rejection(
-        &self,
-        id: Uuid,
-        marks: &[RejectionMark],
-    ) -> Result<Vec<ProjectRejection>> {
-        let decided = write_txn!(self, |conn| write_rejections(conn, id, marks).await?);
-        Ok(decided)
-    }
-
     /// # Errors
     /// `NotFound` for an unknown Project.
     pub async fn project(&self, id: Uuid) -> Result<Project> {
@@ -236,25 +203,26 @@ impl Catalog {
     }
 
     /// Project summaries by name, optionally only those with `target_id` as a
-    /// subject. Done Projects are listed only with `show_done` (D-W48). No
-    /// candidate or progress is computed.
+    /// subject. The Projects Wrap up closed (Closing, Closed, Archived) are
+    /// listed only with `include_closed` (PRJ-FR-32). No suggestion or
+    /// progress is computed.
     ///
     /// # Errors
     /// `PersistenceFailure` when the catalog cannot be read.
     pub async fn list_projects(&self, query: &ProjectQuery) -> Result<Vec<ProjectSummary>> {
         let mut conn = self.reader().await?;
         let rows = sqlx::query(
-            "SELECT p.id, p.name, p.state, p.revision, \
+            "SELECT p.id, p.name, p.lifecycle, p.revision, \
              (SELECT count(*) FROM project_rigs r WHERE r.project_id = p.id) AS rigs, \
              (SELECT count(*) FROM project_goals g WHERE g.project_id = p.id) AS goals \
              FROM projects p WHERE (?1 IS NULL OR EXISTS (SELECT 1 FROM project_subjects s \
-             WHERE s.project_id = p.id AND s.target_id = ?1)) AND (?4 OR p.state = 'open') \
+             WHERE s.project_id = p.id AND s.target_id = ?1)) AND (?4 OR p.lifecycle = 'open') \
              ORDER BY p.name, p.id LIMIT ?2 OFFSET ?3",
         )
         .bind(query.target_id.map(|id| id.to_string()))
         .bind(i64::from(if query.limit == 0 { MAX_PAGE } else { query.limit.min(MAX_PAGE) }))
         .bind(i64::from(query.offset))
-        .bind(query.show_done)
+        .bind(query.include_closed)
         .fetch_all(&mut *conn)
         .await?;
         let mut summaries = Vec::with_capacity(rows.len());
@@ -270,7 +238,7 @@ impl Catalog {
             summaries.push(ProjectSummary {
                 id,
                 name: row.try_get("name")?,
-                state: from_text(&row.try_get::<String, _>("state")?)?,
+                lifecycle: from_text(&row.try_get::<String, _>("lifecycle")?)?,
                 revision: revision(row.try_get("revision")?)?,
                 subjects,
                 rig_count: count(row, "rigs")?,
@@ -280,10 +248,11 @@ impl Catalog {
         Ok(summaries)
     }
 
-    /// The Project's candidates, derived now: every current session whose
-    /// confirmed Target is a subject's Target and whose confirmed rig is a
-    /// Project rig, with its frames outside the Trash. An OBJECT header or a
-    /// suggestion confirms nothing. In subject, rig and session order.
+    /// The Project's candidates, derived now: every current session whose Target
+    /// counts as confirmed and is a subject's Target, and whose confirmed rig is a
+    /// Project rig, with its frames outside the Trash, whether the Project holds it
+    /// or not. An OBJECT header or an unevidenced suggestion counts for nothing.
+    /// In subject, rig and session order.
     ///
     /// # Errors
     /// `NotFound` for an unknown Project.
@@ -296,24 +265,9 @@ impl Catalog {
         Ok(found)
     }
 
-    /// The Project, its candidates and the latest Project-only decision of each
-    /// asset outside the Trash, from one catalog snapshot. Read-only.
-    ///
-    /// # Errors
-    /// `NotFound` for an unknown Project.
-    pub async fn project_detail(&self, id: Uuid) -> Result<ProjectDetail> {
-        let mut conn = self.reader().await?;
-        let mut snapshot = conn.begin().await?;
-        let project = load_project(&mut snapshot, id).await?;
-        let candidates = candidates(&mut snapshot, id).await?;
-        let rejections = latest_rejections(&mut snapshot, id).await?;
-        snapshot.rollback().await?;
-        Ok(ProjectDetail { project, candidates, rejections })
-    }
-
-    /// The Projects holding any of `assets` through an effective Project-only
-    /// reject, each naming the asked assets it holds, at its Project revision.
-    /// Candidates are derived and hold nothing.
+    /// The Projects holding any of `assets` as a copy of a capture they hold
+    /// (`project_capture_copies`), each naming the asked assets it holds, at
+    /// its Project revision. Suggestions are derived and hold nothing.
     ///
     /// # Errors
     /// `PersistenceFailure` when the catalog cannot be read.
@@ -323,12 +277,10 @@ impl Catalog {
         }
         let mut conn = self.reader().await?;
         let rows = sqlx::query(
-            "SELECT p.id AS project_id, p.name, p.revision, r.asset_id FROM project_rejections r \
-             JOIN projects p ON p.id = r.project_id \
-             WHERE r.asset_id IN (SELECT value FROM json_each(?1)) AND r.rejected = 1 \
-             AND r.revision = (SELECT max(x.revision) FROM project_rejections x \
-             WHERE x.project_id = r.project_id AND x.asset_id = r.asset_id) \
-             ORDER BY p.id, r.asset_id",
+            "SELECT p.id AS project_id, p.name, p.revision, c.asset_id \
+             FROM project_capture_copies c JOIN projects p ON p.id = c.project_id \
+             WHERE c.asset_id IN (SELECT value FROM json_each(?1)) \
+             ORDER BY p.id, c.asset_id",
         )
         .bind(json_ids(assets)?)
         .fetch_all(&mut *conn)
@@ -461,6 +413,31 @@ fn not_a_subject(project: Uuid, target: Uuid) -> LibraryError {
     LibraryError::NotFound(format!("Target {target} is not a subject of project {project}"))
 }
 
+/// A new open Project at revision 1 with `input`'s subjects, rigs and goals,
+/// in the caller's transaction: its id.
+///
+/// # Errors
+/// As [`Catalog::create_project`].
+pub async fn insert_project(conn: &mut SqliteConnection, input: &ProjectInput) -> Result<Uuid> {
+    input.validate()?;
+    let id = Uuid::new_v4();
+    let at = now()?;
+    sqlx::query(
+        "INSERT INTO projects (id, name, notes, revision, created_at, updated_at) \
+         VALUES (?1, ?2, ?3, 1, ?4, ?4)",
+    )
+    .bind(id.to_string())
+    .bind(input.name.trim())
+    .bind(notes(input.notes.as_deref()))
+    .bind(&at)
+    .execute(&mut *conn)
+    .await?;
+    write_subjects(conn, id, &input.subjects).await?;
+    write_rigs(conn, id, &input.rig_ids).await?;
+    write_goals(conn, id, &input.goals).await?;
+    Ok(id)
+}
+
 pub async fn require_project(conn: &mut SqliteConnection, id: Uuid) -> Result<Revision> {
     let current: Option<i64> = sqlx::query_scalar("SELECT revision FROM projects WHERE id = ?1")
         .bind(id.to_string())
@@ -473,7 +450,7 @@ pub async fn require_project(conn: &mut SqliteConnection, id: Uuid) -> Result<Re
 }
 
 /// The revision a write of Project `id` commits, after checking `expected`.
-async fn next_project_revision(
+pub async fn next_project_revision(
     conn: &mut SqliteConnection,
     id: Uuid,
     expected: Revision,
@@ -483,7 +460,7 @@ async fn next_project_revision(
     Ok(current + 1)
 }
 
-async fn commit_revision(conn: &mut SqliteConnection, id: Uuid, next: Revision) -> Result<()> {
+pub async fn commit_revision(conn: &mut SqliteConnection, id: Uuid, next: Revision) -> Result<()> {
     sqlx::query("UPDATE projects SET revision = ?2, updated_at = ?3 WHERE id = ?1")
         .bind(id.to_string())
         .bind(db_revision(next)?)
@@ -493,51 +470,20 @@ async fn commit_revision(conn: &mut SqliteConnection, id: Uuid, next: Revision) 
     Ok(())
 }
 
-/// A stored subject's identity, kind and panels by number.
-struct SubjectRow {
-    id: Uuid,
-    mosaic: bool,
-    panels: BTreeMap<u32, Uuid>,
+/// The Project's subjects by Target: each one's id.
+async fn subject_ids(conn: &mut SqliteConnection, project: Uuid) -> Result<HashMap<Uuid, Uuid>> {
+    let rows: Vec<(String, String)> =
+        sqlx::query_as("SELECT target_id, id FROM project_subjects WHERE project_id = ?1")
+            .bind(project.to_string())
+            .fetch_all(&mut *conn)
+            .await?;
+    rows.iter().map(|(target, id)| Ok((parse_uuid(target)?, parse_uuid(id)?))).collect()
 }
 
-/// The Project's subjects by Target.
-async fn subject_rows(
-    conn: &mut SqliteConnection,
-    project: Uuid,
-) -> Result<HashMap<Uuid, SubjectRow>> {
-    let rows = sqlx::query(
-        "SELECT s.target_id, s.id, s.mosaic, p.number, p.id AS panel_id FROM project_subjects s \
-         LEFT JOIN subject_panels p ON p.subject_id = s.id WHERE s.project_id = ?1",
-    )
-    .bind(project.to_string())
-    .fetch_all(&mut *conn)
-    .await?;
-    let mut subjects: HashMap<Uuid, SubjectRow> = HashMap::new();
-    for row in &rows {
-        let target = parse_uuid(&row.try_get::<String, _>("target_id")?)?;
-        let entry = match subjects.entry(target) {
-            std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
-            std::collections::hash_map::Entry::Vacant(entry) => entry.insert(SubjectRow {
-                id: parse_uuid(&row.try_get::<String, _>("id")?)?,
-                mosaic: row.try_get::<i64, _>("mosaic")? == 1,
-                panels: BTreeMap::new(),
-            }),
-        };
-        if let Some(panel) = row.try_get::<Option<String>, _>("panel_id")? {
-            entry.panels.insert(panel_number(row.try_get("number")?)?, parse_uuid(&panel)?);
-        }
-    }
-    Ok(subjects)
-}
-
-fn panel_number(value: i64) -> Result<u32> {
-    u32::try_from(value)
-        .map_err(|_| LibraryError::PersistenceFailure(format!("corrupt panel number {value}")))
-}
-
-/// Keep each listed Target's subject and each listed panel number's panel,
-/// remove the rest with their goals, then remove each goal its subject's kind no
-/// longer takes. A subject or panel any run uses is never removed (D-W65).
+/// Keep each listed Target's subject and remove the rest, keeping their goals
+/// hidden; a Target listed again gets its hidden goals back (D-W128). A
+/// subject a held session joined on is never removed: the session's joined
+/// Target is fixed and its goals keep counting it (PRJ-AC-26).
 async fn write_subjects(
     conn: &mut SqliteConnection,
     project: Uuid,
@@ -546,93 +492,112 @@ async fn write_subjects(
     for subject in subjects {
         load_target(conn, subject.target_id).await?;
     }
-    let stored = subject_rows(conn, project).await?;
+    let stored = subject_ids(conn, project).await?;
     let listed: BTreeSet<Uuid> = subjects.iter().map(|subject| subject.target_id).collect();
     for (target, removed) in stored.iter().filter(|(target, _)| !listed.contains(target)) {
-        let designation = load_target(conn, *target).await?.candidate.designation;
-        let what = format!("subject {designation}");
-        views::refuse_if_used(conn, project, RunUse::Subject, removed.id, &what).await?;
-    }
-    for (_, removed) in stored.iter().filter(|(target, _)| !listed.contains(target)) {
-        for statement in [
-            "DELETE FROM project_goals WHERE subject_id = ?1",
-            "DELETE FROM subject_panels WHERE subject_id = ?1",
-            "DELETE FROM project_subjects WHERE id = ?1",
-        ] {
-            sqlx::query(statement).bind(removed.id.to_string()).execute(&mut *conn).await?;
+        let held: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM project_sessions WHERE project_id = ?1 AND target_id = ?2",
+        )
+        .bind(project.to_string())
+        .bind(target.to_string())
+        .fetch_one(&mut *conn)
+        .await?;
+        if held > 0 {
+            let designation = load_target(conn, *target).await?.candidate.designation;
+            return Err(LibraryError::InvalidInput(format!(
+                "subject {designation} holds {held} session{} of this Project; remove them \
+                 from the Project first",
+                if held == 1 { "" } else { "s" }
+            )));
         }
+        hide_goals(conn, *removed, *target).await?;
+        sqlx::query("DELETE FROM project_subjects WHERE id = ?1")
+            .bind(removed.to_string())
+            .execute(&mut *conn)
+            .await?;
     }
     for (position, subject) in (0_i64..).zip(subjects) {
-        let kept = stored.get(&subject.target_id);
-        let id = kept.map_or_else(Uuid::new_v4, |row| row.id);
+        let id = stored.get(&subject.target_id).copied().unwrap_or_else(Uuid::new_v4);
         sqlx::query(
-            "INSERT INTO project_subjects (id, project_id, target_id, mosaic, name, position) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6) ON CONFLICT (id) DO UPDATE SET \
-             mosaic = excluded.mosaic, name = excluded.name, position = excluded.position",
+            "INSERT INTO project_subjects (id, project_id, target_id, name, position) \
+             VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT (id) DO UPDATE SET \
+             name = excluded.name, position = excluded.position",
         )
         .bind(id.to_string())
         .bind(project.to_string())
         .bind(subject.target_id.to_string())
-        .bind(i64::from(subject.mosaic))
         .bind(subject.label())
         .bind(position)
         .execute(&mut *conn)
         .await?;
-        let panels = kept.map(|row| row.panels.clone()).unwrap_or_default();
-        write_panels(conn, project, id, &panels, &subject.panels).await?;
-    }
-    // Integration and frame-count goals of a mosaic subject name a panel.
-    sqlx::query(
-        "DELETE FROM project_goals WHERE project_id = ?1 AND kind <> 'quality_bar' \
-         AND panel_id IS NULL AND subject_id IN \
-         (SELECT id FROM project_subjects WHERE project_id = ?1 AND mosaic = 1)",
-    )
-    .bind(project.to_string())
-    .execute(&mut *conn)
-    .await?;
-    Ok(())
-}
-
-async fn write_panels(
-    conn: &mut SqliteConnection,
-    project: Uuid,
-    subject: Uuid,
-    stored: &BTreeMap<u32, Uuid>,
-    panels: &[PanelInput],
-) -> Result<()> {
-    let listed: BTreeSet<u32> = panels.iter().map(|panel| panel.number).collect();
-    for (number, removed) in stored.iter().filter(|(number, _)| !listed.contains(number)) {
-        let what = format!("panel {number}");
-        views::refuse_if_used(conn, project, RunUse::Panel, *removed, &what).await?;
-        for statement in [
-            "DELETE FROM project_goals WHERE panel_id = ?1",
-            "DELETE FROM subject_panels WHERE id = ?1",
-        ] {
-            sqlx::query(statement).bind(removed.to_string()).execute(&mut *conn).await?;
+        if !stored.contains_key(&subject.target_id) {
+            restore_hidden_goals(conn, project, subject.target_id).await?;
         }
     }
-    for panel in panels {
-        let id = stored.get(&panel.number).copied().unwrap_or_else(Uuid::new_v4);
-        sqlx::query(
-            "INSERT INTO subject_panels (id, subject_id, number, ra_deg, dec_deg, rotation_deg) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6) ON CONFLICT (id) DO UPDATE SET \
-             ra_deg = excluded.ra_deg, dec_deg = excluded.dec_deg, \
-             rotation_deg = excluded.rotation_deg",
-        )
-        .bind(id.to_string())
-        .bind(subject.to_string())
-        .bind(i64::from(panel.number))
-        .bind(panel.ra_deg)
-        .bind(panel.dec_deg)
-        .bind(panel.rotation_deg)
-        .execute(&mut *conn)
-        .await?;
-    }
     Ok(())
 }
 
-/// Replace the rig list in order. A rig any run uses is never removed
-/// (D-W65); a kept rig keeps its row, so the runs on it stay valid.
+/// Move the goals of `subject`, the subject of `target`, into the Project's
+/// hidden goals with their ids (D-W128): no read counts or shows them.
+async fn hide_goals(conn: &mut SqliteConnection, subject: Uuid, target: Uuid) -> Result<()> {
+    sqlx::query(
+        "INSERT INTO project_hidden_goals (id, project_id, target_id, group_id, kind, channel, \
+         goal_seconds, goal_frames, criterion, position) \
+         SELECT id, project_id, ?2, group_id, kind, channel, goal_seconds, goal_frames, \
+         criterion, position FROM project_goals WHERE subject_id = ?1",
+    )
+    .bind(subject.to_string())
+    .bind(target.to_string())
+    .execute(&mut *conn)
+    .await?;
+    sqlx::query("DELETE FROM project_goals WHERE subject_id = ?1")
+        .bind(subject.to_string())
+        .execute(&mut *conn)
+        .await?;
+    Ok(())
+}
+
+/// Give `target`'s subject, just added to `project`, the goals it had when it
+/// was removed, with their ids, after the Project's goals and in their order
+/// (D-W128). A panel goal whose group is gone or no longer a panel is
+/// dropped: no group is left for it.
+pub async fn restore_hidden_goals(
+    conn: &mut SqliteConnection,
+    project: Uuid,
+    target: Uuid,
+) -> Result<()> {
+    let next: i64 = sqlx::query_scalar(
+        "SELECT coalesce(max(position) + 1, 0) FROM project_goals WHERE project_id = ?1",
+    )
+    .bind(project.to_string())
+    .fetch_one(&mut *conn)
+    .await?;
+    sqlx::query(
+        "INSERT INTO project_goals (id, project_id, subject_id, group_id, kind, channel, \
+         goal_seconds, goal_frames, criterion, position) \
+         SELECT h.id, h.project_id, s.id, h.group_id, h.kind, h.channel, h.goal_seconds, \
+         h.goal_frames, h.criterion, ?3 + h.position FROM project_hidden_goals h \
+         JOIN project_subjects s ON s.project_id = h.project_id AND s.target_id = h.target_id \
+         WHERE h.project_id = ?1 AND h.target_id = ?2 AND (h.group_id IS NULL OR EXISTS \
+         (SELECT 1 FROM project_groups g WHERE g.project_id = h.project_id \
+         AND g.id = h.group_id AND g.panel = 1)) ORDER BY h.position",
+    )
+    .bind(project.to_string())
+    .bind(target.to_string())
+    .bind(next)
+    .execute(&mut *conn)
+    .await?;
+    sqlx::query("DELETE FROM project_hidden_goals WHERE project_id = ?1 AND target_id = ?2")
+        .bind(project.to_string())
+        .bind(target.to_string())
+        .execute(&mut *conn)
+        .await?;
+    Ok(())
+}
+
+/// Replace the rig list in order. A rig a group of the Project is on is
+/// never removed: groups follow rigs (PRJ-FR-31), and a group is removed only
+/// once it holds nothing.
 async fn write_rigs(conn: &mut SqliteConnection, project: Uuid, rig_ids: &[Uuid]) -> Result<()> {
     for rig in rig_ids {
         load_equipment(conn, *rig).await?;
@@ -646,11 +611,25 @@ async fn write_rigs(conn: &mut SqliteConnection, project: Uuid, rig_ids: &[Uuid]
     let mut removed = Vec::new();
     for rig in &stored {
         let rig = parse_uuid(rig)?;
-        if !listed.contains(&rig) {
-            let what = format!("rig {}", load_equipment(conn, rig).await?.name);
-            views::refuse_if_used(conn, project, RunUse::Rig, rig, &what).await?;
-            removed.push(rig);
+        if listed.contains(&rig) {
+            continue;
         }
+        let groups: Vec<String> = sqlx::query_scalar(
+            "SELECT name FROM project_groups WHERE project_id = ?1 AND rig_id = ?2 \
+             ORDER BY position",
+        )
+        .bind(project.to_string())
+        .bind(rig.to_string())
+        .fetch_all(&mut *conn)
+        .await?;
+        if !groups.is_empty() {
+            return Err(LibraryError::InvalidInput(format!(
+                "rig {} has groups in this Project ({}); remove them first",
+                load_equipment(conn, rig).await?.name,
+                groups.join(", ")
+            )));
+        }
+        removed.push(rig);
     }
     for rig in removed {
         sqlx::query("DELETE FROM project_rigs WHERE project_id = ?1 AND equipment_id = ?2")
@@ -673,51 +652,34 @@ async fn write_rigs(conn: &mut SqliteConnection, project: Uuid, rig_ids: &[Uuid]
     Ok(())
 }
 
-/// A goal's stored scope and identity.
+/// A goal's stored scope (subject, panel group) and identity.
 type GoalKey = (Uuid, Option<Uuid>, GoalIdentity);
 
 /// Replace the goal list, resolving each goal's Target to its subject and its
-/// panel number to the panel, and keeping the id of each goal whose key stays.
+/// group to a mosaic panel group of the Project, and keeping the id of each
+/// goal whose key stays.
 async fn write_goals(
     conn: &mut SqliteConnection,
     project: Uuid,
     goals: &[GoalInput],
 ) -> Result<()> {
-    let subjects = subject_rows(conn, project).await?;
+    let subjects = subject_ids(conn, project).await?;
     let mut stored: HashMap<GoalKey, Uuid> = HashMap::new();
     for row in goal_rows(conn, project).await? {
-        stored.insert(
-            (row.goal.subject_id, row.goal.panel_id, row.goal.goal.identity()),
-            row.goal.id,
-        );
+        let goal = &row.goal;
+        stored.insert((goal.subject_id, goal.group_id, goal.goal.identity()), goal.id);
     }
     let mut resolved = Vec::with_capacity(goals.len());
     for item in goals {
-        let subject =
-            subjects.get(&item.target_id).ok_or_else(|| not_a_subject(project, item.target_id))?;
-        let panel = match (subject.mosaic, item.panel) {
-            (false, Some(number)) => {
-                return Err(LibraryError::InvalidInput(format!(
-                    "subject {} is not a mosaic and has no panel {number}",
-                    subject.id
-                )));
-            }
-            (true, Some(number)) => Some(*subject.panels.get(&number).ok_or_else(|| {
-                LibraryError::NotFound(format!("panel {number} of subject {}", subject.id))
-            })?),
-            (true, None) if item.goal.counts_frames() => {
-                return Err(LibraryError::InvalidInput(format!(
-                    "the {} goal of mosaic subject {} names its panel",
-                    item.goal.kind_name(),
-                    subject.id
-                )));
-            }
-            (_, None) => None,
-        };
+        let subject_id =
+            *subjects.get(&item.target_id).ok_or_else(|| not_a_subject(project, item.target_id))?;
+        if let Some(group) = item.group_id {
+            require_panel_group(conn, project, group).await?;
+        }
         let goal = item.goal.normalized();
-        let key = (subject.id, panel, goal.identity());
+        let key = (subject_id, item.group_id, goal.identity());
         let id = stored.get(&key).copied().unwrap_or_else(Uuid::new_v4);
-        resolved.push(ProjectGoal { id, subject_id: subject.id, panel_id: panel, goal });
+        resolved.push(ProjectGoal { id, subject_id, group_id: item.group_id, goal });
     }
     sqlx::query("DELETE FROM project_goals WHERE project_id = ?1")
         .bind(project.to_string())
@@ -732,14 +694,14 @@ async fn write_goals(
             GoalSpec::QualityBar { criterion } => (None, None, Some(to_json(criterion)?)),
         };
         sqlx::query(
-            "INSERT INTO project_goals (id, project_id, subject_id, panel_id, kind, channel, \
+            "INSERT INTO project_goals (id, project_id, subject_id, group_id, kind, channel, \
              goal_seconds, goal_frames, criterion, position) \
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
         )
         .bind(goal.id.to_string())
         .bind(project.to_string())
         .bind(goal.subject_id.to_string())
-        .bind(goal.panel_id.map(|id| id.to_string()))
+        .bind(goal.group_id.map(|id| id.to_string()))
         .bind(goal.goal.kind_name())
         .bind(goal.goal.channel())
         .bind(seconds)
@@ -757,72 +719,26 @@ fn db_count(value: u64) -> Result<i64> {
         .map_err(|_| LibraryError::InvalidInput(format!("goal {value} out of range")))
 }
 
-/// Record one Project-only decision per mark inside the caller's transaction,
-/// all or nothing; the Project revision is not touched. A run's Review step
-/// calls this in the same transaction that removes the frame from its draft.
-///
-/// # Errors
-/// `InvalidInput` for empty or repeated marks, a Trashed frame or a copy of a
-/// retired location; `NotFound` for an unknown Project or asset; `Conflict`
-/// naming the asset at its current decision revision when the mark's expected
-/// revision is stale or its bytes changed since review.
-pub async fn write_rejections(
+/// A goal's group must be a mosaic panel group of the Project (PRJ-FR-03,
+/// PRJ-FR-29).
+async fn require_panel_group(
     conn: &mut SqliteConnection,
     project: Uuid,
-    marks: &[RejectionMark],
-) -> Result<Vec<ProjectRejection>> {
-    let mut seen = BTreeSet::new();
-    if marks.is_empty() || !marks.iter().all(|mark| seen.insert(mark.asset_id)) {
-        return Err(LibraryError::InvalidInput(
-            "rejection marks must be unique and non-empty".into(),
-        ));
+    group: Uuid,
+) -> Result<()> {
+    let panel: Option<i64> =
+        sqlx::query_scalar("SELECT panel FROM project_groups WHERE id = ?1 AND project_id = ?2")
+            .bind(group.to_string())
+            .bind(project.to_string())
+            .fetch_optional(&mut *conn)
+            .await?;
+    match panel {
+        None => Err(LibraryError::NotFound(format!("group {group} of project {project}"))),
+        Some(1) => Ok(()),
+        Some(_) => Err(LibraryError::InvalidInput(format!(
+            "group {group} is not a mosaic panel; only a panel group has its own goals"
+        ))),
     }
-    require_project(conn, project).await?;
-    let decided_at = now()?;
-    let mut decided = Vec::with_capacity(marks.len());
-    for mark in marks {
-        let asset = load_asset(conn, mark.asset_id).await?;
-        if asset.availability == Availability::Trashed {
-            return Err(LibraryError::InvalidInput(format!(
-                "asset {} is in the Trash and takes no Project decision",
-                asset.id
-            )));
-        }
-        require_decidable(&asset)?;
-        let current: Option<i64> = sqlx::query_scalar(
-            "SELECT max(revision) FROM project_rejections WHERE project_id = ?1 AND asset_id = ?2",
-        )
-        .bind(project.to_string())
-        .bind(asset.id.to_string())
-        .fetch_one(&mut *conn)
-        .await?;
-        let current = current.map(revision).transpose()?.unwrap_or(0);
-        require_revision(asset.id, current, mark.expected_revision)?;
-        if !fingerprint_matches(&asset.fingerprint, &mark.fingerprint) {
-            return Err(conflict(asset.id, current));
-        }
-        let next = current + 1;
-        sqlx::query(
-            "INSERT INTO project_rejections (project_id, asset_id, revision, rejected, fingerprint, \
-             decided_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-        )
-        .bind(project.to_string())
-        .bind(asset.id.to_string())
-        .bind(db_revision(next)?)
-        .bind(i64::from(mark.rejected))
-        .bind(to_json(&asset.fingerprint)?)
-        .bind(&decided_at)
-        .execute(&mut *conn)
-        .await?;
-        decided.push(ProjectRejection {
-            asset_id: asset.id,
-            revision: next,
-            rejected: mark.rejected,
-            fingerprint: asset.fingerprint,
-            decided_at: decided_at.clone(),
-        });
-    }
-    Ok(decided)
 }
 
 fn require_user_template(id: Uuid) -> Result<()> {
@@ -862,7 +778,7 @@ fn template_from_row(row: &SqliteRow) -> Result<GoalTemplate> {
 
 pub async fn load_project(conn: &mut SqliteConnection, id: Uuid) -> Result<Project> {
     let row = sqlx::query(
-        "SELECT name, notes, state, done_at, revision, created_at, updated_at FROM projects \
+        "SELECT name, notes, lifecycle, closed_at, revision, created_at, updated_at FROM projects \
          WHERE id = ?1",
     )
     .bind(id.to_string())
@@ -879,8 +795,8 @@ pub async fn load_project(conn: &mut SqliteConnection, id: Uuid) -> Result<Proje
         id,
         name: row.try_get("name")?,
         notes: row.try_get("notes")?,
-        state: from_text(&row.try_get::<String, _>("state")?)?,
-        done_at: row.try_get("done_at")?,
+        lifecycle: from_text(&row.try_get::<String, _>("lifecycle")?)?,
+        closed_at: row.try_get("closed_at")?,
         revision: revision(row.try_get("revision")?)?,
         created_at: row.try_get("created_at")?,
         updated_at: row.try_get("updated_at")?,
@@ -892,58 +808,35 @@ pub async fn load_project(conn: &mut SqliteConnection, id: Uuid) -> Result<Proje
 
 async fn load_subjects(conn: &mut SqliteConnection, project: Uuid) -> Result<Vec<ProjectSubject>> {
     let rows = sqlx::query(
-        "SELECT s.id, s.target_id, t.designation, s.name, s.mosaic FROM project_subjects s \
+        "SELECT s.id, s.target_id, t.designation, s.name FROM project_subjects s \
          JOIN targets t ON t.id = s.target_id WHERE s.project_id = ?1 ORDER BY s.position",
     )
     .bind(project.to_string())
     .fetch_all(&mut *conn)
     .await?;
-    let mut subjects = Vec::with_capacity(rows.len());
-    for row in &rows {
-        let id = parse_uuid(&row.try_get::<String, _>("id")?)?;
-        let panels = sqlx::query(
-            "SELECT id, number, ra_deg, dec_deg, rotation_deg FROM subject_panels \
-             WHERE subject_id = ?1 ORDER BY number",
-        )
-        .bind(id.to_string())
-        .fetch_all(&mut *conn)
-        .await?
-        .iter()
-        .map(|panel| {
-            Ok(SubjectPanel {
-                id: parse_uuid(&panel.try_get::<String, _>("id")?)?,
-                number: panel_number(panel.try_get("number")?)?,
-                ra_deg: panel.try_get("ra_deg")?,
-                dec_deg: panel.try_get("dec_deg")?,
-                rotation_deg: panel.try_get("rotation_deg")?,
+    rows.iter()
+        .map(|row| {
+            Ok(ProjectSubject {
+                id: parse_uuid(&row.try_get::<String, _>("id")?)?,
+                target_id: parse_uuid(&row.try_get::<String, _>("target_id")?)?,
+                designation: row.try_get("designation")?,
+                name: row.try_get("name")?,
             })
         })
-        .collect::<Result<Vec<_>>>()?;
-        subjects.push(ProjectSubject {
-            id,
-            target_id: parse_uuid(&row.try_get::<String, _>("target_id")?)?,
-            designation: row.try_get("designation")?,
-            name: row.try_get("name")?,
-            mosaic: row.try_get::<i64, _>("mosaic")? == 1,
-            panels,
-        });
-    }
-    Ok(subjects)
+        .collect()
 }
 
-/// A stored goal with the Target and panel number that name it in inputs.
+/// A stored goal with the Target that names it in inputs.
 struct GoalRow {
     goal: ProjectGoal,
     target_id: Uuid,
-    panel: Option<u32>,
 }
 
 async fn goal_rows(conn: &mut SqliteConnection, project: Uuid) -> Result<Vec<GoalRow>> {
     let rows = sqlx::query(
-        "SELECT g.id, g.subject_id, g.panel_id, g.kind, g.channel, g.goal_seconds, \
-         g.goal_frames, g.criterion, s.target_id, p.number FROM project_goals g \
+        "SELECT g.id, g.subject_id, g.group_id, g.kind, g.channel, g.goal_seconds, \
+         g.goal_frames, g.criterion, s.target_id FROM project_goals g \
          JOIN project_subjects s ON s.id = g.subject_id \
-         LEFT JOIN subject_panels p ON p.id = g.panel_id \
          WHERE g.project_id = ?1 ORDER BY g.position",
     )
     .bind(project.to_string())
@@ -972,20 +865,18 @@ async fn goal_rows(conn: &mut SqliteConnection, project: Uuid) -> Result<Vec<Goa
                 other => {
                     return Err(LibraryError::PersistenceFailure(format!(
                         "corrupt goal kind {other}"
-                    )))
+                    )));
                 }
             };
-            let panel_id: Option<String> = row.try_get("panel_id")?;
-            let number: Option<i64> = row.try_get("number")?;
+            let group_id: Option<String> = row.try_get("group_id")?;
             Ok(GoalRow {
                 goal: ProjectGoal {
                     id: parse_uuid(&row.try_get::<String, _>("id")?)?,
                     subject_id: parse_uuid(&row.try_get::<String, _>("subject_id")?)?,
-                    panel_id: panel_id.as_deref().map(parse_uuid).transpose()?,
+                    group_id: group_id.as_deref().map(parse_uuid).transpose()?,
                     goal,
                 },
                 target_id: parse_uuid(&row.try_get::<String, _>("target_id")?)?,
-                panel: number.map(panel_number).transpose()?,
             })
         })
         .collect()
@@ -996,24 +887,27 @@ async fn goal_inputs(conn: &mut SqliteConnection, project: Uuid) -> Result<Vec<G
     Ok(goal_rows(conn, project)
         .await?
         .into_iter()
-        .map(|row| GoalInput { target_id: row.target_id, panel: row.panel, goal: row.goal.goal })
+        .map(|row| GoalInput {
+            target_id: row.target_id,
+            group_id: row.goal.group_id,
+            goal: row.goal.goal,
+        })
         .collect())
 }
 
 /// The Project's candidates on `conn`'s snapshot: current sessions with a
-/// confirmed subject Target and a confirmed Project rig that hold a frame
-/// outside the Trash, each with only those frames.
+/// confirmed-or-evidence-qualified subject Target and a confirmed Project rig
+/// that hold a frame outside the Trash, each with only those frames.
 pub async fn candidates(
     conn: &mut SqliteConnection,
     project: Uuid,
 ) -> Result<Vec<ProjectCandidate>> {
     let rows = sqlx::query(
         "SELECT s.id AS session_id, s.grouping_revision, s.decision_revision, s.date_basis, \
-         ps.id AS subject_id, ea.equipment_id AS rig_id, \
-         (SELECT json_group_array(a.id) FROM live_assets a WHERE a.session_id = s.id) AS asset_ids \
+         ps.id AS subject_id, ea.equipment_id AS rig_id, ta.state AS target_state, \
+         ta.evidence AS target_evidence, (SELECT json_group_array(a.id) FROM live_assets a WHERE a.session_id = s.id) AS asset_ids \
          FROM project_subjects ps \
-         JOIN associations ta ON ta.kind = 'target' AND ta.state = 'confirmed' \
-         AND ta.target_id = ps.target_id \
+         JOIN associations ta ON ta.kind = 'target' AND ta.target_id = ps.target_id \
          JOIN sessions s ON s.id = ta.session_id AND s.superseded_by IS NULL \
          JOIN associations ea ON ea.session_id = s.id AND ea.kind = 'equipment' \
          AND ea.state = 'confirmed' \
@@ -1024,54 +918,33 @@ pub async fn candidates(
     .bind(project.to_string())
     .fetch_all(&mut *conn)
     .await?;
-    rows.iter()
-        .map(|row| {
-            let ids: Vec<String> = from_json(&row.try_get::<String, _>("asset_ids")?)?;
-            let mut asset_ids = ids.iter().map(|id| parse_uuid(id)).collect::<Result<Vec<_>>>()?;
-            asset_ids.sort_unstable();
-            Ok(ProjectCandidate {
-                session_id: parse_uuid(&row.try_get::<String, _>("session_id")?)?,
-                grouping_revision: revision(row.try_get("grouping_revision")?)?,
-                decision_revision: revision(row.try_get("decision_revision")?)?,
-                date_basis: row.try_get("date_basis")?,
-                subject_id: parse_uuid(&row.try_get::<String, _>("subject_id")?)?,
-                rig_id: parse_uuid(&row.try_get::<String, _>("rig_id")?)?,
-                asset_ids,
-            })
-        })
-        .collect()
-}
-
-/// The latest Project-only decision of each asset outside the Trash, by asset.
-pub async fn latest_rejections(
-    conn: &mut SqliteConnection,
-    project: Uuid,
-) -> Result<Vec<ProjectRejection>> {
-    let rows = sqlx::query(
-        "SELECT r.asset_id, r.revision, r.rejected, r.fingerprint, r.decided_at \
-         FROM project_rejections r JOIN live_assets a ON a.id = r.asset_id \
-         WHERE r.project_id = ?1 AND r.revision = (SELECT max(x.revision) \
-         FROM project_rejections x WHERE x.project_id = r.project_id AND x.asset_id = r.asset_id) \
-         ORDER BY r.asset_id",
-    )
-    .bind(project.to_string())
-    .fetch_all(&mut *conn)
-    .await?;
-    rows.iter()
-        .map(|row| {
-            Ok(ProjectRejection {
-                asset_id: parse_uuid(&row.try_get::<String, _>("asset_id")?)?,
-                revision: revision(row.try_get("revision")?)?,
-                rejected: row.try_get::<i64, _>("rejected")? == 1,
-                fingerprint: from_json(&row.try_get::<String, _>("fingerprint")?)?,
-                decided_at: row.try_get("decided_at")?,
-            })
-        })
-        .collect()
+    let mut candidates = Vec::with_capacity(rows.len());
+    for row in &rows {
+        let state: platevault_model::AssociationState =
+            from_text(&row.try_get::<String, _>("target_state")?)?;
+        let evidence: Vec<platevault_model::EvidenceItem> =
+            from_json(&row.try_get::<String, _>("target_evidence")?)?;
+        if !counts_as_confirmed(&state, &evidence) {
+            continue;
+        }
+        let ids: Vec<String> = from_json(&row.try_get::<String, _>("asset_ids")?)?;
+        let mut asset_ids = ids.iter().map(|id| parse_uuid(id)).collect::<Result<Vec<_>>>()?;
+        asset_ids.sort_unstable();
+        candidates.push(ProjectCandidate {
+            session_id: parse_uuid(&row.try_get::<String, _>("session_id")?)?,
+            grouping_revision: revision(row.try_get("grouping_revision")?)?,
+            decision_revision: revision(row.try_get("decision_revision")?)?,
+            date_basis: row.try_get("date_basis")?,
+            subject_id: parse_uuid(&row.try_get::<String, _>("subject_id")?)?,
+            rig_id: parse_uuid(&row.try_get::<String, _>("rig_id")?)?,
+            asset_ids,
+        });
+    }
+    Ok(candidates)
 }
 
 // ---------------------------------------------------------------------------
-// Progress (PRJ-FR-03, PRJ-FR-04, D-W36, D-W44, D-W45, D-W66, D-W72)
+// Progress (PRJ-FR-03, PRJ-FR-04, PRJ-FR-29, D-W36, D-W43, D-W66, D-W96)
 // ---------------------------------------------------------------------------
 
 /// A Project's goal progress, read from one catalog snapshot at the
@@ -1086,10 +959,12 @@ pub struct ProgressBasis {
 
 impl Catalog {
     /// Goal progress of Project `id` (PRJ-FR-04) from one catalog snapshot.
-    /// "in project" reads the latest saved revision of each run outside the
-    /// Project's Trash; a median-FWHM bar reads the latest `method` record
-    /// that is valid for the frame's current bytes (PIX R12). Hashes,
-    /// measures and writes nothing.
+    /// "in project" counts the frames of the Project's own sessions that its
+    /// next View places, each content-identical frame once; "captured" adds
+    /// its excluded frames and the frames of its suggestions. Each Project
+    /// counts its own sessions, so a session two Projects hold counts in
+    /// each. A median-FWHM bar reads the latest `method` record valid for the
+    /// frame's current bytes (PIX R12). Hashes, measures and writes nothing.
     ///
     /// # Errors
     /// `NotFound` for an unknown Project; `PersistenceFailure` when the
@@ -1107,11 +982,13 @@ impl Catalog {
     }
 }
 
-/// Where the latest saved revision of a run outside the Trash holds a frame.
+/// Where the Project holds a frame: the subject of its session's confirmed
+/// Target and its group.
 struct Holding {
-    subject_id: Uuid,
-    panel_id: Option<Uuid>,
-    /// Included, with the bytes the run chose (R16): it counts in project.
+    subject_id: Option<Uuid>,
+    group_id: Uuid,
+    /// The next build places it: its inclusion admits its live quality
+    /// (VSEL-FR-15), so it counts in project.
     counts: bool,
 }
 
@@ -1122,9 +999,10 @@ struct Frame {
     channel: Option<String>,
     exposure: Option<Microseconds>,
     quality: ApplicableQuality,
-    fwhm_median: Option<f64>,
-    rejected: bool,
-    /// The subjects it is a candidate of.
+    /// The median FWHM in arcseconds; `None` without a valid measured value
+    /// or the frame's pixel scale.
+    fwhm_arcsec: Option<f64>,
+    /// The subjects whose suggestions hold it.
     candidate_of: BTreeSet<Uuid>,
     holdings: Vec<Holding>,
 }
@@ -1134,42 +1012,44 @@ const fn counted(asset: &Asset) -> bool {
     !matches!(asset.availability, Availability::Trashed | Availability::Retired)
 }
 
-async fn progress_basis(
+pub async fn progress_basis(
     conn: &mut SqliteConnection,
     id: Uuid,
     method: &MeasurementMethod,
 ) -> Result<ProgressBasis> {
     let project = load_project(conn, id).await?;
-    let candidates = candidates(conn, id).await?;
-    let members = saved_members(conn, id).await?;
+    let suggested = project_inputs::suggested(conn, id).await?;
+    let held = project_inputs::held_captures(conn, id).await?;
     let mut ids: BTreeSet<Uuid> =
-        candidates.iter().flat_map(|candidate| candidate.asset_ids.iter().copied()).collect();
-    ids.extend(members.iter().flat_map(|(_, member)| member.copies.iter().map(|c| c.asset_id)));
+        suggested.iter().flat_map(|(candidate, _)| candidate.asset_ids.iter().copied()).collect();
+    ids.extend(held.iter().flat_map(|held| held.capture.copies.iter().map(|c| c.asset_id)));
     let assets: Vec<Asset> = load_assets(conn, &ids).await?.into_iter().filter(counted).collect();
+    let live: HashMap<Uuid, &Asset> = assets.iter().map(|asset| (asset.id, asset)).collect();
     let captures = CaptureView::read(conn, &[], &assets).await?;
     let (of_asset, copies) = content_frames(&captures, &assets);
     let copy_ids: BTreeSet<Uuid> = copies.iter().flatten().map(|copy| copy.id).collect();
     let mut records = measurements::latest_records(conn, &copy_ids, &method.name).await?;
-    let rejected: BTreeSet<Uuid> = latest_rejections(conn, id)
-        .await?
-        .into_iter()
-        .filter(|decision| decision.rejected)
-        .map(|decision| decision.asset_id)
-        .collect();
     let mut frames: Vec<Frame> =
-        copies.iter().map(|copies| frame_of(copies, &mut records, method, &rejected)).collect();
-    for (holding, member) in members {
-        let copy = std::iter::once(member.member.member_key)
-            .chain(member.copies.iter().map(|copy| copy.asset_id))
-            .find_map(|asset| of_asset.get(&asset).copied());
-        // A member with no counted copy left leaves both numbers.
-        if let Some(index) = copy {
-            let counts =
-                member.member.state == MemberState::Included && !member.changed_since_review;
-            frames[index].holdings.push(Holding { counts, ..holding });
-        }
+        copies.iter().map(|copies| frame_of(copies, &mut records, method)).collect();
+    for held in held {
+        let capture = &held.capture;
+        let live_copies: Vec<&Asset> =
+            capture.copies.iter().filter_map(|copy| live.get(&copy.asset_id).copied()).collect();
+        // A capture with no counted copy left leaves both numbers.
+        let Some(index) = std::iter::once(capture.capture_key)
+            .chain(capture.copies.iter().map(|copy| copy.asset_id))
+            .find_map(|asset| of_asset.get(&asset).copied())
+        else {
+            continue;
+        };
+        let counts = capture.inclusion.admits(project_inputs::live_quality(&live_copies));
+        frames[index].holdings.push(Holding {
+            subject_id: held.subject_id,
+            group_id: held.group_id,
+            counts,
+        });
     }
-    for candidate in &candidates {
+    for (candidate, _) in &suggested {
         for asset in &candidate.asset_ids {
             let Some(&index) = of_asset.get(asset) else { continue };
             frames[index].candidate_of.insert(candidate.subject_id);
@@ -1182,36 +1062,6 @@ async fn progress_basis(
         .map(|goal| goal_progress(&project.goals, goal, &frames))
         .collect();
     Ok(ProgressBasis { project_id: project.id, revision: project.revision, goals })
-}
-
-/// Every member of the latest saved revision of each run of `project` outside
-/// its Trash, with where the run holds it; `counts` is filled by the caller.
-async fn saved_members(
-    conn: &mut SqliteConnection,
-    project: Uuid,
-) -> Result<Vec<(Holding, MemberBasis)>> {
-    let rows = sqlx::query(
-        "SELECT id, subject_id, panel_id FROM views \
-         WHERE project_id = ?1 AND trashed_at IS NULL AND revision > 0 ORDER BY id",
-    )
-    .bind(project.to_string())
-    .fetch_all(&mut *conn)
-    .await?;
-    let mut members = Vec::new();
-    for row in &rows {
-        let view = parse_uuid(&row.try_get::<String, _>("id")?)?;
-        let subject_id = parse_uuid(&row.try_get::<String, _>("subject_id")?)?;
-        let panel_id =
-            row.try_get::<Option<String>, _>("panel_id")?.as_deref().map(parse_uuid).transpose()?;
-        let saved = views::read_membership(conn, view, Membership::Committed).await?;
-        members.extend(
-            saved
-                .members
-                .into_iter()
-                .map(|member| (Holding { subject_id, panel_id, counts: false }, member)),
-        );
-    }
-    Ok(members)
 }
 
 /// Group counted copies into content-identical frames: logical captures (D16)
@@ -1278,13 +1128,12 @@ fn root(parent: &HashMap<String, String>, key: &str) -> String {
 
 /// A frame's facts from its counted copies: image type, channel and exposure
 /// from its primary copy (Available first), applicable quality over every
-/// copy, the median FWHM of the first copy with a valid measured record, and
-/// whether a copy carries an effective Project-only reject.
+/// copy, and the median FWHM in arcseconds of the first copy with a valid
+/// measured record and a known pixel scale.
 fn frame_of(
     copies: &[Asset],
     records: &mut HashMap<Uuid, MeasurementRecord>,
     method: &MeasurementMethod,
-    rejected: &BTreeSet<Uuid>,
 ) -> Frame {
     let primary = copies
         .iter()
@@ -1293,7 +1142,7 @@ fn frame_of(
         })
         .expect("a frame holds at least one copy");
     let effective = &primary.effective;
-    let fwhm_median = copies.iter().find_map(|copy| {
+    let fwhm_arcsec = copies.iter().find_map(|copy| {
         let record = records.remove(&copy.id)?;
         if measurements::validity(copy, Some(&record), method) != RecordValidity::Valid {
             return None;
@@ -1304,7 +1153,7 @@ fn frame_of(
             .find(|value| {
                 value.metric == MetricId::FwhmMedian && value.state == MetricState::Measured
             })
-            .and_then(|value| value.value)
+            .and_then(|value| fwhm_in_arcsec(&value, &copy.effective))
     });
     Frame {
         light: effective.is_light(),
@@ -1316,25 +1165,54 @@ fn frame_of(
             .map(str::to_owned),
         exposure: effective.exposure_seconds.and_then(Microseconds::from_seconds),
         quality: capture_quality(&copies.iter().collect::<Vec<_>>()),
-        fwhm_median,
-        rejected: copies.iter().any(|copy| rejected.contains(&copy.id)),
+        fwhm_arcsec,
         candidate_of: BTreeSet::new(),
         holdings: Vec::new(),
     }
 }
 
+/// A median FWHM in arcseconds: an arcsecond value as recorded, a pixel value
+/// through the frame's pixel scale, and `None` for another unit, no value or
+/// an unknown scale (PRJ-FR-03).
+fn fwhm_in_arcsec(value: &MetricValue, frame: &CaptureMetadata) -> Option<f64> {
+    let fwhm = value.value?;
+    match value.units {
+        Units::Arcsec => Some(fwhm),
+        Units::Px => Some(fwhm * pixel_scale_arcsec(frame)?),
+        _ => None,
+    }
+}
+
+/// Arcseconds per pixel from the frame's FOCALLEN and XPIXSZ; `None` when
+/// either, or the frame size `target_match` completes the field with, is
+/// unknown. XPIXSZ already includes binning ("physical X dimension of the
+/// sensor's pixels in microns … Includes binning", the `MaxIm DL` FITS File
+/// Header Definitions,
+/// <https://cdn.diffractionlimited.com/help/maximdl/FITS_File_Header_Definitions.htm>),
+/// as N.I.N.A. writes it too, so binning stays 1×1 here.
+fn pixel_scale_arcsec(frame: &CaptureMetadata) -> Option<f64> {
+    let pixel = frame.pixel_size_um?;
+    let field = Field::from_optics(Optics {
+        focal_mm: frame.focal_length_mm?,
+        pixel_um: (pixel, pixel),
+        binning: (1, 1),
+        pixels: (frame.width?, frame.height?),
+    })
+    .ok()?;
+    field.pixel_scale().map(|(x, _)| x)
+}
+
 /// One goal's two numbers over `frames`, each counted once. A frame is
-/// captured when it is a candidate of the subject, or a member of a run on the
-/// subject (and panel); it is in project when such a run includes it with the
-/// bytes it chose, no Project-only reject holds it and every bar admits it.
-/// Mosaic panels take members only: a candidate names no panel.
+/// captured when the Project holds it in a session on the goal's subject (in
+/// the goal's panel group, for a panel goal), whether it is placed or not,
+/// or when a suggestion on the subject holds it; it is in project when the
+/// Project holds it there, its next View places it and every bar admits it.
+/// Panel goals take held frames only: a suggestion is in no group.
 fn goal_progress(goals: &[ProjectGoal], goal: &ProjectGoal, frames: &[Frame]) -> GoalProgress {
+    let scoped = |scope: Option<Uuid>, of: Option<Uuid>| scope.is_none() || scope == of;
     let quality_bars: Vec<QualityCriterion> = goals
         .iter()
-        .filter(|bar| {
-            bar.subject_id == goal.subject_id
-                && (bar.panel_id.is_none() || bar.panel_id == goal.panel_id)
-        })
+        .filter(|bar| bar.subject_id == goal.subject_id && scoped(bar.group_id, goal.group_id))
         .filter_map(|bar| match &bar.goal {
             GoalSpec::QualityBar { criterion } => Some(criterion.clone()),
             _ => None,
@@ -1354,17 +1232,17 @@ fn goal_progress(goals: &[ProjectGoal], goal: &ProjectGoal, frames: &[Frame]) ->
             continue;
         }
         let mut held = frame.holdings.iter().filter(|holding| {
-            holding.subject_id == goal.subject_id
-                && (goal.panel_id.is_none() || holding.panel_id == goal.panel_id)
+            holding.subject_id == Some(goal.subject_id)
+                && scoped(goal.group_id, Some(holding.group_id))
         });
         let member = held.clone().next().is_some();
         let counts = held.any(|holding| holding.counts);
-        let candidate = goal.panel_id.is_none() && frame.candidate_of.contains(&goal.subject_id);
+        let candidate = goal.group_id.is_none() && frame.candidate_of.contains(&goal.subject_id);
         if !member && !candidate {
             continue;
         }
         progress.captured.count(frame.light, frame.exposure);
-        if !counts || frame.rejected {
+        if !counts {
             continue;
         }
         match admits(&progress.quality_bars, frame) {
@@ -1388,8 +1266,8 @@ fn admits(bars: &[QualityCriterion], frame: &Frame) -> Option<bool> {
                     return Some(false);
                 }
             }
-            QualityCriterion::MaxFwhmMedian { max_px } => match frame.fwhm_median {
-                Some(value) if value <= *max_px => {}
+            QualityCriterion::MaxFwhmMedian { max_arcsec } => match frame.fwhm_arcsec {
+                Some(value) if value <= *max_arcsec => {}
                 Some(_) => return Some(false),
                 None => unknown = true,
             },
@@ -1399,125 +1277,202 @@ fn admits(bars: &[QualityCriterion], frame: &Frame) -> Option<bool> {
 }
 
 // ---------------------------------------------------------------------------
-// State (PRJ-FR-14, PRJ-FR-20, D-W26, D-W46, D-W48, D-W69, D-W72)
+// Duplicate (PRJ-FR-30; D-W96, D-W112). Closing is Wrap up's
+// (`project_wrap_up`); there is no Reopen (PRJ-FR-32).
 // ---------------------------------------------------------------------------
 
 impl Catalog {
-    /// The user's Mark Done: the open Project becomes Done. Refused while any
-    /// run outside the Project's Trash is not Complete, naming each with its
-    /// stage so the user completes it or moves it to the Trash. Meeting the
-    /// goals never marks a Project Done; only this write does. Moves no file.
+    /// Duplicate… (PRJ-FR-30; D-W96, D-W112): a new open Project at revision
+    /// 1 with the source's subjects and rigs, the chosen `sessions` in copies
+    /// of their groups with their placement, joined Target and frame
+    /// overrides, and, as ticked, its goals, notes and View settings. Each
+    /// session joins through the admission rule on its current calibration
+    /// pins, never the source's Close snapshot. No file is copied: the
+    /// duplicate has no View until its first Apply, and nothing links it to
+    /// the source, which stays unchanged. Open, Closed and Archived Projects
+    /// duplicate alike.
     ///
     /// # Errors
-    /// `Conflict` for a stale revision; `NotFound` for an unknown Project;
-    /// `InvalidInput` naming each run that is not Complete, or for a Project
-    /// already Done.
-    pub async fn mark_project_done(&self, id: Uuid, expected: Revision) -> Result<Project> {
+    /// `InvalidInput` for a blank name, a session the source doesn't hold,
+    /// or one the admission rule refuses now, naming its blockers;
+    /// `Conflict` for a session regrouped since; `NotFound` for an unknown
+    /// Project.
+    pub async fn duplicate_project(&self, request: &DuplicateRequest) -> Result<Project> {
+        validate_project_name(&request.name)?;
         let project = write_txn!(self, |conn| {
-            let next = next_project_revision(conn, id, expected).await?;
-            let (name, state) = project_state(conn, id).await?;
-            if state == ProjectState::Done {
+            let source = load_project(conn, request.project_id).await?;
+            let desired = project_inputs::read_desired(conn, request.project_id).await?;
+            let chosen: BTreeSet<Uuid> = request.sessions.iter().copied().collect();
+            if let Some(stray) = chosen
+                .iter()
+                .find(|session| desired.sessions.iter().all(|held| held.session_id != **session))
+            {
                 return Err(LibraryError::InvalidInput(format!(
-                    "Project '{name}' is already Done"
+                    "session {stray} is not in Project '{}'",
+                    source.name
                 )));
             }
-            let open = open_runs(conn, id).await?;
-            if !open.is_empty() {
-                return Err(LibraryError::InvalidInput(format!(
-                    "Project '{name}' cannot be marked Done until every run outside its Trash \
-                     is Complete; for each, complete it or move it to the Trash: {}",
-                    open.join("; ")
-                )));
+            let id = Uuid::new_v4();
+            let at = now()?;
+            sqlx::query(
+                "INSERT INTO projects (id, name, notes, revision, created_at, updated_at) \
+                 VALUES (?1, ?2, ?3, 1, ?4, ?4)",
+            )
+            .bind(id.to_string())
+            .bind(request.name.trim())
+            .bind(if request.notes { notes(source.notes.as_deref()) } else { None })
+            .bind(&at)
+            .execute(&mut *conn)
+            .await?;
+            if request.settings {
+                copy_view_settings(conn, id, &desired.settings).await?;
             }
-            set_state(conn, id, ProjectState::Done, Some(&now()?)).await?;
-            commit_revision(conn, id, next).await?;
-            load_project(conn, id).await?
-        });
-        Ok(project)
-    }
-
-    /// Reopen a Done Project, even after Archive: it is open again with its
-    /// subjects, rigs, goals, runs and members unchanged. Moves no file;
-    /// archived sessions stay Archived until the user restores them.
-    ///
-    /// # Errors
-    /// `Conflict` for a stale revision; `NotFound` for an unknown Project;
-    /// `InvalidInput` for a Project that is open.
-    pub async fn reopen_project(&self, id: Uuid, expected: Revision) -> Result<Project> {
-        let project = write_txn!(self, |conn| {
-            let next = next_project_revision(conn, id, expected).await?;
-            let (name, state) = project_state(conn, id).await?;
-            if state == ProjectState::Open {
-                return Err(LibraryError::InvalidInput(format!("Project '{name}' is not Done")));
+            write_subjects(conn, id, &subject_inputs(&source)).await?;
+            write_rigs(conn, id, &source.rig_ids).await?;
+            let goal_groups: BTreeSet<Uuid> = if request.goals {
+                source.goals.iter().filter_map(|goal| goal.group_id).collect()
+            } else {
+                BTreeSet::new()
+            };
+            let groups = copy_groups(conn, id, &desired, &chosen, &goal_groups).await?;
+            copy_sessions(conn, id, &desired, &chosen, &groups).await?;
+            if request.goals {
+                let mut goals = goal_inputs(conn, request.project_id).await?;
+                for goal in &mut goals {
+                    goal.group_id = goal.group_id.and_then(|group| groups.get(&group).copied());
+                }
+                write_goals(conn, id, &goals).await?;
             }
-            set_state(conn, id, ProjectState::Open, None).await?;
-            commit_revision(conn, id, next).await?;
             load_project(conn, id).await?
         });
         Ok(project)
     }
 }
 
-/// The Project's name and state.
-async fn project_state(conn: &mut SqliteConnection, id: Uuid) -> Result<(String, ProjectState)> {
-    let row = sqlx::query("SELECT name, state FROM projects WHERE id = ?1")
-        .bind(id.to_string())
-        .fetch_optional(&mut *conn)
-        .await?
-        .ok_or_else(|| LibraryError::NotFound(format!("project {id}")))?;
-    Ok((row.try_get("name")?, from_text(&row.try_get::<String, _>("state")?)?))
-}
-
-async fn set_state(
+/// Copy the source's groups that hold a chosen session or carry a goal the
+/// duplicate keeps, with fresh ids; returns the source id → copy id map.
+async fn copy_groups(
     conn: &mut SqliteConnection,
     id: Uuid,
-    state: ProjectState,
-    done_at: Option<&str>,
+    desired: &ProjectDesired,
+    chosen: &BTreeSet<Uuid>,
+    goal_groups: &BTreeSet<Uuid>,
+) -> Result<HashMap<Uuid, Uuid>> {
+    let mut groups = HashMap::new();
+    for group in &desired.groups {
+        let holds = desired
+            .sessions
+            .iter()
+            .any(|held| held.group_id == group.id && chosen.contains(&held.session_id));
+        if !holds && !goal_groups.contains(&group.id) {
+            continue;
+        }
+        let copy = NewGroup {
+            id: Uuid::new_v4(),
+            rig_id: group.rig_id,
+            name: group.name.clone(),
+            origin: group.origin,
+            optics: group.optics.clone(),
+            framing: group.framing,
+        };
+        project_inputs::insert_group(conn, id, &copy).await?;
+        if group.panel {
+            sqlx::query("UPDATE project_groups SET panel = 1 WHERE id = ?1")
+                .bind(copy.id.to_string())
+                .execute(&mut *conn)
+                .await?;
+        }
+        groups.insert(group.id, copy.id);
+    }
+    Ok(groups)
+}
+
+/// Add each chosen session to its group's copy through the admission rule
+/// (its current pins), on the Target it joined the source on, with its live
+/// captures; the user's own frame choices carry over, every other capture
+/// follows the Library as it stands now.
+async fn copy_sessions(
+    conn: &mut SqliteConnection,
+    id: Uuid,
+    desired: &ProjectDesired,
+    chosen: &BTreeSet<Uuid>,
+    groups: &HashMap<Uuid, Uuid>,
 ) -> Result<()> {
-    sqlx::query("UPDATE projects SET state = ?2, done_at = ?3 WHERE id = ?1")
-        .bind(id.to_string())
-        .bind(to_text(&state)?)
-        .bind(done_at)
-        .execute(&mut *conn)
+    let overrides: HashMap<Uuid, CaptureInclusion> = desired
+        .captures
+        .iter()
+        .filter(|capture| {
+            matches!(
+                capture.inclusion,
+                CaptureInclusion::Included { basis: InclusionBasis::Explicit }
+                    | CaptureInclusion::Excluded { basis: ExclusionBasis::User }
+            )
+        })
+        .flat_map(|capture| capture.copies.iter().map(|copy| (copy.asset_id, capture.inclusion)))
+        .collect();
+    for held in desired.sessions.iter().filter(|held| chosen.contains(&held.session_id)) {
+        let group = groups[&held.group_id];
+        let basis = admission::require_admission(conn, id, group, held.session_id, None).await?;
+        project_inputs::insert_member(
+            conn,
+            id,
+            held.session_id,
+            group,
+            held.placement,
+            held.target_id,
+            &basis,
+        )
         .await?;
+        for capture in project_inputs::session_captures(conn, held.session_id).await? {
+            let inclusion = capture
+                .copies
+                .iter()
+                .find_map(|copy| overrides.get(&copy.asset_id).copied())
+                .unwrap_or(capture.inclusion);
+            project_inputs::insert_capture(
+                conn,
+                id,
+                capture.session_id,
+                capture.capture_key,
+                &capture.copies,
+                inclusion,
+                capture.quality_when_added,
+            )
+            .await?;
+        }
+    }
     Ok(())
 }
 
-/// Each run of the Project outside its Trash that is not Complete, as
-/// `run 'name' (id) at Stage`, by name. A run's name is its latest
-/// revision's, else its draft's.
-async fn open_runs(conn: &mut SqliteConnection, project: Uuid) -> Result<Vec<String>> {
-    let rows = sqlx::query(
-        "SELECT v.id, v.stage, coalesce(c.name, d.name) AS name FROM views v \
-         LEFT JOIN view_revisions c ON c.view_id = v.id AND c.revision = v.revision \
-         LEFT JOIN view_revisions d ON d.view_id = v.id AND d.state = 'draft' \
-         WHERE v.project_id = ?1 AND v.trashed_at IS NULL AND v.completion != 'complete' \
-         ORDER BY name, v.id",
-    )
-    .bind(project.to_string())
-    .fetch_all(&mut *conn)
-    .await?;
-    let mut runs = Vec::with_capacity(rows.len());
-    for row in &rows {
-        let name: Option<String> = row.try_get("name")?;
-        let id: String = row.try_get("id")?;
-        let stage = stage_name(from_text(&row.try_get::<String, _>("stage")?)?);
-        runs.push(format!("run '{}' ({id}) at {stage}", name.unwrap_or_default()));
-    }
-    Ok(runs)
+/// The source Project's subjects as they are written for a duplicate.
+fn subject_inputs(source: &Project) -> Vec<SubjectInput> {
+    source
+        .subjects
+        .iter()
+        .map(|subject| SubjectInput { target_id: subject.target_id, name: subject.name.clone() })
+        .collect()
 }
 
-/// The stage as the Project page's stage rail names it (PRJ-FR-20).
-const fn stage_name(stage: RunStage) -> &'static str {
-    match stage {
-        RunStage::Select => "Select",
-        RunStage::Review => "Review",
-        RunStage::Calibrate => "Calibrate",
-        RunStage::Prepare => "Prepare",
-        RunStage::Results => "Results",
-        RunStage::Done => "Done",
-        RunStage::CleanUp => "Clean up",
-    }
+/// Copy the source's View settings onto the duplicate: mode, keywords,
+/// profile and processing location.
+async fn copy_view_settings(
+    conn: &mut SqliteConnection,
+    id: Uuid,
+    settings: &ProjectViewSettings,
+) -> Result<()> {
+    sqlx::query(
+        "UPDATE projects SET view_mode = ?2, group_keyword = ?3, panel_keyword = ?4, \
+         profile_id = ?5, processing_parent = ?6 WHERE id = ?1",
+    )
+    .bind(id.to_string())
+    .bind(to_text(&settings.mode)?)
+    .bind(settings.keywords.as_ref().map(|keywords| keywords.group().as_str().to_owned()))
+    .bind(settings.keywords.as_ref().map(|keywords| keywords.panel().as_str().to_owned()))
+    .bind(settings.profile_id.map(|id| id.to_string()))
+    .bind(settings.parent.as_ref().map(to_json).transpose()?)
+    .execute(&mut *conn)
+    .await?;
+    Ok(())
 }
 
 #[cfg(test)]
@@ -1571,12 +1526,7 @@ mod tests {
         let catalog = Catalog::open(&path).await.unwrap();
         let target = catalog.save_target(&target(), None).await.unwrap();
         let rig = catalog.save_equipment(&rig(), None).await.unwrap();
-        let subject = SubjectInput {
-            target_id: target.candidate.id,
-            name: None,
-            mosaic: false,
-            panels: Vec::new(),
-        };
+        let subject = SubjectInput { target_id: target.candidate.id, name: None };
         let input = ProjectInput {
             name: "NGC 7000 HOO".into(),
             notes: Some("x".repeat(400_000)),
@@ -1586,7 +1536,7 @@ mod tests {
         };
         catalog.limit_writer_pages_for_test().await.unwrap();
         let error = catalog.create_project(&input).await.unwrap_err();
-        assert_eq!(error.response(None, None).kind, "persistence_failure");
+        assert_eq!(error.code().as_str(), "persistence_failure");
         assert!(error.to_string().contains("full"), "{error}");
         catalog.close().await.unwrap();
 

@@ -35,6 +35,13 @@ pub fn io_error(path: &Path, error: &std::io::Error) -> LibraryError {
     LibraryError::from_io(path, error)
 }
 
+/// The file id the product's probe records for the entry at `path`: its
+/// inode number and, on Linux, its kernel file handle.
+pub fn file_id(path: &Path, metadata: &std::fs::Metadata) -> Result<String, LibraryError> {
+    let handle = fs_file_handle_linux::of_path(path).map_err(|error| io_error(path, &error))?;
+    Ok(FileIdentity::unix_file_id(metadata.ino(), handle.as_deref()))
+}
+
 pub fn file_fingerprint(path: &Path) -> Result<ObservationFingerprint, LibraryError> {
     let metadata = std::fs::symlink_metadata(path).map_err(|error| io_error(path, &error))?;
     if !metadata.file_type().is_file() {
@@ -44,7 +51,7 @@ pub fn file_fingerprint(path: &Path) -> Result<ObservationFingerprint, LibraryEr
     let modified_ns =
         i128::try_from(modified.duration_since(UNIX_EPOCH).unwrap().as_nanos()).unwrap();
     Ok(ObservationFingerprint {
-        identity: FileIdentity { volume: volume(), file_id: Some(metadata.ino().to_string()) },
+        identity: FileIdentity { volume: volume(), file_id: Some(file_id(path, &metadata)?) },
         size_bytes: metadata.len(),
         modified_ns,
         content_sha256: None,
@@ -56,7 +63,7 @@ pub fn folder_identity(path: &Path) -> Result<FileIdentity, LibraryError> {
     if !metadata.is_dir() {
         return Err(LibraryError::IdentityConflict("root is not a folder".into()));
     }
-    Ok(FileIdentity { volume: volume(), file_id: Some(metadata.ino().to_string()) })
+    Ok(FileIdentity { volume: volume(), file_id: Some(file_id(path, &metadata)?) })
 }
 
 /// Real no-follow probe of the fixture volume.
@@ -91,6 +98,7 @@ pub fn group(assets: &[Asset]) -> GroupingResult {
                     asset_ids,
                     provisional: Vec::new(),
                     date_basis: Some("2026-09-12".into()),
+                    framing: None,
                 }
             })
             .collect(),
@@ -173,7 +181,7 @@ pub fn root_scope() -> NativePath {
 }
 
 pub fn kind(error: &LibraryError) -> String {
-    error.response(None, None).kind
+    error.code().as_str().into()
 }
 
 pub fn expected(asset: &Asset) -> ExpectedAsset {

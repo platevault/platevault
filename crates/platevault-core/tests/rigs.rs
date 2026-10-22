@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! Rig filter lists, camera kind and field of view (spec 072 PLAN-EQ-FR-01..06,
-//! LIB-FR-05 unknown filter part).
+//! LIB-FR-05 unknown filter part), and the rig version a session's night
+//! records under the real capture grouping (PLAN-EQ-FR-07, LIB-FR-26).
 
 mod support;
 
@@ -322,4 +323,65 @@ async fn fov_unknown_when_sensor_or_focal_unknown() {
     let no_sensor =
         saved(&library, &rig_record("No sensor", None, None, Some(3.76), Some(250.0))).await;
     assert!(library.rig(no_sensor.id).await.unwrap().field_of_view.is_none());
+}
+
+/// PLAN-EQ-AC-08 through the real scan and capture grouping: each session's
+/// night comes from its frames' `DATE-OBS`, and confirming the rig records
+/// the version that night falls in.
+#[tokio::test]
+async fn confirming_a_rig_records_the_version_of_the_sessions_night() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().join("Versions-test").join("Captures");
+    std::fs::create_dir_all(&root).unwrap();
+    write_halpha(&root, "Halpha_1005.fits", "2026-10-05T22:00:00");
+    write_halpha(&root, "Halpha_1009.fits", "2026-10-09T22:00:00");
+    let library = open(temp.path()).await;
+    let location = library
+        .register_location(
+            NativePath::from_path(&root),
+            "Versions-test/Captures".into(),
+            LocationRole::Captures,
+        )
+        .await
+        .unwrap();
+    assert_eq!(scan_to_end(&library, location.id).await.state, ScanState::Completed);
+    let catalog = library.catalog();
+    let camera = Camera {
+        id: Uuid::new_v4(),
+        model: "ZWO ASI2600MM Pro".into(),
+        alias: None,
+        no_darks: false,
+        no_bias: false,
+        revision: 0,
+    };
+    let camera = catalog.save_cameras(&[camera]).await.unwrap().remove(0);
+    let rig = saved(&library, &redcat()).await;
+    let version = |valid_from, reducer| RigVersion {
+        id: Uuid::new_v4(),
+        rig_id: rig.id,
+        valid_from,
+        optics: OpticsSignature::new(Some(camera.id), Some(250.0), reducer).unwrap(),
+        rotator: RotatorPresence::Absent,
+    };
+    let first = catalog.add_rig_version(&version(time::macros::date!(2026 - 10 - 01), None)).await;
+    let second =
+        catalog.add_rig_version(&version(time::macros::date!(2026 - 10 - 08), Some("0.8x"))).await;
+    let (first, second) = (first.unwrap(), second.unwrap());
+
+    let sessions = catalog.list_sessions(&SessionQuery::default()).await.unwrap();
+    assert_eq!(sessions.len(), 2, "one session per night");
+    for summary in &sessions {
+        let session = &summary.session;
+        let expected = ExpectedSession {
+            session_id: session.id,
+            grouping_revision: session.grouping_revision,
+            decision_revision: session.decision_revision,
+        };
+        catalog.confirm_equipment(&[expected], rig.id).await.unwrap();
+        let recorded = catalog.session_rig_version(session.id).await.unwrap().unwrap();
+        let night_of_9_oct = session.key.0.contains("night=2026-10-09");
+        let wanted = if night_of_9_oct { second.id } else { first.id };
+        assert_eq!(recorded.id, wanted, "{}", session.key.0);
+        assert_eq!(catalog.session_camera(session.id).await.unwrap(), Some(camera.clone()));
+    }
 }

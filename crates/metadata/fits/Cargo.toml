@@ -9,7 +9,11 @@ path = "src/lib.rs"
 
 [dependencies]
 metadata_core = { path = "../core" }
-fits-header = "0.4.3"
+# 0.5.0 (nightwatch-astro/fits-header#31): HIERARCH value cards are
+# addressable through `Key::hierarch`.
+fits-header = "0.5.0"
+# The SHA-256 of a patched copy as it is written, and of its original.
+sha2.workspace = true
 
 [dev-dependencies]
 tempfile = { workspace = true }

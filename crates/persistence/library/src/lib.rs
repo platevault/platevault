@@ -20,14 +20,15 @@ use std::sync::Arc;
 use std::time::{Duration, UNIX_EPOCH};
 
 use platevault_model::{
-    logical_quality, ApplicableQuality, Asset, AssetReference, Association, AssociationKind,
-    AssociationState, Availability, CaptureKey, CaptureMetadata, CorrectionInput,
-    CoverageContribution, DigestEvidence, Equipment, EvidenceItem, ExpectedAsset, ExpectedSession,
-    FileIdentity, GroupingResult, LibraryError, Location, LocationLifecycle, LocationRole,
-    NativePath, ObservationFingerprint, PathSensitivity, Provenance, Quality, ReferenceKind,
-    RemapBlock, RemapBlockReason, RemapItem, RemapReview, RetireAsset, RetireReview, RetireSession,
-    Revision, ScanBatch, ScanFile, ScanIssue, ScanObservation, ScanOperation, ScanProgress,
-    ScanState, Session, SessionCandidate, SessionLineage, TargetCandidate, TargetCone,
+    counts_as_confirmed, file_ids_match, logical_quality, ApplicableQuality, Asset, AssetReference,
+    Association, AssociationKind, AssociationState, Availability, CaptureKey, CaptureMetadata,
+    CorrectionInput, CoverageContribution, DigestEvidence, Equipment, EvidenceItem, ExpectedAsset,
+    ExpectedSession, FileIdentity, GroupingResult, LibraryError, LibraryErrorCode, Location,
+    LocationLifecycle, LocationRole, NativePath, ObservationFingerprint, PathSensitivity,
+    Provenance, Quality, ReferenceKind, RemapBlock, RemapBlockReason, RemapItem, RemapReview,
+    RetireAsset, RetireBlock, RetirePinProject, RetireReview, RetireSession, Revision, ScanBatch,
+    ScanFile, ScanIssue, ScanObservation, ScanOperation, ScanProgress, ScanState, Session,
+    SessionCandidate, SessionFraming, SessionLineage, StandingSession, TargetCandidate, TargetCone,
     TargetCoverage, TargetRecord, VolumeIdentity, VolumeKind, NETWORK_ADDRESS_REFUSED,
 };
 use serde::de::DeserializeOwned;
@@ -53,34 +54,55 @@ macro_rules! schema_modules {
 
 /// The catalog schema, applied in this order on every open: `schema.sql` holds
 /// `catalog_meta` and the spec 064 library tables, and each feature module
-/// appends its own idempotent `<feature>.sql`, one file per line.
+/// appends its own idempotent `<feature>.sql`, one file per line. The F4
+/// Project model modules (cameras and rig versions, session intake and
+/// calibration pins, workflow settings, Project inputs, lifecycle, View and
+/// Output) come after the tables they reference.
 #[rustfmt::skip]
 const SCHEMA: &str = schema_modules![
     "schema.sql",
     "naming.sql",
     "rigs.sql",
+    "rig_versions.sql",
     "planning.sql",
     "calibration.sql",
+    "session_intake.sql",
     "trash.sql",
     "projects.sql",
     "measurements.sql",
     "frame_thumbnails.sql",
     "storage.sql",
-    "views.sql",
-    "calibration_decisions.sql",
     "import.sql",
     "targets_list.sql",
-    "view_groups.sql",
-    "prepare.sql",
-    "results.sql",
-    "cleanup.sql",
-    "archive.sql",
-    "trash_moves.sql",
+    "profiles.sql",
+    "workflow_settings.sql",
+    "project_inputs.sql",
+    "project_lifecycle.sql",
+    "project_view.sql",
+    "project_output.sql",
+    "project_wrap_up.sql",
 ];
 /// The one version of the whole [`SCHEMA`] list, recorded by `schema.sql`'s
 /// `catalog_meta` row. There are no migrations: a catalog recording any other
-/// version is refused before any module's DDL runs.
-pub const SCHEMA_VERSION: i64 = 17;
+/// version is refused before any module's DDL runs. Version 19 was the F4
+/// greenfield catalog (D-W115): no earlier catalog is upgraded. That refuses
+/// main's version 17 (remap reviews' `proposed_volume_kind`) and F4's own 18,
+/// whose `project_sessions_admit_ready` trigger predates D-W124. Version 20
+/// records each session's intake split limits in framing JSON and changes
+/// `measurement_run_issues` to store issue codes/parameters and measurement
+/// outcomes to store failure codes/parameters; version 19 has neither shape.
+/// Version 21 lets the admission triggers keep a successor a regroup carries
+/// into an open Project holding its predecessor (D-W100); version 20 refuses
+/// it. Version 22 records why an Apply failed or was canceled as an
+/// `ApplyStop` code (`apply_operations.stop`) and why a foreign file didn't
+/// move as a `ForeignItemFailure` code, where version 21 stored English text.
+/// Version 23 journals each ticked foreign file's claim
+/// (`apply_foreign_items.claimed`) and each kept file's move
+/// (`apply_kept_moves`) before the move starts; version 22 has neither.
+/// Bump it with any DDL change that `IF NOT EXISTS` would leave stale in an
+/// existing catalog, and with any stored JSON shape an existing catalog's rows
+/// can't be read as.
+pub const SCHEMA_VERSION: i64 = 23;
 const BUSY_TIMEOUT: Duration = Duration::from_secs(10);
 const READER_CONNECTIONS: u32 = 4;
 const MAX_PAGE: u32 = 1000;
@@ -126,9 +148,11 @@ mod planning;
 mod rigs;
 pub use planning::{DeliveryClaim, DeliveryOutcome, SubscriptionWrite, PLANNING_SETTINGS_ID};
 mod calibration;
+use calibration::pinned_calibration_kinds;
 
 pub use calibration::{
-    CalibrationInputDetail, CalibrationInputSummary, InputCopy, InputGroup, InputMember, InputQuery,
+    CalibrationInputDetail, CalibrationInputSummary, HeldLight, InputCopy, InputGroup, InputMember,
+    InputQuery, ProjectDarkBasis,
 };
 mod trash;
 pub use trash::{TrashEpisode, TrashedAsset, TrashedFrame, TrashedQuery};
@@ -140,47 +164,54 @@ pub use projects::ProgressBasis;
 pub use frame_thumbnails::{StoredThumbnail, ThumbnailBasis};
 pub use measurements::{FrameRecordBasis, ImportReviewInput};
 mod review_lists;
-pub use review_lists::{ReviewAsset, ReviewBasis, ReviewCapture};
+pub use review_lists::{CorrectionEntryAsset, ReviewAsset, ReviewBasis, ReviewCapture};
 mod import;
 mod session_filters;
 mod storage;
 mod storage_overview;
-pub use storage_overview::{DuplicateCopy, VerifiedTransfer};
+pub use storage_overview::{ArchiveOwner, DuplicateCopy, VerifiedTransfer};
 mod targets_list;
-mod views;
-pub use views::{CandidateBasis, CandidateSession, ChoiceBasis, MembershipBasis};
-mod view_groups;
-pub use view_groups::{GroupCandidates, ViewGroupBasis};
-mod prepare;
-pub use prepare::{
-    EntryUpdate, GroupPanel, GroupPreparationBasis, GroupPreparationRecord, NewGroupPreparation,
-    NewPanelPreparation, NewPreparation, NewPreparedEntry, PanelPreparationRecord,
-    PreparationRecord, RecordedFolder, RecordedFolders, ResumedGroupPreparation,
-};
+// Handoff profiles: the application a Project's View opens in.
 mod home;
-pub use home::{RunningOperations, RunningStorage};
-mod results;
-pub use results::{
-    DetectedMaster, NewAttachment, Observation, ResultsBasis, ResultsScan, ScannedResult,
-    VerifiedAcceptance, VerifiedProduct,
+mod profiles;
+pub use home::{RunningOperations, RunningProject};
+// A Project's `Output/`, Copy to Output and the Processing master offer's
+// hand-off (spec 070, F4).
+mod project_output;
+pub use project_output::{
+    OutputBasis, OutputCopy, OutputFolder, OutputPanel, OutputScan, OutputScanRecord, ScannedOutput,
 };
-mod cleanup;
-pub use cleanup::{
-    CleanupDisposition, CleanupFolderDraft, CleanupItemDraft, GroupFolders, RunCleanupDraft,
-    RunCleanupFolder, RunCleanupItem, RunCleanupRecord, RunFolders,
+// The F4 admission contract (only Ready, calibration-settled sessions join a
+// Project); its `require_admission` runs inside membership-add transactions.
+mod admission;
+// Finish/reopen Review writes the durable session-intake review row only.
+mod session_reviews;
+pub use session_reviews::SessionReviewBasis;
+// One PlateVault operation per Project: Apply, Copy to Output and Wrap up
+// reserve the Project before any file effect (PREP-FR-19).
+mod project_operations;
+// Apply's catalog side: its inputs, manifest, journal, foreign files and
+// leftovers (project_view.sql).
+mod project_view;
+pub use project_view::{
+    ApplyInputs, ApplyReservation, ApplyReserved, CorrectedSource, KeptMove, SourcePath,
 };
-mod done_archive;
-pub use done_archive::{
-    AdoptedSource, DoneArchiveBasis, PreparedUse, ProjectFrame, RecordedResult, RegisteredLocation,
-    ResultsIntermediate,
+// A Project's inputs: whole-session membership through the admission rule,
+// groups, frame choices, View settings, pending changes and suggestions
+// (project_inputs.sql).
+mod project_inputs;
+pub use project_inputs::{NewGroup, SessionAdd};
+// The F4 workflow settings: read by intake and matching, saved by Settings.
+mod workflow_settings;
+pub use workflow_settings::WORKFLOW_SETTINGS_ID;
+// Wrap up's catalog side: step records, Clean up removals, Trash and archive
+// journals, Close with its snapshot, and kept-View repoints
+// (project_wrap_up.sql).
+mod project_wrap_up;
+pub use project_wrap_up::{
+    ArchiveAsset, ArchiveDraft, ArchiveMoveRecord, ArchiveRun, ClosedProject, KeptLinkRecord,
+    TrashBasis, TrashItemDraft, WrapUpFrame, WrapUpTrash, WrapUpTrashItem,
 };
-mod archive;
-pub use archive::{
-    ArchiveAsset, ArchiveItemChange, ArchiveItemState, ArchiveRecord, ArchiveRepoint,
-    EntryReference, EntryRepoint, LatestRepoint, NewArchiveItem, NewArchiveTransfer, SessionFrame,
-};
-mod trash_moves;
-pub use trash_moves::{TrashMoveItem, TrashMoveRecord, TrashTarget};
 
 /// Actual writer-connection settings read back with `PRAGMA` after open.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -223,6 +254,7 @@ pub struct LocationRegistration {
 /// Last recorded access failure of a location, kept until access is restored.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct LocationFailure {
     pub availability: Availability,
     pub reason: String,
@@ -230,7 +262,7 @@ pub struct LocationFailure {
 }
 
 /// References to one location's copies, read outside the catalog from the
-/// features that hold asset ids (Views, Projects, Results).
+/// features that hold asset ids (Projects, calibration records).
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LocationReferences {
@@ -248,8 +280,10 @@ pub struct RecordedPath {
     pub path: NativePath,
     /// For a Missing or Trashed record, whose file left the path, the size
     /// and modification time that file had when last observed: a file at the
-    /// path is that file put back only while it still has them. `None` for
-    /// every other record, whose file the catalog holds there.
+    /// path is that file put back only while it still has them. Likewise for
+    /// the path an archive move's record left while its original waits there
+    /// to be retired. `None` for every other record, whose file the catalog
+    /// holds there.
     pub vacated: Option<SizeAndTime>,
 }
 
@@ -261,19 +295,35 @@ pub struct SizeAndTime {
     pub modified_ns: i128,
 }
 
+/// [`Catalog::location_recorded_paths`]: a location's assets, then the paths
+/// the records of its unsettled archive moves left (`archive_moves_in_flight`).
+const RECORDED_PATHS: &str =
+    "SELECT path_key, availability IN ('missing', 'trashed') AS vacated, size_bytes, \
+     modified_ns FROM assets WHERE location_id = ?1 \
+     UNION ALL SELECT from_path, 1, json_extract(from_fingerprint, '$.sizeBytes'), \
+     json_extract(from_fingerprint, '$.modifiedNs') FROM archive_moves \
+     WHERE from_location_id = ?1 AND repointed_at IS NOT NULL AND outcome IS NULL";
+
 /// A Sessions filter (LIB-FR-17, LIB-FR-18).
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum SessionFilter {
     /// The only list that shows Trashed frames: sessions holding any, each
     /// summarized over its Trashed frames alone.
     Trashed,
     /// Sessions with no confirmed Target, whatever their automatic Target row
-    /// says (Unresolved, Suggested, Needs review or none).
+    /// says (Unresolved, Needs review, Suggested without agreeing evidence or
+    /// none). A Target associated by agreeing evidence counts as confirmed
+    /// (D-W124).
     NeedsTarget,
-    /// Sessions with a confirmed Target that are neither a Project's candidate
-    /// nor a member of any Project's run.
+    /// Sessions with a confirmed Target, or one associated by agreeing
+    /// evidence, that are neither a Project's candidate nor a member of any
+    /// Project's run.
     NotInAnyProject,
+    /// The calibration queue: sessions with a kind neither pinned nor No,
+    /// Ready or not, and sessions whose pinned file changed or went missing.
+    NeedsCalibration,
 }
 
 /// A page of Sessions: light sessions of Captures locations (LIB-FR-16), newest
@@ -292,6 +342,7 @@ pub struct SessionQuery {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct SessionSummary {
     pub session: Session,
     pub location_ids: Vec<Uuid>,
@@ -308,6 +359,7 @@ pub struct SessionSummary {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct SessionDetail {
     pub summary: SessionSummary,
     pub assets: Vec<Asset>,
@@ -324,6 +376,7 @@ pub struct SessionDetail {
 /// asset.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct SessionMember {
     pub copies: Vec<Uuid>,
     pub content_sha256: Option<String>,
@@ -336,6 +389,7 @@ pub struct SessionMember {
 /// Result of applying (or proposing) catalog corrections plus their regroup.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct CorrectionOutcome {
     pub correction_id: Uuid,
     pub assets: Vec<Asset>,
@@ -349,6 +403,7 @@ pub struct CorrectionOutcome {
 /// Durable reviewed correction plan; confirming it re-validates every input.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct CorrectionPreview {
     pub id: Uuid,
     pub expected: Vec<ExpectedAsset>,
@@ -459,6 +514,7 @@ struct SessionRow {
 struct PriorSession {
     key: CaptureKey,
     members: BTreeSet<Uuid>,
+    framing: Option<SessionFraming>,
 }
 
 #[derive(Default)]
@@ -845,7 +901,7 @@ impl Catalog {
         mut grouping: G,
     ) -> Result<ScanOperation>
     where
-        G: FnMut(&[Asset]) -> GroupingResult,
+        G: Grouping,
     {
         let files: Vec<&ScanFile> = batch.files.iter().collect();
         let issues: Vec<&ScanIssue> = batch.issues.iter().collect();
@@ -894,7 +950,7 @@ impl Catalog {
     ) -> Result<ScanOperation>
     where
         R: FnMut(&Location) -> Result<FileIdentity>,
-        G: FnMut(&[Asset]) -> GroupingResult,
+        G: Grouping,
     {
         if observation.state == ScanState::Running {
             return Err(LibraryError::InvalidInput("final observation must be terminal".into()));
@@ -1154,19 +1210,17 @@ impl Catalog {
     /// without reading their records. A Missing or Trashed record's path
     /// carries the size and modification time its file had when last
     /// observed ([`RecordedPath::vacated`]); every other record's file,
-    /// Retired ones included, the catalog holds at its path.
+    /// Retired ones included, the catalog holds at its path. The path an
+    /// archive move's record left carries them too, from the observation the
+    /// move started from, until the move settles: the original stays there
+    /// meanwhile, waiting to be retired.
     ///
     /// # Errors
     /// `PersistenceFailure` when the catalog cannot be read.
     pub async fn location_recorded_paths(&self, location_id: Uuid) -> Result<Vec<RecordedPath>> {
         let mut conn = self.reader().await?;
-        let rows = sqlx::query(
-            "SELECT path_key, availability IN ('missing', 'trashed') AS vacated, size_bytes, \
-             modified_ns FROM assets WHERE location_id = ?1",
-        )
-        .bind(location_id.to_string())
-        .fetch_all(&mut *conn)
-        .await?;
+        let rows =
+            sqlx::query(RECORDED_PATHS).bind(location_id.to_string()).fetch_all(&mut *conn).await?;
         rows.iter()
             .map(|row| {
                 let path = path_from_key(&row.try_get::<Vec<u8>, _>("path_key")?)?;
@@ -1251,7 +1305,12 @@ enum Members {
 impl Members {
     fn of(filter: Option<SessionFilter>) -> Self {
         match filter {
-            None | Some(SessionFilter::NeedsTarget | SessionFilter::NotInAnyProject) => Self::Live,
+            None
+            | Some(
+                SessionFilter::NeedsTarget
+                | SessionFilter::NotInAnyProject
+                | SessionFilter::NeedsCalibration,
+            ) => Self::Live,
             Some(SessionFilter::Trashed) => Self::Trashed,
         }
     }
@@ -1339,7 +1398,7 @@ impl Catalog {
         mut grouping: G,
     ) -> Result<CorrectionPreview>
     where
-        G: FnMut(&[Asset]) -> GroupingResult,
+        G: Grouping,
     {
         validate_correction_request(expected, corrections)?;
         let proposal = {
@@ -1396,7 +1455,7 @@ impl Catalog {
         mut grouping: G,
     ) -> Result<CorrectionOutcome>
     where
-        G: FnMut(&[Asset]) -> GroupingResult,
+        G: Grouping,
     {
         let correction_id = Uuid::new_v4();
         let outcome = write_txn!(self, |conn| {
@@ -1443,7 +1502,7 @@ impl Catalog {
         mut grouping: G,
     ) -> Result<CorrectionOutcome>
     where
-        G: FnMut(&[Asset]) -> GroupingResult,
+        G: Grouping,
     {
         validate_correction_request(expected, corrections)?;
         let correction_id = Uuid::new_v4();
@@ -1899,7 +1958,7 @@ impl Catalog {
         for row in &rows {
             let state: AssociationState = from_text(&row.try_get::<String, _>("state")?)?;
             let evidence: Vec<EvidenceItem> = from_json(&row.try_get::<String, _>("evidence")?)?;
-            if !counts_toward_coverage(&state, &evidence) {
+            if !counts_as_confirmed(&state, &evidence) {
                 continue;
             }
             let session_id = parse_uuid(&row.try_get::<String, _>("id")?)?;
@@ -2242,8 +2301,9 @@ impl Catalog {
 
 impl Catalog {
     /// Durably review Retire location: the location, its root and availability,
-    /// its recorded copies, the current sessions holding them and the Views,
-    /// Projects and Results `references` read for them. Only the review is written.
+    /// its recorded copies, the current sessions holding them and the Projects
+    /// and calibration records `references` read for them. Only the review is
+    /// written.
     ///
     /// # Errors
     /// `InvalidInput` for a retired location; `Conflict` with the location's current
@@ -2261,6 +2321,15 @@ impl Catalog {
             if assets.iter().map(|asset| asset.id).collect::<BTreeSet<_>>() != read.assets {
                 return Err(conflict(location.id, location.decision_revision));
             }
+            let pin_kinds = pinned_calibration_kinds(conn, &read.assets).await?;
+            let blocked = retire_blocks(conn, pin_kinds).await?;
+            let mut projects = retire_projects(conn, &read.references).await?;
+            projects.extend(blocked.iter().flat_map(|block| match block {
+                RetireBlock::PinnedCalibration { projects, .. } => projects.clone(),
+            }));
+            projects.sort_by_key(|project| project.project_id);
+            projects.dedup_by_key(|project| project.project_id);
+            let project_count = projects.len();
             let review = RetireReview {
                 id: Uuid::new_v4(),
                 location_id,
@@ -2270,9 +2339,11 @@ impl Catalog {
                 expected_revision: location.decision_revision,
                 assets: retire_assets(&assets),
                 sessions: retire_sessions(conn, location_id).await?,
-                statement: retire_statement(&location, assets.len(), read.references.len()),
-                references: read.references,
+                references: read.references.clone(),
+                projects: projects.clone(),
+                blocked,
                 consulted: read.consulted,
+                statement: retire_statement(&location, assets.len(), project_count),
             };
             insert_retire_review(conn, &review).await?;
             review
@@ -2331,14 +2402,27 @@ impl Catalog {
                 return Err(conflict(op.id, op.revision));
             }
             let assets = location_assets(conn, location_id).await?;
+            let current_pin_kinds = pinned_calibration_kinds(conn, &read.assets).await?;
+            let current_blocked = retire_blocks(conn, current_pin_kinds).await?;
+            let mut current_projects = retire_projects(conn, &read.references).await?;
+            current_projects.extend(current_blocked.iter().flat_map(|block| match block {
+                RetireBlock::PinnedCalibration { projects, .. } => projects.clone(),
+            }));
+            current_projects.sort_by_key(|project| project.project_id);
+            current_projects.dedup_by_key(|project| project.project_id);
             let unchanged = retire_assets(&assets) == review.assets
                 && assets.iter().map(|asset| asset.id).collect::<BTreeSet<_>>() == read.assets
                 && retire_sessions(conn, location_id).await? == review.sessions
+                && current_blocked == review.blocked
+                && current_projects == review.projects
                 && read.references == review.references
                 && read.consulted == review.consulted
                 && location.availability == review.availability;
             if !unchanged {
                 return Err(conflict(location_id, location.decision_revision));
+            }
+            if !current_blocked.is_empty() {
+                return Err(LibraryError::InvalidInput(retire_block_message(&current_blocked)));
             }
             sqlx::query(
                 "UPDATE locations SET lifecycle = 'retired', \
@@ -2358,6 +2442,93 @@ impl Catalog {
         });
         Ok(location)
     }
+}
+
+fn retire_block_message(blocked: &[RetireBlock]) -> String {
+    let mut holders = BTreeSet::new();
+    for block in blocked {
+        let RetireBlock::PinnedCalibration { projects, .. } = block;
+        for project in projects {
+            holders.insert(format!("{} ({})", project.name, project.lifecycle));
+        }
+    }
+    let suffix = if holders.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "; Projects holding those sessions: {}",
+            holders.into_iter().collect::<Vec<_>>().join(", ")
+        )
+    };
+    format!(
+        "cannot retire location while calibration files are pinned on {} session(s); release or reassign the pins first{suffix}",
+        blocked.len()
+    )
+}
+
+async fn retire_blocks(
+    conn: &mut SqliteConnection,
+    pin_kinds: BTreeMap<Uuid, BTreeSet<platevault_model::InputKind>>,
+) -> Result<Vec<RetireBlock>> {
+    let mut blocked = Vec::with_capacity(pin_kinds.len());
+    for (session_id, kinds) in pin_kinds {
+        let capture_key: String =
+            sqlx::query_scalar("SELECT capture_key FROM sessions WHERE id = ?1")
+                .bind(session_id.to_string())
+                .fetch_one(&mut *conn)
+                .await?;
+        let projects = retire_session_projects(conn, session_id).await?;
+        blocked.push(RetireBlock::PinnedCalibration {
+            session_id,
+            capture_key,
+            kinds: kinds.into_iter().collect(),
+            projects,
+        });
+    }
+    Ok(blocked)
+}
+
+async fn retire_session_projects(
+    conn: &mut SqliteConnection,
+    session_id: Uuid,
+) -> Result<Vec<RetirePinProject>> {
+    sqlx::query(
+        "SELECT p.id AS project_id, p.name, p.lifecycle FROM project_sessions ps \
+         JOIN projects p ON p.id = ps.project_id WHERE ps.session_id = ?1 ORDER BY p.id",
+    )
+    .bind(session_id.to_string())
+    .fetch_all(&mut *conn)
+    .await?
+    .iter()
+    .map(|row| {
+        Ok(RetirePinProject {
+            project_id: parse_uuid(&row.try_get::<String, _>("project_id")?)?,
+            name: row.try_get("name")?,
+            lifecycle: from_text(&row.try_get::<String, _>("lifecycle")?)?,
+        })
+    })
+    .collect()
+}
+
+async fn retire_projects(
+    conn: &mut SqliteConnection,
+    references: &[AssetReference],
+) -> Result<Vec<RetirePinProject>> {
+    let mut projects = Vec::new();
+    for reference in references.iter().filter(|reference| reference.kind == ReferenceKind::Project)
+    {
+        let row = sqlx::query("SELECT id, name, lifecycle FROM projects WHERE id = ?1")
+            .bind(reference.id.to_string())
+            .fetch_optional(&mut *conn)
+            .await?
+            .ok_or_else(|| conflict(reference.id, reference.revision))?;
+        projects.push(RetirePinProject {
+            project_id: parse_uuid(&row.try_get::<String, _>("id")?)?,
+            name: row.try_get("name")?,
+            lifecycle: from_text(&row.try_get::<String, _>("lifecycle")?)?,
+        });
+    }
+    Ok(projects)
 }
 
 // ---------------------------------------------------------------------------
@@ -2519,7 +2690,7 @@ fn same_volume(left: &VolumeIdentity, right: &VolumeIdentity) -> bool {
 fn same_root(registered: &FileIdentity, observed: &FileIdentity) -> bool {
     same_volume(&registered.volume, &observed.volume)
         && match (&registered.file_id, &observed.file_id) {
-            (Some(registered), Some(observed)) => registered == observed,
+            (Some(registered), Some(observed)) => file_ids_match(Some(registered), Some(observed)),
             (Some(_), None) => false,
             (None, _) => !registered.volume.file_ids_stable,
         }
@@ -2530,7 +2701,7 @@ fn root_proven(registered: &FileIdentity, observed: &FileIdentity) -> bool {
     same_volume(&registered.volume, &observed.volume)
         && registered.volume.file_ids_stable
         && registered.file_id.is_some()
-        && registered.file_id == observed.file_id
+        && file_ids_match(registered.file_id.as_deref(), observed.file_id.as_deref())
 }
 
 fn require_revision(id: Uuid, current: Revision, expected: Revision) -> Result<()> {
@@ -2549,7 +2720,7 @@ fn scoped(error: LibraryError, scope: NativePath, identity: Option<Uuid>) -> Lib
     if matches!(error, LibraryError::Context { .. } | LibraryError::Conflict { .. }) {
         return error;
     }
-    LibraryError::Context { error: Box::new(error), scope, identity }
+    LibraryError::Context { error: Box::new(error), scope: Some(scope), identity }
 }
 
 /// Refuse what a retired location never takes again, naming the location.
@@ -2636,9 +2807,9 @@ fn retire_statement(location: &Location, copies: usize, references: usize) -> St
     format!(
         "Retiring {name:?} at {root} deletes, moves or modifies no file. Its {copies} recorded \
          copies will read Retired and stay as history, leave captured, usable and Unreviewed \
-         totals and Project progress, and stay named unresolved in the {references} Views, \
-         Projects and Results that hold them. Its folder can then be registered again as a \
-         new location; no decision transfers to it.",
+         totals and Project progress, and stay named unresolved in the {references} Projects \
+         and calibration records that hold them. Its folder can then be registered again as \
+         a new location; no decision transfers to it.",
         name = location.name,
         root = location.path.display(),
     )
@@ -2912,7 +3083,7 @@ impl CanonicalRoot {
         if !recorded.volume.file_ids_stable {
             return None;
         }
-        Some((device, recorded.file_id.as_deref()?.parse().ok()?))
+        Some((device, FileIdentity::unix_inode(recorded.file_id.as_deref()?)?))
     }
 }
 
@@ -3427,9 +3598,9 @@ fn verify_root(location: &Location, op: &OperationRow, observed: &FileIdentity) 
 }
 
 fn unavailable_for(error: &LibraryError) -> Availability {
-    match error.response(None, None).kind.as_str() {
-        "access_denied" => Availability::Unreadable,
-        "identity_conflict" => Availability::IdentityConflict,
+    match error.code() {
+        LibraryErrorCode::AccessDenied => Availability::Unreadable,
+        LibraryErrorCode::IdentityConflict => Availability::IdentityConflict,
         _ => Availability::Offline,
     }
 }
@@ -3461,7 +3632,7 @@ async fn finish_verified<G>(
     grouping: &mut G,
 ) -> Result<()>
 where
-    G: FnMut(&[Asset]) -> GroupingResult,
+    G: Grouping,
 {
     let observation = input.observation;
     arm_verification(conn, op).await?;
@@ -3833,7 +4004,8 @@ async fn find_asset(
     let qualified =
         |asset: &Asset| observed_id.is_some() && asset.fingerprint.identity.file_id.is_some();
     if let Some(index) = variants.iter().position(|asset| {
-        qualified(asset) && asset.fingerprint.identity.file_id.as_deref() == observed_id
+        qualified(asset)
+            && file_ids_match(asset.fingerprint.identity.file_id.as_deref(), observed_id)
     }) {
         return Ok(AssetMatch::Existing(Box::new(variants.swap_remove(index))));
     }
@@ -4263,6 +4435,28 @@ async fn next_counter(conn: &mut SqliteConnection, key: &'static str) -> Result<
 // Grouping: supplied pure callback inside the current transaction
 // ---------------------------------------------------------------------------
 
+/// The capture grouping a regroup runs inside its transaction. It must be
+/// pure and deterministic over its inputs: every asset belongs to exactly
+/// one returned candidate.
+///
+/// A plain `FnMut(&[Asset]) -> GroupingResult` is a grouping that reads the
+/// assets alone and ignores the standing sessions; intake's grouping keeps
+/// each standing session's members in it (D-W107).
+pub trait Grouping {
+    /// Group `assets`. `standing` are the current sessions among them, each
+    /// with its members whose evidence this regroup did not change.
+    fn group(&mut self, assets: &[Asset], standing: &[StandingSession]) -> GroupingResult;
+}
+
+impl<F> Grouping for F
+where
+    F: FnMut(&[Asset]) -> GroupingResult,
+{
+    fn group(&mut self, assets: &[Asset], _standing: &[StandingSession]) -> GroupingResult {
+        self(assets)
+    }
+}
+
 async fn regroup<G>(
     conn: &mut SqliteConnection,
     changed: &BTreeSet<Uuid>,
@@ -4270,28 +4464,40 @@ async fn regroup<G>(
     cause: Cause,
 ) -> Result<Option<SessionLineage>>
 where
-    G: FnMut(&[Asset]) -> GroupingResult,
+    G: Grouping,
 {
     if changed.is_empty() {
         return Ok(None);
     }
     let changed_assets = load_assets(conn, changed).await?;
-    let first = checked_grouping(grouping(&changed_assets), changed)?;
+    let first = checked_grouping(grouping.group(&changed_assets, &[]), changed)?;
     let mut affected: BTreeSet<Uuid> =
         current_session_of(conn, changed).await?.into_values().collect();
     for candidate in &first.sessions {
         affected.extend(current_sessions_with_key(conn, &candidate.key).await?);
     }
     let mut prior = BTreeMap::new();
+    let mut standing = Vec::new();
     let mut closure = changed.clone();
     for id in &affected {
         let row = load_session_row(conn, *id).await?;
         let members = current_members(conn, *id).await?;
         closure.extend(members.iter().copied());
-        prior.insert(*id, PriorSession { key: row.session.key, members });
+        let unchanged: Vec<Uuid> = members.difference(changed).copied().collect();
+        if !unchanged.is_empty() {
+            standing.push(StandingSession {
+                key: row.session.key.clone(),
+                asset_ids: unchanged,
+                framing: row.session.framing.clone(),
+            });
+        }
+        prior.insert(
+            *id,
+            PriorSession { key: row.session.key, members, framing: row.session.framing },
+        );
     }
     let closure_assets = load_assets(conn, &closure).await?;
-    let result = checked_grouping(grouping(&closure_assets), &closure)?;
+    let result = checked_grouping(grouping.group(&closure_assets, &standing), &closure)?;
     let old_session_of = current_session_of(conn, &closure).await?;
     let plan = plan_grouping(&prior, &old_session_of, result);
     let context =
@@ -4299,12 +4505,22 @@ where
     commit_plan(conn, plan, &context, cause).await
 }
 
-/// Every input asset must belong to exactly one candidate and nothing else.
+/// Every input asset must belong to exactly one candidate and nothing else,
+/// and a candidate's framing is anchored at one of its own assets.
 fn checked_grouping(result: GroupingResult, expected: &BTreeSet<Uuid>) -> Result<GroupingResult> {
     let mut seen = BTreeSet::new();
     for candidate in &result.sessions {
         if candidate.key.0.is_empty() || candidate.asset_ids.is_empty() {
             return Err(LibraryError::InvalidInput("grouping returned an empty session".into()));
+        }
+        if let Some(framing) = &candidate.framing {
+            framing.validate()?;
+            if !candidate.asset_ids.contains(&framing.anchor_asset_id) {
+                return Err(LibraryError::InvalidInput(format!(
+                    "grouping anchored a framing at asset {} outside its session",
+                    framing.anchor_asset_id
+                )));
+            }
         }
         for id in &candidate.asset_ids {
             if !expected.contains(id) || !seen.insert(*id) {
@@ -4322,6 +4538,8 @@ fn checked_grouping(result: GroupingResult, expected: &BTreeSet<Uuid>) -> Result
 
 /// Keep a session id only when identical capture evidence adds previously
 /// ungrouped assets; every other membership change creates successor records.
+/// Sessions of one key are told apart by their framing, so a kept session is
+/// the one whose members the candidate holds.
 fn plan_grouping(
     prior: &BTreeMap<Uuid, PriorSession>,
     old_session_of: &HashMap<Uuid, Uuid>,
@@ -4359,6 +4577,58 @@ struct GroupContext<'a> {
     assets: &'a [Asset],
 }
 
+/// Calibration frames a kept session gained: calibration arrived, so the
+/// sessions still waiting are matched again (LIB-FR-25).
+fn calibration_frames_added<'a>(
+    added: impl IntoIterator<Item = &'a BTreeSet<Uuid>>,
+    assets: &[Asset],
+) -> bool {
+    let added: BTreeSet<&Uuid> = added.into_iter().flatten().collect();
+    assets
+        .iter()
+        .any(|asset| added.contains(&asset.id) && asset.effective.is_light() == Some(false))
+}
+
+/// What a new session keeps and records beside its members: its frames'
+/// recorded rig version and camera, and, for a light session, its
+/// calibration record, matched after the commit (LIB-FR-23).
+async fn record_new_session(
+    conn: &mut SqliteConnection,
+    id: Uuid,
+    members: &BTreeSet<Uuid>,
+    context: &GroupContext<'_>,
+) -> Result<()> {
+    let frame_sessions: Vec<Option<Uuid>> =
+        members.iter().map(|asset| context.old_session_of.get(asset).copied()).collect();
+    rigs::versions::inherit_successor(conn, id, &frame_sessions).await?;
+    calibration::session_ingested(conn, id, members, context.assets).await
+}
+
+/// Attach the frames each kept session gained at `grouping_revision`.
+/// Calibration frames among them are calibration arriving: the sessions
+/// still waiting are matched again (LIB-FR-25).
+async fn grow_kept_sessions(
+    conn: &mut SqliteConnection,
+    kept: &[(Uuid, SessionCandidate, BTreeSet<Uuid>)],
+    grouping_revision: Revision,
+    assets: &[Asset],
+) -> Result<()> {
+    for (id, _, added) in kept {
+        if !added.is_empty() {
+            attach_members(conn, *id, added).await?;
+            sqlx::query("UPDATE sessions SET grouping_revision = ?1 WHERE id = ?2")
+                .bind(db_revision(grouping_revision)?)
+                .bind(id.to_string())
+                .execute(&mut *conn)
+                .await?;
+        }
+    }
+    if calibration_frames_added(kept.iter().map(|(_, _, added)| added), assets) {
+        calibration::calibration_arrived(conn).await?;
+    }
+    Ok(())
+}
+
 async fn commit_plan(
     conn: &mut SqliteConnection,
     plan: GroupPlan,
@@ -4366,12 +4636,17 @@ async fn commit_plan(
     cause: Cause,
 ) -> Result<Option<SessionLineage>> {
     for (id, candidate, _) in &plan.kept {
-        sqlx::query("UPDATE sessions SET provisional = ?1, date_basis = ?2 WHERE id = ?3")
-            .bind(to_json(&candidate.provisional)?)
-            .bind(candidate.date_basis.as_deref())
-            .bind(id.to_string())
-            .execute(&mut *conn)
-            .await?;
+        // The framing's ordinal follows its anchor's capture order, which an
+        // earlier framing arriving later moves on.
+        sqlx::query(
+            "UPDATE sessions SET provisional = ?1, date_basis = ?2, framing = ?3 WHERE id = ?4",
+        )
+        .bind(to_json(&candidate.provisional)?)
+        .bind(candidate.date_basis.as_deref())
+        .bind(candidate.framing.as_ref().map(to_json).transpose()?)
+        .bind(id.to_string())
+        .execute(&mut *conn)
+        .await?;
     }
     let grew = plan.kept.iter().any(|(_, _, added)| !added.is_empty());
     if plan.created.is_empty() && plan.superseded.is_empty() && !grew {
@@ -4391,7 +4666,7 @@ async fn commit_plan(
         for asset in &members {
             if let Some(old) = context.old_session_of.get(asset) {
                 successor |= plan.superseded.contains(old);
-                if context.prior.get(old).is_some_and(|prior| prior.key != candidate.key) {
+                if context.prior.get(old).is_some_and(|prior| moved_by(prior, candidate)) {
                     moved.insert(*asset);
                 }
             }
@@ -4403,17 +4678,9 @@ async fn commit_plan(
         for association in inherit.associations(context) {
             upsert_association(conn, &association, &created_at).await?;
         }
+        record_new_session(conn, id, &members, context).await?;
     }
-    for (id, _, added) in &plan.kept {
-        if !added.is_empty() {
-            attach_members(conn, *id, added).await?;
-            sqlx::query("UPDATE sessions SET grouping_revision = ?1 WHERE id = ?2")
-                .bind(db_revision(grouping_revision)?)
-                .bind(id.to_string())
-                .execute(&mut *conn)
-                .await?;
-        }
-    }
+    grow_kept_sessions(conn, &plan.kept, grouping_revision, context.assets).await?;
     if plan.superseded.is_empty() {
         return Ok(None);
     }
@@ -4425,7 +4692,15 @@ async fn commit_plan(
         grouping_revision,
     };
     insert_lineage(conn, &lineage, cause, &created_at).await?;
+    project_inputs::carry_regrouped(conn, &lineage).await?;
     Ok(Some(lineage))
+}
+
+/// An asset moved when its capture key or its framing's anchor changed.
+fn moved_by(prior: &PriorSession, candidate: &SessionCandidate) -> bool {
+    let anchor = |framing: Option<&SessionFraming>| framing.map(|framing| framing.anchor_asset_id);
+    prior.key != candidate.key
+        || anchor(prior.framing.as_ref()) != anchor(candidate.framing.as_ref())
 }
 
 struct Inheritance<'a> {
@@ -4543,13 +4818,14 @@ async fn insert_session(
 ) -> Result<()> {
     sqlx::query(
         "INSERT INTO sessions (id, capture_key, grouping_revision, decision_revision, \
-         provisional, date_basis, created_at) VALUES (?1, ?2, ?3, 0, ?4, ?5, ?6)",
+         provisional, date_basis, framing, created_at) VALUES (?1, ?2, ?3, 0, ?4, ?5, ?6, ?7)",
     )
     .bind(id.to_string())
     .bind(candidate.key.0.as_str())
     .bind(db_revision(grouping_revision)?)
     .bind(to_json(&candidate.provisional)?)
     .bind(candidate.date_basis.as_deref())
+    .bind(candidate.framing.as_ref().map(to_json).transpose()?)
     .bind(created_at)
     .execute(&mut *conn)
     .await?;
@@ -4682,7 +4958,7 @@ async fn current_member_assets(
 async fn load_session_row(conn: &mut SqliteConnection, id: Uuid) -> Result<SessionRow> {
     let row = sqlx::query(
         "SELECT id, capture_key, grouping_revision, decision_revision, provisional, date_basis, \
-         superseded_by FROM sessions WHERE id = ?1",
+         framing, superseded_by FROM sessions WHERE id = ?1",
     )
     .bind(id.to_string())
     .fetch_optional(&mut *conn)
@@ -4705,6 +4981,11 @@ async fn load_session_row(conn: &mut SqliteConnection, id: Uuid) -> Result<Sessi
             asset_ids,
             provisional: from_json(&row.try_get::<String, _>("provisional")?)?,
             date_basis: row.try_get("date_basis")?,
+            framing: row
+                .try_get::<Option<String>, _>("framing")?
+                .as_deref()
+                .map(from_json)
+                .transpose()?,
         },
         superseded_by: row.try_get("superseded_by")?,
     })
@@ -5072,7 +5353,7 @@ async fn correct_in_txn<G>(
     correction_id: Uuid,
 ) -> Result<CorrectionOutcome>
 where
-    G: FnMut(&[Asset]) -> GroupingResult,
+    G: Grouping,
 {
     check_expected_assets(conn, expected).await?;
     let created_at = now()?;
@@ -5557,6 +5838,13 @@ async fn confirm_one(
         decision_revision,
     };
     upsert_association(conn, &association, updated_at).await?;
+    if kind == AssociationKind::Equipment {
+        // Confirming a rig records the version the session was captured with.
+        rigs::versions::record_session_rig_version(conn, session.id, subject).await?;
+        // Its camera's defaults apply, and its calibration is matched again
+        // for the rig version and camera it now has.
+        calibration::rig_recorded(conn, session.id).await?;
+    }
     sqlx::query("UPDATE sessions SET decision_revision = ?1 WHERE id = ?2")
         .bind(db_revision(decision_revision)?)
         .bind(session.id.to_string())
@@ -5715,32 +6003,6 @@ async fn associations_of(
         }
     }
     Ok(index)
-}
-
-// ---------------------------------------------------------------------------
-// Coverage helpers
-// ---------------------------------------------------------------------------
-
-fn counts_toward_coverage(state: &AssociationState, evidence: &[EvidenceItem]) -> bool {
-    match state {
-        AssociationState::Confirmed => true,
-        AssociationState::Suggested => {
-            let alias = evidence
-                .iter()
-                .any(|item| matches!(item, EvidenceItem::Alias { agrees: true, .. }));
-            let geometry = evidence.iter().any(|item| {
-                matches!(
-                    item,
-                    EvidenceItem::Coordinates { qualified: true, .. }
-                        | EvidenceItem::Footprint { qualified: true, .. }
-                )
-            });
-            let conflicting =
-                evidence.iter().any(|item| matches!(item, EvidenceItem::Conflict { .. }));
-            alias && geometry && !conflicting
-        }
-        AssociationState::Unresolved | AssociationState::NeedsReview => false,
-    }
 }
 
 /// D16 state of one read request: logical captures of its assets, their
@@ -6984,7 +7246,7 @@ fn open_contained(root: &SourceRoot, relative: &Path) -> Result<(std::fs::File, 
     };
     let mut current = root.path.clone();
     let root_metadata = real_directory(&current)?;
-    if !file_id_matches(&root.location.identity, &root_metadata) {
+    if !file_id_matches(&root.location.identity, &current, &root_metadata) {
         return Err(scoped(
             LibraryError::IdentityConflict("root folder is not the registered folder".into()),
             root.location.path.clone(),
@@ -7061,23 +7323,42 @@ fn device_of(metadata: &std::fs::Metadata) -> u64 {
     metadata.dev()
 }
 
-/// Unix file ids are recorded as decimal `st_ino` on remount-stable volumes.
+/// Whether `identity` names the entry at `path`, whose no-follow metadata is
+/// `metadata`. Unix file ids are the decimal `st_ino` and, on Linux, the
+/// kernel file handle, read by path ([`FileIdentity::unix_file_id`]).
 #[cfg(unix)]
-fn file_id_matches(identity: &FileIdentity, metadata: &std::fs::Metadata) -> bool {
-    use std::os::unix::fs::MetadataExt;
+fn file_id_matches(identity: &FileIdentity, path: &Path, metadata: &std::fs::Metadata) -> bool {
     !identity.volume.file_ids_stable
-        || identity.file_id.as_deref() == Some(metadata.ino().to_string().as_str())
+        || unix_id_matches(identity, metadata, fs_file_handle_linux::of_path(path))
 }
 
 /// Whether an opened source handle is the recorded file. Unix compares the
-/// handle's `st_ino`; `open_contained` already holds it to the root's device.
+/// handle's `st_ino` and, on Linux, its kernel file handle; `open_contained`
+/// already holds it to the root's device.
 #[cfg(unix)]
 fn handle_matches(
-    _file: &std::fs::File,
+    file: &std::fs::File,
     handle: &std::fs::Metadata,
     identity: &FileIdentity,
 ) -> bool {
-    file_id_matches(identity, handle)
+    !identity.volume.file_ids_stable
+        || unix_id_matches(identity, handle, fs_file_handle_linux::of_file(file))
+}
+
+/// Whether the recorded file id matches the entry with `metadata` and the
+/// kernel file handle `kernel` read for it; a handle that can't be read
+/// proves nothing.
+#[cfg(unix)]
+fn unix_id_matches(
+    identity: &FileIdentity,
+    metadata: &std::fs::Metadata,
+    kernel: std::io::Result<Option<String>>,
+) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    kernel.is_ok_and(|kernel| {
+        let observed = FileIdentity::unix_file_id(metadata.ino(), kernel.as_deref());
+        file_ids_match(identity.file_id.as_deref(), Some(&observed))
+    })
 }
 
 // Without stable std handle identity, non-unix hosts rely on the probe for the
@@ -7097,7 +7378,11 @@ const fn device_of(_metadata: &std::fs::Metadata) -> u64 {
 }
 
 #[cfg(not(unix))]
-const fn file_id_matches(_identity: &FileIdentity, _metadata: &std::fs::Metadata) -> bool {
+const fn file_id_matches(
+    _identity: &FileIdentity,
+    _path: &Path,
+    _metadata: &std::fs::Metadata,
+) -> bool {
     true
 }
 
@@ -7305,19 +7590,13 @@ mod tests {
         catalog.limit_writer_pages_for_test().await.unwrap();
         let candidate = large_target();
         let error = catalog.save_target(&candidate, None).await.unwrap_err();
-        assert_eq!(error.response(None, None).kind, "persistence_failure");
+        assert_eq!(error.code().as_str(), "persistence_failure");
         assert!(error.to_string().contains("full"), "{error}");
-        assert_eq!(
-            catalog.target(candidate.id).await.unwrap_err().response(None, None).kind,
-            "not_found"
-        );
+        assert_eq!(catalog.target(candidate.id).await.unwrap_err().code().as_str(), "not_found");
         catalog.close().await.unwrap();
 
         let reopened = Catalog::open(&path).await.unwrap();
-        assert_eq!(
-            reopened.target(candidate.id).await.unwrap_err().response(None, None).kind,
-            "not_found"
-        );
+        assert_eq!(reopened.target(candidate.id).await.unwrap_err().code().as_str(), "not_found");
         assert_eq!(
             reopened.list_targets(0, 10).await.unwrap(),
             [] as [platevault_model::TargetRecord; 0]
@@ -7336,7 +7615,7 @@ mod tests {
         catalog.limit_writer_pages_for_test().await.unwrap();
         let candidate = large_target();
         let error = catalog.save_target(&candidate, None).await.unwrap_err();
-        assert_eq!(error.response(None, None).kind, "persistence_failure");
+        assert_eq!(error.code().as_str(), "persistence_failure");
         assert!(error.to_string().contains("full"), "{error}");
         assert_eq!(
             catalog.list_targets(0, 10).await.unwrap(),
@@ -7396,12 +7675,9 @@ mod tests {
             let cancelled = attempt.is_none();
             assert!(saved.is_ok(), "after {polls} polls (cancelled: {cancelled}): {saved:?}");
             committed.insert(next.id);
-            assert_eq!(
-                catalog.target(large.id).await.unwrap_err().response(None, None).kind,
-                "not_found"
-            );
+            assert_eq!(catalog.target(large.id).await.unwrap_err().code().as_str(), "not_found");
             if let Some(result) = attempt {
-                assert_eq!(result.unwrap_err().response(None, None).kind, "persistence_failure");
+                assert_eq!(result.unwrap_err().code().as_str(), "persistence_failure");
                 break;
             }
         }
@@ -7478,6 +7754,7 @@ mod tests {
                                 asset_ids,
                                 provisional: Vec::new(),
                                 date_basis: None,
+                                framing: None,
                             })
                             .collect(),
                     }
@@ -7622,30 +7899,27 @@ mod tests {
         }
     }
 
-    /// The Prepare all and Results foreign-key lookups seek an index: a
-    /// Prepare all's panel revisions, the Results a preparation revision or a
-    /// Prepare all is recorded on, and a run's open master offers.
+    /// The Project operation lookups seek an index: a Project's latest Apply
+    /// (Home rule 2), and the Wrap up trash items and archive moves a Project
+    /// operation carries.
     #[tokio::test]
-    async fn preparation_and_results_lookups_use_indexes() {
+    async fn project_operation_lookups_use_indexes() {
         let dir = tempfile::tempdir().unwrap();
         let catalog = Catalog::open(&dir.path().join("catalog.sqlite")).await.unwrap();
         let mut conn = catalog.reader().await.unwrap();
         for (sql, index) in [
             (
-                "SELECT state FROM preparation_revisions WHERE group_preparation_id = ?1",
-                "preparation_revisions_group",
+                "SELECT operation_id FROM apply_operations WHERE project_id = ?1 \
+                 ORDER BY generation DESC LIMIT 1",
+                "apply_operations_project",
             ),
             (
-                "SELECT id FROM result_candidates WHERE prepared_revision_id = ?1",
-                "result_candidates_prepared",
+                "SELECT seq FROM wrap_up_trash_items WHERE operation_id = ?1",
+                "wrap_up_trash_items_operation",
             ),
             (
-                "SELECT id FROM result_candidates WHERE group_preparation_id = ?1",
-                "result_candidates_group_prepared",
-            ),
-            (
-                "SELECT id FROM master_offers WHERE view_id = ?1 AND state = 'offered'",
-                "master_offers_view",
+                "SELECT seq FROM archive_moves WHERE project_operation_id = ?1",
+                "archive_moves_project_operation",
             ),
         ] {
             let plan: Vec<String> =
@@ -7662,6 +7936,29 @@ mod tests {
                 "{sql}\n{plan:#?}"
             );
         }
+    }
+
+    /// New-capture discovery's read of a location's recorded paths seeks both
+    /// tables: its assets by location, and only the unsettled archive moves
+    /// out of it, through their partial index. Neither table is scanned, so
+    /// the kept rows of settled archives cost nothing.
+    #[tokio::test]
+    async fn recorded_paths_seek_assets_and_in_flight_archive_moves() {
+        let dir = tempfile::tempdir().unwrap();
+        let catalog = Catalog::open(&dir.path().join("catalog.sqlite")).await.unwrap();
+        let mut conn = catalog.reader().await.unwrap();
+        let plan: Vec<String> =
+            sqlx::query(sqlx::AssertSqlSafe(format!("EXPLAIN QUERY PLAN {RECORDED_PATHS}")))
+                .bind("location")
+                .fetch_all(&mut *conn)
+                .await
+                .unwrap()
+                .iter()
+                .map(|row| row.try_get::<String, _>("detail").unwrap())
+                .collect();
+        let seek = "INDEX archive_moves_in_flight (from_location_id=?)";
+        assert!(plan.iter().any(|detail| detail.contains(seek)), "{plan:#?}");
+        assert!(!plan.iter().any(|detail| detail.starts_with("SCAN")), "{plan:#?}");
     }
 
     /// An older catalog is refused with the documented error before any DDL of
@@ -7683,7 +7980,7 @@ mod tests {
         .unwrap();
         conn.close().await.unwrap();
         let error = Catalog::open(&path).await.err().expect("an older catalog is refused");
-        assert_eq!(error.response(None, None).kind, "invalid_input", "{error}");
+        assert_eq!(error.code().as_str(), "invalid_input", "{error}");
         assert_eq!(error.to_string(), "invalid input: unsupported catalog schema version 2");
         let mut conn = SqliteConnection::connect_with(&options).await.unwrap();
         let tables: Vec<String> =
@@ -7716,6 +8013,8 @@ mod tests {
         };
         assert!(!root("/D/x").descends_from(&recorded), "no ancestry, no identity claim");
         assert!(unix.descends_from(&recorded));
+        let with_handle = FileIdentity { file_id: Some("2:1-0a0b".into()), ..recorded };
+        assert!(unix.descends_from(&with_handle), "the inode number of a Linux file id");
     }
 
     /// A real folder registered on a volume with remount-stable folder ids.
@@ -7723,13 +8022,14 @@ mod tests {
     fn stable_registration(path: &Path) -> LocationRegistration {
         use std::os::unix::fs::MetadataExt;
         let inode = std::fs::symlink_metadata(path).unwrap().ino();
+        let handle = fs_file_handle_linux::of_path(path).unwrap();
         LocationRegistration {
             name: path.file_name().unwrap().to_string_lossy().into_owned(),
             path: NativePath::from_path(path),
             role: LocationRole::Captures,
             identity: FileIdentity {
                 volume: VolumeIdentity { file_ids_stable: true, ..plan_volume("search-vol") },
-                file_id: Some(inode.to_string()),
+                file_id: Some(FileIdentity::unix_file_id(inode, handle.as_deref())),
             },
             volume_kind: VolumeKind::Local,
         }
@@ -7839,7 +8139,7 @@ mod tests {
         .await;
         let error = catalog.register_location(&stable_registration(&archive)).await.unwrap_err();
         assert_eq!(searches.load(Ordering::SeqCst), 2, "searched again for the moved root");
-        assert_eq!(error.response(None, None).kind, "identity_conflict");
+        assert_eq!(error.code().as_str(), "identity_conflict");
         let found = std::fs::canonicalize(&moved).unwrap().display().to_string();
         let message = error.to_string();
         assert!(message.contains("\"Darks\"") && message.contains(&found), "{message}");
@@ -7865,7 +8165,7 @@ mod tests {
         let error = catalog.register_location(&stable_registration(&flats)).await.unwrap_err();
         assert_eq!(searches.load(Ordering::SeqCst), STALE_ROOT_SEARCH_ATTEMPTS);
         let response = error.response(None, None);
-        assert_eq!((response.kind.as_str(), response.identity), ("conflict", Some(others[2].id)));
+        assert_eq!((response.code.as_str(), response.identity), ("conflict", Some(others[2].id)));
         assert_eq!(catalog.list_locations().await.unwrap().len(), 5, "refusals write nothing");
         assert_eq!(digest_of(&moved.join("Dark_001.fits")), original, "originals unchanged");
     }

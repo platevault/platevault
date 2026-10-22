@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS measurement_run_issues (
     position INTEGER NOT NULL,
     asset_id TEXT NOT NULL REFERENCES assets (id),
     kind TEXT NOT NULL,
-    message TEXT NOT NULL,
+    parameters TEXT NOT NULL CHECK (json_valid(parameters)),
     PRIMARY KEY (run_id, position)
 ) STRICT;
 

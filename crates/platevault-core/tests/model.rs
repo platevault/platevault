@@ -118,6 +118,49 @@ fn mount_unstable_file_numbers_do_not_invalidate_identical_decision_fingerprint(
     assert!(!a.equivalent(&b));
 }
 
+/// A Linux file id carries the kernel file handle, so an entry made under a
+/// reused inode number is another entry. An id with a handle never matches
+/// one without: a handle read the kernel refused (`EPERM`, `EOVERFLOW`) gives
+/// the inode number alone, which can't prove the recorded generation, so it
+/// fails closed whichever side it is on. Two ids without one match on the
+/// inode number.
+#[test]
+fn a_file_handle_tells_a_reused_inode_number_apart_and_never_matches_an_id_without_one() {
+    let volume = VolumeIdentity {
+        filesystem: "ext4".into(),
+        stable_id: Some("volume".into()),
+        file_ids_stable: true,
+        case: platevault_core::PathSensitivity::Sensitive,
+        normalization: platevault_core::PathSensitivity::Sensitive,
+    };
+    let id = |file_id: &str| FileIdentity { volume: volume.clone(), file_id: Some(file_id.into()) };
+    let recorded = id(&FileIdentity::unix_file_id(42, Some("1-0a0b")));
+    assert_eq!(recorded.file_id.as_deref(), Some("42:1-0a0b"));
+    assert!(id("42:1-0a0b").is_recorded(&recorded));
+    assert!(!id("42:1-0c0d").is_recorded(&recorded), "the inode number reused");
+    assert!(!id("43:1-0a0b").is_recorded(&recorded));
+    let refused = id(&FileIdentity::unix_file_id(42, None));
+    assert_eq!(refused.file_id.as_deref(), Some("42"));
+    assert!(!refused.is_recorded(&recorded), "a refused handle read is no proof");
+    assert!(!recorded.is_recorded(&refused), "nor is an id recorded under one");
+    assert!(id("42").is_recorded(&refused), "neither has a handle");
+    assert!(!id("43").is_recorded(&refused));
+    assert_eq!(FileIdentity::unix_inode("42:1-0a0b"), Some(42));
+    assert_eq!(FileIdentity::unix_inode("42"), Some(42));
+    assert!(!id("42").is_recorded(&FileIdentity { file_id: None, ..refused.clone() }));
+
+    let fingerprint = |identity: FileIdentity| ObservationFingerprint {
+        identity,
+        size_bytes: 16,
+        modified_ns: 123,
+        content_sha256: None,
+    };
+    assert!(fingerprint(id("42:1-0a0b")).equivalent(&fingerprint(recorded.clone())));
+    assert!(!fingerprint(refused.clone()).equivalent(&fingerprint(recorded.clone())));
+    assert!(!fingerprint(recorded.clone()).equivalent(&fingerprint(refused)));
+    assert!(!fingerprint(id("42:1-0c0d")).equivalent(&fingerprint(recorded)));
+}
+
 #[test]
 fn sky_cone_refuses_nonfinite_out_of_range_coordinates() {
     for cone in [

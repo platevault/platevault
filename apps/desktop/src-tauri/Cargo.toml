@@ -19,8 +19,8 @@ app_core = { path = "../../../crates/app/core" }
 # Framework-agnostic backend services: notifications, logging, the log viewer
 # stream and job-progress feeds. This shell adapts them to Tauri events.
 desktop_services = { path = "../../../crates/desktop/services" }
-platevault_core = { path = "../../../crates/platevault-core" }
-persistence_library = { path = "../../../crates/persistence/library" }
+platevault_core = { path = "../../../crates/platevault-core", features = ["wire"] }
+persistence_library = { path = "../../../crates/persistence/library", features = ["wire"] }
 camino = { workspace = true }
 workflow_profiles = { path = "../../../crates/workflow/profiles" }
 audit = { path = "../../../crates/audit" }
@@ -98,6 +98,16 @@ tempfile = { workspace = true }
 # runner with no interactive desktop. Dev-only, so no shipping build can reach
 # it.
 fs_executor = { path = "../../../crates/fs/executor", features = ["e2e-trash-fake"] }
+# `tests/library_controls.rs` holds a real Apply where a tool holding a file
+# in View would (`platevault_core::apply::pacing`), and builds its world with
+# the core's own test support, which hashes with sha2 and hex. Dev-only, so
+# no shipping build can stall an Apply.
+platevault_core = { path = "../../../crates/platevault-core", features = ["test-pacing"] }
+sha2 = { workspace = true }
+hex = { workspace = true }
+# The workspace's FITS fixture builder: `tests/library_restart.rs` scans real
+# FITS files through the library shell.
+fits_fixtures = { path = "../../../crates/testing/fits-fixtures" }
 
 [features]
 # Developer-mode surface (spec 021). Release binaries MUST NOT enable this.

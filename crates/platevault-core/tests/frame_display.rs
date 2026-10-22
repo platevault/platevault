@@ -332,6 +332,82 @@ async fn thumbnail_cached_by_sha_and_redecoded_on_change() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn thumbnail_failure_response_excludes_path_and_os_diagnostic() {
+    let shelf = Shelf::new(|root| write_star_frames(root, 1)).await;
+    let asset = shelf.assets()[0];
+    let sentinel = shelf.path(0);
+    let sentinel_text = sentinel.display().to_string();
+    std::fs::remove_file(&sentinel).unwrap();
+    let os_error_text = std::fs::File::open(&sentinel).unwrap_err().to_string();
+
+    let entries = shelf.review().thumbnails(&[asset]).await.unwrap();
+    assert_eq!(entries[0].state, ThumbnailState::Pending);
+    let entries = settled(shelf.review(), &[asset]).await;
+    let response = serde_json::to_value(&entries[0]).unwrap();
+    let response_text = response.to_string();
+
+    assert!(
+        !response_text.contains(&sentinel_text),
+        "thumbnail IPC disclosed the source path: {response_text}"
+    );
+    assert!(
+        !response_text.contains(&os_error_text),
+        "thumbnail IPC disclosed OS error text: {response_text}"
+    );
+    assert_eq!(response["state"], "unreadable");
+    assert_eq!(response["code"], "not_found");
+    assert!(response["parameters"].is_object());
+}
+
+#[cfg(unix)]
+fn read_folder_error(path: &Path) -> std::io::Error {
+    use std::io::Read as _;
+
+    let mut file = std::fs::File::open(path).unwrap();
+    let mut byte = [0; 1];
+    file.read(&mut byte).unwrap_err()
+}
+
+#[cfg(windows)]
+fn read_folder_error(path: &Path) -> std::io::Error {
+    std::fs::File::open(path).unwrap_err()
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn thumbnail_folder_response_excludes_path_and_os_diagnostic() {
+    let shelf = Shelf::new(|root| write_star_frames(root, 1)).await;
+    let asset = shelf.assets()[0];
+    let sentinel = shelf.path(0);
+    let sentinel_text = sentinel.display().to_string();
+    std::fs::remove_file(&sentinel).unwrap();
+    std::fs::create_dir(&sentinel).unwrap();
+    let os_error_text = read_folder_error(&sentinel).to_string();
+
+    let entries = shelf.review().thumbnails(&[asset]).await.unwrap();
+    assert_eq!(entries[0].state, ThumbnailState::Pending);
+    let entries = settled(shelf.review(), &[asset]).await;
+    let response = serde_json::to_value(&entries[0]).unwrap();
+    let response_text = response.to_string();
+
+    assert_eq!(response["state"], "unreadable");
+    // SourceProbe::fingerprint assigns InvalidInput to directories, so thumbnail
+    // failures use that stable code instead of platform-specific IO errors.
+    assert_eq!(response["code"], "invalid_input");
+    assert!(
+        !response_text.contains(&sentinel_text),
+        "thumbnail IPC disclosed the source path: {response_text}"
+    );
+    assert!(
+        !response_text.contains(&os_error_text),
+        "thumbnail IPC disclosed OS error text: {response_text}"
+    );
+    assert!(
+        !response_text.contains("os error"),
+        "thumbnail IPC disclosed an OS error: {response_text}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn thumbnail_never_starts_measurement() {
     let shelf = Shelf::new(|root| write_star_frames(root, 3)).await;
     let ids = shelf.assets();

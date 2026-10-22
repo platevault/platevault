@@ -11,35 +11,34 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use platevault_model::{
     Asset, AssetReference, Availability, CalibrationRules, CandidateRef, CustodyFact, CustodyKind,
-    LocationLifecycle, MasterKeptCopy, ReferenceKind,
+    InputKind, LocationLifecycle, MasterKeptCopy, ReferenceKind, Revision,
 };
+use sqlx::sqlite::{SqliteConnection, SqliteRow};
 use sqlx::{Connection, Row};
 use uuid::Uuid;
 
 use super::{inventory, load_masters};
-use crate::{json_ids, load_assets, load_location, parse_uuid, revision, Catalog, Result};
+use crate::{
+    from_text, json_ids, load_assets, load_location, parse_uuid, revision, Catalog, Result,
+};
 
-/// Runs whose effective (latest, not withdrawn) decision per light group and
-/// kind holds an asked asset as a light member or a hashed input, with the
-/// run's latest committed name and its plan revision.
-const DECISION_REFERENCES: &str = "\
-    WITH asked(id) AS (SELECT value FROM json_each(?1)), \
-    effective AS (SELECT d.view_id, d.light_asset_ids, d.inputs FROM calibration_decisions d \
-        WHERE d.resolution != 'withdrawn' AND d.rowid = (SELECT MAX(e.rowid) \
-        FROM calibration_decisions e WHERE e.view_id = d.view_id \
-        AND e.light_group = d.light_group AND e.kind = d.kind)), \
-    held(view_id, asset_id) AS ( \
-        SELECT f.view_id, l.value FROM effective f, json_each(f.light_asset_ids) l \
-        WHERE l.value IN (SELECT id FROM asked) \
-        UNION SELECT f.view_id, json_extract(i.value, '$.assetId') \
-        FROM effective f, json_each(f.inputs) i \
-        WHERE json_extract(i.value, '$.assetId') IN (SELECT id FROM asked)) \
-    SELECT h.view_id, h.asset_id, coalesce(p.revision, 0) AS revision, c.name AS name \
-    FROM held h JOIN views v ON v.id = h.view_id \
-    LEFT JOIN calibration_plans p ON p.view_id = h.view_id \
-    JOIN view_revisions c ON c.view_id = v.id AND c.revision = v.revision \
-        AND c.state = 'committed' \
-    ORDER BY h.view_id, h.asset_id";
+/// The pinned kinds whose raw-set pin binds an asked frame, by the frame ids
+/// the pin recorded, and those pinning an adopted master whose file at the
+/// master's location and path is asked. Suggestions and No hold nothing.
+const PINNED_FILES: &str = "\
+    SELECT k.session_id, k.kind, c.generation, json_extract(f.value, '$.assetId') AS asset_id \
+    FROM session_calibration_kinds k \
+    JOIN session_calibration c ON c.session_id = k.session_id \
+    JOIN json_each(k.pin, '$.target.files') f \
+    WHERE k.state = 'pinned' AND k.input_session_id IS NOT NULL \
+    AND json_extract(f.value, '$.assetId') IN (SELECT value FROM json_each(?1)) \
+    UNION ALL \
+    SELECT k.session_id, k.kind, c.generation, a.id AS asset_id \
+    FROM assets a \
+    JOIN adopted_masters m ON m.location_id = a.location_id AND m.path_key = a.path_key \
+    JOIN session_calibration_kinds k ON k.input_master_id = m.id \
+    JOIN session_calibration c ON c.session_id = k.session_id \
+    WHERE k.state = 'pinned' AND a.id IN (SELECT value FROM json_each(?1))";
 
 impl Catalog {
     /// The calibration files STO keeps in protected Keep: candidate masters,
@@ -47,11 +46,11 @@ impl Catalog {
     /// with its recorded no-follow fingerprint; a retained source names its
     /// kept copy, the adopted master.
     ///
-    /// Until results discovery identifies a run's outputs, the facts are
-    /// library-wide: every listed candidate master, every adopted master in an
-    /// Active location and every adopted master's source still recorded outside
-    /// a Retired location and outside the Trash. A source whose adoption failed
-    /// stays a candidate master. Hashes and opens nothing.
+    /// The facts are library-wide: every listed candidate master, every
+    /// adopted master in an Active location and every adopted master's source
+    /// still recorded outside a Retired location and outside the Trash. A
+    /// source whose adoption failed stays a candidate master. Hashes and opens
+    /// nothing.
     ///
     /// # Errors
     /// `PersistenceFailure` when the catalog cannot be read.
@@ -88,7 +87,6 @@ impl Catalog {
                     kind: CustodyKind::CandidateMaster,
                     asset_id: Some(asset_id),
                     master_id: None,
-                    result_id: None,
                     location_id: copy.location_id,
                     relative_path: copy.relative_path.clone(),
                     fingerprint: copy.fingerprint.clone(),
@@ -102,7 +100,6 @@ impl Catalog {
                     kind: CustodyKind::AdoptedMaster,
                     asset_id: master.asset_id,
                     master_id: Some(master.id),
-                    result_id: None,
                     location_id: master.location_id,
                     relative_path: master.relative_path.clone(),
                     fingerprint: master.fingerprint.clone(),
@@ -120,7 +117,6 @@ impl Catalog {
                 kind: CustodyKind::GeneratedSource,
                 asset_id: Some(source.id),
                 master_id: None,
-                result_id: master.provenance.source.result_id,
                 location_id: source.location_id,
                 relative_path: source.relative_path.clone(),
                 fingerprint: source.fingerprint.clone(),
@@ -135,11 +131,13 @@ impl Catalog {
         Ok(facts)
     }
 
-    /// The calibration records holding any of `assets`, kind Calibration: each
-    /// run whose effective decisions hold them as light members or hashed
-    /// inputs, at its plan revision, and each adopted master whose source or
-    /// indexed destination is asked, at the master revision. A withdrawn
-    /// decision names nothing.
+    /// The calibration records holding any of `assets`, kind Calibration:
+    /// each adopted master whose source or indexed destination is asked, at
+    /// the master revision, then each session whose calibration pins an
+    /// asked file, at its calibration generation. A pin is the session's use
+    /// of the file (record §6: Hide and Move to Trash of a master list the
+    /// sessions that use it), so a review names it and goes stale when the
+    /// session's pins change.
     ///
     /// # Errors
     /// `PersistenceFailure` when the catalog cannot be read.
@@ -152,33 +150,11 @@ impl Catalog {
         }
         let mut conn = self.reader().await?;
         let mut snapshot = conn.begin().await?;
-        let rows = sqlx::query(DECISION_REFERENCES)
-            .bind(json_ids(assets)?)
-            .fetch_all(&mut *snapshot)
-            .await?;
         let masters = load_masters(&mut snapshot).await?;
+        let pins = pin_references(&mut snapshot, assets).await?;
         snapshot.rollback().await?;
 
-        let mut runs: BTreeMap<Uuid, AssetReference> = BTreeMap::new();
-        for row in &rows {
-            let id = parse_uuid(&row.try_get::<String, _>("view_id")?)?;
-            let asset = parse_uuid(&row.try_get::<String, _>("asset_id")?)?;
-            if let Some(reference) = runs.get_mut(&id) {
-                reference.asset_ids.push(asset);
-                continue;
-            }
-            runs.insert(
-                id,
-                AssetReference {
-                    kind: ReferenceKind::Calibration,
-                    id,
-                    name: row.try_get("name")?,
-                    revision: revision(row.try_get("revision")?)?,
-                    asset_ids: vec![asset],
-                },
-            );
-        }
-        let mut references: Vec<AssetReference> = runs.into_values().collect();
+        let mut references = Vec::new();
         for master in masters {
             let held: BTreeSet<Uuid> = [master.provenance.source.asset_id, master.asset_id]
                 .into_iter()
@@ -196,6 +172,73 @@ impl Catalog {
                 asset_ids: held.into_iter().collect(),
             });
         }
+        references.extend(pins);
         Ok(references)
     }
+}
+
+/// Pinned calibration kinds whose recorded files intersect `assets`.
+///
+/// Read by Retire location in the same writer transaction as its review or
+/// confirmation so blocker facts and the resulting refusal share a snapshot.
+pub async fn pinned_calibration_kinds(
+    conn: &mut SqliteConnection,
+    assets: &BTreeSet<Uuid>,
+) -> Result<BTreeMap<Uuid, BTreeSet<InputKind>>> {
+    if assets.is_empty() {
+        return Ok(BTreeMap::new());
+    }
+    let rows: Vec<SqliteRow> =
+        sqlx::query(PINNED_FILES).bind(json_ids(assets)?).fetch_all(&mut *conn).await?;
+    let mut sessions: BTreeMap<Uuid, BTreeSet<InputKind>> = BTreeMap::new();
+    for row in &rows {
+        let session_id = parse_uuid(&row.try_get::<String, _>("session_id")?)?;
+        let kind: InputKind = from_text(&row.try_get::<String, _>("kind")?)?;
+        sessions.entry(session_id).or_default().insert(kind);
+    }
+    Ok(sessions)
+}
+/// What one session's pins hold of the asked files.
+struct SessionPins {
+    generation: Revision,
+    kinds: BTreeSet<InputKind>,
+    assets: BTreeSet<Uuid>,
+}
+
+/// One reference per session whose pinned kinds bind an asked file, in
+/// session id order: named by its pinned kinds, at its calibration
+/// generation, holding the asked files its pins bind.
+async fn pin_references(
+    conn: &mut SqliteConnection,
+    assets: &BTreeSet<Uuid>,
+) -> Result<Vec<AssetReference>> {
+    let rows: Vec<SqliteRow> =
+        sqlx::query(PINNED_FILES).bind(json_ids(assets)?).fetch_all(&mut *conn).await?;
+    let mut sessions: BTreeMap<Uuid, SessionPins> = BTreeMap::new();
+    for row in &rows {
+        let session_id = parse_uuid(&row.try_get::<String, _>("session_id")?)?;
+        let kind: InputKind = from_text(&row.try_get::<String, _>("kind")?)?;
+        let asset = parse_uuid(&row.try_get::<String, _>("asset_id")?)?;
+        let generation = revision(row.try_get("generation")?)?;
+        let pins = sessions.entry(session_id).or_insert_with(|| SessionPins {
+            generation,
+            kinds: BTreeSet::new(),
+            assets: BTreeSet::new(),
+        });
+        pins.kinds.insert(kind);
+        pins.assets.insert(asset);
+    }
+    Ok(sessions
+        .into_iter()
+        .map(|(session_id, pins)| {
+            let kinds: Vec<&str> = pins.kinds.iter().map(|kind| kind.as_str()).collect();
+            AssetReference {
+                kind: ReferenceKind::Calibration,
+                id: session_id,
+                name: format!("{} pinned on session {session_id}", kinds.join(", ")),
+                revision: pins.generation,
+                asset_ids: pins.assets.into_iter().collect(),
+            }
+        })
+        .collect())
 }

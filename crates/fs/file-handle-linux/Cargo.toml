@@ -1,0 +1,39 @@
+[package]
+name = "fs_file_handle_linux"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+# astro-plan-yju9s: the Linux kernel file handle of an entry, which carries
+# its inode's generation, behind a safe API, so a recorded file ID tells an
+# entry apart from one made under its reused inode number. It is one FFI call
+# (`name_to_handle_at`, which rustix doesn't wrap), so this crate alone allows
+# `unsafe` at that call site and `platevault_core` and `persistence_library`
+# keep the workspace `forbid`. Other Unix targets get no handle; Windows
+# doesn't build it.
+[target.'cfg(target_os = "linux")'.dependencies]
+# Owner-approved direct dependency (astro-plan-yju9s); the version already
+# locked through rustix's dependents.
+libc = "0.2.189"
+
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+tempfile = { workspace = true }
+
+# The workspace table with `unsafe_code` at `deny` instead of `forbid`, so the
+# FFI call site can allow it. Keep the rest in step with the workspace
+# `[workspace.lints]`.
+[lints.rust]
+unsafe_code = "deny"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+disallowed_methods = "allow"
+use_self = "warn"
+redundant_pub_crate = "warn"
+derive_partial_eq_without_eq = "warn"
+redundant_clone = "warn"
+needless_collect = "warn"
+significant_drop_tightening = "warn"
+or_fun_call = "warn"
+cognitive_complexity = "warn"

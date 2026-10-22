@@ -13,9 +13,9 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use platevault_model::{
-    AdoptedMaster, ApplicableQuality, Asset, Availability, CalibrationDecision, CalibrationRules,
-    CandidateRef, CaptureEvidence, Classification, EvidenceField, InputCandidate, InputEvidence,
-    InputForm, InputKind, InputRef, InputState, Location, LocationLifecycle, MasterOrigin, Session,
+    AdoptedMaster, ApplicableQuality, Asset, Availability, CalibrationRules, CandidateRef,
+    CaptureEvidence, Classification, EvidenceField, InputForm, InputKind, InputState, Location,
+    LocationLifecycle, MasterOrigin, Session,
 };
 use sqlx::sqlite::SqliteConnection;
 use uuid::Uuid;
@@ -40,24 +40,6 @@ pub struct Listed {
     pub summary: CalibrationInputSummary,
     pub members: Vec<InputMember>,
     pub excluded: Vec<InputMember>,
-}
-
-impl Listed {
-    /// The input as the planner sees it.
-    pub fn candidate(&self) -> InputCandidate {
-        let summary = &self.summary;
-        InputCandidate {
-            candidate: summary.input,
-            evidence: InputEvidence {
-                kind: summary.kind,
-                form: summary.form,
-                capture: summary.evidence.clone(),
-            },
-            state: summary.state.clone(),
-            master: summary.master.clone(),
-            origin: summary.origin.clone(),
-        }
-    }
 }
 
 const fn form_rank(form: InputForm) -> u8 {
@@ -133,57 +115,6 @@ pub async fn list_inputs<R: CalibrationRules + ?Sized>(
     }
     listed.sort_by(listing_order);
     Ok(listed)
-}
-
-/// Inputs that decisions name but that no longer list as they were decided:
-/// a raw set whose Session was superseded or regrouped reads `superseded`.
-pub async fn unlisted_inputs<R: CalibrationRules + ?Sized>(
-    conn: &mut SqliteConnection,
-    decisions: &[CalibrationDecision],
-    listed: &[Listed],
-    rules: &R,
-) -> Result<Vec<InputCandidate>> {
-    let known: BTreeSet<CandidateRef> = listed.iter().map(|l| l.summary.input).collect();
-    let mut added = BTreeMap::new();
-    for decision in decisions {
-        let Some(input @ InputRef::RawSet { .. }) = decision.input else { continue };
-        let reference = CandidateRef::from(input);
-        if known.contains(&reference) || added.contains_key(&reference) {
-            continue;
-        }
-        let ids: BTreeSet<Uuid> = decision.inputs.iter().filter_map(|file| file.asset_id).collect();
-        let assets = load_assets(conn, &ids).await?;
-        let Some(asset) = assets.first() else { continue };
-        let kind = rules
-            .classify(&asset.effective, &asset.relative_path)
-            .map_or(decision.kind, |classification| classification.kind);
-        let session = load_session_row(conn, input.id()).await?.session;
-        let capture = CaptureEvidence::from_metadata(
-            &asset.effective,
-            &corrected_fields(conn, asset.id).await?,
-            night_of(&session.key).as_deref(),
-            super::confirmed_equipment(conn, session.id).await?,
-        );
-        let available = assets.iter().filter(|a| a.availability == Availability::Available).count();
-        added.insert(
-            reference,
-            InputCandidate {
-                candidate: reference,
-                evidence: InputEvidence { kind, form: InputForm::RawSet, capture },
-                state: InputState {
-                    availability: session_availability(&assets),
-                    members: count(assets.len()),
-                    available_members: count(available),
-                    excluded_members: 0,
-                    superseded: true,
-                    drifted: false,
-                },
-                master: None,
-                origin: None,
-            },
-        );
-    }
-    Ok(added.into_values().collect())
 }
 
 async fn cached_location(

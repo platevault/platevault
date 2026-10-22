@@ -2,55 +2,50 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! The Storage overview (spec 071 STO-FR-11, STO-FR-12, STO-AC-12, D16) on
-//! the composed library over real files: location availability, run
-//! footprints, live content-identity duplicate candidates and archive
-//! transfers in separate sections; a candidate shown authorizes nothing; and
-//! external drift in an entry the application wrote blocks that item.
-#![cfg(unix)]
+//! the composed library over real files: location availability, live
+//! content-identity duplicate candidates and archive transfers in separate
+//! sections; a candidate shown authorizes nothing; and external drift in an
+//! entry the application wrote blocks that item. A Project's footprint is its
+//! Apply sheet's, so Storage lists none (record §2 line 20). Whose archive a
+//! transfer is (`ArchiveOwner`) is covered by `wrap_up.rs`.
 
-#[path = "support/prepare_group.rs"]
-mod group_support;
+#[path = "support/apply.rs"]
+mod apply_support;
 #[path = "support/storage_overview.rs"]
 mod overview_support;
-#[path = "support/prepare.rs"]
-mod prepare_support;
 mod support;
 
 use std::collections::BTreeSet;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 
+use apply_support::{catalogued, World, HA, OIII};
 use overview_support::{append, register, step_to, transfer_draft, BinTrash, Duplicates};
 use platevault_core::custody::trash::OsTrash;
 use platevault_core::library::Library;
 use platevault_core::*;
-use prepare_support::{digest, tree, world, Watch, HA_LIGHTS, OIII_LIGHTS, RUN};
 use uuid::Uuid;
 
-const QUIET: &str = "exit 0";
-
-fn path(native: &NativePath) -> PathBuf {
-    native.to_path_buf().unwrap()
-}
-
 /// Every file below `root` with its digest, the catalog's own files aside.
-fn files(root: &Path) -> Vec<(PathBuf, String)> {
-    tree(root).into_iter().filter(|(path, _)| !path.to_string_lossy().contains(".sqlite")).collect()
+fn files(root: &Path) -> Vec<(String, String)> {
+    World::tree(root)
+        .into_iter()
+        .filter(|path| !path.contains(".sqlite"))
+        .map(|path| {
+            let digest = support::digest(&root.join(&path));
+            (path, digest)
+        })
+        .collect()
 }
 
-/// STO-AC-12: given registered online and offline locations, a prepared run,
-/// duplicate content and an archive transfer, Storage shows each in its own
-/// section: a Trash operation is no transfer, a Trashed copy is no duplicate
-/// and a prepared copy is footprint only.
+/// STO-AC-12: given registered online and offline locations, duplicate
+/// content and an archive transfer, Storage shows each in its own section: a
+/// Trash operation is no transfer and a Trashed copy is no duplicate.
 #[tokio::test]
-async fn overview_separates_availability_footprints_duplicates_transfers() {
-    let world = world().await;
+async fn overview_separates_availability_duplicates_transfers() {
+    let world = catalogued(ViewMode::Symlinks).await;
     let root = fs::canonicalize(world.temp.path()).unwrap();
-    let profile = world.siril(QUIET).await;
-    let request = world.request(&profile, InputMode::Copy, None);
-    let outcome = world.prepare(&request, &Watch::quiet()).await;
-    assert_eq!(outcome.revision.state, PreparationState::Prepared, "{outcome:#?}");
     let duplicates = Duplicates::new(&world.library, &root).await;
     let drive = register(&world.library, &root.join("Travel drive"), "Travel drive").await;
     world
@@ -60,7 +55,7 @@ async fn overview_separates_availability_footprints_duplicates_transfers() {
         .unwrap();
     let archive = root.join("Archive");
     fs::create_dir_all(&archive).unwrap();
-    let source = world.light(HA_LIGHTS[0]);
+    let source = world.light(HA[0]);
     let draft = transfer_draft(&world.library, &source, &archive, "NGC 7000/Ha_001.fits").await;
     let transfer = world
         .catalog()
@@ -91,23 +86,6 @@ async fn overview_separates_availability_footprints_duplicates_transfers() {
         }
     }
 
-    // Run footprints: the run's prepared folder, its copies and Results folder.
-    assert_eq!(overview.footprints.len(), 1, "{:#?}", overview.footprints);
-    let run = &overview.footprints[0];
-    assert_eq!((run.view_id, run.name.as_str()), (world.run, RUN));
-    assert!(!run.in_project_trash);
-    assert_eq!(run.results_folder.as_ref(), Some(&outcome.revision.results_folder));
-    assert_eq!(run.revisions.len(), 1);
-    let revision = &run.revisions[0];
-    assert_eq!((revision.preparation_id, revision.n), (outcome.revision.id, 1));
-    assert_eq!(revision.folder, outcome.revision.folder);
-    assert_eq!((revision.state, revision.mode), (PreparationState::Prepared, InputMode::Copy));
-    let copy_bytes: u64 = outcome.prepared.iter().map(|entry| entry.size_bytes).sum();
-    assert_eq!(revision.entries as usize, outcome.prepared.len());
-    assert!(copy_bytes > 0);
-    assert_eq!((revision.footprint_bytes, run.footprint_bytes), (copy_bytes, copy_bytes));
-    assert!(revision.blocked.is_empty(), "{:#?}", revision.blocked);
-
     // Duplicate candidates: the frame's live copies in Disk A and Disk B only.
     assert_eq!(overview.duplicates.len(), 1, "{:#?}", overview.duplicates);
     let candidate = &overview.duplicates[0];
@@ -116,80 +94,25 @@ async fn overview_separates_availability_footprints_duplicates_transfers() {
     assert_eq!(homes, vec![duplicates.locations[0].id, duplicates.locations[1].id]);
     assert!(candidate.copies.iter().all(|copy| copy.availability == Availability::Available));
 
-    // Archive transfers: the Copy with its phases; the cleanup Trash is not one.
+    // Archive transfers: the Copy with its phases, no Project's or Sessions'
+    // archive; the Trash of the Disk C copy is not one.
     assert_eq!(overview.transfers.len(), 1, "{:#?}", overview.transfers);
     let shown = &overview.transfers[0];
     assert_eq!(shown.operation_id, transfer);
     assert_ne!(shown.operation_id, duplicates.cleanup);
     assert_eq!(
-        (shown.kind, shown.state),
-        (StorageOperationKind::Copy, StorageOperationState::Settled)
+        (shown.kind, shown.state, shown.archive.as_ref()),
+        (StorageOperationKind::Copy, StorageOperationState::Settled, None)
     );
     let item = &shown.items[0];
     assert_eq!(item.source, NativePath::from_path(&source));
     assert_eq!((item.phase, item.outcome), (ItemPhase::Settled, Some(ItemOutcome::Copied)));
     assert!(item.blocked.is_none(), "{item:?}");
 
-    // The sections stay separate on the wire.
+    // The sections stay separate on the wire, with no run footprints.
     let wire = serde_json::to_value(&overview).unwrap();
     let sections: BTreeSet<&str> = wire.as_object().unwrap().keys().map(String::as_str).collect();
-    assert_eq!(
-        sections,
-        ["duplicates", "footprints", "groupFootprints", "locations", "transfers"]
-            .into_iter()
-            .collect()
-    );
-    assert!(overview.group_footprints.is_empty(), "{:#?}", overview.group_footprints);
-}
-
-/// STO-FR-11, PREP-FR-12/13: a run group's Prepare all shows as its group
-/// folder with the panel run revisions in it, their copies' bytes and the
-/// Assembled folder, and each panel run lists its `Panel N/` revision.
-#[tokio::test]
-async fn group_footprint_lists_prepare_all_and_assembled() {
-    let world = group_support::group_world().await;
-    let profile = world.wbpp(QUIET).await;
-    let request = world.setup(&profile, InputMode::Copy).await;
-    let outcome = world.prepare_all(&request, &Watch::quiet()).await;
-    assert_eq!(outcome.preparation.outcome, PreparationState::Prepared, "{outcome:#?}");
-
-    let overview = world.library.storage_overview().await.unwrap();
-    assert_eq!(overview.footprints.len(), 3, "{:#?}", overview.footprints);
-    let mut panel_bytes = 0;
-    for panel in &outcome.panels {
-        let prepared = &panel.outcome.revision;
-        let run = overview.footprints.iter().find(|run| run.view_id == prepared.view_id).unwrap();
-        assert_eq!(run.results_folder.as_ref(), Some(&prepared.results_folder));
-        let [revision] = run.revisions.as_slice() else {
-            panic!("Panel {}: {:#?}", panel.number, run.revisions);
-        };
-        assert_eq!((revision.preparation_id, &revision.folder), (prepared.id, &prepared.folder));
-        assert_eq!(revision.group_preparation_id, Some(outcome.preparation.id));
-        panel_bytes += revision.footprint_bytes;
-    }
-    assert!(panel_bytes > 0);
-
-    let [group] = overview.group_footprints.as_slice() else {
-        panic!("{:#?}", overview.group_footprints);
-    };
-    assert_eq!(
-        (group.group_id, group.project_id, group.name.as_str()),
-        (world.group, world.project, group_support::MOSAIC)
-    );
-    assert_eq!(group.assembled_folder.as_ref(), Some(&outcome.assembled));
-    let [revision] = group.revisions.as_slice() else {
-        panic!("{:#?}", group.revisions);
-    };
-    assert_eq!(
-        (revision.group_preparation_id, revision.n, revision.outcome),
-        (outcome.preparation.id, 1, PreparationState::Prepared)
-    );
-    assert_eq!(revision.folder, outcome.preparation.folder);
-    let listed: BTreeSet<Uuid> = revision.panel_preparations.iter().copied().collect();
-    let panels: BTreeSet<Uuid> =
-        outcome.panels.iter().map(|panel| panel.outcome.revision.id).collect();
-    assert_eq!(listed, panels);
-    assert_eq!((revision.footprint_bytes, group.footprint_bytes), (panel_bytes, panel_bytes));
+    assert_eq!(sections, ["duplicates", "locations", "transfers"].into_iter().collect());
 }
 
 /// STO-FR-11, D16: showing a duplicate candidate, however often, records no
@@ -245,32 +168,25 @@ async fn candidate_display_authorizes_nothing() {
     }
     assert_eq!(files(&root), before_files, "no file moves or changes");
     for path in &duplicates.paths[..2] {
-        assert_eq!(digest(path), duplicates.sha256, "every live copy stays in place");
+        assert_eq!(support::digest(path), duplicates.sha256, "every live copy stays in place");
     }
 }
 
 /// STO-FR-12: an entry the application wrote that changed outside
-/// `PlateVault` blocks its item for review before anything mutates: a
-/// prepared copy, the copy a transfer wrote, a transfer item's reviewed
-/// source, and a destination another file now occupies. The overview changes
-/// neither the files nor the journal.
+/// `PlateVault` blocks its item for review before anything mutates: the copy
+/// a transfer wrote, a transfer item's reviewed source, and a destination
+/// another file now occupies. The overview changes neither the files nor the
+/// journal.
 #[tokio::test]
 async fn external_drift_in_app_written_entry_blocks_item() {
-    let world = world().await;
+    let world = catalogued(ViewMode::Symlinks).await;
     let root = fs::canonicalize(world.temp.path()).unwrap();
-    let profile = world.siril(QUIET).await;
-    let request = world.request(&profile, InputMode::Copy, None);
-    let outcome = world.prepare(&request, &Watch::quiet()).await;
-    assert_eq!(outcome.revision.state, PreparationState::Prepared, "{outcome:#?}");
-    let edited = outcome.prepared[0].clone();
-    append(&path(&edited.path));
-
     let archive = root.join("Archive");
     fs::create_dir_all(archive.join("taken")).unwrap();
     let occupied = archive.join("taken/OIII_002.fits");
     fs::write(&occupied, b"a file PlateVault did not write").unwrap();
     let (written, drifted, blocked) =
-        (world.light(HA_LIGHTS[1]), world.light(OIII_LIGHTS[0]), world.light(OIII_LIGHTS[1]));
+        (world.light(HA[1]), world.light(OIII[0]), world.light(OIII[1]));
     let drafts = vec![
         transfer_draft(&world.library, &written, &archive, "copied/Ha_002.fits").await,
         transfer_draft(&world.library, &drifted, &archive, "pending/OIII_001.fits").await,
@@ -289,17 +205,8 @@ async fn external_drift_in_app_written_entry_blocks_item() {
     append(&copy);
     append(&drifted);
     let before_files = files(&root);
-    let entries = world.catalog().preparation(outcome.revision.id).await.unwrap().entries;
 
     let overview = world.library.storage_overview().await.unwrap();
-
-    let revision = &overview.footprints[0].revisions[0];
-    assert_eq!(revision.blocked.len(), 1, "{:#?}", revision.blocked);
-    let entry = &revision.blocked[0];
-    assert_eq!((entry.seq, &entry.path), (edited.seq, &edited.path));
-    assert_eq!(entry.reason.code, ReasonCode::DestinationMismatch);
-    assert!(entry.reason.detail.contains(&edited.path.display()), "{entry:?}");
-    assert!(entry.reason.detail.contains("changed outside PlateVault"), "{entry:?}");
 
     let shown = overview.transfers.iter().find(|view| view.operation_id == transfer).unwrap();
     let codes: Vec<(ItemPhase, Option<ReasonCode>)> = shown
@@ -329,6 +236,4 @@ async fn external_drift_in_app_written_entry_blocks_item() {
     let after = world.catalog().storage_operation(transfer).await.unwrap();
     assert_eq!(after.items, journal.items, "the journal is unchanged");
     assert_eq!(after.state, StorageOperationState::Running);
-    let recorded = world.catalog().preparation(outcome.revision.id).await.unwrap().entries;
-    assert_eq!(recorded, entries, "the prepared entries' records are unchanged");
 }

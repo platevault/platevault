@@ -4,7 +4,7 @@
 //! New-capture discovery over real temp folders, the real OS watcher and a
 //! real catalog (bead astro-plan-ef440).
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fs_inventory::artifact_watcher::{ArtifactEventKind, ArtifactFileEvent, TreeWatch};
-use persistence_library::TrashedFrame;
+use persistence_library::{ArchiveDraft, TrashedFrame};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
@@ -24,7 +24,9 @@ use super::{
 use crate::inventory::{self, Entry, Listing, RootRefusal, RootStamp};
 use crate::library::{fixtures, Library};
 use crate::{
-    LibraryError, Location, LocationRole, NativePath, PathSensitivity, ScanOperation, ScanState,
+    ArchiveMoveOutcome, EntryEvidence, EntryKind, ItemReason, LibraryError, Location, LocationRole,
+    NativePath, ObservationFingerprint, PathSensitivity, ReasonCode, ScanOperation, ScanState,
+    StorageItemDraft, TransferDestination,
 };
 
 /// Ticks short enough for tests; the OS watcher, walks and shutdown grace are
@@ -506,7 +508,7 @@ async fn vacate(fx: &Fixture, location: &Location, root: &Path) -> Vec<TrashedFr
         let asset = assets.iter().find(|asset| asset.relative_path == relative).unwrap();
         let sha256 = hex::encode(Sha256::digest(fs::read(root.join(name)).unwrap()));
         move_file(&root.join(name), &bin(fx).join(name));
-        trashed.push(TrashedFrame { asset_id: asset.id, sha256, complete_view_ids: Vec::new() });
+        trashed.push(TrashedFrame { asset_id: asset.id, sha256 });
     }
     trashed
 }
@@ -574,6 +576,193 @@ async fn a_live_event_counts_a_frame_at_a_vacated_path_unless_its_file_was_put_b
     count_is(&watch, location.id, 0).await;
 }
 
+/// A record an archive moved to another location leaves its path, though
+/// it was never Missing or Trashed. A frame written there before the move,
+/// judged held, is looked up again once the move is announced
+/// ([`Library::recorded_paths_changed`]) and counts; the archive's copy,
+/// counted while its record had not moved yet, leaves the other count.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_record_moved_away_is_counted_where_it_left_and_not_where_it_went() {
+    let fx = fixture().await;
+    let root = fx.base.join("Captures");
+    let location = captures(&fx.library, &root).await;
+    let archive_root = fx.base.join("Archive");
+    let archive = captures(&fx.library, &archive_root).await;
+    let name = TRASHED[0];
+    frame(&root.join(name));
+    assert_eq!(scan_to_end(&fx.library, location.id).await.state, ScanState::Completed);
+    let watch = watch(&fx.library);
+    count_is(&watch, location.id, 0).await;
+    count_is(&watch, archive.id, 0).await;
+
+    // Before the record moves: the copy lands in the archive, the original
+    // goes to the OS Trash and another frame takes its path, judged held.
+    // The frame written last, at a new path, counts once the events before
+    // it were applied.
+    fs::copy(root.join(name), archive_root.join(name)).unwrap();
+    move_file(&root.join(name), &bin(&fx).join(name));
+    other_frame(&root.join(name));
+    other_frame(&root.join(MISSING[0]));
+    count_is(&watch, location.id, 1).await;
+    count_is(&watch, archive.id, 1).await;
+
+    // The record moves to the copy, as `move_asset_record` does.
+    let mut catalog = raw_catalog(&fx).await;
+    sqlx::query("UPDATE assets SET location_id = ?1 WHERE location_id = ?2")
+        .bind(archive.id.to_string())
+        .bind(location.id.to_string())
+        .execute(&mut catalog)
+        .await
+        .unwrap();
+    fx.library.recorded_paths_changed(location.id);
+    fx.library.recorded_paths_changed(archive.id);
+    count_is(&watch, location.id, 2).await;
+    count_is(&watch, archive.id, 0).await;
+    assert_eq!(walks(&watch), 2, "the start-up walks only: no rescan");
+}
+
+/// Journal Sessions > Archive of the frame at `name` in `location` to the
+/// same path in `archive`, and move its record to the copy there, as the
+/// archive does once the copy verified. The move stays unsettled: its
+/// original waits at its path to be retired. Returns the storage operation.
+async fn archive_in_flight(
+    fx: &Fixture,
+    location: &Location,
+    archive: &Location,
+    name: &str,
+) -> Uuid {
+    let catalog = fx.library.catalog();
+    let relative = NativePath::from_path(Path::new(name));
+    let assets = catalog.location_assets(location.id).await.unwrap();
+    let asset = assets.into_iter().find(|asset| asset.relative_path == relative).unwrap();
+    let session: String = sqlx::query_scalar("SELECT session_id FROM assets WHERE id = ?1")
+        .bind(asset.id.to_string())
+        .fetch_one(&mut raw_catalog(fx).await)
+        .await
+        .unwrap();
+    let original = location.path.to_path_buf().unwrap().join(name);
+    let sha256 = hex::encode(Sha256::digest(fs::read(&original).unwrap()));
+    let draft = ArchiveDraft {
+        session_id: Uuid::parse_str(&session).unwrap(),
+        asset: asset.clone(),
+        to_location_id: archive.id,
+        to_path: relative.clone(),
+        links: Vec::new(),
+        draft: StorageItemDraft {
+            source: EntryEvidence {
+                path: NativePath::from_path(&original),
+                root: None,
+                kind: EntryKind::File,
+                fingerprint: ObservationFingerprint {
+                    content_sha256: None,
+                    ..asset.fingerprint.clone()
+                },
+                sha256: Some(sha256.clone()),
+            },
+            relied_on: Vec::new(),
+            destination: Some(TransferDestination { root: archive.path.clone(), relative }),
+        },
+    };
+    let storage = catalog.begin_sessions_archive(&[draft]).await.unwrap();
+    let copy = ObservationFingerprint { content_sha256: Some(sha256), ..asset.fingerprint };
+    catalog.record_archive_repoint(storage, 0, &copy).await.unwrap();
+    storage
+}
+
+/// An archive moves a frame's record to the verified copy before it retires
+/// the original, which waits at its path meanwhile. Discovery holds it there
+/// by the size and time the move started from, whether a recount or a
+/// start-up walk reads the location in that gap; only a new frame counts.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn an_original_its_archive_has_not_retired_yet_stays_held() {
+    let fx = fixture().await;
+    let root = fx.base.join("Captures");
+    let location = captures(&fx.library, &root).await;
+    let archive_root = fx.base.join("Archive");
+    let archive = captures(&fx.library, &archive_root).await;
+    let name = TRASHED[0];
+    frame(&root.join(name));
+    assert_eq!(scan_to_end(&fx.library, location.id).await.state, ScanState::Completed);
+    let counting = watch(&fx.library);
+    count_is(&counting, location.id, 0).await;
+
+    fs::copy(root.join(name), archive_root.join(name)).unwrap();
+    archive_in_flight(&fx, &location, &archive, name).await;
+    // A new frame, counted once the events before it were applied.
+    other_frame(&root.join(MISSING[0]));
+    count_is(&counting, location.id, 1).await;
+    let recounts = || counting.observed().recounts.load(Ordering::SeqCst);
+    let before = recounts();
+    fx.library.recorded_paths_changed(location.id);
+    eventually("the source was recounted", || recounts() > before).await;
+    after(&counting, drains, 1).await;
+    let recounted = new_files(&counting.counts(), location.id);
+    counting.shutdown().await;
+
+    // A start-up walk in the same gap, as after a stop.
+    let walking = watch(&fx.library);
+    let walked = until(&walking, |counts| new_files(counts, location.id).is_some()).await;
+    assert_eq!(
+        (recounted, new_files(&walked, location.id)),
+        (Some(1), Some(1)),
+        "(recount, walk): the original waiting at its path is held, the new frame counts"
+    );
+}
+
+/// Once an archive move settles, the source no longer records the path its
+/// record left. An original the archive kept beside its copy (source
+/// retained, as on a volume with no OS Trash) is then a file the library
+/// doesn't hold there and counts once the settle is announced, with no walk;
+/// an original the archive retired leaves nothing new to count.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_settled_archive_counts_the_original_it_kept_and_not_one_it_retired() {
+    for retired in [false, true] {
+        let fx = fixture().await;
+        let root = fx.base.join("Captures");
+        let location = captures(&fx.library, &root).await;
+        let archive_root = fx.base.join("Archive");
+        let archive = captures(&fx.library, &archive_root).await;
+        let name = TRASHED[0];
+        frame(&root.join(name));
+        assert_eq!(scan_to_end(&fx.library, location.id).await.state, ScanState::Completed);
+        let watch = watch(&fx.library);
+        count_is(&watch, location.id, 0).await;
+
+        fs::copy(root.join(name), archive_root.join(name)).unwrap();
+        let storage = archive_in_flight(&fx, &location, &archive, name).await;
+        // A new frame, counted once the events before it were applied.
+        other_frame(&root.join(MISSING[0]));
+        count_is(&watch, location.id, 1).await;
+        let recounts = || watch.observed().recounts.load(Ordering::SeqCst);
+        let before = recounts();
+        fx.library.recorded_paths_changed(location.id);
+        eventually("the source was recounted", || recounts() > before).await;
+        after(&watch, drains, 1).await;
+        assert_eq!(new_files(&watch.counts(), location.id), Some(1), "held while in flight");
+
+        let (outcome, reason) = if retired {
+            move_file(&root.join(name), &bin(&fx).join(name));
+            (ArchiveMoveOutcome::Archived, None)
+        } else {
+            let kept = ItemReason::new(ReasonCode::TrashUnsupported, "the volume has no Trash");
+            (ArchiveMoveOutcome::SourceRetained, Some(kept))
+        };
+        let catalog = fx.library.catalog();
+        catalog.settle_archive_move(storage, 0, outcome, reason.as_ref()).await.unwrap();
+        let before = recounts();
+        fx.library.recorded_paths_changed(location.id);
+        if retired {
+            eventually("the source was recounted", || recounts() > before).await;
+            after(&watch, drains, 1).await;
+            assert_eq!(new_files(&watch.counts(), location.id), Some(1), "the original is gone");
+        } else {
+            count_is(&watch, location.id, 2).await;
+        }
+        assert_eq!(walks(&watch), 2, "the start-up walks only: no rescan");
+        watch.shutdown().await;
+    }
+}
+
 /// A frame at a Missing record's path that kept the record's modification
 /// time but not its size (the original grown by one FITS block, its time put
 /// back) is not the original: the start-up walk counts it.
@@ -619,7 +808,7 @@ async fn a_trash_run_of_many_frames_is_recounted_once_per_tick() {
     for asset in &assets {
         let path = root.join(asset.relative_path.to_path_buf().unwrap());
         let sha256 = hex::encode(Sha256::digest(fs::read(path).unwrap()));
-        let frame = TrashedFrame { asset_id: asset.id, sha256, complete_view_ids: Vec::new() };
+        let frame = TrashedFrame { asset_id: asset.id, sha256 };
         fx.library.record_trashed(Uuid::new_v4(), &[frame]).await.unwrap();
     }
     eventually("the trash run was recounted", || recounts() > before).await;
@@ -2145,7 +2334,7 @@ fn counted(location: Location, root: &Path) -> Watched {
         prefixes: vec![root.to_path_buf()],
         location,
         live: None,
-        known: HashSet::new(),
+        known: HashMap::new(),
         vacated: HashMap::new(),
         new: HashMap::new(),
         walk: None,
