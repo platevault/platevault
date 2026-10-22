@@ -155,13 +155,13 @@ describe('UpdateBanner', () => {
       version: '0.7.0',
       error: {
         code: 'app-replaced',
-        keptAt: ['/Applications/PlateVault (previous version).app'],
+        keptAt: ['/Applications/PlateVault (set aside).app'],
       },
     });
     render(<UpdateBanner />);
 
     expect(screen.getByTestId('update-banner-status')).toHaveTextContent(
-      'Could not install update: the PlateVault app was moved or replaced after it was opened. What was found in its place is saved at /Applications/PlateVault (previous version).app. Restart PlateVault, then try again.',
+      'Could not install update: the PlateVault app was moved or replaced after it was opened. What was found in its place is saved at /Applications/PlateVault (set aside).app. Restart PlateVault, then try again.',
     );
   });
 });

@@ -757,7 +757,7 @@ case "$(ident "unpacked/$bundle")" in
 "$new") ;;
 "") exit 71;;
 *) rn swap "unpacked/$bundle" "../$name"
-  [ "$(ident "../$name")" = "$new" ] && exit 72
+  [ -n "$new" ] && [ "$(ident "../$name")" = "$new" ] && exit 72
   exit 69;;
 esac
 rn excl "../$name" previous.app
@@ -2353,6 +2353,62 @@ function run(argv) {{
             assert_eq!(version(kept), "foreign", "the other bundle is kept, not deleted");
             assert_eq!(version(&dir.path().join("moved-away.app")), "old");
             assert_eq!(version(&installed), "new");
+        }
+
+        /// The exchange brought another bundle in, and before root's
+        /// exchange back another process moves the update off the app's name
+        /// and puts a different bundle there, or nothing. The exchange back
+        /// cannot be told apart from one that failed: what is at the app's
+        /// name is not root's update, so nothing was installed (69). Root
+        /// keeps the other bundle in its directory and names it, which only
+        /// this check's refusal does: refusing earlier keeps nothing. The
+        /// hook knows the exchange back as the swap after it planted the
+        /// other bundle (astro-plan-onahj).
+        #[test]
+        fn a_failed_exchange_back_without_the_update_in_place_is_app_replaced() {
+            for replacement in [true, false] {
+                let dir = tempfile::tempdir().expect("tempdir");
+                let (installed, _, install) = stage(dir.path());
+                let replace = if replacement {
+                    r#"    fm.createDirectoryAtPathWithIntermediateDirectoriesAttributesError("../" + installed, false, $(), null);
+    $("replacement").writeToFileAtomicallyEncodingError("../" + installed + "/version", true, 4, null);"#
+                } else {
+                    ""
+                };
+                let before = format!(
+                    r#"  if (argv[0] === "swap" && $.NSFileManager.defaultManager.fileExistsAtPath("../moved-away.app")) {{
+    var fm = $.NSFileManager.defaultManager;
+    fm.moveItemAtPathToPathError("../" + installed, "../stolen.app", null);
+{replace}
+    return;
+  }}
+{REPLACE_INSTALLED}"#
+                );
+                let command = install.command_with(&renames_after(&before, true), COPY_SECONDS);
+
+                let output = Command::new("/usr/bin/osascript")
+                    .arg("-e")
+                    .arg(format!("do shell script {}", applescript_string(&command)))
+                    .output()
+                    .expect("osascript");
+
+                let message = String::from_utf8_lossy(&output.stderr);
+                assert!(message.trim_end().ends_with("(69)"), "{replacement}: {message}");
+                let outcome = install.failure(message.trim());
+                let UpdateError::AppReplaced { kept, .. } = &outcome else {
+                    panic!("{replacement}: {outcome:?}");
+                };
+                let [kept] = kept.as_slice() else { panic!("{replacement}: {kept:?}") };
+                assert!(kept.starts_with(&install.parent), "in root's directory: {kept:?}");
+                assert_eq!(version(kept), "foreign", "the other bundle is kept, not deleted");
+                assert_eq!(version(&dir.path().join("stolen.app")), "new");
+                assert_eq!(version(&dir.path().join("moved-away.app")), "old");
+                if replacement {
+                    assert_eq!(version(&installed), "replacement");
+                } else {
+                    assert!(!installed.exists(), "nothing is put at the app's name");
+                }
+            }
         }
 
         /// A `stat` that fails in root's directory right after the exchange
