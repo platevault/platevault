@@ -68,8 +68,8 @@ pub(super) fn replace_appimage(payload: &mut File) -> Result<Installed, UpdateEr
 
 /// Write `payload` next to `target` and rename it over `target`, with
 /// `target`'s permissions, so the path always holds a complete file and a
-/// process running the old one keeps its open inode. This only targets the
-/// app-owned install, not a user-chosen export or project location.
+/// process running the old one keeps its open inode. This is only called for
+/// the running app's install, not a user-chosen export or project destination.
 pub(super) fn replace_file(target: &Path, payload: &mut File) -> Result<(), UpdateError> {
     let dir = target.parent().ok_or_else(|| {
         UpdateError::Install(format!("{} has no parent directory", target.display()))
