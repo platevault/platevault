@@ -995,7 +995,9 @@ pub(crate) const fn remove_left_aside(
 /// nothing the source doesn't ([`remove_unfinished_copy`]), and goes on
 /// there, never past it. A taken name holding exactly its bytes, such as
 /// the complete copy an interrupted put-back made, already holds all of
-/// it, and the source is removed. It never stays hidden. Returns where it
+/// it, and the source is removed; so does a claimed name that is a second
+/// link of it, which a link-and-unlink put-back stopped before its unlink
+/// left, and the hidden name goes. It never stays hidden. Returns where it
 /// is now; `None` when no entry beside `from` is proven to be the source.
 ///
 /// # Errors
@@ -1052,6 +1054,13 @@ fn restore_left_aside_with(
             }
             Err(error) => return Err(error),
             Ok(_) => {
+                // A link-and-unlink put-back stopped before it removed the
+                // hidden name: the claimed name is already the source.
+                if claimed == Some(number) && second_link(&aside, &at) {
+                    fs::remove_file(&aside)?;
+                    let _ = sync_folder(from.parent().unwrap_or_else(|| Path::new("")));
+                    return Ok(Some(at));
+                }
                 if remove_copied(&aside, &at, |_, _| true) {
                     let _ = sync_folder(from.parent().unwrap_or_else(|| Path::new("")));
                     return Ok(Some(at));
@@ -1588,6 +1597,32 @@ mod tests {
         let mut out = OpenOptions::new().write(true).create_new(true).open(to)?;
         out.write_all(&bytes[..bytes.len() / 2])?;
         panic!("PlateVault closed mid copy");
+    }
+
+    /// `F4ReviewCustody` on #1879 (3): a put-back on a volume with hard
+    /// links but no no-replace rename links the claimed name and then
+    /// unlinks the hidden one; `PlateVault` closing between the two leaves
+    /// both names on one file. The resumed put-back ends there: only the
+    /// claimed name stays, holding the bytes, and nothing stays hidden.
+    #[cfg(unix)]
+    #[test]
+    fn a_put_back_closed_between_its_link_and_unlink_ends_at_its_name() {
+        let temp = tempfile::tempdir().unwrap();
+        let (from, _) = file_in(&temp);
+        let source = super::super::observe_source(temp.path(), &from).unwrap();
+        let claim = restoring_of(&from, 1);
+        fs::rename(&from, &claim).unwrap();
+        fs::hard_link(&claim, &from).unwrap();
+
+        assert_eq!(restore_left_aside(temp.path(), &from, &source).unwrap(), Some(from.clone()));
+        let mut names: Vec<_> = fs::read_dir(temp.path())
+            .unwrap()
+            .flatten()
+            .map(|entry| entry.file_name().to_string_lossy().into_owned())
+            .collect();
+        names.sort();
+        assert_eq!(names, ["notes.txt"], "one name, nothing hidden");
+        assert_eq!(fs::read(&from).unwrap(), b"the user's notes");
     }
 
     /// `F4ReviewCustody` on #1879 (2): a source put back where its name was
