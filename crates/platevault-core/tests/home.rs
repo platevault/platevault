@@ -17,6 +17,8 @@ mod cleanup_support;
 mod home_support;
 #[path = "support/membership.rs"]
 mod membership_support;
+#[path = "support/scan.rs"]
+mod scan_support;
 mod support;
 
 use std::sync::atomic::Ordering;
