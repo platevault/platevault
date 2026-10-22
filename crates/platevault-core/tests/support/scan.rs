@@ -42,8 +42,9 @@ impl ScanWatch {
     }
 
     /// The terminal event of scan `id`, within `patience`. A receiver that
-    /// lagged skips to the oldest event still held, and the terminal event,
-    /// published last, is never among those dropped.
+    /// lagged skips to the oldest event still held. While `id` is the only
+    /// scan publishing, its terminal event, published last, is never among
+    /// those dropped; a concurrent scan's events could push it out.
     pub async fn terminal(mut self, id: Uuid, patience: Duration) -> ScanOperation {
         tokio::time::timeout(patience, async {
             loop {

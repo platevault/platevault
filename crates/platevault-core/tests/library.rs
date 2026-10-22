@@ -56,6 +56,8 @@ async fn real_composed_library_preserves_sources_quality_and_restart() {
     // recorded; the terminal event is published after them.
     let finished = watch.terminal(started.id, PATIENCE).await;
     assert_eq!(finished.state, ScanState::Completed);
+    let stored = library.catalog().scan_status(started.id).await.unwrap();
+    assert_eq!(stored.state, finished.state, "the stored record agrees with the event");
     assert!(finished.revision > started.revision);
     assert_eq!(finished.progress.metadata_read, 2);
     let assets = library.catalog().location_assets(location.id).await.unwrap();

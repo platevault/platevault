@@ -33,13 +33,12 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
-use std::time::Duration;
 
 use desktop_shell::library_shell::CATALOG_FILE;
 use fits_fixtures::FitsFixture;
 use platevault_core::library::Library;
 use platevault_core::{NativePath, ScanState};
-use scan_support::ScanWatch;
+use scan_support::{ScanWatch, PATIENCE};
 use serde_json::{json, Value};
 use support::Ipc;
 use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime};
@@ -50,9 +49,6 @@ const TEST: &str = "an_applied_project_survives_a_restart_and_apply_has_nothing_
 /// Set only in the child: the temporary root its first life works in.
 const FIRST_LIFE_ENV: &str = "PV_TEST_LIBRARY_RESTART_ROOT";
 const PROJECT: &str = "NGC 7000";
-/// How long a scan or calibration matching may take before the test fails.
-/// Only a hang should fail: on a loaded machine one catalog write took 16 s.
-const PATIENCE: Duration = Duration::from_secs(300);
 
 /// The library shell over the catalog in `data_dir`, opened as a start opens
 /// it: `Library::open` on `<data dir>/catalog.sqlite`, which settles what an
