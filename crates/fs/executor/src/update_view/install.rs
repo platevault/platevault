@@ -7,6 +7,8 @@
 //! share, so every install and folder flush must tolerate volumes without
 //! macOS `F_FULLFSYNC`.
 
+use std::io::{Read, Write};
+
 use camino::{Utf8Path, Utf8PathBuf};
 use fs_pathsafe::sync;
 
