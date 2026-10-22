@@ -24,18 +24,21 @@
 //! - Home reads "Open in {app}";
 //! - Apply has nothing to change.
 
+#[path = "../../../../crates/platevault-core/tests/support/scan.rs"]
+mod scan_support;
 mod support;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::time::{Duration, Instant};
+use std::sync::Arc;
 
 use desktop_shell::library_shell::CATALOG_FILE;
 use fits_fixtures::FitsFixture;
 use platevault_core::library::Library;
-use platevault_core::NativePath;
+use platevault_core::{NativePath, ScanState};
+use scan_support::{ScanWatch, PATIENCE};
 use serde_json::{json, Value};
 use support::Ipc;
 use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime};
@@ -46,9 +49,6 @@ const TEST: &str = "an_applied_project_survives_a_restart_and_apply_has_nothing_
 /// Set only in the child: the temporary root its first life works in.
 const FIRST_LIFE_ENV: &str = "PV_TEST_LIBRARY_RESTART_ROOT";
 const PROJECT: &str = "NGC 7000";
-/// How long a scan or calibration matching may take before the test fails.
-/// Only a hang should fail: on a loaded machine one catalog write took 16 s.
-const PATIENCE: Duration = Duration::from_secs(300);
 
 /// The library shell over the catalog in `data_dir`, opened as a start opens
 /// it: `Library::open` on `<data dir>/catalog.sqlite`, which settles what an
@@ -110,33 +110,22 @@ impl Shell {
         location["id"].clone()
     }
 
-    /// Scan the whole location and wait for its durable terminal state.
+    /// Scan the whole location through IPC and wait for the scan's terminal
+    /// event. The stored status turns terminal at the scan's commit, before
+    /// its target suggestions and calibration matching run; the event follows
+    /// them, and the webview then reads the finished scan through IPC.
     fn scan(&self, location: &Value) {
+        let watch = ScanWatch::new(&self.webview.state::<Arc<Library>>());
         let started = self.call("library_start_scan", &json!({ "locationId": location }));
-        let deadline = Instant::now() + PATIENCE;
-        loop {
-            let status = self.call("library_scan_status", &json!({ "operationId": started["id"] }));
-            if status["state"] != "running" {
-                assert_eq!(status["state"], "completed", "{status:#}");
-                return;
-            }
-            assert!(Instant::now() < deadline, "the scan is still running: {status:#}");
-            std::thread::sleep(Duration::from_millis(20));
-        }
+        let id = serde_json::from_value(started["id"].clone()).expect("scan id");
+        let finished = tauri::async_runtime::block_on(watch.terminal(id, PATIENCE));
+        assert_eq!(finished.state, ScanState::Completed, "{finished:?}");
+        let status = self.call("library_scan_status", &json!({ "operationId": started["id"] }));
+        assert_eq!(status["state"], "completed", "{status:#}");
     }
 
     fn intake(&self, session: &Value) -> Value {
         self.call("pix_session_intake", &json!({ "sessionId": session }))
-    }
-
-    /// The scan's status turns terminal before its target suggestions and
-    /// calibration matching run, so wait until matching has run for `session`.
-    fn wait_for_matching(&self, session: &Value) {
-        let deadline = Instant::now() + PATIENCE;
-        while self.intake(session)["calibration"]["matchingPending"] != false {
-            assert!(Instant::now() < deadline, "matching never ran for session {session}");
-            std::thread::sleep(Duration::from_millis(20));
-        }
     }
 
     fn sessions(&self, location: &Value) -> Vec<Value> {
@@ -366,7 +355,9 @@ fn intake(shell: &Shell, layout: &Layout) -> Intake {
     let [light] = lights.as_slice() else { panic!("one light session: {lights:#?}") };
     assert_eq!(light["assetCount"], 2, "{light:#}");
     let session = light["session"]["id"].clone();
-    shell.wait_for_matching(&session);
+    // The captures scan's terminal event follows its calibration matching.
+    let matching = &shell.intake(&session)["calibration"]["matchingPending"];
+    assert_eq!(*matching, false, "matching has run for session {session}");
 
     let target = shell.call(
         "library_save_target",

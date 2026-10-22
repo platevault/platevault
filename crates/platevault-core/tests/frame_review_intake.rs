@@ -10,8 +10,11 @@ use persistence_library::SessionQuery;
 use platevault_core::frame_review::FrameReview;
 use platevault_core::library::Library;
 use platevault_core::*;
+use scan_support::scan_to_end;
 use uuid::Uuid;
 
+#[path = "support/scan.rs"]
+mod scan_support;
 mod support;
 
 fn rig() -> Equipment {
@@ -44,21 +47,6 @@ fn target() -> TargetCandidate {
         angular_size: None,
         catalogues: Vec::new(),
     }
-}
-
-async fn terminal(library: &Arc<Library>, id: Uuid) {
-    tokio::time::timeout(std::time::Duration::from_secs(20), async {
-        loop {
-            let scan = library.catalog().scan_status(id).await.unwrap();
-            if scan.state != ScanState::Running {
-                assert_eq!(scan.state, ScanState::Completed, "{scan:?}");
-                return;
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-        }
-    })
-    .await
-    .unwrap();
 }
 
 struct World {
@@ -102,7 +90,8 @@ impl World {
             )
             .await
             .unwrap();
-        terminal(&library, library.start_scan(location.id, None).await.unwrap().id).await;
+        let scanned = scan_to_end(&library, location.id).await;
+        assert_eq!(scanned.state, ScanState::Completed, "{scanned:?}");
         let catalog = library.catalog();
         let session =
             catalog.list_sessions(&SessionQuery::default()).await.unwrap().remove(0).session;

@@ -3,32 +3,20 @@
 mod apply_support;
 #[path = "support/membership.rs"]
 mod membership_support;
+#[path = "support/scan.rs"]
+mod scan_support;
 mod support;
 
 use std::collections::BTreeSet;
 use std::path::Path;
 use std::sync::Arc;
-use std::time::Duration;
 
 use persistence_library::{SessionMember, SessionQuery};
 use platevault_core::library::{InventoryProbe, Library};
 use platevault_core::targets::TargetQuery;
 use platevault_core::*;
+use scan_support::{scan_to_end, ScanWatch, PATIENCE};
 use uuid::Uuid;
-
-async fn terminal(library: &Arc<Library>, id: Uuid) -> ScanOperation {
-    tokio::time::timeout(Duration::from_secs(20), async {
-        loop {
-            let operation = library.catalog().scan_status(id).await.unwrap();
-            if operation.state != ScanState::Running {
-                return operation;
-            }
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
-    })
-    .await
-    .expect("scan must reach a durable terminal state")
-}
 
 #[tokio::test]
 async fn real_composed_library_preserves_sources_quality_and_restart() {
@@ -61,14 +49,15 @@ async fn real_composed_library_preserves_sources_quality_and_restart() {
         library.catalog().location_assets(location.id).await.unwrap(),
         [] as [platevault_core::Asset; 0]
     );
-    let mut progress = library.subscribe_scan_progress();
+    let watch = ScanWatch::new(&library);
     let started = library.start_scan(location.id, None).await.unwrap();
     assert_eq!(started.state, ScanState::Running);
     // The durable status turns terminal before scan-time target suggestions are
     // recorded; the terminal event is published after them.
-    published_terminal(&mut progress, started.id).await;
-    let finished = terminal(&library, started.id).await;
+    let finished = watch.terminal(started.id, PATIENCE).await;
     assert_eq!(finished.state, ScanState::Completed);
+    let stored = library.catalog().scan_status(started.id).await.unwrap();
+    assert_eq!(stored.state, finished.state, "the stored record agrees with the event");
     assert!(finished.revision > started.revision);
     assert_eq!(finished.progress.metadata_read, 2);
     let assets = library.catalog().location_assets(location.id).await.unwrap();
@@ -154,19 +143,8 @@ async fn confirmed_object_correction_refreshes_the_stored_target_association() {
         .register_location(NativePath::from_path(&root), "Captured".into(), LocationRole::Captures)
         .await
         .unwrap();
-    let mut progress = library.subscribe_scan_progress();
-    let started = library.start_scan(location.id, None).await.unwrap();
     // The Completed event is published only after scan-time suggestions are recorded.
-    let completed = tokio::time::timeout(Duration::from_secs(20), async {
-        loop {
-            let operation = progress.recv().await.unwrap();
-            if operation.id == started.id && operation.state != ScanState::Running {
-                return operation;
-            }
-        }
-    })
-    .await
-    .expect("scan must publish its terminal state");
+    let completed = scan_to_end(&library, location.id).await;
     assert_eq!(completed.state, ScanState::Completed);
     let stored_target = |detail: &persistence_library::SessionDetail| {
         detail
@@ -225,15 +203,17 @@ async fn retry_runs_a_real_scoped_worker_and_offline_scan_retains_observations()
         .register_location(NativePath::from_path(&root), "Captured".into(), LocationRole::Captures)
         .await
         .unwrap();
+    let watch = ScanWatch::new(&library);
     let retry =
         library.retry_scope(location.id, NativePath::from_path(Path::new("night"))).await.unwrap();
-    assert_eq!(terminal(&library, retry.id).await.state, ScanState::Completed);
+    assert_eq!(watch.terminal(retry.id, PATIENCE).await.state, ScanState::Completed);
     let asset = library.catalog().location_assets(location.id).await.unwrap().remove(0);
+    let watch = ScanWatch::new(&library);
     let unavailable_scope = library
         .retry_scope(location.id, NativePath::from_path(Path::new("missing-sub")))
         .await
         .unwrap();
-    assert_eq!(terminal(&library, unavailable_scope.id).await.state, ScanState::Failed);
+    assert_eq!(watch.terminal(unavailable_scope.id, PATIENCE).await.state, ScanState::Failed);
     assert_eq!(
         library.catalog().location(location.id).await.unwrap().availability,
         Availability::Available
@@ -243,8 +223,7 @@ async fn retry_runs_a_real_scoped_worker_and_offline_scan_retains_observations()
         Availability::Available
     );
     std::fs::rename(&root, temp.path().join("offline")).unwrap();
-    let scan = library.start_scan(location.id, None).await.unwrap();
-    let failed = terminal(&library, scan.id).await;
+    let failed = scan_to_end(&library, location.id).await;
     assert_eq!(failed.state, ScanState::Failed);
     assert!(!failed.issues.is_empty());
     assert_eq!(failed.complete_scopes, [] as [platevault_core::NativePath; 0]);
@@ -276,8 +255,7 @@ async fn malformed_headers_are_visible_file_issues_and_valid_siblings_commit() {
         .register_location(NativePath::from_path(&root), "Captured".into(), LocationRole::Captures)
         .await
         .unwrap();
-    let started = library.start_scan(location.id, None).await.unwrap();
-    let finished = terminal(&library, started.id).await;
+    let finished = scan_to_end(&library, location.id).await;
     assert_eq!(finished.state, ScanState::Partial, "{finished:?}");
     for name in ["zeroed.fits", "empty.fits", "truncated.xisf"] {
         let issue = finished
@@ -297,35 +275,6 @@ async fn malformed_headers_are_visible_file_issues_and_valid_siblings_commit() {
     assert_eq!(location.availability, Availability::Available);
     let after: Vec<String> = sources.iter().map(|path| support::digest(path)).collect();
     assert_eq!(after, originals, "sources are read-only");
-}
-
-/// Start a scan and wait for its terminal event, published after scan-time work.
-async fn scan_to_end(library: &Arc<Library>, location: Uuid) -> ScanOperation {
-    let mut progress = library.subscribe_scan_progress();
-    let started = library.start_scan(location, None).await.unwrap();
-    published_terminal(&mut progress, started.id).await
-}
-
-/// Wait for the terminal event of scan `id`, published after scan-time work.
-///
-/// On Windows every root check and every duplicate-copy rehash of a scan runs
-/// a PowerShell CIM volume query, so a scan beside duplicate copies makes about
-/// sixteen. While measurement tests ran their own queries beside this suite, CI
-/// saw ~2 s per query and such a scan pass 20 s; the budget keeps a 3x margin.
-async fn published_terminal(
-    progress: &mut tokio::sync::broadcast::Receiver<ScanOperation>,
-    id: Uuid,
-) -> ScanOperation {
-    tokio::time::timeout(Duration::from_secs(120), async {
-        loop {
-            let operation = progress.recv().await.unwrap();
-            if operation.id == id && operation.state != ScanState::Running {
-                return operation;
-            }
-        }
-    })
-    .await
-    .expect("scan must publish its terminal state")
 }
 
 /// Write `bytes` over a file in place, keeping its size and nanosecond mtime.

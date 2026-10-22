@@ -6,7 +6,7 @@
 //! the F4 Apply world (`support/apply.rs`) that quiet its candidates, set a
 //! goal and a default site and start one Running operation of each kind.
 //! Included with `#[path = "support/home.rs"] mod home_support;` beside
-//! `apply_support` and `membership_support`.
+//! `apply_support`, `membership_support` and `scan_support`.
 #![allow(dead_code)]
 
 use std::fs;
@@ -24,6 +24,7 @@ use uuid::Uuid;
 
 use crate::apply_support::{World, AT, HA_GAIN_0};
 use crate::membership_support;
+use crate::scan_support::scan_to_end;
 use crate::support;
 
 /// A night NGC 7000 is well up at Backyard (52.09 N, 5.12 E).
@@ -53,26 +54,6 @@ pub async fn default_site(library: &Library) {
     let id = library.save_site(None, None, &input).await.unwrap().site.id;
     let settings = library.catalog().list_sites().await.unwrap().settings_revision;
     library.set_default_site(Some(id), settings).await.unwrap();
-}
-
-/// Scan `location` and wait for its terminal event. The durable status turns
-/// terminal at the scan's commit; calibration matching runs after that commit
-/// (LIB-FR-23/24) and advances each matched session's calibration generation,
-/// and the terminal event is published only after it. Waiting on the durable
-/// status alone races that matching against the fixture's own writes.
-async fn scan_to_end(library: &Arc<Library>, location: Uuid) -> ScanOperation {
-    let mut progress = library.subscribe_scan_progress();
-    let started = library.start_scan(location, None).await.unwrap();
-    tokio::time::timeout(Duration::from_secs(20), async {
-        loop {
-            let operation = progress.recv().await.unwrap();
-            if operation.id == started.id && operation.state != ScanState::Running {
-                return operation;
-            }
-        }
-    })
-    .await
-    .expect("scan must publish its terminal state")
 }
 
 fn expected_session(session: &Session) -> ExpectedSession {
