@@ -546,9 +546,9 @@ mod platform {
 
     use super::{unsupported, windows_volume, RecycleBin, SystemTrash};
     use crate::{TrashSupport, TrashUnsupported};
-    use windows_sys::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_PATH_NOT_FOUND};
     use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, REG_DWORD, REG_QWORD};
     use winreg::types::FromRegValue;
+    use winreg::RegKey;
 
     const DRIVE_FIXED: u32 = 3;
     const RECYCLE_BIN_POLICY: &str = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer";
@@ -670,7 +670,7 @@ mod platform {
     fn optional_dword(key: &RegKey, name: &str) -> io::Result<Option<u32>> {
         match key.get_value(name) {
             Ok(value) => Ok(Some(value)),
-            Err(error) if error.raw_os_error() == Some(ERROR_FILE_NOT_FOUND as i32) => Ok(None),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
             Err(error) => Err(error),
         }
     }
@@ -678,9 +678,7 @@ mod platform {
     fn optional_integer(key: &RegKey, name: &str) -> io::Result<Option<u64>> {
         let value = match key.get_raw_value(name) {
             Ok(value) => value,
-            Err(error) if error.raw_os_error() == Some(ERROR_FILE_NOT_FOUND as i32) => {
-                return Ok(None)
-            }
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
             Err(error) => return Err(error),
         };
         match value.vtype {
