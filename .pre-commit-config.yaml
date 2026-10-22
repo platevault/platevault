@@ -38,10 +38,10 @@ repos:
         # This hook strips that line, so the two gates contradict each other and
         # main fails whichever ran second. Excluded for the same reason
         # src/bindings/ already is: a generator owns the file's final bytes.
-        # bd writes these ignored backup JSON files without a terminal newline.
+        # bd writes these tracked backup JSON files without a terminal newline.
         exclude: '^(apps/desktop/src/bindings/|apps/desktop/src/styles/themes\.css\.ts$|assets/seed/|signatures/cla\.json|\.beads/dolt-backup[^/]*\.json$)'
       - id: trailing-whitespace
-        # bd writes these ignored backup JSON files; preserve tool-owned bytes.
+        # bd writes these tracked backup JSON files; preserve tool-owned bytes.
         exclude: '^(apps/desktop/src/bindings/|assets/seed/|\.beads/dolt-backup[^/]*\.json$)'
 
   - repo: https://github.com/gitleaks/gitleaks

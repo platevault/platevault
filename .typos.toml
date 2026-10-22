@@ -64,14 +64,14 @@ Ded = "Ded"
 # checker splits on the case boundary and judges the leading `fo` alone, so the
 # allow entry has to key `fo`, not the identifier as written.
 fo = "fo"
-# NASA/IPAC Extragalactic Database.
-NED = "NED"
 # British spelling in the journey narrative.
 uncatalogued = "uncatalogued"
+[default.extend-identifiers]
+# Proper name for macOS 11's version variable.
+big_sur = "big_sur"
+# NASA/IPAC Extragalactic Database acronym.
+NED = "NED"
 # OpenSSL's `-passin` command-line option.
 passin = "passin"
-# Proper name for macOS 11's version variable.
-[default.extend-identifiers]
-big_sur = "big_sur"
 # Opaque GitHub review-thread ID cited by a regression test.
 PRRT_kwDOSdTu0s6ueQXd = "PRRT_kwDOSdTu0s6ueQXd"
