@@ -29,7 +29,8 @@ use std::path::{Path, PathBuf};
 use fs_pathsafe::long_path;
 
 use windows_sys::Win32::Storage::FileSystem::{
-    GetDriveTypeW, GetVolumeInformationW, GetVolumeNameForVolumeMountPointW, GetVolumePathNameW,
+    GetDiskSpaceInformationW, GetDriveTypeW, GetVolumeInformationW,
+    GetVolumeNameForVolumeMountPointW, GetVolumePathNameW, DISK_SPACE_INFORMATION,
 };
 
 /// `MAX_PATH`, the longest name `GetVolumeInformationW` reports.
@@ -145,6 +146,29 @@ pub fn drive_type(root: &Path) -> io::Result<u32> {
     Ok(unsafe { GetDriveTypeW(root.as_ptr()) })
 }
 
+/// The volume's actual capacity, independent of the caller's disk quota.
+///
+/// # Errors
+/// `InvalidInput` when the root holds a NUL; otherwise the failing Win32
+/// HRESULT, or `InvalidData` if the reported capacity overflows `u64`.
+pub fn capacity(root: &Path) -> io::Result<u64> {
+    let root = wide(root.as_os_str())?;
+    let mut information = DISK_SPACE_INFORMATION::default();
+    // SAFETY: `root` is NUL-terminated UTF-16 and `information` is a writable
+    // Win32 structure; both remain alive for the duration of the call.
+    #[allow(unsafe_code)]
+    let result = unsafe { GetDiskSpaceInformationW(root.as_ptr(), &raw mut information) };
+    if result < 0 {
+        return Err(io::Error::from_raw_os_error(result));
+    }
+    u64::from(information.SectorsPerAllocationUnit)
+        .checked_mul(u64::from(information.BytesPerSector))
+        .and_then(|bytes_per_unit| {
+            information.ActualTotalAllocationUnits.checked_mul(bytes_per_unit)
+        })
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "volume capacity overflowed u64"))
+}
+
 /// A `\\?\X:\…` mount point in its plain `X:\…` form, which every volume
 /// call takes; any other root is returned as given.
 fn plain_drive_root(root: &[u16]) -> &[u16] {
@@ -181,6 +205,32 @@ mod tests {
     use std::fs;
 
     use super::*;
+
+    #[cfg(windows)]
+    #[test]
+    fn capacity_includes_space_beyond_the_callers_quota() {
+        use windows_sys::Win32::Storage::FileSystem::GetDiskFreeSpaceExW;
+
+        let temp = tempfile::tempdir().unwrap();
+        let root = volume(temp.path()).unwrap().root;
+        let mut caller_total = 0_u64;
+        let root_wide: Vec<u16> = root.as_os_str().encode_wide().chain([0]).collect();
+        // SAFETY: `root_wide` is NUL-terminated UTF-16 and `caller_total` is
+        // writable; the other outputs are optional and null.
+        #[allow(unsafe_code)]
+        let queried = unsafe {
+            GetDiskFreeSpaceExW(
+                root_wide.as_ptr(),
+                std::ptr::null_mut(),
+                &raw mut caller_total,
+                std::ptr::null_mut(),
+            )
+        };
+        assert_ne!(queried, 0);
+
+        let capacity = capacity(&root).unwrap();
+        assert!(caller_total > 0 && capacity >= caller_total, "{capacity} < {caller_total}");
+    }
 
     #[test]
     fn a_temp_folder_is_on_a_fixed_ntfs_drive_root() {

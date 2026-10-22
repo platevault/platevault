@@ -17,8 +17,8 @@
 //!   own device only. A cross-device or unsupported rename is refused; nothing
 //!   is copied and deleted. A missing home Trash is created owner-only, with
 //!   its data home, as the Trash and base directory specifications ask.
-//! - Windows: the Shell Recycle Bin, after a bounded volume and Recycle Bin
-//!   policy query proves the drive keeps what it receives.
+//! - Windows: the Shell Recycle Bin, after native volume and policy queries
+//!   prove the drive keeps what it receives.
 
 use std::path::Path;
 
@@ -470,12 +470,11 @@ mod platform {
 
 // ── Windows: Shell Recycle Bin ────────────────────────────────────────────────
 
-/// What the bounded volume query reports about a folder's Recycle Bin.
+/// What the native volume and registry queries report about a folder's Recycle Bin.
 #[cfg(any(windows, test))]
-#[derive(Clone, Debug, Default, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Debug, Default)]
 struct RecycleBin {
-    /// `Win32_Volume.DriveType` (`Win32_LogicalDisk` for mapped drives).
+    /// `GetDriveTypeW`: 2 removable, 3 fixed, 4 remote, 5 optical.
     drive_type: Option<u32>,
     /// Volume size in bytes.
     capacity: Option<u64>,
@@ -542,44 +541,19 @@ fn windows_volume(bin: &RecycleBin, size_bytes: u64) -> TrashSupport {
 
 #[cfg(windows)]
 mod platform {
-    use std::path::Path;
+    use std::io;
+    use std::path::{Component, Path, PathBuf, Prefix};
 
     use super::{unsupported, windows_volume, RecycleBin, SystemTrash};
     use crate::{TrashSupport, TrashUnsupported};
+    use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, REG_DWORD, REG_QWORD};
+    use winreg::types::FromRegValue;
+    use winreg::RegKey;
 
-    const RECYCLE_BIN_QUERY: &str = r#"$ErrorActionPreference = 'Stop'
-$p = $env:PLATEVAULT_TRASH_PATH
-if ($p.StartsWith('\\?\UNC\') -or ($p.StartsWith('\\') -and -not $p.StartsWith('\\?\'))) { @{ driveType = 4 } | ConvertTo-Json -Compress; exit 0 }
-if ($p.StartsWith('\\?\')) { $p = $p.Substring(4) }
-$p = [System.IO.Path]::GetFullPath($p)
-if (-not $p.EndsWith('\')) { $p = $p + '\' }
-$v = Get-CimInstance -ClassName Win32_Volume |
-  Where-Object { $_.Name -and $p.StartsWith($_.Name, [System.StringComparison]::OrdinalIgnoreCase) } |
-  Sort-Object -Property { $_.Name.Length } -Descending |
-  Select-Object -First 1
-if ($null -eq $v) {
-  $d = Get-CimInstance -ClassName Win32_LogicalDisk -Filter ("DeviceID='" + $p.Substring(0, 2) + "'")
-  if ($null -eq $d) { exit 3 }
-  @{ driveType = [int]$d.DriveType } | ConvertTo-Json -Compress
-  exit 0
-}
-$r = @{ driveType = [int]$v.DriveType }
-if ($null -ne $v.Capacity) { $r.capacity = [int64]$v.Capacity }
-if ($v.DeviceID -match '\{[0-9A-Fa-f-]+\}') {
-  $k = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\BitBucket\Volume\' + $Matches[0]
-  if (Test-Path -LiteralPath $k) {
-    $b = Get-ItemProperty -LiteralPath $k
-    if ($null -ne $b.NukeOnDelete) { $r.nukeOnDelete = [int]$b.NukeOnDelete }
-    if ($null -ne $b.MaxCapacity) { $r.maxCapacityMb = [int64]$b.MaxCapacity }
-  }
-}
-foreach ($h in 'HKCU:', 'HKLM:') {
-  $k = $h + '\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer'
-  if (Test-Path -LiteralPath $k) {
-    if ((Get-ItemProperty -LiteralPath $k).NoRecycleFiles -eq 1) { $r.noRecycleFiles = 1 }
-  }
-}
-$r | ConvertTo-Json -Compress"#;
+    const DRIVE_FIXED: u32 = 3;
+    const RECYCLE_BIN_POLICY: &str = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer";
+    const RECYCLE_BIN_VOLUME: &str =
+        r"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\BitBucket\Volume";
 
     pub(super) fn support(trash: &SystemTrash, entry: &Path, size_bytes: u64) -> TrashSupport {
         let Some(folder) = entry.parent() else {
@@ -602,79 +576,128 @@ $r | ConvertTo-Json -Compress"#;
         trash::delete(entry).map_err(|error| error.to_string())
     }
 
-    fn query(folder: &Path) -> Result<RecycleBin, String> {
-        use std::os::windows::process::CommandExt;
-        use std::process::Command;
+    pub(super) fn query(folder: &Path) -> Result<RecycleBin, String> {
+        let path = std::path::absolute(folder)
+            .map_err(|error| format!("could not resolve Recycle Bin path: {error}"))?;
+        // The old query treated non-drive, non-UNC paths as remote.
+        let Some(Component::Prefix(prefix)) = path.components().next() else {
+            return Ok(RecycleBin { drive_type: Some(4), ..RecycleBin::default() });
+        };
+        match prefix.kind() {
+            Prefix::UNC(..) | Prefix::VerbatimUNC(..) => {
+                let root = unc_root(&path).expect("UNC prefix has a share root");
+                let drive_type = fs_volume_windows::drive_type(&root)
+                    .map_err(|error| format!("Recycle Bin drive type query {error}"))?;
+                return Ok(RecycleBin { drive_type: Some(drive_type), ..RecycleBin::default() });
+            }
+            Prefix::Disk(_) | Prefix::VerbatimDisk(_) => {}
+            _ => return Ok(RecycleBin { drive_type: Some(4), ..RecycleBin::default() }),
+        }
 
-        /// The desktop release build is a GUI-subsystem process; without this
-        /// flag every console child it spawns opens a visible console window.
-        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        let volume = fs_volume_windows::volume(&path)
+            .map_err(|error| format!("Recycle Bin volume query {error}"))?;
+        let mut bin = RecycleBin { drive_type: Some(volume.drive_type), ..RecycleBin::default() };
 
-        let system_root = std::env::var_os("SystemRoot").ok_or("SystemRoot is not set")?;
-        let shell = Path::new(&system_root).join(r"System32\WindowsPowerShell\v1.0\powershell.exe");
-        let mut command = Command::new(shell);
-        command
-            .args(["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", RECYCLE_BIN_QUERY])
-            .env("PLATEVAULT_TRASH_PATH", folder)
-            .creation_flags(CREATE_NO_WINDOW);
-        let output = run_bounded(command, std::time::Duration::from_secs(30))
-            .map_err(|why| format!("Recycle Bin query {why}"))?;
-        serde_json::from_slice(output.trim_ascii())
-            .map_err(|error| format!("Recycle Bin answer unreadable: {error}"))
+        // Only a fixed drive can be supported. A drive without a local volume
+        // name follows the old Win32_LogicalDisk fallback: it supplied a drive
+        // type, but no capacity or per-volume Recycle Bin settings.
+        if volume.drive_type != DRIVE_FIXED || volume.name.is_none() {
+            return Ok(bin);
+        }
+
+        bin.capacity = Some(
+            fs_volume_windows::capacity(&volume.root)
+                .map_err(|error| format!("Recycle Bin capacity query {error}"))?,
+        );
+
+        let current_user = RegKey::predef(HKEY_CURRENT_USER);
+        if let Some(guid) = volume.name.as_deref().and_then(volume_guid) {
+            let key_path = format!(r"{RECYCLE_BIN_VOLUME}\{guid}");
+            if let Some(key) = optional_subkey(&current_user, &key_path)
+                .map_err(|error| format!("Recycle Bin volume policy query {error}"))?
+            {
+                bin.nuke_on_delete = optional_dword(&key, "NukeOnDelete")
+                    .map_err(|error| format!("Recycle Bin NukeOnDelete query {error}"))?;
+                bin.max_capacity_mb = optional_integer(&key, "MaxCapacity")
+                    .map_err(|error| format!("Recycle Bin MaxCapacity query {error}"))?;
+            }
+        }
+
+        for hive in [HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE] {
+            let root = RegKey::predef(hive);
+            let Some(key) = optional_subkey(&root, RECYCLE_BIN_POLICY)
+                .map_err(|error| format!("Recycle Bin policy query {error}"))?
+            else {
+                continue;
+            };
+            if optional_dword(&key, "NoRecycleFiles")
+                .map_err(|error| format!("Recycle Bin NoRecycleFiles query {error}"))?
+                == Some(1)
+            {
+                bin.no_recycle_files = Some(1);
+                break;
+            }
+        }
+
+        Ok(bin)
     }
 
-    /// Run a read-only system query with a deadline; stdout only, capped at 1 MiB.
-    fn run_bounded(
-        mut command: std::process::Command,
-        timeout: std::time::Duration,
-    ) -> Result<Vec<u8>, String> {
-        use std::io::Read;
-        use std::process::Stdio;
-        use std::time::{Duration, Instant};
+    pub(super) fn unc_root(path: &Path) -> Option<PathBuf> {
+        let Some(Component::Prefix(prefix)) = path.components().next() else {
+            return None;
+        };
+        let (server, share) = match prefix.kind() {
+            Prefix::UNC(server, share) | Prefix::VerbatimUNC(server, share) => (server, share),
+            _ => return None,
+        };
+        let mut root = std::ffi::OsString::from(r"\\");
+        root.push(server);
+        root.push("\\");
+        root.push(share);
+        root.push("\\");
+        Some(PathBuf::from(root))
+    }
 
-        command.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null());
-        let mut child = command.spawn().map_err(|error| format!("could not start: {error}"))?;
-        let Some(stdout) = child.stdout.take() else {
-            let _ = child.kill();
-            let _ = child.wait();
-            return Err("produced no output pipe".into());
-        };
-        let reader = std::thread::spawn(move || {
-            let mut output = Vec::new();
-            stdout.take(1 << 20).read_to_end(&mut output).map(|_| output)
-        });
-        let deadline = Instant::now() + timeout;
-        let status = loop {
-            match child.try_wait() {
-                Ok(Some(status)) => break status,
-                Ok(None) if Instant::now() < deadline => {
-                    std::thread::sleep(Duration::from_millis(5))
-                }
-                Ok(None) => {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    return Err(format!("did not answer within {} s", timeout.as_secs()));
-                }
-                Err(error) => {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    return Err(error.to_string());
-                }
-            }
-        };
-        let output = reader
-            .join()
-            .map_err(|_| "output reader panicked".to_owned())?
-            .map_err(|error| format!("output unreadable: {error}"))?;
-        if !status.success() {
-            return Err(format!("exited with {status}"));
+    pub(super) fn volume_guid(name: &std::ffi::OsStr) -> Option<String> {
+        let name = name.to_string_lossy();
+        let guid = name.strip_prefix(r"\\?\Volume")?.strip_suffix('\\')?;
+        (guid.starts_with('{') && guid.ends_with('}')).then(|| guid.to_owned())
+    }
+
+    fn optional_subkey(root: &RegKey, path: &str) -> io::Result<Option<RegKey>> {
+        match root.open_subkey(path) {
+            Ok(key) => Ok(Some(key)),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
+            Err(error) => Err(error),
         }
-        Ok(output)
+    }
+
+    fn optional_dword(key: &RegKey, name: &str) -> io::Result<Option<u32>> {
+        match key.get_value(name) {
+            Ok(value) => Ok(Some(value)),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
+            Err(error) => Err(error),
+        }
+    }
+
+    fn optional_integer(key: &RegKey, name: &str) -> io::Result<Option<u64>> {
+        let value = match key.get_raw_value(name) {
+            Ok(value) => value,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
+            Err(error) => return Err(error),
+        };
+        match value.vtype {
+            REG_DWORD => u32::from_reg_value(&value).map(u64::from).map(Some),
+            REG_QWORD => u64::from_reg_value(&value).map(Some),
+            _ => Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("unsupported registry value type {:?}", value.vtype),
+            )),
+        }
     }
 }
 
 // ── Other platforms ───────────────────────────────────────────────────────────
-
 #[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
 mod platform {
     use std::path::Path;
@@ -694,6 +717,64 @@ mod platform {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_recycle_bin_query_refuses_non_drive_device_paths() {
+        for path in [
+            Path::new(r"\\.\C:\x"),
+            Path::new(r"\\?\Volume{00000000-0000-0000-0000-000000000000}\x"),
+        ] {
+            let bin = super::platform::query(path).unwrap();
+            assert_eq!(bin.drive_type, Some(4), "{path:?}");
+            assert_eq!(
+                reason(&windows_volume(&bin, 1)),
+                Some(TrashUnsupported::DeletesImmediately),
+                "{path:?}"
+            );
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_unc_root_extracts_plain_and_verbatim_shares_only() {
+        assert_eq!(
+            super::platform::unc_root(Path::new(r"\\s\sh\x")),
+            Some(std::path::PathBuf::from(r"\\s\sh\")),
+        );
+        assert_eq!(
+            super::platform::unc_root(Path::new(r"\\?\UNC\s\sh\x")),
+            Some(std::path::PathBuf::from(r"\\s\sh\")),
+        );
+        assert_eq!(super::platform::unc_root(Path::new(r"C:\x")), None);
+        assert_eq!(super::platform::unc_root(Path::new(r"\\.\C:\x")), None);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_volume_guid_extracts_registry_subkey() {
+        use std::ffi::OsStr;
+
+        assert_eq!(
+            super::platform::volume_guid(OsStr::new(
+                r"\\?\Volume{12345678-1234-1234-1234-123456789abc}\",
+            )),
+            Some("{12345678-1234-1234-1234-123456789abc}".into()),
+        );
+        assert_eq!(super::platform::volume_guid(OsStr::new(r"C:\")), None);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_recycle_bin_query_reads_fixed_drive_capacity() {
+        let temp = tempfile::tempdir().unwrap();
+        let volume = fs_volume_windows::volume(temp.path()).unwrap();
+        let bin = super::platform::query(temp.path()).unwrap();
+        assert_eq!(volume.drive_type, 3, "{volume:?}");
+        assert!(volume.name.is_some(), "{volume:?}");
+        assert_eq!(bin.drive_type, Some(3));
+        assert!(bin.capacity.is_some_and(|capacity| capacity > 0));
+    }
 
     fn reason(support: &TrashSupport) -> Option<TrashUnsupported> {
         match support {
