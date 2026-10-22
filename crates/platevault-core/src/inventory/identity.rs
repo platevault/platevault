@@ -1134,6 +1134,14 @@ mod tests {
             .map(|name| MappedDrive { name, unmap })
     }
 
+    /// A drive test the runner cannot set up skips off CI; on CI it fails, so
+    /// a green run proves it ran.
+    #[cfg(windows)]
+    fn skip_off_ci(why: &str) {
+        assert!(std::env::var_os("CI").is_none(), "Windows CI must run this test, but {why}");
+        eprintln!("skipped: {why}");
+    }
+
     #[cfg(windows)]
     fn quietly(program: &str, args: &[&str]) -> bool {
         std::process::Command::new(program)
@@ -1162,7 +1170,7 @@ mod tests {
                 let _ = quietly("subst", &[name, "/D"]);
             },
         ) else {
-            eprintln!("skipped: the runner could not create a SUBST drive");
+            skip_off_ci("the runner could not create a SUBST drive");
             return;
         };
         let meta = fs::symlink_metadata(dir.path()).unwrap();
@@ -1189,7 +1197,7 @@ mod tests {
                 let _ = quietly("net", &["use", name, "/delete", "/y"]);
             },
         ) else {
-            eprintln!("skipped: the runner could not map {share}");
+            skip_off_ci(&format!("the runner could not map {share}"));
             return;
         };
         let root = PathBuf::from(format!("{}{}", drive.name, &text[2..]));
