@@ -720,6 +720,23 @@ mod tests {
 
     #[cfg(windows)]
     #[test]
+    fn windows_recycle_bin_query_refuses_non_drive_device_paths() {
+        for path in [
+            Path::new(r"\\.\C:\x"),
+            Path::new(r"\\?\Volume{00000000-0000-0000-0000-000000000000}\x"),
+        ] {
+            let bin = super::platform::query(path).unwrap();
+            assert_eq!(bin.drive_type, Some(4), "{path:?}");
+            assert_eq!(
+                reason(&windows_volume(&bin, 1)),
+                Some(TrashUnsupported::DeletesImmediately),
+                "{path:?}"
+            );
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
     fn windows_unc_root_extracts_plain_and_verbatim_shares_only() {
         assert_eq!(
             super::platform::unc_root(Path::new(r"\\s\sh\x")),
@@ -757,7 +774,22 @@ mod tests {
         assert!(volume.name.is_some(), "{volume:?}");
         assert_eq!(bin.drive_type, Some(3));
         assert!(bin.capacity.is_some_and(|capacity| capacity > 0));
-        assert_eq!(bin.capacity, Some(fs_volume_windows::capacity(&volume.root).unwrap()));
+        let mut caller_total = 0_u64;
+        let root: Vec<u16> = volume.root.as_os_str().encode_wide().chain([0]).collect();
+        // SAFETY: `root` is NUL-terminated UTF-16 and `caller_total` is writable
+        // for the duration of the Win32 call; the other outputs are optional.
+        #[allow(unsafe_code)]
+        let queried = unsafe {
+            windows_sys::Win32::Storage::FileSystem::GetDiskFreeSpaceExW(
+                root.as_ptr(),
+                std::ptr::null_mut(),
+                &raw mut caller_total,
+                std::ptr::null_mut(),
+            )
+        };
+        assert_ne!(queried, 0);
+        let capacity = bin.capacity.expect("fixed volume capacity is reported");
+        assert!(caller_total > 0 && capacity >= caller_total, "{capacity} < {caller_total}");
     }
 
     fn reason(support: &TrashSupport) -> Option<TrashUnsupported> {
