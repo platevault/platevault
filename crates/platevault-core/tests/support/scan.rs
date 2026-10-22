@@ -48,7 +48,9 @@ impl ScanWatch {
         tokio::time::timeout(patience, async {
             loop {
                 match self.0.recv().await {
-                    Ok(operation) if operation.id == id && operation.state != ScanState::Running => {
+                    Ok(operation)
+                        if operation.id == id && operation.state != ScanState::Running =>
+                    {
                         return operation;
                     }
                     Ok(_) | Err(RecvError::Lagged(_)) => {}
