@@ -6,11 +6,10 @@
 //! The registered project/output root is stored by the user and may be on a
 //! share, so every install and folder flush must tolerate volumes without
 //! macOS `F_FULLFSYNC`.
-use std::io::{Read, Write};
 
 use camino::{Utf8Path, Utf8PathBuf};
-
 use fs_pathsafe::sync;
+
 use sha2::{Digest as _, Sha256};
 
 /// Error from an install step.
