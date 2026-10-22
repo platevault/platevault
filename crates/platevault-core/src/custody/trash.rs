@@ -305,6 +305,9 @@ mod platform {
                 Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
                 Err(error) => return Err(format!("{}: {error}", info_path.display())),
             };
+            // Linux only: sync_all is a plain fsync here, which every file system the
+            // freedesktop Trash lives on supports; only macOS F_FULLFSYNC needs
+            // fs_pathsafe::sync's fallback.
             let written = write!(record, "[Trash Info]\nPath={encoded}\nDeletionDate={date}\n")
                 .and_then(|()| record.sync_all());
             if let Err(error) = written {
@@ -463,6 +466,9 @@ mod platform {
         Ok(())
     }
 
+    // Linux only: sync_all is a plain fsync here, which every file system the
+    // freedesktop Trash lives on supports; only macOS F_FULLFSYNC needs
+    // fs_pathsafe::sync's fallback.
     fn sync_folder(folder: &Path) -> std::io::Result<()> {
         fs::File::open(folder)?.sync_all()
     }

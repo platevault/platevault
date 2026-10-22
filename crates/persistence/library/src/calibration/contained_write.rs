@@ -8,6 +8,7 @@
 //! the file this process created or the identity an earlier attempt recorded;
 //! nothing at the destination is ever replaced, moved or removed.
 
+use fs_pathsafe::sync;
 use std::io::{Read, Write};
 use std::path::{Component, Path, PathBuf};
 
@@ -263,7 +264,7 @@ pub fn copy_verified<P: SourceProbe>(
     if hex::encode(hasher.finalize()) != sha256 {
         return Err(changed("the source bytes no longer hash to the reviewed SHA-256"));
     }
-    temporary.file.as_file().sync_all().map_err(write_error)?;
+    sync::sync(temporary.file.as_file()).map_err(write_error)?;
     root.verify(probe)
 }
 
@@ -410,7 +411,7 @@ fn remove_if_stamp(path: &Path, stamp: Stamp) -> Result<bool> {
 #[cfg(unix)]
 fn sync_folder(path: &Path) -> Result<()> {
     std::fs::File::open(path)
-        .and_then(|folder| folder.sync_all())
+        .and_then(|folder| sync::sync(&folder))
         .map_err(|error| LibraryError::from_io(path, &error))
 }
 

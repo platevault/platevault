@@ -250,6 +250,7 @@ pub async fn download_verified(
         keep: AtomicBool::new(false),
     };
     let mut verifier = stream_verifier(&staged.key, &staged.signature)?;
+    // Staging is under `temp_dir`, never a user-chosen destination.
     let mut out = File::create(&staged.file)?;
     source
         .download(&release.url, &mut |chunk| {

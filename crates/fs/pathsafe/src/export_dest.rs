@@ -14,6 +14,7 @@
 //! directory or symlink that appears at the destination after validation is
 //! kept as it is, however late it appears.
 
+use crate::sync;
 use std::fmt;
 use std::fs::File;
 use std::io;
@@ -256,7 +257,7 @@ impl ExportDestination {
         B: FnOnce(&Path),
     {
         let mut temp = self.create_temp()?;
-        write(temp.as_file_mut()).and_then(|()| temp.as_file().sync_all())?;
+        write(temp.as_file_mut()).and_then(|()| sync::sync(temp.as_file()))?;
         let bytes = temp.as_file().metadata().map_or(0, |m| m.len());
         before_install(&self.final_path);
         settle_install(temp.persist_noclobber(&self.final_path), &self.final_path)?;
@@ -370,12 +371,12 @@ fn copy_into_new<R: io::Read + io::Seek>(
     let copied = temp
         .seek(SeekFrom::Start(0))
         .and_then(|_| io::copy(temp, &mut out))
-        .and_then(|_| out.sync_all());
+        .and_then(|_| sync::sync(&out));
     let Err(source) = copied else {
         return Ok(());
     };
     before_cleanup(final_path);
-    let emptied = out.set_len(0).and_then(|()| out.sync_all()).is_ok();
+    let emptied = out.set_len(0).and_then(|()| sync::sync(&out)).is_ok();
     if names(final_path, &out) {
         Err(ExportWriteError::LeftUnfinished(UnfinishedFile {
             path: final_path.to_path_buf(),

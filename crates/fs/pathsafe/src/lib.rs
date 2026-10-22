@@ -21,6 +21,7 @@
 
 pub mod contain;
 pub mod export_dest;
+pub mod sync;
 #[cfg(any(test, feature = "test-fixture"))]
 pub mod test_support;
 

@@ -3,10 +3,15 @@
 #![allow(clippy::too_many_lines, clippy::missing_errors_doc)]
 
 //! Additive no-clobber file install primitive (spec 062 FR-100).
+//!
+//! The registered project/output root is stored by the user and may be on a
+//! share, so every install and folder flush must tolerate volumes without
+//! macOS `F_FULLFSYNC`.
 
 use std::io::{Read, Write};
 
 use camino::{Utf8Path, Utf8PathBuf};
+use fs_pathsafe::sync;
 use sha2::{Digest as _, Sha256};
 
 /// Error from an install step.
@@ -100,7 +105,7 @@ pub fn install_item(
         message: format!("write temp: {e}"),
     })?;
 
-    tmp.as_file().sync_all().map_err(|e| InstallError {
+    sync::sync(tmp.as_file()).map_err(|e| InstallError {
         code: InstallErrorCode::Io,
         message: format!("fsync temp: {e}"),
     })?;
@@ -122,7 +127,7 @@ pub fn install_item(
 
     if let Some(parent) = dest_abs.parent() {
         if let Ok(dir) = std::fs::File::open(parent.as_std_path()) {
-            let _ = dir.sync_all();
+            let _ = sync::sync(&dir);
         }
     }
 
