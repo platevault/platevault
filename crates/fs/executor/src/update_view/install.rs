@@ -1,6 +1,7 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 #![allow(clippy::too_many_lines, clippy::missing_errors_doc)]
+
 //! Additive no-clobber file install primitive (spec 062 FR-100).
 //!
 //! The registered project/output root is stored by the user and may be on a
@@ -11,7 +12,6 @@ use std::io::{Read, Write};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fs_pathsafe::sync;
-
 use sha2::{Digest as _, Sha256};
 
 /// Error from an install step.

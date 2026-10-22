@@ -27,7 +27,7 @@
 //! the handle `reverify` opened keeps ordinary writers out until the
 //! installer exits, though not code running as the user (see
 //! `open_payload`).
-//!
+
 use std::fs::{self, File};
 use std::io::{self, Read as _, Seek as _, Write as _};
 use std::path::{Path, PathBuf};
@@ -249,7 +249,8 @@ pub async fn download_verified(
         signature,
         keep: AtomicBool::new(false),
     };
-    // Updater payload staging is under `temp_dir`, never a user-chosen destination.
+    let mut verifier = stream_verifier(&staged.key, &staged.signature)?;
+    // Staging is under `temp_dir`, never a user-chosen destination.
     let mut out = File::create(&staged.file)?;
     source
         .download(&release.url, &mut |chunk| {
