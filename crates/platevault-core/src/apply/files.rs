@@ -33,7 +33,7 @@ use crate::custody::rooted::{Folder, Unentered};
 use crate::custody::{
     link_reads, observe_entry, observe_source, open_source, same_identity, transfer, verify_source,
 };
-use crate::layout::{self, VIEW_KEPT_FOLDER, VIEW_PREVIOUS_FOLDER};
+use crate::layout::{self, VIEW_FOLDER, VIEW_KEPT_FOLDER, VIEW_PREVIOUS_FOLDER};
 use crate::patched_copy::{self, HeaderPatch, PatchTarget};
 use crate::{
     EntryEvidence, EntryKind, EntryPlacement, FileIdentity, ForeignItem, ForeignItemFailure,
@@ -412,8 +412,12 @@ impl Ours {
 /// So is an unfinished copy of a partial beside it: where the volume has no
 /// no-replace rename (macOS exFAT) the partial is installed as a verified
 /// copy under the entry's name, and an interruption leaves at most the
-/// partial's first bytes there ([`transfer::remove_unfinished_copy`]).
-/// Anything else stays and is returned; the folder then stays too.
+/// partial's first bytes there ([`transfer::remove_unfinished_copy`]). An
+/// interruption after that copy is verified may leave the partial itself
+/// moved aside under a hidden name; it goes, before anything else, once the
+/// copy beside it is proven to hold its bytes and time
+/// ([`transfer::remove_aside_of_copy`]). Anything else stays and is
+/// returned; the folder then stays too.
 pub fn clear_building(building: &Path, ours: &Ours) -> Vec<PathBuf> {
     let walked = walk(building);
     let mut kept: Vec<PathBuf> = walked.unreadable.into_iter().map(|(path, _)| path).collect();
@@ -422,6 +426,17 @@ pub fn clear_building(building: &Path, ours: &Ours) -> Vec<PathBuf> {
     };
     let (partials, others): (Vec<PathBuf>, Vec<PathBuf>) =
         walked.files.into_iter().partition(|path| is_partial(path));
+    let (asides, mut others): (Vec<PathBuf>, Vec<PathBuf>) =
+        others.into_iter().partition(|path| path.file_name().is_some_and(transfer::is_aside_name));
+    let unproven: Vec<PathBuf> = asides
+        .into_iter()
+        .filter(|aside| {
+            !others.iter().any(|copy| {
+                copy.parent() == aside.parent() && transfer::remove_aside_of_copy(aside, copy)
+            })
+        })
+        .collect();
+    others.extend(unproven);
     for path in others {
         let removed = match fs::symlink_metadata(&path) {
             Ok(metadata) if fs_pathsafe::is_link_or_junction_metadata(&metadata) => {
@@ -693,14 +708,18 @@ pub fn foreign_files(
 /// verified copy, with an identity of its own, made under its destination
 /// name. `journaled` says this Apply's journal claimed the destination
 /// before an earlier attempt at this move, which an interruption ended
-/// unrecorded (e6tgr): only then does a move whose source is gone accept
-/// the reviewed kind and bytes at the destination, removing the source an
-/// interruption left moved aside beside its old name once proven to be it,
-/// its bytes all at the destination (vmv9s,
-/// [`transfer::remove_left_aside`]); and only then is a destination holding
-/// an unfinished copy of the source, which holds nothing the source
-/// doesn't, removed before the move runs again. Without the claim whatever
-/// is there stays, and the name is taken.
+/// unrecorded (e6tgr). Only then is the source an interruption left moved
+/// aside beside its old name looked for, once proven to be it: with the
+/// reviewed kind and bytes at the destination it is removed when they are
+/// all its own (vmv9s, [`transfer::remove_left_aside`]), and a move whose
+/// source is gone accepts them. Otherwise the destination no longer holds
+/// it: it goes back to its name and stays there, reported Stayed, or, that
+/// name being taken, to a visible one beside it, reported Changed, never
+/// hidden ([`transfer::restore_left_aside`]); either is then left for
+/// review like any file of `View (previous)/`. Only then, too, is a
+/// destination holding an unfinished copy of the source, which holds
+/// nothing the source doesn't, removed before the move runs again.
+/// Without the claim whatever is there stays, and the name is taken.
 pub fn move_foreign(
     previous: &Path,
     view: &Path,
@@ -725,9 +744,25 @@ pub fn move_foreign(
         let to = view.join(&relative);
         let gone =
             fs::symlink_metadata(&from).is_err_and(|error| error.kind() == io::ErrorKind::NotFound);
-        if gone && journaled && holds_reviewed_bytes(&to, &item.evidence) {
-            transfer::remove_left_aside(previous, &from, &item.evidence, &to);
-            return Ok(());
+        if journaled && holds_reviewed_bytes(&to, &item.evidence) {
+            let removed = transfer::remove_left_aside(previous, &from, &item.evidence, &to);
+            if removed || gone {
+                return Ok(ForeignItemState::Moved);
+            }
+        }
+        if journaled && !is_reviewed(&from, &item.evidence) {
+            match transfer::restore_left_aside(previous, &from, &item.evidence) {
+                Ok(Some(at)) if at == from => return Ok(ForeignItemState::Stayed),
+                Ok(Some(at)) => {
+                    tracing::warn!(path = %from.display(), kept = %at.display(), "a foreign file moved aside went back under another name");
+                    return Err(ForeignItemFailure::Changed);
+                }
+                Ok(None) => {}
+                Err(error) => {
+                    tracing::warn!(path = %from.display(), %error, "a foreign file moved aside couldn't be put back");
+                    return Err(ForeignItemFailure::NotMoved);
+                }
+            }
         }
         if !is_reviewed(&from, &item.evidence) {
             return Err(ForeignItemFailure::Changed);
@@ -744,7 +779,7 @@ pub fn move_foreign(
         {
             moved = transfer::rename_noreplace(&from, &to);
         }
-        moved.map_err(|error| {
+        moved.map(|()| ForeignItemState::Moved).map_err(|error| {
             if error.kind() == io::ErrorKind::AlreadyExists {
                 ForeignItemFailure::NameTaken
             } else {
@@ -754,7 +789,7 @@ pub fn move_foreign(
         })
     })();
     match outcome {
-        Ok(()) => item.state = ForeignItemState::Moved,
+        Ok(state) => item.state = state,
         Err(failure) => {
             item.state = ForeignItemState::Failed;
             item.reason = Some(failure);
@@ -988,6 +1023,9 @@ pub enum ClaimedKept {
     /// The file is still in `View (previous)/`, and its kept name holds no
     /// unfinished copy of it any more.
     Stayed,
+    /// The file is still in `View (previous)/`, under this visible name
+    /// beside its own, which another entry took while it was moved aside.
+    Renamed(PathBuf),
 }
 
 /// Settle a kept move `claim` names that an interruption left unrecorded.
@@ -995,15 +1033,18 @@ pub enum ClaimedKept {
 /// link, stays there for the next Apply; a copy a volume without a
 /// no-replace rename was making under the claimed kept name, which holds
 /// nothing the file doesn't, is removed (e6tgr), and anything else there
-/// stays. A file that left with its kept name holding it may, on such a
-/// volume, still be beside its old name, moved aside and never unlinked;
-/// it is removed once proven to be the file, its bytes all under the kept
-/// name (vmv9s, [`transfer::remove_left_aside`]), so no later Apply keeps
-/// it as a hidden duplicate. Nothing else is ever touched.
+/// stays. On such a volume a file that left may still be beside its old
+/// name, moved aside and never unlinked: once proven to be the file it is
+/// removed when its bytes are all under the kept name (vmv9s,
+/// [`transfer::remove_left_aside`]), and otherwise put back, under its own
+/// name or, that being taken, a visible one beside it
+/// ([`transfer::restore_left_aside`]), so no later Apply keeps it hidden.
+/// Nothing else is ever touched.
 ///
 /// # Errors
 /// The diagnostic when the claim names no file of `View (previous)/` or no
-/// kept name, or the file is no longer read below `View (previous)/`.
+/// kept name, the file is no longer read below `View (previous)/`, or a
+/// file moved aside couldn't be put back.
 pub fn settle_kept_claim(
     project: &Path,
     claim: &persistence_library::KeptMove,
@@ -1019,15 +1060,21 @@ pub fn settle_kept_claim(
     };
     let previous = project.join(VIEW_PREVIOUS_FOLDER);
     let (from, to) = (previous.join(relative), project.join(VIEW_KEPT_FOLDER).join(kept));
-    if gone(&from) {
-        let holds = observe_entry(&to).is_ok_and(|now| {
-            now.kind == claim.evidence.kind && now.sha256 == claim.evidence.sha256
-        });
-        if !holds {
-            return Ok(ClaimedKept::Gone);
+    let holds = observe_entry(&to)
+        .is_ok_and(|now| now.kind == claim.evidence.kind && now.sha256 == claim.evidence.sha256);
+    if holds {
+        let removed = transfer::remove_left_aside(&previous, &from, &claim.evidence, &to);
+        if removed || gone(&from) {
+            return Ok(ClaimedKept::Moved);
         }
-        transfer::remove_left_aside(&previous, &from, &claim.evidence, &to);
-        return Ok(ClaimedKept::Moved);
+    }
+    match transfer::restore_left_aside(&previous, &from, &claim.evidence) {
+        Ok(Some(at)) if at != from => return Ok(ClaimedKept::Renamed(at)),
+        Ok(_) => {}
+        Err(error) => return Err(format!("{} stays moved aside: {error}", from.display())),
+    }
+    if gone(&from) {
+        return Ok(ClaimedKept::Gone);
     }
     if let Err(error) = observe_source(&previous, &from) {
         return Err(format!("{} isn't read below View (previous)/: {error}", from.display()));
@@ -1036,6 +1083,74 @@ pub fn settle_kept_claim(
         transfer::remove_unfinished_copy(&to, &from);
     }
     Ok(ClaimedKept::Stayed)
+}
+
+// ── Reviewed leftovers ───────────────────────────────────────────────────────
+
+/// Whether a move of the leftover at `relative` in `View (previous)/`,
+/// recorded as `evidence`, into `View/` at the same place already ended,
+/// though an interruption kept its review from being recorded: `View/`
+/// holds its reviewed kind and bytes there and nothing of it stays in
+/// `View (previous)/`. Where the volume has no no-replace rename the move
+/// is a verified copy, and an interruption may leave the file moved aside
+/// beside its old name; it is removed once proven to be the file with its
+/// bytes all in `View/` ([`transfer::remove_left_aside`]).
+pub fn leftover_moved(project: &Path, relative: &Path, evidence: &EntryEvidence) -> bool {
+    let previous = project.join(VIEW_PREVIOUS_FOLDER);
+    let (from, to) = (previous.join(relative), project.join(VIEW_FOLDER).join(relative));
+    if !holds_reviewed_bytes(&to, evidence) {
+        return false;
+    }
+    let removed = transfer::remove_left_aside(&previous, &from, evidence, &to);
+    removed || gone(&from)
+}
+
+/// What [`restore_leftover`] found of a leftover.
+#[derive(Debug)]
+pub enum Restored {
+    /// Nothing of it was moved aside.
+    Untouched,
+    /// It is back at its name, read afresh below `View (previous)/` with
+    /// its recorded kind and bytes: a volume without a no-replace rename
+    /// puts it back as a copy with an identity of its own.
+    Back(Box<EntryEvidence>),
+    /// It is under this visible name beside its own, which another entry
+    /// took meanwhile; relative to the Project folder.
+    Renamed(PathBuf),
+}
+
+/// Put the leftover at `relative` in `View (previous)/`, recorded as
+/// `evidence`, back at its name where an interrupted move into `View/`
+/// left it moved aside beside it, or, that name being taken, under a
+/// visible one beside it ([`transfer::restore_left_aside`]): a review or a
+/// later Apply then finds it, never a file hidden from the user.
+///
+/// # Errors
+/// The rename's error, the file still moved aside; the file put back no
+/// longer read below `View (previous)/` with its recorded kind and bytes.
+pub fn restore_leftover(
+    project: &Path,
+    relative: &Path,
+    evidence: &EntryEvidence,
+) -> io::Result<Restored> {
+    let previous = project.join(VIEW_PREVIOUS_FOLDER);
+    let from = previous.join(relative);
+    let Some(at) = transfer::restore_left_aside(&previous, &from, evidence)? else {
+        return Ok(Restored::Untouched);
+    };
+    if at != from {
+        let relative = at.strip_prefix(project).map_or_else(|_| at.clone(), Path::to_path_buf);
+        return Ok(Restored::Renamed(relative));
+    }
+    let back =
+        observe_source(&previous, &from).map_err(|error| io::Error::other(error.to_string()))?;
+    if back.kind != evidence.kind || back.sha256 != evidence.sha256 {
+        return Err(io::Error::other(format!(
+            "{} doesn't hold the leftover's bytes once put back",
+            from.display()
+        )));
+    }
+    Ok(Restored::Back(Box::new(back)))
 }
 
 // ── The swap ─────────────────────────────────────────────────────────────────

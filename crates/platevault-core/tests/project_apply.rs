@@ -579,17 +579,31 @@ const CLOSE_BEFORE_OUTCOME: &str = "CREATE TRIGGER closed_before_outcome \
 /// What `PlateVault` closing mid move leaves where the volume has no
 /// no-replace rename (macOS exFAT, and Linux volumes that refuse
 /// `RENAME_NOREPLACE`), once the file that was at `from` is already at
-/// `moved`: a verified copy at `moved`, and the source moved aside beside
-/// `from` to the hidden name it takes before it is unlinked. Simulated here
-/// where the platform renames, so the source keeps its identity. Returns
-/// that name's path.
+/// `moved`: a verified copy at `moved` with the source's modification time,
+/// and the source moved aside beside `from` to the hidden name it takes
+/// before it is unlinked. Simulated here where the platform renames, so
+/// the source keeps its identity. Returns that name's path.
 #[cfg(unix)]
 fn closed_before_the_source_unlink(from: &Path, moved: &Path) -> PathBuf {
     let aside = from.with_file_name(format!(".pv-{}.removing", uuid::Uuid::new_v4().simple()));
     fs::create_dir_all(aside.parent().unwrap()).unwrap();
     fs::rename(moved, &aside).unwrap();
     fs::copy(&aside, moved).unwrap();
+    let modified = fs::metadata(&aside).unwrap().modified().unwrap();
+    fs::File::options().write(true).open(moved).unwrap().set_modified(modified).unwrap();
     aside
+}
+
+/// What a Move review of the leftover at `relative` in `View (previous)/`
+/// leaves when `PlateVault` closes mid move where the volume has no
+/// no-replace rename ([`closed_before_the_source_unlink`]): the copy in
+/// `View/` and the file moved aside, its review unrecorded. Returns where
+/// it is.
+#[cfg(unix)]
+fn closed_mid_leftover_move(world: &World, relative: &str) -> PathBuf {
+    let (from, to) = (world.previous().join(relative), world.view().join(relative));
+    fs::rename(&from, &to).unwrap();
+    closed_before_the_source_unlink(&from, &to)
 }
 
 /// 5u6x7 review: `PlateVault` closing after a ticked foreign file's
@@ -660,6 +674,45 @@ async fn a_resumed_foreign_move_removes_the_source_its_copy_holds() {
     assert_eq!(item.state, ForeignItemState::Moved, "{item:#?}");
     assert!(!aside.exists(), "the source its copy holds is removed");
     assert_eq!(fs::read(&at).unwrap(), b"the user's notes");
+}
+
+/// zx3l2: as above, but the copy in the new View changed before the
+/// restart, so it no longer holds the source's bytes. Resumed at the next
+/// start, the move puts the source it proves moved aside back at its name
+/// and reports it Stayed: it is left in `View (previous)/` for review,
+/// never hidden, and the changed copy stays too.
+// Windows always moves by MoveFileExW rename, so it never leaves a verified
+// copy beside a source moved aside (`transfer::restore_left_aside`).
+#[cfg(unix)]
+#[tokio::test]
+async fn a_resumed_foreign_move_puts_back_a_source_its_copy_no_longer_holds() {
+    let mut world = world(ViewMode::Copies).await;
+    world.apply().await;
+    let note = format!("{HA_DIR}notes.txt");
+    fs::write(world.view().join(&note), b"the user's notes").unwrap();
+    world.bump().await;
+    let preview = world.preview().await;
+    let mut request = World::request(&preview);
+    request.ticked = vec![native(&note)];
+    world.sql(CLOSE_BEFORE_OUTCOME, &[]).await;
+    world.library.apply(&request, &Unattended).await.unwrap_err();
+    world.sql("DROP TRIGGER closed_before_outcome", &[]).await;
+    let (from, at) = (world.previous().join(&note), world.view().join(&note));
+    let aside = closed_before_the_source_unlink(&from, &at);
+    fs::write(&at, b"the user's edit").unwrap();
+    world.reopen().await;
+
+    let journal = world.catalog().latest_apply_journal(world.project).await.unwrap().unwrap();
+    assert_eq!(journal.outcome, Some(ApplyOutcome::Applied), "{journal:#?}");
+    let items = world.catalog().apply_foreign_items(journal.operation_id).await.unwrap();
+    let item = items.iter().find(|item| wire(&item.path) == note).unwrap();
+    assert_eq!((item.state, item.reason), (ForeignItemState::Stayed, None), "{item:#?}");
+    assert!(!aside.exists(), "nothing stays hidden");
+    assert_eq!(fs::read(&from).unwrap(), b"the user's notes");
+    assert_eq!(fs::read(&at).unwrap(), b"the user's edit");
+    let leftovers = world.catalog().apply_inputs(world.project).await.unwrap().leftovers;
+    let left = format!("View (previous)/{note}");
+    assert!(leftovers.iter().any(|item| wire(&item.path) == left), "{leftovers:#?}");
 }
 
 /// Every review update fails from now on, as `PlateVault` closing right
@@ -782,6 +835,160 @@ async fn a_file_named_like_a_moved_source_is_never_taken_for_one() {
     assert_eq!(report.outcome, Some(ApplyOutcome::Applied), "{report:#?}");
     assert_eq!(World::tree(&kept_folder(&world).join(HA_DIR)), [name.as_str(), "notes.txt"]);
     assert_eq!(fs::read(kept_folder(&world).join(HA_DIR).join(&name)).unwrap(), b"my notes");
+}
+
+/// zx3l2: as [`a_kept_move_closed_before_its_source_unlink_keeps_no_hidden_duplicate`],
+/// but the copy under the kept name changed before the restart, so it no
+/// longer holds the file's bytes. The next start puts the file it proves
+/// moved aside back at its name, never leaving it hidden, and the next
+/// Apply keeps it beside the changed copy.
+// Windows always moves by MoveFileExW rename, so it never leaves a verified
+// copy beside a source moved aside (`transfer::restore_left_aside`).
+#[cfg(unix)]
+#[tokio::test]
+async fn a_kept_move_closed_before_its_source_unlink_puts_back_what_its_copy_lost() {
+    let mut world = world(ViewMode::Copies).await;
+    world.apply().await;
+    let note = format!("{HA_DIR}notes.txt");
+    keep(&world, &[(&note, b"my notes")]).await;
+    closed_after_a_kept_move(&mut world).await;
+    let (from, to) = (world.previous().join(&note), kept_folder(&world).join(&note));
+    let aside = closed_before_the_source_unlink(&from, &to);
+    fs::write(&to, b"my edit").unwrap();
+    world.reopen().await;
+    assert!(!aside.exists(), "nothing stays hidden");
+    assert_eq!(fs::read(&from).unwrap(), b"my notes", "it is back at its name");
+
+    world.bump().await;
+    let report = world.apply().await;
+    assert_eq!(report.outcome, Some(ApplyOutcome::Applied), "{report:#?}");
+    assert!(report.kept_missing.is_empty(), "{:#?}", report.kept_missing);
+    let kept = kept_folder(&world).join(HA_DIR);
+    assert_eq!(World::tree(&kept), ["notes-2.txt", "notes.txt"]);
+    assert_eq!(fs::read(kept.join("notes-2.txt")).unwrap(), b"my notes");
+    assert_eq!(fs::read(&to).unwrap(), b"my edit");
+}
+
+/// zx3l2: as above, with another file saved at the kept file's name before
+/// the restart. That file keeps the name, and the kept file goes back
+/// under a visible name beside it, never hidden; the next Apply keeps both.
+// Windows always moves by MoveFileExW rename, so it never leaves a verified
+// copy beside a source moved aside (`transfer::restore_left_aside`).
+#[cfg(unix)]
+#[tokio::test]
+async fn a_kept_file_put_back_where_its_name_was_taken_takes_a_visible_name() {
+    let mut world = world(ViewMode::Copies).await;
+    world.apply().await;
+    let note = format!("{HA_DIR}notes.txt");
+    keep(&world, &[(&note, b"my notes")]).await;
+    closed_after_a_kept_move(&mut world).await;
+    let (from, to) = (world.previous().join(&note), kept_folder(&world).join(&note));
+    let aside = closed_before_the_source_unlink(&from, &to);
+    fs::write(&to, b"my edit").unwrap();
+    fs::write(&from, b"their notes").unwrap();
+    world.reopen().await;
+    assert!(!aside.exists(), "nothing stays hidden");
+    assert_eq!(fs::read(&from).unwrap(), b"their notes", "their file keeps the name");
+    assert_eq!(fs::read(from.with_file_name("notes-2.txt")).unwrap(), b"my notes");
+
+    world.bump().await;
+    let report = world.apply().await;
+    assert_eq!(report.outcome, Some(ApplyOutcome::Applied), "{report:#?}");
+    let kept = World::tree(&kept_folder(&world).join(HA_DIR));
+    assert_eq!(kept, ["notes-2.txt", "notes-3.txt", "notes.txt"]);
+}
+
+/// The user saves `relative` in `View/` holding `bytes` and leaves it
+/// unticked at the next Apply: a leftover of `View (previous)/` to review.
+async fn left_over(world: &World, relative: &str, bytes: &[u8]) -> NativePath {
+    fs::write(world.view().join(relative), bytes).unwrap();
+    world.bump().await;
+    let report = world.apply().await;
+    assert_eq!(report.outcome, Some(ApplyOutcome::Applied), "{report:#?}");
+    assert_eq!(report.leftovers.len(), 1, "{:#?}", report.leftovers);
+    native(&format!("View (previous)/{relative}"))
+}
+
+/// zx3l2: `PlateVault` closing mid way through a leftover's Move review
+/// where the volume has no no-replace rename, after its verified copy in
+/// `View/` and before its source is unlinked ([`closed_mid_leftover_move`]).
+/// The Move asked again ends the move: the source it proves the copy holds
+/// is removed, nothing hidden stays, and `View (previous)/` goes.
+// Windows always moves by MoveFileExW rename, so it never leaves a verified
+// copy beside a source moved aside (`transfer::remove_left_aside`).
+#[cfg(unix)]
+#[tokio::test]
+async fn a_move_review_closed_before_its_source_unlink_ends_when_asked_again() {
+    let mut world = world(ViewMode::Copies).await;
+    world.apply().await;
+    let note = format!("{HA_DIR}notes.txt");
+    let leftover = left_over(&world, &note, b"the user's notes").await;
+    let aside = closed_mid_leftover_move(&world, &note);
+    world.reopen().await;
+
+    let trash = FolderTrash(world.temp.path().join("Trash"));
+    world
+        .library
+        .review_view_leftover(world.project, leftover, PreviousItemReview::Moved, &trash)
+        .await
+        .unwrap();
+    assert!(!aside.exists(), "the source its copy holds is removed");
+    assert_eq!(fs::read(world.view().join(&note)).unwrap(), b"the user's notes");
+    assert!(!world.previous().exists(), "an empty View (previous)/ is removed");
+}
+
+/// zx3l2: as above, the user then keeping the leftover instead. It is back
+/// at its name, never hidden, and the next Apply keeps it there.
+// Windows always moves by MoveFileExW rename, so it never leaves a verified
+// copy beside a source moved aside (`transfer::restore_left_aside`).
+#[cfg(unix)]
+#[tokio::test]
+async fn a_keep_review_after_a_closed_move_review_keeps_the_file_at_its_name() {
+    let mut world = world(ViewMode::Copies).await;
+    world.apply().await;
+    let note = format!("{HA_DIR}notes.txt");
+    let leftover = left_over(&world, &note, b"the user's notes").await;
+    let aside = closed_mid_leftover_move(&world, &note);
+    world.reopen().await;
+
+    let trash = FolderTrash(world.temp.path().join("Trash"));
+    world
+        .library
+        .review_view_leftover(world.project, leftover, PreviousItemReview::Kept, &trash)
+        .await
+        .unwrap();
+    assert!(!aside.exists(), "nothing stays hidden");
+    assert_eq!(fs::read(world.previous().join(&note)).unwrap(), b"the user's notes");
+
+    world.bump().await;
+    let report = world.apply().await;
+    assert_eq!(report.outcome, Some(ApplyOutcome::Applied), "{report:#?}");
+    assert!(report.kept_missing.is_empty(), "{:#?}", report.kept_missing);
+    assert_eq!(World::tree(&kept_folder(&world).join(HA_DIR)), ["notes.txt"]);
+}
+
+/// zx3l2: a kept file's Move review closed mid way as above. The next
+/// Apply, which finds it gone from its name, puts it back first, so it
+/// keeps it under its own name, never hidden, and never names it missing.
+// Windows always moves by MoveFileExW rename, so it never leaves a verified
+// copy beside a source moved aside (`transfer::restore_left_aside`).
+#[cfg(unix)]
+#[tokio::test]
+async fn a_kept_file_a_closed_move_review_left_aside_is_kept_at_its_name() {
+    let mut world = world(ViewMode::Copies).await;
+    world.apply().await;
+    let note = format!("{HA_DIR}notes.txt");
+    keep(&world, &[(&note, b"my notes")]).await;
+    let aside = closed_mid_leftover_move(&world, &note);
+    world.reopen().await;
+
+    world.bump().await;
+    let report = world.apply().await;
+    assert_eq!(report.outcome, Some(ApplyOutcome::Applied), "{report:#?}");
+    assert!(report.kept_missing.is_empty(), "{:#?}", report.kept_missing);
+    assert!(!aside.exists(), "nothing stays hidden");
+    assert_eq!(World::tree(&kept_folder(&world).join(HA_DIR)), ["notes.txt"]);
+    assert_eq!(fs::read(kept_folder(&world).join(&note)).unwrap(), b"my notes");
 }
 
 #[tokio::test]
@@ -1133,6 +1340,40 @@ async fn the_next_apply_clears_what_an_interrupted_build_left() {
     assert_eq!(report.outcome, Some(ApplyOutcome::Applied), "{report:#?}");
     assert!(!world.building().exists());
     assert_eq!(read_fits(&placed(&world, SEP24)).object.as_deref(), Some("NGC 7000"));
+    let read = metadata_xisf::XisfExtractor.extract(&placed(&world, XISF)).unwrap().unwrap();
+    assert_eq!(read.object.as_deref(), Some("NGC 7000"));
+}
+
+/// zx3l2: where the volume has no no-replace rename a partial copy is
+/// installed as a verified copy under its entry's name, so an interruption
+/// before the partial is unlinked leaves it moved aside under a hidden
+/// name beside the copy ([`closed_before_the_source_unlink`]). Beside a
+/// patched copy it matches no snapshot nor planned path, yet the copy holds
+/// its bytes and time: the next Apply removes it as its own, and
+/// `View (building)/` goes.
+// Windows always installs by MoveFileExW rename, so it never leaves a
+// partial aside (`transfer::remove_aside_of_copy`).
+#[cfg(unix)]
+#[tokio::test]
+async fn the_next_apply_clears_a_partial_an_interrupted_copy_left_aside() {
+    let mut world = catalogued(ViewMode::Copies).await;
+    let metadata = meta("LIGHT", Some("Ha"), 300.0, 100.0, "2026-10-12");
+    world.add_lights(&[sep24_frame(), (XISF.to_owned(), metadata, xisf_light(true))]).await;
+    world.correct(SEP24, &[("object", json!("NGC 7000"))]).await;
+    world.correct(XISF, &[("object", json!("NGC 7000"))]).await;
+    world.hold(HA[0]).await;
+    let report = interrupted_at(&world, ApplyPhase::BuildVerified).await;
+    let built = World::tree(&world.building());
+    let xisf = built.iter().find(|path| path.ends_with("J23_Light_001.xisf")).unwrap();
+    let copy = world.building().join(xisf);
+    let partial = format!(".pv-{}-1-a1b2c3.partial", report.operation_id.simple());
+    let aside = closed_before_the_source_unlink(&copy.with_file_name(partial), &copy);
+    world.reopen().await;
+    assert_eq!(world.journal(report.operation_id).await.outcome, Some(ApplyOutcome::Failed));
+
+    let report = world.apply().await;
+    assert_eq!(report.outcome, Some(ApplyOutcome::Applied), "{report:#?}");
+    assert!(!aside.exists() && !world.building().exists());
     let read = metadata_xisf::XisfExtractor.extract(&placed(&world, XISF)).unwrap().unwrap();
     assert_eq!(read.object.as_deref(), Some("NGC 7000"));
 }
