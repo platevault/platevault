@@ -305,7 +305,7 @@ fn settle(out: &fs::File, partial: &Path, modified_ns: i128) -> Result<(), ItemR
     if let Some(modified) = modified_time(modified_ns) {
         out.set_modified(modified).map_err(|error| write_failed(partial, &error))?;
     }
-    out.sync_all().map_err(|error| write_failed(partial, &error))
+    sync(out).map_err(|error| write_failed(partial, &error))
 }
 
 /// Install the recorded partial copy at the destination without replacing
@@ -401,7 +401,44 @@ pub(crate) fn verify_bytes(
 
 #[cfg(unix)]
 pub(crate) fn sync_folder(folder: &Path) -> std::io::Result<()> {
-    fs::File::open(folder)?.sync_all()
+    sync(&fs::File::open(folder)?)
+}
+
+/// Flush what `file` holds to its volume, as `File::sync_all` does. On
+/// macOS `sync_all` is `fcntl(F_FULLFSYNC)`, which only some file systems
+/// implement: smbfs answers `ENOTSUP` for a file and a folder alike
+/// (astro-plan-wdlol), so every copy onto an SMB share would fail. Where
+/// the volume has no full sync, this falls back to `fsync`, the strongest
+/// sync it has (smbfs sends it to the server as a flush), as SQLite's
+/// `fullfsync` does. Any other error is the sync's.
+pub(crate) fn sync(file: &fs::File) -> std::io::Result<()> {
+    #[cfg(target_os = "macos")]
+    {
+        full_sync_or_fsync(file, |file| rustix::fs::fcntl_fullfsync(file))
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        file.sync_all()
+    }
+}
+
+/// [`sync`] with the full sync `full`; tests stand in a volume without it.
+#[cfg(target_os = "macos")]
+fn full_sync_or_fsync(
+    file: &fs::File,
+    full: impl Fn(&fs::File) -> rustix::io::Result<()>,
+) -> std::io::Result<()> {
+    use rustix::io::{retry_on_intr, Errno};
+
+    match retry_on_intr(|| full(file)) {
+        // As `move_noreplace` classifies an operation the volume lacks.
+        Err(errno)
+            if [Errno::INVAL, Errno::NOTSUP, Errno::OPNOTSUPP, Errno::NOSYS].contains(&errno) =>
+        {
+            Ok(retry_on_intr(|| rustix::fs::fsync(file))?)
+        }
+        result => Ok(result?),
+    }
 }
 
 /// Windows offers no folder sync through a safe handle; NTFS journals the
@@ -423,7 +460,7 @@ pub(crate) fn clone_file(source: &fs::File, path: &Path) -> std::io::Result<()> 
     let name = path.file_name().ok_or_else(|| std::io::Error::other("no file name"))?;
     let folder = fs::File::open(folder)?;
     rustix::fs::fclonefileat(source, &folder, name, rustix::fs::CloneFlags::NOFOLLOW)?;
-    fs::File::open(path)?.sync_all()
+    sync(&fs::File::open(path)?)
 }
 
 #[cfg(target_os = "linux")]
@@ -440,7 +477,7 @@ pub(crate) fn clone_file(source: &fs::File, path: &Path) -> std::io::Result<()> 
         }
         return Err(error.into());
     }
-    out.sync_all()
+    sync(&out)
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]
@@ -1592,5 +1629,27 @@ mod tests {
         assert!(remove_unfinished_copy(&candidate, &of));
         assert!(!candidate.exists());
         assert_eq!(fs::read(&of).unwrap(), b"the frame's bytes");
+    }
+
+    /// wdlol: a volume without a full sync (macOS smbfs answers
+    /// `F_FULLFSYNC` with `ENOTSUP`) is synced with `fsync` instead, and
+    /// a full sync that fails any other way fails the sync.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn a_volume_without_a_full_sync_is_synced_with_fsync() {
+        use rustix::io::Errno;
+
+        let temp = tempfile::tempdir().unwrap();
+        let copy = fs::File::create(temp.path().join("copy")).unwrap();
+        let asked = std::cell::Cell::new(0);
+        let without_full_sync = |_: &fs::File| {
+            asked.set(asked.get() + 1);
+            Err(Errno::NOTSUP)
+        };
+        full_sync_or_fsync(&copy, without_full_sync).unwrap();
+        assert_eq!(asked.get(), 1, "the full sync is asked once");
+
+        let error = full_sync_or_fsync(&copy, |_: &fs::File| Err(Errno::IO)).unwrap_err();
+        assert_eq!(error.raw_os_error(), Some(Errno::IO.raw_os_error()), "{error}");
     }
 }
