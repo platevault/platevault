@@ -1,15 +1,16 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Apply (spec 066 VSEL-FR-14/20/21, 069 PREP-FR-03/04/06/09/15/16/18/19/20,
-//! 071 STO-FR-10; D19, D-W81, D-W98 to D-W100, D-W108, D-W110, D-W113,
-//! D-W114, D-W122, D-W123):
+//! Apply (spec 066 VSEL-FR-14/20/21, 069 PREP-FR-02/03/04/06/09/15/16/18/19/
+//! 20, PREP-AC-11, 071 STO-FR-10; D04, D19, D-W81, D-W98 to D-W100, D-W108,
+//! D-W110, D-W113, D-W114, D-W122, D-W123):
 //! the View rebuilt from the originals, a verified swap and a safe
 //! retirement of the old View.
 //!
 //! The sheet ([`Library::apply_preview`]) lists the new View as a folder
 //! tree and every reason Apply can't run: offline originals, a changed or
-//! missing pinned calibration file, Symlinks where symlinks can't be made,
+//! missing pinned calibration file, Symlinks where symlinks can't be made
+//! or the Project's profile isn't evidenced to leave its inputs unchanged,
 //! leftovers to review, another running operation. Apply refuses a sheet the
 //! Project or the Library moved past. It reserves the Project, snapshots
 //! every original (identity and SHA-256, against the basis recorded when it
@@ -65,7 +66,7 @@ use crate::{
     ApplyBlocker, ApplyFailure, ApplyJournal, ApplyOutcome, ApplyPhase, ApplyPreview, ApplyReport,
     ApplyRequest, ApplyStop, EntryEvidence, EntryPlacement, ExpectedTree, FileIdentity,
     ForeignFile, ForeignItem, ForeignItemFailure, ForeignItemState, InputKind, ItemReason,
-    LibraryError, ManifestEntry, NativePath, PinHealth, PreviousItem, PreviousItemReview,
+    LibraryError, ManifestEntry, NativePath, PinHealth, PreviousItem, PreviousItemReview, Profile,
     ReasonCode, Revision, SymlinkCapability, ViewFootprint, ViewManifest, ViewMode, ViewPlanEntry,
 };
 
@@ -222,6 +223,7 @@ impl Library {
     ///
     /// # Errors
     /// `Conflict` when the Project or the Library moved since the sheet;
+    /// `InputWriteRisk` when the Project's profile isn't evidenced read-only,
     /// `SymlinksUnavailable` when Windows Developer Mode is off and
     /// `LinksUnsupported` when the processing location holds no links, for
     /// a Symlinks View;
@@ -448,8 +450,10 @@ const fn before(phase: ApplyPhase, other: ApplyPhase) -> bool {
     phase.rank() < other.rank()
 }
 
-/// The Apply refusal: `SymlinksUnavailable` when Windows Developer Mode is
-/// off (PREP-FR-15, PREP-AC-08), else `LinksUnsupported` scoped to a
+/// The Apply refusal: `InputWriteRisk` concerning a profile not evidenced
+/// read-only (PREP-AC-11), first because no setting of this machine lifts
+/// it, else `SymlinksUnavailable` when Windows Developer Mode is off
+/// (PREP-FR-15, PREP-AC-08), else `LinksUnsupported` scoped to a
 /// processing location that holds no links (PREP-AC-03), else
 /// `CorrectionUndeliverable` for the first held frame whose correction no
 /// patched copy can carry (PREP-FR-03), else `SessionNotReady` naming the
@@ -457,6 +461,11 @@ const fn before(phase: ApplyPhase, other: ApplyPhase) -> bool {
 /// `InvalidInput`, naming every blocker.
 fn refusal(blockers: &[ApplyBlocker]) -> LibraryError {
     let message = blockers.iter().map(ApplyBlocker::describe).collect::<Vec<_>>().join("; ");
+    for blocker in blockers {
+        if let ApplyBlocker::InputWriteRisk { profile_id, .. } = blocker {
+            return LibraryError::InputWriteRisk(message).concerning(*profile_id);
+        }
+    }
     if blockers.contains(&ApplyBlocker::SymlinksUnavailable) {
         return LibraryError::SymlinksUnavailable(message);
     }
@@ -668,6 +677,9 @@ fn check(inputs: &ApplyInputs, os: Os) -> Checked {
             });
         }
     }
+    if inputs.basis.mode == ViewMode::Symlinks {
+        blockers.extend(inputs.profile.as_ref().and_then(input_write_risk));
+    }
     let mut project = None;
     let mut found = Found::default();
     match &inputs.parent {
@@ -797,6 +809,19 @@ fn symlink_blocker(
             })
         }
     }
+}
+
+/// The blocker a Symlinks View meets in the profile the Project's View
+/// opens in: a symlink hands the application the original itself, so a
+/// profile not evidenced to leave its inputs unchanged names the
+/// input-write risk, and the sheet offers Copies without switching the mode
+/// (PREP-FR-02, PREP-AC-11; D04, D-W81).
+fn input_write_risk(profile: &Profile) -> Option<ApplyBlocker> {
+    let evidence = &profile.capability_evidence;
+    (!evidence.inputs_read_only()).then_some(ApplyBlocker::InputWriteRisk {
+        profile_id: profile.id,
+        input_behavior: evidence.input_behavior,
+    })
 }
 
 /// What the Project folder holds that the sheet reports.
@@ -1914,7 +1939,10 @@ fn move_leftover(project: &Path, item: &PreviousItem) -> Result<(), LibraryError
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{GroupKeywords, ProjectBasis, ProjectLifecycle};
+    use crate::{
+        Capability, CapabilityEvidence, CapabilityProof, GroupKeywords, InputBehavior, ProfileKind,
+        ProjectBasis, ProjectLifecycle,
+    };
 
     #[allow(clippy::unnecessary_wraps)]
     fn developer_mode_off(_folder: &Path) -> std::io::Result<SymlinkCapability> {
@@ -1924,6 +1952,104 @@ mod tests {
     #[allow(clippy::unnecessary_wraps)]
     fn no_links(_folder: &Path) -> std::io::Result<SymlinkCapability> {
         Ok(SymlinkCapability::Unsupported)
+    }
+
+    #[allow(clippy::unnecessary_wraps)]
+    fn links_available(_folder: &Path) -> std::io::Result<SymlinkCapability> {
+        Ok(SymlinkCapability::Available)
+    }
+
+    /// A generic application profile whose input behaviour is `behavior`,
+    /// with an `Input` proof recorded when `proven`.
+    fn profile(behavior: InputBehavior, proven: bool) -> Profile {
+        let proofs = if proven {
+            vec![CapabilityProof {
+                capability: Capability::Input,
+                evidence: "opens View/ read-only".into(),
+            }]
+        } else {
+            Vec::new()
+        };
+        Profile {
+            id: Uuid::new_v4(),
+            name: "Generic".into(),
+            kind: ProfileKind::Generic,
+            executable: None,
+            args: Vec::new(),
+            capability_evidence: CapabilityEvidence { input_behavior: behavior, proofs },
+            revision: 1,
+            created_at: String::new(),
+            updated_at: String::new(),
+        }
+    }
+
+    /// The blockers of a Project in `mode` whose View opens in `profile`,
+    /// where symlinks can be made.
+    fn blockers_with(parent: &Path, mode: ViewMode, profile: Option<Profile>) -> Vec<ApplyBlocker> {
+        let os = Os { symlinks: links_available, ..Os::SYSTEM };
+        check(&ApplyInputs { profile, ..inputs(parent, mode) }, os).blockers
+    }
+
+    /// PREP-AC-11 for `behavior`: Symlinks is refused naming the input-write
+    /// risk, with the profile and its behaviour for the sheet's Use copies
+    /// offer, and its own stable code concerning the profile. The refusal
+    /// changes neither the mode nor any file.
+    fn assert_input_write_risk_refused(behavior: InputBehavior) {
+        let temp = tempfile::tempdir().unwrap();
+        let profile = profile(behavior, false);
+        let blockers = blockers_with(temp.path(), ViewMode::Symlinks, Some(profile.clone()));
+        assert_eq!(
+            blockers,
+            [ApplyBlocker::InputWriteRisk { profile_id: profile.id, input_behavior: behavior }]
+        );
+        let error = refusal(&blockers);
+        assert_eq!(error.code().as_str(), "input_write_risk");
+        assert_eq!(error.response(None, None).identity, Some(profile.id));
+        assert!(fs::read_dir(temp.path()).unwrap().next().is_none(), "nothing was built");
+    }
+
+    #[test]
+    fn symlinks_mode_refuses_a_profile_whose_input_behaviour_is_unknown() {
+        assert_input_write_risk_refused(InputBehavior::Unknown);
+    }
+
+    #[test]
+    fn symlinks_mode_refuses_a_write_prone_profile() {
+        assert_input_write_risk_refused(InputBehavior::WriteProne);
+    }
+
+    /// Only read-only input with its recorded proof lets Symlinks through;
+    /// a read-only claim without one is still the risk (D04).
+    #[test]
+    fn symlinks_mode_takes_a_profile_evidenced_read_only() {
+        let temp = tempfile::tempdir().unwrap();
+        let proven = profile(InputBehavior::ReadOnly, true);
+        assert_eq!(blockers_with(temp.path(), ViewMode::Symlinks, Some(proven)), Vec::new());
+        let unproven = profile(InputBehavior::ReadOnly, false);
+        assert_eq!(
+            blockers_with(temp.path(), ViewMode::Symlinks, Some(unproven.clone())),
+            [ApplyBlocker::InputWriteRisk {
+                profile_id: unproven.id,
+                input_behavior: InputBehavior::ReadOnly
+            }]
+        );
+    }
+
+    /// Copies never hands the application an original, so the profile's
+    /// input behaviour doesn't refuse it.
+    #[test]
+    fn copies_mode_takes_a_profile_whose_input_behaviour_is_unknown() {
+        let temp = tempfile::tempdir().unwrap();
+        let unknown = profile(InputBehavior::Unknown, false);
+        assert_eq!(blockers_with(temp.path(), ViewMode::Copies, Some(unknown)), Vec::new());
+    }
+
+    /// PREP-AC-11's precondition is a profile: a Project with none set
+    /// meets no input-write refusal.
+    #[test]
+    fn symlinks_mode_without_a_profile_meets_no_input_write_refusal() {
+        let temp = tempfile::tempdir().unwrap();
+        assert_eq!(blockers_with(temp.path(), ViewMode::Symlinks, None), Vec::new());
     }
 
     fn inputs(parent: &Path, mode: ViewMode) -> ApplyInputs {
@@ -1946,6 +2072,7 @@ mod tests {
             previous: None,
             leftovers: Vec::new(),
             running: None,
+            profile: None,
             failed_building: None,
         }
     }
@@ -1983,12 +2110,18 @@ mod tests {
         assert_eq!(check(&inputs(temp.path(), ViewMode::Copies), os).blockers, Vec::new());
     }
 
-    /// A blocker's wire tag is its refusal's code, so the sheet words both
-    /// symlink blockers by their `err_library_<code>` messages.
+    /// A blocker's wire tag is its refusal's code, so the sheet words the
+    /// symlink and input-write blockers by their `err_library_<code>`
+    /// messages.
     #[test]
     fn each_symlink_blocker_is_tagged_as_its_refusal_code() {
         let path = NativePath::from_path(Path::new("/Volumes/EXFAT/Processing"));
-        for blocker in [ApplyBlocker::SymlinksUnavailable, ApplyBlocker::LinksUnsupported { path }]
+        let risk = ApplyBlocker::InputWriteRisk {
+            profile_id: Uuid::new_v4(),
+            input_behavior: InputBehavior::Unknown,
+        };
+        for blocker in
+            [ApplyBlocker::SymlinksUnavailable, ApplyBlocker::LinksUnsupported { path }, risk]
         {
             let tag = serde_json::to_value(&blocker).unwrap()["blocker"].clone();
             let code = refusal(std::slice::from_ref(&blocker)).code();

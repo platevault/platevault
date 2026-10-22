@@ -15,9 +15,9 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    ApplyOutcome, EntryEvidence, EntryPlacement, EntrySource, ForeignItem, InputKind, ItemReason,
-    NativePath, PinHealth, PreviousItem, ProjectLifecycle, ProjectOperationKind, ReasonCode,
-    Revision, SessionReadiness, ViewMode,
+    ApplyOutcome, EntryEvidence, EntryPlacement, EntrySource, ForeignItem, InputBehavior,
+    InputKind, ItemReason, NativePath, PinHealth, PreviousItem, ProjectLifecycle,
+    ProjectOperationKind, ReasonCode, Revision, SessionReadiness, ViewMode,
 };
 
 /// One reason Apply can't run now. The sheet lists every one; Apply refuses
@@ -48,6 +48,15 @@ pub enum ApplyBlocker {
     /// links (FAT, exFAT, some network shares): only Copies is offered
     /// there (PREP-AC-03).
     LinksUnsupported { path: NativePath },
+    /// Symlinks mode where the profile the Project's View opens in isn't
+    /// evidenced to leave its inputs unchanged: its input behaviour is
+    /// unknown, write-prone, or read-only without a recorded proof (D04).
+    /// Through a symlink the application could change an original, so the
+    /// input-write risk is named, Symlinks is refused, and the sheet offers
+    /// Use copies for this Project without switching the mode
+    /// (PREP-FR-02, PREP-AC-11; D-W81). A Project with no profile set meets
+    /// no such refusal.
+    InputWriteRisk { profile_id: Uuid, input_behavior: InputBehavior },
     /// An original the build needs is on a location that is offline now
     /// (VSEL-AC-31, STO-FR-08).
     OriginalOffline { path: NativePath, location_id: Uuid },
@@ -179,6 +188,10 @@ impl ApplyBlocker {
             Self::LinksUnsupported { path } => {
                 format!("{} can't hold symlinks; only copies can be made there", path.display())
             }
+            Self::InputWriteRisk { profile_id, input_behavior } => format!(
+                "profile {profile_id}'s input behaviour is {input_behavior}, not evidenced \
+                 read-only, so symlinks could let it change an original; use copies"
+            ),
             Self::OriginalOffline { path, .. } => format!("{} is offline", path.display()),
             Self::OriginalChanged { path, detail } => format!("{}: {detail}", path.display()),
             Self::PinDrift { session_id, kind, path: Some(path), health } => format!(

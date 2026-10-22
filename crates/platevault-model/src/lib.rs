@@ -193,6 +193,13 @@ pub enum LibraryError {
     /// is offered there (PREP-AC-03). The response's scope names the folder.
     #[error("links unsupported: {0}")]
     LinksUnsupported(String),
+    /// The profile the Project's View opens in isn't evidenced to leave its
+    /// inputs unchanged (unknown or write-prone input behaviour): Apply in
+    /// Symlinks mode refuses, naming the input-write risk, and Copies is
+    /// offered without switching the mode (PREP-FR-02, PREP-AC-11; D-W81).
+    /// The response's identity names the profile.
+    #[error("input-write risk: {0}")]
+    InputWriteRisk(String),
     #[error("operation canceled")]
     Canceled,
     /// A recorded correction can't reach the application: no isolated
@@ -252,6 +259,9 @@ pub enum LibraryErrorCode {
     CorrectionFormatUnpatchable,
     /// A session the Project holds isn't Ready, so Apply waits.
     SessionNotReady,
+    /// The Project's profile isn't evidenced read-only, so Symlinks is
+    /// refused and Copies offered.
+    InputWriteRisk,
 }
 
 impl LibraryErrorCode {
@@ -276,6 +286,7 @@ impl LibraryErrorCode {
             Self::CorrectionUnpatchable => "correction_unpatchable",
             Self::CorrectionFormatUnpatchable => "correction_format_unpatchable",
             Self::SessionNotReady => "session_not_ready",
+            Self::InputWriteRisk => "input_write_risk",
         }
     }
 
@@ -297,7 +308,8 @@ impl LibraryErrorCode {
             | Self::LinksUnsupported
             | Self::CorrectionUnpatchable
             | Self::CorrectionFormatUnpatchable
-            | Self::SessionNotReady => RetryAction::Review,
+            | Self::SessionNotReady
+            | Self::InputWriteRisk => RetryAction::Review,
             Self::UnsupportedFormat | Self::Canceled => RetryAction::None,
         }
     }
@@ -403,6 +415,7 @@ impl LibraryError {
             Self::LinksUnsupported(_) => LibraryErrorCode::LinksUnsupported,
             Self::Canceled => LibraryErrorCode::Canceled,
             Self::SessionNotReady(_) => LibraryErrorCode::SessionNotReady,
+            Self::InputWriteRisk(_) => LibraryErrorCode::InputWriteRisk,
             Self::CorrectionUndeliverable { refusal: PatchRefusal::UnsupportedFormat, .. } => {
                 LibraryErrorCode::CorrectionFormatUnpatchable
             }

@@ -142,6 +142,7 @@ pub async fn project_apply_preview(
 ///
 /// # Errors
 /// `Conflict` when the Project or the Library moved since the sheet;
+/// `InputWriteRisk` when the Project's profile isn't evidenced read-only,
 /// `SymlinksUnavailable` when Windows Developer Mode is off and
 /// `LinksUnsupported` when the processing location holds no links, for a
 /// Symlinks View;

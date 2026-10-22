@@ -94,7 +94,11 @@ impl Catalog {
     }
 }
 
-async fn load_profile(conn: &mut SqliteConnection, id: Uuid) -> Result<Profile> {
+/// Profile `id` in the caller's snapshot.
+///
+/// # Errors
+/// `NotFound` for an unknown profile.
+pub async fn load_profile(conn: &mut SqliteConnection, id: Uuid) -> Result<Profile> {
     let row = sqlx::query("SELECT * FROM profiles WHERE id = ?1")
         .bind(id.to_string())
         .fetch_optional(&mut *conn)

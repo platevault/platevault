@@ -22,9 +22,9 @@ use platevault_model::{
     BasisGroup, BasisSession, CaptureKey, CaptureMetadata, CopyBasis, EntryEvidence, EntryInput,
     EntryName, EntryPlacement, EntrySource, ExpectedTree, FileIdentity, ForeignItem, GroupKeywords,
     GroupName, ImageFormat, InputKind, InputRef, LibraryError, Location, ManifestEntry,
-    ManifestState, NativePath, PreviousItem, PreviousItemReason, PreviousItemReview, ProjectBasis,
-    ProjectLifecycle, ProjectOperation, ProjectOperationKind, Revision, SessionPlacement,
-    SessionReadiness, SettledPin, ViewManifest, ViewMode, WorkflowSettings,
+    ManifestState, NativePath, PreviousItem, PreviousItemReason, PreviousItemReview, Profile,
+    ProjectBasis, ProjectLifecycle, ProjectOperation, ProjectOperationKind, Revision,
+    SessionPlacement, SessionReadiness, SettledPin, ViewManifest, ViewMode, WorkflowSettings,
 };
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -35,8 +35,8 @@ use uuid::Uuid;
 
 use super::{
     admission, calibration, from_json, from_text, load_assets, load_location, now, parse_uuid,
-    path_from_key, path_key, project_inputs, project_operations, revision, to_json, to_text,
-    Catalog, Result,
+    path_from_key, path_key, profiles, project_inputs, project_operations, revision, to_json,
+    to_text, Catalog, Result,
 };
 
 /// Where one original is now: its location and absolute path.
@@ -71,6 +71,10 @@ pub struct ApplyInputs {
     pub desired_revision: Revision,
     /// The processing location; `None` until the user chooses one.
     pub parent: Option<NativePath>,
+    /// The profile the Project's View opens in (`projects.profile_id`), with
+    /// the capability evidence a Symlinks View is checked against
+    /// (PREP-AC-11); `None` until the user sets one.
+    pub profile: Option<Profile>,
     /// The desired state with the live Library state: what the next build
     /// places.
     pub basis: ProjectBasis,
@@ -627,12 +631,13 @@ struct ProjectRow {
     desired_revision: Revision,
     mode: ViewMode,
     keywords: GroupKeywords,
+    profile_id: Option<Uuid>,
     parent: Option<NativePath>,
 }
 
 async fn read_project(conn: &mut SqliteConnection, project_id: Uuid) -> Result<ProjectRow> {
     let row = sqlx::query(
-        "SELECT name, lifecycle, revision, view_mode, group_keyword, panel_keyword, \
+        "SELECT name, lifecycle, revision, view_mode, group_keyword, panel_keyword, profile_id, \
          processing_parent FROM projects WHERE id = ?1",
     )
     .bind(project_id.to_string())
@@ -652,6 +657,11 @@ async fn read_project(conn: &mut SqliteConnection, project_id: Uuid) -> Result<P
         desired_revision: revision(row.try_get("revision")?)?,
         mode: from_text(&row.try_get::<String, _>("view_mode")?)?,
         keywords,
+        profile_id: row
+            .try_get::<Option<String>, _>("profile_id")?
+            .as_deref()
+            .map(parse_uuid)
+            .transpose()?,
         parent: row
             .try_get::<Option<String>, _>("processing_parent")?
             .map(|parent| from_json::<NativePath>(&parent))
@@ -787,6 +797,10 @@ pub async fn read_inputs(conn: &mut SqliteConnection, project_id: Uuid) -> Resul
     let basis =
         ProjectBasis { mode: project.mode, keywords: project.keywords, groups: held.groups };
     basis.validate()?;
+    let profile = match project.profile_id {
+        Some(id) => Some(profiles::load_profile(conn, id).await?),
+        None => None,
+    };
     let installed = read_manifest_in(conn, project_id, "installed").await?;
     let previous = read_manifest_in(conn, project_id, "previous").await?;
     for manifest in installed.iter().chain(&previous) {
@@ -810,6 +824,7 @@ pub async fn read_inputs(conn: &mut SqliteConnection, project_id: Uuid) -> Resul
         lifecycle: project.lifecycle,
         desired_revision: project.desired_revision,
         parent: project.parent,
+        profile,
         basis,
         basis_digest,
         unsettled: held.unsettled,

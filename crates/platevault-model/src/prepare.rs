@@ -113,13 +113,22 @@ impl CapabilityEvidence {
         self.proofs.iter().any(|proof| proof.capability == capability)
     }
 
+    /// Whether the application is evidenced to leave its inputs unchanged:
+    /// read-only input with a recorded `Input` proof (D04). Anything else,
+    /// unknown or write-prone, is the input-write risk a Symlinks View
+    /// refuses (PREP-AC-11).
+    #[must_use]
+    pub fn inputs_read_only(&self) -> bool {
+        self.input_behavior == InputBehavior::ReadOnly && self.proves(Capability::Input)
+    }
+
     /// # Errors
     /// `InvalidInput` for blank evidence, or a claim without its proof.
     pub fn validate(&self) -> Result<(), LibraryError> {
         if self.proofs.iter().any(|proof| proof.evidence.trim().is_empty()) {
             return Err(invalid("capability evidence names what was observed"));
         }
-        if self.input_behavior == InputBehavior::ReadOnly && !self.proves(Capability::Input) {
+        if self.input_behavior == InputBehavior::ReadOnly && !self.inputs_read_only() {
             return Err(invalid("read-only input needs recorded input-behaviour evidence"));
         }
         Ok(())

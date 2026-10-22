@@ -1,12 +1,12 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! F4 Apply (spec 066 VSEL-AC-28/29/31/32/34/35, 069 PREP-AC-05/06/12/14/25/
-//! 26/28/32/33/34/36/38/39, 071 STO-AC-11/26; astro-plan-y1zq7,
-//! astro-plan-mks5g, astro-plan-q8rxp): the View rebuilt from the originals
-//! only, corrected frames as isolated patched copies, a restart-safe swap,
-//! and old copies deleted only once their originals verify, against a real
-//! catalog and real files.
+//! F4 Apply (spec 066 VSEL-AC-28/29/31/32/34/35, 069 PREP-AC-05/06/11/12/14/
+//! 25/26/28/32/33/34/36/38/39, 071 STO-AC-11/26; astro-plan-y1zq7,
+//! astro-plan-mks5g, astro-plan-q8rxp, astro-plan-x18oa): the View rebuilt
+//! from the originals only, corrected frames as isolated patched copies, a
+//! restart-safe swap, and old copies deleted only once their originals
+//! verify, against a real catalog and real files.
 
 #[path = "support/apply.rs"]
 mod apply_support;
@@ -1154,6 +1154,57 @@ fn undeliverable(preview: &ApplyPreview) -> Vec<(Value, Value, Value)> {
 /// Nothing was built: no `View/` and no `View (building)/`.
 fn nothing_built(world: &World) {
     assert!(!world.view().exists() && !world.building().exists(), "nothing was built");
+}
+
+/// The generic application profile `evidence` describes.
+fn generic_profile(evidence: CapabilityEvidence) -> ProfileInput {
+    ProfileInput {
+        name: "Generic".into(),
+        kind: ProfileKind::Generic,
+        executable: None,
+        args: Vec::new(),
+        capability_evidence: evidence,
+    }
+}
+
+/// PREP-AC-11 against the catalog: Apply reads the profile the Project
+/// names. While its input behaviour is unknown, the Symlinks sheet names
+/// the input-write risk with the profile, Apply refuses with its own code
+/// and builds nothing, and the mode stays Symlinks. Once the profile
+/// records read-only input with its proof, the same Project applies.
+#[tokio::test]
+async fn a_symlinks_apply_is_refused_until_its_profile_is_evidenced_read_only() {
+    let world = world(ViewMode::Symlinks).await;
+    let unknown = generic_profile(CapabilityEvidence::default());
+    let profile = world.catalog().create_profile(&unknown).await.unwrap();
+    world
+        .sql(
+            "UPDATE projects SET profile_id = ?2 WHERE id = ?1",
+            &[&world.project.to_string(), &profile.id.to_string()],
+        )
+        .await;
+
+    let preview = world.preview().await;
+    let risk = ApplyBlocker::InputWriteRisk {
+        profile_id: profile.id,
+        input_behavior: InputBehavior::Unknown,
+    };
+    assert_eq!(preview.blockers, [risk]);
+    let refused = world.library.apply(&World::request(&preview), &Unattended).await.unwrap_err();
+    assert_eq!(refused.code(), LibraryErrorCode::InputWriteRisk, "{refused:?}");
+    assert_eq!(refused.response(None, None).identity, Some(profile.id));
+    nothing_built(&world);
+    assert_eq!(world.preview().await.mode, ViewMode::Symlinks, "the mode never changes");
+
+    let read_only = generic_profile(CapabilityEvidence {
+        input_behavior: InputBehavior::ReadOnly,
+        proofs: vec![CapabilityProof {
+            capability: Capability::Input,
+            evidence: "opens View/ read-only".into(),
+        }],
+    });
+    world.catalog().update_profile(profile.id, profile.revision, &read_only).await.unwrap();
+    assert_eq!(world.apply().await.outcome, Some(ApplyOutcome::Applied));
 }
 
 /// D-W123 owner decisions and the FITS limits: a corrected value no patched
