@@ -29,8 +29,8 @@ use std::path::{Path, PathBuf};
 use fs_pathsafe::long_path;
 
 use windows_sys::Win32::Storage::FileSystem::{
-    GetDiskFreeSpaceExW, GetDriveTypeW, GetVolumeInformationW, GetVolumeNameForVolumeMountPointW,
-    GetVolumePathNameW,
+    GetDiskSpaceInformationW, GetDriveTypeW, GetVolumeInformationW,
+    GetVolumeNameForVolumeMountPointW, GetVolumePathNameW, DISK_SPACE_INFORMATION,
 };
 
 /// `MAX_PATH`, the longest name `GetVolumeInformationW` reports.
@@ -146,29 +146,27 @@ pub fn drive_type(root: &Path) -> io::Result<u32> {
     Ok(unsafe { GetDriveTypeW(root.as_ptr()) })
 }
 
-/// The total disk space available to the caller on the volume at `root`.
+/// The volume's actual capacity, independent of the caller's disk quota.
 ///
 /// # Errors
-/// `InvalidInput` when the root holds a NUL; otherwise the error reported by
-/// `GetDiskFreeSpaceExW`. The returned total may be limited by a disk quota.
+/// `InvalidInput` when the root holds a NUL; otherwise the failing Win32
+/// HRESULT, or `InvalidData` if the reported capacity overflows `u64`.
 pub fn capacity(root: &Path) -> io::Result<u64> {
     let root = wide(root.as_os_str())?;
-    let mut total = 0_u64;
-    // SAFETY: `root` is a NUL-terminated UTF-16 buffer and `total` a writable
-    // `u64`, both outliving the call; null pointers skip the optional outputs.
+    let mut information = DISK_SPACE_INFORMATION::default();
+    // SAFETY: `root` is NUL-terminated UTF-16 and `information` is a writable
+    // Win32 structure; both remain alive for the duration of the call.
     #[allow(unsafe_code)]
-    let found = unsafe {
-        GetDiskFreeSpaceExW(
-            root.as_ptr(),
-            std::ptr::null_mut(),
-            &raw mut total,
-            std::ptr::null_mut(),
-        )
-    };
-    if found == 0 {
-        return Err(io::Error::last_os_error());
+    let result = unsafe { GetDiskSpaceInformationW(root.as_ptr(), &raw mut information) };
+    if result < 0 {
+        return Err(io::Error::from_raw_os_error(result));
     }
-    Ok(total)
+    u64::from(information.SectorsPerAllocationUnit)
+        .checked_mul(u64::from(information.BytesPerSector))
+        .and_then(|bytes_per_unit| {
+            information.ActualTotalAllocationUnits.checked_mul(bytes_per_unit)
+        })
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "volume capacity overflowed u64"))
 }
 
 /// A `\\?\X:\…` mount point in its plain `X:\…` form, which every volume

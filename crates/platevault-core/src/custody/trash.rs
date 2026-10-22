@@ -576,17 +576,22 @@ mod platform {
         trash::delete(entry).map_err(|error| error.to_string())
     }
 
-    fn query(folder: &Path) -> Result<RecycleBin, String> {
+    pub(super) fn query(folder: &Path) -> Result<RecycleBin, String> {
         let path = std::path::absolute(folder)
             .map_err(|error| format!("could not resolve Recycle Bin path: {error}"))?;
-
-        // The old query classified UNC shares as remote before querying a
-        // volume. `volume` reports mapped drive roots; for a UNC path use its
-        // share root directly, as GetDriveTypeW requires a root.
-        if let Some(root) = unc_root(&path) {
-            let drive_type = fs_volume_windows::drive_type(&root)
-                .map_err(|error| format!("Recycle Bin drive type query {error}"))?;
-            return Ok(RecycleBin { drive_type: Some(drive_type), ..RecycleBin::default() });
+        // The old query treated non-drive, non-UNC paths as remote.
+        let Some(Component::Prefix(prefix)) = path.components().next() else {
+            return Ok(RecycleBin { drive_type: Some(4), ..RecycleBin::default() });
+        };
+        match prefix.kind() {
+            Prefix::UNC(..) | Prefix::VerbatimUNC(..) => {
+                let root = unc_root(&path).expect("UNC prefix has a share root");
+                let drive_type = fs_volume_windows::drive_type(&root)
+                    .map_err(|error| format!("Recycle Bin drive type query {error}"))?;
+                return Ok(RecycleBin { drive_type: Some(drive_type), ..RecycleBin::default() });
+            }
+            Prefix::Disk(_) | Prefix::VerbatimDisk(_) => {}
+            _ => return Ok(RecycleBin { drive_type: Some(4), ..RecycleBin::default() }),
         }
 
         let volume = fs_volume_windows::volume(&path)
@@ -637,7 +642,7 @@ mod platform {
         Ok(bin)
     }
 
-    fn unc_root(path: &Path) -> Option<PathBuf> {
+    pub(super) fn unc_root(path: &Path) -> Option<PathBuf> {
         let Some(Component::Prefix(prefix)) = path.components().next() else {
             return None;
         };
@@ -653,7 +658,7 @@ mod platform {
         Some(PathBuf::from(root))
     }
 
-    fn volume_guid(name: &std::ffi::OsStr) -> Option<String> {
+    pub(super) fn volume_guid(name: &std::ffi::OsStr) -> Option<String> {
         let name = name.to_string_lossy();
         let guid = name.strip_prefix(r"\\?\Volume")?.strip_suffix('\\')?;
         (guid.starts_with('{') && guid.ends_with('}')).then(|| guid.to_owned())
@@ -692,6 +697,7 @@ mod platform {
     }
 }
 
+// ── Other platforms ───────────────────────────────────────────────────────────
 #[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
 mod platform {
     use std::path::Path;
@@ -711,6 +717,48 @@ mod platform {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_unc_root_extracts_plain_and_verbatim_shares_only() {
+        assert_eq!(
+            super::platform::unc_root(Path::new(r"\\s\sh\x")),
+            Some(std::path::PathBuf::from(r"\\s\sh\")),
+        );
+        assert_eq!(
+            super::platform::unc_root(Path::new(r"\\?\UNC\s\sh\x")),
+            Some(std::path::PathBuf::from(r"\\s\sh\")),
+        );
+        assert_eq!(super::platform::unc_root(Path::new(r"C:\x")), None);
+        assert_eq!(super::platform::unc_root(Path::new(r"\\.\C:\x")), None);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_volume_guid_extracts_registry_subkey() {
+        use std::ffi::OsStr;
+
+        assert_eq!(
+            super::platform::volume_guid(OsStr::new(
+                r"\\?\Volume{12345678-1234-1234-1234-123456789abc}\",
+            )),
+            Some("{12345678-1234-1234-1234-123456789abc}".into()),
+        );
+        assert_eq!(super::platform::volume_guid(OsStr::new(r"C:\")), None);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_recycle_bin_query_reads_fixed_drive_capacity() {
+        let temp = tempfile::tempdir().unwrap();
+        let volume = fs_volume_windows::volume(temp.path()).unwrap();
+        let bin = super::platform::query(temp.path()).unwrap();
+        assert_eq!(volume.drive_type, 3, "{volume:?}");
+        assert!(volume.name.is_some(), "{volume:?}");
+        assert_eq!(bin.drive_type, Some(3));
+        assert!(bin.capacity.is_some_and(|capacity| capacity > 0));
+        assert_eq!(bin.capacity, Some(fs_volume_windows::capacity(&volume.root).unwrap()));
+    }
 
     fn reason(support: &TrashSupport) -> Option<TrashUnsupported> {
         match support {
