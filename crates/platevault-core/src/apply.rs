@@ -271,7 +271,7 @@ impl Library {
         os_trash: &dyn OsTrash,
     ) -> Result<(), LibraryError> {
         let inputs = self.catalog().apply_inputs(project_id).await?;
-        let item = inputs
+        let mut item = inputs
             .leftovers
             .iter()
             .find(|item| item.path == path)
@@ -285,20 +285,33 @@ impl Library {
             )));
         }
         let project = project_folder(&inputs)?;
-        match review {
-            PreviousItemReview::Pending | PreviousItemReview::Kept => {}
-            PreviousItemReview::Moved => {
-                let project = project.clone();
-                let item = item.clone();
-                blocking(move || move_leftover(&project, &item)).await?;
+        let (at, moved) = (project.clone(), item.clone());
+        let ended = review == PreviousItemReview::Moved
+            && blocking(move || Ok(leftover_moved(&at, &moved))).await?;
+        if !ended {
+            // A move an interruption ended may have left the file moved
+            // aside: each review acts on it back at its name, never on a
+            // hidden file, and the leftover's record takes the file put
+            // back, which may be a copy with an identity of its own.
+            let (at, moved) = (project.clone(), item.clone());
+            if let Some(evidence) = blocking(move || put_back_leftover(&at, &moved)).await? {
+                self.catalog().record_previous_item_evidence(project_id, &path, &evidence).await?;
+                item.evidence = evidence;
             }
-            PreviousItemReview::Trashed => {
-                match trash::retire(os_trash, &item.evidence, &[], || Ok(())) {
-                    Retirement::Moved => {}
-                    Retirement::Unsupported(reason)
-                    | Retirement::Blocked(reason)
-                    | Retirement::Uncertain(reason) => {
-                        return Err(LibraryError::IdentityConflict(reason.detail));
+            match review {
+                PreviousItemReview::Pending | PreviousItemReview::Kept => {}
+                PreviousItemReview::Moved => {
+                    let (project, item) = (project.clone(), item.clone());
+                    blocking(move || move_leftover(&project, &item)).await?;
+                }
+                PreviousItemReview::Trashed => {
+                    match trash::retire(os_trash, &item.evidence, &[], || Ok(())) {
+                        Retirement::Moved => {}
+                        Retirement::Unsupported(reason)
+                        | Retirement::Blocked(reason)
+                        | Retirement::Uncertain(reason) => {
+                            return Err(LibraryError::IdentityConflict(reason.detail));
+                        }
                     }
                 }
             }
@@ -1669,11 +1682,15 @@ impl Run<'_> {
     /// the old View can take its place (D-W110), one file at a time: each
     /// move is claimed in the journal before it starts and recorded as it
     /// ends, its kept leftover then Moved, so an interruption leaves no move
-    /// unaccounted for ([`Run::settle_kept_claims`]). One gone from disk is
-    /// named in the report (D-W137). Once the folder is gone its manifest
-    /// retires. A file that can't move fails Apply with the old View in
-    /// place: why, if so.
+    /// unaccounted for ([`Run::settle_kept_claims`]). A kept file a Move
+    /// review's interruption left moved aside is put back first
+    /// ([`Run::put_back_kept`]). One gone from disk is named in the report
+    /// (D-W137). Once the folder is gone its manifest retires. A file that
+    /// can't move fails Apply with the old View in place: why, if so.
     async fn move_kept(&mut self) -> Result<Option<ApplyStop>, LibraryError> {
+        if let Some(stop) = self.put_back_kept().await? {
+            return Ok(Some(stop));
+        }
         let project = self.project.clone();
         let kept = match blocking(move || Ok(files::kept_files(&project))).await? {
             Ok(kept) => kept,
@@ -1722,6 +1739,68 @@ impl Run<'_> {
         Ok(None)
     }
 
+    /// Put back each kept file the sheet found gone from its name that an
+    /// interrupted Move review left moved aside beside it, where the volume
+    /// has no no-replace rename ([`files::restore_leftover`]), so it is kept
+    /// under its own name and never moves into `View (kept)/` hidden. One
+    /// whose name another entry took meanwhile is kept under the visible
+    /// name beside it, and named in the report. Either is no longer gone.
+    /// One that can't be put back fails Apply before anything moves.
+    async fn put_back_kept(&mut self) -> Result<Option<ApplyStop>, LibraryError> {
+        let gone: Vec<PreviousItem> = self
+            .inputs
+            .leftovers
+            .iter()
+            .filter(|item| self.kept_missing.contains(&item.path))
+            .cloned()
+            .collect();
+        let project = self.project.clone();
+        let restored = blocking(move || {
+            Ok(gone
+                .into_iter()
+                .filter_map(|item| {
+                    let relative = files::in_previous(&item.path)?;
+                    Some((item.path, files::restore_leftover(&project, &relative, &item.evidence)))
+                })
+                .collect::<Vec<_>>())
+        })
+        .await?;
+        let mut failed = Vec::new();
+        for (path, outcome) in restored {
+            let at = self.project.join(path.relative_path().unwrap_or_default());
+            match outcome {
+                Ok(files::Restored::Untouched) => continue,
+                Ok(files::Restored::Back(evidence)) => {
+                    let project_id = self.journal.project_id;
+                    let catalog = self.library.catalog();
+                    catalog.record_previous_item_evidence(project_id, &path, &evidence).await?;
+                }
+                Ok(files::Restored::Renamed(visible)) => {
+                    let detail = format!(
+                        "{} was taken; the file is kept as {}",
+                        at.display(),
+                        visible.display()
+                    );
+                    let renamed = (
+                        self.project.join(visible),
+                        ItemReason::new(ReasonCode::DestinationOccupied, detail),
+                    );
+                    self.record(vec![renamed]);
+                }
+                Err(error) => {
+                    failed.push((at, ItemReason::new(ReasonCode::WriteFailed, error.to_string())));
+                    continue;
+                }
+            }
+            self.kept_missing.retain(|missing| *missing != path);
+        }
+        if failed.is_empty() {
+            return Ok(None);
+        }
+        let count = self.record(failed);
+        Ok(Some(ApplyStop::KeptNotMoved { count }))
+    }
+
     /// Move the kept file at `relative` in `View (previous)/` (`path` from
     /// the Project folder) to the first free name in `View (kept)/`, claimed
     /// before the move starts; a name taken meanwhile is claimed afresh with
@@ -1766,8 +1845,9 @@ impl Run<'_> {
     /// gone from disk, and its kept leftover stays for the next Apply to
     /// name (D-W137); one still in `View (previous)/` stays there, the
     /// unfinished copy an interrupted copy left under its claimed kept name
-    /// removed ([`files::settle_kept_claim`]).
-    async fn settle_kept_claims(&self) -> Result<(), LibraryError> {
+    /// removed ([`files::settle_kept_claim`]). One put back under a visible
+    /// name, its own being taken, stays too and is named in the report.
+    async fn settle_kept_claims(&mut self) -> Result<(), LibraryError> {
         let catalog = self.library.catalog();
         let (project_id, operation_id) = (self.journal.project_id, self.journal.operation_id);
         for claim in catalog.kept_move_claims(operation_id).await? {
@@ -1777,6 +1857,18 @@ impl Run<'_> {
             let left = match settled {
                 Ok(files::ClaimedKept::Moved) => true,
                 Ok(files::ClaimedKept::Gone | files::ClaimedKept::Stayed) => false,
+                Ok(files::ClaimedKept::Renamed(at)) => {
+                    let detail = format!(
+                        "{} was taken; the file stays as {}",
+                        claim.path.display(),
+                        at.display()
+                    );
+                    self.record(vec![(
+                        at,
+                        ItemReason::new(ReasonCode::DestinationOccupied, detail),
+                    )]);
+                    false
+                }
                 Err(detail) => return Err(LibraryError::IdentityConflict(detail)),
             };
             catalog.record_kept_move(project_id, operation_id, &claim.path, left).await?;
@@ -1906,8 +1998,19 @@ fn swap_ready(
     Ok(())
 }
 
+/// Whether a Move review of the leftover `item` already ended, though an
+/// interruption kept it from being recorded: `View/` holds the file's
+/// bytes and nothing of it stays in `View (previous)/`
+/// ([`files::leftover_moved`]).
+fn leftover_moved(project: &Path, item: &PreviousItem) -> bool {
+    files::in_previous(&item.path)
+        .is_some_and(|relative| files::leftover_moved(project, &relative, &item.evidence))
+}
+
 /// Move one reviewed leftover from `View (previous)/` into `View/` at the
 /// same place, once it is still the recorded file, never over an entry.
+/// Its review first puts back a file an interrupted move left moved aside
+/// ([`put_back_leftover`]).
 fn move_leftover(project: &Path, item: &PreviousItem) -> Result<(), LibraryError> {
     let relative = files::in_previous(&item.path).ok_or_else(|| {
         LibraryError::InvalidInput(format!("{} is not in View (previous)/", item.path.display()))
@@ -1934,6 +2037,38 @@ fn move_leftover(project: &Path, item: &PreviousItem) -> Result<(), LibraryError
             LibraryError::from_io(&from, &error)
         }
     })
+}
+
+/// Put the leftover `item` back at its name where an interrupted move into
+/// `View/` left it moved aside beside it ([`files::restore_leftover`]), so
+/// its review acts on it there and no later Apply keeps it hidden. Returns
+/// the file's evidence once put back, which its record then takes: on a
+/// volume without a no-replace rename it is a copy with an identity of its
+/// own; `None` when nothing was moved aside.
+///
+/// # Errors
+/// `InvalidInput` for a path outside `View (previous)/`, or when its name
+/// was taken meanwhile, so it stays under the visible name beside it the
+/// error names; the put-back's I/O error.
+fn put_back_leftover(
+    project: &Path,
+    item: &PreviousItem,
+) -> Result<Option<EntryEvidence>, LibraryError> {
+    let relative = files::in_previous(&item.path).ok_or_else(|| {
+        LibraryError::InvalidInput(format!("{} is not in View (previous)/", item.path.display()))
+    })?;
+    match files::restore_leftover(project, &relative, &item.evidence) {
+        Ok(files::Restored::Untouched) => Ok(None),
+        Ok(files::Restored::Back(evidence)) => Ok(Some(*evidence)),
+        Ok(files::Restored::Renamed(at)) => Err(LibraryError::InvalidInput(format!(
+            "{} was taken while it was moved aside; it stays as {}",
+            item.path.display(),
+            at.display()
+        ))),
+        Err(error) => {
+            Err(LibraryError::from_io(&project.join(VIEW_PREVIOUS_FOLDER).join(&relative), &error))
+        }
+    }
 }
 
 #[cfg(test)]
