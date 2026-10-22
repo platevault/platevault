@@ -306,6 +306,7 @@ mod platform {
                 Err(error) => return Err(format!("{}: {error}", info_path.display())),
             };
             let written = write!(record, "[Trash Info]\nPath={encoded}\nDeletionDate={date}\n")
+                // Linux's freedesktop Trash is platform-local; sync_all is plain fsync here.
                 .and_then(|()| record.sync_all());
             if let Err(error) = written {
                 let _ = fs::remove_file(&info_path);

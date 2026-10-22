@@ -13,8 +13,11 @@
 //!
 //! Each test works in a fresh folder below the mounted share named by
 //! `PLATEVAULT_TEST_SMB`; the library, the captures and the OS Trash stay
-//! on the host volume. A throwaway Samba server bound to the loopback, with
-//! a test-only user, is enough (macOS's own smbd may hold port 445):
+//! on the host volume. The Linux freedesktop Trash is the other excluded
+//! sync path: there `sync_all` is already plain `fsync`. The updater uses
+//! app-owned temporary and install locations, never a user-chosen share.
+//! A throwaway Samba server bound to the loopback, with a test-only user, is
+//! enough (macOS's own smbd may hold port 445):
 //!
 //! ```sh
 //! docker run -d --name smb-test -p 127.0.0.1:4455:445 --entrypoint sh alpine/git -c '
@@ -146,6 +149,19 @@ async fn a_second_apply_moves_the_view_folder_aside_on_the_share() {
     assert!(!folder.join("View (previous)").exists(), "{left:#?}");
     assert!(!folder.join("View (building)").exists(), "{left:#?}");
     assert!(!left.iter().any(|path| path.contains(".pv-")), "no partial stays: {left:#?}");
+}
+
+/// The calendar save dialog accepts an arbitrary user-chosen path. Writing its
+/// `.ics` file and committing the folder entry must both work on smbfs.
+#[test]
+#[ignore = "needs an SMB share: PLATEVAULT_TEST_SMB=<mounted folder>"]
+fn a_calendar_export_writes_its_user_chosen_file_to_the_share() {
+    let path = on_share().join("observing-windows.ics");
+    let bytes = b"BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n";
+
+    platevault_core::calendar::write_snapshot(&path, bytes).unwrap();
+
+    assert_eq!(fs::read(&path).unwrap(), bytes);
 }
 
 /// A storage Move of a capture folder's files onto the share: each file is

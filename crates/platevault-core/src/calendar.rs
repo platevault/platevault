@@ -9,6 +9,7 @@
 //! `VTIMEZONE` is needed and every client shows the exact instants (research
 //! R21). Lines end in CRLF and fold at 75 octets without splitting a character.
 
+use fs_pathsafe::sync;
 use std::io::Write as _;
 use std::path::Path;
 
@@ -101,7 +102,7 @@ pub fn write_snapshot(path: &Path, bytes: &[u8]) -> Result<SavedCalendar, Librar
     let written = (|| {
         let mut file = std::fs::OpenOptions::new().write(true).create_new(true).open(&temporary)?;
         file.write_all(bytes)?;
-        file.sync_all()?;
+        sync::sync(&file)?;
         drop(file);
         std::fs::rename(&temporary, path)
     })();
@@ -113,7 +114,7 @@ pub fn write_snapshot(path: &Path, bytes: &[u8]) -> Result<SavedCalendar, Librar
     // Commit the rename. The new bytes are in place and synced, so a failed
     // folder sync cannot make the write a failure.
     #[cfg(unix)]
-    let _ = folder_handle.sync_all();
+    let _ = sync::sync(&folder_handle);
     Ok(SavedCalendar {
         sha256: hex::encode(Sha256::digest(bytes)),
         byte_count: u64::try_from(bytes.len()).unwrap_or(u64::MAX),
