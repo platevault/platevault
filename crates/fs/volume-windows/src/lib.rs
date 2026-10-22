@@ -29,7 +29,8 @@ use std::path::{Path, PathBuf};
 use fs_pathsafe::long_path;
 
 use windows_sys::Win32::Storage::FileSystem::{
-    GetDriveTypeW, GetVolumeInformationW, GetVolumeNameForVolumeMountPointW, GetVolumePathNameW,
+    GetDiskFreeSpaceExW, GetDriveTypeW, GetVolumeInformationW, GetVolumeNameForVolumeMountPointW,
+    GetVolumePathNameW,
 };
 
 /// `MAX_PATH`, the longest name `GetVolumeInformationW` reports.
@@ -143,6 +144,31 @@ pub fn drive_type(root: &Path) -> io::Result<u32> {
     // call, which only reads it during it.
     #[allow(unsafe_code)]
     Ok(unsafe { GetDriveTypeW(root.as_ptr()) })
+}
+
+/// The total disk space available to the caller on the volume at `root`.
+///
+/// # Errors
+/// `InvalidInput` when the root holds a NUL; otherwise the error reported by
+/// `GetDiskFreeSpaceExW`. The returned total may be limited by a disk quota.
+pub fn capacity(root: &Path) -> io::Result<u64> {
+    let root = wide(root.as_os_str())?;
+    let mut total = 0_u64;
+    // SAFETY: `root` is a NUL-terminated UTF-16 buffer and `total` a writable
+    // `u64`, both outliving the call; null pointers skip the optional outputs.
+    #[allow(unsafe_code)]
+    let found = unsafe {
+        GetDiskFreeSpaceExW(
+            root.as_ptr(),
+            std::ptr::null_mut(),
+            &raw mut total,
+            std::ptr::null_mut(),
+        )
+    };
+    if found == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(total)
 }
 
 /// A `\\?\X:\…` mount point in its plain `X:\…` form, which every volume

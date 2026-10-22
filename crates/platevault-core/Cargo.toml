@@ -69,9 +69,9 @@ test-pacing = []
 winapi-util = "0.1.11"
 # The folder and file rename that never replaces (`custody::transfer`).
 fs_noreplace_windows = { path = "../fs/noreplace-windows" }
-# The volume a Windows path is on, through Win32 calls rather than a
-# PowerShell query per probe (`inventory::identity`, astro-plan-f2di3).
+# The Windows volume of a path is read by Win32 calls, not PowerShell.
 fs_volume_windows = { path = "../fs/volume-windows" }
+winreg = "0.56.0"
 
 [target.'cfg(unix)'.dependencies]
 rustix = { version = "1.1", features = ["fs", "process"] }

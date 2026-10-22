@@ -4907,6 +4907,7 @@ dependencies = [
  "unicode-normalization",
  "uuid",
  "winapi-util",
+ "winreg 0.56.0",
  "workflow_artifacts",
 ]
 
