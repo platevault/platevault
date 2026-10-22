@@ -608,6 +608,37 @@ impl Catalog {
         Ok(())
     }
 
+    /// Record what one leftover is now, once a file an interrupted move
+    /// left moved aside is put back at its name: on a volume without a
+    /// no-replace rename that is a copy with an identity of its own, which
+    /// its later review acts on.
+    ///
+    /// # Errors
+    /// `NotFound` for an unknown leftover; `PersistenceFailure` for a record
+    /// the schema refuses.
+    pub async fn record_previous_item_evidence(
+        &self,
+        project_id: Uuid,
+        path: &NativePath,
+        evidence: &EntryEvidence,
+    ) -> Result<()> {
+        write_txn!(self, |conn| {
+            let updated = sqlx::query(
+                "UPDATE view_previous_items SET evidence = ?3 \
+                 WHERE project_id = ?1 AND path_key = ?2",
+            )
+            .bind(project_id.to_string())
+            .bind(path_key(path))
+            .bind(to_json(evidence)?)
+            .execute(&mut *conn)
+            .await?;
+            if updated.rows_affected() == 0 {
+                return Err(LibraryError::NotFound(format!("leftover {}", path.display())));
+            }
+        });
+        Ok(())
+    }
+
     /// `View (previous)/` is gone: its manifest retires.
     ///
     /// # Errors

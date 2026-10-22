@@ -967,6 +967,40 @@ async fn a_keep_review_after_a_closed_move_review_keeps_the_file_at_its_name() {
     assert_eq!(World::tree(&kept_folder(&world).join(HA_DIR)), ["notes.txt"]);
 }
 
+/// `F4ReviewCustody` on #1879 (1): as above, where the put-back itself was a
+/// copy, as on a volume without a no-replace rename or hard links, and an
+/// interruption left that copy complete at the leftover's name beside the
+/// file moved aside. The Keep review ends the put-back on the copy, which
+/// has an identity of its own: the leftover's record takes it, so a later
+/// Trash review acts on the file now there instead of refusing it as
+/// changed.
+// Windows always moves by MoveFileExW rename, so it never leaves a verified
+// copy beside a source moved aside (`transfer::restore_left_aside`).
+#[cfg(unix)]
+#[tokio::test]
+async fn a_leftover_put_back_as_a_copy_is_recorded_as_that_copy() {
+    let mut world = world(ViewMode::Copies).await;
+    world.apply().await;
+    let note = format!("{HA_DIR}notes.txt");
+    let leftover = left_over(&world, &note, b"the user's notes").await;
+    let aside = closed_mid_leftover_move(&world, &note);
+    fs::remove_file(world.view().join(&note)).unwrap();
+    let back = world.previous().join(&note);
+    fs::copy(&aside, &back).unwrap();
+    world.reopen().await;
+
+    let trash = FolderTrash(world.temp.path().join("Trash"));
+    for review in [PreviousItemReview::Kept, PreviousItemReview::Trashed] {
+        world
+            .library
+            .review_view_leftover(world.project, leftover.clone(), review, &trash)
+            .await
+            .unwrap_or_else(|error| panic!("{review:?}: {error}"));
+    }
+    assert!(!aside.exists() && !back.exists(), "the copy put back went to the Trash");
+    assert!(!world.previous().exists(), "an empty View (previous)/ is removed");
+}
+
 /// zx3l2: a kept file's Move review closed mid way as above. The next
 /// Apply, which finds it gone from its name, puts it back first, so it
 /// keeps it under its own name, never hidden, and never names it missing.

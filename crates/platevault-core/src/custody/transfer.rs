@@ -826,26 +826,85 @@ fn aside_of(from: &Path) -> PathBuf {
     from.with_file_name(format!("{ASIDE_PREFIX}{}{ASIDE_SUFFIX}", Uuid::new_v4().simple()))
 }
 
-const ASIDE_PREFIX: &str = ".pv-";
-const ASIDE_SUFFIX: &str = ".removing";
-
-/// Whether `name` is one [`aside_of`] gives.
-pub(crate) fn is_aside_name(name: &std::ffi::OsStr) -> bool {
-    name.to_str()
-        .and_then(|name| name.strip_prefix(ASIDE_PREFIX)?.strip_suffix(ASIDE_SUFFIX))
-        .is_some_and(|id| {
-            id.len() == 32 && id.bytes().all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
-        })
+/// The hidden name [`restore_left_aside`] moves a source left aside to
+/// before it puts it back at the `number`-th name [`put_back_name`] gives:
+/// `.pv-<uuid>.restoring-<number>`, unguessable. It records that name
+/// before a volume without a no-replace rename starts the copy there, as
+/// a journal claims a destination, so the unfinished copy an interruption
+/// leaves there is known for its own.
+#[cfg(unix)]
+fn restoring_of(from: &Path, number: u32) -> PathBuf {
+    let id = Uuid::new_v4().simple();
+    from.with_file_name(format!("{ASIDE_PREFIX}{id}{RESTORING_SUFFIX}{number}"))
 }
 
-/// The entries beside `from` an interruption of [`remove_source`] may have
-/// left of the regular file `source` that a move made by copy took from
-/// `from`: each name [`aside_of`] gives there that is still `source`,
-/// reached below `root` without following a link through a handle proven
-/// to hold `source`'s recorded identity, size and modification time.
-/// Anything else under such a name is the user's.
+const ASIDE_PREFIX: &str = ".pv-";
+const ASIDE_SUFFIX: &str = ".removing";
+const RESTORING_SUFFIX: &str = ".restoring-";
+
+/// A hidden name [`aside_of`] or [`restoring_of`] gives.
+#[derive(Clone, Copy)]
+enum AsideName {
+    /// [`aside_of`]'s.
+    Removing,
+    /// [`restoring_of`]'s, claiming the put-back name with this number.
+    Restoring(u32),
+}
+
+impl AsideName {
+    /// `name` read as one; `None` for any other name.
+    fn of(name: &std::ffi::OsStr) -> Option<Self> {
+        let (id, kind) = name.to_str()?.strip_prefix(ASIDE_PREFIX)?.split_at_checked(32)?;
+        if !id.bytes().all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f')) {
+            return None;
+        }
+        if kind == ASIDE_SUFFIX {
+            return Some(Self::Removing);
+        }
+        let number = kind.strip_prefix(RESTORING_SUFFIX)?;
+        if number.starts_with('0') || !number.bytes().all(|byte| byte.is_ascii_digit()) {
+            return None;
+        }
+        number.parse().ok().map(Self::Restoring)
+    }
+
+    /// The put-back name's number it claims, if any. Windows moves by
+    /// rename only and never looks for one.
+    #[cfg_attr(not(unix), allow(dead_code))]
+    const fn claimed(self) -> Option<u32> {
+        match self {
+            Self::Removing => None,
+            Self::Restoring(number) => Some(number),
+        }
+    }
+}
+
+/// Whether `name` is one [`aside_of`] or [`restoring_of`] gives.
+pub(crate) fn is_aside_name(name: &std::ffi::OsStr) -> bool {
+    AsideName::of(name).is_some()
+}
+
+/// The `number`-th name a source left aside beside `from` is put back
+/// under: `from` first, then [`layout::kept_name`]'s (`notes-2.txt`).
 #[cfg(unix)]
-fn proven_asides(root: &Path, from: &Path, source: &EntryEvidence) -> Vec<(PathBuf, Opened)> {
+fn put_back_name(from: &Path, number: u32) -> Option<PathBuf> {
+    Some(from.with_file_name(layout::kept_name(from.file_name()?, number)))
+}
+
+/// The entries beside `from` an interruption of [`remove_source`] or
+/// [`restore_left_aside`] may have left of the regular file `source` that
+/// a move made by copy took from `from`: each name [`aside_of`] or
+/// [`restoring_of`] gives there that is still `source`, reached below
+/// `root` without following a link through a handle proven to hold
+/// `source`'s recorded identity, size and modification time, with the
+/// put-back name's number it claimed, if any. Anything else under such a
+/// name is the user's.
+#[cfg(unix)]
+fn proven_asides(
+    root: &Path,
+    from: &Path,
+    source: &EntryEvidence,
+) -> Vec<(PathBuf, Opened, Option<u32>)> {
     let Some(folder) = from.parent() else { return Vec::new() };
     let Ok(entries) = fs::read_dir(folder) else { return Vec::new() };
     let root = NativePath::from_path(root);
@@ -853,10 +912,10 @@ fn proven_asides(root: &Path, from: &Path, source: &EntryEvidence) -> Vec<(PathB
     entries
         .flatten()
         .map(|entry| entry.file_name())
-        .filter(|name| is_aside_name(name))
-        .filter_map(|name| {
+        .filter_map(|name| AsideName::of(&name).map(|kind| (name, kind.claimed())))
+        .filter_map(|(name, claimed)| {
             let aside = folder.join(name);
-            open_unchanged(&aside, &expect).ok().map(|opened| (aside, opened))
+            open_unchanged(&aside, &expect).ok().map(|opened| (aside, opened, claimed))
         })
         .collect()
 }
@@ -875,11 +934,14 @@ fn copy_of(copy: &Path, held: &mut fs::File, found: &fs::Metadata) -> Option<fs:
     .then_some(whole)
 }
 
-/// Remove what an interruption of [`remove_source`] left of the regular
-/// file `source` that a move made by copy took from `from` to `copy`: the
-/// source moved aside beside `from` and never unlinked ([`proven_asides`]).
-/// One is removed only when `copy`, another regular file, holds exactly
-/// its bytes: removing it loses nothing. It is removed only while its name
+/// Remove what an interruption of [`remove_source`] or
+/// [`restore_left_aside`] left of the regular file `source` that a move
+/// made by copy took from `from` to `copy`: the source moved aside beside
+/// `from` and never unlinked ([`proven_asides`]). One is removed only when
+/// `copy`, another regular file, holds exactly its bytes: removing it loses
+/// nothing. One a put-back had claimed a name for takes along the
+/// unfinished copy an interruption left there, which holds nothing it
+/// doesn't ([`remove_unfinished_copy`]). It is removed only while its name
 /// still names that handle's file. Anything else stays, whatever its name.
 /// Returns whether it was removed.
 #[cfg(unix)]
@@ -889,12 +951,18 @@ pub(crate) fn remove_left_aside(
     source: &EntryEvidence,
     copy: &Path,
 ) -> bool {
-    for (aside, Opened { file: mut held, below, .. }) in proven_asides(root, from, source) {
+    for (aside, Opened { file: mut held, below, .. }, claimed) in proven_asides(root, from, source)
+    {
         let Ok(found) = held.metadata() else { continue };
         if copy_of(copy, &mut held, &found).is_none()
             || below.is_some_and(|below| !below.holds_path())
         {
             continue;
+        }
+        if let Some(at) = claimed.and_then(|number| put_back_name(from, number)) {
+            if at != copy && fs::symlink_metadata(&at).is_ok() {
+                remove_unfinished_copy(&at, &aside);
+            }
         }
         if names_and_close(&aside, held) && fs::remove_file(&aside).is_ok() {
             let _ = sync_folder(from.parent().unwrap_or_else(|| Path::new("")));
@@ -918,24 +986,42 @@ pub(crate) const fn remove_left_aside(
 /// Put back what an interruption of [`remove_source`] left of the regular
 /// file `source` that a move made by copy took from `from`, where no copy
 /// holds its bytes any more: the source moved aside beside `from`, proven
-/// to be it ([`proven_asides`]). It goes back to `from` with a no-replace
-/// rename. Where `from` is taken, a file there holding exactly its bytes,
-/// such as the copy an interrupted put-back made on this volume, already
-/// holds all of it, and it is removed ([`remove_left_aside`]); otherwise
-/// it takes the first free name [`layout::kept_name`] numbers beside
-/// `from` (`notes-2.txt`). It never stays hidden. Returns where it is now,
-/// `from` or that name; `None` when no entry beside `from` is proven to be
-/// the source.
+/// to be it ([`proven_asides`]). It goes back to the first free name
+/// [`put_back_name`] gives, `from` first, then `notes-2.txt` and on, with
+/// a no-replace rename. Before each it is moved to a hidden name claiming
+/// that one ([`restoring_of`]), since on a volume without a no-replace
+/// rename the put-back is a copy that an interruption may leave unfinished
+/// there: resumed, the put-back removes that unfinished copy, which holds
+/// nothing the source doesn't ([`remove_unfinished_copy`]), and goes on
+/// there, never past it. A taken name holding exactly its bytes, such as
+/// the complete copy an interrupted put-back made, already holds all of
+/// it, and the source is removed. It never stays hidden. Returns where it
+/// is now; `None` when no entry beside `from` is proven to be the source.
 ///
 /// # Errors
-/// The rename's error, the source still at its hidden name.
+/// The rename's error, the source still at a hidden name.
 #[cfg(unix)]
 pub(crate) fn restore_left_aside(
     root: &Path,
     from: &Path,
     source: &EntryEvidence,
 ) -> std::io::Result<Option<PathBuf>> {
-    let Some((aside, Opened { file, below, .. })) =
+    restore_left_aside_with(root, from, source, rename_noreplace)
+}
+
+/// A rename that never replaces; tests stand in one closed mid copy.
+#[cfg(unix)]
+type NoReplace = fn(&Path, &Path) -> std::io::Result<()>;
+
+/// [`restore_left_aside`], putting the source back with `rename_noreplace`.
+#[cfg(unix)]
+fn restore_left_aside_with(
+    root: &Path,
+    from: &Path,
+    source: &EntryEvidence,
+    rename_noreplace: NoReplace,
+) -> std::io::Result<Option<PathBuf>> {
+    let Some((mut aside, Opened { file, below, .. }, mut claimed)) =
         proven_asides(root, from, source).into_iter().next()
     else {
         return Ok(None);
@@ -945,26 +1031,38 @@ pub(crate) fn restore_left_aside(
     }
     // Closed first: a volume may refuse to rename an open entry (smbfs).
     drop(file);
-    match rename_noreplace(&aside, from) {
-        Ok(()) => return Ok(Some(from.to_path_buf())),
-        Err(error) if error.kind() != std::io::ErrorKind::AlreadyExists => return Err(error),
-        Err(_) => {}
-    }
-    if remove_left_aside(root, from, source, from) {
-        return Ok(Some(from.to_path_buf()));
-    }
-    let Some(name) = from.file_name() else {
-        return Err(std::io::ErrorKind::InvalidInput.into());
-    };
-    for number in 2..=u32::MAX {
-        let visible = from.with_file_name(layout::kept_name(name, number));
-        match rename_noreplace(&aside, &visible) {
-            Ok(()) => return Ok(Some(visible)),
-            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+    let mut number = claimed.unwrap_or(1);
+    loop {
+        let at = put_back_name(from, number).ok_or(std::io::ErrorKind::InvalidInput)?;
+        match fs::symlink_metadata(&at) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                if claimed != Some(number) {
+                    // A plain rename: the name is unguessable.
+                    let claim = restoring_of(from, number);
+                    fs::rename(&aside, &claim)?;
+                    (aside, claimed) = (claim, Some(number));
+                }
+                match rename_noreplace(&aside, &at) {
+                    Ok(()) => return Ok(Some(at)),
+                    Err(error) if error.kind() != std::io::ErrorKind::AlreadyExists => {
+                        return Err(error);
+                    }
+                    Err(_) => {}
+                }
+            }
             Err(error) => return Err(error),
+            Ok(_) => {
+                if remove_copied(&aside, &at, |_, _| true) {
+                    let _ = sync_folder(from.parent().unwrap_or_else(|| Path::new("")));
+                    return Ok(Some(at));
+                }
+                if claimed == Some(number) && remove_unfinished_copy(&at, &aside) {
+                    continue;
+                }
+            }
         }
+        number = number.checked_add(1).ok_or(std::io::ErrorKind::AlreadyExists)?;
     }
-    Err(std::io::ErrorKind::AlreadyExists.into())
 }
 
 /// Windows moves by rename only and leaves no source aside.
@@ -987,14 +1085,24 @@ pub(crate) const fn restore_left_aside(
 /// compared. Returns whether it was removed.
 #[cfg(unix)]
 pub(crate) fn remove_aside_of_copy(aside: &Path, copy: &Path) -> bool {
-    if !aside.file_name().is_some_and(is_aside_name) {
-        return false;
-    }
+    aside.file_name().is_some_and(is_aside_name)
+        && remove_copied(aside, copy, |found, whole| whole.modified().ok() == found.modified().ok())
+}
+
+/// Remove the regular file `aside`, never a link, when `copy`, another
+/// regular file, holds exactly its bytes ([`copy_of`]) and `also` holds of
+/// their metadata, `aside`'s first; only while its name still names the
+/// file compared. Returns whether it was removed.
+#[cfg(unix)]
+fn remove_copied(
+    aside: &Path,
+    copy: &Path,
+    also: impl FnOnce(&fs::Metadata, &fs::Metadata) -> bool,
+) -> bool {
     let Ok(mut held) = open_no_follow(aside) else { return false };
     let Ok(found) = held.metadata() else { return false };
     found.is_file()
-        && copy_of(copy, &mut held, &found)
-            .is_some_and(|whole| whole.modified().ok() == found.modified().ok())
+        && copy_of(copy, &mut held, &found).is_some_and(|whole| also(&found, &whole))
         && names_and_close(aside, held)
         && fs::remove_file(aside).is_ok()
 }
@@ -1469,6 +1577,49 @@ mod tests {
         assert_eq!(restore_left_aside(temp.path(), &at, &source).unwrap(), Some(at.clone()));
         assert!(!aside.exists(), "the copy at its name holds all of it");
         assert_eq!(fs::read(&at).unwrap(), b"the user's notes");
+    }
+
+    /// The copy fallback of a put-back with `PlateVault` closing mid copy:
+    /// a file created at `to` holding the first half of `from`'s bytes.
+    /// `to` taken fails as the no-replace rename does.
+    #[cfg(unix)]
+    fn closed_mid_copy(from: &Path, to: &Path) -> io::Result<()> {
+        let bytes = fs::read(from)?;
+        let mut out = OpenOptions::new().write(true).create_new(true).open(to)?;
+        out.write_all(&bytes[..bytes.len() / 2])?;
+        panic!("PlateVault closed mid copy");
+    }
+
+    /// `F4ReviewCustody` on #1879 (2): a source put back where its name was
+    /// taken, on a volume where the put-back is a copy, with `PlateVault`
+    /// closing mid copy. The next put-back removes the unfinished copy at
+    /// the name it took and finishes there, so no truncated file is left in
+    /// sight looking like the user's, and nothing stays hidden.
+    #[cfg(unix)]
+    #[test]
+    fn a_put_back_closed_mid_copy_leaves_no_unfinished_copy_in_sight() {
+        let temp = tempfile::tempdir().unwrap();
+        let (from, _) = file_in(&temp);
+        let source = super::super::observe_source(temp.path(), &from).unwrap();
+        fs::rename(&from, aside_of(&from)).unwrap();
+        fs::write(&from, b"another file").unwrap();
+        let closed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            restore_left_aside_with(temp.path(), &from, &source, closed_mid_copy)
+        }));
+        assert!(closed.is_err(), "closed mid copy");
+
+        let visible = temp.path().join("notes-2.txt");
+        assert_eq!(restore_left_aside(temp.path(), &from, &source).unwrap(), Some(visible.clone()));
+        assert_eq!(fs::read(&visible).unwrap(), b"the user's notes");
+        assert!(!temp.path().join("notes-3.txt").exists(), "no unfinished copy stays in sight");
+        let hidden: Vec<_> = fs::read_dir(temp.path())
+            .unwrap()
+            .flatten()
+            .map(|entry| entry.file_name())
+            .filter(|name| name.to_string_lossy().starts_with(".pv-"))
+            .collect();
+        assert!(hidden.is_empty(), "nothing stays hidden: {hidden:?}");
+        assert_eq!(fs::read(&from).unwrap(), b"another file");
     }
 
     /// zx3l2: a partial installed by copy, interrupted after the copy was

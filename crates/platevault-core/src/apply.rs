@@ -269,7 +269,7 @@ impl Library {
         os_trash: &dyn OsTrash,
     ) -> Result<(), LibraryError> {
         let inputs = self.catalog().apply_inputs(project_id).await?;
-        let item = inputs
+        let mut item = inputs
             .leftovers
             .iter()
             .find(|item| item.path == path)
@@ -283,27 +283,33 @@ impl Library {
             )));
         }
         let project = project_folder(&inputs)?;
-        // A move an interruption ended may have left the file moved aside:
-        // each review acts on it back at its name, never on a hidden file.
-        match review {
-            PreviousItemReview::Moved => {
-                let project = project.clone();
-                let item = item.clone();
-                blocking(move || move_leftover(&project, &item)).await?;
+        let (at, moved) = (project.clone(), item.clone());
+        let ended = review == PreviousItemReview::Moved
+            && blocking(move || Ok(leftover_moved(&at, &moved))).await?;
+        if !ended {
+            // A move an interruption ended may have left the file moved
+            // aside: each review acts on it back at its name, never on a
+            // hidden file, and the leftover's record takes the file put
+            // back, which may be a copy with an identity of its own.
+            let (at, moved) = (project.clone(), item.clone());
+            if let Some(evidence) = blocking(move || put_back_leftover(&at, &moved)).await? {
+                self.catalog().record_previous_item_evidence(project_id, &path, &evidence).await?;
+                item.evidence = evidence;
             }
-            PreviousItemReview::Pending | PreviousItemReview::Kept => {
-                let (project, item) = (project.clone(), item.clone());
-                blocking(move || put_back_leftover(&project, &item).map(drop)).await?;
-            }
-            PreviousItemReview::Trashed => {
-                let (at, moved) = (project.clone(), item.clone());
-                let evidence = blocking(move || put_back_leftover(&at, &moved)).await?;
-                match trash::retire(os_trash, &evidence, &[], || Ok(())) {
-                    Retirement::Moved => {}
-                    Retirement::Unsupported(reason)
-                    | Retirement::Blocked(reason)
-                    | Retirement::Uncertain(reason) => {
-                        return Err(LibraryError::IdentityConflict(reason.detail));
+            match review {
+                PreviousItemReview::Pending | PreviousItemReview::Kept => {}
+                PreviousItemReview::Moved => {
+                    let (project, item) = (project.clone(), item.clone());
+                    blocking(move || move_leftover(&project, &item)).await?;
+                }
+                PreviousItemReview::Trashed => {
+                    match trash::retire(os_trash, &item.evidence, &[], || Ok(())) {
+                        Retirement::Moved => {}
+                        Retirement::Unsupported(reason)
+                        | Retirement::Blocked(reason)
+                        | Retirement::Uncertain(reason) => {
+                            return Err(LibraryError::IdentityConflict(reason.detail));
+                        }
                     }
                 }
             }
@@ -1739,7 +1745,11 @@ impl Run<'_> {
             let at = self.project.join(path.relative_path().unwrap_or_default());
             match outcome {
                 Ok(files::Restored::Untouched) => continue,
-                Ok(files::Restored::Back(_)) => {}
+                Ok(files::Restored::Back(evidence)) => {
+                    let project_id = self.journal.project_id;
+                    let catalog = self.library.catalog();
+                    catalog.record_previous_item_evidence(project_id, &path, &evidence).await?;
+                }
                 Ok(files::Restored::Renamed(visible)) => {
                     let detail = format!(
                         "{} was taken; the file is kept as {}",
@@ -1963,26 +1973,29 @@ fn swap_ready(
     Ok(())
 }
 
+/// Whether a Move review of the leftover `item` already ended, though an
+/// interruption kept it from being recorded: `View/` holds the file's
+/// bytes and nothing of it stays in `View (previous)/`
+/// ([`files::leftover_moved`]).
+fn leftover_moved(project: &Path, item: &PreviousItem) -> bool {
+    files::in_previous(&item.path)
+        .is_some_and(|relative| files::leftover_moved(project, &relative, &item.evidence))
+}
+
 /// Move one reviewed leftover from `View (previous)/` into `View/` at the
 /// same place, once it is still the recorded file, never over an entry.
-/// A move an interruption ended before its review was recorded is done
-/// once `View/` holds the file's bytes ([`files::leftover_moved`]); one
-/// that left the file moved aside puts it back first and moves it again
+/// Its review first puts back a file an interrupted move left moved aside
 /// ([`put_back_leftover`]).
 fn move_leftover(project: &Path, item: &PreviousItem) -> Result<(), LibraryError> {
     let relative = files::in_previous(&item.path).ok_or_else(|| {
         LibraryError::InvalidInput(format!("{} is not in View (previous)/", item.path.display()))
     })?;
-    if files::leftover_moved(project, &relative, &item.evidence) {
-        return Ok(());
-    }
-    let evidence = put_back_leftover(project, item)?;
     let from = project.join(VIEW_PREVIOUS_FOLDER).join(&relative);
     let to_root = project.join(VIEW_FOLDER);
     let now = observe_entry(&from)?;
-    if !same_identity(&now.fingerprint.identity, &evidence.fingerprint.identity)
-        || now.sha256 != evidence.sha256
-        || now.kind != evidence.kind
+    if !same_identity(&now.fingerprint.identity, &item.evidence.fingerprint.identity)
+        || now.sha256 != item.evidence.sha256
+        || now.kind != item.evidence.kind
     {
         return Err(LibraryError::InvalidInput(format!(
             "{} changed since it was left in View (previous)/",
@@ -2004,20 +2017,24 @@ fn move_leftover(project: &Path, item: &PreviousItem) -> Result<(), LibraryError
 /// Put the leftover `item` back at its name where an interrupted move into
 /// `View/` left it moved aside beside it ([`files::restore_leftover`]), so
 /// its review acts on it there and no later Apply keeps it hidden. Returns
-/// the evidence the review acts on: the recorded one, or the file's once
-/// put back.
+/// the file's evidence once put back, which its record then takes: on a
+/// volume without a no-replace rename it is a copy with an identity of its
+/// own; `None` when nothing was moved aside.
 ///
 /// # Errors
 /// `InvalidInput` for a path outside `View (previous)/`, or when its name
 /// was taken meanwhile, so it stays under the visible name beside it the
 /// error names; the put-back's I/O error.
-fn put_back_leftover(project: &Path, item: &PreviousItem) -> Result<EntryEvidence, LibraryError> {
+fn put_back_leftover(
+    project: &Path,
+    item: &PreviousItem,
+) -> Result<Option<EntryEvidence>, LibraryError> {
     let relative = files::in_previous(&item.path).ok_or_else(|| {
         LibraryError::InvalidInput(format!("{} is not in View (previous)/", item.path.display()))
     })?;
     match files::restore_leftover(project, &relative, &item.evidence) {
-        Ok(files::Restored::Untouched) => Ok(item.evidence.clone()),
-        Ok(files::Restored::Back(evidence)) => Ok(*evidence),
+        Ok(files::Restored::Untouched) => Ok(None),
+        Ok(files::Restored::Back(evidence)) => Ok(Some(*evidence)),
         Ok(files::Restored::Renamed(at)) => Err(LibraryError::InvalidInput(format!(
             "{} was taken while it was moved aside; it stays as {}",
             item.path.display(),
