@@ -102,7 +102,7 @@ function localResults(m: Messages, catalog: Catalog, query: string): { mine: Res
         projects.length > 0
           ? m.project_search_subject_of({ names: projects.map((p) => p.name).join(", ") })
           : target.favourite
-            ? m.project_search_favourite()
+            ? m.targets_favourite()
             : m.session_count({ count: sessions }),
     }))
   const byName = new Map(Object.values(catalog.targets).map((t) => [t.name, t]))

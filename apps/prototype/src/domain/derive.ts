@@ -1034,7 +1034,7 @@ export interface MyTarget {
 }
 
 /**
- * My targets (D-W60, D-W125): ★ favourites, every subject of an open
+ * My targets (D-W60, D-W125): favourites, every subject of an open
  * Project, and every Target with at least one session
  * (`sessionCountsByTarget`), so a Target appears as soon as its sessions
  * are indexed.

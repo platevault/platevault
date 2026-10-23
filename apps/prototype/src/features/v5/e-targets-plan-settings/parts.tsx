@@ -51,7 +51,7 @@ export function planNight(ctx: SkyContext | null): NightDate {
 /** The Targets view keys a Target link carries, so the list (and its night) is the same on return. */
 export function keepSearch(search: SearchParams): SearchParams {
   const kept: SearchParams = {}
-  for (const key of ["view", "night", "q", "mode", "cat", "preset", "good", "rig", "project", "saved"]) if (search[key]) kept[key] = search[key]
+  for (const key of ["view", "night", "q", "mode", "cat", "preset", "good", "fav", "rig", "project", "saved"]) if (search[key]) kept[key] = search[key]
   return kept
 }
 
@@ -107,11 +107,11 @@ export function planAction(m: Messages, row: TargetRow, night: NightDate, inPlan
   return { id: "plan", label: m.targets_add_to_plan(), run: () => (target ? addToPlan(target.id, night) : planRow(row, night)) }
 }
 
-/** My targets membership (★, D-W60): add a result or a library Target, or take it out again. */
-export function myTargetsAction(m: Messages, row: TargetRow): Action {
+/** Favourite (D-W60): add a result or a library Target to the favourites, or take it out again. A favourite is listed in My targets. */
+export function favouriteAction(m: Messages, row: TargetRow): Action {
   const target = row.target
-  if (target?.favourite) return { id: "my-remove", label: m.targets_my_remove(), run: () => setFavourite(target.id, false) }
-  return { id: "my-add", label: m.targets_my_add(), run: () => addToMyTargets(row).result }
+  if (target?.favourite) return { id: "favourite-remove", label: m.targets_favourite_remove(), run: () => setFavourite(target.id, false) }
+  return { id: "favourite-add", label: m.targets_favourite_add(), run: () => addToMyTargets(row).result }
 }
 
 export function newProjectAction(m: Messages, targetId: string): Action {

@@ -1,15 +1,18 @@
 /**
  * Catalogue entry for the action components (design/R9-COMPOSITION-PLAN.md
- * §8.3): Button roles × sizes × states, ActionButton kinds, ActionBar,
- * ActionMenu, MenuItems, RowActions with RowContextMenu, and IconButton.
+ * §8.3): Button roles × sizes × states, ActionButton kinds, ActionToggle,
+ * ActionBar, ActionMenu, MenuItems, RowActions with RowContextMenu, and
+ * IconButton.
  * Every visible string comes from the message catalogue (catalogue_actions_*
  * for the reviewer captions). Key legends follow app/shortcuts.tsx. The demo
  * actions write nothing to the store: refusals and failures come back as
  * results, so those states can be triggered here.
  */
-import { ChevronLeft, ChevronRight, Copy, Pencil, Play, RefreshCw, Trash2 } from "lucide-react"
+import { ChevronLeft, ChevronRight, Copy, Pencil, Play, RefreshCw, Star, Trash2 } from "lucide-react"
+import { useState } from "react"
 import { useMessages } from "@/app/preferences"
 import { MOD_LABEL } from "@/app/shortcuts"
+import { ActionToggle } from "@/components/app/action-toggle"
 import { ActionBar, ActionButton, ActionMenu, IconButton, MenuItems, useAction } from "@/components/app/actions"
 import type { Action, MenuItem } from "@/components/app/contracts"
 import { Section } from "@/components/app/page"
@@ -167,6 +170,27 @@ function KindMatrix({ actions }: { actions: DemoActions }) {
   )
 }
 
+function Toggles() {
+  const m = useMessages()
+  const [pressed, setPressed] = useState(false)
+  const action: Action = {
+    id: "favourite",
+    label: pressed ? m.targets_favourite_remove() : m.targets_favourite_add(),
+    run: () => {
+      setPressed(!pressed)
+      return done()
+    },
+  }
+  return (
+    <div className="space-y-2">
+      <Part heading={m.catalogue_actions_toggle_heading()} caption={m.catalogue_actions_toggle_caption()} />
+      <Specimen caption={m.catalogue_actions_size({ size: "sm" })}>
+        <ActionToggle label={m.targets_favourite()} pressed={pressed} action={action} icon={Star} pressedIconClassName="fill-warning text-warning" />
+      </Specimen>
+    </div>
+  )
+}
+
 function Bars({ actions }: { actions: DemoActions }) {
   const m = useMessages()
   const { start, rename, rescan, copyPath, duplicate, archive, remove, trash } = actions
@@ -273,6 +297,7 @@ export function ActionsCatalogue() {
       <div className="space-y-6">
         <RoleMatrix />
         <KindMatrix actions={actions} />
+        <Toggles />
         <Bars actions={actions} />
         <Menus actions={actions} />
         <Rows actions={actions} names={names} />

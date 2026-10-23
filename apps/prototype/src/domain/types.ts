@@ -434,7 +434,7 @@ export interface Target {
   coordinateSource: "catalog" | "user" | "resolver" | "unknown"
   resolver: { provider: string; fetchedAt: IsoDateTime; objectType: string | null } | null
   notes: string
-  /** ★ favourite: listed in My targets (D-W60). */
+  /** Favourite: listed in My targets (D-W60). */
   favourite: boolean
   createdAt: IsoDateTime
   revision: number

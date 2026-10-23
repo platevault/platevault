@@ -1,10 +1,12 @@
 /**
  * S10 Target (`/targets/$targetId`, slice E): one Target on a DetailPage.
  *
- * - Header: the path back to Targets (keeping its view and night), Add to
+ * - Header: the path back to Targets (keeping its view and night), the
+ *   Favourite toggle beside the title (pressed for a favourite), Add to
  *   Plan for the chosen night (the Targets page's `?night=`, else tonight),
- *   New Project… with this Target as the subject, and the Target menu: My
- *   targets, and Add to Project ▸ (each Project confirms what it adds).
+ *   New Project… with this Target as the subject, and the Target menu: Add
+ *   to or Remove from favourites, and Add to Project ▸ (each Project
+ *   confirms what it adds).
  * - Sections: the chosen night at the planning site (altitude, best window,
  *   Img time, filter grades under the Moon curves, Moon and darkness), the
  *   identity, Fit on every rig, the Projects that use it with their goals
@@ -13,10 +15,11 @@
  *   issue once dismissed (F7, P-ISS1).
  */
 import { useNavigate, useParams, useSearch } from "@tanstack/react-router"
-import { MapPin } from "lucide-react"
+import { MapPin, Star } from "lucide-react"
 import { useMemo } from "react"
 import { MissingRecord } from "@/app/missing-record"
 import { useMessages } from "@/app/preferences"
+import { ActionToggle } from "@/components/app/action-toggle"
 import { ActionButton } from "@/components/app/actions"
 import { BoxTable } from "@/components/app/box"
 import type { Action, Column, MenuItem } from "@/components/app/contracts"
@@ -39,7 +42,7 @@ import { type Messages, say } from "@/lib/i18n"
 import type { SearchParams } from "@/routes"
 import { useStore } from "@/store/core"
 import { useIssues } from "@/store/issues"
-import { addToProjectMenu, clockRange, criteriaText, fitText, keepSearch, myTargetsAction, newProjectAction, planAction, planNight, useSkyContext } from "./parts"
+import { addToProjectMenu, clockRange, criteriaText, favouriteAction, fitText, keepSearch, newProjectAction, planAction, planNight, useSkyContext } from "./parts"
 import { allRows, imgTimeText, prioritiesByTarget, type RigFit, rowView, type TargetRow } from "./targets-model"
 
 /** Integration as "2h 10m"; "–" for none. */
@@ -305,11 +308,13 @@ function TargetDetail({ targetId }: { targetId: string }) {
   ]
 
   const addTo = addToProjectMenu(m, catalog, target)
-  const menu: MenuItem[] = [myTargetsAction(m, row), ...(addTo ? [addTo] : [])]
+  const favourite = favouriteAction(m, row)
+  const menu: MenuItem[] = [favourite, ...(addTo ? [addTo] : [])]
   return (
     <DetailPage
       path={[{ label: m.nav_targets(), link: { to: "/targets", search: keepSearch(search) as Record<string, string> } }]}
       title={target.name}
+      status={<ActionToggle label={m.targets_favourite()} pressed={target.favourite} action={favourite} icon={Star} pressedIconClassName="fill-warning text-warning" />}
       actions={[newProjectAction(m, targetId), { ...planAction(m, row, night, inPlan), kind: "primary" }]}
       menu={{ label: m.target_menu(), items: menu }}
       sections={sections}
