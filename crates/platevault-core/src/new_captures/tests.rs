@@ -787,7 +787,7 @@ async fn a_frame_at_a_vacated_path_with_its_time_but_not_its_size_counts() {
 }
 
 /// A trash run recorded frame by frame reads the location's catalog paths
-/// once per debounce tick, not once per frame.
+/// at most once per debounce tick, not once per frame.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_trash_run_of_many_frames_is_recounted_once_per_tick() {
     let fx = fixture().await;
@@ -797,24 +797,35 @@ async fn a_trash_run_of_many_frames_is_recounted_once_per_tick() {
         frame(&root.join(format!("Ha_{n:03}.fits")));
     }
     assert_eq!(scan_to_end(&fx.library, location.id).await.state, ScanState::Completed);
-    // Ticks far enough apart that the run is recorded within one or two.
+    // Count every debounce tick during the run rather than assuming it fits
+    // between two ticks on every runner.
     let slow = Settings { debounce: Duration::from_secs(2), ..FAST };
     let watch = CaptureWatch::start_with(&fx.library, slow, Arc::new(OsProbe));
     count_is(&watch, location.id, 0).await;
     let recounts = || watch.observed().recounts.load(Ordering::SeqCst);
-    let before = recounts();
-
     let assets = fx.library.catalog().location_assets(location.id).await.unwrap();
-    for asset in &assets {
-        let path = root.join(asset.relative_path.to_path_buf().unwrap());
-        let sha256 = hex::encode(Sha256::digest(fs::read(path).unwrap()));
-        let frame = TrashedFrame { asset_id: asset.id, sha256 };
+    let frames: Vec<_> = assets
+        .iter()
+        .map(|asset| {
+            let path = root.join(asset.relative_path.to_path_buf().unwrap());
+            let sha256 = hex::encode(Sha256::digest(fs::read(path).unwrap()));
+            TrashedFrame { asset_id: asset.id, sha256 }
+        })
+        .collect();
+    let before = recounts();
+    let ticks_before = drains(watch.observed()).load(Ordering::SeqCst);
+    for frame in frames {
         fx.library.record_trashed(Uuid::new_v4(), &[frame]).await.unwrap();
     }
     eventually("the trash run was recounted", || recounts() > before).await;
     after(&watch, drains, 1).await;
     let recounted = recounts() - before;
-    assert!(recounted <= 2, "{recounted} recounts for {} trashed frames", assets.len());
+    let elapsed_ticks = drains(watch.observed()).load(Ordering::SeqCst) - ticks_before;
+    assert!(
+        recounted <= elapsed_ticks,
+        "{recounted} recounts for {elapsed_ticks} debounce ticks and {} trashed frames",
+        assets.len()
+    );
     assert_eq!(new_files(&watch.counts(), location.id), Some(0), "the originals are held");
 }
 
