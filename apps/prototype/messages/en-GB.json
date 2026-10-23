@@ -2227,9 +2227,9 @@
       }
     }
   ],
-  "about_clock": "PlateVault clock",
-  "prototype_about_clock": "{date} (simulated)",
-  "about_clock_system": "This computer",
+  "about_clock": "Date and time",
+  "prototype_about_clock": "{date} · simulated",
+  "about_clock_system": "This computer's clock",
   "about_first_run_setup": "First-run setup",
   "about_restart_setup": "Restart setup",
   "about_simulation": "Simulation",
@@ -2346,39 +2346,6 @@
   "settings_lookup_failed": "{provider} didn't respond · nothing changed",
   "settings_lookup_off": "Online lookup is off · nothing sent",
   "settings_lookup_query_empty": "Name to look up: enter a Target name or alias, for example NGC 7000.",
-  "settings_lookup_local": "Local search",
-  "settings_lookup_targets": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{n} Target",
-        "countPlural=*": "{n} Targets"
-      }
-    }
-  ],
-  "settings_lookup_catalogue_objects": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{n} catalogue object",
-        "countPlural=*": "{n} catalogue objects"
-      }
-    }
-  ],
   "settings_lookup_online": "Look up Targets online",
   "settings_lookup_online_help": "Sends Target names to the provider. A failed lookup never blocks indexing.",
   "settings_lookup_provider": "Provider",
