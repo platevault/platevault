@@ -57,6 +57,28 @@ impl<S: tracing::Subscriber> Layer<S> for SqlxCounterLayer {
     }
 }
 
+/// Open every connection `db`'s pool can hold, so a measured window that
+/// follows never opens one.
+///
+/// A new SQLite connection runs its connect-time `PRAGMA journal_mode = WAL;
+/// …` batch, which sqlx logs as one `sqlx::query` event, so a connection
+/// opened inside a window adds one to `sqlx_stmts`. Whether a window opens one
+/// is a race: a dropped `PoolConnection` goes back to the idle queue from a
+/// spawned task, after a ping, and an `acquire` that finds the queue empty
+/// opens a new connection while the pool is below `max_connections`. The
+/// serial classify loop therefore read 661 instead of 660 whenever setup had
+/// opened fewer connections than the loop's scheduling needed: a captured
+/// 661 run had one connection before the window and opened a second inside
+/// it (astro-plan-c7enh). A full pool makes every acquire reuse a connection.
+pub async fn fill_pool(db: &persistence_core::Database) {
+    let pool = db.pool();
+    let max = pool.options().get_max_connections();
+    let mut held = Vec::new();
+    for _ in 0..max {
+        held.push(pool.acquire().await.expect("acquire pool connection"));
+    }
+}
+
 /// Print one scenario result as a single JSON object on stdout.
 ///
 /// `scripts/check-perf-baseline.sh` parses each line independently and reads

@@ -48,7 +48,7 @@ use std::path::Path;
 use std::sync::atomic::Ordering;
 use std::time::Instant;
 
-use support::{print_result, SqlxCounterLayer};
+use support::{fill_pool, print_result, SqlxCounterLayer};
 
 use app_core_inbox::classify::classify_source_group;
 use app_core_inbox::scan::{scan_root, ScanOptions};
@@ -250,7 +250,8 @@ async fn main() {
     //
     // Fetch all unclassified source groups and classify each one. Uses the
     // spec-058 `classify_source_group` path (folder-level, no pre-existing
-    // inbox_item_id required).
+    // inbox_item_id required). The pool is filled first so that no
+    // connect-time statement lands in the window (see `fill_pool`).
 
     let groups = persistence_inbox::repositories::inbox::list_unclassified_source_groups(
         db.pool(),
@@ -258,6 +259,7 @@ async fn main() {
     )
     .await
     .expect("list_unclassified_source_groups");
+    fill_pool(&db).await;
 
     counter.store(0, Ordering::Relaxed);
     let t0 = Instant::now();
