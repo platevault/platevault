@@ -52,6 +52,11 @@ export interface PageHeaderProps {
   meta?: ReactNode
   /** Page-level actions; the primary action goes last. Templates pass an ActionBar. */
   actions?: ReactNode
+  /**
+   * A refusal or failure of a control beside the title (a `meta` toggle), on its own full-width row under the
+   * header row, so the control stays where it was pressed.
+   */
+  feedback?: ReactNode
   /** The page's standing state (P7): one notice, fixed under the header bar. */
   notice?: PageNotice | null
   className?: string
@@ -65,13 +70,14 @@ export interface PageHeaderProps {
 /**
  * Harness v4: a pane header, not a web page header. One compact bar: the
  * path (a breadcrumb inline before the title, never a kicker above it), the
- * title at 17 px, the summary, meta badges, and actions on the right. The
- * notice slot sits under the bar, inside the header, so a standing state
- * stays in view with it. Level 1 sticks to the top of its pane so the title
+ * title at 17 px, the summary, meta badges, and actions on the right. A meta
+ * control's feedback row, then the notice slot, sit under the bar, inside the
+ * header, so an alert or a standing state stays in view with it and the bar
+ * itself never moves. Level 1 sticks to the top of its pane so the title
  * and actions never scroll away, and publishes its height as
  * --pane-header-h so focused controls scroll clear of it.
  */
-export function PageHeader({ title, path, summary, meta, actions, notice, className, level = 1 }: PageHeaderProps) {
+export function PageHeader({ title, path, summary, meta, actions, feedback, notice, className, level = 1 }: PageHeaderProps) {
   useDocumentTitle(level === 1 ? title : null)
   const ref = useRef<HTMLElement>(null)
   useLayoutEffect(() => {
@@ -107,6 +113,11 @@ export function PageHeader({ title, path, summary, meta, actions, notice, classN
         </div>
       </div>
       {actions ? <div className="flex min-w-0 max-w-full flex-wrap items-center gap-1.5">{actions}</div> : null}
+      {feedback ? (
+        <div className="basis-full" data-header-feedback="">
+          {feedback}
+        </div>
+      ) : null}
       {notice ? (
         <div className="basis-full">
           <NoticeSlot notice={notice} />

@@ -20,7 +20,7 @@ import { useMemo } from "react"
 import { MissingRecord } from "@/app/missing-record"
 import { useMessages } from "@/app/preferences"
 import { ActionToggle } from "@/components/app/action-toggle"
-import { ActionButton } from "@/components/app/actions"
+import { ActionButton, useAction } from "@/components/app/actions"
 import { BoxTable } from "@/components/app/box"
 import type { Action, Column, MenuItem } from "@/components/app/contracts"
 import { rowIssues, withIssueItems } from "@/components/app/issue-actions"
@@ -84,6 +84,8 @@ function TargetDetail({ targetId }: { targetId: string }) {
   const navigate = useNavigate()
   const catalog = useStore((s) => s.catalog)
   const disk = useStore((s) => s.disk)
+  /** The Favourite toggle's runner: its alert goes on the header's own row, so the toggle never moves. */
+  const favouriteRunner = useAction()
   const duplicates = useStore(sessionDuplicateCopies)
   const curves = useStore((s) => s.settings.moonAvoidance)
   const issueView = useIssues()
@@ -314,7 +316,13 @@ function TargetDetail({ targetId }: { targetId: string }) {
     <DetailPage
       path={[{ label: m.nav_targets(), link: { to: "/targets", search: keepSearch(search) as Record<string, string> } }]}
       title={target.name}
-      status={<ActionToggle label={m.targets_favourite()} pressed={target.favourite} action={favourite} icon={Star} pressedIconClassName="fill-warning text-warning" />}
+      status={
+        <>
+          <ActionToggle label={m.targets_favourite()} pressed={target.favourite} action={favourite} icon={Star} pressedIconClassName="fill-warning text-warning" runner={favouriteRunner} />
+          {favouriteRunner.dialog}
+        </>
+      }
+      statusFeedback={favouriteRunner.feedback}
       actions={[newProjectAction(m, targetId), { ...planAction(m, row, night, inPlan), kind: "primary" }]}
       menu={{ label: m.target_menu(), items: menu }}
       sections={sections}

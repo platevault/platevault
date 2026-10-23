@@ -62,4 +62,18 @@ describe("Target detail: the Favourite toggle", () => {
     expect(store.getState().catalog.targets[target.id]!.favourite).toBe(false)
     await waitFor(() => expect(toggle).toHaveAttribute("aria-pressed", "false"))
   })
+
+  it("shows a failed write on the header's own row, not in the title group, and stays unpressed", async () => {
+    const user = userEvent.setup()
+    const target = Object.values(store.getState().catalog.targets).find((t) => !t.favourite)!
+    store.setState((s) => ({ ...s, faults: { ...s.faults, failNextCatalogWrite: true } }))
+    renderTarget(target.id)
+    const toggle = await screen.findByRole("button", { name: m.targets_favourite() })
+    await user.click(toggle)
+    const alert = await screen.findByRole("alert")
+    expect(alert.closest("[data-header-feedback]")).not.toBeNull()
+    expect(toggle.parentElement!.contains(alert)).toBe(false)
+    expect(store.getState().catalog.targets[target.id]!.favourite).toBe(false)
+    expect(toggle).toHaveAttribute("aria-pressed", "false")
+  })
 })
