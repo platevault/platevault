@@ -46,12 +46,21 @@ describe("Settings › Applications (cmvgf)", () => {
     expect(screen.queryByRole("menuitem", { name: new RegExp(`^${m.settings_remove()}`) })).toBeNull()
   })
 
-  it("an application's details hold no evidence text", async () => {
+  it("an application's details say how it receives corrections, and hold no evidence text", async () => {
     const user = userEvent.setup()
     renderPage()
     await user.click(await screen.findByRole("button", { name: m.table_row_details({ name: "PixInsight / WBPP" }) }))
-    expect(await screen.findByText(m.apps_corrected_values())).toBeInTheDocument()
+    expect((await screen.findByText(m.session_corrections(), { selector: "dt" })).nextElementSibling?.textContent).toBe(m.apps_corrections_copies())
     expect(screen.queryByText(m.seed_apps_evidence_pixinsight())).toBeNull()
+  })
+
+  it("reads corrections through the application's settings when its profile does", async () => {
+    const pixinsight = Object.values(store.getState().catalog.profiles).find((p) => p.name === "PixInsight / WBPP")!
+    store.setState((s) => ({ ...s, catalog: { ...s.catalog, profiles: { ...s.catalog.profiles, [pixinsight.id]: { ...pixinsight, capability: { ...pixinsight.capability, correctedMetadata: "configuration" } } } } }))
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(await screen.findByRole("button", { name: m.table_row_details({ name: "PixInsight / WBPP" }) }))
+    expect((await screen.findByText(m.session_corrections(), { selector: "dt" })).nextElementSibling?.textContent).toBe(m.apps_corrections_settings({ name: "PixInsight / WBPP" }))
   })
 
   it("keeps Arguments out of the default columns and shows each application's launch arguments in its details", async () => {
@@ -77,5 +86,60 @@ describe("Settings › Applications (cmvgf)", () => {
     expect(within(dialog).getByRole("textbox", { name: m.apps_keyword_panel() })).not.toHaveAttribute("aria-invalid")
     expect(within(dialog).getByRole("button", { name: m.settings_save() })).toHaveAttribute("aria-disabled", "true")
     expect(store.getState().settings.keywords.group).toBe("GROUP")
+  })
+
+  describe("Add application", () => {
+    async function openAdd(user: ReturnType<typeof userEvent.setup>) {
+      renderPage()
+      await user.click(await screen.findByRole("button", { name: `${m.apps_add()}…` }))
+      return within(await screen.findByRole("dialog"))
+    }
+    async function choose(user: ReturnType<typeof userEvent.setup>, dialog: ReturnType<typeof within>, application: string) {
+      await user.click(dialog.getByRole("combobox", { name: m.apps_detected() }))
+      await user.click(await screen.findByRole("option", { name: application }))
+    }
+
+    it("names the application after the chosen one until the user types a name", async () => {
+      const user = userEvent.setup()
+      const dialog = await openAdd(user)
+      const name = dialog.getByRole("textbox", { name: m.apps_name() })
+      await choose(user, dialog, "ASTAP")
+      expect(name).toHaveValue("ASTAP")
+      await choose(user, dialog, "Siril")
+      expect(name).toHaveValue("Siril")
+      await user.clear(name)
+      await user.type(name, "Plate solver")
+      await choose(user, dialog, "ASTAP")
+      expect(name).toHaveValue("Plate solver")
+    })
+
+    it("refuses a name another application has, in any case, under the name field", async () => {
+      const user = userEvent.setup()
+      const dialog = await openAdd(user)
+      await choose(user, dialog, "ASTAP")
+      const name = dialog.getByRole("textbox", { name: m.apps_name() })
+      await user.clear(name)
+      await user.type(name, "siril")
+      expect(name).toHaveAttribute("aria-invalid", "true")
+      expect(name).toHaveAccessibleDescription(m.apps_refused_name_taken({ name: "Siril" }))
+      expect(dialog.getByRole("button", { name: m.apps_add() })).toHaveAttribute("aria-disabled", "true")
+    })
+
+    it("refuses an executable another application starts with the same arguments, under the arguments field", async () => {
+      const user = userEvent.setup()
+      const dialog = await openAdd(user)
+      const before = Object.keys(store.getState().catalog.profiles)
+      await choose(user, dialog, "PixInsight")
+      const args = dialog.getByRole("textbox", { name: m.apps_launch_arguments() })
+      expect(args).toHaveAttribute("aria-invalid", "true")
+      expect(args).toHaveAccessibleDescription(expect.stringContaining(m.apps_refused_launch_taken({ name: "PixInsight / WBPP" })))
+      const add = dialog.getByRole("button", { name: m.apps_add() })
+      expect(add).toHaveAttribute("aria-disabled", "true")
+      await user.click(add)
+      expect(Object.keys(store.getState().catalog.profiles)).toEqual(before)
+      await user.type(args, "--batch")
+      expect(args).not.toHaveAttribute("aria-invalid")
+      expect(dialog.getByRole("button", { name: m.apps_add() })).not.toHaveAttribute("aria-disabled", "true")
+    })
   })
 })

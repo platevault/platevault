@@ -54,6 +54,23 @@ describe("application profiles", () => {
     expect(addApplicationProfile({ name: "Other", executablePath: null, launchArgs: "" }).id).not.toBe(id)
   })
 
+  it("refuses a name another profile has, compared without case, naming that profile", () => {
+    added()
+    const before = catalog().profiles
+    const { result } = addApplicationProfile({ name: "astro pixel PROCESSOR", executablePath: "/Applications/Other.app", launchArgs: "" })
+    expect(refusal(result)).toEqual([m.apps_refused_name_taken({ name: "Astro Pixel Processor" })])
+    expect(refusal(addApplicationProfile({ name: " siril ", executablePath: null, launchArgs: "" }).result)).toEqual([m.apps_refused_name_taken({ name: "Siril" })])
+    expect(catalog().profiles).toEqual(before)
+  })
+
+  it("refuses an executable another profile starts with the same launch arguments, and adds it with other arguments", () => {
+    added()
+    const before = catalog().profiles
+    expect(refusal(addApplicationProfile({ name: "APP batch", executablePath: "/Applications/APP.app", launchArgs: " --batch " }).result)).toEqual([m.apps_refused_launch_taken({ name: "Astro Pixel Processor" })])
+    expect(catalog().profiles).toEqual(before)
+    expect(addApplicationProfile({ name: "APP interactive", executablePath: "/Applications/APP.app", launchArgs: "" }).result.ok).toBe(true)
+  })
+
   it("removes an added profile that no Project uses", () => {
     const { id } = added()
     expect(removeApplicationProfile(id).ok).toBe(true)

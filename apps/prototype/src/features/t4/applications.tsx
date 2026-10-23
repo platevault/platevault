@@ -27,9 +27,9 @@ import { SettingsRow, SettingsSection } from "@/components/app/settings"
 import { StatusBadge } from "@/components/app/status"
 import { ListSection, SettingsPage } from "@/components/templates/settings-page"
 import { MODE_NAME } from "@/domain/labels"
-import type { ApplicationProfile, GroupKeywords, InputMode } from "@/domain/types"
+import type { ApplicationProfile, GroupKeywords, InputMode, SimulatedApp } from "@/domain/types"
 import { type Messages, say } from "@/lib/i18n"
-import { addApplicationProfile, checkExecutable, keywordRefusals, locateExecutable, removeApplicationProfile, setDefaultInputMode, setGroupKeywords, setLaunchArgs } from "@/store/actions/settings"
+import { addApplicationProfile, checkExecutable, keywordRefusals, locateExecutable, profileDuplicates, removeApplicationProfile, setDefaultInputMode, setGroupKeywords, setLaunchArgs } from "@/store/actions/settings"
 import { useStore } from "@/store/core"
 
 /** Profile order: the applications PlateVault has a profile for, then the ones the user added (by name). */
@@ -40,7 +40,7 @@ const ARGUMENT_TOKENS = ["viewFolder"] as const
 
 const INPUT_MODES: InputMode[] = ["symlink", "copy"]
 
-/** Under its row's disclosure: its launch arguments (the hideable Arguments column, hidden by default so the table fits from 1280 px) and what the profile does not support (D04, PREP-FR-01): corrected values only reach it through its configuration, if at all. */
+/** Under its row's disclosure: its launch arguments (the hideable Arguments column, hidden by default so the table fits from 1280 px) and how Apply hands it the header corrections recorded at intake (PREP-FR-03): through the application's own settings where its profile reads them there, otherwise as patched copies in the View. */
 function ProfileDetails({ profile }: { profile: ApplicationProfile }) {
   const m = useMessages()
   const c = profile.capability
@@ -48,7 +48,7 @@ function ProfileDetails({ profile }: { profile: ApplicationProfile }) {
     <KeyValueList
       items={[
         { label: m.apps_launch_arguments(), value: profile.launchArgs || "–", mono: profile.launchArgs !== "" },
-        { label: m.apps_corrected_values(), value: c.correctedMetadata === "configuration" ? m.apps_corrected_through() : m.apps_corrected_not_through() },
+        { label: m.session_corrections(), value: c.correctedMetadata === "configuration" ? m.apps_corrections_settings({ name: profile.name }) : m.apps_corrections_copies() },
       ]}
     />
   )
@@ -119,10 +119,18 @@ function ArgumentsDialog({ profile, onClose }: { profile: ApplicationProfile | n
   )
 }
 
+/** The name an executable suggests: the application at that path on this computer, else its file name without the bundle extension. */
+function suggestedName(apps: SimulatedApp[], path: string): string {
+  return apps.find((app) => app.path === path)?.name ?? (path.split(/[\\/]/).pop() ?? "").replace(/\.(app|exe)$/i, "")
+}
+
+/** Add application…: the name follows the chosen application until the user types one, and another profile's name or executable with the same arguments is refused under its field. */
 function AddApplicationDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const m = useMessages()
-  const detected = useDetected()
+  const apps = useStore((s) => s.disk.apps)
+  const profiles = useStore((s) => s.catalog.profiles)
   const [name, setName] = useState("")
+  const [nameTyped, setNameTyped] = useState(false)
   const [path, setPath] = useState("")
   const [args, setArgs] = useState("")
   const [wasOpen, setWasOpen] = useState(false)
@@ -130,17 +138,24 @@ function AddApplicationDialog({ open, onClose }: { open: boolean; onClose: () =>
     setWasOpen(open)
     if (open) {
       setName("")
+      setNameTyped(false)
       setPath("")
       setArgs("")
     }
   }
   const label = m.apps_add()
-  const missing = [...(name.trim() ? [] : [{ label: m.settings_name_required() }]), ...(path ? [] : [{ label: m.apps_not_located() }])]
+  const duplicates = profileDuplicates(profiles, { name, executablePath: path || null, launchArgs: args })
+  const errors = { name: duplicates.name && say(m, duplicates.name), arguments: duplicates.executable && say(m, duplicates.executable) }
+  const blockers = [
+    ...(name.trim() ? [] : [{ label: m.settings_name_required() }]),
+    ...(path ? [] : [{ label: m.apps_not_located() }]),
+    ...[errors.name, errors.arguments].flatMap((error) => (error ? [{ label: error }] : [])),
+  ]
   const confirm: Action = {
     id: "add-application",
     label,
     kind: "primary",
-    unavailable: missing.length ? { action: m.actions_blocked({ action: label }), reason: m.refusal_blockers({ count: missing.length }), blockers: missing } : undefined,
+    unavailable: blockers.length ? { action: m.actions_blocked({ action: label }), reason: m.refusal_blockers({ count: blockers.length }), blockers } : undefined,
     run: () => addApplicationProfile({ name: name.trim(), executablePath: path, launchArgs: args.trim() }).result,
   }
   return (
@@ -149,12 +164,21 @@ function AddApplicationDialog({ open, onClose }: { open: boolean; onClose: () =>
         path={path}
         onChange={(next) => {
           setPath(next)
-          // The detected application names the profile until the user types a name.
-          if (!name.trim()) setName(detected.find((d) => d.value === next)?.label ?? "")
+          if (!nameTyped) setName(suggestedName(apps, next))
         }}
       />
-      <TextField label={m.apps_name()} value={name} onChange={setName} autoFocus />
-      <ArgumentsField label={m.apps_launch_arguments()} value={args} onChange={setArgs} tokens={ARGUMENT_TOKENS} placeholder={m.apps_launch_placeholder({ token: "{viewFolder}" })} />
+      <TextField
+        label={m.apps_name()}
+        value={name}
+        onChange={(next) => {
+          setName(next)
+          // Clearing the name hands it back to the chosen application.
+          setNameTyped(next.trim() !== "")
+        }}
+        error={errors.name}
+        autoFocus
+      />
+      <ArgumentsField label={m.apps_launch_arguments()} value={args} onChange={setArgs} tokens={ARGUMENT_TOKENS} placeholder={m.apps_launch_placeholder({ token: "{viewFolder}" })} error={errors.arguments} />
     </FormDialog>
   )
 }
