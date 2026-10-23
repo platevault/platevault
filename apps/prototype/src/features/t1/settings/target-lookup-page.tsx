@@ -13,12 +13,12 @@ import { KeyValueList } from "@/components/app/data"
 import { ActionError, DetailSkeleton, Notice, useSaveState } from "@/components/app/feedback"
 import { SegmentedField, SwitchField, TextField } from "@/components/app/fields"
 import { Section } from "@/components/app/page"
-import { SettingsRow, SettingsSection } from "@/components/app/settings"
+import { SettingsSection } from "@/components/app/settings"
 import { SettingsPage } from "@/components/templates/settings-page"
 import { objectTypeRef } from "@/domain/labels"
-import { BUNDLED_CATALOGUE, resolverEntryFor } from "@/domain/sky"
+import { resolverEntryFor } from "@/domain/sky"
 import type { AppSettings } from "@/domain/types"
-import { formatCount, formatDateTime, formatDec, formatRa } from "@/lib/format"
+import { formatDateTime, formatDec, formatRa } from "@/lib/format"
 import { type Messages, msg, say } from "@/lib/i18n"
 import { nowIso, store, updateSlice, useStore } from "@/store/core"
 import type { TargetLookupTest } from "@/store/slices/e"
@@ -81,7 +81,6 @@ function TestOutcome({ last, onRetry }: { last: TargetLookupTest; onRetry: () =>
 export function TargetLookupPage() {
   const m = useMessages()
   const lookup = useStore((s) => s.settings.targetLookup)
-  const targets = useStore((s) => Object.keys(s.catalog.targets).length)
   const last = useStore((s) => s.slices.e.lastLookupTest)
   const [query, setQuery] = useState("NGC 7000")
   const [queryError, setQueryError] = useState<string | undefined>()
@@ -152,9 +151,6 @@ export function TargetLookupPage() {
           disabled={!lookup.enabled}
           onChange={(provider) => change({ ...lookup, provider })}
         />
-        <SettingsRow label={m.settings_lookup_local()}>
-          {m.settings_lookup_targets({ count: targets, n: formatCount(targets) })} · {m.settings_lookup_catalogue_objects({ count: BUNDLED_CATALOGUE.length, n: formatCount(BUNDLED_CATALOGUE.length) })}
-        </SettingsRow>
       </SettingsSection>
 
       <Section title={m.settings_lookup_test_heading()} level={3}>

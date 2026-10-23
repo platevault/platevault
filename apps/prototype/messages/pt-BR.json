@@ -2395,9 +2395,9 @@
       }
     }
   ],
-  "about_clock": "Relógio do PlateVault",
-  "prototype_about_clock": "{date} (simulado)",
-  "about_clock_system": "Este computador",
+  "about_clock": "Data e hora",
+  "prototype_about_clock": "{date} · simulada",
+  "about_clock_system": "Relógio deste computador",
   "about_first_run_setup": "Configuração inicial",
   "about_restart_setup": "Reiniciar configuração",
   "about_simulation": "Simulação",
@@ -2520,43 +2520,6 @@
   "settings_lookup_failed": "{provider} não respondeu · nada mudou",
   "settings_lookup_off": "Busca online desativada · nada enviado",
   "settings_lookup_query_empty": "Nome a buscar: informe um nome ou apelido de Alvo, por exemplo NGC 7000.",
-  "settings_lookup_local": "Busca local",
-  "settings_lookup_targets": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "count",
-        "countPlural"
-      ],
-      "match": {
-        "count=0, countPlural=*": "{n} Alvos",
-        "count=*, countPlural=one": "{n} Alvo",
-        "count=*, countPlural=*": "{n} Alvos"
-      }
-    }
-  ],
-  "settings_lookup_catalogue_objects": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "count",
-        "countPlural"
-      ],
-      "match": {
-        "count=0, countPlural=*": "{n} objetos de catálogo",
-        "count=*, countPlural=one": "{n} objeto de catálogo",
-        "count=*, countPlural=*": "{n} objetos de catálogo"
-      }
-    }
-  ],
   "settings_lookup_online": "Buscar Alvos online",
   "settings_lookup_online_help": "Envia nomes de Alvos ao provedor. Uma busca que falha nunca bloqueia a indexação.",
   "settings_lookup_provider": "Provedor",
