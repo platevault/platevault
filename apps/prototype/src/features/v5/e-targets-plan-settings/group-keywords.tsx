@@ -42,7 +42,7 @@ function KeywordDialog({ kind, open, onClose }: { kind: GroupKeywordKind; open: 
   }
   return (
     <FormDialog open={open} onOpenChange={(value) => !value && onClose()} title={m.settings_label_group_keywords()} size="sm" confirm={confirm}>
-      <TextField label={say(m, GROUP_KEYWORD[kind].label)} description={say(m, GROUP_KEYWORD[kind].help(name || keywords[kind]))} value={draft} onChange={setDraft} error={errors} mono autoFocus />
+      <TextField label={say(m, GROUP_KEYWORD[kind].label)} description={say(m, GROUP_KEYWORD[kind].help(errors.length === 0 ? name : keywords[kind]))} value={draft} onChange={setDraft} error={errors} mono autoFocus />
     </FormDialog>
   )
 }
