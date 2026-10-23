@@ -1,8 +1,11 @@
 /**
  * S16 Settings › Equipment (slice E; D-W31, PLAN-EQ-FR-01 to PLAN-EQ-FR-08;
  * plan §4a, C E1-E8, ngm9g). One ListSection each for Cameras, Telescopes,
- * Reducers, Filters and Rigs (equipment-records.tsx holds the others), then
- * the Matching thresholds (settings-matching.tsx). A
+ * Reducers, Filters and Rigs (equipment-records.tsx holds the others), and
+ * one Add equipment ▾ in the page header for all of them (Camera, Telescope,
+ * Reducer, Filter, Rig; the owner's answer of 2026-10-23); an empty section
+ * keeps its own Add… in its empty state. The matching thresholds have their
+ * own page, Settings › Matching (settings-matching.tsx). A
  * filter is a record: its name, the bands it passes and the FITS FILTER
  * values it matches; rigs select it in their editor, and its Rigs column
  * says which do. A rig's filters drive the Targets band strip, the
@@ -16,10 +19,10 @@
  * the same dialog as "Add {value} to {rig}" (`AddFilterToRigDialog`, D-W127).
  */
 import { useNavigate, useSearch } from "@tanstack/react-router"
-import { Filter as FilterIcon } from "lucide-react"
+import { Camera as CameraIcon, Filter as FilterIcon, Telescope as TelescopeIcon, Waypoints, ZoomIn } from "lucide-react"
 import { useState } from "react"
 import { useMessages } from "@/app/preferences"
-import { onSuccess } from "@/components/app/actions"
+import { ActionButton, ActionMenu, onSuccess } from "@/components/app/actions"
 import type { Action, AddFilterToRigProps, Column, MenuItem } from "@/components/app/contracts"
 import { EmptyState } from "@/components/app/feedback"
 import { ChoiceListField, TextField } from "@/components/app/fields"
@@ -32,9 +35,8 @@ import { formatCount } from "@/lib/format"
 import type { Messages } from "@/lib/i18n"
 import type { SearchParams } from "@/routes"
 import { useStore } from "@/store/core"
-import { CamerasSection, RigsSection, RigsUsing, recordMenu, ReducersSection, TelescopesSection } from "./equipment-records"
+import { CameraDialog, CamerasSection, ReducerDialog, ReducersSection, RigDialog, RigsSection, RigsUsing, recordMenu, TelescopeDialog, TelescopesSection } from "./equipment-records"
 import { addFilterToRig, bandsLine, filterName, saveFilter } from "./settings-actions"
-import { MatchingSection } from "./settings-matching"
 
 /** Bands a header value most likely passes, to prefill "Add filter" from it. The user confirms them. */
 function guessBands(value: string): Band[] {
@@ -173,7 +175,6 @@ function FiltersSection({ onEdit }: { onEdit: (draft: FilterDraft) => void }) {
   return (
     <ListSection<Filter>
       title={m.equipment_filters()}
-      add={add}
       table={{
         label: m.equipment_filters(),
         rows: Object.values(catalog.filters),
@@ -181,7 +182,7 @@ function FiltersSection({ onEdit }: { onEdit: (draft: FilterDraft) => void }) {
         getRowId: (f) => f.id,
         rowLabel: (f) => f.name,
         initialSort: { columnId: "name", direction: "asc" },
-        empty: <EmptyState icon={FilterIcon} title={m.tonight_no_filters()} action={null} />,
+        empty: <EmptyState icon={FilterIcon} title={m.tonight_no_filters()} action={<ActionButton action={add} />} />,
         rowActions: (f) => recordMenu(m, catalog, "filter", f, () => onEdit({ filter: f })),
       }}
     />
@@ -231,20 +232,37 @@ function UnknownFiltersSection({ onAdd }: { onAdd: (draft: FilterDraft) => void 
   )
 }
 
+/** A record kind the page's add dialogs open for; filters add through `FilterDialog`. */
+type AddKind = "camera" | "telescope" | "reducer" | "rig"
+
 export function EquipmentSettingsPage() {
   const m = useMessages()
   const search = useSearch({ strict: false }) as SearchParams
   const navigate = useNavigate()
   const [filterDraft, setFilterDraft] = useState<FilterDraft | null>(null)
+  const [adding, setAdding] = useState<AddKind | null>(null)
+  const closeAdd = () => setAdding(null)
+  const addFilter = () => setFilterDraft({ filter: null })
+  const onRigSaved = (rig: string) => void navigate({ to: "/settings/equipment", search: { rig } as never, replace: true })
+  const addItems: MenuItem[] = [
+    { id: "add-camera", label: m.equipment_camera(), icon: CameraIcon, opensDialog: true, run: () => setAdding("camera") },
+    { id: "add-telescope", label: m.equipment_telescope(), icon: TelescopeIcon, opensDialog: true, run: () => setAdding("telescope") },
+    { id: "add-reducer", label: m.equipment_reducer(), icon: ZoomIn, opensDialog: true, run: () => setAdding("reducer") },
+    { id: "add-filter", label: m.equipment_filter(), icon: FilterIcon, opensDialog: true, run: addFilter },
+    { id: "add-rig", label: m.equipment_rig(), icon: Waypoints, opensDialog: true, run: () => setAdding("rig") },
+  ]
   return (
-    <SettingsPage title={m.settings_equipment()}>
-      <CamerasSection />
-      <TelescopesSection />
-      <ReducersSection />
+    <SettingsPage title={m.settings_equipment()} actions={<ActionMenu label={m.equipment_add_menu()} items={addItems} />}>
+      <CamerasSection onAdd={() => setAdding("camera")} />
+      <TelescopesSection onAdd={() => setAdding("telescope")} />
+      <ReducersSection onAdd={() => setAdding("reducer")} />
       <FiltersSection onEdit={setFilterDraft} />
       <UnknownFiltersSection onAdd={setFilterDraft} />
-      <RigsSection activeRigId={search.rig ?? null} onSaved={(rig) => void navigate({ to: "/settings/equipment", search: { rig } as never, replace: true })} />
-      <MatchingSection />
+      <RigsSection activeRigId={search.rig ?? null} onSaved={onRigSaved} onAdd={() => setAdding("rig")} />
+      <CameraDialog open={adding === "camera"} camera={null} onClose={closeAdd} />
+      <TelescopeDialog open={adding === "telescope"} telescope={null} onClose={closeAdd} />
+      <ReducerDialog open={adding === "reducer"} reducer={null} onClose={closeAdd} />
+      <RigDialog open={adding === "rig"} rig={null} onClose={closeAdd} onSaved={onRigSaved} />
       <FilterDialog draft={filterDraft} onClose={() => setFilterDraft(null)} />
     </SettingsPage>
   )

@@ -43,6 +43,7 @@ import { CalibrationPage } from "@/features/v5/e-targets-plan-settings/calibrati
 import { CalibrationProcessPage } from "@/features/v5/e-targets-plan-settings/calibration-process"
 import { AddFilterToRig, EquipmentSettingsPage } from "@/features/v5/e-targets-plan-settings/settings-equipment"
 import { GoalTemplatesSettingsPage } from "@/features/v5/e-targets-plan-settings/settings-goal-templates"
+import { MatchingSettingsPage } from "@/features/v5/e-targets-plan-settings/settings-matching"
 import { NamingSettingsPage } from "@/features/v5/e-targets-plan-settings/settings-naming"
 import { TargetPage } from "@/features/v5/e-targets-plan-settings/target"
 import { TargetsPage } from "@/features/v5/e-targets-plan-settings/targets"
@@ -146,6 +147,7 @@ const settingsChildren = [
   settingsChild("appearance", AppearancePage),
   settingsChild("locations", LocationsPage),
   settingsChild("equipment", EquipmentSettingsPage),
+  settingsChild("matching", MatchingSettingsPage),
   settingsChild("goal-templates", GoalTemplatesSettingsPage),
   settingsChild("naming", NamingSettingsPage),
   settingsChild("sites", SitesPage),

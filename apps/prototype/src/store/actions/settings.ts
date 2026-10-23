@@ -287,6 +287,7 @@ export function setGroupKeywords(keywords: GroupKeywords): CommitResult {
 // ---------------------------------------------------------------------------
 
 const EQUIPMENT_HREF = "/settings/equipment"
+const MATCHING_HREF = "/settings/matching"
 
 export type MatchingPatch = { [K in keyof MatchingSettings]?: Partial<MatchingSettings[K]> }
 
@@ -332,7 +333,7 @@ export function setMatchingSettings(patch: MatchingPatch): CommitResult {
   const reasons: MessageRef[] = []
   if (next.framing.panelOverlapMinPct > next.framing.panelOverlapMaxPct) reasons.push(msg("settings_matching_panel_overlap_order"))
   if (next.flats.fineDeg > next.flats.warnDeg) reasons.push(msg("settings_matching_flat_rotation_order"))
-  if (reasons.length > 0) return refuse(msg("store_refused", { label }), reasons, EQUIPMENT_HREF)
+  if (reasons.length > 0) return refuse(msg("store_refused", { label }), reasons, MATCHING_HREF)
   const at = nowIso()
   const result = commit(
     label,
@@ -340,9 +341,9 @@ export function setMatchingSettings(patch: MatchingPatch): CommitResult {
       const settings = { ...s.settings, matching: next }
       return { ...s, settings, catalog: calibrateSessions(s.catalog, s.disk, settings, at) }
     },
-    { href: EQUIPMENT_HREF },
+    { href: MATCHING_HREF },
   )
-  if (result.ok) recordSaved(label, null, EQUIPMENT_HREF)
+  if (result.ok) recordSaved(label, null, MATCHING_HREF)
   return result
 }
 

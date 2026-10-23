@@ -2,7 +2,9 @@
  * Settings › Equipment, the records (slice E; plan §4a, C E1-E8, ngm9g,
  * PLAN-EQ-FR-07, PLAN-EQ-FR-08): cameras, telescopes, reducers and rigs,
  * each a ListSection whose ⋯ holds Edit… and Remove, and the FormDialogs
- * that add or edit them. Gear not yet imaged with is added by hand (Manual,
+ * that add or edit them. The page's Add equipment ▾ opens the add dialogs;
+ * an empty section offers its own Add… in its empty state (`onAdd`). Gear
+ * not yet imaged with is added by hand (Manual,
  * Round 6); detected records edit the same way. A camera, telescope or
  * reducer holds its own properties; a camera also holds its physical alias
  * (needed once two cameras share a model) and its "Don't use darks" / "Don't
@@ -15,6 +17,7 @@
 import { Camera as CameraIcon, Pencil, Telescope as TelescopeIcon, Trash2, Waypoints, ZoomIn } from "lucide-react"
 import { useState } from "react"
 import { useMessages } from "@/app/preferences"
+import { ActionButton } from "@/components/app/actions"
 import type { Action, Column, MenuItem } from "@/components/app/contracts"
 import { KeyValueList } from "@/components/app/data"
 import { DataTable } from "@/components/app/data-table"
@@ -136,7 +139,7 @@ const NEW_CAMERA = ""
  * writers apply (`cameraAliasRefusal`), so Save stays unavailable until each
  * camera of the model has its own.
  */
-function CameraDialog({ open, camera, onClose }: { open: boolean; camera: Camera | null; onClose: () => void }) {
+export function CameraDialog({ open, camera, onClose }: { open: boolean; camera: Camera | null; onClose: () => void }) {
   const m = useMessages()
   const catalog = useStore((s) => s.catalog)
   const { values, set, shown } = useDialogForm<CameraForm>(open, () => ({
@@ -254,12 +257,12 @@ function CameraDetails({ camera }: { camera: Camera }) {
 }
 
 /** Every camera, detected or Manual: kind, alias, sensor, pixel size and the rigs it is on; its calibration defaults under its disclosure. */
-export function CamerasSection() {
+export function CamerasSection({ onAdd }: { onAdd: () => void }) {
   const m = useMessages()
   const catalog = useStore((s) => s.catalog)
-  const [editing, setEditing] = useState<{ camera: Camera | null } | null>(null)
+  const [editing, setEditing] = useState<Camera | null>(null)
   const rigCount = (c: Camera) => equipmentUsers(catalog, "camera", c.id).length
-  const add: Action = { id: "add-camera", label: m.equipment_add_camera(), opensDialog: true, run: () => setEditing({ camera: null }) }
+  const add: Action = { id: "add-camera", label: m.equipment_add_camera(), opensDialog: true, run: onAdd }
   const columns: Column<Camera>[] = [
     { id: "name", header: m.equipment_name(), rowHeader: true, truncate: true, sortValue: (c) => c.name, cell: (c) => c.name },
     // Kind and source are in the Columns menu (and the details), so the table fits a 1280 px window in both languages.
@@ -274,7 +277,6 @@ export function CamerasSection() {
     <>
       <ListSection<Camera>
         title={m.equipment_cameras()}
-        add={add}
         table={{
           label: m.equipment_cameras(),
           rows: Object.values(catalog.cameras),
@@ -286,11 +288,11 @@ export function CamerasSection() {
           initialSort: { columnId: "name", direction: "asc" },
           stickyFirstColumn: true,
           expand: { render: (c) => <CameraDetails camera={c} /> },
-          empty: <EmptyState icon={CameraIcon} title={m.equipment_no_cameras()} action={null} />,
-          rowActions: (c) => recordMenu(m, catalog, "camera", { id: c.id, name: cameraLabel(c) }, () => setEditing({ camera: c })),
+          empty: <EmptyState icon={CameraIcon} title={m.equipment_no_cameras()} action={<ActionButton action={add} />} />,
+          rowActions: (c) => recordMenu(m, catalog, "camera", { id: c.id, name: cameraLabel(c) }, () => setEditing(c)),
         }}
       />
-      <CameraDialog open={editing !== null} camera={editing?.camera ?? null} onClose={() => setEditing(null)} />
+      <CameraDialog open={editing !== null} camera={editing} onClose={() => setEditing(null)} />
     </>
   )
 }
@@ -306,7 +308,7 @@ interface TelescopeForm {
 }
 
 /** Add a telescope (`telescope` null) or edit one: name, focal length and aperture. */
-function TelescopeDialog({ open, telescope, onClose }: { open: boolean; telescope: Telescope | null; onClose: () => void }) {
+export function TelescopeDialog({ open, telescope, onClose }: { open: boolean; telescope: Telescope | null; onClose: () => void }) {
   const m = useMessages()
   const { values, set, shown } = useDialogForm<TelescopeForm>(open, () => ({ name: telescope?.name ?? "", focal: telescope?.focalLengthMm ?? null, aperture: telescope?.apertureMm ?? null }))
   const errors: FieldErrors<keyof TelescopeForm> = {
@@ -334,12 +336,12 @@ function TelescopeDialog({ open, telescope, onClose }: { open: boolean; telescop
 }
 
 /** Every telescope, detected or Manual: focal length, aperture and the rigs it is on. */
-export function TelescopesSection() {
+export function TelescopesSection({ onAdd }: { onAdd: () => void }) {
   const m = useMessages()
   const catalog = useStore((s) => s.catalog)
-  const [editing, setEditing] = useState<{ telescope: Telescope | null } | null>(null)
+  const [editing, setEditing] = useState<Telescope | null>(null)
   const rigCount = (t: Telescope) => equipmentUsers(catalog, "telescope", t.id).length
-  const add: Action = { id: "add-telescope", label: m.equipment_add_telescope(), opensDialog: true, run: () => setEditing({ telescope: null }) }
+  const add: Action = { id: "add-telescope", label: m.equipment_add_telescope(), opensDialog: true, run: onAdd }
   const columns: Column<Telescope>[] = [
     { id: "name", header: m.equipment_name(), rowHeader: true, truncate: true, sortValue: (t) => t.name, cell: (t) => t.name },
     { id: "focal", header: m.run_field_focal_length(), align: "right", sortValue: (t) => t.focalLengthMm, cell: (t) => formatMm(t.focalLengthMm) },
@@ -351,7 +353,6 @@ export function TelescopesSection() {
     <>
       <ListSection<Telescope>
         title={m.equipment_telescopes()}
-        add={add}
         table={{
           label: m.equipment_telescopes(),
           rows: Object.values(catalog.telescopes),
@@ -359,11 +360,11 @@ export function TelescopesSection() {
           getRowId: (t) => t.id,
           rowLabel: (t) => t.name,
           initialSort: { columnId: "name", direction: "asc" },
-          empty: <EmptyState icon={TelescopeIcon} title={m.equipment_no_telescopes()} action={null} />,
-          rowActions: (t) => recordMenu(m, catalog, "telescope", t, () => setEditing({ telescope: t })),
+          empty: <EmptyState icon={TelescopeIcon} title={m.equipment_no_telescopes()} action={<ActionButton action={add} />} />,
+          rowActions: (t) => recordMenu(m, catalog, "telescope", t, () => setEditing(t)),
         }}
       />
-      <TelescopeDialog open={editing !== null} telescope={editing?.telescope ?? null} onClose={() => setEditing(null)} />
+      <TelescopeDialog open={editing !== null} telescope={editing} onClose={() => setEditing(null)} />
     </>
   )
 }
@@ -378,7 +379,7 @@ interface ReducerForm {
 }
 
 /** Add a reducer or extender (`reducer` null) or edit one: its name and factor. */
-function ReducerDialog({ open, reducer, onClose }: { open: boolean; reducer: Reducer | null; onClose: () => void }) {
+export function ReducerDialog({ open, reducer, onClose }: { open: boolean; reducer: Reducer | null; onClose: () => void }) {
   const m = useMessages()
   const { values, set, shown } = useDialogForm<ReducerForm>(open, () => ({ name: reducer?.name ?? "", factor: reducer?.factor ?? null }))
   const errors: FieldErrors<keyof ReducerForm> = {
@@ -396,11 +397,11 @@ function ReducerDialog({ open, reducer, onClose }: { open: boolean; reducer: Red
 }
 
 /** Every reducer and extender: its factor and the rigs it is on. */
-export function ReducersSection() {
+export function ReducersSection({ onAdd }: { onAdd: () => void }) {
   const m = useMessages()
   const catalog = useStore((s) => s.catalog)
-  const [editing, setEditing] = useState<{ reducer: Reducer | null } | null>(null)
-  const add: Action = { id: "add-reducer", label: m.equipment_add_reducer(), opensDialog: true, run: () => setEditing({ reducer: null }) }
+  const [editing, setEditing] = useState<Reducer | null>(null)
+  const add: Action = { id: "add-reducer", label: m.equipment_add_reducer(), opensDialog: true, run: onAdd }
   const columns: Column<Reducer>[] = [
     { id: "name", header: m.equipment_name(), rowHeader: true, truncate: true, sortValue: (r) => r.name, cell: (r) => r.name },
     { id: "factor", header: m.equipment_factor(), align: "right", sortValue: (r) => r.factor, cell: (r) => formatFactor(r.factor) },
@@ -410,7 +411,6 @@ export function ReducersSection() {
     <>
       <ListSection<Reducer>
         title={m.equipment_reducers()}
-        add={add}
         table={{
           label: m.equipment_reducers(),
           rows: Object.values(catalog.reducers),
@@ -418,11 +418,11 @@ export function ReducersSection() {
           getRowId: (r) => r.id,
           rowLabel: (r) => r.name,
           initialSort: { columnId: "name", direction: "asc" },
-          empty: <EmptyState icon={ZoomIn} title={m.equipment_no_reducers()} action={null} />,
-          rowActions: (r) => recordMenu(m, catalog, "reducer", r, () => setEditing({ reducer: r })),
+          empty: <EmptyState icon={ZoomIn} title={m.equipment_no_reducers()} action={<ActionButton action={add} />} />,
+          rowActions: (r) => recordMenu(m, catalog, "reducer", r, () => setEditing(r)),
         }}
       />
-      <ReducerDialog open={editing !== null} reducer={editing?.reducer ?? null} onClose={() => setEditing(null)} />
+      <ReducerDialog open={editing !== null} reducer={editing} onClose={() => setEditing(null)} />
     </>
   )
 }
@@ -477,7 +477,7 @@ function NightField({ label, description, value, onChange, today, min }: { label
  * is made of starts a new version from the night picked here, after its
  * current version's first night (PLAN-EQ-FR-07); a rename starts none.
  */
-function RigDialog({ open, rig, onClose, onSaved }: { open: boolean; rig: OpticalTrain | null; onClose: () => void; onSaved: (rigId: string) => void }) {
+export function RigDialog({ open, rig, onClose, onSaved }: { open: boolean; rig: OpticalTrain | null; onClose: () => void; onSaved: (rigId: string) => void }) {
   const m = useMessages()
   const catalog = useStore((s) => s.catalog)
   const byName = <T extends { name: string }>(records: Record<string, T>) => Object.values(records).sort((a, b) => a.name.localeCompare(b.name))
@@ -614,10 +614,10 @@ function RigVersions({ rig }: { rig: OpticalTrain }) {
 }
 
 /** Every rig: what it is made of, its focal length, field of view and filters, the Projects that use it, and its versions under its disclosure. */
-export function RigsSection({ activeRigId, onSaved }: { activeRigId: string | null; onSaved: (rigId: string) => void }) {
+export function RigsSection({ activeRigId, onSaved, onAdd }: { activeRigId: string | null; onSaved: (rigId: string) => void; onAdd: () => void }) {
   const m = useMessages()
   const catalog = useStore((s) => s.catalog)
-  const [editing, setEditing] = useState<{ rig: OpticalTrain | null } | null>(null)
+  const [editing, setEditing] = useState<OpticalTrain | null>(null)
   const projectsOf = (rig: OpticalTrain) =>
     Object.values(catalog.projects)
       .filter((p) => p.rigIds.includes(rig.id))
@@ -629,7 +629,7 @@ export function RigsSection({ activeRigId, onSaved }: { activeRigId: string | nu
   }
   const telescopeName = (r: OpticalTrain) => recordName(r.telescopeId ? catalog.telescopes[r.telescopeId] : undefined)
   const reducerName = (r: OpticalTrain) => recordName(r.reducerId ? catalog.reducers[r.reducerId] : undefined)
-  const add: Action = { id: "add-rig", label: m.project_add_rig(), opensDialog: true, run: () => setEditing({ rig: null }) }
+  const add: Action = { id: "add-rig", label: m.project_add_rig(), opensDialog: true, run: onAdd }
   const columns: Column<OpticalTrain>[] = [
     { id: "name", header: m.equipment_name(), rowHeader: true, truncate: true, sortValue: (r) => r.name, cell: (r) => r.name },
     { id: "camera", header: m.equipment_camera(), truncate: true, sortValue: cameraName, cell: cameraName },
@@ -652,7 +652,6 @@ export function RigsSection({ activeRigId, onSaved }: { activeRigId: string | nu
     <>
       <ListSection<OpticalTrain>
         title={m.project_rigs()}
-        add={add}
         table={{
           label: m.project_rigs(),
           rows: Object.values(catalog.opticalTrains),
@@ -664,11 +663,11 @@ export function RigsSection({ activeRigId, onSaved }: { activeRigId: string | nu
           initialSort: { columnId: "name", direction: "asc" },
           stickyFirstColumn: true,
           expand: { render: (r) => <RigVersions rig={r} /> },
-          empty: <EmptyState icon={Waypoints} title={m.equipment_no_rigs()} action={null} />,
-          rowActions: (r) => recordMenu(m, catalog, "rig", r, () => setEditing({ rig: r })),
+          empty: <EmptyState icon={Waypoints} title={m.equipment_no_rigs()} action={<ActionButton action={add} />} />,
+          rowActions: (r) => recordMenu(m, catalog, "rig", r, () => setEditing(r)),
         }}
       />
-      <RigDialog open={editing !== null} rig={editing?.rig ?? null} onClose={() => setEditing(null)} onSaved={onSaved} />
+      <RigDialog open={editing !== null} rig={editing} onClose={() => setEditing(null)} onSaved={onSaved} />
     </>
   )
 }
