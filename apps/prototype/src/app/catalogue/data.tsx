@@ -1,13 +1,13 @@
 /**
  * Catalogue entry (R9-COMPOSITION-PLAN §8.3): data display. KeyValueList
- * with source notes, a PathText and an UnknownValue with its reason; Stat;
+ * with source notes, a PathText, a DateText and an UnknownValue with its reason; Stat;
  * ChannelCoverage against a goal; EvidenceList of a session's Target; and
  * FilterChips, whose chips can be removed and cleared. Every visible string
  * comes from the message catalogue.
  */
 import { useState } from "react"
 import { useMessages } from "@/app/preferences"
-import { ChannelCoverage, FilterChips, KeyValueList, PathText, Stat } from "@/components/app/data"
+import { ChannelCoverage, DateText, FilterChips, KeyValueList, PathText, Stat } from "@/components/app/data"
 import { EvidenceList } from "@/components/app/evidence-list"
 import { UnknownValue } from "@/components/app/feedback"
 import { Section } from "@/components/app/page"
@@ -38,6 +38,7 @@ export function DataCatalogue() {
           <KeyValueList
             items={[
               { label: m.location_path(), value: <PathText path="/Volumes/Astro-T7/Captures/NGC7000/2026-09-30/OIII" />, mono: false },
+              { label: m.location_last_indexed(), value: <DateText at="2026-10-04T10:00:00Z" /> },
               { label: m.run_col_channel(), value: "OIII", source: m.session_header_source({ keyword: "FILTER" }) },
               { label: m.session_column_exposure(), value: formatExposure(300), source: m.session_header_source({ keyword: "EXPTIME" }) },
               { label: m.ds_pixel_scale(), value: <UnknownValue label={m.ds_fov_unknown()} reason={m.ds_equipment_not_confirmed()} /> },

@@ -13,9 +13,9 @@
  * - `StatusText`, `StatusSelection`: plain words, and the selection count.
  * - `StatusOperation` and `MiniProgress`: one running operation; inline,
  *   Cancel shows on hover or focus in place of what ends the item.
- * - `StatusCounter`: a glyph and a count that opens the page it counts on
- *   (F7): one page at once, several through a menu naming each page with
- *   its count, never a list of the issues themselves.
+ * - `StatusCounter`: a glyph and a count that opens a menu naming each
+ *   page its issues are on, with its count, whether one issue or several
+ *   (F7, R11); never a list of the issues themselves.
  * - `ListPopover`: a trigger (glyph plus count) that opens a list panel with
  *   a header. Its body is `ListRows` with `ListNotice` or
  *   `ListOperationRow` rows.
@@ -220,7 +220,7 @@ export interface StatusCounterProps extends DataAttributes {
   icon: LucideIcon
   tone: ListTone
   count: number
-  /** One page opens at once; several open a menu naming each page with its count. */
+  /** The menu lists every page, one or several, so a single issue opens the same menu as many (R11). */
   pages: StatusCounterPage[]
 }
 
@@ -234,27 +234,10 @@ export function StatusCounter({ label, icon: Icon, tone, count, pages, ...data }
       {count}
     </>
   )
-  const look = "shrink-0 gap-1 px-1 text-muted-foreground"
-  const only = pages.length === 1 ? pages[0] : undefined
-  if (only) {
-    const name = `${label}: ${only.label}`
-    return (
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <Button variant="ghost" size="xs" className={look} render={<Link to={only.link.to as never} params={only.link.params as never} search={only.link.search as never} />} aria-label={name} {...data}>
-              {glyph}
-            </Button>
-          }
-        />
-        <TooltipContent side="top">{name}</TooltipContent>
-      </Tooltip>
-    )
-  }
   const items: MenuItem[] = [{ heading: label }, ...pages.map((page) => ({ id: page.id, label: page.label, run: () => follow(page.link) }))]
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger render={<Button variant="ghost" size="xs" className={look} />} aria-label={label} {...data}>
+      <DropdownMenuTrigger render={<Button variant="ghost" size="xs" className="shrink-0 gap-1 px-1 text-muted-foreground" />} aria-label={label} {...data}>
         {glyph}
       </DropdownMenuTrigger>
       <DropdownMenuContent side="top" align="end" className="w-auto min-w-48">

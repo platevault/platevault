@@ -1,11 +1,11 @@
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from "@tanstack/react-router"
-import { render, screen, within } from "@testing-library/react"
+import { fireEvent, render, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest"
 import { framesInLocation } from "@/features/t1/lib/locations"
 import { createSeed } from "@/domain/seed"
 import { locationDiskUse } from "@/domain/storage"
-import { formatBytes, formatCount } from "@/lib/format"
+import { formatBytes, formatCount, formatDate, formatDateTime } from "@/lib/format"
 import { m } from "@/lib/i18n"
 import { SCHEMA_VERSION, store } from "@/store/core"
 import { initialSliceStates, sliceVersions } from "@/store/slices"
@@ -41,7 +41,44 @@ async function fact(label: string): Promise<string> {
 }
 
 describe("Settings › Locations (cmvgf)", () => {
-  it("repeats a location's Frames, Size and Disk free in its details, so they read with those columns hidden", async () => {
+  it("shows every column by default, and the Columns menu still hides one (R11)", async () => {
+    const user = userEvent.setup()
+    renderAt("/")
+    const table = await screen.findByRole("table", { name: m.common_locations() })
+    const headers = () => within(table).getAllByRole("columnheader").map((cell) => cell.textContent)
+    expect(headers()).toEqual(expect.arrayContaining([m.location_col_frames(), m.location_col_size(), m.location_col_free()]))
+    await user.click(screen.getByRole("button", { name: m.display_menu_columns() }))
+    const items = within(await screen.findByRole("menu")).getAllByRole("menuitemcheckbox")
+    expect(items.map((item) => item.getAttribute("aria-checked"))).not.toContain("false")
+    await user.click(within(screen.getByRole("menu")).getByRole("menuitemcheckbox", { name: m.location_col_size() }))
+    expect(headers()).not.toContain(m.location_col_size())
+  })
+
+  it("reads Indexed as the date, with the date and time for screen readers and on hover (R11)", async () => {
+    const indexedAt = store.getState().catalog.locations[SPARE]!.lastIndexedAt!
+    renderAt("/")
+    const row = (await screen.findByRole("rowheader", { name: "Spare captures" })).closest("tr")!
+    const time = within(row).getByText(formatDate(indexedAt)).closest("time")!
+    expect(time).toHaveAttribute("datetime", indexedAt)
+    expect(within(time).getByText(formatDateTime(indexedAt))).toHaveClass("sr-only")
+  })
+
+  it("marks the sides of the frame that hide scrolled columns, for the pinned columns' edge cues (R11)", async () => {
+    renderAt("/")
+    const frame = (await screen.findByRole("table", { name: m.common_locations() })).parentElement!
+    Object.defineProperty(frame, "scrollWidth", { configurable: true, value: 900 })
+    Object.defineProperty(frame, "clientWidth", { configurable: true, value: 700 })
+    const scrollTo = (left: number) => {
+      frame.scrollLeft = left
+      fireEvent.scroll(frame)
+      return [frame.dataset.scrollStart, frame.dataset.scrollEnd]
+    }
+    expect(scrollTo(0)).toEqual(["false", "true"])
+    expect(scrollTo(100)).toEqual(["true", "true"])
+    expect(scrollTo(200)).toEqual(["true", "false"])
+  })
+
+  it("repeats a location's Frames, Size and Disk free in its details, so they still read once those columns are hidden", async () => {
     const { catalog, disk } = store.getState()
     const use = locationDiskUse(disk, catalog.locations[SPARE]!)!
     renderAt(`/?locationId=${SPARE}`)

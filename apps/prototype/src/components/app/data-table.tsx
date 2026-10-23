@@ -47,13 +47,15 @@
  *   every group shares the column widths and the pinned header row.
  * - Pinned first column (opt-in `stickyFirstColumn`): the selection column
  *   and the first column stay in view while a wide table scrolls sideways,
- *   and so does the row-actions column at the right edge.
+ *   and so does the row-actions column at the right edge. A soft shade on a
+ *   pinned column's inner edge shows content hidden on that side.
  * - Truncation (`truncate` columns): a cell cuts its text with an ellipsis
  *   and shows it in full on hover while it is cut. Its text has no
  *   min-content width, so a frame too narrow for every column's text shrinks
  *   the truncated columns, each in proportion to its width, while the others
  *   keep theirs: the table stays inside its frame wherever the untruncated
- *   columns fit.
+ *   columns fit. A `truncateMin` column shrinks no further than its floor
+ *   (`name`: a typical record name); past it the table scrolls sideways.
  * - Columns menu (opt-in `hideable` columns): "Columns ▾" in the toolbar
  *   row lists a checkbox per hideable column; `defaultHidden` ones start
  *   hidden. The row header, the selection and the row actions always show
@@ -292,16 +294,28 @@ export type DataTableProps<T> = DataTableBaseProps<T> & DataTableRowProps<T>
 /** What the toolbar slot moves focus to after a swap took the focused control away. */
 const SLOT_FOCUSABLE = "button:not([disabled]), input:not([disabled]), [role=checkbox], [tabindex]:not([tabindex='-1'])"
 
+/** The floors of `truncateMin` columns, from the widest demo values: "Astro-T7 calibration" 121 px, "Ainda não indexado" 119 px. */
+const TRUNCATE_MIN = { name: "min-w-32", date: "min-w-32" } as const
+
+/**
+ * The scroll-edge cue of a pinned column: a shade of the scrim colour fading
+ * past its inner edge, shown while the frame hides content on that side.
+ */
+const EDGE_CUE = "after:pointer-events-none after:absolute after:inset-y-0 after:w-2 after:to-transparent after:opacity-0 motion-safe:after:transition-opacity after:from-(--scrim)"
+const EDGE_CUE_START = cn(EDGE_CUE, "after:left-full after:bg-linear-to-r group-data-[scroll-start=true]/frame:after:opacity-100")
+const EDGE_CUE_END = cn(EDGE_CUE, "after:right-full after:bg-linear-to-l group-data-[scroll-end=true]/frame:after:opacity-100")
+
 /**
  * A truncated cell's content. The grid's one `minmax(0, 1fr)` track gives it no min-content width, so under
  * the table's auto layout a truncated column can give up width down to its header's, while every other
  * column keeps its content width; the cell's `max-w-*` still caps how wide it grows. When the frame is too
  * narrow, the truncated columns share what the other columns leave, each in proportion to its own width,
- * and cut their text with the full text on hover (T2).
+ * and cut their text with the full text on hover (T2). A `min` floor stops the column shrinking below it,
+ * so the table scrolls sideways instead.
  */
-function Truncated({ children }: { children: ReactNode }) {
+function Truncated({ min, children }: { min?: keyof typeof TRUNCATE_MIN; children: ReactNode }) {
   return (
-    <div className="grid grid-cols-1">
+    <div className={cn("grid grid-cols-1", min && TRUNCATE_MIN[min])}>
       <div className="truncate" onPointerEnter={titleWhenCut}>
         {children}
       </div>
@@ -428,6 +442,30 @@ export function DataTable<T>({
     const observer = new ResizeObserver(update)
     observer.observe(header)
     return () => observer.disconnect()
+  }, [stickyFirstColumn])
+
+  // Which sides of a pinned table hide scrolled content: `data-scroll-start`
+  // and `data-scroll-end` on the frame show the pinned columns' edge cues
+  // (overlay scrollbars stay hidden until a scroll). Set on the element, so
+  // scrolling never re-renders the table.
+  useLayoutEffect(() => {
+    const container = frame.current
+    const table = tableRef.current
+    if (!stickyFirstColumn || !container || !table) return
+    const update = () => {
+      const end = container.scrollWidth - container.clientWidth
+      container.dataset.scrollStart = String(container.scrollLeft > 0)
+      container.dataset.scrollEnd = String(container.scrollLeft < end - 1)
+    }
+    update()
+    container.addEventListener("scroll", update, { passive: true })
+    const observer = new ResizeObserver(update)
+    observer.observe(container)
+    observer.observe(table)
+    return () => {
+      container.removeEventListener("scroll", update)
+      observer.disconnect()
+    }
   }, [stickyFirstColumn])
 
   // The batch bar and the toolbar row swap in place. When the swap removed the
@@ -618,7 +656,10 @@ export function DataTable<T>({
   const nameOf = (row: T) => rowLabel?.(row) ?? selection?.rowLabel(row) ?? getRowId(row)
   const columnCount = columns.length + (selection ? 1 : 0) + (hasRowActions ? 1 : 0)
   // Pinned cells are opaque (card plus the row's tint, `--row-bg`) and sit
-  // under the sticky header (z-10). The last pinned cell draws the edge.
+  // under the sticky header (z-10). The last pinned cell draws the edge, and
+  // a soft shade past it while content is scrolled away under it (the
+  // frame's `data-scroll-start`); the row-actions column mirrors it
+  // (`data-scroll-end`).
   const pinned = (position: "first" | "only" | "last", head = false) =>
     stickyFirstColumn
       ? cn(
@@ -626,13 +667,14 @@ export function DataTable<T>({
           head ? "bg-card" : "z-1 bg-card [background-image:linear-gradient(var(--row-bg),var(--row-bg))]",
           position === "last" ? "left-10" : "left-0",
           position !== "first" && "shadow-[inset_-1px_0_0_var(--border)]",
+          position !== "first" && EDGE_CUE_START,
           !head && position !== "last" && "group-aria-[current=true]/row:shadow-[inset_2px_0_0_var(--primary)]",
           !head && position === "only" && "group-aria-[current=true]/row:shadow-[inset_2px_0_0_var(--primary),inset_-1px_0_0_var(--border)]",
         )
       : undefined
   const pinnedEnd = (head = false) =>
     stickyFirstColumn
-      ? cn("sticky right-0 shadow-[inset_1px_0_0_var(--border)]", head ? "bg-card" : "z-1 bg-card [background-image:linear-gradient(var(--row-bg),var(--row-bg))]")
+      ? cn("sticky right-0 shadow-[inset_1px_0_0_var(--border)]", EDGE_CUE_END, head ? "bg-card" : "z-1 bg-card [background-image:linear-gradient(var(--row-bg),var(--row-bg))]")
       : undefined
   const columnPin = selection ? "last" : "only"
 
@@ -656,7 +698,7 @@ export function DataTable<T>({
     // stays pinned while long tables scroll inside it. Scroll padding the
     // height of that header keeps a focused row out from under it (WCAG 2.4.11).
     "relative scroll-pt-[calc(var(--row-h)+1px)] overflow-auto rounded-md border bg-background",
-    stickyFirstColumn && "scroll-pl-(--pinned-w) bg-card",
+    stickyFirstColumn && "group/frame scroll-pl-(--pinned-w) bg-card",
     scroll === "frame" && "max-h-[calc(100dvh-14rem)]",
     scroll === "fill" && "min-h-0 flex-1",
     className,
@@ -802,7 +844,7 @@ export function DataTable<T>({
                       </TableCell>
                     ) : null}
                     {columns.map((column, columnIndex) => {
-                      const content = column.truncate ? <Truncated>{column.cell(row)}</Truncated> : column.cell(row)
+                      const content = column.truncate ? <Truncated min={column.truncateMin}>{column.cell(row)}</Truncated> : column.cell(row)
                       const disclosure = columnIndex === 0 && expand !== undefined
                       return (
                         <TableCell
