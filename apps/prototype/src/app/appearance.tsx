@@ -17,7 +17,9 @@ export function LanguagePicker() {
   const { locale } = usePreferences()
   const machine = LOCALES.filter((id) => needsReviewNotice(id))
   return (
+    // On a setup step the select would span the page; a SettingsRow sizes it itself.
     <SelectField<Locale>
+      className="max-w-sm"
       label={m.shell_language()}
       value={locale}
       options={LOCALES.map((id) => ({ value: id, label: LOCALE_META[id].nativeName }))}
