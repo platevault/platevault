@@ -1,22 +1,24 @@
 /**
  * ThemePicker (plan §3.3 P14; user item 256): the mode first (Dark, Light,
  * Match system: the owner's order, as in HIGH-LEVEL-DESIGN.md), then the
- * themes of that mode. Choices apply at once and persist in this browser
- * (`app/preferences.ts`).
+ * themes of that mode. Match system picks two: a dark theme and a light
+ * theme, which the app switches between as the OS does (round 11). Choices
+ * apply at once and persist in this browser (`app/preferences.ts`).
  *
  * - `ThemePicker`: the Settings › Appearance form, a segmented mode control
  *   over live swatches of that mode's themes.
- * - `ThemeMenuItems`: the same two choices as menu radio groups, for a
- *   toolbar menu's Theme submenu.
+ * - `ThemeMenuItems`: the same choices as menu radio groups, for a toolbar
+ *   menu's Theme submenu.
  *
- * Switching mode keeps the theme family when it has the other scheme
- * (Gruvbox Dark ↔ Gruvbox Light); otherwise it falls back to the PlateVault
- * theme of that mode. Match system follows the OS between the two
- * PlateVault themes (`SYSTEM_THEMES`).
+ * Leaving Match system applies the pair's theme of the chosen mode. Between
+ * Dark and Light, a switch keeps the theme family when it has the other
+ * scheme (Gruvbox Dark ↔ Gruvbox Light); otherwise it applies the pair's
+ * theme of that mode.
  */
 import { Monitor, Moon, Sun } from "lucide-react"
-import { setTheme, type ThemePreference, useMessages, usePreferences } from "@/app/preferences"
-import { SYSTEM_THEMES, THEMES, type ThemeId, type ThemeInfo, type ThemeScheme, themeInfo } from "@/app/themes"
+import { Fragment, useId } from "react"
+import { setSystemThemes, setTheme, type SystemThemes, type ThemePreference, useMessages, usePreferences } from "@/app/preferences"
+import { THEMES, type ThemeId, type ThemeInfo, type ThemeScheme, themeInfo } from "@/app/themes"
 import { DropdownMenuGroup, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
@@ -27,11 +29,18 @@ export type ThemeMode = ThemeScheme | "system"
 
 const MODES: ThemeMode[] = ["dark", "light", "system"]
 
+/** Match system's two choices, in the modes' order. */
+const SCHEMES: ThemeScheme[] = ["dark", "light"]
+
 const MODE_ICON = { light: Sun, dark: Moon, system: Monitor } as const
 
 function modeLabel(m: Messages, mode: ThemeMode): string {
   const label: Record<ThemeMode, () => string> = { light: m.theme_picker_light, dark: m.theme_picker_dark, system: m.shell_theme_match_system }
   return label[mode]()
+}
+
+function schemeThemeLabel(m: Messages, scheme: ThemeScheme): string {
+  return scheme === "dark" ? m.theme_picker_dark_theme() : m.theme_picker_light_theme()
 }
 
 export function themeMode(theme: ThemePreference): ThemeMode {
@@ -44,11 +53,19 @@ function family(id: ThemeId): string {
   return cut > 0 ? id.slice(0, cut) : id
 }
 
-/** The preference after choosing `mode`, from the theme now applied. */
-export function themeForMode(resolved: ThemeId, mode: ThemeMode): ThemePreference {
+/** The theme choice as the picker reads it: the preference, the theme it applies and the Match system pair. */
+interface ThemeChoice {
+  theme: ThemePreference
+  resolvedTheme: ThemeId
+  systemThemes: SystemThemes
+}
+
+/** The preference after choosing `mode`, from the current choice. */
+export function themeForMode({ theme, resolvedTheme, systemThemes }: ThemeChoice, mode: ThemeMode): ThemePreference {
   if (mode === "system") return "system"
-  if (themeInfo(resolved).scheme === mode) return resolved
-  return THEMES.find((theme) => theme.scheme === mode && family(theme.id) === family(resolved))?.id ?? SYSTEM_THEMES[mode]
+  if (theme === "system") return systemThemes[mode]
+  if (themeInfo(resolvedTheme).scheme === mode) return resolvedTheme
+  return THEMES.find((option) => option.scheme === mode && family(option.id) === family(resolvedTheme))?.id ?? systemThemes[mode]
 }
 
 function themesOf(scheme: ThemeScheme): ThemeInfo[] {
@@ -87,15 +104,50 @@ const OPTION = "flex cursor-default flex-col gap-1.5 rounded-lg border border-bo
 /** One swatch column at least 9.5rem wide, or the whole box when it is narrower, so the grid never runs past its edge. */
 const GRID = "grid grid-cols-[repeat(auto-fill,minmax(min(9.5rem,100%),1fr))] gap-2"
 
+/** One scheme's themes as swatch radios; `labelledBy` names the group when a visible heading does, else `label` does. */
+function ThemeChoices({ scheme, value, onChange, label, labelledBy }: { scheme: ThemeScheme; value: ThemeId; onChange: (id: ThemeId) => void; label?: string; labelledBy?: string }) {
+  return (
+    <RadioGroup aria-label={label} aria-labelledby={labelledBy} value={value} onValueChange={(next) => onChange(next as ThemeId)} className={GRID} data-theme-choices={scheme}>
+      {themesOf(scheme).map((option) => (
+        <label key={option.id} className={OPTION} data-theme-option={option.id}>
+          <ThemeSwatch id={option.id as ThemeId} />
+          <span className="flex items-center gap-1.5 px-0.5 text-xs">
+            <RadioGroupItem value={option.id} />
+            <span className="truncate">{option.name}</span>
+          </span>
+        </label>
+      ))}
+    </RadioGroup>
+  )
+}
+
+/** Match system's pair: a dark theme and a light theme, each under its own heading. */
+function SystemThemeChoices({ systemThemes }: { systemThemes: SystemThemes }) {
+  const m = useMessages()
+  const base = useId()
+  return (
+    <div className="flex flex-col gap-4">
+      {SCHEMES.map((scheme) => (
+        <div key={scheme} className="flex flex-col gap-2">
+          <span id={`${base}${scheme}`} className="text-xs font-medium text-muted-foreground">
+            {schemeThemeLabel(m, scheme)}
+          </span>
+          <ThemeChoices scheme={scheme} value={systemThemes[scheme]} onChange={(id) => setSystemThemes({ ...systemThemes, [scheme]: id })} labelledBy={`${base}${scheme}`} />
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export function ThemePicker() {
   const m = useMessages()
-  const { theme, resolvedTheme } = usePreferences()
-  const mode = themeMode(theme)
+  const choice = usePreferences()
+  const mode = themeMode(choice.theme)
   return (
     <div className="flex flex-col gap-3" data-theme-picker={mode}>
       <ToggleGroup
         value={[mode]}
-        onValueChange={(value) => value[0] && setTheme(themeForMode(resolvedTheme, value[0] as ThemeMode))}
+        onValueChange={(value) => value[0] && setTheme(themeForMode(choice, value[0] as ThemeMode))}
         variant="outline"
         size="sm"
         spacing={0}
@@ -114,43 +166,40 @@ export function ThemePicker() {
         })}
       </ToggleGroup>
       {mode === "system" ? (
-        // One fixed pair: a preview of what the OS switches between, not a choice.
-        <div className={GRID}>
-          <div className="flex flex-col gap-1.5 rounded-lg border border-border p-1.5" data-theme-option="system">
-            <span className="flex gap-1">
-              <ThemeSwatch id={SYSTEM_THEMES.dark} className="flex-1" />
-              <ThemeSwatch id={SYSTEM_THEMES.light} className="flex-1" />
-            </span>
-            <span className="truncate px-0.5 text-xs text-muted-foreground">{`${themeInfo(SYSTEM_THEMES.dark).name} · ${themeInfo(SYSTEM_THEMES.light).name}`}</span>
-          </div>
-        </div>
+        <SystemThemeChoices systemThemes={choice.systemThemes} />
       ) : (
-        <RadioGroup aria-label={m.theme_picker_theme()} value={theme} onValueChange={(value) => setTheme(value as ThemeId)} className={GRID}>
-          {themesOf(mode).map((option) => (
-            <label key={option.id} className={OPTION} data-theme-option={option.id}>
-              <ThemeSwatch id={option.id as ThemeId} />
-              <span className="flex items-center gap-1.5 px-0.5 text-xs">
-                <RadioGroupItem value={option.id} />
-                <span className="truncate">{option.name}</span>
-              </span>
-            </label>
-          ))}
-        </RadioGroup>
+        <ThemeChoices scheme={mode} value={choice.resolvedTheme} onChange={setTheme} label={m.theme_picker_theme()} />
       )}
     </div>
   )
 }
 
-/** The mode and the mode's themes as menu radio groups; the host puts them in its Theme submenu. */
+/** One menu radio group of a scheme's themes under its label. */
+function ThemeMenuGroup({ scheme, label, value, onChange }: { scheme: ThemeScheme; label: string; value: ThemeId; onChange: (id: ThemeId) => void }) {
+  return (
+    <DropdownMenuGroup>
+      <DropdownMenuLabel>{label}</DropdownMenuLabel>
+      <DropdownMenuRadioGroup value={value} onValueChange={(next) => onChange(next as ThemeId)} data-theme-choices={scheme}>
+        {themesOf(scheme).map((option) => (
+          <DropdownMenuRadioItem key={option.id} value={option.id} data-theme-option={option.id}>
+            {option.name}
+          </DropdownMenuRadioItem>
+        ))}
+      </DropdownMenuRadioGroup>
+    </DropdownMenuGroup>
+  )
+}
+
+/** The mode, then the mode's themes (Match system: its dark and light theme) as menu radio groups; the host puts them in its Theme submenu. */
 export function ThemeMenuItems() {
   const m = useMessages()
-  const { theme, resolvedTheme } = usePreferences()
-  const mode = themeMode(theme)
+  const choice = usePreferences()
+  const mode = themeMode(choice.theme)
   return (
     <>
       <DropdownMenuGroup>
         <DropdownMenuLabel>{m.theme_picker_mode()}</DropdownMenuLabel>
-        <DropdownMenuRadioGroup value={mode} onValueChange={(value) => setTheme(themeForMode(resolvedTheme, value as ThemeMode))}>
+        <DropdownMenuRadioGroup value={mode} onValueChange={(value) => setTheme(themeForMode(choice, value as ThemeMode))}>
           {MODES.map((option) => (
             <DropdownMenuRadioItem key={option} value={option} data-theme-mode={option}>
               {modeLabel(m, option)}
@@ -158,19 +207,17 @@ export function ThemeMenuItems() {
           ))}
         </DropdownMenuRadioGroup>
       </DropdownMenuGroup>
-      {mode === "system" ? null : (
+      {mode === "system" ? (
+        SCHEMES.map((scheme) => (
+          <Fragment key={scheme}>
+            <DropdownMenuSeparator />
+            <ThemeMenuGroup scheme={scheme} label={schemeThemeLabel(m, scheme)} value={choice.systemThemes[scheme]} onChange={(id) => setSystemThemes({ ...choice.systemThemes, [scheme]: id })} />
+          </Fragment>
+        ))
+      ) : (
         <>
           <DropdownMenuSeparator />
-          <DropdownMenuGroup>
-            <DropdownMenuLabel>{m.theme_picker_theme()}</DropdownMenuLabel>
-            <DropdownMenuRadioGroup value={theme} onValueChange={(value) => setTheme(value as ThemeId)}>
-              {themesOf(mode).map((option) => (
-                <DropdownMenuRadioItem key={option.id} value={option.id} data-theme-option={option.id}>
-                  {option.name}
-                </DropdownMenuRadioItem>
-              ))}
-            </DropdownMenuRadioGroup>
-          </DropdownMenuGroup>
+          <ThemeMenuGroup scheme={mode} label={m.theme_picker_theme()} value={choice.resolvedTheme} onChange={setTheme} />
         </>
       )}
     </>

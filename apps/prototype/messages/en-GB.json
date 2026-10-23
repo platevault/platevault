@@ -4614,6 +4614,8 @@
   "theme_picker_light": "Light",
   "theme_picker_dark": "Dark",
   "theme_picker_theme": "Theme",
+  "theme_picker_dark_theme": "Dark theme",
+  "theme_picker_light_theme": "Light theme",
   "actions_blocked": "{action} blocked",
   "actions_for": "Actions for {name}",
   "catalogue_dialogs_heading": "Dialogs",

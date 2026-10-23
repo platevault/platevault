@@ -4970,6 +4970,8 @@
   "theme_picker_light": "Claro",
   "theme_picker_dark": "Escuro",
   "theme_picker_theme": "Tema",
+  "theme_picker_dark_theme": "Tema escuro",
+  "theme_picker_light_theme": "Tema claro",
   "actions_blocked": "{action}: bloqueado",
   "actions_for": "Ações de {name}",
   "catalogue_dialogs_heading": "Diálogos",
