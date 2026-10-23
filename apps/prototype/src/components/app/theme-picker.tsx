@@ -144,7 +144,8 @@ export function ThemePicker() {
   const choice = usePreferences()
   const mode = themeMode(choice.theme)
   return (
-    <div className="flex flex-col gap-3" data-theme-picker={mode}>
+    // The full row: in a SettingsRow's wrapping flex line the picker would shrink to one swatch column.
+    <div className="flex w-full min-w-0 flex-col gap-3" data-theme-picker={mode}>
       <ToggleGroup
         value={[mode]}
         onValueChange={(value) => value[0] && setTheme(themeForMode(choice, value[0] as ThemeMode))}
