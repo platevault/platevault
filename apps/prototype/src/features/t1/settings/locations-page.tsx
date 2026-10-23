@@ -21,7 +21,7 @@ import { useMessages } from "@/app/preferences"
 import { ActionButton } from "@/components/app/actions"
 import { rowIssues, withIssueItems } from "@/components/app/issue-actions"
 import type { Action, Blocker, Column, ConfirmSpec, MenuItem } from "@/components/app/contracts"
-import { KeyValueList, PathText } from "@/components/app/data"
+import { DateText, KeyValueList, PathText } from "@/components/app/data"
 import { EmptyState, type PageNotice, useSaveState } from "@/components/app/feedback"
 import { SelectField, TextField } from "@/components/app/fields"
 import { FormDialog } from "@/components/app/form-dialog"
@@ -253,7 +253,14 @@ export function LocationsPage() {
     { id: "name", header: m.location_col_name(), rowHeader: true, truncate: true, truncateMin: "name", sortValue: (r) => r.location.displayName, cell: (r) => r.location.displayName },
     { id: "role", header: m.location_role(), sortValue: (r) => ROLE_ORDER.indexOf(r.location.role), cell: (r) => <StatusBadge kind="role" value={r.location.role} /> },
     { id: "state", header: m.location_col_state(), sortValue: (r) => attentionRank(locationAttention(r)), cell: (r) => <LocationAttentionBadge state={locationAttention(r)} /> },
-    { id: "indexed", header: m.location_col_indexed(), truncate: true, sortValue: (r) => r.location.lastIndexedAt, cell: (r) => (r.location.lastIndexedAt ? formatDateTime(r.location.lastIndexedAt) : m.location_not_indexed_yet()) },
+    {
+      id: "indexed",
+      header: m.location_col_indexed(),
+      truncate: true,
+      truncateMin: "date",
+      sortValue: (r) => r.location.lastIndexedAt,
+      cell: (r) => (r.location.lastIndexedAt ? <DateText at={r.location.lastIndexedAt} /> : m.location_not_indexed_yet()),
+    },
     { id: "frames", header: m.location_col_frames(), align: "right", hideable: true, sortValue: (r) => r.frames, cell: (r) => formatCount(r.frames) },
     { id: "size", header: m.location_col_size(), align: "right", hideable: true, sortValue: (r) => r.footprint, cell: (r) => (r.footprint === null ? "–" : formatBytes(r.footprint)) },
     { id: "free", header: m.location_col_free(), align: "right", hideable: true, sortValue: (r) => r.free, cell: (r) => (r.free === null ? "–" : formatBytes(r.free)) },
