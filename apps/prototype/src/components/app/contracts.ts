@@ -185,6 +185,11 @@ interface ColumnBase<T> {
   /** Truncate long text (paths, names); the full text shows only when it is cut (§6.2 T2). */
   truncate?: boolean
   /**
+   * A truncated column's floor. `name` keeps a typical record name ("Astro-T7 captures") whole: a frame too
+   * narrow for every column scrolls the table sideways (pin it with `stickyFirstColumn`) instead of cutting it.
+   */
+  truncateMin?: "name"
+  /**
    * The user can hide it from the table's Columns menu. The row header always shows, so a `rowHeader` column
    * is never hideable and never listed.
    */

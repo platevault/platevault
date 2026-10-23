@@ -250,7 +250,7 @@ export function LocationsPage() {
   }
 
   const columns: Column<LocationRow>[] = [
-    { id: "name", header: m.location_col_name(), rowHeader: true, truncate: true, sortValue: (r) => r.location.displayName, cell: (r) => r.location.displayName },
+    { id: "name", header: m.location_col_name(), rowHeader: true, truncate: true, truncateMin: "name", sortValue: (r) => r.location.displayName, cell: (r) => r.location.displayName },
     { id: "role", header: m.location_role(), sortValue: (r) => ROLE_ORDER.indexOf(r.location.role), cell: (r) => <StatusBadge kind="role" value={r.location.role} /> },
     { id: "state", header: m.location_col_state(), sortValue: (r) => attentionRank(locationAttention(r)), cell: (r) => <LocationAttentionBadge state={locationAttention(r)} /> },
     { id: "indexed", header: m.location_col_indexed(), truncate: true, sortValue: (r) => r.location.lastIndexedAt, cell: (r) => (r.location.lastIndexedAt ? formatDateTime(r.location.lastIndexedAt) : m.location_not_indexed_yet()) },
