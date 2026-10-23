@@ -41,7 +41,20 @@ async function fact(label: string): Promise<string> {
 }
 
 describe("Settings › Locations (cmvgf)", () => {
-  it("repeats a location's Frames, Size and Disk free in its details, so they read with those columns hidden", async () => {
+  it("shows every column by default, and the Columns menu still hides one (R11)", async () => {
+    const user = userEvent.setup()
+    renderAt("/")
+    const table = await screen.findByRole("table", { name: m.common_locations() })
+    const headers = () => within(table).getAllByRole("columnheader").map((cell) => cell.textContent)
+    expect(headers()).toEqual(expect.arrayContaining([m.location_col_frames(), m.location_col_size(), m.location_col_free()]))
+    await user.click(screen.getByRole("button", { name: m.display_menu_columns() }))
+    const items = within(await screen.findByRole("menu")).getAllByRole("menuitemcheckbox")
+    expect(items.map((item) => item.getAttribute("aria-checked"))).not.toContain("false")
+    await user.click(within(screen.getByRole("menu")).getByRole("menuitemcheckbox", { name: m.location_col_size() }))
+    expect(headers()).not.toContain(m.location_col_size())
+  })
+
+  it("repeats a location's Frames, Size and Disk free in its details, so they still read once those columns are hidden", async () => {
     const { catalog, disk } = store.getState()
     const use = locationDiskUse(disk, catalog.locations[SPARE]!)!
     renderAt(`/?locationId=${SPARE}`)
