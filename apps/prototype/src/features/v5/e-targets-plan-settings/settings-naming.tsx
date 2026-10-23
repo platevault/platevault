@@ -12,6 +12,7 @@
  * checked as typed against the whitelisted tokens and separators
  * (`validateNamingTemplate`), each problem a field error; Save writes the
  * changed ones, and an invalid one is refused inline with nothing saved.
+ * Group keywords follow, one row per grouping keyword (`GroupKeywordsSection`).
  */
 import { useState } from "react"
 import { useMessages } from "@/app/preferences"
@@ -30,6 +31,7 @@ import { type Messages, m, say } from "@/lib/i18n"
 import { setNamingOmit, setNamingTemplate } from "@/store/actions/settings"
 import { type CommitResult, useStore } from "@/store/core"
 import { versionNight } from "./calibration-model"
+import { GroupKeywordsSection } from "./group-keywords"
 
 /** `label` is a catalogue message, worded at render. */
 const TYPES: Array<{ type: NamingFrameType; label: () => string; role: "captures" | "calibration" }> = [
@@ -192,6 +194,7 @@ export function NamingSettingsPage() {
         })}
       </SettingsSection>
       <ListSection<TemplateToken> title={messages.fields_tokens()} table={{ label: messages.fields_tokens(), rows: tokens, columns: tokenColumns, getRowId: (t) => t.token }} />
+      <GroupKeywordsSection />
     </SettingsPage>
   )
 }

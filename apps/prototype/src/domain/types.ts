@@ -680,11 +680,11 @@ export interface ProjectInput {
   included: AssetId[]
 }
 
-/** The GROUP and PANEL keyword names (PRJ-FR-28): Settings holds the defaults, a Project may override them. */
-export interface GroupKeywords {
-  group: string
-  panel: string
-}
+/** A grouping keyword (PRJ-FR-28): the prefix of a group's View folder, `GROUP_<name>` or, for a mosaic panel, `PANEL_<name>`. Settings › Naming lists them from `GROUP_KEYWORD_KINDS`. */
+export type GroupKeywordKind = "group" | "panel"
+
+/** The grouping keyword names (PRJ-FR-28), one per kind: Settings holds the defaults, a Project may override them. */
+export type GroupKeywords = Record<GroupKeywordKind, string>
 
 /** What the View step chooses (VSEL-FR-16, PREP-FR-01, PREP-FR-04); a change reaches the View through Apply. */
 export interface ProjectSettings {
