@@ -10,9 +10,9 @@
  *   "Idle" when nothing runs.
  * - Right: a counter per severity (errors, warnings, info), shown only when
  *   non-zero, counting the issues not dismissed (`useIssues()`, so the
- *   source-list badges agree). Each opens the owning page filtered to the
- *   affected rows, or, with several pages, a menu naming each page with its
- *   count; never a list of the issues (F7). A muted ✓ with no issues. Then
+ *   source-list badges agree). Each opens a menu naming each owning page,
+ *   filtered to the affected rows, with its count, for one issue as for
+ *   several (R11); never a list of the issues (F7). A muted ✓ with no issues. Then
  *   the bell with the unread count, opening the notification history;
  *   opening it marks every notification read. The live region reads each
  *   notification once, as it arrives.
