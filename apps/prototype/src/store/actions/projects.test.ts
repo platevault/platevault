@@ -148,10 +148,14 @@ describe("there is no Reopen: a Closed Project is locked for good (PRJ-FR-25)", 
 
 describe("Project keyword overrides (PRJ-FR-28)", () => {
   it("refuses keyword names that cannot name View folders and saves valid ones", () => {
-    expect(refusedReasons(setProjectSettings(CYGNUS, { keywords: { group: "GROUP", panel: "group" } }))).toHaveLength(1)
+    expect(refusedReasons(setProjectSettings(CYGNUS, { keywords: { group: "GROUP", panel: "group" } }))).toEqual([
+      m.settings_keyword_same({ kind: m.common_mosaic_panel(), name: "GROUP" }),
+      m.settings_keyword_same({ kind: m.naming_keyword_group(), name: "group" }),
+    ])
+    expect(refusedReasons(setProjectSettings(CYGNUS, { keywords: { group: "RIG_SET", panel: "TILE" } }))).toEqual([m.settings_keyword_underscore({ name: "RIG_SET" })])
     expect(project(CYGNUS).settings.keywords).toBeNull()
-    expect(setProjectSettings(CYGNUS, { keywords: { group: "SET", panel: "TILE" } }).ok).toBe(true)
-    expect(project(CYGNUS).settings.keywords).toEqual({ group: "SET", panel: "TILE" })
+    expect(setProjectSettings(CYGNUS, { keywords: { group: "RIG-SET", panel: "TILE" } }).ok).toBe(true)
+    expect(project(CYGNUS).settings.keywords).toEqual({ group: "RIG-SET", panel: "TILE" })
   })
 })
 

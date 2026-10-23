@@ -12,7 +12,7 @@ import {
   setCameraAlias,
   setCameraCalibrationDefaults,
   setDefaultInputMode,
-  setGroupKeywords,
+  setGroupKeyword,
   setMatchingSettings,
   checkExecutable,
 } from "./settings"
@@ -32,7 +32,7 @@ beforeEach(() => {
 })
 
 const catalog = () => store.getState().catalog
-const refusal = (result: ReturnType<typeof setGroupKeywords>): string[] => {
+const refusal = (result: ReturnType<typeof setGroupKeyword>): string[] => {
   if (result.ok || result.reason !== "refused") throw new Error("expected a refusal")
   return result.reasons
 }
@@ -89,13 +89,26 @@ describe("Project defaults and keywords (PREP-FR-04, PRJ-FR-28)", () => {
     expect(store.getState().settings.defaultInputMode).toBe("copy")
   })
 
-  it("saves trimmed keyword names and refuses ones that cannot name View folders", () => {
-    expect(setGroupKeywords({ group: " SET ", panel: "TILE" }).ok).toBe(true)
-    expect(store.getState().settings.keywords).toEqual({ group: "SET", panel: "TILE" })
-    expect(refusal(setGroupKeywords({ group: "GROUP 1", panel: "group1" }))).toHaveLength(1)
-    expect(refusal(setGroupKeywords({ group: "Panel", panel: "PANEL" }))).toHaveLength(1)
-    expect(refusal(setGroupKeywords({ group: "NIGHT", panel: "PANEL" }))).toHaveLength(1)
-    expect(store.getState().settings.keywords).toEqual({ group: "SET", panel: "TILE" })
+  it("saves one trimmed grouping keyword and keeps the others", () => {
+    expect(setGroupKeyword("group", " SET ").ok).toBe(true)
+    expect(setGroupKeyword("panel", "MOSAIC-TILE").ok).toBe(true)
+    expect(store.getState().settings.keywords).toEqual({ group: "SET", panel: "MOSAIC-TILE" })
+  })
+
+  it("allows hyphens after the first letter and refuses _ as a name WBPP cannot hold", () => {
+    expect(refusal(setGroupKeyword("group", "MY_GROUP"))).toEqual([m.settings_keyword_underscore({ name: "MY_GROUP" })])
+    expect(refusal(setGroupKeyword("group", "-GROUP"))).toEqual([m.settings_keyword_invalid({ name: "-GROUP" })])
+    expect(refusal(setGroupKeyword("group", "GROUP 1"))).toEqual([m.settings_keyword_invalid({ name: "GROUP 1" })])
+    expect(setGroupKeyword("group", "RIG-SET").ok).toBe(true)
+  })
+
+  it("refuses a name another grouping keyword or the View already uses, or one WBPP would read inside another", () => {
+    expect(refusal(setGroupKeyword("group", "Panel"))).toEqual([m.settings_keyword_same({ kind: m.common_mosaic_panel(), name: "Panel" })])
+    expect(refusal(setGroupKeyword("group", "NIGHT"))).toEqual([m.settings_keyword_reserved({ name: "NIGHT" })])
+    expect(refusal(setGroupKeyword("group", "MY-PANEL"))).toEqual([m.settings_keyword_overlap({ inner: "PANEL", outer: "MY-PANEL" })])
+    expect(refusal(setGroupKeyword("panel", "GROUP-X"))).toEqual([m.settings_keyword_overlap({ inner: "GROUP", outer: "GROUP-X" })])
+    expect(refusal(setGroupKeyword("group", "SET-NIGHT"))).toEqual([m.settings_keyword_overlap({ inner: "NIGHT", outer: "SET-NIGHT" })])
+    expect(store.getState().settings.keywords).toEqual({ group: "GROUP", panel: "PANEL" })
   })
 })
 
