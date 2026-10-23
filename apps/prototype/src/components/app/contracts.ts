@@ -185,10 +185,11 @@ interface ColumnBase<T> {
   /** Truncate long text (paths, names); the full text shows only when it is cut (§6.2 T2). */
   truncate?: boolean
   /**
-   * A truncated column's floor. `name` keeps a typical record name ("Astro-T7 captures") whole: a frame too
-   * narrow for every column scrolls the table sideways (pin it with `stickyFirstColumn`) instead of cutting it.
+   * A truncated column's floor: `name` keeps a typical record name ("Astro-T7 captures") whole, `date` a date
+   * ("23 Oct 2026") or the short status in its place ("Not indexed yet"). A frame too narrow for every column
+   * scrolls the table sideways (pin it with `stickyFirstColumn`) instead of cutting them.
    */
-  truncateMin?: "name"
+  truncateMin?: "name" | "date"
   /**
    * The user can hide it from the table's Columns menu. The row header always shows, so a `rowHeader` column
    * is never hideable and never listed.

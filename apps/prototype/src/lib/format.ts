@@ -76,8 +76,8 @@ export function formatNight(night: string, withYear = false): string {
   return withYear ? `${label} ${year}` : label
 }
 
-/** Date and time in a named time zone: "18 Sep 2026, 21:04". */
-export function formatDateTime(iso: string, timeZone?: string): string {
+/** The calendar parts of an instant in a named time zone, months from the product tables. */
+function dateParts(iso: string, timeZone?: string): { date: string; time: string } {
   const parts = new Intl.DateTimeFormat("en-GB", {
     day: "numeric",
     month: "numeric",
@@ -88,7 +88,18 @@ export function formatDateTime(iso: string, timeZone?: string): string {
     timeZone,
   }).formatToParts(new Date(iso))
   const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? ""
-  return `${Number(part("day"))} ${monthName(Number(part("month")))} ${part("year")}, ${part("hour")}:${part("minute")}`
+  return { date: `${Number(part("day"))} ${monthName(Number(part("month")))} ${part("year")}`, time: `${part("hour")}:${part("minute")}` }
+}
+
+/** Date and time in a named time zone: "18 Sep 2026, 21:04". */
+export function formatDateTime(iso: string, timeZone?: string): string {
+  const { date, time } = dateParts(iso, timeZone)
+  return `${date}, ${time}`
+}
+
+/** The date alone in a named time zone: "18 Sep 2026". */
+export function formatDate(iso: string, timeZone?: string): string {
+  return dateParts(iso, timeZone).date
 }
 
 /** Clock time in a named time zone: "21:04". */

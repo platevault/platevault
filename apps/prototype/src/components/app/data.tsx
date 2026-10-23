@@ -1,14 +1,15 @@
 /**
  * Data display primitives (foundation-owned): key-value lists, stats,
- * paths, channel coverage and filter chips. EvidenceList is in
+ * paths, dates, channel coverage and filter chips. EvidenceList is in
  * evidence-list.tsx (a DataTable, which itself uses FilterChips).
  */
 import { X } from "lucide-react"
 import { useRef, type ReactNode } from "react"
 import { useMessages } from "@/app/preferences"
 import { Button } from "@/components/ui/button"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import type { QualityBreakdown } from "@/domain/library"
-import { formatCount, formatDateTime, formatDuration } from "@/lib/format"
+import { formatCount, formatDate, formatDateTime, formatDuration } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import { titleWhenCut } from "./cut-title"
 
@@ -67,6 +68,24 @@ export function PathText({ path, className, truncate = false }: { path: string; 
     <span className={cn("block font-mono text-xs", truncate ? "truncate" : "[overflow-wrap:anywhere]", className)} onPointerEnter={truncate ? titleWhenCut : undefined}>
       {path}
     </span>
+  )
+}
+
+/**
+ * An instant as its date, for a dense table cell: "4 Oct 2026". The date and
+ * time ("4 Oct 2026, 12:00") show in a tooltip on hover and are what a screen
+ * reader reads; the row's details should show it in full, too.
+ */
+export function DateText({ at }: { at: string }) {
+  const full = formatDateTime(at)
+  return (
+    <Tooltip>
+      <TooltipTrigger render={<time dateTime={at} />}>
+        <span aria-hidden="true">{formatDate(at)}</span>
+        <span className="sr-only">{full}</span>
+      </TooltipTrigger>
+      <TooltipContent side="top">{full}</TooltipContent>
+    </Tooltip>
   )
 }
 
