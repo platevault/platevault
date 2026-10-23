@@ -1,5 +1,6 @@
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } from "@tanstack/react-router"
-import { render, screen, within } from "@testing-library/react"
+import { render, screen, waitFor, within } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest"
 import { createSeed } from "@/domain/seed"
 import { m } from "@/lib/i18n"
@@ -42,5 +43,23 @@ describe("Target detail: the chosen night at the planning site", () => {
     expect(value.startsWith(`${m.plan_dark()} `)).toBe(true)
     expect(value).toContain(`${m.tonight_moon()} `)
     for (const term of terms) expect(term.nextElementSibling!.textContent!.startsWith(term.textContent!)).toBe(false)
+  })
+})
+
+describe("Target detail: the Favourite toggle", () => {
+  it("is pressed for a favourite, and a press adds the Target to or removes it from the favourites", async () => {
+    const user = userEvent.setup()
+    const target = Object.values(store.getState().catalog.targets).find((t) => !t.favourite)!
+    renderTarget(target.id)
+    const toggle = await screen.findByRole("button", { name: m.targets_favourite() })
+    expect(toggle).toHaveAttribute("aria-pressed", "false")
+
+    await user.click(toggle)
+    expect(store.getState().catalog.targets[target.id]!.favourite).toBe(true)
+    await waitFor(() => expect(toggle).toHaveAttribute("aria-pressed", "true"))
+
+    await user.click(toggle)
+    expect(store.getState().catalog.targets[target.id]!.favourite).toBe(false)
+    await waitFor(() => expect(toggle).toHaveAttribute("aria-pressed", "false"))
   })
 })
