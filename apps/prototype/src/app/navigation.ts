@@ -74,7 +74,8 @@ export const SETTINGS_SECTIONS: Array<{ readonly group: string; items: Destinati
     get group() { return m.nav_library() },
     items: [
       { to: "/settings/locations", get label() { return m.common_locations() }, keywords: "folders captures calibration results archive" },
-      { to: "/settings/equipment", get label() { return m.settings_equipment() }, keywords: "rig optical train camera telescope filter mono osc" },
+      { to: "/settings/equipment", get label() { return m.settings_equipment() }, keywords: "rig optical train camera telescope reducer filter mono osc add equipment" },
+      { to: "/settings/matching", get label() { return m.settings_matching() }, keywords: "matching thresholds framing overlap centre rotation split mosaic panel flats darks bias calibration window temperature" },
       { to: "/settings/naming", get label() { return m.settings_naming() }, keywords: "naming template tokens import archive folder" },
       { to: "/settings/sites", get label() { return m.settings_sites() }, keywords: "site default location latitude" },
       { to: "/settings/targets", get label() { return m.settings_target_lookup() }, keywords: "simbad sesame resolver online provider" },

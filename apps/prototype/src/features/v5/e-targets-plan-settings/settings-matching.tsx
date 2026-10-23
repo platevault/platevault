@@ -1,22 +1,25 @@
 /**
- * Settings › Equipment › Matching thresholds (slice E; D-W114, PRJ-FR-31,
- * CAL-FR-19 to CAL-FR-21): the framing tolerances that split sessions and
- * group them in a Project (the centre limit an angle in arcminutes; import
- * review starts from these and can override them for one import), and the
- * flat, dark and bias windows and warning
- * levels calibration matching uses. The section reads the values; Edit…
- * opens one dialog for all of them, so a half-typed number is never matched
- * against. Saving re-matches every kind still waiting or suggested; a pin or
- * a No never changes (`setMatchingSettings`).
+ * Settings › Matching, `/settings/matching` (slice E; D-W114, PRJ-FR-31,
+ * CAL-FR-19 to CAL-FR-21; its own page beside Equipment, the owner's answer
+ * of 2026-10-23): the framing tolerances that split sessions and group them
+ * in a Project (the centre limit an angle in arcminutes; import review starts
+ * from these and can override them for one import), and the flat, dark and
+ * bias windows and warning levels calibration matching uses. The page is one
+ * table, setting · value · unit, grouped by subject; its one Edit… opens one
+ * dialog for all of them, so a half-typed number is never matched against.
+ * Saving re-matches every kind still waiting or suggested; a pin or a No never
+ * changes, and a lower bound past its upper one is refused
+ * (`setMatchingSettings`).
  */
 import { Pencil } from "lucide-react"
 import { useState } from "react"
 import { useMessages } from "@/app/preferences"
 import { ActionButton } from "@/components/app/actions"
-import type { Action } from "@/components/app/contracts"
+import type { Action, Column } from "@/components/app/contracts"
+import { DataTable } from "@/components/app/data-table"
 import { FieldGroup, NumberField } from "@/components/app/fields"
 import { blockedByErrors, type FieldErrors, FormDialog, useDialogForm } from "@/components/app/form-dialog"
-import { SettingsRow, SettingsSection } from "@/components/app/settings"
+import { SettingsPage } from "@/components/templates/settings-page"
 import type { MatchingSettings } from "@/domain/types"
 import { formatDecimal } from "@/lib/format"
 import type { Messages } from "@/lib/i18n"
@@ -56,6 +59,48 @@ function formOf(s: MatchingSettings): MatchingForm {
   }
 }
 
+/** What a threshold is about: the page's groups and the dialog's field groups, in this order. */
+type Subject = "framing" | "flats" | "darks" | "bias"
+const SUBJECTS: readonly Subject[] = ["framing", "flats", "darks", "bias"]
+
+function subjectLabel(m: Messages, subject: Subject): string {
+  if (subject === "framing") return m.equipment_matching_framing()
+  if (subject === "flats") return m.calibration_heading_flats()
+  if (subject === "darks") return m.calibration_heading_darks()
+  return m.calibration_heading_bias()
+}
+
+/** One threshold as the table row and the dialog field both show it: its subject, label, unit and the field's step. */
+interface Threshold {
+  key: keyof MatchingForm
+  subject: Subject
+  label: (m: Messages) => string
+  unit: (m: Messages) => string
+  step: number
+}
+
+const percent = () => "%"
+const arcmin = () => "′"
+const degrees = () => "°"
+const celsius = () => "°C"
+const nights = (m: Messages) => m.equipment_unit_nights()
+const days = (m: Messages) => m.calibration_unit_days()
+
+const THRESHOLDS: readonly Threshold[] = [
+  { key: "overlapPct", subject: "framing", label: (m) => m.equipment_matching_overlap(), unit: percent, step: 1 },
+  { key: "centreArcmin", subject: "framing", label: (m) => m.equipment_matching_centre(), unit: arcmin, step: 0.5 },
+  { key: "rotationDeg", subject: "framing", label: (m) => m.equipment_matching_rotation(), unit: degrees, step: 0.5 },
+  { key: "panelOverlapMinPct", subject: "framing", label: (m) => m.equipment_matching_panel_min(), unit: percent, step: 1 },
+  { key: "panelOverlapMaxPct", subject: "framing", label: (m) => m.equipment_matching_panel_max(), unit: percent, step: 1 },
+  { key: "flatFineDeg", subject: "flats", label: (m) => m.equipment_matching_flat_fine(), unit: degrees, step: 0.5 },
+  { key: "flatWarnDeg", subject: "flats", label: (m) => m.equipment_matching_flat_warn(), unit: degrees, step: 0.5 },
+  { key: "flatWindowNights", subject: "flats", label: (m) => m.equipment_matching_window_nights(), unit: nights, step: 1 },
+  { key: "darkWindowDays", subject: "darks", label: (m) => m.equipment_matching_window_days(), unit: days, step: 1 },
+  { key: "darkTemperatureWarnC", subject: "darks", label: (m) => m.equipment_matching_temperature(), unit: celsius, step: 0.5 },
+  { key: "biasWindowDays", subject: "bias", label: (m) => m.equipment_matching_window_days(), unit: days, step: 1 },
+  { key: "biasTemperatureWarnC", subject: "bias", label: (m) => m.equipment_matching_temperature(), unit: celsius, step: 0.5 },
+]
+
 const num = (value: number) => formatDecimal(value, value % 1 === 0 ? 0 : 1)
 
 function MatchingDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -77,65 +122,41 @@ function MatchingDialog({ open, onClose }: { open: boolean; onClose: () => void 
         bias: { windowDays: values.biasWindowDays ?? undefined, temperatureWarnC: values.biasTemperatureWarnC ?? undefined },
       }),
   }
-  const field = (key: keyof MatchingForm, fieldLabel: string, unit: string, step = 1) => (
-    <NumberField key={key} label={fieldLabel} unit={unit} value={values[key]} min={0} step={step} onChange={(value) => set({ [key]: value } as Partial<MatchingForm>)} error={shown(errors, key)} />
-  )
-  const days = m.calibration_unit_days()
   return (
     <FormDialog open={open} onOpenChange={(next) => !next && onClose()} title={m.settings_label_matching()} size="lg" confirm={confirm}>
-      <FieldGroup label={m.equipment_matching_framing()}>
-        {field("overlapPct", m.equipment_matching_overlap(), "%")}
-        {field("centreArcmin", m.equipment_matching_centre(), "′", 0.5)}
-        {field("rotationDeg", m.equipment_matching_rotation(), "°", 0.5)}
-        {field("panelOverlapMinPct", m.equipment_matching_panel_min(), "%")}
-        {field("panelOverlapMaxPct", m.equipment_matching_panel_max(), "%")}
-      </FieldGroup>
-      <FieldGroup label={m.calibration_heading_flats()}>
-        {field("flatFineDeg", m.equipment_matching_flat_fine(), "°", 0.5)}
-        {field("flatWarnDeg", m.equipment_matching_flat_warn(), "°", 0.5)}
-        {field("flatWindowNights", m.equipment_matching_window_nights(), m.equipment_unit_nights())}
-      </FieldGroup>
-      <FieldGroup label={m.calibration_heading_darks()}>
-        {field("darkWindowDays", m.equipment_matching_window_days(), days)}
-        {field("darkTemperatureWarnC", m.equipment_matching_temperature(), "°C", 0.5)}
-      </FieldGroup>
-      <FieldGroup label={m.calibration_heading_bias()}>
-        {field("biasWindowDays", m.equipment_matching_window_days(), days)}
-        {field("biasTemperatureWarnC", m.equipment_matching_temperature(), "°C", 0.5)}
-      </FieldGroup>
+      {SUBJECTS.map((subject) => (
+        <FieldGroup key={subject} label={subjectLabel(m, subject)}>
+          {THRESHOLDS.filter((t) => t.subject === subject).map((t) => (
+            <NumberField key={t.key} label={t.label(m)} unit={t.unit(m)} value={values[t.key]} min={0} step={t.step} onChange={(value) => set({ [t.key]: value } as Partial<MatchingForm>)} error={shown(errors, t.key)} />
+          ))}
+        </FieldGroup>
+      ))}
     </FormDialog>
   )
 }
 
-/** The thresholds in effect, one row per kind of matching, each worded as the matcher applies it. */
-function summary(m: Messages, s: MatchingSettings): Array<{ label: string; value: string }> {
-  const darkLine = (d: MatchingSettings["darks"]) => m.equipment_matching_dark_line({ days: num(d.windowDays), temp: num(d.temperatureWarnC) })
-  return [
-    {
-      label: m.equipment_matching_framing(),
-      value: m.equipment_matching_framing_line({ overlap: num(s.framing.overlapPct), centre: num(s.framing.centreArcmin), rotation: num(s.framing.rotationDeg), min: num(s.framing.panelOverlapMinPct), max: num(s.framing.panelOverlapMaxPct) }),
-    },
-    { label: m.calibration_heading_flats(), value: m.equipment_matching_flats_line({ fine: num(s.flats.fineDeg), warn: num(s.flats.warnDeg), nights: num(s.flats.windowNights) }) },
-    { label: m.calibration_heading_darks(), value: darkLine(s.darks) },
-    { label: m.calibration_heading_bias(), value: darkLine(s.bias) },
-  ]
-}
-
-export function MatchingSection() {
+export function MatchingSettingsPage() {
   const m = useMessages()
   const matching = useStore((s) => s.settings.matching)
   const [editing, setEditing] = useState(false)
   const edit: Action = { id: "edit-matching", label: m.settings_edit(), icon: Pencil, opensDialog: true, run: () => setEditing(true) }
+  const values = formOf(matching)
+  const columns: Column<Threshold>[] = [
+    { id: "setting", header: m.settings_matching_col_setting(), rowHeader: true, static: true, cell: (t) => t.label(m) },
+    { id: "value", header: m.settings_matching_col_value(), align: "right", static: true, cell: (t) => num(values[t.key] ?? 0) },
+    { id: "unit", header: m.settings_matching_col_unit(), static: true, cell: (t) => t.unit(m) },
+  ]
   return (
-    <>
-      <SettingsSection title={m.settings_label_matching()} actions={<ActionButton action={edit} />}>
-        {summary(m, matching).map((row) => (
-          <SettingsRow key={row.label} label={row.label}>
-            {row.value}
-          </SettingsRow>
-        ))}
-      </SettingsSection>
+    <SettingsPage title={m.settings_matching()} actions={<ActionButton action={edit} />}>
+      <DataTable<Threshold>
+        label={m.settings_label_matching()}
+        rows={[...THRESHOLDS]}
+        columns={columns}
+        getRowId={(t) => t.key}
+        scroll="none"
+        groups={{ key: (t) => t.subject, label: (key) => subjectLabel(m, key as Subject), compare: (a, b) => SUBJECTS.indexOf(a as Subject) - SUBJECTS.indexOf(b as Subject) }}
+      />
       <MatchingDialog open={editing} onClose={() => setEditing(false)} />
-    </>
+    </SettingsPage>
   )
 }

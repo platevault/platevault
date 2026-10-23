@@ -83,6 +83,7 @@ const SETTINGS_AREA: Record<string, () => string> = {
   appearance: m.settings_appearance,
   locations: m.common_locations,
   equipment: m.settings_equipment,
+  matching: m.settings_matching,
   "goal-templates": m.settings_goal_templates,
   naming: m.settings_naming,
   sites: m.settings_sites,
