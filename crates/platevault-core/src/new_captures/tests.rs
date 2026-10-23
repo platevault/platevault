@@ -25,9 +25,10 @@ use crate::inventory::{self, Entry, Listing, RootRefusal, RootStamp};
 use crate::library::{fixtures, Library};
 use crate::{
     ArchiveMoveOutcome, EntryEvidence, EntryKind, ItemReason, LibraryError, Location, LocationRole,
-    NativePath, ObservationFingerprint, PathSensitivity, ReasonCode, ScanOperation, ScanState,
-    StorageItemDraft, TransferDestination,
+    NativePath, ObservationFingerprint, PathSensitivity, ReasonCode, ScanState, StorageItemDraft,
+    TransferDestination,
 };
+use crate::scan_support::scan_to_end;
 
 /// Ticks short enough for tests; the OS watcher, walks and shutdown grace are
 /// real.
@@ -147,21 +148,6 @@ async fn after(watch: &CaptureWatch, counter: fn(&Observed) -> &AtomicUsize, tic
     let mark = counter.load(Ordering::SeqCst);
     eventually(&format!("{ticks} more ticks"), || counter.load(Ordering::SeqCst) > mark + ticks)
         .await;
-}
-
-async fn scan_to_end(library: &Arc<Library>, location: Uuid) -> ScanOperation {
-    let mut progress = library.subscribe_scan_progress();
-    let started = library.start_scan(location, None).await.unwrap();
-    tokio::time::timeout(Duration::from_secs(20), async {
-        loop {
-            let operation = progress.recv().await.unwrap();
-            if operation.id == started.id && operation.state != ScanState::Running {
-                return operation;
-            }
-        }
-    })
-    .await
-    .expect("scan must publish its terminal state")
 }
 
 /// Wait until a call waits at `gate`.

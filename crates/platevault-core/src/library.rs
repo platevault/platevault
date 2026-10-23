@@ -1147,6 +1147,7 @@ mod tests {
 
     use super::*;
     use crate::inventory::{OsVolumes, Probed, VolumeCache, VolumeProbe};
+    use crate::scan_support::scan_to_end;
     use crate::{ExpectedAsset, Quality};
 
     fn target_basis(detail: &SessionDetail) -> BTreeMap<Uuid, ObservationFingerprint> {
@@ -1193,12 +1194,6 @@ mod tests {
             locations.push(location);
         }
         (library, locations, originals)
-    }
-
-    async fn scan_to_end(library: &Arc<Library>, location: Uuid) -> ScanOperation {
-        let watch = crate::scan_support::ScanWatch::new(library);
-        let started = library.start_scan(location, None).await.unwrap();
-        watch.terminal(started.id, crate::scan_support::PATIENCE).await
     }
 
     fn unchanged(originals: &[(std::path::PathBuf, String)]) {

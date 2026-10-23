@@ -3,8 +3,10 @@
 
 //! Local-first library records and lossless application contracts.
 
+// Lets lib unit tests include tests/support/scan.rs using its integration-test crate path.
 #[cfg(test)]
 extern crate self as platevault_core;
+
 pub mod apply;
 pub mod calendar;
 pub mod calibration;
