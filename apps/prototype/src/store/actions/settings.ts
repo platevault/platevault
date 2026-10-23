@@ -160,10 +160,43 @@ export function setLaunchArgs(profileId: ProfileId, launchArgs: string): CommitR
 const APPS_HREF = "/settings/applications"
 const BUILT_IN_PROFILES: ReadonlySet<ProfileId> = new Set(Object.values(PROFILE_IDS))
 
-/** A generic launcher profile the user adds: unverified, its executable observed on the simulated computer now. */
-export function addApplicationProfile(input: { name: string; executablePath: string | null; launchArgs: string }): { result: CommitResult; id: ProfileId } {
+/** The profile a new one is input for: its name, its executable and its launch arguments. */
+export interface NewProfile {
+  name: string
+  executablePath: string | null
+  launchArgs: string
+}
+
+/**
+ * Why another profile already covers this one, per field: its name, compared
+ * without case, or its executable started with the same launch arguments.
+ * Empty when no profile does.
+ */
+export function profileDuplicates(profiles: Catalog["profiles"], input: NewProfile): { name?: MessageRef; executable?: MessageRef } {
+  const name = input.name.trim()
+  const launchArgs = input.launchArgs.trim()
+  const others = Object.values(profiles)
+  const sameName = name ? others.find((p) => p.name.toLocaleLowerCase() === name.toLocaleLowerCase()) : undefined
+  const sameLaunch = input.executablePath ? others.find((p) => p.executablePath === input.executablePath && p.launchArgs.trim() === launchArgs) : undefined
+  return {
+    ...(sameName ? { name: msg("apps_refused_name_taken", { name: sameName.name }) } : {}),
+    ...(sameLaunch ? { executable: msg("apps_refused_launch_taken", { name: sameLaunch.name }) } : {}),
+  }
+}
+
+/**
+ * A generic launcher profile the user adds: unverified, its executable
+ * observed on the simulated computer now. Refused while another profile has
+ * its name or its executable and launch arguments (`profileDuplicates`); the
+ * id is then one no profile has.
+ */
+export function addApplicationProfile(input: NewProfile): { result: CommitResult; id: ProfileId } {
   const name = input.name.trim()
   const id = freshId("prof", name)
+  const label = msg("store_label_add_named", { name })
+  const duplicates = profileDuplicates(store.getState().catalog.profiles, input)
+  const reasons = [duplicates.name, duplicates.executable].filter((reason): reason is MessageRef => reason !== undefined)
+  if (reasons.length > 0) return { result: refuse(msg("store_refused", { label }), reasons, APPS_HREF), id }
   const profile: ApplicationProfile = {
     id,
     application: "generic",
@@ -173,7 +206,7 @@ export function addApplicationProfile(input: { name: string; executablePath: str
     launchArgs: input.launchArgs,
     capability: { verified: false, evidence: msg("seed_apps_evidence_generic"), inputWrite: "unknown", correctedMetadata: "none", masterStacking: false },
   }
-  const result = commit(msg("store_label_add_named", { name }), (s) => withCatalog(s, (c) => ({ ...c, profiles: { ...c.profiles, [id]: profile } })), { href: APPS_HREF })
+  const result = commit(label, (s) => withCatalog(s, (c) => ({ ...c, profiles: { ...c.profiles, [id]: profile } })), { href: APPS_HREF })
   if (result.ok) recordSaved(msg("store_saved_added", { name }), null, APPS_HREF)
   return { result, id }
 }
