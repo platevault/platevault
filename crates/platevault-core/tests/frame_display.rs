@@ -8,6 +8,8 @@
 //! every fixture file is only ever read.
 #![allow(clippy::too_many_lines, clippy::cast_precision_loss)]
 
+#[path = "support/scan.rs"]
+mod scan_support;
 mod support;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -130,18 +132,9 @@ impl Shelf {
     /// Scan to its terminal state and re-read the asset ids.
     async fn scan(&mut self) {
         let library = Arc::clone(self.library());
-        let mut progress = library.subscribe_scan_progress();
+        let watch = scan_support::ScanWatch::new(&library);
         let started = library.start_scan(self.location, None).await.unwrap();
-        let finished = tokio::time::timeout(Duration::from_secs(60), async {
-            loop {
-                let operation = progress.recv().await.unwrap();
-                if operation.id == started.id && operation.state != ScanState::Running {
-                    return operation;
-                }
-            }
-        })
-        .await
-        .expect("scan must publish its terminal state");
+        let finished = watch.terminal(started.id, Duration::from_secs(60)).await;
         assert_eq!(finished.state, ScanState::Completed);
         self.ids = library
             .catalog()

@@ -6,6 +6,8 @@
 //! collisions, verified Copy and Move, resume after an unmounted source, and
 //! indexing as files land.
 
+#[path = "support/scan.rs"]
+mod scan_support;
 mod support;
 
 use std::fs;
@@ -286,18 +288,9 @@ fn reason_code(item: &ImportItem) -> Option<ReasonCode> {
 }
 
 async fn scan_to_end(library: &Arc<Library>, location: Uuid) -> ScanOperation {
-    let mut progress = library.subscribe_scan_progress();
+    let watch = scan_support::ScanWatch::new(library);
     let started = library.start_scan(location, None).await.unwrap();
-    tokio::time::timeout(Duration::from_secs(20), async {
-        loop {
-            let operation = progress.recv().await.unwrap();
-            if operation.id == started.id && operation.state != ScanState::Running {
-                return operation;
-            }
-        }
-    })
-    .await
-    .expect("scan must publish its terminal state")
+    watch.terminal(started.id, Duration::from_secs(20)).await
 }
 
 #[tokio::test]

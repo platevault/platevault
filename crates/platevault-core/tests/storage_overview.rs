@@ -13,6 +13,8 @@
 mod apply_support;
 #[path = "support/storage_overview.rs"]
 mod overview_support;
+#[path = "support/scan.rs"]
+mod scan_support;
 mod support;
 
 use std::collections::BTreeSet;

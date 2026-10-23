@@ -13,6 +13,8 @@
     clippy::float_cmp
 )]
 
+#[path = "support/scan.rs"]
+mod scan_support;
 mod support;
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -127,20 +129,12 @@ fn write_frames(root: &Path, count: usize) -> Vec<String> {
         .collect()
 }
 
-/// Start a scan and wait for its terminal event.
 async fn scan_to_end(library: &Arc<Library>, location: Uuid) -> ScanOperation {
-    let mut progress = library.subscribe_scan_progress();
+    let watch = scan_support::ScanWatch::new(library);
     let started = library.start_scan(location, None).await.unwrap();
-    tokio::time::timeout(Duration::from_secs(60), async {
-        loop {
-            let operation = progress.recv().await.unwrap();
-            if operation.id == started.id && operation.state != ScanState::Running {
-                return operation;
-            }
-        }
-    })
-    .await
-    .expect("scan must publish its terminal state")
+    let operation = watch.terminal(started.id, Duration::from_secs(60)).await;
+    assert_eq!(operation.state, ScanState::Completed);
+    operation
 }
 
 /// Poll the durable status until the run leaves Running, failing only once no

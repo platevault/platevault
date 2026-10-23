@@ -9,6 +9,8 @@
 //! read. The Plan area's Target overview with Project gaps is rewritten on the
 //! amended Project contract (U24) and is not exercised here.
 
+#[path = "support/scan.rs"]
+mod scan_support;
 mod support;
 
 use std::collections::BTreeMap;
@@ -193,18 +195,9 @@ fn write_frames(root: &Path) -> Vec<(PathBuf, String)> {
 }
 
 async fn scan_to_end(library: &Arc<Library>, location: Uuid) -> ScanOperation {
-    let mut progress = library.subscribe_scan_progress();
+    let watch = scan_support::ScanWatch::new(library);
     let started = library.start_scan(location, None).await.unwrap();
-    tokio::time::timeout(Duration::from_secs(20), async {
-        loop {
-            let operation = progress.recv().await.unwrap();
-            if operation.id == started.id && operation.state != ScanState::Running {
-                return operation;
-            }
-        }
-    })
-    .await
-    .expect("scan must publish its terminal state")
+    watch.terminal(started.id, Duration::from_secs(20)).await
 }
 
 fn backyard_input() -> SiteInput {

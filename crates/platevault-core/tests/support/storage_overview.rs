@@ -13,7 +13,6 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::Duration;
 
 use persistence_library::TrashedFrame;
 use platevault_core::custody::trash::OsTrash;
@@ -21,6 +20,7 @@ use platevault_core::library::Library;
 use platevault_core::*;
 use uuid::Uuid;
 
+use crate::scan_support;
 use crate::support;
 
 /// A stand-in OS Trash that moves each entry itself into a private bin.
@@ -47,18 +47,7 @@ impl OsTrash for BinTrash {
 }
 
 pub async fn scan_to_end(library: &Arc<Library>, location: Uuid) -> ScanOperation {
-    let mut progress = library.subscribe_scan_progress();
-    let started = library.start_scan(location, None).await.unwrap();
-    tokio::time::timeout(Duration::from_secs(20), async {
-        loop {
-            let operation = progress.recv().await.unwrap();
-            if operation.id == started.id && operation.state != ScanState::Running {
-                return operation;
-            }
-        }
-    })
-    .await
-    .expect("scan must publish its terminal state")
+    scan_support::scan_to_end(library, location).await
 }
 
 pub async fn register(library: &Arc<Library>, root: &Path, name: &str) -> Location {
