@@ -14,7 +14,6 @@ mod support;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::time::Duration;
 
 use persistence_library::SessionQuery;
@@ -132,12 +131,6 @@ fn export(preamble: Option<&str>, rows: &[String]) -> Vec<u8> {
     lines.join("\n").into_bytes()
 }
 
-async fn scan_to_end(library: &Arc<Library>, location: Uuid) -> ScanOperation {
-    let watch = scan_support::ScanWatch::new(library);
-    let started = library.start_scan(location, None).await.unwrap();
-    watch.terminal(started.id, Duration::from_secs(60)).await
-}
-
 async fn finished(review: &FrameReview, run: Uuid) -> MeasurementRun {
     tokio::time::timeout(Duration::from_secs(120), async {
         loop {
@@ -191,7 +184,7 @@ async fn reviewed_imports_attach_beside_built_in_values_and_change_no_library_re
         .register_location(NativePath::from_path(&root), "Captures".into(), LocationRole::Captures)
         .await
         .unwrap();
-    assert_eq!(scan_to_end(&library, location.id).await.state, ScanState::Completed);
+    assert_eq!(scan_support::scan_to_end(&library, location.id).await.state, ScanState::Completed);
     // Fixture names use `/`; the scanner records native separators (`\` on Windows).
     let ids: BTreeMap<NativePath, Uuid> = library
         .catalog()

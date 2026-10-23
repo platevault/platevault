@@ -129,14 +129,6 @@ fn write_frames(root: &Path, count: usize) -> Vec<String> {
         .collect()
 }
 
-async fn scan_to_end(library: &Arc<Library>, location: Uuid) -> ScanOperation {
-    let watch = scan_support::ScanWatch::new(library);
-    let started = library.start_scan(location, None).await.unwrap();
-    let operation = watch.terminal(started.id, Duration::from_secs(60)).await;
-    assert_eq!(operation.state, ScanState::Completed);
-    operation
-}
-
 /// Poll the durable status until the run leaves Running, failing only once no
 /// frame has settled for two minutes.
 ///
@@ -224,7 +216,10 @@ impl Indexed {
             )
             .await
             .unwrap();
-        assert_eq!(scan_to_end(&library, location.id).await.state, ScanState::Completed);
+        assert_eq!(
+            scan_support::scan_to_end(&library, location.id).await.state,
+            ScanState::Completed
+        );
         let ids = library
             .catalog()
             .location_assets(location.id)
@@ -744,7 +739,7 @@ async fn stretched_tiles_and_regions_change_no_record_and_remeasuring_is_bit_ide
         )
         .await
         .unwrap();
-    assert_eq!(scan_to_end(&fresh, location.id).await.state, ScanState::Completed);
+    assert_eq!(scan_support::scan_to_end(&fresh, location.id).await.state, ScanState::Completed);
     let again: BTreeMap<String, Uuid> = fresh
         .catalog()
         .location_assets(location.id)

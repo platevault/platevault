@@ -23,12 +23,12 @@ use super::{
 };
 use crate::inventory::{self, Entry, Listing, RootRefusal, RootStamp};
 use crate::library::{fixtures, Library};
+use crate::scan_support::scan_to_end;
 use crate::{
     ArchiveMoveOutcome, EntryEvidence, EntryKind, ItemReason, LibraryError, Location, LocationRole,
     NativePath, ObservationFingerprint, PathSensitivity, ReasonCode, ScanState, StorageItemDraft,
     TransferDestination,
 };
-use crate::scan_support::scan_to_end;
 
 /// Ticks short enough for tests; the OS watcher, walks and shutdown grace are
 /// real.

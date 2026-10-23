@@ -194,12 +194,6 @@ fn write_frames(root: &Path) -> Vec<(PathBuf, String)> {
     originals
 }
 
-async fn scan_to_end(library: &Arc<Library>, location: Uuid) -> ScanOperation {
-    let watch = scan_support::ScanWatch::new(library);
-    let started = library.start_scan(location, None).await.unwrap();
-    watch.terminal(started.id, Duration::from_secs(20)).await
-}
-
 fn backyard_input() -> SiteInput {
     SiteInput {
         name: "Backyard".into(),
@@ -255,7 +249,10 @@ impl Worked {
             )
             .await
             .unwrap();
-        assert_eq!(scan_to_end(&library, location.id).await.state, ScanState::Completed);
+        assert_eq!(
+            scan_support::scan_to_end(&library, location.id).await.state,
+            ScanState::Completed
+        );
         let target = TargetCandidate {
             id: Uuid::new_v4(),
             designation: "NGC 7000".into(),
