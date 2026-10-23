@@ -5463,7 +5463,7 @@
   "apps_arguments_title": "Arguments for {name}",
   "apps_add": "Add application",
   "apps_name": "Name",
-  "apps_refused_name_taken": "Another application is already called {name}",
+  "apps_refused_name_taken": "Another application already has the name {name}",
   "apps_refused_launch_taken": "{name} already uses this path with these arguments",
   "apps_change_action": "Change",
   "apps_locate_action": "Locate",
