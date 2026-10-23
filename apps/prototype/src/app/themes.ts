@@ -36,8 +36,8 @@ export type ThemeId = (typeof THEMES)[number]["id"]
 
 export const DEFAULT_THEME: ThemeId = "platevault-dark"
 
-/** "Match system" follows the OS between these two. */
-export const SYSTEM_THEMES: Record<ThemeScheme, ThemeId> = { dark: "platevault-dark", light: "platevault-light" }
+/** The pair "Match system" follows the OS between until the user picks their own. */
+export const DEFAULT_SYSTEM_THEMES: Record<ThemeScheme, ThemeId> = { dark: "platevault-dark", light: "platevault-light" }
 
 export function isThemeId(value: string): value is ThemeId {
   return THEMES.some((theme) => theme.id === value)
