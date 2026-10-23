@@ -7,7 +7,7 @@
 import { formatCount, formatDecimal } from "@/lib/format"
 import { type MessageRef, msg, nightRef, verbatim } from "@/lib/i18n"
 import type { MoonAvoidance } from "./planning"
-import type { ApplicationProfile, Band, Catalog, FramingMargins, GoalChannel, GroupKeywords, InputMode, MatchingSettings, OperationUnit, OutputKind, SubjectWindow, WindowRule, WrapUpStepId } from "./types"
+import type { ApplicationProfile, Band, Catalog, FramingMargins, GoalChannel, GroupKeywordKind, GroupKeywords, InputMode, MatchingSettings, OperationUnit, OutputKind, SubjectWindow, WindowRule, WrapUpStepId } from "./types"
 
 /**
  * The catalogue's object types (sky.ts) in the reader's language. A type a
@@ -127,8 +127,22 @@ export const FRAMING_LIMIT_RANGE: Record<keyof FramingMargins, { min: number; ma
   rotationDeg: { min: 0, max: 90, step: 0.5 },
 }
 
-/** The GROUP and PANEL keyword names (PRJ-FR-28), Settings' defaults. */
+/** The grouping keyword names (PRJ-FR-28), Settings' defaults. */
 export const DEFAULT_GROUP_KEYWORDS: GroupKeywords = { group: "GROUP", panel: "PANEL" }
+
+/**
+ * Each grouping keyword's name in Settings › Naming and its one-line help,
+ * which takes the keyword's current name. Settings lists them in this
+ * order; a new grouping keyword is one more `GroupKeywordKind`, one more
+ * entry here and its default above.
+ */
+export const GROUP_KEYWORD: Record<GroupKeywordKind, { label: MessageRef; help: (keyword: string) => MessageRef }> = {
+  group: { label: msg("naming_keyword_group"), help: (keyword) => msg("naming_keyword_group_help", { keyword }) },
+  panel: { label: msg("common_mosaic_panel"), help: (keyword) => msg("naming_keyword_panel_help", { keyword }) },
+}
+
+/** The grouping keywords in Settings' order. */
+export const GROUP_KEYWORD_KINDS = Object.keys(GROUP_KEYWORD) as GroupKeywordKind[]
 
 /** Wrap up steps in order (PRJ-FR-14); Close project is the last step's final action. */
 export const WRAP_UP_STEPS: WrapUpStepId[] = ["cleanup", "trash", "archive"]

@@ -12,7 +12,7 @@
  */
 import { calibrateSessions } from "@/domain/calibration"
 import { currentRigVersion, sessionRigVersion } from "@/domain/indexing"
-import { FRAMING_LIMIT_RANGE, MODE_NAME } from "@/domain/labels"
+import { FRAMING_LIMIT_RANGE, GROUP_KEYWORD, GROUP_KEYWORD_KINDS, MODE_NAME } from "@/domain/labels"
 import { PROFILE_IDS } from "@/domain/seed"
 import { clampMoonAvoidance, type MoonAvoidance } from "@/domain/planning"
 import { NAMING_TOKENS, validateNamingTemplate } from "@/domain/templates"
@@ -24,6 +24,7 @@ import type {
   Catalog,
   GoalTemplate,
   GoalTemplateId,
+  GroupKeywordKind,
   GroupKeywords,
   InputMode,
   IsoDateTime,
@@ -254,21 +255,65 @@ export function setDefaultInputMode(mode: InputMode): CommitResult {
   return result
 }
 
-/** The folder keywords the View already uses beside GROUP and PANEL: a group keyword may not take one of them. */
+/** The folder keywords the View already uses beside the grouping keywords: a grouping keyword may not take one of them. */
 const VIEW_KEYWORDS = ["NIGHT", "GAIN", "OFFSET"]
 
 /**
- * Why these GROUP and PANEL keyword names cannot name View folders
- * (PRJ-FR-28): each is a letter then letters or digits, so `<KEYWORD>_<value>`
- * reads back as one keyword; the two differ, and neither is a keyword the
- * View already uses (NIGHT, GAIN, OFFSET). Empty when they can.
+ * A letter, then letters, digits or hyphens: what WBPP's keyword list takes.
+ * Its keyword field strips every other character (`[^a-z0-9-]`, so `_` too)
+ * and matches the name in a path literally, case-insensitively, before a
+ * `_`, `-` or space (PJSR 76e4f38c, BPP-GUI.js L420-L425, BPP-Helper.js
+ * L1109-L1130).
  */
-export function keywordRefusals(keywords: GroupKeywords): MessageRef[] {
-  const names = [keywords.group, keywords.panel]
-  const reasons: MessageRef[] = names.filter((name) => !/^[A-Za-z][A-Za-z0-9]*$/.test(name)).map((name) => msg("settings_keyword_invalid", { name: name || "–" }))
-  if (keywords.group.toUpperCase() === keywords.panel.toUpperCase()) reasons.push(msg("settings_keyword_same"))
-  for (const name of names) if (VIEW_KEYWORDS.includes(name.toUpperCase())) reasons.push(msg("settings_keyword_reserved", { name }))
+const KEYWORD_NAME = /^[A-Za-z][A-Za-z0-9-]*$/
+
+/** True when `inner` is `outer` or a run of its hyphen-separated parts, so WBPP's match for `inner` also lands in `outer`'s folders (`[^a-zA-Z0-9]` before the name, `-` after it). */
+function readsInside(outer: string, inner: string): boolean {
+  return `-${outer.toUpperCase()}-`.includes(`-${inner.toUpperCase()}-`)
+}
+
+/**
+ * Why the name `kind` takes cannot name View folders beside the other
+ * grouping keywords (PRJ-FR-28): it is a letter then letters, digits or
+ * hyphens, with no `_` (WBPP cannot hold one, and `_` ends a value); no other
+ * grouping keyword has it; it is not a keyword the View already uses
+ * (NIGHT, GAIN, OFFSET); and neither it nor another keyword reads inside
+ * the other at a hyphen. Empty when it can.
+ */
+export function keywordRefusalsFor(keywords: GroupKeywords, kind: GroupKeywordKind): MessageRef[] {
+  const name = keywords[kind]
+  if (name.includes("_")) return [msg("settings_keyword_underscore", { name })]
+  if (!KEYWORD_NAME.test(name)) return [msg("settings_keyword_invalid", { name: name || "–" })]
+  if (VIEW_KEYWORDS.includes(name.toUpperCase())) return [msg("settings_keyword_reserved", { name })]
+  const reasons: MessageRef[] = []
+  for (const other of GROUP_KEYWORD_KINDS) {
+    if (other === kind) continue
+    if (keywords[other].toUpperCase() === name.toUpperCase()) reasons.push(msg("settings_keyword_same", { name, kind: GROUP_KEYWORD[other].label }))
+  }
+  const others = [...GROUP_KEYWORD_KINDS.filter((other) => other !== kind && keywords[other].toUpperCase() !== name.toUpperCase()).map((other) => keywords[other]), ...VIEW_KEYWORDS]
+  for (const other of others) {
+    if (readsInside(name, other)) reasons.push(msg("settings_keyword_overlap", { inner: other, outer: name }))
+    else if (readsInside(other, name)) reasons.push(msg("settings_keyword_overlap", { inner: name, outer: other }))
+  }
   return reasons
+}
+
+/** Why these grouping keyword names cannot name View folders: each kind's reasons (`keywordRefusalsFor`), in Settings' order. Empty when they can. */
+export function keywordRefusals(keywords: GroupKeywords): MessageRef[] {
+  return GROUP_KEYWORD_KINDS.flatMap((kind) => keywordRefusalsFor(keywords, kind))
+}
+
+const NAMING_HREF = "/settings/naming"
+
+/** One grouping keyword name every Project uses unless it sets its own (PRJ-FR-28), trimmed; refused while it cannot name View folders beside the others. A change reaches each View on its next Apply. */
+export function setGroupKeyword(kind: GroupKeywordKind, name: string): CommitResult {
+  const next = { ...store.getState().settings.keywords, [kind]: name.trim() }
+  const label = msg("settings_label_group_keywords")
+  const reasons = keywordRefusalsFor(next, kind)
+  if (reasons.length > 0) return refuse(msg("store_refused", { label: GROUP_KEYWORD[kind].label }), reasons, NAMING_HREF)
+  const result = commit(label, (s) => ({ ...s, settings: { ...s.settings, keywords: next } }), { href: NAMING_HREF })
+  if (result.ok) recordSaved(label, msg("store_saved_label_name", { label: GROUP_KEYWORD[kind].label, name: verbatim(next[kind]) }), NAMING_HREF)
+  return result
 }
 
 /** The GROUP and PANEL keyword names every Project uses unless it sets its own (PRJ-FR-28); a change reaches each View on its next Apply. */
