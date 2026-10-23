@@ -1,5 +1,5 @@
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } from "@tanstack/react-router"
-import { render, screen, within } from "@testing-library/react"
+import { render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest"
 import { rigVersions } from "@/domain/indexing"
@@ -47,12 +47,54 @@ async function rowAction(user: ReturnType<typeof userEvent.setup>, row: string, 
 
 const save = (dialog: HTMLElement, label: string) => within(dialog).getByRole("button", { name: label })
 
+/** Opens the page header's Add equipment ▾ and picks a kind. */
+async function addFromHeader(user: ReturnType<typeof userEvent.setup>, kind: string) {
+  await user.click(await screen.findByRole("button", { name: m.equipment_add_menu() }))
+  await user.click(await screen.findByRole("menuitem", { name: `${kind}…` }))
+}
+
+describe("Settings › Equipment: one Add equipment ▾ (the owner's answer of 2026-10-23)", () => {
+  it("lists Camera, Telescope, Reducer, Filter and Rig in that order, and a section's own Add… shows only in its empty state", async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(await screen.findByRole("button", { name: m.equipment_add_menu() }))
+    const items = await screen.findAllByRole("menuitem")
+    expect(items.map((item) => item.textContent)).toEqual([m.equipment_camera(), m.equipment_telescope(), m.equipment_reducer(), m.equipment_filter(), m.equipment_rig()].map((kind) => `${kind}…`))
+    await user.keyboard("{Escape}")
+    for (const add of [m.equipment_add_camera(), m.equipment_add_telescope(), m.equipment_add_reducer(), m.equipment_add_filter(), m.project_add_rig()]) {
+      for (const button of screen.queryAllByRole("button", { name: `${add}…` })) expect(button.closest("[data-slot=empty]")).not.toBeNull()
+    }
+    // The demo has cameras and rigs, so neither section offers its own Add…; it has no reducer, so Reducers does.
+    expect(screen.queryByRole("button", { name: `${m.equipment_add_camera()}…` })).toBeNull()
+    expect(screen.queryByRole("button", { name: `${m.project_add_rig()}…` })).toBeNull()
+    expect(Object.keys(store.getState().catalog.reducers)).toHaveLength(0)
+    expect(screen.getByRole("button", { name: `${m.equipment_add_reducer()}…` })).toBeInTheDocument()
+  })
+
+  it("each kind opens its own add dialog", async () => {
+    const user = userEvent.setup()
+    renderPage()
+    const kinds = [
+      { kind: m.equipment_telescope(), title: m.equipment_add_telescope() },
+      { kind: m.equipment_reducer(), title: m.equipment_add_reducer() },
+      { kind: m.equipment_filter(), title: m.equipment_add_filter() },
+      { kind: m.equipment_rig(), title: m.project_add_rig() },
+    ]
+    for (const { kind, title } of kinds) {
+      await addFromHeader(user, kind)
+      const dialog = await screen.findByRole("dialog")
+      expect(within(dialog).getByRole("heading", { name: title })).toBeInTheDocument()
+      await user.click(within(dialog).getByRole("button", { name: m.verb_cancel() }))
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull())
+    }
+  })
+})
+
 describe("Settings › Equipment: cameras (PLAN-EQ-FR-08)", () => {
   it("Add camera… of a model the rigs already hold asks for the other camera's alias too, and Save names both", async () => {
     const user = userEvent.setup()
     renderPage()
-    const [add] = await screen.findAllByRole("button", { name: `${m.equipment_add_camera()}…` })
-    await user.click(add!)
+    await addFromHeader(user, m.equipment_camera())
     const dialog = await screen.findByRole("dialog")
     await user.type(within(dialog).getByRole("textbox", { name: m.equipment_name() }), MODEL)
     await user.type(within(dialog).getByRole("spinbutton", { name: m.equipment_sensor_width() }), "3008")
@@ -119,8 +161,9 @@ describe("Settings › Equipment: rig versions (PLAN-EQ-FR-07)", () => {
 })
 
 describe("Settings › Equipment: empty sections", () => {
-  it("names each empty record list once and leaves its Add… to the section header", async () => {
+  it("names each empty record list once and offers its Add… in the empty state", async () => {
     store.replace({ ...createSeed("empty"), schemaVersion: SCHEMA_VERSION, sliceVersions: sliceVersions(), slices: initialSliceStates() })
+    const user = userEvent.setup()
     renderPage()
     const sections = [
       { empty: m.equipment_no_cameras(), add: m.equipment_add_camera() },
@@ -130,8 +173,11 @@ describe("Settings › Equipment: empty sections", () => {
       { empty: m.equipment_no_rigs(), add: m.project_add_rig() },
     ]
     for (const { empty, add } of sections) {
-      expect(await screen.findByText(empty)).toBeInTheDocument()
+      const state = (await screen.findByText(empty)).closest("[data-slot=empty]") as HTMLElement
+      expect(within(state).getAllByRole("button", { name: `${add}…` })).toHaveLength(1)
       expect(screen.getAllByRole("button", { name: `${add}…` })).toHaveLength(1)
     }
+    await user.click(screen.getByRole("button", { name: `${m.equipment_add_reducer()}…` }))
+    expect(within(await screen.findByRole("dialog")).getByRole("heading", { name: m.equipment_add_reducer() })).toBeInTheDocument()
   })
 })

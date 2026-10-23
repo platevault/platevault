@@ -19,15 +19,17 @@ import { headerBar } from "./parts"
 
 export interface SettingsPageProps {
   title: string
+  /** The area's own actions beside its title, such as Equipment's Add equipment ▾ or Matching's Edit… */
+  actions?: ReactNode
   notice?: PageNotice | null
   /** SettingsSection and ListSection elements. */
   children: ReactNode
 }
 
-export function SettingsPage({ title, notice, children }: SettingsPageProps) {
+export function SettingsPage({ title, actions, notice, children }: SettingsPageProps) {
   return (
     <div data-template="settings">
-      <PageHeader level={2} title={title} notice={notice} className={headerBar(2)} />
+      <PageHeader level={2} title={title} actions={actions} notice={notice} className={headerBar(2)} />
       <PageBody className="space-y-6">{children}</PageBody>
     </div>
   )
