@@ -468,6 +468,7 @@ mod tests {
 
     // The deprecated migration shim is process-global; tests touching it must not race.
     static PROTECTION_DEFAULTS_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     #[test]
     fn ttl_cache_miss_then_hit() {
         let cache: TtlCache<String, u32> = TtlCache::new(CacheConfig::new(10));
