@@ -55,9 +55,9 @@ export function keepSearch(search: SearchParams): SearchParams {
   return kept
 }
 
-/** "21:00–04:40" in the site's zone, for values whose zone the page header names. */
+/** "21:00-04:40" in the site's zone, for values whose zone the page header names. */
 export function clockRange(start: string, end: string, timeZone: string): string {
-  return `${formatTime(start, timeZone)}–${formatTime(end, timeZone)}`
+  return `${formatTime(start, timeZone)}-${formatTime(end, timeZone)}`
 }
 
 /** The planning criteria behind every window. */

@@ -1,6 +1,6 @@
 /**
  * `/settings/applications` — Applications (PREP-FR-01, PREP-FR-02,
- * PREP-FR-04, PRJ-FR-28; J23 S8; plan §4a, C AP1-AP7). One table of
+ * PREP-FR-04; J23 S8; plan §4a, C AP1-AP7). One table of
  * application profiles: the applications PlateVault detects and has a
  * profile for, then the ones the user added. Each row shows whether its
  * profile is verified, the located executable and what PlateVault detects
@@ -9,11 +9,11 @@
  * generic "Open in…" row: Add application… adds any other application, with
  * its executable and launch arguments, and only those can be removed. Locate
  * opens the OS chooser with the applications PlateVault detects on this
- * computer. Project defaults hold the View mode a new Project starts with,
- * the GROUP and PANEL folder keywords (a Project may set its own) and, on
- * Windows, the Developer Mode check symlinks need (P-PREP3).
+ * computer. Project defaults hold the View mode a new Project starts with
+ * and, on Windows, the Developer Mode check symlinks need (P-PREP3). The
+ * grouping keywords live in Settings › Naming.
  */
-import { AppWindow, Pencil, Plus } from "lucide-react"
+import { AppWindow, Plus } from "lucide-react"
 import { useState } from "react"
 import { DeveloperModeStatus } from "@/app/developer-mode"
 import { useMessages } from "@/app/preferences"
@@ -22,14 +22,14 @@ import type { Action, Column, MenuItem } from "@/components/app/contracts"
 import { KeyValueList, PathText } from "@/components/app/data"
 import { EmptyState, useSaveState } from "@/components/app/feedback"
 import { ArgumentsField, PathField, SegmentedField, SelectField, TextField } from "@/components/app/fields"
-import { blockedByErrors, FormDialog } from "@/components/app/form-dialog"
-import { SettingsRow, SettingsSection } from "@/components/app/settings"
+import { FormDialog } from "@/components/app/form-dialog"
+import { SettingsSection } from "@/components/app/settings"
 import { StatusBadge } from "@/components/app/status"
 import { ListSection, SettingsPage } from "@/components/templates/settings-page"
 import { MODE_NAME } from "@/domain/labels"
-import type { ApplicationProfile, GroupKeywords, InputMode, SimulatedApp } from "@/domain/types"
+import type { ApplicationProfile, InputMode, SimulatedApp } from "@/domain/types"
 import { type Messages, say } from "@/lib/i18n"
-import { addApplicationProfile, checkExecutable, keywordRefusals, locateExecutable, profileDuplicates, removeApplicationProfile, setDefaultInputMode, setGroupKeywords, setLaunchArgs } from "@/store/actions/settings"
+import { addApplicationProfile, checkExecutable, locateExecutable, profileDuplicates, removeApplicationProfile, setDefaultInputMode, setLaunchArgs } from "@/store/actions/settings"
 import { useStore } from "@/store/core"
 
 /** Profile order: the applications PlateVault has a profile for, then the ones the user added (by name). */
@@ -183,40 +183,6 @@ function AddApplicationDialog({ open, onClose }: { open: boolean; onClose: () =>
   )
 }
 
-/** The keyword field a refusal names: the one whose name it quotes; "GROUP and PANEL need different names" goes under the panel keyword. */
-function keywordErrors(m: Messages, keywords: GroupKeywords): Record<keyof GroupKeywords, string[]> {
-  const errors: Record<keyof GroupKeywords, string[]> = { group: [], panel: [] }
-  for (const reason of keywordRefusals(keywords)) {
-    const named = "key" in reason ? reason.params.name : undefined
-    const fields: (keyof GroupKeywords)[] = named === undefined ? ["panel"] : (["group", "panel"] as const).filter((field) => (keywords[field] || "–") === named)
-    for (const field of fields) errors[field].push(say(m, reason))
-  }
-  return errors
-}
-
-/** The GROUP and PANEL keyword names every Project's View uses unless it sets its own (PRJ-FR-28). Refused inline, under the field it names, while a name cannot name a View folder. */
-function KeywordsDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const m = useMessages()
-  const current = useStore((s) => s.settings.keywords)
-  const [keywords, setKeywords] = useState<GroupKeywords>(current)
-  const [wasOpen, setWasOpen] = useState(false)
-  if (open !== wasOpen) {
-    setWasOpen(open)
-    if (open) setKeywords(current)
-  }
-  const label = m.settings_save()
-  const next = { group: keywords.group.trim(), panel: keywords.panel.trim() }
-  const errors = keywordErrors(m, next)
-  const reasons = Object.fromEntries([...errors.group, ...errors.panel].map((reason, i) => [String(i), reason]))
-  const confirm: Action = { id: "save-keywords", label, kind: "primary", unavailable: blockedByErrors(label, reasons), run: () => setGroupKeywords(next) }
-  return (
-    <FormDialog open={open} onOpenChange={(value) => !value && onClose()} title={m.settings_label_group_keywords()} size="sm" confirm={confirm}>
-      <TextField label={m.apps_keyword_group()} value={keywords.group} onChange={(group) => setKeywords({ ...keywords, group })} error={errors.group} mono autoFocus />
-      <TextField label={m.apps_keyword_panel()} value={keywords.panel} onChange={(panel) => setKeywords({ ...keywords, panel })} error={errors.panel} mono />
-    </FormDialog>
-  )
-}
-
 function profileColumns(m: Messages): Column<ApplicationProfile>[] {
   return [
     { id: "application", header: m.apps_col_application(), rowHeader: true, truncate: true, sortValue: (p) => p.name, cell: (p) => p.name },
@@ -231,11 +197,9 @@ export function SettingsApplicationsPage() {
   const m = useMessages()
   const profiles = useStore((s) => s.catalog.profiles)
   const mode = useStore((s) => s.settings.defaultInputMode)
-  const keywords = useStore((s) => s.settings.keywords)
   const [locating, setLocating] = useState<ApplicationProfile | null>(null)
   const [editingArgs, setEditingArgs] = useState<ApplicationProfile | null>(null)
   const [adding, setAdding] = useState(false)
-  const [editingKeywords, setEditingKeywords] = useState(false)
   const { save, indicator } = useSaveState()
   const rows = Object.values(profiles).sort((a, b) => ORDER.indexOf(a.application) - ORDER.indexOf(b.application) || a.name.localeCompare(b.name))
 
@@ -275,10 +239,6 @@ export function SettingsApplicationsPage() {
           options={INPUT_MODES.map((value) => ({ value, label: say(m, MODE_NAME[value]) }))}
           onChange={(value) => save(() => setDefaultInputMode(value))}
         />
-        <SettingsRow label={m.settings_label_group_keywords()}>
-          <code>{`${keywords.group} · ${keywords.panel}`}</code>
-          <ActionButton action={{ id: "edit-keywords", label: m.settings_edit(), icon: Pencil, opensDialog: true, run: () => setEditingKeywords(true) }} />
-        </SettingsRow>
         <DeveloperModeStatus />
       </SettingsSection>
 
@@ -302,7 +262,6 @@ export function SettingsApplicationsPage() {
       <LocateDialog profile={locating} onClose={() => setLocating(null)} />
       <ArgumentsDialog profile={editingArgs} onClose={() => setEditingArgs(null)} />
       <AddApplicationDialog open={adding} onClose={() => setAdding(false)} />
-      <KeywordsDialog open={editingKeywords} onClose={() => setEditingKeywords(false)} />
     </SettingsPage>
   )
 }

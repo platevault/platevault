@@ -41,7 +41,7 @@ function describeViewRef(catalog: Catalog, view: SavedTargetPreset["view"]): Mes
   if (favourite) parts.push(msg("filter_bar_facet_value", { label: msg("targets_favourite"), value: msg(favourite === "yes" ? "targets_favourite_yes" : "targets_favourite_no") }))
   if (view.rig) {
     const rig = catalog.opticalTrains[view.rig]
-    parts.push(rig ? verbatim(rig.name) : msg("targets_rig_gone"))
+    parts.push(rig ? verbatim(rig.name) : msg("targets_saved_rig_gone"))
   }
   if (view.sort) parts.push(msg("targets_sorted_by", { sort: view.sort.replace(".", " ") }))
   return joinRefs(parts, " · ")

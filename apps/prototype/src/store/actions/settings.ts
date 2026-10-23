@@ -316,17 +316,6 @@ export function setGroupKeyword(kind: GroupKeywordKind, name: string): CommitRes
   return result
 }
 
-/** The GROUP and PANEL keyword names every Project uses unless it sets its own (PRJ-FR-28); a change reaches each View on its next Apply. */
-export function setGroupKeywords(keywords: GroupKeywords): CommitResult {
-  const next = { group: keywords.group.trim(), panel: keywords.panel.trim() }
-  const label = msg("settings_label_group_keywords")
-  const reasons = keywordRefusals(next)
-  if (reasons.length > 0) return refuse(msg("store_refused", { label }), reasons, APPS_HREF)
-  const result = commit(label, (s) => ({ ...s, settings: { ...s.settings, keywords: next } }), { href: APPS_HREF })
-  if (result.ok) recordSaved(label, verbatim(`${next.group} · ${next.panel}`), APPS_HREF)
-  return result
-}
-
 // ---------------------------------------------------------------------------
 // Matching (D-W114, PRJ-FR-31, CAL-FR-19 to CAL-FR-21)
 // ---------------------------------------------------------------------------

@@ -10,7 +10,7 @@
  *   samples of the region, and that MAD is unscaled.
  * - Bin readout (HistogramTransformation's information panel): hovering a
  *   bin draws a hairline there and the first caption line reads
- *   "1,512–1,528 ADU · 3,412 px · 4.1 %"; the last bin, which also holds every
+ *   "1,512-1,528 ADU · 3,412 px · 4.1 %"; the last bin, which also holds every
  *   brighter sample, reads "≥ 2,940 ADU · …". The figure takes focus, and ←/→
  *   (Home/End) step the bins, so the readout is not pointer-only.
  * - `readout`: a value from elsewhere (the plate's cursor readout) drawn as a

@@ -35,7 +35,7 @@ describe("nights left (C7)", () => {
 
   it("names the window", () => {
     expect(say(m, windowRef(finishBy))).toBe("Finish by 1 Nov")
-    expect(say(m, windowRef({ kind: "season", from: TONIGHT, to: "2027-01-27" }))).toBe("Season 13 Oct – 27 Jan")
+    expect(say(m, windowRef({ kind: "season", from: TONIGHT, to: "2027-01-27" }))).toBe(m.domain_window_season({ from: "13 Oct", to: "27 Jan" }))
   })
 })
 

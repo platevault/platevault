@@ -98,7 +98,7 @@ function nightName(m: Messages, n: CalendarNight, date: string): string {
     moon: m.calendar_moon({ illumination: n.moon.illuminationPct, phase: say(m, n.moon.phase) }),
     dark: n.darkS === null ? m.calendar_never_dark() : m.calendar_dark({ time: formatHours(n.darkS) }),
     goals: m.calendar_goals_suit({ count: n.goals, n: formatCount(n.goals) }),
-    planned: m.calendar_planned({ count: n.planned, n: formatCount(n.planned) }),
+    plan: m.calendar_planned({ count: n.planned, n: formatCount(n.planned) }),
   })
 }
 

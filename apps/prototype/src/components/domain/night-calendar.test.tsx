@@ -2,6 +2,7 @@ import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } fr
 import { render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { m } from "@/lib/i18n"
 import { type CalendarNight, NightCalendar } from "./night-calendar"
 
 /** Wednesday: in en-GB its week starts on Monday 12 October. */
@@ -55,7 +56,7 @@ describe("NightCalendar", () => {
     expect(within(grid).getAllByRole("link").filter((link) => link.tabIndex === 0)).toEqual([night(TODAY)])
     // The grid ends with the week of the last night: Monday 12 to Sunday 1 November.
     expect(within(grid).getAllByRole("row")).toHaveLength(4)
-    expect(night("2026-10-15")).toHaveAccessibleName(/Moon 41% Waxing gibbous, never dark, 1 goal suits it, 0 Targets planned/)
+    expect(night("2026-10-15")).toHaveAccessibleName(new RegExp(`Moon 41% Waxing gibbous, never dark, 1 goal suits it, ${m.calendar_planned({ count: 0, n: "0" })}`))
   })
 
   it("moves a night or a week with the arrows, to the week's ends with Home and End, never before tonight", async () => {

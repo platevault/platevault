@@ -19,9 +19,9 @@ export function siteTime(iso: string, timeZone: string): string {
   return `${formatTime(iso, timeZone)} ${zoneAbbreviation(iso, timeZone)}`
 }
 
-/** "21:40–04:10 CEST" in the site's zone. */
+/** "21:40-04:10 CEST" in the site's zone. */
 export function siteTimeRange(start: string, end: string, timeZone: string): string {
-  return `${formatTime(start, timeZone)}–${formatTime(end, timeZone)} ${zoneAbbreviation(end, timeZone)}`
+  return `${formatTime(start, timeZone)}-${formatTime(end, timeZone)} ${zoneAbbreviation(end, timeZone)}`
 }
 
 /** An altitude in whole degrees with a true minus sign. */
@@ -48,7 +48,7 @@ export function MoonLine({ moon, timeZone, className }: { moon: MoonTonight; tim
   )
 }
 
-/** "Dark 20:10–05:40 CEST": the night's darkness window at the site, or that it never gets dark. */
+/** "Dark 20:10-05:40 CEST": the night's darkness window at the site, or that it never gets dark. */
 export function DarkLine({ darkness, timeZone, className }: { darkness: Tonight["darkness"]; timeZone: string; className?: string }) {
   const m = useMessages()
   return (
@@ -74,7 +74,7 @@ export interface SparkSky {
   best: { start: string; end: string } | null
 }
 
-/** "Max 81° at 22:40 · window 20:10–02:30 CEST": the sparkline's tooltip and accessible name, one string. */
+/** "Max 81° at 22:40 · window 20:10-02:30 CEST": the sparkline's tooltip and accessible name, one string. */
 export function altitudeFacts(m: Messages, sky: SparkSky, timeZone: string): string {
   if (sky.peakDeg === null || sky.peakAt === null) return m.tonight_no_darkness()
   const altitude = degrees(sky.peakDeg)

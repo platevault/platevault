@@ -73,21 +73,6 @@ describe("Settings › Applications (cmvgf)", () => {
     expect((await screen.findByText(m.apps_launch_arguments(), { selector: "dt" })).nextElementSibling?.textContent).toBe("--batch")
   })
 
-  it("refuses a group keyword a View folder already uses, inline under its field, and Save stays unavailable", async () => {
-    const user = userEvent.setup()
-    renderPage()
-    await user.click(await screen.findByRole("button", { name: `${m.settings_edit()}…` }))
-    const dialog = await screen.findByRole("dialog")
-    const group = within(dialog).getByRole("textbox", { name: m.apps_keyword_group() })
-    await user.clear(group)
-    await user.type(group, "NIGHT")
-    expect(group).toHaveAttribute("aria-invalid", "true")
-    expect(group).toHaveAccessibleDescription(m.settings_keyword_reserved({ name: "NIGHT" }))
-    expect(within(dialog).getByRole("textbox", { name: m.apps_keyword_panel() })).not.toHaveAttribute("aria-invalid")
-    expect(within(dialog).getByRole("button", { name: m.settings_save() })).toHaveAttribute("aria-disabled", "true")
-    expect(store.getState().settings.keywords.group).toBe("GROUP")
-  })
-
   describe("Add application", () => {
     async function openAdd(user: ReturnType<typeof userEvent.setup>) {
       renderPage()

@@ -154,7 +154,7 @@ function appShortcuts(m: Messages): Shortcut[] {
   return [
     { keys: [[MOD_LABEL, "K"]], label: m.shortcuts_search() },
     { keys: [[MOD_LABEL, "↩"]], label: m.shortcuts_proceed() },
-    { keys: [["⌃", "1–9"]], label: m.shortcuts_go_to_step() },
+    { keys: [["⌃", "1-9"]], label: m.shortcuts_go_to_step() },
     { keys: [["?"]], label: m.shortcuts_show() },
     { keys: [["/"]], label: m.shortcuts_focus_search() },
     { keys: [["["]], label: m.shortcuts_toggle_sidebar() },
@@ -205,7 +205,7 @@ export function reviewShortcuts(m: Messages): ShortcutGroup {
       { keys: [[REVIEW_KEY.inspector]], label: m.review_frame_inspector() },
       { keys: [[REVIEW_KEY.grid]], label: m.review_key_grid() },
       { keys: [[REVIEW_KEY.height]], label: m.review_table_height() },
-      { keys: [["⌥", "1–4"]], label: m.review_key_filter() },
+      { keys: [["⌥", "1-4"]], label: m.review_key_filter() },
       { keys: [[MOD_LABEL, REVIEW_KEY.selectAll]], label: m.review_select_all_shown() },
       { keys: [[m.key_space()]], label: m.review_key_toggle_selection() },
       { keys: [[m.key_escape()]], label: m.review_key_escape() },
