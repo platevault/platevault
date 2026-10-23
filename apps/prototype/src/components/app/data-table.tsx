@@ -53,7 +53,8 @@
  *   min-content width, so a frame too narrow for every column's text shrinks
  *   the truncated columns, each in proportion to its width, while the others
  *   keep theirs: the table stays inside its frame wherever the untruncated
- *   columns fit.
+ *   columns fit. A `truncateMin` column shrinks no further than its floor
+ *   (`name`: a typical record name); past it the table scrolls sideways.
  * - Columns menu (opt-in `hideable` columns): "Columns ▾" in the toolbar
  *   row lists a checkbox per hideable column; `defaultHidden` ones start
  *   hidden. The row header, the selection and the row actions always show
@@ -292,16 +293,20 @@ export type DataTableProps<T> = DataTableBaseProps<T> & DataTableRowProps<T>
 /** What the toolbar slot moves focus to after a swap took the focused control away. */
 const SLOT_FOCUSABLE = "button:not([disabled]), input:not([disabled]), [role=checkbox], [tabindex]:not([tabindex='-1'])"
 
+/** The floor of a `truncateMin` column: wide enough for a typical record name ("Astro-T7 calibration" is 121 px). */
+const TRUNCATE_MIN = { name: "min-w-32" } as const
+
 /**
  * A truncated cell's content. The grid's one `minmax(0, 1fr)` track gives it no min-content width, so under
  * the table's auto layout a truncated column can give up width down to its header's, while every other
  * column keeps its content width; the cell's `max-w-*` still caps how wide it grows. When the frame is too
  * narrow, the truncated columns share what the other columns leave, each in proportion to its own width,
- * and cut their text with the full text on hover (T2).
+ * and cut their text with the full text on hover (T2). A `min` floor stops the column shrinking below it,
+ * so the table scrolls sideways instead.
  */
-function Truncated({ children }: { children: ReactNode }) {
+function Truncated({ min, children }: { min?: keyof typeof TRUNCATE_MIN; children: ReactNode }) {
   return (
-    <div className="grid grid-cols-1">
+    <div className={cn("grid grid-cols-1", min && TRUNCATE_MIN[min])}>
       <div className="truncate" onPointerEnter={titleWhenCut}>
         {children}
       </div>
@@ -802,7 +807,7 @@ export function DataTable<T>({
                       </TableCell>
                     ) : null}
                     {columns.map((column, columnIndex) => {
-                      const content = column.truncate ? <Truncated>{column.cell(row)}</Truncated> : column.cell(row)
+                      const content = column.truncate ? <Truncated min={column.truncateMin}>{column.cell(row)}</Truncated> : column.cell(row)
                       const disclosure = columnIndex === 0 && expand !== undefined
                       return (
                         <TableCell
