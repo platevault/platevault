@@ -11,6 +11,8 @@
 
 #[path = "support/membership.rs"]
 mod membership_support;
+#[path = "support/scan.rs"]
+mod scan_support;
 mod support;
 
 use std::path::Path;
@@ -196,19 +198,10 @@ fn write(root: &Path, name: &str, cards: &[(&'static str, String)]) {
 }
 
 async fn scan_to_end(library: &Arc<Library>, location: Uuid) {
-    let mut progress = library.subscribe_scan_progress();
+    let watch = scan_support::ScanWatch::new(library);
     let started = library.start_scan(location, None).await.unwrap();
-    tokio::time::timeout(Duration::from_secs(60), async {
-        loop {
-            let operation = progress.recv().await.unwrap();
-            if operation.id == started.id && operation.state != ScanState::Running {
-                assert_eq!(operation.state, ScanState::Completed);
-                return;
-            }
-        }
-    })
-    .await
-    .expect("scan must publish its terminal state");
+    let operation = watch.terminal(started.id, Duration::from_secs(60)).await;
+    assert_eq!(operation.state, ScanState::Completed);
 }
 
 fn expected(session: &Session) -> ExpectedSession {

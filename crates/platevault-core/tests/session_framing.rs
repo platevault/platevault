@@ -10,6 +10,8 @@
 //! keep every session id, and a later Settings change re-splits no indexed
 //! session: new frames join a session by its own intake limits.
 
+#[path = "support/scan.rs"]
+mod scan_support;
 mod support;
 
 use std::path::Path;
@@ -386,19 +388,10 @@ fn the_centre_limit_is_an_angle_whatever_the_field() {
 // ── Intake: real scans of a Captures location ────────────────────────────────
 
 async fn scan(library: &Arc<Library>, location: Uuid) {
-    let mut progress = library.subscribe_scan_progress();
+    let watch = scan_support::ScanWatch::new(library);
     let started = library.start_scan(location, None).await.unwrap();
-    let state = tokio::time::timeout(Duration::from_secs(120), async {
-        loop {
-            let operation = progress.recv().await.unwrap();
-            if operation.id == started.id && operation.state != ScanState::Running {
-                return operation.state;
-            }
-        }
-    })
-    .await
-    .expect("scan must publish its terminal state");
-    assert_eq!(state, ScanState::Completed);
+    let operation = watch.terminal(started.id, Duration::from_secs(120)).await;
+    assert_eq!(operation.state, ScanState::Completed);
 }
 
 /// The current light sessions, by framing ordinal.

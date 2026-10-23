@@ -6,14 +6,14 @@
 //! content identity is recorded, one of them moved to a stand-in OS Trash
 //! and recorded Trashed, and verified transfers recorded in the journal.
 //! Included with `#[path = "support/storage_overview.rs"] mod overview_support;`
-//! next to `mod support;`.
+//! next to `mod support;`. The including test crate must also declare
+//! `#[path = "support/scan.rs"] mod scan_support;`.
 #![allow(dead_code)]
 
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::Duration;
 
 use persistence_library::TrashedFrame;
 use platevault_core::custody::trash::OsTrash;
@@ -44,21 +44,6 @@ impl OsTrash for BinTrash {
         let name = entry.file_name().ok_or("an entry has a name")?;
         fs::rename(entry, self.bin.join(name)).map_err(|error| error.to_string())
     }
-}
-
-pub async fn scan_to_end(library: &Arc<Library>, location: Uuid) -> ScanOperation {
-    let mut progress = library.subscribe_scan_progress();
-    let started = library.start_scan(location, None).await.unwrap();
-    tokio::time::timeout(Duration::from_secs(20), async {
-        loop {
-            let operation = progress.recv().await.unwrap();
-            if operation.id == started.id && operation.state != ScanState::Running {
-                return operation;
-            }
-        }
-    })
-    .await
-    .expect("scan must publish its terminal state")
 }
 
 pub async fn register(library: &Arc<Library>, root: &Path, name: &str) -> Location {
@@ -101,7 +86,10 @@ impl Duplicates {
         let mut locations = Vec::new();
         for name in names {
             let location = register(library, &root.join(name), name).await;
-            assert_eq!(scan_to_end(library, location.id).await.state, ScanState::Completed);
+            assert_eq!(
+                crate::scan_support::scan_to_end(library, location.id).await.state,
+                ScanState::Completed
+            );
             locations.push(location);
         }
         let locations: [Location; 3] = locations.try_into().unwrap();

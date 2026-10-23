@@ -13,6 +13,8 @@
     clippy::float_cmp
 )]
 
+#[path = "support/scan.rs"]
+mod scan_support;
 mod support;
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -127,22 +129,6 @@ fn write_frames(root: &Path, count: usize) -> Vec<String> {
         .collect()
 }
 
-/// Start a scan and wait for its terminal event.
-async fn scan_to_end(library: &Arc<Library>, location: Uuid) -> ScanOperation {
-    let mut progress = library.subscribe_scan_progress();
-    let started = library.start_scan(location, None).await.unwrap();
-    tokio::time::timeout(Duration::from_secs(60), async {
-        loop {
-            let operation = progress.recv().await.unwrap();
-            if operation.id == started.id && operation.state != ScanState::Running {
-                return operation;
-            }
-        }
-    })
-    .await
-    .expect("scan must publish its terminal state")
-}
-
 /// Poll the durable status until the run leaves Running, failing only once no
 /// frame has settled for two minutes.
 ///
@@ -230,7 +216,10 @@ impl Indexed {
             )
             .await
             .unwrap();
-        assert_eq!(scan_to_end(&library, location.id).await.state, ScanState::Completed);
+        assert_eq!(
+            scan_support::scan_to_end(&library, location.id).await.state,
+            ScanState::Completed
+        );
         let ids = library
             .catalog()
             .location_assets(location.id)
@@ -750,7 +739,7 @@ async fn stretched_tiles_and_regions_change_no_record_and_remeasuring_is_bit_ide
         )
         .await
         .unwrap();
-    assert_eq!(scan_to_end(&fresh, location.id).await.state, ScanState::Completed);
+    assert_eq!(scan_support::scan_to_end(&fresh, location.id).await.state, ScanState::Completed);
     let again: BTreeMap<String, Uuid> = fresh
         .catalog()
         .location_assets(location.id)

@@ -8,11 +8,13 @@
 //! and the scan's terminal event is published only after them. A test that
 //! polls the stored status races those writes; it waits for the event instead.
 //!
-//! Included by path as `scan_support`, never from `support/mod.rs`, which the
-//! library's own unit tests compile as `crate::fixtures`:
-//! `#[path = "support/scan.rs"] mod scan_support;` in `crates/platevault-core/tests`,
-//! `#[path = "../../../../crates/platevault-core/tests/support/scan.rs"]` in
-//! the desktop tests.
+//! Included by path as `scan_support` in `crates/platevault-core/tests`, in
+//! `src/lib.rs`'s lib unit tests through the `cfg(test)` crate alias, and in
+//! `apps/desktop/src-tauri/tests/library_restart.rs` via
+//! `#[path = "../../../../crates/platevault-core/tests/support/scan.rs"]`.
+//! It is not included from `support/mod.rs`, which becomes `crate::fixtures`
+//! in lib tests: `#[path = "support/scan.rs"] mod scan_support;` for
+//! integration tests and `#[path = "../tests/support/scan.rs"]` for `src/lib.rs`.
 #![allow(dead_code)]
 
 use std::sync::Arc;

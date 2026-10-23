@@ -1144,10 +1144,10 @@ pub(crate) mod fixtures;
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
-    use std::time::Duration;
 
     use super::*;
     use crate::inventory::{OsVolumes, Probed, VolumeCache, VolumeProbe};
+    use crate::scan_support::scan_to_end;
     use crate::{ExpectedAsset, Quality};
 
     fn target_basis(detail: &SessionDetail) -> BTreeMap<Uuid, ObservationFingerprint> {
@@ -1194,21 +1194,6 @@ mod tests {
             locations.push(location);
         }
         (library, locations, originals)
-    }
-
-    async fn scan_to_end(library: &Arc<Library>, location: Uuid) -> ScanOperation {
-        let mut progress = library.subscribe_scan_progress();
-        let started = library.start_scan(location, None).await.unwrap();
-        tokio::time::timeout(Duration::from_secs(20), async {
-            loop {
-                let operation = progress.recv().await.unwrap();
-                if operation.id == started.id && operation.state != ScanState::Running {
-                    return operation;
-                }
-            }
-        })
-        .await
-        .expect("scan must publish its terminal state")
     }
 
     fn unchanged(originals: &[(std::path::PathBuf, String)]) {

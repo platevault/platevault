@@ -8,6 +8,8 @@
 //! zero-Img-time reasons, unknown values sorting last, no-site rows, and the
 //! built-in and saved presets.
 
+#[path = "support/scan.rs"]
+mod scan_support;
 use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::path::Path;
@@ -68,18 +70,9 @@ async fn my_targets_page_includes_a_target_with_an_indexed_session() {
     library.catalog().save_target(&candidate, None).await.unwrap();
     let generation = library.catalog().target_generation().await.unwrap();
 
-    let mut progress = library.subscribe_scan_progress();
+    let watch = scan_support::ScanWatch::new(&library);
     let started = library.start_scan(location.id, None).await.unwrap();
-    let terminal = tokio::time::timeout(std::time::Duration::from_secs(120), async {
-        loop {
-            let operation = progress.recv().await.unwrap();
-            if operation.id == started.id && operation.state != ScanState::Running {
-                break operation;
-            }
-        }
-    })
-    .await
-    .expect("indexing publishes a terminal scan event");
+    let terminal = watch.terminal(started.id, std::time::Duration::from_secs(120)).await;
     assert_eq!(terminal.state, ScanState::Completed, "{terminal:?}");
     let session = library
         .catalog()

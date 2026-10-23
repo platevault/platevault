@@ -6,6 +6,8 @@
 //! collisions, verified Copy and Move, resume after an unmounted source, and
 //! indexing as files land.
 
+#[path = "support/scan.rs"]
+mod scan_support;
 mod support;
 
 use std::fs;
@@ -285,21 +287,6 @@ fn reason_code(item: &ImportItem) -> Option<ReasonCode> {
     item.reason.as_ref().map(|reason| reason.code)
 }
 
-async fn scan_to_end(library: &Arc<Library>, location: Uuid) -> ScanOperation {
-    let mut progress = library.subscribe_scan_progress();
-    let started = library.start_scan(location, None).await.unwrap();
-    tokio::time::timeout(Duration::from_secs(20), async {
-        loop {
-            let operation = progress.recv().await.unwrap();
-            if operation.id == started.id && operation.state != ScanState::Running {
-                return operation;
-            }
-        }
-    })
-    .await
-    .expect("scan must publish its terminal state")
-}
-
 #[tokio::test]
 async fn preview_routes_lights_and_calibration_with_templated_paths() {
     let fixture = Fixture::new().await;
@@ -496,7 +483,7 @@ async fn sha_duplicate_skipped_incl_same_import_and_import_new() {
         "2026-04-11T22:00:00",
     );
     assert_eq!(
-        scan_to_end(&fixture.library, fixture.captures_id).await.state,
+        scan_support::scan_to_end(&fixture.library, fixture.captures_id).await.state,
         ScanState::Completed
     );
     let indexed_id =
@@ -900,7 +887,7 @@ async fn unknown_filter_prompt_holds_nothing_back() {
         "2026-04-01T22:00:00",
     );
     assert_eq!(
-        scan_to_end(&fixture.library, fixture.captures_id).await.state,
+        scan_support::scan_to_end(&fixture.library, fixture.captures_id).await.state,
         ScanState::Completed
     );
     let redcat = fixture

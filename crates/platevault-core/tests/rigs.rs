@@ -5,11 +5,12 @@
 //! LIB-FR-05 unknown filter part), and the rig version a session's night
 //! records under the real capture grouping (PLAN-EQ-FR-07, LIB-FR-26).
 
+#[path = "support/scan.rs"]
+mod scan_support;
 mod support;
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::Duration;
 
 use persistence_library::SessionQuery;
 use platevault_core::library::Library;
@@ -139,21 +140,6 @@ fn write_halpha(root: &Path, name: &str, start: &str) {
     .unwrap();
 }
 
-async fn scan_to_end(library: &Arc<Library>, location: Uuid) -> ScanOperation {
-    let mut progress = library.subscribe_scan_progress();
-    let started = library.start_scan(location, None).await.unwrap();
-    tokio::time::timeout(Duration::from_secs(20), async {
-        loop {
-            let operation = progress.recv().await.unwrap();
-            if operation.id == started.id && operation.state != ScanState::Running {
-                return operation;
-            }
-        }
-    })
-    .await
-    .expect("scan must publish its terminal state")
-}
-
 /// The J15 `Halpha-test` session, the `RedCat` rig listing Ha and OIII and the
 /// OSC `Esprit` rig with an empty list.
 struct HalphaTest {
@@ -181,7 +167,10 @@ impl HalphaTest {
             )
             .await
             .unwrap();
-        assert_eq!(scan_to_end(&library, location.id).await.state, ScanState::Completed);
+        assert_eq!(
+            scan_support::scan_to_end(&library, location.id).await.state,
+            ScanState::Completed
+        );
         let sessions = library.catalog().list_sessions(&SessionQuery::default()).await.unwrap();
         assert_eq!(sessions.len(), 1);
         let session = sessions[0].session.clone();
@@ -344,7 +333,7 @@ async fn confirming_a_rig_records_the_version_of_the_sessions_night() {
         )
         .await
         .unwrap();
-    assert_eq!(scan_to_end(&library, location.id).await.state, ScanState::Completed);
+    assert_eq!(scan_support::scan_to_end(&library, location.id).await.state, ScanState::Completed);
     let catalog = library.catalog();
     let camera = Camera {
         id: Uuid::new_v4(),

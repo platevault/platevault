@@ -9,6 +9,8 @@
 //! read. The Plan area's Target overview with Project gaps is rewritten on the
 //! amended Project contract (U24) and is not exercised here.
 
+#[path = "support/scan.rs"]
+mod scan_support;
 mod support;
 
 use std::collections::BTreeMap;
@@ -192,21 +194,6 @@ fn write_frames(root: &Path) -> Vec<(PathBuf, String)> {
     originals
 }
 
-async fn scan_to_end(library: &Arc<Library>, location: Uuid) -> ScanOperation {
-    let mut progress = library.subscribe_scan_progress();
-    let started = library.start_scan(location, None).await.unwrap();
-    tokio::time::timeout(Duration::from_secs(20), async {
-        loop {
-            let operation = progress.recv().await.unwrap();
-            if operation.id == started.id && operation.state != ScanState::Running {
-                return operation;
-            }
-        }
-    })
-    .await
-    .expect("scan must publish its terminal state")
-}
-
 fn backyard_input() -> SiteInput {
     SiteInput {
         name: "Backyard".into(),
@@ -262,7 +249,10 @@ impl Worked {
             )
             .await
             .unwrap();
-        assert_eq!(scan_to_end(&library, location.id).await.state, ScanState::Completed);
+        assert_eq!(
+            scan_support::scan_to_end(&library, location.id).await.state,
+            ScanState::Completed
+        );
         let target = TargetCandidate {
             id: Uuid::new_v4(),
             designation: "NGC 7000".into(),
