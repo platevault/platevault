@@ -19,8 +19,8 @@ export interface TargetLookupTest {
   result: { name: string; ra: number; dec: number; objectType: string; aliases: string[] } | null
 }
 
-/** The Targets URL keys a saved preset restores: Show mode, catalogues, built-in preset, rig, sort and the good-tonight filter band. */
-export type TargetsViewKey = "mode" | "cat" | "preset" | "rig" | "sort" | "good"
+/** The Targets URL keys a saved preset restores: Show mode, catalogues, built-in preset, rig, sort, the good-tonight filter band and the Favourite filter. */
+export type TargetsViewKey = "mode" | "cat" | "preset" | "rig" | "sort" | "good" | "fav"
 
 export interface SavedTargetPreset {
   id: string

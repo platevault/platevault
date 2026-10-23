@@ -11,8 +11,10 @@
  *   (`?mode=browse`) and Planned (`?view=planned`, the chosen night's plan).
  * - Toolbar: search (My targets, the library, the bundled catalogues and
  *   SIMBAD), the facets Catalogues (Browse), Suitable filters (any picked
- *   filter good or marginal under its Moon curve, C2/C6; Q16) and Rig, and
- *   the Presets ▾ menu (built-in, saved, Save current…, Delete).
+ *   filter good or marginal under its Moon curve, C2/C6; Q16), Favourite
+ *   (Yes or No; not in Planned) and Rig, and the Presets ▾ menu (built-in,
+ *   saved, Save current…, Delete).
+ * - Favourite column: a filled star on each favourite, in every view.
  * - Suitable filters column: one badge per grade, good then marginal, poor
  *   hidden (Q36). It sorts by its grade points, or with picked filters by
  *   their longest Moon-clear time. Img time reads "0h · Too low" when zero:
@@ -27,11 +29,11 @@
  *   it.
  *
  * The view lives in the URL (`view`, `night`, `mode`, `cat`, `preset`,
- * `good`, `rig`, `q`, `project`, `saved`, `open`), so opening a Target and
+ * `good`, `fav`, `rig`, `q`, `project`, `saved`, `open`), so opening a Target and
  * coming back keeps it.
  */
 import { useNavigate, useSearch } from "@tanstack/react-router"
-import { CalendarArrowDown, CalendarClock, Crosshair, MoonStar, Search, Star } from "lucide-react"
+import { CalendarArrowDown, CalendarClock, Check, Crosshair, MoonStar, Search, Star } from "lucide-react"
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react"
 import { useMessages, usePreferences } from "@/app/preferences"
 import { ActionButton, useAction } from "@/components/app/actions"
@@ -55,13 +57,14 @@ import { say } from "@/lib/i18n"
 import type { SearchParams } from "@/routes"
 import { type CommitResult, store, useStore } from "@/store/core"
 import { MoonLimitsDialog } from "./moon-limits"
-import { addToProjectMenu, capturedText, choosePlanningSite, clockRange, fitText, keepSearch, myTargetsAction, newProjectAction, planAction, planNight, siteOptions, useSkyContext } from "./parts"
+import { addToProjectMenu, capturedText, choosePlanningSite, clockRange, favouriteAction, fitText, keepSearch, newProjectAction, planAction, planNight, siteOptions, useSkyContext } from "./parts"
 import { ExportCalendarDialog, RemindersDialog } from "./planned-tools"
 import {
   addToMyTargets,
   allRows,
   BUILT_IN_PRESETS,
   browseRows,
+  favouriteFor,
   fitValue,
   GOOD_TONIGHT_SORT,
   goodFor,
@@ -70,6 +73,7 @@ import {
   myTargetRows,
   panelRows,
   parseBands,
+  parseFavourite,
   parseSort,
   plannedOrder,
   presetById,
@@ -172,6 +176,8 @@ export function TargetsPage() {
   const activePreset = preset && !presetBlocked && !query && !planned ? preset : undefined
   const good = parseBands(search.good).filter((b) => bands.includes(b))
   const activeGood = query || planned ? [] : good
+  const favourite = parseFavourite(search.fav)
+  const activeFavourite = planned ? null : favourite
   const activeSaved = search.saved ? saved.find((p) => p.id === search.saved) : undefined
   const savedSort = activeSaved ? parseSort(activeSaved.view.sort) : null
   const firstSort: SortSpec | undefined = activeGood.length > 0 ? GOOD_TONIGHT_SORT : (activePreset?.sort ?? savedSort ?? undefined)
@@ -210,8 +216,8 @@ export function TargetsPage() {
   const goodKey = activeGood.join(",")
   const shown = useMemo(() => {
     if (planned) return plannedOrder(views, nightOrder ?? [])
-    return priorityOrder(goodFor(activePreset ? views.filter(activePreset.match) : views, activeGood))
-  }, [planned, views, nightOrder, activePreset, goodKey])
+    return priorityOrder(favouriteFor(goodFor(activePreset ? views.filter(activePreset.match) : views, activeGood), activeFavourite))
+  }, [planned, views, nightOrder, activePreset, goodKey, activeFavourite])
   /** The Planned view's order, as Target ids: what Move up and Move down rearrange. */
   const order = planned ? shown.map((v) => v.row.key) : []
   const gapsByTarget = useMemo(() => {
@@ -261,10 +267,17 @@ export function TargetsPage() {
     sortValue: (v: RowView) => fitValue(v.fits[index]?.fit),
     cell: (v: RowView) => (v.fits[index] ? fitText(m, v.fits[index].fit) : "–"),
   }))
+  const favouriteColumn: Column<RowView> = {
+    id: "favourite",
+    header: m.targets_favourite(),
+    sortValue: (v) => (v.row.target?.favourite ? 1 : 0),
+    cell: (v) => (v.row.target?.favourite ? <Star role="img" aria-label={m.targets_favourite()} className="size-3.5 fill-warning text-warning" /> : null),
+  }
 
   const columns: Column<RowView>[] = planned
     ? ([
         designation,
+        favouriteColumn,
         altitude,
         {
           id: "window",
@@ -288,8 +301,9 @@ export function TargetsPage() {
       ] satisfies Column<RowView>[]).map((c): Column<RowView> => ({ ...c, sortValue: undefined, static: true }))
     : [
         designation,
+        favouriteColumn,
         ...(view === "browse" || searched
-          ? [{ id: "mine", header: m.project_search_my_targets(), sortValue: (v: RowView) => (v.row.mine ? 1 : 0), cell: (v: RowView) => (v.row.mine ? <Star role="img" aria-label={m.targets_in_my_targets()} className="size-3.5 fill-warning text-warning" /> : null) }]
+          ? [{ id: "mine", header: m.project_search_my_targets(), sortValue: (v: RowView) => (v.row.mine ? 1 : 0), cell: (v: RowView) => (v.row.mine ? <Check role="img" aria-label={m.targets_in_my_targets()} className="size-3.5 text-success" /> : null) }]
           : []),
         { id: "type", header: m.targets_type(), truncate: true, sortValue: okSort("type"), cell: (v) => (v.row.objectType ? say(m, objectTypeRef(v.row.objectType)) : "–") },
         ...(view === "browse" && !searched ? [] : [priority]),
@@ -318,7 +332,7 @@ export function TargetsPage() {
   function rowActions(v: RowView): MenuItem[] {
     const target = v.row.target
     const plan = planAction(m, v.row, night, Boolean(target && plannedIds.has(target.id)))
-    if (!target) return [{ ...myTargetsAction(m, v.row), id: "add" }, plan]
+    if (!target) return [{ ...favouriteAction(m, v.row), id: "add" }, plan]
     const at = order.indexOf(target.id)
     const addTo = addToProjectMenu(m, catalog, target)
     return [
@@ -332,7 +346,7 @@ export function TargetsPage() {
         : []),
       { separator: true },
       plan,
-      myTargetsAction(m, v.row),
+      favouriteAction(m, v.row),
       ...(addTo ? [addTo] : []),
       newProjectAction(m, target.id),
     ]
@@ -354,7 +368,7 @@ export function TargetsPage() {
             dockId: "targets",
             title: target.name,
             actions: [planAction(m, openView.row, night, plannedIds.has(target.id)), newProjectAction(m, target.id), { id: "open", label: m.verb_open(), run: () => openTarget(target.id) }],
-            menu: { label: m.target_menu(), items: [myTargetsAction(m, openView.row), ...(addTo ? [addTo] : [])] },
+            menu: { label: m.target_menu(), items: [favouriteAction(m, openView.row), ...(addTo ? [addTo] : [])] },
             content: (
               <KeyValueList
                 items={[
@@ -394,12 +408,27 @@ export function TargetsPage() {
       ? [{ id: "cat", label: m.targets_catalogues(), kind: "multi" as const, options: CATALOGUES.map((c) => ({ value: c, label: c })), value: catalogues }]
       : []),
     ...(planned ? [] : [{ id: "good", label: m.domain_suitable_filters(), kind: "multi" as const, options: bands.map((b) => ({ value: b, label: b })), value: good }]),
+    ...(planned
+      ? []
+      : [
+          {
+            id: "fav",
+            label: m.targets_favourite(),
+            kind: "single" as const,
+            options: [
+              { value: "yes", label: m.targets_favourite_yes() },
+              { value: "no", label: m.targets_favourite_no() },
+            ],
+            value: favourite ?? "",
+          },
+        ]),
     { id: "rig", label: m.targets_rig(), kind: "single", options: rigOptions, value: rigIds.length > 0 ? rigParam : "" },
   ]
   function onFacets(patch: FacetPatch) {
     const next: SearchParams = { saved: undefined }
     if ("cat" in patch) next.cat = (patch.cat as string[]).join(",") || undefined
     if ("good" in patch) next.good = (patch.good as string[]).join(",") || undefined
+    if ("fav" in patch) next.fav = (patch.fav as string) || undefined
     if ("rig" in patch) next.rig = (patch.rig as string) || (project ? "none" : undefined)
     setParams(next)
   }
@@ -423,17 +452,26 @@ export function TargetsPage() {
     for (const key of VIEW_KEYS) patch[key] = p.view[key]
     setParams(patch)
   }
-  const currentView = { mode: view === "browse" ? "browse" : undefined, cat: catalogues.join(",") || undefined, preset: activePreset?.id, good: good.join(",") || undefined, rig: rigParam !== "project" && rigIds.length > 0 ? rigParam : undefined }
+  const currentView = {
+    mode: view === "browse" ? "browse" : undefined,
+    cat: catalogues.join(",") || undefined,
+    preset: activePreset?.id,
+    good: good.join(",") || undefined,
+    fav: favourite ?? undefined,
+    rig: rigParam !== "project" && rigIds.length > 0 ? rigParam : undefined,
+  }
 
   // ------------------------------------------------------------------
   // Empty states, notice, header
   // ------------------------------------------------------------------
   const go = (id: string, label: string, patch: SearchParams): Action => ({ id, label, run: () => setParams(patch) })
   const empty = (() => {
+    const noFavourite = <EmptyState icon={Star} title={m.targets_none_favourite()} action={<ActionButton action={go("clear-favourite", m.targets_clear_filter(), { fav: undefined })} />} />
     if (planned) return <EmptyState icon={CalendarClock} title={m.plan_night_empty({ night: formatNight(night) })} action={<ActionButton action={go("my", m.project_search_my_targets(), { view: undefined })} />} />
-    if (searched) return <EmptyState icon={Search} title={m.targets_no_match({ query })} action={<ActionButton action={go("clear", m.sessions_clear_search(), { q: undefined })} />} />
+    if (searched) return activeFavourite && searched.length > 0 ? noFavourite : <EmptyState icon={Search} title={m.targets_no_match({ query })} action={<ActionButton action={go("clear", m.sessions_clear_search(), { q: undefined })} />} />
     if (view === "browse" && !scope && !browsing) return <EmptyState icon={Crosshair} title={m.targets_choose_catalogue()} action={<ActionButton action={go("messier", m.targets_browse_messier(), { cat: "Messier" })} />} />
     if (activeGood.length > 0) return <EmptyState icon={Crosshair} title={m.targets_none_suitable()} action={<ActionButton action={go("clear-good", m.targets_clear_filter(), { good: undefined })} />} />
+    if (activeFavourite) return noFavourite
     if (activePreset) return <EmptyState icon={Crosshair} title={m.targets_none_match_preset({ name: activePreset.label })} action={<ActionButton action={go("clear-preset", m.targets_clear_preset(), { preset: undefined, saved: undefined })} />} />
     return <EmptyState icon={Star} title={m.targets_empty()} action={<ActionButton action={go("browse", m.targets_browse_catalogues(), { mode: "browse", cat: "Messier" })} />} />
   })()

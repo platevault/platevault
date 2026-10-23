@@ -1,7 +1,7 @@
 /**
  * Saved Targets presets (PLAN-TGT-FR-10): a named snapshot of the Targets
- * filters (view, catalogues, built-in preset, rig and the Suitable filters
- * bands), kept in slice E's state so it survives restarts. Built-in presets
+ * filters (view, catalogues, built-in preset, rig, the Suitable filters
+ * bands and Favourite), kept in slice E's state so it survives restarts. Built-in presets
  * are constants and never change.
  */
 import { NARROW_BANDS } from "@/domain/labels"
@@ -11,11 +11,11 @@ import { joinRefs, m, type MessageRef, msg, verbatim } from "@/lib/i18n"
 import { freshId, recordSaved } from "@/store/actions/shared"
 import { store, updateSlice } from "@/store/core"
 import type { SavedTargetPreset, TargetsViewKey } from "@/store/slices/e"
-import { parseBands, presetById } from "./targets-model"
+import { parseBands, parseFavourite, presetById } from "./targets-model"
 
 const HREF = "/targets"
 
-export const VIEW_KEYS: TargetsViewKey[] = ["mode", "cat", "preset", "rig", "sort", "good"]
+export const VIEW_KEYS: TargetsViewKey[] = ["mode", "cat", "preset", "rig", "sort", "good", "fav"]
 
 export function savePreset(name: string, view: SavedTargetPreset["view"]): SavedTargetPreset {
   const preset: SavedTargetPreset = { id: freshId("tps", name), name, view }
@@ -37,6 +37,8 @@ function describeViewRef(catalog: Catalog, view: SavedTargetPreset["view"]): Mes
   if (preset) parts.push(preset.name)
   const bands = parseBands(view.good)
   if (bands.length > 0) parts.push(msg("targets_band_ok_tonight", { band: bands.join(", ") }))
+  const favourite = parseFavourite(view.fav)
+  if (favourite) parts.push(msg("filter_bar_facet_value", { label: msg("targets_favourite"), value: msg(favourite === "yes" ? "targets_favourite_yes" : "targets_favourite_no") }))
   if (view.rig) {
     const rig = catalog.opticalTrains[view.rig]
     parts.push(rig ? verbatim(rig.name) : msg("targets_rig_gone"))

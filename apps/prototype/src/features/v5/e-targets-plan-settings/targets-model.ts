@@ -60,7 +60,7 @@ export interface TargetRow {
   sizeDeg: { width: number; height: number } | null
   /** Open Projects that have it as a subject (D-W60 badge). */
   projects: Project[]
-  /** In My targets (D-W125): ★ favourite, an open-Project subject, or a Target with a session. */
+  /** In My targets (D-W125): a favourite, an open-Project subject, or a Target with a session. */
   mine: boolean
   /** A mosaic panel's row: the Target whose mosaic it belongs to (D-W63); null for every other row. */
   panelOf: TargetId | null
@@ -486,11 +486,26 @@ export function goodFor(views: RowView[], bands: readonly Band[]): RowView[] {
   return bands.length > 0 ? views.filter((v) => bands.some((band) => bandOk(v.tonight, band))) : views
 }
 
+/** The Favourite facet's choice: favourites only, or every other row. */
+export type FavouriteFilter = "yes" | "no"
+
+/** The `fav` URL value; anything but "yes" or "no" is no filter. */
+export function parseFavourite(value: string | undefined): FavouriteFilter | null {
+  return value === "yes" || value === "no" ? value : null
+}
+
+/** The Favourite facet: a row is a favourite when its library Target is; a catalogue or SIMBAD result never is. */
+export function favouriteFor(views: RowView[], filter: FavouriteFilter | null): RowView[] {
+  if (!filter) return views
+  const wanted = filter === "yes"
+  return views.filter((v) => (v.row.target?.favourite ?? false) === wanted)
+}
+
 /** Sort of the Suitable filters facet: the picked bands' longest Moon-clear time, longest first (Q16). */
 export const GOOD_TONIGHT_SORT: SortSpec = { column: "tonight", direction: "desc" }
 
 // ---------------------------------------------------------------------------
-// Sorting: every column but ★ sorts; unknown values sort last (PLAN-TGT-FR-04)
+// Sorting: every column sorts; unknown values sort last (PLAN-TGT-FR-04)
 // ---------------------------------------------------------------------------
 
 const collator = new Intl.Collator("en-GB", { numeric: true, sensitivity: "base" })
@@ -548,7 +563,7 @@ export function parseSort(value: string | undefined): SortSpec | null {
 
 const stale = (): CommitResult => ({ ok: false, reason: "stale", message: m.targets_result_gone() })
 
-/** Write the row into the library as a ★ Target (or star an existing one). A failed write keeps nothing and returns the error for Retry. */
+/** Write the row into the library as a favourite Target (or make an existing one a favourite). A failed write keeps nothing and returns the error for Retry. */
 export function addToMyTargets(row: TargetRow): { result: CommitResult; targetId: string | null } {
   if (row.target) return { result: setFavourite(row.target.id, true), targetId: row.target.id }
   if (!row.entry) return { result: stale(), targetId: null }

@@ -49,9 +49,10 @@ export interface DetailPageProps {
   title: string
   /** 1 for a route's page; 2 for a child area of a layout route or a catalogue specimen. */
   level?: 1 | 2
-  /** A StatusBadge beside the title. */
+  /** A StatusBadge, or a header control such as a Favourite toggle, beside the title. */
   status?: ReactNode
-  /** At most one primary and three standard get a button; the rest go to the menu. */
+  /** The refusal or failure of a `status` control, on its own row under the header row (the host's runner feedback). */
+  statusFeedback?: ReactNode
   actions?: Action[]
   menu?: ObjectMenu
   views?: PageViews
@@ -62,7 +63,7 @@ export interface DetailPageProps {
   detail?: PageDetail | null
 }
 
-export function DetailPage({ path, title, level = 1, status, actions, menu, views, notice, sections, aside = [], detail }: DetailPageProps) {
+export function DetailPage({ path, title, level = 1, status, statusFeedback, actions, menu, views, notice, sections, aside = [], detail }: DetailPageProps) {
   const sectionLevel = level === 1 ? 2 : 3
   const box = (section: DetailSection) => (
     <Box
@@ -79,7 +80,7 @@ export function DetailPage({ path, title, level = 1, status, actions, menu, view
   )
   return (
     <div data-template="detail" className="flex min-h-0 flex-1 flex-col">
-      <PageHeader level={level} path={path} title={title} meta={status} actions={headerActions(actions, menu)} notice={notice} className={headerBar(level)} />
+      <PageHeader level={level} path={path} title={title} meta={status} actions={headerActions(actions, menu)} feedback={statusFeedback} notice={notice} className={headerBar(level)} />
       <ViewTabs views={views}>
         <DetailDock detail={detail} level={level}>
           <div className="min-h-0 flex-1 overflow-y-auto">

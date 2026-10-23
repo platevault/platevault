@@ -3,7 +3,7 @@ import { liveLightSessions } from "@/domain/derive"
 import { createSeed } from "@/domain/seed"
 import type { AssociationStatus, Catalog, Target, TargetId } from "@/domain/types"
 import { m } from "@/lib/i18n"
-import { allRows, imgTimeText, myTargetRows, prioritiesByTarget, priorityOrder, type RowView, rowSource, searchRows, sortValue } from "./targets-model"
+import { allRows, favouriteFor, imgTimeText, myTargetRows, parseFavourite, prioritiesByTarget, priorityOrder, type RowView, rowSource, searchRows, sortValue } from "./targets-model"
 
 const NIGHT = "2026-10-13"
 
@@ -60,7 +60,7 @@ describe("My targets (D-W125): favourites, open-Project subjects and every Targe
   const SUGGESTED = "tgt_test_suggested"
   const FAVOURITE = "tgt_test_favourite"
 
-  /** The demo library plus three new Targets: one with an indexed session, one only suggested for a session, one ★ favourite with no session. */
+  /** The demo library plus three new Targets: one with an indexed session, one only suggested for a session, one favourite with no session. */
   function library(): Catalog {
     const catalog = structuredClone(createSeed("demo").catalog)
     const base = Object.values(catalog.targets)[0]!
@@ -82,7 +82,7 @@ describe("My targets (D-W125): favourites, open-Project subjects and every Targe
 
   const mine = (catalog: Catalog) => new Map(myTargetRows(allRows(catalog)).map((r) => [r.key, r]))
 
-  it("lists a Target with an indexed session that is neither ★ nor an open-Project subject", () => {
+  it("lists a Target with an indexed session that is neither a favourite nor an open-Project subject", () => {
     const catalog = library()
     expect(Object.values(catalog.projects).some((p) => p.state === "open" && p.subjects.some((s) => s.targetId === SHOT))).toBe(false)
     const row = mine(catalog).get(SHOT)
@@ -97,7 +97,7 @@ describe("My targets (D-W125): favourites, open-Project subjects and every Targe
     expect(allRows(catalog).find((r) => r.key === SUGGESTED)?.mine).toBe(false)
   })
 
-  it("still lists ★ favourites with no session, and open-Project subjects with their Project badge", () => {
+  it("still lists favourites with no session, and open-Project subjects with their Project badge", () => {
     const catalog = library()
     const project = Object.values(catalog.projects).find((p) => p.state === "open" && p.subjects.length > 0)!
     const subjectId = project.subjects[0]!.targetId
@@ -118,5 +118,36 @@ describe("My targets (D-W125): favourites, open-Project subjects and every Targe
     expect(row!.target?.id).toBe(SHOT)
     expect(row!.mine).toBe(true)
     expect(rowSource(row!)).toBe(m.project_search_my_targets())
+  })
+})
+
+describe("Favourite facet (`?fav=`)", () => {
+  const row = (designation: string, favourite: boolean | null) => ({ row: { designation, target: favourite === null ? null : { favourite } } }) as unknown as RowView
+  const rows = [row("M 31", true), row("M 33", false), row("Catalogue only", null)]
+  const names = (views: RowView[]) => views.map((v) => v.row.designation)
+
+  it("reads yes and no, and nothing else", () => {
+    expect(parseFavourite("yes")).toBe("yes")
+    expect(parseFavourite("no")).toBe("no")
+    expect(parseFavourite("")).toBeNull()
+    expect(parseFavourite(undefined)).toBeNull()
+    expect(parseFavourite("true")).toBeNull()
+  })
+
+  it("keeps favourites for yes, every other row for no, and every row without a filter", () => {
+    expect(names(favouriteFor(rows, "yes"))).toEqual(["M 31"])
+    expect(names(favouriteFor(rows, "no"))).toEqual(["M 33", "Catalogue only"])
+    expect(names(favouriteFor(rows, null))).toEqual(["M 31", "M 33", "Catalogue only"])
+  })
+
+  it("leaves My targets membership alone: a favourite removed from favourites stays listed while it has a session", () => {
+    const catalog = structuredClone(createSeed("demo").catalog)
+    const withSession = allRows(catalog).find((r) => r.mine && r.target && r.projects.length === 0 && !r.target.favourite)
+    expect(withSession, "a My targets row that is neither a favourite nor a Project subject").toBeDefined()
+    const id = withSession!.target!.id
+    catalog.targets[id] = { ...catalog.targets[id]!, favourite: true }
+    expect(myTargetRows(allRows(catalog)).some((r) => r.key === id)).toBe(true)
+    catalog.targets[id] = { ...catalog.targets[id]!, favourite: false }
+    expect(myTargetRows(allRows(catalog)).some((r) => r.key === id)).toBe(true)
   })
 })
