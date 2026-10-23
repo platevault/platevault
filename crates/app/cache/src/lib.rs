@@ -466,6 +466,8 @@ mod tests {
         CacheConfig, DebounceCache, ProtectionDefaultsSnapshot, SnapshotCache, TtlCache,
     };
 
+    // The deprecated migration shim is process-global; tests touching it must not race.
+    static PROTECTION_DEFAULTS_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
     #[test]
     fn ttl_cache_miss_then_hit() {
         let cache: TtlCache<String, u32> = TtlCache::new(CacheConfig::new(10));
@@ -617,6 +619,8 @@ mod tests {
 
     #[test]
     fn protection_defaults_invalidate_bumps_epoch() {
+        let _guard =
+            PROTECTION_DEFAULTS_TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         let before = super::protection_defaults_epoch();
         invalidate_protection_defaults();
         assert!(
@@ -627,9 +631,10 @@ mod tests {
 
     #[test]
     fn protection_defaults_store_load_invalidate_round_trips() {
-        // Reuses the process-global static, so scope this test to values it
-        // fully owns (invalidate at start and end) to stay independent of
-        // other tests' ordering.
+        let _guard =
+            PROTECTION_DEFAULTS_TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        // The mutex covers the full test body because another test's invalidation
+        // between store and load would make this process-global cache miss.
         invalidate_protection_defaults();
         assert!(protection_defaults().load().is_none());
 
