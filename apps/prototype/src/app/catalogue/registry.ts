@@ -40,7 +40,7 @@ export interface CatalogueEntry {
 export const CATALOGUE: CatalogueEntry[] = [
   {
     id: "actions",
-    components: ["ActionBar", "ActionButton", "ActionMenu", "MenuItems", "IconButton", "RowActions", "RowContextMenu", "Button"],
+    components: ["ActionBar", "ActionButton", "ActionToggle", "ActionMenu", "MenuItems", "IconButton", "RowActions", "RowContextMenu", "Button"],
     Entry: ActionsCatalogue,
   },
   { id: "controls", components: ["Button", "Spinner", "ToggleGroup", "ToggleGroupItem", "Toggle"], Entry: ControlsCatalogue },

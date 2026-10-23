@@ -4,7 +4,7 @@
  * (LIB-FR-05), File into Target for a session imported as Unclassified
  * (P-IMP2), a regrouping correction that may re-split a session (LIB-FR-12),
  * Finish review on a session a re-split reset (D-W100), a session's Edit…
- * (its name and notes, D-W76) and ★ favourites
+ * (its name and notes, D-W76) and favourites
  * (D-W60). Catalog only, except File into Target, which moves the session's
  * frames: source headers never change. A Project reads these writes as
  * pending changes from the Library on its next Apply (VSEL-FR-12); a Closed
@@ -349,7 +349,7 @@ export function finishReview(sessionId: SessionId, expectRevision: number): Comm
   return result
 }
 
-/** ★ toggles My targets membership (D-W60); open-Project subjects and Targets with a session stay listed either way (D-W125). */
+/** Favourite adds a Target to My targets (D-W60); open-Project subjects and Targets with a session stay listed either way (D-W125). */
 export function setFavourite(targetId: TargetId, favourite: boolean): CommitResult {
   const target = store.getState().catalog.targets[targetId]
   if (!target) return MISSING
@@ -359,14 +359,14 @@ export function setFavourite(targetId: TargetId, favourite: boolean): CommitResu
     (s) => withCatalog(s, (c) => ({ ...c, targets: { ...c.targets, [targetId]: { ...c.targets[targetId]!, favourite } } })),
     { expect: { collection: "targets", id: targetId, revision: target.revision }, href },
   )
-  if (result.ok) recordSaved(verbatim(favourite ? `★ ${target.name}` : `☆ ${target.name}`), null, href)
+  if (result.ok) recordSaved(favourite ? msg("store_saved_added_to_my_targets", { name: target.name }) : msg("store_saved_removed_from_favourites", { name: target.name }), null, href)
   return result
 }
 
 /**
  * Add a catalogue or resolver entry to the library as a Target (PRJ-FR-05,
  * PLAN-TGT-FR-03): an existing Target with one of its names is reused (and
- * starred when `favourite`), else a new record is written. New Project's
+ * made a favourite when `favourite`), else a new record is written. New Project's
  * subject search and the Targets screen both add Targets through here.
  */
 export function addTarget(entry: CatalogueEntry, options: { resolver: string | null; favourite: boolean }): { result: CommitResult; targetId: TargetId | null } {
