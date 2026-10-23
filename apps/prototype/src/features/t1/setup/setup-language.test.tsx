@@ -17,17 +17,23 @@ afterEach(() => {
 })
 
 describe("Setup › Language", () => {
-  it("choosing Português (Brasil) switches the interface at once and saves the preference Appearance reads", async () => {
+  it("choosing Português (Brasil) from the select switches the interface at once and saves the preference Appearance reads", async () => {
+    const user = userEvent.setup()
     renderStep()
     const englishTitle = (await screen.findByRole("heading", { level: 1 })).textContent
+    const select = screen.getByRole("combobox", { name: m.shell_language() })
+    expect(select).toHaveTextContent(LOCALE_META["en-GB"].nativeName)
+    expect(screen.getByText(`${LOCALE_META["pt-BR"].nativeName}: ${m.locale_machine_generated()}`)).toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole("button", { name: LOCALE_META["pt-BR"].nativeName }))
+    await user.click(select)
+    expect((await screen.findAllByRole("option")).map((option) => option.textContent)).toEqual([LOCALE_META["en-GB"].nativeName, LOCALE_META["pt-BR"].nativeName])
+    await user.click(screen.getByRole("option", { name: LOCALE_META["pt-BR"].nativeName }))
 
     expect(getPreferences().locale).toBe("pt-BR")
     expect(window.localStorage.getItem("platevault.locale")).toBe("pt-BR")
     const title = screen.getByRole("heading", { level: 1 })
     expect(title).toHaveTextContent(m.setup_language_title())
     expect(title.textContent).not.toBe(englishTitle)
-    expect(screen.getByRole("button", { name: LOCALE_META["pt-BR"].nativeName })).toHaveAttribute("aria-pressed", "true")
+    expect(screen.getByRole("combobox", { name: m.shell_language() })).toHaveTextContent(LOCALE_META["pt-BR"].nativeName)
   })
 })

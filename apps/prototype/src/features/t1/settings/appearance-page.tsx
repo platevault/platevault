@@ -1,12 +1,14 @@
 /**
  * Settings › Appearance (J10 S2, S9; plan §4a). The theme (mode first, then
- * that mode's themes) and the language apply at once and persist in this
- * browser (`src/app/preferences.ts`): they survive Reset prototype data.
- * Restore defaults confirms first. The keyboard setting lives on Help.
+ * that mode's themes, or Match system's dark and light theme) and the
+ * language apply at once and persist in this browser
+ * (`src/app/preferences.ts`): they survive Reset prototype data. Restore
+ * defaults confirms first and resets the Match system pair too. The keyboard
+ * setting lives on Help.
  */
 import { LanguagePicker } from "@/app/appearance"
-import { setLocale, setTheme, type ThemePreference, useMessages, usePreferences } from "@/app/preferences"
-import { DEFAULT_THEME, themeInfo } from "@/app/themes"
+import { setLocale, setSystemThemes, setTheme, type ThemePreference, useMessages, usePreferences } from "@/app/preferences"
+import { DEFAULT_SYSTEM_THEMES, DEFAULT_THEME, themeInfo } from "@/app/themes"
 import { ActionButton } from "@/components/app/actions"
 import { SettingsRow, SettingsSection } from "@/components/app/settings"
 import { ThemePicker } from "@/components/app/theme-picker"
@@ -14,13 +16,13 @@ import { SettingsPage } from "@/components/templates/settings-page"
 import { DEFAULT_LOCALE, LOCALE_META } from "@/lib/i18n"
 import { usePreferenceSaveState } from "./preference-save"
 
-const DEFAULTS = { theme: DEFAULT_THEME as ThemePreference, locale: DEFAULT_LOCALE }
+const DEFAULTS = { theme: DEFAULT_THEME as ThemePreference, systemThemes: DEFAULT_SYSTEM_THEMES, locale: DEFAULT_LOCALE }
 
 export function AppearancePage() {
   const m = useMessages()
-  const { theme, locale } = usePreferences()
-  const indicator = usePreferenceSaveState(`${theme} ${locale}`)
-  const atDefaults = theme === DEFAULTS.theme && locale === DEFAULTS.locale
+  const { theme, systemThemes, locale } = usePreferences()
+  const indicator = usePreferenceSaveState(`${theme} ${systemThemes.dark} ${systemThemes.light} ${locale}`)
+  const atDefaults = theme === DEFAULTS.theme && systemThemes.dark === DEFAULTS.systemThemes.dark && systemThemes.light === DEFAULTS.systemThemes.light && locale === DEFAULTS.locale
 
   return (
     <SettingsPage title={m.settings_appearance()}>
@@ -41,6 +43,7 @@ export function AppearancePage() {
                 },
                 run: () => {
                   setTheme(DEFAULTS.theme)
+                  setSystemThemes(DEFAULTS.systemThemes)
                   setLocale(DEFAULTS.locale)
                 },
               }}
@@ -51,9 +54,7 @@ export function AppearancePage() {
         <SettingsRow label={m.shell_theme()}>
           <ThemePicker />
         </SettingsRow>
-        <SettingsRow label={m.shell_language()}>
-          <LanguagePicker />
-        </SettingsRow>
+        <LanguagePicker />
       </SettingsSection>
     </SettingsPage>
   )

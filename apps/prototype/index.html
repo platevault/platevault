@@ -11,7 +11,8 @@
   <script>
     // Pre-paint theme and language so the first frame uses the saved choice.
     // PlateVault Dark is the default; "system" follows prefers-color-scheme between the
-    // PlateVault themes. src/app/preferences.ts stores the resolved scheme for this script.
+    // saved light and dark themes (the PlateVault pair by default). src/app/preferences.ts
+    // stores the resolved scheme for this script and validates the saved themes.
     {
       const root = document.documentElement
       let theme = "platevault-dark"
@@ -29,6 +30,9 @@
       if (theme === "system") {
         scheme = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
         theme = `platevault-${scheme}`
+        try {
+          theme = localStorage.getItem(`platevault.systemTheme.${scheme}`) || theme
+        } catch { }
       }
       root.dataset.theme = theme
       root.classList.toggle("dark", scheme === "dark")
