@@ -19,8 +19,8 @@ You can:
   cluster**, and so on).
 - Sort any column — one active sort indicator at a time.
 - Group rows, for example by **Object type** or catalogue.
-- Mark targets as a **Favourite** to collect them under the **My targets**
-  view.
+- Star targets with ☆ ("Add to My Targets") to collect favourites under the
+  **My Targets** view. The **Favourite** column shows the star.
 
 [screenshot: the Targets page with search results and planner columns]
 
@@ -87,8 +87,8 @@ Two related notes:
 - The **Target Planner** settings pane already exposes a real tunable — the
   usable-altitude threshold (0–90°, default 30°) — which the planner columns
   will honor; see [Settings](./08-settings.md#target-planner).
-- **Favourite** targets are stored in your library database, so they stay
-  with the library and survive app restarts.
+- **My Targets** favourites are stored in your library database, so they
+  stay with the library and survive app restarts.
 
 The design principle behind all of this: a stub must never be mistakable for
 real astronomical data. If a planner number ever looks concrete but cannot be
