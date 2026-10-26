@@ -36,7 +36,7 @@ use crate::bootstrap::background::{
     spawn_ingest_resolution_drain, spawn_stale_dependent_propagator,
 };
 use crate::bootstrap::menu::{install_native_menu, MENU_ID_QUIT, MENU_ID_SETTINGS};
-use crate::bootstrap::window::{enforce_min_window_size, recenter_if_offscreen};
+use crate::bootstrap::window::clamp_restored_window;
 #[cfg(feature = "dev-tools")]
 use crate::commands::dev::CallBuffer;
 use crate::commands::lifecycle::AppState;
@@ -470,13 +470,15 @@ fn create_main_window(handle: &tauri::AppHandle) {
     let window =
         WebviewWindowBuilder::from_config(handle, &config).and_then(WebviewWindowBuilder::build);
     match window {
-        // Spec 051 US4 (T029/T030): enforce the min-size floor and off-screen
-        // fallback after tauri-plugin-window-state restores a persisted
-        // size/position — it may restore geometry from a prior app version or
-        // a since-disconnected monitor.
+        // Queued behind the window-state plugin's restore hook, which Tauri also
+        // schedules with `run_on_main_thread` when it attaches the window.
         Ok(window) => {
-            enforce_min_window_size(&window);
-            recenter_if_offscreen(&window);
+            let restored_window = window.clone();
+            if let Err(error) =
+                window.run_on_main_thread(move || clamp_restored_window(&restored_window))
+            {
+                tracing::warn!("failed to schedule restored-window geometry correction: {error:?}");
+            }
         }
         Err(e) => fatal(handle, &format!("failed to create the `{MAIN_WINDOW_LABEL}` window: {e}")),
     }

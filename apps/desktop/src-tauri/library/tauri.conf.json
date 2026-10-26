@@ -13,8 +13,8 @@
         "title": "PlateVault Library (rebuild)",
         "width": 1280,
         "height": 820,
-        "minWidth": 1100,
-        "minHeight": 720
+        "minWidth": 1280,
+        "minHeight": 640
       }
     ],
     "security": {

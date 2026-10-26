@@ -501,7 +501,7 @@
   gap: var(--pv-sp-1);
   justify-content: flex-end;
   /* #838: observing-site rows can carry up to 4 actions (Set active/default,
-     Edit, Remove) — wrap instead of overflowing the 1100px pinned layout. */
+     Edit, Remove) — wrap instead of overflowing the 1280px pinned layout. */
   flex-wrap: wrap;
 }
 
