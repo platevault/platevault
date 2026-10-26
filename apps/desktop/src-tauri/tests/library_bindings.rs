@@ -6,15 +6,20 @@
 //! `apps/desktop/src/bindings/library-index.ts` is generated from
 //! `desktop_shell::library_shell::library_specta_builder()`, the same
 //! `library_commands!` list `run` registers, and committed. This test exports
-//! it again and fails on any difference from the committed file. On a
-//! difference it also writes the export over the committed file, so the fix is
-//! to review that diff and commit it. It stays separate from the legacy
-//! `index.ts` (`tests/bindings.rs`).
+//! it again and fails on any difference from the committed file, which leaves
+//! the committed file untouched, so `just check-generated` rejects drift
+//! instead of repairing it. With `PV_LIBRARY_BINDINGS=write` it writes the
+//! export over the committed file instead (`just library-bindings`); review
+//! that diff and commit it. It stays separate from the legacy `index.ts`
+//! (`tests/bindings.rs`).
 //!
 //! Like `index.ts`, the file carries no SPDX header: the exporter never emits
 //! one, and adding one by hand makes this test fail.
 
 use specta_typescript::Typescript;
+
+/// Set to `write` to regenerate the committed bindings rather than check them.
+const MODE_ENV: &str = "PV_LIBRARY_BINDINGS";
 
 #[test]
 fn library_bindings_match_the_committed_file() {
@@ -31,12 +36,25 @@ fn library_bindings_match_the_committed_file() {
         .expect("export the library-shell bindings");
 
     let exported = std::fs::read_to_string(&export_path).expect("read the export");
-    let committed = std::fs::read_to_string(&committed_path).unwrap_or_default();
-    if exported != committed {
-        std::fs::write(&committed_path, &exported).expect("write the regenerated bindings");
-        panic!(
-            "{} differs from the library-shell command list; it was regenerated: review and commit it",
-            committed_path.display()
-        );
+    match std::env::var_os(MODE_ENV) {
+        None => {
+            let committed = std::fs::read_to_string(&committed_path).unwrap_or_default();
+            let first_difference = exported
+                .lines()
+                .zip(committed.lines())
+                .position(|(exported, committed)| exported != committed)
+                .unwrap_or_else(|| exported.lines().count().min(committed.lines().count()));
+            assert!(
+                exported == committed,
+                "{} differs from the library-shell command list from line {}; regenerate it \
+                 with `just library-bindings`, then review and commit the diff",
+                committed_path.display(),
+                first_difference + 1
+            );
+        }
+        Some(mode) if mode == "write" => {
+            std::fs::write(&committed_path, &exported).expect("write the regenerated bindings");
+        }
+        Some(other) => panic!("{MODE_ENV}={other:?}: the only mode is `write`"),
     }
 }
