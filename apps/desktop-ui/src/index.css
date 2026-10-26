@@ -49,15 +49,9 @@
 }
 
 @layer base {
-  :root {
-    color-scheme: dark;
-    font-family: var(--font-sans);
-  }
-
   * {
     border-color: var(--border);
   }
-
   body {
     margin: 0;
     min-width: var(--window-min-w);
