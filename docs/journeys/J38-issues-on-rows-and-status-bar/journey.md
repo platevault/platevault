@@ -1,7 +1,7 @@
 ---
 id: J38
 title: Handle issues from the status bar and on their rows
-version: 5
+version: 6
 status: draft
 last_reviewed: 2026-10-12
 actors: [primary-user]
@@ -143,7 +143,7 @@ running, and the notifications history. Done means:
 ### S8 — Retry interrupted work {#S8}
 
 - **Do:** Once at least 4 items have been copied and verified, quit PlateVault and read the confirmation. Cancel it, then quit again and confirm. Launch PlateVault again. Choose the ⚠ counter and open `Activity · 1` from its menu, which opens Activity filtered to the interrupted import, and choose Retry.
-- **Expect:** While the import runs, quitting first asks for confirmation. Cancelling it leaves PlateVault open with the import still shown as running work; confirming quits. After relaunch, ⚠ reads 4, and the import's row in Activity reads interrupted. Activity shows the import as Interrupted with "PlateVault restarted while this was running. Recorded progress is kept; Retry resumes it."
+- **Expect:** While the import runs, quitting first asks for confirmation. Cancelling it leaves PlateVault open with the import still shown as running work; confirming quits. After relaunch, ⚠ reads 4, and the import's row in Activity reads interrupted. Activity shows the import as Interrupted with "Interrupted when PlateVault restarted. Retry continues from the recorded progress."
   - After Retry, the import resumes from its recorded progress, shows again as running work, and finishes with 12 lights imported.
   - ⚠ returns to 3, and no row shows the interrupted issue.
   - Sessions lists a new `4 Oct` Ha session of 12 frames with its Target NGC 7000 confirmed. Home's Pending work still reads `2 need a Target`, equal to the number of sessions under the Sessions filter Needs a Target.
@@ -235,3 +235,6 @@ running, and the notifications history. Done means:
 - **Δ5** 2026-10-15 · S1, S2, S3, S4, S5a, S6, S7, S8, S9, S11, S14 · behavior-change
   Issues now sit on F4 Project, session and Output rows: a failed Apply, a session in Needs calibration and a master offer on the Project's Output step replace run-row examples. The counter arithmetic remains 1 + 3 + 3 = 7 at S1; dismissal counts reflect row-level actions. S11's Duplicates review names no keeper, because the Project's Wrap up names the kept copy (J39/S3), and G6 is dissolved with the Issues hub.
   Evidence: D-W92, D-W93 to D-W106 in PR #1804, 063 FR-032, 064 LIB-FR-17/LIB-FR-22/LIB-FR-23, 065 PRJ-FR-15/PRJ-FR-17/PRJ-FR-18, 068 CAL-FR-06, 070 RES-FR-11 · by: SpecF4Writer2 (intent-gated)
+- **Δ6** 2026-10-26 · S8 · behavior-change
+  Work a restart interrupted reads "Interrupted when PlateVault restarted. Retry continues from the recorded progress."
+  Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 11 (OWNER, 2026-10-23) on ui-harness-v5 @ 5dc245244; D-W149 · by: SpecAmend (intent-gated)

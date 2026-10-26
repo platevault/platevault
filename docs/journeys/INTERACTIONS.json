@@ -385,9 +385,9 @@
       "flowStep": "K",
       "owner": "072-observing-plans",
       "journeyStep": "J29/S1, J29/S2, J29/S3, J29/S3a, J29/S4, J29/S5, J29/S6, J29/S7, J29/S7a, J29/S8, J29/S9, J29/S10, J29/S11, J29/S12, J29/S13",
-      "spec": "072-observing-plans PLAN-FR-01, PLAN-FR-08, PLAN-FR-09, PLAN-FR-10, PLAN-FR-11, PLAN-FR-12, PLAN-AC-01, PLAN-AC-11, PLAN-AC-12, PLAN-TGT-FR-14; 065-project-goals PRJ-FR-04, PRJ-FR-07, PRJ-FR-17; D-W16, D-W88, D-W89, D-W96",
+      "spec": "072-observing-plans PLAN-FR-01, PLAN-FR-04, PLAN-FR-08, PLAN-FR-09, PLAN-FR-10, PLAN-FR-11, PLAN-FR-12, PLAN-AC-01, PLAN-AC-03, PLAN-AC-11, PLAN-AC-12, PLAN-TGT-FR-14; 065-project-goals PRJ-FR-04, PRJ-FR-07, PRJ-FR-17; D-W16, D-W88, D-W89, D-W96, D-W151",
       "action": "Plan windows from a Target, set criteria, switch site, configure and use reminders, export and re-check the .ics, plan a Target outside a Project and from a Project page, and read Tonight on Home.",
-      "expect": "Windows name their site and time zone, beside the Project's goal gap. Reminders start only after opt-in and name the default site; denial stays visible with Settings and Retry. A delivered reminder stays delivered after restart, and the .ics holds exactly the selected windows.",
+      "expect": "Windows name their site and time zone, beside the Project's goal gap. Reminders start only after opt-in and name the default site; denial stays visible with Settings and Retry. A delivered reminder stays delivered after restart, and the .ics holds exactly the windows of every upcoming night with a plan.",
       "negative": "No weather or readiness claims, no reminder for another site, no repeat delivery of a recorded identity, and no account or hosted subscription. Planning creates no Project record."
     },
     {
@@ -652,6 +652,15 @@
       "negative": "Dark flats are never matched, suggested or assigned. Rig edits do not change a session's recorded version or pinned calibration."
     },
     {
+      "flowStep": "Settings > Matching: the framing and calibration thresholds as one table (D-W148)",
+      "owner": "068-calibration-inputs",
+      "journeyStep": "J41/S16b",
+      "spec": "068-calibration-inputs CAL-FR-24, CAL-AC-32; 064-library-inventory LIB-FR-04; 065-project-goals PRJ-FR-29, PRJ-FR-31; D-W107, D-W114, D-W148",
+      "action": "Open Settings > Matching in the Library group, read the table grouped Framing, Flats, Darks and Bias, and change one threshold with Edit….",
+      "expect": "One table of Setting, Value and Unit holds every threshold the contract calls adjustable in Settings, with the defaults of D-W114. The next ingestion matches with the changed value.",
+      "negative": "Settings > Equipment shows no thresholds, and changing the centre or rotation limit re-splits no existing session (CAL-FR-24)."
+    },
+    {
       "flowStep": "Cross-flow: Unsupported input mode",
       "owner": "069-application-handoff",
       "journeyStep": "J23/S9, J24/S13",
@@ -769,12 +778,12 @@
       "negative": "Nothing is written before Import starts, no file is overwritten or permanently deleted, and Add existing library folder copies, renames or moves nothing."
     },
     {
-      "flowStep": "Settings > Naming: text templates per frame type, live preview and token table (D-W84)",
+      "flowStep": "Settings > Naming: text templates per frame type, live preview and token table (D-W84), and the Group keywords (D-W146)",
       "owner": "071-storage-custody",
-      "journeyStep": "J31/S4",
-      "spec": "071-storage-custody STO-IMP-FR-07, STO-IMP-AC-08; D-W84, D-W11",
-      "action": "Open Settings > Naming, edit a frame-type template as plain text, try an invalid segment, save, then Restore defaults.",
-      "expect": "The live preview shows a sample path and fallback token; the token table names available and unavailable renderings. An invalid segment shows an inline error and blocks Save, and the next Import preview uses the saved template.",
+      "journeyStep": "J31/S4, J41/S1, J41/S2, J41/S3, J41/S4, J41/S5, J41/S6, J41/S7, J41/S16b",
+      "spec": "071-storage-custody STO-IMP-FR-07, STO-IMP-FR-09, STO-IMP-AC-08, STO-IMP-AC-12; 065-project-goals PRJ-FR-28; D-W84, D-W11, D-W146",
+      "action": "Open Settings > Naming, edit a frame-type template as plain text, try an invalid segment, save, then Restore defaults. In Group keywords, edit the Mosaic panel name to one with `_`, then to one with `-`.",
+      "expect": "The live preview shows a sample path and fallback token; the token table names available and unavailable renderings. An invalid segment shows an inline error and blocks Save, and the next Import preview uses the saved template. Group keywords has one row each for Group and Mosaic panel; a name with `_`, or one WBPP would read inside another at a hyphen, is refused under the field, and a name with `-` saves.",
       "negative": "No template change writes, renames or moves a file, there is no chip editor, and no Auto-apply pattern checkbox exists."
     },
     {
@@ -796,21 +805,30 @@
       "negative": "No existing file is overwritten, reused or cleared; it stays byte-identical."
     },
     {
-      "flowStep": "Targets list: Show mode, search with Add to targets, columns, presets and rig selector (D-W17, D-W18, D-W19, D-W23, D-W37)",
+      "flowStep": "Targets list: Show mode, search where clicking a result adds or opens it, columns, the Favourite filter, presets and rig selector (D-W17, D-W18, D-W19, D-W23, D-W37, D-W142, D-W152)",
       "owner": "072-observing-plans",
       "journeyStep": "J14/S1, J19/S6a, J29/S1, J29/S11, J29/S12, J35/S1, J35/S2, J35/S3, J35/S4, J35/S5, J35/S5a, J35/S5b, J35/S6, J35/S7, J35/S8, J35/S9, J35/S10, J35/S11, J35/S12, J35/S13",
-      "spec": "072-observing-plans PLAN-TGT-FR-01, PLAN-TGT-FR-02, PLAN-TGT-FR-03, PLAN-TGT-FR-04, PLAN-TGT-FR-05, PLAN-TGT-FR-06, PLAN-TGT-FR-07, PLAN-TGT-FR-08, PLAN-TGT-FR-09, PLAN-TGT-FR-10, PLAN-TGT-FR-11, PLAN-TGT-FR-12, PLAN-TGT-FR-13, PLAN-TGT-FR-14, PLAN-TGT-AC-01, PLAN-TGT-AC-16, PLAN-FR-10; D-W17, D-W18, D-W19, D-W23, D-W37, D-W60, D-W88",
-      "action": "Open Targets on My targets, search and use Add to targets, read and sort columns, open a row's Plan area, browse catalogues, apply and save presets, and select a mono rig, an OSC rig and this Project's rigs. Also read Targets before an observing site exists.",
-      "expect": "My targets lists favourites, subjects of open Projects and every Target with at least one session; each open-Project subject has its Project badge. Search names sources; columns show site-based planning values, presets apply and persist, and a selected rig adds Fit and limits the Filters strip. Without a site, planning columns read a dash and offer Add an observing site in Settings (owner's answer, 2026-10-19, astro-plan-rzbzu.1).",
-      "negative": "Searching and browsing write nothing until Add to targets, and adding a Target creates no Project. No window is computed for an assumed location, built-in presets cannot be edited, and no Avoid tonight preset exists."
+      "spec": "072-observing-plans PLAN-TGT-FR-01, PLAN-TGT-FR-02, PLAN-TGT-FR-03, PLAN-TGT-FR-04, PLAN-TGT-FR-05, PLAN-TGT-FR-06, PLAN-TGT-FR-07, PLAN-TGT-FR-08, PLAN-TGT-FR-09, PLAN-TGT-FR-10, PLAN-TGT-FR-11, PLAN-TGT-FR-12, PLAN-TGT-FR-13, PLAN-TGT-FR-14, PLAN-TGT-FR-17, PLAN-TGT-AC-01, PLAN-TGT-AC-03, PLAN-TGT-AC-16, PLAN-TGT-AC-20, PLAN-TGT-AC-21, PLAN-TGT-AC-22, PLAN-FR-10; D-W17, D-W18, D-W19, D-W23, D-W37, D-W60, D-W88, D-W142, D-W152",
+      "action": "Open Targets on My targets, search and click a catalogue result and a result already in My targets, toggle a favourite and use the Favourite filter, read and sort columns, open a row's Plan area, browse catalogues, apply and save presets, and select a mono rig, an OSC rig and this Project's rigs. Also read Targets before an observing site exists.",
+      "expect": "My targets lists favourites, subjects of open Projects and every Target with at least one session; each open-Project subject has its Project badge. Search names sources; clicking a catalogue or SIMBAD result adds it to My targets as a favourite with the search still open, and clicking a result already there opens it. The Favourite column shows a star on each favourite, and the Favourite filter, kept as `?fav=`, lists All, Yes or No. Columns show site-based planning values, presets apply and persist, and a selected rig adds Fit and limits the Filters strip. Without a site, planning columns read a dash and offer Add an observing site in Settings (owner's answer, 2026-10-19, astro-plan-rzbzu.1).",
+      "negative": "Searching and browsing write nothing until the user clicks a result, result rows carry no Add button (provisional, PLAN-TGT-FR-03), and adding a Target creates no Project. No window is computed for an assumed location, built-in presets cannot be edited, and no Avoid tonight preset exists."
     },
     {
-      "flowStep": "Settings > Equipment: cameras, telescopes, filters and rigs, rig versions, camera aliases and defaults, and the unknown-filter prompt (D-W31, D-W87, D-W104)",
+      "flowStep": "The \"Planned\" view: a plan per night, reminders and the calendar export (D-W151)",
+      "owner": "072-observing-plans",
+      "journeyStep": "J29/S1, J29/S3a, J29/S4, J29/S5, J29/S6, J29/S7, J29/S7a, J29/S8, J29/S9, J29/S10, J29/S14",
+      "spec": "072-observing-plans PLAN-FR-03, PLAN-FR-04, PLAN-FR-06, PLAN-FR-07, PLAN-FR-09, PLAN-TGT-FR-16, PLAN-TGT-FR-18, PLAN-AC-02, PLAN-AC-03, PLAN-AC-04, PLAN-AC-06, PLAN-AC-08, PLAN-AC-09, PLAN-AC-13, PLAN-AC-15, PLAN-TGT-AC-23, PLAN-TGT-AC-24; D-W16, D-W88, D-W151",
+      "action": "Add a Target to tonight's plan and to the next night's, open the \"Planned\" view, enable notifications from its header, then export the calendar.",
+      "expect": "Each night has its own plan, listed as a schedule in order with each Target's windows and the Altitude column. Enable notifications names the default site, criteria and lead time before it starts, and the export holds the windows of every upcoming night with a plan.",
+      "negative": "Adding to one night's plan leaves the other nights' plans unchanged, the view has no Favourite filter, and the page has no wide altitude timeline."
+    },
+    {
+      "flowStep": "Settings > Equipment: the Add equipment menu, cameras, telescopes, reducers, filters and rigs, rig versions, camera aliases and defaults, and the unknown-filter prompt (D-W31, D-W87, D-W104, D-W147, D-W155)",
       "owner": "072-observing-plans",
       "journeyStep": "J15/S1, J15/S2, J15/S3, J15/S3a, J15/S4, J15/S4a, J15/S4b, J15/S4c, J15/S4d, J15/S4e, J35/S13",
-      "spec": "072-observing-plans PLAN-EQ-FR-01, PLAN-EQ-FR-02, PLAN-EQ-FR-03, PLAN-EQ-FR-04, PLAN-EQ-FR-05, PLAN-EQ-FR-06, PLAN-EQ-FR-07, PLAN-EQ-FR-08, PLAN-EQ-AC-01, PLAN-EQ-AC-02, PLAN-EQ-AC-03, PLAN-EQ-AC-04, PLAN-EQ-AC-05, PLAN-EQ-AC-06, PLAN-TGT-FR-13, PLAN-TGT-AC-13; 064-library-inventory LIB-FR-05, LIB-FR-26; 068-calibration-inputs CAL-FR-21, CAL-FR-22; D-W23, D-W30, D-W31, D-W37, D-W87, D-W104, D-W105",
-      "action": "In Settings > Equipment register cameras and telescopes, compose mono and OSC rigs, add filters with FITS FILTER values and bands, create a dated rig version, configure camera aliases and defaults, recover from a failed save, confirm a session's rig, and accept or decline an unknown-filter prompt.",
-      "expect": "Mono or OSC comes from the camera and field of view from sensor and focal length. Rig versions list dates and do not rewrite a session's captured version. Cameras that share a model require unique aliases; Don't use darks and Don't use bias settle sessions as No choices. An unmatched FILTER value on a confirmed rig offers Add value to rig.",
+      "spec": "072-observing-plans PLAN-EQ-FR-01, PLAN-EQ-FR-02, PLAN-EQ-FR-03, PLAN-EQ-FR-04, PLAN-EQ-FR-05, PLAN-EQ-FR-06, PLAN-EQ-FR-07, PLAN-EQ-FR-08, PLAN-EQ-AC-01, PLAN-EQ-AC-02, PLAN-EQ-AC-03, PLAN-EQ-AC-04, PLAN-EQ-AC-05, PLAN-EQ-AC-06, PLAN-EQ-AC-14, PLAN-EQ-AC-15, PLAN-TGT-FR-13, PLAN-TGT-AC-13; 064-library-inventory LIB-FR-05, LIB-FR-26; 065-project-goals PRJ-FR-31; 068-calibration-inputs CAL-FR-21, CAL-FR-22; D-W23, D-W30, D-W31, D-W37, D-W87, D-W104, D-W105, D-W147, D-W155",
+      "action": "In Settings > Equipment register cameras, telescopes and a reducer, compose mono and OSC rigs, add filters with FITS FILTER values and bands, create a dated rig version, configure camera aliases and defaults, recover from a failed save, confirm a session's rig, and accept or decline an unknown-filter prompt.",
+      "expect": "Mono or OSC comes from the camera. Field of view comes from the camera's sensor and the rig's effective focal length, the telescope's focal length times its reducer's factor. Rig versions list dates and do not rewrite a session's captured version. Cameras that share a model require unique aliases; Don't use darks and Don't use bias settle sessions as No choices. An unmatched FILTER value on a confirmed rig offers Add value to rig.",
       "negative": "No prompt appears before the rig is confirmed, declining leaves the filter list unchanged, no header byte changes, and goal templates never follow the rig's filters."
     },
     {

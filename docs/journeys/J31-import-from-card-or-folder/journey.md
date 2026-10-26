@@ -1,7 +1,7 @@
 ---
 id: J31
 title: Import from a card or folder with Copy or Move and templated paths
-version: 9
+version: 10
 status: draft
 last_reviewed: 2026-10-06
 actors: [primary-user]
@@ -177,7 +177,7 @@ folder is added in place. Done means:
 
 ### S10a — Review a framing split, merge it and split it again {#S10a}
 
-- **Do:** Connect `Card-4`. Choose it as the source and `Astro-T7 captures` as the Captures location, and read the preview's sessions. Merge the two Ha sessions and read the preview, then re-split the merged session. Set the centre limit to 12′ and read the preview, then raise the rotation limit to 6° and read it again. Choose **Copy** and start the import with both limits still set. Then, in Settings, open the global Project grouping preferences and read the framing limits.
+- **Do:** Connect `Card-4`. Choose it as the source and `Astro-T7 captures` as the Captures location, and read the preview's sessions. Merge the two Ha sessions. Read the preview. Re-split the merged session. Set the centre limit to 12′. Read the preview. Raise the rotation limit to 6°. Read the preview again. Choose **Copy** and start the import with both limits still set. Then open Settings › Matching and read the framing limits.
 - **Expect:**
   - The preview lists two sessions with Target NGC 7000 prefilled from their pointing: "NGC 7000 · Ha · 300 s · 6 Oct" with the 24 lights from either side of the meridian flip, and "NGC 7000 · Ha · 300 s · 6 Oct · framing 2" with the other 10. Both list their lights under `NGC 7000/Ha/2026-10-06/light/`.
   - The first session's 24 lights include the 10 that return to framing A after framing B.
@@ -264,3 +264,6 @@ folder is added in place. Done means:
 - **Δ9** 2026-10-20 · P8, S10a, SC9, SC10 · behavior-change
   The centre limit is an angle, 5′ by default, and lights that return to an earlier framing rejoin its session, so P8 has 14 lights at framing A, 10 at framing B and 10 back at A. In the import preview the user moves the centre and rotation sliders, and the split recalculates live without saving. S10a starts the import with a 12′ centre limit and a 6° rotation limit, which only together keep B in the session, so it lands one 6 Oct session of 34 and SC9 counts 5 imported light sessions, while Settings keeps the defaults.
   Evidence: D-W107 and D-W114 (owner's answers of 2026-10-20) in PR #1850, LIB-FR-04, LIB-FR-24, LIB-AC-31 · by: Main (intent-gated)
+- **Δ10** 2026-10-26 · S10a · behavior-change
+  The framing limits live on Settings › Matching, a page of their own in the Library group of Settings.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 11 (OWNER, 2026-10-23) on ui-harness-v5 @ 5dc245244; D-W148, CAL-FR-24 · by: SpecAmend (intent-gated)
