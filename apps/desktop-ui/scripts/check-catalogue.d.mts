@@ -14,6 +14,14 @@ export interface CatalogueGap {
   missing: string[]
 }
 
-export function exportsOf(source: string): string[]
+export interface CatalogueGaps {
+  /** Each module with component exports. */
+  modules: CatalogueGap[]
+  /** Registered names no module exports, sorted. */
+  unexported: string[]
+}
+
+export function exportsOf(module: ModuleSource, modules?: ModuleSource[]): string[]
 export function registeredNames(registry: string): Set<string>
-export function catalogueGaps(registry: string, modules: ModuleSource[]): CatalogueGap[]
+export function catalogueGaps(registry: string, modules: ModuleSource[]): CatalogueGaps
+export function layerModules(src: string): ModuleSource[]
