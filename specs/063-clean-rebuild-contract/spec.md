@@ -8,7 +8,7 @@
 
 **Amended**: 2026-10-26, to the Round 11 decisions D-W144 and D-W149, to the Rounds 5 to 9 decisions recorded that day (D-W150, D-W157 to D-W159, D-W161 and D-W162) and to the owner's answer D-W156.
 
-**Status**: Active, reconciled 2026-10-26 (`specs/SPEC_STATUS.md`). Landed: this contract and its journeys (#1776, #1778), the Round 9 amendments (#1804, #1836, #1840, #1844), the owner's answers (#1849, #1850, #1855) and the F4 backend cut-over (#1851). Remains: the clean-slate frontend (epic astro-plan-ocyuc), the coverage review astro-plan-lzrq and the requirements reviews in `checklists/requirements.md`. Conservative product decisions and all human-approval gate waivers are authorised.
+**Status**: Active, reconciled 2026-10-26 (`specs/SPEC_STATUS.md`). Landed: this contract and its journeys (#1776, #1778), the Round 9 amendments (#1804, #1836, #1840, #1844), the owner's answers (#1849, #1850, #1855) and the F4 backend cut-over (#1851). Remains: the clean-slate frontend (epic astro-plan-ocyuc), the coverage review astro-plan-lzrq, the requirements reviews in `checklists/requirements.md`, and every step of molecule astro-plan-mol-92n after specify. Conservative product decisions and all human-approval gate waivers are authorised.
 
 **Input**: Rebuild PlateVault cleanly, preserve the old code as a recoverable reference, and reuse code where it satisfies the agreed product contract.
 
