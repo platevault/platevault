@@ -1,7 +1,7 @@
 ---
 id: J43
 title: Recover from routine mistakes and failures by retrying interrupted work, changing a wrong Target, acting on a refusal and undoing marks
-version: 4
+version: 5
 status: draft
 last_reviewed: 2026-10-12
 actors: [primary-user]
@@ -44,7 +44,7 @@ Recoveries that other journeys own end to end are referenced, not repeated (G5).
 ### S2 — Find the interrupted work after relaunch {#S2}
 
 - **Do:** Launch PlateVault. Read the status bar, open the severity counter for interrupted work, then open Home and Activity.
-- **Expect:** The status bar shows a count only; activating it opens the owning page filtered to affected rows, not a list of issues. Home's Status section and Activity show `Indexing Astro-T7 captures` as interrupted with **Retry** and the message "PlateVault restarted while this was running. Recorded progress is kept; Retry resumes it."
+- **Expect:** The status bar shows a count only; activating it opens a menu naming the owning page, which opens it filtered to the affected rows, not a list of issues. Home's Status section and Activity show `Indexing Astro-T7 captures` as interrupted with **Retry** and the message "Interrupted when PlateVault restarted. Retry continues from the recorded progress."
 - **Expect (negative):** The rescan does not restart by itself.
 - **Trace:** root FR-032 · LIB-FR-03 · D-W89 · P-SB3
 
@@ -140,3 +140,6 @@ Recoveries that other journeys own end to end are referenced, not repeated (G5).
 - **Δ4** 2026-10-19 · S4 · behavior-change
   **Mark rest usable** asks for confirmation and names the number of Unreviewed frames; S4 confirms it.
   Evidence: PIX-FR-14 · D-W118 · owner's answer, 2026-10-19 in astro-plan-rzbzu.1 · by: Main (intent-gated)
+- **Δ5** 2026-10-26 · S2 · behavior-change
+  The status-bar counter opens its menu of owning pages for a single issue too, and the restart message reads "Interrupted when PlateVault restarted. Retry continues from the recorded progress."
+  Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 11 (OWNER, 2026-10-23) on ui-harness-v5 @ 5dc245244; D-W144, D-W149, FR-032 · by: SpecAmend (intent-gated)
