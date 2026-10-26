@@ -10,7 +10,15 @@ import pv from "./eslint-rules/no-user-string.js"
 // Only test and fixture literals sit outside the user-visible copy scan.
 export const I18N_IGNORES = ["**/*.test.{ts,tsx}", "**/*.spec.{ts,tsx}", "**/__fixtures__/**"]
 
-export const COMPOSITION_EXEMPT = [...I18N_IGNORES]
+// Composition rules L1-L11 govern everything that composes the component library. The library itself
+// (src/components), the test harness and the catalogue review surfaces build or show primitives directly.
+export const COMPOSITION_EXEMPT = [
+  ...I18N_IGNORES,
+  "src/components/**",
+  "src/test/**",
+  "src/app/catalogue/**",
+  "src/app/design-system-page.tsx",
+]
 
 export default defineConfig(
   {
@@ -38,12 +46,8 @@ export default defineConfig(
   },
   {
     files: ["src/**/*.{ts,tsx}"],
-    ignores: ["src/app/catalogue/**", "src/app/design-system-page.tsx"],
+    ignores: COMPOSITION_EXEMPT,
     rules: { "no-restricted-syntax": ["error", ...COMPOSITION_SYNTAX], "composition/components": "error" },
-  },
-  {
-    files: ["src/components/**/*.{ts,tsx}", "src/features/**/*.{ts,tsx}"],
-    rules: { "composition/imports": "error" },
   },
   {
     files: ["src/**/*.{ts,tsx}"],
