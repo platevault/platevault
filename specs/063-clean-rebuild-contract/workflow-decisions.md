@@ -212,4 +212,9 @@ The owner answered two open questions of the contract amendment (PR #1888) on 20
 - D-W155 (reducers; owner's answer, 2026-10-26; settles the *Open* reducer item of D-W147): A Reducer is its own Equipment record with a factor. A rig may select one, and the factor scales the telescope's focal length for field of view and matching. The Add equipment menu offers Reducer….
 - D-W156 (library-wide clean-ups; owner's answer, 2026-10-26; amends FR-021, PRJ-FR-15, STO-FR-03, STO-FR-14 and LIB-FR-22, which offered trashing a library frame or a duplicate copy from Wrap up alone): Besides Wrap up, the library offers two clean-ups outside any Project. One is the library-wide duplicates clean-up in the Sessions › Duplicates review, and the other a purge of Unusable frames. Both keep the contract's existing safety rules: files go to the OS Trash only, and the user confirms a reviewed list. The contract adds refusals from rules it already has. A frame or copy that an open Project's View links or copies is in use (PRJ-FR-15), and a calibration frame pinned on a session is pinned (LIB-FR-15).
 
+## Owner's answer, 2026-10-14 (Q35; recorded 2026-10-26)
+
+The owner answered Q35 on 2026-10-14. Decision bead `astro-plan-ocyuc.2` records it, and PR #1889 implements it.
+- D-W163 (desktop window minimum and restore; owner's answer to Q35, astro-plan-ocyuc.2; implemented by PR #1889): The desktop app MUST enforce a minimum window size of 1280×640 on macOS, Windows and Linux. At start-up, PlateVault MUST move and shrink a restored window until it fits fully on a connected screen. The 1280×640 minimum at 125% zoom yields a 1024×512 CSS viewport. At 150% it yields about 853×427 CSS pixels. This corrects J10's former 733 px viewport-width figure, based on 1100×720 at 150%.
+
 Sources: the legacy facts are in legacy-frontend-facts.md.

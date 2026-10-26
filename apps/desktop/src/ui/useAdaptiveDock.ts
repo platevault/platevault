@@ -18,7 +18,7 @@ import { getPreferences, setPreference } from '@/data/preferences';
  * Placement resolution: `override ?? (windowWidth >= threshold ? 'side' :
  * 'bottom')`. Below `minSideWidth` the side dock is never usable regardless
  * of an override — bottom is the universal narrow-window fallback (decision
- * #8: the shell's enforced 1100x720 minimum must stay fully workable).
+ * #8: the shell's enforced 1280x640 minimum must stay fully workable).
  *
  * `dockId` scopes persistence per adopting page (e.g. "sessions", "targets")
  * so each page remembers its own pin + width, stored under the typed
