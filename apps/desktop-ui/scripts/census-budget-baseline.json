@@ -23,17 +23,21 @@
     }
   ],
   "fixture": {
-    "rules": {
+    "expected": {
+      "btn": 1,
+      "combos": 1,
+      "dt": 1,
       "raw": 0,
+      "sort": 1,
+      "headers": 4,
+      "dataHeaders": 1,
+      "ttl": 0,
+      "ttlTruncation": 0,
+      "tip": 0,
       "pill": 0,
-      "ttlEqualsTruncation": true,
-      "tipMaximum": 1,
-      "tipApprovals": [],
-      "combosMaximum": 4,
-      "sortEqualsHeaders": true,
       "handRolled": 0,
-      "overflowX": 0,
-      "pageErrors": 0
+      "menus": 0,
+      "overflowX": 0
     }
   }
 }

@@ -9,6 +9,18 @@ function CensusFixture() {
     "main",
     { id: "main", "aria-label": "Census fixture" },
     createElement("header", null, createElement(Button, { variant: "default", size: "sm" }, "Open library")),
+    createElement("section", { "data-component": "DataTable" },
+      createElement("table", { "data-census-datatable": "true" },
+        createElement("thead", null,
+          createElement("tr", null,
+            createElement("th", { "aria-sort": "ascending" }, "Name"),
+            createElement("th", { "data-column-kind": "selection" }, "Select"),
+            createElement("th", { "data-column-kind": "action" }, "Actions"),
+            createElement("th", { "data-column-kind": "static" }, "Preview"),
+          ),
+        ),
+      ),
+    ),
     createElement("p", null, "Fixture page for exercising the rendered census before app routes exist."),
   )
 }

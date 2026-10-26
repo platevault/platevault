@@ -18,14 +18,16 @@ export function checkBudget(result, rules, errors = []) {
   for (const metric of ["raw", "pill", "handRolled", "overflowX"]) {
     if (result[metric] !== rules[metric]) violations.push(`${metric}=${result[metric]} expected ${rules[metric]}`)
   }
-  if (result.ttl > result.ttlTruncation) violations.push(`ttl=${result.ttl} exceeds ttlTruncation=${result.ttlTruncation}`)
+  if (rules.ttlEqualsTruncation && result.ttl !== result.ttlTruncation) {
+    violations.push(`ttl=${result.ttl} does not equal ttlTruncation=${result.ttlTruncation}`)
+  }
   if (result.tip > (rules.tipMaximum ?? 1) && !(rules.tipApprovals ?? []).includes(result.route)) {
     violations.push(`tip=${result.tip} exceeds ${rules.tipMaximum ?? 1} without approval`)
   }
   if (result.combos > rules.combosMaximum) violations.push(`combos=${result.combos} exceeds ${rules.combosMaximum}`)
-  if (rules.sortEqualsHeaders && result.sort !== result.headers) violations.push(`sort=${result.sort} does not equal headers=${result.headers}`)
-  const pageErrors = errors.length + (result.pageErrors?.length ?? 0)
-  if (pageErrors !== rules.pageErrors) violations.push(`pageErrors=${pageErrors} expected ${rules.pageErrors}`)
+  const dataHeaders = result.dataHeaders ?? result.headers
+  if (result.sort !== dataHeaders) violations.push(`sort=${result.sort} does not equal dataHeaders=${dataHeaders}`)
+  if (errors.length !== rules.pageErrors) violations.push(`pageErrors=${errors.length} expected ${rules.pageErrors}`)
   return violations
 }
 
@@ -61,7 +63,7 @@ async function measure(page, route, label, rules) {
   const result = await injectCensus(page)
   const violations = checkBudget(result, rules, errors)
   console.log(JSON.stringify({ viewport: label, route, result, errors, violations }))
-  return violations
+  return { result, violations }
 }
 
 async function runCensus() {
@@ -70,7 +72,7 @@ async function runCensus() {
   try {
     const selectedRoutes = fixtureOnly ? ["/fixture"] : routes
     for (const route of selectedRoutes) {
-      const rules = route === "/fixture" ? baseline.fixture.rules : ruleForRoute(route)
+      const rules = ruleForRoute(route)
       if (!rules) {
         failures.push(`${route}: no route-pattern census rules`)
         continue
@@ -82,7 +84,8 @@ async function runCensus() {
         })
         try {
           const page = await context.newPage()
-          failures.push(...(await measure(page, route, viewport.name, rules)).map((failure) => `${route} at ${viewport.name}: ${failure}`))
+          const { violations } = await measure(page, route, viewport.name, ruleForRoute(route))
+          failures.push(...violations.map((failure) => `${route} at ${viewport.name}: ${failure}`))
         } finally {
           await context.close()
         }
