@@ -17,7 +17,7 @@ const ROOTS: readonly FolderRoot[] = [
   { id: "t7", name: "T7", mountPath: "/Volumes/T7", mounted: true },
 ]
 
-const folder = (path: string): FolderEntry => ({ path, name: path.slice(path.lastIndexOf("/") + 1), kind: "folder" })
+const folder = (path: string): FolderEntry => ({ path, name: path.slice(path.lastIndexOf("/") + 1), kind: "folder", denied: false })
 const listed = (...entries: FolderEntry[]): FolderListing => ({ denied: false, entries })
 
 interface PendingListing {
@@ -50,7 +50,7 @@ describe("FolderPicker", () => {
     expect(calls.map((call) => call.path)).toEqual(["/Volumes/Astro"])
     expect(within(dialog).getByRole("status", { name: m.common_loading() })).toBeInTheDocument()
 
-    await settle(() => calls[0]!.resolve(listed(folder("/Volumes/Astro/Captures"), { path: "/Volumes/Astro/a.fits", name: "a.fits", kind: "file" })))
+    await settle(() => calls[0]!.resolve(listed(folder("/Volumes/Astro/Captures"), { path: "/Volumes/Astro/a.fits", name: "a.fits", kind: "file", denied: false })))
     const list = within(dialog).getByRole("list", { name: m.folder_picker_list({ name: "Astro" }) })
     // Folder mode lists folders only.
     expect(within(list).getAllByRole("button").map((row) => row.textContent)).toEqual(["Captures"])
