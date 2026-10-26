@@ -98,7 +98,7 @@ opens on Home, the control-panel dashboard. Done means:
 ### S6a — Read planning before any site exists {#S6a}
 
 - **Do:** When both Captures locations finish indexing, on Home, read Tonight. Open Targets and search for `NGC 7000`.
-- **Expect:** Tonight reads `No site` and offers **Add site**, which leads to Settings › Observing sites. Targets opens on My targets, with tonight in its header date picker and a toggle to Browse catalogues. My targets lists NGC 7000, because its sessions are indexed, not as a favourite and with no Project badge. The altitude column draws no sparkline and the page offers **Add site**. The search lists NGC 7000 from the bundled catalogues with its source, and the result shows it is in My targets, so it offers no Add to targets (PLAN-TGT-FR-03). The results read `SIMBAD off` or `SIMBAD unreachable`, never `SIMBAD searched`.
+- **Expect:** Tonight reads `No site` and offers **Add site**, which leads to Settings › Observing sites. Targets opens on My targets, with tonight in its header date picker and a toggle to Browse catalogues. My targets lists NGC 7000, because its sessions are indexed, not as a favourite and with no Project badge. The altitude column draws no sparkline and the page offers **Add site**. The search lists NGC 7000 from the bundled catalogues with its source, and the result shows it is in My targets, so clicking it would open NGC 7000 and add nothing (PLAN-TGT-FR-03). The results read `SIMBAD off` or `SIMBAD unreachable`, never `SIMBAD searched`.
 - **Expect (negative):** No window, altitude or Img time is computed for an assumed location. Searching writes nothing: this step clicks no result row, and the search adds no Target to My targets.
 - **Trace:** PLAN-FR-11 · PLAN-AC-12 · PLAN-TGT-FR-01, PLAN-TGT-FR-03 · PLAN-TGT-AC-03, PLAN-TGT-AC-04, PLAN-TGT-AC-15 · D-W17, D-W39 · HARNESS-V5-IA.md §Screens S1 (Tonight), S10, S11 · HARNESS-V5-FEEDBACK-R1.md §Round 6 "Targets opens on My targets"
 
@@ -265,4 +265,5 @@ opens on Home, the control-panel dashboard. Done means:
   Evidence: owner's answers of 2026-10-19 in astro-plan-rzbzu.1 (My targets, associated Target), PLAN-TGT-FR-03, LIB-FR-17, LIB-FR-20 · by: Main (intent-gated)
 - **Δ9** 2026-10-26 · S6, S6a · behavior-change
   A status-bar counter with one issue opens the same menu of owning pages as several do, and My targets marks a favourite in its Favourite column instead of with ★.
-  Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 11 (OWNER, 2026-10-23) on ui-harness-v5 @ 5dc245244; D-W142, D-W144, FR-032 · by: SpecAmend (intent-gated)
+  At S6a, clicking NGC 7000's search result would open it, because a click on a result adds it or opens it and no result row has an Add button.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 11 (OWNER, 2026-10-23) and §Round 6 "Clicking a result" on ui-harness-v5 @ 5dc245244; D-W142, D-W144, D-W152, FR-032 · by: SpecAmend (intent-gated)
