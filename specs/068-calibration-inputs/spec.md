@@ -8,7 +8,9 @@
 
 **Amended**: 2026-10-14, to the calibration library of D-W82 and the F4 Project model, D-W93 to D-W106, on 2026-10-16 to the owner's answers of 2026-10-15/16, D-W107 to D-W116, and on 2026-10-16 to the owner's second batch, D-W119, with D-W113 amended in place.
 
-**Status**: Draft; product defaults and all human-approval gate waivers follow the root autonomous objective. Requirements analysis, implementation and verification remain required.
+**Amended**: 2026-10-26, to the Round 11 decision D-W148.
+
+**Status**: Backend landed; frontend and acceptance open (reconciled 2026-10-26, `specs/SPEC_STATUS.md`). Landed: the calibration matching backend (#1780, #1782, #1783) and matching at ingestion in the F4 cut-over (#1851). Remains: the Calibration surface (astro-plan-i5op2) and verification. Product defaults and all human-approval gate waivers follow the root autonomous objective.
 
 **Input**: Clean rebuild with selective reuse of verified code and the agreed PlateVault product flow.
 
@@ -55,6 +57,7 @@ Calibration is matched when sessions come in. At ingestion, flats, darks and bia
 - **CAL-AC-29**: Given a session pinned to master flat F, when F's library file changes in place or goes missing, then the pin stays and the session reads F as changed or missing, with Reassign…. "Needs calibration" lists the session. The session remains settled for Project membership and may be added to a Project while the pin is drifted. The next Apply of a Project that holds the session is refused with a link to reassign F, and no other flat is pinned by itself. Restoring F's bytes takes the session out of "Needs calibration" and lets Apply proceed. (D-W113; owner's answer, 2026-10-19, astro-plan-rzbzu.1)
 - **CAL-AC-30**: Given a bias master B and a session with 300 s lights, both at gain 100 and offset 50, then B is pinned although no bias has a 300 s exposure. For darks the exposure still counts: only a 300 s dark master can be pinned to that session. The bias checks this relies on are provisional (CAL-FR-21). (D-W103, D-W114)
 - **CAL-AC-31**: Given one night that intake split into a session at ROTATANG 10° and a "framing 2" session at 95°, with flats taken at 10°. Then the flats are pinned on the first session and aren't offered to the second. (D-W102, D-W107)
+- **CAL-AC-32**: Given Settings, when the user opens Matching in its Library group, then `/settings/matching` shows one table of Setting, Value and Unit, grouped Framing, Flats, Darks and Bias. It holds the defaults of D-W114, such as rotation within 5° under Framing and 365 days under Darks, and Settings > Equipment shows no thresholds. After Edit… sets the flat rotation warning limit to 4°, the table reads 4°, and the next ingestion matches flats with it. (D-W114, D-W148)
 
 ### Edge Cases
 
@@ -91,6 +94,7 @@ The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody,
 - **CAL-FR-21**: Darks and bias are matched against the session's camera, by alias where the rigs hold several cameras of its model (LIB-FR-26), and against its capture time, because a dark records the sensor's state when it was taken. The version pinned is the one taken closest to the lights, before or after. The age window for darks and bias is a setting that defaults to 365 days, and ages count from capture time, not import time. This window is separate from the Old badge's threshold (CAL-FR-15). Darks and bias have separate checks: a dark's are exposure, gain, offset, binning, readout mode and temperature within tolerance. Drift past the warning level makes the match a suggestion. A dark or bias outside the window, before or after the lights, is never pinned automatically: it is only suggested, with both capture dates shown, and needs confirmation. This also applies when calibration arrives later (LIB-FR-25). Provisional: a bias's checks are a dark's without exposure. (D-W103, D-W104, D-W114)
 - **CAL-FR-22**: A camera with "Don't use darks" or "Don't use bias" (PLAN-EQ-FR-08) gets no dark or bias match: its sessions are settled as No darks or No bias with no warning, and a per-session override pins one. (D-W104)
 - **CAL-FR-23**: Calibration doesn't need to be the same across a Project. Its sessions may pin different versions, and the View layout keeps each with the lights that use it (PREP-FR-16). Dark flats are never matched, suggested or assigned. (D-W93, D-W99, D-W101)
+- **CAL-FR-24**: The matching thresholds have their own page, Matching, in the Library group of Settings (`/settings/matching`), next to Equipment. It shows them as one table of Setting, Value and Unit, grouped Framing, Flats, Darks and Bias, with one Edit…. Framing holds the framing limits (LIB-FR-04, PRJ-FR-31) and the mosaic panel overlap (PRJ-FR-29), Flats the rotation thresholds and window of CAL-FR-20, and Darks and Bias the windows and checks of CAL-FR-21. Every threshold this contract calls adjustable in Settings is set here, with the defaults of D-W114. Changing the centre or rotation limit applies to later imports only; it re-splits no existing session (D-W107; owner's answer, 2026-10-20). (D-W107, D-W114, D-W148)
 
 ### Owned interaction steps
 
@@ -101,6 +105,7 @@ The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody,
 - Calibration surface: Import masters, Add version… and dated master versions, Old badge, Hide and Show hidden, Move to Trash (D-W82, D-W103)
 - Matching at ingestion: the flat, dark and bias rules (D-W101 to D-W104)
 - Calibrate step: read-only check and calibration diagram (D-W101)
+- Settings > Matching: the framing and calibration thresholds as one table (D-W148)
 
 ### Key Entities
 
@@ -135,3 +140,4 @@ Use the [root vocabulary](../063-clean-rebuild-contract/spec.md#key-entities). F
 - Workflow decisions D-W101 to D-W106 (the F4 Project model, owner, 2026-10-14) match flats, darks and bias at ingestion and pin them on the session, make the Calibrate step a read-only check with a diagram, and set the flat, dark and bias rules, rig versions, camera aliases and camera defaults. Dark flats are ignored (D-W93). Provisional: the flat ranking, the master offer from `Processing/`, the refusal of Hide and Move to Trash while a Project uses the master, and the copy "Add version…" and "New version of {master}".
 - Workflow decisions D-W107, D-W113 and D-W114 (the owner's answers of 2026-10-15/16, amended on 2026-10-19 in astro-plan-rzbzu.1) give each session one rotation, so flats are matched per session. A pin whose file changes or goes missing stays, and Apply refuses with a link to reassign it. They settle the flat rotation thresholds, the 365-day window for darks and bias, separate dark and bias checks, capture-time dates and the preference for masters over raw sets. Sessions stay split by exposure time (D-W107), which closes Q7.
 - The owner's second batch of 2026-10-16 amends D-W113 in place: a session with a changed or missing pinned file also waits in "Needs calibration". It adds D-W119: adoption refuses PlateVault's own unregistered copy at the master's destination, names it and offers a reviewed Move to Trash, then retries. The owner's answer on 2026-10-19 settles D-W113: drifted pins remain settled for Project membership, while Apply waits for reassignment or restoration of recorded bytes. (astro-plan-rzbzu.1)
+- Workflow decision D-W148 (Round 11, owner, 2026-10-23, astro-plan-qk9ri.6) gives the matching thresholds their own Settings page, Matching, in the Library group next to Equipment, as one table with one Edit… (CAL-FR-24). The thresholds and their defaults stay as D-W114 settled them.

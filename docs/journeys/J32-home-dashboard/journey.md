@@ -1,7 +1,7 @@
 ---
 id: J32
 title: Work from the Home dashboard and follow each Project's Next action
-version: 6
+version: 7
 status: draft
 last_reviewed: 2026-10-06
 actors: [primary-user]
@@ -42,7 +42,7 @@ The user opens PlateVault and decides what to do next from Home. Home shows pend
   - `3 Oct` (OBJECT `Cygnus field`, conflicting pointing) and `5 Oct` (no OBJECT, no pointing): no confirmed Target.
 
   `NGC 7000 HOO` holds the worked example's Ha sessions `18 Sep` and `28 Sep` (111 frames). Its other matching Ready sessions are suggestions until the user adds them. No session joins a Project automatically, and `2 Oct OIII` cannot be added before review and settled calibration.
-- P4: My targets holds ★ M 33. M 45 is not ★. Tomorrow's plan at Backyard, the night of 7 Oct, holds NGC 7000, and no other night has a planned Target.
+- P4: M 33 is a favourite in My targets, and M 45 is not a favourite. The plan at Backyard for the night of 7 Oct holds NGC 7000, and no other night has a Target in its plan.
 - P5: A manifest (relative path, size, SHA-256) of every file under the registered locations, recorded outside PlateVault before S1.
 - P6: No two files under the registered locations are byte-identical, so a duplicate scan finds no duplicate copies.
 
@@ -113,8 +113,8 @@ The user opens PlateVault and decides what to do next from Home. Home shows pend
 ### S7 — Read Tonight {#S7}
 
 - **Do:** Read the Tonight box. Open Targets, keep the night on tonight at Backyard, and compare each Tonight window with that Target's altitude column.
-- **Expect:** Tonight lists the best window, with start, end, peak altitude and Moon separation, for NGC 7000, Veil Mosaic, M 31, IC 1396 and M 33, with M 33 marked ★. The Veil Mosaic window uses the mosaic's centre. The box shows tonight's darkness window and the Moon's phase, illumination, rise and set. Every value names Backyard and its time zone. Each listed Target's window matches the best window marked in its altitude column on the Targets page, whose tooltip states the same peak altitude and time.
-- **Expect (negative):** M 45 is not listed, because its Project is Closed and it is not ★. No window is listed for a Target without one tonight.
+- **Expect:** Tonight lists the best window, with start, end, peak altitude and Moon separation, for NGC 7000, Veil Mosaic, M 31, IC 1396 and M 33, with M 33 marked as a favourite. The Veil Mosaic window uses the mosaic's centre. The box shows tonight's darkness window, plus the Moon's phase, illumination, moonrise and moonset. Every value names Backyard and its time zone. Each listed Target's window matches the best window marked in its altitude column on the Targets page, whose tooltip states the same peak altitude and time.
+- **Expect (negative):** M 45 is not listed, because its Project is Closed and it is not a favourite. No window is listed for a Target without one tonight.
 - **Trace:** Home dashboard · HARNESS-V5-IA.md S1 Tonight · HARNESS-V5-FEEDBACK-R1.md Round 5 P-PLAN2 · PLAN-FR-11 · PLAN-AC-11 · PV-PLAN-SC-04 · D-W39, D-W60, D-W63
 
 ### S7a — Inspect and open a calendar night {#S7a}
@@ -193,3 +193,6 @@ The user opens PlateVault and decides what to do next from Home. Home shows pend
 - **Δ6** 2026-10-17 · +S7a, +SC9, P4 · behavior-change
   New S7a checks Home's five-week Calendar: each night's Moon phase, darkness, suited goals and planned Targets, and the card on hover or focus. Choosing a night opens Targets set to that night. P4 now plans NGC 7000 for 7 Oct, so that night counts one planned Target.
   Evidence: HARNESS-V5-FEEDBACK-R1.md Round 9 C8 (decision astro-plan-b66vy) · D-W89 · PLAN-FR-12, PLAN-AC-14 · by: JourneysR9c (intent-gated)
+- **Δ7** 2026-10-26 · P4, S7 · behavior-change
+  ★ becomes Favourite: Tonight marks a favourite as one, in the wording of the Targets page's Favourite column.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 11 (OWNER, 2026-10-23) on ui-harness-v5 @ 5dc245244; D-W142, PLAN-TGT-FR-17 · by: SpecAmend (intent-gated)
