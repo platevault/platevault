@@ -10,9 +10,9 @@ The bootstrap manifest owner maintains the `apps/desktop-ui` manifest and its `p
 
 ## Frontend route census
 
-Run `pnpm --filter @platevault/desktop-ui census` to invoke `scripts/census.mjs`. The command measures `/` and a checked-in React fixture separately by default. Set `PV_CENSUS_ROUTES` to choose routes with a comma-separated list. It measures each route at 1440px and 1280px. It also measures each route at 1280px with 125% zoom. This case models physical geometry at 1024 CSS pixels. Route checks need an app `#main` landmark. Missing `#main` is an error.
+Run `pnpm --filter @platevault/desktop-ui census` to invoke `scripts/census.mjs`. By default, it measures `/`. Set `PV_CENSUS_ROUTES` to choose routes with a comma-separated list. It measures each route at 1440px and 1280px. It also measures each route at 1280px with 125% zoom. This case models physical geometry at 1024 CSS pixels. Route checks need an app `#main` landmark. Missing `#main` is an error.
 
-Set `PV_CENSUS_FIXTURE_ONLY=1` to measure only the fixture at 1024 CSS pixels. Fixture results do not replace route results. The bootstrap worktree did not yet have the census runner. The details above follow the census owner's contract and were not tested here.
+Set `PV_CENSUS_FIXTURE_ONLY=1` to measure only the checked-in React fixture at 1024 CSS pixels. Normal runs do not measure the fixture. The bootstrap worktree did not yet have the census runner. The details above follow the census owner's contract and were not tested here.
 
 ## Legacy recovery reference
 
