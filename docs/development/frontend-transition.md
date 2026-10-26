@@ -8,6 +8,12 @@ At the `astro-plan-qnv6v` cutover, promote the replacement from `apps/desktop-ui
 
 The bootstrap manifest owner maintains the `apps/desktop-ui` manifest and its `pnpm-lock.yaml` importer. Request additional direct dependencies or version changes from that owner. Include the package, requested range, consumer, and reason. Feature workers do not edit the manifest or lockfile. The owner checks each request against existing workspace and prototype dependencies, then publishes any needed lockfile update.
 
+## Frontend route census
+
+Run `pnpm --filter @platevault/desktop-ui census` to invoke `scripts/census.mjs`. The command measures `/` and a checked-in React fixture separately by default. Set `PV_CENSUS_ROUTES` to choose routes with a comma-separated list. It measures each route at 1440px and 1280px. It also measures each route at 1280px with 125% zoom. This case models physical geometry at 1024 CSS pixels. Route checks need an app `#main` landmark. Missing `#main` is an error.
+
+Set `PV_CENSUS_FIXTURE_ONLY=1` to measure only the fixture at 1024 CSS pixels. Fixture results do not replace route results. The bootstrap worktree did not yet have the census runner. The details above follow the census owner's contract and were not tested here.
+
 ## Legacy recovery reference
 
 The branch `reference/legacy-ui-before-rebuild` points to commit `3bb56c5909263920f840e8b48a4620c450f4265b`. The epic `astro-plan-ocyuc` records it as `legacy_ui_ref`. Use this immutable reference to recover legacy source. It does not back up catalogue data.
