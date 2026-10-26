@@ -194,6 +194,7 @@ The owner settled these items in Rounds 5 to 9 of `HARNESS-V5-FEEDBACK-R1.md` on
 - D-W153 (a Target the pointing disagrees with; Round 6 "Import and sessions"): Round 6: "Confirming a Target the pointing disagrees with is allowed. The session's Target box then shows a mismatch warning." The pointing disagrees when the confirmed Target's footprint doesn't contain it. The user's confirmation stands, and the warning stays on the session's Target box.
 - D-W154 (an import source that goes away; Round 6 "Import and sessions"): Round 6: "Import source vanishes mid-import (SD pulled, share dropped): the import pauses as Interrupted; reconnecting and choosing Retry resumes it." Verified items keep their state, and Retry resumes the recorded work (STO-IMP-FR-06).
 - D-W157 (quitting while work runs; Round 6 "Equipment, storage, shell"): Round 6: "Quit asks while an import, index or prepare runs." Apply replaces Prepare (D-W100). Cancelling keeps PlateVault open with the work still running. After the user confirms, the work shows as Interrupted with Retry on the next launch (D-W149).
+- D-W158 (when a dismissed issue returns; Round 8 P-ISS1 (user), whose hub D-W92 replaced): P-ISS1: "A dismissed issue stays hidden until it changes: the same kind, the same subject, and the same count and bytes. A new failure, another duplicate or a location going offline again brings it back." Dismissing hides the issue only, and the state behind it stays as it was. The Dismiss and Restore controls stay on the rows (D-W92).
 
 ## Owner's answers, 2026-10-26
 
