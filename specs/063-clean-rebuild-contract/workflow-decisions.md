@@ -197,6 +197,7 @@ The owner settled these items in Rounds 5 to 9 of `HARNESS-V5-FEEDBACK-R1.md` on
 - D-W158 (when a dismissed issue returns; Round 8 P-ISS1 (user), whose hub D-W92 replaced): P-ISS1: "A dismissed issue stays hidden until it changes: the same kind, the same subject, and the same count and bytes. A new failure, another duplicate or a location going offline again brings it back." Dismissing hides the issue only, and the state behind it stays as it was. The Dismiss and Restore controls stay on the rows (D-W92).
 - D-W159 (dialog button order; Round 9 grilling round 2, C1 (user)): C1: "Cancel, then the action, on every OS (one shared DialogFooter decides)." The order holds on macOS, Windows and Linux alike.
 - D-W160 (observing-site map; Round 9 grilling round 2, C5 (user)): C5: "Leaflet + OpenStreetMap tiles (new dependency approved), plus a place search and "Use my location"; the number fields stay the source of truth, with a "map unavailable" fallback." The site editor saves its latitude and longitude fields; the map, the place search and Use my location only fill them.
+- D-W161 (every visible string in the message catalogue; Round 9 "Copy rule" (user)): The rule: "Every visible string goes through the message catalogue in en-GB and pt-BR". It goes on: "Nothing goes in the i18n ignores without a genuine reason; the only valid ones are catalogue names and other proper nouns (Messier, NGC, target designations, file names, paths, code identifiers), unit tests and fixtures, internal code and docs, debugging and logs."
 
 ## Owner's answers, 2026-10-26
 
