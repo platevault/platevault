@@ -1,7 +1,7 @@
 ---
 id: J19
 title: Index capture folders in place and inspect sessions on first use
-version: 8
+version: 9
 status: draft
 last_reviewed: 2026-10-03
 actors: [primary-user]
@@ -91,14 +91,14 @@ opens on Home, the control-panel dashboard. Done means:
 ### S6 — Browse while indexing runs {#S6}
 
 - **Do:** Before indexing finishes, click **Open library**. The orientation walk opens on its own after setup (J18/S1); skip or finish it (J18/S2, S3). Read Home, the source list and the status bar, then open Sessions.
-- **Expect:** Home opens, not the Targets list. It shows Pending ingestions, Pending work, Open work, Status, Tonight and the calendar, with no tabs and no header buttons. Open work reads **No Projects in progress.**, Home shows no setup checklist (J18/S6), and Status lists the indexing operation with its progress. The source list offers Home, Projects, Targets, Sessions and Calibration, with Activity and Settings in its footer, and the toolbar offers Import. The status bar shows the indexing operation as running work with a mini progress bar. Its ⛔ errors counter reads 1 and opens Settings › Locations filtered to the `Astro-T7 calibration` row, which names the access failure. In Sessions, the sessions read so far can be inspected. Totals name the locations they cover and read Provisional.
+- **Expect:** Home opens, not the Targets list. It shows Pending ingestions, Pending work, Open work, Status, Tonight and the calendar, with no tabs and no header buttons. Open work reads **No Projects in progress.**, Home has no Getting started checklist (J18/S6), and Status lists the indexing operation with its progress. The source list offers Home, Projects, Targets, Sessions and Calibration, with Activity and Settings in its footer, and the toolbar offers Import. The status bar shows the indexing operation as running work with a mini progress bar. Its ⛔ errors counter reads 1 and opens a menu naming `Settings › Locations · 1`, which opens Settings › Locations filtered to the `Astro-T7 calibration` row, which names the access failure (FR-032, D-W144). In Sessions, the sessions read so far can be inspected. Totals name the locations they cover and read Provisional.
 - **Expect (negative):** Home shows no issues strip, summary line or alerts list, and no counter opens a list of issues. The source list has no Storage or Plan entry. No total implies that unscanned folders or data outside the registered locations are included. No screen asks for an account or a network connection.
 - **Trace:** flow A4 · LIB-FR-03, LIB-FR-10 · LIB-AC-07, LIB-AC-09 · PRJ-FR-17 · D-W89, D-W92 · HARNESS-V5-IA.md §Source list, §Screens S1, §Round 2b (Status bar) · HARNESS-V5-FEEDBACK-R1.md §Round 5 (P-SB3, Home has no issues strip, Navigation, P-STO2, P-PLAN2), §Round 6 "Onboarding: walk plus checklist" · J18/G4 (the page setup hands over to) · G5
 
 ### S6a — Read planning before any site exists {#S6a}
 
 - **Do:** When both Captures locations finish indexing, on Home, read Tonight. Open Targets and search for `NGC 7000`.
-- **Expect:** Tonight reads `No site` and offers **Add site**, which leads to Settings › Observing sites. Targets opens on My targets, with tonight in its header date picker and a toggle to Browse catalogues. My targets lists NGC 7000, because its sessions are indexed, with no ★ and no Project badge. The altitude column draws no sparkline and the page offers **Add site**. The search lists NGC 7000 from the bundled catalogues with its source, and the result shows it is in My targets, so it offers no Add to targets (PLAN-TGT-FR-03). The results read `SIMBAD off` or `SIMBAD unreachable`, never `SIMBAD searched`.
+- **Expect:** Tonight reads `No site` and offers **Add site**, which leads to Settings › Observing sites. Targets opens on My targets, with tonight in its header date picker and a toggle to Browse catalogues. My targets lists NGC 7000, because its sessions are indexed, not as a favourite and with no Project badge. The altitude column draws no sparkline and the page offers **Add site**. The search lists NGC 7000 from the bundled catalogues with its source, and the result shows it is in My targets, so it offers no Add to targets (PLAN-TGT-FR-03). The results read `SIMBAD off` or `SIMBAD unreachable`, never `SIMBAD searched`.
 - **Expect (negative):** No window, altitude or Img time is computed for an assumed location. Searching writes nothing: this step clicks no result row, and the search adds no Target to My targets.
 - **Trace:** PLAN-FR-11 · PLAN-AC-12 · PLAN-TGT-FR-01, PLAN-TGT-FR-03 · PLAN-TGT-AC-03, PLAN-TGT-AC-04, PLAN-TGT-AC-15 · D-W17, D-W39 · HARNESS-V5-IA.md §Screens S1 (Tonight), S10, S11 · HARNESS-V5-FEEDBACK-R1.md §Round 6 "Targets opens on My targets"
 
@@ -263,3 +263,6 @@ opens on Home, the control-panel dashboard. Done means:
   My targets lists every Target with at least one session, so at S6a it lists NGC 7000, and NGC 7000's search result offers no Add to targets.
   A Target associated by agreeing pointing counts as confirmed: at S9a and S10 the sessions associated by pointing are not in Needs a Target and are in Not in any Project.
   Evidence: owner's answers of 2026-10-19 in astro-plan-rzbzu.1 (My targets, associated Target), PLAN-TGT-FR-03, LIB-FR-17, LIB-FR-20 · by: Main (intent-gated)
+- **Δ9** 2026-10-26 · S6, S6a · behavior-change
+  A status-bar counter with one issue opens the same menu of owning pages as several do, and My targets marks a favourite in its Favourite column instead of with ★.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 11 (OWNER, 2026-10-23) on ui-harness-v5 @ 5dc245244; D-W142, D-W144, FR-032 · by: SpecAmend (intent-gated)

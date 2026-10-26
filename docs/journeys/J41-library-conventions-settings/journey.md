@@ -1,7 +1,7 @@
 ---
 id: J41
 title: Set library and Project conventions in Settings for naming, goals, grouping, locations and applications
-version: 7
+version: 8
 status: draft
 last_reviewed: 2026-10-12
 actors: [primary-user]
@@ -168,10 +168,10 @@ The user sets how imported files are named, which goals a new Project starts wit
 
 ### S16b — Read global Project grouping defaults {#S16b}
 
-- **Do:** In Settings, open the global Project grouping preferences. Read the framing and mosaic-panel thresholds and the GROUP and PANEL keyword names.
-- **Expect:** The same-framing defaults are coverage of at least 90 %, a centre limit of 5′ and rotation within 5°, and each is adjustable. The mosaic-panel overlap default is 5 % to 40 %. GROUP is the default folder keyword and PANEL is used for a mosaic-panel group; both keyword names are configurable globally and per Project. The group folder level appears only when a Project has several groups, so a one-group Project has none, even when its group is a mosaic panel.
+- **Do:** Open Settings › Matching and read the framing and mosaic-panel thresholds. Then open Settings › Naming and read its Group keywords rows.
+- **Expect:** Settings › Matching shows one table of Setting, Value and Unit, grouped Framing, Flats, Darks and Bias. The same-framing defaults are coverage of at least 90 %, a centre limit of 5′ and rotation within 5°, and each is adjustable. The mosaic-panel overlap default is 5 % to 40 %. Settings › Naming has a Group keywords row for Group, reading GROUP, and one for Mosaic panel, reading PANEL, each with its own Edit…. A Project can also change both keyword names. The group folder level appears only when a Project has several groups, so a one-group Project has none, even when its group is a mosaic panel.
 - **Expect (negative):** Reading these defaults changes no existing Project group or View.
-- **Trace:** PRJ-FR-31 · PRJ-FR-28 · PRJ-FR-29 · PREP-FR-16 · D-W95 · D-W100 · D-W114
+- **Trace:** PRJ-FR-31 · PRJ-FR-28 · PRJ-FR-29 · PREP-FR-16 · CAL-FR-24 · STO-IMP-FR-09 · D-W95 · D-W100 · D-W114 · D-W146 · D-W148
 
 ### S17 — Confirm nothing changed on disk {#S17}
 
@@ -228,3 +228,6 @@ The user sets how imported files are named, which goals a new Project starts wit
 - **Δ7** 2026-10-20 · S16b · behavior-change
   The same-framing centre default is an angle, a centre limit of 5′, rather than a share of the field.
   Evidence: D-W114 (owner's answer of 2026-10-20) in PR #1850, PRJ-FR-31 · by: Main (intent-gated)
+- **Δ8** 2026-10-26 · S16b · behavior-change
+  The framing and mosaic-panel thresholds live on Settings › Matching, and the GROUP and PANEL keyword names on Settings › Naming, one row each.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 11 (OWNER, 2026-10-23) on ui-harness-v5 @ 5dc245244; D-W146, D-W148, CAL-FR-24, STO-IMP-FR-09 · by: SpecAmend (intent-gated)
