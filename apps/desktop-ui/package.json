@@ -12,6 +12,7 @@
     "lint": "pnpm lint:eslint && pnpm lint:i18n",
     "lint:eslint": "eslint --max-warnings 0 src/",
     "lint:i18n": "node scripts/check-i18n-catalog.mjs && node scripts/check-i18n-locale-drift.mjs && node scripts/check-copy.mjs",
+    "census": "node scripts/census.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:lint-rules": "node --test eslint-rules/tests/*.test.mjs",
