@@ -19,8 +19,8 @@ You can:
   cluster**, and so on).
 - Sort any column — one active sort indicator at a time.
 - Group rows, for example by **Object type** or catalogue.
-- Star targets with ☆ ("Add to My Targets") to collect favourites under the
-  **My Targets** view. The **Favourite** column shows the star.
+- Mark targets as a **Favourite** (☆) to collect them under the **My Targets**
+  view.
 
 [screenshot: the Targets page with search results and planner columns]
 
