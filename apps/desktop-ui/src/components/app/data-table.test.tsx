@@ -368,6 +368,9 @@ describe("DataTable", () => {
       trigger().focus()
       await user.keyboard("{Enter}")
       const items = within(await screen.findByRole("menu")).getAllByRole("menuitemcheckbox")
+      // Opening from the keyboard focuses the first item, a frame after the menu mounts. Pressing an
+      // arrow before then would land on the first item instead of moving past it.
+      await waitFor(() => expect(items[0]).toHaveFocus())
       await user.keyboard("{ArrowDown}")
       await waitFor(() => expect(items[1]).toHaveFocus())
       await user.keyboard(" ")
