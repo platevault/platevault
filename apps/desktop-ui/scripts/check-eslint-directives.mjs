@@ -12,8 +12,8 @@ const RULE_LIST = /^[\w@./-]+(?:\s*,\s*[\w@./-]+)*$/
 
 /**
  * The comments come from the same TypeScript parser ESLint uses for src/ so directives in JSX and
- * template substitutions cannot escape. Every comment beginning with eslint must be an allowed
- * rule-disable directive with a named rule and an explicit reason.
+ * template substitutions cannot escape. Every comment beginning with eslint must be a rule-disable
+ * directive with a named rule and an explicit reason, or an eslint-enable naming the rules it closes.
  */
 export function invalidDisableDirectives(file, source) {
   const { ast } = tseslint.parser.parseForESLint(source, { filePath: file, comment: true, loc: true })
@@ -21,6 +21,11 @@ export function invalidDisableDirectives(file, source) {
   for (const comment of ast.comments) {
     const directiveText = comment.value.trim()
     if (!/^eslint\b/.test(directiveText)) continue
+    const enable = directiveText.match(/^eslint-enable\s+(.+)$/s)
+    if (enable) {
+      if (!RULE_LIST.test(enable[1].trim())) failures.push(`${file}:${comment.loc.start.line}: eslint-enable requires named rule(s)`)
+      continue
+    }
     const match = directiveText.match(/^eslint-disable(?:-(?:line|next-line))?(?=\s|$)(.*)$/s)
     if (!match) {
       failures.push(`${file}:${comment.loc.start.line}: unsupported inline eslint configuration`)

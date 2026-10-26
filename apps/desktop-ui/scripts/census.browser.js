@@ -55,9 +55,8 @@ window.__censusResult = (() => {
   const headerActions = header ? [...header.querySelectorAll("[data-slot=button]")].filter(visible).map((el) => `${text(el)} (${role(el)})`) : []
 
   const tables = [...main.querySelectorAll("table")].filter(visible)
-  // Fixture tables use the same explicit ownership slot that ui/DataTable
-  // exposes through React fiber owner metadata in the application.
-  const dataTables = tables.filter((t) => componentAbove(t, "DataTable") || t.hasAttribute("data-census-datatable") || t.parentElement?.closest("[data-component=DataTable]"))
+  // DataTable ownership comes only from the React fiber tree, so markup cannot claim it.
+  const dataTables = tables.filter((t) => componentAbove(t, "DataTable"))
   const rawTables = tables.filter((t) => !dataTables.includes(t))
   const headerCells = [...main.querySelectorAll("thead th")].filter((th) => visible(th) && th.innerText.trim())
   const dataHeaders = headerCells.filter((th) => !th.hasAttribute("data-column-kind") || th.dataset.columnKind === "data")

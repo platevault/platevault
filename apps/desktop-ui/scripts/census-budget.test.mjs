@@ -1,14 +1,25 @@
 import assert from "node:assert/strict"
 import { describe, it } from "node:test"
-import { checkBudget } from "./census.mjs"
+import { checkBudget, checkFixture } from "./census.mjs"
 describe("census route budgets", () => {
-  it("fails when a census measurement violates the per-route policy", () => {
-    const rules = { raw: 0, pill: 0, handRolled: 0, overflowX: 0, tipMaximum: 1, tipApprovals: [], combosMaximum: 4, sortEqualsHeaders: true, pageErrors: 0 }
-    const result = { route: "/", raw: 0, pill: 0, handRolled: 0, overflowX: 0, ttl: 1, ttlTruncation: 1, tip: 0, combos: 4, sort: 2, headers: 2, pageErrors: [] }
-    assert.deepEqual(checkBudget(result, rules), [])
+  const rules = { raw: 0, pill: 0, handRolled: 0, overflowX: 0, tipMaximum: 1, tipApprovals: [], combosMaximum: 4, pageErrors: 0 }
+  const passing = () => ({ route: "/", raw: 0, pill: 0, handRolled: 0, overflowX: 0, ttl: 1, ttlTruncation: 1, tip: 0, combos: 4, sort: 2, headers: 3, dataHeaders: 2 })
 
-    result.combos = 5
-    assert.deepEqual(checkBudget(result, rules), ["combos=5 exceeds 4"])
+  it("fails when a census measurement violates the per-route policy", () => {
+    assert.deepEqual(checkBudget(passing(), rules), [])
+    assert.deepEqual(checkBudget({ ...passing(), combos: 5 }, rules), ["combos=5 exceeds 4"])
+    assert.deepEqual(checkBudget({ ...passing(), ttl: 0 }, rules), ["ttl=0 does not equal ttlTruncation=1"])
+  })
+
+  it("requires every data column to sort, and only data columns", () => {
+    assert.deepEqual(checkBudget({ ...passing(), sort: 1 }, rules), ["sort=1 does not equal dataHeaders=2"])
+    assert.deepEqual(checkBudget({ ...passing(), dataHeaders: undefined }, rules), ["sort=2 does not equal dataHeaders=undefined"])
+  })
+
+  it("fails the fixture run when the census miscounts the fixture", () => {
+    const expected = { btn: 1, dt: 1 }
+    assert.deepEqual(checkFixture({ btn: 1, dt: 1, raw: 0 }, expected), [])
+    assert.deepEqual(checkFixture({ btn: 2, dt: 1 }, expected), ["fixture btn=2 expected 1"])
   })
 })
 describe("ESLint disable directive policy", () => {
@@ -60,5 +71,16 @@ describe("ESLint disable directive policy", () => {
     const { invalidDisableDirectives } = await import("./check-eslint-directives.mjs")
     const source = ["const C = () => <Select", "  // eslint-disable-next-line no-alert -- short", "  value={value}", "/>"].join("\n")
     assert.equal(invalidDisableDirectives("page.tsx", source).length, 1)
+  })
+
+  it("accepts eslint-enable that names the rules it closes", async () => {
+    const { invalidDisableDirectives } = await import("./check-eslint-directives.mjs")
+    const source = [
+      "/* eslint-disable no-alert -- the kiosk build has no dialog */",
+      "alert(1)",
+      "/* eslint-enable no-alert */",
+      "/* eslint-enable */",
+    ].join("\n")
+    assert.deepEqual(invalidDisableDirectives("page.tsx", source), ["page.tsx:4: unsupported inline eslint configuration"])
   })
 })
