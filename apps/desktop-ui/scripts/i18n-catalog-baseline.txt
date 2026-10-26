@@ -1,0 +1,12 @@
+# i18n catalogue lint baseline: deliberately accepted violations.
+# The ported catalogue contains known duplicate wording not yet unified.
+# Keep each complete signature specific so new duplicate groups still fail lint.
+# Regenerate with: node scripts/check-i18n-catalog.mjs --generate
+# Portuguese wording intentionally varies by grammatical position or gender.
+dup-value	plan_show_all,review_show_all,sessions_show_all
+dup-value	run_wrap_up,wrapup_action
+dup-value	run_entry_its_volume,wrapup_its_volume
+dup-value	measure_frames_action,op_measure_title
+dup-value	actions_for,run_actions_for
+dup-value	status_not_a_master,store_cal_not_a_master
+dup-value	domain_session_framing_unknown,project_framing_unknown
