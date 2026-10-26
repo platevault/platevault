@@ -198,5 +198,6 @@ The owner settled these items in Rounds 5 to 9 of `HARNESS-V5-FEEDBACK-R1.md` on
 
 The owner answered two open questions of the contract amendment (PR #1888) on 2026-10-26. Each entry records the answer and the entries it amends.
 - D-W155 (reducers; owner's answer, 2026-10-26; settles the *Open* reducer item of D-W147): A Reducer is its own Equipment record with a factor. A rig may select one, and the factor scales the telescope's focal length for field of view and matching. The Add equipment menu offers Reducer….
+- D-W156 (library-wide clean-ups; owner's answer, 2026-10-26; amends FR-021, PRJ-FR-15 and STO-FR-14, which offered trashing a library frame from Wrap up alone): Besides Wrap up, the library offers two clean-ups outside any Project. One is the library-wide duplicates clean-up in the Sessions › Duplicates review, and the other a purge of Unusable frames. Both keep every existing safety rule. Files go to the OS Trash only, and the user confirms a reviewed list. A frame or copy that is pinned or in use is refused with its reason.
 
 Sources: the legacy facts are in legacy-frontend-facts.md.
