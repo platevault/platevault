@@ -140,19 +140,25 @@ export function FolderPicker(props: FolderPickerProps) {
       live = false
     }
   }, [open, current, attempt, listFolder, mode, filters])
-  // Opening a folder replaces the control that was pressed: keep keyboard focus in the list once it is listed.
+  // Opening a folder or Retry replaces the control that was pressed: once the list arrives, keep keyboard focus
+  // in it (the first row, or Retry when the listing failed again), else on Up, else on Choose.
   useEffect(() => {
     if (!focusAfterMove.current || listing.state === "loading") return
     focusAfterMove.current = false
-    const firstRow = listPane.current?.querySelector<HTMLElement>("[data-folder-row]")
+    const inList = listPane.current?.querySelector<HTMLElement>("button")
     const up = upButton.current && !upButton.current.disabled ? upButton.current : null
-    ;(firstRow ?? up ?? chooseButton.current)?.focus()
+    ;(inList ?? up ?? chooseButton.current)?.focus()
   }, [listing])
 
   function openFolder(path: string) {
     focusAfterMove.current = true
     setSelected([])
     setCurrent(path)
+  }
+
+  function retry() {
+    focusAfterMove.current = true
+    setAttempt((n) => n + 1)
   }
 
   function choose(paths: string[]) {
@@ -272,7 +278,7 @@ export function FolderPicker(props: FolderPickerProps) {
               ) : listing.state === "denied" ? (
                 <Notice tone="warning" title={m.status_access_denied()} />
               ) : listing.state === "failed" ? (
-                <ActionError className="px-2 py-6" message={m.folder_picker_list_failed({ name: currentName })} onRetry={() => setAttempt((n) => n + 1)} />
+                <ActionError className="px-2 py-6" message={m.folder_picker_list_failed({ name: currentName })} onRetry={retry} />
               ) : entries.length === 0 ? (
                 <p className="px-2 py-6 text-center text-sm text-muted-foreground">{choosesFolder ? m.folder_picker_empty() : m.folder_picker_empty_items()}</p>
               ) : (
