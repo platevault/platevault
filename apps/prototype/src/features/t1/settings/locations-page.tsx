@@ -101,7 +101,7 @@ function EditLocationDialog({ location, onClose }: { location: Location | null; 
   )
 }
 
-/** A location's facts, under its row's disclosure: what the hideable Frames, Size and Disk free columns show, too, so they still read once the Columns menu hides them. */
+/** A location's facts, under its row's disclosure: what the hideable Frames, Size and Free columns show, too, so they still read once the Columns menu hides them. */
 function LocationDetails({ row }: { row: LocationRow }) {
   const m = useMessages()
   const disk = useStore((s) => s.disk)
@@ -298,6 +298,8 @@ export function LocationsPage() {
           activeRowId: search.locationId ?? null,
           empty: <EmptyState icon={FolderPlus} title={m.storage_no_locations()} action={<ActionButton action={add} />} />,
           primaryRowAction: (r) => (r.availability === "retired" ? null : rescan(r)),
+          // Rescan or Index now as its icon, so every column fits the Settings pane at 1440 px in either language.
+          primaryRowActionIcon: true,
           rowActions,
           expand: { render: (r) => <LocationDetails row={r} />, defaultExpanded: search.locationId ? [search.locationId] : [] },
         }}

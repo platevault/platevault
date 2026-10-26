@@ -46,7 +46,16 @@ describe("Settings › Locations (cmvgf)", () => {
     renderAt("/")
     const table = await screen.findByRole("table", { name: m.common_locations() })
     const headers = () => within(table).getAllByRole("columnheader").map((cell) => cell.textContent)
-    expect(headers()).toEqual(expect.arrayContaining([m.location_col_frames(), m.location_col_size(), m.location_col_free()]))
+    expect(headers()).toEqual([
+      m.location_col_name(),
+      m.location_role(),
+      m.location_col_state(),
+      m.location_col_indexed(),
+      m.location_col_frames(),
+      m.location_col_size(),
+      m.location_col_free(),
+      m.table_actions_column(),
+    ])
     await user.click(screen.getByRole("button", { name: m.display_menu_columns() }))
     const items = within(await screen.findByRole("menu")).getAllByRole("menuitemcheckbox")
     expect(items.map((item) => item.getAttribute("aria-checked"))).not.toContain("false")
@@ -78,7 +87,15 @@ describe("Settings › Locations (cmvgf)", () => {
     expect(scrollTo(200)).toEqual(["true", "false"])
   })
 
-  it("repeats a location's Frames, Size and Disk free in its details, so they still read once those columns are hidden", async () => {
+  it("keeps Rescan inline as its icon, named by its label, beside the row's ⋯ (R11)", async () => {
+    renderAt("/")
+    const row = (await screen.findByRole("rowheader", { name: "Spare captures" })).closest("tr")!
+    const rescan = within(row).getByRole("button", { name: m.location_rescan() })
+    expect(rescan).toHaveTextContent("")
+    expect(within(row).getByRole("button", { name: m.actions_for({ name: "Spare captures" }) })).toBeInTheDocument()
+  })
+
+  it("repeats a location's Frames, Size and Free in its details, so they still read once those columns are hidden", async () => {
     const { catalog, disk } = store.getState()
     const use = locationDiskUse(disk, catalog.locations[SPARE]!)!
     renderAt(`/?locationId=${SPARE}`)
