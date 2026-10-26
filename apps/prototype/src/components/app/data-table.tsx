@@ -23,7 +23,8 @@
  *   most one inline action and the row's ⋯ menu. Right click, Shift+F10 or the
  *   Menu key on a row open the same items as a context menu named after the
  *   row (`rowLabel`). One action runner per table holds the confirmations
- *   and refusals.
+ *   and refusals. With `primaryRowActionIcon` the inline action shows its
+ *   icon alone, named by its tooltip, so a wide table keeps to its frame.
  * - Expand (`expand`): a disclosure in the first cell opens the row's detail
  *   in a row under it, one level deep (a nested DataTable, a KeyValueList).
  * - Keyboard (P-KBD1): a table whose rows act (selection, row actions, click
@@ -278,7 +279,7 @@ interface DataTableBaseProps<T> {
 
 /** Row actions and expand name each row, so `rowLabel` comes with them. */
 type DataTableRowProps<T> =
-  | { rowLabel?: undefined; rowActions?: undefined; primaryRowAction?: undefined; expand?: undefined }
+  | { rowLabel?: undefined; rowActions?: undefined; primaryRowAction?: undefined; primaryRowActionIcon?: undefined; expand?: undefined }
   | {
       /** The row's name ("30 Sep OIII"): it names the row's ⋯ menu, its context menu and its disclosure. */
       rowLabel: (row: T) => string
@@ -286,6 +287,8 @@ type DataTableRowProps<T> =
       rowActions?: (row: T) => MenuItem[]
       /** At most one inline action beside the ⋯ ("Make default"); null where it does not apply. */
       primaryRowAction?: (row: T) => Action | null
+      /** Show the inline action as its icon alone (ActionButton `iconOnly`), where the table must fit its frame. */
+      primaryRowActionIcon?: boolean
       expand?: DataTableExpand<T>
     }
 
@@ -294,8 +297,8 @@ export type DataTableProps<T> = DataTableBaseProps<T> & DataTableRowProps<T>
 /** What the toolbar slot moves focus to after a swap took the focused control away. */
 const SLOT_FOCUSABLE = "button:not([disabled]), input:not([disabled]), [role=checkbox], [tabindex]:not([tabindex='-1'])"
 
-/** The floors of `truncateMin` columns, from the widest demo values: "Astro-T7 calibration" 121 px, "Ainda não indexado" 119 px. */
-const TRUNCATE_MIN = { name: "min-w-32", date: "min-w-32" } as const
+/** The floors of `truncateMin` columns: the 4 px step at or above the widest demo values, "Astro-T7 calibration" 121 px and "Ainda não indexado" 119 px. */
+const TRUNCATE_MIN = { name: "min-w-31", date: "min-w-30" } as const
 
 /**
  * The scroll-edge cue of a pinned column: a shade of the scrim colour fading
@@ -348,6 +351,7 @@ export function DataTable<T>({
   rowLabel,
   rowActions,
   primaryRowAction,
+  primaryRowActionIcon = false,
   expand,
 }: DataTableProps<T>) {
   const m = useMessages()
@@ -886,7 +890,7 @@ export function DataTable<T>({
                     {hasRowActions ? (
                       <TableCell className={cn("w-px text-right whitespace-nowrap", pinnedEnd())}>
                         <div className="inline-flex items-center gap-1 align-middle">
-                          {primary ? <ActionButton action={primary} size="xs" runner={rowRunner(id, () => rowElement(id))} /> : null}
+                          {primary ? <ActionButton action={primary} size="xs" iconOnly={primaryRowActionIcon} runner={rowRunner(id, () => rowElement(id))} /> : null}
                           {rowActions ? <RowActions name={nameOf(row)} items={rowActions(row)} runner={rowRunner(id, () => rowElement(id)?.querySelector<HTMLElement>("[data-row-actions]"))} /> : null}
                         </div>
                       </TableCell>

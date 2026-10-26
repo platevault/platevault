@@ -1,5 +1,6 @@
 import { render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
+import { RotateCw } from "lucide-react"
 import { describe, expect, it, vi } from "vitest"
 import { m } from "@/lib/i18n"
 import { ActionButton, ActionMenu } from "./actions"
@@ -53,6 +54,24 @@ describe("ActionButton", () => {
     expect(button).toHaveFocus()
     expect(button).not.toHaveAttribute("aria-disabled", "true")
     expect(button).not.toHaveAttribute("aria-describedby")
+  })
+
+  it("shows only its icon with iconOnly, named by its label and a tooltip, and keeps the label without an icon", async () => {
+    const user = userEvent.setup()
+    const rescan = (unavailable?: Action["unavailable"]) => <ActionButton action={{ id: "rescan", label: "Rescan", icon: RotateCw, run: vi.fn(), unavailable }} size="xs" iconOnly />
+    const { rerender } = render(rescan())
+    const button = screen.getByRole("button", { name: "Rescan" })
+    expect(button).toHaveTextContent("")
+    await user.hover(button)
+    expect(await screen.findByText("Rescan", { selector: "[data-slot=tooltip-content]" }, { timeout: 2000 })).toBeInTheDocument()
+
+    rerender(rescan(BLOCKED))
+    expect(screen.getByRole("button", { name: "Rescan" })).toBe(button)
+    expect(button).toHaveAttribute("aria-disabled", "true")
+    expect(button).toHaveAccessibleDescription("Can't archive · 2 in a Project")
+
+    rerender(<ActionButton action={{ id: "archive", label: "Archive", run: vi.fn() }} size="xs" iconOnly />)
+    expect(screen.getByRole("button", { name: "Archive" })).toHaveTextContent("Archive")
   })
 
   it("keeps its ConfirmDialog open and busy until an async run settles", async () => {

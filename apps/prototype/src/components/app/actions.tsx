@@ -14,7 +14,8 @@
  * - `ActionButton`: one action as a Button. `size="xs"` is for DataTable
  *   cells, where a primary action stays outline (one primary per view). An
  *   unavailable action stays focusable and opens its BlockersPreview on
- *   hover and focus; nothing is inserted beside it.
+ *   hover and focus; nothing is inserted beside it. `iconOnly` shows an
+ *   action's icon alone in the IconButton role (below).
  * - `ActionBar`: header actions. At most one primary (trailing) and three
  *   standard buttons; the rest go to one named menu ("More ▾" by default).
  * - `ActionMenu`: a named pull-down ("Run ▾"); `⋯` is for rows only
@@ -26,7 +27,7 @@
  * - `actionCommand`: the palette command for an action.
  */
 import { ChevronDown, type LucideIcon } from "lucide-react"
-import { type ComponentProps, Fragment, type ReactNode, useId, useState } from "react"
+import { type ComponentProps, Fragment, type MouseEvent, type ReactNode, useId, useState } from "react"
 import { useMessages } from "@/app/preferences"
 import type { PaletteCommand } from "@/app/shell-contract"
 import { Button } from "@/components/ui/button"
@@ -306,6 +307,11 @@ export interface ActionButtonProps {
   action: Action
   /** `sm` in headers, toolbars and batch bars (default); `default` in dialog footers; `xs` in DataTable cells only. */
   size?: ActionSize
+  /**
+   * Show the action's icon alone in the IconButton role (ghost `icon-sm`), its label as the accessible name and the
+   * tooltip (T1); while unavailable the blockers preview names it instead. An action without an icon keeps its label.
+   */
+  iconOnly?: boolean
   /** The host's runner. Without one the button keeps its own and renders its feedback and dialog right after itself. */
   runner?: ActionRunner
 }
@@ -325,29 +331,43 @@ function OwnActionButton(props: Omit<ActionButtonProps, "runner">) {
   )
 }
 
-function ActionTrigger({ action: declared, size = "sm", runner }: Omit<ActionButtonProps, "runner"> & { runner: ActionRunner }) {
+function ActionTrigger({ action: declared, size = "sm", iconOnly = false, runner }: Omit<ActionButtonProps, "runner"> & { runner: ActionRunner }) {
   const action = runner.resolve(declared)
   const Icon = action.icon
   const busy = runner.pending === action.id
   const unavailable = action.unavailable
-  const button = (
-    <Button
-      variant={variantOf(action.kind ?? "standard", size)}
-      size={size}
-      // Focusable while unavailable, so its blockers preview can be reached (P7).
-      disabled={unavailable !== undefined}
-      focusableWhenDisabled
-      aria-busy={busy || undefined}
-      data-action={action.id}
-      onClick={(event) => runner.run(action, event.currentTarget)}
-    >
-      {busy ? <Spinner aria-hidden="true" data-icon="inline-start" className={SPINNER_SIZE[size]} /> : Icon ? <Icon aria-hidden="true" data-icon="inline-start" /> : null}
-      {actionLabel(action)}
-    </Button>
-  )
+  const label = actionLabel(action)
+  const behaviour = {
+    // Focusable while unavailable, so its blockers preview can be reached (P7).
+    disabled: unavailable !== undefined,
+    focusableWhenDisabled: true,
+    "aria-busy": busy || undefined,
+    "data-action": action.id,
+    onClick: (event: MouseEvent<HTMLButtonElement>) => runner.run(action, event.currentTarget),
+  }
   // The preview opens on hover and focus, and describes the button with "<action> · <reason>". One wrapper in both states,
   // so the button keeps its node, and focus, when the action turns unavailable or available again.
-  return <Blockable unavailable={unavailable}>{button}</Blockable>
+  if (iconOnly && Icon) {
+    // The tooltip names the button while it is available; the preview takes over while it is not, so one popup shows.
+    return (
+      <Tooltip disabled={unavailable !== undefined}>
+        <Blockable unavailable={unavailable}>
+          <TooltipTrigger render={<Button variant="ghost" size="icon-sm" aria-label={label} {...behaviour} />}>
+            {busy ? <Spinner aria-hidden="true" className={SPINNER_SIZE.sm} /> : <Icon aria-hidden="true" />}
+          </TooltipTrigger>
+        </Blockable>
+        <TooltipContent side="bottom">{label}</TooltipContent>
+      </Tooltip>
+    )
+  }
+  return (
+    <Blockable unavailable={unavailable}>
+      <Button variant={variantOf(action.kind ?? "standard", size)} size={size} {...behaviour}>
+        {busy ? <Spinner aria-hidden="true" data-icon="inline-start" className={SPINNER_SIZE[size]} /> : Icon ? <Icon aria-hidden="true" data-icon="inline-start" /> : null}
+        {label}
+      </Button>
+    </Blockable>
+  )
 }
 
 // ---------------------------------------------------------------------------
