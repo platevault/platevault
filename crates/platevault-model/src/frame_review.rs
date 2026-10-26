@@ -703,6 +703,7 @@ pub struct MeasurementRun {
 /// and frame-state reads are the durable truth.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct MeasurementProgress {
     pub operation_id: Uuid,
     pub revision: Revision,

@@ -29,6 +29,8 @@ reqwest = { workspace = true, features = ["system-proxy"] }
 semver = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+# The `wire` feature's IPC type derive on the job-progress event payloads.
+specta = { workspace = true, optional = true }
 sqlx = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["time"] }
@@ -68,6 +70,11 @@ persistence_core = { path = "../../persistence/core" }
 # Real FITS frames for the measurement feed tests.
 platevault_pixels = { path = "../../platevault-pixels", features = ["fixtures"] }
 tokio = { workspace = true, features = ["time", "net", "io-util", "test-util"] }
+
+[features]
+# Exports the job-progress event payloads to the generated TypeScript client
+# (`desktop_shell::library_shell::library_specta_builder`).
+wire = ["dep:specta", "platevault_core/wire"]
 
 [lints]
 workspace = true
