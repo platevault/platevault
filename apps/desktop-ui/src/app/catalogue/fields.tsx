@@ -253,7 +253,7 @@ function SettingsKit() {
           label={m.session_filter()}
           value={filter}
           onChange={setFilter}
-          // eslint-disable-next-line pv/no-user-string -- filter names
+          // eslint-disable-next-line pv/no-user-string -- filter names are proper nouns
           options={[{ value: "ha", label: "Ha" }, { value: "oiii", label: "OIII" }]}
         />
         <PathField label={m.status_role_captures()} mode="folder" source={FIXTURE_DISK} value={folder} onChange={setFolder} />
