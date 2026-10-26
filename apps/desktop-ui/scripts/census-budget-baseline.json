@@ -11,11 +11,9 @@
       "rules": {
         "raw": 0,
         "pill": 0,
-        "ttlEqualsTruncation": true,
         "tipMaximum": 1,
         "tipApprovals": [],
         "combosMaximum": 4,
-        "sortEqualsHeaders": true,
         "handRolled": 0,
         "overflowX": 0,
         "pageErrors": 0

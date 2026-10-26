@@ -12,7 +12,7 @@
 //! state/persistence checks with no native OS dialogs involved — the
 //! "lowest filesystem-mutation risk" batch per the coverage matrix. The
 //! remaining Tests (ingestion-settings-persist-across-restart, altitude
-//! clamp, log-panel layout/export, 1100x720 layout convention, translated
+//! clamp, log-panel layout/export, 1280x640 layout convention, translated
 //! backend-error surfacing, command palette, sidebar persistence) are left
 //! as documented follow-ups — several need either a scrollable content
 //! fixture or a real backend-rejected action reachable without a native

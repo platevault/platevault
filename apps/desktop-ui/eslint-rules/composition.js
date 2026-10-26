@@ -315,10 +315,11 @@ const imports = {
       const target = resolveSpecifier(source.value, file)
       const escapesPackage = target === ".." || target.startsWith("../")
       const tauriApi = target === "@tauri-apps/api" || target.startsWith("@tauri-apps/api/")
-      // The one import that leaves the package: src/api reading the generated library client.
-      const libraryClient = /^(\.\.\/)+desktop\/src\/bindings\/library-index(?:\.ts)?$/.test(target)
-      const tauriMocksInTest = testFile && target === "@tauri-apps/api/mocks"
-      if ((escapesPackage && !(apiOwner && libraryClient)) || (!apiOwner && tauriApi && !tauriMocksInTest)) {
+      // The one import that leaves the package: src/api (apps/desktop-ui/src/api) reading the generated library client.
+      const libraryClient = /^\.\.\/desktop\/src\/bindings\/library-index(?:\.ts)?$/.test(target)
+      const tauriMocks = target === "@tauri-apps/api/mocks"
+      const misplacedTauri = tauriMocks ? !testFile : tauriApi && !apiOwner
+      if ((escapesPackage && !(apiOwner && libraryClient)) || misplacedTauri) {
         context.report({ node: source, messageId: "I7" })
       }
       for (const { messageId, banned } of bans) if (banned(target)) context.report({ node: source, messageId })

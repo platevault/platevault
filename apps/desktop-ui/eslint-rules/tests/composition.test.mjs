@@ -151,6 +151,8 @@ describe("generated IPC importer boundary", () => {
   it("lets tests, and only tests, use Tauri's IPC mocks", () => {
     assert.deepEqual(imports('import { mockIPC } from "@tauri-apps/api/mocks"', "src/features/library/library.test.tsx"), [])
     assert.deepEqual(imports('import { mockIPC } from "@tauri-apps/api/mocks"', "src/features/library/library.tsx"), ["I7"])
+    assert.deepEqual(imports('import { mockIPC } from "@tauri-apps/api/mocks"', "src/api/ipc.ts"), ["I7"])
+    assert.deepEqual(imports('import { mockIPC } from "@tauri-apps/api/mocks"', "src/api/ipc.test.ts"), [])
   })
 
   it("does not mistake an in-package bindings module for the generated client", () => {

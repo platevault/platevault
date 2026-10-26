@@ -18,17 +18,22 @@ export function checkBudget(result, rules, errors = []) {
   for (const metric of ["raw", "pill", "handRolled", "overflowX"]) {
     if (result[metric] !== rules[metric]) violations.push(`${metric}=${result[metric]} expected ${rules[metric]}`)
   }
-  if (rules.ttlEqualsTruncation && result.ttl !== result.ttlTruncation) {
-    violations.push(`ttl=${result.ttl} does not equal ttlTruncation=${result.ttlTruncation}`)
-  }
-  if (result.tip > (rules.tipMaximum ?? 1) && !(rules.tipApprovals ?? []).includes(result.route)) {
-    violations.push(`tip=${result.tip} exceeds ${rules.tipMaximum ?? 1} without approval`)
+  if (result.ttl !== result.ttlTruncation) violations.push(`ttl=${result.ttl} does not equal ttlTruncation=${result.ttlTruncation}`)
+  if (result.tip > rules.tipMaximum && !rules.tipApprovals.includes(result.route)) {
+    violations.push(`tip=${result.tip} exceeds ${rules.tipMaximum} without approval`)
   }
   if (result.combos > rules.combosMaximum) violations.push(`combos=${result.combos} exceeds ${rules.combosMaximum}`)
-  const dataHeaders = result.dataHeaders ?? result.headers
-  if (result.sort !== dataHeaders) violations.push(`sort=${result.sort} does not equal dataHeaders=${dataHeaders}`)
+  // Every data column sorts (P4); headers marked selection, action or static are not data.
+  if (result.sort !== result.dataHeaders) violations.push(`sort=${result.sort} does not equal dataHeaders=${result.dataHeaders}`)
   if (errors.length !== rules.pageErrors) violations.push(`pageErrors=${errors.length} expected ${rules.pageErrors}`)
   return violations
+}
+
+/** The fixture's known contents prove the census script still counts what it claims. */
+export function checkFixture(result, expected) {
+  return Object.entries(expected)
+    .filter(([metric, count]) => result?.[metric] !== count)
+    .map(([metric, count]) => `fixture ${metric}=${result?.[metric]} expected ${count}`)
 }
 
 function routeMatches(route, pattern) {
@@ -84,8 +89,9 @@ async function runCensus() {
         })
         try {
           const page = await context.newPage()
-          const { violations } = await measure(page, route, viewport.name, ruleForRoute(route))
-          failures.push(...violations.map((failure) => `${route} at ${viewport.name}: ${failure}`))
+          const { result, violations } = await measure(page, route, viewport.name, rules)
+          const fixtureMiscounts = route === "/fixture" ? checkFixture(result, baseline.fixture.expected) : []
+          failures.push(...[...violations, ...fixtureMiscounts].map((failure) => `${route} at ${viewport.name}: ${failure}`))
         } finally {
           await context.close()
         }
