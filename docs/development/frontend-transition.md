@@ -14,6 +14,6 @@ The `census` script in `apps/desktop-ui/package.json` measures composition per r
 
 ## Legacy recovery reference
 
-The tag `legacy-ui-before-rebuild` points to commit `3bb56c5909263920f840e8b48a4620c450f4265b`. The epic `astro-plan-ocyuc` records it as `legacy_ui_ref`. Use this immutable tag to recover legacy source. It does not copy catalogue data.
+The annotated tag `legacy-ui-before-rebuild` points to commit `3bb56c5909263920f840e8b48a4620c450f4265b`. The epic `astro-plan-ocyuc` records it as `legacy_ui_ref`. Use this tag to recover legacy source. It does not copy catalogue data.
 
 The legacy app used a separate catalogue. Restoring its source does not revert catalogue decisions or restore files moved by new filesystem operations. The reference does not contain work that was uncommitted at the anchor. Preserve any such work separately before cutover. Use existing recovery journals or an explicit data-restore procedure for later catalogue or filesystem changes. Never let the legacy runtime open the rebuilt catalogue.
