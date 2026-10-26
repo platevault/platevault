@@ -1,0 +1,89 @@
+import * as React from "react"
+import { mergeProps } from "@base-ui/react/merge-props"
+import { useRender } from "@base-ui/react/use-render"
+import { cn } from "cn"
+import { ChevronRightIcon } from "lucide-react"
+import { useMessages } from "@/app/preferences"
+
+function Breadcrumb({ className, ...props }: React.ComponentProps<"nav">) {
+  const m = useMessages()
+  return (
+    <nav
+      aria-label={m.ui_breadcrumb()}
+      data-slot="breadcrumb"
+      className={cn(className)}
+      {...props}
+    />
+  )
+}
+
+function BreadcrumbList({ className, ...props }: React.ComponentProps<"ol">) {
+  return (
+    <ol
+      data-slot="breadcrumb-list"
+      className={cn(
+        "flex flex-wrap items-center gap-1.5 text-sm wrap-break-word text-muted-foreground",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+function BreadcrumbItem({ className, ...props }: React.ComponentProps<"li">) {
+  return (
+    <li
+      data-slot="breadcrumb-item"
+      className={cn("inline-flex items-center gap-1", className)}
+      {...props}
+    />
+  )
+}
+
+function BreadcrumbLink({
+  className,
+  render,
+  ...props
+}: useRender.ComponentProps<"a">) {
+  return useRender({
+    defaultTagName: "a",
+    props: mergeProps<"a">(
+      {
+        className: cn("transition-colors hover:text-foreground", className),
+      },
+      props
+    ),
+    render,
+    state: {
+      slot: "breadcrumb-link",
+    },
+  })
+}
+
+function BreadcrumbSeparator({
+  children,
+  className,
+  ...props
+}: React.ComponentProps<"li">) {
+  return (
+    <li
+      data-slot="breadcrumb-separator"
+      role="presentation"
+      aria-hidden="true"
+      className={cn("[&>svg]:size-3.5", className)}
+      {...props}
+    >
+      {children ?? (
+        <ChevronRightIcon />
+      )}
+    </li>
+  )
+}
+
+export {
+  Breadcrumb,
+  BreadcrumbList,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbSeparator,
+}

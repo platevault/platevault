@@ -1,0 +1,232 @@
+/**
+ * Confirmation for irreversible or scope-changing actions (L2;
+ * design/R9-COMPOSITION-PLAN.md P8). Always an AlertDialog.
+ *
+ * The dialog names the exact scope: the title is the verb and object ("Move
+ * 14 files to Trash?"), an optional summary line gives the totals, and each
+ * group of files folds out to the files themselves: File · From · To ·
+ * Size, then SHA-256 where a row knows it, then Status, where a file that
+ * stays reads its terse reason ("Read-only", "Linked by NGC 7000 OIII deep
+ * ▸"). Description prose is not required.
+ *
+ * `FileTable` is that fold-out on its own, for a page row that folds out
+ * the same files its review will list (Wrap up's offers, astro-plan-6bh3p).
+ *
+ * The footer is the shared DialogFooter (Cancel, then the action). Initial
+ * focus goes to Cancel when the action is destructive, so Enter on open
+ * never runs it, and to the action otherwise. A returned failure keeps the
+ * dialog open with the error and Retry; a promise shows the action busy.
+ * While `blocked`, the review lists the blockers above the footer and the
+ * action stays focusable but disabled with that reason (P7).
+ *
+ * Takes a ConfirmSpec as it is: `<ConfirmDialog {...spec} onConfirm />`.
+ */
+import { Link } from "@tanstack/react-router"
+import { ChevronRight, OctagonX } from "lucide-react"
+import { type ReactElement, useRef } from "react"
+import { useMessages } from "@/app/preferences"
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
+import { Button } from "@/components/ui/button"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { formatBytes } from "@/lib/format"
+import type { Messages } from "@/lib/i18n"
+import type { Action, Column, ConfirmSpec, FileRow } from "./contracts"
+import { DataTable } from "./data-table"
+import { ActionError } from "./feedback"
+import { DIALOG_DEFAULT_ATTR, type DialogCommit, type DialogCommitOptions, DialogFooter, useDialogCommit } from "./form-dialog"
+import { BlockersBody } from "./previews"
+
+/** One group of files that fold out: "Unusable frames · 12 files · 1.2 GB". */
+export type ConfirmGroup = NonNullable<ConfirmSpec["groups"]>[number]
+
+export interface ConfirmDialogProps extends DialogCommitOptions {
+  /** Element that opens the dialog; omit when controlling `open`. */
+  trigger?: ReactElementLike
+  /** Verb plus object: "Move 14 files to Trash?". */
+  title: string
+  /** Totals on one line: "1.2 GB · 2 locations". */
+  summary?: string
+  /** The files the action touches, one fold-out per group. */
+  groups?: ConfirmGroup[]
+  /** The action: its label repeats the verb ("Move to Trash"); `kind: "destructive"` makes it red and puts initial focus on Cancel. */
+  confirm: ConfirmSpec["confirm"]
+  /** Why the action is refused now: listed in the dialog, and the action is disabled with it. */
+  blocked?: ConfirmSpec["blocked"]
+  /** Runs the action. A failure keeps the dialog open with the error and Retry; a promise shows it busy until it settles. */
+  onConfirm: DialogCommit
+}
+
+type ReactElementLike = ReactElement<Record<string, unknown>>
+
+interface Shown {
+  title: string
+  summary: string | undefined
+  groups: ConfirmGroup[]
+  label: string
+  destructive: boolean
+  blocked: ConfirmSpec["blocked"]
+}
+
+export function ConfirmDialog({ trigger, title, summary, groups, onConfirm, confirm, blocked, ...options }: ConfirmDialogProps) {
+  const m = useMessages()
+  const popup = useRef<HTMLDivElement>(null)
+  const { isOpen, setOpen, commit, busy, error, finalFocus } = useDialogCommit(options)
+  // Confirming usually changes the state the copy is derived from. Keep showing what was
+  // confirmed while the dialog animates closed, never a re-derived empty scope.
+  const live: Shown = { title, summary, groups: groups ?? [], label: confirm.label, destructive: confirm.kind === "destructive", blocked }
+  const frozen = useRef(live)
+  if (isOpen) frozen.current = live
+  const shown = isOpen ? live : frozen.current
+  const action: Action = { id: "confirm", label: shown.label, kind: shown.destructive ? "destructive" : "primary", unavailable: shown.blocked, run: onConfirm }
+  const hasScope = shown.groups.length > 0
+
+  return (
+    <AlertDialog open={isOpen} onOpenChange={setOpen}>
+      {trigger ? <AlertDialogTrigger render={trigger} /> : null}
+      <AlertDialogContent
+        ref={popup}
+        width={shown.groups.length > 0 ? "lg" : "md"}
+        initialFocus={() => popup.current?.querySelector<HTMLElement>(`[${DIALOG_DEFAULT_ATTR}]`) ?? true}
+        finalFocus={finalFocus}
+      >
+        <AlertDialogHeader>
+          <AlertDialogTitle className="text-balance">{shown.title}</AlertDialogTitle>
+          {shown.summary ? <AlertDialogDescription>{shown.summary}</AlertDialogDescription> : null}
+        </AlertDialogHeader>
+        {hasScope || error || shown.blocked ? (
+          <div className="min-w-0 space-y-2 text-sm">
+            {hasScope ? (
+              <div className="divide-y divide-separator overflow-hidden rounded-[0.3125rem] border border-separator bg-background">
+                <section aria-label={m.dialog_changes()} className="py-2">
+                  <h3 className="mb-1 px-3 text-xs font-medium text-muted-foreground">{m.dialog_changes()}</h3>
+                  <ul className="divide-y divide-separator">
+                    {shown.groups.map((group) => (
+                      <li key={group.label}>
+                        <FileGroup group={group} onNavigate={() => setOpen(false)} />
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              </div>
+            ) : null}
+            {shown.blocked ? (
+              <section aria-label={`${shown.blocked.action} · ${shown.blocked.reason}`} className="flex min-w-0 flex-col gap-2" data-confirm-blocked="">
+                <h3 className="flex items-center gap-1.5 font-medium">
+                  <OctagonX aria-hidden="true" className="size-3.5 shrink-0 text-destructive" />
+                  {shown.blocked.action} · {shown.blocked.reason}
+                </h3>
+                <BlockersBody {...shown.blocked} />
+              </section>
+            ) : null}
+            {error ? <ActionError message={error} /> : null}
+          </div>
+        ) : null}
+        <DialogFooter confirm={action} onConfirm={() => commit(onConfirm)} busy={busy} failed={error !== null} />
+      </AlertDialogContent>
+    </AlertDialog>
+  )
+}
+
+/** A group's line, with its files folding out under it; a group without files only states its count. */
+function FileGroup({ group, onNavigate }: { group: ConfirmGroup; onNavigate: () => void }) {
+  const m = useMessages()
+  const size = formatBytes(group.rows.reduce((total, row) => total + row.size, 0))
+  const line = m.dialog_group({ label: group.label, count: group.rows.length, size })
+  // Lines up with the labels of the groups that fold out, which follow a chevron.
+  if (group.rows.length === 0) return <p className="py-1 pr-3 pl-6.5 text-muted-foreground">{line}</p>
+  return (
+    <Collapsible defaultOpen={group.defaultOpen ?? false}>
+      {/* The outline sits inside: the scope box clips anything outside its rounded border. */}
+      <CollapsibleTrigger
+        render={<Button variant="ghost" size="sm" className="group/file-group w-full justify-start rounded-none px-2 font-normal outline-offset-[-2px]" />}
+      >
+        <ChevronRight aria-hidden="true" data-icon="inline-start" className="transition-transform group-data-[panel-open]/file-group:rotate-90" />
+        {line}
+      </CollapsibleTrigger>
+      <CollapsibleContent className="px-2 pb-2">
+        <FileTable label={group.label} rows={group.rows} onNavigate={onNavigate} />
+      </CollapsibleContent>
+    </Collapsible>
+  )
+}
+
+interface IndexedRow extends FileRow {
+  key: string
+}
+
+/** Where a file goes when the row names no destination; a kept file stays in its folder. */
+function actionWord(m: Messages, action: FileRow["action"]): string {
+  switch (action) {
+    case "trash":
+      return m.dialog_to_trash()
+    case "unlink":
+      return m.dialog_to_unlink()
+    case "move":
+      return m.dialog_to_move()
+    case "copy":
+      return m.dialog_to_copy()
+    case "keep":
+      return m.dialog_to_keep()
+  }
+}
+
+export interface FileTableProps {
+  /** The table's accessible name: the group's label, or "Files of M 31 L 0001". */
+  label: string
+  rows: FileRow[]
+  /** Runs when a Status link is followed: a dialog closes itself. */
+  onNavigate?: () => void
+}
+
+/** The exact files of one group: File · From · To · Size, SHA-256 where known, and Status where a file stays or carries a note. */
+export function FileTable({ label, rows: files, onNavigate }: FileTableProps) {
+  const m = useMessages()
+  const rows: IndexedRow[] = files.map((row, index) => ({ ...row, key: String(index) }))
+  const destination = (row: FileRow) => row.to ?? actionWord(m, row.action)
+  // Narrower than a page table's 18rem cut, so File · From · To · Size · SHA-256 · Status fit the 42rem dialog; a cut path or digest shows in full on hover (T2).
+  // The file name is the identity, so its cut is the widest; a destination that is only an action word ("Trash", "Stays") is never cut.
+  const moves = rows.some((row) => row.to !== undefined)
+  const columns: Column<IndexedRow>[] = [
+    { id: "file", header: m.dialog_col_file(), cell: (row) => row.file, sortValue: (row) => row.file, rowHeader: true, truncate: true, className: "max-w-60" },
+    { id: "from", header: m.dialog_col_from(), cell: (row) => row.from, sortValue: (row) => row.from, truncate: true, className: "max-w-36" },
+    { id: "to", header: m.dialog_col_to(), cell: destination, sortValue: destination, ...(moves ? { truncate: true, className: "max-w-36" } : {}) },
+    { id: "size", header: m.dialog_col_size(), cell: (row) => formatBytes(row.size), sortValue: (row) => row.size, align: "right" },
+  ]
+  if (rows.some((row) => row.sha256)) {
+    columns.push({ id: "sha256", header: m.storage_sha256(), cell: (row) => <span className="font-mono">{row.sha256 ?? "–"}</span>, sortValue: (row) => row.sha256 ?? null, truncate: true, className: "max-w-28" })
+  }
+  if (rows.some((row) => row.status)) {
+    columns.push({
+      id: "status",
+      header: m.dialog_col_status(),
+      cell: (row) => (row.status ? <FileStatus status={row.status} onNavigate={onNavigate} /> : null),
+      sortValue: (row) => row.status?.label ?? null,
+    })
+  }
+  return <DataTable label={label} rows={rows} columns={columns} getRowId={(row) => row.key} scroll="none" />
+}
+
+/** A per-file refusal or note; with a link it opens the place that resolves it and closes the dialog. */
+function FileStatus({ status, onNavigate }: { status: NonNullable<FileRow["status"]>; onNavigate?: () => void }) {
+  const { link } = status
+  if (!link) return <span className="text-muted-foreground">{status.label}</span>
+  return (
+    <Button
+      variant="link"
+      size="xs"
+      className="min-h-0 px-0"
+      render={<Link to={link.to as never} params={link.params as never} search={link.search as never} />}
+      onClick={onNavigate}
+    >
+      {status.label}
+      <ChevronRight aria-hidden="true" data-icon="inline-end" />
+    </Button>
+  )
+}

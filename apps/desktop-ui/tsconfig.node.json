@@ -10,5 +10,5 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["vite.config.ts", "vitest.config.ts", "vitest.globalSetup.ts", ".storybook/*.ts"]
+  "include": ["vite.config.ts", "vitest.config.ts", "vitest.globalSetup.ts", ".storybook/main.ts"]
 }

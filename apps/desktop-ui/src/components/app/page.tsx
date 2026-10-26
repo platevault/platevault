@@ -1,0 +1,212 @@
+/**
+ * Page-level layout primitives (foundation-owned): page header, sections,
+ * list + detail and the pre-created placeholder page. The page templates
+ * (components/templates) build on PageHeader.
+ */
+import { Fragment, type ReactNode, useEffect, useLayoutEffect, useRef } from "react"
+import { CurrentLink } from "@/components/app/links"
+import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbSeparator } from "@/components/ui/breadcrumb"
+import type { StepLink } from "./contracts"
+import { m } from "@/lib/i18n"
+import { cn } from "@/lib/utils"
+import { NoticeSlot, type PageNotice } from "./feedback"
+
+const mountedTitles = new Map<symbol, string>()
+
+function applyDocumentTitle() {
+  document.title = [...mountedTitles.values(), m.app_name()].join(" · ")
+}
+
+/**
+ * Names the browser tab after the page: "Sessions · PlateVault"
+ * (WCAG 2.4.2). Only a page-level heading names it; a child area, a tab or
+ * a catalogue specimen (level 2) passes null and adds nothing.
+ */
+export function useDocumentTitle(title: string | null) {
+  useEffect(() => {
+    if (title === null) return
+    const key = Symbol(title)
+    mountedTitles.set(key, title)
+    applyDocumentTitle()
+    return () => {
+      mountedTitles.delete(key)
+      applyDocumentTitle()
+    }
+  }, [title])
+}
+
+/** One parent of the page in its header path: "Projects", "M 42". */
+export interface PathItem {
+  label: string
+  /** Where the parent opens; a parent without a link reads as plain text. */
+  link?: StepLink
+}
+
+export interface PageHeaderProps {
+  title: string
+  /** The page's parents, outermost first, as a breadcrumb before the title: Projects › M 42 › title. */
+  path?: PathItem[]
+  /** One short fact beside the title, such as a list's count ("128 sessions"). Never a sentence. */
+  summary?: string
+  /** Status badges shown beside the title. */
+  meta?: ReactNode
+  /** Page-level actions; the primary action goes last. Templates pass an ActionBar. */
+  actions?: ReactNode
+  /**
+   * A refusal or failure of a control beside the title (a `meta` toggle), on its own full-width row under the
+   * header row, so the control stays where it was pressed.
+   */
+  feedback?: ReactNode
+  /** The page's standing state (P7): one notice, fixed under the header bar. */
+  notice?: PageNotice | null
+  className?: string
+  /**
+   * Heading level. Layout routes (View workspace, Settings) own the page h1;
+   * their child areas render their title as h2.
+   */
+  level?: 1 | 2
+}
+
+/**
+ * Harness v4: a pane header, not a web page header. One compact bar: the
+ * path (a breadcrumb inline before the title, never a kicker above it), the
+ * title at 17 px, the summary, meta badges, and actions on the right. A meta
+ * control's feedback row, then the notice slot, sit under the bar, inside the
+ * header, so an alert or a standing state stays in view with it and the bar
+ * itself never moves. Level 1 sticks to the top of its pane so the title
+ * and actions never scroll away, and publishes its height as
+ * --pane-header-h so focused controls scroll clear of it.
+ */
+export function PageHeader({ title, path, summary, meta, actions, feedback, notice, className, level = 1 }: PageHeaderProps) {
+  useDocumentTitle(level === 1 ? title : null)
+  const ref = useRef<HTMLElement>(null)
+  useLayoutEffect(() => {
+    const header = ref.current
+    const pane = header?.closest<HTMLElement>("#main")
+    if (level !== 1 || !header || !pane) return
+    const update = () => pane.style.setProperty("--pane-header-h", `${header.offsetHeight}px`)
+    update()
+    const observer = new ResizeObserver(update)
+    observer.observe(header)
+    return () => {
+      observer.disconnect()
+      pane.style.removeProperty("--pane-header-h")
+    }
+  }, [level])
+  const Heading = level === 1 ? "h1" : "h2"
+  return (
+    <header
+      ref={ref}
+      data-chrome
+      className={cn(
+        "flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5 px-5",
+        level === 1 ? "sticky top-0 z-10 border-b border-separator bg-background py-2" : "pt-3 pb-1",
+        className,
+      )}
+    >
+      <div className="min-w-0 flex-[1_1_16rem]">
+        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+          {path && path.length > 0 ? <HeaderPath path={path} /> : null}
+          <Heading className={cn("font-semibold text-balance", level === 1 ? "text-xl" : "text-lg")}>{title}</Heading>
+          {summary ? <span className="ml-1 text-sm text-muted-foreground tabular-nums">{summary}</span> : null}
+          {meta ? <span className="ml-1 flex flex-wrap items-center gap-2">{meta}</span> : null}
+        </div>
+      </div>
+      {actions ? <div className="flex min-w-0 max-w-full flex-wrap items-center gap-1.5">{actions}</div> : null}
+      {feedback ? (
+        <div className="basis-full" data-header-feedback="">
+          {feedback}
+        </div>
+      ) : null}
+      {notice ? (
+        <div className="basis-full">
+          <NoticeSlot notice={notice} />
+        </div>
+      ) : null}
+    </header>
+  )
+}
+
+/** The header path: a breadcrumb of the page's parents, ending in the separator before the title. */
+function HeaderPath({ path }: { path: PathItem[] }) {
+  return (
+    <Breadcrumb className="min-w-0">
+      <BreadcrumbList className="gap-1.5">
+        {path.map((item, index) => (
+          <Fragment key={`${index}:${item.label}`}>
+            <BreadcrumbItem className="min-w-0">
+              {item.link ? (
+                <BreadcrumbLink
+                  render={<CurrentLink to={item.link.to as never} params={item.link.params as never} search={item.link.search as never} />}
+                  className="truncate"
+                >
+                  {item.label}
+                </BreadcrumbLink>
+              ) : (
+                <span className="truncate">{item.label}</span>
+              )}
+            </BreadcrumbItem>
+            <BreadcrumbSeparator className="opacity-70" />
+          </Fragment>
+        ))}
+      </BreadcrumbList>
+    </Breadcrumb>
+  )
+}
+
+export interface SectionProps {
+  title: string
+  description?: ReactNode
+  actions?: ReactNode
+  children: ReactNode
+  className?: string
+  /** Heading level; sections directly under the page title use h2. */
+  level?: 2 | 3
+  id?: string
+}
+
+/** A pane section: an h2 at 15 px (h3 at 13 px) with a one-line caption at 11 px; actions sit beside the heading. */
+export function Section({ title, description, actions, children, className, level = 2, id }: SectionProps) {
+  const Heading = level === 2 ? "h2" : "h3"
+  return (
+    <section aria-labelledby={id ? `${id}-title` : undefined} className={cn("space-y-2", className)}>
+      <div className="flex flex-wrap items-end justify-between gap-2" data-chrome>
+        {/* Like PageHeader: the heading block takes the free space and wraps its description, so actions stay beside it. */}
+        <div className="min-w-0 flex-1">
+          <Heading id={id ? `${id}-title` : undefined} className={cn("font-semibold", level === 2 ? "text-lg" : "text-sm")}>
+            {title}
+          </Heading>
+          {description ? <p className="mt-0.5 max-w-[80ch] text-xs text-pretty text-muted-foreground">{description}</p> : null}
+        </div>
+        {actions ? <div className="flex flex-wrap items-center gap-1.5 self-start">{actions}</div> : null}
+      </div>
+      {children}
+    </section>
+  )
+}
+
+/** Scrollable pane body with the standard 20 px margins and vertical rhythm. */
+export function PageBody({ children, className }: { children: ReactNode; className?: string }) {
+  return <div className={cn("space-y-5 px-5 py-4", className)}>{children}</div>
+}
+
+export interface ListDetailProps {
+  /** The list pane's content. It brings its own landmark or name (a NavList is a named nav), so the pane adds none. */
+  list: ReactNode
+  detail: ReactNode
+  className?: string
+}
+
+/**
+ * List + detail pattern: the list stays visible while the detail changes.
+ * From 768 px the list keeps 18rem at every width and the detail takes the
+ * rest. Below 768 px the panes stack and scroll with the page (WCAG 1.4.10).
+ */
+export function ListDetail({ list, detail, className }: ListDetailProps) {
+  return (
+    <div className={cn("grid min-h-0 flex-1 grid-cols-[18rem_minmax(0,1fr)] max-md:flex-none max-md:grid-cols-1", className)}>
+      <div className="min-h-0 overflow-y-auto border-r max-md:border-r-0 max-md:border-b">{list}</div>
+      <div className="flex min-h-0 min-w-0 flex-col overflow-y-auto">{detail}</div>
+    </div>
+  )
+}

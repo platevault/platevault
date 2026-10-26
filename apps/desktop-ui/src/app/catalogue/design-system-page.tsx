@@ -1,0 +1,333 @@
+/**
+ * Design-system reference (foundation-owned route `/design-system`).
+ * Renders the tokens and every shared app component in its applicable
+ * states, on the catalogue's sample library (fixtures/). Tracks use it as
+ * the visual contract; reviewers use it as evidence.
+ */
+import { Inbox } from "lucide-react"
+import { useState } from "react"
+import { ConfirmDialog } from "@/components/app/confirm-dialog"
+import { FolderPicker } from "@/components/app/folder-picker"
+import { PathText } from "@/components/app/data"
+import type { Column } from "@/components/app/contracts"
+import { DataTable } from "@/components/app/data-table"
+import { EmptyState, UnknownValue } from "@/components/app/feedback"
+import { PageBody, PageHeader, Section } from "@/components/app/page"
+import { STATUS, type StatusKind, StatusBadge, type StatusValue } from "@/components/app/status"
+import { Button } from "@/components/ui/button"
+import { useMessages } from "@/app/preferences"
+import { formatDuration, formatExposure, formatNight } from "@/lib/format"
+import type { Messages } from "@/lib/i18n"
+import { FIXTURE_DISK } from "./fixtures/disk"
+import { SAMPLE_LIBRARY, type SampleSession as Session } from "./fixtures/sessions"
+import { CATALOGUE } from "./registry"
+
+/** Each colour token with what it is for. */
+function colorTokens(m: Messages): Array<[token: string, use: string]> {
+  return [
+    ["background", m.ds_color_background()],
+    ["card", m.ds_color_card()],
+    ["popover", m.ds_color_popover()],
+    ["muted", m.ds_color_muted()],
+    ["secondary", m.ds_color_secondary()],
+    ["accent", m.ds_color_accent()],
+    ["primary", m.ds_color_primary()],
+    ["success", m.ds_color_success()],
+    ["warning", m.ds_color_warning()],
+    ["destructive", m.ds_color_destructive()],
+    ["border", m.ds_color_border()],
+  ]
+}
+
+/** Each type style with a sample line that names its use. */
+function typeScale(m: Messages): Array<[className: string, sample: string]> {
+  return [
+    ["text-lg font-semibold", m.ds_type_page_title()],
+    ["text-base font-semibold", m.ds_type_section_title()],
+    ["text-sm font-semibold", m.ds_type_sub_section()],
+    ["text-sm", m.ds_type_body()],
+    ["text-xs text-muted-foreground", m.ds_type_meta()],
+    ["font-mono text-xs", m.ds_type_mono({ path: "/Volumes/Astro-T7/Captures" })],
+    ["text-sm tabular-nums", m.ds_type_numerals()],
+  ]
+}
+
+/** Each z-index token with what sits on it; the utility is `z-<name>`. */
+function zScale(m: Messages): Array<[token: string, use: string]> {
+  return [
+    ["--z-page", m.ds_z_page()],
+    ["--z-pinned", m.ds_z_pinned_column()],
+    ["--z-sticky", m.ds_z_sticky_headers()],
+    ["--z-shell", m.ds_z_shell()],
+    ["--z-flyout", m.ds_z_flyouts()],
+    ["--z-overlay", m.ds_z_portalled()],
+  ]
+}
+
+/** Each elevation step with its utility (written out so Tailwind finds it) and what sits at it. */
+function elevationScale(m: Messages): Array<[token: string, className: string, use: string]> {
+  return [
+    ["--elevation-0", "shadow-elevation-0", m.ds_elevation_0()],
+    ["--elevation-1", "shadow-elevation-1", m.ds_elevation_1()],
+    ["--elevation-2", "shadow-elevation-2", m.ds_elevation_2()],
+    ["--elevation-3", "shadow-elevation-3", m.ds_elevation_3()],
+  ]
+}
+
+/** Each dialog width with its utility and what it is for. */
+function dialogWidths(m: Messages): Array<[token: string, className: string, use: string]> {
+  return [
+    ["--dialog-w-sm", "max-w-dialog-sm", m.ds_dialog_sm()],
+    ["--dialog-w-md", "max-w-dialog-md", m.ds_dialog_md()],
+    ["--dialog-w-lg", "max-w-dialog-lg", m.ds_dialog_lg()],
+  ]
+}
+
+/** A token's generated value as the browser resolves it, so the page shows themes.css rather than a copy of it. */
+function rootToken(name: string): string {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+}
+
+/** The z-index table: token, its resolved value, and what sits on it. */
+function zColumns(m: Messages): Column<[token: string, use: string]>[] {
+  return [
+    { id: "token", header: m.ds_token_column(), rowHeader: true, sortValue: ([token]) => token, cell: ([token]) => <span className="font-mono">{token}</span> },
+    { id: "value", header: m.ds_value_column(), align: "right", sortValue: ([token]) => Number.parseFloat(rootToken(token)), cell: ([token]) => rootToken(token) },
+    { id: "use", header: m.ds_use_column(), truncate: true, sortValue: ([, use]) => use, cell: ([, use]) => use },
+  ]
+}
+
+function SessionTable({ loading, empty, grouped, pinned, locked }: { loading: boolean; empty: boolean; grouped: boolean; pinned: boolean; locked: boolean }) {
+  const m = useMessages()
+  const sessions = Object.values(SAMPLE_LIBRARY.sessions).filter((x) => x.imageType === "light")
+  const [selected, setSelected] = useState<string[]>([])
+  const columns: Column<Session>[] = [
+    { id: "night", header: m.run_col_night(), cell: (s) => formatNight(s.night), sortValue: (s) => s.night, rowHeader: true },
+    { id: "channel", header: m.run_col_channel(), cell: (s) => s.channel ?? <UnknownValue label={m.palette_session_no_filter()} />, sortValue: (s) => s.channel },
+    { id: "exposure", header: m.session_column_exposure(), cell: (s) => formatExposure(s.exposureS), sortValue: (s) => s.exposureS, align: "right" },
+    { id: "frames", header: m.sessions_column_frames(), cell: (s) => s.frames.length, sortValue: (s) => s.frames.length, align: "right" },
+    {
+      id: "integration",
+      header: m.run_col_integration(),
+      cell: (s) => formatDuration(s.frames.length * s.exposureS),
+      sortValue: (s) => s.frames.length * s.exposureS,
+      align: "right",
+    },
+    // OBJECT is the FITS header keyword, never translated.
+    { id: "object", header: "OBJECT", cell: (s) => s.objectLabel ?? <UnknownValue label={m.palette_session_missing_object()} />, sortValue: (s) => s.objectLabel },
+    { id: "target", header: m.sessions_column_target(), cell: (s) => <StatusBadge kind="association" value={s.target.status} />, sortValue: (s) => s.target.status },
+    // Wide-table sample: the extra columns make the table scroll sideways at 1024px.
+    ...(pinned
+      ? ([
+          { id: "camera", header: m.session_camera(), cell: (s) => s.cameraName ?? <UnknownValue label={m.status_not_set()} />, sortValue: (s) => s.cameraName },
+          { id: "telescope", header: m.session_telescope(), cell: (s) => s.telescopeName ?? <UnknownValue label={m.status_not_set()} />, sortValue: (s) => s.telescopeName },
+          { id: "gain", header: m.domain_criterion_gain(), cell: (s) => s.gain ?? "–", sortValue: (s) => s.gain, align: "right" },
+          { id: "binning", header: m.domain_criterion_binning(), cell: (s) => `${s.binning}×${s.binning}`, sortValue: (s) => s.binning, align: "right" },
+          { id: "equipment", header: m.settings_equipment(), cell: (s) => <StatusBadge kind="association" value={s.target.status === "needs-review" ? "needs-review" : "confirmed"} />, sortValue: (s) => s.target.status },
+        ] satisfies Column<Session>[])
+      : []),
+  ]
+  const [query, setQuery] = useState("")
+  const shown = sessions.filter((s) => `${s.channel ?? ""} ${s.objectLabel ?? m.palette_session_missing_object()} ${formatNight(s.night)}`.toLowerCase().includes(query.toLowerCase()))
+  const toggle = (s: Session) => setSelected(selected.includes(s.id) ? selected.filter((id) => id !== s.id) : [...selected, s.id])
+  return (
+    <DataTable
+      label={m.ds_table_label()}
+      rows={empty ? [] : shown}
+      columns={columns}
+      getRowId={(s) => s.id}
+      loading={loading}
+      initialSort={{ columnId: "night", direction: "asc" }}
+      groups={grouped ? { key: (s) => s.channel ?? m.palette_session_no_filter(), label: (channel, rows) => `${channel} · ${rows.length}` } : undefined}
+      selection={{
+        selected,
+        onChange: setSelected,
+        rowLabel: (s) => m.ds_row_label({ night: formatNight(s.night), channel: s.channel ?? "" }),
+        countLabel: (count) => m.status_bar_selected({ count }),
+        onShowHidden: () => setQuery(""),
+      }}
+      activeRowId={shown[0]?.id ?? null}
+      empty={
+        <EmptyState
+          icon={Inbox}
+          title={m.ds_empty_title()}
+          description={m.ds_empty_description()}
+          action={
+            <Button size="sm" variant="outline">
+              {m.filters_clear()}
+            </Button>
+          }
+        />
+      }
+      stickyFirstColumn={pinned}
+      toolbar={{ search: { label: m.sessions_filter(), placeholder: m.ds_filter_placeholder(), value: query, onChange: setQuery } }}
+      batchActions={() => [
+        {
+          id: "deselect",
+          label: m.ds_deselect(),
+          run: () => setSelected([]),
+          unavailable: locked ? { action: m.actions_blocked({ action: m.ds_deselect() }), reason: m.ds_selection_locked(), blockers: [] } : undefined,
+        },
+      ]}
+      rowLabel={(s) => m.ds_row_label({ night: formatNight(s.night), channel: s.channel ?? "" })}
+      rowActions={(s) => [{ id: "toggle", label: selected.includes(s.id) ? m.ds_deselect() : m.review_select(), run: () => toggle(s) }]}
+    />
+  )
+}
+
+function SampleFolderPicker() {
+  const m = useMessages()
+  const [open, setOpen] = useState(false)
+  const [chosen, setChosen] = useState<string | null>(null)
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      <Button variant="outline" onClick={() => setOpen(true)}>
+        {m.ds_choose_folder_ellipsis()}
+      </Button>
+      {chosen ? <PathText path={chosen} className="text-muted-foreground" /> : <span className="text-sm text-muted-foreground">{m.ds_no_folder()}</span>}
+      <FolderPicker open={open} onOpenChange={setOpen} title={m.location_role_captures_picker()} source={FIXTURE_DISK} initialPath="/Volumes/Astro-T7" onChoose={(path) => setChosen(path)} />
+    </div>
+  )
+}
+
+export function DesignSystemPage() {
+  const m = useMessages()
+  const [tableLoading, setTableLoading] = useState(false)
+  const [tableEmpty, setTableEmpty] = useState(false)
+  const [tableGrouped, setTableGrouped] = useState(false)
+  const [tablePinned, setTablePinned] = useState(false)
+  const [selectionLocked, setSelectionLocked] = useState(false)
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <PageHeader title={m.nav_design_system()} />
+      <PageBody className="space-y-6">
+        <Section title={m.ds_colour_title()} description={m.ds_colour_description()}>
+          <ul className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-4">
+            {colorTokens(m).map(([token, use]) => (
+              <li key={token} className="flex items-center gap-3 rounded-lg border p-2">
+                <span className="size-8 shrink-0 rounded-md border" style={{ background: `var(--${token})` }} aria-hidden="true" />
+                <span className="min-w-0">
+                  <span className="block font-mono text-xs">--{token}</span>
+                  <span className="block text-xs text-muted-foreground">{use}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Section>
+
+        <Section title={m.ds_type_title()}>
+          <div className="grid gap-6 xl:grid-cols-2">
+            <ul className="space-y-2">
+              {typeScale(m).map(([cls, sample]) => (
+                <li key={cls} className={cls}>
+                  {sample}
+                </li>
+              ))}
+            </ul>
+            <div className="space-y-4 text-sm">
+              <p className="text-muted-foreground">{m.ds_spacing()}</p>
+              <div className="flex items-end gap-3">
+                {["rounded-sm", "rounded-md", "rounded-lg", "rounded-xl"].map((r) => (
+                  <div key={r} className="space-y-1 text-center text-xs text-muted-foreground">
+                    <div className={`size-10 border bg-muted ${r}`} aria-hidden="true" />
+                    {r}
+                  </div>
+                ))}
+              </div>
+              <p className="text-muted-foreground">{m.ds_row_height()}</p>
+            </div>
+          </div>
+        </Section>
+
+        <Section title={m.ds_layers_title()}>
+          <div className="grid gap-6 xl:grid-cols-2">
+            <Section title={m.ds_elevation_caption()} level={3}>
+              <ul className="grid grid-cols-2 gap-4 rounded-lg bg-muted p-4 lg:grid-cols-4">
+                {elevationScale(m).map(([token, cls, use]) => (
+                  <li key={token} className="space-y-2 text-xs">
+                    <div className={`h-12 rounded-lg bg-popover ${cls}`} aria-hidden="true" />
+                    <span className="block font-mono">{token}</span>
+                    <span className="block text-muted-foreground">{use}</span>
+                  </li>
+                ))}
+              </ul>
+            </Section>
+            <Section title={m.ds_z_caption()} level={3}>
+              <DataTable label={m.ds_z_caption()} rows={zScale(m)} columns={zColumns(m)} getRowId={([token]) => token} scroll="none" />
+            </Section>
+          </div>
+          <Section title={m.ds_dialog_caption()} level={3}>
+            <ul className="space-y-3 text-xs">
+              {dialogWidths(m).map(([token, cls, use]) => (
+                <li key={token} className="space-y-1">
+                  <div className={`h-6 w-full rounded-md border bg-muted ${cls}`} aria-hidden="true" />
+                  <span className="font-mono">{token}</span> <span className="tabular-nums">{rootToken(token)}</span> <span className="text-muted-foreground">{use}</span>
+                </li>
+              ))}
+            </ul>
+          </Section>
+        </Section>
+
+        <Section title={m.ds_status_title()} description={m.ds_status_description()}>
+          <div className="space-y-3">
+            {(Object.keys(STATUS) as StatusKind[]).map((kind) => (
+              <div key={kind} className="grid grid-cols-[9rem_1fr] items-start gap-3">
+                <span className="pt-0.5 font-mono text-xs text-muted-foreground">{kind}</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {(Object.keys(STATUS[kind]) as StatusValue<typeof kind>[]).map((value) => (
+                    <StatusBadge key={value} kind={kind} value={value} />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Section>
+
+        <Section
+          title={m.ds_table_title()}
+          description={m.ds_table_description()}
+          actions={
+            <>
+              <Button size="sm" variant="outline" aria-pressed={tableLoading} onClick={() => setTableLoading((v) => !v)}>
+                {m.ds_table_loading()}
+              </Button>
+              <Button size="sm" variant="outline" aria-pressed={tableEmpty} onClick={() => setTableEmpty((v) => !v)}>
+                {m.ds_table_empty()}
+              </Button>
+              <Button size="sm" variant="outline" aria-pressed={tableGrouped} onClick={() => setTableGrouped((v) => !v)}>
+                {m.ds_table_grouped()}
+              </Button>
+              <Button size="sm" variant="outline" aria-pressed={tablePinned} onClick={() => setTablePinned((v) => !v)}>
+                {m.ds_table_pinned()}
+              </Button>
+              <Button size="sm" variant="outline" aria-pressed={selectionLocked} onClick={() => setSelectionLocked((v) => !v)}>
+                {m.ds_table_lock()}
+              </Button>
+            </>
+          }
+        >
+          <SessionTable loading={tableLoading} empty={tableEmpty} grouped={tableGrouped} pinned={tablePinned} locked={selectionLocked} />
+        </Section>
+
+        <Section title={m.ds_confirm_title()} description={m.ds_confirm_description()}>
+          <ConfirmDialog
+            trigger={<Button variant="outline">{m.ds_confirm_trigger()}</Button>}
+            title={m.ds_confirm_dialog_title({ count: 208 })}
+            summary={m.ds_confirm_change_integration({ target: "NGC 7000", duration: formatDuration(62_400) })}
+            confirm={{ label: m.ds_confirm_label({ count: 208 }) }}
+            onConfirm={() => undefined}
+          />
+        </Section>
+
+        <Section title={m.ds_folder_picker_title()} description={m.ds_folder_picker_description()}>
+          <SampleFolderPicker />
+        </Section>
+
+        {CATALOGUE.map(({ id, Entry }) => (
+          <Entry key={id} />
+        ))}
+      </PageBody>
+    </div>
+  )
+}

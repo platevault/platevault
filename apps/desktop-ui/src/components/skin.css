@@ -1,0 +1,275 @@
+/*
+ * The desktop skin of the shared components (harness v4/v5): one focus
+ * indicator, native control heights, menus and popovers that float with a
+ * real shadow, flat group boxes, and chrome that never selects as text.
+ * Every value is a token from themes.css. The base rules sit in the base
+ * layer; the skin is unlayered, so it applies to every primitive over its
+ * own utilities without editing each call site.
+ */
+
+@layer base {
+  * {
+    /* Full-strength ring as the resting outline colour, so `transition-all` never animates the focus indicator through a low-contrast colour. */
+    outline-color: var(--ring);
+  }
+
+  html {
+    accent-color: var(--primary);
+    /* The window is the layout: panes scroll, the page never does, except below the minimum window (`--window-min-w`, `--window-min-h`). */
+    height: 100%;
+    overflow: auto;
+    scrollbar-color: var(--scrollbar) transparent;
+    scrollbar-width: thin;
+  }
+
+  body {
+    height: 100%;
+    font-variant-numeric: tabular-nums;
+  }
+
+  ::selection {
+    background: color-mix(in oklch, var(--primary) 38%, transparent);
+  }
+
+  /*
+   * Chrome is not text: controls, headers, tabs and list chrome never select
+   * and keep the arrow cursor, as native controls do. Values in content
+   * (paths, names, numbers) stay selectable.
+   */
+  button,
+  [role="button"],
+  [role="tab"],
+  [role^="menuitem"],
+  [role="option"],
+  [role="separator"],
+  label,
+  th,
+  [data-slot="badge"],
+  [data-chrome] {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  button,
+  [role="button"],
+  [role="tab"],
+  [role^="menuitem"],
+  [role="option"] {
+    cursor: default;
+  }
+
+  code,
+  kbd,
+  samp {
+    font-family: var(--font-mono);
+  }
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+/*
+ * Focus indicator: one treatment everywhere, a 2 px accent outline (≥ 3:1 on
+ * every surface in every theme). Unlayered so it wins over the primitives'
+ * `outline-none` utilities. Items inside popups draw it inset so the popup's
+ * overflow clipping cannot hide it. Programmatic targets (tabindex=-1, the
+ * skip-link target) are excluded.
+ */
+:focus-visible:not([tabindex="-1"]) {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+
+/* A programmatic target (the h1 after a navigation, a pane, a status line) shows no ring, not even the UA's. */
+[tabindex="-1"]:focus-visible {
+  outline: none;
+}
+
+/*
+ * Focus not obscured (WCAG 2.4.11): a pane scrolls a focused control below
+ * its sticky pane header. PageHeader sets --pane-header-h to its height.
+ */
+#main {
+  scroll-padding-top: calc(var(--pane-header-h, 0px) + var(--spacing) * 2);
+}
+
+:is([role="option"], [role^="menuitem"], [role="tab"], td, th) :focus-visible,
+:is([role="option"], [role^="menuitem"]):focus-visible {
+  outline-offset: -2px;
+}
+
+/*
+ * Source-list rows draw the ring inside the row, so the list's scroll edge
+ * cannot clip it; on the selected fill it takes the fill's text colour,
+ * which keeps 4.5:1 there (design/themes-contrast.md).
+ */
+[data-nav-link]:focus-visible {
+  outline-offset: -2px;
+}
+
+[data-nav-link][aria-current="page"]:focus-visible {
+  outline-color: var(--sidebar-primary-foreground);
+}
+
+/* A Box inside a Box loses its frame, as group boxes do. */
+[data-slot="box"] [data-slot="box"] {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+/* The palette search row draws its own 2 px bar instead (palette.tsx). */
+[data-palette-input]:focus-visible {
+  outline: none;
+}
+
+/*
+ * Highlighted option in menus, selects and the palette: the native menu
+ * highlight, the selection accent with its own text colour, so the item
+ * Enter will choose is unmistakable.
+ */
+:is([data-slot="select-item"], [data-slot^="dropdown-menu-"], [data-slot="combobox-item"], [data-slot^="context-menu-"])[data-highlighted] {
+  background-color: var(--selected);
+  color: var(--selected-foreground);
+}
+
+:is([data-slot="select-item"], [data-slot^="dropdown-menu-"], [data-slot="combobox-item"], [data-slot^="context-menu-"])[data-highlighted] :is(svg, [data-slot$="-shortcut"], .text-muted-foreground) {
+  color: inherit;
+}
+
+/* Unchecked switch track meets 3:1 against the canvas in every theme. */
+[data-slot="switch"][data-unchecked] {
+  background-color: var(--input);
+}
+
+/* Native control heights, square panes, floating menus and popovers, flat group boxes. */
+:is([data-slot="input"], [data-slot="input-group"], [data-slot="combobox-chips"]) {
+  min-height: var(--control-h-md);
+  height: auto;
+  border-radius: var(--radius);
+  font-size: var(--text-sm);
+}
+
+[data-slot="input"] {
+  height: var(--control-h-md);
+  padding-inline: calc(var(--spacing) * 2);
+  background-color: var(--background);
+}
+
+/* Search fields carry a leading magnifier glyph (ClearableInput's `search`). */
+[data-slot="input"][data-page-search] {
+  padding-left: calc(var(--spacing) * 7);
+}
+
+[data-slot="textarea"] {
+  border-radius: var(--radius);
+  font-size: var(--text-sm);
+  background-color: var(--background);
+}
+
+[data-slot="select-trigger"] {
+  border-radius: var(--radius);
+  min-height: var(--control-h-md);
+  padding-block: calc(var(--spacing) * 0.5);
+  background-color: color-mix(in oklch, var(--foreground) 5%, var(--background));
+}
+
+[data-slot="select-trigger"][data-size="sm"] {
+  min-height: var(--control-h-sm);
+}
+
+:is([data-slot="dropdown-menu-content"], [data-slot="dropdown-menu-sub-content"], [data-slot="select-content"], [data-slot="combobox-content"], [data-slot="popover-content"], [data-slot="context-menu-content"]) {
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--elevation-2);
+  --tw-ring-color: color-mix(in oklch, var(--foreground) 8%, transparent);
+}
+
+:is([data-slot="dropdown-menu-item"], [data-slot="dropdown-menu-radio-item"], [data-slot="dropdown-menu-checkbox-item"], [data-slot="select-item"], [data-slot="combobox-item"], [data-slot="context-menu-item"]) {
+  min-height: var(--control-h-sm);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+}
+
+:is([data-slot="dialog-content"], [data-slot="alert-dialog-content"]) {
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--elevation-3);
+}
+
+[data-slot="sheet-content"] {
+  box-shadow: var(--sheet-shadow);
+}
+
+:is([data-slot="dialog-overlay"], [data-slot="alert-dialog-overlay"], [data-slot="sheet-overlay"]) {
+  background-color: var(--scrim);
+  backdrop-filter: none;
+}
+
+[data-slot="tabs-list"] {
+  border-radius: var(--radius);
+}
+
+[data-slot="toggle"],
+[data-slot="toggle-group-item"] {
+  border-radius: var(--radius);
+}
+
+[data-slot="kbd"] {
+  font-family: var(--font-sans);
+  border-radius: var(--radius-md);
+}
+
+[data-slot="tooltip-content"] {
+  border-radius: var(--radius-lg);
+  font-size: var(--text-xs);
+}
+
+[data-slot="empty"] {
+  border-radius: 0;
+}
+
+/* Group boxes, never nested: an inner card loses its box. */
+[data-slot="card"] {
+  border-radius: var(--radius-xl);
+  box-shadow: none;
+}
+
+[data-slot="card"] [data-slot="card"] {
+  background: transparent;
+  --tw-ring-shadow: 0 0 transparent;
+  padding-block: 0;
+}
+
+/* Themed scrollbars for the panes (WebKit; Firefox uses scrollbar-color). */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+  background-color: var(--scrollbar);
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
