@@ -56,7 +56,7 @@ function NumberAndChoiceFields() {
   const [kind, setKind] = useState<"mono" | "osc">("mono")
   const [mode, setMode] = useState<"symlink" | "copy">("symlink")
   const [centre, setCentre] = useState(5)
-  // eslint-disable-next-line pv/no-user-string -- filter names
+  // eslint-disable-next-line pv/no-user-string -- filter names are proper nouns
   const filters = [{ value: "ha", label: "Ha" }, { value: "oiii", label: "OIII" }, { value: "sii", label: "SII" }, { value: "l", label: "L", disabled: true }]
   return (
     <ComponentSection components={["NumberField", "SliderField", "Slider", "SelectField", "ComboboxField", "SegmentedField"]} level={3}>
