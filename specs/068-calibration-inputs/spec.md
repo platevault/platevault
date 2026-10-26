@@ -10,7 +10,7 @@
 
 **Amended**: 2026-10-26, to the Round 11 decision D-W148.
 
-**Status**: Draft; product defaults and all human-approval gate waivers follow the root autonomous objective. Requirements analysis, implementation and verification remain required.
+**Status**: Backend landed; frontend and acceptance open (reconciled 2026-10-26, `specs/SPEC_STATUS.md`). Landed: the calibration matching backend (#1780, #1782, #1783) and matching at ingestion in the F4 cut-over (#1851). Remains: the Calibration surface (astro-plan-i5op2) and verification. Product defaults and all human-approval gate waivers follow the root autonomous objective.
 
 **Input**: Clean rebuild with selective reuse of verified code and the agreed PlateVault product flow.
 

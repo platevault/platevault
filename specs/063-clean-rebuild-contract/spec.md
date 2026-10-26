@@ -8,7 +8,7 @@
 
 **Amended**: 2026-10-26, to the Round 11 decisions D-W144 and D-W149.
 
-**Status**: Draft; conservative product decisions and all human-approval gate waivers are authorized. Requirements analysis and implementation verification remain required.
+**Status**: Active, reconciled 2026-10-26 (`specs/SPEC_STATUS.md`). Landed: this contract and its journeys (#1776, #1778), the Round 9 amendments (#1804, #1836, #1840, #1844), the owner's answers (#1849, #1850, #1855) and the F4 backend cut-over (#1851). Remains: the clean-slate frontend (epic astro-plan-ocyuc), the coverage review astro-plan-lzrq and the requirements reviews in `checklists/requirements.md`. Conservative product decisions and all human-approval gate waivers are authorised.
 
 **Input**: Rebuild PlateVault cleanly, preserve the old code as a recoverable reference, and reuse code where it satisfies the agreed product contract.
 

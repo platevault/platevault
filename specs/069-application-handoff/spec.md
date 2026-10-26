@@ -10,7 +10,7 @@
 
 **Amended**: 2026-10-26, to the Round 11 decisions D-W145 and D-W146.
 
-**Status**: Draft; product defaults and all human-approval gate waivers follow the root autonomous objective. Requirements analysis, implementation and verification remain required.
+**Status**: Backend landed; frontend and acceptance open (reconciled 2026-10-26, `specs/SPEC_STATUS.md`). Landed: profiles and Apply (#1783, #1784, #1851), profiles without the run-era contract (#1866) and the Symlinks refusal of PREP-AC-11 (#1880). Remains: patched copies for corrected frames (astro-plan-q8rxp, in progress), profile capability qualification (astro-plan-msfp2), the preparation surface (astro-plan-hb23b) and verification. Product defaults and all human-approval gate waivers follow the root autonomous objective.
 
 **Input**: Clean rebuild with selective reuse of verified code and the agreed PlateVault product flow.
 

@@ -10,7 +10,7 @@
 
 **Amended**: 2026-10-26, to the Round 11 decisions D-W143, D-W144 and D-W148.
 
-**Status**: Draft; product defaults and all human-approval gate waivers follow the root autonomous objective. Requirements analysis, implementation and verification remain required.
+**Status**: Backend landed; frontend and acceptance open (reconciled 2026-10-26, `specs/SPEC_STATUS.md`). Landed: the Library inventory backend (#1777), backend deltas (#1779-#1782) and the F4 Project model (#1851). Remains: the final library UI and J19 (astro-plan-4zm11), the real-UI journeys for the Locations step and locate or remap, and verification. Product defaults and all human-approval gate waivers follow the root autonomous objective.
 
 **Input**: Clean rebuild with selective reuse of verified code and the agreed PlateVault product flow.
 

@@ -10,7 +10,7 @@
 
 **Amended**: 2026-10-26, to the Round 11 decision D-W146.
 
-**Status**: Draft; product defaults and all human-approval gate waivers follow the root autonomous objective. Requirements analysis, implementation and verification remain required.
+**Status**: Backend landed; frontend and acceptance open (reconciled 2026-10-26, `specs/SPEC_STATUS.md`). Landed: the custody, archive and Trash backend (#1780-#1782, #1784, #1785), archive paths from the confirmed Target (#1867) and the F4 Project model (#1851). Remains: platform Trash qualification (astro-plan-g33dq), the Clean up, Archive and Trash surfaces (astro-plan-ma6xc) and verification. Product defaults and all human-approval gate waivers follow the root autonomous objective.
 
 **Input**: Clean rebuild with selective reuse of verified code and the agreed PlateVault product flow.
 

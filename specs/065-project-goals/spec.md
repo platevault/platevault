@@ -10,7 +10,7 @@
 
 **Amended**: 2026-10-26, to the Round 11 decisions D-W146 and D-W148.
 
-**Status**: Draft; product defaults and all human-approval gate waivers follow the root autonomous objective. Requirements analysis, implementation and verification remain required.
+**Status**: Backend landed; frontend and acceptance open (reconciled 2026-10-26, `specs/SPEC_STATUS.md`). Landed: backend deltas (#1780, #1782-#1785) and the F4 Project model (#1851). Remains: final-frontend acceptance of the Projects surface (astro-plan-z8seb) and verification. Product defaults and all human-approval gate waivers follow the root autonomous objective.
 
 **Input**: Clean rebuild with selective reuse of verified code and the agreed PlateVault product flow, as amended by the 2026-10-06 workflow decisions.
 
