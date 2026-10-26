@@ -470,7 +470,8 @@ fn create_main_window(handle: &tauri::AppHandle) {
     let window =
         WebviewWindowBuilder::from_config(handle, &config).and_then(WebviewWindowBuilder::build);
     match window {
-        // Defer until the window-state plugin's on_window_ready restore hook has run.
+        // Queued behind the window-state plugin's restore hook, which Tauri also
+        // schedules with `run_on_main_thread` when it attaches the window.
         Ok(window) => {
             let restored_window = window.clone();
             if let Err(error) =
