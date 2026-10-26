@@ -8,7 +8,7 @@
 
 **Amended**: 2026-10-14, to the F4 Project model, D-W93 to D-W106.
 
-**Status**: Draft; product defaults and all human-approval gate waivers follow the root autonomous objective. Requirements analysis, implementation and verification remain required.
+**Status**: Backend landed; frontend and acceptance open (reconciled 2026-10-26, `specs/SPEC_STATUS.md`). Landed: the Results backend (#1782, #1784, #1785), now the Project's `Output/` (#1851). Remains: the Results surface (astro-plan-jd1y1) and verification. Product defaults and all human-approval gate waivers follow the root autonomous objective.
 
 **Input**: Clean rebuild with selective reuse of verified code and the agreed PlateVault product flow.
 

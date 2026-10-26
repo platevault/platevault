@@ -1,7 +1,7 @@
 ---
 id: J29
 title: Plan nights on the Targets page's Planned view, opt into default-site reminders, see Tonight on Home, and export every planned night to a calendar
-version: 6
+version: 7
 status: draft
 last_reviewed: 2026-10-03
 actors: [primary-user]
@@ -34,7 +34,7 @@ Project or session data and starts no indexing.
 
 ## Preconditions
 
-- P1: J15 and J20 completed (J21 to J28 are not required). Settings holds Backyard at 52.09° N, 5.12° E, minimum altitude 25° and astronomical darkness, plus `Remote site`; no site is designated default. Project `NGC 7000 HOO` is open as J20 left it: subject NGC 7000, rigs `RedCat` and `Esprit`, goals Ha 10h and OIII 12h, and seven matching sessions, none added to the Project. It is the only Project. No Target is marked ★, so M 31 is not in My targets, and no night has a plan. Backyard's coordinates, minimum altitude and darkness follow J15/P3 and prototype `domain/seed.ts` line 805 at a2ec1297.
+- P1: J15 and J20 completed (J21 to J28 are not required). Settings holds Backyard at 52.09° N, 5.12° E, minimum altitude 25° and astronomical darkness, plus `Remote site`; no site is designated default. Project `NGC 7000 HOO` is open as J20 left it: subject NGC 7000, rigs `RedCat` and `Esprit`, goals Ha 10h and OIII 12h, and seven matching sessions, none added to the Project. It is the only Project. No Target is a favourite, so M 31 is not in My targets, and no night has a plan. Backyard's coordinates, minimum altitude and darkness follow J15/P3 and prototype `domain/seed.ts` line 805 at a2ec1297.
 - P2: The OS has not yet been asked for notification permission for PlateVault, so the first request can be denied.
 - P3: No calendar provider account is configured.
 - P4: A development-build clock control (D17) sets PlateVault's clock to a night before 2026-10-25. At S7a, it brings the first upcoming Backyard window to its reminder lead time while the app runs and holds it there across the S8 relaunch. NGC 7000 and M 31 have windows at Backyard and `Remote site` tonight, and NGC 7000 has a window at both sites on the following night (G3). The date picker reads this controlled tonight.
@@ -45,7 +45,7 @@ Project or session data and starts no indexing.
 
 - **Do:** On the Targets page, with the date picker on tonight, choose **Add to plan** on the NGC 7000 row. Switch to the Planned view and choose Backyard in the site picker. Then open NGC 7000's Target detail and go back.
 - **Expect:** The site picker lists Backyard and `Remote site`. After Backyard is chosen, the Planned view lists NGC 7000 with its best window, Img time, Moon separation and altitude sparkline, and the page shows Backyard, its IANA time zone, tonight's darkness window and the Moon. Calculated windows show their site and time-zone basis. NGC 7000's row menu offers **Remove from plan** instead of **Add to plan**. The Target detail lists Project `NGC 7000 HOO` with its goal lines: Ha reads 0h 00m "in project" and 12h 35m "captured" against the 10h goal, and OIII reads 0h 00m "in project" and 10h 35m "captured" against the 12h goal. "captured" counts all seven suggested sessions on both rigs. The Planned view header offers **Enable notifications** and **Export calendar**, and notifications read off.
-- **Expect (negative):** No window claims clear weather, telescope availability, or processing readiness. The goal lines never show "in project" above "captured". Adding NGC 7000 to the plan changes no ★, Project or session record.
+- **Expect (negative):** No window claims clear weather, telescope availability, or processing readiness. The goal lines never show "in project" above "captured". Adding NGC 7000 to the plan changes no favourite, Project or session record.
 - **Trace:** flow K · PLAN-FR-02, PLAN-FR-05, PLAN-TGT-FR-14 · PRJ-FR-04, PRJ-FR-21 · root FR-023 · D07, D-W16, D-W36, D-W66 · HARNESS-V5-IA.md S10 (Target detail), S11 · Round 5 P-PLAN2 · Round 6 "Reminders and calendar export stay" (both in the Planned view header)
 
 ### S2 — Grade filters with the per-filter Moon curve {#S2}
@@ -71,7 +71,7 @@ Project or session data and starts no indexing.
   - NGC 7000's best window, Img time, sparkline and Per filter grades are those of tomorrow's night at `Remote site`, with window times on that date.
   - After **Add to plan**, tomorrow's Planned view lists exactly NGC 7000, with tomorrow's values.
   - Back on tonight, the Planned view lists exactly NGC 7000, and every value equals its S3 value.
-- **Expect (negative):** Changing the night alone writes nothing. Adding NGC 7000 to tomorrow's plan adds nothing to and removes nothing from tonight's plan, changes no ★, Project or session record, and starts no indexing.
+- **Expect (negative):** Changing the night alone writes nothing. Adding NGC 7000 to the next night's plan adds nothing to and removes nothing from tonight's plan, changes no favourite, Project or session record, and starts no indexing.
 - **Trace:** HARNESS-V5-FEEDBACK-R1.md Round 5 P-PLAN2 (a date picker in the page header, default tonight, sets the night that suitability, altitude and windows use), Round 6 "Per-night plans" · messages plan_list_empty, targets_add_to_plan @ 4f470775
 
 ### S4 — Try to enable reminders without a default site {#S4}
@@ -132,7 +132,7 @@ Project or session data and starts no indexing.
 ### S11 — Plan a Target outside any Project {#S11}
 
 - **Do:** On the Targets page, search `m 31` and click the M 31 result. Choose **Add to plan** on the M 31 row and read the Planned view.
-- **Expect:** M 31 is listed in My targets with ★ set. The Planned view lists NGC 7000 and M 31 in order of their best window's start, and M 31's windows name the active planning site and its time zone.
+- **Expect:** M 31 is listed in My targets with a star in its Favourite column. The "Planned" view lists NGC 7000 and M 31 in order of their best window's start, and M 31's windows name the active planning site and its time zone.
 - **Expect (negative):** No step asks for a Project or creates one, and M 31's Target detail lists no Project and no goal line. M 31 joins tonight's plan only: tomorrow's plan still lists exactly NGC 7000.
 - **Trace:** flow K · PLAN-FR-09, PLAN-TGT-FR-03 · PLAN-AC-09 · root FR-013 · D-W16, D-W17 · Round 5 P-PLAN2 (Planned: the night's schedule in order), "Click a result to act" · Round 6 "Per-night plans", "Clicking a result" (a catalogue result is added)
 
@@ -146,7 +146,7 @@ Project or session data and starts no indexing.
 ### S13 — Read Tonight on Home {#S13}
 
 - **Do:** With the planning site still on `Remote site`, open Home and read its Tonight box. Then follow its Plan link.
-- **Expect:** Tonight names `Remote site` and its time zone, and shows tonight's darkness window and the Moon's phase, illumination, rise and set. Its windows list NGC 7000 and ★ M 31, each with start, end, peak altitude and Moon separation, and each matches the best window that the Planned view lists for that Target at `Remote site` tonight. The Plan link opens the Targets page's Planned view.
+- **Expect:** Tonight names `Remote site` and its time zone, and shows tonight's darkness window and the Moon's phase, illumination, rise and set. Its windows list NGC 7000 and M 31, a favourite, each with start, end, peak altitude and Moon separation. Each matches the best window that the "Planned" view lists for that Target at `Remote site` tonight. The Plan link opens the "Planned" view of the Targets page.
 - **Expect (negative):** No Tonight value is computed for Backyard while `Remote site` is the picked planning site. Reading Tonight schedules no reminder and starts no indexing.
 - **Trace:** Home Tonight · PLAN-FR-08, PLAN-FR-11 · PLAN-AC-11 · PRJ-FR-17 · PV-PLAN-SC-04 · D-W39 · HARNESS-V5-IA.md S1 (Tonight) · HARNESS-V5-FEEDBACK-R1.md Domain and seed (Sites: Plan and Tonight use the default unless one is picked)
 
@@ -199,3 +199,6 @@ Project or session data and starts no indexing.
 - **Δ6** 2026-10-17 · S2 · behavior-change
   One Moon-avoidance curve per filter replaces the separate Moon limits. S2's **Moon limits** edit now raises OIII's separation at full Moon, and only OIII's grade, windows and Img time recalculate.
   Evidence: HARNESS-V5-FEEDBACK-R1.md Round 9 C6 · D-W88 · PLAN-FR-02, PLAN-TGT-FR-06, PLAN-TGT-AC-18 · prototype moon-limits.tsx (ui-harness-v5) · by: JourneysR9c (intent-gated)
+- **Δ7** 2026-10-26 · P1, S1, S3a, S11, S13 · behavior-change
+  ★ becomes Favourite: a favourite shows a star in the Favourite column of the Targets tables.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 11 (OWNER, 2026-10-23) on ui-harness-v5 @ 5dc245244; D-W142, PLAN-TGT-FR-17 · by: SpecAmend (intent-gated)

@@ -8,7 +8,7 @@
 
 **Amended**: 2026-10-14, to the F4 Project model, D-W93 to D-W106, and on 2026-10-16 to the owner's second batch, D-W118 (amended by the owner's answer in astro-plan-rzbzu.1 on 2026-10-19).
 
-**Status**: Draft; product defaults and all human-approval gate waivers follow the root autonomous objective. Requirements analysis, implementation and verification remain required.
+**Status**: Backend landed; frontend and acceptance open (reconciled 2026-10-26, `specs/SPEC_STATUS.md`). Landed: pixel decode, measurement and their IPC (#1780, #1782, #1783). Remains: the Frames surface (astro-plan-70po3), re-verification against a real View (astro-plan-jztxh) and verification. Product defaults and all human-approval gate waivers follow the root autonomous objective.
 
 **Input**: Clean rebuild with selective reuse of verified code and the agreed PlateVault product flow.
 
