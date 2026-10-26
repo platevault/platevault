@@ -8,6 +8,8 @@
 
 **Amended**: 2026-10-06, to the workflow decisions D-W1 to D-W63 settled by the user that day, on 2026-10-12 to 2026-10-14 to the Round 9 decisions D-W87 to D-W89, on 2026-10-14 to the F4 Project model, D-W93 to D-W106, and on 2026-10-19 to the owner's answers on rig versions, My targets and the session filter prompt (astro-plan-rzbzu.1). Tags such as (D-W16) name the decision a requirement follows.
 
+**Amended**: 2026-10-26, to the Round 11 decisions D-W142 and D-W147.
+
 **Status**: Draft; product defaults and all human-approval gate waivers follow the root autonomous objective. Requirements analysis, implementation and verification remain required.
 
 **Input**: Clean rebuild with selective reuse of verified code and the agreed PlateVault product flow.
@@ -54,7 +56,7 @@ The Targets page lists the user's Targets with tonight's planning columns. Searc
 - **PLAN-TGT-AC-02**: Given Browse catalogues is selected with no catalogue and no preset, then no rows are listed and the page asks the user to choose a catalogue or a preset. After choosing Messier, the Messier objects are listed. (D-W17)
 - **PLAN-TGT-AC-03**: Given the query "m 31", when search runs, then matches from My targets, the bundled catalogues and SIMBAD are listed, each with its source. A match not in My targets shows "Add to targets"; choosing it adds the Target to My targets and the search stays open. (D-W17)
 - **PLAN-TGT-AC-04**: Given SIMBAD cannot be reached, when search runs, then matches from My targets and the bundled catalogues are listed and the results state that SIMBAD was not searched. (D-W17)
-- **PLAN-TGT-AC-05**: Given a saved planning site, when the list shows, then the columns are ★, Designation, Type, Max alt, Lunar, Img time, Filters, Opposition, Sessions and Captured. Moon illumination appears once, in the toolbar, and in no row. (D-W18)
+- **PLAN-TGT-AC-05**: Given a saved planning site, when the list shows, then the columns are Favourite, Designation, Type, Max alt, Lunar, Img time, Filters, Opposition, Sessions and Captured. Moon illumination appears once, in the toolbar, and in no row. (D-W18, D-W142)
 - **PLAN-TGT-AC-06**: Given a Target that never clears the altitude criterion tonight, then its Img time is 0 with the altitude reason. A Target with zero time because of the Moon shows the Moon reason, and one with zero time because there is no darkness shows the darkness reason. (D-W18)
 - **PLAN-TGT-AC-07**: Given a Target without catalogued coordinates, then Max alt, Lunar, Img time and Opposition show "-" with the reason "This target has no catalogued coordinates, so visibility can't be computed." (D-W18)
 - **PLAN-TGT-AC-08**: Given M 31 with 2h00m of Ha sessions and 1h30m of OIII sessions, where one 30m OIII session is Trashed, then Captured shows Ha 2h00m and OIII 1h00m. Sessions leaves out the Trashed session. (D-W18, D-W43)
@@ -64,11 +66,14 @@ The Targets page lists the user's Targets with tonight's planning columns. Searc
 - **PLAN-TGT-AC-12**: Given a selected rig whose filters are L, R, G and B, then the Filters strip shows only L, R, G and B. The presets Narrowband (Moon up), Emission nebulae Ha and Planetary nebulae OIII are hidden. (D-W23, D-W31)
 - **PLAN-TGT-AC-13**: Given a selected OSC rig with a dual-band filter that passes Ha and OIII, then the Filters strip shows R, G, B, Ha and OIII, and the narrowband presets are offered. (D-W31)
 - **PLAN-TGT-AC-14**: Given the Targets page opened through "Open in Planner" from a Project with two rigs, then the rig selector shows "this Project's rigs". Fit shows one value per rig, labeled with the rig name. The Filters strip shows the union of the bands either rig can capture, and Mosaic candidates and Fits nicely match a Target when it matches on either rig. (D-W37, D-W62)
-- **PLAN-TGT-AC-15**: Given no saved planning site, when the Targets page opens, then the planning columns show "-" and the page shows "Add an observing site in Settings". Search, Add to targets, ★ and Sessions still work. (D-W18)
-- **PLAN-TGT-AC-16**: Given M 31 marked ★ and the open Project "Summer nebulae" with subject IC 1396, which is not marked ★. When the Targets page opens on My targets, then it lists M 31 and IC 1396, and IC 1396 carries a "Summer nebulae" Project badge. (D-W60)
+- **PLAN-TGT-AC-15**: Given no saved planning site, when the Targets page opens, then the planning columns show "-" and the page shows "Add an observing site in Settings". Search, Add to targets, Favourite and Sessions still work. (D-W18, D-W142)
+- **PLAN-TGT-AC-16**: Given M 31 marked as a favourite and the open Project "Summer nebulae" with subject IC 1396, which is not a favourite, when My targets opens, then it lists M 31 and IC 1396. IC 1396 carries a "Summer nebulae" Project badge. (D-W60, D-W142)
 - **PLAN-TGT-AC-17**: Given the Targets page on tonight, when the user chooses next week twice, then every column shows values for the night two weeks ahead and the night picker names it. Today returns the page to tonight. When Home's calendar opens Targets for a night, the page opens set to that night. (D-W88)
 - **PLAN-TGT-AC-18**: Given a night with a 60 % lit Moon, when the user chooses Ha and OIII in Suitable filters, then the table lists every Target for which Ha or OIII is good or marginal, sorted by the longer of the two bands' clear times, and each band's grade comes from its Moon-avoidance curve, so Img time and the Filters strip agree. A poor band shows in the danger tone and a marginal band in the warning tone. (D-W88)
 - **PLAN-TGT-AC-19**: Given an indexed session whose Target is NGC 7000, when the user opens My targets, then NGC 7000 appears even if it is neither a favourite nor the subject of an open Project. Its search result offers no Add to targets (PLAN-TGT-FR-03; owner's answer, 2026-10-19, astro-plan-rzbzu.1).
+- **PLAN-TGT-AC-20**: Given My targets with M 31 and M 33, of which only M 31 is a favourite, when the user sets the Favourite filter to Yes, then only M 31 is listed. Its Favourite column shows a star, and the URL keeps the choice in `?fav=`. No lists only M 33, and All lists both. A preset saved with Yes restores it when applied. (D-W142)
+- **PLAN-TGT-AC-21**: Given the Target page of M 33, which is not a favourite, when the user turns on the Favourite toggle beside its title, then M 33 becomes a favourite. Its Targets row shows a star. A refused write shows its alert on a row under the page header; the toggle stays in place, and M 33 stays not a favourite. (D-W142)
+- **PLAN-TGT-AC-22**: Given Browse catalogues with Messier chosen and M 31 in My targets but not a favourite, then M 31's row shows a check in the My targets column. Its Favourite column shows no star. (D-W142)
 
 ### User Story 3 - Equipment: rigs compose a camera, a telescope and filters (Priority: P2)
 
@@ -93,6 +98,7 @@ In Settings > Equipment the user keeps cameras, telescopes and filters as their 
 - **PLAN-EQ-AC-11**: Given camera ASI533MC set to "Don't use darks", when a session from a rig with that camera is ingested, then its darks read No darks with no warning, no dark is matched or suggested, and the session counts as settled for darks. When the user pins a dark on that session, it keeps the dark, and the camera's other sessions stay No darks. (D-W104, D-W105)
 - **PLAN-EQ-AC-12**: Given RedCat's first rig version starts on 2026-10-05 and a session was captured on 2026-10-02 before that version, when the session records its rig version, then it records RedCat version 1. When the user creates a new rig version, its start date defaults to today and the user may edit it before saving. (PLAN-EQ-FR-07; owner's answer, 2026-10-19, astro-plan-rzbzu.1)
 - **PLAN-EQ-AC-13**: Given `Halpha-test` on confirmed rig `RedCat` with an unknown observed FILTER value `Halpha`, when the session opens, then it offers **Add Halpha to RedCat** and asks which bands the filter passes. If the user declines, the value remains unknown and the prompt is still available. The prototype needs the session control (owner's answer, 2026-10-19, astro-plan-rzbzu.1).
+- **PLAN-EQ-AC-14**: Given Settings > Equipment, when the user opens Add equipment in the page header, then it offers Camera…, Telescope…, Filter… and Rig…, each opening that record's add dialog. No section has an Add button of its own. With no filter records, the Filters section's empty state offers its own Add…. (D-W147)
 
 ### Edge Cases
 
@@ -127,11 +133,11 @@ The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody,
 
 #### Targets list
 
-- **PLAN-TGT-FR-01**: The Targets page shows either "My targets" (the default) or "Browse catalogues". My targets lists the ★ favourites, every subject of an open Project, and every Target with at least one session. An open-Project subject carries a badge naming its Project. ★ on a row adds or removes the favourite; an open-Project subject stays listed with its badge either way. (D-W17, D-W60; owner's answer, 2026-10-19, astro-plan-rzbzu.1)
+- **PLAN-TGT-FR-01**: The Targets page shows either "My targets" (the default) or "Browse catalogues". My targets lists the favourites, every subject of an open Project, and every Target with at least one session. An open-Project subject carries a badge naming its Project. Favourite adds or removes the favourite (PLAN-TGT-FR-17); an open-Project subject stays listed with its badge either way. (D-W17, D-W60, D-W142; owner's answer, 2026-10-19, astro-plan-rzbzu.1)
 - **PLAN-TGT-FR-02**: Browse catalogues lists rows only once at least one bundled catalogue (Messier, NGC, IC, Sharpless, LBN, LDN, Caldwell, Barnard) or a preset is chosen. With neither chosen, it lists no rows and asks for a catalogue or a preset. (D-W17)
 - **PLAN-TGT-FR-03**: Search covers My targets, the bundled catalogues and SIMBAD. It ignores case and whitespace, so "M31", "M 31" and "m31" match the same Target. It searches every row, not only rows already shown, and each result names its source. A result not in My targets offers "Add to targets" inline. Adding writes the Target into the library and My targets; a failed add shows the error with Retry. Searching alone writes nothing. When SIMBAD cannot be reached, the results say SIMBAD was not searched. (D-W17)
 - **PLAN-TGT-FR-04**: The table has these columns, with values for the selected night (tonight by default, PLAN-TGT-FR-16) at the active planning site under the planning criteria:
-  - ★: favourite toggle, not sortable.
+  - Favourite: a star on each favourite (PLAN-TGT-FR-17).
   - Designation and Type.
   - Max alt: peak altitude tonight.
   - Lunar: angular separation from the Moon tonight.
@@ -141,7 +147,7 @@ The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody,
   - Sessions: count of linked sessions, "-" when none.
   - Captured: compact integration per channel (PLAN-TGT-FR-08).
 
-  Every column except ★ sorts ascending or descending. Unknown values sort last, and the default sort is Designation ascending. A Target without catalogued coordinates shows "-" with the reason. (D-W18)
+  Every column sorts ascending or descending. Unknown values sort last, and the default sort is Designation ascending. A Target without catalogued coordinates shows "-" with the reason. (D-W18, D-W142)
 - **PLAN-TGT-FR-05**: An Img time of zero shows why: altitude, Moon or darkness. Img time for a Target equals the total of its Plan area windows for tonight under the same site and criteria. (D-W18)
 - **PLAN-TGT-FR-06**: The Filters strip shows bands L, R, G, B, Ha, SII and OIII, each graded good, marginal or poor for the night under its Moon-avoidance curve (PLAN-FR-02), with a recommendation label. A poor band uses the danger tone and a marginal band the warning tone. With a rig selected it shows only the bands the rig's filters pass (PLAN-EQ-FR-03); with several rigs, such as "this Project's rigs", it shows the union of their bands. With no rig selected it shows all seven. (D-W18, D-W23, D-W31, D-W62, D-W88)
 - **PLAN-TGT-FR-07**: Moon illumination and phase appear once, in the toolbar, for tonight at the active planning site. No row repeats them. (D-W18)
@@ -154,7 +160,7 @@ The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody,
   - Planetary nebulae OIII: planetary nebulae with OIII viable.
 
   (D-W19)
-- **PLAN-TGT-FR-10**: The user can save the current Show mode, catalogues, preset, Fit filter and sort as a named preset, and rename or delete saved presets. Saved presets persist across restarts and sit in a Custom presets dropdown after the built-ins. Built-in presets cannot be edited or deleted. A saved preset that needs a rig or a narrowband filter follows the same availability rules as a built-in one. (D-W19, D-W88)
+- **PLAN-TGT-FR-10**: The user can save the current Show mode, catalogues, preset, Favourite filter, Fit filter and sort as a named preset, and rename or delete saved presets. Saved presets persist across restarts and sit in a Custom presets dropdown after the built-ins. Built-in presets cannot be edited or deleted. A saved preset that needs a rig or a narrowband filter follows the same availability rules as a built-in one. (D-W19, D-W88, D-W142)
 - **PLAN-TGT-FR-11**: The toolbar's rig selector offers:
   - no rig, the default;
   - each rig from Settings > Equipment;
@@ -167,9 +173,10 @@ The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody,
 - **PLAN-TGT-FR-15**: **Suitable filters**, which replaces "Good tonight for", is a toolbar filter that takes one or more bands. A Target qualifies when any chosen band is good or marginal for it on the selected night, and the list sorts by the longest clear time among the chosen bands, descending. (D-W88)
 - **PLAN-TGT-FR-16**: A night picker in the Targets toolbar sets the planning night, tonight by default, with previous week, next week and Today, which returns to tonight. Every value this section gives "for tonight" is given for the selected night. Opening Targets from a night on Home's calendar sets that night. (D-W88)
 
+- **PLAN-TGT-FR-17**: Every label for a favourite says Favourite; no label says Star or Unstar. Every Targets table has a Favourite column, which shows a star on each favourite, and a Favourite filter: All, Yes or No. The URL keeps the filter as `?fav=`, and so does a saved preset (PLAN-TGT-FR-10). The row's Favourite action and the Favourite toggle beside the Target page's title (LIB-FR-08) add or remove the favourite. A refused write shows its alert on a row under the page header, so the toggle stays where the pointer is, and the favourite stays as it was. In Browse catalogues and in search results, a My targets column shows a check on each Target in My targets, so the star means only Favourite. Favourite leaves the rest of My targets membership unchanged (PLAN-TGT-FR-01). (D-W142)
 #### Equipment: cameras, telescopes, filters and rigs
 
-- **PLAN-EQ-FR-01**: Settings > Equipment has a section each for cameras, telescopes, filters and rigs. A filter is its own record, with a name, the FITS FILTER values it matches, and the bands it passes (one or more of L, R, G, B, Ha, SII, OIII). A rig selects one camera, one telescope and any number of filters, with the same form for mono and OSC cameras; it edits no camera, telescope or filter property, which are edited on their own records with Edit…. Each camera, telescope, filter and rig shows what uses it as a Used by popover that lists every user and links to it. (D-W31, D-W76, D-W87)
+- **PLAN-EQ-FR-01**: Settings > Equipment has a section each for cameras, telescopes, filters and rigs. Its header has one Add equipment menu, with Camera…, Telescope…, Filter… and Rig…, in place of an Add button per section. An empty section keeps its own Add… in its empty state (D-W147). A filter is its own record, with a name, the FITS FILTER values it matches, and the bands it passes (one or more of L, R, G, B, Ha, SII, OIII). A rig selects one camera, one telescope and any number of filters, with the same form for mono and OSC cameras. Camera, telescope and filter properties are edited only on their own records, with Edit…. Each camera, telescope, filter and rig shows what uses it as a Used by popover that lists every user and links to it. (D-W31, D-W76, D-W87, D-W147)
 - **PLAN-EQ-FR-02**: Mono or OSC comes from the rig's camera, not from its filters. An OSC rig captures R, G and B without a filter; on any rig, each selected filter adds the bands it passes. (D-W31, D-W87)
 - **PLAN-EQ-FR-03**: A rig's filters drive the Targets Filters strip (PLAN-TGT-FR-06) and the visibility of the narrowband presets (PLAN-TGT-FR-13). The selected rig's field of view drives Fit (PLAN-TGT-FR-11). Filters never filter Goal templates. (D-W30, D-W31, D-W87)
 - **PLAN-EQ-FR-04**: When a session's FILTER header value matches no filter on its confirmed rig, the session shows the filter as unknown and offers "Add {value} to {rig}" in the session. Settings > Equipment lists the unknown values seen per rig. Adding asks for the bands the filter passes, creates a filter record that matches the value and selects it in the rig; header bytes and observed evidence stay unchanged. When an existing filter record matches the value, the prompt also offers that record, as Settings > Unknown filters does (D-W132; owner's answer, 2026-10-20). Declining leaves the value unknown and the prompt available. (D-W31, D-W87; owner's answer, 2026-10-19, astro-plan-rzbzu.1)
@@ -182,7 +189,7 @@ The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody,
 
 - B3
 - K
-- Targets list: Show mode, search with Add to targets, columns, presets and rig selector (D-W17, D-W18, D-W19, D-W23, D-W37)
+- Targets list: Show mode, search with Add to targets, columns, the Favourite filter, presets and rig selector (D-W17, D-W18, D-W19, D-W23, D-W37, D-W142)
 - Settings > Equipment: cameras, telescopes, filters and rigs, rig versions, camera aliases and defaults, and the unknown-filter prompt (D-W31, D-W87, D-W104)
 - Tonight and calendar data for Home (D-W39, D-W89)
 
@@ -191,7 +198,8 @@ The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody,
 Use the [root vocabulary](../063-clean-rebuild-contract/spec.md#key-entities). Feature-specific evidence and decisions retain their input identity, scope, and revision.
 
 - **Rig version**: a dated version of a rig. Each session records the one it was captured with, and only flats depend on it. (D-W102, D-W104)
-- **My targets**: the Targets the user has marked ★, plus every subject of an open Project, shown with its Project badge. (D-W60)
+- **My targets**: the Targets the user has marked as a favourite, every subject of an open Project, shown with its Project badge, and every Target with at least one session. (D-W60, D-W125, D-W142)
+- **Favourite**: a Target the user marks with Favourite. The star in the Favourite column means only this; a check in the My targets column shows membership. (D-W142)
 - **Rig**: an optical train from Settings > Equipment that selects one camera, one telescope and its filters; its field of view follows from them. Editing it creates a rig version.
 - **Filter**: an Equipment record with a name, matched FITS FILTER values and passed bands, which rigs select. (D-W87)
 - **Targets preset**: a named set of Targets list filters, either built in or saved by the user.
@@ -225,3 +233,4 @@ Use the [root vocabulary](../063-clean-rebuild-contract/spec.md#key-entities). F
 - Workflow decision D-W89 (Round 9 C8 and decision astro-plan-b66vy, 2026-10-13) supersedes section 4 of D-W39: Home's Tonight holds the unfinished goals graded for tonight, and PV-PLAN also supplies Home's five-week calendar.
 - Workflow decisions D-W94, D-W95 and D-W104 (the F4 Project model, owner, 2026-10-14) replace runs with Projects, replace mosaic subjects and D-W63's mosaic centre with panel groups, and add rig versions, camera aliases and the per-camera "Don't use darks" and "Don't use bias" defaults (PLAN-EQ-FR-07, PLAN-EQ-FR-08). Provisional: a version dated before an existing session leaves it unchanged, a rename starts no rig version, and a panel group's goals are graded from the subject's window.
 - The owner's answer, 2026-10-19 (astro-plan-rzbzu.1), settles PLAN-EQ-FR-07 (J15/G12): a session captured before the rig's first version records that first version; new versions default to today, editable.
+- Workflow decisions D-W142 and D-W147 (Round 11, owner, 2026-10-23, astro-plan-qk9ri) replace ★ with Favourite (PLAN-TGT-FR-17). Favourite adds a column, a filter kept in the URL and in saved presets, and a toggle on the Target page. Settings > Equipment gets one Add equipment menu (PLAN-EQ-FR-01). The Favourite column sorts like the others, as in the harness's Targets table. *Open*: the owner's menu also lists Reducer…. No decision makes a reducer an Equipment record or says how it changes a rig's field of view (PLAN-EQ-FR-05), so the menu offers only the records this feature defines.
