@@ -1490,6 +1490,15 @@ export const commands = {
 	homeDashboard: (tonight: TonightQuery_Deserialize) => typedError<HomeDashboard_Serialize, ErrorResponse>(__TAURI_INVOKE("home_dashboard", { tonight })),
 };
 
+/* Constants */
+export const APPLY_WAITING_EVENT = "project_apply_waiting" as const;
+
+export const MEASUREMENT_PROGRESS_EVENT = "pix_measurement_progress" as const;
+
+export const NEW_CAPTURES_EVENT = "library_new_captures" as const;
+
+export const SCAN_PROGRESS_EVENT = "library_scan_progress" as const;
+
 /* Types */
 /**  The Target "Add to targets" writes into the library and My targets. */
 export type AddTarget = 
@@ -4783,6 +4792,38 @@ export type MeasurementOutcome = { outcome: "measured"; metrics: MetricValue[]; 
 /**  Only the brightest candidates were kept. */
 truncated: boolean } | { outcome: "failed"; code: MeasurementFailureCode; parameters: { [key in string]: string } };
 
+/**
+ *  The `pix_measurement_progress` event payload. Events can be lost; status
+ *  and frame-state reads are the durable truth.
+ */
+export type MeasurementProgress = MeasurementProgress_Serialize | MeasurementProgress_Deserialize;
+
+/**
+ *  The `pix_measurement_progress` event payload. Events can be lost; status
+ *  and frame-state reads are the durable truth.
+ */
+export type MeasurementProgress_Deserialize = {
+	operationId: string,
+	revision: number,
+	state: RunState,
+	counters: RunCounters,
+	assetId: string | null,
+	frameState: FrameState_Deserialize | null,
+};
+
+/**
+ *  The `pix_measurement_progress` event payload. Events can be lost; status
+ *  and frame-state reads are the durable truth.
+ */
+export type MeasurementProgress_Serialize = {
+	operationId: string,
+	revision: number,
+	state: RunState,
+	counters: RunCounters,
+	assetId: string | null,
+	frameState: FrameState_Serialize | null,
+};
+
 /**  A cached measurement of one asset. */
 export type MeasurementRecord = MeasurementRecord_Serialize | MeasurementRecord_Deserialize;
 
@@ -6868,6 +6909,20 @@ export type ScanProgress = {
 	 *  instead of hashing those files again (LIB-FR-19).
 	 */
 	rehashKept?: number,
+};
+
+/**
+ *  One committed scan operation snapshot (the `library_scan_progress` event
+ *  payload): operation id, revision, counts and scope.
+ */
+export type ScanProgressEvent = {
+	operationId: string,
+	revision: number,
+	locationId: string,
+	state: ScanState,
+	progress: ScanProgress,
+	completeScopes: NativePathWire[],
+	incompleteScopes: NativePathWire[],
 };
 
 export type ScanState = "running" | "completed" | "partial" | "failed" | "canceled";
