@@ -299,7 +299,7 @@ const imports = {
       I4: "[I4] Features never import Base UI directly.",
       I5: "[I5] Features never import components/ui directly.",
       I6: "[I6] No feature cross-imports; unregistered areas fail closed.",
-      I7: "[I7] Only src/api imports generated IPC or Tauri core, and imports must stay within the package.",
+      I7: "[I7] Only src/api imports Tauri APIs and the generated library client; no import leaves the package.",
     },
   },
   /** @param {any} context */
@@ -307,17 +307,18 @@ const imports = {
     const file = path.relative(APP_ROOT, context.filename).split(path.sep).join("/")
     const bans = bansFor(file)
     const apiOwner = within(file, "src/api")
+    // Tests may stand in for Tauri with its official IPC mocks; runtime code may not.
+    const testFile = /\.(test|spec)\.tsx?$/.test(file)
     /** @param {any} source */
     function check(source) {
       if (source?.type !== "Literal" || typeof source.value !== "string") return
       const target = resolveSpecifier(source.value, file)
       const escapesPackage = target === ".." || target.startsWith("../")
       const tauriApi = target === "@tauri-apps/api" || target.startsWith("@tauri-apps/api/")
-      const generatedClient = /(^|\/)bindings\/(?:library-index|index)(?:\.ts)?$/.test(target)
-      const legacyIpcSource = /(?:^|\/)desktop\/src\/bindings\/library-index(?:\.ts)?$/.test(target)
-      const legacyMocks = /(?:^|\/)desktop\/(?:src\/api\/mocks|api\/mocks)(?:\.ts)?$/.test(target)
-      const apiException = apiOwner && (generatedClient || legacyIpcSource || legacyMocks)
-      if ((escapesPackage && !apiException) || (!apiOwner && (tauriApi || generatedClient))) {
+      // The one import that leaves the package: src/api reading the generated library client.
+      const libraryClient = /^(\.\.\/)+desktop\/src\/bindings\/library-index(?:\.ts)?$/.test(target)
+      const tauriMocksInTest = testFile && target === "@tauri-apps/api/mocks"
+      if ((escapesPackage && !(apiOwner && libraryClient)) || (!apiOwner && tauriApi && !tauriMocksInTest)) {
         context.report({ node: source, messageId: "I7" })
       }
       for (const { messageId, banned } of bans) if (banned(target)) context.report({ node: source, messageId })

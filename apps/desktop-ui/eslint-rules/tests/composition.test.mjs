@@ -131,14 +131,30 @@ describe("composition boundaries fail closed", () => {
 })
 
 describe("generated IPC importer boundary", () => {
-  it("allows only src/api to import generated clients and Tauri APIs", () => {
+  it("allows only src/api to import the generated library client and Tauri APIs", () => {
     assert.deepEqual(imports('import { invoke } from "@tauri-apps/api/core"', "src/app/boot.ts"), ["I7"])
+    assert.deepEqual(imports('import { core } from "@tauri-apps/api"', "src/app/boot.ts"), ["I7"])
     assert.deepEqual(imports('import * as generated from "../../../desktop/src/bindings/library-index"', "src/app/boot.ts"), ["I7"])
     assert.deepEqual(imports('import * as mocks from "../../../desktop/src/api/mocks"', "src/app/boot.ts"), ["I7"])
-    assert.deepEqual(imports('import { invoke } from "@tauri-apps/api"', "src/app/boot.ts"), ["I7"])
-    assert.deepEqual(imports('import * as generated from "../../desktop/src/bindings/library-index"', "src/api/ipc.ts"), [])
-    assert.deepEqual(imports('import * as mocks from "../../desktop/src/api/mocks"', "src/api/ipc.ts"), [])
+    // src/api/ipc.ts sits three levels below the repo's apps/ directory.
+    assert.deepEqual(imports('import * as generated from "../../../desktop/src/bindings/library-index"', "src/api/ipc.ts"), [])
     assert.deepEqual(imports('import { invoke } from "@tauri-apps/api/core"', "src/api/ipc.ts"), [])
+    assert.deepEqual(imports('import { listen } from "@tauri-apps/api/event"', "src/api/events.ts"), [])
+  })
+
+  it("refuses the legacy client and mock dispatch even from src/api", () => {
+    assert.deepEqual(imports('import * as legacy from "../../../desktop/src/bindings/index"', "src/api/ipc.ts"), ["I7"])
+    assert.deepEqual(imports('import * as mocks from "../../../desktop/src/api/mocks"', "src/api/ipc.ts"), ["I7"])
+    assert.deepEqual(imports('import * as other from "../../../desktop/src/lib/paths"', "src/api/ipc.ts"), ["I7"])
+  })
+
+  it("lets tests, and only tests, use Tauri's IPC mocks", () => {
+    assert.deepEqual(imports('import { mockIPC } from "@tauri-apps/api/mocks"', "src/features/library/library.test.tsx"), [])
+    assert.deepEqual(imports('import { mockIPC } from "@tauri-apps/api/mocks"', "src/features/library/library.tsx"), ["I7"])
+  })
+
+  it("does not mistake an in-package bindings module for the generated client", () => {
+    assert.deepEqual(imports('import { x } from "@/lib/bindings/index"', "src/app/boot.ts"), [])
   })
 })
 
