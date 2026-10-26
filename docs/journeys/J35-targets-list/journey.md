@@ -1,7 +1,7 @@
 ---
 id: J35
 title: Find, favourite and narrow Targets on the Targets page's All view with search, presets, a rig selector and Fit
-version: 4
+version: 5
 status: draft
 last_reviewed: 2026-10-06
 actors: [primary-user]
@@ -16,7 +16,7 @@ The user opens the Targets page, which opens on My targets in the All view with
 the night's planning columns and a compact altitude sparkline, finds and adds new
 Targets through search, browses the bundled catalogues through the Browse
 catalogues toggle, and narrows the list with presets and a rig. Done means: My
-targets lists exactly the ★ favourites plus every open Project subject with its
+targets lists exactly the favourites plus every open Project subject with its
 Project badge. Search names each result's source. Clicking a catalogue result
 adds that Target, clicking a result already in My targets opens its Target
 detail, and no result row carries an Add button. Browse catalogues lists nothing
@@ -24,12 +24,12 @@ until a catalogue or preset is chosen. Best tonight lists only Targets with a
 usable window, best first. A saved preset survives a restart. With a rig
 selected, the Filters strip shows only that rig's bands, narrowband presets
 follow its filters, and Fit reads per rig. Nothing on the page writes library
-data except ★ and adding a Target from a catalogue result.
+data except Favourite and adding a Target from a catalogue result.
 
 ## Preconditions
 
-- P1: Fresh replay of J15, J19 and J20, with J21 to J34 not run. The rigs `RedCat` and `Esprit` exist as J15 left them. `RedCat` is mono with the filters Ha, OIII and Halpha and a field of about 5.4° × 3.6°. `Esprit` is OSC with an empty filter list and a field of about 1.2° × 1.2°. Settings holds Backyard and `Remote site`. Project `NGC 7000 HOO` is open as J20 left it: subject NGC 7000 and rigs `RedCat` and `Esprit`. Seven sessions, six on `RedCat` and one on `Esprit`, have confirmed Target NGC 7000; none has been added to the Project. No Target is marked ★.
-- P2: A second open Project `Summer nebulae`, created with New Project as in J20, has the single subject IC 1396 and the rigs `RedCat` and `Esprit`, and no sessions. IC 1396 is not marked ★.
+- P1: Fresh replay of J15, J19 and J20, with J21 to J34 not run. The rigs `RedCat` and `Esprit` exist as J15 left them. `RedCat` is mono with the filters Ha, OIII and Halpha and a field of about 5.4° × 3.6°. `Esprit` is OSC with an empty filter list and a field of about 1.2° × 1.2°. Settings holds Backyard and `Remote site`. Project `NGC 7000 HOO` is open as J20 left it: subject NGC 7000 and rigs `RedCat` and `Esprit`. Seven sessions, six on `RedCat` and one on `Esprit`, have confirmed Target NGC 7000; none has been added to the Project. No Target is a favourite.
+- P2: A second open Project `Summer nebulae`, created with New Project as in J20, has the single subject IC 1396 and the rigs `RedCat` and `Esprit`, and no sessions. IC 1396 is not a favourite.
 - P3: The bundled catalogues (Messier, NGC, IC, Sharpless, LBN, LDN, Caldwell, Barnard) are installed. SIMBAD is reachable until S6, and a network control can then block it (G2).
 - P4: The planning site picker reads Backyard and the header date picker reads tonight, its default. A development-build clock control (D17) fixes tonight to one date, so the S1 and S3 values can be compared.
 - P5: Backyard lies north of 43° N, so NGC 5139 (declination about −47°) never rises above its horizon there.
@@ -39,35 +39,35 @@ data except ★ and adding a Target from a catalogue result.
 ### S1 — Open the Targets page {#S1}
 
 - **Do:** Open the Targets page from main navigation, then hover or focus the altitude sparkline of the NGC 7000 row.
-- **Expect:** The All view is selected and opens on My targets, with a toggle to Browse catalogues, and the header date picker reads tonight. My targets lists exactly NGC 7000, with a `NGC 7000 HOO` badge, and IC 1396, with a `Summer nebulae` badge. The columns are ★, Designation, Type, the altitude sparkline, Max alt, Lunar, Img time, Filters, Opposition, Sessions and Captured, sorted by Designation ascending. Each sparkline plots altitude across tonight with the dark window shaded and the row's best window marked; NGC 7000's tooltip states a maximum altitude equal to its Max alt and the time it is reached. Moon illumination and phase appear once, in the toolbar, for tonight at Backyard.
-- **Expect (negative):** The page does not open on Browse catalogues. No catalogue object that is neither ★ nor a Project subject is listed. No row repeats the Moon illumination. The page shows no wide altitude timeline.
+- **Expect:** The All view is selected and opens on My targets, with a toggle to Browse catalogues, and the header date picker reads tonight. My targets lists exactly NGC 7000, with a `NGC 7000 HOO` badge, and IC 1396, with a `Summer nebulae` badge. The columns are Favourite, Designation, Type, the altitude sparkline, Max alt, Lunar, Img time, Filters, Opposition, Sessions and Captured, sorted by Designation ascending. Each sparkline plots altitude across tonight with the dark window shaded and the row's best window marked. NGC 7000's tooltip states a maximum altitude equal to its Max alt and the time it is reached. Moon illumination and phase appear once, in the toolbar, for tonight at Backyard.
+- **Expect (negative):** The page does not open on Browse catalogues. No catalogue object that is neither a favourite nor a Project subject is listed. No row repeats the Moon illumination. The page shows no wide altitude timeline.
 - **Trace:** Targets page, All view · PLAN-TGT-FR-01, PLAN-TGT-FR-04, PLAN-TGT-FR-07 · PLAN-TGT-AC-01, PLAN-TGT-AC-05, PLAN-TGT-AC-16 · D-W17, D-W18, D-W60 · HARNESS-V5-IA.md S10 · Round 5 P-PLAN2 · Round 6 "Targets opens on My targets" · messages targets_browse_catalogues @ 4f470775
 
 ### S2 — Read Sessions and Captured, and sort {#S2}
 
 - **Do:** Read the NGC 7000 and IC 1396 rows, open NGC 7000's Target page, then return and sort by Img time descending and again ascending.
 - **Expect:** NGC 7000's Sessions equals the number of sessions its Target page lists. Its Captured reads Ha 12h 35m, from the Ha sessions on both rigs, and OIII equals the OIII captured integration on its Target page. IC 1396 reads "-" for Sessions. Each sort reorders the rows by Img time, and a row with an unknown value sorts last both times.
-- **Expect (negative):** The ★ column offers no sort.
+- **Expect:** The Favourite column sorts like every other column (PLAN-TGT-FR-04).
 - **Trace:** Targets list · PLAN-TGT-FR-04, PLAN-TGT-FR-08 · PLAN-TGT-AC-08 · D-W18
 
 ### S3 — Open a Target's detail from its row {#S3}
 
 - **Do:** Select the NGC 7000 row, read its Target detail, then go back.
 - **Expect:** NGC 7000's Target detail opens with tonight at Backyard, its identity, Fit on `RedCat` and on `Esprit`, the Project `NGC 7000 HOO` with its goal lines, and captured time per channel with its sessions. It offers Add to Plan, Add to Project and New Project. The row's Max alt equals the detail's peak altitude tonight, and its Img time equals the total of the detail's windows tonight under the same criteria. Going back restores the All view, its sort and the date picker, because the view lives in the URL.
-- **Expect (negative):** Opening and reading the detail changes no ★, plan, Project or session record.
+- **Expect (negative):** Opening and reading the detail changes no favourite, plan, Project or session record.
 - **Trace:** Targets list, Target detail · PLAN-TGT-FR-05, PLAN-TGT-FR-14, PLAN-FR-08 · PV-PLAN-SC-04 · D-W16, D-W18 · HARNESS-V5-IA.md S10 (Target detail, the view lives in the URL)
 
 ### S4 — Toggle a favourite {#S4}
 
-- **Do:** Back on the Targets page, mark IC 1396 ★, then clear its ★.
-- **Expect:** The ★ toggles each time. IC 1396 stays listed with its `Summer nebulae` badge in both states.
-- **Expect (negative):** Toggling ★ changes no subject of `Summer nebulae` and no Project record.
-- **Trace:** Targets list · PLAN-TGT-FR-01 · PLAN-TGT-AC-16 · D-W60
+- **Do:** Back on the Targets page, open IC 1396's row menu and choose **Add to favourites**. Set the Favourite filter to Yes. Choose **Remove from favourites** on IC 1396. Set the filter back to All.
+- **Expect:** After **Add to favourites**, IC 1396's Favourite column shows a star, and with the filter on Yes the list holds IC 1396 only and the URL keeps `?fav=`. After **Remove from favourites**, the star is gone. With the filter on All, IC 1396 stays listed with its `Summer nebulae` badge in both states (PLAN-TGT-FR-17, D-W142).
+- **Expect (negative):** Neither choice changes a subject of `Summer nebulae` or a Project record.
+- **Trace:** Targets list · PLAN-TGT-FR-01, PLAN-TGT-FR-17 · PLAN-TGT-AC-16, PLAN-TGT-AC-20 · D-W60, D-W142
 
 ### S5 — Search and add a Target by clicking its catalogue result {#S5}
 
 - **Do:** Search `m 31`, then `M31` and `m31`. Click the Messier M 31 result row. Then search `ngc 5139`, click the NGC 5139 result the same way, and clear the search.
-- **Expect:** All three queries return the same M 31 matches, from the bundled catalogues and from SIMBAD, each naming its source in the Source column. Clicking the M 31 result adds it: the search stays open, and the result shows it is in My targets. My targets then lists M 31 and NGC 5139 with ★ set, beside NGC 7000 and IC 1396.
+- **Expect:** All three queries return the same M 31 matches, from the bundled catalogues and from SIMBAD, each naming its source in the Source column. Clicking the M 31 result adds it: the search stays open, and the result shows it is in My targets. Afterwards, My targets lists M 31 and NGC 5139 as favourites, beside NGC 7000 and IC 1396.
 - **Expect (negative):** No result row shows an **Add to targets** button; the row's menu keeps the other actions. Before a result is clicked, My targets is unchanged: typing a query writes nothing.
 - **Trace:** Targets list · PLAN-TGT-FR-03 · PLAN-TGT-AC-03 · D-W17 · Round 5 "Click a result to act" · Round 6 "Clicking a result" (a catalogue result is added)
 
@@ -82,20 +82,20 @@ data except ★ and adding a Target from a catalogue result.
 
 - **Do:** Search `ngc 7000` and click the NGC 7000 result row, read the page, then go back. Search `m 31`, click the Messier M 31 result row, read the page, then go back and clear the search.
 - **Expect:** The NGC 7000 result shows that it is in My targets. Clicking it opens NGC 7000's Target detail, with the Project `NGC 7000 HOO` and its goal lines as S3 reads them. The M 31 result, in My targets since S5, shows the same, and clicking it opens M 31's Target detail.
-- **Expect (negative):** Neither click adds, duplicates or ★-toggles a Target: My targets still lists exactly NGC 7000, IC 1396, M 31 and NGC 5139, one row each, and NGC 7000 still has no ★. Neither click writes a plan, Project or session record.
+- **Expect (negative):** Neither click adds, duplicates or favourites a Target. My targets still lists exactly NGC 7000, IC 1396, M 31 and NGC 5139, one row each, and NGC 7000 is still not a favourite. Neither click writes a plan, Project or session record.
 - **Trace:** Targets list, Target detail · PLAN-TGT-FR-03, PLAN-TGT-FR-14 · D-W17 · Round 5 "Click a result to act" · Round 6 "Clicking a result" (a Target in My targets opens)
 
 ### S6 — Search without SIMBAD {#S6}
 
 - **Do:** Block SIMBAD with the P3 control, search `m 57`, and click the Messier result row. Unblock SIMBAD.
-- **Expect:** Matches from My targets and the bundled catalogues are listed with their sources, and the results state that SIMBAD was not searched ("SIMBAD unreachable"). M 57 joins My targets with ★ set.
+- **Expect:** Matches from My targets and the bundled catalogues are listed with their sources, and the results state that SIMBAD was not searched ("SIMBAD unreachable"). M 57 joins My targets as a favourite.
 - **Expect (negative):** The results do not read as a complete search ("SIMBAD searched" is not shown), and no SIMBAD source is shown.
 - **Trace:** Targets list · PLAN-TGT-FR-03 · PLAN-TGT-AC-04 · D-W17 · Round 5 "Click a result to act"
 
 ### S7 — Browse the catalogues {#S7}
 
 - **Do:** On the All view, use the toggle to switch from My targets to Browse catalogues with no catalogue and no preset chosen, then choose Messier.
-- **Expect:** With nothing chosen, no rows are listed and the page asks the user to choose a catalogue or a preset. After choosing Messier, the Messier objects M 1 to M 110 are listed, and M 31 and M 57 show ★.
+- **Expect:** With nothing chosen, no rows are listed and the page asks the user to choose a catalogue or a preset. After choosing Messier, the Messier objects M 1 to M 110 are listed, and M 31 and M 57 show a check in the My targets column and a star in the Favourite column.
 - **Expect (negative):** Browsing writes nothing to My targets.
 - **Trace:** Targets list · PLAN-TGT-FR-02 · PLAN-TGT-AC-02 · PV-PLAN-SC-05 · D-W17 · HARNESS-V5-IA.md S10 (Browse needs a catalogue or a preset) · Round 6 "Targets opens on My targets" (a toggle switches to Browse catalogues)
 
@@ -183,3 +183,6 @@ data except ★ and adding a Target from a catalogue result.
 - **Δ4** 2026-10-15 · P1, P2 · behavior-change
   The fixture Projects hold no processing run: `NGC 7000 HOO` and `Summer nebulae` name their subjects and rigs, and no session has been added to either.
   Evidence: D-W93 to D-W106 (F4 Project model, owner's answers of 2026-10-14) in PR #1804, 065 PRJ-FR-02, PRJ-FR-08 · by: SpecF4Writer2 (intent-gated)
+- **Δ5** 2026-10-26 · P1, P2, S1, S2, S3, S4, S5, S5b, S6, S7 · behavior-change
+  ★ becomes Favourite. The Favourite column shows a star and sorts, and the row menu offers **Add to favourites** and **Remove from favourites**. S4 also sets the Favourite filter, and Browse catalogues marks My targets members with a check.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 11 (OWNER, 2026-10-23) on ui-harness-v5 @ 5dc245244; D-W142, PLAN-TGT-FR-04, PLAN-TGT-FR-17 · by: SpecAmend (intent-gated)
