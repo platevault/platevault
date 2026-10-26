@@ -817,7 +817,7 @@
       "flowStep": "The \"Planned\" view: a plan per night, reminders and the calendar export (D-W151)",
       "owner": "072-observing-plans",
       "journeyStep": "J29/S1, J29/S3a, J29/S4, J29/S5, J29/S6, J29/S7, J29/S7a, J29/S8, J29/S9, J29/S10, J29/S14",
-      "spec": "072-observing-plans PLAN-FR-03, PLAN-FR-04, PLAN-FR-06, PLAN-FR-07, PLAN-TGT-FR-16, PLAN-TGT-FR-18, PLAN-AC-02, PLAN-AC-03, PLAN-AC-04, PLAN-AC-06, PLAN-AC-08, PLAN-AC-13, PLAN-AC-15, PLAN-TGT-AC-23, PLAN-TGT-AC-24; D-W88, D-W151",
+      "spec": "072-observing-plans PLAN-FR-03, PLAN-FR-04, PLAN-FR-06, PLAN-FR-07, PLAN-FR-09, PLAN-TGT-FR-16, PLAN-TGT-FR-18, PLAN-AC-02, PLAN-AC-03, PLAN-AC-04, PLAN-AC-06, PLAN-AC-08, PLAN-AC-09, PLAN-AC-13, PLAN-AC-15, PLAN-TGT-AC-23, PLAN-TGT-AC-24; D-W16, D-W88, D-W151",
       "action": "Add a Target to tonight's plan and to the next night's, open the \"Planned\" view, enable notifications from its header, then export the calendar.",
       "expect": "Each night has its own plan, listed as a schedule in order with each Target's windows and the Altitude column. Enable notifications names the default site, criteria and lead time before it starts, and the export holds the windows of every upcoming night with a plan.",
       "negative": "Adding to one night's plan leaves the other nights' plans unchanged, the view has no Favourite filter, and the page has no wide altitude timeline."
