@@ -6,7 +6,7 @@ The app shell (`Shell.tsx`) renders every route page inside a bounded flex
 column: `<main class="alm-frame__main">` (display:flex; flex-direction:column;
 flex:1; min-height:0). Pages that grow with their content instead of filling
 this bounded area cause toolbars or action bars to scroll out of view or get
-clipped at the minimum window size (1100x720).
+clipped at the minimum window size (1280x640).
 
 ## Primitives
 
@@ -67,5 +67,5 @@ For the standard list+detail pattern use `PageShell` + `ListDetailLayout` +
 
 ## Verification
 
-At 1100x720: open any route page, scroll the content list, and confirm that the
+At 1280x640: open any route page, scroll the content list, and confirm that the
 top action bar and any bottom bar remain visible throughout.

@@ -1,7 +1,7 @@
 ---
 id: J40
 title: Choose a theme and language in Settings › Appearance and keep them across restarts
-version: 3
+version: 4
 status: draft
 last_reviewed: 2026-10-12
 actors: [primary-user]
@@ -23,7 +23,7 @@ The user chooses how PlateVault looks and reads: they set its appearance mode, c
 ## Preconditions
 
 - P1: Fresh replay of J19 and J20: the catalogue holds the J19 sessions and the open Project `NGC 7000 HOO` (subject NGC 7000, rig `RedCat`), and Activity lists `Project created: NGC 7000 HOO`. Appearance is at its defaults: mode Match system, with PlateVault Dark as its dark theme and PlateVault Light as its light theme, language English (UK), single-key shortcuts on.
-- P2: The PlateVault window is sized to 1100 × 720 (README validator rule). The OS appearance can be switched between Dark and Light during the run.
+- P2: The PlateVault window is sized to 1280 × 640 (the minimum on macOS, Windows and Linux). At start-up, a restored window is moved and shrunk to fit fully on a connected screen. The OS appearance can be switched between Dark and Light during the run.
 - P3: The J19/P5 manifest is available, and the catalog's session, Project and Activity entry counts are recorded before S1.
 
 ## Steps
@@ -84,9 +84,10 @@ The user chooses how PlateVault looks and reads: they set its appearance mode, c
 
 ### S8 — Check the layout in Portuguese {#S8}
 
-- **Do:** At 1100 × 720, with Português (Brasil) active, open Home, Projects, the `NGC 7000 HOO` Project page, Sessions and Settings › Appearance.
+- **Do:** At 1280 × 640, with Português (Brasil) active, open Home, Projects,
+  the `NGC 7000 HOO` Project page, Sessions and Settings › Appearance.
 - **Expect:** On each screen the toolbar, page header and its actions, and the status bar stay fully visible. Only content panes scroll; the window itself never scrolls and shows no horizontal scrollbar. Any label cut short (the toolbar's Next) shows its whole text in its tooltip.
-- **Trace:** README §Notes (layout invariant at 1100×720) · IA §Fix pass (toolbar truncation with tooltip)
+- **Trace:** README §Notes (layout invariant at 1280×640) · IA §Fix pass (toolbar truncation with tooltip)
 
 ### S9 — Turn single-key shortcuts off {#S9}
 
@@ -118,7 +119,7 @@ The user chooses how PlateVault looks and reads: they set its appearance mode, c
 - SC1: S2 lists exactly 13 themes, each with a swatch, and PlateVault Dark is selected at start. Appearance has no density setting.
 - SC2: In each theme chosen in S3 and S4, the measured contrast is at least 4.5:1 for text and status-pill text and at least 3:1 for UI glyphs and control borders.
 - SC3: In S7, 0 English UI words remain on the 9 screens visited plus every Settings section; months and decimals follow pt-BR.
-- SC4: In S8, on 5 screens at 1100 × 720, the window scroll height equals the viewport height and there is no horizontal scroll.
+- SC4: In S8, on 5 screens at 1280 × 640, the window scroll height equals the viewport height and there is no horizontal scroll.
 - SC5: After the S10 restart, the selected theme, language and keyboard shortcut preference equal the values chosen before quitting, from the first frame.
 - SC6: After S11, the theme is PlateVault Dark, the language is English (UK), single-key shortcuts are on and Restore defaults is disabled.
 - SC7: S12 manifest matches P5 for 100% of files, and the catalog and Activity counts are unchanged from P3.
@@ -137,3 +138,7 @@ The user chooses how PlateVault looks and reads: they set its appearance mode, c
 - **Δ3** 2026-10-26 · P1, S2, S4, S6 · behavior-change
   Follow system is named Match system and picks one dark and one light theme, and the language is a select.
   Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 11 (OWNER, 2026-10-23) on ui-harness-v5 @ 5dc245244; D-W143, LIB-FR-21, LIB-AC-23 · by: SpecAmend (intent-gated)
+- **Δ4** 2026-10-26 · P2, S8, SC4 · behavior-change
+  The minimum window is now 1280×640 on macOS, Windows and Linux; a restored
+  window is moved and shrunk at start-up to fit a connected screen.
+  Evidence: D-W163, astro-plan-ocyuc.2, PR #1889 · by: WindowDocs (intent-gated)
