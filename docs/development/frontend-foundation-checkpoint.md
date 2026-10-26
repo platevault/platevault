@@ -50,7 +50,7 @@ The commands below ran in `apps/desktop-ui` at input head `e67788fe5306adcd701a0
 |---|---|
 | `pnpm lint` | PASS. ESLint passed. Catalogue lint passed. Locale parity: 3352 keys per locale. Copy lint: 0 findings. Directive checks passed. Catalogue: 264/264 exports registered. |
 | `pnpm typecheck` | PASS. Paraglide compilation, package TypeScript check and Node TypeScript check completed. |
-| `pnpm test` | FAIL. 50/51 test files and 327/328 tests passed. The Columns menu keyboard test in `src/components/app/data-table.test.tsx` failed when focus did not return to the expected item. |
+| `pnpm test` | PASS. 51/51 test files and 328/328 tests passed in two consecutive full runs. An earlier run failed the Columns menu keyboard test in `src/components/app/data-table.test.tsx`, which pressed ArrowDown before the menu focused its first item. The test now waits for that focus. |
 | `pnpm build` | PASS. Production Vite build completed. |
 | `pnpm test:lint-rules` | PASS. 35 tests passed. |
 | `pnpm themes:check` | PASS. All 13 registered themes meet generated text and glyph contrast bounds. |
