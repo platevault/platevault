@@ -1,7 +1,7 @@
 // @ts-check
-// ESLint enforces i18n and composition rules over the production frontend.
+// ESLint enforces localisation and composition/import rules over production source.
 // Every user-visible string comes from messages/en-GB.json through m.<key>().
-// Composition rules L1-L11 and import boundaries I1-I6 are errors.
+// Composition rules L1-L11 and import boundaries I1-I7 are errors.
 import { defineConfig } from "eslint/config"
 import tseslint from "typescript-eslint"
 import composition, { COMPOSITION_SYNTAX } from "./eslint-rules/composition.js"

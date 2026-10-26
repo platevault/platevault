@@ -2,7 +2,7 @@
 import { readdirSync, readFileSync } from "node:fs"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
-import ts from "typescript"
+import tseslint from "typescript-eslint"
 import { APP_ROOT } from "./i18n-project.mjs"
 
 const SRC = path.join(APP_ROOT, "src")
@@ -10,16 +10,22 @@ const FILES = /\.(?:ts|tsx)$/
 const MIN_REASON_WORDS = 3
 const RULE_LIST = /^[\w@./-]+(?:\s*,\s*[\w@./-]+)*$/
 
+/**
+ * The comments come from the same TypeScript parser ESLint uses for src/ so directives in JSX and
+ * template substitutions cannot escape. Every comment beginning with eslint must be an allowed
+ * rule-disable directive with a named rule and an explicit reason.
+ */
 export function invalidDisableDirectives(file, source) {
-  const scriptKind = file.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS
-  const scanner = ts.createScanner(ts.ScriptTarget.Latest, false, scriptKind, source)
+  const { ast } = tseslint.parser.parseForESLint(source, { filePath: file, comment: true, loc: true })
   const failures = []
-  for (let token = scanner.scan(); token !== ts.SyntaxKind.EndOfFileToken; token = scanner.scan()) {
-    if (token !== ts.SyntaxKind.SingleLineCommentTrivia && token !== ts.SyntaxKind.MultiLineCommentTrivia) continue
-    const comment = scanner.getTokenText()
-    const body = token === ts.SyntaxKind.SingleLineCommentTrivia ? comment.slice(2) : comment.slice(2, -2)
-    const match = body.trim().match(/^eslint-disable(?:-(?:line|next-line))?(?=\s|$)(.*)$/s)
-    if (!match) continue
+  for (const comment of ast.comments) {
+    const directiveText = comment.value.trim()
+    if (!/^eslint\b/.test(directiveText)) continue
+    const match = directiveText.match(/^eslint-disable(?:-(?:line|next-line))?(?=\s|$)(.*)$/s)
+    if (!match) {
+      failures.push(`${file}:${comment.loc.start.line}: unsupported inline eslint configuration`)
+      continue
+    }
 
     const tail = match[1].trim()
     const separator = tail.indexOf("--")
@@ -27,8 +33,7 @@ export function invalidDisableDirectives(file, source) {
     const reason = separator === -1 ? "" : tail.slice(separator + 2).trim()
     const words = reason.split(/\s+/).filter(Boolean).length
     if (!RULE_LIST.test(rules) || words < MIN_REASON_WORDS) {
-      const line = source.slice(0, scanner.getTokenStart()).split("\n").length
-      failures.push(`${file}:${line}: eslint-disable requires named rule(s) and a reason of at least ${MIN_REASON_WORDS} words`)
+      failures.push(`${file}:${comment.loc.start.line}: eslint-disable requires named rule(s) and a reason of at least ${MIN_REASON_WORDS} words`)
     }
   }
   return failures

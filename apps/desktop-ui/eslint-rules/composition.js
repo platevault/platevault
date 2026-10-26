@@ -1,14 +1,8 @@
 // @ts-check
-// The composition rules (design/R9-COMPOSITION-PLAN.md §8.1-§8.2). The gate
-// (eslint.config.js) enforces them as errors over src/ (W4):
-// - COMPOSITION_SYNTAX: core `no-restricted-syntax` selectors for the rules
-//   that look at markup alone (L1, L8-L11).
-// - `composition/components`: the rules about a named component or prop
-//   (L2-L7). It resolves the component through import and const aliases and
-//   reads props from statically known spreads, which a selector cannot.
-// - `composition/imports`: the layer and area import boundaries (I1-I6). It
-//   resolves `@/` and relative specifiers, `..` included, to a path under src/
-//   before matching layers, which `no-restricted-imports` patterns cannot.
+// Composition rules (L1-L11, I1-I7) are enforced at error in the desktop-ui package.
+// COMPOSITION_SYNTAX holds markup rules; composition/components resolves named
+// component aliases and static spreads; composition/imports owns architectural
+// boundaries, including the single generated-client importer contract.
 // Every message starts with its rule id ([L1]…[L11], [I1]…[I7]).
 import path from "node:path"
 import { fileURLToPath } from "node:url"
@@ -19,7 +13,7 @@ const ARBITRARY_SIZE = "/(^|[\\s:])(min-|max-)?(w|h|size|text|gap|p[xytrbl]?|m[x
 const L8 = "[L8] No arbitrary sizes: use the space, control, row and dialog tokens."
 const L11 = "[L11] No feature-local Button or Menu wrappers: pass an Action to ActionBar, ActionMenu or RowActions."
 
-/** §8.1 L1 and L8-L10, plus L11 for the feature-local Button and Menu wrappers that P1/P2 delete. */
+/** §8.1 L1 and L8-L10 apply throughout src/, plus L11 feature wrappers. */
 export const COMPOSITION_SYNTAX = [
   {
     selector: "JSXOpeningElement[name.name=/^(table|thead|tbody|tr|th|td|button|select|input|textarea|dialog|details|summary)$/]",
@@ -265,61 +259,82 @@ function resolveSpecifier(specifier, file) {
 }
 
 /**
- * The bans that apply to one file: its layer's (I1-I3), or its feature area's (I4-I6).
+ * Layer, feature-area and API owner imports, checked over resolved paths.
  * @param {string} file relative to the app root
- * @returns {{ messageId: string, banned: (target: string) => boolean }[]}
  */
 function bansFor(file) {
   const layer = LAYER_BANS.find((ban) => within(file, ban.layer))
-  if (layer) return [{ messageId: layer.messageId, banned: (target) => layer.banned.some((dir) => within(target, dir)) }]
+  if (layer) return [{ messageId: layer.messageId, banned: (/** @type {string} */ target) => layer.banned.some((dir) => within(target, dir)) }]
+
+  const componentsPrefix = "src/components/"
+  if (file.startsWith(componentsPrefix)) {
+    const area = file.slice(componentsPrefix.length).split("/")[0]
+    if (!["ui", "app", "domain", "templates"].includes(area)) {
+      return [{ messageId: "I1", banned: () => true }]
+    }
+    return []
+  }
+
   const featureRoot = "src/features"
   const featurePrefix = `${featureRoot}/`
   if (!file.startsWith(featurePrefix)) return []
   const area = file.slice(featurePrefix.length).split("/")[0]
-  if (!area || !AREAS.includes(area)) {
-    return [{ messageId: "I6", banned: () => true }]
-  }
+  if (!area || !AREAS.includes(area)) return [{ messageId: "I6", banned: () => true }]
   return [
-    { messageId: "I4", banned: (target) => within(target, "@base-ui") },
-    { messageId: "I5", banned: (target) => within(target, "src/components/ui") },
-    { messageId: "I6", banned: (target) => within(target, featureRoot) && !within(target, `${featurePrefix}${area}`) },
+    { messageId: "I4", banned: (/** @type {string} */ target) => within(target, "@base-ui") },
+    { messageId: "I5", banned: (/** @type {string} */ target) => within(target, "src/components/ui") },
+    { messageId: "I6", banned: (/** @type {string} */ target) => within(target, featureRoot) && !within(target, `${featurePrefix}${area}`) }
   ]
 }
+
 const imports = {
   meta: {
     type: /** @type {const} */ ("problem"),
-    docs: { description: "Layer and feature-area import boundaries I1-I7 over resolved paths." },
+    docs: { description: "Layer, feature-area and API owner import boundaries I1-I7 over resolved paths." },
     schema: [],
     messages: {
-      I1: "[I1] UI primitives import no app patterns, templates or features.",
+      I1: "[I1] UI primitives import no app patterns, templates or features; unknown component layers fail closed.",
       I2: "[I2] App and domain patterns import Base UI through components/ui and no feature or template modules.",
       I3: "[I3] Templates import no features.",
       I4: "[I4] Features never import Base UI directly.",
       I5: "[I5] Features never import components/ui directly.",
       I6: "[I6] No feature cross-imports; unregistered areas fail closed.",
-      I7: "[I7] Only src/api imports generated IPC or Tauri core.",
+      I7: "[I7] Only src/api imports Tauri APIs and the generated library client; no import leaves the package.",
     },
   },
+  /** @param {any} context */
   create(context) {
     const file = path.relative(APP_ROOT, context.filename).split(path.sep).join("/")
     const bans = bansFor(file)
     const apiOwner = within(file, "src/api")
+    // Tests may stand in for Tauri with its official IPC mocks; runtime code may not.
+    const testFile = /\.(test|spec)\.tsx?$/.test(file)
+    /** @param {any} source */
     function check(source) {
       if (source?.type !== "Literal" || typeof source.value !== "string") return
       const target = resolveSpecifier(source.value, file)
-      if (!apiOwner && (target === "@tauri-apps/api/core" || /(^|\/)bindings\/library-index(?:\.ts)?$/.test(target))) {
+      const escapesPackage = target === ".." || target.startsWith("../")
+      const tauriApi = target === "@tauri-apps/api" || target.startsWith("@tauri-apps/api/")
+      // The one import that leaves the package: src/api reading the generated library client.
+      const libraryClient = /^(\.\.\/)+desktop\/src\/bindings\/library-index(?:\.ts)?$/.test(target)
+      const tauriMocksInTest = testFile && target === "@tauri-apps/api/mocks"
+      if ((escapesPackage && !(apiOwner && libraryClient)) || (!apiOwner && tauriApi && !tauriMocksInTest)) {
         context.report({ node: source, messageId: "I7" })
       }
       for (const { messageId, banned } of bans) if (banned(target)) context.report({ node: source, messageId })
     }
     return {
+      /** @param {any} node */
       ImportDeclaration: (node) => check(node.source),
+      /** @param {any} node */
       ExportNamedDeclaration: (node) => check(node.source),
+      /** @param {any} node */
       ExportAllDeclaration: (node) => check(node.source),
+      /** @param {any} node */
       ImportExpression: (node) => check(node.source),
     }
   },
 }
 
-/** The `composition` plugin: L2-L7 and I1-I6. */
+/** The `composition` plugin: L2-L7 and I1-I7. */
 export default { rules: { components, imports } }
