@@ -6,7 +6,7 @@
 
 **Amended**: 2026-10-16, to the owner's answers of 2026-10-15/16 (D-W107 to D-W116) and the second batch (D-W117 to D-W121). The second batch also amends D-W107, D-W108, D-W110 and D-W113 in place. On 2026-10-17, Round 9 C15 added D-W122. Provisional D-W123 records corrected-FITS keyword mapping and open delivery questions. Amended 2026-10-19, to the owner's answers in astro-plan-rzbzu.1 (D-W100, D-W107, D-W110, D-W113, D-W114, D-W118 and D-W123).
 
-**Amended**: 2026-10-26, to the Round 11 decisions D-W144 and D-W149, to the Rounds 5 to 9 decisions recorded that day (D-W150, D-W157 to D-W159, D-W161 and D-W162) and to the owner's answer D-W156.
+**Amended**: 2026-10-26, to the Round 11 decisions D-W144 and D-W149, to the Rounds 5 to 9 decisions recorded that day (D-W150, D-W157 to D-W159, D-W161 and D-W162), the owner's answer D-W156, and the 2026-10-14 Q35 window decision D-W163 (astro-plan-ocyuc.2; PR #1889).
 
 **Status**: Active, reconciled 2026-10-26 (`specs/SPEC_STATUS.md`). Landed: this contract and its journeys (#1776, #1778), the Round 9 amendments (#1804, #1836, #1840, #1844), the owner's answers (#1849, #1850, #1855) and the F4 backend cut-over (#1851). Remains: the clean-slate frontend (epic astro-plan-ocyuc), the coverage review astro-plan-lzrq, the requirements reviews in `checklists/requirements.md`, and every step of molecule astro-plan-mol-92n after specify. Conservative product decisions and all human-approval gate waivers are authorised.
 
@@ -179,6 +179,7 @@ The visual system, tokens and component catalogue are documented as a DESIGN.md 
 - **FR-038**: The status bar MUST hold three groups. On the left, it MUST show the locations online and, while a list has a selection, the selection count. In the middle, it MUST show running work as plain text with a mini progress bar and Cancel on hover or focus, or "Idle" when nothing runs. On the right, it MUST show the severity counters of FR-032, each only when it is not zero, or a muted ✓ when there is no issue. The bell with the unread count follows them and opens the notification history. The bar MUST show no pills and no inline notifications. (D-W92, D-W150)
 - **FR-039**: Quitting PlateVault while an import, an index or an Apply runs MUST ask for confirmation first. Cancelling MUST keep PlateVault open with the work still running. After the user confirms, the work MUST read Interrupted, with Retry, on the next launch (FR-012). (D-W100, D-W149, D-W157)
 - **FR-040**: Every visible string MUST come from the message catalogue, in en-GB and pt-BR. A string MAY stay out of the catalogue only for a genuine reason. A catalogue name or other proper noun is one, such as Messier, NGC, a target designation, a file name, a path or a code identifier. Unit tests and fixtures, internal code and docs, and debugging and logs MAY stay out as well. (D-W161)
+- **FR-041**: The desktop app MUST enforce a minimum window size of 1280×640 on macOS, Windows and Linux. At start-up, a restored window that does not fit fully on a connected screen MUST be moved and shrunk until it does. (D-W163; owner's answer, 2026-10-14, Q35, astro-plan-ocyuc.2; PR #1889)
 
 ### Project model
 
@@ -289,6 +290,7 @@ The user authorized conservative product defaults and, on 2026-10-04, waived eve
 | Round 11, 2026-10-23 (D-W142 to D-W149) | PV-LIB, PV-PRJ, PV-CAL, PV-PREP, PV-STO, PV-PLAN |
 | Rounds 5 to 9, 2026-10-10 to 2026-10-16, recorded 2026-10-26 (D-W150 to D-W154, D-W157 to D-W162) | All feature owners |
 | Owner's answers, 2026-10-26 (D-W155, D-W156) | PV-LIB, PV-PRJ, PV-STO, PV-PLAN |
+| Window minimum and restored-window placement, owner's answer 2026-10-14 (Q35; D-W163) | All feature owners |
 
 The existing constitution prohibits debayering. A raw/CFA review specification must define supported read-only channel handling or seek an explicit constitutional amendment before adding debayered preview behavior.
 

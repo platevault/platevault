@@ -622,7 +622,7 @@ describe('ListPageLayout', () => {
 
     it('falls back to bottom when the window is too narrow for a side dock', () => {
       // sideAvailable = innerWidth >= minWidth * 2. Below that an explicit
-      // 'side' pin must NOT win — the 1100x720 shell minimum stays workable.
+      // 'side' pin must NOT win — the 1280x640 shell minimum stays workable.
       resizeWindowTo(600);
       const { result } = renderHook(() =>
         useAdaptiveDock({ dockId: 'hook-narrow', minWidth: 320 }),
