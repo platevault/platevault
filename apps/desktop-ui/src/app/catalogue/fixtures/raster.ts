@@ -1,0 +1,470 @@
+/**
+ * Demo pixels for the catalogue's frame specimens (Plate, CornerGrid,
+ * StarCutouts, Histogram, FrameThumbnails), carried over from the v5
+ * design. Catalogue-only: the app's frames come from the library, so no
+ * component imports this. A deterministic star field is drawn from a
+ * frame's pixel facts (`PixelTruth`: FWHM, eccentricity, star count,
+ * background, saturated stars, invalid samples, trailing) with a
+ * deterministic star field per frame. Values are linear ADU in source pixel
+ * coordinates; display stretch maps them for the screen only and never feeds
+ * a measurement (PIX-FR-04). Per-star records follow HLD §14: saturated stars
+ * are failed fits with a warning and no width (PIX-AC-03). Each frame also
+ * carries a seeded field aberration (tilt and coma): stars soften and stretch
+ * tangentially away from a sweet spot near the centre, so the corner
+ * inspector has something to show.
+ */
+/** The pixel facts a demo frame is drawn from. */
+export interface PixelTruth {
+  fwhmPx: number
+  eccentricity: number
+  starCount: number
+  background: number
+  saturatedStars: number
+  invalidSamples: number
+  trailed: boolean
+}
+
+/** A stable FNV-1a hash of `input`, base 36: one star field per key. */
+function stableHash(input: string): string {
+  let hash = 0x811c9dc5
+  for (let i = 0; i < input.length; i += 1) {
+    hash ^= input.charCodeAt(i)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return (hash >>> 0).toString(36)
+}
+
+export const ADU_MAX = 65_535
+const BETA = 4
+/** α of a Moffat profile with unit FWHM: 1 / (2·√(2^(1/β) − 1)). */
+const ALPHA_PER_FWHM = 1 / (2 * Math.sqrt(2 ** (1 / BETA) - 1))
+const CELL = 32
+
+export interface FieldStar {
+  x: number
+  y: number
+  peak: number
+  fwhm: number
+  eccentricity: number
+  angle: number
+}
+
+export interface StarField {
+  width: number
+  height: number
+  background: number
+  noise: number
+  stars: FieldStar[]
+  grid: Map<number, number[]>
+  /** Block of invalid samples (NaN or ±∞) in source pixels; null when none. */
+  invalid: { x: number; y: number; w: number; h: number; count: number } | null
+  /** Recorded CFA pattern, drawn as the mosaic plane; never debayered (PIX-AC-09). */
+  cfa: string | null
+  seed: number
+}
+
+function mulberry(seed: number) {
+  let a = seed >>> 0
+  return () => {
+    a = (a + 0x6d2b79f5) | 0
+    let t = Math.imul(a ^ (a >>> 15), 1 | a)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+const cache = new Map<string, StarField>()
+
+export function starField(key: string, truth: PixelTruth, width: number, height: number, cfa: string | null): StarField {
+  const cacheKey = `${key}|${width}x${height}|${cfa ?? ""}`
+  const hit = cache.get(cacheKey)
+  if (hit) return hit
+  const seed = Number.parseInt(stableHash(key), 36)
+  const random = mulberry(seed)
+  const trailAngle = random() * 180
+  // The optics draw from their own stream, so the stars keep their places and brightness.
+  const optics = mulberry(seed ^ 0x5bd1e995)
+  const sweet = { x: (optics() - 0.5) * 0.5, y: (optics() - 0.5) * 0.5 }
+  const soften = 0.25 + optics() * 0.6
+  const stretch = 0.3 + optics() * 0.5
+  const stars: FieldStar[] = []
+  const count = Math.min(truth.starCount, 2600)
+  for (let i = 0; i < count; i += 1) {
+    // Brightness follows a steep power law: a few bright stars, many faint ones.
+    const peak = 220 + 26_000 * random() ** 6
+    const x = 12 + random() * (width - 24)
+    const y = 12 + random() * (height - 24)
+    const fwhm = truth.fwhmPx * (0.94 + random() * 0.12)
+    const baseEccentricity = Math.min(0.95, truth.eccentricity * (0.9 + random() * 0.2))
+    const angle = truth.trailed ? trailAngle + (random() - 0.5) * 4 : random() * 180
+    const nx = (x / width) * 2 - 1 - sweet.x
+    const ny = (y / height) * 2 - 1 - sweet.y
+    const r2 = (nx * nx + ny * ny) / 2
+    const fieldEccentricity = Math.min(0.95, stretch * r2)
+    const tangential = !truth.trailed && fieldEccentricity > baseEccentricity
+    stars.push({
+      x,
+      y,
+      peak,
+      fwhm: fwhm * (1 + soften * r2),
+      eccentricity: Math.min(0.95, Math.hypot(baseEccentricity, fieldEccentricity)),
+      angle: tangential ? (Math.atan2(ny, nx) * 180) / Math.PI + 90 : angle,
+    })
+  }
+  stars.sort((a, b) => b.peak - a.peak)
+  // The brightest stars saturate: their profile clips at the full-well value.
+  for (let i = 0; i < Math.min(truth.saturatedStars, stars.length); i += 1) stars[i]!.peak = 150_000 + random() * 80_000
+  const grid = new Map<number, number[]>()
+  stars.forEach((star, index) => {
+    const key = Math.floor(star.x / CELL) * 10_000 + Math.floor(star.y / CELL)
+    grid.set(key, [...(grid.get(key) ?? []), index])
+  })
+  const invalid =
+    truth.invalidSamples > 0
+      ? { x: Math.round(width * 0.62), y: Math.round(height * 0.38), w: 14, h: Math.ceil(truth.invalidSamples / 14), count: truth.invalidSamples }
+      : null
+  const field: StarField = { width, height, background: truth.background, noise: Math.sqrt(truth.background * 1.2) + 8, stars, grid, invalid, cfa, seed }
+  cache.set(cacheKey, field)
+  if (cache.size > 12) cache.delete(cache.keys().next().value!)
+  return field
+}
+
+function moffat(star: FieldStar, dx: number, dy: number): number {
+  const q = Math.sqrt(1 - star.eccentricity ** 2)
+  const alpha = star.fwhm * ALPHA_PER_FWHM
+  const a = (star.angle * Math.PI) / 180
+  const u = (dx * Math.cos(a) + dy * Math.sin(a)) / (alpha / Math.sqrt(q))
+  const v = (-dx * Math.sin(a) + dy * Math.cos(a)) / (alpha * Math.sqrt(q))
+  return star.peak * (1 + u * u + v * v) ** -BETA
+}
+
+function noiseAt(field: StarField, x: number, y: number): number {
+  let h = (Math.imul(x, 73_856_093) ^ Math.imul(y, 19_349_663) ^ field.seed) >>> 0
+  h = Math.imul(h ^ (h >>> 13), 1_274_126_177) >>> 0
+  const u1 = (h & 0xffff) / 0xffff
+  const u2 = (h >>> 16) / 0xffff
+  return (u1 + u2 - 1) * field.noise * 1.7
+}
+
+const CFA_GAIN: Record<string, [number, number, number, number]> = {
+  RGGB: [0.85, 1, 1, 0.7],
+  BGGR: [0.7, 1, 1, 0.85],
+  GRBG: [1, 0.85, 0.7, 1],
+  GBRG: [1, 0.7, 0.85, 1],
+}
+
+/** Linear ADU at one source pixel; NaN inside the invalid block. */
+export function sampleAt(field: StarField, x: number, y: number, only?: FieldStar): number {
+  const inv = field.invalid
+  if (inv && x >= inv.x && x < inv.x + inv.w && y >= inv.y && y < inv.y + inv.h) return Number.NaN
+  let value = field.background + noiseAt(field, x, y)
+  if (only) value += moffat(only, x + 0.5 - only.x, y + 0.5 - only.y)
+  else {
+    const cx = Math.floor(x / CELL)
+    const cy = Math.floor(y / CELL)
+    for (let gx = cx - 1; gx <= cx + 1; gx += 1) {
+      for (let gy = cy - 1; gy <= cy + 1; gy += 1) {
+        for (const index of field.grid.get(gx * 10_000 + gy) ?? []) {
+          const star = field.stars[index]!
+          value += moffat(star, x + 0.5 - star.x, y + 0.5 - star.y)
+        }
+      }
+    }
+  }
+  if (field.cfa) value *= CFA_GAIN[field.cfa]?.[(y & 1) * 2 + (x & 1)] ?? 1
+  return Math.min(ADU_MAX, value)
+}
+
+export type Stretch = "linear" | "auto" | "strong"
+
+/** Display transfer: linear, or a midtones transfer that puts the background at a target level. */
+export function stretchLut(field: StarField, stretch: Stretch): Uint8ClampedArray {
+  const lut = new Uint8ClampedArray(4097)
+  const shadows = stretch === "linear" ? 0 : Math.max(0, field.background - (stretch === "auto" ? 2.8 : 1.5) * field.noise)
+  const target = stretch === "auto" ? 0.25 : 0.5
+  const m = (field.background - shadows) / (ADU_MAX - shadows)
+  const mb = (m * (target - 1)) / (2 * target * m - target - m)
+  for (let i = 0; i <= 4096; i += 1) {
+    const v = (i / 4096) * ADU_MAX
+    const x = Math.min(1, Math.max(0, (v - shadows) / (ADU_MAX - shadows)))
+    const y = stretch === "linear" ? x : x === 0 ? 0 : ((mb - 1) * x) / ((2 * mb - 1) * x - mb)
+    lut[i] = Math.round(y * 255)
+  }
+  return lut
+}
+
+export interface ViewWindow {
+  /** Source pixel at the canvas origin. */
+  x0: number
+  y0: number
+  /** Source pixels per canvas pixel: > 1 when the whole frame is fitted, 1 at 1:1, 0.5 at 2:1. */
+  scale: number
+  width: number
+  height: number
+}
+
+const INVALID_RGB = [235, 64, 64] as const
+
+/** Render a window of the field into RGBA, binning when zoomed out so faint stars stay visible. */
+export function renderWindow(field: StarField, window: ViewWindow, stretch: Stretch): ImageData {
+  const { width, height, scale, x0, y0 } = window
+  const image = new ImageData(width, height)
+  const lut = stretchLut(field, stretch)
+  const values = new Float32Array(width * height)
+  if (scale <= 1) {
+    for (let j = 0; j < height; j += 1) {
+      for (let i = 0; i < width; i += 1) {
+        const x = Math.floor(x0 + i * scale)
+        const y = Math.floor(y0 + j * scale)
+        values[j * width + i] = x < 0 || y < 0 || x >= field.width || y >= field.height ? field.background : sampleAt(field, x, y)
+      }
+    }
+  } else {
+    const noiseScale = 1 / scale
+    for (let j = 0; j < height; j += 1) {
+      for (let i = 0; i < width; i += 1) {
+        values[j * width + i] = field.background + noiseAt(field, i, j) * noiseScale
+      }
+    }
+    for (const star of field.stars) {
+      const alphaM = (star.fwhm * ALPHA_PER_FWHM) / Math.sqrt(Math.sqrt(1 - star.eccentricity ** 2))
+      const flux = (star.peak * Math.PI * alphaM * alphaM) / (BETA - 1)
+      const ci = (star.x - x0) / scale
+      const cj = (star.y - y0) / scale
+      const sigma = Math.max(0.45, star.fwhm / 2.355 / scale)
+      const perBin = flux / (scale * scale) / (2 * Math.PI * sigma * sigma)
+      for (let dj = -2; dj <= 2; dj += 1) {
+        for (let di = -2; di <= 2; di += 1) {
+          const i = Math.floor(ci) + di
+          const j = Math.floor(cj) + dj
+          if (i < 0 || j < 0 || i >= width || j >= height) continue
+          const r2 = (i + 0.5 - ci) ** 2 + (j + 0.5 - cj) ** 2
+          values[j * width + i]! += perBin * Math.exp(-r2 / (2 * sigma * sigma))
+        }
+      }
+    }
+    const inv = field.invalid
+    if (inv) {
+      for (let j = Math.floor((inv.y - y0) / scale); j <= Math.floor((inv.y + inv.h - y0) / scale); j += 1) {
+        for (let i = Math.floor((inv.x - x0) / scale); i <= Math.floor((inv.x + inv.w - x0) / scale); i += 1) {
+          if (i >= 0 && j >= 0 && i < width && j < height) values[j * width + i] = Number.NaN
+        }
+      }
+    }
+  }
+  for (let p = 0; p < values.length; p += 1) {
+    const v = values[p]!
+    const o = p * 4
+    if (Number.isNaN(v)) {
+      image.data[o] = INVALID_RGB[0]
+      image.data[o + 1] = INVALID_RGB[1]
+      image.data[o + 2] = INVALID_RGB[2]
+    } else {
+      const g = lut[Math.min(4096, Math.max(0, Math.round((v / ADU_MAX) * 4096)))]!
+      image.data[o] = g
+      image.data[o + 1] = g
+      image.data[o + 2] = g
+    }
+    image.data[o + 3] = 255
+  }
+  return image
+}
+
+/** A saturated core fails the PSF fit; a star near the edge may have its profile cut off. */
+export type StarWarning = "saturated" | "near-edge"
+
+export interface StarRecord {
+  id: number
+  x: number
+  y: number
+  state: "fitted" | "failed"
+  fwhmPx: number | null
+  hfrPx: number | null
+  eccentricity: number | null
+  angleDeg: number | null
+  peakAdu: number
+  backgroundAdu: number
+  snr: number
+  /** Fit caveats, worded at render. */
+  warnings: StarWarning[]
+  source: FieldStar
+}
+
+/** The brightest detected stars with fit results; saturated stars are failed fits with no width. */
+export function detectedStars(field: StarField, limit = 40): StarRecord[] {
+  return field.stars.slice(0, limit).map((star, index) => fitStar(field, star, index))
+}
+
+/** The fit record of one field star; `index` is its brightness rank, so its id matches `detectedStars`. */
+function fitStar(field: StarField, star: FieldStar, index: number): StarRecord {
+  const saturated = star.peak >= ADU_MAX
+  const nearEdge = star.x < 40 || star.y < 40 || star.x > field.width - 40 || star.y > field.height - 40
+  const jitter = 1 + (((index * 7919) % 61) - 30) / 1000
+  const warnings: StarWarning[] = [...(saturated ? (["saturated"] as const) : []), ...(nearEdge ? (["near-edge"] as const) : [])]
+  return {
+    id: index + 1,
+    x: Math.round(star.x),
+    y: Math.round(star.y),
+    state: saturated ? "failed" : "fitted",
+    fwhmPx: saturated ? null : Number((star.fwhm * jitter).toFixed(2)),
+    hfrPx: saturated ? null : Number((star.fwhm * 0.62 * jitter).toFixed(2)),
+    eccentricity: saturated ? null : Number(star.eccentricity.toFixed(2)),
+    angleDeg: saturated ? null : Number((((star.angle % 180) + 180) % 180).toFixed(1)),
+    peakAdu: Math.round(Math.min(ADU_MAX, star.peak + field.background)),
+    backgroundAdu: Math.round(field.background),
+    snr: Number((Math.min(ADU_MAX, star.peak) / field.noise).toFixed(1)),
+    warnings,
+    source: star,
+  }
+}
+
+/** A source-pixel rectangle at 1:1. */
+export interface RegionRect {
+  x0: number
+  y0: number
+  width: number
+  height: number
+}
+
+export interface RegionStats {
+  /** Detected stars inside the region, brightest first, at most `limit`. */
+  stars: StarRecord[]
+  /** Medians over the fitted stars; null with fewer than 3. */
+  fwhmPx: number | null
+  eccentricity: number | null
+  fitted: number
+}
+
+/** Below this SNR a star is not detected. */
+const DETECT_SNR = 5
+
+function median(values: number[]): number | null {
+  if (values.length < 3) return null
+  const sorted = [...values].sort((a, b) => a - b)
+  const mid = Math.floor(sorted.length / 2)
+  return sorted.length % 2 === 1 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2
+}
+
+/** Stars detected in one region and their median FWHM and eccentricity (the corner inspector). */
+export function regionStats(field: StarField, rect: RegionRect, limit = 60): RegionStats {
+  const indices: number[] = []
+  for (let gx = Math.floor(rect.x0 / CELL); gx <= Math.floor((rect.x0 + rect.width) / CELL); gx += 1) {
+    for (let gy = Math.floor(rect.y0 / CELL); gy <= Math.floor((rect.y0 + rect.height) / CELL); gy += 1) {
+      for (const index of field.grid.get(gx * 10_000 + gy) ?? []) {
+        const s = field.stars[index]!
+        if (s.x >= rect.x0 && s.x < rect.x0 + rect.width && s.y >= rect.y0 && s.y < rect.y0 + rect.height) indices.push(index)
+      }
+    }
+  }
+  indices.sort((a, b) => a - b)
+  const all = indices.map((index) => fitStar(field, field.stars[index]!, index)).filter((s) => s.snr >= DETECT_SNR)
+  const fitted = all.filter((s) => s.state === "fitted")
+  return {
+    stars: all.slice(0, limit),
+    fwhmPx: median(fitted.map((s) => s.fwhmPx!)),
+    eccentricity: median(fitted.map((s) => s.eccentricity!)),
+    fitted: fitted.length,
+  }
+}
+
+export type CutoutKind = "observed" | "fitted" | "residual"
+
+/** A square cutout around a star at 1:1: the data, the fitted model, or their difference. */
+export function renderCutout(field: StarField, star: StarRecord, kind: CutoutKind, size = 25): ImageData {
+  const image = new ImageData(size, size)
+  const half = Math.floor(size / 2)
+  const lut = stretchLut(field, "auto")
+  const span = Math.max(field.noise * 6, Math.min(ADU_MAX, star.peakAdu) * 0.08)
+  for (let j = 0; j < size; j += 1) {
+    for (let i = 0; i < size; i += 1) {
+      const x = star.x - half + i
+      const y = star.y - half + j
+      const observed = sampleAt(field, x, y)
+      const model = field.background + moffat(star.source, x + 0.5 - star.source.x, y + 0.5 - star.source.y)
+      const o = (j * size + i) * 4
+      let g: number
+      if (kind === "residual") g = Math.round(Math.min(1, Math.max(0, 0.5 + (observed - model) / (2 * span))) * 255)
+      else {
+        const v = kind === "observed" ? observed : Math.min(ADU_MAX, model)
+        g = Number.isNaN(v) ? 0 : lut[Math.round((v / ADU_MAX) * 4096)]!
+      }
+      image.data[o] = g
+      image.data[o + 1] = g
+      image.data[o + 2] = g
+      image.data[o + 3] = 255
+    }
+  }
+  return image
+}
+
+export interface Histogram {
+  /** Counts per bin over linear 0..`rangeMax` ADU; the last bin also holds every brighter sample. */
+  bins: number[]
+  rangeMax: number
+  median: number
+  /** Median absolute deviation, in ADU. */
+  mad: number
+  /** Samples above `rangeMax`: stars and other bright signal. */
+  above: number
+  saturated: number
+  invalid: number
+  samples: number
+  /** Faintest sampled value in ADU; null when no sample is valid. */
+  min: number | null
+  /** Brightest value in ADU: the brighter of the sampled grid and the star peaks inside the region, so a star core the grid misses still counts. Null when no sample is valid. */
+  max: number | null
+  /** Source pixels in the region the samples were drawn from. */
+  total: number
+}
+
+/**
+ * Histogram of the displayed region's linear data (PIX-FR-03), sampled on a
+ * grid of at most 160 × 120 source pixels. The range runs from 0 to the
+ * median plus 24 MAD so the sky background has room; brighter samples count
+ * in the last bin. MAD is unscaled (PCL `MAD()`), not ×1.4826. Min comes from
+ * the grid; Max also takes each star's peak in the region from the model, so
+ * a hot core between grid points is not missed (R9-PIXINSIGHT-STATS §3a).
+ * Display stretch never reaches it.
+ */
+export function linearHistogram(field: StarField, window: ViewWindow, binCount = 96): Histogram {
+  const values: number[] = []
+  let saturated = 0
+  let invalid = 0
+  const w = window.width * window.scale
+  const h = window.height * window.scale
+  const left = Math.max(0, window.x0)
+  const top = Math.max(0, window.y0)
+  const right = Math.min(field.width, window.x0 + w)
+  const bottom = Math.min(field.height, window.y0 + h)
+  const stepX = Math.max(1, w / 160)
+  const stepY = Math.max(1, h / 120)
+  for (let y = top; y < bottom; y += stepY) {
+    for (let x = left; x < right; x += stepX) {
+      const v = sampleAt(field, Math.floor(x), Math.floor(y))
+      if (Number.isNaN(v)) invalid += 1
+      else {
+        if (v >= ADU_MAX) saturated += 1
+        values.push(v)
+      }
+    }
+  }
+  const sorted = [...values].sort((a, b) => a - b)
+  const median = sorted[Math.floor(sorted.length / 2)] ?? 0
+  const deviations = sorted.map((v) => Math.abs(v - median)).sort((a, b) => a - b)
+  const mad = deviations[Math.floor(deviations.length / 2)] ?? 0
+  const rangeMax = Math.min(ADU_MAX, Math.max(64, median + 24 * Math.max(mad, 1)))
+  const bins = new Array<number>(binCount).fill(0)
+  let above = 0
+  for (const v of values) {
+    if (v > rangeMax) above += 1
+    bins[Math.min(binCount - 1, Math.floor((Math.max(0, v) / rangeMax) * binCount))]! += 1
+  }
+  let max = sorted.at(-1) ?? null
+  if (max !== null) {
+    for (const star of field.stars) {
+      if (star.x >= left && star.x < right && star.y >= top && star.y < bottom) max = Math.max(max, Math.min(ADU_MAX, star.peak + field.background))
+    }
+  }
+  const total = Math.max(0, Math.ceil(right - left)) * Math.max(0, Math.ceil(bottom - top))
+  return { bins, rangeMax, median, mad, above, saturated, invalid, samples: values.length, min: sorted[0] ?? null, max, total }
+}

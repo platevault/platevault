@@ -10,7 +10,13 @@ import pv from "./eslint-rules/no-user-string.js"
 // Only test and fixture literals sit outside the user-visible copy scan.
 export const I18N_IGNORES = ["**/*.test.{ts,tsx}", "**/*.spec.{ts,tsx}", "**/__fixtures__/**"]
 
-export const COMPOSITION_EXEMPT = [...I18N_IGNORES]
+/**
+ * Exempt from the composition rules: tests and fixtures, plus the review
+ * surface (the component catalogue and its design-system page), which shows
+ * components out of their composed context. Its copy still goes through the
+ * message catalogue: the i18n rules above apply to it.
+ */
+export const COMPOSITION_EXEMPT = [...I18N_IGNORES, "src/app/catalogue/**"]
 
 export default defineConfig(
   {
