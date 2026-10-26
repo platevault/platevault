@@ -1,0 +1,41 @@
+{
+  "source": "R9-COMPOSITION-PLAN.md §4 and §7.4 census rules",
+  "viewports": [
+    { "name": "1440px", "width": 1440, "height": 900, "zoom": 1 },
+    { "name": "1280px", "width": 1280, "height": 900, "zoom": 1 },
+    { "name": "1280px at 125% zoom", "width": 1280, "height": 900, "zoom": 1.25 }
+  ],
+  "routes": [
+    {
+      "routePattern": "*",
+      "rules": {
+        "raw": 0,
+        "pill": 0,
+        "tipMaximum": 1,
+        "tipApprovals": [],
+        "combosMaximum": 4,
+        "handRolled": 0,
+        "overflowX": 0,
+        "pageErrors": 0
+      }
+    }
+  ],
+  "fixture": {
+    "expected": {
+      "btn": 1,
+      "combos": 1,
+      "dt": 1,
+      "raw": 0,
+      "sort": 1,
+      "headers": 4,
+      "dataHeaders": 1,
+      "ttl": 0,
+      "ttlTruncation": 0,
+      "tip": 0,
+      "pill": 0,
+      "handRolled": 0,
+      "menus": 0,
+      "overflowX": 0
+    }
+  }
+}

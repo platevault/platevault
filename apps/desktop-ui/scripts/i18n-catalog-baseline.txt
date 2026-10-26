@@ -1,0 +1,18 @@
+# i18n catalogue lint baseline: deliberately accepted violations.
+# scripts/check-i18n-catalog.mjs fails on any code-param / dup-value
+# violation NOT listed here. Note why in the change that adds an entry.
+# Regenerate with: node scripts/check-i18n-catalog.mjs --generate
+# pt-BR agrees in gender with the noun: 'Mostrar tudo' (plan entries), 'Mostrar todos' (frames), 'Mostrar todas' (sessões).
+dup-value	plan_show_all,review_show_all,sessions_show_all
+# 'Wrap up' is a stage name (pt-BR noun 'Encerramento') and an action (verb 'Encerrar').
+dup-value	run_wrap_up,wrapup_action
+# pt-BR differs by position: mid-sentence possessive vs sentence-initial article.
+dup-value	run_entry_its_volume,wrapup_its_volume
+# 'Measure frames' is a button (pt-BR verb 'Medir frames') and an operation title (noun 'Medição de frames').
+dup-value	measure_frames_action,op_measure_title
+# actions_* belong to the L2 action components; the feature copies are migrated to RowActions/useAction.
+dup-value	actions_for,run_actions_for
+# A store refusal reason and status word belong to separate owning patterns.
+dup-value	status_not_a_master,store_cal_not_a_master
+# Differs by position: lowercase mid-label fragment vs sentence-initial label; comparison is case-insensitive.
+dup-value	domain_session_framing_unknown,project_framing_unknown

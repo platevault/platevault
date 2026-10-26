@@ -1,7 +1,8 @@
-import { m } from "../paraglide/messages"
+/** Shared localization boundary: product code imports messages and locale types from here. */
+import { m as generated } from "../paraglide/messages"
+import { baseLocale, getLocale, isLocale, locales, type Locale } from "../paraglide/runtime"
 
-export const DEFAULT_LOCALE = "en-GB" as const
-export const LOCALES = ["en-GB", "pt-BR"] as const
-export type Locale = (typeof LOCALES)[number]
-
-export { m }
+export { getLocale, isLocale, type Locale }
+export const DEFAULT_LOCALE = baseLocale
+export const LOCALES = locales
+export const m = generated
