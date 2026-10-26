@@ -32,6 +32,11 @@ This checkpoint has no production router or route-injection API. `src/App.tsx` r
 
 The route owner is bead `astro-plan-iczs2`, “Build the real library frontend shell and route composition”. It owns `apps/desktop-ui/src/main.tsx`, `routes.tsx` and app composition. Its scope assigns SessionReview injection to the router. Feature workers expose their screen contracts for that owner to compose. They must not create a parallel router.
 
+### StepFlow
+
+`StepFlow` in `src/components/app/contracts.ts:137-164` carries ordered steps, the current step, proceed and next actions, and optional skip. `StepPage` in `src/components/templates/step-page.tsx:42-68` composes its header, strip, viewed-step region and footer. `src/components/app/step-flow.test.tsx` covers StepStrip. `src/components/templates/step-page.test.tsx` covers fill, scrolling and view composition.
+
+
 ### Data columns and census
 
 `DataTable` marks selection, static and action headers with `data-column-kind`. Ordinary data headers stay unmarked or use `data`. Each data header must sort. The census counts the data headers described in `scripts/census.browser.js:19-21,61-64`. `src/components/app/data-table.test.tsx:74-89` checks the markers. `scripts/census.mjs:26-28` checks sortability. Do not mark a data column as static to avoid the sort contract.
@@ -40,21 +45,19 @@ The route owner is bead `astro-plan-iczs2`, “Build the real library frontend s
 
 Run `pnpm lint` to invoke ESLint, copy checks, locale parity and catalogue completeness. `apps/desktop-ui/eslint.config.js` enables the composition rules in `apps/desktop-ui/eslint-rules/composition.js` at error level. I1-I7 include component-layer rules. I7 limits Tauri APIs and the generated client to `src/api`. It permits only the `library-index` generated-client escape from that boundary. It also rejects legacy bindings and mocks in runtime code, and package-escaping imports.
 
-`project.inlang/settings.json` configures `en-GB` and `pt-BR`. Add visible copy to both locales. Keep the locale and copy gates enabled.
-
 ## Check results
 
-The commands below ran in `apps/desktop-ui` at input head `e67788fe5306adcd701a0e2c4a5f72a6b399c202`, before the checkpoint changes.
+The full package checks ran at `fa12477b36788c053950833ffca716d73bd0c0d8` in `apps/desktop-ui`.
 
 | Command | Result |
 |---|---|
 | `pnpm lint` | PASS. ESLint passed. Catalogue lint passed. Locale parity: 3352 keys per locale. Copy lint: 0 findings. Directive checks passed. Catalogue: 264/264 exports registered. |
 | `pnpm typecheck` | PASS. Paraglide compilation, package TypeScript check and Node TypeScript check completed. |
-| `pnpm test` | PASS. 51/51 test files and 328/328 tests passed in two consecutive full runs. An earlier run failed the Columns menu keyboard test in `src/components/app/data-table.test.tsx`, which pressed ArrowDown before the menu focused its first item. The test now waits for that focus. |
+| `pnpm test` | PASS. 51/51 test files and 328/328 tests passed in two consecutive full runs at this commit. An earlier run failed the Columns menu keyboard test in `src/components/app/data-table.test.tsx`, which pressed ArrowDown before the menu focused its first item. The test now waits for that focus. |
 | `pnpm build` | PASS. Production Vite build completed. |
 | `pnpm test:lint-rules` | PASS. 35 tests passed. |
 | `pnpm themes:check` | PASS. All 13 registered themes meet generated text and glyph contrast bounds. |
-| `PV_CENSUS_URL=http://127.0.0.1:5194 PV_CENSUS_ROUTES=/ pnpm census` | BLOCKED. The route cannot find visible `#main` because the production shell and routes do not exist. Fixture census passed at 1440 px, 1280 px and 1280 px at 125% zoom. Vite PID 47935 was stopped. |
+| `PV_CENSUS_URL=http://127.0.0.1:5194 PV_CENSUS_ROUTES=/ pnpm census` | BLOCKED. The route cannot find visible `#main` because the production shell and routes do not exist. Fixture census passed at 1440 px, 1280 px and 1280 px at 125% zoom. |
 
 ## Cutover acceptance stays open
 

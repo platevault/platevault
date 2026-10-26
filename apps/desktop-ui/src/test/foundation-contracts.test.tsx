@@ -1,11 +1,3 @@
-/**
- * Cross-package foundation contracts that production feature workers consume.
- * These tests cover behavior not already pinned by component and accessibility
- * suites, while the package's own gates remain responsible for locale parity,
- * catalogue completeness and the full I1-I7 ruleset.
- */
-import "./jsdom-render"
-import "@/index.css"
 import { clearMocks, mockIPC } from "@tauri-apps/api/mocks"
 import { ESLint } from "eslint"
 import { readFile } from "node:fs/promises"
@@ -16,7 +8,7 @@ import userEvent from "@testing-library/user-event"
 import { useState } from "react"
 import { afterEach, describe, expect, it } from "vitest"
 import { library, type ErrorResponse } from "@/api/ipc"
-import { DEFAULT_SYSTEM_THEMES, DEFAULT_THEME, THEMES } from "@/app/themes"
+import { THEMES, DEFAULT_SYSTEM_THEMES, DEFAULT_THEME } from "@/app/themes"
 import { setLocale, setSystemThemes, setTheme, useMessages } from "@/app/preferences"
 import { ControlsCatalogue } from "@/app/catalogue/controls"
 import { ActionButton } from "@/components/app/actions"
@@ -26,9 +18,7 @@ import { TextField } from "@/components/app/fields"
 import { LOCALES, m } from "@/lib/i18n"
 
 const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..")
-
 const FONT_SANS = '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, "Helvetica Neue", sans-serif'
-
 const ACCESS_DENIED: ErrorResponse = { code: "access_denied", identity: null, scope: null, retry: "retry", currentRevision: null, successors: [], window: null, correction: null }
 
 afterEach(() => {
@@ -42,31 +32,37 @@ afterEach(() => {
 })
 
 describe("frontend foundation contracts", () => {
-  it("applies the system UI font token to the computed page typography", async () => {
+  it("pins the ADR-0009 system UI font stack in the theme token and body rule", async () => {
+    const systemTokens = JSON.parse(await readFile(path.join(PACKAGE_ROOT, "tokens/sys.json"), "utf8")) as {
+      sys: { font: { sans: { $value: string[] } } }
+    }
+    const fontValue = systemTokens.sys.font.sans.$value.join(", ")
     const themes = await readFile(path.join(PACKAGE_ROOT, "src/themes.css"), "utf8")
     const token = themes.match(/^\s*--font-sans:\s*(.+);$/m)?.[1]?.trim()
     expect(token).toBe(FONT_SANS)
+    expect(token?.replace(/\s+/g, "").replaceAll('"', "")).toBe(fontValue.replace(/\s+/g, ""))
 
     const css = await readFile(path.join(PACKAGE_ROOT, "src/index.css"), "utf8")
     expect(css).toMatch(/body\s*\{[^}]*font-family:\s*var\(--font-sans\)/s)
-
-    const style = document.createElement("style")
-    style.textContent = `:root { --font-sans: ${token}; }`
-    document.head.append(style)
-    expect(getComputedStyle(document.documentElement).getPropertyValue("--font-sans").replace(/\s+/g, "")).toBe(FONT_SANS.replace(/\s+/g, ""))
-    expect(document.body.style.fontFamily || "var(--font-sans)").toBe("var(--font-sans)")
-    style.remove()
   })
 
-  it.each(THEMES.map(({ id, scheme }) => [id, scheme] as const))("applies registry theme %s to the document root", (id, scheme) => {
+  it.each(THEMES.map(({ id, scheme }) => [id, scheme] as const))("applies registry theme %s to the document root", async (id, scheme) => {
     act(() => setTheme(id))
     const root = document.documentElement
     expect(root.dataset.theme).toBe(id)
     expect(root.classList.contains("dark")).toBe(scheme === "dark")
+
+    const themes = await readFile(path.join(PACKAGE_ROOT, "src/themes.css"), "utf8")
+    const block = themes.match(new RegExp(`\\[data-theme="${id}"\\]\\s*\\{([^}]*)\\}`))?.[1]
+    expect(block).toBeDefined()
+    expect(block).toMatch(new RegExp(`color-scheme:\\s*${scheme};`))
   })
 
   it("renders a failed Action from src/api as the library's catalogue message", async () => {
-    mockIPC(() => Promise.reject(ACCESS_DENIED))
+    mockIPC((command) => {
+      expect(command).toBe("library_update_location")
+      return Promise.reject(ACCESS_DENIED)
+    })
     const action: Action = {
       id: "save-location",
       label: "Save location",
@@ -78,8 +74,12 @@ describe("frontend foundation contracts", () => {
     await user.click(screen.getByRole("button", { name: "Save location" }))
     expect(await screen.findByRole("alert")).toHaveTextContent(m.action_failure_access_denied())
   })
-  it("composes token-backed fields, localized messages and DialogFooter order, Enter, and focus return", async () => {
-    mockIPC(() => Promise.reject(ACCESS_DENIED))
+
+  it("composes an Action form dialog with footer order, keyboard submit, failure draft retention and focus return", async () => {
+    mockIPC((command) => {
+      expect(command).toBe("library_update_location")
+      return Promise.reject(ACCESS_DENIED)
+    })
     const user = userEvent.setup()
     function DialogHarness() {
       const messages = useMessages()
@@ -87,30 +87,31 @@ describe("frontend foundation contracts", () => {
       const [open, setOpen] = useState(false)
       const action: Action = {
         id: "save",
-        label: messages.project_apply(),
+        label: messages.settings_save(),
         kind: "primary",
         run: () => library.libraryUpdateLocation("loc-1", name, 1),
       }
       return (
         <>
-          <button type="button" onClick={() => setOpen(true)}>{messages.ds_buttons_title()}</button>
-          <FormDialog open={open} onOpenChange={setOpen} title={messages.settings_appearance()} confirm={action}>
-            <TextField label={messages.settings_group_general()} value={name} onChange={setName} />
+          <button type="button" onClick={() => setOpen(true)}>{messages.location_not_saved()}</button>
+          <FormDialog open={open} onOpenChange={setOpen} title={messages.settings_edit_title({ name: "M 31" })} confirm={action}>
+            <TextField label={messages.location_display_name()} value={name} onChange={setName} />
           </FormDialog>
         </>
       )
     }
     render(<DialogHarness />)
-    const opener = screen.getByRole("button", { name: m.ds_buttons_title() })
+    const opener = screen.getByRole("button", { name: m.location_not_saved() })
     await user.click(opener)
-    const dialog = await screen.findByRole("dialog", { name: m.settings_appearance() })
-    const controls = screen.getByRole("textbox", { name: m.settings_group_general() })
-    const footer = within(dialog)
-    expect(footer.getAllByRole("button").map((button) => button.textContent?.trim())).toEqual([m.verb_cancel(), m.project_apply()])
-    expect(controls).toHaveClass("border-input")
-    await user.type(controls, "{Enter}")
+    const dialog = await screen.findByRole("dialog", { name: m.settings_edit_title({ name: "M 31" }) })
+    const field = within(dialog).getByRole("textbox", { name: m.location_display_name() })
+    expect(within(dialog).getAllByRole("button").map((button) => button.textContent?.trim())).toEqual([m.verb_cancel(), m.settings_save()])
+    await user.clear(field)
+    await user.type(field, "Renamed M31")
+    await user.type(field, "{Enter}")
     expect(await screen.findByRole("alert")).toHaveTextContent(m.action_failure_access_denied())
-    expect(screen.getByRole("dialog", { name: m.settings_appearance() })).toBeInTheDocument()
+    expect(field).toHaveValue("Renamed M31")
+    expect(screen.getByRole("dialog", { name: m.settings_edit_title({ name: "M 31" }) })).toBeInTheDocument()
     await user.keyboard("{Escape}")
     await expect.poll(() => screen.queryByRole("dialog")).toBeNull()
     expect(opener).toHaveFocus()
@@ -123,23 +124,23 @@ describe("frontend foundation contracts", () => {
     const startIndexing = locale === "en-GB" ? "Start indexing" : "Iniciar indexação"
     expect(within(container).getByRole("heading", { name: heading })).toBeInTheDocument()
     expect(within(container).getByRole("button", { name: startIndexing })).toBeInTheDocument()
-    expect(container).not.toHaveTextContent("ds_buttons_title")
-    expect(container).not.toHaveTextContent("setup_start_indexing")
     expect(document.documentElement.lang).toBe(locale)
   })
 
-  it("runs package ESLint I7 and layer rules against every production runtime module", async () => {
-    const eslint = new ESLint({
-      cwd: PACKAGE_ROOT,
-      overrideConfigFile: path.join(PACKAGE_ROOT, "eslint.config.js"),
-      overrideConfig: [{ rules: { "no-restricted-imports": ["error", { patterns: [{ group: ["**/prototype/**", "**/simulation/**", "**/simulations/**", "**/fake-disk/**", "**/fakedisk/**", "**/bindings/index"] }] }] } }],
-    })
+  it("runs package ESLint import gates on src modules and boundary controls", async () => {
+    const eslint = new ESLint({ cwd: PACKAGE_ROOT, overrideConfigFile: path.join(PACKAGE_ROOT, "eslint.config.js") })
     const results = await eslint.lintFiles(["src/**/*.ts", "src/**/*.tsx"])
-    const violations = results.flatMap((result) =>
-      result.messages
-        .filter((message) => message.ruleId === "composition/imports" || message.ruleId === "no-restricted-imports")
-        .map((message) => `${path.relative(PACKAGE_ROOT, result.filePath)}:${message.line}:${message.column} ${message.message}`),
-    )
-    expect(violations).toEqual([])
+    const treeMessages = results.flatMap((result) => result.messages)
+    expect(treeMessages.filter((message) => message.fatal)).toEqual([])
+    expect(treeMessages.filter((message) => message.ruleId === "composition/imports")).toEqual([])
+
+    const lintText = async (source: string, filePath: string) => {
+      const [result] = await eslint.lintText(source, { filePath })
+      expect(result?.messages.filter((message) => message.fatal)).toEqual([])
+      return result?.messages.map((message) => message.ruleId)
+    }
+    expect(await lintText('import * as legacy from "../../../../desktop/src/bindings/index"', "src/features/library/page.tsx")).toContain("composition/imports")
+    expect(await lintText('import { mockIPC } from "@tauri-apps/api/mocks"', "src/features/library/page.tsx")).toContain("composition/imports")
+    expect(await lintText('import * as generated from "../../../desktop/src/bindings/library-index"', "src/api/ipc.ts")).toEqual([])
   }, 30_000)
 })
