@@ -3,7 +3,7 @@
 **Status**: Accepted
 **Date**: 2026-07-20
 **Deciders**: Product owner (Sjors Robroek)
-**Governs**: `apps/desktop/src/ui/Lock.tsx`, `apps/desktop/src/ui/InfoTip.tsx`, `apps/desktop/src/ui/Tooltip.tsx`
+**Governs**: `apps/desktop-ui/src/components/ui/lock.tsx`, `apps/desktop-ui/src/components/ui/info-tip.tsx`, `apps/desktop-ui/src/components/ui/tooltip.tsx`, `apps/desktop-ui/src/components/ui/lock.a11y.test.tsx`, `apps/desktop-ui/src/components/ui/info-tip.a11y.test.tsx`, and, until the cutover removes them, the legacy `apps/desktop/src/ui/Lock.tsx`, `apps/desktop/src/ui/InfoTip.tsx`, `apps/desktop/src/ui/Tooltip.tsx`
 **Related**: [#1155](https://github.com/platevault/platevault/issues/1155) — raised in the UX/UI review of the design-system refresh (`handoff/06` in the Claude Design project)
 
 ## Context
@@ -15,6 +15,11 @@ Three components sit in the tooltip area of the design system:
 | `Tooltip` | Token-styled wrapper over the base-ui tooltip. Renders its trigger as a bare `<span>` and passes `className` plus extra span attributes through. | `Lock`, `InfoTip`, `PropertyTable` |
 | `Lock` | Padlock glyph marking a row or category as protected. | `OutputsCleanupSections` |
 | `InfoTip` | ⓘ glyph supplying help text for a form or settings row. | `StepSourceFolders`, `SettingsKit` |
+
+The table describes the legacy app, where the product owner decided. In
+`apps/desktop-ui`, `Lock` and `InfoTip` render their own `<span>` trigger
+through the base-ui `render` prop. The catalogue's glyph-tips entry is so far
+their only consumer.
 
 The design-system refresh proposed merging `Lock` and `InfoTip` into one tooltip
 component. The proposal is one line; the Components page carries no tooltip
@@ -60,7 +65,9 @@ base-ui portals the popup and mounts it only while open, and the closed trigger
 carries no `aria-describedby`. The accessible name is the only route from
 trigger to text for a screen reader user who has not opened the popup.
 
-Two consequences follow, both asserted in `Lock.test.tsx` and `InfoTip.test.tsx`:
+Two consequences follow, both asserted in `Lock.test.tsx` and `InfoTip.test.tsx`
+in the legacy app and in `lock.a11y.test.tsx` and `info-tip.a11y.test.tsx` in
+`apps/desktop-ui`:
 
 - The name must duplicate the tip text. `InfoTip.tip` is typed `string` rather
   than `ReactNode` because a node-valued tip cannot be mirrored into
@@ -74,11 +81,18 @@ Two consequences follow, both asserted in `Lock.test.tsx` and `InfoTip.test.tsx`
 - A merged component would need a decorative mode reachable by every caller.
   A caller reaching for it on help text silently drops that text from assistive
   technology, with no visual symptom — the failure mode this decision avoids.
-- `Tooltip` remains the single shared implementation. Each glyph owns its own
-  vanilla-extract style beside it: `Lock.css.ts` and `InfoTip.css.ts`. The two
-  share no class, and both draw keyboard focus with the same `focusRing` token,
-  so their focus indicators stay consistent. Popup styling is `.pv-tooltip` in
-  `Tooltip.css.ts`.
+- `Tooltip` remains the single shared implementation. In the legacy app, each
+  glyph owns its own vanilla-extract style beside it: `Lock.css.ts` and
+  `InfoTip.css.ts`. The two share no class, and both draw keyboard focus with
+  the same `focusRing` token, so their focus indicators stay consistent. Popup
+  styling is `.pv-tooltip` in `Tooltip.css.ts`.
+- In `apps/desktop-ui` there is no vanilla-extract. Each glyph takes utility
+  classes on the theme tokens (`text-muted-foreground`, `text-foreground` on
+  hover), as a 16 px glyph with a 24 px hit area. Both show keyboard focus with
+  the one `:focus-visible` ring in `components/skin.css` (`--ring`), so their focus
+  indicators still match. The popup takes its colours from tokens in
+  `tooltip.tsx`, and its radius and type size from the skin's
+  `[data-slot="tooltip-content"]` rule.
 - Reversing this needs a new ADR and a Components-page tooltip section
   specifying the merged role, focus behaviour, and decorative-mode rule.
 
