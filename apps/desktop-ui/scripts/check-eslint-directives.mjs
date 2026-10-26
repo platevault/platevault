@@ -2,7 +2,7 @@
 import { readdirSync, readFileSync } from "node:fs"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
-import tseslint from "typescript-eslint"
+import ts from "typescript"
 import { APP_ROOT } from "./i18n-project.mjs"
 
 const SRC = path.join(APP_ROOT, "src")
@@ -10,17 +10,15 @@ const FILES = /\.(?:ts|tsx)$/
 const MIN_REASON_WORDS = 3
 const RULE_LIST = /^[\w@./-]+(?:\s*,\s*[\w@./-]+)*$/
 
-/**
- * The comments come from the parser ESLint runs on src/ (eslint.config.js), so the check sees
- * every directive ESLint honours. A bare token scanner has no parser context: it cannot tell
- * a template literal's closing backtick from an opening one, nor JSX text from code, and it
- * silently skipped every comment after `${v}°` in a TSX file.
- */
 export function invalidDisableDirectives(file, source) {
-  const { ast } = tseslint.parser.parseForESLint(source, { filePath: file, comment: true, loc: true })
+  const scriptKind = file.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS
+  const scanner = ts.createScanner(ts.ScriptTarget.Latest, false, scriptKind, source)
   const failures = []
-  for (const comment of ast.comments) {
-    const match = comment.value.trim().match(/^eslint-disable(?:-(?:line|next-line))?(?=\s|$)(.*)$/s)
+  for (let token = scanner.scan(); token !== ts.SyntaxKind.EndOfFileToken; token = scanner.scan()) {
+    if (token !== ts.SyntaxKind.SingleLineCommentTrivia && token !== ts.SyntaxKind.MultiLineCommentTrivia) continue
+    const comment = scanner.getTokenText()
+    const body = token === ts.SyntaxKind.SingleLineCommentTrivia ? comment.slice(2) : comment.slice(2, -2)
+    const match = body.trim().match(/^eslint-disable(?:-(?:line|next-line))?(?=\s|$)(.*)$/s)
     if (!match) continue
 
     const tail = match[1].trim()
@@ -29,7 +27,8 @@ export function invalidDisableDirectives(file, source) {
     const reason = separator === -1 ? "" : tail.slice(separator + 2).trim()
     const words = reason.split(/\s+/).filter(Boolean).length
     if (!RULE_LIST.test(rules) || words < MIN_REASON_WORDS) {
-      failures.push(`${file}:${comment.loc.start.line}: eslint-disable requires named rule(s) and a reason of at least ${MIN_REASON_WORDS} words`)
+      const line = source.slice(0, scanner.getTokenStart()).split("\n").length
+      failures.push(`${file}:${line}: eslint-disable requires named rule(s) and a reason of at least ${MIN_REASON_WORDS} words`)
     }
   }
   return failures
