@@ -1,38 +1,27 @@
 /**
  * axe-core over every catalogue entry (CATALOGUE in app/catalogue/registry.ts),
- * rendered as the design-system page renders it: WCAG 2.x A and AA rules.
- *
- * Off here, with the reason: `color-contrast` needs the cascade and layout,
- * which jsdom does not compute from the Tailwind sheet, so it would pass or
- * fail on nothing (contrast is checked in the browser by ui-review). Each
- * entry is a fragment, so page-level best-practice rules (one main landmark,
- * a level-one heading, content inside landmarks) are out of scope.
+ * rendered as the design-system page renders it, with the rules in ./axe.ts.
+ * An entry is judged once its lazy parts have loaded: a Suspense fallback
+ * carries `data-pending`, and the run waits until none is left.
  */
 import "./jsdom-render"
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from "@tanstack/react-router"
 import { render, waitFor } from "@testing-library/react"
-import axe from "axe-core"
-import type { ComponentType } from "react"
+import { type ComponentType, lazy, Suspense } from "react"
 import { describe, expect, it } from "vitest"
 import { CATALOGUE } from "@/app/catalogue/registry"
+import { Spinner } from "@/components/ui/spinner"
+import { axeViolations } from "./axe"
 
-const OPTIONS: axe.RunOptions = {
-  runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"] },
-  rules: { "color-contrast": { enabled: false } },
-}
-
-/** One line per failing node: the rule, axe's help text and the node's opening markup, so a failure names what to fix. */
-function violations(results: axe.AxeResults) {
-  return results.violations.flatMap((violation) => violation.nodes.map((node) => `${violation.id} (${violation.help}): ${node.html.slice(0, 240)}`))
-}
-
-/** Renders an entry inside a router (entries hold route links) and runs axe over what it rendered. */
+/** Renders an entry inside a router (entries hold route links) and runs axe over what it rendered, once it has loaded. */
 async function axeEntry(Entry: ComponentType) {
   const router = createRouter({ routeTree: createRootRoute({ component: () => <Entry /> }), history: createMemoryHistory({ initialEntries: ["/"] }) })
   const { container } = render(<RouterProvider router={router} />)
   // Fails rather than passing vacuously when the entry renders nothing.
   await waitFor(() => expect(container.querySelector("section, h2, h3")).not.toBeNull())
-  return violations(await axe.run(container, OPTIONS))
+  // A loading stand-in is not the specimen: judge what replaces it.
+  await waitFor(() => expect(container.querySelector("[data-pending]")).toBeNull(), { timeout: 10_000 })
+  return axeViolations(container)
 }
 
 describe("catalogue under axe", () => {
@@ -44,6 +33,19 @@ describe("catalogue under axe", () => {
       </section>
     )
     expect(await axeEntry(Unnamed)).toEqual([expect.stringMatching(/^button-name /)])
+  })
+
+  it("judges a lazy specimen after it loads, not its loading fallback", async () => {
+    const Late = lazy(() => new Promise<{ default: ComponentType }>((resolve) => setTimeout(() => resolve({ default: () => <button type="button" /> }), 50)))
+    const Entry = () => (
+      <section>
+        <h2>Late control</h2>
+        <Suspense fallback={<Spinner data-pending />}>
+          <Late />
+        </Suspense>
+      </section>
+    )
+    expect(await axeEntry(Entry)).toEqual([expect.stringMatching(/^button-name /)])
   })
 
   it.each(CATALOGUE.map(({ id, Entry }) => [id, Entry] as const))("%s has no violations", async (_id, Entry) => {

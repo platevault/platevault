@@ -2,12 +2,14 @@
  * FolderPicker against a FolderSource the test answers by hand: each listing
  * stays pending until the test resolves, denies or rejects it, so the loading,
  * listed, denied and failed states, a listing that answers after the user has
- * moved on, and focus after Retry are each driven explicitly.
+ * moved on, and focus after Retry are each driven explicitly, and each state
+ * of the open chooser runs under axe.
  */
 import { act, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { describe, expect, it, vi } from "vitest"
 import { m } from "@/lib/i18n"
+import { axeViolations } from "@/test/axe"
 import { type FolderEntry, type FolderListing, FolderPicker, type FolderRoot } from "./folder-picker"
 
 const ROOTS: readonly FolderRoot[] = [
@@ -106,5 +108,21 @@ describe("FolderPicker", () => {
     await user.keyboard("{Enter}")
     await settle(() => calls[2]!.resolve(listed(folder("/Volumes/Astro/Captures"))))
     await waitFor(() => expect(within(dialog).getByRole("button", { name: "Captures" })).toHaveFocus())
+  })
+})
+
+describe("FolderPicker under axe", () => {
+  const STATES: [state: string, settle: (call: PendingListing) => void, shown: () => HTMLElement][] = [
+    ["loading", () => {}, () => screen.getByRole("status", { name: m.common_loading() })],
+    ["listed", (call) => call.resolve(listed(folder("/Volumes/Astro/Captures"))), () => screen.getByRole("list", { name: m.folder_picker_list({ name: "Astro" }) })],
+    ["denied", (call) => call.resolve({ denied: true }), () => screen.getByText(m.status_access_denied())],
+    ["failed", (call) => call.reject(new Error("disk unreadable")), () => screen.getByRole("alert")],
+  ]
+
+  it.each(STATES)("%s has no violations", async (_state, answer, shown) => {
+    const { calls } = await renderPicker()
+    await settle(() => answer(calls[0]!))
+    expect(shown()).toBeInTheDocument()
+    expect(await axeViolations()).toEqual([])
   })
 })

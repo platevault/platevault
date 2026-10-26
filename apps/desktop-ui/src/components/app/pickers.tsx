@@ -384,9 +384,10 @@ export function SiteLocationField({ value, onChange, errors = {}, disabled = fal
   )
 }
 
+/** The map's Suspense fallback; `data-pending` marks it as a stand-in for what is still loading. */
 function MapLoading() {
   return (
-    <div className="flex h-56 w-full items-center justify-center rounded-md border border-border bg-muted">
+    <div data-pending className="flex h-56 w-full items-center justify-center rounded-md border border-border bg-muted">
       <Spinner />
     </div>
   )

@@ -337,7 +337,7 @@ function SiteMaps() {
     <ComponentSection components={["SiteMap"]} description={m.catalogue_domain_map_desc()} level={3}>
       <Specimen caption={m.catalogue_pickers_state_default()}>
         <div className="w-full max-w-xl space-y-1">
-          <Suspense fallback={<Spinner />}>
+          <Suspense fallback={<Spinner data-pending />}>
             <SiteMap latitude={at.latitude} longitude={at.longitude} onPick={(latitude, longitude) => setAt({ latitude, longitude })} onUnavailable={() => setAt({ latitude: null, longitude: null })} />
           </Suspense>
           <span className="text-xs text-muted-foreground tabular-nums">
