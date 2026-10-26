@@ -47,7 +47,7 @@ Run `pnpm lint` to invoke ESLint, copy checks, locale parity and catalogue compl
 
 ## Check results
 
-The full package checks ran at `fa12477b36788c053950833ffca716d73bd0c0d8` in `apps/desktop-ui`.
+The full package checks ran at `4299e6bcfbc887dee42775fbe6436b4730783618` in `apps/desktop-ui`. Later commits change only this document.
 
 | Command | Result |
 |---|---|
