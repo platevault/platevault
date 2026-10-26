@@ -473,7 +473,9 @@ fn create_main_window(handle: &tauri::AppHandle) {
         // Defer until the window-state plugin's on_window_ready restore hook has run.
         Ok(window) => {
             let restored_window = window.clone();
-            if let Err(error) = window.run_on_main_thread(move || clamp_restored_window(&restored_window)) {
+            if let Err(error) =
+                window.run_on_main_thread(move || clamp_restored_window(&restored_window))
+            {
                 tracing::warn!("failed to schedule restored-window geometry correction: {error:?}");
             }
         }

@@ -80,10 +80,14 @@ fn work_area_rect(monitor: &tauri::Monitor) -> Rect {
     Rect::new(area.position.x, area.position.y, area.size.width, area.size.height)
 }
 
-#[expect(clippy::cognitive_complexity, reason = "sequentially applying the three returned window geometry settings")]
+#[expect(
+    clippy::cognitive_complexity,
+    reason = "sequentially applying the three returned window geometry settings"
+)]
 fn apply_geometry(window: &tauri::WebviewWindow, current: Rect, clamped: Rect) {
     if clamped.width < MIN_WIDTH || clamped.height < MIN_HEIGHT {
-        let minimum = tauri::PhysicalSize::new(MIN_WIDTH.min(clamped.width), MIN_HEIGHT.min(clamped.height));
+        let minimum =
+            tauri::PhysicalSize::new(MIN_WIDTH.min(clamped.width), MIN_HEIGHT.min(clamped.height));
         if let Err(error) = window.set_min_size(Some(minimum)) {
             tracing::warn!("failed to adjust minimum window size for a small monitor: {error:?}");
         }
@@ -95,7 +99,8 @@ fn apply_geometry(window: &tauri::WebviewWindow, current: Rect, clamped: Rect) {
         }
     }
     if clamped.x != current.x || clamped.y != current.y {
-        let position = tauri::Position::Physical(tauri::PhysicalPosition::new(clamped.x, clamped.y));
+        let position =
+            tauri::Position::Physical(tauri::PhysicalPosition::new(clamped.x, clamped.y));
         if let Err(error) = window.set_position(position) {
             tracing::warn!("failed to clamp restored window position: {error:?}");
         }
@@ -162,10 +167,7 @@ mod tests {
 
     #[test]
     fn shrinks_a_window_larger_than_the_screen() {
-        assert_eq!(
-            clamp(Rect::new(-1, -1, 3000, 2000), &[primary()], Some(primary())),
-            primary()
-        );
+        assert_eq!(clamp(Rect::new(-1, -1, 3000, 2000), &[primary()], Some(primary())), primary());
     }
 
     #[test]
