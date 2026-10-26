@@ -39,8 +39,8 @@
 //!
 //! An `e2e` build is the `WebDriver` test host. It embeds the `WebDriver` server
 //! and opens only the catalog that [`DATA_DIR_ENV`] names. The webview keeps
-//! its data in [`WEBVIEW_SUBDIR`] of that directory on Windows and Linux; the
-//! macOS webview has no such setting and keeps it under `HOME`. A loopback URL in
+//! its data in [`WEBVIEW_SUBDIR`] of that directory on Windows and Linux, and
+//! on macOS 14 and later in a data store named after it. A loopback URL in
 //! [`FRONTEND_URL_ENV`] replaces `devUrl`. Release builds enable neither
 //! `dev-tools` nor `e2e`, so they carry no automation
 //! (`scripts/check-dev-surface-absent.sh`).
@@ -438,7 +438,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         // webview's data beside the run's catalog.
         #[cfg(feature = "e2e")]
         if let RunEvent::Ready = event {
-            if let Err(error) = test_window.open(handle, data_dir.join(WEBVIEW_SUBDIR)) {
+            if let Err(error) = test_window.open(handle, &data_dir) {
                 tracing::error!(%error, "the test host window did not open");
                 handle.exit(1);
             }
@@ -532,16 +532,34 @@ fn loopback_frontend(raw: Option<OsString>) -> Result<Option<tauri::Url>, String
     }
 }
 
+/// The name space of [`webview_store_id`]'s name-based UUIDs.
+#[cfg(any(test, all(feature = "e2e", target_os = "macos")))]
+const WEBVIEW_STORE_NAMESPACE: uuid::Uuid =
+    uuid::Uuid::from_u128(0x8c3e_6a1f_2b4d_4e7a_9f10_3c5b_7d2e_0a61);
+
+/// The macOS webview data store of the data directory `data_dir`: a
+/// name-based UUID of its canonical path. Each test run's directory gets its
+/// own store, and one directory always gets the same store.
+///
+/// # Errors
+/// `data_dir` cannot be resolved to a canonical path.
+#[cfg(any(test, all(feature = "e2e", target_os = "macos")))]
+fn webview_store_id(data_dir: &std::path::Path) -> std::io::Result<[u8; 16]> {
+    let canonical = std::fs::canonicalize(data_dir)?;
+    Ok(uuid::Uuid::new_v5(&WEBVIEW_STORE_NAMESPACE, canonical.as_os_str().as_encoded_bytes())
+        .into_bytes())
+}
+
 /// The `e2e` test host's frontend and window.
 #[cfg(feature = "e2e")]
 mod test_host {
     use std::ffi::OsString;
-    use std::path::PathBuf;
+    use std::path::Path;
 
     use tauri::utils::config::WindowConfig;
     use tauri::WebviewWindowBuilder;
 
-    use super::{loopback_frontend, FRONTEND_URL_ENV};
+    use super::{loopback_frontend, FRONTEND_URL_ENV, WEBVIEW_SUBDIR};
 
     /// The library window, held back from Tauri's own start-up creation.
     pub(super) struct TestWindow(WindowConfig);
@@ -571,17 +589,18 @@ mod test_host {
     }
 
     impl TestWindow {
-        /// Open the window from its config with the webview's data in
-        /// `webview_data`. `WebView2` and `WebKitGTK` honour it; the macOS
-        /// webview has no data directory and keeps its data under `HOME`.
-        pub(super) fn open(
-            &self,
-            handle: &tauri::AppHandle,
-            webview_data: PathBuf,
-        ) -> tauri::Result<()> {
-            WebviewWindowBuilder::from_config(handle, &self.0)?
-                .data_directory(webview_data)
-                .build()?;
+        /// Open the window from its config with the webview's data kept by
+        /// the run's data directory `data_dir`. `WebView2` and `WebKitGTK`
+        /// keep it in [`WEBVIEW_SUBDIR`]. The macOS webview takes no
+        /// directory, so it gets the data store [`super::webview_store_id`]
+        /// names; macOS before 14 has no such stores and falls back to the
+        /// default one under `HOME`.
+        pub(super) fn open(&self, handle: &tauri::AppHandle, data_dir: &Path) -> tauri::Result<()> {
+            let builder = WebviewWindowBuilder::from_config(handle, &self.0)?
+                .data_directory(data_dir.join(WEBVIEW_SUBDIR));
+            #[cfg(target_os = "macos")]
+            let builder = builder.data_store_identifier(super::webview_store_id(data_dir)?);
+            builder.build()?;
             Ok(())
         }
     }
@@ -708,13 +727,27 @@ mod registry {
     }
 }
 
-/// The `e2e` test host's inputs: its data directory and its frontend URL.
+/// The `e2e` test host's inputs: its data directory, its macOS webview data
+/// store and its frontend URL.
 #[cfg(test)]
 mod test_host_inputs {
     use std::ffi::OsString;
     use std::path::PathBuf;
 
-    use super::{data_dir_override, loopback_frontend};
+    use super::{data_dir_override, loopback_frontend, webview_store_id};
+
+    /// One directory names one store however its path is spelt; another
+    /// directory names another, and a missing one names none.
+    #[test]
+    fn each_data_directory_names_its_own_webview_store() {
+        let run = tempfile::tempdir().expect("run directory");
+        let other = tempfile::tempdir().expect("other run directory");
+        std::fs::create_dir(run.path().join("webview")).expect("webview directory");
+        let store = webview_store_id(run.path()).expect("the run's store");
+        assert_eq!(webview_store_id(&run.path().join("webview").join("..")).ok(), Some(store));
+        assert_ne!(webview_store_id(other.path()).ok(), Some(store));
+        assert!(webview_store_id(&run.path().join("missing")).is_err());
+    }
 
     /// A named directory is used verbatim. Without one an `e2e` build refuses
     /// to start, and any other build takes the platform default.

@@ -1,6 +1,6 @@
-import { MutationObserver, onlineManager } from "@tanstack/react-query"
+import { MutationObserver, onlineManager, QueryObserver } from "@tanstack/react-query"
 import { clearMocks, mockIPC } from "@tauri-apps/api/mocks"
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import { data, library } from "./ipc"
 import { createQueryClient, libraryKey, libraryQuery } from "./query"
 
@@ -43,9 +43,16 @@ describe("createQueryClient", () => {
       })
     })
     const client = createQueryClient()
+    // An observed query takes the client's retry default (TanStack's own is
+    // three retries); `fetchQuery` would turn retries off by itself.
+    const observer = new QueryObserver(client, libraryQuery("libraryScanStatus", "op-1"))
+    const unsubscribe = observer.subscribe(() => undefined)
 
-    await expect(client.fetchQuery(libraryQuery("libraryScanStatus", "op-1"))).rejects.toThrow("libraryScanStatus")
+    // A retried read stays pending for the retry delay instead of failing.
+    await vi.waitFor(() => expect(observer.getCurrentResult().status).toBe("error"))
+    expect(observer.getCurrentResult().failureCount).toBe(1)
     expect(reads).toBe(1)
+    unsubscribe()
   })
 })
 
