@@ -4,13 +4,18 @@ function Button({ children, variant = "default", size = "default" }: { children?
   return createElement("button", { "data-slot": "button", "data-variant": variant, "data-size": size }, children)
 }
 
+// Named DataTable so the census sees it in the fiber tree, as it sees the real component.
+function DataTable({ children }: { children?: React.ReactNode }) {
+  return createElement("table", null, children)
+}
+
 function CensusFixture() {
   return createElement(
     "main",
     { id: "main", "aria-label": "Census fixture" },
     createElement("header", null, createElement(Button, { variant: "default", size: "sm" }, "Open library")),
-    createElement("section", { "data-component": "DataTable" },
-      createElement("table", { "data-census-datatable": "true" },
+    createElement("section", null,
+      createElement(DataTable, null,
         createElement("thead", null,
           createElement("tr", null,
             createElement("th", { "aria-sort": "ascending" }, "Name"),
