@@ -8,7 +8,7 @@
 
 **Amended**: 2026-10-06, to the workflow decisions D-W1 to D-W63 settled by the user that day, on 2026-10-12 to 2026-10-14 to the Round 9 decisions D-W87 to D-W89, on 2026-10-14 to the F4 Project model, D-W93 to D-W106, and on 2026-10-19 to the owner's answers on rig versions, My targets and the session filter prompt (astro-plan-rzbzu.1). Tags such as (D-W16) name the decision a requirement follows.
 
-**Amended**: 2026-10-26, to the Round 11 decisions D-W142 and D-W147.
+**Amended**: 2026-10-26, to the Round 11 decisions D-W142 and D-W147, to the Rounds 5 to 9 decisions recorded that day (D-W151, D-W152 and D-W160) and to the owner's answer D-W155.
 
 **Status**: Backend landed; frontend and acceptance open (reconciled 2026-10-26, `specs/SPEC_STATUS.md`). Landed: the planning, calendar and reminder backend (#1780-#1783), moved onto Projects in the F4 cut-over (#1851). Remains: the Plan area, Sites and Targets surfaces (astro-plan-mp25r) and verification. Product defaults and all human-approval gate waivers follow the root autonomous objective.
 

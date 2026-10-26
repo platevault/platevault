@@ -8,7 +8,7 @@
 
 **Amended**: 2026-10-16, to the owner's answers of 2026-10-15/16, D-W107 to D-W116, and to the owner's second batch of 2026-10-16, D-W117 and D-W120, with D-W107 and D-W113 amended in place, and on 2026-10-17 to Round 9 C15, D-W122; and on 2026-10-19 to the owner's answers D-W100, D-W107, D-W113 and D-W118, plus the pinned-calibration Retire location and associated-Target confirmation answers (astro-plan-rzbzu.1).
 
-**Amended**: 2026-10-26, to the Round 11 decisions D-W143, D-W144 and D-W148.
+**Amended**: 2026-10-26, to the Round 11 decisions D-W143, D-W144 and D-W148, to the Round 6 decision D-W153 recorded that day and to the owner's answer D-W156.
 
 **Status**: Backend landed; frontend and acceptance open (reconciled 2026-10-26, `specs/SPEC_STATUS.md`). Landed: the Library inventory backend (#1777), backend deltas (#1779-#1782) and the F4 Project model (#1851). Remains: the final library UI and J19 (astro-plan-4zm11), the real-UI journeys for the Locations step and locate or remap, and verification. Product defaults and all human-approval gate waivers follow the root autonomous objective.
 
@@ -161,3 +161,4 @@ Use the [root vocabulary](../063-clean-rebuild-contract/spec.md#key-entities). F
 - The 2026-10-19 answer (astro-plan-rzbzu.1) settles how D-W107 frames are compared, where no-pointing frames belong, propagation of regroup and reopened-review changes to held open Projects, Needs review status until Ready, the membership effect of drifted calibration, and Mark rest usable's count confirmation.
 - Workflow decision D-W122 (Round 9 C15, owner, 2026-10-12, recorded 2026-10-17) moves metadata corrections to the session's intake flow. Each corrected value shows beside the recorded one, and Apply delivers them (PV-PREP). Provisional: the Corrections table on the Target and Rig steps.
 - Workflow decisions D-W143, D-W144 and D-W148 (Round 11, owner, 2026-10-23, astro-plan-qk9ri) amend Settings. The language is a select in Appearance and in first-run setup, and Match system picks a dark and a light theme that follow the OS live. Locations shows every column, with Name and Actions pinned when the table scrolls. The matching thresholds get their own Settings page, owned by PV-CAL. Match system is the mode D-W86 called Follow system.
+- Under workflow decision D-W153 (Round 6, user, 2026-10-10, recorded 2026-10-26), a confirmed Target stands even when the pointing disagrees with it. A mismatch warning marks the session's Target box (LIB-FR-05). The owner's answer of 2026-10-26 (D-W156) adds the library clean-ups outside any Project: the Duplicates review's clean-up and the Unusable clean-up of STO-FR-18 (LIB-FR-18, LIB-FR-22).

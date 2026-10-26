@@ -8,7 +8,7 @@
 
 **Amended**: 2026-10-06, to the [workflow redesign](../063-clean-rebuild-contract/decisions.md#workflow-redesign-2026-10-06) decisions D-W1 through D-W71, on 2026-10-07 to the answers D-W72 through D-W74, on 2026-10-14 to the F4 Project model, D-W93 through D-W106, on 2026-10-16 to the owner's answers of 2026-10-15/16, D-W107 through D-W116, and on 2026-10-19 to the owner's answers D-W100, D-W107, D-W110, D-W113, D-W114 and D-W118, plus removed-subject goal readdition (astro-plan-rzbzu.1).
 
-**Amended**: 2026-10-26, to the Round 11 decisions D-W146 and D-W148.
+**Amended**: 2026-10-26, to the Round 11 decisions D-W146 and D-W148 and to the owner's answers D-W155 and D-W156.
 
 **Status**: Backend landed; frontend and acceptance open (reconciled 2026-10-26, `specs/SPEC_STATUS.md`). Landed: backend deltas (#1780, #1782-#1785) and the F4 Project model (#1851). Remains: final-frontend acceptance of the Projects surface (astro-plan-z8seb) and verification. Product defaults and all human-approval gate waivers follow the root autonomous objective.
 
@@ -211,3 +211,4 @@ Use the [root vocabulary](../063-clean-rebuild-contract/spec.md#key-entities). F
   - the Next rules 2 and 4.
 - Workflow decisions D-W107, D-W111, D-W112, D-W114 and D-W116 (the owner's answers of 2026-10-15/16) split sessions at intake by framing, so a group holds whole sessions. Archive repoints a Closed or Archived Project's kept View without changing it, and Duplicate uses the sessions' current pins, not the Close snapshot. The framing and mosaic defaults, spaces as hyphens in folder names and the one-group rule are settled, and a tie for the kept duplicate copy preselects the first-catalogued copy. The owner's answer of 2026-10-19 limits the hyphen rule to the View keyword folders; the Project folder keeps its spaces (D-W114; astro-plan-rzbzu.1).
 - Workflow decisions D-W146 and D-W148 (Round 11, owner, 2026-10-23, astro-plan-qk9ri) move the GROUP and PANEL keyword names to Settings > Naming, under the WBPP naming rule of STO-IMP-FR-09. The framing and mosaic panel defaults this feature reads "in Settings" move to Settings > Matching (CAL-FR-24).
+- The owner's answers of 2026-10-26 (D-W155, D-W156) base framing coverage on the rig's effective focal length, the telescope's focal length times its reducer's factor (PRJ-FR-31). They also add the library clean-ups of STO-FR-18, which trash Unusable frames and duplicate copies outside any Project, beside Wrap up's Trash step (PRJ-FR-15).

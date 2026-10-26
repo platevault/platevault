@@ -21,13 +21,13 @@ Feature: [Specification](../spec.md)
 - [x] The workflow decisions log records D-W75 (2026-10-08), D-W76 to D-W92 (2026-10-12 to 2026-10-14), D-W93 to D-W106 (2026-10-14), D-W107 to D-W116 (2026-10-15/16), D-W117 to D-W121 (2026-10-16), D-W122 (Round 9 C15, recorded 2026-10-17), and the owner's answers of 2026-10-19 (astro-plan-rzbzu.1).
   The log settles D-W123's fixed-format alias replacement, HIERARCH aliases, XISF patching, printable-ASCII refusal and Apply wording. The generic-tool wording claims only that corrected values were written to patched copies, not that an application reads them. The D-W99 keyword-value character set is confirmed against PJSR commit 76e4f38c, `BPP-Global.js:79-80` and `BPP-Helper.js:1025-1028`.
 - [x] Five journey answers from 2026-10-19 are recorded in the workflow log (astro-plan-rzbzu.1): a pointing-associated Target counts as confirmed, My targets includes every Target with a session, the unknown-filter prompt is available in the session, removed-subject goals are restored when the subject is re-added, and import without a pointing or matching Target preselects Unclassified.
-- [x] The log records D-W124 to D-W141 (the owner's answers of 2026-10-19 and 2026-10-20) and D-W142 to D-W149 (Round 11, 2026-10-23).
+- [x] The log records D-W124 to D-W141 (the owner's answers of 2026-10-19 and 2026-10-20), D-W142 to D-W149 (Round 11, 2026-10-23), D-W150 to D-W154 and D-W157 to D-W162 (Rounds 5 to 9, recorded 2026-10-26), and D-W155 and D-W156 (the owner's answers of 2026-10-26).
 - [x] Changed and added requirements end with their D-W tag; the cross-spec flow states the Project, its groups, its View and Apply, and the Wrap up model.
 - [ ] Independent requirements review of the 2026-10-06 workflow amendment has not yet run.
 - [ ] Independent requirements review of the 2026-10-08 and round 9 amendments (D-W75 to D-W92) has not yet run.
 - [ ] Independent requirements review of the F4 Project model amendment and the owner's second batch (D-W93 to D-W121, 2026-10-14 to 2026-10-16) has not yet passed.
 - [ ] Independent requirements review of the Round 9 C15 amendment (D-W122) and owner-confirmed D-W123 corrections has not yet run. Only the delivery route for corrected non-FITS formats other than XISF remains an open product choice.
-- [ ] Independent requirements review of the Round 11 amendment (D-W142 to D-W149) has not yet run. The reducer record in D-W147 is an open product choice.
+- [ ] Independent requirements review of the Round 11 amendment and the 2026-10-26 decisions (D-W142 to D-W162) has not yet run. D-W155 settles the reducer record that D-W147 left open.
 
 ## Feature readiness
 
