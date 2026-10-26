@@ -148,7 +148,7 @@ export const STATUS = {
   record: {
     trashed: s(m.status_trashed, "muted", Trash2),
   },
-  /** A step's gate (domain/derive GateState): each state its own glyph shape, so colour only reinforces. The triangle stays for warnings. */
+  /** A step's gate: each state its own glyph shape, so colour only reinforces. The triangle stays for warnings. */
   gate: {
     done: s(m.status_done, "success", CircleCheck),
     ready: s(m.status_ready, "info", CircleArrowRight),
@@ -218,7 +218,7 @@ export const STATUS = {
     failed: s(m.status_failed_fit, "danger", CircleX),
     unavailable: s(m.status_not_measured, "muted", CircleDashed),
   },
-  /** A calibration process (domain/calibration-process `ProcessStatus`), so a badge takes `view.status`. */
+  /** A calibration process's state, as the feature that owns the process maps it. */
   process: {
     "awaiting-stack": s(m.status_to_stack, "info", CircleArrowRight),
     stacking: s(m.status_stacking, "info", Loader),
@@ -243,7 +243,7 @@ export const STATUS = {
   masterAge: {
     old: s(m.status_old, "warning", CalendarClock),
   },
-  /** A prototype rule the owner has not settled yet. */
+  /** A rule the product owner has not settled yet. */
   rule: {
     provisional: s(m.status_provisional, "muted", Hourglass),
   },

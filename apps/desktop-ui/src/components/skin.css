@@ -173,7 +173,7 @@
   background-color: var(--background);
 }
 
-/* Search fields carry a leading magnifier glyph (TableToolbar). */
+/* Search fields carry a leading magnifier glyph (ClearableInput's `search`). */
 [data-slot="input"][data-page-search] {
   padding-left: calc(var(--spacing) * 7);
 }

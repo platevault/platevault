@@ -8,7 +8,7 @@ import type { Action } from "./contracts"
 import { TextField } from "./fields"
 import { ActionButton } from "./actions"
 import { RowActions } from "./row-actions"
-import { DialogFooter, FormDialog } from "./form-dialog"
+import { blockedByErrors, DialogFooter, FormDialog, useDialogForm } from "./form-dialog"
 
 /** Fails unless each element comes after the one before it in document order. */
 function expectInOrder(...elements: HTMLElement[]) {
@@ -160,5 +160,49 @@ describe("FormDialog focus return (WCAG 2.4.3)", () => {
     await user.keyboard("{Escape}")
     await vi.waitFor(() => expect(screen.queryByRole("dialog")).toBeNull())
     expect(trigger).toHaveFocus()
+  })
+})
+
+describe("form checks", () => {
+  it("blockedByErrors names each distinct failing field once, and nothing when the fields pass", () => {
+    expect(blockedByErrors(m, "Save", { name: undefined })).toBeUndefined()
+    expect(blockedByErrors(m, "Save", { name: "Name is required", alias: "Name is required", gain: "Gain must be 0 or more" })).toEqual({
+      action: m.actions_blocked({ action: "Save" }),
+      reason: m.refusal_blockers({ count: 2 }),
+      blockers: [{ label: "Name is required" }, { label: "Gain must be 0 or more" }],
+    })
+  })
+
+  it("useDialogForm shows a field's message only once the user changed it, and starts over on each opening", async () => {
+    function NameDialog() {
+      const [open, setOpen] = useState(false)
+      const { values, set, shown } = useDialogForm(open, () => ({ name: "" }))
+      const errors = { name: values.name ? undefined : "Name is required" }
+      return (
+        <>
+          <button type="button" onClick={() => setOpen(true)}>
+            Edit
+          </button>
+          <FormDialog open={open} onOpenChange={setOpen} title="Edit run" confirm={{ id: "save", label: "Save", kind: "primary", run: vi.fn() }}>
+            <TextField label="Name" value={values.name} onChange={(name) => set({ name })} error={shown(errors, "name")} />
+          </FormDialog>
+        </>
+      )
+    }
+    const user = userEvent.setup()
+    render(<NameDialog />)
+    await user.click(screen.getByRole("button", { name: "Edit" }))
+    const name = await screen.findByRole("textbox", { name: "Name" })
+    expect(screen.queryByText("Name is required")).toBeNull()
+
+    await user.type(name, "M")
+    await user.clear(name)
+    expect(screen.getByText("Name is required")).toBeInTheDocument()
+
+    await user.keyboard("{Escape}")
+    await vi.waitFor(() => expect(screen.queryByRole("dialog")).toBeNull())
+    await user.click(screen.getByRole("button", { name: "Edit" }))
+    expect(await screen.findByRole("textbox", { name: "Name" })).toHaveValue("")
+    expect(screen.queryByText("Name is required")).toBeNull()
   })
 })

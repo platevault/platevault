@@ -1,8 +1,7 @@
 /**
  * The Columns menu's choice of a DataTable (`hideable` columns), kept per
  * table (`columnsId`) in localStorage the way the dock keeps its pin and
- * width per page (templates/dock.ts) and Review keeps its visible columns
- * (d-review/prefs.ts). Only the columns the user switched are stored, so a
+ * width per page (templates/dock.ts). Only the columns the user switched are stored, so a
  * column's own default (`defaultHidden`) still applies to the rest. A table
  * with no `columnsId` keeps the choice while it is mounted.
  */

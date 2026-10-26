@@ -19,11 +19,11 @@
  * Home is a DetailPage with sections and an aside (C8).
  */
 import type { ReactNode } from "react"
+import { useMessages } from "@/app/preferences"
 import { Box } from "@/components/app/box"
 import type { Action, MenuItem } from "@/components/app/contracts"
 import type { PageNotice } from "@/components/app/feedback"
 import { PageHeader, type PathItem } from "@/components/app/page"
-import { m } from "@/lib/i18n"
 import { DetailDock, type PageDetail } from "./detail-panel"
 import { asStandard, headerActions, headerBar, type ObjectMenu, type PageViews, ViewTabs } from "./parts"
 
@@ -64,6 +64,7 @@ export interface DetailPageProps {
 }
 
 export function DetailPage({ path, title, level = 1, status, statusFeedback, actions, menu, views, notice, sections, aside = [], detail }: DetailPageProps) {
+  const m = useMessages()
   const sectionLevel = level === 1 ? 2 : 3
   const box = (section: DetailSection) => (
     <Box

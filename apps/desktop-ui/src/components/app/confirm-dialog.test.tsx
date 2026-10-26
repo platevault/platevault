@@ -7,9 +7,9 @@ import type { ActionKind } from "./contracts"
 import { ConfirmDialog } from "./confirm-dialog"
 
 /** Renders a confirmation and opens it from the keyboard, so focus starts on the trigger. */
-async function openTrashDialog(kind: ActionKind) {
+async function openTrashDialog(kind: ActionKind, onConfirm = vi.fn()) {
   const user = userEvent.setup()
-  render(<ConfirmDialog trigger={<Button>Clean up</Button>} title="Move 3 files to Trash?" confirm={{ label: "Move to Trash", kind }} onConfirm={vi.fn()} />)
+  render(<ConfirmDialog trigger={<Button>Clean up</Button>} title="Move 3 files to Trash?" confirm={{ label: "Move to Trash", kind }} onConfirm={onConfirm} />)
   await user.tab()
   const trigger = screen.getByRole("button", { name: "Clean up" })
   expect(trigger).toHaveFocus()
@@ -41,5 +41,15 @@ describe("ConfirmDialog", () => {
     await user.keyboard("{Escape}")
     await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument())
     expect(trigger).toHaveFocus()
+  })
+
+  it("closes after a successful confirm and returns focus to the trigger that stays on screen", async () => {
+    const onConfirm = vi.fn()
+    const { user, trigger, action } = await openTrashDialog("destructive", onConfirm)
+    await user.click(action)
+    expect(onConfirm).toHaveBeenCalledOnce()
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument())
+    expect(trigger).toBeInTheDocument()
+    await waitFor(() => expect(trigger).toHaveFocus())
   })
 })

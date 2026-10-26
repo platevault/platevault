@@ -11,6 +11,13 @@
  * It has no decorative mode, and must not gain one: its text is the sole
  * carrier of the information. Lock, which marks protected state, keeps its
  * own decorative mode; the ADR rejects merging the two.
+ *
+ * HelpTip (components/app/tips.tsx) is the other ⓘ, with another contract: a
+ * button named "Help" by default and described by a hidden copy of its tip, which may
+ * hold markup. A screen uses HelpTip, under tooltip policy T4, since features
+ * import nothing from components/ui (I5). InfoTip is the primitive an
+ * app-layer field or settings row composes when a plain-text tip should be
+ * the glyph's own name.
  */
 import { Info } from "lucide-react"
 import { useMessages } from "@/app/preferences"
