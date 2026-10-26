@@ -21,9 +21,9 @@ const OPTIONS: axe.RunOptions = {
   rules: { "color-contrast": { enabled: false } },
 }
 
-/** One line per failing node: the rule, the node's selector and axe's summary, so a failure names what to fix. */
+/** One line per failing node: the rule, axe's help text and the node's opening markup, so a failure names what to fix. */
 function violations(results: axe.AxeResults) {
-  return results.violations.flatMap((violation) => violation.nodes.map((node) => `${violation.id} ${node.target.join(" ")}: ${node.failureSummary ?? violation.help}`))
+  return results.violations.flatMap((violation) => violation.nodes.map((node) => `${violation.id} (${violation.help}): ${node.html.slice(0, 240)}`))
 }
 
 /** Renders an entry inside a router (entries hold route links) and runs axe over what it rendered. */
