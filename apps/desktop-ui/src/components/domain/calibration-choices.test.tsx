@@ -2,30 +2,14 @@ import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } fr
 import { render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import type { ReactNode } from "react"
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
-import { CHOICE_STATE_NAME, KIND_NAME, NO_KIND_NAME, sourceKey } from "@/domain/calibration"
-import { fakeSha256, fileAt, writeFiles } from "@/domain/disk"
-import { createSeed } from "@/domain/seed"
+import { describe, expect, it, vi } from "vitest"
+import { CHOICE_ROWS, CHOICE_SESSIONS, ONE_SESSION_ROWS, READ_ONLY_ROWS } from "@/app/catalogue/fixtures/calibration"
+import { SUCCEEDED } from "@/app/catalogue/fixtures/results"
 import { m, say } from "@/lib/i18n"
-import { type PrototypeState, SCHEMA_VERSION } from "@/store/core"
-import { initialSliceStates, sliceVersions } from "@/store/slices"
-import { CalibrationChoices, type CalibrationChoiceRow, calibrationChoiceRows, choiceRowId } from "./calibration-choices"
+import { CalibrationChoices, type CalibrationChoiceRow } from "./calibration-choices"
+import { CHOICE_STATE_NAME, KIND_NAME, NO_KIND_NAME } from "./calibration-model"
 
-// The sample library's light sessions: a suggested flat, a waiting flat, No darks by the camera's default, and automatic pins.
-const SUGGESTED = "ses_1v704nq"
-const WAITING = "ses_9ddkg4"
-const CAMERA_NO = "ses_573cbz"
-const PINNED = "ses_1oeln5l"
-
-let seed: PrototypeState
-beforeAll(() => {
-  vi.useFakeTimers({ toFake: ["Date"] })
-  vi.setSystemTime(Date.parse("2026-10-13T12:00:00Z"))
-  seed = { ...createSeed("demo"), schemaVersion: SCHEMA_VERSION, sliceVersions: sliceVersions(), slices: initialSliceStates() }
-})
-afterAll(() => {
-  vi.useRealTimers()
-})
+const { suggested: SUGGESTED, pinned: PINNED } = CHOICE_SESSIONS
 
 /** The table's links go through the router, so it renders inside one. */
 function inRouter(node: ReactNode) {
@@ -35,6 +19,7 @@ function inRouter(node: ReactNode) {
 
 const row = (rows: CalibrationChoiceRow[], sessionId: string, kind: CalibrationChoiceRow["kind"]) => rows.find((r) => r.sessionId === sessionId && r.kind === kind)!
 const rowOf = (name: string) => screen.getByRole("rowheader", { name }).closest("tr") as HTMLElement
+const pinnedRows = CHOICE_ROWS.filter((r) => r.sessionId === PINNED)
 
 /** Tabs on until `element` has focus: the header's sort buttons come before the table's one row stop. */
 async function tabTo(user: ReturnType<typeof userEvent.setup>, element: HTMLElement) {
@@ -43,41 +28,16 @@ async function tabTo(user: ReturnType<typeof userEvent.setup>, element: HTMLElem
 }
 
 function renderChoices(rows: CalibrationChoiceRow[], extra: Partial<Parameters<typeof CalibrationChoices>[0]> = {}) {
-  const calls = { onConfirm: vi.fn(() => ({ ok: true }) as const), onPick: vi.fn(() => ({ ok: true }) as const), onNo: vi.fn(() => ({ ok: true }) as const) }
+  const calls = { onConfirm: vi.fn(() => SUCCEEDED), onPick: vi.fn(() => SUCCEEDED), onNo: vi.fn(() => SUCCEEDED) }
   inRouter(<CalibrationChoices label="Calibration" rows={rows} {...calls} {...extra} />)
   return calls
 }
 
-describe("calibrationChoiceRows", () => {
-  it("reads each kind's state, source, health and offers from the catalogue, kinds in order", () => {
-    const rows = calibrationChoiceRows(seed, [SUGGESTED, WAITING, CAMERA_NO, PINNED])
-    expect(rows.map(choiceRowId)).toEqual([SUGGESTED, WAITING, CAMERA_NO, PINNED].flatMap((id) => ["dark", "flat", "bias"].map((kind) => `${id}:${kind}`)))
-    expect(row(rows, SUGGESTED, "flat").choice.state).toBe("suggested")
-    expect(row(rows, SUGGESTED, "flat").source).not.toBeNull()
-    expect(row(rows, WAITING, "flat")).toMatchObject({ choice: { state: "waiting" }, source: null, sourceLink: null })
-    expect(row(rows, CAMERA_NO, "dark").choice).toMatchObject({ state: "none", by: "camera-default" })
-    expect(row(rows, PINNED, "dark")).toMatchObject({ choice: { state: "pinned", by: "matching" }, health: "ok", sourceLink: { to: "/calibration" } })
-    // Choose ▸ never offers the pin the kind already holds.
-    const pinned = row(rows, PINNED, "dark")
-    if (pinned.choice.state !== "pinned") throw new Error("the sample dark is pinned")
-    expect(pinned.offers.map((o) => o.key)).not.toContain(sourceKey(pinned.choice.source))
-  })
-
-  it("reads a pinned file that changed as changed; the pin stays", () => {
-    const flat = seed.catalog.sessions[PINNED]!.calibration!.flat
-    if (flat.state !== "pinned") throw new Error("the sample flat is pinned")
-    const file = fileAt(seed.disk, flat.evidence.files[0]!.path)!
-    const changed = { ...seed, disk: writeFiles(seed.disk, [{ ...file, sha256: fakeSha256(file.path, 9) }]) }
-    expect(row(calibrationChoiceRows(changed, [PINNED]), PINNED, "flat")).toMatchObject({ health: "changed", choice: { state: "pinned" } })
-  })
-})
-
 describe("CalibrationChoices", () => {
   it("words every state, in one group per session headed by a link to it, in the order given", async () => {
-    const rows = calibrationChoiceRows(seed, [SUGGESTED, WAITING, CAMERA_NO, PINNED])
-    renderChoices(rows)
+    renderChoices(CHOICE_ROWS)
     const table = await screen.findByRole("table", { name: "Calibration" })
-    const heads = [SUGGESTED, WAITING, CAMERA_NO, PINNED].map((id) => say(m, rows.find((r) => r.sessionId === id)!.session))
+    const heads = [...new Set(CHOICE_ROWS.map((r) => r.sessionId))].map((id) => say(m, CHOICE_ROWS.find((r) => r.sessionId === id)!.session))
     // The group headers: the only links in the body's header cells (a raw flat's source link sits in a data cell).
     const links = [...table.querySelectorAll("tbody th a[href]")].map((a) => a.textContent)
     expect(links).toEqual(heads)
@@ -88,10 +48,25 @@ describe("CalibrationChoices", () => {
     expect(within(table).getAllByText(m.calibration_choices_no_match()).length).toBeGreaterThan(0)
   })
 
+  it("reads a pinned file that changed as changed, a user's No as its word, and links a pinned master to the Calibration library", async () => {
+    renderChoices(READ_ONLY_ROWS, { changeable: false })
+    const table = await screen.findByRole("table", { name: "Calibration" })
+    expect(within(table).getByText(m.status_drifted())).toBeInTheDocument()
+    expect(within(table).getByText(say(m, NO_KIND_NAME.bias))).toBeInTheDocument()
+    expect(row(pinnedRows, PINNED, "dark")).toMatchObject({ choice: { state: "pinned", by: "matching" }, health: "ok", sourceLink: { to: "/calibration" } })
+  })
+
+  it("never offers under Choose ▸ the pin a kind already holds", () => {
+    const dark = row(pinnedRows, PINNED, "dark")
+    if (dark.choice.state !== "pinned") throw new Error("the sample dark is pinned")
+    const pinnedSource = dark.choice.source
+    expect(dark.offers.some((o) => JSON.stringify(o.source) === JSON.stringify(pinnedSource))).toBe(false)
+  })
+
   it("calls the host's callbacks and writes nothing itself: Enter confirms a suggestion, the row menu sets No", async () => {
     const user = userEvent.setup()
-    const rows = calibrationChoiceRows(seed, [SUGGESTED])
-    const before = structuredClone(seed.catalog.sessions[SUGGESTED]!.calibration)
+    const rows = ONE_SESSION_ROWS
+    const before = structuredClone(rows)
     const calls = renderChoices(rows)
     const flat = say(m, KIND_NAME.flat)
     await screen.findByRole("table", { name: "Calibration" })
@@ -112,12 +87,12 @@ describe("CalibrationChoices", () => {
     await waitFor(() => expect(calls.onNo).toHaveBeenCalledWith([{ sessionId: SUGGESTED, kind: "flat" }]))
     await waitFor(() => expect(rowOf(flat)).toHaveFocus())
 
-    expect(seed.catalog.sessions[SUGGESTED]!.calibration).toEqual(before)
+    expect(rows).toEqual(before)
   })
 
   it("offers Choose ▸ with the row's revision, and opens a row's evidence one level deep", async () => {
     const user = userEvent.setup()
-    const rows = calibrationChoiceRows(seed, [SUGGESTED])
+    const rows = ONE_SESSION_ROWS
     const flat = row(rows, SUGGESTED, "flat")
     const calls = renderChoices(rows)
     await screen.findByRole("table", { name: "Calibration" })
@@ -145,7 +120,7 @@ describe("CalibrationChoices", () => {
   })
 
   it("not changeable: no row actions, the evidence still opens", async () => {
-    renderChoices(calibrationChoiceRows(seed, [SUGGESTED]), { changeable: false })
+    renderChoices(ONE_SESSION_ROWS, { changeable: false })
     const table = await screen.findByRole("table", { name: "Calibration" })
     expect(within(table).queryByRole("button", { name: m.verb_confirm() })).not.toBeInTheDocument()
     expect(within(table).getAllByRole("button", { name: m.table_row_details({ name: say(m, KIND_NAME.flat) }) }).length).toBe(1)
@@ -162,7 +137,7 @@ describe("CalibrationChoices", () => {
   })
 
   it("boxed: draws no frame of its own inside a flush Box, and its own frame elsewhere", async () => {
-    const rows = calibrationChoiceRows(seed, [PINNED])
+    const rows = pinnedRows
     const { unmount } = inRouter(<CalibrationChoices label="Calibration" rows={rows} boxed onConfirm={vi.fn()} onPick={vi.fn()} onNo={vi.fn()} />)
     const boxed = (await screen.findByRole("table", { name: "Calibration" })).parentElement!
     expect(boxed).toHaveClass("border-0", "rounded-none")

@@ -11,9 +11,8 @@
 import { ChevronLeft, ChevronRight, Copy, Pencil, Play, RefreshCw, Star, Trash2 } from "lucide-react"
 import { useState } from "react"
 import { useMessages } from "@/app/preferences"
-import { MOD_LABEL } from "@/app/shortcuts"
 import { ActionToggle } from "@/components/app/action-toggle"
-import { ActionBar, ActionButton, ActionMenu, IconButton, MenuItems, useAction } from "@/components/app/actions"
+import { ActionBar, ActionButton, ActionMenu, IconButton, MenuItems, QuickActionModeProvider, useAction } from "@/components/app/actions"
 import type { Action, MenuItem } from "@/components/app/contracts"
 import { Section } from "@/components/app/page"
 import { RowActions, RowContextMenu } from "@/components/app/row-actions"
@@ -21,8 +20,9 @@ import { Button } from "@/components/ui/button"
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from "@/components/ui/context-menu"
 import { Spinner } from "@/components/ui/spinner"
 import type { Messages } from "@/lib/i18n"
-import type { CommitResult } from "@/store/core"
-import { useStore } from "@/store/core"
+import { MOD_LABEL } from "./fixtures/keys"
+import { TARGET_NAMES } from "./fixtures/library"
+import { after, libraryFailure, SUCCEEDED } from "./fixtures/results"
 import { Specimen } from "./specimen"
 
 /** Each Button variant with the caption naming its role. */
@@ -38,10 +38,10 @@ const SIZES = ["sm", "default", "xs"] as const
 
 const SPINNER_SIZE: Record<(typeof SIZES)[number], string | undefined> = { sm: "size-3.5", default: undefined, xs: "size-3" }
 
-const done = (): CommitResult => ({ ok: true })
+const done = () => SUCCEEDED
 
 /** Settles after a moment, so the busy state can be seen. */
-const slowly = (): Promise<CommitResult> => new Promise((resolve) => setTimeout(() => resolve({ ok: true }), 1500))
+const slowly = () => after(1500, SUCCEEDED)
 
 /** The demo set: every kind, a dialog opener, a confirm, an unavailable action, a refusal, a failure and a slow run. */
 function demoActions(m: Messages, names: string[]) {
@@ -56,16 +56,10 @@ function demoActions(m: Messages, names: string[]) {
     run: done,
     unavailable: { action: m.sessions_cant_archive(), reason: m.sessions_in_a_project({ count: 2 }), blockers: names.slice(0, 2).map((label) => ({ label })) },
   }
-  const remove: Action = {
-    id: "remove",
-    label: m.run_remove(),
-    run: (): CommitResult => ({ ok: false, reason: "refused", message: m.project_refusal_remove_rig(), reasons: names }),
-  }
-  const fail: Action = {
-    id: "rescan-fail",
-    label: m.location_rescan(),
-    run: (): CommitResult => ({ ok: false, reason: "write-failed", message: m.op_prep_write_removed({ folder: "/Volumes/Astro-T7/Captures" }) }),
-  }
+  // A rule refused it and nothing was written: a Refusal beside the trigger.
+  const remove: Action = { id: "remove", label: m.run_remove(), run: () => libraryFailure("input_write_risk", "none") }
+  // The same call may succeed again: the error with Retry.
+  const fail: Action = { id: "rescan-fail", label: m.location_rescan(), run: () => libraryFailure("access_denied", "retry", "libraryStartScan") }
   const trash: Action = {
     id: "trash",
     label: m.common_move_to_trash(),
@@ -191,6 +185,35 @@ function Toggles() {
   )
 }
 
+/** One ticked action under each Quick actions mode: one-click runs it in place with Undo; Open page sends it to its page. */
+function QuickModes() {
+  const m = useMessages()
+  const [last, setLast] = useState<string | null>(null)
+  const favourite: Action = {
+    id: "quick-favourite",
+    label: m.targets_favourite_add(),
+    icon: Star,
+    run: () => {
+      setLast(m.catalogue_actions_quick_done())
+      return done()
+    },
+    quick: { oneClick: { undo: () => ({ message: m.catalogue_actions_quick_done(), run: done }) }, openPage: { link: { to: "/targets" } } },
+  }
+  return (
+    <div className="space-y-2">
+      <Part heading={m.catalogue_actions_quick_heading()} caption={m.catalogue_actions_quick_caption()} />
+      {(["one-click", "open-page"] as const).map((mode) => (
+        <Specimen key={mode} caption={mode}>
+          <QuickActionModeProvider mode={mode}>
+            <ActionButton action={favourite} size="sm" />
+          </QuickActionModeProvider>
+        </Specimen>
+      ))}
+      {last ? <p className="text-xs text-muted-foreground">{last}</p> : null}
+    </div>
+  )
+}
+
 function Bars({ actions }: { actions: DemoActions }) {
   const m = useMessages()
   const { start, rename, rescan, copyPath, duplicate, archive, remove, trash } = actions
@@ -287,10 +310,7 @@ function Rows({ actions, names }: { actions: DemoActions; names: string[] }) {
 
 export function ActionsCatalogue() {
   const m = useMessages()
-  const targets = useStore((s) => s.catalog.targets)
-  const names = Object.values(targets)
-    .slice(0, 3)
-    .map((target) => target.name)
+  const names = [...TARGET_NAMES]
   const actions = demoActions(m, names)
   return (
     <Section title={m.catalogue_actions_heading()} description={m.catalogue_actions_summary()}>
@@ -298,6 +318,7 @@ export function ActionsCatalogue() {
         <RoleMatrix />
         <KindMatrix actions={actions} />
         <Toggles />
+        <QuickModes />
         <Bars actions={actions} />
         <Menus actions={actions} />
         <Rows actions={actions} names={names} />

@@ -2,6 +2,8 @@ import { render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { RotateCw } from "lucide-react"
 import { describe, expect, it, vi } from "vitest"
+import type { ActionResult } from "@/api/ipc"
+import { libraryFailure, SUCCEEDED } from "@/app/catalogue/fixtures/results"
 import { m } from "@/lib/i18n"
 import { ActionButton, ActionMenu } from "./actions"
 import type { Action, ConfirmSpec, MenuItem } from "./contracts"
@@ -76,8 +78,8 @@ describe("ActionButton", () => {
 
   it("keeps its ConfirmDialog open and busy until an async run settles", async () => {
     const user = userEvent.setup()
-    let finish: (result: { ok: true }) => void = () => undefined
-    const run = vi.fn(() => new Promise<{ ok: true }>((resolve) => (finish = resolve)))
+    let finish: (result: ActionResult<null>) => void = () => undefined
+    const run = vi.fn(() => new Promise<ActionResult<null>>((resolve) => (finish = resolve)))
     render(<ActionButton action={{ id: "trash", label: "Move to Trash", kind: "destructive", run, confirm: TRASH_CONFIRM }} />)
 
     await user.click(screen.getByRole("button", { name: "Move to Trash…" }))
@@ -87,19 +89,19 @@ describe("ActionButton", () => {
     expect(screen.getByRole("alertdialog")).toBe(dialog)
     expect(within(dialog).getByRole("button", { name: "Move" })).toHaveAttribute("aria-busy", "true")
 
-    finish({ ok: true })
+    finish(SUCCEEDED)
     await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument())
   })
 
-  it("keeps its ConfirmDialog open with Retry when an async run fails", async () => {
+  it("keeps its ConfirmDialog open with Retry when an async run fails and the library says retry", async () => {
     const user = userEvent.setup()
-    const run = vi.fn(async () => ({ ok: false as const, reason: "write-failed" as const, message: "Cold-1 is offline" }))
+    const run = vi.fn(async () => libraryFailure("source_unavailable", "retry"))
     render(<ActionButton action={{ id: "trash", label: "Move to Trash", kind: "destructive", run, confirm: TRASH_CONFIRM }} />)
 
     await user.click(screen.getByRole("button", { name: "Move to Trash…" }))
     const dialog = await screen.findByRole("alertdialog", { name: "Move 3 files to Trash?" })
     await user.click(within(dialog).getByRole("button", { name: "Move" }))
-    expect(await within(dialog).findByRole("alert")).toHaveTextContent("Cold-1 is offline")
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent(m.action_failure_source_unavailable())
     expect(within(dialog).getByRole("button", { name: m.verb_retry() })).toBeInTheDocument()
   })
 })

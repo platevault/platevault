@@ -7,9 +7,8 @@
  */
 import { useState } from "react"
 import { useMessages } from "@/app/preferences"
-import { DEFAULT_GOAL, type GoalKinds, GoalKindsFields, GoalValuesEditor } from "@/components/domain/goal-fields"
-import { BUILT_IN_GOAL_TEMPLATES, qualityBarFor } from "@/domain/templates"
-import type { GoalTemplateValue } from "@/domain/types"
+import { DEFAULT_GOAL, type GoalKinds, GoalKindsFields, type GoalTemplateValue, GoalValuesEditor, qualityBarFor } from "@/components/domain/goal-fields"
+import { GOAL_TEMPLATES } from "./fixtures/library"
 import { ComponentSection, Specimen } from "./specimen"
 
 const VALUES: GoalTemplateValue[] = [
@@ -25,7 +24,7 @@ export function GoalFieldsCatalogue() {
   const [values, setValues] = useState<GoalTemplateValue[]>(VALUES)
   const [narrow, setNarrow] = useState<GoalTemplateValue[]>([])
   const [empty, setEmpty] = useState<GoalTemplateValue[]>([])
-  const templates = { items: BUILT_IN_GOAL_TEMPLATES.map((t) => ({ id: t.id, label: t.name })), apply: (id: string) => setValues(structuredClone(BUILT_IN_GOAL_TEMPLATES.find((t) => t.id === id)?.values ?? [])) }
+  const templates = { items: GOAL_TEMPLATES.map((t) => ({ id: t.id, label: t.name })), apply: (id: string) => setValues(structuredClone(GOAL_TEMPLATES.find((t) => t.id === id)?.values ?? [])) }
   return (
     <ComponentSection components={["GoalKindsFields", "GoalValuesEditor"]} description={m.catalogue_goal_fields_desc()}>
       <div className="grid max-w-3xl gap-4">

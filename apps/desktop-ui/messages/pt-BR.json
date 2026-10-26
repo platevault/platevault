@@ -594,6 +594,7 @@
   "folder_picker_applications": "Aplicativos",
   "folder_picker_contents": "Conteúdo de {name}",
   "folder_picker_empty_items": "Pasta vazia",
+  "folder_picker_list_failed": "O PlateVault não conseguiu listar {name}. Tente de novo.",
   "folder_picker_live_items": [
     {
       "declarations": [
@@ -4956,6 +4957,9 @@
   "catalogue_actions_button_caption": "O tipo escolhe a variante. Em uma célula de tabela xs, uma ação principal mantém o contorno. Passe o cursor ou foque em {archive} para ver os impedimentos. {start} e {rescan} demoram. A ação {remove} retorna uma recusa. A segunda execução de {rescan} falha e oferece {retry}.",
   "catalogue_actions_toggle_heading": "ActionToggle",
   "catalogue_actions_toggle_caption": "Pressionado enquanto o estado está ativo. Pressionar executa a ação oposta. Uma recusa aparece ao lado do botão.",
+  "catalogue_actions_quick_heading": "QuickActionModeProvider",
+  "catalogue_actions_quick_caption": "Uma ação marcada em cada modo de ações rápidas. Um clique a executa no lugar e oferece Desfazer. Abrir página abre a página dona dela.",
+  "catalogue_actions_quick_done": "Adicionado aos favoritos",
   "catalogue_actions_bar_heading": "ActionBar",
   "catalogue_actions_bar_caption": "A barra mostra até 3 botões padrão, o menu nomeado e uma ação principal na extremidade final. A quarta ação padrão, as ações destrutivas e as excedentes vão para o menu ({more} por padrão ou um menu de objeto). O retorno aparece abaixo da barra.",
   "catalogue_actions_bar_empty": "Sem ações: nada é exibido",
@@ -5222,8 +5226,9 @@
     }
   ],
   "ds_folder_picker_title": "Seletor de pastas",
+  "ds_folder_picker_description": "Escolhe uma pasta, um arquivo ou um aplicativo num disco de exemplo. Escolher nunca grava nada.",
   "ds_operation_title": "Operação",
-  "ds_operation_description": "Em andamento com progresso, resultados por item e um status final. Usa uma indexação real.",
+  "ds_operation_description": "Em andamento com progresso, resultados por item e um status final, numa indexação de exemplo.",
   "picker_today": "Data atual",
   "picker_week_previous": "Mover o calendário uma semana para trás",
   "picker_week_next": "Próxima semana",

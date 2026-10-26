@@ -7,9 +7,8 @@ import { Button } from "@/components/ui/button"
 import { m } from "@/lib/i18n"
 import { BlockersPreview, MasterPreview, type MasterPreviewProps, UsedByPreview } from "./previews"
 
-const ORIGIN = { projectId: null, sourcePath: "", sessionId: null }
-const OLDER = { id: "mv_older", capturedAt: "2026-05-02T22:10:00.000Z", frameCount: 30, origin: { kind: "library", ...ORIGIN } } as const
-const NEWER = { id: "mv_newer", capturedAt: "2026-09-14T21:40:00.000Z", frameCount: 40, origin: { kind: "stacked", ...ORIGIN } } as const
+const OLDER = { id: "mv_older", capturedAt: "2026-05-02T22:10:00.000Z", frameCount: 30, origin: "library" } as const
+const NEWER = { id: "mv_newer", capturedAt: "2026-09-14T21:40:00.000Z", frameCount: 40, origin: "stacked" } as const
 const DARK = { kind: "dark", cameraName: "ZWO ASI2600MM Pro", gain: 100, offset: 50, ccdTempC: -10, exposureS: 300, versions: [OLDER, NEWER] } as const
 
 /** The previews' links go through the router, so they render inside one. */

@@ -30,7 +30,7 @@ import { cn } from "@/lib/utils"
 import type { Column } from "./contracts"
 import { KeyValueList, PathText } from "./data"
 import { DataTable } from "./data-table"
-import { FolderPicker, type PathPickerMode } from "./folder-picker"
+import { type FolderSource, FolderPicker, type PathPickerMode } from "./folder-picker"
 import { SettingsRow, useInSettingsSection } from "./settings"
 
 // ---------------------------------------------------------------------------
@@ -578,6 +578,8 @@ export interface PathFieldProps extends FieldChrome {
   mode: PathPickerMode
   value: string | null
   onChange: (path: string) => void
+  /** Where the chooser reads the disk. */
+  source: FolderSource
   /** File extensions the chooser lists in "file" mode, e.g. `[".fits", ".xisf"]`. */
   filters?: readonly string[]
   /** Chooser title; the field's label when omitted ("Capture folder"). */
@@ -590,7 +592,7 @@ export interface PathFieldProps extends FieldChrome {
 }
 
 /** One chosen path as text plus "Choose…", which opens the OS chooser. */
-export function PathField({ mode, value, onChange, filters, pickerTitle, chooseVerb, initialPath, disabled, ...chrome }: PathFieldProps) {
+export function PathField({ mode, value, onChange, source, filters, pickerTitle, chooseVerb, initialPath, disabled, ...chrome }: PathFieldProps) {
   const m = useMessages()
   const [open, setOpen] = useState(false)
   const empty = { folder: m.fields_path_none_folder, file: m.fields_path_none_file, executable: m.fields_path_none_executable }[mode]
@@ -603,7 +605,7 @@ export function PathField({ mode, value, onChange, filters, pickerTitle, chooseV
           <ChooserControl control={control} disabled={disabled} onChoose={() => setOpen(true)} shown={value ? <PathText path={value} /> : <span className="text-sm text-muted-foreground">{empty()}</span>} />
         )}
       </Field>
-      <FolderPicker open={open} onOpenChange={setOpen} title={pickerTitle ?? chrome.label} mode={mode} filters={filters} initialPath={openAt} chooseVerb={chooseVerb} onChoose={onChange} />
+      <FolderPicker open={open} onOpenChange={setOpen} title={pickerTitle ?? chrome.label} source={source} mode={mode} filters={filters} initialPath={openAt} chooseVerb={chooseVerb} onChoose={onChange} />
     </>
   )
 }
@@ -612,6 +614,8 @@ export interface FilesFieldProps extends FieldChrome {
   /** The chosen files in the chooser's order; empty while none is chosen. */
   value: readonly string[]
   onChange: (paths: string[]) => void
+  /** Where the chooser reads the disk. */
+  source: FolderSource
   /** File extensions the chooser lists, e.g. `[".fits", ".xisf"]`. */
   filters?: readonly string[]
   /** Chooser title; the field's label when omitted. */
@@ -624,7 +628,7 @@ export interface FilesFieldProps extends FieldChrome {
 }
 
 /** Several files of one folder chosen at once with the OS chooser: one reads as its path, several as "3 files in {folder}". */
-export function FilesField({ value, onChange, filters, pickerTitle, chooseVerb, initialPath, disabled, ...chrome }: FilesFieldProps) {
+export function FilesField({ value, onChange, source, filters, pickerTitle, chooseVerb, initialPath, disabled, ...chrome }: FilesFieldProps) {
   const m = useMessages()
   const [open, setOpen] = useState(false)
   const folder = value.length > 0 ? value[0]!.slice(0, value[0]!.lastIndexOf("/")) : null
@@ -646,6 +650,7 @@ export function FilesField({ value, onChange, filters, pickerTitle, chooseVerb, 
         open={open}
         onOpenChange={setOpen}
         title={pickerTitle ?? chrome.label}
+        source={source}
         mode="files"
         filters={filters}
         initialPath={folder ?? initialPath}

@@ -48,13 +48,6 @@ export interface MosaicPointing {
   inside: boolean
 }
 
-export interface MosaicFieldModel {
-  panels: MosaicFieldPanel[]
-  pointings: MosaicPointing[]
-  /** The field of view of the Project's first rig with a known one; null when none is known. */
-  field: FieldSize | null
-}
-
 const cosDec = (dec: number) => Math.max(0.1, Math.cos((dec * Math.PI) / 180))
 
 /** RA difference a − b in degrees, wrapped to −180…180. */

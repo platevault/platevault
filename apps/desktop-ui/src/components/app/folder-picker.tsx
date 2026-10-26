@@ -1,10 +1,10 @@
 /**
- * Simulated OS chooser (foundation-owned, HLD §8). Lists volumes and folders
- * from the simulated disk, including empty folders; offline volumes and
+ * In-app OS chooser (foundation-owned, HLD §8). Lists the volumes and folders
+ * a `FolderSource` reads, including empty folders; offline volumes and
  * access-denied folders show their reason. `mode` picks what it returns, as
  * the native panels do: a folder (default), a file matching `filters`,
  * several files of one folder ("files", each press selects or clears one),
- * or an application bundle (the simulated computer's Applications folder is a root).
+ * or an application bundle (the Applications folder is a root).
  * Choosing only returns a path: it never registers a location or writes
  * anything. Used for locations (T1), View folder parents (T4), storage
  * destinations (T5) and by `PathField` (fields.tsx).
@@ -14,18 +14,47 @@ import { useEffect, useRef, useState } from "react"
 import { useMessages } from "@/app/preferences"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { filesUnder, listFolders, volumeForPath } from "@/domain/disk"
-import { isUnder } from "@/domain/indexing"
-import { unitCount } from "@/domain/labels"
-import type { Disk } from "@/domain/types"
-import { say } from "@/lib/i18n"
+import { Spinner } from "@/components/ui/spinner"
+import { formatCount } from "@/lib/format"
 import { cn } from "@/lib/utils"
-import { useStore } from "@/store/core"
 import { PathText } from "./data"
-import { Notice } from "./feedback"
+import { ActionError, Notice } from "./feedback"
 
 /** What the chooser returns: the current folder, a file, or an application bundle. */
 export type PathPickerMode = "folder" | "file" | "executable"
+
+/** One entry directly inside a listed folder. `app` is an application bundle, chosen like a file. */
+export interface FolderEntry {
+  path: string
+  name: string
+  kind: "folder" | "file" | "app"
+  /** Read access denied: the folder is listed but its contents are not. */
+  denied: boolean
+}
+
+/** A folder's direct entries, or that reading its contents was denied. */
+export type FolderListing = { denied: false; entries: readonly FolderEntry[] } | { denied: true }
+
+/** A place in the side list: one volume. */
+export interface FolderRoot {
+  id: string
+  name: string
+  mountPath: string
+  mounted: boolean
+}
+
+/**
+ * Where the chooser reads the disk. The library registers no folder-listing
+ * command yet (astro-plan-wre19), so the shell that opens the chooser supplies
+ * it. Keep `listFolder` stable (a module function or a memoized callback): a
+ * new function lists the open folder again.
+ */
+export interface FolderSource {
+  /** The volumes, in side-list order. */
+  roots: readonly FolderRoot[]
+  /** The folder's direct entries; rejects when the folder cannot be read at all. */
+  listFolder: (path: string) => Promise<FolderListing>
+}
 
 interface FolderPickerBaseProps {
   open: boolean
@@ -33,7 +62,8 @@ interface FolderPickerBaseProps {
   /** Names the task, e.g. "Choose a capture folder". */
   title: string
   description?: string
-  /** Folder to open at. Falls back to the first mounted volume (Applications for `executable`) when it is offline or unknown. */
+  source: FolderSource
+  /** Folder to open at. Falls back to the first mounted volume (Applications for `executable`) when it is on no mounted root. */
   initialPath?: string | null
   /** Verb of the primary action; the chosen name follows: "Choose Captures". */
   chooseVerb?: string
@@ -44,101 +74,80 @@ interface FolderPickerBaseProps {
 /** One path (default "folder"), or with `mode: "files"` the files selected in one folder, in list order. */
 export type FolderPickerProps = FolderPickerBaseProps & ({ mode?: PathPickerMode; onChoose: (path: string) => void } | { mode: "files"; onChoose: (paths: string[]) => void })
 
-/** A place in the side list: a volume, or the Applications folder in `executable` mode. */
-interface Root {
-  id: string
-  name: string
-  mountPath: string
-  mounted: boolean
-}
+/** The open folder's contents as the list shows them. */
+type Listing = { state: "loading" } | { state: "listed"; entries: FolderEntry[] } | { state: "denied" } | { state: "failed" }
 
-interface Entry {
-  path: string
-  name: string
-  kind: "folder" | "file" | "app"
-  /** Read access denied: the folder is listed but its contents are not. */
-  denied: boolean
-}
-
+const APPLICATIONS_ID = "applications"
 const APPLICATIONS = "/Applications"
 const EXECUTABLE_EXTENSIONS = [".app", ".exe"]
 
-/** One entry per mount path: the mounted volume wins (the impostor Archive shares a path). */
-function volumeRoots(disk: Disk): Root[] {
-  const byPath = new Map<string, Root>()
-  for (const volume of Object.values(disk.volumes)) {
-    const seen = byPath.get(volume.mountPath)
-    if (!seen || (!seen.mounted && volume.mounted)) byPath.set(volume.mountPath, volume)
-  }
-  return [...byPath.values()].sort((a, b) => a.name.localeCompare(b.name))
-}
-
+const isUnder = (path: string, folder: string) => path === folder || path.startsWith(`${folder}/`)
 const parentOf = (path: string) => path.slice(0, path.lastIndexOf("/"))
 const nameOf = (path: string) => path.slice(path.lastIndexOf("/") + 1)
 const matches = (path: string, extensions: readonly string[] | undefined) => !extensions?.length || extensions.some((ext) => path.toLowerCase().endsWith(ext.toLowerCase()))
+const byName = (a: FolderEntry, b: FolderEntry) => a.name.localeCompare(b.name)
 
-function startPath(disk: Disk, roots: Root[], initialPath: string | null | undefined): string {
-  if (initialPath && roots.some((r) => r.id === "applications") && isUnder(initialPath, APPLICATIONS)) return initialPath
-  const volumeId = initialPath ? volumeForPath(disk, initialPath) : null
-  if (initialPath && volumeId && disk.volumes[volumeId]?.mounted) return initialPath
-  return roots.find((v) => v.mounted)?.mountPath ?? "/Volumes"
+function startPath(roots: readonly FolderRoot[], initialPath: string | null | undefined): string {
+  if (initialPath && roots.some((root) => root.mounted && isUnder(initialPath, root.mountPath))) return initialPath
+  return roots.find((root) => root.mounted)?.mountPath ?? "/"
 }
 
-/** The application bundles and the folders that lead to them, directly inside `folder`. */
-function applicationEntries(disk: Disk, folder: string): Entry[] {
-  const apps = disk.apps.filter((app) => app.present && isUnder(app.path, folder) && app.path !== folder)
-  const entries = new Map<string, Entry>()
-  for (const app of apps) {
-    if (parentOf(app.path) === folder) {
-      entries.set(app.path, { path: app.path, name: nameOf(app.path), kind: "app", denied: false })
-      continue
-    }
-    const child = `${folder}/${app.path.slice(folder.length + 1).split("/")[0]}`
-    if (!entries.has(child)) entries.set(child, { path: child, name: nameOf(child), kind: "folder", denied: false })
-  }
-  return [...entries.values()].sort((a, b) => a.name.localeCompare(b.name))
-}
-
-function entriesIn(disk: Disk, folder: string, mode: PathPickerMode, filters: readonly string[] | undefined): Entry[] {
-  if (mode === "executable" && isUnder(folder, APPLICATIONS)) return applicationEntries(disk, folder)
-  const folders = listFolders(disk, folder).map((f): Entry => ({ path: f.path, name: f.name, kind: "folder", denied: f.denied }))
+/** The entries `mode` offers, folders first: folders only, or the files `filters` match, or application bundles. */
+function shownEntries(entries: readonly FolderEntry[], mode: PathPickerMode, filters: readonly string[] | undefined): FolderEntry[] {
+  const folders = entries.filter((entry) => entry.kind === "folder").sort(byName)
   if (mode === "folder") return folders
-  const extensions = mode === "executable" ? EXECUTABLE_EXTENSIONS : filters
-  const fileKind: Entry["kind"] = mode === "executable" ? "app" : "file"
-  const files = filesUnder(disk, folder)
-    .filter((f) => parentOf(f.path) === folder && matches(f.path, extensions))
-    .map((f): Entry => ({ path: f.path, name: nameOf(f.path), kind: fileKind, denied: false }))
-    .sort((a, b) => a.name.localeCompare(b.name))
-  return [...folders, ...files]
+  const choosable =
+    mode === "executable"
+      ? entries.filter((entry) => entry.kind === "app" || (entry.kind === "file" && matches(entry.path, EXECUTABLE_EXTENSIONS))).map((entry): FolderEntry => ({ ...entry, kind: "app" }))
+      : entries.filter((entry) => entry.kind === "file" && matches(entry.path, filters))
+  return [...folders, ...choosable.sort(byName)]
 }
 
 export function FolderPicker(props: FolderPickerProps) {
-  const { open, onOpenChange, title, description, initialPath, chooseVerb, filters } = props
+  const { open, onOpenChange, title, description, source, initialPath, chooseVerb, filters } = props
   const many = props.mode === "files"
   const mode: PathPickerMode = props.mode === "files" ? "file" : (props.mode ?? "folder")
   const m = useMessages()
-  const disk = useStore((s) => s.disk)
-  const roots: Root[] = mode === "executable" ? [{ id: "applications", name: m.folder_picker_applications(), mountPath: APPLICATIONS, mounted: true }, ...volumeRoots(disk)] : volumeRoots(disk)
-  const [current, setCurrent] = useState(() => startPath(disk, roots, initialPath))
+  const roots: readonly FolderRoot[] = mode === "executable" ? [{ id: APPLICATIONS_ID, name: m.folder_picker_applications(), mountPath: APPLICATIONS, mounted: true }, ...source.roots] : source.roots
+  const [current, setCurrent] = useState(() => startPath(roots, initialPath))
+  const [listing, setListing] = useState<Listing>({ state: "loading" })
+  const [attempt, setAttempt] = useState(0)
   const [selected, setSelected] = useState<string[]>([])
   const listPane = useRef<HTMLDivElement>(null)
   const upButton = useRef<HTMLButtonElement>(null)
   const chooseButton = useRef<HTMLButtonElement>(null)
   const focusAfterMove = useRef(false)
-  // Each opening starts at the requested folder, as an OS dialog does; later disk changes do not move it.
+  const { listFolder } = source
+  // Each opening starts at the requested folder, as an OS dialog does.
   useEffect(() => {
     if (!open) return
-    setCurrent(startPath(disk, roots, initialPath))
+    setCurrent(startPath(roots, initialPath))
     setSelected([])
   }, [open])
-  // Opening a folder replaces the control that was pressed: keep keyboard focus in the list.
   useEffect(() => {
-    if (!focusAfterMove.current) return
+    if (!open) return
+    let live = true
+    setListing({ state: "loading" })
+    listFolder(current).then(
+      (result) => {
+        if (live) setListing(result.denied ? { state: "denied" } : { state: "listed", entries: shownEntries(result.entries, mode, filters) })
+      },
+      () => {
+        if (live) setListing({ state: "failed" })
+      },
+    )
+    return () => {
+      live = false
+    }
+  }, [open, current, attempt, listFolder, mode, filters])
+  // Opening a folder replaces the control that was pressed: keep keyboard focus in the list once it is listed.
+  useEffect(() => {
+    if (!focusAfterMove.current || listing.state === "loading") return
     focusAfterMove.current = false
     const firstRow = listPane.current?.querySelector<HTMLElement>("[data-folder-row]")
     const up = upButton.current && !upButton.current.disabled ? upButton.current : null
     ;(firstRow ?? up ?? chooseButton.current)?.focus()
-  }, [current])
+  }, [listing])
 
   function openFolder(path: string) {
     focusAfterMove.current = true
@@ -157,11 +166,10 @@ export function FolderPicker(props: FolderPickerProps) {
     setSelected(!many ? [path] : selected.includes(path) ? selected.filter((p) => p !== path) : [...selected, path])
   }
 
-  const root = roots.find((v) => v.mounted && isUnder(current, v.mountPath))
-  const entries = entriesIn(disk, current, mode, filters)
+  const root = roots.find((r) => r.mounted && isUnder(current, r.mountPath))
+  const entries = listing.state === "listed" ? listing.entries : []
   /** The selection in list order. */
   const inOrder = (paths: readonly string[]) => entries.filter((e) => paths.includes(e.path)).map((e) => e.path)
-  const denied = disk.deniedPaths.some((p) => isUnder(current, p))
   const crumbs = root
     ? [root.mountPath, ...current.slice(root.mountPath.length).split("/").filter(Boolean)].map((_, index, parts) =>
         index === 0 ? root.mountPath : `${root.mountPath}/${parts.slice(1, index + 1).join("/")}`,
@@ -172,7 +180,16 @@ export function FolderPicker(props: FolderPickerProps) {
   const choosesFolder = mode === "folder"
   const chosen = choosesFolder ? [current] : inOrder(selected)
   const verb = chooseVerb ?? m.verb_choose()
-  const chosenName = chosen.length > 1 ? say(m, unitCount("files", chosen.length)) : chosen.length === 1 ? (choosesFolder ? currentName : nameOf(chosen[0]!)) : null
+  const chosenName = chosen.length > 1 ? m.op_count_files({ count: chosen.length, n: formatCount(chosen.length) }) : chosen.length === 1 ? (choosesFolder ? currentName : nameOf(chosen[0]!)) : null
+  // A failed listing announces itself (ActionError is an alert); loading says nothing until the list arrives.
+  const liveText =
+    listing.state === "denied"
+      ? m.folder_picker_live_denied({ name: currentName })
+      : listing.state !== "listed"
+        ? ""
+        : choosesFolder
+          ? m.folder_picker_live_count({ name: currentName, count: entries.length })
+          : m.folder_picker_live_items({ name: currentName, count: entries.length })
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -203,7 +220,7 @@ export function FolderPicker(props: FolderPickerProps) {
                       className={cn("w-full justify-start", active && "bg-primary/10 text-foreground")}
                       onClick={() => openFolder(volume.mountPath)}
                     >
-                      {volume.id === "applications" ? <AppWindow aria-hidden="true" data-icon="inline-start" /> : <HardDrive aria-hidden="true" data-icon="inline-start" />}
+                      {volume.id === APPLICATIONS_ID ? <AppWindow aria-hidden="true" data-icon="inline-start" /> : <HardDrive aria-hidden="true" data-icon="inline-start" />}
                       <span className="truncate">{volume.name}</span>
                     </Button>
                     {volume.mounted ? null : (
@@ -244,18 +261,18 @@ export function FolderPicker(props: FolderPickerProps) {
                 </ol>
               </nav>
             </div>
-            <div ref={listPane} className="max-h-80 min-h-0 flex-1 overflow-y-auto p-2">
+            <div ref={listPane} className="max-h-80 min-h-0 flex-1 overflow-y-auto p-2" aria-busy={listing.state === "loading"}>
               <p className="sr-only" aria-live="polite">
-                {open
-                  ? denied
-                    ? m.folder_picker_live_denied({ name: currentName })
-                    : choosesFolder
-                      ? m.folder_picker_live_count({ name: currentName, count: entries.length })
-                      : m.folder_picker_live_items({ name: currentName, count: entries.length })
-                  : ""}
+                {open ? liveText : ""}
               </p>
-              {denied ? (
+              {listing.state === "loading" ? (
+                <div className="flex justify-center px-2 py-6">
+                  <Spinner />
+                </div>
+              ) : listing.state === "denied" ? (
                 <Notice tone="warning" title={m.status_access_denied()} />
+              ) : listing.state === "failed" ? (
+                <ActionError className="px-2 py-6" message={m.folder_picker_list_failed({ name: currentName })} onRetry={() => setAttempt((n) => n + 1)} />
               ) : entries.length === 0 ? (
                 <p className="px-2 py-6 text-center text-sm text-muted-foreground">{choosesFolder ? m.folder_picker_empty() : m.folder_picker_empty_items()}</p>
               ) : (

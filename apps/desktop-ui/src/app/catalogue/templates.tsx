@@ -21,7 +21,6 @@
  * Every string comes from the messages; target names, nights and paths are
  * the seed's data.
  */
-import { Link } from "@tanstack/react-router"
 import { Inbox } from "lucide-react"
 import { type ReactNode, type RefObject, useLayoutEffect, useRef, useState } from "react"
 import { useMessages } from "@/app/preferences"
@@ -44,57 +43,57 @@ import { ListSection, SettingsPage } from "@/components/templates/settings-page"
 import { StepPage } from "@/components/templates/step-page"
 import { Toggle } from "@/components/ui/toggle"
 import { Button } from "@/components/ui/button"
-import { WRAP_UP_NAME, WRAP_UP_STEPS } from "@/domain/labels"
-import { PROJECT_TAB_NAME, PROJECT_TABS, type ProjectTabId } from "@/domain/project-view"
-import type { Catalog, Location, Project, ProjectGroup, Session, Subject, WrapUpStepId } from "@/domain/types"
 import { formatCount, formatDuration, formatExposure, formatNight } from "@/lib/format"
-import { type Messages, say } from "@/lib/i18n"
-import { useStore } from "@/store/core"
+import type { Messages } from "@/lib/i18n"
+import { heldSessions, SAMPLE_LIBRARY, type SampleGroup, type SampleLibrary, type SampleLocationRecord, type SampleSession, type SampleSubject, sessionLabel, targetName } from "./fixtures/sessions"
 import { ComponentSection } from "./specimen"
+
+type WrapUpStepId = "cleanup" | "trash" | "archive"
+/** Wrap up steps in order (PRJ-FR-14); Close project is the last step's final action. */
+const WRAP_UP_STEPS: readonly WrapUpStepId[] = ["cleanup", "trash", "archive"]
+const WRAP_UP_NAME: Record<WrapUpStepId, (m: Messages) => string> = { cleanup: (m) => m.wrapup_clean_up(), trash: (m) => m.trash_title(), archive: (m) => m.wrapup_archive_title() }
+
+type ProjectTabId = "sessions" | "calibrate" | "view" | "output" | "wrap-up"
+const PROJECT_TABS: readonly ProjectTabId[] = ["sessions", "calibrate", "view", "output", "wrap-up"]
+const PROJECT_TAB_NAME: Record<ProjectTabId, (m: Messages) => string> = {
+  sessions: (m) => m.project_tab_sessions(),
+  calibrate: (m) => m.project_tab_calibrate(),
+  view: (m) => m.project_tab_view(),
+  output: (m) => m.project_tab_output(),
+  "wrap-up": (m) => m.wrapup_action(),
+}
+
+const FIRST_PROJECT = Object.values(SAMPLE_LIBRARY.projects)[0]!
 
 // ---------------------------------------------------------------------------
 // Shared: seed labels, the session facts, the reviewer lines
 // ---------------------------------------------------------------------------
 
-function targetName(catalog: Catalog, session: Session): string {
-  const id = session.target.value
-  return (id ? catalog.targets[id]?.name : undefined) ?? session.objectLabel ?? "–"
-}
-
-function sessionLabel(catalog: Catalog, session: Session): string {
-  return `${targetName(catalog, session)} · ${formatNight(session.night)} · ${session.channel ?? "–"}`
-}
-
-/** The sessions a Project holds, in its input order. */
-function heldSessions(catalog: Catalog, project: Project): Session[] {
-  return project.inputs.flatMap((input) => catalog.sessions[input.sessionId] ?? [])
-}
-
-function sessionFacts(m: Messages, catalog: Catalog, session: Session) {
+function sessionFacts(m: Messages, catalog: SampleLibrary, session: SampleSession) {
   return [
     { label: m.run_col_night(), value: formatNight(session.night, true) },
     { label: m.sessions_column_target(), value: targetName(catalog, session) },
     { label: m.run_col_channel(), value: session.channel ?? "–" },
     { label: m.session_column_exposure(), value: formatExposure(session.exposureS) },
-    { label: m.run_col_frames(), value: formatCount(session.assetIds.length) },
-    { label: m.run_col_integration(), value: formatDuration(session.assetIds.length * session.exposureS) },
+    { label: m.run_col_frames(), value: formatCount(session.frames.length) },
+    { label: m.run_col_integration(), value: formatDuration(session.frames.length * session.exposureS) },
     { label: m.session_camera(), value: session.cameraName ?? "–" },
     { label: m.session_telescope(), value: session.telescopeName ?? "–" },
   ]
 }
 
-function sessionColumns(m: Messages, catalog: Catalog): Column<Session>[] {
+function sessionColumns(m: Messages, catalog: SampleLibrary): Column<SampleSession>[] {
   return [
     { id: "night", header: m.run_col_night(), cell: (s) => formatNight(s.night), sortValue: (s) => s.night, rowHeader: true },
     { id: "target", header: m.sessions_column_target(), cell: (s) => targetName(catalog, s), sortValue: (s) => targetName(catalog, s), truncate: true },
     { id: "channel", header: m.run_col_channel(), cell: (s) => s.channel ?? "–", sortValue: (s) => s.channel },
     { id: "exposure", header: m.session_column_exposure(), cell: (s) => formatExposure(s.exposureS), sortValue: (s) => s.exposureS, align: "right" },
-    { id: "frames", header: m.run_col_frames(), cell: (s) => formatCount(s.assetIds.length), sortValue: (s) => s.assetIds.length, align: "right" },
+    { id: "frames", header: m.run_col_frames(), cell: (s) => formatCount(s.frames.length), sortValue: (s) => s.frames.length, align: "right" },
     {
       id: "integration",
       header: m.run_col_integration(),
-      cell: (s) => formatDuration(s.assetIds.length * s.exposureS),
-      sortValue: (s) => s.assetIds.length * s.exposureS,
+      cell: (s) => formatDuration(s.frames.length * s.exposureS),
+      sortValue: (s) => s.frames.length * s.exposureS,
       align: "right",
     },
   ]
@@ -169,22 +168,6 @@ function Frame({ host, children }: { host?: RefObject<HTMLDivElement | null>; ch
   )
 }
 
-/** Shown in place of a template while the store holds no demo library. */
-function NoSeed() {
-  const m = useMessages()
-  return (
-    <EmptyState
-      icon={Inbox}
-      title={m.catalogue_templates_no_seed()}
-      action={
-        <Button variant="outline" size="sm" render={<Link to="/welcome" />}>
-          {m.setup_demo_load()}
-        </Button>
-      }
-    />
-  )
-}
-
 // ---------------------------------------------------------------------------
 // ListPage: Sessions with views, toolbar, batch bar, row actions and the dock
 // ---------------------------------------------------------------------------
@@ -193,7 +176,7 @@ type SessionView = "lights" | "calibration"
 
 function ListDemo() {
   const m = useMessages()
-  const catalog = useStore((s) => s.catalog)
+  const catalog = SAMPLE_LIBRARY
   const [view, setView] = useState<SessionView>("lights")
   const [query, setQuery] = useState("")
   const [channel, setChannel] = useState("")
@@ -206,10 +189,10 @@ function ListDemo() {
   const host = useRef<HTMLDivElement>(null)
   const shift = useShift(host, "table, [data-detail-panel]", `${selected.join(",")}|${openId ?? ""}`)
 
-  const live = Object.values(catalog.sessions).filter((s) => s.supersededBy === null)
+  const live = Object.values(catalog.sessions)
   const ofView = (v: SessionView) => live.filter((s) => (v === "lights" ? s.imageType === "light" : s.imageType !== "light"))
   const sessions = ofView(view)
-  const name = (s: Session) => sessionLabel(catalog, s)
+  const name = (s: SampleSession) => sessionLabel(catalog, s)
   const channels = distinct(sessions.map((s) => s.channel ?? "–")).sort()
   const needle = query.trim().toLowerCase()
   const shown = sessions.filter((s) => (channel === "" || (s.channel ?? "–") === channel) && name(s).toLowerCase().includes(needle))
@@ -228,7 +211,7 @@ function ListDemo() {
     { id: "export", label: m.catalogue_templates_export(), opensDialog: true, run: ran(m.catalogue_templates_export()) },
   ]
   const menu: ObjectMenu = { label: m.nav_sessions(), items: [trash] }
-  const rowActions = (s: Session): MenuItem[] => [
+  const rowActions = (s: SampleSession): MenuItem[] => [
     { id: "details", label: m.settings_details(), run: () => setOpenId(s.id) },
     { id: "review", label: m.verb_review(), run: ran(m.verb_review()) },
     { separator: true },
@@ -345,10 +328,9 @@ function ListDemo() {
 /** ListPage inside an object: a Project's sessions under the path Projects › {Project}. */
 function ListPathDemo() {
   const m = useMessages()
-  const catalog = useStore((s) => s.catalog)
-  const project = Object.values(catalog.projects)[0]
+  const catalog = SAMPLE_LIBRARY
+  const project = FIRST_PROJECT
   const [query, setQuery] = useState("")
-  if (!project) return <NoSeed />
   const sessions = heldSessions(catalog, project)
   const shown = sessions.filter((s) => sessionLabel(catalog, s).toLowerCase().includes(query.trim().toLowerCase()))
   return (
@@ -384,21 +366,20 @@ type ProjectView = "overview" | "groups"
 
 function DetailDemo() {
   const m = useMessages()
-  const catalog = useStore((s) => s.catalog)
-  const project = Object.values(catalog.projects)[0]
+  const catalog = SAMPLE_LIBRARY
+  const project = FIRST_PROJECT
   const [view, setView] = useState<ProjectView>("overview")
   const [openId, setOpenId] = useState<string | null>(null)
   const [last, setLast] = useState<string | null>(null)
   const host = useRef<HTMLDivElement>(null)
   const shift = useShift(host, "[data-template] section[data-slot='box'], [data-detail-panel]", openId ?? "")
-  if (!project) return <NoSeed />
 
   const ran = (label: string) => () => setLast(label)
   const sessions = heldSessions(catalog, project)
   const open = openId ? catalog.sessions[openId] : undefined
-  const name = (s: Session) => sessionLabel(catalog, s)
-  const subjectName = (subject: Subject) => catalog.targets[subject.targetId]?.name ?? "–"
-  const subjectColumns: Column<Subject>[] = [
+  const name = (s: SampleSession) => sessionLabel(catalog, s)
+  const subjectName = (subject: SampleSubject) => catalog.targets[subject.targetId]?.name ?? "–"
+  const subjectColumns: Column<SampleSubject>[] = [
     { id: "subject", header: m.project_col_subject(), cell: subjectName, sortValue: subjectName, rowHeader: true },
     {
       id: "sessions",
@@ -408,8 +389,8 @@ function DetailDemo() {
       align: "right",
     },
   ]
-  const members = (group: ProjectGroup) => project.inputs.filter((i) => i.groupId === group.id).length
-  const groupColumns: Column<ProjectGroup>[] = [
+  const members = (group: SampleGroup) => project.inputs.filter((i) => i.groupId === group.id).length
+  const groupColumns: Column<SampleGroup>[] = [
     { id: "group", header: m.project_col_group(), cell: (group) => group.name, sortValue: (group) => group.name, rowHeader: true },
     { id: "sessions", header: m.nav_sessions(), cell: (group) => formatCount(members(group)), sortValue: members, align: "right" },
   ]
@@ -422,8 +403,8 @@ function DetailDemo() {
           columns={2}
           items={[
             { label: m.project_subjects(), value: formatCount(project.subjects.length) },
-            { label: m.project_rigs(), value: formatCount(project.rigIds.length) },
-            { label: m.home_goals(), value: formatCount(project.goals.length) },
+            { label: m.project_rigs(), value: formatCount(project.rigs) },
+            { label: m.home_goals(), value: formatCount(project.subjects.reduce((n, subject) => n + subject.goals, 0)) },
             { label: m.newproject_notes(), value: project.notes || "–" },
           ]}
         />
@@ -522,10 +503,9 @@ function DetailDemo() {
 /** DetailPage with an aside: two columns from 1280 px, one column below it (sections first). */
 function DetailAsideDemo() {
   const m = useMessages()
-  const catalog = useStore((s) => s.catalog)
-  const project = Object.values(catalog.projects)[0]
-  if (!project) return <NoSeed />
-  const subjectName = (subject: Subject) => catalog.targets[subject.targetId]?.name ?? "-"
+  const catalog = SAMPLE_LIBRARY
+  const project = FIRST_PROJECT
+  const subjectName = (subject: SampleSubject) => catalog.targets[subject.targetId]?.name ?? "-"
   return (
     <ComponentSection components={["DetailPage"]} description={m.catalogue_templates_detail_aside_desc()}>
       <Frame>
@@ -540,7 +520,7 @@ function DetailAsideDemo() {
                 <KeyValueList
                   items={[
                     { label: m.project_subjects(), value: formatCount(project.subjects.length) },
-                    { label: m.project_rigs(), value: formatCount(project.rigIds.length) },
+                    { label: m.project_rigs(), value: formatCount(project.rigs) },
                   ]}
                 />
               ),
@@ -549,7 +529,7 @@ function DetailAsideDemo() {
               id: "tpl-aside-subjects",
               title: m.project_subjects(),
               count: project.subjects.length,
-              content: <KeyValueList items={project.subjects.map((subject) => ({ label: subjectName(subject), value: formatCount(project.goals.filter((g) => g.subjectId === subject.id).length) }))} />,
+              content: <KeyValueList items={project.subjects.map((subject) => ({ label: subjectName(subject), value: formatCount(subject.goals) }))} />,
             },
           ]}
           aside={[{ id: "tpl-aside-notes", title: m.newproject_notes(), content: <KeyValueList items={[{ label: m.newproject_notes(), value: project.notes || "–" }]} /> }]}
@@ -568,8 +548,8 @@ const SELECTION_STEP: WrapUpStepId = "archive"
 
 function StepDemo() {
   const m = useMessages()
-  const catalog = useStore((s) => s.catalog)
-  const project = Object.values(catalog.projects).find((p) => p.state === "open")
+  const catalog = SAMPLE_LIBRARY
+  const project = Object.values(catalog.projects).find((p) => p.state === "open") ?? FIRST_PROJECT
   const [at, setAt] = useState(0)
   const [finished, setFinished] = useState(false)
   const [viewing, setViewing] = useState<string>(WRAP_UP_STEPS[0]!)
@@ -579,14 +559,13 @@ function StepDemo() {
   const [fill, setFill] = useState(false)
   const host = useRef<HTMLDivElement>(null)
   const shift = useShift(host, "[data-step-strip], [data-step-region], [data-step-footer]", `${viewing}|${at}|${finished}|${selected.length}`)
-  if (!project) return <NoSeed />
 
   const ran = (label: string) => () => setLast(label)
   const sessions = heldSessions(catalog, project)
-  const name = (s: Session) => sessionLabel(catalog, s)
+  const name = (s: SampleSession) => sessionLabel(catalog, s)
   const steps: FlowStep[] = WRAP_UP_STEPS.map((id, index) => ({
     id,
-    label: say(m, WRAP_UP_NAME[id]),
+    label: WRAP_UP_NAME[id](m),
     state: finished || index < at ? (id === SELECTION_STEP && selected.length === 0 ? "skipped" : "finished") : index === at ? "current" : "todo",
     summary: id === SELECTION_STEP ? m.project_sessions_selected({ count: selected.length }) : undefined,
   }))
@@ -675,10 +654,10 @@ function StepDemo() {
             views={{
               label: m.catalogue_templates_project_views(),
               value: "wrap-up",
-              items: PROJECT_TABS.map((id) => ({ id, label: say(m, PROJECT_TAB_NAME[id]) })),
+              items: PROJECT_TABS.map((id) => ({ id, label: PROJECT_TAB_NAME[id](m) })),
               // The host switches template for another view; the specimen records the choice.
               onChange: (id) => {
-                if (id !== "wrap-up") setLast(say(m, PROJECT_TAB_NAME[id as ProjectTabId]))
+                if (id !== "wrap-up") setLast(PROJECT_TAB_NAME[id as ProjectTabId](m))
               },
             }}
             fill={fill}
@@ -697,11 +676,11 @@ function StepDemo() {
 
 function SettingsDemo() {
   const m = useMessages()
-  const locations = useStore((s) => Object.values(s.catalog.locations))
+  const locations = Object.values(SAMPLE_LIBRARY.locations)
   const [rescan, setRescan] = useState(true)
   const [last, setLast] = useState<string | null>(null)
   const ran = (label: string) => () => setLast(label)
-  const columns: Column<Location>[] = [
+  const columns: Column<SampleLocationRecord>[] = [
     { id: "name", header: m.equipment_name(), cell: (l) => l.displayName, sortValue: (l) => l.displayName, rowHeader: true },
     { id: "path", header: m.location_path(), cell: (l) => <PathText path={l.path} truncate />, sortValue: (l) => l.path },
     { id: "role", header: m.location_role(), cell: (l) => <StatusBadge kind="role" value={l.role} />, sortValue: (l) => l.role },

@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import userEvent from "@testing-library/user-event"
 import { type ReactNode, useState } from "react"
 import { describe, expect, it, vi } from "vitest"
+import { libraryFailure, SUCCEEDED } from "@/app/catalogue/fixtures/results"
 import { setSingleKeyShortcuts } from "@/app/preferences"
 import { m } from "@/lib/i18n"
 import type { Action, Column, MenuItem } from "./contracts"
@@ -104,13 +105,13 @@ describe("DataTable", () => {
 
   it("shows a refused row action beside a table without a toolbar", async () => {
     const user = userEvent.setup()
-    const refused: MenuItem = { id: "remove", label: "Remove", run: () => ({ ok: false, reason: "refused", message: "In use", reasons: ["Used by 2 runs"] }) }
+    const refused: MenuItem = { id: "remove", label: "Remove", run: () => libraryFailure("input_write_risk", "none") }
     render(<DataTable label="Frames" rows={ROWS} columns={COLUMNS} getRowId={(row) => row.id} rowLabel={(row) => row.name} rowActions={() => [refused]} />)
     await user.click(screen.getByRole("button", { name: m.actions_for({ name: "Vega" }) }))
     await user.click(within(await screen.findByRole("menu")).getByRole("menuitem", { name: "Remove" }))
     const alert = await screen.findByRole("alert")
     expect(alert).toHaveTextContent(m.actions_blocked({ action: "Remove" }))
-    expect(alert).toHaveTextContent(m.refusal_blockers({ count: 1 }))
+    expect(alert).toHaveTextContent(m.action_failure_input_write_risk())
   })
 
   it("toolbar select: one labelled choice, keyboard operable, with no All and no filter chip", async () => {
@@ -671,7 +672,7 @@ describe("DataTable", () => {
         confirm: quick ? undefined : { title: `Remove ${row.name}?`, confirm: { label: "Remove" } },
         run: () => {
           setRows((current) => current.filter((other) => other.id !== row.id))
-          return { ok: true }
+          return SUCCEEDED
         },
       })
       return <DataTable label="Frames" rows={rows} columns={PLAIN} getRowId={(row) => row.id} rowLabel={(row) => row.name} rowActions={(row) => [remove(row)]} />

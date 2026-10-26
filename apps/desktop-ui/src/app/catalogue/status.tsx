@@ -9,8 +9,6 @@ import { Radio } from "lucide-react"
 import { useMessages } from "@/app/preferences"
 import { CountBadge, Pill } from "@/components/app/pill"
 import { STATUS, type StatusKind, StatusBadge, StatusBadges, type StatusValue, type Tone } from "@/components/app/status"
-import { PROJECT_TAB_NAME } from "@/domain/project-view"
-import { say } from "@/lib/i18n"
 import { ComponentSection, Specimen } from "./specimen"
 
 const ABSORBED: StatusKind[] = ["gate", "profile", "executable", "check", "write"]
@@ -30,7 +28,7 @@ export function StatusCatalogue() {
             </Specimen>
           ))}
           <Specimen caption={m.catalogue_status_label_override()}>
-            <StatusBadge kind="gate" value="blocked" label={m.home_blocked_at({ step: say(m, PROJECT_TAB_NAME.calibrate) })} />
+            <StatusBadge kind="gate" value="blocked" label={m.home_blocked_at({ step: m.project_tab_calibrate() })} />
           </Specimen>
         </div>
       </ComponentSection>

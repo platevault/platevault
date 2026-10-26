@@ -28,10 +28,13 @@ import { StatusBadge } from "@/components/app/status"
 import { Button } from "@/components/ui/button"
 import { Toggle } from "@/components/ui/toggle"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import type { Asset, Session } from "@/domain/types"
 import { formatBytes, formatCount, formatDuration, formatExposure, formatNight } from "@/lib/format"
-import { trashFileRows } from "@/store/actions/trash"
-import { useStore } from "@/store/core"
+import { SUCCEEDED } from "./fixtures/results"
+import { SAMPLE_LIBRARY, type SampleFrame, type SampleSession } from "./fixtures/sessions"
+
+type Session = SampleSession
+
+const parentOf = (path: string) => path.slice(0, path.lastIndexOf("/"))
 
 type TableState = "rows" | "loading" | "empty" | "error"
 
@@ -66,10 +69,7 @@ function distinct<T>(values: T[]): T[] {
 
 export function DataTableCatalogue() {
   const m = useMessages()
-  const sessions = useStore((s) => Object.values(s.catalog.sessions).filter((x) => x.imageType === "light" && x.supersededBy === null))
-  const catalog = useStore((s) => s.catalog)
-  const disk = useStore((s) => s.disk)
-  const assets = catalog.assets
+  const sessions = Object.values(SAMPLE_LIBRARY.sessions).filter((x) => x.imageType === "light")
   const [wide, setWide] = useState(false)
   const [state, setState] = useState<TableState>("rows")
   const [query, setQuery] = useState("")
@@ -89,7 +89,7 @@ export function DataTableCatalogue() {
       (filters.exposure.length === 0 || filters.exposure.includes(String(s.exposureS))) &&
       `${sessionName(s)} ${s.objectLabel ?? ""} ${s.cameraName ?? ""}`.toLowerCase().includes(query.trim().toLowerCase()),
   )
-  const framesOf = (s: Session): Asset[] => s.assetIds.flatMap((id) => (assets[id] ? [assets[id]] : []))
+  const framesOf = (s: Session): SampleFrame[] => s.frames
 
   const facets: Facet[] = [
     {
@@ -135,7 +135,7 @@ export function DataTableCatalogue() {
         title: m.common_trash_named_title({ name: m.session_count({ count: ids.length }) }),
         groups: trashedSessions.map((s) => ({
           label: sessionName(s),
-          rows: trashFileRows(m, { catalog, disk }, framesOf(s).flatMap((a) => a.copies.map((c) => ({ path: c.path, assetId: a.id })))),
+          rows: framesOf(s).map((f) => ({ file: f.fileName, from: parentOf(f.path), action: "trash" as const, size: f.sizeBytes })),
         })),
         confirm: { label: m.common_move_to_trash(), kind: "destructive" },
       },
@@ -143,7 +143,7 @@ export function DataTableCatalogue() {
         setTrashed((current) => [...current, ...ids])
         setSelected((current) => current.filter((id) => !ids.includes(id)))
         note(m.common_move_to_trash(), ids.length)
-        return { ok: true }
+        return SUCCEEDED
       },
     }
   }
@@ -174,8 +174,8 @@ export function DataTableCatalogue() {
     { id: "night", header: m.run_col_night(), cell: (s) => formatNight(s.night), sortValue: (s) => s.night, rowHeader: true },
     { id: "channel", header: m.run_col_channel(), cell: (s) => s.channel ?? "–", sortValue: (s) => s.channel },
     { id: "exposure", header: m.session_column_exposure(), cell: (s) => formatExposure(s.exposureS), sortValue: (s) => s.exposureS, align: "right" },
-    { id: "frames", header: m.run_col_frames(), cell: (s) => formatCount(s.assetIds.length), sortValue: (s) => s.assetIds.length, align: "right" },
-    { id: "integration", header: m.run_col_integration(), cell: (s) => formatDuration(s.assetIds.length * s.exposureS), sortValue: (s) => s.assetIds.length * s.exposureS, align: "right" },
+    { id: "frames", header: m.run_col_frames(), cell: (s) => formatCount(s.frames.length), sortValue: (s) => s.frames.length, align: "right" },
+    { id: "integration", header: m.run_col_integration(), cell: (s) => formatDuration(s.frames.length * s.exposureS), sortValue: (s) => s.frames.length * s.exposureS, align: "right" },
     { id: "camera", header: m.project_col_camera(), cell: (s) => s.cameraName ?? "–", sortValue: (s) => s.cameraName, truncate: true, className: "max-w-32" },
     { id: "target", header: m.sessions_column_target(), cell: (s) => <StatusBadge kind="association" value={s.target.status} />, static: true },
     ...(wide
@@ -186,10 +186,10 @@ export function DataTableCatalogue() {
         ] satisfies Column<Session>[])
       : []),
   ]
-  const frameColumns: Column<Asset>[] = [
+  const frameColumns: Column<SampleFrame>[] = [
     { id: "file", header: m.run_col_file(), cell: (a) => a.fileName, sortValue: (a) => a.fileName, rowHeader: true, truncate: true },
     { id: "size", header: m.run_col_size(), cell: (a) => formatBytes(a.sizeBytes), sortValue: (a) => a.sizeBytes, align: "right" },
-    { id: "quality", header: m.session_column_quality(), cell: (a) => <StatusBadge kind="quality" value={a.quality.value} />, static: true },
+    { id: "quality", header: m.session_column_quality(), cell: (a) => <StatusBadge kind="quality" value={a.quality} />, static: true },
   ]
 
   // Where the table sits under the toolbar slot, measured when the selection appears or goes.
@@ -278,7 +278,7 @@ export function DataTableCatalogue() {
               primaryRowAction={(s) => (s.target.status !== "confirmed" ? { id: "review", label: m.verb_review(), kind: "primary", run: () => note(m.verb_review(), 1) } : null)}
               expand={{
                 render: (s) => <DataTable label={sessionName(s)} rows={framesOf(s)} columns={frameColumns} getRowId={(a) => a.id} scroll="none" className="max-w-2xl" />,
-                isExpandable: (s) => s.assetIds.length > 0,
+                isExpandable: (s) => s.frames.length > 0,
                 defaultExpanded: live.slice(0, 1).map((s) => s.id),
               }}
             />

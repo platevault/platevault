@@ -1,13 +1,10 @@
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from "@tanstack/react-router"
 import { render, screen } from "@testing-library/react"
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest"
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest"
 import { setLocale } from "@/app/preferences"
-import { createSeed } from "@/domain/seed"
 import { DEFAULT_LOCALE, m } from "@/lib/i18n"
-import { SCHEMA_VERSION, store } from "@/store/core"
-import { initialSliceStates, sliceVersions } from "@/store/slices"
-import { ControlsCatalogue } from "./catalogue/controls"
-import { FeedbackCatalogue } from "./catalogue/feedback"
+import { ControlsCatalogue } from "./controls"
+import { FeedbackCatalogue } from "./feedback"
 
 // The page's tables measure their room and keep rows in view; jsdom has neither ResizeObserver nor scrollIntoView.
 const original = { resizeObserver: globalThis.ResizeObserver, scrollIntoView: Element.prototype.scrollIntoView }
@@ -22,9 +19,6 @@ beforeAll(() => {
 afterAll(() => {
   globalThis.ResizeObserver = original.resizeObserver
   Element.prototype.scrollIntoView = original.scrollIntoView
-})
-beforeEach(() => {
-  store.replace({ ...createSeed("demo"), schemaVersion: SCHEMA_VERSION, sliceVersions: sliceVersions(), slices: initialSliceStates() })
 })
 afterEach(() => {
   setLocale(DEFAULT_LOCALE)

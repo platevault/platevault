@@ -1,30 +1,74 @@
 /**
  * Operation progress and outcome (foundation-owned). Shows Running with
  * progress, per-item outcomes, the single settled status and the actions
- * that are safe for the kind (Pause, Resume, Cancel, Retry). A start
- * acknowledgment is never shown as success (PREP-FR-09). `OperationLine` is
- * the same status and actions on one fixed-height line, for a pane header
- * where a panel would push the page down.
+ * the owner offers (Pause, Resume, Cancel, Retry). A start acknowledgment is
+ * never shown as success (PREP-FR-09). `OperationLine` is the same status and
+ * actions on one fixed-height line, for a pane header where a panel would
+ * push the page down.
+ *
+ * The panel shows the operation it is given and calls back for each action;
+ * the owner runs the library call and passes the operation's next state. An
+ * action the operation's kind does not allow is one the owner leaves out.
  */
 import { type RefObject, useEffect, useRef, useState } from "react"
 import { useMessages } from "@/app/preferences"
 import { Button } from "@/components/ui/button"
 import { Progress, ProgressValue } from "@/components/ui/progress"
-import { OPERATION_UNIT_NAME } from "@/domain/labels"
-import type { Operation, OperationId, OperationItemStatus } from "@/domain/types"
 import { formatCount, formatDateTime } from "@/lib/format"
-import { say } from "@/lib/i18n"
+import { type MessageRef, type Messages, say } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
-import { useStore } from "@/store/core"
-import { cancelOperation, isSettled, pauseOperation, resumeOperation } from "@/store/operations"
 import { titleWhenCut } from "./cut-title"
 import { PathText } from "./data"
-import { StatusBadge, statusMeta } from "./status"
+import { StatusBadge, type StatusValue, statusMeta } from "./status"
 
-export interface OperationPanelProps {
-  operationId: OperationId
+export type OperationStatus = StatusValue<"operation">
+export type OperationItemStatus = StatusValue<"item">
+
+/** What an operation counts, as a plural noun beside its totals: "12 of 40 frames". */
+export type OperationUnit = "files" | "frames" | "entries" | "prepared-entries" | "sessions" | "items"
+
+export interface OperationItemView {
+  id: string
+  /** Usually a file or location name, as data (`verbatim`). */
+  label: MessageRef
+  path: string | null
+  status: OperationItemStatus
+  /** Kind-specific phase, for example "destination-verified". */
+  phase: string | null
+  detail: MessageRef | null
+}
+
+/**
+ * One operation as the panel shows it. The library has no general operation
+ * read (astro-plan-wre19): the owning feature maps its own run state (a
+ * scan, a measurement run, a Project operation) onto this view. Copy is a
+ * `MessageRef`, worded at render, so it follows a language switch.
+ */
+export interface OperationView {
+  id: string
+  title: MessageRef
+  status: OperationStatus
+  progress: { done: number; total: number; unit: OperationUnit }
+  items: readonly OperationItemView[]
+  summary: MessageRef | null
+  createdAt: string
+  settledAt: string | null
+}
+
+/** The actions the owner offers; each shows only in the states it applies to, and only when given. */
+export interface OperationActions {
+  /** Pause a running operation. */
+  onPause?: () => void
+  /** Resume a paused operation, or retry an interrupted one. */
+  onResume?: () => void
+  /** Cancel an operation that has not settled. */
+  onCancel?: () => void
   /** Retry for settled failed/partial outcomes; the owning track decides how. */
   onRetry?: () => void
+}
+
+export interface OperationPanelProps extends OperationActions {
+  operation: OperationView
   /** Items listed before "Show all". */
   itemLimit?: number
   /** Heading level of the panel title; 2 when the panel sits directly under the page h1. Default 3. */
@@ -33,12 +77,26 @@ export interface OperationPanelProps {
 
 const ITEM_ORDER: OperationItemStatus[] = ["blocked", "failed", "uncertain", "running", "pending", "done", "skipped"]
 
-export function OperationPanel({ operationId, onRetry, itemLimit = 8, headingLevel = 3 }: OperationPanelProps) {
+const UNSETTLED: readonly OperationStatus[] = ["running", "paused", "interrupted"]
+
+/** Whether the operation has its one outcome: not running, paused or interrupted. */
+function isSettled(status: OperationStatus): boolean {
+  return !UNSETTLED.includes(status)
+}
+
+const UNIT_NAME: Record<OperationUnit, (m: Messages) => string> = {
+  files: (m) => m.op_unit_files(),
+  frames: (m) => m.op_unit_frames(),
+  entries: (m) => m.op_unit_entries(),
+  "prepared-entries": (m) => m.op_unit_prepared_entries(),
+  sessions: (m) => m.op_unit_sessions(),
+  items: (m) => m.op_unit_items(),
+}
+
+export function OperationPanel({ operation: op, itemLimit = 8, headingLevel = 3, ...actions }: OperationPanelProps) {
   const m = useMessages()
-  const op = useStore((s) => s.operations[operationId])
   const [showAll, setShowAll] = useState(false)
   const heading = useRef<HTMLHeadingElement>(null)
-  if (!op) return null
   const Heading = headingLevel === 2 ? "h2" : headingLevel === 4 ? "h4" : "h3"
   const settled = isSettled(op.status)
   const value = op.progress.total > 0 ? Math.min(100, (op.progress.done / op.progress.total) * 100) : settled ? 100 : null
@@ -50,7 +108,7 @@ export function OperationPanel({ operationId, onRetry, itemLimit = 8, headingLev
   }, {})
   const title = say(m, op.title)
   const summary = op.summary ? say(m, op.summary) : null
-  const unit = say(m, OPERATION_UNIT_NAME[op.progress.unit])
+  const unit = UNIT_NAME[op.progress.unit](m)
 
   return (
     <section aria-labelledby={`${op.id}-title`} className="space-y-3 rounded-lg border bg-card p-4">
@@ -61,7 +119,7 @@ export function OperationPanel({ operationId, onRetry, itemLimit = 8, headingLev
           </Heading>
           <StatusBadge kind="operation" value={op.status} />
         </div>
-        <OperationControls op={op} onRetry={onRetry} fallback={heading} />
+        <OperationControls op={op} actions={actions} fallback={heading} />
       </div>
 
       <Progress
@@ -126,12 +184,15 @@ export function OperationPanel({ operationId, onRetry, itemLimit = 8, headingLev
   )
 }
 
+export interface OperationLineProps extends OperationActions {
+  operation: OperationView
+  className?: string
+}
+
 /** One line: title, status, percent (or when it settled) and the actions; the line keeps one height in every state. */
-export function OperationLine({ operationId, onRetry, className }: { operationId: OperationId; onRetry?: () => void; className?: string }) {
+export function OperationLine({ operation: op, className, ...actions }: OperationLineProps) {
   const m = useMessages()
-  const op = useStore((s) => s.operations[operationId])
   const name = useRef<HTMLSpanElement>(null)
-  if (!op) return null
   const title = say(m, op.title)
   const summary = op.summary ? say(m, op.summary) : null
   const percent = op.progress.total > 0 ? `${Math.round(Math.min(1, op.progress.done / op.progress.total) * 100)}%` : null
@@ -144,13 +205,13 @@ export function OperationLine({ operationId, onRetry, className }: { operationId
       <span className="shrink-0 text-muted-foreground tabular-nums">
         {isSettled(op.status) && op.settledAt ? formatDateTime(op.settledAt) : percent}
       </span>
-      <OperationControls op={op} onRetry={onRetry} fallback={name} size="xs" />
+      <OperationControls op={op} actions={actions} fallback={name} size="xs" />
       <SettledAnnouncement op={op} title={title} summary={summary} />
     </div>
   )
 }
 
-function SettledAnnouncement({ op, title, summary }: { op: Operation; title: string; summary: string | null }) {
+function SettledAnnouncement({ op, title, summary }: { op: OperationView; title: string; summary: string | null }) {
   return (
     <p className="sr-only" aria-live="polite">
       {isSettled(op.status) ? `${title}: ${summary ?? statusMeta("operation", op.status).label}` : ""}
@@ -159,11 +220,12 @@ function SettledAnnouncement({ op, title, summary }: { op: Operation; title: str
 }
 
 /**
- * Pause, Resume, Cancel and Retry, as the kind allows. They replace
+ * Pause, Resume, Cancel and Retry, as the owner offers them. They replace
  * themselves when the status changes (WCAG 2.4.3): focus moves to the
  * replacement control, else to `fallback`, never to the page body.
  */
-function OperationControls({ op, onRetry, fallback, size = "sm" }: { op: Operation; onRetry?: () => void; fallback: RefObject<HTMLElement | null>; size?: "sm" | "xs" }) {
+function OperationControls({ op, actions, fallback, size = "sm" }: { op: OperationView; actions: OperationActions; fallback: RefObject<HTMLElement | null>; size?: "sm" | "xs" }) {
+  const { onPause, onResume, onCancel, onRetry } = actions
   const m = useMessages()
   const controls = useRef<HTMLDivElement>(null)
   const keepFocus = useRef(false)
@@ -180,18 +242,18 @@ function OperationControls({ op, onRetry, fallback, size = "sm" }: { op: Operati
   const settled = isSettled(op.status)
   return (
     <div ref={controls} className={cn("flex shrink-0", size === "sm" ? "flex-wrap gap-2" : "gap-1")}>
-      {op.status === "running" && op.canPause ? (
-        <Button size={size} variant="outline" onClick={act(() => pauseOperation(op.id))}>
+      {op.status === "running" && onPause ? (
+        <Button size={size} variant="outline" onClick={act(onPause)}>
           {m.verb_pause()}
         </Button>
       ) : null}
-      {op.status === "paused" || op.status === "interrupted" ? (
-        <Button size={size} variant="outline" onClick={act(() => resumeOperation(op.id))}>
+      {(op.status === "paused" || op.status === "interrupted") && onResume ? (
+        <Button size={size} variant="outline" onClick={act(onResume)}>
           {op.status === "paused" ? m.verb_resume() : m.verb_retry()}
         </Button>
       ) : null}
-      {!settled && op.canCancel ? (
-        <Button size={size} variant="outline" onClick={act(() => cancelOperation(op.id))}>
+      {!settled && onCancel ? (
+        <Button size={size} variant="outline" onClick={act(onCancel)}>
           {m.verb_cancel()}
         </Button>
       ) : null}

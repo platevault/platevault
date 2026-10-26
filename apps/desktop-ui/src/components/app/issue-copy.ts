@@ -5,9 +5,64 @@
  * (Home's Project rows), and the status bar counts it by severity.
  */
 import { Info, type LucideIcon, OctagonX, TriangleAlert } from "lucide-react"
-import type { Issue, IssueSeverity } from "@/domain/issues"
 import { formatBytes } from "@/lib/format"
-import { type Messages, say } from "@/lib/i18n"
+import { type MessageRef, type Messages, say } from "@/lib/i18n"
+
+export type IssueSeverity = "info" | "warning" | "danger"
+
+/** What an issue is about; `issueCopy` words it by kind. */
+export type IssueKind =
+  | "needs-target"
+  | "not-in-project"
+  | "needs-calibration"
+  | "pin-drift"
+  | "location-denied"
+  | "location-offline"
+  | "work-failed"
+  | "work-interrupted"
+  | "apply-refused"
+  | "previous-review"
+  | "master-offer"
+  | "calibration-waiting"
+  | "calibration-failed"
+  /** A session's frames changed on disk. */
+  | "drift"
+  /** An adopted master's file changed on disk. */
+  | "master-drift"
+  | "duplicates"
+
+/** The row an issue belongs to (F7): a session, Project, location, master, calibration process or operation, or a Library count (no row). */
+export type IssueOwner =
+  | { kind: "library" }
+  | { kind: "session"; id: string }
+  | { kind: "project"; id: string }
+  | { kind: "location"; id: string }
+  | { kind: "master"; id: string }
+  | { kind: "process"; id: string }
+  | { kind: "operation"; id: string }
+
+/**
+ * One issue as a row, a menu and a count show it. The library has no issue
+ * read (astro-plan-wre19): the feature that owns the row derives this view
+ * from its own reads.
+ */
+export interface Issue {
+  /** Stable while the issue lasts. */
+  id: string
+  kind: IssueKind
+  severity: IssueSeverity
+  /** How many things the issue covers (sessions, frames, files, extra duplicate copies). */
+  count: number
+  /** Bytes the issue covers: the extra copies of duplicates; absent for other kinds. */
+  bytes?: number
+  /** Value for the copy's `{name}`: the location, Project or session the issue is about; an operation's title is a ref. */
+  name: string | MessageRef | null
+  owner: IssueOwner
+  /** Route the issue's one action opens (`/sessions`); `issueCopy` words the action ("Assign"). */
+  to: string
+  /** False for a Project's own waiting work: the Project waits on the user, and the issue is how they find it (P-ISS1). */
+  dismissable: boolean
+}
 
 export const ISSUE_SEVERITY_ICON: Record<IssueSeverity, LucideIcon> = { danger: OctagonX, warning: TriangleAlert, info: Info }
 
@@ -47,9 +102,9 @@ export function issueCopy(m: Messages, issue: Issue): { text: string; action: st
     case "calibration-failed":
       return { text: m.issue_failed({ name }), action: m.verb_open() }
     case "drift":
-      return issue.id.startsWith("drift:master:")
-        ? { text: m.issue_master_changed({ name }), action: m.nav_calibration() }
-        : { text: m.issue_frames_changed({ count, name }), action: m.verb_review() }
+      return { text: m.issue_frames_changed({ count, name }), action: m.verb_review() }
+    case "master-drift":
+      return { text: m.issue_master_changed({ name }), action: m.nav_calibration() }
     case "duplicates":
       return { text: m.issue_duplicates({ count, bytes: formatBytes(issue.bytes ?? 0) }), action: m.verb_review() }
   }

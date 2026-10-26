@@ -558,6 +558,7 @@
   "folder_picker_applications": "Applications",
   "folder_picker_contents": "Contents of {name}",
   "folder_picker_empty_items": "Empty folder",
+  "folder_picker_list_failed": "PlateVault couldn't list {name}. Retry.",
   "folder_picker_live_items": [
     {
       "declarations": [
@@ -4604,6 +4605,9 @@
   "catalogue_actions_button_caption": "The kind picks the variant. In an xs table cell, a primary stays outline. Hover over or focus {archive} to see its blockers. {start} and {rescan} run slowly. The {remove} action returns a refusal. The second {rescan} fails and offers {retry}.",
   "catalogue_actions_toggle_heading": "ActionToggle",
   "catalogue_actions_toggle_caption": "Pressed while the state is on. A press runs the opposite action. A refusal shows beside the toggle.",
+  "catalogue_actions_quick_heading": "QuickActionModeProvider",
+  "catalogue_actions_quick_caption": "One ticked action under each Quick actions mode. One-click runs it in place and offers Undo. Open page opens the page that owns it.",
+  "catalogue_actions_quick_done": "Added to favourites",
   "catalogue_actions_bar_heading": "ActionBar",
   "catalogue_actions_bar_caption": "The bar shows up to 3 standard buttons, the named menu and one primary at the trailing end. A fourth standard action, destructive actions and overflow go in the menu ({more} by default or an object menu). Feedback shows under the bar.",
   "catalogue_actions_bar_empty": "No actions: nothing renders",
@@ -4858,8 +4862,9 @@
     }
   ],
   "ds_folder_picker_title": "Folder picker",
+  "ds_folder_picker_description": "Chooses a folder, a file or an application on a sample disk. Choosing never writes anything.",
   "ds_operation_title": "Operation",
-  "ds_operation_description": "Running with progress, per-item outcomes and one settled status. Uses a real indexing run.",
+  "ds_operation_description": "Running with progress, per-item outcomes and one settled status, on a sample indexing run.",
   "picker_today": "Current date",
   "picker_week_previous": "Move calendar back one week",
   "picker_week_next": "Next week",

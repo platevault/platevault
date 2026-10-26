@@ -19,21 +19,21 @@ import { Section } from "@/components/app/page"
 import { Button } from "@/components/ui/button"
 import { formatBytes } from "@/lib/format"
 import type { Messages } from "@/lib/i18n"
-import type { CommitResult } from "@/store/core"
-import { useStore } from "@/store/core"
+import { RIG_NAMES, TARGET_NAMES } from "./fixtures/library"
+import { after, libraryFailure, SUCCEEDED } from "./fixtures/results"
 import { ComponentSection, Specimen } from "./specimen"
 
 const CAPTURES = "/Volumes/Astro-T7/Captures/M31/2026-09-18"
 const ARCHIVE = "/Volumes/Archive/M31/2026-09-18"
 const WORK = "/Volumes/Astro-T7/Work/M31 LRGB"
 
-const done = (): CommitResult => ({ ok: true })
+const done = () => SUCCEEDED
 
 /** Settles after a moment, so the busy state can be seen. */
-const slowly = (): Promise<CommitResult> => new Promise((resolve) => setTimeout(() => resolve({ ok: true }), 1500))
+const slowly = () => after(1500, SUCCEEDED)
 
-/** A failed write: the dialog stays open with the error and Retry. */
-const failing = (m: Messages) => (): CommitResult => ({ ok: false, reason: "write-failed", message: m.op_prep_write_removed({ folder: CAPTURES }) })
+/** A failed write the library says may succeed again: the dialog stays open with the error and Retry. */
+const failing = () => after(600, libraryFailure("access_denied", "retry"))
 
 function frames(count: number, filter: string, action: FileRow["action"], to?: string): FileRow[] {
   return Array.from({ length: count }, (_, index) => ({ file: `M31_${filter}_300s_${String(index + 1).padStart(4, "0")}.fits`, from: CAPTURES, to, action, size: 33_554_432 }))
@@ -106,7 +106,7 @@ function ConfirmSpecimens({ archiveName }: { archiveName: string }) {
         <ConfirmSpecimen caption={m.catalogue_dialogs_state_folded()} title={trashTitle} groups={folded} confirm={trash} onConfirm={done} />
         <ConfirmSpecimen caption={m.catalogue_dialogs_state_unfolded()} title={trashTitle} summary={trashSummary} groups={unfolded} confirm={trash} onConfirm={done} />
         <ConfirmSpecimen caption={m.catalogue_dialogs_state_busy()} title={m.wrapup_archive_confirm_title({ name: archiveName })} groups={archiveGroups} confirm={archive} onConfirm={slowly} />
-        <ConfirmSpecimen caption={m.catalogue_dialogs_state_error()} title={m.wrapup_archive_confirm_title({ name: archiveName })} groups={archiveGroups} confirm={archive} onConfirm={failing(m)} />
+        <ConfirmSpecimen caption={m.catalogue_dialogs_state_error()} title={m.wrapup_archive_confirm_title({ name: archiveName })} groups={archiveGroups} confirm={archive} onConfirm={failing} />
         <ConfirmSpecimen caption={m.catalogue_dialogs_state_title_only()} title={m.template_delete_title({ name: archiveName })} confirm={{ label: m.template_delete(), kind: "destructive" }} onConfirm={done} />
       </div>
     </ComponentSection>
@@ -149,7 +149,7 @@ function FormSpecimens({ rigName }: { rigName: string }) {
         <RenameSpecimen caption={m.catalogue_dialogs_state_default()} name={rigName} run={done} />
         <RenameSpecimen caption={m.catalogue_dialogs_state_unavailable()} name={rigName} run={done} startEmpty />
         <RenameSpecimen caption={m.catalogue_dialogs_state_busy()} name={rigName} run={slowly} />
-        <RenameSpecimen caption={m.catalogue_dialogs_state_error()} name={rigName} run={failing(m)} />
+        <RenameSpecimen caption={m.catalogue_dialogs_state_error()} name={rigName} run={failing} />
       </div>
     </ComponentSection>
   )
@@ -157,10 +157,8 @@ function FormSpecimens({ rigName }: { rigName: string }) {
 
 export function DialogsCatalogue() {
   const m = useMessages()
-  const targets = useStore((s) => s.catalog.targets)
-  const rigs = useStore((s) => s.catalog.opticalTrains)
-  const target = Object.values(targets)[0]?.name ?? ""
-  const rig = Object.values(rigs)[0]?.name ?? target
+  const target = TARGET_NAMES[0]!
+  const rig = RIG_NAMES[0]!
   return (
     <Section title={m.catalogue_dialogs_heading()} description={m.catalogue_dialogs_summary()}>
       <div className="space-y-6">

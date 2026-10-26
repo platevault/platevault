@@ -1,8 +1,8 @@
 /**
  * Design-system reference (foundation-owned route `/design-system`).
  * Renders the tokens and every shared app component in its applicable
- * states, using live prototype data where a component reads the store.
- * Tracks use it as the visual contract; reviewers use it as evidence.
+ * states, on the catalogue's sample library (fixtures/). Tracks use it as
+ * the visual contract; reviewers use it as evidence.
  */
 import { Inbox } from "lucide-react"
 import { useState } from "react"
@@ -15,13 +15,12 @@ import { EmptyState, UnknownValue } from "@/components/app/feedback"
 import { PageBody, PageHeader, Section } from "@/components/app/page"
 import { STATUS, type StatusKind, StatusBadge, type StatusValue } from "@/components/app/status"
 import { Button } from "@/components/ui/button"
-import { sessionBreakdown } from "@/domain/library"
-import type { Session } from "@/domain/types"
+import { useMessages } from "@/app/preferences"
 import { formatDuration, formatExposure, formatNight } from "@/lib/format"
 import type { Messages } from "@/lib/i18n"
-import { useStore } from "@/store/core"
-import { CATALOGUE } from "./catalogue/registry"
-import { useMessages } from "./preferences"
+import { FIXTURE_DISK } from "./fixtures/disk"
+import { SAMPLE_LIBRARY, type SampleSession as Session } from "./fixtures/sessions"
+import { CATALOGUE } from "./registry"
 
 /** Each colour token with what it is for. */
 function colorTokens(m: Messages): Array<[token: string, use: string]> {
@@ -100,20 +99,18 @@ function zColumns(m: Messages): Column<[token: string, use: string]>[] {
 
 function SessionTable({ loading, empty, grouped, pinned, locked }: { loading: boolean; empty: boolean; grouped: boolean; pinned: boolean; locked: boolean }) {
   const m = useMessages()
-  const sessions = useStore((s) => Object.values(s.catalog.sessions).filter((x) => x.imageType === "light"))
-  const disk = useStore((s) => s.disk)
-  const catalog = useStore((s) => s.catalog)
+  const sessions = Object.values(SAMPLE_LIBRARY.sessions).filter((x) => x.imageType === "light")
   const [selected, setSelected] = useState<string[]>([])
   const columns: Column<Session>[] = [
     { id: "night", header: m.run_col_night(), cell: (s) => formatNight(s.night), sortValue: (s) => s.night, rowHeader: true },
     { id: "channel", header: m.run_col_channel(), cell: (s) => s.channel ?? <UnknownValue label={m.palette_session_no_filter()} />, sortValue: (s) => s.channel },
     { id: "exposure", header: m.session_column_exposure(), cell: (s) => formatExposure(s.exposureS), sortValue: (s) => s.exposureS, align: "right" },
-    { id: "frames", header: m.sessions_column_frames(), cell: (s) => s.assetIds.length, sortValue: (s) => s.assetIds.length, align: "right" },
+    { id: "frames", header: m.sessions_column_frames(), cell: (s) => s.frames.length, sortValue: (s) => s.frames.length, align: "right" },
     {
       id: "integration",
       header: m.run_col_integration(),
-      cell: (s) => formatDuration(sessionBreakdown(disk, catalog, s).captured.seconds),
-      sortValue: (s) => s.assetIds.length * s.exposureS,
+      cell: (s) => formatDuration(s.frames.length * s.exposureS),
+      sortValue: (s) => s.frames.length * s.exposureS,
       align: "right",
     },
     // OBJECT is the FITS header keyword, never translated.
@@ -124,9 +121,9 @@ function SessionTable({ loading, empty, grouped, pinned, locked }: { loading: bo
       ? ([
           { id: "camera", header: m.session_camera(), cell: (s) => s.cameraName ?? <UnknownValue label={m.status_not_set()} />, sortValue: (s) => s.cameraName },
           { id: "telescope", header: m.session_telescope(), cell: (s) => s.telescopeName ?? <UnknownValue label={m.status_not_set()} />, sortValue: (s) => s.telescopeName },
-          { id: "gain", header: m.ds_col_gain_offset(), cell: (s) => `${s.gain ?? "–"} / ${s.offset ?? "–"}`, sortValue: (s) => s.gain, align: "right" },
+          { id: "gain", header: m.domain_criterion_gain(), cell: (s) => s.gain ?? "–", sortValue: (s) => s.gain, align: "right" },
           { id: "binning", header: m.domain_criterion_binning(), cell: (s) => `${s.binning}×${s.binning}`, sortValue: (s) => s.binning, align: "right" },
-          { id: "equipment", header: m.settings_equipment(), cell: (s) => <StatusBadge kind="association" value={s.equipment.status} />, sortValue: (s) => s.equipment.status },
+          { id: "equipment", header: m.settings_equipment(), cell: (s) => <StatusBadge kind="association" value={s.target.status === "needs-review" ? "needs-review" : "confirmed"} />, sortValue: (s) => s.target.status },
         ] satisfies Column<Session>[])
       : []),
   ]
@@ -188,7 +185,7 @@ function SampleFolderPicker() {
         {m.ds_choose_folder_ellipsis()}
       </Button>
       {chosen ? <PathText path={chosen} className="text-muted-foreground" /> : <span className="text-sm text-muted-foreground">{m.ds_no_folder()}</span>}
-      <FolderPicker open={open} onOpenChange={setOpen} title={m.location_role_captures_picker()} initialPath="/Volumes/Astro-T7" onChoose={(path) => setChosen(path)} />
+      <FolderPicker open={open} onOpenChange={setOpen} title={m.location_role_captures_picker()} source={FIXTURE_DISK} initialPath="/Volumes/Astro-T7" onChoose={(path) => setChosen(path)} />
     </div>
   )
 }
@@ -323,7 +320,7 @@ export function DesignSystemPage() {
           />
         </Section>
 
-        <Section title={m.ds_folder_picker_title()} description={m.simulation_ds_folder_picker_description()}>
+        <Section title={m.ds_folder_picker_title()} description={m.ds_folder_picker_description()}>
           <SampleFolderPicker />
         </Section>
 

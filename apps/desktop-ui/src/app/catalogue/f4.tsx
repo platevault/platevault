@@ -2,78 +2,61 @@
  * Catalogue entry (R9-COMPOSITION-PLAN §8.3; F4 prototype plan, unit V): the
  * shared F4 patterns. CalibrationDiagram, CalibrationChoices with its
  * CalibrationChoiceBadge, ViewFolderTree, PlaceLink and the session-row
- * badges (DuplicatesBadge, ReadinessBadge), on the live sample
- * library and on a what-if copy of it that is never written back: there a
- * RedCat session pins the older dark version (mixed versions, darks in the
- * nights), the Framing 2 session joins the RedCat group with another flat
- * version (a second flat set, `NIGHT_…-2`), a flat is only suggested with an
- * unknown rotation, a session is set to No bias and a pinned flat file
- * changed on disk. The live CalibrationChoices call the real session
- * actions. Captions are reviewer labels; Project names are sample data.
+ * badges (DuplicatesBadge, ReadinessBadge), on the sample calibration
+ * library (fixtures/calibration.ts, fixtures/view-tree.ts) and on a what-if
+ * of it: a RedCat session pins the older dark version (mixed versions, darks
+ * in the nights), a second flat set gets `NIGHT_…-2`, a session is set to No
+ * bias and a pinned flat file changed on disk. The working CalibrationChoices
+ * apply its callbacks to local rows. Captions are reviewer labels; Project
+ * names are sample data.
  */
-import { useMemo, useState } from "react"
+import { useState } from "react"
 import { useMessages } from "@/app/preferences"
 import { useFollowLink } from "@/components/app/links"
 import { Section } from "@/components/app/page"
-import { CalibrationChoices, type CalibrationChoicesProps, calibrationChoiceRows } from "@/components/domain/calibration-choices"
-import { CalibrationDiagram, calibrationDiagram } from "@/components/domain/calibration-diagram"
+import { CalibrationChoices, type CalibrationChoiceRow, type CalibrationChoicesProps, calibrationSourceLink, choiceRowId } from "@/components/domain/calibration-choices"
+import { CalibrationDiagram } from "@/components/domain/calibration-diagram"
+import type { CalibrationChoice } from "@/components/domain/calibration-model"
 import { DuplicatesBadge } from "@/components/domain/duplicates-badge"
 import { ReadinessBadge } from "@/components/domain/readiness-badge"
 import { ViewFolderTree } from "@/components/domain/view-folder-tree"
 import { Button } from "@/components/ui/button"
-import { calibrationSources, candidatesFor, noChoice, pickChoice } from "@/domain/calibration"
-import { fakeSha256, fileAt, writeFiles } from "@/domain/disk"
-import { applyPlan, viewPlan, viewTree } from "@/domain/project-view"
-import type { CalibrationChoice, PinKind, SessionId } from "@/domain/types"
-import { msg } from "@/lib/i18n"
-import { confirmCalibration, pickCalibration, setNoCalibration } from "@/store/actions/calibration"
-import { type PrototypeState, useStore } from "@/store/core"
+import { CHOICE_ROWS, DIAGRAM_GROUPS, DIAGRAM_MIXED, DIAGRAM_ONE_GROUP, DIAGRAM_PANELS, ONE_SESSION_ROWS, READ_ONLY_ROWS } from "./fixtures/calibration"
+import { after, SUCCEEDED } from "./fixtures/results"
+import { VIEW_EMPTY, VIEW_GROUPS, VIEW_MIXED, VIEW_ONE_GROUP, VIEW_PANELS } from "./fixtures/view-tree"
 import { ComponentSection, Specimen } from "./specimen"
 
-const CYGNUS = "prj_cygnus"
-const MOSAIC = "prj_ic5070"
-const M31 = "prj_m31"
-const CLOSED = "prj_ngc_oiii"
+/** Rows after the host applied a change to the picked kinds, as the library would answer the next read. */
+function applied(rows: CalibrationChoiceRow[], ids: ReadonlySet<string>, next: (row: CalibrationChoiceRow) => Pick<CalibrationChoiceRow, "choice" | "source" | "sourceLink">): CalibrationChoiceRow[] {
+  return rows.map((row) => (ids.has(choiceRowId(row)) ? { ...row, ...next(row), revision: row.revision + 1 } : row))
+}
 
-/** Light sessions whose kinds hold every state between them: a suggested flat, a waiting flat, No darks by the camera's default, automatic pins. */
-const LIVE_SESSIONS: SessionId[] = ["ses_1v704nq", "ses_9ddkg4", "ses_573cbz", "ses_1oeln5l"]
+const AT = "2026-10-13T12:00:00.000Z"
+const ids = (picks: { sessionId: string; kind: CalibrationChoiceRow["kind"] }[]) => new Set(picks.map(choiceRowId))
 
-/** The what-if sessions (Cygnus HOO 2026). */
-const WHAT_IF = { olderDark: "ses_1xf1wax", secondFlat: "ses_tcxqb9", suggested: "ses_1863gio", changed: "ses_1oeln5l" } as const
-
-/** A copy of the state with the what-if choices of this entry's header; the store is never written. */
-function whatIfState(state: PrototypeState): PrototypeState {
-  const at = "2026-10-10T12:00:00.000Z"
-  const catalog = structuredClone(state.catalog)
-  let disk = state.disk
-  const sources = calibrationSources(catalog, disk)
-  const setChoice = (sessionId: SessionId, kind: PinKind, choice: CalibrationChoice | null) => {
-    const session = catalog.sessions[sessionId]
-    if (session?.calibration && choice) session.calibration[kind] = choice
+/** The session actions on local rows: each answers after a short delay, as a library call does. */
+function useLocalChoices(initial: CalibrationChoiceRow[]): [CalibrationChoiceRow[], Pick<CalibrationChoicesProps, "onConfirm" | "onPick" | "onNo">] {
+  const [rows, setRows] = useState(initial)
+  const settle = (change: (rows: CalibrationChoiceRow[]) => CalibrationChoiceRow[]) => {
+    setRows(change)
+    return after(300, SUCCEEDED)
   }
-  const pick = (sessionId: SessionId, kind: PinKind, versionId: string) => {
-    const session = catalog.sessions[sessionId]
-    const candidate = session ? candidatesFor(catalog, state.settings, session, kind, sources).find((c) => c.source.source.type === "master" && c.source.source.versionId === versionId) : undefined
-    return candidate ? pickChoice(candidate, at) : null
-  }
-  const cygnus = catalog.projects[CYGNUS]
-  if (cygnus) cygnus.inputs = cygnus.inputs.map((input) => (input.sessionId === WHAT_IF.secondFlat ? { ...input, groupId: "grp_cyg_redcat" } : input))
-  setChoice(WHAT_IF.olderDark, "dark", pick(WHAT_IF.olderDark, "dark", "mv_49epv6"))
-  setChoice(WHAT_IF.secondFlat, "flat", pick(WHAT_IF.secondFlat, "flat", "mv_bmjp84"))
-  const flat = catalog.sessions[WHAT_IF.suggested]?.calibration?.flat
-  if (flat?.state === "pinned") {
-    const criteria = flat.evidence.criteria.filter((c) => c.name !== "rotation")
-    setChoice(WHAT_IF.suggested, "flat", {
-      state: "suggested",
-      source: flat.source,
-      evidence: { ...flat.evidence, rotationDeltaDeg: null, criteria: [...criteria, { name: "rotation", result: "unknown", lightValue: msg("domain_not_recorded"), calibrationValue: msg("domain_not_recorded") }] },
-    })
-  }
-  setChoice(WHAT_IF.suggested, "bias", noChoice(at))
-  const changed = catalog.sessions[WHAT_IF.changed]?.calibration?.flat
-  const file = changed?.state === "pinned" && changed.evidence.files[0] ? fileAt(disk, changed.evidence.files[0].path) : undefined
-  if (file) disk = writeFiles(disk, [{ ...file, sha256: fakeSha256(file.path, 9) }])
-  return { ...state, catalog, disk }
+  const pinnedByUser = (row: CalibrationChoiceRow): CalibrationChoice => (row.choice.state === "suggested" ? { state: "pinned", source: row.choice.source, evidence: row.choice.evidence, at: AT, by: "user" } : row.choice)
+  return [
+    rows,
+    {
+      onConfirm: (picks) => settle((all) => applied(all, ids(picks), (row) => ({ choice: pinnedByUser(row), source: row.source, sourceLink: row.sourceLink }))),
+      onNo: (picks) => settle((all) => applied(all, ids(picks), () => ({ choice: { state: "none", at: AT, by: "user" }, source: null, sourceLink: null }))),
+      onPick: (pick) =>
+        settle((all) =>
+          applied(all, ids([pick]), (row) => {
+            const offer = row.offers.find((o) => o.source === pick.source)
+            if (!offer) return row
+            return { choice: { state: "pinned", source: offer.source, evidence: offer.evidence, at: AT, by: "user" }, source: offer.label, sourceLink: calibrationSourceLink(offer.source) }
+          }),
+        ),
+    },
+  ]
 }
 
 type SampleState = "live" | "loading" | "empty" | "error"
@@ -102,41 +85,32 @@ function useSampleError(sample: SampleState, retry: () => void) {
   return sample === "error" ? { message: m.catalogue_f4_error_message(), onRetry: retry } : undefined
 }
 
-function Diagrams({ state, whatIf, now }: { state: PrototypeState; whatIf: PrototypeState; now: number }) {
+function Diagrams() {
   const m = useMessages()
   const [sample, setSample] = useState<SampleState>("live")
   const error = useSampleError(sample, () => setSample("live"))
-  const of = (world: PrototypeState, id: string) => {
-    const project = world.catalog.projects[id]
-    return project ? calibrationDiagram(world, project, now) : []
-  }
   return (
     <ComponentSection components={["CalibrationDiagram", "CalibrationChoiceBadge", "PlaceLink"]} description={m.catalogue_f4_diagram_desc()} level={3}>
       <div className="space-y-4">
         <Specimen caption={m.catalogue_f4_states()}>
           <div className="w-full space-y-2">
             <StateToggles value={sample} onChange={setSample} />
-            <CalibrationDiagram level={4} groups={sample === "empty" ? [] : of(state, M31)} loading={sample === "loading"} error={error} />
+            <CalibrationDiagram level={4} groups={sample === "empty" ? [] : DIAGRAM_ONE_GROUP} loading={sample === "loading"} error={error} />
           </div>
         </Specimen>
         <Specimen caption={m.catalogue_f4_diagram_groups()}>
           <div className="w-full">
-            <CalibrationDiagram level={4} groups={of(state, CYGNUS)} />
+            <CalibrationDiagram level={4} groups={DIAGRAM_GROUPS} />
           </div>
         </Specimen>
         <Specimen caption={m.catalogue_f4_diagram_what_if()}>
           <div className="w-full">
-            <CalibrationDiagram level={4} groups={of(whatIf, CYGNUS)} />
+            <CalibrationDiagram level={4} groups={DIAGRAM_MIXED} />
           </div>
         </Specimen>
         <Specimen caption={m.catalogue_f4_diagram_mosaic()}>
           <div className="w-full">
-            <CalibrationDiagram level={4} groups={of(state, MOSAIC)} />
-          </div>
-        </Specimen>
-        <Specimen caption={m.catalogue_f4_diagram_closed()}>
-          <div className="w-full">
-            <CalibrationDiagram level={4} groups={of(state, CLOSED)} />
+            <CalibrationDiagram level={4} groups={DIAGRAM_PANELS} />
           </div>
         </Specimen>
       </div>
@@ -144,19 +118,15 @@ function Diagrams({ state, whatIf, now }: { state: PrototypeState; whatIf: Proto
   )
 }
 
-function Choices({ state, whatIf }: { state: PrototypeState; whatIf: PrototypeState }) {
+function Choices() {
   const m = useMessages()
   const follow = useFollowLink()
   const [selected, setSelected] = useState<string[]>([])
   const [sample, setSample] = useState<SampleState>("live")
   const error = useSampleError(sample, () => setSample("live"))
-  // The session actions, as a host passes them.
-  const actions: Pick<CalibrationChoicesProps, "onConfirm" | "onPick" | "onNo" | "onAddFiles"> = {
-    onConfirm: confirmCalibration,
-    onPick: (p) => pickCalibration(p.sessionId, p.kind, p.source, p.expectRevision),
-    onNo: setNoCalibration,
-    onAddFiles: () => follow({ to: "/import" }),
-  }
+  const [rows, actions] = useLocalChoices(CHOICE_ROWS)
+  const [oneRows, oneActions] = useLocalChoices(ONE_SESSION_ROWS)
+  const addFiles = () => follow({ to: "/import" })
   return (
     <ComponentSection components={["CalibrationChoices"]} description={m.catalogue_f4_choices_desc()} level={3}>
       <div className="space-y-4">
@@ -165,22 +135,23 @@ function Choices({ state, whatIf }: { state: PrototypeState; whatIf: PrototypeSt
             <StateToggles value={sample} onChange={setSample} />
             <CalibrationChoices
               label={m.catalogue_f4_choices_live()}
-              rows={sample === "empty" ? [] : calibrationChoiceRows(state, LIVE_SESSIONS)}
+              rows={sample === "empty" ? [] : rows}
               loading={sample === "loading"}
               error={error}
               selection={{ selected, onChange: setSelected }}
+              onAddFiles={addFiles}
               {...actions}
             />
           </div>
         </Specimen>
         <Specimen caption={m.catalogue_f4_choices_one()}>
           <div className="w-full">
-            <CalibrationChoices label={m.catalogue_f4_choices_one()} rows={calibrationChoiceRows(state, ["ses_1863gio"])} {...actions} />
+            <CalibrationChoices label={m.catalogue_f4_choices_one()} rows={oneRows} onAddFiles={addFiles} {...oneActions} />
           </div>
         </Specimen>
         <Specimen caption={m.catalogue_f4_choices_read_only()}>
           <div className="w-full">
-            <CalibrationChoices label={m.catalogue_f4_choices_read_only()} rows={calibrationChoiceRows(whatIf, [WHAT_IF.suggested, WHAT_IF.changed])} changeable={false} {...actions} />
+            <CalibrationChoices label={m.catalogue_f4_choices_read_only()} rows={READ_ONLY_ROWS} changeable={false} onConfirm={() => SUCCEEDED} onPick={() => SUCCEEDED} onNo={() => SUCCEEDED} />
           </div>
         </Specimen>
       </div>
@@ -188,57 +159,34 @@ function Choices({ state, whatIf }: { state: PrototypeState; whatIf: PrototypeSt
   )
 }
 
-function Trees({ state, whatIf }: { state: PrototypeState; whatIf: PrototypeState }) {
+function Trees() {
   const m = useMessages()
   const [sample, setSample] = useState<SampleState>("live")
   const error = useSampleError(sample, () => setSample("live"))
-  const planned = (world: PrototypeState, id: string) => {
-    const project = world.catalog.projects[id]
-    return project ? { tree: applyPlan(world, project).tree, mode: project.settings.mode } : null
-  }
-  const symlinks = planned(state, CYGNUS)
-  const panels = planned(state, MOSAIC)
-  const oneGroup = planned(state, M31)
-  const mixedProject = whatIf.catalog.projects[CYGNUS]
-  const mixed = mixedProject ? viewTree(viewPlan(whatIf, mixedProject).entries, "copy") : null
   return (
     <ComponentSection components={["ViewFolderTree"]} description={m.catalogue_f4_tree_desc()} level={3}>
       <div className="space-y-4">
         <Specimen caption={m.catalogue_f4_states()}>
           <div className="w-full space-y-2">
             <StateToggles value={sample} onChange={setSample} />
-            {oneGroup ? (
-              <ViewFolderTree
-                label={m.catalogue_f4_tree_one_group()}
-                tree={sample === "empty" ? { ...oneGroup.tree, entries: 0, children: [] } : oneGroup.tree}
-                mode={oneGroup.mode}
-                loading={sample === "loading"}
-                error={error}
-              />
-            ) : null}
+            <ViewFolderTree label={m.catalogue_f4_tree_one_group()} tree={sample === "empty" ? VIEW_EMPTY : VIEW_ONE_GROUP} mode="copy" loading={sample === "loading"} error={error} />
           </div>
         </Specimen>
-        {symlinks ? (
-          <Specimen caption={m.catalogue_f4_tree_symlinks()}>
-            <div className="w-full">
-              <ViewFolderTree label={m.catalogue_f4_tree_symlinks()} tree={symlinks.tree} mode={symlinks.mode} />
-            </div>
-          </Specimen>
-        ) : null}
-        {mixed ? (
-          <Specimen caption={m.catalogue_f4_tree_mixed()}>
-            <div className="w-full">
-              <ViewFolderTree label={m.catalogue_f4_tree_mixed()} tree={mixed} mode="copy" />
-            </div>
-          </Specimen>
-        ) : null}
-        {panels ? (
-          <Specimen caption={m.catalogue_f4_tree_panels()}>
-            <div className="w-full">
-              <ViewFolderTree label={m.catalogue_f4_tree_panels()} tree={panels.tree} mode={panels.mode} />
-            </div>
-          </Specimen>
-        ) : null}
+        <Specimen caption={m.catalogue_f4_tree_symlinks()}>
+          <div className="w-full">
+            <ViewFolderTree label={m.catalogue_f4_tree_symlinks()} tree={VIEW_GROUPS} mode="symlink" />
+          </div>
+        </Specimen>
+        <Specimen caption={m.catalogue_f4_tree_mixed()}>
+          <div className="w-full">
+            <ViewFolderTree label={m.catalogue_f4_tree_mixed()} tree={VIEW_MIXED} mode="copy" />
+          </div>
+        </Specimen>
+        <Specimen caption={m.catalogue_f4_tree_panels()}>
+          <div className="w-full">
+            <ViewFolderTree label={m.catalogue_f4_tree_panels()} tree={VIEW_PANELS} mode="symlink" />
+          </div>
+        </Specimen>
       </div>
     </ComponentSection>
   )
@@ -264,9 +212,9 @@ function Readiness() {
     <ComponentSection components={["ReadinessBadge"]} description={m.catalogue_f4_readiness_desc()} level={3}>
       <Specimen caption={m.catalogue_f4_readiness_states()}>
         <ReadinessBadge readiness="ready" unreviewed={0} trashed={false} />
-        <ReadinessBadge readiness="needs-target" unreviewed={0} trashed={false} />
-        <ReadinessBadge readiness="needs-rig" unreviewed={0} trashed={false} />
-        <ReadinessBadge readiness="needs-review" unreviewed={1} trashed={false} />
+        <ReadinessBadge readiness="needs_target" unreviewed={0} trashed={false} />
+        <ReadinessBadge readiness="needs_rig" unreviewed={0} trashed={false} />
+        <ReadinessBadge readiness="needs_review" unreviewed={1} trashed={false} />
         <ReadinessBadge readiness="ready" unreviewed={0} trashed />
       </Specimen>
     </ComponentSection>
@@ -275,14 +223,11 @@ function Readiness() {
 
 export function F4Catalogue() {
   const m = useMessages()
-  const state = useStore((s) => s)
-  const whatIf = useMemo(() => whatIfState(state), [state])
-  const now = Date.now()
   return (
     <Section title={m.catalogue_f4_title()}>
-      <Diagrams state={state} whatIf={whatIf} now={now} />
-      <Choices state={state} whatIf={whatIf} />
-      <Trees state={state} whatIf={whatIf} />
+      <Diagrams />
+      <Choices />
+      <Trees />
       <Duplicates />
       <Readiness />
     </Section>

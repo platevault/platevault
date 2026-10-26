@@ -11,29 +11,14 @@ import { useMessages } from "@/app/preferences"
 import { IconButton } from "@/components/app/actions"
 import type { Column } from "@/components/app/contracts"
 import { DataTable } from "@/components/app/data-table"
-import { ArgumentsField, ChoiceListField, ComboboxField, FieldGroup, FilesField, NumberField, PathField, SegmentedField, SelectField, SliderField, SwitchField, type TemplateToken, TextAreaField, TextField, TokenTable, TokenTemplateField } from "@/components/app/fields"
+import { ArgumentsField, ChoiceListField, ComboboxField, FieldGroup, FilesField, NumberField, PathField, SegmentedField, SelectField, SliderField, SwitchField, TextAreaField, TextField, TokenTable, TokenTemplateField } from "@/components/app/fields"
 import { Section } from "@/components/app/page"
 import { SettingsRow, SettingsSection } from "@/components/app/settings"
 import { Button } from "@/components/ui/button"
-import { BANDS } from "@/domain/labels"
-import { NAMING_TOKENS } from "@/domain/templates"
-import { say } from "@/lib/i18n"
+import { FIXTURE_DISK, FRAME_FILES } from "./fixtures/disk"
+import { BANDS } from "./fixtures/library"
+import { namingTokens } from "./fixtures/naming"
 import { ComponentSection } from "./specimen"
-
-/** Typical values for the naming tokens (sample data, as in a library item). */
-const EXAMPLES: Record<string, string> = {
-  target: "M 31",
-  filter: "Ha",
-  date: "2026-10-11",
-  frame_type: "light",
-  train: "RedCat 51",
-  camera: "ASI2600MM",
-  exposure: "300s",
-  gain: "100",
-  offset: "50",
-  binning: "1x1",
-  set_temp: "-10C",
-}
 
 function Caption({ children }: { children: string }) {
   return <p className="text-xs text-muted-foreground">{children}</p>
@@ -217,11 +202,11 @@ function SwitchAndPathFields() {
       <div className="grid max-w-3xl grid-cols-2 gap-4">
         <SwitchField label={m.shortcuts_single_key()} checked={on} onChange={setOn} />
         <SwitchField label={m.shortcuts_single_key()} checked={false} onChange={() => {}} disabled />
-        <PathField label={m.status_role_captures()} mode="folder" value={folder} onChange={setFolder} />
-        <PathField label={m.run_profile_application()} mode="executable" value={app} onChange={setApp} />
-        <PathField label={m.import_type_light()} mode="file" filters={[".fits", ".fit", ".xisf"]} initialPath="/Volumes/Astro/Captures" value={file} onChange={setFile} error={file ? undefined : m.settings_name_required()} />
-        <PathField label={m.run_layout_output_folder()} mode="folder" value={folder} onChange={setFolder} disabled />
-        <FilesField label={m.calibration_import_files_label()} description={m.calibration_import_files_help()} filters={[".fits", ".fit", ".xisf"]} initialPath="/Volumes/Astro/Captures" value={files} onChange={setFiles} />
+        <PathField label={m.status_role_captures()} mode="folder" source={FIXTURE_DISK} value={folder} onChange={setFolder} />
+        <PathField label={m.run_profile_application()} mode="executable" source={FIXTURE_DISK} value={app} onChange={setApp} />
+        <PathField label={m.import_type_light()} mode="file" source={FIXTURE_DISK} filters={FRAME_FILES} initialPath="/Volumes/Astro/Captures" value={file} onChange={setFile} error={file ? undefined : m.settings_name_required()} />
+        <PathField label={m.run_layout_output_folder()} mode="folder" source={FIXTURE_DISK} value={folder} onChange={setFolder} disabled />
+        <FilesField label={m.calibration_import_files_label()} description={m.calibration_import_files_help()} source={FIXTURE_DISK} filters={FRAME_FILES} initialPath="/Volumes/Astro/Captures" value={files} onChange={setFiles} />
       </div>
     </ComponentSection>
   )
@@ -229,7 +214,7 @@ function SwitchAndPathFields() {
 
 function TemplateFields() {
   const m = useMessages()
-  const tokens: TemplateToken[] = NAMING_TOKENS.map((t) => ({ token: t.token, label: say(m, t.label), example: EXAMPLES[t.token] ?? t.fallback, fallback: t.fallback }))
+  const tokens = namingTokens(m)
   const [template, setTemplate] = useState("{target}/{filter}/{date}/light/")
   const [omit, setOmit] = useState<string[]>(["filter"])
   const [broken, setBroken] = useState("{target}/{night}/{filter")
@@ -271,7 +256,7 @@ function SettingsKit() {
           // eslint-disable-next-line pv/no-user-string -- filter names
           options={[{ value: "ha", label: "Ha" }, { value: "oiii", label: "OIII" }]}
         />
-        <PathField label={m.status_role_captures()} mode="folder" value={folder} onChange={setFolder} />
+        <PathField label={m.status_role_captures()} mode="folder" source={FIXTURE_DISK} value={folder} onChange={setFolder} />
         <SettingsRow label={m.about_first_run_setup()}>
           <Button variant="outline">{m.about_restart_setup()}</Button>
         </SettingsRow>

@@ -32,7 +32,7 @@ import { Button } from "@/components/ui/button"
 import type { StepLink } from "@/components/app/contracts"
 import { formatBytes, formatNight } from "@/lib/format"
 import type { Messages } from "@/lib/i18n"
-import { nowIso } from "@/store/core"
+import { FIXTURE_DISK } from "./fixtures/disk"
 import { ComponentSection, Specimen } from "./specimen"
 
 type StepState = FlowStep["state"]
@@ -57,7 +57,7 @@ function advance(progress: Progress, ids: readonly string[], outcome: "finished"
   const at = ids.indexOf(progress.current)
   const next = ids[at + 1]
   const states = { ...progress.states, [progress.current]: outcome }
-  if (!next) return { ...progress, states, finishedOn: nowIso().slice(0, 10) }
+  if (!next) return { ...progress, states, finishedOn: new Date().toISOString().slice(0, 10) }
   return { states: { ...states, [next]: "current" }, current: next, finishedOn: null }
 }
 
@@ -181,7 +181,7 @@ function fixedFlow(m: Messages, states: StepState[], current: string, options: {
   })
   const last = current === "review"
   return {
-    steps: options.finished ? steps.map((step) => (step.id === "review" ? { ...step, summary: m.stepflow_finished_on({ date: formatNight(nowIso().slice(0, 10), true) }) } : step)) : steps,
+    steps: options.finished ? steps.map((step) => (step.id === "review" ? { ...step, summary: m.stepflow_finished_on({ date: formatNight(new Date().toISOString().slice(0, 10), true) }) } : step)) : steps,
     current,
     ordered: true,
     proceed: options.finished ? null : { id: "proceed", label: last ? m.stepflow_finish_review() : m.stepflow_proceed(), run: noop },
@@ -501,7 +501,7 @@ function DialogDemo() {
             // One body height on every step, as StepPane gives a page: the centred dialog then never moves.
             <div className="h-28 space-y-3" data-dialog-step-body="">
               <BodyState editable={editable} />
-              {step === "folder" ? <PathField label={m.import_column_folder()} mode="folder" value={folder} onChange={setFolder} disabled={!editable} /> : null}
+              {step === "folder" ? <PathField label={m.import_column_folder()} mode="folder" source={FIXTURE_DISK} value={folder} onChange={setFolder} disabled={!editable} /> : null}
               {step === "mode" ? <SegmentedField label={m.import_copy_or_move()} value={mode} options={modes} onChange={setMode} disabled={!editable} /> : null}
               {step === "preview" ? (
                 <KeyValueList

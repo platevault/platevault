@@ -13,10 +13,10 @@ import { DisplayMenu, type DisplayGroup } from "@/components/app/display-menu"
 import { NightPicker, type SiteLocation, SiteLocationField, SitePicker, type TargetOption, TargetPicker, type TargetResultGroup } from "@/components/app/pickers"
 import { Section } from "@/components/app/page"
 import { STRETCH_LABEL, STRETCHES, type Stretch, ZOOM_LABEL, ZOOMS, type Zoom } from "@/components/domain/plate"
-import { objectTypeRef } from "@/domain/labels"
-import { BUNDLED_CATALOGUE, type CatalogueEntry, matchesQuery, SIMBAD_FIXTURE } from "@/domain/sky"
 import { formatDec, formatRa } from "@/lib/format"
-import { type Messages, say } from "@/lib/i18n"
+import type { Messages } from "@/lib/i18n"
+import { shiftNight } from "@/lib/week"
+import { matchesQuery, OBJECT_TYPE_NAME, SIMBAD_RESULTS as SIMBAD_FIXTURE, SKY_CATALOGUE as BUNDLED_CATALOGUE, type SkyObject } from "./fixtures/sky"
 import { ComponentSection, Specimen } from "./specimen"
 
 const SITES = [{ id: "site_utrecht", name: "Utrecht" }, { id: "site_ardennes", name: "Ardennes" }, { id: "site_la_palma", name: "La Palma" }]
@@ -37,7 +37,7 @@ function NightPickers() {
   const m = useMessages()
   const today = new Date().toISOString().slice(0, 10)
   const [night, setNight] = useState(today)
-  const [other, setOther] = useState(shiftNight(today, 3))
+  const [other, setOther] = useState(() => shiftNight(today, 3))
   const [week, setWeek] = useState(today)
   const [jump, setJump] = useState(today)
   return (
@@ -134,11 +134,11 @@ function SiteLocations() {
   )
 }
 
-function option(m: Messages, entry: CatalogueEntry): TargetOption {
-  return { id: entry.designation, name: entry.designation, detail: [entry.aliases[0], say(m, objectTypeRef(entry.objectType)), `${formatRa(entry.ra)} ${formatDec(entry.dec)}`].filter(Boolean).join(" · ") }
+function option(m: Messages, entry: SkyObject): TargetOption {
+  return { id: entry.designation, name: entry.designation, detail: [entry.aliases[0], OBJECT_TYPE_NAME[entry.objectType](m), `${formatRa(entry.ra)} ${formatDec(entry.dec)}`].filter(Boolean).join(" · ") }
 }
 
-function search(m: Messages, entries: readonly CatalogueEntry[], query: string): TargetOption[] {
+function search(m: Messages, entries: readonly SkyObject[], query: string): TargetOption[] {
   return entries.filter((entry) => matchesQuery([entry.designation, ...entry.aliases], query)).map((entry) => option(m, entry))
 }
 

@@ -8,12 +8,11 @@ import { Link } from "@tanstack/react-router"
 import { ChevronDown, CircleAlert, FolderOpen, Inbox, Info, Search, Telescope } from "lucide-react"
 import { type ReactNode, useId, useState } from "react"
 import { useMessages } from "@/app/preferences"
-import { MOD_LABEL, PALETTE_SHORTCUT, PROCEED_SHORTCUT } from "@/app/shortcuts"
 import { ClearableInput } from "@/components/app/clearable-input"
 import type { Action } from "@/components/app/contracts"
 import { announce } from "@/components/app/feedback"
 import { DialogFooter } from "@/components/app/form-dialog"
-import { OperationLine } from "@/components/app/operation-panel"
+import { OperationLine, type OperationView } from "@/components/app/operation-panel"
 import { ListDetail } from "@/components/app/page"
 import { HelpTip, NoteMarker } from "@/components/app/tips"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -60,11 +59,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import type { Messages } from "@/lib/i18n"
-import type { CommitResult } from "@/store/core"
-import { useStore } from "@/store/core"
+import { MOD_LABEL, PALETTE_SHORTCUT, PROCEED_SHORTCUT } from "./fixtures/keys"
+import { OPERATION_LINES, stopRun } from "./fixtures/operations"
+import { SUCCEEDED } from "./fixtures/results"
 import { ComponentSection, Specimen } from "./specimen"
 
-const done = (): CommitResult => ({ ok: true })
+const done = () => SUCCEEDED
 
 const BADGE_VARIANTS = ["default", "secondary", "destructive", "outline", "ghost", "link"] as const
 const ALERT_VARIANTS = ["default", "destructive"] as const
@@ -721,7 +721,9 @@ function Value({ children }: { children: ReactNode }) {
 
 function SmallParts() {
   const m = useMessages()
-  const latest = useStore((s) => Object.values(s.operations).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0])
+  const [lines, setLines] = useState<readonly OperationView[]>(OPERATION_LINES)
+  const now = () => new Date().toISOString()
+  const update = (id: string, next: (op: OperationView) => OperationView) => setLines((all) => all.map((op) => (op.id === id ? next(op) : op)))
   return (
     <>
       <ComponentSection components={["HelpTip", "NoteMarker"]} description={m.catalogue_primitives_tips_desc()}>
@@ -764,9 +766,20 @@ function SmallParts() {
       </ComponentSection>
 
       <ComponentSection components={["OperationLine"]} description={m.catalogue_primitives_operation_desc()}>
-        <Specimen caption={m.catalogue_primitives_operation_caption()}>
-          {latest ? <OperationLine operationId={latest.id} className="w-full max-w-xl" /> : <p className="text-sm text-muted-foreground">{m.ds_op_none()}</p>}
-        </Specimen>
+        <div className="w-full max-w-xl space-y-2">
+          {lines.map((op) => (
+            <Specimen key={op.id} caption={op.status}>
+              <OperationLine
+                operation={op}
+                className="w-full"
+                onPause={() => update(op.id, (o) => stopRun(o, "paused", now()))}
+                onResume={() => update(op.id, (o) => ({ ...o, status: "running" }))}
+                onCancel={() => update(op.id, (o) => stopRun(o, "canceled", now()))}
+                onRetry={() => update(op.id, () => OPERATION_LINES[0]!)}
+              />
+            </Specimen>
+          ))}
+        </div>
       </ComponentSection>
     </>
   )

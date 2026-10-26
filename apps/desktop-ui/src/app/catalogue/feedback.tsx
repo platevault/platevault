@@ -13,11 +13,12 @@ import { Section } from "@/components/app/page"
 import { Refusal } from "@/components/app/refusal"
 import { Button } from "@/components/ui/button"
 import { formatNight } from "@/lib/format"
-import type { CommitResult } from "@/store/core"
+import type { RunOutcome } from "@/components/app/run-result"
+import { after, libraryFailure, SUCCEEDED } from "./fixtures/results"
 import { ComponentSection, Specimen } from "./specimen"
 
 /** One section's save: the button runs `write` through the hook, and the hook's indicator follows it. */
-function SaveSpecimen({ caption, write }: { caption: string; write: () => CommitResult }) {
+function SaveSpecimen({ caption, write }: { caption: string; write: () => RunOutcome }) {
   const m = useMessages()
   const { save, indicator } = useSaveState()
   return (
@@ -32,13 +33,13 @@ function SaveSpecimen({ caption, write }: { caption: string; write: () => Commit
   )
 }
 
-/** Fails the first write, so Retry shows; the retried write succeeds. */
-function failOnce(message: string): () => CommitResult {
+/** Fails the first write with a failure the library says may succeed again, so Retry shows; the retried write succeeds. */
+function failOnce(): () => RunOutcome {
   let failed = false
   return () => {
-    if (failed) return { ok: true }
+    if (failed) return after(400, SUCCEEDED)
     failed = true
-    return { ok: false, reason: "write-failed", message }
+    return after(400, libraryFailure("persistence_failure", "retry"))
   }
 }
 
@@ -98,9 +99,9 @@ export function FeedbackCatalogue() {
 
       <ComponentSection components={["useSaveState"]} description={m.catalogue_feedback_save_state_desc()}>
         <div className="space-y-3">
-          <SaveSpecimen caption={m.catalogue_feedback_save_succeeds()} write={() => ({ ok: true })} />
-          <SaveSpecimen caption={m.catalogue_feedback_save_fails()} write={failOnce(m.store_not_saved_message({ label: m.ds_target_correction() }))} />
-          <SaveSpecimen caption={m.catalogue_feedback_save_stale()} write={() => ({ ok: false, reason: "stale", message: m.ds_save_stale({ from: 3, to: 4 }) })} />
+          <SaveSpecimen caption={m.catalogue_feedback_save_succeeds()} write={() => after(400, SUCCEEDED)} />
+          <SaveSpecimen caption={m.catalogue_feedback_save_fails()} write={failOnce()} />
+          <SaveSpecimen caption={m.catalogue_feedback_save_stale()} write={() => after(400, libraryFailure("conflict", "review"))} />
         </div>
       </ComponentSection>
 

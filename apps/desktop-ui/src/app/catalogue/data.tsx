@@ -11,9 +11,8 @@ import { ChannelCoverage, DateText, FilterChips, KeyValueList, PathText, Stat } 
 import { EvidenceList } from "@/components/app/evidence-list"
 import { UnknownValue } from "@/components/app/feedback"
 import { Section } from "@/components/app/page"
-import { emptyBreakdown, sessionBreakdown } from "@/domain/library"
 import { formatDuration, formatExposure } from "@/lib/format"
-import { useStore } from "@/store/core"
+import { HA_BREAKDOWN, TARGET_EVIDENCE } from "./fixtures/library"
 
 type ChipId = "ha" | "object" | "unreviewed"
 
@@ -27,10 +26,6 @@ export function DataCatalogue() {
     unreviewed: m.ds_chip_quality({ quality: m.status_unreviewed() }),
   }
   const chips = chipIds.map((id) => ({ id, label: chipLabel[id] }))
-  const sample = useStore((s) => Object.values(s.catalog.sessions).find((x) => x.target.status === "needs-review") ?? Object.values(s.catalog.sessions)[0])
-  const disk = useStore((s) => s.disk)
-  const catalog = useStore((s) => s.catalog)
-  const breakdown = sample ? sessionBreakdown(disk, catalog, sample) : emptyBreakdown()
   return (
     <Section title={m.ds_data_title()}>
       <div className="grid gap-6 xl:grid-cols-2">
@@ -49,10 +44,10 @@ export function DataCatalogue() {
             <Stat label={m.status_excluded_from_view()} value="6" hint={m.ds_files_stay()} />
             <Stat label={m.status_unresolved()} value="0" />
           </div>
-          <ChannelCoverage channel={sample?.channel ?? "Ha"} breakdown={breakdown} goalS={10 * 3600} />
+          <ChannelCoverage channel="Ha" breakdown={HA_BREAKDOWN} goalS={10 * 3600} usableVerifiedAt="2026-10-04T10:00:00Z" />
         </div>
         <div className="space-y-3">
-          {sample ? <EvidenceList evidence={sample.target.evidence} caption={m.ds_evidence_caption()} /> : null}
+          <EvidenceList evidence={TARGET_EVIDENCE} caption={m.ds_evidence_caption()} />
           <FilterChips
             chips={chips}
             onRemove={(id) => setChipIds((ids) => ids.filter((chip) => chip !== id))}

@@ -13,7 +13,7 @@ import { type NavListGroup, NavList } from "@/components/app/nav-list"
 import { ThemeMenuItems, ThemePicker } from "@/components/app/theme-picker"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { useStore } from "@/store/core"
+import { SAMPLE_PROJECTS } from "./fixtures/library"
 import { ComponentSection } from "./specimen"
 
 function Row({ caption, children }: { caption: string; children: ReactNode }) {
@@ -32,7 +32,6 @@ function Sidebar({ collapsed, children }: { collapsed?: boolean; children: React
 
 function useNavGroups(): NavListGroup[] {
   const m = useMessages()
-  const projects = useStore((s) => Object.values(s.catalog.projects).slice(0, 3))
   return [
     {
       id: "primary",
@@ -58,7 +57,7 @@ function useNavGroups(): NavListGroup[] {
           id: "recent-projects",
           label: m.nav_projects(),
           icon: History,
-          items: projects.map((project) => ({ id: `project:${project.id}`, label: project.name, icon: FolderKanban, link: { to: "/projects/$projectId", params: { projectId: project.id } } })),
+          items: SAMPLE_PROJECTS.map((project) => ({ id: `project:${project.id}`, label: project.name, icon: FolderKanban, link: { to: "/projects/$projectId", params: { projectId: project.id } } })),
         },
       ],
     },
@@ -130,10 +129,7 @@ export function ShellPartsCatalogue() {
   const utilityGroups = useUtilityGroups()
   const settingsGroups = useSettingsGroups()
   const checklist = useChecklist()
-  const recentId = useStore((s) => {
-    const first = Object.values(s.catalog.projects)[0]
-    return first ? `project:${first.id}` : null
-  })
+  const recentId = `project:${SAMPLE_PROJECTS[0]!.id}`
   const [dismissedChecklist, setDismissedChecklist] = useState(false)
   return (
     <>

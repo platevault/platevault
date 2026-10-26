@@ -12,6 +12,7 @@ import { SwitchField } from "@/components/app/fields"
 import { BlockersBody, BlockersPreview, MasterPreview, Preview, UsedByPreview } from "@/components/app/previews"
 import { Button } from "@/components/ui/button"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card"
+import { DARK_MAY as OLDER, DARK_SEP as NEWER, MASTER_DARK as DARK, MASTER_DARK_FILE as DARK_FILE, MASTER_DARK_OLD as OLD_DARK } from "./fixtures/calibration"
 import { ComponentSection, Specimen } from "./specimen"
 
 // eslint-disable-next-line pv/no-user-string -- sample Projects: Target and filter names with a night
@@ -19,13 +20,6 @@ const PROJECTS = [{ label: "M 42 · Ha · 2026-09-14", link: { to: "/projects" }
 // eslint-disable-next-line pv/no-user-string -- sample sessions and the Projects that hold them: Target and filter names with a night, Project names
 const HELD = [{ label: "M 42 · Ha · 2026-09-14", where: "Orion 2026", link: { to: "/projects" } }, { label: "NGC 7000 · OIII · 2026-09-02", where: "Cygnus HOO", link: { to: "/projects" } }]
 
-// A master dark as the Calibration library records it, with two dated versions, and its file name.
-const OLDER = { id: "mv_older", capturedAt: "2026-05-02T22:10:00.000Z", frameCount: 30, origin: { kind: "library", projectId: null, sourcePath: "", sessionId: null } } as const
-const NEWER = { id: "mv_newer", capturedAt: "2026-09-14T21:40:00.000Z", frameCount: 40, origin: { kind: "stacked", projectId: null, sourcePath: "", sessionId: null } } as const
-const DARK = { kind: "dark", cameraName: "ZWO ASI2600MM Pro", gain: 100, offset: 50, ccdTempC: -10, exposureS: 300, versions: [OLDER, NEWER] } as const
-/** The same settings with only the May version: its newest version is past the age limit. */
-const OLD_DARK = { ...DARK, versions: [OLDER] } as const
-const DARK_FILE = "masterDark_BIN-1_EXPOSURE-300.00s.xisf"
 
 export function PreviewsCatalogue() {
   const m = useMessages()

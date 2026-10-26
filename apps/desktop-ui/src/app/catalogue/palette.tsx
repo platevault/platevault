@@ -4,8 +4,8 @@
  */
 import { useState } from "react"
 import { useMessages } from "@/app/preferences"
-import { PALETTE_SHORTCUT } from "@/app/shortcuts"
 import { CommandPalette, type PaletteGroup, PaletteTrigger } from "@/components/app/palette"
+import { PALETTE_SHORTCUT } from "./fixtures/keys"
 import { ComponentSection, Specimen } from "./specimen"
 
 export function PaletteCatalogue() {

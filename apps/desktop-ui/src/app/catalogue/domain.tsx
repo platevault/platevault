@@ -2,50 +2,60 @@
  * Catalogue entry (R9-COMPOSITION-PLAN §3.3 L2-domain): Plate, Histogram,
  * CornerGrid, FrameThumbnails, SessionPlots, StarCutouts, MoonLine, DarkLine,
  * AltitudeSpark, NightCalendar, MoonPhase, MosaicField and SiteMap. The
- * plates render the prototype's synthetic star field; the night visuals
- * compute a real night at sample sites; the mosaic is the sample library's
- * IC 5070 Project read from the store, then a 2 × 2 layout around M 31 with a
- * session outside its panel and a panel with no pointing. Captions are
- * reviewer labels; site and frame names are sample data.
+ * plates render a synthetic star field (fixtures/raster.ts); the night
+ * visuals use a smooth model of the Moon and darkness at two sample sites
+ * (fixtures/night.ts); the mosaics are a three-panel IC 5070 layout and a
+ * 2 × 2 layout around M 31 with a session outside its panel and a panel with
+ * no pointing. Captions are reviewer labels; site and frame names are sample
+ * data.
  */
-import { lazy, Suspense, useMemo, useState } from "react"
+import { lazy, Suspense, useEffect, useMemo, useState } from "react"
 import { useMessages } from "@/app/preferences"
 import { DisplayMenu } from "@/components/app/display-menu"
 import { Section } from "@/components/app/page"
-import { CornerGrid } from "@/components/domain/corner-grid"
-import { FrameThumbnails } from "@/components/domain/frame-thumbnails"
+import { CornerGrid, type RegionRect } from "@/components/domain/corner-grid"
+import { type FrameThumbnail, FrameThumbnails, type Thumbnail, THUMB_W } from "@/components/domain/frame-thumbnails"
 import { Histogram } from "@/components/domain/histogram"
-import { type MosaicFieldPanel, MosaicField, type MosaicPointing, mosaicFieldModel } from "@/components/domain/mosaic-field"
+import { MosaicField, type MosaicFieldPanel, type MosaicPointing } from "@/components/domain/mosaic-field"
 import { Plate, type PlateImage, type PlateView, STRETCH_LABEL, STRETCHES, type Stretch, type ViewWindow, ZOOM_LABEL, ZOOMS, type Zoom } from "@/components/domain/plate"
 import { type PlotSeries, SessionPlots } from "@/components/domain/session-plots"
 import { AltitudeSpark, DarkLine, MoonLine } from "@/components/domain/sky-lines"
-import { type CalendarNight, NightCalendar } from "@/components/domain/night-calendar"
+import { NightCalendar } from "@/components/domain/night-calendar"
 import { StarCutouts } from "@/components/domain/star-cutouts"
 import { StatusBadge } from "@/components/app/status"
 import { Spinner } from "@/components/ui/spinner"
-import { defaultCriteria, nightSummary, shiftNight, upcomingNight } from "@/domain/planning"
-import type { DiskFile, ObservingSite } from "@/domain/types"
 import { formatCount, formatDecimal } from "@/lib/format"
-import { detectedStars, linearHistogram, renderWindow, type StarField, starField } from "@/components/domain/raster"
-import { nightGrid } from "@/features/v5/e-targets-plan-settings/sky-tonight"
-import { nightSky, type SkyContext } from "@/features/v5/e-targets-plan-settings/targets-model"
-import { useStore } from "@/store/core"
+import { calendarNights, darknessOn, moonOn, type SampleSite, skyOf, sparkNight, TROMSO, UTRECHT } from "./fixtures/night"
+import { detectedStars, linearHistogram, type PixelTruth, regionStats, renderCutout, renderWindow, type StarField, starField } from "./fixtures/raster"
 import { ComponentSection, Specimen } from "./specimen"
 
 const SiteMap = lazy(() => import("@/components/domain/site-map").then((module) => ({ default: module.SiteMap })))
 
-const FIELD_TRUTH = { fwhmPx: 3.2, eccentricity: 0.32, starCount: 260, background: 820, saturatedStars: 3, invalidSamples: 0, trailed: false }
-const FLAGGED_TRUTH = { ...FIELD_TRUTH, saturatedStars: 8, invalidSamples: 400 }
+const FIELD_TRUTH: PixelTruth = { fwhmPx: 3.2, eccentricity: 0.32, starCount: 260, background: 820, saturatedStars: 3, invalidSamples: 0, trailed: false }
+const FLAGGED_TRUTH: PixelTruth = { ...FIELD_TRUTH, saturatedStars: 8, invalidSamples: 400 }
 
 function plateImage(field: StarField): PlateImage {
   return { width: field.width, height: field.height, render: (window, stretch) => renderWindow(field, window, stretch) }
 }
 
-const UTRECHT: ObservingSite = { id: "site_utrecht", name: "Utrecht", latitude: 52.09, longitude: 5.12, elevationM: 5, timeZone: "Europe/Amsterdam", twilight: "astronomical", minAltitudeDeg: 30 }
-const FAR_NORTH: ObservingSite = { id: "site_tromso", name: "Tromsø", latitude: 69.65, longitude: 18.96, elevationM: 10, timeZone: "Europe/Oslo", twilight: "astronomical", minAltitudeDeg: 30 }
-
-function skyContext(site: ObservingSite, night: string, nowMs: number): SkyContext {
-  return { site, grid: nightGrid(site, night), summary: nightSummary(site, night), criteria: defaultCriteria(site), nowMs, tonight: night }
+/** The fields' thumbnails as a host decodes them: null while pending, then each field drawn at `THUMB_W`; without a 2D canvas they stay pending. */
+function useThumbnailUrls(fields: readonly StarField[]): readonly (string | null)[] {
+  const [urls, setUrls] = useState<readonly (string | null)[]>(() => fields.map(() => null))
+  useEffect(() => {
+    const canvas = document.createElement("canvas")
+    const context = canvas.getContext("2d")
+    if (!context) return
+    setUrls(
+      fields.map((field) => {
+        const scale = field.width / THUMB_W
+        canvas.width = THUMB_W
+        canvas.height = Math.round(field.height / scale)
+        context.putImageData(renderWindow(field, { x0: 0, y0: 0, scale, width: canvas.width, height: canvas.height }, "auto"), 0, 0)
+        return canvas.toDataURL()
+      }),
+    )
+  }, [fields])
+  return urls
 }
 
 function Plates() {
@@ -112,23 +122,33 @@ function Histograms() {
   )
 }
 
+/** A tile's thumbnail: the host's reason when no copy is readable, else decoded or pending. */
+function thumbnail(url: string | null, offline: string | null): Thumbnail {
+  if (offline) return { state: "unreadable", reason: offline }
+  return url ? { state: "ready", url } : { state: "pending" }
+}
+
 function ReviewVisuals() {
   const m = useMessages()
   const field = useMemo(() => starField("catalogue-corners", FIELD_TRUTH, 1600, 1100, null), [])
+  const image = useMemo(() => plateImage(field), [field])
+  const measure = useMemo(() => (zone: RegionRect) => regionStats(field, zone), [field])
   const stars = useMemo(() => detectedStars(field), [field])
   const failed = stars.find((s) => s.state === "failed") ?? stars[0]!
+  const cutouts = useMemo(() => ({ fitted: (kind: Parameters<typeof renderCutout>[2]) => renderCutout(field, stars[0]!, kind), failed: (kind: Parameters<typeof renderCutout>[2]) => renderCutout(field, failed, kind) }), [field, stars, failed])
   const [active, setActive] = useState("t2")
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set(["t4"]))
-  const thumbs = useMemo(
-    () =>
-      Array.from({ length: 8 }, (_, i) => {
-        const id = `t${i + 1}`
-        // A disk file as indexing records it: enough header and pixel facts to decode a thumbnail.
-        const file = { path: `/catalogue/Light_${i + 1}.fits`, sha256: `catalogue-thumb-${i}`, header: { widthPx: 1600, heightPx: 1100, bayerPattern: null }, pixelTruth: { ...FIELD_TRUTH, fwhmPx: 2.6 + i * 0.3 } } as unknown as DiskFile
-        return { id, name: `Light_${String(i + 1).padStart(4, "0")}.fits`, file: i === 6 ? undefined : file, unreadable: i === 6 ? m.status_offline() : null, status: <StatusBadge kind="quality" value={i === 3 ? "unusable" : i < 3 ? "usable" : "unreviewed"} />, statusText: "", dimmed: i === 3 }
-      }),
-    [m],
-  )
+  const fields = useMemo(() => Array.from({ length: 8 }, (_, i) => starField(`catalogue-thumb-${i}`, { ...FIELD_TRUTH, fwhmPx: 2.6 + i * 0.3 }, 1600, 1100, null)), [])
+  const urls = useThumbnailUrls(fields)
+  // Eight tiles; the seventh has no readable copy.
+  const thumbs: FrameThumbnail[] = fields.map((_, i) => ({
+    id: `t${i + 1}`,
+    name: `Light_${String(i + 1).padStart(4, "0")}.fits`,
+    thumb: thumbnail(urls[i] ?? null, i === 6 ? m.status_offline() : null),
+    status: <StatusBadge kind="quality" value={i === 3 ? "unusable" : i < 3 ? "usable" : "unreviewed"} />,
+    statusText: "",
+    dimmed: i === 3,
+  }))
   const series: PlotSeries[] = (["fwhm", "eccentricity"] as const).map((id) => ({
     id,
     label: id === "fwhm" ? "FWHM" : m.review_ecc_short(),
@@ -147,7 +167,7 @@ function ReviewVisuals() {
         <Specimen caption={m.catalogue_domain_corners()}>
           <div className="flex h-96 w-full">
             {/* eslint-disable-next-line pv/no-user-string -- a sample file name */}
-            <CornerGrid field={field} stretch="auto" overlay={{ fwhm: true, eccentricity: true }} label="Light_0001.fits" />
+            <CornerGrid image={image} measure={measure} stretch="auto" overlay={{ fwhm: true, eccentricity: true }} label="Light_0001.fits" />
           </div>
         </Specimen>
         <Specimen caption={m.catalogue_domain_filmstrip()}>
@@ -166,8 +186,8 @@ function ReviewVisuals() {
           </div>
         </Specimen>
         <Specimen caption={m.catalogue_domain_cutouts({ count: formatCount(2) })}>
-          <StarCutouts field={field} star={stars[0]!} />
-          <StarCutouts field={field} star={failed} />
+          <StarCutouts star={stars[0]!} render={cutouts.fitted} />
+          <StarCutouts star={failed} render={cutouts.failed} />
         </Specimen>
       </div>
     </ComponentSection>
@@ -177,30 +197,28 @@ function ReviewVisuals() {
 function NightVisuals() {
   const m = useMessages()
   const nights = useMemo(() => {
-    const now = Date.now()
-    const here = skyContext(UTRECHT, upcomingNight(UTRECHT, now), now)
+    const autumn = "2026-10-14"
     const midsummer = "2026-06-21"
-    const north = skyContext(FAR_NORTH, midsummer, Date.parse(`${midsummer}T08:00:00Z`))
-    const sky = (ctx: SkyContext, ra: number, dec: number) => {
-      const s = nightSky(ctx, ra, dec)
-      return s.status === "ok" ? s : null
-    }
-    return { here, north, high: sky(here, 10.68, 41.27), low: sky(here, 270.9, -24.38), polar: sky(north, 10.68, 41.27) }
+    const at = (site: SampleSite, night: string) => ({ site, night, grid: sparkNight(site, night), moon: moonOn(site, night), darkness: darknessOn(site, night) })
+    const here = at(UTRECHT, autumn)
+    const north = at(TROMSO, midsummer)
+    // M 31 high at midnight; M 8 low in the south, never above the limit; M 31 from the far north in June, with no darkness.
+    return { here, north, high: skyOf(UTRECHT, autumn, 11.5, 82), low: skyOf(UTRECHT, autumn, 5, 14), polar: skyOf(TROMSO, midsummer, 16, 70) }
   }, [])
-  const spark = (ctx: SkyContext, sky: typeof nights.high) =>
-    sky ? <AltitudeSpark night={ctx.grid} sky={sky} darkness={ctx.summary.darkness} minAltitudeDeg={ctx.criteria.minAltitudeDeg} timeZone={ctx.site.timeZone} /> : null
+  type Night = typeof nights.here
+  const spark = (at: Night, sky: typeof nights.high) => <AltitudeSpark night={at.grid} sky={sky} darkness={at.darkness} minAltitudeDeg={at.site.minAltitudeDeg} timeZone={at.site.timeZone} />
   return (
     <ComponentSection components={["MoonLine", "DarkLine", "AltitudeSpark"]} description={m.catalogue_domain_night_desc()} level={3}>
       <div className="space-y-3">
         <Specimen caption={m.catalogue_domain_night_window()}>
-          <MoonLine moon={nights.here.summary.moon} timeZone={UTRECHT.timeZone} />
-          <DarkLine darkness={nights.here.summary.darkness} timeZone={UTRECHT.timeZone} />
+          <MoonLine moon={nights.here.moon} timeZone={UTRECHT.timeZone} />
+          <DarkLine darkness={nights.here.darkness} timeZone={UTRECHT.timeZone} />
           {spark(nights.here, nights.high)}
         </Specimen>
         <Specimen caption={m.catalogue_domain_night_low()}>{spark(nights.here, nights.low)}</Specimen>
         <Specimen caption={m.catalogue_domain_night_no_dark()}>
-          <MoonLine moon={nights.north.summary.moon} timeZone={FAR_NORTH.timeZone} />
-          <DarkLine darkness={nights.north.summary.darkness} timeZone={FAR_NORTH.timeZone} />
+          <MoonLine moon={nights.north.moon} timeZone={TROMSO.timeZone} />
+          <DarkLine darkness={nights.north.darkness} timeZone={TROMSO.timeZone} />
           {spark(nights.north, nights.polar)}
         </Specimen>
       </div>
@@ -214,33 +232,20 @@ function NightVisuals() {
  * their date only. The counts are sample figures, zero on some nights; each
  * card shows the night's darkness and Moon, as Home's does.
  */
-function sampleNights(site: ObservingSite, today: string, count: number): CalendarNight[] {
-  const summaries = Array.from({ length: count + 1 }, (_, i) => nightSummary(site, shiftNight(today, i)))
-  return summaries.slice(0, count).map((summary, i): CalendarNight => {
-    const dark = summary.darkness
-    return {
-      night: summary.night,
-      moon: summary.moon,
-      waxing: summaries[i + 1]!.moon.illuminationPct > summary.moon.illuminationPct,
-      darkS: dark ? (Date.parse(dark.end) - Date.parse(dark.start)) / 1000 : null,
-      goals: (i * 5) % 4,
-      planned: i % 6 === 0 ? 1 : 0,
-      link: { to: "/targets", search: i === 0 ? {} : { night: summary.night } },
-      card: (
-        <>
-          <DarkLine darkness={dark} timeZone={site.timeZone} />
-          <MoonLine moon={summary.moon} timeZone={site.timeZone} />
-        </>
-      ),
-    }
-  })
+function sampleNights(site: SampleSite, today: string, count: number) {
+  return calendarNights(site, today, count, (night) => (
+    <>
+      <DarkLine darkness={darknessOn(site, night)} timeZone={site.timeZone} />
+      <MoonLine moon={moonOn(site, night)} timeZone={site.timeZone} />
+    </>
+  ))
 }
 
 function NightCalendars() {
   const m = useMessages()
   const autumn = "2026-10-14"
   const midsummer = "2026-06-21"
-  const nights = useMemo(() => ({ here: sampleNights(UTRECHT, autumn, 30), north: sampleNights(FAR_NORTH, midsummer, 12) }), [])
+  const nights = useMemo(() => ({ here: sampleNights(UTRECHT, autumn, 30), north: sampleNights(TROMSO, midsummer, 12) }), [])
   return (
     <ComponentSection components={["NightCalendar", "MoonPhase"]} description={m.catalogue_domain_calendar_desc()} level={3}>
       <div className="space-y-3">
@@ -261,6 +266,21 @@ function NightCalendars() {
 
 const FOV = { widthDeg: 1.2, heightDeg: 0.8 }
 
+/** IC 5070 in three panels, each at its sessions' median pointing, with the rig's field. */
+const IC5070_FOV = { widthDeg: 5.38, heightDeg: 3.6 }
+const IC5070_PANELS: Array<Omit<MosaicFieldPanel, "name"> & { n: number }> = [
+  { id: "grp_ic5070_p1", n: 1, centre: { ra: 312.2, dec: 44.4 }, rotationDeg: 0, sessions: 2 },
+  { id: "grp_ic5070_p2", n: 2, centre: { ra: 316.9, dec: 44.4 }, rotationDeg: 0, sessions: 2 },
+  { id: "grp_ic5070_p3", n: 3, centre: { ra: 314.6, dec: 41.3 }, rotationDeg: 1, sessions: 1 },
+]
+const IC5070_POINTINGS: MosaicPointing[] = [
+  { id: "ses_ic5070_p1a", ra: 312.18, dec: 44.41, panelId: "grp_ic5070_p1", inside: true },
+  { id: "ses_ic5070_p1b", ra: 312.24, dec: 44.38, panelId: "grp_ic5070_p1", inside: true },
+  { id: "ses_ic5070_p2a", ra: 316.88, dec: 44.42, panelId: "grp_ic5070_p2", inside: true },
+  { id: "ses_ic5070_p2b", ra: 316.93, dec: 44.37, panelId: "grp_ic5070_p2", inside: true },
+  { id: "ses_ic5070_p3a", ra: 314.6, dec: 41.32, panelId: "grp_ic5070_p3", inside: true },
+]
+
 /** A 2 × 2 layout around M 31: Panel 4 has no session with a pointing yet. */
 const M31_PANELS: Array<Omit<MosaicFieldPanel, "name"> & { n: number }> = [
   { id: "p1", n: 1, centre: { ra: 11.4, dec: 41.6 }, rotationDeg: 0, sessions: 2 },
@@ -280,20 +300,16 @@ const M31_POINTINGS: MosaicPointing[] = [
 
 function MosaicFields() {
   const m = useMessages()
-  const catalog = useStore((s) => s.catalog)
-  const ic5070 = catalog.projects.prj_ic5070
-  const live = ic5070 ? mosaicFieldModel(catalog, ic5070) : null
-  const panels = M31_PANELS.map(({ n, ...panel }) => ({ ...panel, name: m.common_panel_n({ n }) }))
+  const named = (panels: typeof M31_PANELS) => panels.map(({ n, ...panel }) => ({ ...panel, name: m.common_panel_n({ n }) }))
+  const panels = named(M31_PANELS)
   return (
     <ComponentSection components={["MosaicField"]} description={m.catalogue_domain_mosaic_map_desc()} level={3}>
       <div className="space-y-3">
-        {live ? (
-          <Specimen caption={m.catalogue_domain_mosaic_live()}>
-            <div className="w-full max-w-xl">
-              <MosaicField panels={live.panels} pointings={live.pointings} field={live.field} />
-            </div>
-          </Specimen>
-        ) : null}
+        <Specimen caption={m.catalogue_domain_mosaic_live()}>
+          <div className="w-full max-w-xl">
+            <MosaicField panels={named(IC5070_PANELS)} pointings={IC5070_POINTINGS} field={IC5070_FOV} />
+          </div>
+        </Specimen>
         <Specimen caption={m.catalogue_domain_mosaic_outside()}>
           <div className="w-full max-w-xl">
             <MosaicField panels={panels} pointings={M31_POINTINGS} field={FOV} />
