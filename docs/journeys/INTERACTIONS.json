@@ -658,7 +658,7 @@
       "spec": "068-calibration-inputs CAL-FR-24, CAL-AC-32; 064-library-inventory LIB-FR-04; 065-project-goals PRJ-FR-29, PRJ-FR-31; D-W107, D-W114, D-W148",
       "action": "Open Settings > Matching in the Library group, read the table grouped Framing, Flats, Darks and Bias, and change one threshold with Edit….",
       "expect": "One table of Setting, Value and Unit holds every threshold the contract calls adjustable in Settings, with the defaults of D-W114. The next ingestion matches with the changed value.",
-      "negative": "Settings > Equipment shows no thresholds, and changing a framing limit re-splits no existing session (CAL-FR-24)."
+      "negative": "Settings > Equipment shows no thresholds, and changing the centre or rotation limit re-splits no existing session (CAL-FR-24)."
     },
     {
       "flowStep": "Cross-flow: Unsupported input mode",
