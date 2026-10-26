@@ -1,7 +1,7 @@
 ---
 id: J10
 title: Configure appearance, per-library defaults, and trust the app is fully localized
-version: 17
+version: 18
 status: draft
 last_reviewed: 2026-07-17
 actors: [astrophotographer]
@@ -9,12 +9,9 @@ surfaces: [settings, shell, audit, framing]
 interfaces: [desktop-ui, desktop-ui-macos]
 trace:
   - pre-migration journey.md @ git 66026463
-  - deltas/2026-07-14-q15-t122.md (folded — PR #826 / commit 0cdc81cc)
-  - deltas/2026-07-14-q15-t126.md (not folded — still blocked, see Known gaps)
-  - deltas/2026-07-14-q27-f11.md (folded 2026-07-17 — the R11a clustering
-    tunables now ship in a real Settings → Framing pane, PR #927; see S10)
-  - PR #927 (Settings → Framing pane: pointing/rotation/mosaic-envelope
-    tunables)
+  - "deltas/2026-07-14-q15-t122.md (folded, PR #826 / commit 0cdc81cc)"
+  - "deltas/2026-07-14-q15-t126.md (not folded; still blocked, see Known gaps)"
+  - "deltas/2026-07-14-q27-f11.md (folded 2026-07-17; R11a tunables now ship in Settings -> Framing, PR #927; see S10)"
   - docs/development/windows-journeys/journey-11-framing-clustering-attribution.md
   - spec 018 (settings configuration model)
   - spec 019 (bottom log viewer)
@@ -23,22 +20,16 @@ trace:
   - spec 043 (UI redesign — shell, sort announcements)
   - spec 046 (i18n error codes)
   - spec 055 Phase 4 (whole-app engine zoom, T030/T032/T033)
-  - PR #388 (Audit Log screen), PR #410 (audit detail localization),
-    PR #415 (aria-sort), PR #826 (durable audit rows for settings/protection/
-    equipment/source changes), commit 1f4ba13f (accessibility/theming pass)
-  - PR #882 (merged, fixes #587) · PR #884 (merged, fixes #581)
-  - PR #902 (merged, fixes #582, #583) · PR #909 (merged, fixes #584)
-  - PR #914 (merged, carried nJ09c/nJ10a review nit: palette catalog
-    caching)
+  - "PR #388 (Audit Log screen), PR #410 (audit detail localization), PR #415 (aria-sort), PR #826 (durable audit rows for settings/protection/equipment/source changes), commit 1f4ba13f (accessibility/theming pass)"
+  - "PR #882 (merged, fixes #587) · PR #884 (merged, fixes #581)"
+  - "PR #902 (merged, fixes #582, #583) · PR #909 (merged, fixes #584)"
+  - "PR #914 (merged, carried nJ09c/nJ10a review nit: palette catalog caching)"
   - spec 055 (typography rework) Phase 2, T010–T015
-  - spec-054-adaptive-detail-dock (FR-003 — per-page Detail panel placement
-    control)
-  - PR #1176 (design-refresh handoff 03 — canonical themes, family-grouped
-    picker, clay/espresso hidden)
-  - PR #1185 (design-refresh handoff 08 — default dark theme)
-  - spec 061 US2 (selectable app language — Settings → Appearance control)
-  - PR #1078 (settings persistence sweep — planner threshold, calibration
-    tolerances)
+  - "spec-054-adaptive-detail-dock (FR-003 -- per-page Detail panel placement control)"
+  - "PR #1176 (design-refresh handoff 03 -- canonical themes, family-grouped picker, clay/espresso hidden)"
+  - "PR #1185 (design-refresh handoff 08 -- default dark theme)"
+  - spec 061 US2 (selectable app language -- Settings -> Appearance control)
+  - "PR #1078 (settings persistence sweep -- planner threshold, calibration tolerances)"
   - PR #1060 (command-palette routes)
   - PR #1065, PR #1087 (Advanced danger-zone honesty)
   - PR #1005, PR #1387 (Restore defaults on Appearance and Target Resolution)
@@ -63,6 +54,10 @@ fall back to English for a translated language (S12).
 ## Preconditions
 - P1: Setup is complete with at least one registered source, so every pane
   has real data to act on.
+- P2: The PlateVault window is sized to 1280 × 640 (the minimum on macOS,
+  Windows and Linux). At start-up, a restored window is moved and shrunk to
+  fit fully on a connected screen. The OS appearance can be switched between
+  Dark and Light during the run.
 
 Note: Release builds lack the /dev/contracts palette entry by design
 (dev-tools compile-time gate, spec 021).
@@ -143,13 +138,12 @@ Note: Release builds lack the /dev/contracts palette entry by design
   server, vitest, and Playwright mock mode the call is a guarded no-op — the
   Zoom setting still persists and the control still reflects the chosen
   step, but the webview itself does not visually rescale outside a real
-  desktop build. At the documented envelope edge (a min-size 1100×720
-  window at 150% zoom, which is above the shipped 125% CI-pinned floor), the
-  spec records the resulting ~733px CSS viewport as accepted layout
-  degradation, not guarded (correction, 2026-07-17: spec 054, adaptive
-  detail dock, has since shipped — see S11 — but it addresses list-page
-  detail-panel placement specifically, not this shell/zoom viewport
-  degradation, which remains accepted as-is).
+  desktop build. At the documented minimum window size (1280×640), the
+  125% zoom pin yields a 1024×512 CSS viewport; at 150% it yields about
+  853×427 CSS pixels. The 150% minimum-size layout remains accepted as
+  degraded, not guarded. This shell and zoom viewport degradation is separate
+  from the detail-panel placement change in spec 054 (adaptive dock), which
+  shipped and is covered by S11.
 - **Trace:** apps/desktop/src/data/theme.ts (`THEMES` registry — `enabled`/
   `family` fields, `LIGHT_DEFAULT`/`DARK_DEFAULT`, `resolveTheme`,
   `applyTokenScale`, `applyDensity`, `applyFontSize`/`FontSizeChoice`/
@@ -242,10 +236,10 @@ Note: Release builds lack the /dev/contracts palette entry by design
 ### S7 — Use the shell: sidebar, command palette, layout {#S7}
 - **Do:** Collapse/expand the left sidebar; reload the app; open the command
   palette (Ctrl+K) and navigate to a listed page; resize the window to
-  1100×720.
+  1280×640.
 - **Expect:** Sidebar collapse state persists across reload and keeps
   per-item tooltips. Every page keeps its header/action bar pinned while
-  only its content scrolls, down to 1100×720. The command palette now
+  only its content scrolls, down to 1280×640. The command palette now
   renders fully styled (a `.pv-palette*` floating overlay, not bare
   document flow); search matching is alias-aware and reuses the Targets
   page's own tested matcher (a compact query like "M31" now matches a
@@ -424,13 +418,14 @@ Note: Release builds lack the /dev/contracts palette entry by design
 - SC3: Zero raw i18n keys or untranslated backend error/audit strings appear
   anywhere in a full-app sweep, and all six listed sortable tables expose
   `aria-sort` (S8).
-- SC4: All panes remain usable at a window size of 1100×720 with the header/
+- SC4: All panes remain usable at a window size of 1280×640 with the header/
   action bar pinned (S7).
 - SC5: The app shell stays intact (sidebar, page bar, content all visible)
-  with no horizontal overflow at the shipped zoom envelope's 125%/150%
-  window×zoom pairs (S2); CI-pinned in
-  tests/e2e/settings_appearance_i18n.spec.ts ("Whole-app zoom envelope
-  pins").
+  with no horizontal overflow at 1280×640×125% (1024×512 CSS viewport) and
+  1320×864×150% (880×576 CSS viewport) (S2). The existing mock-mode test
+  still exercises 880×576 for both cases and therefore does not yet verify
+  the new minimum-window 125% viewport. Intent: run the minimum-only UI check
+  at 1280×640, not as a zoomed CSS-viewport test.
 - SC7: Selecting a non-base UI language (S12) never produces a raw key or a
   crash, the two catalogues hold an identical key set (2258 each), and the
   choice persists across a restart; CI-pinned in
@@ -510,12 +505,13 @@ Note: Release builds lack the /dev/contracts palette entry by design
   the chosen step. Max zoom is capped at 150% (user decision 2026-07-17);
   spec 054 (adaptive detail dock) is a separate feature — since shipped, see
   Δ8/S11 — not a dependency here, and the resulting layout
-  degradation at min-window (1100×720) × 150% is documented and accepted,
-  not guarded. Two CI pins cover the accepted envelope: 1100×720×125% and
-  1320×864×150%, both emulated in mock mode as an 880×576 viewport (no
-  engine zoom in mock mode, so a pre-shrunk viewport stands in for the
-  zoomed CSS viewport) — shell (sidebar, page bar, content) stays intact
-  with no horizontal overflow at either pin.
+  degradation at the 1280×640 minimum × 150% (about 853×427 CSS pixels) is
+  documented and accepted, not guarded. The existing CI pins each use an
+  880×576 viewport: 1280×640×125% would be 1024×512, while 1320×864×150% is
+  880×576. Mock mode uses a pre-shrunk viewport because there is no engine
+  zoom; the current first pin therefore does not yet exercise the contracted
+  minimum-window 125% viewport. Shell (sidebar, page bar, content) stays intact
+  with no horizontal overflow at both existing test viewports.
   Evidence: spec 055 Phase 4 (T030/T032), branch feat/app-zoom (PR not yet
   merged at authoring time) · by: journey-scribe (intent-gated)
 
@@ -610,3 +606,9 @@ Note: Release builds lack the /dev/contracts palette entry by design
   to English almost everywhere.
   Evidence: PR #1379 (b4e1c8e8c), PR #1414 (12865328c) · by: journey-scribe
   (intent-gated)
+- **Δ18** 2026-10-26 · P2, S2, S7, SC4, SC5 · behavior-change
+  The minimum window is now 1280×640 on macOS, Windows and Linux, and a
+  restored window is moved and shrunk at start-up to fit a connected screen.
+  At 125% zoom, this minimum is a 1024×512 CSS viewport; the corrected
+  150%-at-minimum viewport is about 853×427 CSS pixels.
+  Evidence: D-W163, astro-plan-ocyuc.2, PR #1889 · by: WindowDocs (intent-gated)
