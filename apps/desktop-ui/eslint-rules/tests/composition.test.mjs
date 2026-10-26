@@ -84,7 +84,7 @@ describe("L1, L8-L11 selectors", () => {
   })
 })
 
-describe("I1-I3 and I6 over resolved paths (§8.2)", () => {
+describe("I1-I7 source boundaries", () => {
   it("I1: components/ui importing a pattern, relatively or through ..", () => {
     assert.deepEqual(imports('import { Pill } from "../app/pill"', "src/components/ui/button.tsx"), ["I1"])
     assert.deepEqual(imports('import { x } from "@/components/ui/../app/pill"', "src/components/ui/button.tsx"), ["I1"])
@@ -124,15 +124,20 @@ describe("pv/require-disable-reason", () => {
 })
 
 describe("composition boundaries fail closed", () => {
-  it("rejects imports from an unregistered feature area", () => {
+  it("rejects imports from an unregistered feature or component area", () => {
     assert.deepEqual(imports('import { x } from "./new-feature"', "src/features/new-feature/page.tsx"), ["I6"])
+    assert.deepEqual(imports('import { x } from "./hidden"', "src/components/hidden/page.tsx"), ["I1"])
   })
 })
 
 describe("generated IPC importer boundary", () => {
-  it("allows only src/api to import the generated client and Tauri core", () => {
+  it("allows only src/api to import generated clients and Tauri APIs", () => {
     assert.deepEqual(imports('import { invoke } from "@tauri-apps/api/core"', "src/app/boot.ts"), ["I7"])
     assert.deepEqual(imports('import * as generated from "../../../desktop/src/bindings/library-index"', "src/app/boot.ts"), ["I7"])
+    assert.deepEqual(imports('import * as mocks from "../../../desktop/src/api/mocks"', "src/app/boot.ts"), ["I7"])
+    assert.deepEqual(imports('import { invoke } from "@tauri-apps/api"', "src/app/boot.ts"), ["I7"])
+    assert.deepEqual(imports('import * as generated from "../../desktop/src/bindings/library-index"', "src/api/ipc.ts"), [])
+    assert.deepEqual(imports('import * as mocks from "../../desktop/src/api/mocks"', "src/api/ipc.ts"), [])
     assert.deepEqual(imports('import { invoke } from "@tauri-apps/api/core"', "src/api/ipc.ts"), [])
   })
 })

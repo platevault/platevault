@@ -7,27 +7,36 @@ import { fileURLToPath, pathToFileURL } from "node:url"
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const snippet = readFileSync(path.join(root, "scripts/census.browser.js"), "utf8")
 const baseline = JSON.parse(readFileSync(path.join(root, "scripts/census-budget-baseline.json"), "utf8"))
-const routes = process.env.PV_CENSUS_ROUTES?.split(",").filter(Boolean) ?? baseline.routes.map(({ route }) => route)
+const routes = process.env.PV_CENSUS_ROUTES?.split(",").filter(Boolean) ?? ["/"]
 const fixtureOnly = process.env.PV_CENSUS_FIXTURE_ONLY === "1"
 const appOrigin = process.env.PV_CENSUS_URL ?? "http://127.0.0.1:5180"
 const viewports = baseline.viewports
-const budgets = new Map(baseline.routes.map(({ route, budgets }) => [route, budgets]))
 
-export function checkBudget(result, budget, errors = []) {
-  const violations = []
+export function checkBudget(result, rules, errors = []) {
   if (!result) return ["missing census result"]
-  for (const metric of baseline.metrics) {
-    const actual = result[metric]
-    const limit = budget?.[metric]
-    if (typeof actual !== "number") violations.push(`${metric} is missing or not numeric`)
-    else if (typeof limit !== "number") violations.push(`${metric} has no numeric budget`)
-    else if (actual > limit) violations.push(`${metric}=${actual} exceeds ${limit}`)
+  const violations = []
+  for (const metric of ["raw", "pill", "handRolled", "overflowX"]) {
+    if (result[metric] !== rules[metric]) violations.push(`${metric}=${result[metric]} expected ${rules[metric]}`)
   }
+  if (result.ttl > result.ttlTruncation) violations.push(`ttl=${result.ttl} exceeds ttlTruncation=${result.ttlTruncation}`)
+  if (result.tip > (rules.tipMaximum ?? 1) && !(rules.tipApprovals ?? []).includes(result.route)) {
+    violations.push(`tip=${result.tip} exceeds ${rules.tipMaximum ?? 1} without approval`)
+  }
+  if (result.combos > rules.combosMaximum) violations.push(`combos=${result.combos} exceeds ${rules.combosMaximum}`)
+  if (rules.sortEqualsHeaders && result.sort !== result.headers) violations.push(`sort=${result.sort} does not equal headers=${result.headers}`)
   const pageErrors = errors.length + (result.pageErrors?.length ?? 0)
-  const errorBudget = budget?.pageErrors
-  if (typeof errorBudget !== "number") violations.push("pageErrors has no numeric budget")
-  else if (pageErrors > errorBudget) violations.push(`pageErrors=${pageErrors} exceeds ${errorBudget}`)
+  if (pageErrors !== rules.pageErrors) violations.push(`pageErrors=${pageErrors} expected ${rules.pageErrors}`)
   return violations
+}
+
+function routeMatches(route, pattern) {
+  if (pattern === "*") return true
+  const regex = new RegExp(`^${pattern.split("*").map((part) => part.replace(/[|\\{}()[\]^$+?.]/g, "\\$&")).join(".*")}$`)
+  return regex.test(route)
+}
+
+function ruleForRoute(route) {
+  return baseline.routes.find((entry) => routeMatches(route, entry.routePattern))?.rules
 }
 
 function injectCensus(page) {
@@ -39,22 +48,18 @@ function injectCensus(page) {
   }, snippet)
 }
 
-async function measure(page, route, label, budget) {
+async function measure(page, route, label, rules) {
   const errors = []
   page.on("pageerror", (error) => errors.push(error.message))
-  page.on("console", (message) => {
-    if (message.type() === "error") errors.push(message.text())
-  })
+  page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()) })
   if (route === "/fixture" && process.env.PV_CENSUS_FIXTURE_THROW === "1") {
     await page.addInitScript(() => { throw new Error("intentional census fixture error") })
   }
-  const url = route === "/fixture"
-    ? `${appOrigin}/scripts/census-fixture.html`
-    : `${appOrigin}/#${route}`
+  const url = route === "/fixture" ? `${appOrigin}/scripts/census-fixture.html` : `${appOrigin}/#${route}`
   await page.goto(url, { waitUntil: "networkidle" })
   await page.waitForSelector("#main", { timeout: Number(process.env.PV_CENSUS_WAIT_MS ?? 5000) })
   const result = await injectCensus(page)
-  const violations = checkBudget(result, budget, errors)
+  const violations = checkBudget(result, rules, errors)
   console.log(JSON.stringify({ viewport: label, route, result, errors, violations }))
   return violations
 }
@@ -65,24 +70,19 @@ async function runCensus() {
   try {
     const selectedRoutes = fixtureOnly ? ["/fixture"] : routes
     for (const route of selectedRoutes) {
-      const routeBudgets = budgets.get(route)
-      if (!routeBudgets) {
-        failures.push(`${route}: no route budgets in census-budget-baseline.json`)
+      const rules = route === "/fixture" ? baseline.fixture.rules : ruleForRoute(route)
+      if (!rules) {
+        failures.push(`${route}: no route-pattern census rules`)
         continue
       }
       for (const viewport of viewports) {
-        const budget = routeBudgets[viewport.name]
-        if (!budget) {
-          failures.push(`${route} at ${viewport.name}: no viewport budget`)
-          continue
-        }
         const context = await browser.newContext({
           viewport: { width: Math.round(viewport.width / viewport.zoom), height: Math.round(viewport.height / viewport.zoom) },
           deviceScaleFactor: viewport.zoom,
         })
         try {
           const page = await context.newPage()
-          failures.push(...(await measure(page, route, viewport.name, budget)).map((failure) => `${route} at ${viewport.name}: ${failure}`))
+          failures.push(...(await measure(page, route, viewport.name, rules)).map((failure) => `${route} at ${viewport.name}: ${failure}`))
         } finally {
           await context.close()
         }

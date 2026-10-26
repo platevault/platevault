@@ -2,19 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Rendered census (design/R9-COMPOSITION-PLAN.md §4, §8.5): one row of
- * counts for the route on screen, over `#main` only. No dependency: evaluate
- * this file's text in the page of a Vite dev build, after the route has
- * rendered (the lead's browser tool: `tab.evaluate(text)`). The route list and
- * the saved rows are design/R10-CENSUS-BASELINE.json.
- *
- * It reads React's dev fibers for two facts the DOM does not carry: a Button's
- * `variant`/`size` props, and whether a <table> was rendered by DataTable.
- * The fibers are expandos on the page's own DOM objects, so evaluate it in the
- * page's main world: a tool that evaluates in an isolated world sees none of
- * them (every role reads "unknown"); inject it as a <script> there, e.g.
- * `page.addScriptTag({ content: \`document.documentElement.dataset.census = JSON.stringify(${text})\` })`,
- * and read the attribute back.
+ * Rendered census over `#main`, run by scripts/census.mjs after route load.
+ * The per-route policy is scripts/census-budget-baseline.json.
+ * It reads React dev fibers for Button roles and DataTable ownership, so evaluate
+ * this in the page's main world by injecting a script element.
  *
  * Columns (budgets in §4 and §7.4):
  *   btn / combos   Button elements / distinct variant×size combinations

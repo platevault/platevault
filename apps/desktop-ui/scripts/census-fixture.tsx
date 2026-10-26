@@ -15,4 +15,3 @@ function CensusFixture() {
 
 createRoot(document.getElementById("root")!).render(createElement(CensusFixture))
 
-if (location.search.includes("throw")) throw new Error("intentional census fixture error")

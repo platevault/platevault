@@ -11,17 +11,21 @@ const MIN_REASON_WORDS = 3
 const RULE_LIST = /^[\w@./-]+(?:\s*,\s*[\w@./-]+)*$/
 
 /**
- * The comments come from the parser ESLint runs on src/ (eslint.config.js), so the check sees
- * every directive ESLint honours. A bare token scanner has no parser context: it cannot tell
- * a template literal's closing backtick from an opening one, nor JSX text from code, and it
- * silently skipped every comment after `${v}°` in a TSX file.
+ * The comments come from the same TypeScript parser ESLint uses for src/ so directives in JSX and
+ * template substitutions cannot escape. Every comment beginning with eslint must be an allowed
+ * rule-disable directive with a named rule and an explicit reason.
  */
 export function invalidDisableDirectives(file, source) {
   const { ast } = tseslint.parser.parseForESLint(source, { filePath: file, comment: true, loc: true })
   const failures = []
   for (const comment of ast.comments) {
-    const match = comment.value.trim().match(/^eslint-disable(?:-(?:line|next-line))?(?=\s|$)(.*)$/s)
-    if (!match) continue
+    const directiveText = comment.value.trim()
+    if (!/^eslint\b/.test(directiveText)) continue
+    const match = directiveText.match(/^eslint-disable(?:-(?:line|next-line))?(?=\s|$)(.*)$/s)
+    if (!match) {
+      failures.push(`${file}:${comment.loc.start.line}: unsupported inline eslint configuration`)
+      continue
+    }
 
     const tail = match[1].trim()
     const separator = tail.indexOf("--")
