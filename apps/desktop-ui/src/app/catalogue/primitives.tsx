@@ -573,7 +573,7 @@ function Display() {
             <Separator className="max-w-md" />
           </Specimen>
           <Specimen caption={m.catalogue_primitives_skeleton_caption()}>
-            <div className="w-64 space-y-2" aria-busy="true" aria-label={m.common_loading()}>
+            <div role="status" className="w-64 space-y-2" aria-busy="true" aria-label={m.common_loading()}>
               <Skeleton className="h-4 w-3/4" />
               <Skeleton className="h-4 w-full" />
               <Skeleton className="h-4 w-1/2" />

@@ -8,6 +8,7 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group"
 import { ChevronDownIcon, XIcon, CheckIcon } from "lucide-react"
+import { useMessages } from "@/app/preferences"
 
 const Combobox = ComboboxPrimitive.Root
 
@@ -52,6 +53,7 @@ function ComboboxInput({
   showTrigger?: boolean
   showClear?: boolean
 }) {
+  const m = useMessages()
   return (
     <InputGroup className={cn("w-auto", className)}>
       <ComboboxPrimitive.Input
@@ -65,6 +67,7 @@ function ComboboxInput({
             variant="ghost"
             render={<ComboboxTrigger />}
             data-slot="input-group-button"
+            aria-label={m.combobox_show_options()}
             className="group-has-data-[slot=combobox-clear]/input-group:hidden data-pressed:bg-transparent"
             disabled={disabled}
           />
