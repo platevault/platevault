@@ -7444,5 +7444,25 @@
     }
   ],
   "status_bar_page_in": "{area} › {page}",
-  "status_bar_issue_page": "{page} ({count})"
+  "status_bar_issue_page": "{page} ({count})",
+  "action_failure_invalid_input": "O PlateVault não pode aceitar um valor desta solicitação. Verifique os campos.",
+  "action_failure_not_found": "O registro não está mais na biblioteca.",
+  "action_failure_conflict": "O registro mudou em outro lugar. Revise a versão atual.",
+  "action_failure_identity_conflict": "Outro registro já tem esta identidade.",
+  "action_failure_access_denied": "O PlateVault teve o acesso negado a um arquivo ou pasta necessário.",
+  "action_failure_source_unavailable": "A origem está indisponível. Reconecte a unidade e tente de novo.",
+  "action_failure_unsupported_format": "O PlateVault não é compatível com este formato de arquivo.",
+  "action_failure_metadata_unreadable": "Não é possível ler os metadados do arquivo.",
+  "action_failure_provider_unavailable": "O serviço de consulta está indisponível. Tente de novo mais tarde.",
+  "action_failure_persistence_failure": "O PlateVault não conseguiu salvar a alteração. Nada foi gravado.",
+  "action_failure_no_byte_proof": "O PlateVault não conseguiu comprovar que a cópia é idêntica ao original byte a byte.",
+  "action_failure_symlinks_unavailable": "Links simbólicos não estão disponíveis aqui. Use cópias.",
+  "action_failure_links_unsupported": "Este volume não é compatível com links.",
+  "action_failure_canceled": "A operação foi cancelada.",
+  "action_failure_correction_unpatchable": "Uma correção registrada não pode ser gravada em uma cópia deste arquivo.",
+  "action_failure_correction_format_unpatchable": "Correções só podem ser gravadas em arquivos FITS ou XISF.",
+  "action_failure_session_not_ready": "Uma sessão deste Projeto não está Pronta, então a aplicação aguarda.",
+  "action_failure_input_write_risk": "Não há prova de que as entradas são somente leitura, então Links simbólicos foi recusado. Use Cópias.",
+  "action_failure_unreachable": "O PlateVault não conseguiu acessar a biblioteca. Tente de novo.",
+  "info_tip_more_information": "Mais informações"
 }

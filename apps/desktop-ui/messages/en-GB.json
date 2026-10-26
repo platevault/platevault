@@ -6936,5 +6936,25 @@
     }
   ],
   "status_bar_page_in": "{area} › {page}",
-  "status_bar_issue_page": "{page} ({count})"
+  "status_bar_issue_page": "{page} ({count})",
+  "action_failure_invalid_input": "PlateVault can't accept a value in this request. Check the fields.",
+  "action_failure_not_found": "The record is no longer in the library.",
+  "action_failure_conflict": "The record changed elsewhere. Review the current version.",
+  "action_failure_identity_conflict": "Another record already has this identity.",
+  "action_failure_access_denied": "PlateVault was denied access to a file or folder this needs.",
+  "action_failure_source_unavailable": "The source is unavailable. Reconnect its drive, then retry.",
+  "action_failure_unsupported_format": "PlateVault doesn't support this file format.",
+  "action_failure_metadata_unreadable": "The file's metadata can't be read.",
+  "action_failure_provider_unavailable": "The lookup service is unavailable. Retry later.",
+  "action_failure_persistence_failure": "PlateVault couldn't save the change. Nothing was written.",
+  "action_failure_no_byte_proof": "PlateVault couldn't prove the copy matches the original byte for byte.",
+  "action_failure_symlinks_unavailable": "Symlinks aren't available here. Use copies.",
+  "action_failure_links_unsupported": "This volume doesn't support links.",
+  "action_failure_canceled": "The operation was cancelled.",
+  "action_failure_correction_unpatchable": "A recorded correction can't be written into a copy of this file.",
+  "action_failure_correction_format_unpatchable": "Corrections can be written only into FITS or XISF files.",
+  "action_failure_session_not_ready": "A session in this Project isn't Ready, so Apply waits.",
+  "action_failure_input_write_risk": "The inputs aren't proven read-only, so Symlinks is refused. Use Copies.",
+  "action_failure_unreachable": "PlateVault couldn't reach the library. Retry.",
+  "info_tip_more_information": "More information"
 }
