@@ -12,6 +12,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "storybook": "storybook dev --host 127.0.0.1 --port 6180 --exact-port --no-open",
+    "themes:check": "node scripts/themes.mjs --check",
     "build-storybook": "pnpm i18n:compile && storybook build"
   },
   "dependencies": {
