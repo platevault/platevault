@@ -17,8 +17,9 @@ tauri-build = { workspace = true }
 [dependencies]
 app_core = { path = "../../../crates/app/core" }
 # Framework-agnostic backend services: notifications, logging, the log viewer
-# stream and job-progress feeds. This shell adapts them to Tauri events.
-desktop_services = { path = "../../../crates/desktop/services" }
+# stream and job-progress feeds. This shell adapts them to Tauri events, and
+# `wire` exports their event payloads to the library-shell bindings.
+desktop_services = { path = "../../../crates/desktop/services", features = ["wire"] }
 platevault_core = { path = "../../../crates/platevault-core", features = ["wire"] }
 persistence_library = { path = "../../../crates/persistence/library", features = ["wire"] }
 camino = { workspace = true }
@@ -75,7 +76,9 @@ tracing = { workspace = true }
 # The library shell binary's stderr subscriber.
 tracing-subscriber = { workspace = true }
 tokio = { workspace = true }
-uuid = { workspace = true }
+# `v5`: the e2e host names each run's macOS webview data store after its data
+# directory (`library_shell::webview_store_id`).
+uuid = { workspace = true, features = ["v5"] }
 futures-util = { workspace = true }
 
 # Spec 072 R13: the macOS reminder adapter reads UNUserNotificationCenter

@@ -24,15 +24,26 @@
 //! database, bootstrap job, legacy watcher or legacy command registration. The
 //! legacy code stays archivable and is never booted by this binary.
 //!
+//! A development build (no `custom-protocol`) loads its frontend from `devUrl`,
+//! the production frontend in transition: `apps/desktop-ui`, served on
+//! `127.0.0.1:5180`. A bundled build still embeds the legacy `dist` until the
+//! cutover promotes the replacement into `apps/desktop/src`.
+//!
 //! In `dev-tools` (debug-only) builds the MCP bridge always starts, bound to IPv4
-//! loopback, and the webview loads the hosted dev URL so the bridge has a page
-//! to drive. That page is the legacy React app calling commands this shell does
-//! not register, so it proves no frontend acceptance:
+//! loopback, so an agent can drive that page:
 //!
 //! ```text
-//! pnpm --filter @astro-plan/desktop dev
+//! pnpm --filter @platevault/desktop-ui dev
 //! cargo run -p desktop_shell --features dev-tools --bin platevault-library
 //! ```
+//!
+//! An `e2e` build is the `WebDriver` test host. It embeds the `WebDriver` server
+//! and opens only the catalog that [`DATA_DIR_ENV`] names. The webview keeps
+//! its data in [`WEBVIEW_SUBDIR`] of that directory on Windows and Linux, and
+//! on macOS 14 and later in a data store named after it. A loopback URL in
+//! [`FRONTEND_URL_ENV`] replaces `devUrl`. Release builds enable neither
+//! `dev-tools` nor `e2e`, so they carry no automation
+//! (`scripts/check-dev-surface-absent.sh`).
 
 #[cfg(all(feature = "dev-tools", not(debug_assertions)))]
 compile_error!(
@@ -41,6 +52,9 @@ compile_error!(
 );
 
 use std::error::Error;
+use std::ffi::OsString;
+#[cfg(any(test, feature = "e2e"))]
+use std::net::IpAddr;
 #[cfg(feature = "dev-tools")]
 use std::net::Ipv4Addr;
 use std::path::PathBuf;
@@ -59,7 +73,8 @@ use crate::commands::library as ipc;
 use crate::commands::project_apply::ApplyRuns;
 use crate::commands::project_wrap_up::{CloseRuns, WrapUpTrash};
 
-/// Catalog directory override, used verbatim.
+/// Catalog directory override, used verbatim. An `e2e` build requires it, so a
+/// test run never opens the catalog of the user's library shell.
 pub const DATA_DIR_ENV: &str = "PV_LIBRARY_DATA_DIR";
 /// Catalog directory under the platform app-data directory by default. That
 /// directory follows the config identifier, and `library-dev` has its own, so
@@ -67,6 +82,11 @@ pub const DATA_DIR_ENV: &str = "PV_LIBRARY_DATA_DIR";
 pub const DATA_SUBDIR: &str = "library-rebuild";
 /// Catalog database file inside the data directory.
 pub const CATALOG_FILE: &str = "catalog.sqlite";
+/// Webview data directory inside an `e2e` build's data directory.
+pub const WEBVIEW_SUBDIR: &str = "webview";
+/// Loopback frontend an `e2e` build loads instead of the compiled-in `devUrl`,
+/// so each test lane serves its own frontend build on its own port.
+pub const FRONTEND_URL_ENV: &str = "PV_LIBRARY_FRONTEND_URL";
 /// SIMBAD TAP endpoint. Unset keeps target resolution explicitly offline
 /// (`ProviderUnavailable`) while seed and saved target search stay local.
 pub const SIMBAD_ENDPOINT_ENV: &str = "PV_LIBRARY_SIMBAD_ENDPOINT";
@@ -283,8 +303,19 @@ pub fn library_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         // JSON numbers on this wire, so they export as `number`.
         .dangerously_cast_bigints_to_number()
         .typ::<serde_json::Value>()
-        // Events are named by Rust constants, not tauri-specta events, so a
-        // payload no command returns is registered on its own.
+        // Events are named by Rust constants, not tauri-specta events. Each
+        // name is exported as a constant beside its payload type, so the client
+        // takes both from the generated file and writes neither by hand.
+        .constant("SCAN_PROGRESS_EVENT", SCAN_PROGRESS_EVENT)
+        .typ::<desktop_services::jobs::ScanProgressEvent>()
+        .constant(
+            "MEASUREMENT_PROGRESS_EVENT",
+            crate::commands::frame_review::MEASUREMENT_PROGRESS_EVENT,
+        )
+        .typ::<platevault_core::MeasurementProgress>()
+        .constant("NEW_CAPTURES_EVENT", NEW_CAPTURES_EVENT)
+        .typ::<contracts_core::captures::NewCaptures>()
+        .constant("APPLY_WAITING_EVENT", crate::commands::project_apply::APPLY_WAITING_EVENT)
         .typ::<crate::commands::project_apply::ApplyWaiting>()
         .commands(library_commands!(collect_commands))
 }
@@ -293,24 +324,34 @@ pub fn library_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
 ///
 /// # Errors
 /// Every startup failure: a refused bridge address, invalid provider
-/// configuration, an unusable data directory, a catalog that cannot be opened
+/// configuration, an `e2e` build without its data directory or with a refused
+/// frontend URL, an unusable data directory, a catalog that cannot be opened
 /// (including a foreign or legacy database), reminder subscriptions that
 /// cannot be read when the notifier attaches, or the Tauri runtime itself.
 /// A removal notice window that Windows refuses is logged, not returned.
 pub fn run() -> Result<(), Box<dyn Error>> {
     use tauri::generate_handler;
     let provider = provider_config()?;
+    #[cfg_attr(not(feature = "e2e"), allow(unused_mut))]
+    let mut context = context();
+    #[cfg(feature = "e2e")]
+    let test_window = test_host::configure(&mut context, std::env::var_os(FRONTEND_URL_ENV))?;
     let builder = tauri::Builder::default().invoke_handler(library_commands!(generate_handler));
     // The planning handlers call these through their Rust APIs, which need no
     // grant; window `library` holds only `capabilities/library.json`.
     let builder = builder.plugin(tauri_plugin_dialog::init()).plugin(tauri_plugin_opener::init());
     #[cfg(feature = "dev-tools")]
     let builder = builder.plugin(dev_bridge(std::env::var(BRIDGE_BIND_ENV).ok().as_deref())?);
+    // The WebDriver server the tauri-webdriver proxy drives. It binds loopback
+    // (`TAURI_WEBDRIVER_PORT`, default 4445) and needs no capability grant.
+    #[cfg(feature = "e2e")]
+    let builder = builder.plugin(tauri_plugin_webdriver::init());
 
     // Windows are created when the event loop starts, so the catalog is open
     // and managed before any webview can invoke a command.
-    let app = builder.build(context())?;
-    let catalog = catalog_path(&app)?;
+    let app = builder.build(context)?;
+    let data_dir = data_dir(&app)?;
+    let catalog = data_dir.join(CATALOG_FILE);
     let library = tauri::async_runtime::block_on(Library::open(&catalog, provider.as_ref()))
         .map_err(|error| format!("cannot open library catalog {}: {error}", catalog.display()))?;
     tracing::info!(
@@ -393,6 +434,15 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     #[cfg(windows)]
     let mut eject = crate::eject::EjectNotices::start(app.handle());
     app.run(move |handle, event| {
+        // As Tauri opens a configured window once the loop runs, with the
+        // webview's data beside the run's catalog.
+        #[cfg(feature = "e2e")]
+        if let RunEvent::Ready = event {
+            if let Err(error) = test_window.open(handle, &data_dir) {
+                tracing::error!(%error, "the test host window did not open");
+                handle.exit(1);
+            }
+        }
         // No watcher outlives the app: every OS watch is released before exit.
         if let RunEvent::Exit = event {
             tauri::async_runtime::block_on(handle.state::<OutputWatch>().shutdown());
@@ -422,16 +472,138 @@ fn context() -> tauri::Context {
     tauri::generate_context!("library/tauri.conf.json", test = true)
 }
 
-/// `PV_LIBRARY_DATA_DIR` verbatim, else `<app data>/library-rebuild`, created if absent.
-fn catalog_path(app: &tauri::App) -> Result<PathBuf, Box<dyn Error>> {
-    let dir = match std::env::var_os(DATA_DIR_ENV).filter(|dir| !dir.is_empty()) {
-        Some(dir) => PathBuf::from(dir),
+/// [`DATA_DIR_ENV`] verbatim, else `<app data>/library-rebuild`, created if absent.
+fn data_dir(app: &tauri::App) -> Result<PathBuf, Box<dyn Error>> {
+    let dir = match data_dir_override(std::env::var_os(DATA_DIR_ENV))? {
+        Some(dir) => dir,
         None => app.path().app_data_dir()?.join(DATA_SUBDIR),
     };
     std::fs::create_dir_all(&dir).map_err(|error| {
         format!("cannot create library data directory {}: {error}", dir.display())
     })?;
-    Ok(dir.join(CATALOG_FILE))
+    Ok(dir)
+}
+
+/// The directory [`DATA_DIR_ENV`] names; unset or empty is none. An `e2e`
+/// build has no default: it seeds and resets its catalog, and without
+/// `dev-tools` it shares the shipped identifier, so its default would be the
+/// catalog of the user's library shell.
+fn data_dir_override(raw: Option<OsString>) -> Result<Option<PathBuf>, String> {
+    match raw.filter(|dir| !dir.is_empty()) {
+        Some(dir) => Ok(Some(PathBuf::from(dir))),
+        None if cfg!(feature = "e2e") => {
+            Err(format!("an `e2e` build opens only an isolated catalog; set {DATA_DIR_ENV}"))
+        }
+        None => Ok(None),
+    }
+}
+
+/// [`FRONTEND_URL_ENV`]'s URL; unset or blank is none. Anything else must be
+/// an `http` or `https` URL on `localhost` or a loopback address: the window's
+/// grants follow the page it loads, so a remote page would reach every
+/// command handler.
+#[cfg(any(test, feature = "e2e"))]
+fn loopback_frontend(raw: Option<OsString>) -> Result<Option<tauri::Url>, String> {
+    let Some(raw) = raw else {
+        return Ok(None);
+    };
+    let raw = raw.into_string().map_err(|_| format!("{FRONTEND_URL_ENV} is not valid UTF-8"))?;
+    let raw = raw.trim();
+    if raw.is_empty() {
+        return Ok(None);
+    }
+    let refused = |why: String| {
+        format!("{FRONTEND_URL_ENV}={raw:?} {why}; the test host loads a loopback frontend only")
+    };
+    let url = tauri::Url::parse(raw).map_err(|error| refused(format!("is not a URL ({error})")))?;
+    let loopback = match url.host_str() {
+        Some("localhost") => true,
+        Some(host) => host
+            .trim_start_matches('[')
+            .trim_end_matches(']')
+            .parse::<IpAddr>()
+            .is_ok_and(|ip| ip.is_loopback()),
+        None => false,
+    };
+    if matches!(url.scheme(), "http" | "https") && loopback {
+        Ok(Some(url))
+    } else {
+        Err(refused("is not an http(s) loopback URL".to_owned()))
+    }
+}
+
+/// The name space of [`webview_store_id`]'s name-based UUIDs.
+#[cfg(any(test, all(feature = "e2e", target_os = "macos")))]
+const WEBVIEW_STORE_NAMESPACE: uuid::Uuid =
+    uuid::Uuid::from_u128(0x8c3e_6a1f_2b4d_4e7a_9f10_3c5b_7d2e_0a61);
+
+/// The macOS webview data store of the data directory `data_dir`: a
+/// name-based UUID of its canonical path. Each test run's directory gets its
+/// own store, and one directory always gets the same store.
+///
+/// # Errors
+/// `data_dir` cannot be resolved to a canonical path.
+#[cfg(any(test, all(feature = "e2e", target_os = "macos")))]
+fn webview_store_id(data_dir: &std::path::Path) -> std::io::Result<[u8; 16]> {
+    let canonical = std::fs::canonicalize(data_dir)?;
+    Ok(uuid::Uuid::new_v5(&WEBVIEW_STORE_NAMESPACE, canonical.as_os_str().as_encoded_bytes())
+        .into_bytes())
+}
+
+/// The `e2e` test host's frontend and window.
+#[cfg(feature = "e2e")]
+mod test_host {
+    use std::ffi::OsString;
+    use std::path::Path;
+
+    use tauri::utils::config::WindowConfig;
+    use tauri::WebviewWindowBuilder;
+
+    use super::{loopback_frontend, FRONTEND_URL_ENV, WEBVIEW_SUBDIR};
+
+    /// The library window, held back from Tauri's own start-up creation.
+    pub(super) struct TestWindow(WindowConfig);
+
+    /// Load [`FRONTEND_URL_ENV`]'s frontend, if set, instead of `devUrl`, and
+    /// hold the one window back so [`TestWindow::open`] chooses its data.
+    pub(super) fn configure(
+        context: &mut tauri::Context,
+        frontend: Option<OsString>,
+    ) -> Result<TestWindow, String> {
+        let config = context.config_mut();
+        if let Some(url) = loopback_frontend(frontend)? {
+            // A bundled build embeds its frontend and never reads `devUrl`, so
+            // it would ignore the override and test another frontend.
+            if !tauri::is_dev() {
+                return Err(format!(
+                    "{FRONTEND_URL_ENV} needs a development build; this build embeds its frontend"
+                ));
+            }
+            config.build.dev_url = Some(url);
+        }
+        let [window] = config.app.windows.as_mut_slice() else {
+            return Err("the library shell config must declare exactly one window".to_owned());
+        };
+        window.create = false;
+        Ok(TestWindow(window.clone()))
+    }
+
+    impl TestWindow {
+        /// Open the window from its config with the webview's data kept by
+        /// the run's data directory `data_dir`. `WebView2` and `WebKitGTK`
+        /// keep it in [`WEBVIEW_SUBDIR`]. The macOS webview takes no
+        /// directory, so it gets the data store [`super::webview_store_id`]
+        /// names; macOS before 14 has no such stores and falls back to the
+        /// default one under `HOME`.
+        pub(super) fn open(&self, handle: &tauri::AppHandle, data_dir: &Path) -> tauri::Result<()> {
+            let builder = WebviewWindowBuilder::from_config(handle, &self.0)?
+                .data_directory(data_dir.join(WEBVIEW_SUBDIR));
+            #[cfg(target_os = "macos")]
+            let builder = builder.data_store_identifier(super::webview_store_id(data_dir)?);
+            builder.build()?;
+            Ok(())
+        }
+    }
 }
 
 /// Online provider only when an endpoint is configured; no configuration is
@@ -501,6 +673,129 @@ mod tests {
             "127.000.000.001",
         ] {
             assert!(loopback_bind(Some(refused)).is_err(), "{refused} must be refused");
+        }
+    }
+}
+
+/// The generated client calls only what [`run`] registers: each
+/// `__TAURI_INVOKE` name in the export is a handler of `library_commands!`,
+/// and each handler has its call. A `#[specta::specta(rename = …)]` would give
+/// the client a name Tauri never registered.
+#[cfg(test)]
+mod registry {
+    use std::collections::BTreeSet;
+
+    use specta_typescript::Typescript;
+
+    macro_rules! handler_paths {
+        ($($handler:path),* $(,)?) => {
+            [$(stringify!($handler)),*]
+        };
+    }
+
+    #[test]
+    fn generated_calls_reach_only_registered_handlers() {
+        let registered: BTreeSet<&str> = library_commands!(handler_paths)
+            .into_iter()
+            .map(|path| path.rsplit("::").next().unwrap_or(path).trim())
+            .collect();
+        let scratch = tempfile::tempdir().expect("scratch directory");
+        let export = scratch.path().join("library-index.ts");
+        super::library_specta_builder()
+            .export(Typescript::default(), &export)
+            .expect("export the library-shell bindings");
+        let source = std::fs::read_to_string(&export).expect("read the export");
+        // `__TAURI_INVOKE("name"…)`, or `__TAURI_INVOKE<T>("name")` for a
+        // command that cannot fail; the import line names no command.
+        let invoked: BTreeSet<&str> = source
+            .split("__TAURI_INVOKE")
+            .filter_map(|call| {
+                let call = match call.strip_prefix('<') {
+                    Some(generic) => &generic[generic.find(">(\"")? + 1..],
+                    None => call,
+                };
+                call.strip_prefix("(\"")?.split('"').next()
+            })
+            .collect();
+        assert!(!registered.is_empty(), "the registry lists no handler");
+        let unregistered: Vec<_> = invoked.difference(&registered).collect();
+        let uncalled: Vec<_> = registered.difference(&invoked).collect();
+        assert!(
+            unregistered.is_empty() && uncalled.is_empty(),
+            "the client invokes unregistered {unregistered:?}; no client call for {uncalled:?}"
+        );
+    }
+}
+
+/// The `e2e` test host's inputs: its data directory, its macOS webview data
+/// store and its frontend URL.
+#[cfg(test)]
+mod test_host_inputs {
+    use std::ffi::OsString;
+    use std::path::PathBuf;
+
+    use super::{data_dir_override, loopback_frontend, webview_store_id};
+
+    /// One directory names one store however its path is spelt; another
+    /// directory names another, and a missing one names none.
+    #[test]
+    fn each_data_directory_names_its_own_webview_store() {
+        let run = tempfile::tempdir().expect("run directory");
+        let other = tempfile::tempdir().expect("other run directory");
+        std::fs::create_dir(run.path().join("webview")).expect("webview directory");
+        let store = webview_store_id(run.path()).expect("the run's store");
+        assert_eq!(webview_store_id(&run.path().join("webview").join("..")).ok(), Some(store));
+        assert_ne!(webview_store_id(other.path()).ok(), Some(store));
+        assert!(webview_store_id(&run.path().join("missing")).is_err());
+    }
+
+    /// A named directory is used verbatim. Without one an `e2e` build refuses
+    /// to start, and any other build takes the platform default.
+    #[test]
+    fn only_an_e2e_build_requires_its_data_directory() {
+        assert_eq!(
+            data_dir_override(Some(OsString::from("/tmp/run"))),
+            Ok(Some(PathBuf::from("/tmp/run")))
+        );
+        for unset in [None, Some(OsString::new())] {
+            let resolved = data_dir_override(unset);
+            if cfg!(feature = "e2e") {
+                assert!(resolved.is_err(), "an e2e build must refuse {resolved:?}");
+            } else {
+                assert_eq!(resolved, Ok(None));
+            }
+        }
+    }
+
+    /// Unset or blank keeps `devUrl`. Only `http(s)` on `localhost` or a
+    /// loopback address passes; private, unspecified, v4-mapped and remote
+    /// hosts, other schemes and non-URLs are refused.
+    #[test]
+    fn the_frontend_override_accepts_loopback_http_only() {
+        for unset in [None, Some(""), Some("   ")] {
+            assert_eq!(loopback_frontend(unset.map(OsString::from)), Ok(None), "{unset:?}");
+        }
+        for accepted in [
+            "http://127.0.0.1:5180",
+            " http://localhost:5180/ ",
+            "http://[::1]:5180",
+            "https://127.0.0.2:8443/index.html",
+        ] {
+            let url = loopback_frontend(Some(accepted.into()));
+            assert!(matches!(url, Ok(Some(_))), "{accepted} must pass: {url:?}");
+        }
+        for refused in [
+            "http://192.168.1.20:5180",
+            "http://0.0.0.0:5180",
+            "http://example.com",
+            "http://localhost.example.com:5180",
+            "http://[::ffff:127.0.0.1]:5180",
+            "file:///tmp/dist/index.html",
+            "tauri://localhost",
+            "127.0.0.1:5180",
+            "not a url",
+        ] {
+            assert!(loopback_frontend(Some(refused.into())).is_err(), "{refused} must be refused");
         }
     }
 }

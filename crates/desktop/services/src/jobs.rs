@@ -33,6 +33,7 @@ const RETAINED_FINISHED: usize = 256;
 /// payload): operation id, revision, counts and scope.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type))]
 pub struct ScanProgressEvent {
     operation_id: Uuid,
     revision: Revision,

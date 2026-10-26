@@ -4,7 +4,7 @@
   "identifier": "dev.astro-plan.astro-library-manager.library-dev",
   "build": {
     "frontendDist": "../../dist",
-    "devUrl": "http://localhost:5173"
+    "devUrl": "http://127.0.0.1:5180"
   },
   "app": {
     "withGlobalTauri": true,
