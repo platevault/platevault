@@ -101,7 +101,7 @@ In Settings > Equipment the user keeps cameras, telescopes and filters as their 
 - **PLAN-EQ-AC-11**: Given camera ASI533MC set to "Don't use darks", when a session from a rig with that camera is ingested, then its darks read No darks with no warning, no dark is matched or suggested, and the session counts as settled for darks. When the user pins a dark on that session, it keeps the dark, and the camera's other sessions stay No darks. (D-W104, D-W105)
 - **PLAN-EQ-AC-12**: Given RedCat's first rig version starts on 2026-10-05 and a session was captured on 2026-10-02 before that version, when the session records its rig version, then it records RedCat version 1. When the user creates a new rig version, its start date defaults to today and the user may edit it before saving. (PLAN-EQ-FR-07; owner's answer, 2026-10-19, astro-plan-rzbzu.1)
 - **PLAN-EQ-AC-13**: Given `Halpha-test` on confirmed rig `RedCat` with an unknown observed FILTER value `Halpha`, when the session opens, then it offers **Add Halpha to RedCat** and asks which bands the filter passes. If the user declines, the value remains unknown and the prompt is still available. The prototype needs the session control (owner's answer, 2026-10-19, astro-plan-rzbzu.1).
-- **PLAN-EQ-AC-14**: Given Settings > Equipment, when the user opens Add equipment in the page header, then it offers Camera…, Telescope…, Reducer…, Filter… and Rig…, each opening that record's add dialog. No section has an Add button of its own. With no filter records, the Filters section's empty state offers its own Add…. (D-W147, D-W155)
+- **PLAN-EQ-AC-14**: Given Settings > Equipment, when the user opens Add equipment in the page header, then it offers Camera…, Telescope…, Reducer…, Filter… and Rig…, each opening that record's add dialog. No section that holds records has an Add button of its own. With no filter records, the Filters section's empty state offers its own Add…. (D-W147, D-W155)
 - **PLAN-EQ-AC-15**: Given rig `RedCat` with a 250 mm telescope, a reducer record with the factor 0.8 and that reducer selected in the rig, then the rig's field of view is computed from 200 mm. Fit on the Targets page and the rig's framing groups use that field of view. (D-W155)
 
 ### Edge Cases
@@ -197,7 +197,7 @@ The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody,
 - K
 - Targets list: Show mode, search where clicking a result adds or opens it, columns, the Favourite filter, presets and rig selector (D-W17, D-W18, D-W19, D-W23, D-W37, D-W142, D-W152)
 - The "Planned" view: a plan per night, reminders and the calendar export (D-W151)
-- Settings > Equipment: cameras, telescopes, filters and rigs, rig versions, camera aliases and defaults, and the unknown-filter prompt (D-W31, D-W87, D-W104)
+- Settings > Equipment: the Add equipment menu, cameras, telescopes, reducers, filters and rigs, rig versions, camera aliases and defaults, and the unknown-filter prompt (D-W31, D-W87, D-W104, D-W147, D-W155)
 - Tonight and calendar data for Home (D-W39, D-W89)
 
 ### Key Entities

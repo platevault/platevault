@@ -823,7 +823,7 @@
       "negative": "Adding to one night's plan leaves the other nights' plans unchanged, the view has no Favourite filter, and the page has no wide altitude timeline."
     },
     {
-      "flowStep": "Settings > Equipment: cameras, telescopes, filters and rigs, rig versions, camera aliases and defaults, and the unknown-filter prompt (D-W31, D-W87, D-W104)",
+      "flowStep": "Settings > Equipment: the Add equipment menu, cameras, telescopes, reducers, filters and rigs, rig versions, camera aliases and defaults, and the unknown-filter prompt (D-W31, D-W87, D-W104, D-W147, D-W155)",
       "owner": "072-observing-plans",
       "journeyStep": "J15/S1, J15/S2, J15/S3, J15/S3a, J15/S4, J15/S4a, J15/S4b, J15/S4c, J15/S4d, J15/S4e, J35/S13",
       "spec": "072-observing-plans PLAN-EQ-FR-01, PLAN-EQ-FR-02, PLAN-EQ-FR-03, PLAN-EQ-FR-04, PLAN-EQ-FR-05, PLAN-EQ-FR-06, PLAN-EQ-FR-07, PLAN-EQ-FR-08, PLAN-EQ-AC-01, PLAN-EQ-AC-02, PLAN-EQ-AC-03, PLAN-EQ-AC-04, PLAN-EQ-AC-05, PLAN-EQ-AC-06, PLAN-EQ-AC-14, PLAN-EQ-AC-15, PLAN-TGT-FR-13, PLAN-TGT-AC-13; 064-library-inventory LIB-FR-05, LIB-FR-26; 065-project-goals PRJ-FR-31; 068-calibration-inputs CAL-FR-21, CAL-FR-22; D-W23, D-W30, D-W31, D-W37, D-W87, D-W104, D-W105, D-W147, D-W155",
