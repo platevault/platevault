@@ -37,18 +37,16 @@ export default defineConfig(
     },
   },
   {
-    files: ["src/features/**/*.{ts,tsx}", "src/app/**/*.{ts,tsx}"],
-    ignores: COMPOSITION_EXEMPT,
+    files: ["src/**/*.{ts,tsx}"],
+    ignores: ["src/app/catalogue/**", "src/app/design-system-page.tsx"],
     rules: { "no-restricted-syntax": ["error", ...COMPOSITION_SYNTAX], "composition/components": "error" },
   },
   {
-    files: ["src/components/**/*.{ts,tsx}"],
+    files: ["src/components/**/*.{ts,tsx}", "src/features/**/*.{ts,tsx}"],
     rules: { "composition/imports": "error" },
   },
   {
-    files: ["src/features/**/*.{ts,tsx}"],
-    ignores: COMPOSITION_EXEMPT,
+    files: ["src/**/*.{ts,tsx}"],
     rules: { "composition/imports": "error" },
   },
 )
-

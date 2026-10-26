@@ -20,8 +20,8 @@ import ts from "typescript"
 import { APP_ROOT, inlangProject, readJson } from "./i18n-project.mjs"
 
 const SLOP = /\b(we|please|simply|just|easily|seamlessly|powerful|leverage|note that|this will)\b/i
-const PROTOTYPE = /\b(prototypes?|simulated|fixtures?|harness)\b/i
-const PRODUCT_ONLY_KEYS = /^(prototype|simulation|seed|setup_demo)_/
+const PROTOTYPE = /\b(prototypes?|simulation|simulated|fixtures?|harness|demos?)\b/i
+const FORBIDDEN_KEYS = /^(prototype|simulation|seed|setup_demo)_/
 const LABEL_KEY = /_title$|_label$|^verb_|_action$/
 const BUTTON_KEY = /^verb_|_action$|_button$/
 const DIALOG_KEY = /_ellipsis$/
@@ -103,7 +103,7 @@ export const SPEC_LONG_BUTTONS = Object.freeze({
 
 const CHECKS = {
   "slop-word": (_key, text) => SLOP.test(text),
-  "prototype-word": (key, text) => !PRODUCT_ONLY_KEYS.test(key) && PROTOTYPE.test(text),
+  "prototype-word": (_key, text) => PROTOTYPE.test(text),
   "title-case": (key, text, button) => (LABEL_KEY.test(key) || button) && isTitleCase(text),
   "label-period": (key, text) => LABEL_KEY.test(key) && /[^.]\.$/.test(text.trim()),
   "button-length": (key, text, button) => button && !Object.hasOwn(SPEC_LONG_BUTTONS, key) && words(text.replace(/[…·▸]/g, "")).length > 3,
@@ -111,9 +111,10 @@ const CHECKS = {
 }
 
 export function copyFindings(catalog, actionKeys) {
-  const findings = Object.fromEntries(Object.keys(CHECKS).map((name) => [name, []]))
+  const findings = Object.fromEntries([...Object.keys(CHECKS), "prototype-prefix"].map((name) => [name, []]))
   for (const [key, value] of Object.entries(catalog)) {
     if (key === "$schema") continue
+    if (FORBIDDEN_KEYS.test(key)) findings["prototype-prefix"].push(key)
     const variants = texts(value)
     const button = BUTTON_KEY.test(key) || actionKeys.has(key)
     for (const [name, check] of Object.entries(CHECKS)) {

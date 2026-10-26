@@ -11,11 +11,11 @@
     "i18n:compile": "paraglide-js compile --project ./project.inlang --outdir ./src/paraglide --strategy custom-preferences baseLocale --emit-ts-declarations",
     "lint": "pnpm lint:eslint && pnpm lint:i18n",
     "lint:eslint": "eslint --max-warnings 0 src/",
-    "lint:i18n": "node scripts/check-i18n-catalog.mjs && node scripts/check-i18n-locale-drift.mjs && node scripts/check-copy.mjs",
+    "lint:i18n": "node scripts/check-i18n-catalog.mjs && node scripts/check-i18n-locale-drift.mjs && node scripts/check-copy.mjs && node scripts/check-eslint-directives.mjs",
     "census": "node scripts/census.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:lint-rules": "node --test eslint-rules/tests/*.test.mjs",
+    "test:lint-rules": "node --test eslint-rules/tests/*.test.mjs scripts/*.test.mjs",
     "storybook": "storybook dev --host 127.0.0.1 --port 6180 --exact-port --no-open",
     "themes:check": "node scripts/themes.mjs --check",
     "build-storybook": "pnpm i18n:compile && storybook build"
