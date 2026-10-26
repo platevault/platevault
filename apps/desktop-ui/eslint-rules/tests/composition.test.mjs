@@ -19,7 +19,7 @@ const linter = new Linter({ cwd: APP_ROOT })
  * @param {string} file relative to the app root
  */
 function ids(source, rules, file = "src/features/library/page.tsx") {
-  const config = { files: ["**/*.{ts,tsx}"], languageOptions: { parser: tseslint.parser }, plugins: { pv, composition }, rules }
+  const config = { files: ["**/*.{ts,tsx}"], languageOptions: { parser: tseslint.parser }, plugins: { pv, composition }, rules, settings: { "import/resolver": "" } }
   const messages = linter.verify(source, [config], path.join(APP_ROOT, file))
   const fatal = messages.find((message) => message.fatal)
   if (fatal) throw new Error(fatal.message)
@@ -94,9 +94,9 @@ describe("I1-I3 and I6 over resolved paths (§8.2)", () => {
     assert.deepEqual(imports('export { DetailPage } from "../templates/detail-page"', "src/components/app/data.tsx"), ["I2"])
     assert.deepEqual(imports('import { Button } from "../ui/button"', "src/components/app/data.tsx"), [])
   })
-  it("I3: a template importing a store action relatively", () => {
-    assert.deepEqual(imports('import { trash } from "../../store/actions/trash"', "src/components/templates/page.tsx"), ["I3"])
-    assert.deepEqual(imports('import { useStore } from "../../store"', "src/components/templates/page.tsx"), [])
+  it("I3: a template importing a feature relatively", () => {
+    assert.deepEqual(imports('import { trash } from "../../features/library/actions/trash"', "src/components/templates/page.tsx"), ["I3"])
+    assert.deepEqual(imports('import { helper } from "../../lib/utils"', "src/components/templates/page.tsx"), [])
   })
   it("I6: another feature area through .. in an @/ path, a relative path or import()", () => {
     assert.deepEqual(imports('import { x } from "@/features/library/../projects/model"'), ["I6"])
@@ -122,3 +122,18 @@ describe("pv/require-disable-reason", () => {
     assert.deepEqual(disableReason("/* eslint-disable no-alert -- legacy page */\nalert(1)\n/* eslint-enable no-alert */"), [])
   })
 })
+
+describe("composition boundaries fail closed", () => {
+  it("rejects imports from an unregistered feature area", () => {
+    assert.deepEqual(imports('import { x } from "./new-feature"', "src/features/new-feature/page.tsx"), ["I6"])
+  })
+})
+
+describe("generated IPC importer boundary", () => {
+  it("allows only src/api to import the generated client and Tauri core", () => {
+    assert.deepEqual(imports('import { invoke } from "@tauri-apps/api/core"', "src/app/boot.ts"), ["I7"])
+    assert.deepEqual(imports('import * as generated from "../../../desktop/src/bindings/library-index"', "src/app/boot.ts"), ["I7"])
+    assert.deepEqual(imports('import { invoke } from "@tauri-apps/api/core"', "src/api/ipc.ts"), [])
+  })
+})
+

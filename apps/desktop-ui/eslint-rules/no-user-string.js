@@ -1008,14 +1008,10 @@ const noJsPlural = {
   },
 };
 
-// pv/require-disable-reason. Every eslint-disable, eslint-disable-line and
-// eslint-disable-next-line directive names its reason after ` -- `, so a
-// reviewer can judge the exception (design/I18N.md "The gate"). It reads the
-// directives as ESLint itself parses them (SourceCode#getDisableDirectives), so
-// the reason is the directive's justification. ESLint applies directives to
-// this rule too: a directive that names no rule and covers its own line
-// (`/* eslint-disable */`, a bare `// eslint-disable-line`) suppresses its own
-// report. Name the rule being disabled.
+// pv/require-disable-reason validates per-line exception documentation.
+// A separate source scan rejects rule-less or underspecified directives.
+// The scanner uses TypeScript's lexer so directive-like text inside string
+// literals and templates is never mistaken for an ESLint control comment.
 /** @type {import('eslint').Rule.RuleModule} */
 const requireDisableReason = {
   meta: {

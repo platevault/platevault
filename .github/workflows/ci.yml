@@ -170,6 +170,7 @@ jobs:
               - 'assets/seed/**'
             frontend:
               - 'apps/desktop/src/**'
+              - 'apps/desktop-ui/**'
               - 'apps/desktop/public/**'
               - 'apps/desktop/index.html'
               - 'packages/**'
@@ -433,6 +434,18 @@ jobs:
       - name: Test-suite lint (Biome over tests/)
         if: runner.os == 'Linux' && needs.changes.outputs.frontend == 'true'
         run: pnpm run lint:tests
+
+      - name: Desktop UI composition and localisation lint
+        if: runner.os == 'Linux' && needs.changes.outputs.frontend == 'true'
+        run: pnpm --filter @platevault/desktop-ui lint
+
+      - name: Desktop UI lint rule tests
+        if: runner.os == 'Linux' && needs.changes.outputs.frontend == 'true'
+        run: pnpm --filter @platevault/desktop-ui test:lint-rules
+
+      - name: Desktop UI theme contrast
+        if: runner.os == 'Linux' && needs.changes.outputs.frontend == 'true'
+        run: pnpm --filter @platevault/desktop-ui themes:check
 
       # Formatting is OS-agnostic; running it on all 3 legs is pure redundancy.
       # `cargo fmt` only walks `mod` declarations, so it never reaches

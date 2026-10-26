@@ -9,8 +9,7 @@
 // - `composition/imports`: the layer and area import boundaries (I1-I6). It
 //   resolves `@/` and relative specifiers, `..` included, to a path under src/
 //   before matching layers, which `no-restricted-imports` patterns cannot.
-// Every message starts with its rule id ([L1]…[L11], [I1]…[I6]); the report
-// (scripts/report-composition-lint.mjs) groups by that id.
+// Every message starts with its rule id ([L1]…[L11], [I1]…[I7]).
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -235,17 +234,17 @@ const components = {
 }
 
 /** Final rebuild feature ownership from the approved plan; each area imports only itself. */
-export const AREAS = ["library", "projects", "jd2rc", "targets", "calibration", "settings"]
+export const AREAS = ["library", "projects", "review", "targets", "calibration", "settings"]
 
 /** Whether `target` is `dir` or lies below it. @param {string} target @param {string} dir */
 const within = (target, dir) => target === dir || target.startsWith(`${dir}/`)
 
 /** §8.2 I1-I3: what each component layer may not import, as resolved targets. */
 const LAYER_BANS = [
-  { layer: "src/components/ui", messageId: "I1", banned: ["src/components/app", "src/components/templates", "src/features", "src/store"] },
+  { layer: "src/components/ui", messageId: "I1", banned: ["src/components/app", "src/components/templates", "src/features"] },
   { layer: "src/components/app", messageId: "I2", banned: ["@base-ui", "src/features", "src/components/templates"] },
   { layer: "src/components/domain", messageId: "I2", banned: ["@base-ui", "src/features", "src/components/templates"] },
-  { layer: "src/components/templates", messageId: "I3", banned: ["src/features", "src/store/actions"] },
+  { layer: "src/components/templates", messageId: "I3", banned: ["src/features"] },
 ]
 
 /** The app root (apps/desktop-ui): paths are matched relative to the package root. */
@@ -273,49 +272,50 @@ function resolveSpecifier(specifier, file) {
 function bansFor(file) {
   const layer = LAYER_BANS.find((ban) => within(file, ban.layer))
   if (layer) return [{ messageId: layer.messageId, banned: (target) => layer.banned.some((dir) => within(target, dir)) }]
-  const area = AREAS.map((dir) => `src/features/${dir}`).find((dir) => within(file, dir))
-  if (!area) return []
+  const featureRoot = "src/features"
+  const featurePrefix = `${featureRoot}/`
+  if (!file.startsWith(featurePrefix)) return []
+  const area = file.slice(featurePrefix.length).split("/")[0]
+  if (!area || !AREAS.includes(area)) {
+    return [{ messageId: "I6", banned: () => true }]
+  }
   return [
     { messageId: "I4", banned: (target) => within(target, "@base-ui") },
     { messageId: "I5", banned: (target) => within(target, "src/components/ui") },
-    { messageId: "I6", banned: (target) => within(target, "src/features") && !within(target, area) },
+    { messageId: "I6", banned: (target) => within(target, featureRoot) && !within(target, `${featurePrefix}${area}`) },
   ]
 }
-
-/** §8.2 I1-I6 over resolved import paths. */
 const imports = {
   meta: {
     type: /** @type {const} */ ("problem"),
-    docs: { description: "Layer and feature-area import boundaries I1-I6 over resolved paths (design/R9-COMPOSITION-PLAN.md §8.2)." },
+    docs: { description: "Layer and feature-area import boundaries I1-I7 over resolved paths." },
     schema: [],
     messages: {
-      I1: "[I1] components/ui imports no patterns, templates, features or store.",
-      I2: "[I2] Patterns import Base UI through components/ui, and never features or templates.",
-      I3: "[I3] Templates import no features and no store actions.",
-      I4: "[I4] Features never import Base UI: go through the components.",
-      I5: "[I5] Features compose components/app and templates, not components/ui (end state).",
-      I6: "[I6] No cross-feature imports: shared code belongs in components/app or domain.",
+      I1: "[I1] UI primitives import no app patterns, templates or features.",
+      I2: "[I2] App and domain patterns import Base UI through components/ui and no feature or template modules.",
+      I3: "[I3] Templates import no features.",
+      I4: "[I4] Features never import Base UI directly.",
+      I5: "[I5] Features never import components/ui directly.",
+      I6: "[I6] No feature cross-imports; unregistered areas fail closed.",
+      I7: "[I7] Only src/api imports generated IPC or Tauri core.",
     },
   },
-  /** @param {any} context */
   create(context) {
     const file = path.relative(APP_ROOT, context.filename).split(path.sep).join("/")
     const bans = bansFor(file)
-    if (bans.length === 0) return {}
-    /** @param {any} source the specifier's string Literal */
+    const apiOwner = within(file, "src/api")
     function check(source) {
       if (source?.type !== "Literal" || typeof source.value !== "string") return
       const target = resolveSpecifier(source.value, file)
+      if (!apiOwner && (target === "@tauri-apps/api/core" || /(^|\/)bindings\/library-index(?:\.ts)?$/.test(target))) {
+        context.report({ node: source, messageId: "I7" })
+      }
       for (const { messageId, banned } of bans) if (banned(target)) context.report({ node: source, messageId })
     }
     return {
-      /** @param {any} node */
       ImportDeclaration: (node) => check(node.source),
-      /** @param {any} node */
       ExportNamedDeclaration: (node) => check(node.source),
-      /** @param {any} node */
       ExportAllDeclaration: (node) => check(node.source),
-      /** @param {any} node */
       ImportExpression: (node) => check(node.source),
     }
   },

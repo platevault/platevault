@@ -40,3 +40,18 @@ describe("check-copy Action labels (W2)", () => {
     for (const [key, decision] of Object.entries(SPEC_LONG_BUTTONS)) assert.match(decision, /^D-W\d+$/, key)
   })
 })
+
+describe("prototype-only copy boundary", () => {
+  it("flags simulation/demo language and forbidden legacy key prefixes", () => {
+    const findings = copyFindings({
+      product_label: "Demo library",
+      product_simulation_label: "Simulation panel",
+      prototype_old_label: "An ordinary label",
+      simulation_old_label: "An ordinary label",
+      seed_old_label: "An ordinary label",
+      setup_demo_old_label: "An ordinary label",
+    }, new Set())
+    assert.deepEqual(findings["prototype-word"], ["product_label", "product_simulation_label"])
+    assert.deepEqual(findings["prototype-prefix"], ["prototype_old_label", "simulation_old_label", "seed_old_label", "setup_demo_old_label"])
+  })
+})
