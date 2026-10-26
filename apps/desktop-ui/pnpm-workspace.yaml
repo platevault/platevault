@@ -1,9 +1,0 @@
-packages:
-  - "."
-
-allowBuilds:
-  esbuild: true
-  "@tailwindcss/oxide": true
-
-minimumReleaseAgeExclude:
-  - lucide-react@1.52.0
