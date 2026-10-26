@@ -3,6 +3,11 @@
  * label with its one action, in the chosen language. There is no Issues
  * hub and no issue list in the status bar: the rows an issue is on show it
  * (Home's Project rows), and the status bar counts it by severity.
+ *
+ * No surface imports this module yet; it is kept for the feature beads that
+ * put issues on rows and count them in the status bar (astro-plan-so0jv for
+ * J38, astro-plan-iczs2 for the shell's counters). issue-copy.test.ts holds
+ * its wording until then.
  */
 import { Info, type LucideIcon, OctagonX, TriangleAlert } from "lucide-react"
 import { formatBytes } from "@/lib/format"

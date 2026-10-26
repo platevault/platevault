@@ -9,6 +9,10 @@
  * one. Dismissing hides the issue from every count until it changes; the
  * state behind it is unchanged, so the row stays where it is. The owner
  * records a dismissal through `IssueCallbacks`.
+ *
+ * No surface imports this module yet; it is kept for the feature beads that
+ * put issues on rows (astro-plan-so0jv for J38, and the pages that own
+ * them).
  */
 import { EyeOff, RotateCcw } from "lucide-react"
 import type { Messages } from "@/lib/i18n"
