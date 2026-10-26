@@ -7,9 +7,9 @@
 //! synthetic layouts. The Tauri adapter below reads that snapshot, decides when
 //! it can be trusted, and applies the returned [`Placement`].
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::cell::Cell;
 
-use tauri::{Manager, WebviewWindow, WindowEvent};
+use tauri::{Manager, WebviewWindow};
 
 /// Differences up to half a pixel are rounding from converting physical pixels
 /// to logical points, not geometry.
@@ -341,32 +341,55 @@ fn fit_now(window: &WebviewWindow) -> tauri::Result<Fit> {
     Ok(decision)
 }
 
-/// Keep fitting `window` on each move, resize or focus until a run on real
-/// geometry while the window is shown. `main` stays hidden until the splash
-/// shows it, so before then only the restore and this correction move it;
-/// after, the geometry is the user's.
+/// How far the correction has got while it waits for the window's real
+/// geometry. `main` stays hidden until the splash shows it, so while it is
+/// hidden only the restore and this correction move it; once it is shown, its
+/// geometry is the user's.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Watch {
+    /// No fit has run on real geometry yet.
+    Waiting,
+    /// A fit ran on real geometry while the window was hidden.
+    FittedHidden,
+    Done,
+}
+
+impl Watch {
+    /// The watch after one window event of any kind, seen while the window was
+    /// `visible`. It calls `fit` unless the watch is over or the window was
+    /// fitted before it was shown, so the first event after showing ends the
+    /// watch and a move or resize there stays the user's. Stale geometry keeps
+    /// the watch waiting. `fit` returns `None` when the geometry cannot be
+    /// read, which ends the watch.
+    fn after_event(self, visible: bool, fit: impl FnOnce() -> Option<Fit>) -> Self {
+        match self {
+            Self::Done => Self::Done,
+            Self::FittedHidden if visible => Self::Done,
+            Self::Waiting | Self::FittedHidden => match fit() {
+                Some(Fit::Stale) => self,
+                Some(_) if !visible => Self::FittedHidden,
+                Some(_) | None => Self::Done,
+            },
+        }
+    }
+}
+
+/// Fit `window` on its window events until [`Watch`] is done.
 fn fit_when_settled(window: &WebviewWindow) {
-    let armed = AtomicBool::new(true);
+    let watch = Cell::new(Watch::Waiting);
     let target = window.clone();
-    window.on_window_event(move |event| {
-        let settling = matches!(
-            event,
-            WindowEvent::Moved(_) | WindowEvent::Resized(_) | WindowEvent::Focused(true)
-        );
-        if !settling || !armed.load(Ordering::Relaxed) {
+    window.on_window_event(move |_| {
+        if watch.get() == Watch::Done {
             return;
         }
-        let settled = match fit_now(&target) {
-            Ok(Fit::Stale) => false,
-            Ok(_) => target.is_visible().unwrap_or(true),
-            Err(error) => {
-                tracing::warn!("failed to read the restored window geometry: {error:?}");
-                true
-            }
-        };
-        if settled {
-            armed.store(false, Ordering::Relaxed);
-        }
+        let visible = target.is_visible().unwrap_or(true);
+        watch.set(watch.get().after_event(visible, || {
+            fit_now(&target)
+                .inspect_err(|error| {
+                    tracing::warn!("failed to read the restored window geometry: {error:?}");
+                })
+                .ok()
+        }));
     });
 }
 
@@ -389,7 +412,7 @@ pub fn clamp_restored_window(window: &WebviewWindow) {
 
 #[cfg(test)]
 mod tests {
-    use super::{fit, Desktop, Fit, Placement, Point, Rect, Size, Snapshot, WorkArea};
+    use super::{fit, Desktop, Fit, Placement, Point, Rect, Size, Snapshot, Watch, WorkArea};
 
     const MINIMUM: Size = Size { width: 1280.0, height: 640.0 };
 
@@ -653,5 +676,51 @@ mod tests {
             place_in(window, &[retina], Some(retina), Desktop::Logical),
             Placement { inner: Some(Size { width: 1500.0, height: 982.0 }), ..moved_to(12.0, 0.0) }
         );
+    }
+
+    /// A fit that read real geometry.
+    const PLACED: Option<Fit> =
+        Some(Fit::Place(Placement { min_inner: None, inner: None, position: None }));
+
+    /// Shown, then focused: nothing moved the window while it was hidden (no
+    /// saved state), so the focus event fits it, and no later event does.
+    #[test]
+    fn fits_once_on_the_first_event_after_showing() {
+        let mut fits = 0;
+        let watch = Watch::Waiting.after_event(true, || {
+            fits += 1;
+            PLACED
+        });
+        assert_eq!((watch, fits), (Watch::Done, 1));
+        assert_eq!(watch.after_event(true, || unreachable!("the watch is over")), Watch::Done);
+    }
+
+    /// Shown, then moved without focus: the restore and the fit settled while
+    /// the window was hidden, so its first event once shown, the user's move,
+    /// ends the watch without a fit.
+    #[test]
+    fn leaves_the_first_move_after_showing_to_the_user() {
+        let restored = Watch::Waiting.after_event(false, || PLACED);
+        assert_eq!(restored, Watch::FittedHidden);
+        let fitted = restored.after_event(false, || PLACED);
+        assert_eq!(fitted, Watch::FittedHidden);
+        assert_eq!(
+            fitted.after_event(true, || unreachable!("a fit of the user's move")),
+            Watch::Done
+        );
+    }
+
+    /// Stale, then settled: GTK's geometry cache can still be stale at the
+    /// shown window's first event, so the watch waits for the configure event.
+    #[test]
+    fn waits_out_stale_geometry_then_fits_once() {
+        let stale = Watch::Waiting.after_event(true, || Some(Fit::Stale));
+        assert_eq!(stale, Watch::Waiting);
+        let mut fits = 0;
+        let settled = stale.after_event(true, || {
+            fits += 1;
+            PLACED
+        });
+        assert_eq!((settled, fits), (Watch::Done, 1));
     }
 }
