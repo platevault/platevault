@@ -2,30 +2,23 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Rendered census (design/R9-COMPOSITION-PLAN.md §4, §8.5): one row of
- * counts for the route on screen, over `#main` only. No dependency: evaluate
- * this file's text in the page of a Vite dev build, after the route has
- * rendered (the lead's browser tool: `tab.evaluate(text)`). The route list and
- * the saved rows are design/R10-CENSUS-BASELINE.json.
- *
- * It reads React's dev fibers for two facts the DOM does not carry: a Button's
- * `variant`/`size` props, and whether a <table> was rendered by DataTable.
- * The fibers are expandos on the page's own DOM objects, so evaluate it in the
- * page's main world: a tool that evaluates in an isolated world sees none of
- * them (every role reads "unknown"); inject it as a <script> there, e.g.
- * `page.addScriptTag({ content: \`document.documentElement.dataset.census = JSON.stringify(${text})\` })`,
- * and read the attribute back.
+ * Rendered census over `#main`, run by scripts/census.mjs after route load.
+ * The per-route policy is scripts/census-budget-baseline.json.
+ * It reads React dev fibers for Button roles and DataTable ownership, so evaluate
+ * this in the page's main world by injecting a script element.
  *
  * Columns (budgets in §4 and §7.4):
  *   btn / combos   Button elements / distinct variant×size combinations
  *   dt / raw       DataTable tables / any other <table>
- *   sort / headers sortable header cells / header cells with text
+ *   sort / headers sortable data headers / all data headers with text
  *   ttl            visible `title=` attributes (ttlTruncation: those on truncated text, the T2 exception)
  *   tip            glyph tips: HelpTip (helpTip) and NoteMarker (noteMarker)
  *   pill           pills rendered as a link or a button
  *   handRolled     <button>/[role=button] that is no Button, primitive part, pill, glyph tip or DataTable control
  *   menus          menu triggers (aria-haspopup=menu)
  *   overflowX      px the document scrolls sideways
+ * DataTable marks non-data headers with data-column-kind="selection", "action", or "static".
+ * Missing data-column-kind and data-column-kind="data" mark columns as data and count for sort.
  */
 window.__censusResult = (() => {
   const main = document.querySelector("#main")
@@ -62,11 +55,13 @@ window.__censusResult = (() => {
   const headerActions = header ? [...header.querySelectorAll("[data-slot=button]")].filter(visible).map((el) => `${text(el)} (${role(el)})`) : []
 
   const tables = [...main.querySelectorAll("table")].filter(visible)
-  // DataTable renders its <table> through the ui/table parts, so the table's direct owner is `Table`: a table is a DataTable's when one sits above it.
-  const dataTables = tables.filter((t) => componentAbove(t, "DataTable"))
-  const rawTables = tables.filter((t) => !componentAbove(t, "DataTable"))
+  // Fixture tables use the same explicit ownership slot that ui/DataTable
+  // exposes through React fiber owner metadata in the application.
+  const dataTables = tables.filter((t) => componentAbove(t, "DataTable") || t.hasAttribute("data-census-datatable") || t.parentElement?.closest("[data-component=DataTable]"))
+  const rawTables = tables.filter((t) => !dataTables.includes(t))
   const headerCells = [...main.querySelectorAll("thead th")].filter((th) => visible(th) && th.innerText.trim())
-  const sortable = headerCells.filter((th) => th.hasAttribute("aria-sort") || th.querySelector("button:not([role=checkbox])"))
+  const dataHeaders = headerCells.filter((th) => !th.hasAttribute("data-column-kind") || th.dataset.columnKind === "data")
+  const sortable = dataHeaders.filter((th) => th.hasAttribute("aria-sort") || th.querySelector("button:not([role=checkbox])"))
 
   const titled = [...main.querySelectorAll("[title]")].filter((el) => visible(el) && el.getAttribute("title").trim())
   const truncates = (el) => /(^|\s)(truncate|line-clamp-\d)(\s|$)/.test(classOf(el))
@@ -93,6 +88,7 @@ window.__censusResult = (() => {
     rawBy: tally(rawTables.map((t) => ownerName(t) ?? "unknown")),
     sort: sortable.length,
     headers: headerCells.length,
+    dataHeaders: dataHeaders.length,
     ttl: titled.length,
     ttlTruncation: titled.filter(truncates).length,
     tip: tips.length,

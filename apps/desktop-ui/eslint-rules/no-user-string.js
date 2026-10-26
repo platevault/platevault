@@ -1008,10 +1008,9 @@ const noJsPlural = {
   },
 };
 
-// pv/require-disable-reason validates per-line exception documentation.
-// A separate source scan rejects rule-less or underspecified directives.
-// The scanner uses TypeScript's lexer so directive-like text inside string
-// literals and templates is never mistaken for an ESLint control comment.
+// pv/require-disable-reason reports per-line rule-disable justification quality.
+// scripts/check-eslint-directives.mjs additionally rejects blanket,
+// rule-less and underspecified directives throughout production source.
 /** @type {import('eslint').Rule.RuleModule} */
 const requireDisableReason = {
   meta: {
