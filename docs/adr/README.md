@@ -16,6 +16,7 @@ old one `Superseded`.
 | [0006](0006-tauri-react-and-backend-services.md) | Stay on Tauri and React, with backend-owned services | Accepted | 2026-10-12 |
 | [0007](0007-home-dashboard.md) | Home dashboard without duplicating other pages | Accepted | 2026-10-13 |
 | [0008](0008-goal-conditions.md) | Goal conditions beyond time or frames | Accepted | 2026-10-13 |
+| [0009](0009-production-typeface-system-ui.md) | The production frontend uses the system UI font | Accepted | 2026-10-26 |
 
 ## Status values
 

@@ -1,7 +1,7 @@
 ---
 id: J37
 title: Confirm, cull and place a new night's sessions after an import
-version: 4
+version: 5
 status: draft
 last_reviewed: 2026-10-12
 actors: [primary-user]
@@ -42,7 +42,7 @@ After import, the user resolves Target and rig associations, reviews new session
 ### S1 — Start from the status bar {#S1}
 
 - **Do:** Read the status bar. Open its ℹ counter, read its menu and choose `Sessions · 9`, then return and choose its ⚠ counter.
-- **Expect:** The status bar shows the ⚠ warnings and ℹ info counters and no ⛔ errors counter. No counter opens a list of issues. The ℹ counter opens a menu naming `Sessions · 9` (`9 not in a Project`), which opens Sessions filtered to **Not in any Project**, and `Calibration · <n>` (`<n> to stack`) for the raw calibration processes that J19/S7a and J31/S6 left awaiting Stack. The ⚠ counter reads 1 and opens Sessions filtered to **Needs a Target**. The filters read All 10, Needs a Target 1, Needs calibration 0, Not in any Project 9 and Trashed 0, and Needs a Target lists exactly `4 Oct Ha`.
+- **Expect:** The status bar shows the ⚠ warnings and ℹ info counters and no ⛔ errors counter. No counter opens a list of issues. The ℹ counter opens a menu naming `Sessions · 9` (`9 not in a Project`), which opens Sessions filtered to **Not in any Project**, and `Calibration · <n>` (`<n> to stack`) for the raw calibration processes that J19/S7a and J31/S6 left awaiting Stack. The ⚠ counter reads 1 and opens a menu naming `Sessions · 1`, which opens Sessions filtered to **Needs a Target**. The filters read All 10, Needs a Target 1, Needs calibration 0, Not in any Project 9 and Trashed 0, and Needs a Target lists exactly `4 Oct Ha`.
 - **Expect (negative):** Choosing a counter changes no session, Target, rig or Project. Neither `2 Oct Ha` nor `2 Oct OIII` is listed under Needs a Target, because their Targets were confirmed at import.
 - **Trace:** LIB-FR-17, LIB-FR-23, PRJ-FR-17 · D-W92, D-W105
 
@@ -136,7 +136,7 @@ After import, the user resolves Target and rig associations, reviews new session
 
 ## Success criteria
 
-- SC1: At S1 the filters read exactly All 10, Needs a Target 1, Needs calibration 0, Not in any Project 9 and Trashed 0. The ℹ counter's menu names `Sessions · 9`, and the ⚠ counter reads 1 and opens Sessions filtered to Needs a Target, not a list of issues.
+- SC1: At S1 the filters read exactly All 10, Needs a Target 1, Needs calibration 0, Not in any Project 9 and Trashed 0. The ℹ counter's menu names `Sessions · 9`, and the ⚠ counter reads 1 and its menu names `Sessions · 1`, not a list of issues.
 - SC2: After S3, Needs a Target reads 0, and confirming the Target and rig changes zero source paths. 0 Targets were taken from an OBJECT label: `4 Oct Ha`'s picker opened with no Target chosen (S3), and no evidence list named OBJECT (S3, S5).
 - SC3: After S6, `2 Oct Ha` reads 32 Usable, 3 Unusable and 0 Unreviewed frames, still 35 frames in all, and the Trashed filter reads 0.
 - SC4: After S7, the Project holds only the Ready session the user explicitly added. After S8 and S10, it holds exactly four user-added sessions, lists rigs `RedCat` and `Esprit`, and keeps unadded matching Ready sessions as suggestions.
@@ -167,3 +167,6 @@ After import, the user resolves Target and rig associations, reviews new session
 - **Δ4** 2026-10-16 · S4, S6, S9 · behavior-change
   Every mark on a ⌘A selection asks first, whatever its count: S4 reads `Mark 6 frames Usable?`, S6 `Mark 32 frames Usable?` and S9 `Mark 12 frames Usable?`, and single-frame marks never ask. G6 is dissolved.
   Evidence: D-W118 (owner's second batch of 2026-10-16) in PR #1804, PIX-FR-14, PIX-AC-21 · by: EncodeOwnerAnswers2 (intent-gated)
+- **Δ5** 2026-10-26 · S1, SC1 · behavior-change
+  A counter with one issue opens the same menu of owning pages as a counter with several, so the ⚠ counter's menu names `Sessions · 1`.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 11 (OWNER, 2026-10-23) on ui-harness-v5 @ 5dc245244; D-W144, FR-032 · by: SpecAmend (intent-gated)

@@ -1,7 +1,7 @@
 ---
 id: J14
 title: Add a Target and sessions to an existing Project
-version: 7
+version: 8
 status: draft
 last_reviewed: 2026-07-14
 actors: [primary-user]
@@ -28,7 +28,7 @@ Done means:
 ## Preconditions
 
 - P1: J19 completed through S15. All seven light sessions are Ready, fully reviewed, have settled calibration assignments, and have Target NGC 7000: 24 and 26 Sep are Confirmed, and 12, 18, 28 and 30 Sep and the other-camera session are Associated by pointing within NGC 7000's footprint (OBJECT never counts). The six RedCat sessions read rig `RedCat`, the other-camera session reads rig `Esprit`, and `Cold-1` is offline.
-- P2: My targets has no ★ favourite. Exactly one Project exists: `Cygnus HOO`, open, created with New Project as in J20/S2 with the single subject NGC 6888, rig `RedCat` and the built-in HOO goal template (Ha 10h and OIII 10h). No session has Target NGC 6888, and the Project holds no sessions.
+- P2: My targets has no favourite. Exactly one Project exists: `Cygnus HOO`, open, created with New Project as in J20/S2 with the single subject NGC 6888, rig `RedCat` and the built-in HOO goal template (Ha 10h and OIII 10h). No session has Target NGC 6888, and the Project holds no sessions.
 - P3: Settings > Equipment holds rig `RedCat` (RedCat 51 + ASI2600MM) as J15/S2 to S4 create it, with a 250 mm focal length and the ASI2600MM sensor size and pixel size, so its field of view is known. Its filter list holds Ha and OIII.
 - P4: A manifest (relative path, size, SHA-256) of every file under the J19 folders, recorded outside PlateVault before S1, with `Cold-1` remounted for the recording and ejected again afterwards.
 
@@ -36,16 +36,16 @@ Done means:
 
 ### S1 — Find NGC 7000 on the Targets page {#S1}
 
-- **Do:** From Home, open **Targets**. Search for `ngc7000`. Open the NGC 7000 result row's menu and choose **Add ★**. In the toolbar rig selector, choose `RedCat`.
-- **Expect:** Targets opens on **My targets**, which lists NGC 6888, with the badge `Project Cygnus HOO`, and NGC 7000, with no ★ and no badge, because it has indexed sessions (PLAN-TGT-FR-01, D-W125; owner's answer, 2026-10-19, astro-plan-rzbzu.1). The search lists NGC 7000 with its source, and `ngc7000` matches the same Target as `NGC 7000`. After **Add ★**, NGC 7000 is listed under My targets with ★ set. Choosing the rig adds a Fit column, and NGC 7000's Fit reads fits, with its coverage: its major axis is about 2° against the rig's 3.6° shorter side. The Filters column shows one chip per `RedCat` filter, Ha and OIII, each graded good tonight.
-- **Expect (negative):** No result row carries an Add button. Starring a Target creates no Project, adds no subject and assigns no session to anything.
+- **Do:** From Home, open **Targets**. Search for `ngc7000`. Open the NGC 7000 result row's menu and choose **Add to favourites**. In the toolbar rig selector, choose `RedCat`.
+- **Expect:** Targets opens on **My targets**, which lists NGC 6888, with the badge `Project Cygnus HOO`, and NGC 7000, not a favourite and with no badge, because it has indexed sessions (PLAN-TGT-FR-01, D-W125; owner's answer, 2026-10-19, astro-plan-rzbzu.1). The search lists NGC 7000 with its source, and `ngc7000` matches the same Target as `NGC 7000`. After **Add to favourites**, NGC 7000 is listed under My targets with a star in its Favourite column (PLAN-TGT-FR-17, D-W142). Choosing the rig adds a Fit column, and NGC 7000's Fit reads fits, with its coverage: its major axis is about 2° against the rig's 3.6° shorter side. The Filters column shows one chip per `RedCat` filter, Ha and OIII, each graded good tonight.
+- **Expect (negative):** No result row carries an Add button. Adding a favourite creates no Project, adds no subject and assigns no session to anything.
 - **Trace:** Targets list · HARNESS-V5-IA.md S10 · HARNESS-V5-FEEDBACK-R1.md Round 5 "Click a result to act", P-PLAN2 · PLAN-TGT-FR-01, PLAN-TGT-FR-03, PLAN-TGT-FR-11, PLAN-TGT-FR-06 · PLAN-TGT-AC-03, PLAN-TGT-AC-11 · D-W17, D-W23, D-W61
 
 ### S2 — Open the Target page {#S2}
 
 - **Do:** In the search results, which still list NGC 7000, click NGC 7000's result row.
 - **Expect:** NGC 7000 is now in My targets, so the click opens NGC 7000's Target page. Its captured time reads Ha 12h35 and OIII 10h35, with the seven sessions listed by night, channel, frames and rig: six on `RedCat` and one on `Esprit`. Its header offers **Add to Plan**, **Add to Project** and **New Project…**, and its Projects box reads `No Project`.
-- **Expect (negative):** The Target page offers no processing action. The click adds nothing: My targets still lists NGC 7000 once, with ★ set.
+- **Expect (negative):** The Target page offers no processing action. The click adds nothing: My targets still lists NGC 7000 once, as a favourite.
 - **Trace:** LIB-FR-08 · LIB-AC-05 · PRJ-FR-01, PRJ-FR-02 · D-W94, D-W96
 
 ### S2a — Add NGC 7000 to Cygnus HOO {#S2a}
@@ -79,7 +79,7 @@ Done means:
 ### S6 — Check the link from both sides and rename {#S6}
 
 - **Do:** Open Targets on My targets, then open NGC 7000's Target page and choose `Cygnus HOO` in its Projects box. On the Project header, choose **Edit…**, change the name to `Cygnus HOO bicolour` and save, then open NGC 7000's Target page again. Open **Projects**, open the `Cygnus HOO bicolour` row's menu, choose **Edit…**, change the name back to `Cygnus HOO` and save.
-- **Expect:** My targets lists NGC 7000 with ★ and the badge `Project Cygnus HOO`. The Target page lists the Project, and choosing it opens the Project page with NGC 7000 among its subjects. **Edit…** offers the Project's name and notes from the header and row menu. After each rename, the Project header, My targets badge and Target page's Projects box show the new name; its subjects, groups and sessions remain linked to the same Project identity.
+- **Expect:** My targets lists NGC 7000 as a favourite, with the badge `Project Cygnus HOO`. The Target page lists the Project, and choosing it opens the Project page with NGC 7000 among its subjects. **Edit…** offers the Project's name and notes from the header and row menu. After each rename, the Project header, My targets badge and Target page's Projects box show the new name; its subjects, groups and sessions remain linked to the same Project identity.
 - **Expect (negative):** Renaming leaves the subject and its Target attached because the link is by identity. Neither rename changes the Project's notes, goals, groups or sessions. The View does not change before Apply.
 - **Trace:** PRJ-FR-01, PRJ-FR-05, PRJ-FR-07 · PLAN-TGT-FR-01 · D-W94, D-W97, D-W100
 
@@ -137,3 +137,6 @@ Done means:
 - **Δ7** 2026-10-20 · +S2c, +SC7 · behavior-change
   Changing a subject's Target to one with hidden goals restores those goals and hides the subject's previous goals under its old Target.
   Evidence: D-W134 (owner's answer, 2026-10-20) in PR #1855, PRJ-FR-02, PRJ-AC-49 · by: Main (intent-gated)
+- **Δ8** 2026-10-26 · P2, S1, S2, S6 · behavior-change
+  ★ becomes Favourite: the row menu reads **Add to favourites**, and a favourite shows a star in the Favourite column.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 11 (OWNER, 2026-10-23) on ui-harness-v5 @ 5dc245244; D-W142, PLAN-TGT-FR-17 · by: SpecAmend (intent-gated)

@@ -1,7 +1,7 @@
 ---
 id: J40
 title: Choose a theme and language in Settings › Appearance and keep them across restarts
-version: 2
+version: 3
 status: draft
 last_reviewed: 2026-10-12
 actors: [primary-user]
@@ -14,7 +14,7 @@ trace: [HARNESS-V5-IA.md#S16, HARNESS-V5-IA.md#round-2-foundation, HARNESS-V5-IA
 
 The user chooses how PlateVault looks and reads: they set its appearance mode, choose a theme, and choose the interface language. They expect the choices to apply across screens and persist after a restart. Choosing appearance is personal and must never touch the library. Done means:
 
-- Settings › Appearance sets the mode to Dark, Light or Follow system and offers 13 themes and two languages. Each choice applies across screens immediately. The app uses one density and offers no density setting.
+- Settings › Appearance sets the mode to Dark, Light or Match system and offers 13 themes and a language select with two languages. Match system picks one dark theme and one light theme. Each choice applies across screens immediately. The app uses one density and offers no density setting.
 - With Português (Brasil) chosen, the shell, every screen visited and the copy recorded earlier (Activity) read in Portuguese, with pt-BR month names and number separators, and no English UI word is left.
 - After a restart, the chosen appearance mode, theme and language are in effect from the first frame.
 - Restore defaults returns the theme to PlateVault Dark, the language to English (UK) and single-key shortcuts to on.
@@ -22,7 +22,7 @@ The user chooses how PlateVault looks and reads: they set its appearance mode, c
 
 ## Preconditions
 
-- P1: Fresh replay of J19 and J20: the catalog holds the J19 sessions and the open Project `NGC 7000 HOO` (subject NGC 7000, rig `RedCat`), and Activity lists `Project created: NGC 7000 HOO`. Appearance is at its defaults: mode Follow system, theme PlateVault Dark, language English (UK), single-key shortcuts on.
+- P1: Fresh replay of J19 and J20: the catalogue holds the J19 sessions and the open Project `NGC 7000 HOO` (subject NGC 7000, rig `RedCat`), and Activity lists `Project created: NGC 7000 HOO`. Appearance is at its defaults: mode Match system, with PlateVault Dark as its dark theme and PlateVault Light as its light theme, language English (UK), single-key shortcuts on.
 - P2: The PlateVault window is sized to 1100 × 720 (README validator rule). The OS appearance can be switched between Dark and Light during the run.
 - P3: The J19/P5 manifest is available, and the catalog's session, Project and Activity entry counts are recorded before S1.
 
@@ -38,7 +38,7 @@ The user chooses how PlateVault looks and reads: they set its appearance mode, c
 ### S2 — Read the theme picker {#S2}
 
 - **Do:** Read the Theme section.
-- **Expect:** It offers 13 themes: PlateVault Dark, PlateVault Light, Gruvbox Dark, Gruvbox Light, Nord, Dracula, Solarized Dark, Solarized Light, Catppuccin Mocha, Catppuccin Latte, Tokyo Night, One Dark and Rosé Pine. Each option shows a swatch: a miniature window painted in that theme's own colours, with a source list and its selection, a toolbar, text lines, a primary button and four status dots (success, warning, danger, info). PlateVault Dark is selected. Follow system is an appearance mode, not a theme option.
+- **Expect:** It offers 13 themes: PlateVault Dark, PlateVault Light, Gruvbox Dark, Gruvbox Light, Nord, Dracula, Solarized Dark, Solarized Light, Catppuccin Mocha, Catppuccin Latte, Tokyo Night, One Dark and Rosé Pine. Each option shows a swatch: a miniature window painted in that theme's own colours, with a source list and its selection, a toolbar, text lines, a primary button and four status dots (success, warning, danger, info). PlateVault Dark is selected. Match system is an appearance mode, not a theme option.
 - **Trace:** LIB-FR-21 · D-W86 · Feedback §Shell 5 · themes-contrast.md
 - **Trace:** Feedback §Shell 5 · IA §Round 2 foundation Themes · appearance.tsx ThemePicker, ThemeSwatch · themes.ts
 
@@ -51,9 +51,9 @@ The user chooses how PlateVault looks and reads: they set its appearance mode, c
 
 ### S4 — Follow the OS appearance {#S4}
 
-- **Do:** Choose Follow system as the appearance mode. Switch the OS appearance to Light, then to Dark.
-- **Expect:** With Follow system selected, PlateVault shows PlateVault Light when the OS is in Light mode and PlateVault Dark when it is in Dark mode. Each switch takes effect while PlateVault stays open, without touching any PlateVault control.
-- **Trace:** LIB-FR-21 · D-W86
+- **Do:** Choose Match system as the appearance mode, with its dark theme PlateVault Dark and its light theme PlateVault Light. Switch the OS appearance to Light. Switch it to Dark.
+- **Expect:** With Match system selected, PlateVault shows PlateVault Light when the OS is in Light mode and PlateVault Dark when it is in Dark mode. Each switch takes effect while PlateVault stays open, without touching any PlateVault control.
+- **Trace:** LIB-FR-21 · LIB-AC-23 · D-W86, D-W143
 
 ### S5 — Confirm the single density {#S5}
 
@@ -65,8 +65,8 @@ The user chooses how PlateVault looks and reads: they set its appearance mode, c
 ### S6 — Read the language picker {#S6}
 
 - **Do:** Read the Language section.
-- **Expect:** It offers exactly two languages, each named in its own language: English (UK) and Português (Brasil). Português (Brasil) carries a "Machine-generated" pill. English (UK) is selected.
-- **Trace:** Feedback §Shell 6 · IA §Screens S16 ("pt-BR marked machine-generated") · I18N.md §pt-BR · i18n.ts LOCALE_META
+- **Expect:** The language is a select that offers exactly two languages, each named in its own language: English (UK) and Português (Brasil). Português (Brasil) is marked machine-generated. English (UK) is selected.
+- **Trace:** Feedback §Shell 6 · IA §Screens S16 ("pt-BR marked machine-generated") · I18N.md §pt-BR · i18n.ts LOCALE_META · LIB-FR-21 · D-W143
 
 ### S7 — Switch to Português (Brasil) {#S7}
 
@@ -134,3 +134,6 @@ The user chooses how PlateVault looks and reads: they set its appearance mode, c
 - **Δ2** 2026-10-15 · S1, S2, S4, S5, S7, S10, S11 · behavior-change
   Appearance has one density and no density setting. Dark, Light and Follow system are modes; Match system is no longer a theme option.
   Evidence: D-W86 and LIB-FR-21 · by: SpecF4Writer2 (intent-gated)
+- **Δ3** 2026-10-26 · P1, S2, S4, S6 · behavior-change
+  Follow system is named Match system and picks one dark and one light theme, and the language is a select.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 11 (OWNER, 2026-10-23) on ui-harness-v5 @ 5dc245244; D-W143, LIB-FR-21, LIB-AC-23 · by: SpecAmend (intent-gated)
