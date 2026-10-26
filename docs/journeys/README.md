@@ -32,7 +32,7 @@ instead of being repeated per journey:
 
 ## Clean rebuild validation
 
-J14, J15, J18 to J29 and J31 to J44 describe the rebuild contract in specs 063 through 072, as amended by the workflow decisions D-W1 to D-W123. J14, J15 and J18 keep their IDs and now describe rebuild behavior. J30 is retired with status deprecated, because Import (J31) replaces reviewed filing. The rebuild journeys remain Draft and have no rebuild execution evidence. J01 to J13, J16 and J17 and their run history describe the preserved baseline; those records do not certify the rebuild. The [interaction map](INTERACTIONS.json) assigns every interaction that specs 064 through 072 own to formal journey steps and owning requirements: the 44 product-flow steps, the redesign surfaces and the cross-flow states. [REBUILD-MAPPING.json](REBUILD-MAPPING.json) names the rebuild successor of each legacy journey and the readiness blockers of each rebuild journey.
+J14, J15, J18 to J29, and J31 to J44 describe the rebuild contract in specs 063 through 072. The workflow decisions amend it through D-W163. J14, J15 and J18 keep their IDs and now describe rebuild behavior. J30 is retired as deprecated because Import (J31) replaces reviewed filing. The rebuild journeys remain Draft and have no execution evidence. J01 to J13, J16 and J17, with their run history, describe the preserved baseline. The [interaction map](INTERACTIONS.json) assigns every interaction that specs 064 through 072 own to journey steps and requirements. It covers the 44 product-flow steps, redesign surfaces and cross-flow states. [REBUILD-MAPPING.json](REBUILD-MAPPING.json) names the successor of each legacy journey and the readiness blockers of each rebuild journey.
 
 The rebuild journeys follow the **harness v5** design, the clickable prototype the production frontend is built to: `apps/prototype/design/HARNESS-V5-IA.md`, `HARNESS-V5-FEEDBACK-R1.md` (every round through Round 7), `HIGH-LEVEL-DESIGN.md` and `I18N.md` on the `ui-harness-v5` branch (user instruction, 2026-10-12). Round 6 (user, 2026-10-10) records the user's answers to the journeys' open product questions and supersedes earlier rounds where they disagree. Round 7 (user, 2026-10-12) decides run views as P-PREP3, which supersedes Round 6's P-PREP2 input modes: a run prepares as Symlinks (the Settings default) or as Copies, which are removed when the run completes, and on Windows Symlinks need Developer Mode, checked in setup, in Settings and at Prepare. Where a user-decided v5 item (Round 1b, 2c, 5, 6 and 7, and the accepted P- items) changes a contract interaction, the journey states the v5 behavior and its Δ entry cites the v5 section; the spec text, and the interaction map's paraphrase of it, waits for the contract amendment (D-W28 order). J36 to J44 were authored from the v5 design. The F4 Project model (D-W93 to D-W116, owner's answers of 2026-10-14 to 16) then replaces processing runs: a Project holds sessions in groups, has one View that Apply builds from the originals, keeps its Results in `Output/`, and is locked for good once Closed. Calibration is matched at ingestion and pinned on each session. The rebuild journeys describe that model, and run views, run Results and Reopen are gone.
 
@@ -332,8 +332,10 @@ this directory is where current truth now lives: all eighteen journeys
 
 Cross-cutting validator rules (user-mandated):
 
-- Layout invariant: action bars/headers always visible, only content
-  scrolls; verify at 1100×720.
+- Layout invariant: keep action bars and headers visible while content scrolls.
+  Check at the 1280×640 minimum on macOS, Windows and Linux. At start-up,
+  move and shrink a restored window until it fits fully on a connected screen.
+
 - Reveal-control labels are OS-native ("Show in File Explorer" on Windows,
   "Reveal in Finder" on macOS; `apps/desktop/src/lib/reveal-label.ts`).
 - Every campaign wave ships per-journey delta docs — Δ entries + run files
