@@ -737,7 +737,7 @@ export function DataTable<T>({
       <TableHeader>
         <tr>
           {selection ? (
-            <TableHead className={cn("w-10", pinned("first", true))}>
+            <TableHead data-column-kind="selection" className={cn("w-10", pinned("first", true))}>
               <Checkbox
                 aria-label={m.table_select_all({ count: selectable.length })}
                 checked={allShownSelected}
@@ -756,6 +756,8 @@ export function DataTable<T>({
                 key={column.id}
                 ref={columnIndex === 0 ? lastPinnedHeader : undefined}
                 aria-sort={ariaSort}
+                // The census counts unmarked headers as data columns, which must all sort (P4).
+                data-column-kind={column.static ? "static" : undefined}
                 className={cn(
                   column.align === "right" && "text-right",
                   column.className,
@@ -769,7 +771,7 @@ export function DataTable<T>({
             )
           })}
           {hasRowActions ? (
-            <TableHead className={cn("w-px", pinnedEnd(true))}>
+            <TableHead data-column-kind="action" className={cn("w-px", pinnedEnd(true))}>
               <span className="sr-only">{m.table_actions_column()}</span>
             </TableHead>
           ) : null}

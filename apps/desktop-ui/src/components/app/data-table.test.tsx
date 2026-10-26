@@ -71,6 +71,23 @@ describe("DataTable", () => {
     expect(within(header("Preview")).queryByRole("button")).not.toBeInTheDocument()
   })
 
+  it("marks every header the census must not count as a data column", () => {
+    render(
+      <DataTable
+        label="Frames"
+        rows={ROWS}
+        columns={COLUMNS}
+        getRowId={(row) => row.id}
+        rowLabel={(row) => row.name}
+        rowActions={() => ITEMS}
+        selection={{ selected: [], onChange: vi.fn(), rowLabel: (row) => row.name }}
+      />,
+    )
+    const kinds = screen.getAllByRole("columnheader").map((cell) => cell.getAttribute("data-column-kind"))
+    // Selection, then Name and Size (data, unmarked), then the static Preview, then row actions.
+    expect(kinds).toEqual(["selection", null, null, "static", "action"])
+  })
+
   it("opens a row's ⋯ entries as its context menu on Shift+F10", async () => {
     const user = userEvent.setup()
     render(<DataTable label="Frames" rows={ROWS} columns={COLUMNS} getRowId={(row) => row.id} rowLabel={(row) => row.name} rowActions={() => ITEMS} />)
