@@ -194,4 +194,9 @@ The owner settled these items in Rounds 5 to 9 of `HARNESS-V5-FEEDBACK-R1.md` on
 - D-W153 (a Target the pointing disagrees with; Round 6 "Import and sessions"): Round 6: "Confirming a Target the pointing disagrees with is allowed. The session's Target box then shows a mismatch warning." The pointing disagrees when the confirmed Target's footprint doesn't contain it. The user's confirmation stands, and the warning stays on the session's Target box.
 - D-W154 (an import source that goes away; Round 6 "Import and sessions"): Round 6: "Import source vanishes mid-import (SD pulled, share dropped): the import pauses as Interrupted; reconnecting and choosing Retry resumes it." Verified items keep their state, and Retry resumes the recorded work (STO-IMP-FR-06).
 
+## Owner's answers, 2026-10-26
+
+The owner answered two open questions of the contract amendment (PR #1888) on 2026-10-26. Each entry records the answer and the entries it amends.
+- D-W155 (reducers; owner's answer, 2026-10-26; settles the *Open* reducer item of D-W147): A Reducer is its own Equipment record with a factor. A rig may select one, and the factor scales the telescope's focal length for field of view and matching. The Add equipment menu offers Reducer….
+
 Sources: the legacy facts are in legacy-frontend-facts.md.
