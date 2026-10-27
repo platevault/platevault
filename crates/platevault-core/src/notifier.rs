@@ -16,7 +16,7 @@ use time::OffsetDateTime;
 
 use crate::{PermissionState, WindowKey};
 
-/// What [`Notifier`] methods return, boxed as [`crate::library::AssetReferences`] does.
+/// What [`Notifier`] and [`Clock`] methods return, boxed as [`crate::library::AssetReferences`] does.
 pub type NotifierFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 /// One reminder notification for one window identity.
@@ -46,9 +46,15 @@ pub trait Notifier: Send + Sync + 'static {
     fn submit<'a>(&'a self, notice: &'a ReminderNotice) -> NotifierFuture<'a, SubmitOutcome>;
 }
 
-/// The wall clock the scheduler re-reads, so it catches up after system sleep.
+/// The scheduler's time: the wall clock it re-reads, so it catches up after
+/// system sleep, and the timer it waits on between passes.
 pub trait Clock: Send + Sync + 'static {
     fn now_utc(&self) -> OffsetDateTime;
+
+    /// Wait `delay` on the monotonic timer, which system sleep stalls.
+    fn sleep(&self, delay: std::time::Duration) -> NotifierFuture<'static, ()> {
+        Box::pin(tokio::time::sleep(delay))
+    }
 }
 
 /// The real system wall clock.

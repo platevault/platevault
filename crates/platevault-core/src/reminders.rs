@@ -381,7 +381,7 @@ impl Run {
                 .and_then(|due| StdDuration::try_from(due - self.clock.now_utc()).ok())
                 .map_or(RECHECK_INTERVAL, |until| until.min(RECHECK_INTERVAL));
             tokio::select! {
-                () = tokio::time::sleep(delay) => {}
+                () = self.clock.sleep(delay) => {}
                 () = self.wake.notified() => {}
                 () = stopped(&mut stop) => return,
             }
