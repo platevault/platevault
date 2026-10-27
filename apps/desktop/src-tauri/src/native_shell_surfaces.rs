@@ -109,6 +109,9 @@ fn catalogue_labels(locale: &str) -> Result<NativeMenuLabels, String> {
 
 /// One labelled native item.
 #[derive(Clone, Copy)]
+// GTK has no Undo, Redo, Minimise or Close Window item, so Linux builds no
+// Window menu and never labels those (see `menu_bar`).
+#[cfg_attr(target_os = "linux", allow(dead_code))]
 enum Label {
     About,
     Quit,
