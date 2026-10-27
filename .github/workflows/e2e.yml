@@ -166,6 +166,12 @@ on:
           no continue-on-error, so this is a genuine signal).
         type: boolean
         default: false
+      run_window_runtime:
+        description: >-
+          Run native window restore checks on Windows and Linux X11. This skips
+          the slower legacy L3 smoke and full journeys on manual dispatch.
+        type: boolean
+        default: false
 
 concurrency:
   group: e2e-${{ github.workflow }}-${{ github.ref }}
@@ -453,11 +459,8 @@ jobs:
       # No webkit2gtk-driver — the plugin replaces the external driver.
       - name: Install Tauri Linux system deps
         if: steps.verify-app-cache.outputs.app_usable != 'true' || steps.verify-app-cache.outputs.archive_usable != 'true'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev \
-            libayatana-appindicator3-dev
+        timeout-minutes: 10
+        run: bash scripts/install-tauri-linux-deps.sh libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev
 
       - uses: dtolnay/rust-toolchain@1.99.0
         if: steps.verify-app-cache.outputs.app_usable != 'true' || steps.verify-app-cache.outputs.archive_usable != 'true'
@@ -755,21 +758,17 @@ jobs:
     # (real-ui-e2e-ubuntu shards) instead.
     if: >-
       needs.changes.outputs.run == 'true'
-      && (github.event_name == 'pull_request' || github.event_name == 'merge_group')
+      && (github.event_name == 'pull_request' || github.event_name == 'merge_group' || (github.event_name == 'workflow_dispatch' && inputs.run_window_runtime != true))
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     env:
       APP_BIN: target/debug/desktop_shell
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Tauri Linux system deps
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev \
-            libayatana-appindicator3-dev \
-            xvfb
+        timeout-minutes: 10
+        run: bash scripts/install-tauri-linux-deps.sh libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev xvfb
 
       - uses: taiki-e/install-action@nextest
 
@@ -834,6 +833,90 @@ jobs:
           --no-tests=fail
           --filter-expr 'test(all_top_level_screens_load) | test(inbox_ui_mixed_folder_splits_into_single_type_items) | test(targets_ui_add_target_no_duplicate_on_reconfirm)'
 
+  # Focused manual check of restored window bounds and native window events.
+  window-runtime-ubuntu:
+    name: Window runtime restore — ubuntu-latest (X11)
+    needs: [changes, build-frontend, build-app-ubuntu]
+    if: github.event_name == 'workflow_dispatch' && inputs.run_window_runtime == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      APP_BIN: target/debug/desktop_shell
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Tauri Linux system deps
+        timeout-minutes: 10
+        run: bash scripts/install-tauri-linux-deps.sh libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev xvfb openbox xdotool
+      - uses: taiki-e/install-action@nextest
+      - uses: taiki-e/install-action@cargo-binstall
+      - name: Install tauri-webdriver CLI
+        run: cargo binstall tauri-webdriver@${{ env.TAURI_WEBDRIVER_VERSION }} --locked --no-confirm
+      - uses: pnpm/action-setup@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install JS deps
+        run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          name: e2e-frontend-dist
+          path: apps/desktop/dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: e2e-build-ubuntu-latest
+      - name: Make app binary executable
+        shell: bash
+        run: chmod +x "$APP_BIN"
+      - name: Serve frontend dist on $PV_DEV_URL
+        shell: bash
+        run: pnpm --filter @astro-plan/desktop preview --port "${PV_DEV_URL##*:}" --strictPort &
+      - name: Run native window runtime checks (X11)
+        env:
+          WEBKIT_DISABLE_DMABUF_RENDERER: "1"
+          WEBKIT_DISABLE_COMPOSITING_MODE: "1"
+          PV_E2E_APP_BIN: ${{ github.workspace }}/${{ env.APP_BIN }}
+        run: >-
+          xvfb-run -s "-screen 0 1600x1200x24" -a
+          sh -c 'openbox >/tmp/openbox.log 2>&1 & sleep 2; cargo nextest run --archive-file e2e-archive.tar.zst --workspace-remap . --profile e2e --run-ignored all --no-tests=fail --test window_runtime --status-level all --success-output immediate'
+
+  window-runtime-windows:
+    name: Window runtime restore — windows-latest
+    needs: [changes, build-frontend, build-app-windows]
+    if: github.event_name == 'workflow_dispatch' && inputs.run_window_runtime == true
+    runs-on: windows-latest
+    timeout-minutes: 15
+    env:
+      APP_BIN: target/debug/desktop_shell.exe
+    steps:
+      - uses: actions/checkout@v4
+      - uses: taiki-e/install-action@nextest
+      - uses: taiki-e/install-action@cargo-binstall
+      - name: Install tauri-webdriver CLI
+        run: cargo binstall tauri-webdriver@${{ env.TAURI_WEBDRIVER_VERSION }} --locked --no-confirm
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.17.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install JS deps
+        run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          name: e2e-frontend-dist
+          path: apps/desktop/dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: e2e-build-windows-latest
+      - name: Serve frontend dist on $PV_DEV_URL
+        shell: bash
+        run: pnpm --filter @astro-plan/desktop preview --port "${PV_DEV_URL##*:}" --strictPort &
+      - name: Run native window runtime checks (programmatic move proxy only)
+        env:
+          PV_E2E_APP_BIN: ${{ github.workspace }}/${{ env.APP_BIN }}
+        run: cargo nextest run --archive-file e2e-archive.tar.zst --workspace-remap . --profile e2e --run-ignored all --no-tests=fail --test window_runtime --status-level all --success-output immediate
+
   # Gate for the smoke job, and the ONLY publisher of
   # "Real-UI smoke (L3) — ubuntu-latest"
   # — the context required by branch protection for PRs (replaces the old
@@ -854,7 +937,7 @@ jobs:
     needs: [changes, smoke-ubuntu]
     if: >-
       always()
-      && (github.event_name == 'pull_request' || github.event_name == 'merge_group')
+      && (github.event_name == 'pull_request' || github.event_name == 'merge_group' || (github.event_name == 'workflow_dispatch' && inputs.run_window_runtime != true))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -888,7 +971,7 @@ jobs:
     # PRs run the lighter smoke-ubuntu job instead (see two-tier strategy above).
     if: >-
       needs.changes.outputs.run == 'true'
-      && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+      && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.run_window_runtime != true))
     strategy:
       fail-fast: false
       matrix:
@@ -909,12 +992,8 @@ jobs:
       # dev metapackages are what the runner image resolves fastest and the
       # difference is seconds; keep the known-good set plus xvfb.
       - name: Install Tauri Linux system deps
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev \
-            libayatana-appindicator3-dev \
-            xvfb
+        timeout-minutes: 10
+        run: bash scripts/install-tauri-linux-deps.sh libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev xvfb
 
       - uses: taiki-e/install-action@nextest
 
@@ -1079,7 +1158,7 @@ jobs:
     # trains while preserving full coverage on every main push.
     if: >-
       needs.changes.outputs.run == 'true'
-      && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+      && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.run_window_runtime != true))
     strategy:
       fail-fast: false
       matrix:
@@ -1376,7 +1455,7 @@ jobs:
     # PRs satisfy their real-UI requirement via e2e-smoke-gate-ubuntu instead.
     if: >-
       always() && needs.changes.outputs.run == 'true'
-      && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+      && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.run_window_runtime != true))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -1393,7 +1472,7 @@ jobs:
     # Full gate only on main pushes and manual dispatch; skipped on PRs.
     if: >-
       always() && needs.changes.outputs.run == 'true'
-      && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+      && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.run_window_runtime != true))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
