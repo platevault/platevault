@@ -45,7 +45,7 @@ log_apt_mirror_activity() {
 
 for attempt in 1 2; do
   mirror=azure.archive.ubuntu.com
-  if (( attempt == 1 )); then budget=5s; else budget=5m; fi
+  if (( attempt == 1 )); then budget=4m; else budget=5m; fi
   if (( attempt == 2 )); then
     switch_archive_mirror
     mirror=archive.ubuntu.com
