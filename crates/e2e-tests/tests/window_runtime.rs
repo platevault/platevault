@@ -14,9 +14,9 @@ use std::process::Command;
 
 use std::time::Duration;
 
-use anyhow::{Context, ensure};
+use anyhow::{ensure, Context};
 use common::E2eApp;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 const SETTLE: Duration = Duration::from_secs(2);
 const RESTORE_TIMEOUT: Duration = Duration::from_secs(20);
@@ -43,17 +43,30 @@ fn saved_window_state(x: i32, y: i32, width: u32, height: u32, maximized: bool) 
     })
 }
 
-async fn seed_and_launch(x: i32, y: i32, width: u32, height: u32, maximized: bool) -> anyhow::Result<E2eApp> {
+async fn seed_and_launch(
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+    maximized: bool,
+) -> anyhow::Result<E2eApp> {
     let path = E2eApp::window_state_path();
-    std::fs::write(&path, serde_json::to_vec_pretty(&saved_window_state(x, y, width, height, maximized))?)
-        .with_context(|| format!("failed to seed saved window state at {}", path.display()))?;
+    std::fs::write(
+        &path,
+        serde_json::to_vec_pretty(&saved_window_state(x, y, width, height, maximized))?,
+    )
+    .with_context(|| format!("failed to seed saved window state at {}", path.display()))?;
 
     let app = E2eApp::launch_preserving_window_state().await?;
     app.wait_bridge_ready(Duration::from_secs(30)).await?;
     Ok(app)
 }
 
-async fn invoke_native<T: serde::de::DeserializeOwned>(app: &E2eApp, command: &str, args: Value) -> anyhow::Result<T> {
+async fn invoke_native<T: serde::de::DeserializeOwned>(
+    app: &E2eApp,
+    command: &str,
+    args: Value,
+) -> anyhow::Result<T> {
     let script = r#"window.__PV_E2E__.invoke(arguments[0], arguments[1]).then(value => callback({ ok: true, value })).catch(error => callback({ ok: false, error: String(error) }));"#;
     let response: Value = app
         .driver
@@ -63,7 +76,8 @@ async fn invoke_native<T: serde::de::DeserializeOwned>(app: &E2eApp, command: &s
         .convert()
         .context("native command bridge returned invalid JSON")?;
     anyhow::ensure!(response["ok"] == true, "native command {command} failed: {response}");
-    serde_json::from_value(response["value"].clone()).context("native command returned unexpected shape")
+    serde_json::from_value(response["value"].clone())
+        .context("native command returned unexpected shape")
 }
 
 async fn probe(app: &E2eApp) -> anyhow::Result<Value> {
@@ -102,7 +116,9 @@ async fn wait_for_settled_probe(app: &E2eApp) -> anyhow::Result<Value> {
             return probe(app).await;
         }
         if tokio::time::Instant::now() >= deadline {
-            anyhow::bail!("window geometry did not settle to the expected normal/maximized state: {last}");
+            anyhow::bail!(
+                "window geometry did not settle to the expected normal/maximized state: {last}"
+            );
         }
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
@@ -145,10 +161,18 @@ async fn restored_offscreen_small_window_is_clamped_to_visible_monitor() -> anyh
     let inner = &state["inner"];
     let (_, _, work_w, work_h) = work_bounds(&state)?;
     ensure!(state["maximized"] == false, "normal saved state became maximized: {state}");
-    let expected_inner_w = i64::from(MIN_WIDTH).min(work_w - (state["outer"]["w"].as_i64().unwrap() - inner["w"].as_i64().unwrap()));
-    let expected_inner_h = i64::from(MIN_HEIGHT).min(work_h - (state["outer"]["h"].as_i64().unwrap() - inner["h"].as_i64().unwrap()));
-    ensure!(inner["w"].as_i64() == Some(expected_inner_w), "inner width did not clamp to configured minimum/work area: {state}");
-    ensure!(inner["h"].as_i64() == Some(expected_inner_h), "inner height did not clamp to configured minimum/work area: {state}");
+    let expected_inner_w = i64::from(MIN_WIDTH)
+        .min(work_w - (state["outer"]["w"].as_i64().unwrap() - inner["w"].as_i64().unwrap()));
+    let expected_inner_h = i64::from(MIN_HEIGHT)
+        .min(work_h - (state["outer"]["h"].as_i64().unwrap() - inner["h"].as_i64().unwrap()));
+    ensure!(
+        inner["w"].as_i64() == Some(expected_inner_w),
+        "inner width did not clamp to configured minimum/work area: {state}"
+    );
+    ensure!(
+        inner["h"].as_i64() == Some(expected_inner_h),
+        "inner height did not clamp to configured minimum/work area: {state}"
+    );
     println!("WINDOW_RUNTIME_CASE_A_BOUNDS={state}");
     app.shutdown().await
 }
@@ -163,7 +187,10 @@ async fn restored_maximized_window_stays_maximized_after_focus_event() -> anyhow
     let _: Value = invoke_native(&app, "e2e_window_focus", json!({})).await?;
     tokio::time::sleep(SETTLE).await;
     let after_focus = probe(&app).await?;
-    ensure!(after_focus["maximized"] == true, "maximized state was lost after focus event: {after_focus}");
+    ensure!(
+        after_focus["maximized"] == true,
+        "maximized state was lost after focus event: {after_focus}"
+    );
     println!("WINDOW_RUNTIME_CASE_B_BOUNDS={after_focus}");
     app.shutdown().await
 }
@@ -196,7 +223,14 @@ async fn first_move_after_show_is_not_refitted() -> anyhow::Result<()> {
         let pointer_x = target_x + 120;
         let pointer_y = target_y + 12;
         let pressed = Command::new("xdotool")
-            .args(["mousemove", "--sync", &source_x.to_string(), &source_y.to_string(), "mousedown", "1"])
+            .args([
+                "mousemove",
+                "--sync",
+                &source_x.to_string(),
+                &source_y.to_string(),
+                "mousedown",
+                "1",
+            ])
             .status()
             .context("xdotool mouse press failed")?;
         ensure!(pressed.success(), "xdotool mouse press exited unsuccessfully");
@@ -208,8 +242,14 @@ async fn first_move_after_show_is_not_refitted() -> anyhow::Result<()> {
         ensure!(moved.success() && released.success(), "xdotool drag/release failed");
         tokio::time::sleep(SETTLE).await;
         let after = probe(&app).await?;
-        ensure!(after["outer"]["x"].as_i64() == Some(target_x), "real X11 drag was refitted from x={target_x}: {after}");
-        ensure!(after["outer"]["x"].as_i64().unwrap() + outer_w > work_x + work_w, "drag did not leave window partly off-monitor: {after}");
+        ensure!(
+            after["outer"]["x"].as_i64() == Some(target_x),
+            "real X11 drag was refitted from x={target_x}: {after}"
+        );
+        ensure!(
+            after["outer"]["x"].as_i64().unwrap() + outer_w > work_x + work_w,
+            "drag did not leave window partly off-monitor: {after}"
+        );
         println!("WINDOW_RUNTIME_CASE_C_X11_USER_DRAG={after}");
     }
     #[cfg(target_os = "windows")]
@@ -219,10 +259,15 @@ async fn first_move_after_show_is_not_refitted() -> anyhow::Result<()> {
         let (work_x, work_y, _, _) = work_bounds(&before)?;
         let move_x = work_x + 120;
         let move_y = work_y + 100;
-        let _: Value = invoke_native(&app, "e2e_window_move", json!({ "x": move_x, "y": move_y })).await?;
+        let _: Value =
+            invoke_native(&app, "e2e_window_move", json!({ "x": move_x, "y": move_y })).await?;
         tokio::time::sleep(SETTLE).await;
         let after = probe(&app).await?;
-        ensure!(after["outer"]["x"].as_i64() == Some(move_x) && after["outer"]["y"].as_i64() == Some(move_y), "programmatic native move was refitted: {after}");
+        ensure!(
+            after["outer"]["x"].as_i64() == Some(move_x)
+                && after["outer"]["y"].as_i64() == Some(move_y),
+            "programmatic native move was refitted: {after}"
+        );
         println!("WINDOW_RUNTIME_CASE_C_WINDOWS_PROGRAMMATIC_PROXY={after}");
     }
     app.shutdown().await
