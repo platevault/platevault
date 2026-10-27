@@ -10,7 +10,7 @@
 
 **Amended**: 2026-10-26, to the Round 11 decisions D-W143, D-W144 and D-W148, to the Round 6 decision D-W153 recorded that day and to the owner's answer D-W156.
 
-**Amended**: 2026-10-27, to the owner's answer D-W165: a better match is offered at import and hinted on the session's calibration row (LIB-FR-29, LIB-AC-40, LIB-AC-41).
+**Amended**: 2026-10-27, to the owner's answer D-W165: a better match is offered at import and hinted on the session's calibration row (LIB-FR-29, LIB-AC-40, LIB-AC-41, LIB-AC-42).
 
 **Status**: Backend landed; frontend and acceptance open (reconciled 2026-10-26, `specs/SPEC_STATUS.md`). Landed: the Library inventory backend (#1777), backend deltas (#1779-#1782) and the F4 Project model (#1851). Remains: the final library UI and J19 (astro-plan-4zm11), the real-UI journeys for the Locations step and locate or remap, and the verify, verify sign-off and final checkpoint steps of molecule astro-plan-mol-j1k. Product defaults and all human-approval gate waivers follow the root autonomous objective.
 
@@ -168,3 +168,4 @@ Use the [root vocabulary](../063-clean-rebuild-contract/spec.md#key-entities). F
 - Workflow decision D-W122 (Round 9 C15, owner, 2026-10-12, recorded 2026-10-17) moves metadata corrections to the session's intake flow. Each corrected value shows beside the recorded one, and Apply delivers them (PV-PREP). Provisional: the Corrections table on the Target and Rig steps.
 - Workflow decisions D-W143, D-W144 and D-W148 (Round 11, owner, 2026-10-23, astro-plan-qk9ri) amend Settings. The language is a select in Appearance and in first-run setup, and Match system picks a dark and a light theme that follow the OS live. Locations shows every column, with Name and Actions pinned when the table scrolls. The matching thresholds get their own Settings page, owned by PV-CAL. Match system is the mode D-W86 called Follow system.
 - Under workflow decision D-W153 (Round 6, user, 2026-10-10, recorded 2026-10-26), a confirmed Target stands even when the pointing disagrees with it. A mismatch warning marks the session's Target box (LIB-FR-05). The owner's answer of 2026-10-26 (D-W156) adds the library clean-ups outside any Project: the Duplicates review's clean-up and the Unusable clean-up of STO-FR-18 (LIB-FR-18, LIB-FR-22).
+- The owner's answer of 2026-10-27 (D-W165, astro-plan-ygihm) settles where a better calibration match shows: an unticked "Better for: …" choice in the import review, and a passive "Better match available" hint on the session's calibration row, whichever way the better calibration reached the library (LIB-FR-29).
