@@ -41,6 +41,7 @@ export type * from "../../../desktop/src/bindings/library-index"
 export {
   APPLY_WAITING_EVENT,
   MEASUREMENT_PROGRESS_EVENT,
+  NATIVE_QUIT_CONFIRM_EVENT,
   NEW_CAPTURES_EVENT,
   SCAN_PROGRESS_EVENT,
 } from "../../../desktop/src/bindings/library-index"

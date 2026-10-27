@@ -95,6 +95,10 @@ pub const SCAN_PROGRESS_EVENT: &str = "library_scan_progress";
 /// Optional IPv4 loopback address for the development bridge.
 #[cfg(feature = "dev-tools")]
 pub const BRIDGE_BIND_ENV: &str = "PV_MCP_BRIDGE_BIND";
+/// Optional base port for the development bridge, so a second shell (or a
+/// legacy shell on the plugin's default 9223) does not take the same range.
+#[cfg(feature = "dev-tools")]
+pub const BRIDGE_PORT_ENV: &str = "PV_MCP_BRIDGE_PORT";
 
 /// The library-shell IPC command list, spliced into `$mac![…]`.
 ///
@@ -287,6 +291,11 @@ macro_rules! library_commands {
             crate::commands::targets_list::targets_preset_delete,
             // home
             crate::commands::home::home_dashboard,
+            // native shell (menu bar, tray, OS pickers)
+            crate::commands::library_dialogs::library_pick_folder,
+            crate::commands::library_dialogs::library_pick_file,
+            crate::native_shell_surfaces::library_native_menu_set_labels,
+            crate::native_shell_surfaces::library_native_quit_answer,
         ]
     };
 }
@@ -317,6 +326,11 @@ pub fn library_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         .typ::<contracts_core::captures::NewCaptures>()
         .constant("APPLY_WAITING_EVENT", crate::commands::project_apply::APPLY_WAITING_EVENT)
         .typ::<crate::commands::project_apply::ApplyWaiting>()
+        .constant(
+            "NATIVE_QUIT_CONFIRM_EVENT",
+            crate::native_shell_surfaces::NATIVE_QUIT_CONFIRM_EVENT,
+        )
+        .typ::<crate::native_shell_surfaces::NativeQuitRequest>()
         .commands(library_commands!(collect_commands))
 }
 
@@ -330,26 +344,12 @@ pub fn library_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
 /// cannot be read when the notifier attaches, or the Tauri runtime itself.
 /// A removal notice window that Windows refuses is logged, not returned.
 pub fn run() -> Result<(), Box<dyn Error>> {
-    use tauri::generate_handler;
     let provider = provider_config()?;
     #[cfg_attr(not(feature = "e2e"), allow(unused_mut))]
     let mut context = context();
     #[cfg(feature = "e2e")]
     let test_window = test_host::configure(&mut context, std::env::var_os(FRONTEND_URL_ENV))?;
-    // `generate_handler!` expands to a non-capturing closure; the fn type fixes its runtime.
-    let handler: fn(tauri::ipc::Invoke<tauri::Wry>) -> bool = library_commands!(generate_handler);
-    #[cfg(feature = "e2e")]
-    let handler = crate::commands::e2e_window::with_e2e_commands(handler);
-    let builder = tauri::Builder::default().invoke_handler(handler);
-    // The planning handlers call these through their Rust APIs, which need no
-    // grant; window `library` holds only `capabilities/library.json`.
-    let builder = builder.plugin(tauri_plugin_dialog::init()).plugin(tauri_plugin_opener::init());
-    #[cfg(feature = "dev-tools")]
-    let builder = builder.plugin(dev_bridge(std::env::var(BRIDGE_BIND_ENV).ok().as_deref())?);
-    // The WebDriver server the tauri-webdriver proxy drives. It binds loopback
-    // (`TAURI_WEBDRIVER_PORT`, default 4445) and needs no capability grant.
-    #[cfg(feature = "e2e")]
-    let builder = builder.plugin(tauri_plugin_webdriver::init());
+    let builder = shell_builder()?;
 
     // Windows are created when the event loop starts, so the catalog is open
     // and managed before any webview can invoke a command.
@@ -432,12 +432,15 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     // 071 STO-FR-08).
     app.manage(ApplyRuns::emitting(app.handle().clone()));
     app.manage(CloseRuns::default());
+    // The menu bar and tray; Quit asks first while work runs (D-W157).
+    crate::native_shell_surfaces::install(app.handle())?;
     // Windows ejects a Captures drive only once discovery's watcher lets go
     // of it (astro-plan-ef440). Without the notices, which `start` logs, the
     // app still starts; only that release is lost.
     #[cfg(windows)]
     let mut eject = crate::eject::EjectNotices::start(app.handle());
     app.run(move |handle, event| {
+        crate::native_shell_surfaces::on_run_event(handle, &event);
         // As Tauri opens a configured window once the loop runs, with the
         // webview's data beside the run's catalog.
         #[cfg(feature = "e2e")]
@@ -458,6 +461,35 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         }
     });
     Ok(())
+}
+
+/// The shell's commands, native menu routing and plugins.
+///
+/// # Errors
+/// A refused bridge address or base port (`dev-tools` only).
+#[cfg_attr(not(feature = "dev-tools"), allow(clippy::unnecessary_wraps))] // only the dev bridge can fail
+fn shell_builder() -> Result<tauri::Builder<tauri::Wry>, String> {
+    use tauri::generate_handler;
+    // `generate_handler!` expands to a non-capturing closure; the fn type fixes its runtime.
+    let handler: fn(tauri::ipc::Invoke<tauri::Wry>) -> bool = library_commands!(generate_handler);
+    #[cfg(feature = "e2e")]
+    let handler = crate::commands::e2e_window::with_e2e_commands(handler);
+    let builder = tauri::Builder::default().invoke_handler(handler).on_menu_event(|app, event| {
+        crate::native_shell_surfaces::on_menu(app, event.id().as_ref());
+    });
+    // The planning handlers call these through their Rust APIs, which need no
+    // grant; window `library` holds only `capabilities/library.json`.
+    let builder = builder.plugin(tauri_plugin_dialog::init()).plugin(tauri_plugin_opener::init());
+    #[cfg(feature = "dev-tools")]
+    let builder = builder.plugin(dev_bridge(
+        std::env::var(BRIDGE_BIND_ENV).ok().as_deref(),
+        std::env::var(BRIDGE_PORT_ENV).ok().as_deref(),
+    )?);
+    // The WebDriver server the tauri-webdriver proxy drives. It binds loopback
+    // (`TAURI_WEBDRIVER_PORT`, default 4445) and needs no capability grant.
+    #[cfg(feature = "e2e")]
+    let builder = builder.plugin(tauri_plugin_webdriver::init());
+    Ok(builder)
 }
 
 // Tauri reads only a canonically named config: given `tauri.library.conf.json`
@@ -626,14 +658,42 @@ fn provider_config() -> Result<Option<SimbadConfig>, String> {
 }
 
 /// The unauthenticated MCP bridge reaches every command handler, so it binds
-/// loopback whatever the environment says.
+/// loopback whatever the environment says. [`BRIDGE_PORT_ENV`] moves its base
+/// port; unset keeps the plugin's default.
 #[cfg(feature = "dev-tools")]
-fn dev_bridge(requested: Option<&str>) -> Result<tauri::plugin::TauriPlugin<tauri::Wry>, String> {
-    let bind = loopback_bind(requested)?;
-    tracing::info!(%bind, "MCP bridge starting (library shell, loopback only)");
-    Ok(tauri_plugin_mcp_bridge::init_with_config(tauri_plugin_mcp_bridge::Config::new(
-        &bind.to_string(),
-    )))
+fn dev_bridge(
+    requested_bind: Option<&str>,
+    requested_port: Option<&str>,
+) -> Result<tauri::plugin::TauriPlugin<tauri::Wry>, String> {
+    let bind = loopback_bind(requested_bind)?;
+    let mut config = tauri_plugin_mcp_bridge::Config::new(&bind.to_string());
+    if let Some(port) = bridge_base_port(requested_port)? {
+        config.base_port = port;
+    }
+    tracing::info!(%bind, base_port = config.base_port, "MCP bridge starting (library shell, loopback only)");
+    Ok(tauri_plugin_mcp_bridge::init_with_config(config))
+}
+
+/// The plugin tries 100 ports from its base, so the base leaves room for them
+/// below 65535, and stays out of the privileged range.
+#[cfg(feature = "dev-tools")]
+const BRIDGE_PORTS: std::ops::RangeInclusive<u16> = 1024..=65435;
+
+/// Unset or blank keeps the plugin's default base port; anything else must
+/// be a port number in [`BRIDGE_PORTS`].
+#[cfg(feature = "dev-tools")]
+fn bridge_base_port(requested: Option<&str>) -> Result<Option<u16>, String> {
+    let Some(raw) = requested.map(str::trim).filter(|raw| !raw.is_empty()) else {
+        return Ok(None);
+    };
+    match raw.parse::<u16>() {
+        Ok(port) if BRIDGE_PORTS.contains(&port) => Ok(Some(port)),
+        _ => Err(format!(
+            "{BRIDGE_PORT_ENV}={raw:?} is not a port from {} to {}",
+            BRIDGE_PORTS.start(),
+            BRIDGE_PORTS.end()
+        )),
+    }
 }
 
 /// Unset or blank means `127.0.0.1`; anything else must be an IPv4 loopback
@@ -657,7 +717,7 @@ fn loopback_bind(requested: Option<&str>) -> Result<Ipv4Addr, String> {
 mod tests {
     use std::net::Ipv4Addr;
 
-    use super::loopback_bind;
+    use super::{bridge_base_port, loopback_bind};
 
     /// Only IPv4 loopback literals pass. Unspecified, private, IPv6 (including
     /// `::1` and v4-mapped loopback), hostnames and socket addresses are refused.
@@ -677,6 +737,22 @@ mod tests {
             "127.000.000.001",
         ] {
             assert!(loopback_bind(Some(refused)).is_err(), "{refused} must be refused");
+        }
+    }
+
+    /// Unset or blank keeps the default; a port with room for the plugin's
+    /// 100-port scan passes; privileged, too-high and non-numeric values stop
+    /// start-up rather than fall back.
+    #[test]
+    fn bridge_base_port_is_a_usable_unprivileged_port() {
+        for unset in [None, Some(""), Some("  ")] {
+            assert_eq!(bridge_base_port(unset), Ok(None), "{unset:?}");
+        }
+        assert_eq!(bridge_base_port(Some(" 9323 ")), Ok(Some(9323)));
+        assert_eq!(bridge_base_port(Some("1024")), Ok(Some(1024)));
+        assert_eq!(bridge_base_port(Some("65435")), Ok(Some(65435)));
+        for refused in ["1023", "65436", "70000", "-1", "port", "9323x"] {
+            assert!(bridge_base_port(Some(refused)).is_err(), "{refused} must be refused");
         }
     }
 }

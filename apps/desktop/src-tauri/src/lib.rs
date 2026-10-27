@@ -13,6 +13,7 @@ pub mod data_dir;
 pub mod frame_watcher;
 pub mod library_notifier;
 pub mod library_shell;
+pub mod native_shell_surfaces;
 pub mod resolve_cache;
 pub mod updater;
 pub mod watcher;

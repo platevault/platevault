@@ -1488,12 +1488,45 @@ export const commands = {
 	 *  catalog cannot be read.
 	 */
 	homeDashboard: (tonight: TonightQuery_Deserialize) => typedError<HomeDashboard_Serialize, ErrorResponse>(__TAURI_INVOKE("home_dashboard", { tonight })),
+	/**
+	 *  Pick a folder.
+	 * 
+	 *  # Errors
+	 *  `SourceUnavailable` when the picker could not run; `InvalidInput` when it
+	 *  answered something other than a local path.
+	 */
+	libraryPickFolder: () => typedError<{ encoding: "unix-bytes"; payload: number[]; display: string } | { encoding: "windows-utf16"; payload: number[]; display: string } | null, ErrorResponse>(__TAURI_INVOKE("library_pick_folder")),
+	/**
+	 *  Pick a file.
+	 * 
+	 *  # Errors
+	 *  `SourceUnavailable` when the picker could not run; `InvalidInput` when it
+	 *  answered something other than a local path.
+	 */
+	libraryPickFile: () => typedError<{ encoding: "unix-bytes"; payload: number[]; display: string } | { encoding: "windows-utf16"; payload: number[]; display: string } | null, ErrorResponse>(__TAURI_INVOKE("library_pick_file")),
+	/**
+	 *  Relabel the menu bar and the tray in the UI's active locale.
+	 * 
+	 *  # Errors
+	 *  The platform refuses a label change.
+	 */
+	libraryNativeMenuSetLabels: (labels: NativeMenuLabels) => typedError<null, ErrorResponse>(__TAURI_INVOKE("library_native_menu_set_labels", { labels })),
+	/**
+	 *  The UI's answer to a [`NativeQuitRequest`]: Confirm exits, Cancel keeps
+	 *  the app open with the work still running.
+	 * 
+	 *  # Errors
+	 *  The request was already answered or never made.
+	 */
+	libraryNativeQuitAnswer: (requestId: string, confirmed: boolean) => typedError<null, ErrorResponse>(__TAURI_INVOKE("library_native_quit_answer", { requestId, confirmed })),
 };
 
 /* Constants */
 export const APPLY_WAITING_EVENT = "project_apply_waiting" as const;
 
 export const MEASUREMENT_PROGRESS_EVENT = "pix_measurement_progress" as const;
+
+export const NATIVE_QUIT_CONFIRM_EVENT = "native_quit_confirm" as const;
 
 export const NEW_CAPTURES_EVENT = "library_new_captures" as const;
 
@@ -4939,11 +4972,33 @@ export type NamingTemplate = {
 	overridden: boolean,
 };
 
+/**  Every catalogue label the native menu bar and tray show. */
+export type NativeMenuLabels = {
+	about: string,
+	quit: string,
+	edit: string,
+	undo: string,
+	redo: string,
+	cut: string,
+	copy: string,
+	paste: string,
+	selectAll: string,
+	window: string,
+	minimise: string,
+	closeWindow: string,
+	show: string,
+};
+
 /**
  *  The record [`NativePath`]'s `Serialize` writes: the native payload plus its
  *  display text. Deserialize never reads `display`.
  */
 export type NativePathWire = { encoding: "unix-bytes"; payload: number[]; display: string } | { encoding: "windows-utf16"; payload: number[]; display: string };
+
+/**  A Quit that waits on the user, because work is running. */
+export type NativeQuitRequest = {
+	requestId: string,
+};
 
 /**  The new files of one online Captures location. */
 export type NewCaptureCount = {
