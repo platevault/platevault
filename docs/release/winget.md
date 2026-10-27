@@ -70,34 +70,32 @@ Only the owner can do these. Do them once, in this order.
       ```
 
 2. **Create the bot's token.** Signed in as the bot, open **Settings** ›
-   **Developer settings** › **Personal access tokens** › **Tokens
-   (classic)** › **Generate new token** › **Generate new token (classic)**.
+   **Developer settings** › **Personal access tokens** › **Tokens (classic)**.
    Name it `platevault winget`, pick an expiry date, and select only the
    scopes `public_repo` and `workflow`. Click **Generate token** and copy it.
    Komac needs a classic token, because a fine-grained token cannot open the
    winget-pkgs pull request
    ([Komac #310](https://github.com/russellbanks/Komac/issues/310)).
    `workflow` lets the fork sync when upstream changes its workflow files.
-   Note the expiry date: the job fails once the token expires.
-3. **Store the token.** As the owner, run this, and paste the bot's token at
-   the prompt:
+
+3. **Store the token.** As the owner of platevault/platevault, run this command and enter the bot's token at the prompt:
 
    ```sh
    gh secret set WINGET_TOKEN --repo platevault/platevault
    ```
 
-4. **Submit the first version.** Install Komac 2.16.0 (`brew install komac`,
-   or `winget install --id RussellBanks.Komac`). Use the bot's token from
-   step 2, so the pull request comes from the bot's fork. Preview the
-   manifests with `--dry-run`, then run the same command with `--submit`
-   instead:
+4. **Submit the first version.** Komac updates existing packages only, so submit the first manifest by hand.
+
+   Install Komac 2.16.0 and set `KOMAC_FORK_OWNER` to the bot account. Then preview manifests for the latest release using the bot token.
 
    ```sh
    read -rs -p 'Bot token: ' GITHUB_TOKEN && export GITHUB_TOKEN && echo
    export KOMAC_FORK_OWNER=platevault-winget-bot
-   komac new PlateVault.PlateVault --version 0.6.1 \
-     --urls https://github.com/platevault/platevault/releases/download/v0.6.1/PlateVault_0.6.1_x64-setup.exe \
-            https://github.com/platevault/platevault/releases/download/v0.6.1/PlateVault_0.6.1_x64_en-US.msi \
+   VERSION=0.6.1 # Replace with the latest published release version.
+   TAG="v${VERSION}"
+   komac new PlateVault.PlateVault --version "${VERSION}" \
+     --urls "https://github.com/platevault/platevault/releases/download/${TAG}/PlateVault_${VERSION}_x64-setup.exe" \
+            "https://github.com/platevault/platevault/releases/download/${TAG}/PlateVault_${VERSION}_x64_en-US.msi" \
      --package-locale en-US \
      --publisher PlateVault \
      --publisher-url https://github.com/platevault \
@@ -108,46 +106,35 @@ Only the owner can do these. Do them once, in this order.
      --license AGPL-3.0-only \
      --license-url https://github.com/platevault/platevault/blob/main/LICENSE \
      --short-description "Local-first organizer for large astrophotography libraries" \
-     --release-notes-url https://github.com/platevault/platevault/releases/tag/v0.6.1 \
+     --release-notes-url "https://github.com/platevault/platevault/releases/tag/${TAG}" \
      --dry-run
    ```
 
-   Komac then asks for the fields it cannot read from the installers: install
-   modes, extra installer return codes, upgrade behavior, commands,
-   protocols, file extensions, author, copyright and description. Press
-   Enter at each one to keep the default (**Install** for upgrade behavior,
-   empty for the rest). It detects the NSIS installer as `nullsoft`, scope
-   `user`, and the MSI as `wix`, scope `machine`. With `--submit` it pushes
-   the manifests to the fork and prints the pull request URL.
-5. **Wait for the merge.** winget-pkgs runs automated validation, then a
-   moderator reviews the pull request. Answer any review comments on the pull
-   request. After the merge, check on a Windows machine:
+   Review the generated manifests. Confirm their URLs and hashes match the intended release assets. Ask the repository owner to run the command with `--submit` instead of `--dry-run`.
+5. **Wait for the merge.** winget-pkgs validates the pull request and a moderator reviews it. After the merge, check the package on Windows:
 
    ```powershell
    winget show --id PlateVault.PlateVault
    ```
 
-6. **Turn the job on.**
+6. **Enable automated submissions.** After the first manifest merges, ask the owner to approve automation before setting the variable.
 
    ```sh
    gh variable set ENABLE_WINGET_PUBLISH --repo platevault/platevault --body true
    ```
 
-   From the next release on, the `winget` job opens the pull request for each
-   new version and writes its URL to the job summary.
+   Each subsequent published release then opens a pull request and writes its URL to the job summary.
 
 ## When the job fails
 
-- *WINGET_FORK_USER is empty* or *the WINGET_TOKEN secret is empty*: an owner
-  step is missing. Do owner step 1.4 or step 3, then re-run the job.
+- *WINGET_FORK_USER is empty* or *the WINGET_TOKEN secret is empty*: complete the bot fork setup and set repository secrets and variables in steps 1 and 3.
 - *computed checksum did NOT match* in **Install Komac**: the downloaded
   Komac is not the pinned release. Do not change `KOMAC_SHA256` to make it
   pass; check the Komac release first.
 - *expected the x64 setup.exe and .msi*: the release does not have exactly
   one installer of each kind matching the pattern above. Check the release's
   assets and the `build` job.
-- Komac reports that PlateVault.PlateVault does not exist: the first
-  submission has not merged yet. Finish owner step 5, then re-run the job.
+- Komac reports that PlateVault.PlateVault does not exist: submit the first manifest by hand, wait for its merge, then enable the job.
 - Komac reports a permission or fork-sync error: the token has expired,
   lacks a scope, or does not belong to `WINGET_FORK_USER`. Make a new token
   (owner step 2) and store it (owner step 3). Or, signed in as the bot, click
