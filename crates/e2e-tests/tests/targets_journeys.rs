@@ -802,11 +802,11 @@ fn px(m: &serde_json::Value, key: &str) -> anyhow::Result<i64> {
 /// never lost (FR-006/FR-007, shipped in #1253).
 ///
 /// **Pins the dock rather than relying on the 1400px width threshold**, so
-/// this runs on both supported platforms. GitHub-hosted Windows runners are
-/// fixed at 1024x768 and cannot be resized — the runner service runs in
-/// non-interactive Session 0 with no real display (actions/runner-images
-/// #2935, #8606) — so a journey demanding a 1400px viewport would be
-/// Linux-only by construction. A user pin is a first-class supported
+/// this runs on both supported platforms. GitHub-hosted Windows runners
+/// start at 1024x768, and the journey shards don't raise the display (only
+/// the window runtime job runs `scripts/set-windows-display.ps1`), so a
+/// journey demanding a 1400px viewport would be Linux-only there.
+/// A user pin is a first-class supported
 /// configuration, not a test-only shortcut: `useAdaptiveDock` honours an
 /// override at any width wide enough for a side dock at all.
 ///
