@@ -8,14 +8,16 @@ name: Release Please
 # redesign integration branch. The first release PR appears once this config
 # lands on main (via #349) and a subsequent feat/fix is pushed.
 #
-# The release PR is verified by release-gate.yml, which posts the single
-# "Release Gate / verdict" check the shepherd reads before merging.
+# The release PR is verified by release-gate.yml, whose required "Release
+# Gate" check the shepherd reads before merging.
 #
-# Once release-please tags+publishes a release (release_created == 'true'),
-# `rc-gate` checks that the released commit came from a release candidate
-# that passed (scripts/release/check-rc-provenance.mjs,
-# docs/release/release-candidates.md).
-# Only then does the `build` job (spec 051 US10 / T060, in
+# release-please runs in two places. The `release-please` job only maintains
+# the release PR. When a push to main is a release PR's merge, the `release`
+# job waits for an approver on the `release` environment, checks that the
+# commit came from a release candidate that passed
+# (scripts/release/check-rc-provenance.mjs, docs/release/release-candidates.md),
+# and only then has release-please tag and publish the release.
+# Then the `build` job (spec 051 US10 / T060, in
 # build-installers.yml, which release candidates use too) build the Tauri
 # desktop app on the Windows/macOS/Linux matrix, sign the bundles + updater
 # artifact with tauri-apps/tauri-action (minisign, via the
@@ -42,21 +44,21 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  statuses: read # the provenance check reads the candidate's release/rc status
 
 concurrency:
   group: release-please-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
+  # Keeps the release PR up to date and nothing else: it never publishes a
+  # release. `release` below does that, once the provenance check passes.
   release-please:
     name: Release Please
     runs-on: ubuntu-latest
     outputs:
-      release_created: ${{ steps.release.outputs.release_created }}
-      tag_name: ${{ steps.release.outputs.tag_name }}
-      # The body with the code signing policy link (see the `notes` step),
-      # or release-please's own body if that step wrote none.
-      release_body: ${{ steps.notes.outputs.body || steps.release.outputs.body }}
+      release_commit: ${{ steps.release-commit.outputs.release_commit }}
+      version: ${{ steps.release-commit.outputs.version }}
     steps:
       # Mint a short-lived GitHub App installation token from the shared org
       # release app (contents:write + pull_requests:write). This is the
@@ -74,13 +76,87 @@ jobs:
           app-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
 
-      - name: Run release-please
+      - name: Maintain the release PR
+        uses: googleapis/release-please-action@v5
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+          skip-github-release: true
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      # A release PR's merge is the only commit that changes the manifest's
+      # version, so that change marks a commit to release.
+      - name: Is this a release PR's merge?
+        id: release-commit
+        run: |
+          set -euo pipefail
+          version=$(jq -r '.["."]' .release-please-manifest.json)
+          previous=$(git show HEAD^:.release-please-manifest.json 2>/dev/null | jq -r '.["."]' || echo none)
+          if [ "$version" != "$previous" ]; then
+            echo "release_commit=true" >> "$GITHUB_OUTPUT"
+            echo "Release commit: the manifest moved from ${previous} to ${version}."
+          else
+            echo "release_commit=false" >> "$GITHUB_OUTPUT"
+            echo "Not a release commit: the manifest stays at ${version}."
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  # Publishes vX.Y.Z, but only from a passed release candidate
+  # (docs/release/release-candidates.md). The `release` environment holds the
+  # job for an approver before anything is published, and the provenance check
+  # runs before release-please creates the release. A refusal publishes
+  # nothing: the merged release PR keeps `autorelease: pending`, and installed
+  # copies keep the previous release. Release Gate runs the same check on the
+  # release PR, but it can test an older merge result (branch protection does
+  # not require PRs to be up to date, and release-please leaves its PR alone
+  # for commits the changelog hides), so this check is the one that decides.
+  release:
+    name: Release
+    needs: release-please
+    if: needs.release-please.outputs.release_commit == 'true'
+    runs-on: ubuntu-latest
+    environment: release
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+      # The body with the code signing policy link (see the `notes` step),
+      # or release-please's own body if that step wrote none.
+      release_body: ${{ steps.notes.outputs.body || steps.release.outputs.body }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check the commit came from a passed release candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.release-please.outputs.version }}
+        run: |
+          set -euo pipefail
+          git fetch --force --quiet origin 'refs/tags/rc/*:refs/tags/rc/*'
+          node scripts/release/check-rc-provenance.mjs --version "${VERSION}" --commit "${GITHUB_SHA}"
+
+      - name: Mint release-please app token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
+      - name: Publish the release
         id: release
         uses: googleapis/release-please-action@v5
         with:
           token: ${{ steps.app-token.outputs.token }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+          skip-github-pull-request: true
 
       # SignPath Foundation's conditions (https://signpath.org/terms.html) ask
       # for a "Code signing policy" link on every release page. release-please
@@ -107,40 +183,10 @@ jobs:
           gh release edit "${TAG}" --repo "${GITHUB_REPOSITORY}" --notes "${body}" \
             || echo "::warning::could not add the code signing policy link to ${TAG} now; the build legs save it through tauri-action"
 
-  # The release's last gate: it refuses a release whose commit is not its
-  # newest passed candidate's plus release metadata. Release Gate, a required
-  # check, runs the same check on the release PR, and merging that PR is the
-  # human approval. So this job takes seconds and only fails when the PR
-  # merged without the gate. A refusal leaves a published release with no
-  # installers and no latest.json, so update checks fail until the release is
-  # removed. Re-running cannot help, because the commit stays the same. The
-  # recovery is in docs/release/release-candidates.md.
-  rc-gate:
-    name: Release candidate gate
-    needs: release-please
-    if: needs.release-please.outputs.release_created == 'true'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      statuses: read
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Check the release came from a passed release candidate
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.release-please.outputs.tag_name }}
-        run: |
-          set -euo pipefail
-          git fetch --force --quiet origin 'refs/tags/rc/*:refs/tags/rc/*'
-          node scripts/release/check-rc-provenance.mjs --version "${TAG#v}" --commit "${GITHUB_SHA}"
-
   build:
     name: Build & sign
-    needs: [release-please, rc-gate]
+    needs: release
+    if: needs.release.outputs.release_created == 'true'
     uses: ./.github/workflows/build-installers.yml
     permissions:
       contents: write # tauri-action publishes the release and uploads bundles
@@ -149,8 +195,8 @@ jobs:
       actions: read # the SignPath connector reads the job's artifacts
     secrets: inherit
     with:
-      tag_name: ${{ needs.release-please.outputs.tag_name }}
-      release_body: ${{ needs.release-please.outputs.release_body }}
+      tag_name: ${{ needs.release.outputs.tag_name }}
+      release_body: ${{ needs.release.outputs.release_body }}
       prerelease: false
 
   # Writes latest.json, the manifest every installed copy polls through
@@ -165,10 +211,10 @@ jobs:
   # finishes the release.
   updater-manifest:
     name: Publish updater manifest
-    needs: [release-please, build]
+    needs: [release, build]
     if: >-
       ${{ !cancelled()
-        && needs.release-please.outputs.release_created == 'true'
+        && needs.release.outputs.release_created == 'true'
         && needs.build.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
@@ -185,7 +231,7 @@ jobs:
       - name: Download the release's assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ needs.release-please.outputs.tag_name }}
+          TAG: ${{ needs.release.outputs.tag_name }}
         run: |
           set -euo pipefail
           gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" --json assets,body > release.json
@@ -202,7 +248,7 @@ jobs:
       - name: Upload latest.json to the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ needs.release-please.outputs.tag_name }}
+          TAG: ${{ needs.release.outputs.tag_name }}
         run: gh release upload "${TAG}" latest.json --repo "${GITHUB_REPOSITORY}" --clobber
 
   # Submits the release to the Windows Package Manager community repository
@@ -227,8 +273,8 @@ jobs:
   # job checks out nothing.
   winget:
     name: Submit to winget
-    needs: [release-please, updater-manifest]
-    if: ${{ needs.release-please.outputs.release_created == 'true' && vars.ENABLE_WINGET_PUBLISH == 'true' }}
+    needs: [release, updater-manifest]
+    if: ${{ needs.release.outputs.release_created == 'true' && vars.ENABLE_WINGET_PUBLISH == 'true' }}
     # homebrew-bump.yml runs only when this whole workflow succeeds. A winget
     # failure (expired token, fork sync, API error) must not skip the cask bump:
     # the job still shows as failed, but the run concludes successfully.
@@ -276,7 +322,7 @@ jobs:
         id: installers
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.release-please.outputs.tag_name }}
+          TAG: ${{ needs.release.outputs.tag_name }}
         run: |
           set -euo pipefail
           mapfile -t urls < <(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" \

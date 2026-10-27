@@ -7,8 +7,8 @@ flowchart LR
   main[commit on main] -->|Cut release candidate| rc["rc/vX.Y.Z-rc.N tag"]
   rc --> suites["Release candidate workflow:\nrelease suites + installers"]
   suites -->|release/rc = success| gate["Release Gate on the release PR\n(required; rc-provenance, hard)"]
-  gate -->|you merge the release PR| release["vX.Y.Z by release-please"]
-  release --> build["rc-gate re-checks,\nthen build + latest.json"]
+  gate -->|merge the release PR| approve["Release job: approve the\nrelease environment"]
+  approve -->|provenance re-checked| release["vX.Y.Z published,\nthen build + latest.json"]
 ```
 
 Release-please still owns versions and the changelog. It keeps an open release PR whose manifest names the next version, X.Y.Z. A candidate is a tag on a commit of main, `rc/vX.Y.Z-rc.N`. Release-please never counts it as a release: with `include-component-in-tag: false` it ignores any tag that has a component, and `rc/` is one.
@@ -37,18 +37,19 @@ A failed candidate stays failed. Fix main, then cut the next candidate; N goes u
    - `apps/desktop/src-tauri/Cargo.toml`, the package version only, and `Cargo.lock`, the `desktop_shell` entry's version only.
 
    Any other change since the candidate, such as a new commit on main, fails the check: cut a new candidate from main's new tip.
-2. Merge the release PR. Release Gate is a required check, so the merge button waits for it, and your merge is the release's approval.
-3. The merge makes release-please publish the `vX.Y.Z` release. Its `rc-gate` job re-runs the same check on the released commit, which takes seconds, and only then lets the installers build and `latest.json` publish.
+2. Merge the release PR. Release Gate is a required check, so the merge button waits for it.
+3. The merge's push to main starts **Release Please**. Its `release-please` job only maintains the release PR and never publishes. It sees that the manifest version moved and hands the commit to the `release` job, which waits for you to approve the `release` environment. Then it re-runs the provenance check on the merged commit, and only if that passes does release-please tag and publish `vX.Y.Z`. The installers build and `latest.json` publishes after that.
+
+Release Gate is an early signal, but the `release` job is the check that decides. Release Gate can test an older merge result: branch protection does not require PRs to be up to date, release-please leaves its PR alone when the commits on main are ones the changelog hides (`ci`, `docs`, `chore` and others), and a re-run checks the run's original merge commit.
 
 `scripts/release/check-rc-provenance.mjs` is the one implementation of the check, used by both gates. `node scripts/release/check-rc-provenance.test.mjs` tests the metadata rules.
 
-### If rc-gate refuses a release
+### If the release job refuses
 
-This happens only when the release PR merged without a passing Release Gate. By then release-please has published `vX.Y.Z` with no installers and no `latest.json`, so installed copies' update checks fail. Re-running `rc-gate` cannot pass, because the commit stays the same. To recover:
+A refusal publishes nothing, so installed copies keep the previous release and nothing needs undoing. The merged release PR keeps its `autorelease: pending` label, and release-please opens no new release PR until that one is released. To finish the release:
 
-1. Note the released commit (`git rev-list -n 1 vX.Y.Z`), then delete the `vX.Y.Z` release and its tag (`gh release delete vX.Y.Z --cleanup-tag`). Installed copies then see the previous release as the latest again.
-2. Run **Cut release candidate** with `version` set to X.Y.Z, since the merged release PR no longer offers one, and `commit` set to the released commit. Wait for the candidate to pass.
-3. On the merged release PR, swap the `autorelease: tagged` label back to `autorelease: pending`; release-please only publishes releases for PRs with the pending label. Then re-run the **Release Please** run that published `vX.Y.Z`, the one for the released commit. It publishes the release again, and `rc-gate` passes.
+1. Run **Cut release candidate** with `version` set to X.Y.Z, since the merged release PR no longer offers one, and `commit` set to the merged commit. Wait for the candidate to pass.
+2. Re-run the failed **Release** job of that Release Please run. Approve the environment again; the check now passes, and the release publishes.
 
 ## What runs where
 
@@ -65,5 +66,6 @@ This happens only when the release PR merged without a passing Release Gate. By 
 
 These settings live in the repository, not in the workflows:
 
-1. **Settings, Branches: add `Release Gate` to main's required status checks**, by running `scripts/branch-protection-main.sh apply` once this lands; `scripts/branch-protection-main.json` already lists it. As of 2026-10-27 it is reported but not required. The `Release Gate` job always runs and passes at once on PRs that aren't release PRs and on merge-queue entries, so only the release PR waits on it.
-2. Optional: add a tag ruleset that limits who may create `rc/*` and `v*` tags. Anyone with write access can post a `release/rc` status or push a tag, so the gate protects against mistakes, not against someone with write access acting on purpose.
+1. **Settings, Environments: create `release` and add yourself as a required reviewer.** Without a reviewer the environment approves itself, and the `release` job publishes as soon as the check passes.
+2. **Settings, Branches: add `Release Gate` to main's required status checks**, by running `scripts/branch-protection-main.sh apply` once this lands; `scripts/branch-protection-main.json` already lists it. As of 2026-10-27 it is reported but not required. The `Release Gate` job always runs and passes at once on PRs that aren't release PRs and on merge-queue entries, so only the release PR waits on it.
+3. Optional: add a tag ruleset that limits who may create `rc/*` and `v*` tags. Anyone with write access can post a `release/rc` status or push a tag, so the gate protects against mistakes, not against someone with write access acting on purpose.

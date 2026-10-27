@@ -180,9 +180,9 @@ on:
 
 concurrency:
   group: e2e-${{ github.workflow }}-${{ github.ref }}
-  # A newer run on the same branch or tag replaces the older one. Pushes to
-  # main no longer run this workflow; the `main` exception stays because a
-  # manual dispatch on main must not cancel a candidate's run (#1208).
+  # A newer run on the same branch or tag replaces the older one, but never on
+  # main (#1208): each push's builders must finish to save their caches, and
+  # with merges seconds apart a cancelling group would let none finish.
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 env:
@@ -748,7 +748,7 @@ jobs:
   # Tier-1 smoke (per-PR, ubuntu-latest only): a focused subset of real-UI
   # journeys that boots the app and exercises the core surfaces. Runs on
   # pull_request and merge_group ONLY — the full matrix (both OSes, all shards)
-  # runs on push to main and workflow_dispatch instead (see the two-tier strategy in the
+  # runs in the release suite instead (see the two-tier strategy in the
   # header). No sharding: the filter selects 3 journeys, each serial, which
   # completes in < 8 min on ubuntu-latest.
   #

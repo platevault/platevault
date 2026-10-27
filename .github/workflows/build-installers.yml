@@ -33,8 +33,9 @@ on:
         required: true
       app_version:
         description: >-
-          X.Y.Z to stamp into apps/desktop/src-tauri/tauri.conf.json before
-          building; empty keeps the committed version.
+          X.Y.Z to stamp into tauri.conf.json, apps/desktop/package.json and
+          the desktop_shell Cargo.toml before building; empty keeps the
+          committed version.
         type: string
         default: ''
 
