@@ -67,17 +67,7 @@ async fn invoke_native<T: serde::de::DeserializeOwned>(
     command: &str,
     args: Value,
 ) -> anyhow::Result<T> {
-    let script = r#"window.__PV_E2E__.invoke(arguments[0], arguments[1]).then(value => callback({ ok: true, value })).catch(error => callback({ ok: false, error: String(error) }));"#;
-    let response: Value = app
-        .driver
-        .execute_async(script, vec![json!(command), args])
-        .await
-        .with_context(|| format!("failed to invoke unregistered native command {command}"))?
-        .convert()
-        .context("native command bridge returned invalid JSON")?;
-    anyhow::ensure!(response["ok"] == true, "native command {command} failed: {response}");
-    serde_json::from_value(response["value"].clone())
-        .context("native command returned unexpected shape")
+    app.invoke(command, args).await
 }
 
 async fn probe(app: &E2eApp) -> anyhow::Result<Value> {
