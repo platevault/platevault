@@ -64,8 +64,12 @@
 # issue #489). Linux + Windows is the supported matrix.
 #
 # The release suite runs the macOS chain without blocking: its jobs use
-# `continue-on-error`, so a red macOS leg shows in the run without failing the
-# candidate, until #489 is fixed upstream. A manual dispatch with
+# `continue-on-error`, so a red macOS shard shows as failed in the run without
+# failing the candidate. `continue-on-error` also hands dependents a
+# `success` result, so the macOS gate, which would read that and report a
+# green "Real-UI journeys (L3) — macos-latest", does not run in the release
+# suite; read the shards' own results there. This lasts until #489 is fixed
+# upstream. A manual dispatch with
 # `suite: macos` runs it alone as a genuine red/green signal, so a future
 # upstream fix is discoverable. Layer-1 `cargo test --workspace` (ci.yml) stays
 # required on macOS; only this real-UI WebDriver leg is affected.
@@ -1508,13 +1512,15 @@ jobs:
           echo "real-ui-e2e-windows result: $RESULT"
           [ "$RESULT" = "success" ] || exit 1
 
-  # Skipped unless the macOS chain ran. In the release suite it reports the
-  # macOS result without failing the candidate (#489).
+  # Runs only for a `macos` dispatch. In the release suite the shards'
+  # continue-on-error hands this job a `success` result whatever they did, so
+  # it would report a green macOS check for red shards (#489).
   e2e-gate-macos:
     name: Real-UI journeys (L3) — macos-latest
     needs: [changes, real-ui-e2e-macos]
-    if: always() && needs.changes.outputs.run == 'true' && needs.changes.outputs.macos == 'true'
-    continue-on-error: ${{ needs.changes.outputs.release == 'true' }}
+    if: >-
+      always() && needs.changes.outputs.run == 'true'
+      && needs.changes.outputs.macos == 'true' && needs.changes.outputs.release != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
