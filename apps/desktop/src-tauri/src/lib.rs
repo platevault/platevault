@@ -273,7 +273,12 @@ pub fn build_app() -> tauri::App {
                 app.exit(0);
             }
         })
-        .invoke_handler(builder.invoke_handler())
+        .invoke_handler({
+            let production = builder.invoke_handler();
+            #[cfg(feature = "e2e")]
+            let production = crate::commands::e2e_window::with_e2e_commands(production);
+            production
+        })
         .setup(move |app| {
             builder.mount_events(app);
             Ok(())

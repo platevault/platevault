@@ -336,7 +336,11 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     let mut context = context();
     #[cfg(feature = "e2e")]
     let test_window = test_host::configure(&mut context, std::env::var_os(FRONTEND_URL_ENV))?;
-    let builder = tauri::Builder::default().invoke_handler(library_commands!(generate_handler));
+    // `generate_handler!` expands to a non-capturing closure; the fn type fixes its runtime.
+    let handler: fn(tauri::ipc::Invoke<tauri::Wry>) -> bool = library_commands!(generate_handler);
+    #[cfg(feature = "e2e")]
+    let handler = crate::commands::e2e_window::with_e2e_commands(handler);
+    let builder = tauri::Builder::default().invoke_handler(handler);
     // The planning handlers call these through their Rust APIs, which need no
     // grant; window `library` holds only `capabilities/library.json`.
     let builder = builder.plugin(tauri_plugin_dialog::init()).plugin(tauri_plugin_opener::init());
