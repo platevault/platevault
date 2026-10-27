@@ -459,11 +459,10 @@ impl E2eApp {
     /// Windows. So: set, MEASURE, correct by the observed delta.
     ///
     /// **Best-effort, deliberately not an assertion.** GitHub-hosted
-    /// **Windows runners are fixed at 1024x768 and cannot be resized** — the
-    /// runner service runs in non-interactive Session 0 with no real display
-    /// attached, so `ChangeDisplaySettings` has nothing to act on
-    /// (actions/runner-images#2935, #8606). Hard-failing on a short request
-    /// would make every docked-layout journey Linux-only by construction.
+    /// **Windows runners start at 1024x768**, and only a job that runs
+    /// `scripts/set-windows-display.ps1` (the window runtime job) raises the
+    /// display. Hard-failing on a short request would make every
+    /// docked-layout journey fail on the Windows journey shards.
     /// Callers needing a minimum must assert on the return value — better
     /// still, avoid depending on one, as
     /// `targets_ui_identity_columns_stay_pinned_while_table_scrolls` does by

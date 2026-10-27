@@ -144,11 +144,12 @@ fn assert_fully_on_monitor(state: &Value) -> anyhow::Result<()> {
 #[tokio::test]
 #[ignore = "Layer-2 real-UI runtime check: needs tauri-webdriver CLI + desktop_shell --features e2e + served frontend; run via dedicated window runtime workflow"]
 async fn restored_offscreen_small_window_is_clamped_to_visible_monitor() -> anyhow::Result<()> {
-    // The right edge starts beyond the 1600px Xvfb monitor. A monitor narrower
-    // than the configured minimum bounds the attainable geometry by its work
-    // area; a run that sets PV_E2E_REQUIRE_FULL_MINIMUM has arranged a monitor
-    // large enough, so there the full 1280x640 client size is required.
-    let app = seed_and_launch(1000, 40, 800, 500, false).await?;
+    // The saved right edge (1500 + 800) lies beyond both the 1600px Xvfb
+    // monitor and a 1920px Windows display. A monitor narrower than the
+    // configured minimum bounds the attainable geometry by its work area; a
+    // run that sets PV_E2E_REQUIRE_FULL_MINIMUM has arranged a monitor large
+    // enough, so there the full 1280x640 client size is required.
+    let app = seed_and_launch(1500, 40, 800, 500, false).await?;
     let state = wait_for_settled_probe(&app).await?;
     assert_fully_on_monitor(&state)?;
     let inner = &state["inner"];
@@ -341,14 +342,16 @@ async fn first_move_after_show_is_not_refitted() -> anyhow::Result<()> {
         let outer_h = outer["h"].as_i64().context("outer height missing")?;
         let inner_w = before["inner"]["w"].as_i64().context("inner width missing")?;
         let inner_h = before["inner"]["h"].as_i64().context("inner height missing")?;
-        // The outer frame adds equal invisible side and bottom borders; the
-        // rest of the height difference is the title bar, grabbed at its
-        // middle and a third of the way across, clear of the caption buttons.
+        // The outer frame adds equal invisible side and bottom borders. The
+        // rest of the height difference is the non-client area above the
+        // client: the caption and, under it, the native menu bar. A quarter of
+        // that height down lies in the caption, a third of the way across,
+        // clear of the caption buttons.
         let border = (outer_w - inner_w) / 2;
         let title_h = outer_h - inner_h - border;
         ensure!(title_h > 0, "no native title bar above the client area: {before}");
         let source_x = outer_x + outer_w / 3;
-        let source_y = outer_y + title_h / 2;
+        let source_y = outer_y + title_h / 4;
         // As on X11, the drag leaves the window partly off the monitor, where
         // a refit would visibly pull it back.
         let target_x = work_x + work_w - outer_w / 2;
@@ -422,9 +425,9 @@ Start-Sleep -Milliseconds 300
     let output = Command::new("powershell")
         .args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File"])
         .arg(&path)
-        .output()
-        .context("could not start PowerShell for the title-bar drag")?;
+        .output();
     let _ = std::fs::remove_file(&path);
+    let output = output.context("could not start PowerShell for the title-bar drag")?;
     ensure!(
         output.status.success(),
         "the title-bar drag failed: {}",
