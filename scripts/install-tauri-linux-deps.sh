@@ -7,34 +7,42 @@ if (( $# == 0 )); then
   exit 2
 fi
 
-# Ubuntu 24.04 hosted runners use deb822 sources at this path. Change only the
-# Azure archive mirror for attempt two; preserve security.ubuntu.com and all
-# other configured sources. Do not rewrite sources when the file is absent.
+# Hosted Ubuntu 24.04 uses a deb822 source with
+# `URIs: mirror+file:/etc/apt/apt-mirrors.txt`. Change only the archive mirror
+# for attempt two; keep security.ubuntu.com and all other source entries intact.
 switch_archive_mirror() {
+  local mirrors=/etc/apt/apt-mirrors.txt
   local sources=/etc/apt/sources.list.d/ubuntu.sources
-  if [[ -f "$sources" ]]; then
-    sudo sed -i 's|azure.archive.ubuntu.com|archive.ubuntu.com|g' "$sources"
+  if [[ -f "$mirrors" ]]; then
+    printf '%s\n' 'http://archive.ubuntu.com/ubuntu/' | sudo tee "$mirrors" >/dev/null
+  elif [[ -f "$sources" ]]; then
+    sudo sed -i 's|mirror+file:/etc/apt/apt-mirrors.txt|http://archive.ubuntu.com/ubuntu/|g; s|azure.archive.ubuntu.com|archive.ubuntu.com|g' "$sources"
   elif [[ -f /etc/apt/sources.list ]]; then
     sudo sed -i 's|azure.archive.ubuntu.com|archive.ubuntu.com|g' /etc/apt/sources.list
   else
-    echo "No known Ubuntu sources file found; retaining configured mirror." >&2
+    echo "No known Ubuntu source or mirror-list file found; retaining configured mirror." >&2
   fi
+}
+
+log_apt_mirror_activity() {
+  local output=$1
+  printf '%s\n' "$output" | grep -E '^(Get|Hit):' | sed -E 's#^(Get|Hit):[0-9]+ ([^ ]+).*#APT_SOURCE=\2#' | sort -u || true
 }
 
 for attempt in 1 2; do
   mirror=azure.archive.ubuntu.com
-  budget=5s
+  if (( attempt == 1 )); then budget=5s; else budget=5m; fi
   if (( attempt == 2 )); then
     switch_archive_mirror
     mirror=archive.ubuntu.com
-    budget=5m
   fi
-  echo "Installing Tauri Linux dependencies (attempt ${attempt}/2, mirror ${mirror}, budget ${budget}): $*"
+  echo "Installing Tauri Linux dependencies (attempt ${attempt}/2, initial mirror ${mirror}, budget ${budget}): $*"
   set +e
-  timeout --signal=TERM --kill-after=30s "$budget" \
-    bash -c 'sudo apt-get -o Acquire::http::Timeout=30 -o Acquire::Retries=2 update && sudo apt-get -o Acquire::http::Timeout=30 -o Acquire::Retries=2 install -y "$@"' _ "$@"
+  output=$(timeout --signal=TERM --kill-after=30s "$budget" \
+    bash -c 'sudo apt-get -o Acquire::http::Timeout=30 -o Acquire::Retries=2 update && sudo apt-get -o Acquire::http::Timeout=30 -o Acquire::Retries=2 install -y "$@"' _ "$@" 2>&1 | tee /dev/stderr)
   status=$?
   set -e
+  log_apt_mirror_activity "$output"
   if (( status == 0 )); then
     exit 0
   fi
