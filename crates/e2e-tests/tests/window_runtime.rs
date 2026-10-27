@@ -9,7 +9,7 @@
 
 mod common;
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 use std::process::Command;
 
 use std::time::Duration;
@@ -144,9 +144,10 @@ fn assert_fully_on_monitor(state: &Value) -> anyhow::Result<()> {
 #[tokio::test]
 #[ignore = "Layer-2 real-UI runtime check: needs tauri-webdriver CLI + desktop_shell --features e2e + served frontend; run via dedicated window runtime workflow"]
 async fn restored_offscreen_small_window_is_clamped_to_visible_monitor() -> anyhow::Result<()> {
-    // The right edge starts beyond the 1600px Xvfb monitor; Windows hosted
-    // runners are only 1024px wide, so their attainable geometry is bounded by
-    // the monitor work area when the configured minimum does not fit.
+    // The right edge starts beyond the 1600px Xvfb monitor. A monitor narrower
+    // than the configured minimum bounds the attainable geometry by its work
+    // area; a run that sets PV_E2E_REQUIRE_FULL_MINIMUM has arranged a monitor
+    // large enough, so there the full 1280x640 client size is required.
     let app = seed_and_launch(1000, 40, 800, 500, false).await?;
     let state = wait_for_settled_probe(&app).await?;
     assert_fully_on_monitor(&state)?;
@@ -165,6 +166,12 @@ async fn restored_offscreen_small_window_is_clamped_to_visible_monitor() -> anyh
         inner["h"].as_i64() == Some(expected_inner_h),
         "inner height did not clamp to configured minimum/work area: {state}"
     );
+    if std::env::var_os("PV_E2E_REQUIRE_FULL_MINIMUM").is_some() {
+        ensure!(
+            expected_inner_w == i64::from(MIN_WIDTH) && expected_inner_h == i64::from(MIN_HEIGHT),
+            "the monitor work area cannot hold the {MIN_WIDTH}x{MIN_HEIGHT} minimum client size: {state}"
+        );
+    }
     println!("WINDOW_RUNTIME_CASE_A_BOUNDS={state}");
     app.shutdown().await
 }
@@ -220,10 +227,9 @@ fn ensure_fills_work_area(state: &Value, when: &str) -> anyhow::Result<()> {
 
 /// After the main window shows, a real user move is not refitted.
 ///
-/// Linux uses xdotool under the dedicated Openbox/Xvfb job, so the drag is a
-/// real X11 input sequence. Windows uses the e2e-only native positioning
-/// command as a labelled proxy: hosted Windows runner sessions do not expose
-/// an interactive desktop input path to this WebDriver test.
+/// Linux uses xdotool under the dedicated Openbox/Xvfb job, and Windows
+/// injects mouse input through `user32` in the runner's desktop session, so
+/// on both the drag is real OS input on the native title bar.
 #[tokio::test]
 #[ignore = "Layer-2 real-UI runtime check: needs tauri-webdriver CLI + desktop_shell --features e2e + served frontend; run via dedicated window runtime workflow"]
 async fn first_move_after_show_is_not_refitted() -> anyhow::Result<()> {
@@ -323,23 +329,108 @@ async fn first_move_after_show_is_not_refitted() -> anyhow::Result<()> {
     }
     #[cfg(target_os = "windows")]
     {
-        // This drives native positioning but is not OS input; report it as a
-        // programmatic proxy, not as proof of a physical user drag.
-        let (work_x, work_y, _, _) = work_bounds(&before)?;
-        let move_x = work_x + 120;
-        let move_y = work_y + 100;
-        let _: Value =
-            invoke_native(&app, "e2e_window_move", json!({ "x": move_x, "y": move_y })).await?;
+        // Bring the app forward so no other window covers the grab point.
+        let _: Value = invoke_native(&app, "e2e_window_focus", json!({})).await?;
+        tokio::time::sleep(SETTLE).await;
+        let before = probe(&app).await?;
+        let (work_x, work_y, work_w, _) = work_bounds(&before)?;
+        let outer = &before["outer"];
+        let outer_x = outer["x"].as_i64().context("outer x missing")?;
+        let outer_y = outer["y"].as_i64().context("outer y missing")?;
+        let outer_w = outer["w"].as_i64().context("outer width missing")?;
+        let outer_h = outer["h"].as_i64().context("outer height missing")?;
+        let inner_w = before["inner"]["w"].as_i64().context("inner width missing")?;
+        let inner_h = before["inner"]["h"].as_i64().context("inner height missing")?;
+        // The outer frame adds equal invisible side and bottom borders; the
+        // rest of the height difference is the title bar, grabbed at its
+        // middle and a third of the way across, clear of the caption buttons.
+        let border = (outer_w - inner_w) / 2;
+        let title_h = outer_h - inner_h - border;
+        ensure!(title_h > 0, "no native title bar above the client area: {before}");
+        let source_x = outer_x + outer_w / 3;
+        let source_y = outer_y + title_h / 2;
+        // As on X11, the drag leaves the window partly off the monitor, where
+        // a refit would visibly pull it back.
+        let target_x = work_x + work_w - outer_w / 2;
+        let target_y = work_y + 100;
+        let pointer_x = source_x + (target_x - outer_x);
+        let pointer_y = source_y + (target_y - outer_y);
+        windows_title_bar_drag(source_x, source_y, pointer_x, pointer_y)?;
+        let immediately_after = probe(&app).await?;
+        println!("WINDOW_RUNTIME_CASE_C_WINDOWS_IMMEDIATE={immediately_after}");
+        ensure!(
+            immediately_after["outer"]["x"].as_i64() == Some(target_x)
+                && immediately_after["outer"]["y"].as_i64() == Some(target_y),
+            "the title-bar drag did not move the window to ({target_x},{target_y}): {immediately_after}"
+        );
         tokio::time::sleep(SETTLE).await;
         let after = probe(&app).await?;
         ensure!(
-            after["outer"]["x"].as_i64() == Some(move_x)
-                && after["outer"]["y"].as_i64() == Some(move_y),
-            "programmatic native move was refitted: {after}"
+            after["outer"]["x"].as_i64() == Some(target_x)
+                && after["outer"]["y"].as_i64() == Some(target_y),
+            "real Windows drag was refitted from ({target_x},{target_y}): {after}"
         );
-        println!("WINDOW_RUNTIME_CASE_C_WINDOWS_PROGRAMMATIC_PROXY={after}");
+        ensure!(
+            target_x + outer_w > work_x + work_w,
+            "drag did not leave window partly off-monitor: {after}"
+        );
+        println!("WINDOW_RUNTIME_CASE_C_WINDOWS_USER_DRAG={after}");
     }
     app.shutdown().await
+}
+
+/// Press the left button at the source point, move to the target in steps and
+/// release, as injected OS mouse input. The cursor moves through
+/// `SetCursorPos` and the button through `mouse_event`, so Windows runs its own
+/// title-bar move loop exactly as it does for a user's drag.
+#[cfg(target_os = "windows")]
+fn windows_title_bar_drag(
+    source_x: i64,
+    source_y: i64,
+    target_x: i64,
+    target_y: i64,
+) -> anyhow::Result<()> {
+    let script = format!(
+        r#"$ErrorActionPreference = 'Stop'
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class PvDrag {{
+    [DllImport("user32.dll", SetLastError = true)] public static extern bool SetCursorPos(int x, int y);
+    [DllImport("user32.dll")] public static extern void mouse_event(uint flags, uint dx, uint dy, uint data, UIntPtr extra);
+}}
+'@
+function Move-To([int]$x, [int]$y) {{
+    if (-not [PvDrag]::SetCursorPos($x, $y)) {{ throw "SetCursorPos($x, $y) failed" }}
+}}
+Move-To {source_x} {source_y}
+Start-Sleep -Milliseconds 150
+[PvDrag]::mouse_event(0x0002, 0, 0, 0, [UIntPtr]::Zero)
+Start-Sleep -Milliseconds 150
+$steps = 16
+for ($i = 1; $i -le $steps; $i++) {{
+    Move-To ([int]({source_x} + ({target_x} - {source_x}) * $i / $steps)) ([int]({source_y} + ({target_y} - {source_y}) * $i / $steps))
+    Start-Sleep -Milliseconds 20
+}}
+Start-Sleep -Milliseconds 150
+[PvDrag]::mouse_event(0x0004, 0, 0, 0, [UIntPtr]::Zero)
+Start-Sleep -Milliseconds 300
+"#
+    );
+    let path = std::env::temp_dir().join(format!("pv-e2e-drag-{}.ps1", std::process::id()));
+    std::fs::write(&path, script).with_context(|| format!("failed to write {}", path.display()))?;
+    let output = Command::new("powershell")
+        .args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File"])
+        .arg(&path)
+        .output()
+        .context("could not start PowerShell for the title-bar drag")?;
+    let _ = std::fs::remove_file(&path);
+    ensure!(
+        output.status.success(),
+        "the title-bar drag failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    Ok(())
 }
 
 /// The X11 window of the app's main window: the one visible, named window

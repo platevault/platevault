@@ -10,7 +10,7 @@
 use serde::Serialize;
 use tauri::ipc::Invoke;
 use tauri::utils::config::WindowConfig;
-use tauri::{AppHandle, Manager, PhysicalPosition, Runtime, WebviewWindow, Wry};
+use tauri::{AppHandle, Manager, Runtime, WebviewWindow, Wry};
 
 /// The four edges of a physical-pixel rectangle.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -111,17 +111,6 @@ pub fn e2e_window_probe(app: AppHandle) -> Result<WindowProbe, String> {
     probe(&app)
 }
 
-/// Programmatically move the host-configured primary window in physical pixels.
-///
-/// # Errors
-/// The primary window is missing or the platform refuses the move.
-#[tauri::command]
-#[allow(clippy::needless_pass_by_value)] // Tauri injects the app handle by value
-pub fn e2e_window_move(app: AppHandle, x: i32, y: i32) -> Result<(), String> {
-    let (_, window) = configured_window(&app)?;
-    window.set_position(PhysicalPosition::new(x, y)).map_err(|error| error.to_string())
-}
-
 /// Focus the host-configured primary window to generate a native focus event.
 ///
 /// # Errors
@@ -133,15 +122,14 @@ pub fn e2e_window_focus(app: AppHandle) -> Result<(), String> {
     window.set_focus().map_err(|error| error.to_string())
 }
 
-/// Wrap a host's production invoke handler so the three window commands are
+/// Wrap a host's production invoke handler so the two window commands are
 /// served first and every other command reaches `production` unchanged.
 pub fn with_e2e_commands(
     production: impl Fn(Invoke<Wry>) -> bool + Send + Sync + 'static,
 ) -> impl Fn(Invoke<Wry>) -> bool + Send + Sync + 'static {
-    let e2e: fn(Invoke<Wry>) -> bool =
-        tauri::generate_handler![e2e_window_probe, e2e_window_move, e2e_window_focus];
+    let e2e: fn(Invoke<Wry>) -> bool = tauri::generate_handler![e2e_window_probe, e2e_window_focus];
     move |invoke| match invoke.message.command() {
-        "e2e_window_probe" | "e2e_window_move" | "e2e_window_focus" => e2e(invoke),
+        "e2e_window_probe" | "e2e_window_focus" => e2e(invoke),
         _ => production(invoke),
     }
 }

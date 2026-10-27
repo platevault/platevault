@@ -917,9 +917,16 @@ jobs:
       - name: Serve frontend dist on $PV_DEV_URL
         shell: bash
         run: pnpm --filter @astro-plan/desktop preview --port "${PV_DEV_URL##*:}" --strictPort &
-      - name: Run native window runtime checks (programmatic move proxy only)
+      # Hosted runners start at 1024x768, narrower than the 1280x640 minimum
+      # client size case A must prove. The script fails unless the display
+      # really is 1920x1080, so the test never falls back to its work-area bound.
+      - name: Set a 1920x1080 display
+        shell: pwsh
+        run: ./scripts/set-windows-display.ps1 -Width 1920 -Height 1080
+      - name: Run native window runtime checks (real title-bar drag)
         env:
           PV_E2E_APP_BIN: ${{ github.workspace }}/${{ env.APP_BIN }}
+          PV_E2E_REQUIRE_FULL_MINIMUM: "1"
         run: cargo nextest run --archive-file e2e-archive.tar.zst --workspace-remap . --profile e2e --run-ignored all --no-tests=fail --test-threads 1 -E 'binary(window_runtime) & (test(restored_offscreen_small_window_is_clamped_to_visible_monitor) | test(restored_maximized_window_stays_maximized_after_focus_event) | test(first_move_after_show_is_not_refitted))' --status-level all --success-output immediate
 
   # Gate for the smoke job, and the ONLY publisher of
