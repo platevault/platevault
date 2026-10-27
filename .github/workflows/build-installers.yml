@@ -7,10 +7,11 @@ name: Build installers
 #   - release-please.yml's `build`, after its `release` job has checked the
 #     commit's provenance and published a stable `vX.Y.Z` (prerelease false).
 #   - release-candidate.yml, for an `rc/vX.Y.Z-rc.N` GitHub prerelease
-#     (prerelease true). It stamps `app_version` (X.Y.Z, the version the
-#     candidate is for) into the three files release-please versions before
-#     building, because main still carries the last release's version until
-#     the release PR merges.
+#     (prerelease true). It stamps `app_version`, the candidate's X.Y.Z-rc.N,
+#     into the three files release-please versions before building, because
+#     main still carries the last release's version until the release PR
+#     merges. An installed candidate reports X.Y.Z-rc.N, which orders below
+#     X.Y.Z, so the updater offers it X.Y.Z once that is released.
 #
 # A prerelease never becomes GitHub's "latest" release, so installed copies,
 # which poll releases/latest/download/latest.json, never see a candidate. Only
@@ -33,9 +34,9 @@ on:
         required: true
       app_version:
         description: >-
-          X.Y.Z to stamp into tauri.conf.json, apps/desktop/package.json and
-          the desktop_shell Cargo.toml before building; empty keeps the
-          committed version.
+          The candidate's X.Y.Z-rc.N, stamped before building
+          (scripts/release/stamp-candidate-version.mjs); empty keeps the
+          committed version, as a release does.
         type: string
         default: ''
 
@@ -88,35 +89,23 @@ jobs:
       - name: Install JS dependencies
         run: pnpm install --frozen-lockfile
 
-      # A release candidate is built for the version it is a candidate for, in
-      # the same three files release-please writes on release:
-      # tauri.conf.json (installer names, the Windows updater signature),
-      # package.json (the splash screen's version) and the desktop_shell
-      # Cargo.toml (CARGO_PKG_VERSION, which labels the pre-migration backup).
+      # A release candidate is built as X.Y.Z-rc.N, its tag's version, in the
+      # same three files release-please writes on release: tauri.conf.json
+      # (the version the app reports and the updater compares, installer
+      # names, the Windows updater signature), package.json (the splash
+      # screen's version) and the desktop_shell Cargo.toml (CARGO_PKG_VERSION,
+      # which labels the pre-migration backup). Each installer format orders
+      # versions its own way, so the script also gives the MSI and the macOS
+      # CFBundleVersion the numeric forms they need, and outputs the deb and
+      # rpm forms the candidate's Linux packages step bundles with. No form
+      # orders the candidate above X.Y.Z, so X.Y.Z's installers replace it.
       - name: Stamp the candidate's version
+        id: stamp
         if: inputs.app_version != ''
         shell: bash
         env:
           APP_VERSION: ${{ inputs.app_version }}
-        run: |
-          set -euo pipefail
-          node -e '
-            const fs = require("fs");
-            const version = process.env.APP_VERSION;
-            if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error(`app_version must be X.Y.Z, got ${version}`);
-            for (const path of ["apps/desktop/src-tauri/tauri.conf.json", "apps/desktop/package.json"]) {
-              const json = JSON.parse(fs.readFileSync(path, "utf8"));
-              console.log(`${path} version ${json.version} -> ${version}`);
-              json.version = version;
-              fs.writeFileSync(path, JSON.stringify(json, null, 2) + "\n");
-            }
-            const cargo = "apps/desktop/src-tauri/Cargo.toml";
-            const toml = fs.readFileSync(cargo, "utf8");
-            const stamped = toml.replace(/^version = "[^"]*"/m, `version = "${version}"`);
-            if (stamped === toml) throw new Error(`${cargo} has no package version line to stamp`);
-            fs.writeFileSync(cargo, stamped);
-            console.log(`${cargo} version -> ${version}`);
-          '
+        run: node scripts/release/stamp-candidate-version.mjs "$APP_VERSION"
 
       # macOS Developer ID signing and notarization, off unless
       # vars.ENABLE_MACOS_SIGNING is 'true' (docs/development/code-signing.md).
@@ -209,6 +198,10 @@ jobs:
       # vars.ENABLE_WINDOWS_SIGNING on, the Windows leg runs neither: the
       # Windows signing steps at the end of this job build and upload its
       # bundles instead.
+      #
+      # `args` is empty, as for a release, except on a candidate's Linux leg,
+      # which bundles only its AppImage here: the candidate's deb and rpm
+      # step below bundles those two.
       - name: Build, sign, and upload Tauri bundles
         id: tauri
         if: >-
@@ -228,6 +221,7 @@ jobs:
           releaseDraft: false
           prerelease: ${{ inputs.prerelease }}
           uploadUpdaterJson: false
+          args: ${{ runner.os == 'Linux' && inputs.app_version != '' && '--bundles appimage' || '' }}
 
       - name: Build, sign, and upload Tauri bundles (macOS code signing)
         id: tauri-macos-signed
@@ -260,6 +254,69 @@ jobs:
         if: always() && runner.os == 'macOS'
         run: security delete-keychain "${RUNNER_TEMP}/platevault-signing.keychain-db" || true
 
+      # A candidate's deb and rpm. The bundler versions both with `version`,
+      # here the semver X.Y.Z-rc.N. dpkg reads that as X.Y.Z with Debian
+      # revision rc.N and rpm as newer than X.Y.Z, so X.Y.Z's package would
+      # be a downgrade of an installed candidate, which `rpm -U` (the in-app
+      # updater's rpm install) refuses. The stamp step's outputs carry forms
+      # that order below X.Y.Z: the deb is bundled as usual and repacked with
+      # Version X.Y.Z~rc.N, and the rpm is bundled with Version X.Y.Z and
+      # Release 0.rc.N. Both pack the binary tauri-action built, which reports
+      # X.Y.Z-rc.N. The bundler would sign the deb before the repack and the
+      # rpm for X.Y.Z, so both are bundled without updater artifacts and
+      # signed afterwards for X.Y.Z-rc.N, as the Windows signing steps sign
+      # theirs. A release never runs this step.
+      - name: Bundle, sign, and upload the candidate's deb and rpm
+        id: candidate-packages
+        if: runner.os == 'Linux' && inputs.app_version != ''
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          TAG: ${{ inputs.tag_name }}
+          APP_VERSION: ${{ inputs.app_version }}
+          DEB_VERSION: ${{ steps.stamp.outputs.deb_version }}
+          RPM_VERSION: ${{ steps.stamp.outputs.rpm_version }}
+          RPM_RELEASE: ${{ steps.stamp.outputs.rpm_release }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          bundle="$(cargo metadata --format-version 1 --no-deps | jq -r .target_directory)/release/bundle"
+          tauri() { pnpm --dir apps/desktop exec tauri "$@"; }
+          # The single path among the arguments, the bundle a glob found.
+          only() {
+            if [ "$#" -ne 1 ]; then
+              echo "::error::expected one bundle, found $#: $*" >&2
+              return 1
+            fi
+            printf '%s' "$1"
+          }
+          # A restored cache can hold bundles of an earlier build.
+          rm -rf -- "${bundle}/deb" "${bundle}/rpm"
+
+          tauri bundle --bundles deb --config '{"bundle":{"createUpdaterArtifacts":false}}'
+          deb="$(only "${bundle}"/deb/*.deb)"
+          unpacked="${RUNNER_TEMP}/candidate-deb"
+          rm -rf -- "${unpacked}"
+          dpkg-deb --raw-extract "${deb}" "${unpacked}"
+          sed -i "s/^Version: .*/Version: ${DEB_VERSION}/" "${unpacked}/DEBIAN/control"
+          # Root-owned, gzip-compressed, as the bundler packs it.
+          dpkg-deb --root-owner-group -Zgzip --build "${unpacked}" "${deb}"
+          test "$(dpkg-deb --field "${deb}" Version)" = "${DEB_VERSION}"
+
+          rpm_config="$(jq -nc --arg version "${RPM_VERSION}" --arg release "${RPM_RELEASE}" \
+            '{version: $version, bundle: {createUpdaterArtifacts: false, linux: {rpm: {release: $release}}}}')"
+          tauri bundle --bundles rpm --config "${rpm_config}"
+          rpm="$(only "${bundle}"/rpm/*.rpm)"
+
+          for package in "${deb}" "${rpm}"; do
+            tauri signer sign --app-version "${APP_VERSION}" "${package}"
+          done
+          gh release upload "${TAG}" "${deb}" "${deb}.sig" "${rpm}" "${rpm}.sig" \
+            --repo "${GITHUB_REPOSITORY}" --clobber
+          echo "artifactPaths=$(jq -cn --arg deb "${deb}" --arg rpm "${rpm}" '[$deb, $rpm]')" >> "$GITHUB_OUTPUT"
+
       # Build provenance for the bundles this matrix leg produced: a signed statement of
       # which workflow run, at which commit, built these exact bytes. Complements the
       # minisign updater signatures rather than replacing them — those are what the
@@ -275,20 +332,23 @@ jobs:
       # directly — subject-path wants a newline-separated list. Converting here also
       # avoids hardcoding bundle paths: filenames carry the version, and the bundle
       # directory is the workspace's cargo target dir (target/release/bundle), not
-      # apps/desktop/src-tauri/target.
+      # apps/desktop/src-tauri/target. A candidate's Linux leg adds the deb and rpm
+      # its own step bundled, in the same shape.
       - name: Collect artifact paths
         id: subjects
         if: runner.os != 'Windows' || vars.ENABLE_WINDOWS_SIGNING != 'true'
         shell: bash
         env:
           ARTIFACT_PATHS: ${{ steps.tauri.outputs.artifactPaths || steps.tauri-macos-signed.outputs.artifactPaths }}
+          PACKAGE_PATHS: ${{ steps.candidate-packages.outputs.artifactPaths }}
         run: |
           set -euo pipefail
           # Drop .sig sidecars (signatures over the bundles, not artifacts in their own
           # right) and latest.json (a pointer regenerated on every release, so a
           # provenance claim over it ages out immediately).
           filter='.[] | select(endswith(".sig") or endswith("latest.json") | not)'
-          subjects="$(printf '%s' "${ARTIFACT_PATHS:-[]}" | jq -r "${filter}")"
+          subjects="$(jq -rn --argjson tauri "${ARTIFACT_PATHS:-[]}" --argjson packages "${PACKAGE_PATHS:-[]}" \
+            "\$tauri + \$packages | ${filter}")"
 
           # Fail loud rather than silently attesting nothing. If tauri-action changes its
           # output shape, an empty list would leave every bundle unattested while the job

@@ -9,8 +9,10 @@ name: Release candidate
 #     Rust coverage (coverage.yml).
 #   - The installers are built the way the release will build them
 #     (build-installers.yml) and published on a GitHub prerelease for the tag.
-#     A prerelease never becomes "latest", so installed copies are not offered
-#     it.
+#     They are stamped with the candidate's version, X.Y.Z-rc.N, so an
+#     installed candidate is offered X.Y.Z once that is released. A
+#     prerelease never becomes "latest", so installed copies are not offered
+#     the candidate itself.
 #   - `verdict` posts the `release/rc` commit status on the tagged commit:
 #     success only when every suite and the build passed. Release Gate and
 #     release-please.yml's `release` job (scripts/release/check-rc-provenance.mjs) read it.
@@ -34,7 +36,7 @@ jobs:
       statuses: write # the pending release/rc status
     outputs:
       tag: ${{ steps.tag.outputs.tag }}
-      version: ${{ steps.tag.outputs.version }}
+      app_version: ${{ steps.tag.outputs.app_version }}
       notes: ${{ steps.tag.outputs.notes }}
     steps:
       - uses: actions/checkout@v4
@@ -64,7 +66,7 @@ jobs:
           notes="Release candidate ${number} for v${version}, at ${GITHUB_SHA}. This is not a release: installed copies are not offered it."
           {
             echo "tag=$GITHUB_REF_NAME"
-            echo "version=$version"
+            echo "app_version=${version}-rc.${number}"
             echo "notes=$notes"
           } >> "$GITHUB_OUTPUT"
           gh api "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
@@ -118,7 +120,7 @@ jobs:
       tag_name: ${{ needs.candidate.outputs.tag }}
       release_body: ${{ needs.candidate.outputs.notes }}
       prerelease: true
-      app_version: ${{ needs.candidate.outputs.version }}
+      app_version: ${{ needs.candidate.outputs.app_version }}
 
   verdict:
     name: Release candidate verdict
