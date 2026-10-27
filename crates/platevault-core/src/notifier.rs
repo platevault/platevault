@@ -16,7 +16,7 @@ use time::OffsetDateTime;
 
 use crate::{PermissionState, WindowKey};
 
-/// What [`Notifier`] methods return, boxed as [`crate::library::AssetReferences`] does.
+/// What [`Notifier`] and [`Clock`] methods return, boxed as [`crate::library::AssetReferences`] does.
 pub type NotifierFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 /// One reminder notification for one window identity.
