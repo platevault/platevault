@@ -25,7 +25,7 @@ use super::boot::{
 use super::helpers::{
     app_binary_path, blocking_session_delete, clean_shutdown_marker, drain_into, kill_driver_proc,
     port_accepts, preflight, reset_database, reset_webview_storage, reset_window_state,
-    spawn_tauri_webdriver, ProcLog,
+    spawn_tauri_webdriver, window_state_path, ProcLog,
 };
 #[cfg(target_os = "windows")]
 use super::helpers::{describe_stores, local_storage_dirs, local_storage_on_disk_contains};
@@ -122,6 +122,26 @@ enum ResetScope {
     /// Wipe DB + window-state, but keep webview storage (localStorage) —
     /// simulates a real app restart within one journey.
     PreserveWebviewStorage,
+    /// Wipe DB + webview storage, but retain a seeded window-state file.
+    PreserveWindowState,
+}
+
+impl ResetScope {
+    const fn resets_window_state(self) -> bool {
+        !matches!(self, Self::PreserveWindowState)
+    }
+}
+
+#[cfg(test)]
+mod reset_scope_tests {
+    use super::ResetScope;
+
+    #[test]
+    fn preserving_window_state_skips_only_state_reset() {
+        assert!(ResetScope::Full.resets_window_state());
+        assert!(ResetScope::PreserveWebviewStorage.resets_window_state());
+        assert!(!ResetScope::PreserveWindowState.resets_window_state());
+    }
 }
 
 impl E2eApp {
@@ -159,6 +179,23 @@ impl E2eApp {
     /// no `driver.goto(...)` call is needed here (see module docs).
     pub async fn launch() -> Result<Self> {
         Self::launch_with(ResetScope::Full).await
+    }
+
+    /// Launch while keeping this process's seeded window-state file intact.
+    ///
+    /// The isolated database and webview storage are still reset, so this is a
+    /// fresh journey except for the geometry under test.
+    pub async fn launch_preserving_window_state() -> Result<Self> {
+        Self::launch_with(ResetScope::PreserveWindowState).await
+    }
+
+    /// Path to this test process's isolated `tauri-plugin-window-state` JSON.
+    /// Seed it before calling [`Self::launch_preserving_window_state`].
+    #[must_use]
+    pub fn window_state_path() -> PathBuf {
+        let env = instance_env();
+        super::helpers::window_state_path(&env.vars)
+            .expect("isolated E2E window-state path is unavailable")
     }
 
     /// Simulate a real app restart WITHIN one journey: a fresh WebDriver
@@ -203,7 +240,9 @@ impl E2eApp {
         if matches!(scope, ResetScope::Full) {
             reset_webview_storage(&env.vars);
         }
-        reset_window_state(&env.vars);
+        if scope.resets_window_state() {
+            reset_window_state(&env.vars);
+        }
 
         let app_binary = app_binary_path()?;
 
