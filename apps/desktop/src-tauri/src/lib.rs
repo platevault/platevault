@@ -77,6 +77,10 @@ include!("bootstrap/specta.rs");
 /// Layers 2 and 3 are decided by [`crate::bootstrap::mcp_bridge_bind_address`],
 /// which is where they are tested; this function only reads the environment and
 /// logs.
+///
+/// `PV_MCP_BRIDGE_PORT` pins the base port the plugin scans upward from
+/// ([`crate::bootstrap::mcp_bridge_base_port`]). It is not a gate: it cannot
+/// open a bridge that layers 1-3 keep closed.
 #[cfg(feature = "dev-tools")]
 #[expect(
     clippy::cognitive_complexity,
@@ -102,7 +106,17 @@ fn build_mcp_bridge_plugin() -> Option<tauri::plugin::TauriPlugin<tauri::Wry>> {
              reachable from that address"
         );
     }
-    Some(tauri_plugin_mcp_bridge::init_with_config(tauri_plugin_mcp_bridge::Config::new(bind)))
+    let mut config = tauri_plugin_mcp_bridge::Config::new(bind);
+    if let Some(base_port) =
+        crate::bootstrap::mcp_bridge_base_port(std::env::var("PV_MCP_BRIDGE_PORT").ok().as_deref())
+    {
+        config.base_port = base_port;
+    }
+    tracing::info!(
+        base_port = config.base_port,
+        "MCP bridge base port (the plugin scans up to 100 ports from here and logs the one it took)"
+    );
+    Some(tauri_plugin_mcp_bridge::init_with_config(config))
 }
 
 /// Build the Tauri `App` **without** starting the event loop.
