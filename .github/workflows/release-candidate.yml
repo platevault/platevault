@@ -37,6 +37,13 @@ jobs:
       version: ${{ steps.tag.outputs.version }}
       notes: ${{ steps.tag.outputs.notes }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # A tag pushed by hand could name any commit; a candidate is a commit of
+      # main, so the release PR's diff against it means something.
       - name: Parse the tag and mark the candidate pending
         id: tag
         env:
@@ -46,6 +53,10 @@ jobs:
           set -euo pipefail
           if [[ ! "$GITHUB_REF_NAME" =~ ^rc/v([0-9]+\.[0-9]+\.[0-9]+)-rc\.([0-9]+)$ ]]; then
             echo "::error::$GITHUB_REF_NAME is not rc/vX.Y.Z-rc.N"
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::$GITHUB_REF_NAME points at $GITHUB_SHA, which is not a commit of main."
             exit 1
           fi
           version="${BASH_REMATCH[1]}"
