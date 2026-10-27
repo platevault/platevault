@@ -8,6 +8,8 @@
 
 **Amended**: 2026-10-26, to the Round 11 decisions D-W144 and D-W149, to the Rounds 5 to 9 decisions recorded that day (D-W150, D-W157 to D-W159, D-W161 and D-W162), the owner's answer D-W156, and the 2026-10-14 Q35 window decision D-W163 (astro-plan-ocyuc.2; PR #1889).
 
+**Amended**: 2026-10-27, to the owner's answers D-W164 (the Round 5 lead answers confirmed) and D-W165 (better match available: C + A), astro-plan-ygihm.
+
 **Status**: Active, reconciled 2026-10-26 (`specs/SPEC_STATUS.md`). Landed: this contract and its journeys (#1776, #1778), the Round 9 amendments (#1804, #1836, #1840, #1844), the owner's answers (#1849, #1850, #1855) and the F4 backend cut-over (#1851). Remains: the clean-slate frontend (epic astro-plan-ocyuc), the coverage review astro-plan-lzrq, the requirements reviews in `checklists/requirements.md`, and every step of molecule astro-plan-mol-92n after specify. Conservative product decisions and all human-approval gate waivers are authorised.
 
 **Input**: Rebuild PlateVault cleanly, preserve the old code as a recoverable reference, and reuse code where it satisfies the agreed product contract.
@@ -291,6 +293,7 @@ The user authorized conservative product defaults and, on 2026-10-04, waived eve
 | Rounds 5 to 9, 2026-10-10 to 2026-10-16, recorded 2026-10-26 (D-W150 to D-W154, D-W157 to D-W162) | All feature owners |
 | Owner's answers, 2026-10-26 (D-W155, D-W156) | PV-LIB, PV-PRJ, PV-STO, PV-PLAN |
 | Window minimum and restored-window placement, owner's answer 2026-10-14 (Q35; D-W163) | All feature owners |
+| Owner's answers, 2026-10-27 (D-W164 Round 5 confirmed, D-W165 better match) | PV-LIB, PV-CAL, PV-PLAN |
 
 The existing constitution prohibits debayering. A raw/CFA review specification must define supported read-only channel handling or seek an explicit constitutional amendment before adding debayered preview behavior.
 

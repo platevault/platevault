@@ -1,7 +1,7 @@
 ---
 id: J23
 title: Review Project calibration and configure its View
-version: 9
+version: 10
 status: draft
 last_reviewed: 2026-10-03
 actors: [primary-user]
@@ -35,6 +35,7 @@ The user checks the pinned calibration for the sessions in Project `NGC 7000 HOO
 - P3: The library also holds the two other masters J36/S9 and J36/S9a imported: a master dark from a second camera (ZWO ASI294MM Pro) and an OIII master flat from a second optical train (Esprit 100). Neither is part of rig RedCat. The bias master also holds the 15 Jun version that J36/S9a added, which is never the closest version for these sessions.
 - P4: Siril is installed at a known path and not yet configured in PlateVault.
 - P5: The J19/P5 manifest is available.
+- P7: Outside the library, `Astro-T7/Incoming/MasterDark_2026-09-25.xisf` is a RedCat master dark taken on 25 Sep, with the camera, dimensions, binning, gain, offset, 300 s exposure and temperature of `MasterDark_2026-09-20.xisf`, so it passes every dark check for the five sessions.
 
 ## Steps
 
@@ -108,6 +109,13 @@ The user checks the pinned calibration for the sessions in Project `NGC 7000 HOO
 - **Expect (negative):** Hide and Restore do not move, rename or delete the master file.
 - **Trace:** CAL-FR-16 · D-W76, D-W106
 
+### S7d — A closer dark arrives for sessions that already have one {#S7d}
+
+- **Do:** Choose **Import masters**, pick `MasterDark_2026-09-25.xisf` from P7, read the import review, leave its **Better for: …** choice unticked and finish the import. Open the details of the 24 Sep and 18 Sep sessions.
+- **Expect:** The review lists no session under **Used for:**, because none waits for a dark. It lists the 24, 26, 28 and 30 Sep sessions under the unticked **Better for: …** choice: 25 Sep is closer to their capture than the pinned 20 Sep dark. The 18 Sep session is not listed, because 20 Sep stays closer to it. After the import, the 24 Sep session's darks row shows **Better match available** beside **Reassign…**. The 18 Sep session's darks row shows no hint.
+- **Expect (negative):** Every session keeps `MasterDark_2026-09-20.xisf` pinned. No session enters Needs calibration, no issue or counter changes, and Project `NGC 7000 HOO` gets no pending change.
+- **Trace:** LIB-FR-25, LIB-FR-29, LIB-AC-41 · CAL-FR-21, CAL-FR-25 · D-W106, D-W165
+
 ### S8 — Choose Siril in the Project's View {#S8}
 
 - **Do:** Open Project `NGC 7000 HOO`'s **View** step and choose **Siril** under Application. If its executable is not found, locate it in Settings › Applications and return to View.
@@ -146,6 +154,7 @@ The user checks the pinned calibration for the sessions in Project `NGC 7000 HOO
 - SC6: Siril and the input mode are chosen in View; an unknown or write-prone profile cannot use Symlinks without a refusal and explicit mode choice (S8, S9).
 - SC7: Apply patches all 20 corrected 24 Sep FITS lights with `OBJECT = 'NGC 7000'`. PlateVault's FITS reader returns that object value from every patched copy, and all 20 original digests remain unchanged (S10, S11).
 - SC8: Apply patches all 56 corrected 28 Sep FITS lights with the RedCat rig values from J19/P2 and J15/S3. PlateVault's reader returns `TELESCOP = 'RedCat 51'`, `INSTRUME = 'ZWO ASI2600MM Pro'` and `FOCALLEN = 250 mm` from every patched copy. Where a source frame contains `FOCAL`, the patched value is 250 mm; where it contains `FLENGTH`, the patched value is 0.25 m. All 56 original digests remain unchanged (S10, S11).
+- SC9: Importing a closer dark lists exactly the four sessions it outranks under an unticked **Better for: …** choice. While unticked, it changes no pin, adds no pending change, and shows **Better match available** only on those sessions' darks rows (S7d).
 
 ## Known gaps
 
@@ -187,3 +196,6 @@ The user checks the pinned calibration for the sessions in Project `NGC 7000 HOO
 - **Δ9** 2026-10-19 · S11 · behavior-change
   Apply reports "2 corrected values written to patched copies"; its report states the corrected values written, not what the generic application reads. A present `FOCAL` or `FLENGTH` alias card is overwritten, and none is added to a frame that lacks it. G10 keeps only the route for other non-FITS formats open.
   Evidence: owner's answers of 2026-10-19 in astro-plan-rzbzu.1, D-W123, PREP-FR-20 · by: Main (intent-gated)
+- **Δ10** 2026-10-27 · +P7, +S7d · behavior-change
+  Owner's answer "Better match: go with C + A" (D-W165): a newly imported calibration that outranks a session's pin is offered in the import review as an unticked **Better for: …** choice, and the session's details show a passive **Better match available** hint beside **Reassign…**. S7d imports a closer dark and asserts both, and that leaving the choice unticked changes nothing. SC9 is new.
+  Evidence: D-W165 (owner's answer, 2026-10-27, astro-plan-ygihm), LIB-FR-29, LIB-AC-41, CAL-FR-25 · by: Main (intent-gated)
