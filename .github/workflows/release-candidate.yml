@@ -1,0 +1,162 @@
+name: Release candidate
+
+# Verifies one release candidate, the commit a rc/vX.Y.Z-rc.N tag points at
+# (docs/release/release-candidates.md). Cut release candidate creates the tag.
+#
+#   - The release suites run at the tagged commit: the full journey matrix on
+#     Ubuntu and Windows, the window runtime checks and the macOS journeys
+#     (e2e.yml, suite `release`; macOS reports without blocking, #489), and
+#     Rust coverage (coverage.yml).
+#   - The installers are built the way the release will build them
+#     (build-installers.yml) and published on a GitHub prerelease for the tag.
+#     A prerelease never becomes "latest", so installed copies are not offered
+#     it.
+#   - `verdict` posts the `release/rc` commit status on the tagged commit:
+#     success only when every suite and the build passed. Release Gate and
+#     release-please.yml's `release` job (scripts/release/check-rc-provenance.mjs) read it.
+
+on:
+  push:
+    tags: ['rc/v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-candidate-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  candidate:
+    name: Read the candidate
+    runs-on: ubuntu-latest
+    permissions:
+      statuses: write # the pending release/rc status
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      version: ${{ steps.tag.outputs.version }}
+      notes: ${{ steps.tag.outputs.notes }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # A tag pushed by hand could name any commit; a candidate is a commit of
+      # main, so the release PR's diff against it means something.
+      - name: Parse the tag and mark the candidate pending
+        id: tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$GITHUB_REF_NAME" =~ ^rc/v([0-9]+\.[0-9]+\.[0-9]+)-rc\.([0-9]+)$ ]]; then
+            echo "::error::$GITHUB_REF_NAME is not rc/vX.Y.Z-rc.N"
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::$GITHUB_REF_NAME points at $GITHUB_SHA, which is not a commit of main."
+            exit 1
+          fi
+          version="${BASH_REMATCH[1]}"
+          number="${BASH_REMATCH[2]}"
+          notes="Release candidate ${number} for v${version}, at ${GITHUB_SHA}. This is not a release: installed copies are not offered it."
+          {
+            echo "tag=$GITHUB_REF_NAME"
+            echo "version=$version"
+            echo "notes=$notes"
+          } >> "$GITHUB_OUTPUT"
+          gh api "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            -f state=pending -f context=release/rc \
+            -f "description=${GITHUB_REF_NAME}" -f "target_url=${RUN_URL}" > /dev/null
+
+  e2e:
+    name: Release suite
+    needs: candidate
+    uses: ./.github/workflows/e2e.yml
+    with:
+      suite: release
+
+  coverage:
+    name: Coverage
+    needs: candidate
+    uses: ./.github/workflows/coverage.yml
+
+  prerelease:
+    name: Create the prerelease
+    needs: candidate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Create the GitHub prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.candidate.outputs.tag }}
+          NOTES: ${{ needs.candidate.outputs.notes }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "$TAG already has a release; a re-run uploads to it."
+          else
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --prerelease \
+              --title "$TAG" --notes "$NOTES"
+          fi
+
+  build:
+    name: Build installers
+    needs: [candidate, prerelease]
+    uses: ./.github/workflows/build-installers.yml
+    permissions:
+      contents: write # tauri-action uploads bundles to the prerelease
+      id-token: write # OIDC identity that signs the attestation
+      attestations: write # publish the attestation to this repo
+      actions: read # the SignPath connector reads the job's artifacts
+    secrets: inherit
+    with:
+      tag_name: ${{ needs.candidate.outputs.tag }}
+      release_body: ${{ needs.candidate.outputs.notes }}
+      prerelease: true
+      app_version: ${{ needs.candidate.outputs.version }}
+
+  verdict:
+    name: Release candidate verdict
+    needs: [candidate, e2e, coverage, build]
+    if: ${{ always() && needs.candidate.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      statuses: write # the final release/rc status
+    steps:
+      - name: Post the candidate's result
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.candidate.outputs.tag }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          E2E: ${{ needs.e2e.result }}
+          COVERAGE: ${{ needs.coverage.result }}
+          BUILD: ${{ needs.build.result }}
+        run: |
+          set -euo pipefail
+          state=success
+          {
+            echo "## ${TAG}"
+            echo ""
+            echo "| Part | Result |"
+            echo "| --- | --- |"
+            echo "| Release suite (e2e.yml) | ${E2E} |"
+            echo "| Coverage | ${COVERAGE} |"
+            echo "| Installers | ${BUILD} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          for result in "$E2E" "$COVERAGE" "$BUILD"; do
+            [ "$result" = success ] || state=failure
+          done
+          gh api "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            -f "state=${state}" -f context=release/rc \
+            -f "description=${TAG}" -f "target_url=${RUN_URL}" > /dev/null
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$state" != success ]; then
+            echo "**${TAG} failed.** Fix main and cut a new candidate." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "**${TAG} passed.** The release PR for this version may merge while main stays at this commit." >> "$GITHUB_STEP_SUMMARY"

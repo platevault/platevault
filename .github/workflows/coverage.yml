@@ -2,8 +2,10 @@ name: Coverage
 
 # Rust test coverage via cargo-llvm-cov.
 #
-# Runs on every push to main and on pull requests that touch Rust sources.
-# Report-only: no threshold gate until a baseline is established.
+# Runs for every release candidate (release-candidate.yml calls this workflow)
+# and on manual dispatch, not on pull requests or pushes to main.
+# Report-only: no threshold gate until a baseline is established. A failing
+# test still fails the job, and with it the candidate.
 #
 # Linux-only: llvm-cov is OS-agnostic and the instrumented binaries are
 # significantly larger; running on one platform avoids triple disk pressure.
@@ -29,9 +31,8 @@ permissions:
   contents: read
 
 on:
-  pull_request:
-  push:
-    branches: [main]
+  workflow_call:
+  workflow_dispatch:
 
 concurrency:
   group: coverage-${{ github.workflow }}-${{ github.ref }}
@@ -45,32 +46,8 @@ env:
   CARGO_PROFILE_TEST_DEBUG: line-tables-only
 
 jobs:
-  changes:
-    name: Detect changes (coverage)
-    runs-on: ubuntu-latest
-    outputs:
-      rust: ${{ steps.decide.outputs.rust }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v4
-        id: filter
-        with:
-          filters: |
-            rust:
-              - 'crates/**'
-              - 'apps/desktop/src-tauri/**'
-              - 'tests/**'
-              - '**/*.rs'
-              - '**/Cargo.toml'
-              - 'Cargo.lock'
-              - '.github/workflows/coverage.yml'
-      - id: decide
-        run: echo "rust=${{ steps.filter.outputs.rust }}" >> "$GITHUB_OUTPUT"
-
   coverage:
     name: Rust coverage (llvm-cov)
-    needs: changes
-    if: needs.changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

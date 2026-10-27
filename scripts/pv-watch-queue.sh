@@ -46,7 +46,8 @@ jq -e '
    "Unit + integration (L1+L2) — windows-latest",
    "UI mock-mode (Playwright)",
    "Real-UI smoke (L3) — ubuntu-latest",
-   "Supply chain (cargo-deny)"] as $required
+   "Supply chain (cargo-deny)",
+   "Release Gate"] as $required
   | [ .[]
       | . as $pr
       | ($pr.statusCheckRollup // []) as $rollup

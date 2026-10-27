@@ -10,25 +10,37 @@ name: Release Gate
 #
 # Hard/soft policy is configured in the `env` block below. Start policy:
 #   version-sync ...... HARD  (the four version fields must agree)
+#   rc-provenance ..... HARD  (a passed release candidate exists for this
+#                              version, and this commit differs from it only
+#                              in release metadata; docs/release/release-candidates.md)
 #   build ............. HARD  (release build compiles, dev-tools OFF)
 #   devtools-off ...... HARD  (dev-tools feature is not a default; release binary omits it)
 #   tests ............. SOFT  (full suite; warns but does not block)
 #   changelog ......... SOFT  (cosmetic: CHANGELOG updated on the release PR)
 #
-# The shepherd/user reads the "Release Gate / verdict" check: green = safe to
-# merge; red = a HARD invariant failed (see the table in the run summary).
-# SOFT warnings surface in the summary table (status: warn) without blocking,
-# so a release can still be cut with visible, non-lost warnings.
+# "Release Gate" is a required check on main (scripts/branch-protection-main.sh),
+# published by the `release-gate-result` job, which always runs. A PR that is
+# not a release PR, and every merge-queue entry, passes it at once: the
+# `scope` job finds nothing to check and the heavy `release-gate` job (named
+# "Release Gate checks") is skipped. On a release PR the result is the checks'
+# verdict: green = safe to merge; red = a HARD invariant failed (see the table
+# in the run summary). SOFT warnings surface in the summary table (status:
+# warn) without blocking, so a release can still be cut with visible,
+# non-lost warnings.
 
 on:
   pull_request:
     branches: [main]
+  # A queue entry waits on every required context, so this workflow must
+  # publish "Release Gate" for it too.
+  merge_group:
   push:
     tags: ["v*"]
   workflow_dispatch: {}
 
 permissions:
   contents: read
+  statuses: read # rc-provenance reads the candidate's release/rc status
 
 concurrency:
   group: release-gate-${{ github.ref }}
@@ -37,6 +49,7 @@ concurrency:
 env:
   # Per-check gating policy: "hard" fails the verdict, "soft" only warns.
   POLICY_VERSION_SYNC: hard
+  POLICY_RC_PROVENANCE: hard
   POLICY_BUILD: hard
   POLICY_DEVTOOLS_OFF: hard
   POLICY_DEVTOOLS_BUNDLE: hard
@@ -44,13 +57,25 @@ env:
   POLICY_CHANGELOG: soft
 
 jobs:
+  scope:
+    name: Release Gate scope
+    runs-on: ubuntu-latest
+    outputs:
+      release: ${{ steps.scope.outputs.release }}
+    steps:
+      - id: scope
+        env:
+          RELEASE: >-
+            ${{ github.event_name == 'workflow_dispatch'
+              || github.event_name == 'push'
+              || (github.event_name == 'pull_request' && startsWith(github.head_ref, 'release-please--')) }}
+        run: echo "release=${RELEASE}" >> "$GITHUB_OUTPUT"
+
   release-gate:
-    name: Release Gate
+    name: Release Gate checks
+    needs: scope
     # Only meaningful on release-please PRs, release tags, or manual dispatch.
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      github.event_name == 'push' ||
-      startsWith(github.head_ref, 'release-please--')
+    if: needs.scope.outputs.release == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -88,6 +113,30 @@ jobs:
             echo "status=pass" >> "$GITHUB_OUTPUT"
           else
             echo "status=fail" >> "$GITHUB_OUTPUT"
+          fi
+
+      # --- Check 1b: release candidate provenance (HARD) ---
+      # Enforces main -> rc -> release: the version may ship only from the
+      # commit of its newest release candidate whose run passed, plus the
+      # metadata release-please writes. A commit that landed on main after the
+      # candidate fails this until a new candidate is cut from it.
+      - name: Release candidate provenance
+        id: rc_provenance
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git fetch --force --quiet origin 'refs/tags/rc/*:refs/tags/rc/*'
+          VERSION=$(jq -r '.["."]' .release-please-manifest.json)
+          if OUT=$(node scripts/release/check-rc-provenance.mjs --version "$VERSION" --commit HEAD 2>&1); then
+            echo "$OUT"
+            echo "status=pass" >> "$GITHUB_OUTPUT"
+            echo "detail=${OUT##*$'\n'}" >> "$GITHUB_OUTPUT"
+          else
+            echo "$OUT"
+            echo "status=fail" >> "$GITHUB_OUTPUT"
+            echo "detail=$(grep -m1 '::error::' <<<"$OUT" | sed 's/^::error:://')" >> "$GITHUB_OUTPUT"
           fi
 
       # --- Check 2: build (HARD) ---
@@ -208,6 +257,8 @@ jobs:
         env:
           VS_STATUS: ${{ steps.version_sync.outputs.status }}
           VS_DETAIL: ${{ steps.version_sync.outputs.detail }}
+          RC_STATUS: ${{ steps.rc_provenance.outputs.status }}
+          RC_DETAIL: ${{ steps.rc_provenance.outputs.detail }}
           BUILD_STATUS: ${{ steps.build.outputs.status }}
           BUILD_DETAIL: ${{ steps.build.outputs.detail }}
           DT_STATUS: ${{ steps.devtools_off.outputs.status }}
@@ -244,6 +295,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
           emit "version-sync" "$POLICY_VERSION_SYNC" "${VS_STATUS:-fail}" "$VS_DETAIL"
+          emit "rc-provenance" "$POLICY_RC_PROVENANCE" "${RC_STATUS:-fail}" "$RC_DETAIL"
           emit "build (release, dev-tools off)" "$POLICY_BUILD" "${BUILD_STATUS:-fail}" "$BUILD_DETAIL"
           emit "dev-tools-off" "$POLICY_DEVTOOLS_OFF" "${DT_STATUS:-fail}" "$DT_DETAIL"
           emit "dev-tools-off (frontend bundle)" "$POLICY_DEVTOOLS_BUNDLE" "${DTB_STATUS:-fail}" "$DTB_DETAIL"
@@ -258,3 +310,30 @@ jobs:
           fi
           echo "**Verdict: PASS** — safe to merge (soft warnings, if any, are shown above)." >> "$GITHUB_STEP_SUMMARY"
           echo "Release gate PASS."
+
+  # The required "Release Gate" context. It always runs and always concludes,
+  # so neither a PR nor a queue entry ever waits on a skipped check
+  # (scripts/branch-protection-main.sh, "do not rely on a skipped conclusion").
+  release-gate-result:
+    name: Release Gate
+    needs: [scope, release-gate]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report the gate's result
+        env:
+          RELEASE: ${{ needs.scope.outputs.release }}
+          SCOPE_RESULT: ${{ needs.scope.result }}
+          CHECKS: ${{ needs.release-gate.result }}
+        run: |
+          set -euo pipefail
+          if [ "$SCOPE_RESULT" != success ]; then
+            echo "Release Gate could not decide its scope (scope job: $SCOPE_RESULT)."
+            exit 1
+          fi
+          if [ "$RELEASE" != true ]; then
+            echo "Not a release PR, tag or dispatch: nothing to gate."
+            exit 0
+          fi
+          echo "Release Gate checks: $CHECKS"
+          [ "$CHECKS" = success ]
