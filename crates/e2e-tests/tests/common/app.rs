@@ -132,18 +132,6 @@ impl ResetScope {
     }
 }
 
-#[cfg(test)]
-mod reset_scope_tests {
-    use super::ResetScope;
-
-    #[test]
-    fn preserving_window_state_skips_only_state_reset() {
-        assert!(ResetScope::Full.resets_window_state());
-        assert!(ResetScope::PreserveWebviewStorage.resets_window_state());
-        assert!(!ResetScope::PreserveWindowState.resets_window_state());
-    }
-}
-
 impl E2eApp {
     /// Launch a full E2E session: preflight → reset DB → spawn the
     /// `tauri-webdriver` CLI proxy → create the WebDriver session with a
@@ -2087,5 +2075,17 @@ impl Drop for E2eApp {
             blocking_session_delete(self.proxy_port);
             kill_driver_proc(&mut child);
         }
+    }
+}
+
+#[cfg(test)]
+mod reset_scope_tests {
+    use super::ResetScope;
+
+    #[test]
+    fn preserving_window_state_skips_only_state_reset() {
+        assert!(ResetScope::Full.resets_window_state());
+        assert!(ResetScope::PreserveWebviewStorage.resets_window_state());
+        assert!(!ResetScope::PreserveWindowState.resets_window_state());
     }
 }

@@ -91,8 +91,10 @@ async fn wait_for_settled_probe(app: &E2eApp) -> anyhow::Result<Value> {
         let work_y = work["y"].as_i64().context("probe monitor_work_area.y missing")?;
         let work_w = work["w"].as_u64().context("probe monitor_work_area.w missing")?;
         let work_h = work["h"].as_u64().context("probe monitor_work_area.h missing")?;
-        let min_inner_w = u64::from(MIN_WIDTH).min(work_w.saturating_sub(outer_w.saturating_sub(inner_w)));
-        let min_inner_h = u64::from(MIN_HEIGHT).min(work_h.saturating_sub(outer_h.saturating_sub(inner_h)));
+        let min_inner_w =
+            u64::from(MIN_WIDTH).min(work_w.saturating_sub(outer_w.saturating_sub(inner_w)));
+        let min_inner_h =
+            u64::from(MIN_HEIGHT).min(work_h.saturating_sub(outer_h.saturating_sub(inner_h)));
         let fully_on_monitor = x >= work_x
             && y >= work_y
             && x.saturating_add(outer_w as i64) <= work_x.saturating_add(work_w as i64)
@@ -212,12 +214,12 @@ async fn first_move_after_show_is_not_refitted() -> anyhow::Result<()> {
         let target_y = work_y + 180;
         let pointer_x = target_x + 120;
         let pointer_y = target_y + 12;
-        let active_before = Command::new("xdotool")
-            .args(["getactivewindow"])
-            .output()
-            .context("xdotool could not read the active window")?;
-        ensure!(active_before.status.success(), "xdotool getactivewindow failed before drag");
-        let window_id = String::from_utf8_lossy(&active_before.stdout).trim().to_owned();
+        let window_id = app_x11_window(&before).await?;
+        let activated = Command::new("xdotool")
+            .args(["windowactivate", "--sync", &window_id])
+            .status()
+            .context("xdotool could not activate the app window")?;
+        ensure!(activated.success(), "xdotool windowactivate failed for {window_id}");
         let geometry_before = Command::new("xdotool")
             .args(["getwindowgeometry", "--shell", &window_id])
             .output()
@@ -268,7 +270,10 @@ async fn first_move_after_show_is_not_refitted() -> anyhow::Result<()> {
             "WINDOW_RUNTIME_CASE_C_X11_IMMEDIATE window_id={active_after} geometry={} probe={immediately_after}",
             String::from_utf8_lossy(&geometry_after.stdout).replace('\n', ";")
         );
-        ensure!(active_after == window_id, "X11 drag changed active window from {window_id} to {active_after}");
+        ensure!(
+            active_after == window_id,
+            "X11 drag changed active window from {window_id} to {active_after}"
+        );
         ensure!(
             immediately_after["outer"]["x"].as_i64() == Some(target_x),
             "Openbox did not move the active window to x={target_x} immediately after the drag: {immediately_after}"
@@ -304,4 +309,40 @@ async fn first_move_after_show_is_not_refitted() -> anyhow::Result<()> {
         println!("WINDOW_RUNTIME_CASE_C_WINDOWS_PROGRAMMATIC_PROXY={after}");
     }
     app.shutdown().await
+}
+
+/// The X11 window of the app's main window: the one visible window whose
+/// client area has the probed inner size. The active window is no proof: a
+/// window of the previous test can still be on top while it closes.
+#[cfg(target_os = "linux")]
+async fn app_x11_window(probe: &Value) -> anyhow::Result<String> {
+    let width = probe["inner"]["w"].as_i64().context("inner width missing")?;
+    let height = probe["inner"]["h"].as_i64().context("inner height missing")?;
+    let deadline = tokio::time::Instant::now() + RESTORE_TIMEOUT;
+    loop {
+        let listed = Command::new("xdotool")
+            .args(["search", "--onlyvisible", "--name", ""])
+            .output()
+            .context("xdotool could not list visible windows")?;
+        let ids = String::from_utf8_lossy(&listed.stdout).into_owned();
+        let mut matching = Vec::new();
+        for id in ids.split_whitespace() {
+            let geometry =
+                Command::new("xdotool").args(["getwindowgeometry", "--shell", id]).output()?;
+            let shell = String::from_utf8_lossy(&geometry.stdout);
+            let field = |name: &str| {
+                shell.lines().find_map(|line| line.strip_prefix(name)?.parse::<i64>().ok())
+            };
+            if field("WIDTH=") == Some(width) && field("HEIGHT=") == Some(height) {
+                matching.push(id.to_owned());
+            }
+        }
+        match matching.as_slice() {
+            [one] => return Ok(one.clone()),
+            _ if tokio::time::Instant::now() >= deadline => anyhow::bail!(
+                "expected one visible {width}x{height} X11 window for the app, found {matching:?}"
+            ),
+            _ => tokio::time::sleep(Duration::from_millis(200)).await,
+        }
+    }
 }
