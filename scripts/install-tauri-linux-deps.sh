@@ -49,6 +49,12 @@ for attempt in 1 2; do
   if (( attempt == 2 )); then
     switch_archive_mirror
     mirror=archive.ubuntu.com
+    # A timeout during unpacking leaves dpkg interrupted, and apt refuses to
+    # install until it is configured again.
+    if ! sudo dpkg --configure -a; then
+      echo "dpkg --configure -a failed after attempt 1; the package state is broken, so attempt 2 can't install." >&2
+      exit 1
+    fi
   fi
   echo "Installing Tauri Linux dependencies (attempt ${attempt}/2, initial mirror ${mirror}, budget ${budget}): $*"
   set +e

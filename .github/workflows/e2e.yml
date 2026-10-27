@@ -758,7 +758,7 @@ jobs:
     # (real-ui-e2e-ubuntu shards) instead.
     if: >-
       needs.changes.outputs.run == 'true'
-      && (github.event_name == 'pull_request' || github.event_name == 'merge_group' || (github.event_name == 'workflow_dispatch' && inputs.run_window_runtime != true))
+      && (github.event_name == 'pull_request' || github.event_name == 'merge_group')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -880,7 +880,7 @@ jobs:
           PV_E2E_APP_BIN: ${{ github.workspace }}/${{ env.APP_BIN }}
         run: >-
           xvfb-run -s "-screen 0 1600x1200x24" -a
-          sh -c 'openbox >/tmp/openbox.log 2>&1 & sleep 2; cargo nextest run --archive-file e2e-archive.tar.zst --workspace-remap . --profile e2e --run-ignored all --no-tests=fail -E "binary(window_runtime) & (test(restored_offscreen_small_window_is_clamped_to_visible_monitor) | test(restored_maximized_window_stays_maximized_after_focus_event) | test(first_move_after_show_is_not_refitted))" --status-level all --success-output immediate'
+          sh -c 'openbox >/tmp/openbox.log 2>&1 & sleep 2; cargo nextest run --archive-file e2e-archive.tar.zst --workspace-remap . --profile e2e --run-ignored all --no-tests=fail --test-threads 1 -E "binary(window_runtime) & (test(restored_offscreen_small_window_is_clamped_to_visible_monitor) | test(restored_maximized_window_stays_maximized_after_focus_event) | test(first_move_after_show_is_not_refitted))" --status-level all --success-output immediate'
 
   window-runtime-windows:
     name: Window runtime restore — windows-latest
@@ -918,7 +918,7 @@ jobs:
       - name: Run native window runtime checks (programmatic move proxy only)
         env:
           PV_E2E_APP_BIN: ${{ github.workspace }}/${{ env.APP_BIN }}
-        run: cargo nextest run --archive-file e2e-archive.tar.zst --workspace-remap . --profile e2e --run-ignored all --no-tests=fail -E 'binary(window_runtime) & (test(restored_offscreen_small_window_is_clamped_to_visible_monitor) | test(restored_maximized_window_stays_maximized_after_focus_event) | test(first_move_after_show_is_not_refitted))' --status-level all --success-output immediate
+        run: cargo nextest run --archive-file e2e-archive.tar.zst --workspace-remap . --profile e2e --run-ignored all --no-tests=fail --test-threads 1 -E 'binary(window_runtime) & (test(restored_offscreen_small_window_is_clamped_to_visible_monitor) | test(restored_maximized_window_stays_maximized_after_focus_event) | test(first_move_after_show_is_not_refitted))' --status-level all --success-output immediate
 
   # Gate for the smoke job, and the ONLY publisher of
   # "Real-UI smoke (L3) — ubuntu-latest"
@@ -940,7 +940,7 @@ jobs:
     needs: [changes, smoke-ubuntu]
     if: >-
       always()
-      && (github.event_name == 'pull_request' || github.event_name == 'merge_group' || (github.event_name == 'workflow_dispatch' && inputs.run_window_runtime != true))
+      && (github.event_name == 'pull_request' || github.event_name == 'merge_group')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

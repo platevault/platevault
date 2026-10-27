@@ -169,22 +169,53 @@ async fn restored_offscreen_small_window_is_clamped_to_visible_monitor() -> anyh
     app.shutdown().await
 }
 
-/// A saved maximized window stays OS-maximized after a native focus event.
+/// A saved maximized window is shown maximized, filling the monitor's work
+/// area, and stays so after a native focus event.
 #[tokio::test]
 #[ignore = "Layer-2 real-UI runtime check: needs tauri-webdriver CLI + desktop_shell --features e2e + served frontend; run via dedicated window runtime workflow"]
 async fn restored_maximized_window_stays_maximized_after_focus_event() -> anyhow::Result<()> {
     let app = seed_and_launch(40, 40, 800, 500, true).await?;
     let before = wait_for_settled_probe(&app).await?;
+    let before = wait_until_visible(&app, before).await?;
     ensure!(before["maximized"] == true, "saved maximized state was not restored: {before}");
+    ensure_fills_work_area(&before, "before the focus event")?;
     let _: Value = invoke_native(&app, "e2e_window_focus", json!({})).await?;
     tokio::time::sleep(SETTLE).await;
     let after_focus = probe(&app).await?;
     ensure!(
-        after_focus["maximized"] == true,
+        after_focus["maximized"] == true && after_focus["visible"] == true,
         "maximized state was lost after focus event: {after_focus}"
     );
+    ensure_fills_work_area(&after_focus, "after the focus event")?;
     println!("WINDOW_RUNTIME_CASE_B_BOUNDS={after_focus}");
     app.shutdown().await
+}
+
+/// The probe once the window is shown; a maximized flag on a hidden window
+/// proves nothing about what the user sees.
+async fn wait_until_visible(app: &E2eApp, mut last: Value) -> anyhow::Result<Value> {
+    let deadline = tokio::time::Instant::now() + RESTORE_TIMEOUT;
+    while last["visible"] != true {
+        ensure!(tokio::time::Instant::now() < deadline, "main window never became visible: {last}");
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        last = probe(app).await?;
+    }
+    Ok(last)
+}
+
+/// A maximized window's outer bounds cover the monitor's work area.
+fn ensure_fills_work_area(state: &Value, when: &str) -> anyhow::Result<()> {
+    let (work_x, work_y, work_w, work_h) = work_bounds(state)?;
+    let outer = &state["outer"];
+    let (x, y) = (outer["x"].as_i64(), outer["y"].as_i64());
+    let (w, h) = (outer["w"].as_i64(), outer["h"].as_i64());
+    ensure!(
+        x.zip(y).zip(w).zip(h).is_some_and(|(((x, y), w), h)| {
+            x <= work_x && y <= work_y && x + w >= work_x + work_w && y + h >= work_y + work_h
+        }),
+        "maximized window does not cover the work area {when}: {state}"
+    );
+    Ok(())
 }
 
 /// After the main window shows, a real user move is not refitted.

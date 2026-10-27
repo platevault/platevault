@@ -225,7 +225,7 @@ impl E2eApp {
         preflight()?;
         let env = instance_env();
         reset_database(&env.db_path)?;
-        if matches!(scope, ResetScope::Full) {
+        if matches!(scope, ResetScope::Full | ResetScope::PreserveWindowState) {
             reset_webview_storage(&env.vars);
         }
         if scope.resets_window_state() {
