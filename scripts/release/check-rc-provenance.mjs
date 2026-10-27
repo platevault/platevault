@@ -161,9 +161,10 @@ function main() {
   console.log(`${commit} differs from ${tag} only in release metadata (${changed.length} file(s)); provenance holds.`);
 }
 
-// Guarded so the test can import the functions without running the CLI (see
+// Guarded so the test and cut-release-candidate.yml (`node -e`, where argv[1]
+// is unset) can import the functions without running the CLI (see
 // assemble-updater-manifest.mjs).
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
     main();
   } catch (error) {

@@ -46,16 +46,16 @@ jobs:
           COMMIT: ${{ inputs.commit }}
         run: |
           set -euo pipefail
-          git fetch --force --quiet origin 'refs/tags/rc/*:refs/tags/rc/*' release-please--branches--main
           git fetch --force --quiet origin 'refs/tags/rc/*:refs/tags/rc/*'
-          release_pr=refs/remotes/origin/release-please--branches--main
-          git fetch --force --quiet origin "+refs/heads/release-please--branches--main:${release_pr}" 2>/dev/null || true
+          commit=$(git rev-parse --verify "${COMMIT:-origin/main}^{commit}")
           if ! git merge-base --is-ancestor "$commit" origin/main; then
             echo "::error::$commit is not on main; a release candidate must be a commit of main."
             exit 1
           fi
-          if ! manifest=$(git show FETCH_HEAD:.release-please-manifest.json 2>/dev/null); then
-          if ! manifest=$(git show "${release_pr}:.release-please-manifest.json" 2>/dev/null); then
+          release_pr=refs/remotes/origin/release-please--branches--main
+          if ! git fetch --force --quiet origin "+refs/heads/release-please--branches--main:${release_pr}" \
+            || ! manifest=$(git show "${release_pr}:.release-please-manifest.json"); then
+            echo "::error::release-please has no open release PR (branch release-please--branches--main), so there is no version to cut a candidate for."
             exit 1
           fi
           version=$(jq -r '.["."]' <<<"$manifest")
