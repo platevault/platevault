@@ -18,12 +18,13 @@
 use std::collections::HashSet;
 use std::sync::{Mutex, PoisonError};
 
+use persistence_library::RunningOperations;
 use platevault_core::library::Library;
 use platevault_core::{ErrorResponse, LibraryError, ProjectOperationKind};
 use serde::{Deserialize, Serialize};
 use tauri::menu::{IsMenuItem, Menu, MenuItem, MenuItemKind, PredefinedMenuItem, Submenu};
 use tauri::tray::TrayIconBuilder;
-use tauri::{AppHandle, Emitter, Manager, RunEvent, Wry};
+use tauri::{AppHandle, Emitter, Manager, WindowEvent, Wry};
 use uuid::Uuid;
 
 use crate::commands::library::fail;
@@ -180,36 +181,51 @@ fn menu_bar(
         true,
         &[&about, &PredefinedMenuItem::separator(app)?, &quit],
     )?;
-    let undo = PredefinedMenuItem::undo(app, Some(&labels.undo))?;
-    let redo = PredefinedMenuItem::redo(app, Some(&labels.redo))?;
     let cut = PredefinedMenuItem::cut(app, Some(&labels.cut))?;
     let copy = PredefinedMenuItem::copy(app, Some(&labels.copy))?;
     let paste = PredefinedMenuItem::paste(app, Some(&labels.paste))?;
     let select_all = PredefinedMenuItem::select_all(app, Some(&labels.select_all))?;
-    let edit = Submenu::with_items(
-        app,
-        &labels.edit,
-        true,
-        &[&undo, &redo, &PredefinedMenuItem::separator(app)?, &cut, &copy, &paste, &select_all],
-    )?;
-    let minimise = PredefinedMenuItem::minimize(app, Some(&labels.minimise))?;
-    let close = PredefinedMenuItem::close_window(app, Some(&labels.close_window))?;
-    let window = Submenu::with_items(app, &labels.window, true, &[&minimise, &close])?;
-    let menu = Menu::with_items(app, &[&app_menu, &edit, &window])?;
-    let items = vec![
+    let mut items = vec![
         (Label::About, about.kind()),
         (Label::Quit, quit.kind()),
-        (Label::Edit, edit.kind()),
-        (Label::Undo, undo.kind()),
-        (Label::Redo, redo.kind()),
         (Label::Cut, cut.kind()),
         (Label::Copy, copy.kind()),
         (Label::Paste, paste.kind()),
         (Label::SelectAll, select_all.kind()),
-        (Label::Window, window.kind()),
-        (Label::Minimise, minimise.kind()),
-        (Label::CloseWindow, close.kind()),
     ];
+    // GTK has no Undo, Redo, Minimise or Close Window item (muda draws them
+    // disabled), so Linux shows only what works: Cut, Copy, Paste and Select
+    // All, and no Window menu.
+    #[cfg(not(target_os = "linux"))]
+    let menu = {
+        let undo = PredefinedMenuItem::undo(app, Some(&labels.undo))?;
+        let redo = PredefinedMenuItem::redo(app, Some(&labels.redo))?;
+        let edit = Submenu::with_items(
+            app,
+            &labels.edit,
+            true,
+            &[&undo, &redo, &PredefinedMenuItem::separator(app)?, &cut, &copy, &paste, &select_all],
+        )?;
+        let minimise = PredefinedMenuItem::minimize(app, Some(&labels.minimise))?;
+        let close = PredefinedMenuItem::close_window(app, Some(&labels.close_window))?;
+        let window = Submenu::with_items(app, &labels.window, true, &[&minimise, &close])?;
+        items.extend([
+            (Label::Edit, edit.kind()),
+            (Label::Undo, undo.kind()),
+            (Label::Redo, redo.kind()),
+            (Label::Window, window.kind()),
+            (Label::Minimise, minimise.kind()),
+            (Label::CloseWindow, close.kind()),
+        ]);
+        Menu::with_items(app, &[&app_menu, &edit, &window])?
+    };
+    #[cfg(target_os = "linux")]
+    let menu = {
+        let edit =
+            Submenu::with_items(app, &labels.edit, true, &[&cut, &copy, &paste, &select_all])?;
+        items.push((Label::Edit, edit.kind()));
+        Menu::with_items(app, &[&app_menu, &edit])?
+    };
     Ok((menu, items))
 }
 
@@ -224,9 +240,13 @@ pub fn install(app: &AppHandle<Wry>) -> Result<(), String> {
     let (menu, mut items) = menu_bar(app, &labels)
         .map_err(|error| format!("the native menu bar was refused: {error}"))?;
     app.set_menu(menu).map_err(|error| format!("the native menu bar was refused: {error}"))?;
-    match tray(app, &labels) {
-        Ok(tray_items) => items.extend(tray_items),
-        Err(error) => tracing::warn!(%error, "no tray: this desktop refused it"),
+    // Building a Linux tray panics inside libappindicator-sys when neither
+    // indicator library is installed, so a panic is a missing tray too.
+    let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| tray(app, &labels)));
+    match built {
+        Ok(Ok(tray_items)) => items.extend(tray_items),
+        Ok(Err(error)) => tracing::warn!(%error, "no tray: this desktop refused it"),
+        Err(_) => tracing::warn!("no tray: this desktop has no indicator library"),
     }
     app.manage(NativeItems(items));
     app.manage(PendingQuits::default());
@@ -257,12 +277,12 @@ pub fn on_menu(app: &AppHandle<Wry>, id: &str) {
     }
 }
 
-/// Closing the last window is a Quit too. An exit the app itself requested
-/// (`AppHandle::exit`, which carries a code) is never held.
-pub fn on_run_event(app: &AppHandle<Wry>, event: &RunEvent) {
-    if let RunEvent::ExitRequested { code: None, api, .. } = event {
-        api.prevent_exit();
-        request_quit(app);
+/// Closing the window is a Quit too. It is held while the window still
+/// exists, so the confirmation has a webview to ask in.
+pub fn on_window_event(window: &tauri::Window<Wry>, event: &WindowEvent) {
+    if let WindowEvent::CloseRequested { api, .. } = event {
+        api.prevent_close();
+        request_quit(window.app_handle());
     }
 }
 
@@ -304,19 +324,23 @@ async fn work_runs(app: &AppHandle<Wry>) -> bool {
         return false;
     };
     match library.catalog().running_operations().await {
-        Ok(running) => {
-            !running.imports.is_empty()
-                || !running.scans.is_empty()
-                || running
-                    .projects
-                    .iter()
-                    .any(|project| project.operation.kind == ProjectOperationKind::Apply)
-        }
+        Ok(running) => asks_before_quit(&running),
         Err(error) => {
             tracing::error!(%error, "running work is unknown; Quit asks first");
             true
         }
     }
+}
+
+/// Quit asks first while an import, an index (a scan) or an Apply runs
+/// (D-W157); other work, such as a measurement, ends with the app.
+fn asks_before_quit(running: &RunningOperations) -> bool {
+    !running.imports.is_empty()
+        || !running.scans.is_empty()
+        || running
+            .projects
+            .iter()
+            .any(|project| project.operation.kind == ProjectOperationKind::Apply)
 }
 
 /// Relabel the menu bar and the tray in the UI's active locale.
@@ -372,7 +396,11 @@ pub fn library_native_quit_answer(
 
 #[cfg(test)]
 mod tests {
-    use super::{catalogue_labels, Label, NativeMenuLabels};
+    use persistence_library::{RunningOperations, RunningProject};
+    use platevault_core::{ProjectOperation, ProjectOperationKind, ProjectOperationState};
+    use uuid::Uuid;
+
+    use super::{asks_before_quit, catalogue_labels, Label, NativeMenuLabels};
 
     const LABELS: [Label; 13] = [
         Label::About,
@@ -414,5 +442,48 @@ mod tests {
     #[test]
     fn an_unknown_locale_reads_the_default_catalogue() {
         assert_eq!(catalogue_labels("fr-FR"), catalogue_labels("en-GB"));
+    }
+
+    fn project(kind: ProjectOperationKind) -> RunningProject {
+        RunningProject {
+            operation: ProjectOperation {
+                id: Uuid::new_v4(),
+                project_id: Uuid::new_v4(),
+                kind,
+                state: ProjectOperationState::Active,
+                reserved_at: "2026-10-27T00:00:00Z".to_owned(),
+                settled_at: None,
+            },
+            project_name: "Cygnus".to_owned(),
+        }
+    }
+
+    /// D-W157: Quit asks while an import, an index or an Apply runs, and
+    /// exits at once otherwise, including while a measurement, a storage
+    /// move or another Project operation runs.
+    #[test]
+    fn quit_asks_only_while_an_import_an_index_or_an_apply_runs() {
+        let idle = RunningOperations::default();
+        assert!(!asks_before_quit(&idle));
+        for asking in [
+            RunningOperations { imports: vec![Uuid::new_v4()], ..idle.clone() },
+            RunningOperations { scans: vec![Uuid::new_v4()], ..idle.clone() },
+            RunningOperations {
+                projects: vec![project(ProjectOperationKind::Apply)],
+                ..idle.clone()
+            },
+        ] {
+            assert!(asks_before_quit(&asking), "{asking:?}");
+        }
+        let other = RunningOperations {
+            measurements: vec![Uuid::new_v4()],
+            storage: vec![Uuid::new_v4()],
+            projects: vec![
+                project(ProjectOperationKind::CopyToOutput),
+                project(ProjectOperationKind::Archive),
+            ],
+            ..idle
+        };
+        assert!(!asks_before_quit(&other), "{other:?}");
     }
 }

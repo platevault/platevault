@@ -440,7 +440,6 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     #[cfg(windows)]
     let mut eject = crate::eject::EjectNotices::start(app.handle());
     app.run(move |handle, event| {
-        crate::native_shell_surfaces::on_run_event(handle, &event);
         // As Tauri opens a configured window once the loop runs, with the
         // webview's data beside the run's catalog.
         #[cfg(feature = "e2e")]
@@ -474,9 +473,12 @@ fn shell_builder() -> Result<tauri::Builder<tauri::Wry>, String> {
     let handler: fn(tauri::ipc::Invoke<tauri::Wry>) -> bool = library_commands!(generate_handler);
     #[cfg(feature = "e2e")]
     let handler = crate::commands::e2e_window::with_e2e_commands(handler);
-    let builder = tauri::Builder::default().invoke_handler(handler).on_menu_event(|app, event| {
-        crate::native_shell_surfaces::on_menu(app, event.id().as_ref());
-    });
+    let builder = tauri::Builder::default()
+        .invoke_handler(handler)
+        .on_menu_event(|app, event| {
+            crate::native_shell_surfaces::on_menu(app, event.id().as_ref());
+        })
+        .on_window_event(crate::native_shell_surfaces::on_window_event);
     // The planning handlers call these through their Rust APIs, which need no
     // grant; window `library` holds only `capabilities/library.json`.
     let builder = builder.plugin(tauri_plugin_dialog::init()).plugin(tauri_plugin_opener::init());
