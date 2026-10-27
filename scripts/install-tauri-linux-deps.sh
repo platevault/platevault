@@ -23,7 +23,7 @@ switch_archive_mirror() {
 
 for attempt in 1 2; do
   mirror=azure.archive.ubuntu.com
-  budget=5s
+  budget=4m
   if (( attempt == 2 )); then
     switch_archive_mirror
     mirror=archive.ubuntu.com
