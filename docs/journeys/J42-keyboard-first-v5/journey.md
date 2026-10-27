@@ -50,9 +50,8 @@ Done means:
   **Esc** closes the dialog, and focus returns to where it was before **?**.
 - **Expect (negative):** The list has no go-to entry for Plan or Storage.
 - **Trace:** 063 FR-042, FR-042-AC-02 · D-W164 · src/app/shortcuts.tsx shortcutRows · HARNESS-V5-FEEDBACK-R1.md §Round 5 Navigation "Storage and Plan leave the source list", P-PLAN2, P-STO2 · D-W121
-- **Δ5** 2026-10-27 · S1–S4, S8–S9 · behavior-change
-  The journey's keyboard interactions trace to the owner-bearing requirements, including go-to keys, text-field exclusion, command palette and focus return. The non-density Appearance preference is shared with J40; no density setting exists.
-  Evidence: FR-037, FR-042, FR-042-AC-01, FR-042-AC-02 · D-W121, D-W162, D-W164 · LIB-FR-21, LIB-AC-45 · astro-plan-k9fil · astro-plan-ocyuc.5 · by: SpecOwner2 (intent-gated)
+
+
 
 ### S2 — Move around with go-to keys, the sidebar toggle and Back {#S2}
 
@@ -212,6 +211,7 @@ Done means:
 - **Δ4** 2026-10-17 · S3a · behavior-change
   On the `desktop-ui` (Windows) lane the Menu key opens a row's menu as **⇧F10** does; Apple keyboards have no Menu key, so the `desktop-ui-macos` lane uses **⇧F10** (with **fn** where needed). Tables keep native semantics with no ARIA grid role. The header stops and previous-row focus are the owner's rules, so G7 is dissolved.
   Evidence: HARNESS-V5-FEEDBACK-R1.md "Tables and the keyboard" P-KBD1 (OWNER, 2026-10-16; decision astro-plan-g3tx4) · D-W121 · prototype row-actions.tsx openMenuFromKeyboard (ContextMenu key or Shift+F10) on ui-harness-v5 · by: JourneysR9c (intent-gated)
-- **Δ5** 2026-10-27 · S1–S4, S8–S9 · behavior-change
-  The journey's steps trace to FR-037/FR-042 and the owning keyboard acceptance; go-to keys, text-field exclusion, palette search and focus return, and sidebar/history navigation are explicitly covered.
+- **Δ5** 2026-10-27 · S1-S4, S8-S9 · behavior-change
+  The journey's steps trace to FR-037/FR-042 and the owning keyboard acceptance. They explicitly cover go-to keys, text-field exclusion, palette search and focus return, and sidebar/history navigation.
   Evidence: FR-037, FR-042, FR-042-AC-01, FR-042-AC-02 · D-W121, D-W162, D-W164 · astro-plan-ocyuc.5 · by: SpecOwner2 (intent-gated)
+

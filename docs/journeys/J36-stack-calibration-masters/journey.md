@@ -163,11 +163,11 @@ Light sessions are later matched to these masters at ingestion (J23). Done means
 - **Expect (negative):** No raw frame or raw session is listed among the masters, including the 50 kept raw bias frames. No master is listed twice.
 - **Trace:** HARNESS-V5-IA.md §Screens S14 (masters grouped by kind in their structured-storage keys) · HARNESS-V5-FEEDBACK-R1.md §Round 1b P-CAL3 step 4
 
-### S11 — Open a master detail panel and its Used by popover {#S11}
+### S11: Open a master's details and its Used by popover {#S11}
 
-- **Do:** Open the details of the master dark `MasterDark_2026-09-20.xisf`, then those of the imported OIII flat `MasterFlat_2026-09-26.xisf`. In each detail panel, open **Used by**.
-- **Expect:** Each master opens in a detail panel. The dark's details read: kind Dark, camera ASI2600MM, optical train and filter absent (each an en dash), exposure 300 s, gain 100 / offset 50, temperature −10 °C, binning 1x1 and frame count 20. They also show its created date, the file it was imported from in the application's output folder, its storage path and the SHA-256 recorded in S5. Its Used by popover lists assigned sessions; it is empty here. The OIII flat details read optical train –, filter OIII and frame count 25, with the source imported from `Astro-T7/Stacked elsewhere/MasterFlat_OIII_2026-09-26.xisf`; its Used by popover lists assigned sessions.
-- **Expect (negative):** Opening details or Used by changes no master, assignment or file; Used by opens as a popover and never expands the master row.
+- **Do:** Open the master dark `MasterDark_2026-09-20.xisf`, then the imported OIII flat `MasterFlat_2026-09-26.xisf`. Open **Used by** in each detail panel.
+- **Expect:** Each master opens in a detail panel. The dark's details read: kind Dark, camera ASI2600MM, optical train and filter both absent, exposure 300 s, gain 100 / offset 50, temperature -10 °C, binning 1x1 and frame count 20. They also show its created date, the file it was imported from in the application's output folder, its storage path and the SHA-256 recorded in S5. Its Used by popover lists assigned sessions; it is empty here. The OIII flat details show optical train absent, filter OIII and frame count 25, with the imported source `Astro-T7/Stacked elsewhere/MasterFlat_OIII_2026-09-26.xisf`; its Used by popover lists assigned sessions.
+- **Expect (negative):** Opening details or Used by changes no master, assignment or file. Used by opens as a popover and never expands the master row.
 - **Trace:** CAL-AC-34 · D-W164 · HARNESS-V5-FEEDBACK-R1.md §Round 5 Calibration (master details panel; Used by is a popover)
 
 ### S12 — Hide a master and restore it {#S12}
@@ -213,6 +213,6 @@ Light sessions are later matched to these masters at ingestion (J23). Done means
 - **Δ4** 2026-10-17 · S1, S4, S5, S6, S8, S9, +S9a, S10, P3, +SC8 · behavior-change
   Import masters picks master files, several at once with FITS and XISF filters, and shows a preview table with each file's match (New, New version of {master}, Duplicate) before anything is imported. S9 imports the two flats; new S9a imports one mixed batch, the ASI294MM dark as New, P3's new bias file as a second version of the S8 bias master and an S9 flat as a Duplicate that is skipped. With no Issues hub, S1, S4, S5, S6 and S8 read the state on the Calibration rows and in Activity.
   Evidence: HARNESS-V5-FEEDBACK-R1.md Round 9 C9 · D-W82, D-W92, D-W103 · CAL-FR-13, CAL-FR-14, CAL-AC-15, CAL-AC-16 · prototype calibration.ts masterImportMatch (ui-harness-v5) · by: JourneysR9c (intent-gated)
-- **Δ8** 2026-10-27 · S11 · behavior-change
+- **Δ5** 2026-10-27 · S11 · behavior-change
   The owner confirms the master detail panel and Used by popover under D-W164. S11 asserts both interaction types and that viewing them is read-only.
   Evidence: D-W164 · astro-plan-ygihm owner confirmation, 2026-10-27 · CAL-AC-34 · by: SpecOwner2 (intent-gated)

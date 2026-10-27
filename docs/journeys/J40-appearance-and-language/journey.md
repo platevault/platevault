@@ -32,7 +32,7 @@ The user chooses how PlateVault looks and reads: they set its appearance mode, c
 
 - **Do:** Open Settings and choose Appearance.
 - **Expect:** Settings lists its sections in groups: General (Appearance, Help, About), Library (Locations, Equipment, Naming, Calibration, Sites, Target lookup), Projects (Goal templates) and Processing (Applications). Appearance sets the mode and theme, then the language and keyboard preferences. The app has one density and no density setting. A **Restore defaults** button is disabled with the tooltip "Already at the defaults". There is no Save button.
-- **Trace:** LIB-FR-21 · D-W86
+- **Trace:** LIB-FR-21, LIB-AC-45 · D-W86, D-W143
 - **Trace:** HARNESS-V5-IA.md §Screens S16 · settings-layout.tsx · navigation.ts SETTINGS_SECTIONS
 
 ### S2 — Read the theme picker {#S2}
@@ -53,20 +53,20 @@ The user chooses how PlateVault looks and reads: they set its appearance mode, c
 
 - **Do:** Choose Match system as the appearance mode, with its dark theme PlateVault Dark and its light theme PlateVault Light. Switch the OS appearance to Light. Switch it to Dark.
 - **Expect:** With Match system selected, PlateVault shows PlateVault Light when the OS is in Light mode and PlateVault Dark when it is in Dark mode. Each switch takes effect while PlateVault stays open, without touching any PlateVault control.
-- **Trace:** LIB-FR-21 · LIB-AC-23 · D-W86, D-W143
+- **Trace:** LIB-FR-21 · LIB-AC-23 · D-W86, D-W143 · LIB-AC-45
 
 ### S5 — Confirm the single density {#S5}
 
 - **Do:** Open Sessions, then Settings › Appearance, and inspect the density controls.
 - **Expect:** Appearance offers no density control. Sessions and the other visited screens use the app's single density.
 - **Expect (negative):** No density choice is available, and opening Appearance or Sessions changes no column, filter or sort.
-- **Trace:** LIB-FR-21 · D-W86
+- **Trace:** LIB-FR-21, LIB-AC-45 · D-W86
 
 ### S6 — Read the language picker {#S6}
 
 - **Do:** Read the Language section.
 - **Expect:** The language is a select that offers exactly two languages, each named in its own language: English (UK) and Português (Brasil). Português (Brasil) is marked machine-generated. English (UK) is selected.
-- **Trace:** Feedback §Shell 6 · IA §Screens S16 ("pt-BR marked machine-generated") · I18N.md §pt-BR · i18n.ts LOCALE_META · LIB-FR-21 · D-W143
+- **Trace:** LIB-FR-21, LIB-AC-45 · D-W143
 
 ### S7 — Switch to Português (Brasil) {#S7}
 
@@ -129,7 +129,7 @@ The user chooses how PlateVault looks and reads: they set its appearance mode, c
 - G1: Not validated. The rebuilt application does not implement Settings › Appearance yet; the behavior follows the harness v5 design (ui-harness-v5 @ b5e813a5: HARNESS-V5-IA.md §S16 and §Round 2 foundation, HARNESS-V5-FEEDBACK-R1.md §Shell and navigation and §Round 1b, I18N.md, themes-contrast.md).
 - G2: Unresolved implementation qualification: SC2 needs a contrast measurement over computed colours in the real webview; no validator script exists for it, and the harness figures in themes-contrast.md were computed from tokens, not from the running app. Blocks readiness.
 - G3: Unresolved implementation qualification: S4 needs the validator to switch the OS appearance during journey validation on each desktop lane. Blocks readiness.
-- G4: (dissolved 2026-10-27): This journey covers only appearance (theme/mode) and language; keyboard behavior belongs to J42. No density setting or density-related journey step exists (astro-plan-k9fil).
+- G4: (dissolved 2026-10-27): This journey covers only appearance (theme/mode) and language; keyboard behavior belongs to J42. No density setting or density-related journey step exists (LIB-AC-45, astro-plan-k9fil).
 
 ## Delta log
 - **Δ2** 2026-10-15 · S1, S2, S4, S7, S10, S11 · behavior-change
@@ -143,5 +143,5 @@ The user chooses how PlateVault looks and reads: they set its appearance mode, c
   window is moved and shrunk at start-up to fit a connected screen.
   Evidence: D-W163, astro-plan-ocyuc.2, PR #1889 · by: WindowDocs (intent-gated)
 - **Δ5** 2026-10-27 · S1, S2, S4, S6, S7, S9, S10, S11 · behavior-change
-  The owning requirement traces appearance (theme/mode) and language persistence to J40; density is deliberately absent. Keyboard shortcut behavior is owned by J42.
+  Steps S1, S2, S4, S6 and S7 trace appearance and language choices to LIB-FR-21 and LIB-AC-45. S9 to S11 cover persistence, Restore defaults and the unchanged catalogue; keyboard shortcuts remain covered in J42.
   Evidence: LIB-FR-21, LIB-AC-45 · astro-plan-0v2o0.3; density dropped by astro-plan-k9fil; final UI acceptance astro-plan-ocyuc.5 · by: SpecOwner2 (intent-gated)

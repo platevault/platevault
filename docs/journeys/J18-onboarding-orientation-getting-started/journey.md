@@ -55,7 +55,7 @@ first Apply builds the Project's View from the original sessions.
 ### S2 — Complete the walk end to end {#S2}
 
 - **Do:** Use Next to advance through every stop, then finish the walk at the last stop. To test each setup exit, repeat on a fresh install with Set up later and Index later.
-- **Expect:** Every setup exit—finishing setup, Set up later or Index later—hands over to Home and opens a one-time modal orientation walk. It has one stop per main navigation entry, in navigation order, with Home's stop last: Projects, Targets, Sessions, Calibration, Import, Activity, Settings and Home. Every stop brings its page into view; Next and Back move between stops, and Skip or Escape closes the walk. Finishing or skipping it ends the walk, which never opens by itself again. Settings > Help replays it from its first stop.
+- **Expect:** Every setup exit, whether the user finishes setup, chooses Set up later or chooses Index later, hands over to Home and opens a one-time modal orientation walk. It has one stop per main navigation entry, in navigation order, with Home's stop last: Projects, Targets, Sessions, Calibration, Import, Activity, Settings and Home. Every stop brings its page into view; Next and Back move between stops, and Skip or Escape closes the walk. Finishing or skipping it ends the walk, which never opens by itself again. Settings > Help replays it from its first stop.
 - **Expect (negative):** The walk creates and changes no record. It has no stop for the optional Recent group and no Getting started checklist on Home.
 - **Trace:** LIB-FR-27, LIB-AC-35 · D-W117 (owner's answer to astro-plan-rzbzu, 2026-10-16)
 

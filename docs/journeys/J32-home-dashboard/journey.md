@@ -197,5 +197,5 @@ The user opens PlateVault and decides what to do next from Home. Home shows pend
   ★ becomes Favourite: Tonight marks a favourite as one, in the wording of the Targets page's Favourite column.
   Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 11 (OWNER, 2026-10-23) on ui-harness-v5 @ 5dc245244; D-W142, PLAN-TGT-FR-17 · by: SpecAmend (intent-gated)
 - **Δ8** 2026-10-27 · S4, G6 · behavior-change
-  S4's ⌘A confirmation remains traced to owner answer D-W118; the separate “Mark rest usable” answer is documented without implying J32 invokes that control.
+  S4's ⌘A confirmation remains traced to owner answer D-W118. J32 does not use the separate “Mark rest usable” control.
   Evidence: D-W118, PIX-FR-14, PIX-AC-21 · astro-plan-rzbzu owner answer 2026-10-16 · by: SpecOwner2 (intent-gated)

@@ -171,5 +171,5 @@ After import, the user resolves Target and rig associations, reviews new session
   A counter with one issue opens the same menu of owning pages as a counter with several, so the ⚠ counter's menu names `Sessions · 1`.
   Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 11 (OWNER, 2026-10-23) on ui-harness-v5 @ 5dc245244; D-W144, FR-032 · by: SpecAmend (intent-gated)
 - **Δ7** 2026-10-27 · G6 · behavior-change
-  D-W118's ⌘A/threshold selection distinction is settled and J37's steps assert it; the separate Mark rest usable answer is noted without implying J37 invokes that control.
+  D-W118's ⌘A and threshold-selection distinction is settled and J37's steps assert it. The separate Mark rest usable answer applies to another flow; no J37 step invokes that control.
   Evidence: D-W118, PIX-FR-14, PIX-AC-21 · astro-plan-rzbzu owner answer 2026-10-16; astro-plan-rzbzu.1 answer 2026-10-19 · by: SpecOwner2 (intent-gated)

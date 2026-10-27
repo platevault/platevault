@@ -71,7 +71,7 @@ running, and the notifications history. Done means:
 
   Together the filtered pages show the 7 issues of S1, each exactly once. The `1 Oct Ha` row carries separate Needs calibration and drift issues; following the drift row's Review opens the session, where F-drift reads Changed content.
 - **Expect (negative):** No counter or menu lists an issue's text, and no filtered page shows a row with no issue. Choosing a counter changes nothing.
-- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 5 P-SB3 · D-W92, D-W144, D-W158 (counts only, each opening the owning page filtered; dismissed issues are excluded until their identity changes) · 063 FR-032, FR-038
+- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 5 P-SB3 · D-W92, D-W144 and D-W158. Counters show only counts and open filtered owning pages. A dismissed issue remains hidden until its identity changes (063 FR-032, FR-038)
 
 ### S3 — Follow the failed Apply issue {#S3}
 
