@@ -187,13 +187,15 @@ async fn first_move_after_show_is_not_refitted() -> anyhow::Result<()> {
         let source_y = before["outer"]["y"].as_i64().context("outer y missing")? + 12;
         let target_x = work_x + work_w - outer_w / 2;
         let target_y = work_y + 180;
+        let pointer_x = target_x + 120;
+        let pointer_y = target_y + 12;
         let pressed = Command::new("xdotool")
             .args(["mousemove", "--sync", &source_x.to_string(), &source_y.to_string(), "mousedown", "1"])
             .status()
             .context("xdotool mouse press failed")?;
         ensure!(pressed.success(), "xdotool mouse press exited unsuccessfully");
         let moved = Command::new("xdotool")
-            .args(["mousemove", "--sync", &target_x.to_string(), &target_y.to_string()])
+            .args(["mousemove", "--sync", &pointer_x.to_string(), &pointer_y.to_string()])
             .status()
             .context("xdotool title-bar drag failed")?;
         let released = Command::new("xdotool").args(["mouseup", "1"]).status()?;
