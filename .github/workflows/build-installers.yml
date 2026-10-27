@@ -4,8 +4,8 @@ name: Build installers
 # the Windows/macOS/Linux matrix. Both release paths call it, so a release
 # candidate is built exactly the way its release will be:
 #
-#   - release-please.yml, after release-please has published a stable `vX.Y.Z`
-#     release and its rc-gate has passed (prerelease false).
+#   - release-please.yml's `build`, after its `release` job has checked the
+#     commit's provenance and published a stable `vX.Y.Z` (prerelease false).
 #   - release-candidate.yml, for an `rc/vX.Y.Z-rc.N` GitHub prerelease
 #     (prerelease true). It stamps `app_version` (X.Y.Z, the version the
 #     candidate is for) into the three files release-please versions before

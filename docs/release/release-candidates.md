@@ -51,6 +51,10 @@ A refusal publishes nothing, so installed copies keep the previous release and n
 1. Run **Cut release candidate** with `version` set to X.Y.Z, since the merged release PR no longer offers one, and `commit` set to the merged commit. Wait for the candidate to pass.
 2. Re-run the failed **Release** job of that Release Please run. Approve the environment again; the check now passes, and the release publishes.
 
+### If Release Please says a release PR is not published yet
+
+Each run looks for a merged release PR still labelled `autorelease: pending`, and only the run for that PR's merge commit may publish it. When that run never got to its `release` job, for example because a newer push cancelled it while it waited in the concurrency queue, every later run fails with "Release PR #N merged as <commit> is not published yet". Re-run the **Release Please** run for that commit; it then goes through the `release` job as usual.
+
 ## What runs where
 
 |Suite|PRs and merge queue|Push to main|Release candidate|Manual dispatch|

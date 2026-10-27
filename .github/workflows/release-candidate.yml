@@ -13,7 +13,7 @@ name: Release candidate
 #     it.
 #   - `verdict` posts the `release/rc` commit status on the tagged commit:
 #     success only when every suite and the build passed. Release Gate and
-#     the release's rc-gate (scripts/release/check-rc-provenance.mjs) read it.
+#     release-please.yml's `release` job (scripts/release/check-rc-provenance.mjs) read it.
 
 on:
   push:
