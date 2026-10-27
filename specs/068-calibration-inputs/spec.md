@@ -10,6 +10,8 @@
 
 **Amended**: 2026-10-26, to the Round 11 decision D-W148.
 
+**Amended**: 2026-10-27, to the owner's answer D-W165: the matching ranking also decides a better match (CAL-FR-25).
+
 **Status**: Backend landed; frontend and acceptance open (reconciled 2026-10-26, `specs/SPEC_STATUS.md`). Landed: the calibration matching backend (#1780, #1782, #1783) and matching at ingestion in the F4 cut-over (#1851). Remains: the Calibration surface (astro-plan-i5op2) and verification. Product defaults and all human-approval gate waivers follow the root autonomous objective.
 
 **Input**: Clean rebuild with selective reuse of verified code and the agreed PlateVault product flow.
@@ -95,7 +97,7 @@ The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody,
 - **CAL-FR-22**: A camera with "Don't use darks" or "Don't use bias" (PLAN-EQ-FR-08) gets no dark or bias match: its sessions are settled as No darks or No bias with no warning, and a per-session override pins one. (D-W104)
 - **CAL-FR-23**: Calibration doesn't need to be the same across a Project. Its sessions may pin different versions, and the View layout keeps each with the lights that use it (PREP-FR-16). Dark flats are never matched, suggested or assigned. (D-W93, D-W99, D-W101)
 - **CAL-FR-24**: The matching thresholds have their own page, Matching, in the Library group of Settings (`/settings/matching`), next to Equipment. It shows them as one table of Setting, Value and Unit, grouped Framing, Flats, Darks and Bias, with one Edit…. Framing holds the framing limits (LIB-FR-04, PRJ-FR-31) and the mosaic panel overlap (PRJ-FR-29), Flats the rotation thresholds and window of CAL-FR-20, and Darks and Bias the windows and checks of CAL-FR-21. Every threshold this contract calls adjustable in Settings is set here, with the defaults of D-W114. Changing the centre or rotation limit applies to later imports only; it re-splits no existing session (D-W107; owner's answer, 2026-10-20). (D-W107, D-W114, D-W148)
-- **CAL-FR-25**: The ranking of CAL-FR-20 and CAL-FR-21 also decides whether a newly imported calibration is a better match for a session that already has a pin: only a strictly higher rank is, and a tie isn't. A better match is offered and hinted as LIB-FR-29 says, and it never replaces a pin by itself (LIB-FR-25). (D-W106, D-W165)
+- **CAL-FR-25**: The ranking of CAL-FR-20 and CAL-FR-21 also decides whether a calibration in the library is a better match for a session that already has a pin: only a strictly higher rank is, and a tie isn't. This holds however the calibration reached the library: imported, adopted (CAL-FR-07) or restored from hidden (CAL-FR-16). A better match is offered and hinted as LIB-FR-29 says. It never replaces a pin by itself (LIB-FR-25), and its hint is no Update notice (D-W103). (D-W103, D-W106, D-W165)
 
 ### Owned interaction steps
 

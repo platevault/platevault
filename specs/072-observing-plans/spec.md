@@ -10,6 +10,8 @@
 
 **Amended**: 2026-10-26, to the Round 11 decisions D-W142 and D-W147, to the Rounds 5 to 9 decisions recorded that day (D-W151, D-W152 and D-W160) and to the owner's answer D-W155.
 
+**Amended**: 2026-10-27, to the owner's answer D-W164, which settles the click-to-act search with no Add button (PLAN-TGT-FR-03, PLAN-TGT-AC-03).
+
 **Status**: Backend landed; frontend and acceptance open (reconciled 2026-10-26, `specs/SPEC_STATUS.md`). Landed: the planning, calendar and reminder backend (#1780-#1783), moved onto Projects in the F4 cut-over (#1851). Remains: the Plan area, Sites and Targets surfaces (astro-plan-mp25r) and verification. Product defaults and all human-approval gate waivers follow the root autonomous objective.
 
 **Input**: Clean rebuild with selective reuse of verified code and the agreed PlateVault product flow.
