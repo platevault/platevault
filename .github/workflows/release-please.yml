@@ -12,9 +12,9 @@ name: Release Please
 # "Release Gate / verdict" check the shepherd reads before merging.
 #
 # Once release-please tags+publishes a release (release_created == 'true'),
-# `rc-gate` waits for an approver on the `release` environment and checks
-# that the released commit came from a release candidate that passed
-# (scripts/release/check-rc-provenance.mjs, docs/release/release-candidates.md).
+# `rc-gate` checks that the released commit came from a release candidate
+# that passed (scripts/release/check-rc-provenance.mjs,
+# docs/release/release-candidates.md).
 # Only then does the `build` job (spec 051 US10 / T060, in
 # build-installers.yml, which release candidates use too) build the Tauri
 # desktop app on the Windows/macOS/Linux matrix, sign the bundles + updater
@@ -107,19 +107,19 @@ jobs:
           gh release edit "${TAG}" --repo "${GITHUB_REPOSITORY}" --notes "${body}" \
             || echo "::warning::could not add the code signing policy link to ${TAG} now; the build legs save it through tauri-action"
 
-  # The release's last gate. The `release` environment holds the run for an
-  # approver (its required reviewers are set in the repository settings), and
-  # the check refuses a release whose commit is not its newest passed
-  # candidate's plus release metadata. Release Gate runs the same check on the
-  # release PR, so this one only fails when the PR merged without it. A
-  # refusal leaves the release without installers or latest.json, as a failed
-  # build does: installed copies keep the previous version.
+  # The release's last gate: it refuses a release whose commit is not its
+  # newest passed candidate's plus release metadata. Release Gate, a required
+  # check, runs the same check on the release PR, and merging that PR is the
+  # human approval. So this job takes seconds and only fails when the PR
+  # merged without the gate. A refusal leaves a published release with no
+  # installers and no latest.json, so update checks fail until the release is
+  # removed. Re-running cannot help, because the commit stays the same. The
+  # recovery is in docs/release/release-candidates.md.
   rc-gate:
     name: Release candidate gate
     needs: release-please
     if: needs.release-please.outputs.release_created == 'true'
     runs-on: ubuntu-latest
-    environment: release
     permissions:
       contents: read
       statuses: read

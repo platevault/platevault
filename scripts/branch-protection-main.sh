@@ -11,8 +11,8 @@
 #
 #   strict: false         Branches need not be up to date with main before
 #                         merging. The merge queue re-runs the required
-#                         contexts on the queued merge result (ci.yml and
-#                         e2e.yml both trigger on merge_group), so forcing a
+#                         contexts on the queued merge result (ci.yml,
+#                         e2e.yml and release-gate.yml trigger on merge_group), so forcing a
 #                         rebase per PR would only add churn.
 #   enforce_admins: false Sole maintainer needs an override path when a runner
 #                         or an upstream dependency breaks.
@@ -28,6 +28,9 @@
 #   UI mock-mode (Playwright)                    ci.yml `ui-e2e-gate`
 #   Real-UI smoke (L3) — ubuntu-latest           e2e.yml `e2e-smoke-gate-ubuntu`
 #   Supply chain (cargo-deny)                    ci.yml `supply-chain`
+#   Release Gate                                 release-gate.yml `release-gate-result`
+#                                                (passes at once unless the PR is
+#                                                a release PR; docs/release/release-candidates.md)
 #
 # Required contexts are the GATE jobs, never the workers they depend on: a gate
 # already depends on its shards, so requiring the shards as well would add
@@ -137,9 +140,10 @@ verify_names_exist() {
   contexts=$(read_contexts) || return $?
   names=$(grep -hoE "^    name: .*" "$here/../.github/workflows/ci.yml" \
                                     "$here/../.github/workflows/e2e.yml" \
+                                    "$here/../.github/workflows/release-gate.yml" \
           | sed 's/^    name: //')
   if [ -z "${names//[[:space:]]/}" ]; then
-    echo "ERROR: no job names parsed from ci.yml and e2e.yml; the name scan failed." >&2
+    echo "ERROR: no job names parsed from ci.yml, e2e.yml and release-gate.yml; the name scan failed." >&2
     return 2
   fi
   while IFS= read -r ctx; do

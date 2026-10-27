@@ -29,9 +29,9 @@
 #     + windows (3 shards) journey matrix, the window runtime checks on both
 #     OSes and the macOS journeys. It runs when a release candidate is cut
 #     (release-candidate.yml calls this workflow) and on a manual dispatch that
-#     picks `release`. It no longer runs on pushes to main: a release ships
-#     only from a candidate whose release suite passed
-#     (docs/release/release-candidates.md). Windows L3 is off PRs because it is
+#     picks `release`. A push to main runs no journey, only the builders, to
+#     keep their caches warm for PRs. A release ships only from a candidate
+#     whose release suite passed (docs/release/release-candidates.md). Windows L3 is off PRs because it is
 #     the slow and historically flaky leg (runs 30013328940, 30008614669) that
 #     blocked merge trains without adding PR signal proportional to its cost.
 #
@@ -137,6 +137,12 @@ permissions:
 
 on:
   pull_request:
+  # A push to main runs only the builders (build-frontend, build-app-ubuntu),
+  # with no journey. PRs can restore caches saved under main but not under a
+  # release candidate's tag, so this run keeps the smoke tier's build caches
+  # warm. It also gives scripts/pv-watch-queue.sh a run on main's tip.
+  push:
+    branches: [main]
   # Required for the merge queue. A queued PR waits on the contexts branch
   # protection requires, and "Real-UI smoke (L3) — ubuntu-latest" is one of them
   # (this workflow publishes it). A workflow with no `merge_group` trigger
@@ -764,7 +770,7 @@ jobs:
     name: Real-UI smoke (L3) subset — ubuntu-latest
     needs: [changes, build-frontend, build-app-ubuntu]
     # Smoke subset runs on pull_request and on merge_group (the queue needs the
-    # same required context). Main pushes and dispatch run the full matrix
+    # same required context). The release suite runs the full matrix
     # (real-ui-e2e-ubuntu shards) instead.
     if: >-
       needs.changes.outputs.run == 'true'
