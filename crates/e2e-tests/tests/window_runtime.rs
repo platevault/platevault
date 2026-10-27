@@ -212,6 +212,21 @@ async fn first_move_after_show_is_not_refitted() -> anyhow::Result<()> {
         let target_y = work_y + 180;
         let pointer_x = target_x + 120;
         let pointer_y = target_y + 12;
+        let active_before = Command::new("xdotool")
+            .args(["getactivewindow"])
+            .output()
+            .context("xdotool could not read the active window")?;
+        ensure!(active_before.status.success(), "xdotool getactivewindow failed before drag");
+        let window_id = String::from_utf8_lossy(&active_before.stdout).trim().to_owned();
+        let geometry_before = Command::new("xdotool")
+            .args(["getwindowgeometry", "--shell", &window_id])
+            .output()
+            .context("xdotool could not read window geometry before drag")?;
+        ensure!(geometry_before.status.success(), "xdotool getwindowgeometry failed before drag");
+        println!(
+            "WINDOW_RUNTIME_CASE_C_X11_BEFORE window_id={window_id} geometry={}",
+            String::from_utf8_lossy(&geometry_before.stdout).replace('\n', ";")
+        );
         let pressed = Command::new("xdotool")
             .args([
                 "mousemove",
@@ -224,12 +239,40 @@ async fn first_move_after_show_is_not_refitted() -> anyhow::Result<()> {
             .status()
             .context("xdotool mouse press failed")?;
         ensure!(pressed.success(), "xdotool mouse press exited unsuccessfully");
-        let moved = Command::new("xdotool")
-            .args(["mousemove", "--sync", &pointer_x.to_string(), &pointer_y.to_string()])
-            .status()
-            .context("xdotool title-bar drag failed")?;
+        let drag_steps = 16;
+        for step in 1..=drag_steps {
+            let x = source_x + (pointer_x - source_x) * step / drag_steps;
+            let y = source_y + (pointer_y - source_y) * step / drag_steps;
+            let moved = Command::new("xdotool")
+                .args(["mousemove", "--sync", &x.to_string(), &y.to_string()])
+                .status()
+                .context("xdotool title-bar drag failed")?;
+            ensure!(moved.success(), "xdotool title-bar drag exited unsuccessfully");
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
         let released = Command::new("xdotool").args(["mouseup", "1"]).status()?;
-        ensure!(moved.success() && released.success(), "xdotool drag/release failed");
+        ensure!(released.success(), "xdotool drag release failed");
+        let active_after = Command::new("xdotool")
+            .args(["getactivewindow"])
+            .output()
+            .context("xdotool could not read the active window after drag")?;
+        ensure!(active_after.status.success(), "xdotool getactivewindow failed after drag");
+        let active_after = String::from_utf8_lossy(&active_after.stdout).trim().to_owned();
+        let geometry_after = Command::new("xdotool")
+            .args(["getwindowgeometry", "--shell", &window_id])
+            .output()
+            .context("xdotool could not read window geometry after drag")?;
+        ensure!(geometry_after.status.success(), "xdotool getwindowgeometry failed after drag");
+        let immediately_after = probe(&app).await?;
+        println!(
+            "WINDOW_RUNTIME_CASE_C_X11_IMMEDIATE window_id={active_after} geometry={} probe={immediately_after}",
+            String::from_utf8_lossy(&geometry_after.stdout).replace('\n', ";")
+        );
+        ensure!(active_after == window_id, "X11 drag changed active window from {window_id} to {active_after}");
+        ensure!(
+            immediately_after["outer"]["x"].as_i64() == Some(target_x),
+            "Openbox did not move the active window to x={target_x} immediately after the drag: {immediately_after}"
+        );
         tokio::time::sleep(SETTLE).await;
         let after = probe(&app).await?;
         ensure!(
