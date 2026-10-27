@@ -396,16 +396,7 @@ pub(super) fn reset_webview_storage(vars: &[(&'static str, String)]) {
 /// `vars` — see [`reset_webview_storage`]'s doc on why this takes the
 /// instance's env overrides instead of reading the real OS env.
 pub(super) fn reset_window_state(vars: &[(&'static str, String)]) {
-    // On every platform the app writes `.window-state.json` under PV_DATA_DIR
-    // when that variable is set (astro-plan-qmc fix in `lib.rs`). Fall back to
-    // `app_config_dir` on Linux/macOS where the env vars ARE honoured by the
-    // platform dirs resolver and `PV_DATA_DIR` is only set for app-data (not
-    // config-dir) isolation.
-    let path = if let Some(data_dir) = app_data_dir(vars) {
-        data_dir.join(".window-state.json")
-    } else if let Some(cfg_dir) = app_config_dir(vars) {
-        cfg_dir.join(".window-state.json")
-    } else {
+    let Some(path) = window_state_path(vars) else {
         eprintln!(
             "[e2e harness] reset_window_state: neither PV_DATA_DIR nor \
              an app_config_dir override is set — window-state file not reset"
@@ -432,6 +423,11 @@ pub(super) fn reset_window_state(vars: &[(&'static str, String)]) {
             );
         }
     }
+}
+
+/// Isolated `tauri-plugin-window-state` file used by the app and E2E harness.
+pub(super) fn window_state_path(vars: &[(&'static str, String)]) -> Option<PathBuf> {
+    app_data_dir(vars).or_else(|| app_config_dir(vars)).map(|dir| dir.join(".window-state.json"))
 }
 
 /// Look up `key` in an [`InstanceEnv::vars`]-shaped override list.
@@ -618,4 +614,24 @@ pub(super) fn describe_stores(stores: &[PathBuf]) -> String {
         })
         .collect::<Vec<_>>()
         .join("; ")
+}
+
+#[cfg(test)]
+mod window_state_tests {
+    use super::{reset_window_state, window_state_path};
+
+    #[test]
+    fn reset_removes_only_the_instance_window_state_file() {
+        let root = tempfile::tempdir().expect("failed to create temporary instance root");
+        let data_dir = root.path().join("appdata");
+        std::fs::create_dir_all(&data_dir).expect("failed to create app-data dir");
+        let vars = vec![("PV_DATA_DIR", data_dir.display().to_string())];
+        let path = window_state_path(&vars).expect("isolated window-state path missing");
+        std::fs::write(&path, b"seed").expect("failed to seed window state");
+
+        reset_window_state(&vars);
+
+        assert!(!path.exists(), "reset must delete the instance state file");
+        assert!(data_dir.is_dir(), "reset must not delete the instance directory");
+    }
 }
