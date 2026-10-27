@@ -1,0 +1,89 @@
+name: Cut release candidate
+
+# Tags a commit on main as the next release candidate, rc/vX.Y.Z-rc.N
+# (docs/release/release-candidates.md). The tag push starts
+# release-candidate.yml, which runs the release suites and builds the
+# candidate's installers.
+#
+# X.Y.Z is the version release-please proposes in its open release PR, read
+# from that branch's .release-please-manifest.json. N is one more than the
+# newest candidate for X.Y.Z. The tag lives under `rc/` so release-please,
+# which ignores tags with a component when include-component-in-tag is false,
+# never counts a candidate as a release.
+#
+# The tag is created with the release app's token: a tag pushed with
+# GITHUB_TOKEN would start no workflow.
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: Commit on main to cut the candidate from. Empty takes main's tip.
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cut-release-candidate
+  cancel-in-progress: false
+
+jobs:
+  cut:
+    name: Cut release candidate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Choose the commit, version and tag
+        id: candidate
+        env:
+          COMMIT: ${{ inputs.commit }}
+        run: |
+          set -euo pipefail
+          git fetch --force --quiet origin 'refs/tags/rc/*:refs/tags/rc/*' release-please--branches--main
+          commit=$(git rev-parse --verify "${COMMIT:-origin/main}^{commit}")
+          if ! git merge-base --is-ancestor "$commit" origin/main; then
+            echo "::error::$commit is not on main; a release candidate must be a commit of main."
+            exit 1
+          fi
+          if ! manifest=$(git show FETCH_HEAD:.release-please-manifest.json 2>/dev/null); then
+            echo "::error::release-please has no open release PR (branch release-please--branches--main), so there is no version to cut a candidate for."
+            exit 1
+          fi
+          version=$(jq -r '.["."]' <<<"$manifest")
+          tag=$(VERSION="$version" node --input-type=module -e '
+            import { execFileSync } from "node:child_process";
+            import { nextCandidate } from "./scripts/release/check-rc-provenance.mjs";
+            const tags = execFileSync("git", ["tag", "--list", "rc/*"], { encoding: "utf8" }).split("\n").filter(Boolean);
+            console.log(nextCandidate(tags, process.env.VERSION));
+          ')
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "Cutting $tag for v$version at $commit"
+
+      - name: Mint release app token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
+      - name: Create the tag
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          TAG: ${{ steps.candidate.outputs.tag }}
+          COMMIT: ${{ steps.candidate.outputs.commit }}
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/git/refs" -f "ref=refs/tags/${TAG}" -f "sha=${COMMIT}" > /dev/null
+          {
+            echo "## ${TAG}"
+            echo ""
+            echo "Tagged \`${COMMIT}\`. The **Release candidate** workflow now runs the release suites and builds the installers for this tag."
+          } >> "$GITHUB_STEP_SUMMARY"

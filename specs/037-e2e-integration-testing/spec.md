@@ -27,16 +27,17 @@ of `contracts/coverage-matrix.md`).
   with `ui-e2e-gate` publishing the required context. These drive the UI against
   in-process mocks, **not** a real backend, so they do not satisfy Layer 2.
 - **US2, cross-platform automation** — what runs **by default** versus what is
-  opt-in (`.github/workflows/e2e.yml:14-35`):
+  opt-in (`.github/workflows/e2e.yml` header):
   - Every `pull_request` and `merge_group` entry: a Tier-1 real-UI **smoke subset**
     on `ubuntu-latest` only. Required context "Real-UI smoke (L3) — ubuntu-latest".
-  - Every push to `main`: the Tier-2 full matrix, `ubuntu-latest` (4 shards) +
-    `windows-latest` (3 shards). Windows is deliberately off PRs as the slow and
-    historically flaky leg.
-  - `macos-latest`: **opt-in only.** It runs on an explicit `workflow_dispatch` with
-    `run_macos=true`, which defaults to `false` (`:163-168`, gated at `:303`). It is
-    skipped on ordinary PR and main-push runs, so the spec's "across Windows, Linux,
-    and macOS" is met on Linux and Windows automatically and on macOS on request.
+  - Every release candidate (`rc/vX.Y.Z-rc.N`, docs/release/release-candidates.md):
+    the Tier-2 release suite, the full matrix on `ubuntu-latest` (4 shards) +
+    `windows-latest` (3 shards), the window runtime checks and the macOS journeys.
+    Windows is deliberately off PRs as the slow and historically flaky leg. Pushes
+    to `main` no longer run it (owner's decision of 2026-10-27).
+  - `macos-latest`: runs in the release suite without blocking, and alone on a
+    `workflow_dispatch` with `suite: macos`. The spec's "across Windows, Linux, and
+    macOS" is met on Linux and Windows for every candidate and on macOS on request.
 - **US4, one-command local execution**: `apps/desktop/package.json`
   `test:e2e` (`playwright test`, mock mode) and `test:e2e:real`
   (`scripts/run-e2e-real.sh`); `just test-e2e`.

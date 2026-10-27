@@ -25,13 +25,15 @@
 #     two check runs share the required name. PRs get a real-UI signal without
 #     the ~25-min Windows full-suite cost or Windows L3 flake exposure.
 #
-#   Tier 2 — Full L3 matrix (main pushes + workflow_dispatch): the complete
-#     ubuntu (4 shards) + windows (3 shards) suite runs on every push to main
-#     and on manual dispatch. This is the gate that matters post-merge.
-#     Windows L3 is off PRs because it is the slow and historically flaky leg
-#     (runs 30013328940, 30008614669) that blocked merge trains without adding
-#     PR signal proportional to its cost. All full-matrix regressions surface
-#     before the next merge via the main-push run.
+#   Tier 2 — the release suite (`suite: release`): the full ubuntu (4 shards)
+#     + windows (3 shards) journey matrix, the window runtime checks on both
+#     OSes and the macOS journeys. It runs when a release candidate is cut
+#     (release-candidate.yml calls this workflow) and on a manual dispatch that
+#     picks `release`. It no longer runs on pushes to main: a release ships
+#     only from a candidate whose release suite passed
+#     (docs/release/release-candidates.md). Windows L3 is off PRs because it is
+#     the slow and historically flaky leg (runs 30013328940, 30008614669) that
+#     blocked merge trains without adding PR signal proportional to its cost.
 #
 # - Journeys are real (spec 037 WP-C, 2026-07-04): first-run resolve+create,
 #   filesystem plan review->apply+durable-record, ingest->session->calibration
@@ -61,17 +63,18 @@
 # upstream/runner-side limitation, not fixable in this repo (full audit:
 # issue #489). Linux + Windows is the supported matrix.
 #
-# A `workflow_dispatch` `run_macos` input can still add macos-latest back for
-# a one-off re-test, WITHOUT `continue-on-error` — a genuine red/green signal
-# so a future upstream fix is discoverable, instead of never re-checking.
-# Layer-1 `cargo test --workspace` (ci.yml) stays required on macOS; only this
-# real-UI WebDriver leg is affected.
+# The release suite runs the macOS chain without blocking: its jobs use
+# `continue-on-error`, so a red macOS leg shows in the run without failing the
+# candidate, until #489 is fixed upstream. A manual dispatch with
+# `suite: macos` runs it alone as a genuine red/green signal, so a future
+# upstream fix is discoverable. Layer-1 `cargo test --workspace` (ci.yml) stays
+# required on macOS; only this real-UI WebDriver leg is affected.
 #
 # Job DAG — smoke (per-PR ubuntu only):
 #
 #   changes ── build-frontend ── build-app-ubuntu ── smoke-ubuntu ── smoke-gate-ubuntu
 #
-# Job DAG — full matrix (main push / workflow_dispatch, build-once, test-sharded):
+# Job DAG — release suite (build-once, test-sharded):
 #
 #   changes ── build-frontend (ubuntu, once) ──┐          (per OS:)
 #          └── build-app-<os> ─────────────────┴─ shard 1/3 ┐
@@ -134,14 +137,6 @@ permissions:
 
 on:
   pull_request:
-  # Runs the shards on every main push, not just PRs (issue #1203: before
-  # this, main reported green from mock-mode Playwright alone while the
-  # real-UI suite never executed post-merge, so a merge-induced regression
-  # had no signal until the next unlucky PR hit it). Verified live: run
-  # 29740436232 (commit 44dbb69f, a normal main push) scheduled and ran the
-  # ubuntu + windows shards for real, not skipped.
-  push:
-    branches: [main]
   # Required for the merge queue. A queued PR waits on the contexts branch
   # protection requires, and "Real-UI smoke (L3) — ubuntu-latest" is one of them
   # (this workflow publishes it). A workflow with no `merge_group` trigger
@@ -152,46 +147,36 @@ on:
   #
   # A queue entry runs the SMOKE tier, the same as a pull_request — it is the
   # required context, and the full matrix at ~25 min would make the queue the
-  # slowest path in the repo. The full matrix still runs on the push to `main`
-  # the queue produces, so Tier 2 coverage is unchanged. Every job `if:` below
-  # therefore names its events positively instead of testing
-  # `!= 'pull_request'`, which would silently have put queue entries on the
-  # full-matrix side.
+  # slowest path in the repo. The full matrix runs in the release suite. Every
+  # job `if:` below therefore names its events or suites positively instead of
+  # testing `!= 'pull_request'`, which would silently have put queue entries on
+  # the full-matrix side.
   merge_group:
+  # A release candidate (release-candidate.yml) runs the release suite through
+  # this trigger, at the candidate's tagged commit.
+  workflow_call:
+    inputs:
+      suite:
+        description: Which suite to run; release-candidate.yml passes `release`.
+        type: string
+        required: true
   workflow_dispatch:
     inputs:
-      run_macos:
+      suite:
         description: >-
-          Also run the macOS Real-UI leg (best-effort re-test of issue #489 —
-          no continue-on-error, so this is a genuine signal).
-        type: boolean
-        default: false
-      run_window_runtime:
-        description: >-
-          Run native window restore checks on Windows and Linux X11. This skips
-          the slower legacy L3 smoke and full journeys on manual dispatch.
-        type: boolean
-        default: false
+          release = full journey matrix (Ubuntu + Windows), window runtime and
+          macOS journeys, as for a release candidate. window-runtime = only the
+          native window restore checks. macos = only the macOS journeys
+          (re-test of issue #489, as a genuine red/green signal).
+        type: choice
+        options: [release, window-runtime, macos]
+        default: release
 
 concurrency:
   group: e2e-${{ github.workflow }}-${{ github.ref }}
-  # Cancel superseded runs on branches, but never on `main` (#1208).
-  #
-  # `main` shares one concurrency group across every push, so with a blanket
-  # `true` each merge killed the previous main run. During a normal merge
-  # campaign, merges land seconds apart, and no main run ever survived to
-  # report: 0aced5f0's run was cancelled at 08:19:23, one second after
-  # 971e7b11's was created at 08:19:22, which was itself cancelled two seconds
-  # after the next push. Ten consecutive main runs went the same way.
-  #
-  # The E2E suite therefore never gated `main` at all, and main-side
-  # regressions were structurally invisible — the suite looked configured
-  # while reporting nothing.
-  #
-  # This does not serialise indefinitely: with `cancel-in-progress: false`
-  # GitHub keeps at most the in-flight run plus the newest queued one and
-  # discards intermediate pending runs, so the cost stays bounded at ~2 runs
-  # per group while guaranteeing that one actually completes.
+  # A newer run on the same branch or tag replaces the older one. Pushes to
+  # main no longer run this workflow; the `main` exception stays because a
+  # manual dispatch on main must not cancel a candidate's run (#1208).
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 env:
@@ -251,11 +236,18 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       run: ${{ steps.decide.outputs.run }}
-      run_macos: ${{ steps.macos.outputs.run_macos }}
+      full: ${{ steps.suite.outputs.full }}
+      window_runtime: ${{ steps.suite.outputs.window_runtime }}
+      macos: ${{ steps.suite.outputs.macos }}
+      release: ${{ steps.suite.outputs.release }}
     steps:
       - uses: actions/checkout@v4
+      # A chosen suite always runs, so only PRs and queue entries need the
+      # path filter. It is skipped there because a tag push (a release
+      # candidate) has no base commit to diff against.
       - uses: dorny/paths-filter@v4
         id: filter
+        if: inputs.suite == ''
         with:
           filters: |
             # Deliberately NOT '.github/workflows/**': editing ci.yml or
@@ -288,11 +280,11 @@ jobs:
       - id: decide
         shell: bash
         env:
-          DISPATCHED: ${{ github.event_name == 'workflow_dispatch' }}
+          SUITE: ${{ inputs.suite }}
         run: |
           set -euo pipefail
           run=false
-          if [ "$DISPATCHED" = "true" ] \
+          if [ -n "$SUITE" ] \
             || [ "${{ steps.filter.outputs.force_full }}" = "true" ] \
             || [ "${{ steps.filter.outputs.rust }}" = "true" ] \
             || [ "${{ steps.filter.outputs.frontend }}" = "true" ]; then
@@ -300,14 +292,30 @@ jobs:
           fi
           echo "run=$run" >> "$GITHUB_OUTPUT"
           echo "e2e changes: run=$run"
-      # The macOS chain only runs on an explicit workflow_dispatch with
-      # run_macos=true (see header comment, issue #489) — never on
-      # pull_request/push.
-      - id: macos
+      # Which tier-2 chains run. PRs and queue entries pass no suite and run
+      # only the smoke tier. The macOS chain runs in the release suite (not
+      # blocking, see the header and issue #489) or alone for `macos`.
+      - id: suite
         shell: bash
         env:
-          RUN_MACOS: ${{ github.event_name == 'workflow_dispatch' && inputs.run_macos == true }}
-        run: echo "run_macos=$RUN_MACOS" >> "$GITHUB_OUTPUT"
+          SUITE: ${{ inputs.suite }}
+        run: |
+          set -euo pipefail
+          case "$SUITE" in
+            ''|release|window-runtime|macos) ;;
+            *) echo "::error::unknown suite '$SUITE'"; exit 1 ;;
+          esac
+          release=false; full=false; window_runtime=false; macos=false
+          [ "$SUITE" = release ] && release=true full=true window_runtime=true macos=true
+          [ "$SUITE" = window-runtime ] && window_runtime=true
+          [ "$SUITE" = macos ] && macos=true
+          {
+            echo "release=$release"
+            echo "full=$full"
+            echo "window_runtime=$window_runtime"
+            echo "macos=$macos"
+          } >> "$GITHUB_OUTPUT"
+          echo "e2e suite '${SUITE:-smoke}': full=$full window_runtime=$window_runtime macos=$macos"
 
   # Build the VITE_E2E frontend dist ONCE (it is OS-independent) and share it
   # with every test shard as an artifact. Content-keyed cache: a run whose
@@ -509,12 +517,12 @@ jobs:
   build-app-windows:
     name: Build app — windows-latest
     needs: changes
-    # Windows build only needed on main pushes and dispatch; the windows shards
-    # are skipped on pull_request and merge_group, so no consumer would use this
-    # artifact there.
+    # The Windows build feeds the Windows journey shards and window runtime
+    # job, which run only in a chosen suite; PRs and queue entries skip them,
+    # so no consumer would use this artifact there.
     if: >-
       needs.changes.outputs.run == 'true'
-      && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+      && (needs.changes.outputs.full == 'true' || needs.changes.outputs.window_runtime == 'true')
     runs-on: windows-latest
     timeout-minutes: 45
     env:
@@ -619,11 +627,13 @@ jobs:
             e2e-archive.tar.zst
           retention-days: 1
 
-  # Copy of build-app-ubuntu for the dispatch-only macOS chain (issue #489).
+  # Copy of build-app-ubuntu for the macOS chain (issue #489).
   build-app-macos:
     name: Build app — macos-latest
     needs: changes
-    if: needs.changes.outputs.run == 'true' && needs.changes.outputs.run_macos == 'true'
+    if: needs.changes.outputs.run == 'true' && needs.changes.outputs.macos == 'true'
+    # Not blocking in the release suite until #489 is fixed (header comment).
+    continue-on-error: ${{ needs.changes.outputs.release == 'true' }}
     runs-on: macos-latest
     timeout-minutes: 45
     env:
@@ -839,7 +849,7 @@ jobs:
   window-runtime-ubuntu:
     name: Window runtime restore — ubuntu-latest (X11)
     needs: [changes, build-frontend, build-app-ubuntu]
-    if: github.event_name == 'workflow_dispatch' && inputs.run_window_runtime == true
+    if: needs.changes.outputs.window_runtime == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -887,7 +897,7 @@ jobs:
   window-runtime-windows:
     name: Window runtime restore — windows-latest
     needs: [changes, build-frontend, build-app-windows]
-    if: github.event_name == 'workflow_dispatch' && inputs.run_window_runtime == true
+    if: needs.changes.outputs.window_runtime == 'true'
     runs-on: windows-latest
     timeout-minutes: 15
     env:
@@ -979,11 +989,11 @@ jobs:
   real-ui-e2e-ubuntu:
     name: Real-UI journeys (L3) shard — ubuntu-latest ${{ matrix.shard }}/4
     needs: [changes, build-frontend, build-app-ubuntu]
-    # Full ubuntu matrix only on main pushes and manual dispatch (not PRs).
-    # PRs run the lighter smoke-ubuntu job instead (see two-tier strategy above).
+    # Full ubuntu matrix only in the release suite (not PRs). PRs run the
+    # lighter smoke-ubuntu job instead (see two-tier strategy above).
     if: >-
       needs.changes.outputs.run == 'true'
-      && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.run_window_runtime != true))
+      && needs.changes.outputs.full == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -1164,13 +1174,12 @@ jobs:
   real-ui-e2e-windows:
     name: Real-UI journeys (L3) shard — windows-latest ${{ matrix.shard }}/3
     needs: [changes, build-frontend, build-app-windows]
-    # Full windows matrix only on main pushes and manual dispatch (not PRs).
-    # Windows L3 is the slow/historically flaky leg (~25 min + flake, runs
-    # 30013328940, 30008614669); keeping it off PRs avoids blocking merge
-    # trains while preserving full coverage on every main push.
+    # Full windows matrix only in the release suite (not PRs). Windows L3 is
+    # the slow/historically flaky leg (~25 min + flake, runs 30013328940,
+    # 30008614669); keeping it off PRs avoids blocking merge trains.
     if: >-
       needs.changes.outputs.run == 'true'
-      && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.run_window_runtime != true))
+      && needs.changes.outputs.full == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -1360,31 +1369,24 @@ jobs:
           fi
           exit 1
 
-  # Copy of real-ui-e2e-ubuntu for the dispatch-only macOS chain (issue #489):
-  # no xvfb (native display), longer timeout for the 120s-per-attempt
-  # launch-failure loop.
+  # Copy of real-ui-e2e-ubuntu for the macOS chain (issue #489): no xvfb
+  # (native display), longer timeout for the 120s-per-attempt launch-failure
+  # loop. It runs in the release suite, where it does not block, and alone for
+  # a `macos` dispatch.
   #
-  # This job's `needs: build-app-macos` is itself gated on run_macos=='true'
+  # This job's `needs: build-app-macos` is itself gated on the macos output
   # (see that job's `if:`), and GitHub adds an implicit success() to a job's
   # `if:` whenever it doesn't already reference always()/cancelled()/
   # failure() — so this job inherits build-app-macos's skip on every normal
-  # run without needing its own run_macos check. Consequence worth knowing:
-  # GitHub can only substitute `${{ matrix.shard }}` in a job's `name:` once
-  # that job's matrix is actually scheduled. Skipped-before-scheduling (the
-  # normal case here) leaves the raw `${{ matrix.shard }}/2` template
-  # visible in the check name instead of an expanded `1/2`/`2/2` — a
-  # generic GitHub Actions display quirk for any matrix job skipped before
-  # expansion, reproduced identically by the ubuntu/windows shard jobs above
-  # whenever `changes.outputs.run` is false. It is cosmetic (the "skipped"
-  # conclusion is still accurate) and, unlike ubuntu/windows, permanently
-  # visible here because this leg only ever runs via explicit
-  # `workflow_dispatch(run_macos: true)` — where the matrix DOES expand
-  # correctly, so renaming this job to dodge the unexpanded string in the
-  # common (skipped) case would only make the dispatched case worse.
+  # run without needing its own check. GitHub can only substitute
+  # `${{ matrix.shard }}` in a job's `name:` once that job's matrix is
+  # scheduled, so a skipped run shows the raw `${{ matrix.shard }}/2` template
+  # in the check name. That is cosmetic: the "skipped" conclusion is accurate.
   real-ui-e2e-macos:
     name: Real-UI journeys (L3) shard — macos-latest ${{ matrix.shard }}/2
     needs: [changes, build-frontend, build-app-macos]
     if: needs.changes.outputs.run == 'true'
+    continue-on-error: ${{ needs.changes.outputs.release == 'true' }}
     strategy:
       fail-fast: false
       matrix:
@@ -1468,11 +1470,11 @@ jobs:
   e2e-gate-ubuntu:
     name: Real-UI journeys (L3) — ubuntu-latest
     needs: [changes, real-ui-e2e-ubuntu]
-    # Full gate only on main pushes and manual dispatch; skipped on PRs.
-    # PRs satisfy their real-UI requirement via e2e-smoke-gate-ubuntu instead.
+    # Full gate only in the release suite; skipped on PRs. PRs satisfy their
+    # real-UI requirement via e2e-smoke-gate-ubuntu instead.
     if: >-
       always() && needs.changes.outputs.run == 'true'
-      && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.run_window_runtime != true))
+      && needs.changes.outputs.full == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -1486,10 +1488,10 @@ jobs:
   e2e-gate-windows:
     name: Real-UI journeys (L3) — windows-latest
     needs: [changes, real-ui-e2e-windows]
-    # Full gate only on main pushes and manual dispatch; skipped on PRs.
+    # Full gate only in the release suite; skipped on PRs.
     if: >-
       always() && needs.changes.outputs.run == 'true'
-      && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.run_window_runtime != true))
+      && needs.changes.outputs.full == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -1500,11 +1502,13 @@ jobs:
           echo "real-ui-e2e-windows result: $RESULT"
           [ "$RESULT" = "success" ] || exit 1
 
-  # Skipped entirely unless the dispatch-only macOS chain was requested.
+  # Skipped unless the macOS chain ran. In the release suite it reports the
+  # macOS result without failing the candidate (#489).
   e2e-gate-macos:
     name: Real-UI journeys (L3) — macos-latest
     needs: [changes, real-ui-e2e-macos]
-    if: always() && needs.changes.outputs.run == 'true' && needs.changes.outputs.run_macos == 'true'
+    if: always() && needs.changes.outputs.run == 'true' && needs.changes.outputs.macos == 'true'
+    continue-on-error: ${{ needs.changes.outputs.release == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

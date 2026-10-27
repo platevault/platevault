@@ -10,6 +10,9 @@ name: Release Gate
 #
 # Hard/soft policy is configured in the `env` block below. Start policy:
 #   version-sync ...... HARD  (the four version fields must agree)
+#   rc-provenance ..... HARD  (a passed release candidate exists for this
+#                              version, and this commit differs from it only
+#                              in release metadata; docs/release/release-candidates.md)
 #   build ............. HARD  (release build compiles, dev-tools OFF)
 #   devtools-off ...... HARD  (dev-tools feature is not a default; release binary omits it)
 #   tests ............. SOFT  (full suite; warns but does not block)
@@ -29,6 +32,7 @@ on:
 
 permissions:
   contents: read
+  statuses: read # rc-provenance reads the candidate's release/rc status
 
 concurrency:
   group: release-gate-${{ github.ref }}
@@ -37,6 +41,7 @@ concurrency:
 env:
   # Per-check gating policy: "hard" fails the verdict, "soft" only warns.
   POLICY_VERSION_SYNC: hard
+  POLICY_RC_PROVENANCE: hard
   POLICY_BUILD: hard
   POLICY_DEVTOOLS_OFF: hard
   POLICY_DEVTOOLS_BUNDLE: hard
@@ -88,6 +93,30 @@ jobs:
             echo "status=pass" >> "$GITHUB_OUTPUT"
           else
             echo "status=fail" >> "$GITHUB_OUTPUT"
+          fi
+
+      # --- Check 1b: release candidate provenance (HARD) ---
+      # Enforces main -> rc -> release: the version may ship only from the
+      # commit of its newest release candidate whose run passed, plus the
+      # metadata release-please writes. A commit that landed on main after the
+      # candidate fails this until a new candidate is cut from it.
+      - name: Release candidate provenance
+        id: rc_provenance
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git fetch --force --quiet origin 'refs/tags/rc/*:refs/tags/rc/*'
+          VERSION=$(jq -r '.["."]' .release-please-manifest.json)
+          if OUT=$(node scripts/release/check-rc-provenance.mjs --version "$VERSION" --commit HEAD 2>&1); then
+            echo "$OUT"
+            echo "status=pass" >> "$GITHUB_OUTPUT"
+            echo "detail=${OUT##*$'\n'}" >> "$GITHUB_OUTPUT"
+          else
+            echo "$OUT"
+            echo "status=fail" >> "$GITHUB_OUTPUT"
+            echo "detail=$(grep -m1 '::error::' <<<"$OUT" | sed 's/^::error:://')" >> "$GITHUB_OUTPUT"
           fi
 
       # --- Check 2: build (HARD) ---
@@ -208,6 +237,8 @@ jobs:
         env:
           VS_STATUS: ${{ steps.version_sync.outputs.status }}
           VS_DETAIL: ${{ steps.version_sync.outputs.detail }}
+          RC_STATUS: ${{ steps.rc_provenance.outputs.status }}
+          RC_DETAIL: ${{ steps.rc_provenance.outputs.detail }}
           BUILD_STATUS: ${{ steps.build.outputs.status }}
           BUILD_DETAIL: ${{ steps.build.outputs.detail }}
           DT_STATUS: ${{ steps.devtools_off.outputs.status }}
@@ -244,6 +275,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
           emit "version-sync" "$POLICY_VERSION_SYNC" "${VS_STATUS:-fail}" "$VS_DETAIL"
+          emit "rc-provenance" "$POLICY_RC_PROVENANCE" "${RC_STATUS:-fail}" "$RC_DETAIL"
           emit "build (release, dev-tools off)" "$POLICY_BUILD" "${BUILD_STATUS:-fail}" "$BUILD_DETAIL"
           emit "dev-tools-off" "$POLICY_DEVTOOLS_OFF" "${DT_STATUS:-fail}" "$DT_DETAIL"
           emit "dev-tools-off (frontend bundle)" "$POLICY_DEVTOOLS_BUNDLE" "${DTB_STATUS:-fail}" "$DTB_DETAIL"

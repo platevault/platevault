@@ -39,18 +39,19 @@
 # vs the required "Real-UI smoke (L3) — ubuntu-latest".
 #
 # Excluded on purpose:
-#   Real-UI journeys (L3) — <os>           the full matrix runs on main pushes
-#                                          and dispatch, never on pull_request
-#                                          or merge_group, so it publishes
-#                                          nothing to require on a PR. PRs are
-#                                          gated by the smoke context instead
-#                                          (two-tier strategy in e2e.yml's
-#                                          header). The macos-latest leg runs
-#                                          only on a `run_macos` dispatch:
-#                                          blocked upstream, see issue #489
-#                                          (tauri-plugin-webdriver).
+#   Real-UI journeys (L3) — <os>           the full matrix runs only in a
+#                                          release candidate's release suite
+#                                          (docs/release/release-candidates.md)
+#                                          and on dispatch, never on
+#                                          pull_request or merge_group, so it
+#                                          publishes nothing to require on a PR.
+#                                          PRs are gated by the smoke context
+#                                          instead (two-tier strategy in
+#                                          e2e.yml's header). The macos-latest
+#                                          leg never blocks: blocked upstream,
+#                                          see issue #489 (tauri-plugin-webdriver).
 #   Real-UI smoke (L3) — windows-latest    no windows smoke job exists; windows
-#                                          L3 is main-push only.
+#                                          L3 runs only in the release suite.
 #   Unit + integration (L1+L2) — macos-latest
 #                                          Held out only while the frontend
 #                                          suite still runs on Rust-only PRs.

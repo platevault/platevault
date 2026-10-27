@@ -175,9 +175,10 @@ should therefore expect:
 
 CI is not a substitute for this lane. `ci.yml` runs the L1+L2
 `cargo test --workspace` matrix on `macos-latest` by default, but the real-UI
-WebDriver leg in `e2e.yml` has its **macOS leg removed from the default
-matrix** — `tauri-plugin-webdriver` has no working macOS WebDriver on GitHub
-runners, and macOS runs only on a `workflow_dispatch` `run_macos` input
+WebDriver leg in `e2e.yml` has its **macOS leg out of the blocking matrix**:
+`tauri-plugin-webdriver` has no working macOS WebDriver on GitHub runners, so
+macOS runs only in a release candidate's release suite, where it does not
+block, and on a `workflow_dispatch` with `suite: macos`
 (`.github/workflows/e2e.yml` header and `build-app-macos` job `if:`). Journey
 validation on macOS goes through the MCP bridge on a real Mac, which is a
 different harness and unaffected by that removal.
