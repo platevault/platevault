@@ -53,12 +53,21 @@ async fn seed_and_launch(x: i32, y: i32, width: u32, height: u32, maximized: boo
     Ok(app)
 }
 
-async fn probe(app: &E2eApp) -> anyhow::Result<Value> {
-    let value: Value = app
-        .invoke("e2e_window_probe", json!({}))
+async fn invoke_native<T: serde::de::DeserializeOwned>(app: &E2eApp, command: &str, args: Value) -> anyhow::Result<T> {
+    let script = r#"window.__PV_E2E__.invoke(arguments[0], arguments[1]).then(value => callback({ ok: true, value })).catch(error => callback({ ok: false, error: String(error) }));"#;
+    let response: Value = app
+        .driver
+        .execute_async(script, vec![json!(command), args])
         .await
-        .context("failed to read native main-window geometry")?;
-    Ok(value)
+        .with_context(|| format!("failed to invoke unregistered native command {command}"))?
+        .convert()
+        .context("native command bridge returned invalid JSON")?;
+    anyhow::ensure!(response["ok"] == true, "native command {command} failed: {response}");
+    serde_json::from_value(response["value"].clone()).context("native command returned unexpected shape")
+}
+
+async fn probe(app: &E2eApp) -> anyhow::Result<Value> {
+    invoke_native(app, "e2e_window_probe", json!({})).await
 }
 
 async fn wait_for_settled_probe(app: &E2eApp) -> anyhow::Result<Value> {
@@ -130,17 +139,16 @@ async fn restored_offscreen_small_window_is_clamped_to_visible_monitor() -> anyh
     // The right edge starts beyond the 1600px Xvfb monitor; Windows hosted
     // runners are only 1024px wide, so their attainable geometry is bounded by
     // the monitor work area when the configured minimum does not fit.
-    let app = seed_and_launch(950, 40, 800, 500, false).await?;
+    let app = seed_and_launch(1000, 40, 800, 500, false).await?;
     let state = wait_for_settled_probe(&app).await?;
     assert_fully_on_monitor(&state)?;
     let inner = &state["inner"];
     let (_, _, work_w, work_h) = work_bounds(&state)?;
     ensure!(state["maximized"] == false, "normal saved state became maximized: {state}");
-    ensure!(
-        inner["w"].as_i64().unwrap() >= i64::from(MIN_WIDTH).min(work_w)
-            && inner["h"].as_i64().unwrap() >= i64::from(MIN_HEIGHT).min(work_h),
-        "window did not attain the configured minimum or available monitor work area: {state}"
-    );
+    let expected_inner_w = i64::from(MIN_WIDTH).min(work_w - (state["outer"]["w"].as_i64().unwrap() - inner["w"].as_i64().unwrap()));
+    let expected_inner_h = i64::from(MIN_HEIGHT).min(work_h - (state["outer"]["h"].as_i64().unwrap() - inner["h"].as_i64().unwrap()));
+    ensure!(inner["w"].as_i64() == Some(expected_inner_w), "inner width did not clamp to configured minimum/work area: {state}");
+    ensure!(inner["h"].as_i64() == Some(expected_inner_h), "inner height did not clamp to configured minimum/work area: {state}");
     println!("WINDOW_RUNTIME_CASE_A_BOUNDS={state}");
     app.shutdown().await
 }
@@ -152,13 +160,11 @@ async fn restored_maximized_window_stays_maximized_after_focus_event() -> anyhow
     let app = seed_and_launch(40, 40, 800, 500, true).await?;
     let before = wait_for_settled_probe(&app).await?;
     ensure!(before["maximized"] == true, "saved maximized state was not restored: {before}");
-    let _: Value = app
-        .invoke("e2e_window_focus", json!({}))
-        .await
-        .context("failed to invoke native focus event")?;
+    let _: Value = invoke_native(&app, "e2e_window_focus", json!({})).await?;
     tokio::time::sleep(SETTLE).await;
     let after_focus = probe(&app).await?;
     ensure!(after_focus["maximized"] == true, "maximized state was lost after focus event: {after_focus}");
+    println!("WINDOW_RUNTIME_CASE_B_BOUNDS={after_focus}");
     app.shutdown().await
 }
 
@@ -210,12 +216,10 @@ async fn first_move_after_show_is_not_refitted() -> anyhow::Result<()> {
     {
         // This drives native positioning but is not OS input; report it as a
         // programmatic proxy, not as proof of a physical user drag.
+        let (work_x, work_y, _, _) = work_bounds(&before)?;
         let move_x = work_x + 120;
         let move_y = work_y + 100;
-        let _: Value = app
-            .invoke("e2e_window_move", json!({ "x": move_x, "y": move_y }))
-            .await
-            .context("failed to move native window after it showed")?;
+        let _: Value = invoke_native(&app, "e2e_window_move", json!({ "x": move_x, "y": move_y })).await?;
         tokio::time::sleep(SETTLE).await;
         let after = probe(&app).await?;
         ensure!(after["outer"]["x"].as_i64() == Some(move_x) && after["outer"]["y"].as_i64() == Some(move_y), "programmatic native move was refitted: {after}");
