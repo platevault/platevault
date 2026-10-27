@@ -82,9 +82,10 @@ fs_file_handle_linux = { path = "../fs/file-handle-linux" }
 trash.workspace = true
 
 [dev-dependencies]
-parking_lot = "0.12.5"
+tokio = { workspace = true, features = ["test-util"] }
 persistence_library = { path = "../persistence/library", features = ["test-counters"] }
 platevault_pixels = { path = "../platevault-pixels", features = ["fixtures"] }
+parking_lot = "0.12.5"
 
 [lints]
 workspace = true

@@ -19,7 +19,9 @@ use parking_lot::Mutex;
 use persistence_library::{Catalog, SubscriptionWrite};
 use platevault_core::notifier::{Clock, Notifier, NotifierFuture, ReminderNotice, SubmitOutcome};
 use platevault_core::planning::compute_windows;
-use platevault_core::reminders::{due_reminders, notice, upcoming_reminders, ReminderScheduler};
+use platevault_core::reminders::{
+    due_reminders, notice, upcoming_reminders, ReminderScheduler, RECHECK_INTERVAL,
+};
 use platevault_core::{
     BlockReason, Darkness, DeliveryState, MoonCriterion, ObservingSite, ObservingWindow,
     PermissionState, PlanCriteria, Provenance, RecoveryAction, ReminderSubscription, SiteInput,
@@ -40,21 +42,36 @@ const PATIENCE: StdDuration = StdDuration::from_secs(20);
 // ---------------------------------------------------------------------------
 
 /// A wall clock the test sets; it never advances on its own.
-struct Controlled(Mutex<OffsetDateTime>);
+struct Controlled {
+    instant: Mutex<OffsetDateTime>,
+    reads: AtomicUsize,
+    pass_complete: tokio::sync::Notify,
+}
 
 impl Controlled {
     fn at(instant: OffsetDateTime) -> Arc<Self> {
-        Arc::new(Self(Mutex::new(instant)))
+        Arc::new(Self {
+            instant: Mutex::new(instant),
+            reads: AtomicUsize::new(0),
+            pass_complete: tokio::sync::Notify::new(),
+        })
     }
 
     fn set(&self, instant: OffsetDateTime) {
-        *self.0.lock() = instant;
+        *self.instant.lock() = instant;
+    }
+
+    async fn wait_for_pass(&self) {
+        self.pass_complete.notified().await;
     }
 }
 
 impl Clock for Controlled {
     fn now_utc(&self) -> OffsetDateTime {
-        *self.0.lock()
+        if self.reads.fetch_add(1, Ordering::SeqCst) == 4 {
+            self.pass_complete.notify_one();
+        }
+        *self.instant.lock()
     }
 }
 
@@ -644,23 +661,21 @@ async fn a_wall_clock_jump_is_caught_within_one_recheck_and_never_after_window_s
     planning.subscribe(&pleiades, open_sky, lead).await;
     assert!(due_at(&rising, lead) <= jump && jump < rising.start_utc);
 
-    // Every due instant is an hour away, so the scheduler sleeps for 30 s.
     let clock = Controlled::at(due_at(&ngc, 60) - Duration::hours(1));
     let notifier = Recording::new(PermissionState::Granted, Answer::Accept);
     let scheduler =
         ReminderScheduler::spawn(Arc::clone(&planning.catalog), notifier.clone(), clock.clone());
-    tokio::time::sleep(StdDuration::from_secs(1)).await;
+    clock.wait_for_pass().await;
+    tokio::task::yield_now().await;
     assert!(notifier.submissions().is_empty());
 
-    // The wall clock moves past the NGC 7000 window start with no tick or wake.
     clock.set(jump);
     let jumped = Instant::now();
-    let deadline = jumped + StdDuration::from_secs(35);
+    let deadline = jumped + RECHECK_INTERVAL + StdDuration::from_secs(1);
     while notifier.submissions().is_empty() {
-        assert!(Instant::now() < deadline, "no re-check within 30 s of the jump");
+        assert!(Instant::now() < deadline, "no re-check within one interval");
         tokio::time::sleep(StdDuration::from_millis(100)).await;
     }
-    assert!(jumped.elapsed() <= StdDuration::from_secs(32), "{:?}", jumped.elapsed());
     settle(&scheduler, &notifier).await;
     scheduler.stop().await;
 
