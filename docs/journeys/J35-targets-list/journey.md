@@ -1,13 +1,14 @@
 ---
 id: J35
 title: Find, favourite and narrow Targets on the Targets page's All view with search, presets, a rig selector and Fit
-version: 5
+version: 7
 status: draft
-last_reviewed: 2026-10-06
+last_reviewed: 2026-10-27
 actors: [primary-user]
 surfaces: [targets, planning, equipment, projects]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 065-project-goals, 072-observing-plans, D17, D18, D-W16, D-W17, D-W18, D-W19, D-W23, D-W31, D-W95, D-W60, D-W61, D-W62, specs/072-observing-plans/spec.md, specs/065-project-goals/spec.md, HARNESS-V5-IA.md#S10, HARNESS-V5-IA.md#S3, HARNESS-V5-IA.md#S16, HARNESS-V5-FEEDBACK-R1.md#round-5, P-PLAN2, "HARNESS-V5-FEEDBACK-R1.md#round-5 Click a result to act", "HARNESS-V5-FEEDBACK-R1.md#round-5 Best tonight shows nothing", HARNESS-V5-FEEDBACK-R1.md#round-6, apps/prototype/src/features/v5/e-targets-plan-settings/targets.tsx @b5e813a5, apps/prototype/messages/en-GB.json @b5e813a5]
+trace: [063-clean-rebuild-contract, 065-project-goals, 072-observing-plans, D17, D18, D-W16, D-W17, D-W18, D-W19, D-W23, D-W31, D-W95, D-W60, D-W61, D-W62, D-W152, D-W164, specs/072-observing-plans/spec.md, specs/065-project-goals/spec.md, HARNESS-V5-IA.md#S10, HARNESS-V5-IA.md#S3, HARNESS-V5-IA.md#S16, HARNESS-V5-FEEDBACK-R1.md#round-5, P-PLAN2, "HARNESS-V5-FEEDBACK-R1.md#round-5 Click a result to act", "HARNESS-V5-FEEDBACK-R1.md#round-5 Best tonight shows nothing", HARNESS-V5-FEEDBACK-R1.md#round-6, apps/prototype/src/features/v5/e-targets-plan-settings/targets.tsx @b5e813a5, apps/prototype/messages/en-GB.json @b5e813a5]
+trace: [063-clean-rebuild-contract, 065-project-goals, 072-observing-plans, D17, D18, D-W16, D-W17, D-W18, D-W19, D-W23, D-W31, D-W95, D-W60, D-W61, D-W62, D-W152, D-W164, specs/072-observing-plans/spec.md, specs/065-project-goals/spec.md, HARNESS-V5-IA.md#S10, HARNESS-V5-IA.md#S3, HARNESS-V5-IA.md#S16, HARNESS-V5-FEEDBACK-R1.md#round-5, P-PLAN2, "HARNESS-V5-FEEDBACK-R1.md#round-5 Click a result to act", "HARNESS-V5-FEEDBACK-R1.md#round-5 Best tonight shows nothing", HARNESS-V5-FEEDBACK-R1.md#round-6, apps/prototype/src/features/v5/e-targets-plan-settings/targets.tsx @b5e813a5, apps/prototype/messages/en-GB.json @b5e813a5]
 ---
 
 ## Goal
@@ -55,7 +56,7 @@ data except Favourite and adding a Target from a catalogue result.
 - **Do:** Select the NGC 7000 row, read its Target detail, then go back.
 - **Expect:** NGC 7000's Target detail opens with tonight at Backyard, its identity, Fit on `RedCat` and on `Esprit`, the Project `NGC 7000 HOO` with its goal lines, and captured time per channel with its sessions. It offers Add to Plan, Add to Project and New Project. The row's Max alt equals the detail's peak altitude tonight, and its Img time equals the total of the detail's windows tonight under the same criteria. Going back restores the All view, its sort and the date picker, because the view lives in the URL.
 - **Expect (negative):** Opening and reading the detail changes no favourite, plan, Project or session record.
-- **Trace:** Targets list, Target detail · PLAN-TGT-FR-05, PLAN-TGT-FR-14, PLAN-FR-08 · PV-PLAN-SC-04 · D-W16, D-W18 · HARNESS-V5-IA.md S10 (Target detail, the view lives in the URL)
+- **Trace:** Targets list, Target detail · PLAN-TGT-FR-05, PLAN-TGT-FR-14 · PLAN-TGT-AC-03 · PV-PLAN-SC-04 · D-W16, D-W18, D-W164 · HARNESS-V5-IA.md S10 (Target detail, the view lives in the URL)
 
 ### S4 — Toggle a favourite {#S4}
 
@@ -69,7 +70,7 @@ data except Favourite and adding a Target from a catalogue result.
 - **Do:** Search `m 31`, then `M31` and `m31`. Click the Messier M 31 result row. Then search `ngc 5139`, click the NGC 5139 result the same way, and clear the search.
 - **Expect:** All three queries return the same M 31 matches, from the bundled catalogues and from SIMBAD, each naming its source in the Source column. Clicking the M 31 result adds it: the search stays open, and the result shows it is in My targets. Afterwards, My targets lists M 31 and NGC 5139 as favourites, beside NGC 7000 and IC 1396.
 - **Expect (negative):** No result row shows an **Add to targets** button; the row's menu keeps the other actions. Before a result is clicked, My targets is unchanged: typing a query writes nothing.
-- **Trace:** Targets list · PLAN-TGT-FR-03 · PLAN-TGT-AC-03 · D-W17 · Round 5 "Click a result to act" · Round 6 "Clicking a result" (a catalogue result is added)
+- **Trace:** Targets list · PLAN-TGT-FR-03 · PLAN-TGT-AC-03 · D-W17, D-W152, D-W164 · Round 5 "Click a result to act"; Round 6 "Clicking a result" (a catalogue result is added)
 
 ### S5a — Read a zero imaging time {#S5a}
 
@@ -83,7 +84,7 @@ data except Favourite and adding a Target from a catalogue result.
 - **Do:** Search `ngc 7000` and click the NGC 7000 result row, read the page, then go back. Search `m 31`, click the Messier M 31 result row, read the page, then go back and clear the search.
 - **Expect:** The NGC 7000 result shows that it is in My targets. Clicking it opens NGC 7000's Target detail, with the Project `NGC 7000 HOO` and its goal lines as S3 reads them. The M 31 result, in My targets since S5, shows the same, and clicking it opens M 31's Target detail.
 - **Expect (negative):** Neither click adds, duplicates or favourites a Target. My targets still lists exactly NGC 7000, IC 1396, M 31 and NGC 5139, one row each, and NGC 7000 is still not a favourite. Neither click writes a plan, Project or session record.
-- **Trace:** Targets list, Target detail · PLAN-TGT-FR-03, PLAN-TGT-FR-14 · D-W17 · Round 5 "Click a result to act" · Round 6 "Clicking a result" (a Target in My targets opens)
+- **Trace:** Targets list, Target detail · PLAN-TGT-FR-03, PLAN-TGT-FR-14 · PLAN-TGT-AC-03, PLAN-TGT-AC-19 · D-W17, D-W152, D-W164 · Round 5 "Click a result to act"; Round 6 "Clicking a result" (a Target in My targets opens)
 
 ### S6 — Search without SIMBAD {#S6}
 
@@ -169,7 +170,7 @@ data except Favourite and adding a Target from a catalogue result.
 - G5: Out of scope for this journey: no session is Trashed here. J34/S7 covers trashed frames leaving Sessions and the Captured column of Target NGC 7000 (PLAN-TGT-FR-08, D-W43). A wholly Trashed session (PLAN-TGT-AC-08) is not exercised. Blocks readiness until covered by a step or a journey.
 - G6: Unresolved implementation qualification: the bundled catalogue's angular sizes for NGC 7000, IC 1396 and M 57 are assumed to place them as S10, S11 and S12 state for the J15 fields of view. A different catalogue value changes the expected Fit readings. Blocks readiness.
 - G7: (dissolved 2026-10-12): answered by Round 6 "Targets opens on My targets"; S1 now asserts that the page opens on My targets with a toggle to Browse catalogues, and S7 and S10 switch with that toggle.
-- G8: (dissolved 2026-10-12): answered by Round 6 "Clicking a result"; S5 and S6 assert that a catalogue result is added, and S5b asserts that a result already in My targets opens its Target detail and adds nothing.
+- G8: (dissolved 2026-10-12): answered by Round 6 "Clicking a result"; S5 and S6 assert that a catalogue result is added, S5b asserts that a result already in My targets opens its Target detail and adds nothing, and all result rows have no Add button. D-W164 confirms this Round 5 lead-answer behavior; it is settled, not provisional.
 
 ## Delta log
 
@@ -186,3 +187,6 @@ data except Favourite and adding a Target from a catalogue result.
 - **Δ5** 2026-10-26 · P1, P2, S1, S2, S3, S4, S5, S5b, S6, S7 · behavior-change
   ★ becomes Favourite. The Favourite column shows a star and sorts, and the row menu offers **Add to favourites** and **Remove from favourites**. S4 also sets the Favourite filter, and Browse catalogues marks My targets members with a check.
   Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 11 (OWNER, 2026-10-23) on ui-harness-v5 @ 5dc245244; D-W142, PLAN-TGT-FR-04, PLAN-TGT-FR-17 · by: SpecAmend (intent-gated)
+- **Δ6** 2026-10-27 · S3, S5, S5b, SC9 · behavior-change
+  Round 5's click-to-act behavior is confirmed: result rows have no Add button, and clicking a result adds it to My targets or opens its Target detail when already present.
+  Evidence: D-W164 · owner's confirmation, 2026-10-27, astro-plan-ygihm · PLAN-TGT-FR-03, PLAN-TGT-AC-03 · by: SpecOwner2 (intent-gated)

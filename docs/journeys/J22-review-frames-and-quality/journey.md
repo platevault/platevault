@@ -1,9 +1,9 @@
 ---
 id: J22
 title: Review session frames and record quality decisions
-version: 8
+version: 9
 status: draft
-last_reviewed: 2026-10-03
+last_reviewed: 2026-10-27
 actors: [primary-user]
 surfaces: [frame-review, sessions, targets, projects, home]
 interfaces: [desktop-ui, desktop-ui-macos]
@@ -138,10 +138,10 @@ moves or trashes no source file.
 
 ### S10 — Finish reviewing the session's remaining frames {#S10}
 
-- **Do:** Press **⌥4** to list the 42 Unreviewed frames in `30 Sep`, select all with **⌘A**, press **P**, and confirm the bulk mark. Choose **Finish review**, then add the Ready `30 Sep` session to Project `NGC 7000 HOO` from its session row.
-- **Expect:** The confirmation names 42 frames. After confirming, those frames read Picked (library Usable), and the six rejected frames remain Unusable. **Finish review** makes the session Ready. Only after the user adds it does it join the Project; its 42 Usable frames contribute 3h 30m of OIII, and its six Unusable frames are visibly excluded from the Project's inputs.
+- **Do:** Press **⌥4** to list the 42 Unreviewed frames in `30 Sep`, select all with **⌘A**, press **P**, and confirm the bulk mark. Then choose **Mark rest usable**, read the remaining Unreviewed-frame count in its confirmation and confirm it. Choose **Finish review**, then add the Ready `30 Sep` session to Project `NGC 7000 HOO` from its session row.
+- **Expect:** The ⌘A mark confirmation names 42 frames. After confirming it, those frames read Picked (library Usable), and the six rejected frames remain Unusable. Mark rest usable confirms the number of remaining Unreviewed frames before marking; after confirmation no Unreviewed frame remains. **Finish review** makes the session Ready. Only after the user adds it does it join the Project; its 42 Usable frames contribute 3h 30m of OIII, and its six Unusable frames are visibly excluded from the Project's inputs.
 - **Expect (negative):** No session joins the Project before the user adds it. Reviewing, marking frames and adding the session moves no source file and sends nothing to the OS Trash.
-- **Trace:** LIB-FR-20, LIB-FR-23 · PIX-FR-14, PIX-FR-18, PIX-AC-20, PIX-AC-21 · PRJ-FR-08, PRJ-FR-09 · VSEL-FR-03, VSEL-FR-15 · D-W78, D-W79, D-W94, D-W96, D-W105, D-W118
+- **Trace:** LIB-FR-20, LIB-FR-23 · PIX-FR-14, PIX-FR-18, PIX-AC-20, PIX-AC-21 · PRJ-FR-08, PRJ-FR-09 · VSEL-FR-03, VSEL-FR-15 · D-W78, D-W79, D-W94, D-W96, D-W105, D-W118 · owner's answer, 2026-10-19, astro-plan-rzbzu
 
 ### S11 — Check that the Project's frames are all reviewed {#S11}
 
@@ -223,7 +223,7 @@ moves or trashes no source file.
 - SC6: S14 attaches 0 imported values to the P6 frame and shows 0 imported values as verified.
 - SC7: With the replacement in place, the frame reads ChangedContent, usable Ha reads 9h 10m and its cached values read valid 0 times (S15a); after S15b usable Ha reads 9h 15m again.
 - SC8: Measurement starts exactly three times, at S1, S4 and S15a, each time from **Measure frames**. Opening Review and the corner inspector (S7b) start 0 measurements, and S7b shows exactly 9 tiles.
-- SC9: The ⌘A **P** on 42 frames at S10 and the threshold **X** at S7a ask for confirmation, and zero frames are marked before a confirmation is accepted or after one is cancelled. Zero single-frame or hand-picked marks ask (S8, S9, S9a, S11a, S13, S16).
+- SC9: The ⌘A **P** on 42 frames at S10, the threshold **X** at S7a, and **Mark rest usable** on the remaining frames at S10 each ask for confirmation and name the number of affected frames. Zero frames are marked before confirmation or after cancellation. Zero single-frame or hand-picked marks ask (S8, S9, S9a, S11a, S13, S16).
 - SC10: 0 files are moved or sent to the OS Trash by any step: the six rejected frames (S8) and F1 (S11a, S13) stay on disk.
 - SC11: With the replacement in place, 18 Sep reads Needs review, `NGC 7000 HOO` gains 0 pending changes and its Apply waits (S15a); after S15b, 18 Sep reads Ready and Apply no longer waits (S15b).
 
@@ -235,8 +235,8 @@ moves or trashes no source file.
 - G4: Out of scope for this journey: a frame shared by two Projects and its library-wide Rejected state in both (PIX-AC-12) are not observed, because the fixture has one NGC 7000 Project. A Ready session added with library-Unusable frames visibly excluded (VSEL-AC-13) is not exercised. Blocks readiness until covered by a step or a journey.
 - G5: Out of scope for this journey: no frame is trashed before this journey. J34/S7 covers a Trashed frame's absence from frame review (PIX-AC-19). Mosaic panel progress and the panel map are not exercised. Blocks readiness until covered by a step or a journey.
 - G6: (dissolved 2026-10-12): answered by Round 6 "Reject is library-wide by default"; S8, S9, S10, S13 and S16 now assert X as the way a frame leaves the run: it reads "Rejected · Library" (library Unusable), leaves the draft at once, stays on disk, and U or P brings it back, while "Reject for this Project only" stays in the frame menu (S11b, S13).
-- G7: (dissolved 2026-10-12): answered by Round 6 "Large bulk marks need confirmation"; S10 now asserts ⌥4, ⌘A and P on the 42 Unreviewed frames asking for confirmation, with no frame marked before it is accepted.
-- G8: (dissolved 2026-10-16): answered by the owner's D-W118 (PIX-FR-14): every mark on a ⌘A or threshold selection asks, whatever its count, and single-frame and hand-picked marks never ask. S7a asserts the threshold confirmation, S9a a hand-picked two-frame mark with none, and S10 the ⌘A confirmation. "Mark rest usable" also asks and names the count (owner's answer, 2026-10-19, astro-plan-rzbzu.1); no step exercises it.
+- G7: (dissolved 2026-10-12): answered by Round 6 "Large bulk marks need confirmation"; S10 asserts ⌥4, ⌘A and P on the 42 Unreviewed frames asks for confirmation, with no frame marked before confirmation.
+- G8: (dissolved 2026-10-16): D-W118 (PIX-FR-14) settles that every P, X or U mark on a ⌘A or threshold selection asks for confirmation regardless of count, while single-frame and hand-picked marks never ask. S7a asserts threshold-selection confirmation; S9a asserts hand-picked marks without confirmation; S10 asserts the ⌘A confirmation. The 2026-10-19 answer also requires “Mark rest usable” confirmation naming the count, now exercised at S10.
 - G9: (dissolved 2026-10-15): D-W78 moves review into session intake and D-W94 removes runs, so there is no Review draft and no Discard to define. Library marks are durable when made, and reopened Review is allowed on a Ready session. Its marks reach open Projects that hold the session as labelled pending changes (D-W100) and never change a Closed or Archived Project (D-W97; LIB-FR-20, PIX-FR-18, VSEL-FR-12). The owner's answer on 2026-10-19 (astro-plan-rzbzu.1) settles that a mark setting a frame to Unreviewed, and a grouping correction that re-splits a held session, reach every open Project holding it as a labelled pending change; there the session reads Needs review, and Apply waits until Ready.
 - G10: Rests on a provisional F4 item, pending the owner's confirmation in PR #1804: D-W96's "captured" count of every matching suggestion (S12). If the owner changes it, S12's captured value changes.
 - G11: D-W140's reconfirmation branch is not observed: S15b ends the wait only by restoring the reviewed bytes, and no step reconfirms the replaced frame in frame review, so no step shows 18 Sep reading Ready and Apply no longer waiting after a reconfirmation (LIB-FR-09, LIB-AC-36; D-W140; owner's answer, 2026-10-20). Blocks readiness until a step does.
@@ -266,3 +266,6 @@ moves or trashes no source file.
 - **Δ8** 2026-10-20 · S15a, S15b, +SC11, +G11 · behavior-change
   A frame whose bytes change after review puts its session back to Needs review, and the holding Project's Apply waits, with no pending change, until the frame is reconfirmed or its reviewed bytes return. S15b observes the bytes returning, and G11 records reconfirmation as not observed.
   Evidence: D-W140 (owner's answer, 2026-10-20) in PR #1855, LIB-FR-09, LIB-AC-36 · by: Main (intent-gated)
+- **Δ9** 2026-10-27 · S10, SC9 · behavior-change
+  S10 now exercises the separately-confirmed “Mark rest usable” action, which names the number of remaining Unreviewed frames; SC9 records each bulk-confirmation case.
+  Evidence: D-W118 (owner answer, 2026-10-16) and 2026-10-19 answer in astro-plan-rzbzu · PIX-FR-14, PIX-AC-20 · by: SpecOwner2 (intent-gated)

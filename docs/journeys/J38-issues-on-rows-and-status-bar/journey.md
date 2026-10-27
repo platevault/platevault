@@ -1,13 +1,13 @@
 ---
 id: J38
 title: Handle issues from the status bar and on their rows
-version: 6
+version: 7
 status: draft
-last_reviewed: 2026-10-12
+last_reviewed: 2026-10-27
 actors: [primary-user]
 surfaces: [issues, status-bar, shell, home, sessions, projects, view, output, calibration, calibration-process, locations, import, indexing, activity, duplicates]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#shell-and-navigation-foundation, HARNESS-V5-FEEDBACK-R1.md#round-1b-decisions-user-2026-10-09, HARNESS-V5-FEEDBACK-R1.md#round-2c-user-2026-10-10, HARNESS-V5-FEEDBACK-R1.md#round-5, HARNESS-V5-FEEDBACK-R1.md#round-8-user-2026-10-12, P-SB3, P-ISS1, P-STO2, P-CAL2, P-CAL3, HARNESS-V5-IA.md#round-2b-foundation-status-bar-and-p-cal3-2026-10-09, HARNESS-V5-IA.md#S1, HARNESS-V5-IA.md#S17, apps/prototype/src/domain/issues.ts, apps/prototype/src/app/issues-hub.tsx, apps/prototype/src/app/status-bar.tsx, apps/prototype/src/store/issues.ts, apps/prototype/src/store/notifications.ts, apps/prototype/src/store/operations.ts, apps/prototype/messages/en-GB.json, D-W11, D-W24, D-W74, specs/064-library-inventory/spec.md, specs/071-storage-custody/spec.md, D-W92, specs/063-clean-rebuild-contract/spec.md#FR-032, specs/064-library-inventory/spec.md#LIB-FR-17, specs/064-library-inventory/spec.md#LIB-FR-23, specs/065-project-goals/spec.md#PRJ-FR-17, specs/065-project-goals/spec.md#PRJ-FR-18, specs/068-calibration-inputs/spec.md#CAL-FR-06, specs/070-results-reuse/spec.md#RES-FR-11, D-W94, D-W98, D-W100, D-W101, D-W105]
+trace: [HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#shell-and-navigation-foundation, HARNESS-V5-FEEDBACK-R1.md#round-1b-decisions-user-2026-10-09, HARNESS-V5-FEEDBACK-R1.md#round-2c-user-2026-10-10, HARNESS-V5-FEEDBACK-R1.md#round-5, HARNESS-V5-FEEDBACK-R1.md#round-8-user-2026-10-12, P-SB3, P-ISS1, P-STO2, P-CAL2, P-CAL3, HARNESS-V5-IA.md#round-2b-foundation-status-bar-and-p-cal3-2026-10-09, HARNESS-V5-IA.md#S1, HARNESS-V5-IA.md#S17, specs/063-clean-rebuild-contract/spec.md#FR-032, specs/063-clean-rebuild-contract/spec.md#FR-038, specs/064-library-inventory/spec.md#LIB-AC-44, apps/prototype/src/domain/issues.ts, apps/prototype/src/app/issues-hub.tsx, apps/prototype/src/app/status-bar.tsx, apps/prototype/src/store/issues.ts, apps/prototype/src/store/notifications.ts, apps/prototype/src/store/operations.ts, apps/prototype/messages/en-GB.json, D-W11, D-W24, D-W74, specs/064-library-inventory/spec.md#LIB-FR-17, specs/064-library-inventory/spec.md#LIB-FR-23, specs/065-project-goals/spec.md#PRJ-FR-17, specs/065-project-goals/spec.md#PRJ-FR-18, specs/070-results-reuse/spec.md#RES-FR-11]
 ---
 
 ## Goal
@@ -59,7 +59,7 @@ running, and the notifications history. Done means:
   - Output: `M 31 OSC`'s `1 master offered` (Add to calibration library) on its Project's Output step and Open work.
   - Drift: `1 changed` (Review) on the `1 Oct Ha` session row, and Changed content on the F-drift frame row.
 - **Expect (negative):** The toolbar has no Issues button and the app has no Issues hub. Home has no alerts list. The status bar shows no pills and no inline notification. Opening these pages changes no catalog or Project record and no file.
-- **Trace:** PRJ-FR-17 · D-W89, D-W92, D-W94, D-W105 · 063 FR-032 · 064 LIB-FR-17, LIB-FR-23 · 065 PRJ-FR-17, PRJ-FR-18 · 070 RES-FR-11
+- **Trace:** PRJ-FR-17 · D-W89, D-W92, D-W94, D-W144, D-W158 · 063 FR-032, FR-038 · 064 LIB-FR-17, LIB-FR-23, LIB-AC-44 · 065 PRJ-FR-17, PRJ-FR-18 · 068 CAL-FR-06 · 070 RES-FR-11
 
 ### S2 — Open each severity counter {#S2}
 
@@ -71,7 +71,7 @@ running, and the notifications history. Done means:
 
   Together the filtered pages show the 7 issues of S1, each exactly once. The `1 Oct Ha` row carries separate Needs calibration and drift issues; following the drift row's Review opens the session, where F-drift reads Changed content.
 - **Expect (negative):** No counter or menu lists an issue's text, and no filtered page shows a row with no issue. Choosing a counter changes nothing.
-- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 5 P-SB3 · D-W92 (counts only, each opening the owning page filtered; owner's answer of 2026-10-14, F7) · src/domain/issues.ts severities
+- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 5 P-SB3 · D-W92, D-W144, D-W158 (counts only, each opening the owning page filtered; dismissed issues are excluded until their identity changes) · 063 FR-032, FR-038
 
 ### S3 — Follow the failed Apply issue {#S3}
 
@@ -238,3 +238,6 @@ running, and the notifications history. Done means:
 - **Δ6** 2026-10-26 · S8 · behavior-change
   Work a restart interrupted reads "Interrupted when PlateVault restarted. Retry continues from the recorded progress."
   Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 11 (OWNER, 2026-10-23) on ui-harness-v5 @ 5dc245244; D-W149 · by: SpecAmend (intent-gated)
+- **Δ7** 2026-10-27 · S1, S2, S5a, S5b, S7 to S11, SC1, SC3, SC4, SC5, SC7 · behavior-change
+  Added contract traces for the status-bar groups, row-level issue behavior, the no-hub rule and dismissal recurrence. The issues this journey exercises map to their owning FR/ACs; seeded-catalog and fault-injection gaps stay implementation qualifications.
+  Evidence: D-W92, D-W144, D-W150, D-W157, D-W158, D-W164 · FR-032, FR-038, LIB-FR-17, LIB-FR-22, LIB-FR-23, LIB-AC-43, LIB-AC-44, STO-FR-18, STO-IMP-FR-06, astro-plan-0v2o0.2, astro-plan-ocyuc.5 · by: SpecOwner2 (intent-gated)

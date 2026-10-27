@@ -485,8 +485,8 @@
       "owner": "064-library-inventory",
       "journeyStep": "J18/S1, J18/S2, J18/S3, J18/S4, J18/S5",
       "spec": "064-library-inventory LIB-FR-01, LIB-FR-21, LIB-FR-27, LIB-AC-35; D-W117",
-      "action": "Leave first-run setup by finishing it, by Set up later and by Index later; step through the walk, or close it before its last stop; relaunch; replay the walk from Settings › Help. The controls Next, Back, Skip and Escape are provisional (D-W117).",
-      "expect": "Each way out of setup hands over to Home and opens the walk once at its first stop. The walk has one stop per main navigation entry, in navigation order, with Home's stop last: provisionally Projects, Targets, Sessions, Calibration, Import, Activity and Settings, then Home. After it is finished or skipped it never opens by itself again, and Settings › Help replays it from its first stop.",
+      "action": "Leave first-run setup by finishing it, by Set up later and by Index later; step through the modal walk, or close it before its last stop; relaunch; replay the walk from Settings › Help. The walk has Next, Back, Skip and Escape controls.",
+      "expect": "Each way out of setup hands over to Home and opens the walk once at its first stop. The walk has one stop per main navigation entry, in navigation order, with Home's stop last: Projects, Targets, Sessions, Calibration, Import, Activity, Settings and Home. After it is finished or skipped it never opens by itself again, and Settings › Help replays it from its first stop.",
       "negative": "The walk creates, changes or removes no location, session, Project or Target, and no demo or sample record exists."
     },
     {
@@ -808,10 +808,10 @@
       "flowStep": "Targets list: Show mode, search where clicking a result adds or opens it, columns, the Favourite filter, presets and rig selector (D-W17, D-W18, D-W19, D-W23, D-W37, D-W142, D-W152)",
       "owner": "072-observing-plans",
       "journeyStep": "J14/S1, J19/S6a, J29/S1, J29/S11, J29/S12, J35/S1, J35/S2, J35/S3, J35/S4, J35/S5, J35/S5a, J35/S5b, J35/S6, J35/S7, J35/S8, J35/S9, J35/S10, J35/S11, J35/S12, J35/S13",
-      "spec": "072-observing-plans PLAN-TGT-FR-01, PLAN-TGT-FR-02, PLAN-TGT-FR-03, PLAN-TGT-FR-04, PLAN-TGT-FR-05, PLAN-TGT-FR-06, PLAN-TGT-FR-07, PLAN-TGT-FR-08, PLAN-TGT-FR-09, PLAN-TGT-FR-10, PLAN-TGT-FR-11, PLAN-TGT-FR-12, PLAN-TGT-FR-13, PLAN-TGT-FR-14, PLAN-TGT-FR-17, PLAN-TGT-AC-01, PLAN-TGT-AC-03, PLAN-TGT-AC-16, PLAN-TGT-AC-20, PLAN-TGT-AC-21, PLAN-TGT-AC-22, PLAN-FR-10; D-W17, D-W18, D-W19, D-W23, D-W37, D-W60, D-W88, D-W142, D-W152",
+      "spec": "072-observing-plans PLAN-TGT-FR-01, PLAN-TGT-FR-02, PLAN-TGT-FR-03, PLAN-TGT-FR-04, PLAN-TGT-FR-05, PLAN-TGT-FR-06, PLAN-TGT-FR-07, PLAN-TGT-FR-08, PLAN-TGT-FR-09, PLAN-TGT-FR-10, PLAN-TGT-FR-11, PLAN-TGT-FR-12, PLAN-TGT-FR-13, PLAN-TGT-FR-14, PLAN-TGT-FR-17, PLAN-TGT-AC-01, PLAN-TGT-AC-03, PLAN-TGT-AC-16, PLAN-TGT-AC-20, PLAN-TGT-AC-21, PLAN-TGT-AC-22, PLAN-FR-10; D-W17, D-W18, D-W19, D-W23, D-W37, D-W60, D-W88, D-W142, D-W152, D-W164",
       "action": "Open Targets on My targets, search and click a catalogue result and a result already in My targets, toggle a favourite and use the Favourite filter, read and sort columns, open a row's Plan area, browse catalogues, apply and save presets, and select a mono rig, an OSC rig and this Project's rigs. Also read Targets before an observing site exists.",
       "expect": "My targets lists favourites, subjects of open Projects and every Target with at least one session; each open-Project subject has its Project badge. Search names sources; clicking a catalogue or SIMBAD result adds it to My targets as a favourite with the search still open, and clicking a result already there opens it. The Favourite column shows a star on each favourite, and the Favourite filter, kept as `?fav=`, lists All, Yes or No. Columns show site-based planning values, presets apply and persist, and a selected rig adds Fit and limits the Filters strip. Without a site, planning columns read a dash and offer Add an observing site in Settings (owner's answer, 2026-10-19, astro-plan-rzbzu.1).",
-      "negative": "Searching and browsing write nothing until the user clicks a result, result rows carry no Add button (provisional, PLAN-TGT-FR-03), and adding a Target creates no Project. No window is computed for an assumed location, built-in presets cannot be edited, and no Avoid tonight preset exists."
+      "negative": "Searching and browsing write nothing until the user clicks a result, result rows carry no Add button, and adding a Target creates no Project. No window is computed for an assumed location, built-in presets cannot be edited, and no Avoid tonight preset exists."
     },
     {
       "flowStep": "The \"Planned\" view: a plan per night, reminders and the calendar export (D-W151)",
@@ -823,9 +823,36 @@
       "negative": "Adding to one night's plan leaves the other nights' plans unchanged, the view has no Favourite filter, and the page has no wide altitude timeline."
     },
     {
+      "flowStep": "Status bar and row-level issues, with no Issues hub (D-W92)",
+      "owner": "063-clean-rebuild-contract",
+      "journeyStep": "J38/S1, J38/S2, J38/S3, J38/S4, J38/S5, J38/S5a, J38/S5b, J38/S6, J38/S7, J38/S8, J38/S9, J38/S10, J38/S11, J38/S12, J38/S13, J38/S14",
+      "spec": "063-clean-rebuild-contract FR-032, FR-038; 064-library-inventory LIB-FR-17, LIB-FR-18, LIB-FR-22, LIB-FR-23, LIB-AC-43, LIB-AC-44; 065-project-goals PRJ-FR-17, PRJ-FR-18; 068-calibration-inputs CAL-FR-06; 070-results-discovery RES-FR-11; 071-storage-custody STO-IMP-FR-06, STO-FR-18; D-W92, D-W144, D-W150, D-W157, D-W158; astro-plan-0v2o0.2, astro-plan-ocyuc.5",
+      "action": "Read the status bar and affected rows, open each severity counter, follow row-owned issues, take a location offline and reconnect it, dismiss and restore row issues, import and retry interrupted work, observe duplicate scans, and read notification history.",
+      "expect": "Issues appear on affected rows with actions; no Issues hub exists. The status bar shows online locations and selection, running work or Idle, nonzero issue counts, and notification history. Counters show counts only and open owning pages filtered to affected rows (or a page menu); dismissed issues leave counts while state remains unchanged and return when their identity changes.",
+      "negative": "No issue list appears in the bar or hub. Opening counters or history does not mutate files, catalog records or Projects; no counter shows 0, and no dismissed issue is counted."
+    },
+    {
+      "flowStep": "Settings > Appearance: theme and language only; one density, no density control (D-W86, D-W143)",
+      "owner": "064-library-inventory",
+      "journeyStep": "J40/S1, J40/S2, J40/S3, J40/S4, J40/S6, J40/S7, J40/S8, J40/S10, J40/S11, J40/S12",
+      "spec": "064-library-inventory LIB-FR-21, LIB-AC-45; 063-clean-rebuild-contract FR-042; D-W86, D-W143; astro-plan-0v2o0.3; astro-plan-k9fil; astro-plan-ocyuc.5",
+      "action": "Set the appearance mode and theme, choose interface language, relaunch to check persistence, and restore defaults.",
+      "expect": "Theme, mode and language apply immediately and persist across relaunch, including before the first frame. Match system follows the OS using its selected dark/light pair. Density has no setting; J40 covers appearance and language only.",
+      "negative": "Appearance changes no library record or source file; there is no density setting or density journey step. Keyboard behavior is J42's contract."
+    },
+    {
+      "flowStep": "Keyboard model, shortcuts, go-to keys and command palette (D-W91, D-W121, D-W162)",
+      "owner": "063-clean-rebuild-contract",
+      "journeyStep": "J42/S1, J42/S2, J42/S3, J42/S3a, J42/S4, J42/S5, J42/S6, J42/S7, J42/S8, J42/S9, J42/S10, J42/S11, J42/S12, J42/S13, J42/S14, J42/S15",
+      "spec": "063-clean-rebuild-contract FR-025, FR-026, FR-027, FR-031, FR-037, FR-042, FR-042-AC-01, FR-042-AC-02; 064-library-inventory LIB-FR-21, LIB-AC-45; D-W91, D-W121, D-W162, D-W164; astro-plan-ocyuc.5",
+      "action": "Work from launch through the Project View with keyboard-only shortcuts, go-to navigation, Back/Forward, table row navigation and menus, sheets, the status-bar Cancel action and the command palette.",
+      "expect": "Keyboard help lists the available keys and go-to sequences. Shortcuts do not fire while typing; the preference disables single-key navigation while ⌘K/Ctrl+K remains active. Table navigation follows the settled P-KBD1 model. The command palette searches pages, actions and entities, opens its highlighted result, excludes unavailable Plan and Storage surfaces, and restores focus on Escape.",
+      "negative": "No pointer interaction, stray navigation while typing, tab stops on non-current rows, or unintended data/file mutation occurs. Theme/language and density are owned by J40, not J42."
+    },
+    {
       "flowStep": "Settings > Equipment: the Add equipment menu, cameras, telescopes, reducers, filters and rigs, rig versions, camera aliases and defaults, and the unknown-filter prompt (D-W31, D-W87, D-W104, D-W147, D-W155)",
-      "owner": "072-observing-plans",
       "journeyStep": "J15/S1, J15/S2, J15/S3, J15/S3a, J15/S4, J15/S4a, J15/S4b, J15/S4c, J15/S4d, J15/S4e, J35/S13",
+      "owner": "072-observing-plans",
       "spec": "072-observing-plans PLAN-EQ-FR-01, PLAN-EQ-FR-02, PLAN-EQ-FR-03, PLAN-EQ-FR-04, PLAN-EQ-FR-05, PLAN-EQ-FR-06, PLAN-EQ-FR-07, PLAN-EQ-FR-08, PLAN-EQ-AC-01, PLAN-EQ-AC-02, PLAN-EQ-AC-03, PLAN-EQ-AC-04, PLAN-EQ-AC-05, PLAN-EQ-AC-06, PLAN-EQ-AC-14, PLAN-EQ-AC-15, PLAN-TGT-FR-13, PLAN-TGT-AC-13; 064-library-inventory LIB-FR-05, LIB-FR-26; 065-project-goals PRJ-FR-31; 068-calibration-inputs CAL-FR-21, CAL-FR-22; D-W23, D-W30, D-W31, D-W37, D-W87, D-W104, D-W105, D-W147, D-W155",
       "action": "In Settings > Equipment register cameras, telescopes and a reducer, compose mono and OSC rigs, add filters with FITS FILTER values and bands, create a dated rig version, configure camera aliases and defaults, recover from a failed save, confirm a session's rig, and accept or decline an unknown-filter prompt.",
       "expect": "Mono or OSC comes from the camera. Field of view comes from the camera's sensor and the rig's effective focal length, the telescope's focal length times its reducer's factor. Rig versions list dates and do not rewrite a session's captured version. Cameras that share a model require unique aliases; Don't use darks and Don't use bias settle sessions as No choices. An unmatched FILTER value on a confirmed rig offers Add value to rig.",

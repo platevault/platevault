@@ -1,9 +1,9 @@
 ---
 id: J18
 title: Get oriented after setup and make a first import, Project and View
-version: 9
+version: 10
 status: draft
-last_reviewed: 2026-07-19
+last_reviewed: 2026-10-27
 actors: [astrophotographer]
 surfaces: [onboarding, shell, home, import, sessions, targets, projects, view, output, settings]
 interfaces: [desktop-ui, desktop-ui-macos]
@@ -54,17 +54,16 @@ first Apply builds the Project's View from the original sessions.
 
 ### S2 — Complete the walk end to end {#S2}
 
-- **Do:** Use Next to advance through every stop, then finish the walk at the last stop.
-- **Expect:** The walk has one stop per main navigation entry, in navigation order, except that Home's stop comes last. The stops are Projects, Targets, Sessions and Calibration from the source list, Import from the toolbar, then Activity and Settings, and Home last (provisional list, G7). Every stop brings its page into view, and Back returns to the prior stop and its page. The last stop points at Home's dashboard (S6) with Home in view. Finishing the last stop closes the walk.
-- **Expect (negative):** No stop mentions an Inbox, "File into library" or a sidebar Getting started trigger, and no stop points at a page that the v5 source list or toolbar does not offer. Provisional (G7): the walk is modal, so clicking outside its tooltip neither dismisses it nor acts on the underlying page, and only Next, Back, Skip and Escape control it.
-- **Trace:** product decision 2026-07-18 (spec 056 FR-002, FR-003) · LIB-FR-10, LIB-FR-27 · LIB-AC-35 · PRJ-FR-17, PRJ-FR-22 · D-W7, D-W11, D-W24, D-W89, D-W117 · HARNESS-V5-IA.md §Source list
+- **Do:** Use Next to advance through every stop, then finish the walk at the last stop. To test each setup exit, repeat on a fresh install with Set up later and Index later.
+- **Expect:** Every setup exit—finishing setup, Set up later or Index later—hands over to Home and opens a one-time modal orientation walk. It has one stop per main navigation entry, in navigation order, with Home's stop last: Projects, Targets, Sessions, Calibration, Import, Activity, Settings and Home. Every stop brings its page into view; Next and Back move between stops, and Skip or Escape closes the walk. Finishing or skipping it ends the walk, which never opens by itself again. Settings > Help replays it from its first stop.
+- **Expect (negative):** The walk creates and changes no record. It has no stop for the optional Recent group and no Getting started checklist on Home.
+- **Trace:** LIB-FR-27, LIB-AC-35 · D-W117 (owner's answer to astro-plan-rzbzu, 2026-10-16)
 
 ### S3 — Skip the walk instead of finishing it {#S3}
 
-- **Do:** From a fresh, not-yet-oriented install, click **Set up locations**, then **Set up later** on the Locations step, and click Skip on any stop of the walk. On a second fresh install, add `Empty/Captures`, click **Continue**, then **Index later**, and press Escape on any stop of the walk.
-- **Expect:** Each exit closes setup and hands over to Home, and the walk opens at its first stop without any further click. Skip and Escape each close the walk immediately from whichever stop it was on.
-- **Expect:** Skipping is recorded as equivalent to finishing for "never auto-runs twice" (S4). Skip and finish are the two terminal outcomes of the same one-time walk.
-- **Trace:** LIB-FR-01, LIB-FR-27 · LIB-AC-01, LIB-AC-35 · D-W117
+- **Do:** From a fresh install, choose Set up locations then Set up later; on another fresh install, add `Empty/Captures`, choose Continue, then Index later. Press Skip on one walk and Escape on the other.
+- **Expect:** Each exit closes setup, hands over to Home and opens the walk at its first stop without another action. Skip and Escape each close it; the walk never opens automatically again.
+- **Trace:** LIB-FR-01, LIB-FR-27 · LIB-AC-01, LIB-AC-35 · D-W117 (owner's answer to astro-plan-rzbzu, 2026-10-16)
 
 ### S4 — The walk never auto-runs a second time {#S4}
 
@@ -160,8 +159,7 @@ first Apply builds the Project's View from the original sessions.
 - G4: (dissolved 2026-10-16): answered by the owner's D-W117 (LIB-FR-27). Every way out of setup hands over to Home and launches the walk once (S1, S3). The walk has one stop per main navigation entry in navigation order with Home's stop last (S2), and Settings › Help replays it (S5).
 - G5: (dissolved 2026-10-15): D-W89 leaves the setup checklist off Home, so no setup, import, Project or run outcome ticks an item. S9 to S9b assert the import, Project and Apply outcomes themselves.
 - G6: (dissolved 2026-10-15): Home has no setup checklist under PRJ-FR-17 and D-W89; S6, S7 and S7a now assert the current dashboard sections and their empty states.
-- G7: Rests on provisional items, pending the owner's confirmation in PR #1804: D-W96's matching rule, which makes the Ready Card-1 session a suggestion of `First light` (S9b), and D-W100's rule that the first Apply builds the View with no separate Start processing (S9b). D-W117's walk details are provisional too. The walk is modal and driven by Next, Back, Skip and Escape (S2, S3). Its stops are Projects, Targets, Sessions, Calibration, Import, Activity, Settings and Home (S2). If the owner changes one, the steps that cite it change.
-- G8: (dissolved 2026-10-19): the owner's answer in astro-plan-rzbzu.1 settles D-W118: **Mark rest usable** asks for confirmation and names the number of Unreviewed frames. S9 requires and confirms that action.
+- G7: Rests only on provisional F4 items, pending the owner's confirmation in PR #1804: D-W96's matching rule makes the Ready Card-1 session a suggestion of `First light` (S9b), and D-W100's rule that first Apply builds the View with no separate Start processing (S9b). D-W117's walk behavior is settled: S2 asserts the modal walk, navigation-order stops, Next/Back, Skip/Escape and Home last; S3 exercises Set up later and Index later; S5 covers replay.
 
 ## Delta log
 
@@ -219,3 +217,7 @@ steps above were checked against it.
 - **Δ9** 2026-10-19 · S9 · behavior-change
   **Mark rest usable** asks for confirmation and names the number of Unreviewed frames.
   Evidence: PIX-FR-14 · D-W118 · owner's answer, 2026-10-19 in astro-plan-rzbzu.1 · by: OwnerAnswersDocsFix (intent-gated)
+
+- **Δ10** 2026-10-27 · S2, S3 · behavior-change
+  D-W117 settles the modal orientation walk, its stops and controls, all setup exits, one-time behavior and replay. The answered walk details are no longer provisional.
+  Evidence: D-W117, LIB-FR-27, LIB-AC-35 · astro-plan-rzbzu owner answer, 2026-10-16 · by: SpecOwner2 (intent-gated)

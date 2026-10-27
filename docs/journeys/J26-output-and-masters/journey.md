@@ -1,7 +1,7 @@
 ---
 id: J26
 title: Discover Project Output and adopt a calibration master
-version: 7
+version: 8
 status: draft
 last_reviewed: 2026-10-03
 actors: [primary-user]
@@ -180,22 +180,15 @@ The user opens the Project's Output step to find its Results, saves finished ima
 ## Known gaps
 
 - G1: Not validated: the rebuilt application does not exist. Expected behavior follows specs 063 to 072 and workflow decisions D-W93 to D-W116 in PR #1804; no implementation has been validated against them.
-- G2: (dissolved 2026-10-15): D-W93 drops Results as inputs, so no step depends on Siril's product-input capability; S4 and S6 assert that `Output/` is never a Project input.
 - G3: (dissolved 2026-10-15): D-W93 drops Results as inputs and D-W94 removes runs, so there is no product to pick into a run, no mixed raw and product input and no run group Result; S4a asserts that another Project's Results are not selectable.
 - G4: Unresolved implementation qualification: no fault control yet pauses adoption between destination verification and registration (P6), and S8c depends on it. Blocks readiness.
-- G5: (dissolved 2026-10-12): answered by Round 6 "No silent re-rank"; S9 now asserts that the prepared run keeps `MasterFlat_2026-09-18.xisf` and both revisions unchanged while Calibrate shows "Better match available", and S9a to S9c assert that the notice follows the adopted master's availability.
-- G6: (dissolved 2026-10-12): answered by Round 6 "Result revision"; S1 and S1a now assert that tool evidence decides each stack's revision, also against the revision current when it appeared, and that the log, without it, is marked Inferred.
-- G7: (dissolved 2026-10-12): answered by Round 6 "Rename runs and Projects"; S4 now asserts that the run starts as `NGC 7000 RedCat` and is renamed `NGC7000 HOO combine` on the run header, and S7 and S7a read the picker of the existing `28 Sep Ha copy check` instead of starting throwaway runs.
-- G8: (dissolved 2026-10-12): answered by Round 6 "Adopting a master"; S8a to S9 now assert that **Add to library** opens a confirmation naming the destination path and SHA-256 and re-verifies the bytes on confirm, so S8b writes no copy. G9 records what stays open.
-- G9: (dissolved 2026-10-16): answered by the owner's D-W119 (CAL-FR-07, CAL-AC-08). Adoption refuses PlateVault's own unregistered copy at the fixed destination, names it and offers a reviewed Move to Trash, then retries, so S9 clears the destination through PlateVault and adopts there.
+- G5: (dissolved 2026-10-27): D-W165 settles both parts of Better match available. Import review offers a strictly higher new master for an existing pin as an unticked “Better for: {session}, …” beside “Used for: …”; confirming Import reassigns only when the user chooses it. After import the matching-kind row on the session shows passive “Better match available” beside Reassign…, never on the Project's Calibrate step; it is not an issue and does not put the session in Needs calibration. If ranking cannot distinguish candidates, no hint appears. J26's adopted master has no pinned session, so its empty Used by does not show the hint (J36/S11 checks the detail and popover).
+- G6: (dissolved 2026-10-12): answered by Round 6 “Result revision”; S1 and S1a assert that tool evidence decides each stack's revision, including against the revision current when it appeared, and the log is Inferred without evidence.
+- G7: (dissolved 2026-10-12): answered by Round 6 “Rename runs and Projects”; S4 asserts the run starts auto-named and is renamed on its header; S7 and S7a read an existing run picker.
+- G8: (dissolved 2026-10-12): answered by Round 6 “Adopting a master”; S8a to S9 assert the confirmation names destination and SHA-256, and re-verifies on confirm, so S8b writes no copy.
+- G9: (dissolved 2026-10-16): answered by the owner's D-W119 (CAL-FR-07, CAL-AC-08). Adoption refuses PlateVault's own unregistered copy at the fixed destination, names it and offers reviewed Move to Trash, then retries.
 - G10: Rests on a provisional F4 item, pending the owner's confirmation in PR #1804: D-W98's once-only offer of a generated master found in `Processing/`, on the Output step (S8 to S9, SC5). If the owner changes it, those steps change.
-
 ## Delta log
-
-- **Δ2** 2026-10-06 · S1, +S1a, S2, S4, +S4a, S6, S7, S8, S8a, S9, S9a, S9b · behavior-change
-  Results are discovered in the sibling `<Run> Results/` folder, one folder for every revision, and each candidate records its revision. Attach Result is a visible action on the Results step. Reuse is through a new run's Results input filter, across Projects and rigs. Intermediates are never trashed from the Results step. The new master is offered once in the Results step, with Dismiss.
-  Evidence: specs/070-results-reuse RES-FR-01, RES-FR-02, RES-FR-05, RES-AC-01, RES-AC-13, RES-AC-14, RES-AC-15. specs/068-calibration-inputs CAL-FR-06, CAL-AC-12. D-W4, D-W55, D-W56, D-W67 at e4476231. D-W67, D-W70. 070 RES-FR-01, RES-FR-05, RES-AC-16, 069 PREP-FR-07 and 071 STO-FR-16 · by: JourneysC (intent-gated)
-- **Δ3** 2026-10-12 · S2, S3, S3a, S4, S4a, S7, S7a, S8, S8a, S8b, S8c, S9, S9a, S9b · behavior-change
   Attach is **Attach…**, Accept works per product, and reuse goes through a run's **Add products…** picker, where another rig reads `Another rig`. Siril's master flat no longer comes from raw flats PlateVault handed it.
   Dismiss is reversible: the offer goes to the Calibration library's Dismissed filter, where Restore offers it again. Add to library files the master at a fixed path in structured calibration storage, so no destination or file name is chosen.
   Evidence: HARNESS-V5-IA.md §Screens S5, S14, §Round 2b foundation (C: masters only, `masterStoragePath`); HARNESS-V5-FEEDBACK-R1.md §Domain and seed P-CAL2, §Round 1b P-CAL3; prototype src/features/v5/c-runs/results-step.tsx, select-step.tsx, actions.ts (`answerMasterOffer`), messages/en-GB.json (apps/prototype/ on ui-harness-v5 @ b5e813a5); user instruction 2026-10-12 · by: JourneysV5.U4Calibration (intent-gated)
@@ -212,3 +205,6 @@ The user opens the Project's Output step to find its Results, saves finished ima
 - **Δ7** 2026-10-16 · S8c, S9 · behavior-change
   S9 no longer moves the copy S8c left by hand: adoption refuses it as PlateVault's own unregistered copy, offers a reviewed Move to Trash, and retries once the copy is in the OS Trash. G9 is dissolved.
   Evidence: D-W119 (owner's second batch of 2026-10-16) in PR #1804, CAL-FR-07, CAL-AC-08, CAL-AC-09, STO-FR-12 · by: EncodeOwnerAnswers2 (intent-gated)
+- **Δ8** 2026-10-27 · G5 · behavior-change
+  D-W165 settles the Better match import-review choice and places the passive post-import hint on the session's matching-kind row beside Reassign…, rather than a Project's Calibrate step. The adopted-master fixture has no pinned session, so it does not exercise that hint.
+  Evidence: D-W165, “Better match: go with C + A”, owner's answer 2026-10-27 in astro-plan-ygihm; CAL-AC-33, CAL-FR-20/21, LIB-AC-40 · by: SpecOwner2 (intent-gated)

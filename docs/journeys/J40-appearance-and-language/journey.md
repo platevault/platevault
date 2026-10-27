@@ -1,9 +1,9 @@
 ---
 id: J40
 title: Choose a theme and language in Settings › Appearance and keep them across restarts
-version: 4
+version: 5
 status: draft
-last_reviewed: 2026-10-12
+last_reviewed: 2026-10-27
 actors: [primary-user]
 surfaces: [settings, appearance, i18n, shell, status-bar, home, activity, keyboard]
 interfaces: [desktop-ui, desktop-ui-macos]
@@ -116,7 +116,7 @@ The user chooses how PlateVault looks and reads: they set its appearance mode, c
 
 ## Success criteria
 
-- SC1: S2 lists exactly 13 themes, each with a swatch, and PlateVault Dark is selected at start. Appearance has no density setting.
+- SC1: S2 lists exactly 13 themes, each with a swatch, and PlateVault Dark is selected at start.
 - SC2: In each theme chosen in S3 and S4, the measured contrast is at least 4.5:1 for text and status-pill text and at least 3:1 for UI glyphs and control borders.
 - SC3: In S7, 0 English UI words remain on the 9 screens visited plus every Settings section; months and decimals follow pt-BR.
 - SC4: In S8, on 5 screens at 1280 × 640, the window scroll height equals the viewport height and there is no horizontal scroll.
@@ -129,11 +129,11 @@ The user chooses how PlateVault looks and reads: they set its appearance mode, c
 - G1: Not validated. The rebuilt application does not implement Settings › Appearance yet; the behavior follows the harness v5 design (ui-harness-v5 @ b5e813a5: HARNESS-V5-IA.md §S16 and §Round 2 foundation, HARNESS-V5-FEEDBACK-R1.md §Shell and navigation and §Round 1b, I18N.md, themes-contrast.md).
 - G2: Unresolved implementation qualification: SC2 needs a contrast measurement over computed colours in the real webview; no validator script exists for it, and the harness figures in themes-contrast.md were computed from tokens, not from the running app. Blocks readiness.
 - G3: Unresolved implementation qualification: S4 needs the validator to switch the OS appearance during journey validation on each desktop lane. Blocks readiness.
-- G4: Out of scope: what each keyboard shortcut does (J42); per-library settings such as naming, goal templates, locations and applications (J41); equipment and sites (J15).
+- G4: (dissolved 2026-10-27): This journey covers only appearance (theme/mode) and language; keyboard behavior belongs to J42. No density setting or density-related journey step exists (astro-plan-k9fil).
 
 ## Delta log
-- **Δ2** 2026-10-15 · S1, S2, S4, S5, S7, S10, S11 · behavior-change
-  Appearance has one density and no density setting. Dark, Light and Follow system are modes; Match system is no longer a theme option.
+- **Δ2** 2026-10-15 · S1, S2, S4, S7, S10, S11 · behavior-change
+  Dark and Light are modes; Match system follows the selected dark and light themes.
   Evidence: D-W86 and LIB-FR-21 · by: SpecF4Writer2 (intent-gated)
 - **Δ3** 2026-10-26 · P1, S2, S4, S6 · behavior-change
   Follow system is named Match system and picks one dark and one light theme, and the language is a select.
@@ -142,3 +142,6 @@ The user chooses how PlateVault looks and reads: they set its appearance mode, c
   The minimum window is now 1280×640 on macOS, Windows and Linux; a restored
   window is moved and shrunk at start-up to fit a connected screen.
   Evidence: D-W163, astro-plan-ocyuc.2, PR #1889 · by: WindowDocs (intent-gated)
+- **Δ5** 2026-10-27 · S1, S2, S4, S6, S7, S9, S10, S11 · behavior-change
+  The owning requirement traces appearance (theme/mode) and language persistence to J40; density is deliberately absent. Keyboard shortcut behavior is owned by J42.
+  Evidence: LIB-FR-21, LIB-AC-45 · astro-plan-0v2o0.3; density dropped by astro-plan-k9fil; final UI acceptance astro-plan-ocyuc.5 · by: SpecOwner2 (intent-gated)

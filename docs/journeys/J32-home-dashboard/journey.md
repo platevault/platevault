@@ -1,9 +1,9 @@
 ---
 id: J32
 title: Work from the Home dashboard and follow each Project's Next action
-version: 7
+version: 8
 status: draft
-last_reviewed: 2026-10-06
+last_reviewed: 2026-10-27
 actors: [primary-user]
 surfaces: [home, projects, sessions, frame-review, targets, planning, view-review, wrap-up, locations, indexing, duplicates, activity]
 interfaces: [desktop-ui, desktop-ui-macos]
@@ -85,7 +85,7 @@ The user opens PlateVault and decides what to do next from Home. Home shows pend
 - **Do:** Open `2 Oct OIII` from Sessions filtered to Needs review. Select all 48 frames with **⌘A** (Ctrl+A off macOS) and press **P**, read the confirmation and confirm it, then choose **Finish review**. Return to Home and follow `NGC 7000 HOO`'s Next action.
 - **Expect:** The session's Review step lists the 48 frames. **P** on the ⌘A selection opens the bulk confirmation `Mark 48 frames Usable?`. After confirming and finishing review, all 48 read Usable and the session becomes Ready. Its calibration is unsettled, so it stays in Needs calibration, appears as a suggestion to `NGC 7000 HOO` on Home, and the Project's Next reads **Choose its flats first**.
 - **Expect (negative):** No frame changes before the confirmation is accepted. Review changes no Project membership or goal until the user adds the session, and the unsettled session cannot be added. No file changes before Apply.
-- **Trace:** PRJ-FR-08, PRJ-FR-09, PRJ-FR-18 · PRJ-AC-23 · LIB-FR-20, LIB-FR-23 · PIX-FR-14 · PIX-AC-21 · D-W94, D-W96, D-W100, D-W105, D-W118
+- **Trace:** PRJ-FR-08, PRJ-FR-09, PRJ-FR-18 · PRJ-AC-23 · LIB-FR-20, LIB-FR-23 · PIX-FR-14 · PIX-AC-21 · D-W94, D-W96, D-W100, D-W105, D-W118; astro-plan-rzbzu, owner's answer 2026-10-16
 
 ### S5 — Follow the other Next actions {#S5}
 
@@ -172,7 +172,7 @@ The user opens PlateVault and decides what to do next from Home. Home shows pend
 - G1: Not validated. The rebuilt application does not exist. Expected behavior follows specs 063, 064, 065, 067, 068, 070 and 072 at head and workflow decisions D-W93 to D-W116. No implementation has been validated against them.
 - G2: Unresolved implementation qualification: P1 and P2 need a seeded catalog in a known state at a fixed local time. No fixture builder exists, and the windows depend on Backyard's coordinates. Blocks readiness.
 - G5: Out of scope for this journey: a session that qualifies for more than one Pending work category, and the Status section's Pause, Resume and Retry actions, are not exercised. Blocks readiness until covered by a step or a journey.
-- G6: (dissolved 2026-10-16): answered by the owner's D-W118 (PIX-FR-14): every mark on a ⌘A or threshold selection asks, whatever its count, so S4 reads `Mark 48 frames Usable?` and no frame changes before it is confirmed. Single-frame and hand-picked marks never ask (J22/S9a). **Mark rest usable** also asks and names the count (owner's answer, 2026-10-19, astro-plan-rzbzu.1); no step exercises it.
+- G6: (dissolved 2026-10-16): answered by the owner's D-W118 (PIX-FR-14): every mark on a ⌘A or threshold selection asks, whatever its count, so S4 reads `Mark 48 frames Usable?` and no frame changes before it is confirmed. Single-frame and hand-picked marks never ask (J22/S9a). **Mark rest usable** also asks and names the count (owner's answer, 2026-10-19, astro-plan-rzbzu.1); this journey does not invoke that control.
 - G7: Rests on provisional F4 items, pending the owner's confirmation in PR #1804: D-W105's "Choose its flats first" copy (S2, S4, S6), D-W96's matching rule and its "captured" count (S2, S4, S6, S8), and PRJ-FR-18's provisional "Add sessions" Next copy and the step a waiting Project opens at (S2, S6). If the owner changes one, the steps that cite it change.
 
 ## Delta log
@@ -196,3 +196,6 @@ The user opens PlateVault and decides what to do next from Home. Home shows pend
 - **Δ7** 2026-10-26 · P4, S7 · behavior-change
   ★ becomes Favourite: Tonight marks a favourite as one, in the wording of the Targets page's Favourite column.
   Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 11 (OWNER, 2026-10-23) on ui-harness-v5 @ 5dc245244; D-W142, PLAN-TGT-FR-17 · by: SpecAmend (intent-gated)
+- **Δ8** 2026-10-27 · S4, G6 · behavior-change
+  S4's ⌘A confirmation remains traced to owner answer D-W118; the separate “Mark rest usable” answer is documented without implying J32 invokes that control.
+  Evidence: D-W118, PIX-FR-14, PIX-AC-21 · astro-plan-rzbzu owner answer 2026-10-16 · by: SpecOwner2 (intent-gated)

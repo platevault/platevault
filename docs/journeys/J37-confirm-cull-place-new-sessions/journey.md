@@ -1,9 +1,9 @@
 ---
 id: J37
 title: Confirm, cull and place a new night's sessions after an import
-version: 5
+version: 7
 status: draft
-last_reviewed: 2026-10-12
+last_reviewed: 2026-10-27
 actors: [primary-user]
 surfaces: [status-bar, home, sessions, frame-review, projects]
 interfaces: [desktop-ui, desktop-ui-macos]
@@ -151,7 +151,7 @@ After import, the user resolves Target and rig associations, reviews new session
 - G3: Unresolved implementation qualification: P2 assumes that the RedCat optics keywords of `2 Oct Ha` and `4 Oct Ha` associate rig `RedCat` without user action (LIB-FR-05). The v5 design does not state the equipment-matching rule for a session whose TELESCOP and FOCALLEN match an existing rig. Blocks readiness.
 - G4: Out of scope for this journey, covered elsewhere: reopening a Ready session's Review and its labelled pending changes on open Projects (J22), moving Unusable frames to Trash during Wrap up (J44, J34), status-bar counters opening their owning pages (J38), Home's Open work and Next action (J32), creating rigs and filter lists (J15), first Apply and later View changes (J21, J24, J25), and a failed catalog write while confirming (J19/S11).
 - G5: Out of scope for this journey: a Trashed session (Sessions' Trashed filter), reviewing a session whose location is offline, a confirmation made stale by a concurrent edit, and Create Project from a session with no Target, which opens unprefilled. Blocks readiness until covered by a step or a journey.
-- G6: (dissolved 2026-10-16): answered by the owner's D-W118 (PIX-FR-14): every mark on a ⌘A or threshold selection asks, whatever its count. So S4 (6 frames), S6 (32 frames) and S9 (12 frames) all ask, and single-frame marks such as S6's three X marks never ask. **Mark rest usable** also asks and names the count (owner's answer, 2026-10-19, astro-plan-rzbzu.1); no step exercises it.
+- G6: (dissolved 2026-10-16): D-W118 settles confirmation for every mark made on a ⌘A or threshold selection, regardless of count; single-frame and hand-picked marks never ask. S4 (6 frames), S6 (32 frames) and S9 (12 frames) assert ⌘A confirmation, and S6's three X marks require none. “Mark rest usable” also asks and names the count (owner's answer, 2026-10-19, astro-plan-rzbzu.1); no step in this journey uses that separate control.
 - G7: (dissolved 2026-10-15): D-W94 and LIB-FR-12 make confirming a Target a change to the session's catalog association only, so no move review follows it. Imported files stay at the paths listed in the Import preview; this journey verifies that P5 remains unchanged (LIB-FR-12, STO-IMP-FR-02).
 - G8: Rests on provisional F4 items, pending the owner's confirmation in PR #1804: D-W96's matching rule, which makes Ready RedCat sessions with Target NGC 7000 suggestions of `NGC 7000 HOO` (S7, S10), and D-W94's rig list that only decides suggestions (S8). If the owner changes one, the steps that cite it change.
 
@@ -170,3 +170,6 @@ After import, the user resolves Target and rig associations, reviews new session
 - **Δ5** 2026-10-26 · S1, SC1 · behavior-change
   A counter with one issue opens the same menu of owning pages as a counter with several, so the ⚠ counter's menu names `Sessions · 1`.
   Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 11 (OWNER, 2026-10-23) on ui-harness-v5 @ 5dc245244; D-W144, FR-032 · by: SpecAmend (intent-gated)
+- **Δ7** 2026-10-27 · G6 · behavior-change
+  D-W118's ⌘A/threshold selection distinction is settled and J37's steps assert it; the separate Mark rest usable answer is noted without implying J37 invokes that control.
+  Evidence: D-W118, PIX-FR-14, PIX-AC-21 · astro-plan-rzbzu owner answer 2026-10-16; astro-plan-rzbzu.1 answer 2026-10-19 · by: SpecOwner2 (intent-gated)
