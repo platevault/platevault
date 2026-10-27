@@ -44,35 +44,72 @@ const PATIENCE: StdDuration = StdDuration::from_secs(20);
 /// A wall clock the test sets; it never advances on its own.
 struct Controlled {
     instant: Mutex<OffsetDateTime>,
-    reads: AtomicUsize,
-    pass_complete: tokio::sync::Notify,
 }
 
 impl Controlled {
     fn at(instant: OffsetDateTime) -> Arc<Self> {
-        Arc::new(Self {
-            instant: Mutex::new(instant),
-            reads: AtomicUsize::new(0),
-            pass_complete: tokio::sync::Notify::new(),
-        })
+        Arc::new(Self { instant: Mutex::new(instant) })
     }
 
     fn set(&self, instant: OffsetDateTime) {
         *self.instant.lock() = instant;
     }
-
-    async fn wait_for_pass(&self) {
-        self.pass_complete.notified().await;
-    }
 }
 
 impl Clock for Controlled {
     fn now_utc(&self) -> OffsetDateTime {
-        if self.reads.fetch_add(1, Ordering::SeqCst) == 4 {
-            self.pass_complete.notify_one();
-        }
         *self.instant.lock()
     }
+}
+
+/// One wait the scheduler asked its timer for, which ends when the test
+/// sends `resume`.
+struct SleepRequest {
+    delay: StdDuration,
+    resume: tokio::sync::oneshot::Sender<()>,
+}
+
+/// A [`Controlled`] wall clock whose timer only fires when the test says so,
+/// as a monotonic timer stalled by system sleep would.
+struct Stepped {
+    wall: Arc<Controlled>,
+    requests: tokio::sync::mpsc::UnboundedSender<SleepRequest>,
+}
+
+impl Stepped {
+    fn at(
+        instant: OffsetDateTime,
+    ) -> (Arc<Self>, tokio::sync::mpsc::UnboundedReceiver<SleepRequest>) {
+        let (requests, received) = tokio::sync::mpsc::unbounded_channel();
+        (Arc::new(Self { wall: Controlled::at(instant), requests }), received)
+    }
+}
+
+impl Clock for Stepped {
+    fn now_utc(&self) -> OffsetDateTime {
+        self.wall.now_utc()
+    }
+
+    fn sleep(&self, delay: StdDuration) -> NotifierFuture<'static, ()> {
+        let (resume, resumed) = tokio::sync::oneshot::channel();
+        let asked = self.requests.send(SleepRequest { delay, resume }).is_ok();
+        Box::pin(async move {
+            // A wait the test dropped, or nobody could see, never ends.
+            if !asked || resumed.await.is_err() {
+                std::future::pending::<()>().await;
+            }
+        })
+    }
+}
+
+/// The scheduler's next wait, which it asks for only after a whole pass.
+async fn next_sleep(
+    requests: &mut tokio::sync::mpsc::UnboundedReceiver<SleepRequest>,
+) -> SleepRequest {
+    tokio::time::timeout(PATIENCE, requests.recv())
+        .await
+        .expect("the scheduler waits after its pass")
+        .expect("the scheduler is running")
 }
 
 #[derive(Clone, Copy)]
@@ -638,9 +675,12 @@ async fn permission_denied_before_submission_blocks_the_subscription_and_submits
 }
 
 /// System sleep stalls monotonic timers while the wall clock moves on. The
-/// scheduler re-reads the wall clock at least every 30 s, so a reminder whose
-/// due instant passed during the stall is submitted at the next re-check while
-/// its window has not started, and a window that started meanwhile never is.
+/// scheduler waits at most [`RECHECK_INTERVAL`] before it re-reads the wall
+/// clock, even when the next reminder is an hour away, so a reminder whose
+/// due instant passed during the stall is submitted at the next re-check
+/// while its window has not started, and a window that started meanwhile
+/// never is. The test's timer fires only when told, so no runner speed
+/// decides the outcome.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_wall_clock_jump_is_caught_within_one_recheck_and_never_after_window_start() {
     let planning = Planning::new().await;
@@ -661,21 +701,23 @@ async fn a_wall_clock_jump_is_caught_within_one_recheck_and_never_after_window_s
     planning.subscribe(&pleiades, open_sky, lead).await;
     assert!(due_at(&rising, lead) <= jump && jump < rising.start_utc);
 
-    let clock = Controlled::at(due_at(&ngc, 60) - Duration::hours(1));
+    let (clock, mut sleeps) = Stepped::at(due_at(&ngc, 60) - Duration::hours(1));
     let notifier = Recording::new(PermissionState::Granted, Answer::Accept);
     let scheduler =
         ReminderScheduler::spawn(Arc::clone(&planning.catalog), notifier.clone(), clock.clone());
-    clock.wait_for_pass().await;
-    tokio::task::yield_now().await;
-    assert!(notifier.submissions().is_empty());
+    let first = next_sleep(&mut sleeps).await;
+    assert!(notifier.submissions().is_empty(), "nothing is due an hour early");
+    assert!(
+        first.delay <= RECHECK_INTERVAL,
+        "the scheduler waits {:?} for a reminder an hour away; it must re-check within {RECHECK_INTERVAL:?}",
+        first.delay
+    );
 
-    clock.set(jump);
-    let jumped = Instant::now();
-    let deadline = jumped + RECHECK_INTERVAL + StdDuration::from_secs(1);
-    while notifier.submissions().is_empty() {
-        assert!(Instant::now() < deadline, "no re-check within one interval");
-        tokio::time::sleep(StdDuration::from_millis(100)).await;
-    }
+    // The stall ends: the wall clock has jumped and the timer fires.
+    clock.wall.set(jump);
+    first.resume.send(()).expect("the scheduler is waiting");
+    eventually("a submission after the re-check", || async { !notifier.submissions().is_empty() })
+        .await;
     settle(&scheduler, &notifier).await;
     scheduler.stop().await;
 
