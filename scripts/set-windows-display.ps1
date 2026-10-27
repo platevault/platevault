@@ -50,39 +50,61 @@ public static class PvDisplay {
         public int dmPanningHeight;
     }
 
-    [DllImport("user32.dll", CharSet = CharSet.Ansi)]
-    public static extern bool EnumDisplaySettings(string deviceName, int modeNum, ref DEVMODE devMode);
+    [DllImport("user32.dll", CharSet = CharSet.Ansi, SetLastError = true)]
+    static extern bool EnumDisplaySettings(string deviceName, int modeNum, ref DEVMODE devMode);
 
     [DllImport("user32.dll", CharSet = CharSet.Ansi)]
-    public static extern int ChangeDisplaySettings(ref DEVMODE devMode, int flags);
+    static extern int ChangeDisplaySettings(ref DEVMODE devMode, int flags);
 
     [DllImport("user32.dll")]
     public static extern int GetSystemMetrics(int index);
+
+    const int ENUM_CURRENT_SETTINGS = -1;
+    const int DM_PELSWIDTH = 0x80000;
+    const int DM_PELSHEIGHT = 0x100000;
+
+    static DEVMODE NewMode() {
+        DEVMODE mode = new DEVMODE();
+        mode.dmDeviceName = new string('\0', 32);
+        mode.dmFormName = new string('\0', 32);
+        mode.dmSize = (short)Marshal.SizeOf(typeof(DEVMODE));
+        return mode;
+    }
+
+    // The struct stays in C#, so no PowerShell copy of it reaches the API.
+    public static string Apply(int width, int height) {
+        DEVMODE current = NewMode();
+        if (!EnumDisplaySettings(null, ENUM_CURRENT_SETTINGS, ref current)) {
+            throw new InvalidOperationException(
+                "EnumDisplaySettings could not read the current mode (Win32 error " + Marshal.GetLastWin32Error() + ")");
+        }
+        string before = current.dmPelsWidth + "x" + current.dmPelsHeight;
+        current.dmPelsWidth = width;
+        current.dmPelsHeight = height;
+        current.dmFields = DM_PELSWIDTH | DM_PELSHEIGHT;
+        int result = ChangeDisplaySettings(ref current, 0);
+        if (result != 0) {
+            throw new InvalidOperationException(
+                "ChangeDisplaySettings returned " + result + " for " + width + "x" + height + " (was " + before + "); modes: " + Modes());
+        }
+        return before;
+    }
+
+    static string Modes() {
+        var sizes = new System.Collections.Generic.SortedSet<string>();
+        DEVMODE mode = NewMode();
+        for (int i = 0; EnumDisplaySettings(null, i, ref mode); i++) {
+            sizes.Add(mode.dmPelsWidth + "x" + mode.dmPelsHeight);
+        }
+        return string.Join(", ", sizes);
+    }
 }
 '@
 
-$ENUM_CURRENT_SETTINGS = -1
-$DM_PELSWIDTH = 0x80000
-$DM_PELSHEIGHT = 0x100000
-$DISP_CHANGE_SUCCESSFUL = 0
-
-$mode = New-Object PvDisplay+DEVMODE
-$mode.dmSize = [System.Runtime.InteropServices.Marshal]::SizeOf($mode)
-if (-not [PvDisplay]::EnumDisplaySettings($null, $ENUM_CURRENT_SETTINGS, [ref]$mode)) {
-    throw 'EnumDisplaySettings could not read the current display mode.'
-}
-Write-Output "Display before: $($mode.dmPelsWidth)x$($mode.dmPelsHeight)"
-$mode.dmPelsWidth = $Width
-$mode.dmPelsHeight = $Height
-$mode.dmFields = $DM_PELSWIDTH -bor $DM_PELSHEIGHT
-$result = [PvDisplay]::ChangeDisplaySettings([ref]$mode, 0)
-if ($result -ne $DISP_CHANGE_SUCCESSFUL) {
-    throw "ChangeDisplaySettings returned $result for ${Width}x${Height}."
-}
-
+$before = [PvDisplay]::Apply($Width, $Height)
 $actualWidth = [PvDisplay]::GetSystemMetrics(0)
 $actualHeight = [PvDisplay]::GetSystemMetrics(1)
-Write-Output "Display after: ${actualWidth}x${actualHeight}"
+Write-Output "Display: $before before, ${actualWidth}x${actualHeight} after"
 if ($actualWidth -ne $Width -or $actualHeight -ne $Height) {
     throw "The display is ${actualWidth}x${actualHeight}, not ${Width}x${Height}."
 }
