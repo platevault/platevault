@@ -311,6 +311,9 @@ fn request_quit(app: &AppHandle<Wry>) {
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .insert(request_id);
+        // A tray or ⌘Q Quit can come while the window is minimised or behind
+        // others; the question is asked in it, so bring it forward first.
+        show_window(&app);
         if let Err(error) = app.emit(NATIVE_QUIT_CONFIRM_EVENT, NativeQuitRequest { request_id }) {
             tracing::error!(%error, "the quit confirmation did not reach the UI");
         }
