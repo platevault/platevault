@@ -311,9 +311,10 @@ async fn first_move_after_show_is_not_refitted() -> anyhow::Result<()> {
     app.shutdown().await
 }
 
-/// The X11 window of the app's main window: the one visible window whose
-/// client area has the probed inner size. The active window is no proof: a
-/// window of the previous test can still be on top while it closes.
+/// The X11 window of the app's main window: the one visible, named window
+/// whose client area has the probed inner size. GTK's unnamed child windows
+/// share that size, so only titled windows count. The active window is no
+/// proof: a window of the previous test can still be on top while it closes.
 #[cfg(target_os = "linux")]
 async fn app_x11_window(probe: &Value) -> anyhow::Result<String> {
     let width = probe["inner"]["w"].as_i64().context("inner width missing")?;
@@ -321,7 +322,7 @@ async fn app_x11_window(probe: &Value) -> anyhow::Result<String> {
     let deadline = tokio::time::Instant::now() + RESTORE_TIMEOUT;
     loop {
         let listed = Command::new("xdotool")
-            .args(["search", "--onlyvisible", "--name", ""])
+            .args(["search", "--onlyvisible", "--name", "."])
             .output()
             .context("xdotool could not list visible windows")?;
         let ids = String::from_utf8_lossy(&listed.stdout).into_owned();
@@ -333,12 +334,20 @@ async fn app_x11_window(probe: &Value) -> anyhow::Result<String> {
             let field = |name: &str| {
                 shell.lines().find_map(|line| line.strip_prefix(name)?.parse::<i64>().ok())
             };
-            if field("WIDTH=") == Some(width) && field("HEIGHT=") == Some(height) {
-                matching.push(id.to_owned());
+            // GTK's child windows share the client size but carry no
+            // _NET_WM_PID; only the toplevel the app mapped does.
+            let toplevel = Command::new("xdotool")
+                .args(["getwindowpid", id])
+                .output()
+                .is_ok_and(|pid| pid.status.success());
+            if field("WIDTH=") == Some(width) && field("HEIGHT=") == Some(height) && toplevel {
+                let name = Command::new("xdotool").args(["getwindowname", id]).output()?;
+                matching
+                    .push((id.to_owned(), String::from_utf8_lossy(&name.stdout).trim().to_owned()));
             }
         }
         match matching.as_slice() {
-            [one] => return Ok(one.clone()),
+            [(one, _)] => return Ok(one.clone()),
             _ if tokio::time::Instant::now() >= deadline => anyhow::bail!(
                 "expected one visible {width}x{height} X11 window for the app, found {matching:?}"
             ),
