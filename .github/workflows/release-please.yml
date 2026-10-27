@@ -678,6 +678,10 @@ jobs:
     name: Submit to winget
     needs: [release-please, updater-manifest]
     if: ${{ needs.release-please.outputs.release_created == 'true' && vars.ENABLE_WINGET_PUBLISH == 'true' }}
+    # homebrew-bump.yml runs only when this whole workflow succeeds. A winget
+    # failure (expired token, fork sync, API error) must not skip the cask bump:
+    # the job still shows as failed, but the run concludes successfully.
+    continue-on-error: true
     runs-on: ubuntu-latest
     permissions:
       contents: read # gh api reads the release's assets with github.token

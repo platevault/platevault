@@ -30,12 +30,16 @@ against the SHA256 that the Komac release publishes, and runs
    its URL to the job summary.
 
 The job runs after `updater-manifest`, so the installers are final: when
-Windows signing is on, `sign-windows` has already replaced them with signed
-copies. winget then validates the pull request, and a moderator merges it.
+Windows signing is on, the Windows leg of `build` has already uploaded the
+SignPath-signed copies. winget then validates the pull request, and a
+moderator merges it.
 
 The job is off until the repository variable `ENABLE_WINGET_PUBLISH` is
 `true`. `komac update` only adds versions to a package that already exists
-in winget-pkgs, so the first version goes in by hand, as below.
+in winget-pkgs, so the first version goes in by hand, as below. The job runs
+with `continue-on-error`, so a winget failure shows on the job but does not
+fail the release run. The Homebrew cask bump, which waits for a successful
+release run, still happens.
 
 ### Token isolation
 
@@ -51,7 +55,9 @@ Komac, change `KOMAC_VERSION` and
 
 ## Owner steps
 
-Only the owner can do these. Do them once, in this order.
+Only the owner can do these. Do them once, in this order. Steps 4 and 6
+publish PlateVault to winget, so take them only once you have decided to
+publish there. Nothing here runs by itself.
 
 1. **Create the bot account and its fork.**
    1. Sign out of GitHub, or use a private browser window. Open
@@ -76,7 +82,8 @@ Only the owner can do these. Do them once, in this order.
    Komac needs a classic token, because a fine-grained token cannot open the
    winget-pkgs pull request
    ([Komac #310](https://github.com/russellbanks/Komac/issues/310)).
-   `workflow` lets the fork sync when upstream changes its workflow files.
+   `workflow` lets the fork sync when upstream changes its workflow files
+   ([Komac #1726](https://github.com/russellbanks/Komac/issues/1726)).
 
 3. **Store the token.** As the owner of platevault/platevault, run this command and enter the bot's token at the prompt:
 
@@ -86,7 +93,7 @@ Only the owner can do these. Do them once, in this order.
 
 4. **Submit the first version.** Komac updates existing packages only, so submit the first manifest by hand.
 
-   Install Komac 2.16.0 and set `KOMAC_FORK_OWNER` to the bot account. Then preview manifests for the latest release using the bot token.
+   Install [Komac 2.16.0](https://github.com/russellbanks/Komac/releases/tag/v2.16.0) and check the download against that release's `SHA256SUMS`, as the job does. Set `KOMAC_FORK_OWNER` to the bot account. Then preview manifests for the latest release using the bot token.
 
    ```sh
    read -rs -p 'Bot token: ' GITHUB_TOKEN && export GITHUB_TOKEN && echo
@@ -110,14 +117,21 @@ Only the owner can do these. Do them once, in this order.
      --dry-run
    ```
 
-   Review the generated manifests. Confirm their URLs and hashes match the intended release assets. Ask the repository owner to run the command with `--submit` instead of `--dry-run`.
+   Review the generated manifests. Compare their URLs and SHA256 values with the release assets:
+
+   ```sh
+   gh release view "${TAG}" --repo platevault/platevault --json assets --jq '.assets[] | .name + " " + .digest'
+   ```
+
+   Then run the same `komac new` command with `--submit` instead of `--dry-run`.
+
 5. **Wait for the merge.** winget-pkgs validates the pull request and a moderator reviews it. After the merge, check the package on Windows:
 
    ```powershell
    winget show --id PlateVault.PlateVault
    ```
 
-6. **Enable automated submissions.** After the first manifest merges, ask the owner to approve automation before setting the variable.
+6. **Enable automated submissions.** After the first manifest merges, set the variable:
 
    ```sh
    gh variable set ENABLE_WINGET_PUBLISH --repo platevault/platevault --body true
@@ -134,7 +148,7 @@ Only the owner can do these. Do them once, in this order.
 - *expected the x64 setup.exe and .msi*: the release does not have exactly
   one installer of each kind matching the pattern above. Check the release's
   assets and the `build` job.
-- Komac reports that PlateVault.PlateVault does not exist: submit the first manifest by hand, wait for its merge, then enable the job.
+- Komac reports that PlateVault.PlateVault does not exist: the package isn't in winget-pkgs yet. Unset `ENABLE_WINGET_PUBLISH` (`gh variable delete ENABLE_WINGET_PUBLISH --repo platevault/platevault`), submit the first manifest by hand (owner step 4), wait for its merge, then set the variable again.
 - Komac reports a permission or fork-sync error: the token has expired,
   lacks a scope, or does not belong to `WINGET_FORK_USER`. Make a new token
   (owner step 2) and store it (owner step 3). Or, signed in as the bot, click
