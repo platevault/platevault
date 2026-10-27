@@ -91,8 +91,8 @@ async fn wait_for_settled_probe(app: &E2eApp) -> anyhow::Result<Value> {
         let work_y = work["y"].as_i64().context("probe monitor_work_area.y missing")?;
         let work_w = work["w"].as_u64().context("probe monitor_work_area.w missing")?;
         let work_h = work["h"].as_u64().context("probe monitor_work_area.h missing")?;
-        let min_inner_w = u64::from(MIN_WIDTH).min(work_w.saturating_sub(outer_w - inner_w));
-        let min_inner_h = u64::from(MIN_HEIGHT).min(work_h.saturating_sub(outer_h - inner_h));
+        let min_inner_w = u64::from(MIN_WIDTH).min(work_w.saturating_sub(outer_w.saturating_sub(inner_w)));
+        let min_inner_h = u64::from(MIN_HEIGHT).min(work_h.saturating_sub(outer_h.saturating_sub(inner_h)));
         let fully_on_monitor = x >= work_x
             && y >= work_y
             && x.saturating_add(outer_w as i64) <= work_x.saturating_add(work_w as i64)
