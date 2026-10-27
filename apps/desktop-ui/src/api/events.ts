@@ -1,7 +1,7 @@
 /**
  * Library events: the live half of a durable read.
  *
- * The library host emits four events, whose names and payload types the
+ * The library host emits five events, whose names and payload types the
  * generated client exports (`library_specta_builder`). An event can be lost:
  * one emitted before a listener attaches, while the webview reloads, or
  * across a restart reaches nobody. The status command it reports on stays
@@ -29,6 +29,8 @@ import {
   type NewCaptures,
   SCAN_PROGRESS_EVENT,
   type ScanProgressEvent,
+  NATIVE_QUIT_CONFIRM_EVENT,
+  type NativeQuitRequest,
 } from "./ipc"
 
 /** The payload each library event carries, as the host serialises it. */
@@ -37,6 +39,7 @@ export interface LibraryEventPayloads {
   [MEASUREMENT_PROGRESS_EVENT]: MeasurementProgress_Serialize
   [NEW_CAPTURES_EVENT]: NewCaptures
   [APPLY_WAITING_EVENT]: ApplyWaiting
+  [NATIVE_QUIT_CONFIRM_EVENT]: NativeQuitRequest
 }
 
 export type LibraryEventName = keyof LibraryEventPayloads

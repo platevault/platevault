@@ -13,6 +13,7 @@ pub mod data_dir;
 pub mod frame_watcher;
 pub mod library_notifier;
 pub mod library_shell;
+pub mod native_shell_surfaces;
 pub mod resolve_cache;
 pub mod updater;
 pub mod watcher;
@@ -273,7 +274,12 @@ pub fn build_app() -> tauri::App {
                 app.exit(0);
             }
         })
-        .invoke_handler(builder.invoke_handler())
+        .invoke_handler({
+            let production = builder.invoke_handler();
+            #[cfg(feature = "e2e")]
+            let production = crate::commands::e2e_window::with_e2e_commands(production);
+            production
+        })
         .setup(move |app| {
             builder.mount_events(app);
             Ok(())

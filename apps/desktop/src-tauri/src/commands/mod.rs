@@ -26,6 +26,8 @@ pub mod calibration_tolerances;
 pub mod cleanup;
 #[cfg(feature = "dev-tools")]
 pub mod dev;
+#[cfg(feature = "e2e")]
+pub mod e2e_window;
 pub mod envelope;
 pub mod equipment;
 pub mod firstrun;
@@ -37,6 +39,7 @@ pub mod ingestion;
 pub mod inventory;
 pub mod inventory_frame;
 pub mod library;
+pub mod library_dialogs;
 pub mod lifecycle;
 pub mod log;
 pub mod manifests;
