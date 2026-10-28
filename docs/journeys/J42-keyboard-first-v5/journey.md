@@ -1,7 +1,7 @@
 ---
 id: J42
 title: Work from launch to an open Project's View with the keyboard only
-version: 4
+version: 5
 status: draft
 last_reviewed: 2026-10-12
 actors: [primary-user]
@@ -49,7 +49,7 @@ Done means:
 
   **Esc** closes the dialog, and focus returns to where it was before **?**.
 - **Expect (negative):** The list has no go-to entry for Plan or Storage.
-- **Trace:** src/app/shortcuts.tsx shortcutRows · HARNESS-V5-FEEDBACK-R1.md §Round 5 Navigation "Storage and Plan leave the source list", P-PLAN2, P-STO2 · FR-037 · D-W121
+- **Trace:** src/app/shortcuts.tsx shortcutRows · HARNESS-V5-FEEDBACK-R1.md §Round 5 Navigation "Storage and Plan leave the source list" · FR-037, FR-042-AC-02 · D-W121, D-W164
 
 ### S2 — Move around with go-to keys, the sidebar toggle and Back {#S2}
 
@@ -59,7 +59,7 @@ Done means:
   - The first **[** collapses the sidebar, and the second expands it.
   - Back returns to Projects, and Forward returns to Sessions. Each control is named Back or Forward when it has focus.
 - **Expect (negative):** None of these keys changes a catalog record.
-- **Trace:** src/app/navigation.ts goKey · src/app/history.tsx HistoryControl · HARNESS-V5-FEEDBACK-R1.md §Shell and navigation 3 "Back"
+- **Trace:** src/app/navigation.ts goKey · src/app/history.tsx HistoryControl · HARNESS-V5-FEEDBACK-R1.md §Shell and navigation 3 "Back" · FR-042-AC-02
 
 ### S3 — Search a list with the keyboard {#S3}
 
@@ -69,7 +69,7 @@ Done means:
   - `gp` appears in the field and filters the list. **Esc** empties the field, and focus stays in it.
   - `Sep` filters the list to the September sessions. The × button empties the field, focus returns to the field, and every session is listed again.
 - **Expect (negative):** Typing `g` then `p` in the field does not open Projects, and no other shortcut fires while the field has focus.
-- **Trace:** src/components/app/clearable-input.tsx · HARNESS-V5-FEEDBACK-R1.md §Copy rules "Every text field that filters or searches gets a clear (×) button" · messages shortcuts_description
+- **Trace:** src/components/app/clearable-input.tsx · HARNESS-V5-FEEDBACK-R1.md §Copy rules "Every text field that filters or searches gets a clear (×) button" · messages shortcuts_description · FR-042, FR-042-AC-02
 
 ### S3a — Move through a table with the keyboard {#S3a}
 
@@ -81,14 +81,14 @@ Done means:
   - **⇧F10** opens the row's menu, named after the row, on both lanes, and on the `desktop-ui` lane the Menu key opens the same menu. **Esc** closes it, and focus is back on the row. On the `desktop-ui-macos` lane, **⇧F10** is the only key that opens the row's context menu; the row's `⋯`, reached with Tab, opens the same items with Enter or Space.
   - From the row, Tab reaches that row's own controls, its checkbox and `⋯`, and the next Tab leaves the table. Shift+Tab returns to the row's `⋯`.
 - **Expect (negative):** No row other than the current one takes a Tab stop. The table keeps native table semantics, with no ARIA grid role. No arrow, Home, End or Page key changes a selection or a record, and opening and closing the menu runs none of its items.
-- **Trace:** FR-026, FR-027, FR-031, FR-037 · D-W91, D-W121 · HARNESS-V5-FEEDBACK-R1.md "Tables and the keyboard" P-KBD1 (OWNER, 2026-10-16) · src/components/app/data-table.tsx (ui-harness-v5 @ d1e721af, astro-plan-2r9ld)
+- **Trace:** FR-026, FR-027, FR-031, FR-037 · D-W91, D-W121, D-W162 · HARNESS-V5-FEEDBACK-R1.md "Tables and the keyboard" P-KBD1 (OWNER, 2026-10-16) · src/components/app/data-table.tsx (ui-harness-v5 @ d1e721af, astro-plan-2r9ld)
 
 ### S4 — Act on a row with Enter and its menu {#S4}
 
 - **Do:** Press **G H**. Tab to the table of Home's Open work section, then press ↓ to the `NGC 7000 HOO` row unless it is the first row. Press **⇧F10**, read the menu, then press **Esc**. Press Enter.
 - **Expect:** Tab lands on the table's current row, and the table takes one Tab stop. **⇧F10** opens the row's context menu, named after the row. Arrow keys move through its items. **Esc** closes it, and focus is back on the row. Enter on the row opens the `NGC 7000 HOO` Project page.
 - **Expect (negative):** Opening and closing the menu runs none of its items.
-- **Trace:** src/components/app/row-menu.tsx openMenuFromKeyboard · HARNESS-V5-FEEDBACK-R1.md §Round 5 "Home rows open the Project page", "Click a result to act" · HARNESS-V5-FEEDBACK-R1.md §Shell and navigation 4 context-menu helpers · PRJ-FR-17 · FR-031, FR-037 · D-W121
+- **Trace:** src/components/app/row-menu.tsx openMenuFromKeyboard · HARNESS-V5-FEEDBACK-R1.md §Round 5 "Home rows open the Project page", "Click a result to act" · HARNESS-V5-FEEDBACK-R1.md §Shell and navigation 4 context-menu helpers · PRJ-FR-17 · FR-031, FR-037, FR-042 · D-W121, D-W164 · astro-plan-ocyuc.5
 
 ### S5 — Inspect Project actions with the keyboard {#S5}
 
@@ -124,7 +124,7 @@ Done means:
   - On Sessions, Space on the focused row selects nothing, and no batch bar appears.
   - After the second Space on the switch, it reads on.
 - **Expect (negative):** While the setting is off, no single key opens a page or a dialog, and Space selects no row.
-- **Trace:** src/features/t1/settings/appearance-page.tsx · messages settings_shortcuts_help "⌘K and Ctrl+K always work" · HARNESS-V5-IA.md §Screens S16 "Appearance (… shortcuts)" · FR-037 · D-W121
+- **Trace:** src/features/t1/settings/appearance-page.tsx · messages settings_shortcuts_help "⌘K and Ctrl+K always work" · HARNESS-V5-IA.md §Screens S16 "Appearance (… shortcuts)" · FR-037, FR-042, FR-042-AC-01, FR-042-AC-02 · D-W121, D-W162, D-W164 · astro-plan-ocyuc.5
 
 ### S9 — Open the Project from the command palette {#S9}
 
@@ -134,7 +134,7 @@ Done means:
   - The Project page offers Sessions, Calibrate, View, Output and Wrap up. Its first step is Sessions.
   - No step creates or names a processing run; frame Review remains in session intake.
 - **Expect (negative):** Typing in the palette's field triggers no shortcut.
-- **Trace:** PRJ-FR-07 · PRJ-FR-32 · D-W94
+- **Trace:** PRJ-FR-07 · PRJ-FR-32 · FR-042, FR-042-AC-01, FR-042-AC-02 · D-W94 · astro-plan-ocyuc.5
 
 ### S10 — Open the Sessions step {#S10}
 
@@ -209,3 +209,6 @@ Done means:
 - **Δ4** 2026-10-17 · S3a · behavior-change
   On the `desktop-ui` (Windows) lane the Menu key opens a row's menu as **⇧F10** does; Apple keyboards have no Menu key, so the `desktop-ui-macos` lane uses **⇧F10** (with **fn** where needed). Tables keep native semantics with no ARIA grid role. The header stops and previous-row focus are the owner's rules, so G7 is dissolved.
   Evidence: HARNESS-V5-FEEDBACK-R1.md "Tables and the keyboard" P-KBD1 (OWNER, 2026-10-16; decision astro-plan-g3tx4) · D-W121 · prototype row-actions.tsx openMenuFromKeyboard (ContextMenu key or Shift+F10) on ui-harness-v5 · by: JourneysR9c (intent-gated)
+- **Δ5** 2026-10-27 · S1-S4, S8-S9 · behavior-change
+  Keyboard steps trace to the owning shortcut and navigation requirements, including go-to sequences, text-field exclusion, palette search, and focus return.
+  Evidence: FR-037, FR-042, FR-042-AC-01, FR-042-AC-02 · D-W121, D-W162, D-W164 · astro-plan-ocyuc.5 · by: SpecOwner2 (intent-gated)
