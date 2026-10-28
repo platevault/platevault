@@ -354,7 +354,18 @@ function candidateManifestEntry(version, signedVersion = version) {
     assertEqual(error.message, 'darwin-aarch64-app: signature was signed for version 0.7.0, but candidate announces 0.7.0-rc.2', 'signature version mismatch is reported');
   }
 }
+{
+  const stable = { version: '0.6.1', platforms: {}, candidates: [candidateManifestEntry('0.7.0-rc.3')] };
+  try {
+    mergeCandidate(stable, candidateManifestEntry('0.7.0-rc.2'));
+    failures.push('older same-train candidate retry must be refused');
+  } catch (error) {
+    assertEqual(error.message, 'candidate 0.7.0-rc.2 is older than already-published 0.7.0-rc.3', 'older same-train retry does not roll back latest RC');
+  }
 
+  const equal = mergeCandidate(stable, candidateManifestEntry('0.7.0-rc.3'));
+  assertEqual(equal.candidates.filter((candidate) => candidate.version.startsWith('0.7.0-rc.')).length, 1, 'equal retry replaces rather than duplicates');
+}
 {
   const previous = {
     version: '0.6.1',

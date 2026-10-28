@@ -28,7 +28,7 @@ The macOS journeys run but don't block yet: `tauri-plugin-webdriver` has no work
 
 Release candidates are also announced in the normal updater manifest attached to the newest stable release. Testers can enable **Include release candidates** in the app's update settings; it is off by default. With the setting on, the app offers the highest available version newer than the installed version. Stable installs from older versions ignore the optional `candidates` key and continue to see the top-level stable release as before. This does not change where candidates are installed from: testers may still install them from the prerelease page.
 
-Candidate selection is provided by the newer updater client and its **Include release candidates** preference; older stable clients ignore the optional manifest key. The workflow publishes candidates only after the app-side parser and opt-in setting ship.
+Candidate selection is provided by the newer updater client and its **Include release candidates** preference; older stable clients ignore the optional manifest key, so publishing candidates does not change their update behavior.
 
 A failed candidate stays failed. Fix main, then cut the next candidate; N goes up by one.
 

@@ -294,11 +294,15 @@ export function mergeCandidate(priorManifest, candidate) {
       throw new Error(`${key}: signature was signed for version ${version ?? '(no version)'}, but candidate announces ${candidate.version}`);
     }
   }
-  const candidates = (priorManifest.candidates ?? []).filter((entry) => {
+  const candidates = priorManifest.candidates ?? [];
+  for (const entry of candidates) {
     const existingBase = candidateBaseVersion(entry.version);
-    return existingBase !== baseVersion || compareVersions(candidate.version, entry.version) < 0;
-  });
-  return { ...priorManifest, candidates: [...candidates, candidate] };
+    if (existingBase === baseVersion && compareVersions(candidate.version, entry.version) < 0) {
+      throw new Error(`candidate ${candidate.version} is older than already-published ${entry.version}`);
+    }
+  }
+  const retained = candidates.filter((entry) => candidateBaseVersion(entry.version) !== baseVersion);
+  return { ...priorManifest, candidates: [...retained, candidate] };
 }
 
 export function carryForwardCandidates(previousManifest, manifest) {
