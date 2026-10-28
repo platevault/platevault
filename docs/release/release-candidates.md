@@ -20,14 +20,28 @@ Release-please still owns versions and the changelog. It keeps an open release P
 3. The tag push starts **Release candidate** (`release-candidate.yml`) at the tagged commit. It:
    - posts a pending `release/rc` commit status on the commit;
    - runs the release suites: the full journey matrix on Ubuntu (4 shards) and Windows (3 shards), the window runtime checks on Windows at 1920x1080 and on Linux X11, the macOS journeys, and Rust coverage;
-   - creates a GitHub prerelease for the tag and builds the installers on it with `build-installers.yml`, the same workflow a release uses, stamped with X.Y.Z;
+   - creates a GitHub prerelease for the tag and builds the installers on it with `build-installers.yml`, the same workflow a release uses, stamped with the candidate's version X.Y.Z-rc.N (see [Candidate versions](#candidate-versions));
    - posts `release/rc` as success only when every suite and the installer build passed, and as failure otherwise.
 
 The macOS journeys run but don't block yet: `tauri-plugin-webdriver` has no working macOS WebDriver on GitHub runners (#489). A red macOS leg shows in the run without failing the candidate.
 
-A prerelease never becomes GitHub's latest release, and installed copies poll `releases/latest/download/latest.json`. So no installed copy is offered a candidate, and only the stable release writes `latest.json`. Testers install a candidate from its prerelease page.
+A prerelease never becomes GitHub's latest release, and installed copies poll `releases/latest/download/latest.json`. So no installed copy is offered a candidate, and only the stable release writes `latest.json`. Testers install a candidate from its prerelease page. Once X.Y.Z is released, an installed candidate is offered X.Y.Z like any older version.
 
 A failed candidate stays failed. Fix main, then cut the next candidate; N goes up by one.
+
+### Candidate versions
+
+A candidate is built as X.Y.Z-rc.N, so the app reports itself as a candidate, and the updater, which offers only a newer version, offers it X.Y.Z. `scripts/release/stamp-candidate-version.mjs` stamps the version and gives each installer the form its package manager needs, so that X.Y.Z replaces the candidate:
+
+|Installer|Candidate version|Why|
+|---|---|---|
+|App, NSIS, AppImage|`X.Y.Z-rc.N`|Semver orders it below X.Y.Z, as the NSIS installer compares it.|
+|MSI|`X.Y.Z.N` (`bundle.windows.wix.version`)|WiX takes numbers only. Windows Installer ignores the fourth field, so it sees X.Y.Z, and X.Y.Z's MSI replaces the candidate as a same-version upgrade.|
+|macOS `.app`|`CFBundleShortVersionString` `X.Y.Z-rc.N`, `CFBundleVersion` `X.Y.Z`|Apple defines `CFBundleVersion` as numbers; X.Y.Z never ranks the candidate above the release.|
+|deb|`X.Y.Z~rc.N`|dpkg reads `X.Y.Z-rc.N` as X.Y.Z with Debian revision `rc.N`, newer than X.Y.Z. The tilde sorts first.|
+|rpm|Version `X.Y.Z`, Release `0.rc.N`|rpm forbids `-` in Version. Release `0.rc.N` sorts below the release's Release `1`.|
+
+The bundler versions a deb and an rpm with the semver only, so on Linux the candidate's own build step bundles them: it repacks the deb with its Version, bundles the rpm with its Version and Release, and signs both for X.Y.Z-rc.N. A release builds every installer with tauri-action, unchanged.
 
 ## Release
 

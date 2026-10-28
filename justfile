@@ -14,6 +14,7 @@ test:
     node scripts/precommit-verify.test.mjs
     node scripts/assemble-updater-manifest.test.mjs
     node scripts/release/check-rc-provenance.test.mjs
+    node scripts/release/stamp-candidate-version.test.mjs
 
 # Lint and format. This recipe is the single local definition of the lint set;
 # the root package.json `lint` script delegates here so the two cannot drift.

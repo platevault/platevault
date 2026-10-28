@@ -416,6 +416,31 @@ fn the_bare_platform_entry_is_the_fallback() {
     }
 }
 
+// ── Release candidates (astro-plan-e1axw) ───────────────────────────────────
+// A candidate is built as X.Y.Z-rc.N, so once X.Y.Z is released its install
+// is offered X.Y.Z, and a release is never offered one of its candidates.
+
+#[test]
+fn a_release_candidate_is_offered_its_release() {
+    let manifest =
+        manifest_json(RELEASE, &[("linux-x86_64", "https://example.test/bare", "bare-sig")]);
+    let candidate = Version::parse("0.7.0-rc.1").expect("version");
+    let release = manifest::newer_release(&manifest, &candidate, &test_platform(None))
+        .expect("manifest")
+        .expect("the release is newer than its candidate");
+    assert_eq!(release.version_text, RELEASE);
+}
+
+#[test]
+fn a_release_is_not_offered_its_candidate() {
+    let manifest =
+        manifest_json("0.7.0-rc.1", &[("linux-x86_64", "https://example.test/bare", "bare-sig")]);
+    let current = Version::parse(RELEASE).expect("version");
+    let offered =
+        manifest::newer_release(&manifest, &current, &test_platform(None)).expect("manifest");
+    assert_eq!(offered, None);
+}
+
 // ── "Check for updates automatically" (D8, astro-plan-bzzbp) ────────────────
 
 #[tokio::test]
