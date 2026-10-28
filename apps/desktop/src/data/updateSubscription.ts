@@ -260,7 +260,9 @@ async function run(
 
 /** Check for an update. Never downloads, installs or elevates. */
 export async function checkForUpdate(): Promise<void> {
-  await run('check', () => commands.updateCheck());
+  await run('check', () =>
+    commands.updateCheck(getPreferences().includeReleaseCandidates),
+  );
 }
 
 /** Install now (explicit user action). */
@@ -336,7 +338,10 @@ export async function startUpdateSubscription(): Promise<void> {
   if (!getPreferences().setupCompleted) return;
 
   await run('startup check', () =>
-    commands.updateCheckOnStartup(getPreferences().checkUpdatesAutomatically),
+    commands.updateCheckOnStartup(
+      getPreferences().checkUpdatesAutomatically,
+      getPreferences().includeReleaseCandidates,
+    ),
   );
 }
 

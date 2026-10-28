@@ -495,7 +495,7 @@ describe('startUpdateSubscription — Check for updates automatically', () => {
     await startUpdateSubscription();
 
     expect(mockCommands.updateCheckOnStartup).toHaveBeenCalledTimes(1);
-    expect(mockCommands.updateCheckOnStartup).toHaveBeenCalledWith(false);
+    expect(mockCommands.updateCheckOnStartup).toHaveBeenCalledWith(false, false);
     expect(mockCommands.updateCheck).not.toHaveBeenCalled();
   });
 
@@ -503,18 +503,19 @@ describe('startUpdateSubscription — Check for updates automatically', () => {
     setPreference('setupCompleted', true);
     await startUpdateSubscription();
 
-    expect(mockCommands.updateCheckOnStartup).toHaveBeenCalledWith(true);
+    expect(mockCommands.updateCheckOnStartup).toHaveBeenCalledWith(true, false);
   });
 
-  it('still checks when the user asks while it is off', async () => {
+  it('passes the saved release-candidate preference to startup and manual checks', async () => {
     setPreference('setupCompleted', true);
-    setPreference('checkUpdatesAutomatically', false);
+    setPreference('includeReleaseCandidates', true);
     await startUpdateSubscription();
+    expect(mockCommands.updateCheckOnStartup).toHaveBeenCalledWith(true, true);
 
     await checkForUpdate();
-
-    expect(mockCommands.updateCheck).toHaveBeenCalledTimes(1);
+    expect(mockCommands.updateCheck).toHaveBeenCalledWith(true);
   });
+
 });
 
 describe('the user choices', () => {

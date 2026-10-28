@@ -72,6 +72,9 @@ export function Advanced({ save }: AdvancedProps) {
   const [runningVersion, setRunningVersion] = useState<string | null>(null);
   const [checkUpdatesAutomatically, setCheckUpdatesAutomatically] =
     usePreference('checkUpdatesAutomatically');
+  const [includeReleaseCandidates, setIncludeReleaseCandidates] = usePreference(
+    'includeReleaseCandidates',
+  );
   const [resetConfirming, setResetConfirming] = useState(false);
   const [resetDone, setResetDone] = useState(false);
 
@@ -279,6 +282,17 @@ export function Advanced({ save }: AdvancedProps) {
             checked={checkUpdatesAutomatically}
             onChange={setCheckUpdatesAutomatically}
             data-testid="update-auto-check-toggle"
+          />
+        </SettingsRow>
+        <SettingsRow
+          label={m.settings_advanced_updates_candidates()}
+          info={m.settings_advanced_updates_candidates_info()}
+        >
+          <Toggle
+            aria-label={m.settings_advanced_updates_candidates()}
+            checked={includeReleaseCandidates}
+            onChange={setIncludeReleaseCandidates}
+            data-testid="update-candidates-toggle"
           />
         </SettingsRow>
         <SettingsRow label={m.settings_advanced_updates_title()}>

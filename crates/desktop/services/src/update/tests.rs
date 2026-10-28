@@ -27,8 +27,9 @@ use super::{
 };
 use crate::locale::ActiveLocale;
 
-const RUNNING: &str = "0.6.0";
 const RELEASE: &str = "0.7.0";
+const RUNNING: &str = "0.6.0";
+const CANDIDATE: &str = "0.8.0-rc.3";
 const PAYLOAD_URL: &str = "https://example.test/PlateVault_0.7.0_amd64.AppImage";
 const NOTES: &str = "Faster imports.";
 /// How long a test waits for something a background thread does.
@@ -87,6 +88,37 @@ fn manifest_json(version: &str, platforms: &[(&str, &str, &str)]) -> Vec<u8> {
         "platforms": platforms,
     }))
     .expect("manifest json")
+}
+
+fn candidate_manifest(
+    top_level_version: &str,
+    top_level_signature: &str,
+    candidates: &[(&str, &str)],
+) -> Vec<u8> {
+    let candidates = candidates
+        .iter()
+        .map(|(version, signature)| {
+            json!({
+                "version": version,
+                "notes": "Candidate notes.",
+                "platforms": {
+                    "linux-x86_64-appimage": {
+                        "url": PAYLOAD_URL,
+                        "signature": signature,
+                    },
+                },
+            })
+        })
+        .collect::<Vec<_>>();
+    serde_json::to_vec(&json!({
+        "version": top_level_version,
+        "notes": NOTES,
+        "platforms": {
+            "linux-x86_64-appimage": { "url": PAYLOAD_URL, "signature": top_level_signature },
+        },
+        "candidates": candidates,
+    }))
+    .expect("candidate manifest json")
 }
 
 /// The network: one manifest (`None` answers 204) and one payload.
@@ -320,7 +352,7 @@ async fn a_newer_release_is_offered_with_its_version_and_notes() {
     let source = FakeSource::release(&signer, b"new AppImage");
     let rig = Rig::new(&signer, &source, Box::new(FakeInstaller::answering(vec![])));
 
-    rig.updater.check().await;
+    rig.updater.check(false).await;
 
     let status = rig.updater.current_status();
     assert_eq!(status.phase, UpdatePhase::Available);
@@ -337,7 +369,7 @@ async fn a_release_that_is_not_newer_is_up_to_date() {
         b"",
     );
     let rig = Rig::new(&signer, &source, Box::new(FakeInstaller::answering(vec![])));
-    rig.updater.check().await;
+    rig.updater.check(false).await;
     assert_eq!(rig.phase(), UpdatePhase::UpToDate);
 }
 
@@ -346,7 +378,7 @@ async fn a_no_content_answer_is_up_to_date() {
     let signer = Signer::new();
     let source = FakeSource::new(None, b"");
     let rig = Rig::new(&signer, &source, Box::new(FakeInstaller::answering(vec![])));
-    rig.updater.check().await;
+    rig.updater.check(false).await;
     assert_eq!(rig.phase(), UpdatePhase::UpToDate);
 }
 
@@ -358,7 +390,7 @@ async fn a_manifest_without_this_platform_fails_the_check() {
         b"",
     );
     let rig = Rig::new(&signer, &source, Box::new(FakeInstaller::answering(vec![])));
-    rig.updater.check().await;
+    rig.updater.check(false).await;
     let status = rig.updater.current_status();
     assert_eq!(status.phase, UpdatePhase::CheckFailed);
     assert_eq!(status.error, Some(UpdateFailure::Manifest), "a code, not an English sentence");
@@ -378,7 +410,7 @@ async fn a_payload_url_that_is_not_https_fails_the_check() {
         b"new AppImage",
     );
     let rig = Rig::new(&signer, &source, Box::new(FakeInstaller::answering(vec![])));
-    rig.updater.check().await;
+    rig.updater.check(false).await;
     assert_eq!(rig.updater.current_status().error, Some(UpdateFailure::Manifest));
     let detail = rig.updater.error_text().expect("detail");
     assert!(detail.contains("is not an HTTPS URL"), "{detail}");
@@ -395,10 +427,14 @@ fn the_package_entry_wins_over_the_bare_platform_entry() {
         ],
     );
     let current = Version::parse(RUNNING).expect("version");
-    let release =
-        manifest::newer_release(&manifest, &current, &test_platform(Some(Package::AppImage)))
-            .expect("manifest")
-            .expect("newer");
+    let release = manifest::newer_release(
+        &manifest,
+        &current,
+        &test_platform(Some(Package::AppImage)),
+        false,
+    )
+    .expect("manifest")
+    .expect("newer");
     assert_eq!(release.url.as_str(), "https://example.test/appimage");
     assert_eq!(release.signature, "appimage-sig");
 }
@@ -409,7 +445,7 @@ fn the_bare_platform_entry_is_the_fallback() {
         manifest_json(RELEASE, &[("linux-x86_64", "https://example.test/bare", "bare-sig")]);
     let current = Version::parse(RUNNING).expect("version");
     for package in [Some(Package::AppImage), None] {
-        let release = manifest::newer_release(&manifest, &current, &test_platform(package))
+        let release = manifest::newer_release(&manifest, &current, &test_platform(package), false)
             .expect("manifest")
             .expect("newer");
         assert_eq!(release.url.as_str(), "https://example.test/bare", "{package:?}");
@@ -425,7 +461,7 @@ fn a_release_candidate_is_offered_its_release() {
     let manifest =
         manifest_json(RELEASE, &[("linux-x86_64", "https://example.test/bare", "bare-sig")]);
     let candidate = Version::parse("0.7.0-rc.1").expect("version");
-    let release = manifest::newer_release(&manifest, &candidate, &test_platform(None))
+    let release = manifest::newer_release(&manifest, &candidate, &test_platform(None), false)
         .expect("manifest")
         .expect("the release is newer than its candidate");
     assert_eq!(release.version_text, RELEASE);
@@ -436,9 +472,77 @@ fn a_release_is_not_offered_its_candidate() {
     let manifest =
         manifest_json("0.7.0-rc.1", &[("linux-x86_64", "https://example.test/bare", "bare-sig")]);
     let current = Version::parse(RELEASE).expect("version");
-    let offered =
-        manifest::newer_release(&manifest, &current, &test_platform(None)).expect("manifest");
+    let offered = manifest::newer_release(&manifest, &current, &test_platform(None), false)
+        .expect("manifest");
     assert_eq!(offered, None);
+}
+
+#[test]
+fn release_candidates_are_ignored_when_disabled() {
+    let manifest = candidate_manifest(RELEASE, "stable", &[(CANDIDATE, "candidate")]);
+    let current = Version::parse(RUNNING).expect("version");
+    let release = manifest::newer_release(
+        &manifest,
+        &current,
+        &test_platform(Some(Package::AppImage)),
+        false,
+    )
+    .expect("manifest")
+    .expect("stable release");
+    assert_eq!(release.version_text, RELEASE);
+}
+#[test]
+fn enabled_release_candidates_choose_the_newest_version_above_current() {
+    let manifest = candidate_manifest(
+        RELEASE,
+        "stable",
+        &[("0.8.0-rc.2", "older"), ("0.8.0-rc.10", "newest")],
+    );
+    let current = Version::parse(RUNNING).expect("version");
+    let release =
+        manifest::newer_release(&manifest, &current, &test_platform(Some(Package::AppImage)), true)
+            .expect("manifest")
+            .expect("newer candidate");
+    assert_eq!(release.version_text, "0.8.0-rc.10");
+    assert_eq!(release.signature, "newest");
+}
+
+#[test]
+fn newer_stable_release_beats_a_stale_candidate() {
+    let manifest = candidate_manifest("0.9.0", "stable", &[("0.8.0-rc.3", "stale")]);
+    let current = Version::parse(RUNNING).expect("version");
+    let release =
+        manifest::newer_release(&manifest, &current, &test_platform(Some(Package::AppImage)), true)
+            .expect("manifest")
+            .expect("newer stable release");
+    assert_eq!(release.version_text, "0.9.0");
+    assert_eq!(release.signature, "stable");
+}
+
+#[test]
+fn current_equal_to_newest_candidate_is_up_to_date() {
+    let manifest = candidate_manifest(RELEASE, "stable", &[(CANDIDATE, "candidate")]);
+    let current = Version::parse(CANDIDATE).expect("version");
+    assert!(manifest::newer_release(
+        &manifest,
+        &current,
+        &test_platform(Some(Package::AppImage)),
+        true
+    )
+    .expect("manifest")
+    .is_none());
+}
+
+#[test]
+fn manifest_without_candidate_array_keeps_stable_release_behavior() {
+    let manifest = manifest_json(RELEASE, &[("linux-x86_64-appimage", PAYLOAD_URL, "stable")]);
+    let current = Version::parse(RUNNING).expect("version");
+    let release =
+        manifest::newer_release(&manifest, &current, &test_platform(Some(Package::AppImage)), true)
+            .expect("manifest")
+            .expect("stable release");
+    assert_eq!(release.version_text, RELEASE);
+    assert_eq!(release.signature, "stable");
 }
 
 // ── "Check for updates automatically" (D8, astro-plan-bzzbp) ────────────────
@@ -449,7 +553,7 @@ async fn with_automatic_checks_off_the_startup_check_makes_no_request() {
     let source = FakeSource::release(&signer, b"new AppImage");
     let rig = Rig::new(&signer, &source, Box::new(FakeInstaller::answering(vec![])));
 
-    rig.updater.check_on_startup(false).await;
+    rig.updater.check_on_startup(false, false).await;
 
     assert_eq!(source.manifest_requests(), 0, "no request while the setting is off");
     assert_eq!(rig.phase(), UpdatePhase::Idle);
@@ -461,8 +565,8 @@ async fn with_automatic_checks_on_the_startup_check_runs_once() {
     let source = FakeSource::release(&signer, b"new AppImage");
     let rig = Rig::new(&signer, &source, Box::new(FakeInstaller::answering(vec![])));
 
-    rig.updater.check_on_startup(true).await;
-    rig.updater.check_on_startup(true).await;
+    rig.updater.check_on_startup(true, false).await;
+    rig.updater.check_on_startup(true, false).await;
 
     assert_eq!(source.manifest_requests(), 1);
     assert_eq!(rig.phase(), UpdatePhase::Available);
@@ -474,11 +578,32 @@ async fn a_manual_check_works_with_automatic_checks_off() {
     let source = FakeSource::release(&signer, b"new AppImage");
     let rig = Rig::new(&signer, &source, Box::new(FakeInstaller::answering(vec![])));
 
-    rig.updater.check_on_startup(false).await;
-    rig.updater.check().await;
+    rig.updater.check_on_startup(false, false).await;
+    rig.updater.check(false).await;
 
     assert_eq!(source.manifest_requests(), 1);
     assert_eq!(rig.phase(), UpdatePhase::Available);
+}
+
+#[tokio::test]
+async fn a_candidate_signed_for_another_version_is_refused() {
+    let signer = Signer::new();
+    let candidate_signature = signer.sign_with_comment(
+        b"new AppImage",
+        "timestamp:1760000000\tfile:update\tversion:0.8.0-rc.2",
+    );
+    let stable_signature = signer.sign(b"new AppImage");
+    let manifest =
+        candidate_manifest(RELEASE, &stable_signature, &[(CANDIDATE, &candidate_signature)]);
+    let source = FakeSource::new(Some(manifest), b"new AppImage");
+    let installer = FakeInstaller::answering(vec![]);
+    let rig = Rig::new(&signer, &source, Box::new(Arc::clone(&installer)));
+
+    rig.updater.check_for_update(true).await;
+    assert_eq!(rig.updater.current_status().phase, UpdatePhase::Available);
+    rig.updater.install_now().await;
+
+    assert_refused(&rig, &installer, "signed for version 0.8.0-rc.2");
 }
 
 // ── Signature verification ──────────────────────────────────────────────────
@@ -496,7 +621,7 @@ async fn download_with(
     );
     let installer = FakeInstaller::answering(vec![]);
     let rig = Rig::new(signer, &source, Box::new(Arc::clone(&installer)));
-    rig.updater.check().await;
+    rig.updater.check(false).await;
     assert_eq!(rig.phase(), UpdatePhase::Available);
     rig.updater.install_now().await;
     (rig, installer)
@@ -647,7 +772,7 @@ async fn a_retry_after_the_staged_payload_changed_installs_nothing() {
     let source = FakeSource::release(&signer, b"new AppImage");
     let installer = Arc::new(TamperingInstaller::default());
     let rig = Rig::new(&signer, &source, Box::new(Arc::clone(&installer)));
-    rig.updater.check().await;
+    rig.updater.check(false).await;
     rig.updater.install_now().await;
     assert_eq!(rig.updater.current_status().error, Some(UpdateFailure::Install));
 
@@ -692,7 +817,7 @@ async fn a_handoff_install_exits_for_the_installer() {
     let source = FakeSource::release(&signer, b"new AppImage");
     let installer = FakeInstaller::answering(vec![Ok(Installed::Handoff)]);
     let rig = Rig::new(&signer, &source, Box::new(Arc::clone(&installer)));
-    rig.updater.check().await;
+    rig.updater.check(false).await;
     rig.updater.install_now().await;
     assert_eq!(rig.host_calls(), vec![HostCall::Exit]);
     assert_eq!(
@@ -711,7 +836,7 @@ async fn a_failed_install_keeps_the_verified_payload_for_a_retry() {
         Ok(Installed::relaunch()),
     ]);
     let rig = Rig::new(&signer, &source, Box::new(Arc::clone(&installer)));
-    rig.updater.check().await;
+    rig.updater.check(false).await;
 
     rig.updater.install_now().await;
     let status = rig.updater.current_status();
@@ -736,7 +861,7 @@ async fn install_now_blocked(
     let (installer, release_install) = FakeInstaller::blocked();
     installer.results.lock().expect("results").push_back(result);
     let rig = Rig::new(&signer, &source, Box::new(Arc::clone(&installer)));
-    rig.updater.check().await;
+    rig.updater.check(false).await;
     let updater = rig.updater.clone();
     let install = tokio::spawn(async move { updater.install_now().await });
     let started = std::time::Instant::now();
@@ -783,7 +908,7 @@ async fn nothing_installs_from_a_build_without_a_package() {
     let installer = FakeInstaller::answering(vec![]);
     let rig = Rig::build(&signer, &source, Box::new(Arc::clone(&installer)), None, WAIT);
 
-    rig.updater.check().await;
+    rig.updater.check(false).await;
     assert_eq!(rig.phase(), UpdatePhase::Available, "it can still check");
     rig.updater.install_now().await;
 
@@ -805,14 +930,14 @@ async fn install_on_quit_stages_the_payload_without_installing() {
     let source = FakeSource::release(&signer, b"new AppImage");
     let installer = FakeInstaller::answering(vec![]);
     let rig = Rig::new(&signer, &source, Box::new(Arc::clone(&installer)));
-    rig.updater.check().await;
+    rig.updater.check(false).await;
 
     rig.updater.install_on_quit().await;
 
     assert_eq!(rig.phase(), UpdatePhase::InstallOnQuit);
     assert_eq!(source.downloads(), 1);
     assert!(installer.calls().is_empty(), "nothing installs before the quit");
-    rig.updater.check().await;
+    rig.updater.check(false).await;
     assert_eq!(source.manifest_requests(), 1, "a re-check never drops the staged update");
     assert_eq!(rig.phase(), UpdatePhase::InstallOnQuit);
 }
@@ -823,7 +948,7 @@ async fn the_first_quit_installs_the_staged_update_then_exits() {
     let source = FakeSource::release(&signer, b"new AppImage");
     let installer = FakeInstaller::answering(vec![]);
     let rig = Rig::new(&signer, &source, Box::new(Arc::clone(&installer)));
-    rig.updater.check().await;
+    rig.updater.check(false).await;
     rig.updater.install_on_quit().await;
 
     assert_eq!(rig.updater.on_quit_requested(), QuitDecision::Defer);
@@ -839,7 +964,7 @@ async fn a_quit_with_nothing_staged_proceeds() {
     let source = FakeSource::release(&signer, b"new AppImage");
     let rig = Rig::new(&signer, &source, Box::new(FakeInstaller::answering(vec![])));
     assert_eq!(rig.updater.on_quit_requested(), QuitDecision::Proceed);
-    rig.updater.check().await;
+    rig.updater.check(false).await;
     assert_eq!(rig.updater.on_quit_requested(), QuitDecision::Proceed, "found, not chosen");
 }
 
@@ -849,7 +974,7 @@ async fn quits_during_the_install_at_quit_are_held_until_it_finishes() {
     let source = FakeSource::release(&signer, b"new AppImage");
     let (installer, release_install) = FakeInstaller::blocked();
     let rig = Rig::new(&signer, &source, Box::new(Arc::clone(&installer)));
-    rig.updater.check().await;
+    rig.updater.check(false).await;
     rig.updater.install_on_quit().await;
 
     assert_eq!(rig.updater.on_quit_requested(), QuitDecision::Defer);
@@ -873,7 +998,7 @@ async fn a_hung_install_at_quit_exits_once_at_the_ceiling() {
         Some(Package::AppImage),
         Duration::from_millis(50),
     );
-    rig.updater.check().await;
+    rig.updater.check(false).await;
     rig.updater.install_on_quit().await;
 
     assert_eq!(rig.updater.on_quit_requested(), QuitDecision::Defer);
@@ -892,7 +1017,7 @@ async fn a_failed_install_at_quit_still_exits() {
     let source = FakeSource::release(&signer, b"new AppImage");
     let installer = FakeInstaller::answering(vec![Err(UpdateError::Install("denied".to_owned()))]);
     let rig = Rig::new(&signer, &source, Box::new(Arc::clone(&installer)));
-    rig.updater.check().await;
+    rig.updater.check(false).await;
     rig.updater.install_on_quit().await;
 
     assert_eq!(rig.updater.on_quit_requested(), QuitDecision::Defer);
@@ -1018,7 +1143,7 @@ async fn an_install_at_quit_that_kept_the_previous_app_says_where_before_exiting
     let source = FakeSource::release(&signer, b"new AppImage");
     let installer = FakeInstaller::answering(vec![Err(previous_app_not_restored())]);
     let rig = Rig::new(&signer, &source, Box::new(Arc::clone(&installer)));
-    rig.updater.check().await;
+    rig.updater.check(false).await;
     rig.updater.install_on_quit().await;
 
     assert_eq!(rig.updater.on_quit_requested(), QuitDecision::Defer);
@@ -1042,7 +1167,7 @@ async fn the_watchdog_waits_for_the_notice_of_a_kept_previous_app() {
         Duration::from_millis(50),
         Duration::from_millis(300),
     );
-    rig.updater.check().await;
+    rig.updater.check(false).await;
     rig.updater.install_on_quit().await;
 
     assert_eq!(rig.updater.on_quit_requested(), QuitDecision::Defer);
@@ -1086,7 +1211,7 @@ async fn install_now_without_a_quit_shows_the_kept_path_in_the_app_instead() {
     let source = FakeSource::release(&signer, b"new AppImage");
     let installer = FakeInstaller::answering(vec![Err(previous_app_not_restored())]);
     let rig = Rig::new(&signer, &source, Box::new(Arc::clone(&installer)));
-    rig.updater.check().await;
+    rig.updater.check(false).await;
 
     rig.updater.install_now().await;
 
@@ -1118,7 +1243,7 @@ async fn an_install_at_quit_over_a_replaced_app_asks_for_a_restart_before_exitin
     let source = FakeSource::release(&signer, b"new AppImage");
     let installer = FakeInstaller::answering(vec![Err(replaced_app(&[]))]);
     let rig = Rig::new(&signer, &source, Box::new(Arc::clone(&installer)));
-    rig.updater.check().await;
+    rig.updater.check(false).await;
     rig.updater.install_on_quit().await;
 
     assert_eq!(rig.updater.on_quit_requested(), QuitDecision::Defer);
@@ -1160,7 +1285,7 @@ async fn an_install_that_kept_another_app_aside_says_where_before_relaunching() 
     let kept_aside = vec![std::path::PathBuf::from(KEPT)];
     let installer = FakeInstaller::answering(vec![Ok(Installed::Relaunch { kept_aside })]);
     let rig = Rig::new(&signer, &source, Box::new(Arc::clone(&installer)));
-    rig.updater.check().await;
+    rig.updater.check(false).await;
 
     rig.updater.install_now().await;
 
@@ -1174,7 +1299,7 @@ async fn an_install_at_quit_that_kept_another_app_aside_says_where_before_exitin
     let kept_aside = vec![std::path::PathBuf::from(KEPT)];
     let installer = FakeInstaller::answering(vec![Ok(Installed::Relaunch { kept_aside })]);
     let rig = Rig::new(&signer, &source, Box::new(Arc::clone(&installer)));
-    rig.updater.check().await;
+    rig.updater.check(false).await;
     rig.updater.install_on_quit().await;
 
     assert_eq!(rig.updater.on_quit_requested(), QuitDecision::Defer);
@@ -1205,7 +1330,7 @@ async fn install_now_over_a_replaced_app_shows_the_kept_path_in_the_app() {
     let source = FakeSource::release(&signer, b"new AppImage");
     let installer = FakeInstaller::answering(vec![Err(replaced_app(&[KEPT]))]);
     let rig = Rig::new(&signer, &source, Box::new(Arc::clone(&installer)));
-    rig.updater.check().await;
+    rig.updater.check(false).await;
 
     rig.updater.install_now().await;
 
@@ -1224,7 +1349,7 @@ async fn each_install_is_worded_in_the_active_language() {
     let source = FakeSource::release(&signer, b"new AppImage");
     let installer = FakeInstaller::answering(vec![Err(UpdateError::Install("denied".to_owned()))]);
     let rig = Rig::new(&signer, &source, Box::new(Arc::clone(&installer)));
-    rig.updater.check().await;
+    rig.updater.check(false).await;
     rig.updater.install_now().await;
 
     rig.locale.set_locale("pt-BR");
@@ -1268,7 +1393,7 @@ async fn install_now_after_install_on_quit_installs_at_once() {
     let source = FakeSource::release(&signer, b"new AppImage");
     let installer = FakeInstaller::answering(vec![]);
     let rig = Rig::new(&signer, &source, Box::new(Arc::clone(&installer)));
-    rig.updater.check().await;
+    rig.updater.check(false).await;
     rig.updater.install_on_quit().await;
 
     rig.updater.install_now().await;
@@ -1284,7 +1409,7 @@ async fn download_stages_the_payload_and_keeps_offering_both_choices() {
     let source = FakeSource::release(&signer, b"new AppImage");
     let installer = FakeInstaller::answering(vec![]);
     let rig = Rig::new(&signer, &source, Box::new(Arc::clone(&installer)));
-    rig.updater.check().await;
+    rig.updater.check(false).await;
 
     assert!(rig.updater.download().await);
     assert_eq!(rig.phase(), UpdatePhase::Available);
@@ -1300,7 +1425,7 @@ async fn the_status_feed_starts_with_the_current_status() {
     let signer = Signer::new();
     let source = FakeSource::release(&signer, b"new AppImage");
     let rig = Rig::new(&signer, &source, Box::new(FakeInstaller::answering(vec![])));
-    rig.updater.check().await;
+    rig.updater.check(false).await;
 
     let mut feed = rig.updater.status();
     let first = feed.next().await.expect("status");
@@ -1563,7 +1688,7 @@ mod bundle {
         let bundle_installer = BundleInstaller { launched, signing: Arc::clone(signing) };
         let rig =
             Rig::build(&signer, &source, Box::new(bundle_installer), Some(Package::App), WAIT);
-        rig.updater.check().await;
+        rig.updater.check(false).await;
         assert_eq!(rig.phase(), UpdatePhase::Available);
         after_launch(&app);
         rig.updater.install_now().await;

@@ -872,12 +872,14 @@ export const commands = {
 	/**
 	 *  `update.check_on_startup` — the check at app start, run once per process
 	 *  and only when `automatic` ("Check for updates automatically") is on.
+	 *  The independently chosen release-candidate preference applies to both
+	 *  startup and manual checks.
 	 * 
 	 *  # Errors
 	 * 
 	 *  `InternalError` when the build has no usable updater configuration.
 	 */
-	updateCheckOnStartup: (automatic: boolean) => typedError<null, ContractError_Serialize>(__TAURI_INVOKE("update_check_on_startup", { automatic })),
+	updateCheckOnStartup: (automatic: boolean, includeCandidates: boolean) => typedError<null, ContractError_Serialize>(__TAURI_INVOKE("update_check_on_startup", { automatic, includeCandidates })),
 	/**
 	 *  `update.check` — a manual check. Never downloads.
 	 * 
@@ -885,7 +887,7 @@ export const commands = {
 	 * 
 	 *  `InternalError` when the build has no usable updater configuration.
 	 */
-	updateCheck: () => typedError<null, ContractError_Serialize>(__TAURI_INVOKE("update_check")),
+	updateCheck: (includeCandidates: boolean) => typedError<null, ContractError_Serialize>(__TAURI_INVOKE("update_check", { includeCandidates })),
 	/**
 	 *  `update.install_now` — download and verify, install, then relaunch (on
 	 *  Windows the app exits for the installer).
@@ -2285,6 +2287,8 @@ export type AppPreferences = {
 	 *  in Settings › Advanced contacts the update endpoint.
 	 */
 	checkUpdatesAutomatically: boolean,
+	/**  Whether update checks may offer release-candidate builds. */
+	includeReleaseCandidates: boolean,
 };
 
 /**

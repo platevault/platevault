@@ -202,7 +202,7 @@ pub trait UpdatePort: Send + Sync {
 
     /// Ask the endpoint whether a newer release exists. Never downloads. A
     /// no-op while a download or install the user chose is under way.
-    fn check(&self) -> impl Future<Output = ()> + Send;
+    fn check(&self, include_candidates: bool) -> impl Future<Output = ()> + Send;
 
     /// Download and verify the release the last check found, without
     /// installing it. Returns whether a verified payload is staged.
@@ -535,7 +535,7 @@ impl Updater {
     /// `automatic` ("Check for updates automatically") is on. With it off,
     /// nothing contacts the update endpoint until the user checks. Either
     /// way, it first removes payloads earlier runs left in the temp dir.
-    pub async fn check_on_startup(&self, automatic: bool) {
+    pub async fn check_on_startup(&self, automatic: bool, include_candidates: bool) {
         if self.inner.startup_checked.swap(true, Ordering::SeqCst) {
             return;
         }
@@ -543,7 +543,7 @@ impl Updater {
         if !automatic {
             return;
         }
-        self.check().await;
+        self.check_for_update(include_candidates).await;
     }
 
     /// Decide a quit. With an install on quit staged, the quit is held while
@@ -599,16 +599,38 @@ impl Updater {
         }
     }
 
+    /// Check using the user's release-candidate preference. Never downloads.
+    pub async fn check_for_update(&self, include_candidates: bool) {
+        if !self.begin_check() {
+            return;
+        }
+        let next = match self.fetch_release(include_candidates).await {
+            Ok(Some(release)) => {
+                tracing::info!(version = %release.version_text, "update available");
+                State::Available { release, staged: None }
+            }
+            Ok(None) => State::UpToDate,
+            Err(error) => State::CheckFailed(error),
+        };
+        self.set(&mut self.lock(), next);
+    }
+
     /// The newer release the first answering endpoint announces.
-    async fn fetch_release(&self) -> Result<Option<Release>, UpdateError> {
+    async fn fetch_release(
+        &self,
+        include_candidates: bool,
+    ) -> Result<Option<Release>, UpdateError> {
         let inner = &*self.inner;
         let mut failure = UpdateError::Config("no update endpoint is configured".to_owned());
         for url in &inner.endpoints {
             let found = match inner.source.manifest(url).await {
                 Ok(None) => return Ok(None),
-                Ok(Some(manifest)) => {
-                    manifest::newer_release(&manifest, &inner.current_version, &inner.platform)
-                }
+                Ok(Some(manifest)) => manifest::newer_release(
+                    &manifest,
+                    &inner.current_version,
+                    &inner.platform,
+                    include_candidates,
+                ),
                 Err(error) => Err(error),
             };
             match found {
@@ -857,19 +879,8 @@ impl UpdatePort for Updater {
         Latest::new(self.inner.status.subscribe())
     }
 
-    async fn check(&self) {
-        if !self.begin_check() {
-            return;
-        }
-        let next = match self.fetch_release().await {
-            Ok(Some(release)) => {
-                tracing::info!(version = %release.version_text, "update available");
-                State::Available { release, staged: None }
-            }
-            Ok(None) => State::UpToDate,
-            Err(error) => State::CheckFailed(error),
-        };
-        self.set(&mut self.lock(), next);
+    async fn check(&self, include_candidates: bool) {
+        self.check_for_update(include_candidates).await;
     }
 
     async fn download(&self) -> bool {
@@ -879,7 +890,6 @@ impl UpdatePort for Updater {
     async fn install_now(&self) {
         self.advance(Intent::InstallNow).await;
     }
-
     async fn install_on_quit(&self) {
         self.advance(Intent::InstallOnQuit).await;
     }

@@ -73,4 +73,6 @@ pub struct AppPreferences {
     /// Whether the app checks for updates at startup. Off: only a manual check
     /// in Settings › Advanced contacts the update endpoint.
     pub check_updates_automatically: bool,
+    /// Whether update checks may offer release-candidate builds.
+    pub include_release_candidates: bool,
 }

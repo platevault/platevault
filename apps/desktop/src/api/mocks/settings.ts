@@ -23,4 +23,5 @@ export const mockPreferences: AppPreferences = {
   setupCompleted: false,
   detailDock: {},
   checkUpdatesAutomatically: true,
+  includeReleaseCandidates: false,
 };
