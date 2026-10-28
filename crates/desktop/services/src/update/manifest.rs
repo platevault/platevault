@@ -68,11 +68,8 @@ pub fn newer_release(
                 manifest.release.version
             ))
         })?;
-    let mut selected = if stable_version > *current {
-        Some((&manifest.release, stable_version.clone()))
-    } else {
-        None
-    };
+    let mut selected =
+        if stable_version > *current { Some((&manifest.release, stable_version)) } else { None };
 
     if include_candidates {
         for candidate in &manifest.candidates {

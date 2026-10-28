@@ -58,6 +58,10 @@ pub struct DetailDockPref {
 }
 
 /// Application-level user preferences.
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "IPC DTO of independent user toggles, not a state machine"
+)]
 #[derive(Clone, Debug, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct AppPreferences {
