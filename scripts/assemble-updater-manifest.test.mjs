@@ -22,7 +22,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { assembleManifest } from './assemble-updater-manifest.mjs';
+import { assembleManifest, carryForwardCandidates, mergeCandidate } from './assemble-updater-manifest.mjs';
 
 const SCRIPT_PATH = resolve(dirname(fileURLToPath(import.meta.url)), 'assemble-updater-manifest.mjs');
 const BASE_URL = 'https://github.com/platevault/platevault/releases/download/v0.7.0';
@@ -303,10 +303,83 @@ function assemble(edit = () => {}) {
   assertProblem(problems, /^linux-x86_64-deb: 2 release assets end with "_amd64\.deb"/, 'an ambiguous match is named');
 }
 
+
+function candidateManifestEntry(version, signedVersion = version) {
+  const key = makeKey();
+  const fileName = `PlateVault_${version}_aarch64.app.tar.gz`;
+  const bytes = Buffer.from(`bundle for ${version}`);
+  return {
+    version,
+    notes: `notes for ${version}`,
+    pub_date: '2026-10-27T00:00:00.000Z',
+    platforms: {
+      'darwin-aarch64-app': {
+        url: `${BASE_URL.replace('/v0.7.0', `/rc/${version}`)}/${fileName}`,
+        signature: signFile(bytes, fileName, key, signedVersion),
+      },
+    },
+  };
+}
+
+{
+  const stable = {
+    version: '0.6.1',
+    notes: 'stable notes',
+    pub_date: '2026-10-01T00:00:00.000Z',
+    platforms: { stable: { url: 'https://example.test/stable', signature: 'stable-signature' } },
+    candidates: [candidateManifestEntry('0.7.0-rc.1'), candidateManifestEntry('0.8.0-rc.4')],
+  };
+  const merged = mergeCandidate(stable, candidateManifestEntry('0.7.0-rc.2'));
+  assertEqual(merged.version, stable.version, 'candidate writer preserves stable version');
+  assertEqual(merged.notes, stable.notes, 'candidate writer preserves stable notes');
+  assertEqual(merged.pub_date, stable.pub_date, 'candidate writer preserves stable date');
+  assertEqual(JSON.stringify(merged.platforms), JSON.stringify(stable.platforms), 'candidate writer preserves stable platforms');
+  assertEqual(merged.candidates.map((candidate) => candidate.version).join(','), '0.8.0-rc.4,0.7.0-rc.2', 'candidate writer replaces the same release train');
+}
+
+{
+  try {
+    mergeCandidate({ version: '0.7.0', platforms: {} }, candidateManifestEntry('0.7.0-rc.1'));
+    failures.push('candidate at or below stable version must be refused');
+  } catch (error) {
+    assertEqual(error.message, 'candidate 0.7.0-rc.1 must be newer than top-level 0.7.0', 'stable comparison rejects a candidate not newer than top-level');
+  }
+}
+
+{
+  try {
+    mergeCandidate({ version: '0.6.1', platforms: {} }, candidateManifestEntry('0.7.0-rc.2', '0.7.0'));
+    failures.push('signature trusted-comment version mismatch must be refused');
+  } catch (error) {
+    assertEqual(error.message, 'darwin-aarch64-app: signature was signed for version 0.7.0, but candidate announces 0.7.0-rc.2', 'signature version mismatch is reported');
+  }
+}
+{
+  const stable = { version: '0.6.1', platforms: {}, candidates: [candidateManifestEntry('0.7.0-rc.3')] };
+  try {
+    mergeCandidate(stable, candidateManifestEntry('0.7.0-rc.2'));
+    failures.push('older same-train candidate retry must be refused');
+  } catch (error) {
+    assertEqual(error.message, 'candidate 0.7.0-rc.2 is older than already-published 0.7.0-rc.3', 'older same-train retry does not roll back latest RC');
+  }
+
+  const equal = mergeCandidate(stable, candidateManifestEntry('0.7.0-rc.3'));
+  assertEqual(equal.candidates.filter((candidate) => candidate.version.startsWith('0.7.0-rc.')).length, 1, 'equal retry replaces rather than duplicates');
+}
+{
+  const previous = {
+    version: '0.6.1',
+    platforms: {},
+    candidates: [candidateManifestEntry('0.7.0-rc.2'), candidateManifestEntry('0.8.0-rc.1'), candidateManifestEntry('0.9.0-rc.1')],
+  };
+  const carried = carryForwardCandidates(previous, { version: '0.8.0', platforms: {} });
+  assertEqual(carried.candidates.map((candidate) => candidate.version).join(','), '0.9.0-rc.1', 'stable writer carries only candidates newer than stable');
+  assertEqual(carryForwardCandidates(previous, { version: '0.9.0', platforms: {} }).candidates, undefined, 'stable writer omits an empty candidates key');
+}
 // ── the CLI ─────────────────────────────────────────────────────────────────
 // Also the entry-point guard: an exit-0 run that wrote nothing would read as
 // "manifest published" to the workflow (see check-mock-baseline.mjs).
-function runCli(edit, { rotateKey = false } = {}) {
+function runCli(edit, { rotateKey = false, previousManifest } = {}) {
   const key = makeKey();
   const dir = mkdtempSync(join(tmpdir(), 'updater-manifest-cli-'));
   try {
@@ -334,6 +407,11 @@ function runCli(edit, { rotateKey = false } = {}) {
       writeConf('previous.json', '0.6.0', key.pubkey);
       pubkeyFlags.push('--pubkey-conf', join(dir, 'previous.json'));
     }
+    const previousFlags = [];
+    if (previousManifest) {
+      writeFileSync(join(dir, 'previous-latest.json'), JSON.stringify(previousManifest));
+      previousFlags.push('--previous-manifest', join(dir, 'previous-latest.json'));
+    }
     const out = join(dir, 'latest.json');
     const run = spawnSync(
       process.execPath,
@@ -346,6 +424,7 @@ function runCli(edit, { rotateKey = false } = {}) {
         '--tauri-conf',
         join(dir, 'tauri.conf.json'),
         ...pubkeyFlags,
+        ...previousFlags,
         '--out',
         out,
       ],
