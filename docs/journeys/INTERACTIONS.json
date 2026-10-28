@@ -856,7 +856,7 @@
       "spec": "064-library-inventory LIB-FR-21, LIB-AC-45; 063-clean-rebuild-contract FR-042; D-W86, D-W143, D-W166; astro-plan-0v2o0.3; astro-plan-k9fil; astro-plan-ocyuc.5",
       "action": "Set the appearance mode and theme, choose interface language, relaunch to check persistence, and restore defaults.",
       "expect": "Theme, mode, language and single-key shortcut choices apply immediately and persist across relaunch before the first frame. Match system follows the OS using its selected dark/light pair. Density has no setting; J40 covers appearance and language only.",
-      "negative": "Appearance changes no catalog record, Activity entry, library file, or user file. There is no density setting or density journey step. Keyboard behavior is J42's contract."
+      "negative": "Appearance changes no catalog record, Activity entry, or library or user file; only PlateVault's own settings store changes. There is no density setting or density journey step. Keyboard behavior is J42's contract."
     },
     {
       "flowStep": "Keyboard model, shortcuts, go-to keys and command palette (D-W91, D-W121, D-W162)",

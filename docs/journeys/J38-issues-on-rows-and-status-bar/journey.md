@@ -239,5 +239,5 @@ running, and the notifications history. Done means:
   Work a restart interrupted reads "Interrupted when PlateVault restarted. Retry continues from the recorded progress."
   Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 11 (OWNER, 2026-10-23) on ui-harness-v5 @ 5dc245244; D-W149 · by: SpecAmend (intent-gated)
 - **Δ7** 2026-10-28 · S1, S2, S3, S4, S5a, S5b, S7, S8, S9, S10, S11, S12, S13, S14 · trace-only
-  Steps now also cite their owning FR/AC: status-bar groups (063 FR-038), row-level issues (063 FR-032), dismissal and recurrence (064 LIB-AC-44) and the automatic duplicate scan (064 LIB-AC-43). No step's behaviour changes.
+  Steps now also cite their owning FR/AC: status-bar groups (063 FR-038), row-level issues (063 FR-032), dismissal and recurrence (064 LIB-AC-44) and the automatic duplicate scan (064 LIB-AC-43). No step's behaviour changes. LIB-AC-44 restates S5a and S5b as D-W158 settles them; LIB-AC-43 restates S9 and S11 (after an import, after an index) under D-W164.
   Evidence: 063 FR-032, FR-037 to FR-040 · 064 LIB-FR-07, LIB-FR-17, LIB-FR-22, LIB-AC-43, LIB-AC-44 · 065 PRJ-FR-15 · 071 STO-FR-16, STO-IMP-FR-06 · D-W144, D-W149, D-W150, D-W158, D-W164 · astro-plan-0v2o0.2, astro-plan-ocyuc.5 · by: omp-lead-20261004 (intent-gated)
