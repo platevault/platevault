@@ -58,6 +58,10 @@ pub struct DetailDockPref {
 }
 
 /// Application-level user preferences.
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "IPC DTO of independent user toggles, not a state machine"
+)]
 #[derive(Clone, Debug, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct AppPreferences {
@@ -73,4 +77,6 @@ pub struct AppPreferences {
     /// Whether the app checks for updates at startup. Off: only a manual check
     /// in Settings › Advanced contacts the update endpoint.
     pub check_updates_automatically: bool,
+    /// Whether update checks may offer release-candidate builds.
+    pub include_release_candidates: bool,
 }

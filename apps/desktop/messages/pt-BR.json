@@ -1693,6 +1693,8 @@
   "settings_advanced_updates_not_checked": "O PlateVault ainda não verificou se há atualizações.",
   "settings_advanced_updates_auto_check": "Verificar atualizações automaticamente",
   "settings_advanced_updates_auto_check_info": "Quando ativado, o PlateVault consulta o GitHub sobre a versão mais recente sempre que é iniciado. Quando desativado, só contata o GitHub quando você clica em Verificar atualizações.",
+  "settings_advanced_updates_candidates": "Incluir versões candidatas",
+  "settings_advanced_updates_candidates_info": "As versões candidatas são builds de teste da próxima versão. Se houver migrações pendentes, o PlateVault tenta fazer um backup do banco de dados antes da migração, identificado com a versão do aplicativo; bancos novos ou atualizados não são copiados.",
   "settings_advanced_updates_downloading": "Baixando atualização {version}…",
   "settings_advanced_updates_downloadfailed": "Não foi possível baixar a atualização: {message}",
   "settings_advanced_updates_available": "A atualização {version} está disponível.",

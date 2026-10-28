@@ -79,7 +79,7 @@ impl UpdatePort for FakePort {
         Latest::new(self.status.subscribe())
     }
 
-    fn check(&self) -> impl Future<Output = ()> + Send {
+    fn check(&self, _include_candidates: bool) -> impl Future<Output = ()> + Send {
         self.record("check");
         ready(())
     }

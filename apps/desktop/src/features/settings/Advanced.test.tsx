@@ -249,6 +249,19 @@ describe('Advanced — Software Update section', () => {
     ).toBeChecked();
   });
 
+  // Ensure the candidate opt-in defaults off and follows the existing preference store.
+  it('turns candidate updates off by default and persists them when enabled', async () => {
+    render(<Advanced save={vi.fn()} />);
+    const toggle = await screen.findByLabelText('Include release candidates');
+    expect(toggle).not.toBeChecked();
+    fireEvent.click(toggle);
+    await waitFor(() => expect(toggle).toBeChecked());
+    expect(
+      JSON.parse(localStorage.getItem('alm-preferences') ?? '{}')
+        .includeReleaseCandidates,
+    ).toBe(true);
+  });
+
   it('keeps "Check for updates automatically" off across a reload', async () => {
     render(<Advanced save={vi.fn()} />);
     const toggle = await screen.findByLabelText(

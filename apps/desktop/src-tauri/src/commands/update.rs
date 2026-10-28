@@ -13,7 +13,7 @@ use desktop_services::locale::ActiveLocale;
 use contracts_core::updates::{UpdateOffer, UpdateStatus};
 use contracts_core::ContractError;
 use desktop_services::update::offer::Offers;
-use desktop_services::update::{UpdatePort as _, Updater};
+use desktop_services::update::{UpdatePort, Updater};
 use tauri::Manager;
 use tauri::State;
 #[cfg(test)]
@@ -63,6 +63,8 @@ pub fn update_offer(app: AppHandle) -> Result<UpdateOffer, ContractError> {
 
 /// `update.check_on_startup` — the check at app start, run once per process
 /// and only when `automatic` ("Check for updates automatically") is on.
+/// The independently chosen release-candidate preference applies to both
+/// startup and manual checks.
 ///
 /// # Errors
 ///
@@ -70,8 +72,12 @@ pub fn update_offer(app: AppHandle) -> Result<UpdateOffer, ContractError> {
 #[tauri::command]
 #[specta::specta]
 #[allow(clippy::needless_pass_by_value)] // Tauri injects the app handle by value
-pub async fn update_check_on_startup(app: AppHandle, automatic: bool) -> Result<(), ContractError> {
-    updater(&app)?.check_on_startup(automatic).await;
+pub async fn update_check_on_startup(
+    app: AppHandle,
+    automatic: bool,
+    include_candidates: bool,
+) -> Result<(), ContractError> {
+    updater(&app)?.check_on_startup(automatic, include_candidates).await;
     Ok(())
 }
 
@@ -83,8 +89,8 @@ pub async fn update_check_on_startup(app: AppHandle, automatic: bool) -> Result<
 #[tauri::command]
 #[specta::specta]
 #[allow(clippy::needless_pass_by_value)] // Tauri injects the app handle by value
-pub async fn update_check(app: AppHandle) -> Result<(), ContractError> {
-    updater(&app)?.check().await;
+pub async fn update_check(app: AppHandle, include_candidates: bool) -> Result<(), ContractError> {
+    UpdatePort::check(&updater(&app)?, include_candidates).await;
     Ok(())
 }
 

@@ -31,6 +31,7 @@ pub async fn preferences_get() -> Result<AppPreferences, ContractError> {
         setup_completed: false,
         detail_dock: HashMap::new(),
         check_updates_automatically: true,
+        include_release_candidates: false,
     })
 }
 
