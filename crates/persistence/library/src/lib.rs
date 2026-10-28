@@ -81,6 +81,7 @@ const SCHEMA: &str = schema_modules![
     "project_view.sql",
     "project_output.sql",
     "project_wrap_up.sql",
+    "issues.sql",
 ];
 /// The one version of the whole [`SCHEMA`] list, recorded by `schema.sql`'s
 /// `catalog_meta` row. There are no migrations: a catalog recording any other
@@ -196,6 +197,8 @@ mod project_view;
 pub use project_view::{
     ApplyInputs, ApplyReservation, ApplyReserved, CorrectedSource, KeptMove, SourcePath,
 };
+// Issue dismissals and the issue sources core reads in one snapshot (issues.sql).
+mod issues;
 // A Project's inputs: whole-session membership through the admission rule,
 // groups, frame choices, View settings, pending changes and suggestions
 // (project_inputs.sql).

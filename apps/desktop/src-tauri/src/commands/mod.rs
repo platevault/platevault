@@ -38,6 +38,7 @@ pub mod inbox;
 pub mod ingestion;
 pub mod inventory;
 pub mod inventory_frame;
+pub mod issues;
 pub mod library;
 pub mod library_dialogs;
 pub mod lifecycle;

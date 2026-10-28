@@ -1489,6 +1489,31 @@ export const commands = {
 	 */
 	homeDashboard: (tonight: TonightQuery_Deserialize) => typedError<HomeDashboard_Serialize, ErrorResponse>(__TAURI_INVOKE("home_dashboard", { tonight })),
 	/**
+	 *  Every current issue: those that count, those dismissed, the counters by
+	 *  severity and, per severity, each page with its count. Reading forgets a
+	 *  dismissal whose issue ended or changed.
+	 * 
+	 *  # Errors
+	 *  `PersistenceFailure` when the catalog cannot be read or written.
+	 */
+	libraryIssues: () => typedError<IssueView, ErrorResponse>(__TAURI_INVOKE("library_issues")),
+	/**
+	 *  Dismiss the current issue with `fingerprint` until it changes.
+	 * 
+	 *  # Errors
+	 *  `NotFound` when no current issue has it; `InvalidInput` for a Project's
+	 *  own waiting work; `PersistenceFailure` when the catalog cannot be written.
+	 */
+	libraryDismissIssue: (fingerprint: string) => typedError<null, ErrorResponse>(__TAURI_INVOKE("library_dismiss_issue", { fingerprint })),
+	/**
+	 *  Restore the dismissed issue with `fingerprint`.
+	 * 
+	 *  # Errors
+	 *  `NotFound` when no dismissal has it; `PersistenceFailure` when the
+	 *  catalog cannot be written.
+	 */
+	libraryRestoreIssue: (fingerprint: string) => typedError<null, ErrorResponse>(__TAURI_INVOKE("library_restore_issue", { fingerprint })),
+	/**
 	 *  Pick a folder.
 	 * 
 	 *  # Errors
@@ -4624,6 +4649,99 @@ export type InputState = {
 	 *  suggested or accepted while it reads drifted.
 	 */
 	drifted?: boolean,
+};
+
+/**  One issue as a row, a menu and a counter show it. */
+export type Issue = {
+	/**  The kind and subject: stable while the issue lasts. */
+	id: string,
+	/**  What a dismissal records: the kind, subject, count and bytes (D-W158). */
+	fingerprint: string,
+	kind: IssueKind,
+	severity: IssueSeverity,
+	/**
+	 *  How many things the issue covers: sessions, files, pins, offers or
+	 *  extra duplicate copies; 1 for a location or one operation.
+	 */
+	count: number,
+	/**  The bytes of the extra duplicate copies; `None` for every other kind. */
+	bytes: number | null,
+	/**  The location or Project the issue is about, for the client's wording. */
+	name: string | null,
+	owner: IssueOwner,
+	page: IssuePage,
+	dismissable: boolean,
+};
+
+/**  The status-bar counters: issues not dismissed, by severity. */
+export type IssueCounts = {
+	danger: number,
+	warning: number,
+	info: number,
+};
+
+/**  What an issue is about; the client words it by kind. */
+export type IssueKind = 
+/**  Sessions with no confirmed Target (a Library count). */
+"needs-target" | 
+/**  Confirmed sessions no Project holds (a Library count). */
+"not-in-project" | 
+/**  Sessions in the Needs calibration queue (a Library count). */
+"needs-calibration" | 
+/**  A session's pinned calibration file changed or went missing. */
+"pin-drift" | 
+/**  A location that can't be read: unreadable, or another folder now at its root. */
+"location-denied" | 
+/**  A location that is offline or whose root is missing. */
+"location-offline" | 
+/**  A scan, measurement run or Apply that failed. */
+"work-failed" | 
+/**  An import or measurement run left unfinished. */
+"work-interrupted" | 
+/**  A Project's `View (previous)/` holds files the user hasn't reviewed. */
+"previous-review" | 
+/**  A Project's `Processing/` holds generated masters offered to the calibration library. */
+"master-offer" | 
+/**  Reviewed frames of a session whose bytes changed on disk. */
+"drift" | 
+/**  Live copies that share their content with another live copy (a Library count). */
+"duplicates";
+
+/**  The row an issue is on, or the Library for a count with no row. */
+export type IssueOwner = { kind: "library" } | { kind: "session"; id: string } | { kind: "project"; id: string } | { kind: "location"; id: string } | 
+/**  Work no Project ran: a scan, an import or a measurement run. */
+{ kind: "operation"; id: string };
+
+/**
+ *  The page an issue's action opens, filtered to the affected rows; the
+ *  status bar's counter menu names these pages with their counts (D-W144).
+ */
+export type IssuePage = { kind: "sessions" } | 
+/**  Settings > Locations. */
+{ kind: "locations" } | { kind: "activity" } | { kind: "project"; id: string };
+
+/**  The issues of one severity whose action opens one page. */
+export type IssuePageCount = {
+	severity: IssueSeverity,
+	page: IssuePage,
+	count: number,
+};
+
+/**  A status-bar counter. */
+export type IssueSeverity = "danger" | "warning" | "info";
+
+/**  Every current issue, split into those that count and those dismissed. */
+export type IssueView = {
+	/**  Issues not dismissed: every counter and page count reads these. */
+	issues: Issue[],
+	/**  Dismissed issues, unchanged since their dismissal; each row offers Restore. */
+	dismissed: Issue[],
+	counts: IssueCounts,
+	/**
+	 *  Per severity, each page with how many of its issues count, in the
+	 *  order the issues first name it.
+	 */
+	pages: IssuePageCount[],
 };
 
 /**

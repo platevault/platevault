@@ -149,7 +149,7 @@ impl Library {
 }
 
 /// Group live copies by digest, largest reclaim first.
-fn duplicate_candidates(copies: Vec<DuplicateCopy>) -> Vec<DuplicateCandidate> {
+pub fn duplicate_candidates(copies: Vec<DuplicateCopy>) -> Vec<DuplicateCandidate> {
     let mut candidates: Vec<DuplicateCandidate> = Vec::new();
     for copy in copies {
         match candidates.last_mut() {

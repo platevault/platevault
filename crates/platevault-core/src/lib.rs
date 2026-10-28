@@ -17,6 +17,7 @@ pub mod grouping;
 pub mod home;
 pub mod import;
 pub mod inventory;
+pub mod issues;
 pub mod layout;
 pub mod library;
 pub mod model;

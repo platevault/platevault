@@ -62,6 +62,8 @@ mod targets_list;
 pub use targets_list::*;
 mod prepare;
 pub use prepare::*;
+mod issues;
+pub use issues::*;
 mod home;
 pub use home::*;
 
