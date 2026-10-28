@@ -495,7 +495,10 @@ describe('startUpdateSubscription — Check for updates automatically', () => {
     await startUpdateSubscription();
 
     expect(mockCommands.updateCheckOnStartup).toHaveBeenCalledTimes(1);
-    expect(mockCommands.updateCheckOnStartup).toHaveBeenCalledWith(false, false);
+    expect(mockCommands.updateCheckOnStartup).toHaveBeenCalledWith(
+      false,
+      false,
+    );
     expect(mockCommands.updateCheck).not.toHaveBeenCalled();
   });
 
@@ -515,7 +518,6 @@ describe('startUpdateSubscription — Check for updates automatically', () => {
     await checkForUpdate();
     expect(mockCommands.updateCheck).toHaveBeenCalledWith(true);
   });
-
 });
 
 describe('the user choices', () => {
