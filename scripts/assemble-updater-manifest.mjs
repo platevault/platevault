@@ -245,6 +245,110 @@ export function assembleManifest({ version, notes, pubDate, pubkey, assets, asse
   return { manifest: { version, notes, pub_date: pubDate, platforms }, problems };
 }
 
+const RELEASE_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+const CANDIDATE_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)-rc\.(0|[1-9]\d*)$/;
+
+function compareVersions(left, right) {
+  const leftMatch = CANDIDATE_VERSION.exec(left) ?? RELEASE_VERSION.exec(left);
+  const rightMatch = CANDIDATE_VERSION.exec(right) ?? RELEASE_VERSION.exec(right);
+  if (!leftMatch || !rightMatch) throw new Error(`invalid release version comparison: ${left} and ${right}`);
+  for (let index = 1; index <= 3; index += 1) {
+    const difference = BigInt(leftMatch[index]) - BigInt(rightMatch[index]);
+    if (difference !== 0n) return difference < 0n ? -1 : 1;
+  }
+  const leftRc = CANDIDATE_VERSION.exec(left);
+  const rightRc = CANDIDATE_VERSION.exec(right);
+  if (!leftRc) return rightRc ? 1 : 0;
+  if (!rightRc) return -1;
+  const difference = BigInt(leftRc[4]) - BigInt(rightRc[4]);
+  return difference < 0n ? -1 : difference > 0n ? 1 : 0;
+}
+
+function candidateBaseVersion(version) {
+  const match = CANDIDATE_VERSION.exec(version);
+  if (!match) throw new Error(`candidate version must be X.Y.Z-rc.N: ${version}`);
+  return match.slice(1, 4).join('.');
+}
+
+function signedVersion(signature) {
+  let lines;
+  try {
+    lines = boxLines(signature);
+  } catch {
+    throw new Error('is not a minisign signature');
+  }
+  const comment = lines[2] ?? '';
+  if (!comment.startsWith(TRUSTED_COMMENT_PREFIX)) throw new Error('is not a minisign signature');
+  return comment.slice(TRUSTED_COMMENT_PREFIX.length).split('\t')
+    .find((field) => field.startsWith(SIGNED_VERSION_FIELD))?.slice(SIGNED_VERSION_FIELD.length);
+}
+
+export function mergeCandidate(priorManifest, candidate) {
+  const baseVersion = candidateBaseVersion(candidate.version);
+  if (compareVersions(candidate.version, priorManifest.version) <= 0) {
+    throw new Error(`candidate ${candidate.version} must be newer than top-level ${priorManifest.version}`);
+  }
+  for (const [key, platform] of Object.entries(candidate.platforms ?? {})) {
+    const version = signedVersion(platform.signature);
+    if (!version || version.replace(/^v/, '') !== candidate.version) {
+      throw new Error(`${key}: signature was signed for version ${version ?? '(no version)'}, but candidate announces ${candidate.version}`);
+    }
+  }
+  const candidates = (priorManifest.candidates ?? []).filter((entry) => {
+    const existingBase = candidateBaseVersion(entry.version);
+    return existingBase !== baseVersion || compareVersions(candidate.version, entry.version) < 0;
+  });
+  return { ...priorManifest, candidates: [...candidates, candidate] };
+}
+
+export function carryForwardCandidates(previousManifest, manifest) {
+  const candidates = (previousManifest.candidates ?? []).filter((candidate) => {
+    candidateBaseVersion(candidate.version);
+    return compareVersions(candidate.version, manifest.version) > 0;
+  });
+  return candidates.length ? { ...manifest, candidates } : manifest;
+}
+
+export function assembleCandidate({ version, notes, pubDate, pubkey, assets, assetsDir }) {
+  candidateBaseVersion(version);
+  const problems = [];
+  const platforms = {};
+  const byName = new Map(assets.map((asset) => [asset.name, asset]));
+  const publicKey = parsePublicKey(pubkey);
+  for (const row of UPDATER_BUNDLES) {
+    const key = `${row.os}-${row.arch}-${row.bundle}`;
+    const matches = assets.filter((asset) => asset.name.endsWith(row.suffix));
+    if (matches.length !== 1) {
+      problems.push(matches.length === 0
+        ? `${key}: no release asset ends with "${row.suffix}"`
+        : `${key}: ${matches.length} release assets end with "${row.suffix}": ${matches.map((asset) => asset.name).join(', ')}`);
+      continue;
+    }
+    const bundle = matches[0];
+    const signatureName = `${bundle.name}.sig`;
+    if (!byName.has(signatureName)) {
+      problems.push(`${key}: ${bundle.name} has no ${signatureName} on the release`);
+      continue;
+    }
+    const bundlePath = join(assetsDir, bundle.name);
+    const signaturePath = join(assetsDir, signatureName);
+    if (![bundlePath, signaturePath].every((file) => existsSync(file))) {
+      problems.push(`${key}: bundle or signature was not downloaded`);
+      continue;
+    }
+    const signature = readFileSync(signaturePath, 'utf8');
+    const failure = verifySignature(readFileSync(bundlePath), signature, publicKey, version);
+    if (failure) {
+      problems.push(`${key}: the signature in ${signatureName} ${failure}`);
+      continue;
+    }
+    const entry = { signature, url: bundle.url };
+    if (row.primary) platforms[`${row.os}-${row.arch}`] = entry;
+    platforms[key] = entry;
+  }
+  if (problems.length) return { candidate: null, problems };
+  return { candidate: { version, notes, pub_date: pubDate, platforms }, problems };
+}
 function main() {
   const { values } = parseArgs({
     options: {
@@ -252,37 +356,52 @@ function main() {
       assets: { type: 'string' },
       'tauri-conf': { type: 'string' },
       'pubkey-conf': { type: 'string' },
+      'candidate-release': { type: 'string' },
+      'candidate-version': { type: 'string' },
+      'stable-manifest': { type: 'string' },
+      'previous-manifest': { type: 'string' },
       out: { type: 'string' },
     },
   });
-  const missingFlags = ['release', 'assets', 'tauri-conf', 'out'].filter((flag) => !values[flag]);
+  const candidateMode = Boolean(values['candidate-release']);
+  const missingFlags = candidateMode
+    ? ['candidate-version', 'stable-manifest', 'assets', 'tauri-conf', 'out'].filter((flag) => !values[flag])
+    : ['release', 'assets', 'tauri-conf', 'out'].filter((flag) => !values[flag]);
   if (missingFlags.length > 0) {
     console.error(`usage: missing --${missingFlags.join(', --')}`);
     process.exitCode = 2;
     return;
   }
-
-  const release = JSON.parse(readFileSync(values.release, 'utf8'));
-  // The version of the commit being released, which is where tauri-action
-  // read it from and what the bundler signed into each trusted comment.
   const tauriConf = JSON.parse(readFileSync(values['tauri-conf'], 'utf8'));
-  // The key installed clients trust, which is the released commit's key except
-  // during a minisign key rotation: the release that embeds a new key is still
-  // signed with the old one. For that one release pass --pubkey-conf with the
-  // previous release's config, e.g. from `git show
-  // v0.6.0:apps/desktop/src-tauri/tauri.conf.json`. The version still comes
-  // from --tauri-conf.
   const pubkeyConf = values['pubkey-conf']
     ? JSON.parse(readFileSync(values['pubkey-conf'], 'utf8'))
     : tauriConf;
-  const { manifest, problems } = assembleManifest({
-    version: tauriConf.version,
-    notes: release.body ?? '',
-    pubDate: new Date().toISOString(),
-    pubkey: pubkeyConf.plugins.updater.pubkey,
-    assets: release.assets,
-    assetsDir: values.assets,
-  });
+  let manifest;
+  let problems;
+  if (candidateMode) {
+    const release = JSON.parse(readFileSync(values['candidate-release'], 'utf8'));
+    const stableManifest = JSON.parse(readFileSync(values['stable-manifest'], 'utf8'));
+    const result = assembleCandidate({
+      version: values['candidate-version'],
+      notes: release.body ?? '',
+      pubDate: release.publishedAt ?? new Date().toISOString(),
+      pubkey: pubkeyConf.plugins.updater.pubkey,
+      assets: release.assets,
+      assetsDir: values.assets,
+    });
+    problems = result.problems;
+    manifest = result.candidate ? mergeCandidate(stableManifest, result.candidate) : null;
+  } else {
+    const release = JSON.parse(readFileSync(values.release, 'utf8'));
+    ({ manifest, problems } = assembleManifest({
+      version: tauriConf.version,
+      notes: release.body ?? '',
+      pubDate: new Date().toISOString(),
+      pubkey: pubkeyConf.plugins.updater.pubkey,
+      assets: release.assets,
+      assetsDir: values.assets,
+    }));
+  }
 
   if (problems.length > 0) {
     console.error(`latest.json NOT written: ${problems.length} problem(s).`);
@@ -290,10 +409,18 @@ function main() {
     process.exitCode = 1;
     return;
   }
+  if (!manifest) {
+    console.error('latest.json NOT written: candidate manifest could not be merged.');
+    process.exitCode = 1;
+    return;
+  }
+  if (!candidateMode && values['previous-manifest']) {
+    const previousManifest = JSON.parse(readFileSync(values['previous-manifest'], 'utf8'));
+    manifest = carryForwardCandidates(previousManifest, manifest);
+  }
   writeFileSync(values.out, `${JSON.stringify(manifest, null, 2)}\n`);
-  console.log(
-    `OK: latest.json for ${manifest.version} with ${Object.keys(manifest.platforms).length} platform keys, every signature verified.`,
-  );
+  console.log(`OK: latest.json for ${manifest.version} with ${Object.keys(manifest.platforms).length} platform keys, every signature verified.`);
+
 }
 
 // Guarded so assemble-updater-manifest.test.mjs can import the functions

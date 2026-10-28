@@ -47,7 +47,7 @@ permissions:
   statuses: read # the provenance check reads the candidate's release/rc status
 
 concurrency:
-  group: release-please-${{ github.ref }}
+  group: updater-latest-json
   cancel-in-progress: false
 
 jobs:
@@ -252,6 +252,9 @@ jobs:
           set -euo pipefail
           gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" --json assets,body > release.json
           gh release download "${TAG}" --repo "${GITHUB_REPOSITORY}" --dir release-assets
+          mkdir -p previous-release
+          gh release download --repo "${GITHUB_REPOSITORY}" --pattern latest.json --dir previous-release
+          cp previous-release/latest.json previous-latest.json
 
       - name: Assemble and verify latest.json
         run: |
@@ -259,6 +262,7 @@ jobs:
             --release release.json \
             --assets release-assets \
             --tauri-conf apps/desktop/src-tauri/tauri.conf.json \
+            --previous-manifest previous-latest.json \
             --out latest.json
 
       - name: Upload latest.json to the release

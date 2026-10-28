@@ -21,11 +21,14 @@ Release-please still owns versions and the changelog. It keeps an open release P
    - posts a pending `release/rc` commit status on the commit;
    - runs the release suites: the full journey matrix on Ubuntu (4 shards) and Windows (3 shards), the window runtime checks on Windows at 1920x1080 and on Linux X11, the macOS journeys, and Rust coverage;
    - creates a GitHub prerelease for the tag and builds the installers on it with `build-installers.yml`, the same workflow a release uses, stamped with the candidate's version X.Y.Z-rc.N (see [Candidate versions](#candidate-versions));
+   - uploads the release's updater bundles and signatures; after every release suite and installer build succeeds, a separate job verifies their trusted-comment versions against X.Y.Z-rc.N before publishing the entry in the newest stable release's `latest.json`;
    - posts `release/rc` as success only when every suite and the installer build passed, and as failure otherwise.
 
 The macOS journeys run but don't block yet: `tauri-plugin-webdriver` has no working macOS WebDriver on GitHub runners (#489). A red macOS leg shows in the run without failing the candidate.
 
-A prerelease never becomes GitHub's latest release, and installed copies poll `releases/latest/download/latest.json`. So no installed copy is offered a candidate, and only the stable release writes `latest.json`. Testers install a candidate from its prerelease page. Once X.Y.Z is released, an installed candidate is offered X.Y.Z like any older version.
+Release candidates are also announced in the normal updater manifest attached to the newest stable release. Testers can enable **Include release candidates** in the app's update settings; it is off by default. With the setting on, the app offers the highest available version newer than the installed version. Stable installs from older versions ignore the optional `candidates` key and continue to see the top-level stable release as before. This does not change where candidates are installed from: testers may still install them from the prerelease page.
+
+Candidate selection is provided by the newer updater client and its **Include release candidates** preference; older stable clients ignore the optional manifest key. The workflow publishes candidates only after the app-side parser and opt-in setting ship.
 
 A failed candidate stays failed. Fix main, then cut the next candidate; N goes up by one.
 

@@ -10,9 +10,10 @@ name: Release candidate
 #   - The installers are built the way the release will build them
 #     (build-installers.yml) and published on a GitHub prerelease for the tag.
 #     They are stamped with the candidate's version, X.Y.Z-rc.N, so an
-#     installed candidate is offered X.Y.Z once that is released. A
-#     prerelease never becomes "latest", so installed copies are not offered
-#     the candidate itself.
+#     installed candidate is offered X.Y.Z once that is released. After all
+#     release suites and installers pass, the workflow announces the RC in the
+#     latest stable release's updater manifest; opting into candidates in-app
+#     is required to offer it. Older clients ignore that optional entry.
 #   - `verdict` posts the `release/rc` commit status on the tagged commit:
 #     success only when every suite and the build passed. Release Gate and
 #     release-please.yml's `release` job (scripts/release/check-rc-provenance.mjs) read it.
@@ -25,7 +26,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: release-candidate-${{ github.ref }}
+  group: updater-latest-json
   cancel-in-progress: false
 
 jobs:
@@ -121,6 +122,68 @@ jobs:
       release_body: ${{ needs.candidate.outputs.notes }}
       prerelease: true
       app_version: ${{ needs.candidate.outputs.app_version }}
+  # Announce an RC only after all suites and the candidate build succeed.
+  publish-candidate-manifest:
+    name: Publish candidate to stable updater manifest
+    needs: [candidate, e2e, coverage, build]
+    if: >-
+      ${{ !cancelled()
+        && needs.candidate.result == 'success'
+        && needs.e2e.result == 'success'
+        && needs.coverage.result == 'success'
+        && needs.build.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Download candidate updater artifacts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.candidate.outputs.tag }}
+        run: |
+          set -euo pipefail
+          mkdir -p candidate-assets
+          gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" --json assets,body,publishedAt > candidate-release.json
+          gh release download "${TAG}" --repo "${GITHUB_REPOSITORY}" --dir candidate-assets
+
+      - name: Download latest stable manifest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p stable-assets
+          gh release download --repo "${GITHUB_REPOSITORY}" --pattern latest.json --dir stable-assets
+          cp stable-assets/latest.json stable-latest.json
+
+      - name: Assemble and verify candidate entry
+        env:
+          APP_VERSION: ${{ needs.candidate.outputs.app_version }}
+        run: |
+          set -euo pipefail
+          node scripts/assemble-updater-manifest.mjs \
+            --candidate-release candidate-release.json \
+            --candidate-version "${APP_VERSION}" \
+            --stable-manifest stable-latest.json \
+            --assets candidate-assets \
+            --tauri-conf apps/desktop/src-tauri/tauri.conf.json \
+            --out latest.json
+
+      - name: Upload candidate to the stable release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          stable_tag=$(gh release view --repo "${GITHUB_REPOSITORY}" --json tagName --jq .tagName)
+          gh release upload "${stable_tag}" latest.json --repo "${GITHUB_REPOSITORY}" --clobber
+
 
   verdict:
     name: Release candidate verdict
