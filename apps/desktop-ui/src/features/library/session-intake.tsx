@@ -16,7 +16,8 @@
  * - Review: the review workspace the router injects (`SessionIntakeProps`).
  *   It runs its own Finish review and then calls `onFinished` (409cm.6), so
  *   the footer offers no Proceed of its own there; intake then opens the
- *   session's detail.
+ *   session's detail. While Target or rig is still to confirm, the
+ *   workspace is read-only (`readOnly`): no mark and no Finish review.
  *
  * Each confirmation names the session's grouping and decision revisions as
  * read. A stale one is refused as `conflict`: the refusal shows beside the
@@ -160,7 +161,8 @@ export function SessionIntake({ session, admission, viewing, review: Review, ref
     ) : viewing === "rig" ? (
       <RigStep rigIds={rigIds} rigId={rigId} onRig={setRigId} locked={current === "target"} change={current !== "rig" && current !== "target" ? confirmRig : null} />
     ) : (
-      <Review sessionId={sessionId} onFinished={onFinished} />
+      // A later step stays read-only until the current one is confirmed (C3); the footer and the workspace name it.
+      <Review sessionId={sessionId} onFinished={onFinished} readOnly={current === "target" || current === "rig" ? { reason: m.stepflow_finish_first({ step: stepLabel(m, current) }) } : null} />
     )
   return (
     <StepPage

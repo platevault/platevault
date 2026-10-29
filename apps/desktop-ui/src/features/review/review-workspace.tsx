@@ -21,8 +21,13 @@
  * - Finish review (⌘↩) runs this step's own action, `pix_finish_review` at
  *   the grouping revision the list was read at, and only then calls
  *   `onFinished`: it never runs the intake flow's current step (409cm.6).
+ * - Read-only (`readOnly`, while intake's Review step is locked): marks and
+ *   Finish review are unavailable for the reason intake names, in every
+ *   control, menu and palette command; viewing, navigation, filters, the
+ *   views, Compare and the corner inspector still work. The step footer
+ *   shows the lock, and fullscreen, which covers it, shows it in its bar.
  */
-import { ArrowLeftRight, ChevronLeft, ChevronRight, Expand, Grid3x3, ImageOff, Minimize, Rows3 } from "lucide-react"
+import { ArrowLeftRight, ChevronLeft, ChevronRight, Expand, Grid3x3, ImageOff, Lock, Minimize, Rows3 } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { failureOf, type Quality, type ReviewFilter, type ReviewFrame_Serialize } from "@/api/ipc"
 import { getPreferences, useMessages } from "@/app/preferences"
@@ -34,6 +39,7 @@ import { DataTable, sortRows, type TableSort } from "@/components/app/data-table
 import { DisplayMenu, type DisplayGroup } from "@/components/app/display-menu"
 import { announce, EmptyState, toast, UnknownValue } from "@/components/app/feedback"
 import { FilterControls } from "@/components/app/filter-bar"
+import { Pill } from "@/components/app/pill"
 import { failureMessage } from "@/components/app/run-result"
 import type { CornerOverlay } from "@/components/domain/corner-grid"
 import { type FrameThumbnail, FrameThumbnails, type Thumbnail } from "@/components/domain/frame-thumbnails"
@@ -95,11 +101,11 @@ function qualityName(m: Messages, quality: Quality): string {
 }
 
 /** The Review step body of session intake (SessionIntakeProps.review). */
-export function SessionReview({ sessionId, onFinished }: SessionReviewProps) {
-  return <ReviewWorkspace key={sessionId} sessionId={sessionId} onFinished={onFinished} />
+export function SessionReview({ sessionId, onFinished, readOnly }: SessionReviewProps) {
+  return <ReviewWorkspace key={sessionId} sessionId={sessionId} onFinished={onFinished} readOnly={readOnly} />
 }
 
-function ReviewWorkspace({ sessionId, onFinished }: SessionReviewProps) {
+function ReviewWorkspace({ sessionId, onFinished, readOnly }: SessionReviewProps) {
   const m = useMessages()
   const prefs = useReviewPrefs()
   const runner = useAction()
@@ -195,7 +201,13 @@ function ReviewWorkspace({ sessionId, onFinished }: SessionReviewProps) {
       id: `mark-${quality}`,
       label,
       shortcut: MARK_KEY[quality],
-      unavailable: list.length === 0 ? { action: label, reason: m.review_no_current_frame(), blockers: [] } : undefined,
+      // Read-only is checked when a mark starts: one already running, or confirmed, when the step locks still lands.
+      // No current path locks a mounted Review step (intake only moves forward), so that stays as is.
+      unavailable: readOnly
+        ? { action: label, reason: readOnly.reason, blockers: [] }
+        : list.length === 0
+          ? { action: label, reason: m.review_no_current_frame(), blockers: [] }
+          : undefined,
       confirm: askFirst ? { title: m.review_bulk_mark_title(said), confirm: { label: m.store_label_mark_frames(said) } } : undefined,
       run: () => mark(quality, list, always),
     }
@@ -208,11 +220,13 @@ function ReviewWorkspace({ sessionId, onFinished }: SessionReviewProps) {
     label: finishLabel,
     kind: "primary",
     shortcut: `${MOD_LABEL}↩`,
-    unavailable: !review.data
-      ? { action: finishLabel, reason: m.review_no_frame(), blockers: [] }
-      : counts.unreviewed > 0
-        ? { action: finishLabel, reason: m.flow_frames_unreviewed({ count: counts.unreviewed }), blockers: [] }
-        : undefined,
+    unavailable: readOnly
+      ? { action: finishLabel, reason: readOnly.reason, blockers: [] }
+      : !review.data
+        ? { action: finishLabel, reason: m.review_no_frame(), blockers: [] }
+        : counts.unreviewed > 0
+          ? { action: finishLabel, reason: m.flow_frames_unreviewed({ count: counts.unreviewed }), blockers: [] }
+          : undefined,
     run: async () => {
       const result = await writes.finish(review.data!.groupingRevision)
       if (result.ok) onFinished()
@@ -659,6 +673,12 @@ function ReviewWorkspace({ sessionId, onFinished }: SessionReviewProps) {
                   <>
                     {name(current)}
                     <QualityLabel frame={current} />
+                    {/* The step footer that names the lock is under fullscreen: the bar names it instead. */}
+                    {readOnly ? (
+                      <Pill tone="muted" icon={Lock}>
+                        {`${m.stepflow_read_only()} · ${readOnly.reason}`}
+                      </Pill>
+                    ) : null}
                     <ActionBar actions={marksFor(targets)} runner={runner} />
                     <IconButton label={m.review_corner_inspector()} icon={Grid3x3} shortcut={`${MOD_LABEL}I`} aria-pressed={corners} onClick={toggleCorners} />
                     <IconButton label={withKey(m, m.review_leave_fullscreen(), REVIEW_KEYS.fullscreen)} icon={Minimize} onClick={() => setFullscreen(false)} />

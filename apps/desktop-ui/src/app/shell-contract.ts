@@ -46,6 +46,12 @@ export interface SessionReviewProps {
   sessionId: string
   /** The review finished: intake goes on past its Review step. */
   onFinished: () => void
+  /**
+   * Set while intake's Review step is locked behind an earlier step: marks and
+   * Finish review are unavailable for `reason`, which names that step. Viewing,
+   * navigation, filters, views, Compare and the corner inspector still work.
+   */
+  readOnly: { reason: string } | null
 }
 
 /** What the router hands the session intake page. */
