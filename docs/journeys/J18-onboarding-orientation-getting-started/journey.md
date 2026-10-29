@@ -1,9 +1,9 @@
 ---
 id: J18
 title: Get oriented after setup and make a first import, Project and View
-version: 9
+version: 10
 status: draft
-last_reviewed: 2026-07-19
+last_reviewed: 2026-10-29
 actors: [astrophotographer]
 surfaces: [onboarding, shell, home, import, sessions, targets, projects, view, output, settings]
 interfaces: [desktop-ui, desktop-ui-macos]
@@ -47,10 +47,10 @@ first Apply builds the Project's View from the original sessions.
 
 ### S1 — Orientation walk launches automatically after setup {#S1}
 
-- **Do:** On the Welcome screen, click **Set up locations**. Add `Empty/Captures` as the Captures location and leave Calibration unset. Click **Continue**, then **Start indexing**. When indexing has finished, click **Open library**.
-- **Expect:** Setup closes and hands over to Home, and the orientation walk opens at its first stop without any further click. On the `desktop-ui` lane, the Locations step shows a Windows Developer Mode row reading Off, with **Open Windows settings** and **Check again**, and **Continue** stays available; on the `desktop-ui-macos` lane it shows no such row.
-- **Expect (negative):** Neither setup nor the walk creates a demo, sample or placeholder session, Project or Target record anywhere. The walk is only an overlay on an empty, real library. Developer Mode being off blocks no setup step.
-- **Trace:** LIB-FR-01, LIB-FR-03, LIB-FR-10, LIB-FR-27 · LIB-AC-35 · PRJ-FR-17, PREP-FR-15 · D-W89, D-W117 · product decision 2026-07-18 (spec 056 FR-001) · prototype src/features/t1/setup/setup-pages.tsx · HARNESS-V5-FEEDBACK-R1.md §Round 7 P-PREP3 ("Windows prerequisite": checked in setup)
+- **Do:** On the Welcome screen, click **Set up locations**. Add `Empty/Captures` as the Captures location and leave Calibration unset. Click **Continue**. In the Index step, set Home's planning criteria and click **Start indexing**. When indexing has finished, click **Open library**.
+- **Expect:** Setup closes and hands over to Home, and the orientation walk opens at its first stop without any further click. Home's Tonight section and calendar use the planning criteria from the Index step. On the `desktop-ui` lane, the Locations step shows a Windows Developer Mode row reading Off, with **Open Windows settings** and **Check again**, and **Continue** stays available; on the `desktop-ui-macos` lane it shows no such row.
+- **Expect (negative):** Neither setup nor the walk creates a demo, sample or placeholder session, Project or Target record anywhere. The walk is only an overlay on an empty, real library. Developer Mode being off blocks no setup step. The Index step fills in no planning criterion.
+- **Trace:** LIB-FR-01, LIB-FR-03, LIB-FR-10, LIB-FR-27 · LIB-AC-35 · PLAN-FR-11 · PRJ-FR-17, PREP-FR-15 · D-W89, D-W117, D-W170 · product decision 2026-07-18 (spec 056 FR-001) · prototype src/features/t1/setup/setup-pages.tsx · HARNESS-V5-FEEDBACK-R1.md §Round 7 P-PREP3 ("Windows prerequisite": checked in setup)
 
 ### S2 — Complete the walk end to end {#S2}
 
@@ -64,7 +64,8 @@ first Apply builds the Project's View from the original sessions.
 - **Do:** From a fresh, not-yet-oriented install, click **Set up locations**, then **Set up later** on the Locations step, and click Skip on any stop of the walk. On a second fresh install, add `Empty/Captures`, click **Continue**, then **Index later**, and press Escape on any stop of the walk.
 - **Expect:** Each exit closes setup and hands over to Home, and the walk opens at its first stop without any further click. Skip and Escape each close the walk immediately from whichever stop it was on.
 - **Expect:** Skipping is recorded as equivalent to finishing for "never auto-runs twice" (S4). Skip and finish are the two terminal outcomes of the same one-time walk.
-- **Trace:** LIB-FR-01, LIB-FR-27 · LIB-AC-01, LIB-AC-35 · D-W117
+- **Expect (negative):** Neither exit saves Home's planning criteria, and Home's Tonight and calendar compute nothing from assumed criteria.
+- **Trace:** LIB-FR-01, LIB-FR-27 · LIB-AC-01, LIB-AC-35 · PLAN-AC-17 · D-W117, D-W170
 
 ### S4 — The walk never auto-runs a second time {#S4}
 
@@ -81,9 +82,9 @@ first Apply builds the Project's View from the original sessions.
 ### S6 — Read the Home dashboard {#S6}
 
 - **Do:** With the walk closed (S2 or S3), read Home's sections and the source list.
-- **Expect:** Home shows Pending ingestions, Pending work and Open work on the left, and Status, Tonight and the calendar on the right at 1280 px or wider. Below that width the same sections appear in one column in that order. Each section shows at most 5 rows before **All N ›**. Home has no tabs or header buttons.
+- **Expect:** Home shows Pending ingestions, Pending work and Open work on the left, and Status, Tonight and the calendar on the right at 1280 px or wider. Below that width the same sections appear in one column in that order. Each section shows at most 5 rows before **All N ›**. Home has no tabs or header buttons. Tonight and the calendar use the criteria from S1. After the S3 exits, they show no planning result.
 - **Expect (negative):** Home shows no setup checklist, summary line above its sections or alerts list. The source list remains navigation only.
-- **Trace:** PRJ-FR-17, PRJ-FR-19, PRJ-FR-22 · D-W89
+- **Trace:** PRJ-FR-17, PRJ-FR-19, PRJ-FR-22 · PLAN-FR-11 · D-W89, D-W170
 
 ### S7 — Read Home's pending and open work {#S7}
 
@@ -219,3 +220,6 @@ steps above were checked against it.
 - **Δ9** 2026-10-19 · S9 · behavior-change
   **Mark rest usable** asks for confirmation and names the number of Unreviewed frames.
   Evidence: PIX-FR-14 · D-W118 · owner's answer, 2026-10-19 in astro-plan-rzbzu.1 · by: OwnerAnswersDocsFix (intent-gated)
+- **Δ10** 2026-10-29 · S1, S3, S6 · behavior-change
+  The setup wizard's Index step sets Home's planning criteria, which have no defaults. S1 sets them. The S3 exits leave them unset, so Tonight and the calendar compute nothing.
+  Evidence: D-W170, LIB-FR-01, PLAN-FR-11, PLAN-AC-17 · owner's answer, 2026-10-29, astro-plan-0v2o0.4 · by: Amend5Fix (intent-gated)

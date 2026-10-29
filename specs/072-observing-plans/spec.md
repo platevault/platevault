@@ -8,7 +8,7 @@
 
 **Amended**: 2026-10-06, to the workflow decisions D-W1 to D-W63 settled by the user that day, on 2026-10-12 to 2026-10-14 to the Round 9 decisions D-W87 to D-W89, on 2026-10-14 to the F4 Project model, D-W93 to D-W106, and on 2026-10-19 to the owner's answers on rig versions, My targets and the session filter prompt (astro-plan-rzbzu.1). Tags such as (D-W16) name the decision a requirement follows.
 
-**Amended**: 2026-10-26, to the Round 11 decisions D-W142 and D-W147, to the Rounds 5 to 9 decisions recorded that day (D-W151, D-W152 and D-W160) and to the owner's answer D-W155.
+**Amended**: 2026-10-26, to the Round 11 decisions D-W142 and D-W147, to the Rounds 5 to 9 decisions recorded that day (D-W151, D-W152 and D-W160) and to the owner's answer D-W155. Amended 2026-10-29 to the owner's answer D-W170. Home's planning criteria have no defaults, and the setup wizard sets them (PLAN-FR-11, PLAN-AC-17).
 
 **Amended**: 2026-10-27, to the owner's answer D-W164, which settles the click-to-act search with no Add button (PLAN-TGT-FR-03, PLAN-TGT-AC-03).
 
@@ -44,6 +44,7 @@ Astronomical windows for a Target from a chosen planning site, opt-in reminders 
 - **PLAN-AC-14**: Given a default site and one Target in the plan for Friday, when Home requests the calendar, then it receives five weeks of nights, starting with the week of the request. Each night has its Moon phase, hours of darkness, number of goals it suits and number of Targets in its plan, and Friday counts one. The card for a night lists its dark window and the Moon's illumination, moonrise and moonset. It also lists the goals the night suits, best first, the goals the Moon rules out, and the Targets in its plan. (D-W89, D-W151)
 - **PLAN-AC-15**: Given reminders enabled for five Targets and PlateVault closed for two nights, where two windows ended while it was closed and three are open at start-up (one has started, two are inside their lead time), when PlateVault starts, then Activity records the two ended windows as "Missed while PlateVault was closed" with no notification. One notice names three Targets, or three and "1 more" when a fourth is open, and opens Targets for tonight. None of the three open windows notifies again, and the next window that enters its lead time notifies on its own. (D-W88)
 - **PLAN-AC-16**: Given the editor for site Backyard, when the user picks the place search result "Utrecht", then the latitude and longitude fields show its coordinates, and saving stores those numbers. A map that can't load leaves the editor reading "map unavailable", and typed coordinates still save the site. (D-W160)
+- **PLAN-AC-17**: Given a default site and no saved planning criteria, when Home requests Tonight or the calendar, then it receives no window or grade. After the setup wizard saves criteria, Home's requests use them. (D-W170)
 
 ### User Story 2 - Targets list (Priority: P1)
 
@@ -135,6 +136,8 @@ The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody,
   - tonight's darkness window.
 
   Each value names its site and time zone. When no goal suits tonight, Tonight gives the date of the next good night. Provisional: a panel group's goals are graded from the subject's window, like any other goal. The same computation tells Home whether a subject has a window tonight. The user changes the site on Targets. Home has no site control. (D-W35, D-W39, D-W88, D-W89, D-W95)
+
+  Tonight and the calendar (PLAN-FR-12) grade under Home's planning criteria, which take the form PLAN-FR-02 defines. These criteria have no defaults, and the setup wizard sets them (LIB-FR-01). Before the wizard saves them, Tonight and the calendar return no window, grade or suited-goal count. (D-W170)
 - **PLAN-FR-12**: The calendar supplies Home's calendar for the default site: five weeks of nights, starting with the week of the request. Each night has its Moon phase, its hours of darkness, the number of unfinished goals it suits and the number of Targets in its plan. A card opens on hover or focus with the night's dark window and the Moon's illumination, moonrise and moonset. The card also lists the goals the night suits, best first, the goals the Moon rules out, and the Targets in its plan. Choosing a night opens Targets set to that night (PLAN-TGT-FR-16). (D-W88, D-W89, D-W151)
 
 #### Targets list

@@ -8,6 +8,8 @@
 
 **Amended**: 2026-10-14, to the F4 Project model, D-W93 to D-W106.
 
+**Amended**: 2026-10-29, to the owner's answer D-W168. PlateVault refuses Hide and Restore of a Closed or Archived Project's generated master offer (RES-FR-07, RES-AC-29).
+
 **Status**: Backend landed; frontend and acceptance open (reconciled 2026-10-26, `specs/SPEC_STATUS.md`). Landed: the Results backend (#1782, #1784, #1785), now the Project's `Output/` (#1851). Remains: the Results surface (astro-plan-jd1y1) and verification. Product defaults and all human-approval gate waivers follow the root autonomous objective.
 
 **Input**: Clean rebuild with selective reuse of verified code and the agreed PlateVault product flow.
@@ -52,6 +54,7 @@ A Project's Results are the files in its `Output/` folder. The user saves finish
 - **RES-AC-26**: Reserved. It was drafted and withdrawn (D-W97) within PR #1804 and never reached main; Wrap up's Trash step offers the files in `Processing/` (PRJ-FR-15).
 - **RES-AC-27**: Given the user keeps `final/` and `drafts/` subfolders inside `Output/`, then the table lists each file with its path relative to `Output/`, and PlateVault creates, renames and moves no folder inside it. (D-W85, D-W98)
 - **RES-AC-28**: Given the user reruns WBPP and it overwrites `Processing/WBPP/master/`, then the copy in `Output/` is unchanged and the Output step lists the same Results. (D-W93, D-W98)
+- **RES-AC-29**: Given a Closed or Archived Project's generated master offer, when the user chooses Hide or Restore for it, then PlateVault refuses it. This holds on the Output step and in Calibration's Show hidden list. The offer and its file stay unchanged. (RES-FR-07, CAL-FR-16, D-W168)
 
 ### Edge Cases
 
@@ -69,7 +72,7 @@ The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody,
 - **RES-FR-04**: Withdrawn (D-W98). No Result needs accepting; every file in `Output/` is a Result.
 - **RES-FR-05**: Withdrawn (D-W93). Results are never inputs to a Project, so there is no Results picker, no product input and no composition rule.
 - **RES-FR-06**: Close project… keeps `Output/`. PlateVault never moves or deletes a file in it, and neither Clean up nor Trash lists it (PRJ-FR-14, STO-FR-01). Closing needs no Result and never infers that an external job stopped or succeeded. (D-W26, D-W97, D-W98)
-- **RES-FR-07**: Provisional: one PlateVault operation runs per Project at a time (PREP-FR-19). Copy to Output and the master offer change no Project input, and a Closed or Archived Project's Output step is read-only. External launch or exit is never a completion or success signal. (D-W97, D-W100)
+- **RES-FR-07**: Provisional: one PlateVault operation runs per Project at a time (PREP-FR-19). Copy to Output and the master offer change no Project input. A Closed or Archived Project's Output step is read-only, and Hide and Restore of that Project's generated master offers are refused wherever they are offered, including Calibration's Show hidden list (CAL-FR-16). External launch or exit is never a completion or success signal. (D-W97, D-W100, D-W168)
 - **RES-FR-08**: In a mosaic, `Output/Panels/` holds a folder for each panel group for that panel's result, and the finished mosaic goes in `Output/` itself. Provisional: the folder takes the group's name under the folder-name rule of PRJ-FR-27, with no `PANEL_` token, so the group "Panel 1" gets `Output/Panels/Panel-1/`. A file belongs to the panel whose folder it was saved in; PlateVault infers no panel from a header or file name. The user assembles the mosaic in their tool; PlateVault assembles nothing, and a mosaic with no assembled image is not incomplete. (D-W95, D-W98, D-W114)
 - **RES-FR-09**: Withdrawn (D-W72).
 - **RES-FR-10**: Withdrawn (D-W94). There are no runs, so there is no Move run to Trash, Restore or Empty Trash.

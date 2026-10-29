@@ -6,7 +6,7 @@
 
 **Created**: 2026-10-03
 
-**Amended**: 2026-10-14, to the F4 Project model, D-W93 to D-W106, and on 2026-10-16 to the owner's second batch, D-W118 (amended by the owner's answer in astro-plan-rzbzu.1 on 2026-10-19).
+**Amended**: 2026-10-14, to the F4 Project model, D-W93 to D-W106, and on 2026-10-16 to the owner's second batch, D-W118 (amended by the owner's answer in astro-plan-rzbzu.1 on 2026-10-19). Amended 2026-10-29 to the owner's answer D-W169.
 
 **Status**: Backend landed; frontend and acceptance open (reconciled 2026-10-26, `specs/SPEC_STATUS.md`). Landed: pixel decode, measurement and their IPC (#1780, #1782, #1783). Remains: the Frames surface (astro-plan-70po3), re-verification against a real View (astro-plan-jztxh) and verification. Product defaults and all human-approval gate waivers follow the root autonomous objective.
 
@@ -45,6 +45,7 @@ Native measurement and full-resolution linear preview during the Review step of 
 - **PIX-AC-19**: Given a session that holds a Trashed frame record, when its Review step opens, then that frame is not listed, counted, measured or thumbnailed in any view or filter (D-W43, D-W78).
 - **PIX-AC-20**: Given a session's Review step with 60 frames, of which 6 are marked Rejected and 54 are Unreviewed. When the user chooses "Mark rest usable", a confirmation reads "Mark 54 remaining frames Usable?". No frame changes until the user confirms; cancelling marks none. After confirmation the 54 read Picked, no frame is Unreviewed, and Finish review is enabled. Before confirmation, Finish review is disabled and names the Unreviewed count. (D-W78, D-W118; owner's answer, 2026-10-19, astro-plan-rzbzu.1)
 - **PIX-AC-21**: Given a session's Review step with 48 Unreviewed frames. When the user presses ⌘A and then P, a confirmation reads "Mark 48 frames Usable?", and no frame changes until the user confirms; cancelling it marks none. When the user selects the frames with FWHM above 3.5″ and presses X, a confirmation names the selected count before any frame is marked. When the user picks two frames by hand and presses U, or presses X on the current frame alone, the mark applies at once with no confirmation. When the user chooses "Mark rest usable", a confirmation names the Unreviewed count before any frame is marked. (D-W118; owner's answer, 2026-10-19, astro-plan-rzbzu.1)
+- **PIX-AC-22**: Given a review with more frames than fit on screen, then each of the three views renders only its visible part. The current frame and selection still cover every frame. (D-W169)
 
 ### Edge Cases
 
@@ -69,8 +70,8 @@ The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody,
 - **PIX-FR-07**: Import measurements from a supported export (PixInsight SubframeSelector CSV). The review lists matched, unmatched, and ambiguous rows with units and method, and the mapping needs confirmation. Missing units or ambiguous identity require review. Unsupported columns stay unavailable rather than being relabelled. Rejection decisions are never imported.
 - **PIX-FR-08**: Measurements never auto-exclude, auto-reject, or mark frames Usable. Threshold selection only selects frames; quality changes only through a user mark under PIX-FR-14 (D-W13).
 - **PIX-FR-09**: Invalid samples and mask evidence remain visible and are never silently replaced. Raw/CFA interpretation and metric-specific masking follow root decision D03 and the fixture-qualified metric definitions; no debayering is introduced.
-- **PIX-FR-10**: Layout: the frame table sits at the top across the full width. T and a visible toolbar control cycle it through three heights: full height; about 8 rows, resizable with a drag handle and remembered; and a one-line strip showing the current frame. The preview, with histogram and star cutouts, and the plots across the session in the bottom strip fill the rest of the window (D-W13, D-W22).
-- **PIX-FR-11**: Three views show the same frame list: the table, a filmstrip (the table's one-line state, with thumbnails) and a grid (G) for Lightroom-style culling. All three share the filter, sort, multi-selection and current frame, and every hotkey in PIX-FR-13 acts the same in each (D-W40).
+- **PIX-FR-10**: Layout: the frame table sits at the top across the full width. T and a visible toolbar control cycle it through three heights: full height; about 8 rows, resizable with a drag handle and remembered; and a one-line strip showing the current frame. The preview, with histogram and star cutouts, and the plots across the session in the bottom strip fill the rest of the window. PlateVault virtualizes the frame table, and every frame stays reachable. (D-W13, D-W22, D-W169)
+- **PIX-FR-11**: Three views show the same frame list: the table, a filmstrip (the table's one-line state, with thumbnails) and a grid (G) for Lightroom-style culling. All three share the filter, sort, multi-selection and current frame, and every hotkey in PIX-FR-13 acts the same in each. PlateVault virtualizes all three views, and navigation, selection and the current frame still cover the complete list. (D-W40, D-W169)
 - **PIX-FR-12**: Thumbnails are decoded by the same PIX decoder as the preview, with a display stretch, and cached. A cached thumbnail records the SHA-256 of the bytes it was decoded from; when the frame's current bytes differ, it is decoded again. A thumbnail not yet decoded shows a pending state. Thumbnails are display-only and are never used for measurement (PIX-FR-04). Decoding a thumbnail does not start built-in measurement (D-W40).
 - **PIX-FR-13**: Hotkeys, which act the same in every view (D-W14, D-W22, D-W40, D-W53):
   - ← and → or J and K move to the previous and next frame.
@@ -116,6 +117,7 @@ Use the [root vocabulary](../063-clean-rebuild-contract/spec.md#key-entities). F
 - **PV-PIX-SC-03**: Original inputs remain unchanged except through separately reviewed and approved filesystem operations.
 - **PV-PIX-SC-04**: Every hotkey in PIX-FR-13 gives the same result in the table, filmstrip and grid views (D-W40).
 - **PV-PIX-SC-05**: No quality record changes except through a user mark: P, X, U, Shift+P, Shift+X or Mark rest usable (D-W78, D-W79).
+- **PV-PIX-SC-06**: In a long-list fixture, each view renders only its visible part. The current frame and selection still cover the full list (D-W169).
 
 ## Assumptions
 

@@ -8,7 +8,7 @@
 
 **Amended**: 2026-10-06, to the [workflow redesign](../063-clean-rebuild-contract/decisions.md#workflow-redesign-2026-10-06) decisions D-W1 through D-W71, on 2026-10-07 to the answers D-W72 through D-W74, on 2026-10-14 to the F4 Project model, D-W93 through D-W106, on 2026-10-16 to the owner's answers of 2026-10-15/16, D-W107 through D-W116, and on 2026-10-19 to the owner's answers D-W100, D-W107, D-W110, D-W113, D-W114 and D-W118, plus removed-subject goal readdition (astro-plan-rzbzu.1).
 
-**Amended**: 2026-10-26, to the Round 11 decisions D-W146 and D-W148 and to the owner's answers D-W155 and D-W156.
+**Amended**: 2026-10-26, to the Round 11 decisions D-W146 and D-W148 and to the owner's answers D-W155 and D-W156. Amended 2026-10-29 to the owner's answer D-W170.
 
 **Status**: Backend landed; frontend and acceptance open (reconciled 2026-10-26, `specs/SPEC_STATUS.md`). Landed: backend deltas (#1780, #1782-#1785) and the F4 Project model (#1851). Remains: final-frontend acceptance of the Projects surface (astro-plan-z8seb) and verification. Product defaults and all human-approval gate waivers follow the root autonomous objective.
 
@@ -140,9 +140,10 @@ The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody,
   - Pending ingestions: "Everything is imported."; on first run, "Add a Captures location to find new captures." with Add location.
   - Pending work: "Nothing to sort or review."; on first run, "Import captures to start sorting them." with Import….
   - Open work: "No Projects in progress." with New Project….
+  - Tonight, until the setup wizard saves Home's planning criteria: no grades and no next good night (PLAN-FR-11).
   - Tonight, when no goal suits the night: "No goals suit tonight. Next good night: {date}."; on first run, "Add a site to see tonight's darkness and Moon." with Add site.
   - Tonight, when there are no goals at all: "No unfinished goals." with Add a Goal (the owner's exact label, astro-plan-b66vy), which opens a menu of open Projects and then that Project's add-goal dialog.
-  - Status, background jobs: "Nothing running." (D-W89)
+  - Status, background jobs: "Nothing running." (D-W89, D-W170)
 - **PRJ-FR-23**: Each subject may carry an optional deadline: a "Finish by" date or a season window, pre-filled from the Target's visibility. A Target visible all year has no season window. Progress then shows the nights left, and Home's Open work and Tonight rank the subject higher as the date nears. Conditions are set in Settings > Goal templates and edited per subject. (D-W89, D-W90)
 - **PRJ-FR-24**: In a mosaic, panel balance keeps each channel's counted integration of every panel group within ±N % of the panels' mean, counting Usable frames inside the quality bar, or frames when the goal counts frames. N defaults to 10 and the user can change it. A panel outside the band shows a warning; balance never blocks completion. (D-W90, D-W95)
 - **PRJ-FR-25**: A Closed or Archived Project is locked for good: no edits, no Apply, and Library or calibration changes never touch it. Its header shows Closed or Archived, and its menu offers only Duplicate…; Edit… is disabled and says "Project closed · Duplicate ▸" (provisional copy). Open in {app} stays available while its View exists. The Wrap up tab is a read-only record of each step's outcome. Its goals are read-only and freeze at Close. To continue a finished target, the user duplicates the Project (PRJ-FR-30). Provisional: there is no Reopen, and Close records a snapshot of the calibration each group and night used, so a later reassignment never changes a Closed or Archived Project. When Archive moves originals that its kept View links to, Archive repoints those links and records it, and nothing else in the Project changes (STO-FR-06). Frame review is not reachable from a Project, and library marks stay editable from Sessions (D-W78); they never change a Closed or Archived Project's sessions or snapshot. Renaming one of its sessions in the Library (LIB-FR-28) changes only the session, and the Project shows the new name (D-W130; owner's answer, 2026-10-20). (D-W76, D-W78, D-W80, D-W90, D-W97, D-W111, D-W112)

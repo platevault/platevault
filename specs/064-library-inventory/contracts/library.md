@@ -41,7 +41,7 @@ Fingerprint `modifiedNs` is a signed decimal string, preserving nanoseconds acro
 
 ## Errors
 
-InvalidInput, NotFound, Conflict, IdentityConflict, SourceUnavailable, UnsupportedFormat, MetadataUnreadable, ProviderUnavailable and PersistenceFailure name the affected identity/path and retry/review applicability. Unknown evidence is data, never zero-valued success. Nothing reports saved success before its transaction commits.
+InvalidInput names the invalid field by a stable identifier, such as `minAltitudeDeg`, rather than display text (LIB-FR-30, D-W171). NotFound, Conflict, IdentityConflict, SourceUnavailable, UnsupportedFormat, MetadataUnreadable, ProviderUnavailable and PersistenceFailure name the affected identity/path and retry/review applicability. Unknown evidence is data, never zero-valued success. Nothing reports saved success before its transaction commits.
 
 ## Long-running work
 
