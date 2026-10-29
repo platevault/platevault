@@ -308,6 +308,7 @@ macro_rules! library_commands {
             // native shell (menu bar, tray, OS pickers)
             crate::commands::library_dialogs::library_pick_folder,
             crate::commands::library_dialogs::library_pick_file,
+            crate::commands::library_dialogs::library_reveal,
             crate::native_shell_surfaces::library_native_menu_set_labels,
             crate::native_shell_surfaces::library_native_quit_answer,
         ]
@@ -837,6 +838,7 @@ mod registry {
             unregistered.is_empty() && uncalled.is_empty(),
             "the client invokes unregistered {unregistered:?}; no client call for {uncalled:?}"
         );
+        assert!(registered.contains("library_reveal"), "the library client lacks library_reveal");
     }
 }
 

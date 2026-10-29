@@ -1570,6 +1570,18 @@ export const commands = {
 	 */
 	libraryPickFile: () => typedError<{ encoding: "unix-bytes"; payload: number[]; display: string } | { encoding: "windows-utf16"; payload: number[]; display: string } | null, ErrorResponse>(__TAURI_INVOKE("library_pick_file")),
 	/**
+	 *  Show `path` in the file manager with it selected (`target`) or, on Linux
+	 *  when that fails, its folder opened (`directory_only`). The same reveal as
+	 *  the legacy shell's; the library catalog keeps no legacy audit events, so a
+	 *  failure is logged instead.
+	 * 
+	 *  # Errors
+	 *  `NotFound` for a missing path; `SourceUnavailable` when it cannot be read
+	 *  or the file manager could not show it; `InvalidInput` for a path that is
+	 *  not local.
+	 */
+	libraryReveal: (path: NativePathWire) => typedError<RevealSelection, ErrorResponse>(__TAURI_INVOKE("library_reveal", { path })),
+	/**
 	 *  Relabel the menu bar and the tray in the UI's active locale.
 	 * 
 	 *  # Errors
@@ -6854,6 +6866,15 @@ export type RetireSession = {
 };
 
 export type RetryAction = "retry" | "review" | "none";
+
+/**  How the target was highlighted in the OS file browser after a reveal. */
+export type RevealSelection = 
+/**  The item was selected in the file browser (macOS, Windows, Linux freedesktop). */
+"target" | 
+/**  Only the parent directory opened (Linux xdg-open fallback). */
+"directory_only" | 
+/**  No UI hint was applied. */
+"none";
 
 /**
  *  Where Review frames opened (PIX-FR-17, PIX-FR-18). A session's own intake
