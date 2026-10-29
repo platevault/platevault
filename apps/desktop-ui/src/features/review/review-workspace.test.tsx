@@ -8,8 +8,9 @@ import type { Quality } from "@/api/ipc"
 import { createQueryClient } from "@/api/query"
 import { setLocale, setSingleKeyShortcuts } from "@/app/preferences"
 import { ZOOM_LABEL } from "@/components/domain/plate"
-import { DEFAULT_LOCALE, m } from "@/lib/i18n"
+import { DEFAULT_LOCALE, LOCALES, m } from "@/lib/i18n"
 import { commandsSent, type ReviewHost, reviewHost, SESSION_ID } from "./__fixtures__/review-host"
+import { type ReviewCommands, useReviewCommands } from "./commands"
 import { reloadReviewPrefs, ROWS_DEFAULT_PX, setReviewPrefs } from "./prefs"
 import { SessionReview } from "./review-workspace"
 
@@ -57,11 +58,19 @@ afterEach(() => {
 
 const nameOf = (n: number) => `M42_Ha_300s_${String(n).padStart(4, "0")}.fits`
 
-async function renderReview({ count = 6, marked = 0, onFinished = vi.fn() }: { count?: number; marked?: number; onFinished?: () => void } = {}) {
+/** What the shell's palette reads: the open review's commands source. */
+let palette: ReviewCommands | null = null
+function PaletteProbe() {
+  palette = useReviewCommands()
+  return null
+}
+
+async function renderReview({ count = 6, marked = 0, onFinished = vi.fn(), readOnly = null }: { count?: number; marked?: number; onFinished?: () => void; readOnly?: { reason: string } | null } = {}) {
   host = installReviewHost({ count, marked })
   render(
     <QueryClientProvider client={createQueryClient()}>
-      <SessionReview sessionId={SESSION_ID} onFinished={onFinished} />
+      <SessionReview sessionId={SESSION_ID} onFinished={onFinished} readOnly={readOnly} />
+      <PaletteProbe />
     </QueryClientProvider>,
   )
   await waitFor(() => expect(caption()).toContain(`${nameOf(1)} · ${m.review_frame_position({ index: 1, total: count })}`))
@@ -371,7 +380,7 @@ describe("Review refusals and sources", () => {
     host.frames[0] = { ...offline, asset: { ...offline.asset, availability: "offline" }, state: { ...offline.state, availability: "offline" } }
     render(
       <QueryClientProvider client={createQueryClient()}>
-        <SessionReview sessionId={SESSION_ID} onFinished={vi.fn()} />
+        <SessionReview sessionId={SESSION_ID} onFinished={vi.fn()} readOnly={null} />
       </QueryClientProvider>,
     )
     await waitFor(() => expect(caption()).toContain(nameOf(1)))
@@ -413,6 +422,46 @@ describe("Finish review (409cm.6)", () => {
     press("Enter", { mod: true })
     expect(await screen.findByText(m.action_failure_conflict())).toBeInTheDocument()
     expect(onFinished).not.toHaveBeenCalled()
+  })
+})
+
+describe("Review read-only while intake's Review step is locked (astro-plan-ocyuc.11)", () => {
+  it.each(LOCALES)("%s: P, X, U, their Shift variants and ⌘↩ send nothing, and every mark and Finish review names the reason", async (locale) => {
+    setLocale(locale)
+    // The reason is the host's: intake names the step to confirm first.
+    const reason = m.stepflow_finish_first({ step: m.sessions_column_target() })
+    const { onFinished } = await renderReview({ marked: 6, readOnly: { reason } })
+    for (const key of ["p", "x", "u"]) press(key)
+    press("p", { shift: true })
+    press("x", { shift: true })
+    press("Enter", { mod: true })
+    // Viewing goes on: J moves to the next frame.
+    press("j")
+    await expectCurrent(2)
+    expect(commandsSent(host, "pix_session_review_mark")).toEqual([])
+    expect(commandsSent(host, "pix_finish_review")).toEqual([])
+    expect(onFinished).not.toHaveBeenCalled()
+    const finish = m.stepflow_finish_review()
+    expect(screen.getByRole("button", { name: finish })).toHaveAccessibleDescription(`${finish} · ${reason}`)
+    // The palette carries the same reason on each mark and on Finish review.
+    const unavailable = Object.fromEntries((palette?.("Review") ?? []).map((c) => [c.label, c.unavailable]))
+    for (const label of [m.review_cmd_usable(), m.review_cmd_unusable(), m.review_cmd_unreviewed(), finish]) expect(unavailable[label]).toBe(reason)
+    expect(unavailable[m.review_cmd_next()]).toBeUndefined()
+  })
+
+  it("keeps a ⌘A selection's marks unavailable without asking, and names the lock in fullscreen, which covers the step footer", async () => {
+    const reason = m.stepflow_finish_first({ step: m.sessions_column_rig() })
+    await renderReview({ readOnly: { reason } })
+    press("a", { mod: true })
+    expect(statusLine()).toContain(m.status_bar_selected({ count: 6 }))
+    press("p")
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument()
+    expect(commandsSent(host, "pix_session_review_mark")).toEqual([])
+    press("Escape")
+    press("f")
+    const bar = await screen.findByRole("dialog", { name: m.review_cmd_fullscreen() })
+    expect(within(bar).getByText(`${m.stepflow_read_only()} · ${reason}`)).toBeInTheDocument()
+    expect(within(bar).getByRole("button", { name: m.review_cmd_usable() })).toHaveAccessibleDescription(`${m.review_cmd_usable()} · ${reason}`)
   })
 })
 
