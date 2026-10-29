@@ -25,7 +25,7 @@ import { TextField } from "@/components/app/fields"
 import { blockedByErrors, FormDialog, useDialogForm } from "@/components/app/form-dialog"
 import { type GoalChannel, GOAL_CHANNELS, type GoalTemplateValue, fwhmBar, goalKindsError, GoalValuesEditor, qualityBarFor } from "@/components/domain/goal-fields"
 import { ListSection, SettingsPage } from "@/components/templates/settings-page"
-import { formatCount, formatHours, numberText } from "@/lib/format"
+import { formatCount, formatHours, formatList, numberText } from "@/lib/format"
 import type { Messages } from "@/lib/i18n"
 import { Read } from "./parts"
 import { goalTemplatesQuery, settingsWrite } from "./queries"
@@ -39,14 +39,14 @@ function specText(m: Messages, spec: GoalSpec): string {
 function columns(m: Messages): Column<GoalTemplate>[] {
   return [
     { id: "name", header: m.site_name(), rowHeader: true, truncate: true, truncateMin: "name", sortValue: (t) => t.name, cell: (t) => t.name },
-    { id: "goals", header: m.template_goals(), truncate: true, sortValue: (t) => t.goals.length, cell: (t) => (t.goals.length > 0 ? t.goals.map((g) => specText(m, g)).join(" · ") : m.projects_no_goals()) },
+    { id: "goals", header: m.template_goals(), truncate: true, sortValue: (t) => t.goals.length, cell: (t) => (t.goals.length > 0 ? formatList(t.goals.map((g) => specText(m, g))) : m.projects_no_goals()) },
   ]
 }
 
 const isChannel = (value: string | null): value is GoalChannel => value !== null && (GOAL_CHANNELS as readonly string[]).includes(value)
 
-/** The editor's rows of a template's goals; the goals it cannot edit are kept apart. */
-function editorValues(goals: GoalSpec[]): { values: GoalTemplateValue[]; kept: GoalSpec[] } {
+/** The editor's rows of a template's goals; the goals it cannot edit, and its quality bar, are kept apart. */
+function editorValues(goals: GoalSpec[]): { values: GoalTemplateValue[]; kept: GoalSpec[]; bar: QualityCriterion | null } {
   const bar = goals.find((g): g is Extract<GoalSpec, { kind: "quality_bar" }> => g.kind === "quality_bar")
   const fwhm = bar?.criterion.criterion === "max_fwhm_median" ? bar.criterion.maxArcsec : null
   const values: GoalTemplateValue[] = []
@@ -64,30 +64,37 @@ function editorValues(goals: GoalSpec[]): { values: GoalTemplateValue[]; kept: G
       qualityBar: qualityBarFor(fwhm),
     })
   }
-  return { values, kept }
+  return { values, kept, bar: bar?.criterion ?? null }
 }
 
-/** The goals a save sends: one per channel row, the kept ones, then the FWHM limit as the template's quality bar. */
-function goalsOf(values: GoalTemplateValue[], kept: GoalSpec[]): GoalSpec[] {
+/**
+ * The goals a save sends: one per channel row, the kept ones, then the
+ * template's quality bar: the editor's FWHM limit while it shows a goal,
+ * else the bar the template had.
+ */
+function goalsOf(values: GoalTemplateValue[], kept: GoalSpec[], bar: QualityCriterion | null): GoalSpec[] {
   const goals: GoalSpec[] = values.map((v) =>
     v.integrationS !== null ? { kind: "integration", channel: v.channel, goalSeconds: v.integrationS } : { kind: "frame_count", channel: v.channel, goalFrames: v.frameCount ?? 0 },
   )
   const maxArcsec = values.map((v) => fwhmBar(v.qualityBar)).find((limit) => limit !== null) ?? null
-  const criterion: QualityCriterion = maxArcsec !== null ? { criterion: "max_fwhm_median", maxArcsec } : { criterion: "usable_only" }
-  return [...goals, ...kept, ...(values.length > 0 ? [{ kind: "quality_bar" as const, criterion }] : [])]
+  const edited: QualityCriterion = maxArcsec !== null ? { criterion: "max_fwhm_median", maxArcsec } : { criterion: "usable_only" }
+  const criterion = values.length > 0 ? edited : bar
+  return [...goals, ...kept, ...(criterion ? [{ kind: "quality_bar" as const, criterion }] : [])]
 }
 
-type Editing = { template: GoalTemplate | null; name: string; goals: GoalSpec[] } | null
+/** What the editor opens with; an edit keeps only the template id and reads the template from the current read. */
+type Editing = { templateId: string | null; name: string; goals: GoalSpec[] } | null
 
 export function GoalTemplatesPage() {
   const m = useMessages()
   const client = useQueryClient()
   const templates = useQuery(goalTemplatesQuery())
   const [editing, setEditing] = useState<Editing>(null)
-  const duplicate = (t: GoalTemplate): MenuItem => ({ id: "duplicate-template", label: m.template_duplicate(), opensDialog: true, run: () => setEditing({ template: null, name: m.template_copy_name({ name: t.name }), goals: t.goals }) })
+  const edited = editing?.templateId ? templates.data?.find((t) => t.id === editing.templateId) : undefined
+  const duplicate = (t: GoalTemplate): MenuItem => ({ id: "duplicate-template", label: m.template_duplicate(), opensDialog: true, run: () => setEditing({ templateId: null, name: m.template_copy_name({ name: t.name }), goals: t.goals }) })
   const builtinActions = (t: GoalTemplate): MenuItem[] => [duplicate(t)]
   const ownActions = (t: GoalTemplate): MenuItem[] => [
-    { id: "edit-template", label: m.settings_edit(), opensDialog: true, run: () => setEditing({ template: t, name: t.name, goals: t.goals }) },
+    { id: "edit-template", label: m.settings_edit(), opensDialog: true, run: () => setEditing({ templateId: t.id, name: t.name, goals: t.goals }) },
     duplicate(t),
     { separator: true },
     {
@@ -109,18 +116,26 @@ export function GoalTemplatesPage() {
             />
             <ListSection
               title={m.template_yours()}
-              add={{ id: "new-template", label: m.template_new(), icon: Plus, opensDialog: true, run: () => setEditing({ template: null, name: "", goals: [] }) }}
+              add={{ id: "new-template", label: m.template_new(), icon: Plus, opensDialog: true, run: () => setEditing({ templateId: null, name: "", goals: [] }) }}
               table={{ label: m.template_table_caption_yours(), rows: all.filter((t) => !t.builtin), columns: columns(m), getRowId: (t) => t.id, rowLabel: (t) => t.name, rowActions: ownActions, empty: m.template_none_yours() }}
             />
           </>
         )}
       </Read>
-      {editing ? <TemplateDialog editing={editing} taken={(templates.data ?? []).filter((t) => t.id !== editing.template?.id).map((t) => t.name)} open onOpenChange={(open) => !open && setEditing(null)} /> : null}
+      {editing && (editing.templateId === null || edited) ? (
+        <TemplateDialog
+          editing={editing}
+          template={edited ?? null}
+          taken={(templates.data ?? []).filter((t) => t.id !== editing.templateId).map((t) => t.name)}
+          open
+          onOpenChange={(open) => !open && setEditing(null)}
+        />
+      ) : null}
     </SettingsPage>
   )
 }
 
-function TemplateDialog({ editing, taken, open, onOpenChange }: { editing: NonNullable<Editing>; taken: string[]; open: boolean; onOpenChange: (open: boolean) => void }) {
+function TemplateDialog({ editing, template, taken, open, onOpenChange }: { editing: NonNullable<Editing>; template: GoalTemplate | null; taken: string[]; open: boolean; onOpenChange: (open: boolean) => void }) {
   const m = useMessages()
   const client = useQueryClient()
   const start = editorValues(editing.goals)
@@ -132,7 +147,6 @@ function TemplateDialog({ editing, taken, open, onOpenChange }: { editing: NonNu
     name: !name ? m.settings_name_required() : taken.some((other) => other.toLowerCase() === name.toLowerCase()) ? m.settings_name_taken() : undefined,
     goals: goalError,
   }
-  const template = editing.template
   return (
     <FormDialog
       open={open}
@@ -144,7 +158,7 @@ function TemplateDialog({ editing, taken, open, onOpenChange }: { editing: NonNu
         label,
         kind: "primary",
         unavailable: blockedByErrors(m, label, errors),
-        run: () => settingsWrite(client, () => library.goalTemplateSave(template?.id ?? null, name, goalsOf(values.goals, start.kept), template?.revision ?? null)),
+        run: () => settingsWrite(client, () => library.goalTemplateSave(template?.id ?? null, name, goalsOf(values.goals, start.kept, start.bar), template?.revision ?? null)),
       }}
     >
       <TextField label={m.site_name()} value={values.name} onChange={(next) => set({ name: next })} error={shown(errors, "name")} autoFocus />

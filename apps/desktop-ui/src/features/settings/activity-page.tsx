@@ -69,11 +69,12 @@ export function ActivityPage() {
   const names = new Map((locations.data ?? []).map((l) => [l.location.id, l.location.name]))
   const rows = scans.data && runs.data && adoptions.data ? activityEntries(m, scans.data, runs.data, adoptions.data, names) : []
   const full = [scans.data, runs.data, adoptions.data].some((list) => (list?.length ?? 0) >= ACTIVITY_PAGE)
+  // astro-plan-wre19.24: the library records no refusals or failed saves yet.
   return (
     <ListPage
       title={m.nav_activity()}
       summary={m.activity_entry_count({ count: rows.length, n: formatCount(rows.length) })}
-      notice={{ tone: "info", title: m.home_unavailable({ what: m.activity_filter_refusals() }), detail: full ? `${m.settings_gap_refusals()} ${m.settings_activity_newest({ n: formatCount(ACTIVITY_PAGE) })}` : m.settings_gap_refusals() }}
+      notice={{ tone: "info", title: m.home_unavailable({ what: m.activity_filter_refusals() }), detail: full ? m.settings_gap_refusals_paged({ n: formatCount(ACTIVITY_PAGE) }) : m.settings_gap_refusals() }}
       table={{
         label: m.activity_caption(),
         rows,

@@ -10,14 +10,18 @@
  * - Add location…: the role, a folder from the native picker
  *   (`library_pick_folder`: Cancel answers `null` and changes nothing) and
  *   a display name. Registering records access only; it indexes nothing.
- * - Rename…, Rescan (Index now before the first scan), Choose folder
- *   again… for a location that is not available, and Retire location… after
- *   the library's review, which a pinned calibration file blocks.
+ * - Rename…, Rescan (Index now before the first scan; Retry for a location
+ *   that is not available, whose recorded access failure the row unfolds),
+ *   Choose folder again… for a location that is not available, and Retire
+ *   location… after the library's review, which a pinned calibration file
+ *   blocks. A dialog keeps only the location's id and reads the row from the
+ *   current read on every render, so a Save after `conflict` names the
+ *   revision read again and the user's edits stay.
  *
  * The frame count, footprint and volume space columns of LIB-FR-21 have no
  * library read yet (astro-plan-wre19.10); the table says so under itself.
  */
-import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query"
 import { FolderSearch, Play, RotateCw } from "lucide-react"
 import { type ReactNode, useState } from "react"
 import { type Availability, library, type LocationRole, type LocationState, type NativePathWire, type ScanOperation, type VolumeKind } from "@/api/ipc"
@@ -25,13 +29,14 @@ import { libraryQuery } from "@/api/query"
 import { useMessages } from "@/app/preferences"
 import { ActionButton } from "@/components/app/actions"
 import type { Action, Column, MenuItem } from "@/components/app/contracts"
+import type { DataTableExpand } from "@/components/app/data-table"
 import { DateText, KeyValueList, PathText } from "@/components/app/data"
 import { FieldGroup, SelectField, TextField } from "@/components/app/fields"
 import { blockedByErrors, FormDialog, useDialogForm } from "@/components/app/form-dialog"
 import { StatusBadge } from "@/components/app/status"
 import { formatCount, formatList } from "@/lib/format"
 import type { Messages } from "@/lib/i18n"
-import { locationsQuery, scansQuery, settingsWrite } from "./queries"
+import { lastScanQuery, locationsQuery, settingsWrite } from "./queries"
 
 export const ROLES: readonly LocationRole[] = ["captures", "calibration", "results"]
 
@@ -45,19 +50,44 @@ export function isScanning(row: LocationRow): boolean {
   return row.scan?.state === "running"
 }
 
-/** The registered locations with their newest scans; `null` until both reads answered. */
+/** The registered locations with their newest scans; `null` until every read answered. */
 export function useLocationRows(): { rows: LocationRow[] | null; error: unknown; retry: () => void } {
   const locations = useQuery(locationsQuery())
-  const scans = useQuery(scansQuery())
+  const states = locations.data ?? []
+  const scans = useQueries({ queries: states.map((state) => lastScanQuery(state.location.id)) })
   const retry = () => {
     void locations.refetch()
-    void scans.refetch()
+    for (const scan of scans) void scan.refetch()
   }
-  if (!locations.data || !scans.data) return { rows: null, error: locations.error ?? scans.error, retry }
-  // `library_list_operations` lists newest first, so a location's first scan is its newest.
-  const newest = new Map<string, ScanOperation>()
-  for (const scan of scans.data) if (!newest.has(scan.locationId)) newest.set(scan.locationId, scan)
-  return { rows: locations.data.map((state) => ({ state, scan: newest.get(state.location.id) ?? null })), error: null, retry }
+  const failed = locations.error ?? scans.find((scan) => scan.isError)?.error ?? null
+  if (!locations.data || scans.some((scan) => scan.data === undefined)) return { rows: null, error: failed, retry }
+  return { rows: states.map((state, index) => ({ state, scan: scans[index]?.data?.[0] ?? null })), error: null, retry }
+}
+
+/** A location that needs attention: its access failed, or it is not available (the status bar's `?issues=with-issues`). */
+export function hasIssue(row: LocationRow): boolean {
+  return row.state.location.lifecycle === "active" && (row.state.failure !== null || row.state.location.availability !== "available")
+}
+
+/** A row with a recorded access failure unfolds it: what the library observed, and when. */
+export const failureDetail: DataTableExpand<LocationRow> = {
+  isExpandable: (row) => row.state.failure !== null,
+  render: (row) => <FailureDetail row={row} />,
+}
+
+function FailureDetail({ row }: { row: LocationRow }) {
+  const m = useMessages()
+  const failure = row.state.failure
+  if (!failure) return null
+  return (
+    <KeyValueList
+      items={[
+        { label: m.location_access(), value: failure.reason, mono: true },
+        { label: m.location_availability(), value: <AvailabilityBadge availability={failure.availability} /> },
+        { label: m.activity_recorded(), value: <DateText at={failure.recordedAt} /> },
+      ]}
+    />
+  )
 }
 
 export function roleTitle(m: Messages, role: LocationRole): { title: string; description: string; add: string; list: string } {
@@ -113,18 +143,19 @@ export async function pickFolder(onPicked: (path: NativePathWire) => void) {
   return picked
 }
 
-type Dialog = { kind: "rename" | "retire"; row: LocationRow } | null
+type Dialog = { kind: "rename" | "retire"; locationId: string } | null
 
-/** The row actions of a location and the dialogs they open; `rowActions` is empty for a retired location. */
-export function useLocationActions(): { rowActions: (row: LocationRow) => MenuItem[]; dialogs: ReactNode } {
+/** The row actions of `rows` and the dialogs they open; `rowActions` is empty for a retired location. */
+export function useLocationActions(rows: LocationRow[] | null): { rowActions: (row: LocationRow) => MenuItem[]; dialogs: ReactNode } {
   const m = useMessages()
   const client = useQueryClient()
   const [dialog, setDialog] = useState<Dialog>(null)
   const rowActions = (row: LocationRow): MenuItem[] => {
     const { location } = row.state
     if (location.lifecycle === "retired") return []
-    const scanLabel = row.scan ? m.location_rescan() : m.location_index_now()
-    const scanBlocked = isScanning(row) ? m.location_indexing() : location.availability !== "available" ? m.settings_location_not_available() : null
+    // A location that is not available is retried by a rescan: only a scan observes its access again (LIB-FR-07).
+    const scanLabel = location.availability !== "available" ? m.verb_retry() : row.scan ? m.location_rescan() : m.location_index_now()
+    const scanBlocked = isScanning(row) ? m.location_indexing() : null
     const items: MenuItem[] = [
       {
         id: "rescan",
@@ -133,7 +164,7 @@ export function useLocationActions(): { rowActions: (row: LocationRow) => MenuIt
         unavailable: scanBlocked ? { action: scanLabel, reason: scanBlocked, blockers: [] } : undefined,
         run: () => settingsWrite(client, () => library.libraryStartScan(location.id)),
       },
-      { id: "rename", label: m.equipment_rename(), opensDialog: true, run: () => setDialog({ kind: "rename", row }) },
+      { id: "rename", label: m.equipment_rename(), opensDialog: true, run: () => setDialog({ kind: "rename", locationId: location.id }) },
     ]
     if (location.availability !== "available") {
       items.push({
@@ -150,16 +181,18 @@ export function useLocationActions(): { rowActions: (row: LocationRow) => MenuIt
         },
       })
     }
-    items.push({ separator: true }, { id: "retire", label: m.location_retire(), kind: "destructive", opensDialog: true, run: () => setDialog({ kind: "retire", row }) })
+    items.push({ separator: true }, { id: "retire", label: m.location_retire(), kind: "destructive", opensDialog: true, run: () => setDialog({ kind: "retire", locationId: location.id }) })
     return items
   }
   const close = (open: boolean) => !open && setDialog(null)
-  const dialogs = (
+  // The row as the library reads it now, so a Save after `conflict` sends the revision read again.
+  const live = dialog ? rows?.find((row) => row.state.location.id === dialog.locationId) : undefined
+  const dialogs = live ? (
     <>
-      {dialog?.kind === "rename" ? <RenameLocationDialog row={dialog.row} open onOpenChange={close} /> : null}
-      {dialog?.kind === "retire" ? <RetireLocationDialog row={dialog.row} open onOpenChange={close} /> : null}
+      {dialog?.kind === "rename" ? <RenameLocationDialog row={live} open onOpenChange={close} /> : null}
+      {dialog?.kind === "retire" ? <RetireLocationDialog row={live} open onOpenChange={close} /> : null}
     </>
-  )
+  ) : null
   return { rowActions, dialogs }
 }
 

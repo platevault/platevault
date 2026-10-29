@@ -2,7 +2,8 @@
  * Catalogue entry (R9-COMPOSITION-PLAN §8.3; PLAN-FR-02, PLAN-FR-11/12):
  * the planning fields in components/domain. PlanCriteriaFields empty, as
  * setup's Index step first shows it (no value filled in, D-W170), and
- * filled with a Moon separation; MoonLimitsDialog over one workflow
+ * filled with a Moon separation; PlanCriteriaDialog over no stored
+ * criteria; MoonLimitsDialog over one workflow
  * settings document, whose Save only resolves here. Captions are reviewer
  * labels; bands are band names.
  */
@@ -11,6 +12,7 @@ import type { WorkflowSettingsRecord_Serialize } from "@/api/ipc"
 import { useMessages } from "@/app/preferences"
 import type { FieldErrors } from "@/components/app/form-dialog"
 import { MoonLimitsDialog } from "@/components/domain/moon-limits"
+import { PlanCriteriaDialog } from "@/components/domain/plan-criteria-dialog"
 import { type CriteriaDraft, type CriteriaField, criteriaErrors, draftOf } from "@/components/domain/plan-criteria"
 import { PlanCriteriaFields } from "@/components/domain/plan-criteria-fields"
 import { Button } from "@/components/ui/button"
@@ -45,14 +47,21 @@ function Criteria({ initial, showErrors }: { initial: CriteriaDraft; showErrors:
 export function PlanningFieldsCatalogue() {
   const m = useMessages()
   const [open, setOpen] = useState(false)
+  const [criteriaOpen, setCriteriaOpen] = useState(false)
   return (
-    <ComponentSection components={["PlanCriteriaFields", "MoonLimitsDialog"]} description={m.catalogue_planning_fields_desc()}>
+    <ComponentSection components={["PlanCriteriaFields", "PlanCriteriaDialog", "MoonLimitsDialog"]} description={m.catalogue_planning_fields_desc()}>
       <div className="grid max-w-3xl gap-4">
         <Specimen caption={m.catalogue_planning_fields_empty()}>
           <Criteria initial={draftOf(null)} showErrors={false} />
         </Specimen>
         <Specimen caption={m.catalogue_planning_fields_set()}>
           <Criteria initial={draftOf({ minAltitudeDeg: 30, darkness: "astronomical", moon: { kind: "min_separation", minSeparationDeg: 45 }, minDurationMinutes: 60 })} showErrors />
+        </Specimen>
+        <Specimen caption={m.home_criteria_title()}>
+          <Button variant="outline" onClick={() => setCriteriaOpen(true)}>
+            {m.home_set_criteria()}
+          </Button>
+          <PlanCriteriaDialog record={{ criteria: null, revision: 0 }} open={criteriaOpen} onOpenChange={setCriteriaOpen} save={async () => ({ ok: true, data: null })} />
         </Specimen>
         <Specimen caption={m.catalogue_planning_fields_moon()}>
           <Button variant="outline" onClick={() => setOpen(true)}>

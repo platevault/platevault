@@ -79,8 +79,12 @@ describe.each(LOCALES)("Settings in %s", (locale) => {
       for (const name of [m.settings_help(), m.common_locations(), m.settings_equipment(), m.settings_matching(), m.settings_naming(), m.settings_sites(), m.settings_goal_templates(), m.settings_applications(), m.settings_about()]) {
         expect(within(sections).getByRole("link", { name })).toBeInTheDocument()
       }
-      // One density: no density control anywhere in Appearance.
+      // One density: Appearance offers the theme and the language, and no density control at all.
       expect(screen.getByRole("combobox", { name: m.shell_language() })).toBeInTheDocument()
+      const main = screen.getByRole("main")
+      expect(within(main).queryByText(/densit/i)).toBeNull()
+      const controls = [...within(main).queryAllByRole("combobox"), ...within(main).queryAllByRole("radiogroup"), ...within(main).queryAllByRole("slider"), ...within(main).queryAllByRole("switch")]
+      expect(controls.map((control) => control.getAttribute("aria-label") ?? control.textContent ?? "").filter((name) => /densit/i.test(name))).toEqual([])
     },
     TEST_MS,
   )
@@ -124,6 +128,47 @@ describe.each(LOCALES)("Settings in %s", (locale) => {
       expect(await screen.findByText(m.action_failure_invalid_input())).toBeInTheDocument()
       expect(host.sent("library_delete_equipment")).toEqual([{ equipmentId: "rig-1", expectedRevision: 4 }])
       expect(screen.getByRole("rowheader", { name: "RedCat 51" })).toBeInTheDocument()
+    },
+    TEST_MS,
+  )
+
+  it(
+    "keeps a rig's edits through a stale revision and saves them over the revision read again",
+    async () => {
+      const host = serve()
+      const { user } = renderAt("/settings/equipment")
+      const row = (await screen.findByRole("rowheader", { name: "RedCat 51" })).closest("tr") as HTMLElement
+      await user.click(within(row).getByRole("button", { name: new RegExp("RedCat 51") }))
+      await user.click(await screen.findByRole("menuitem", { name: named(m.settings_edit()) }))
+      const dialog = await screen.findByRole("dialog")
+      // Someone else saved the rig since the page read it.
+      const [rig] = host.state.rigs
+      if (rig) host.state.rigs = [{ ...rig, equipment: { ...rig.equipment, decisionRevision: 7 } }]
+      const telescope = within(dialog).getByRole("textbox", { name: m.equipment_telescope() })
+      await user.clear(telescope)
+      await user.type(telescope, "Esprit 100")
+      await user.click(within(dialog).getByRole("button", { name: m.settings_save() }))
+      expect(await within(dialog).findByText(m.action_failure_conflict())).toBeInTheDocument()
+      await waitFor(() => expect(host.sent("library_list_rig_filters").length).toBeGreaterThan(1))
+      expect(within(dialog).getByRole("textbox", { name: m.equipment_telescope() })).toHaveValue("Esprit 100")
+      await user.click(within(dialog).getByRole("button", { name: new RegExp(`^(${m.settings_save()}|${m.verb_retry()})$`) }))
+      await waitFor(() => expect(host.sent("library_save_equipment").map((args) => args.expectedRevision)).toEqual([4, 7]))
+      expect(host.state.rigs[0]?.equipment.telescope).toBe("Esprit 100")
+    },
+    TEST_MS,
+  )
+
+  it(
+    "narrows Locations to the locations that need attention from the status bar's link, with Show all",
+    async () => {
+      serve(catalog({ locations: [location("loc-1", "Lights", "captures"), location("loc-2", "NAS", "captures", { availability: "offline" })] }))
+      const { user, history } = renderAt("/settings/locations?issues=with-issues")
+      expect(await screen.findByRole("rowheader", { name: "NAS" })).toBeInTheDocument()
+      expect(screen.queryByRole("rowheader", { name: "Lights" })).toBeNull()
+      expect(screen.getByText(m.settings_locations_with_issues())).toBeInTheDocument()
+      await user.click(screen.getByRole("button", { name: m.plan_show_all() }))
+      expect(await screen.findByRole("rowheader", { name: "Lights" })).toBeInTheDocument()
+      expect(history.location.search).not.toContain("issues")
     },
     TEST_MS,
   )
@@ -260,6 +305,18 @@ describe.each(LOCALES)("First-run setup in %s", (locale) => {
   )
 
   it(
+    "keeps Start indexing unavailable without a Captures location, even with the criteria set",
+    async () => {
+      serve(catalog({ locations: [location("loc-1", "Darks", "calibration")], criteria: { criteria: CRITERIA, revision: 2 } }))
+      renderAt("/setup/index")
+      const start = await screen.findByRole("button", { name: m.setup_start_indexing() })
+      await screen.findByRole("rowheader", { name: "Darks" })
+      expect(start).toHaveAttribute("aria-disabled", "true")
+    },
+    TEST_MS,
+  )
+
+  it(
     "leaves the criteria unset when the user picks Index later, and hands over to Home",
     async () => {
       const host = serve(catalog({ locations: [location("loc-1", "Lights", "captures")], scans: [scan("scan-0", "loc-1")] }))
@@ -286,7 +343,10 @@ describe("orientation walk stops (LIB-FR-27)", () => {
 
 describe("launch arguments", () => {
   it("round-trips arguments with spaces through one line", () => {
-    const args = ["-r", "{view}", "My Script.js", ""]
+    const args = ["-r", "{view}", "My Script.js", "", 'say "hi"', "C:\\PixInsight\\bin", "a\\"]
     expect(parseArgs(argsText(args))).toEqual(args)
+  })
+  it("keeps a typed Windows path's backslashes", () => {
+    expect(parseArgs("C:\\Tools\\run.exe --input {view}")).toEqual(["C:\\Tools\\run.exe", "--input", "{view}"])
   })
 })

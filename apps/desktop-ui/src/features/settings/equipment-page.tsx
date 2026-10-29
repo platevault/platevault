@@ -43,7 +43,7 @@ function rigColumns(m: Messages): Column<Rig>[] {
     { id: "focal", header: m.equipment_native_focal_length(), align: "right", sortValue: (r) => r.equipment.focalLengthMm, cell: (r) => dash(r.equipment.focalLengthMm) },
     { id: "kind", header: m.equipment_camera_kind(), sortValue: (r) => r.equipment.colorKind, cell: (r) => colorText(m, r.equipment.colorKind) },
     { id: "filters", header: m.equipment_filters(), truncate: true, sortValue: (r) => r.filters.filters.length, cell: (r) => (r.filters.filters.length > 0 ? formatList(r.filters.filters.map((f) => f.name)) : "–") },
-    { id: "bands", header: m.equipment_bands(), sortValue: (r) => r.bands.length, cell: (r) => r.bands.join(" ") || "–" },
+    { id: "bands", header: m.equipment_bands(), sortValue: (r) => r.bands.length, cell: (r) => (r.bands.length > 0 ? formatList(r.bands) : "–") },
   ]
 }
 
@@ -62,9 +62,11 @@ export function EquipmentPage() {
   const client = useQueryClient()
   const rigs = useQuery(rigsQuery())
   const cameras = useQuery(camerasQuery())
-  const [editing, setEditing] = useState<Rig | "new" | null>(null)
+  // Only the id: the dialog reads the rig from the current read, so a Save after `conflict` names the revision read again.
+  const [editing, setEditing] = useState<string | null>(null)
+  const editedRig = editing && editing !== "new" ? rigs.data?.find((r) => r.equipment.id === editing) : undefined
   const rigActions = (rig: Rig): MenuItem[] => [
-    { id: "edit-rig", label: m.settings_edit(), opensDialog: true, run: () => setEditing(rig) },
+    { id: "edit-rig", label: m.settings_edit(), opensDialog: true, run: () => setEditing(rig.equipment.id) },
     { separator: true },
     {
       id: "delete-rig",
@@ -102,8 +104,9 @@ export function EquipmentPage() {
           />
         )}
       </Read>
+      {/* astro-plan-wre19.22: no camera create or edit command; astro-plan-c6rcr: rig filter editing. */}
       <Gap what={m.equipment_add_camera()} detail={m.settings_gap_camera_edit()} />
-      {editing ? <RigDialog rig={editing === "new" ? null : editing} open onOpenChange={(open) => !open && setEditing(null)} /> : null}
+      {editing === "new" || editedRig ? <RigDialog rig={editedRig ?? null} open onOpenChange={(open) => !open && setEditing(null)} /> : null}
     </SettingsPage>
   )
 }

@@ -31,8 +31,9 @@ import { settingsWrite, workflowQuery } from "./queries"
 /** The document without the keywords (Naming edits those) and the curves (Moon limits…). */
 type Matching = Pick<WorkflowSettings_Serialize, "framing" | "flats" | "darkBias" | "calibration" | "viewMode">
 
-function amount(value: number | null, unit: string): string {
-  return value === null ? "–" : `${numberText(value)} ${unit}`.trim()
+/** A setting's value in its unit's message, or "–" while it is not set. */
+function amount(value: number | null, word: (value: number) => string): string {
+  return value === null ? "–" : word(value)
 }
 
 function modeText(m: Messages, mode: ViewMode): string {
@@ -42,17 +43,21 @@ function modeText(m: Messages, mode: ViewMode): string {
 function MatchingValues({ record }: { record: WorkflowSettingsRecord_Serialize }) {
   const m = useMessages()
   const { framing, flats, darkBias, calibration, viewMode, moonAvoidance } = record.settings
-  const deg = m.criteria_unit_degrees()
+  const deg = (value: number) => m.site_degrees_value({ degrees: numberText(value) })
+  const arcmin = (value: number) => m.settings_value_arcmin({ value: numberText(value) })
+  const percent = (value: number) => m.settings_value_percent({ value: numberText(value) })
+  const days = (value: number) => m.settings_value_days({ count: value, n: numberText(value) })
+  const nights = (value: number) => m.settings_value_nights({ count: value, n: numberText(value) })
   return (
     <>
       <Section title={m.equipment_matching_framing()} level={3}>
         <KeyValueList
           items={[
-            { label: m.equipment_matching_centre(), value: amount(framing.maxCentreOffsetArcmin, m.settings_unit_arcmin()) },
+            { label: m.equipment_matching_centre(), value: amount(framing.maxCentreOffsetArcmin, arcmin) },
             { label: m.equipment_matching_rotation(), value: amount(framing.maxRotationDeg, deg) },
-            { label: m.equipment_matching_overlap(), value: amount(framing.minOverlapPercent, m.settings_unit_percent()) },
-            { label: m.equipment_matching_panel_min(), value: amount(framing.panelOverlapPercent[0], m.settings_unit_percent()) },
-            { label: m.equipment_matching_panel_max(), value: amount(framing.panelOverlapPercent[1], m.settings_unit_percent()) },
+            { label: m.equipment_matching_overlap(), value: amount(framing.minOverlapPercent, percent) },
+            { label: m.equipment_matching_panel_min(), value: amount(framing.panelOverlapPercent[0], percent) },
+            { label: m.equipment_matching_panel_max(), value: amount(framing.panelOverlapPercent[1], percent) },
           ]}
         />
       </Section>
@@ -61,18 +66,18 @@ function MatchingValues({ record }: { record: WorkflowSettingsRecord_Serialize }
           items={[
             { label: m.equipment_matching_flat_fine(), value: amount(flats.fineWithinDeg, deg) },
             { label: m.equipment_matching_flat_warn(), value: amount(flats.offeredWithinDeg, deg) },
-            { label: m.equipment_matching_window_nights(), value: amount(flats.windowNights, m.equipment_unit_nights()) },
+            { label: m.equipment_matching_window_nights(), value: amount(flats.windowNights, nights) },
           ]}
         />
       </Section>
-      <Section title={`${m.calibration_heading_darks()} · ${m.calibration_heading_bias()}`} level={3}>
-        <KeyValueList items={[{ label: m.equipment_matching_window_days(), value: amount(darkBias.windowDays, m.calibration_unit_days()) }]} />
+      <Section title={m.settings_joined({ first: m.calibration_heading_darks(), second: m.calibration_heading_bias() })} level={3}>
+        <KeyValueList items={[{ label: m.equipment_matching_window_days(), value: amount(darkBias.windowDays, days) }]} />
       </Section>
       <Section title={m.settings_raw_frames()} level={3}>
         <KeyValueList
           items={[
             { label: m.settings_keep_raws(), value: calibration.keepRawFrames ? m.equipment_rotator_yes() : m.equipment_rotator_no() },
-            { label: m.settings_old_master_after(), value: amount(calibration.oldMasterAfterDays, m.calibration_unit_days()) },
+            { label: m.settings_old_master_after(), value: amount(calibration.oldMasterAfterDays, days) },
             { label: m.settings_default_input_mode(), value: modeText(m, viewMode) },
           ]}
         />

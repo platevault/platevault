@@ -35,7 +35,7 @@ export function AppearancePage() {
               unavailable: atDefaults ? { action: label, reason: m.settings_at_defaults(), blockers: [] } : undefined,
               confirm: {
                 title: m.settings_restore_title(),
-                summary: [m.shell_theme_named({ name: themeInfo(DEFAULT_THEME).name }), m.shell_language_named({ name: localeName(DEFAULT_LOCALE) }), m.shortcuts_single_key()].join(" · "),
+                summary: m.settings_joined({ first: m.shell_theme_named({ name: themeInfo(DEFAULT_THEME).name }), second: m.settings_joined({ first: m.shell_language_named({ name: localeName(DEFAULT_LOCALE) }), second: m.shortcuts_single_key() }) }),
                 confirm: { label },
               },
               run: restoreDefaultPreferences,

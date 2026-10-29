@@ -16,7 +16,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { Plus, SlidersHorizontal } from "lucide-react"
 import { useState } from "react"
-import { type HomeCriteria, library, type ObservingSite, type PlanCriteria, type PlanningSites, type SiteInput } from "@/api/ipc"
+import { library, type ObservingSite, type PlanCriteria, type PlanningSites, type SiteInput } from "@/api/ipc"
 import { useMessages } from "@/app/preferences"
 import { ActionButton } from "@/components/app/actions"
 import type { Column, MenuItem } from "@/components/app/contracts"
@@ -25,8 +25,8 @@ import { NumberField, TextField } from "@/components/app/fields"
 import { blockedByErrors, FormDialog, useDialogForm } from "@/components/app/form-dialog"
 import { Section } from "@/components/app/page"
 import { StatusBadge } from "@/components/app/status"
-import { type CriteriaDraft, criteriaErrors, criteriaOf, draftOf, homeCriteriaQuery } from "@/components/domain/plan-criteria"
-import { PlanCriteriaFields } from "@/components/domain/plan-criteria-fields"
+import { homeCriteriaQuery } from "@/components/domain/plan-criteria"
+import { PlanCriteriaDialog } from "@/components/domain/plan-criteria-dialog"
 import { ListSection, SettingsPage } from "@/components/templates/settings-page"
 import { numberText } from "@/lib/format"
 import type { Messages } from "@/lib/i18n"
@@ -60,7 +60,7 @@ function siteColumns(m: Messages, defaultId: string | null): Column<ObservingSit
 function criteriaItems(m: Messages, criteria: PlanCriteria) {
   const moon =
     criteria.moon.kind === "min_separation"
-      ? `${m.criteria_moon_min_separation()} · ${m.site_degrees_value({ degrees: numberText(criteria.moon.minSeparationDeg ?? 0) })}`
+      ? m.settings_joined({ first: m.criteria_moon_min_separation(), second: m.site_degrees_value({ degrees: numberText(criteria.moon.minSeparationDeg ?? 0) }) })
       : criteria.moon.kind === "below_horizon"
         ? m.criteria_moon_below_horizon()
         : m.criteria_moon_none()
@@ -69,7 +69,7 @@ function criteriaItems(m: Messages, criteria: PlanCriteria) {
     { label: m.criteria_min_altitude(), value: criteria.minAltitudeDeg === null ? "–" : m.site_degrees_value({ degrees: numberText(criteria.minAltitudeDeg) }) },
     { label: m.criteria_darkness(), value: darkness },
     { label: m.criteria_moon(), value: moon },
-    { label: m.criteria_min_duration(), value: `${numberText(criteria.minDurationMinutes)} ${m.criteria_unit_minutes()}` },
+    { label: m.criteria_min_duration(), value: m.settings_value_minutes({ value: numberText(criteria.minDurationMinutes) }) },
   ]
 }
 
@@ -78,7 +78,9 @@ export function SitesPage() {
   const client = useQueryClient()
   const sites = useQuery(sitesQuery())
   const criteria = useQuery(homeCriteriaQuery())
-  const [editing, setEditing] = useState<ObservingSite | "new" | null>(null)
+  // Only the id: the dialog reads the site from the current read, so a Save after `conflict` names the revision read again.
+  const [editing, setEditing] = useState<string | null>(null)
+  const editedSite = editing && editing !== "new" ? sites.data?.sites.find((s) => s.id === editing) : undefined
   const [settingCriteria, setSettingCriteria] = useState(false)
   const rowActions = (data: PlanningSites) => (site: ObservingSite): MenuItem[] => [
     {
@@ -87,7 +89,7 @@ export function SitesPage() {
       unavailable: site.id === data.defaultSiteId ? { action: m.settings_make_default(), reason: m.status_default_site(), blockers: [] } : undefined,
       run: () => settingsWrite(client, () => library.planningSetDefaultSite(site.id, data.settingsRevision)),
     },
-    { id: "edit-site", label: m.settings_edit(), opensDialog: true, run: () => setEditing(site) },
+    { id: "edit-site", label: m.settings_edit(), opensDialog: true, run: () => setEditing(site.id) },
   ]
   return (
     <SettingsPage title={m.settings_sites()}>
@@ -110,8 +112,15 @@ export function SitesPage() {
           {(record) => (record.criteria ? <KeyValueList items={criteriaItems(m, record.criteria)} /> : m.status_not_set())}
         </Read>
       </Section>
-      {editing ? <SiteDialog site={editing === "new" ? null : editing} open onOpenChange={(open) => !open && setEditing(null)} /> : null}
-      {criteria.data ? <CriteriaDialog record={criteria.data} open={settingCriteria} onOpenChange={setSettingCriteria} /> : null}
+      {editing === "new" || editedSite ? <SiteDialog site={editedSite ?? null} open onOpenChange={(open) => !open && setEditing(null)} /> : null}
+      {criteria.data ? (
+        <PlanCriteriaDialog
+          record={criteria.data}
+          open={settingCriteria}
+          onOpenChange={setSettingCriteria}
+          save={(next, expectedRevision) => settingsWrite(client, () => library.planningSaveHomeCriteria(next, expectedRevision))}
+        />
+      ) : null}
     </SettingsPage>
   )
 }
@@ -162,35 +171,6 @@ function SiteDialog({ site, open, onOpenChange }: { site: ObservingSite | null; 
       <NumberField label={m.site_longitude_field()} min={-180} max={180} step={0.0001} value={values.longitudeDeg} onChange={(longitudeDeg) => set({ longitudeDeg })} error={shown(errors, "longitudeDeg")} />
       <NumberField label={m.site_elevation_field()} step={1} value={values.elevationM} onChange={(elevationM) => set({ elevationM })} error={shown(errors, "elevationM")} />
       <TextField label={m.site_time_zone()} placeholder={m.site_time_zone_placeholder()} value={values.timeZone} onChange={(timeZone) => set({ timeZone })} error={shown(errors, "timeZone")} />
-    </FormDialog>
-  )
-}
-
-/** Home's criteria, edited as Home's own criteria dialog does (the shared fields and model of components/domain). */
-function CriteriaDialog({ record, open, onOpenChange }: { record: HomeCriteria; open: boolean; onOpenChange: (open: boolean) => void }) {
-  const m = useMessages()
-  const client = useQueryClient()
-  const { values, set, shown } = useDialogForm<CriteriaDraft>(open, () => draftOf(record.criteria))
-  const errors = criteriaErrors(m, values)
-  const label = m.home_save_criteria()
-  return (
-    <FormDialog
-      open={open}
-      onOpenChange={onOpenChange}
-      title={m.home_criteria_title()}
-      confirm={{
-        id: "save-home-criteria",
-        label,
-        kind: "primary",
-        unavailable: blockedByErrors(m, label, errors),
-        run: () => {
-          const criteria = criteriaOf(values)
-          if (!criteria) return
-          return settingsWrite(client, () => library.planningSaveHomeCriteria(criteria, record.revision))
-        },
-      }}
-    >
-      <PlanCriteriaFields values={values} set={set} errorOf={(field) => shown(errors, field)} />
     </FormDialog>
   )
 }

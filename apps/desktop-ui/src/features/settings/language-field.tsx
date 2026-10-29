@@ -8,6 +8,7 @@
  */
 import { setLocale, useMessages, usePreferences } from "@/app/preferences"
 import { SelectField } from "@/components/app/fields"
+import { formatList } from "@/lib/format"
 import { type Locale, LOCALES } from "@/lib/i18n"
 
 /** The locales whose catalogue is machine-generated (project.inlang: pt-BR is translated by machine, en-GB is the source). */
@@ -27,7 +28,7 @@ export function LanguageField() {
       value={locale}
       options={LOCALES.map((id) => ({ value: id, label: localeName(id) }))}
       onChange={setLocale}
-      description={MACHINE_GENERATED.map((id) => `${localeName(id)}: ${m.locale_machine_generated()}`).join(" · ")}
+      description={formatList(MACHINE_GENERATED.map((id) => m.settings_locale_status({ name: localeName(id), status: m.locale_machine_generated() })))}
     />
   )
 }

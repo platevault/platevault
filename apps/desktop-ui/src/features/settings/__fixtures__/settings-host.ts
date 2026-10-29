@@ -142,8 +142,12 @@ export function settingsHost(state: Catalog = catalog()) {
         return { issues: [], dismissed: [], counts: { danger: 0, warning: 0, info: 0 }, pages: [] }
       case "library_list_locations":
         return state.locations
-      case "library_list_operations":
-        return state.scans
+      case "library_list_operations": {
+        const listed = a.locationId ? state.scans.filter((s) => s.locationId === a.locationId) : state.scans
+        return listed.slice(a.offset as number, (a.offset as number) + (a.limit as number))
+      }
+      case "library_check_symlinks":
+        return "developer_mode_off"
       case "library_pick_folder":
       case "library_pick_file":
         return state.picked

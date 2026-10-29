@@ -18,8 +18,10 @@ import { libraryQuery } from "@/api/query"
 export const ACTIVITY_PAGE = 200
 
 export const locationsQuery = () => libraryQuery("libraryListLocations")
-/** Every location's scans, newest first: the Locations table's Indexed column and setup's Index step read the newest per location. */
+/** Every location's scans, newest first: Activity's list. */
 export const scansQuery = () => libraryQuery("libraryListOperations", null, 0, ACTIVITY_PAGE)
+/** One location's newest scan: `library_list_operations` lists newest first, so its one row is it. */
+export const lastScanQuery = (locationId: string) => libraryQuery("libraryListOperations", locationId, 0, 1)
 export const rigsQuery = () => libraryQuery("libraryListRigFilters")
 export const camerasQuery = () => libraryQuery("libraryListCameras")
 export const workflowQuery = () => libraryQuery("workflowSettingsGet")

@@ -12,6 +12,7 @@ export function TargetLookupPage() {
   const m = useMessages()
   return (
     <SettingsPage title={m.settings_target_lookup()}>
+      {/* astro-plan-wre19.23: no command reads or saves the provider setting. */}
       <Gap what={m.settings_lookup_online_title()} detail={m.settings_gap_target_lookup()} />
     </SettingsPage>
   )

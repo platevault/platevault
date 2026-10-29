@@ -21,6 +21,7 @@ export function AboutPage() {
       <Section title={m.about_this_build()} level={3}>
         <KeyValueList items={[{ label: m.about_version(), value: version.data ?? <UnknownValue reason={m.settings_about_version_unknown()} /> }]} />
       </Section>
+      {/* astro-plan-wre19.21: the library reports no data location yet. */}
       <Section title={m.about_data()} level={3}>
         <Gap what={m.about_stored_in()} detail={m.settings_gap_data_location()} />
       </Section>

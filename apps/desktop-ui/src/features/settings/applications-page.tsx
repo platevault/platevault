@@ -33,19 +33,29 @@ export function kindText(m: Messages, kind: ProfileKind): string {
   return words[kind]
 }
 
-/** Launch arguments as one line: an argument with a space is quoted. */
+/** Launch arguments as one line: an argument with a space, a quote or a backslash, or an empty one, is quoted, its quotes and backslashes escaped. */
 export function argsText(args: readonly string[]): string {
-  return args.map((arg) => (/\s/.test(arg) || arg === "" ? `"${arg}"` : arg)).join(" ")
+  return args.map((arg) => (arg === "" || /[\s"\\]/.test(arg) ? `"${arg.replace(/["\\]/g, "\\$&")}"` : arg)).join(" ")
 }
 
-/** One line of arguments split at spaces outside double quotes; the quotes are not kept. */
+/**
+ * One line of arguments split at spaces outside double quotes. A backslash
+ * before a quote or a backslash keeps that character; any other backslash
+ * (a Windows path) is kept as typed. `parseArgs(argsText(args))` is `args`.
+ */
 export function parseArgs(line: string): string[] {
   const args: string[] = []
   let current = ""
   let quoted = false
   let started = false
-  for (const char of line) {
-    if (char === '"') {
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i] as string
+    const next = line[i + 1]
+    if (char === "\\" && (next === '"' || next === "\\")) {
+      current += next
+      started = true
+      i++
+    } else if (char === '"') {
       quoted = !quoted
       started = true
     } else if (/\s/.test(char) && !quoted) {
@@ -73,8 +83,10 @@ function columns(m: Messages): Column<Profile>[] {
 export function ApplicationsPage() {
   const m = useMessages()
   const profiles = useQuery(profilesQuery())
-  const [editing, setEditing] = useState<Profile | "new" | null>(null)
-  const rowActions = (p: Profile): MenuItem[] => [{ id: "edit-profile", label: m.settings_edit(), opensDialog: true, run: () => setEditing(p) }]
+  // Only the id: the dialog reads the profile from the current read, so a Save after `conflict` names the revision read again.
+  const [editing, setEditing] = useState<string | null>(null)
+  const edited = editing && editing !== "new" ? profiles.data?.find((p) => p.id === editing) : undefined
+  const rowActions = (p: Profile): MenuItem[] => [{ id: "edit-profile", label: m.settings_edit(), opensDialog: true, run: () => setEditing(p.id) }]
   return (
     <SettingsPage title={m.settings_applications()}>
       <Read query={profiles} label={m.apps_list_title()}>
@@ -86,7 +98,7 @@ export function ApplicationsPage() {
           />
         )}
       </Read>
-      {editing ? <ProfileDialog profile={editing === "new" ? null : editing} open onOpenChange={(open) => !open && setEditing(null)} /> : null}
+      {editing === "new" || edited ? <ProfileDialog profile={edited ?? null} open onOpenChange={(open) => !open && setEditing(null)} /> : null}
     </SettingsPage>
   )
 }

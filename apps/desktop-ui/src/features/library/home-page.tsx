@@ -43,8 +43,8 @@ import { DetailPage, type DetailSection } from "@/components/templates/detail-pa
 import { formatCount } from "@/lib/format"
 import type { Messages } from "@/lib/i18n"
 import { AddToProjectDialog } from "./add-to-project"
-import { HomeCriteriaDialog } from "./criteria-dialog"
 import { homeCriteriaQuery } from "@/components/domain/plan-criteria"
+import { PlanCriteriaDialog } from "@/components/domain/plan-criteria-dialog"
 import { IngestionsTable, ROWS, useIngestions } from "./ingestions"
 import { HomeCalendar, TonightGoals } from "./home-planning"
 import { readError, Unavailable } from "./parts"
@@ -64,6 +64,7 @@ function allAction(m: Messages, follow: Follow, id: string, count: number, link:
 export function HomePage() {
   const m = useMessages()
   const follow = useFollowLink()
+  const client = useQueryClient()
   const criteria = useQuery(homeCriteriaQuery())
   const [editing, setEditing] = useState(false)
   const dashboard = useQuery(dashboardQuery())
@@ -132,7 +133,14 @@ export function HomePage() {
   return (
     <>
       <DetailPage title={m.nav_home()} sections={sections} aside={aside} />
-      {criteria.data ? <HomeCriteriaDialog record={criteria.data} open={editing} onOpenChange={setEditing} /> : null}
+      {criteria.data ? (
+        <PlanCriteriaDialog
+          record={criteria.data}
+          open={editing}
+          onOpenChange={setEditing}
+          save={(next, expectedRevision) => homeWrite(client, () => library.planningSaveHomeCriteria(next, expectedRevision))}
+        />
+      ) : null}
     </>
   )
 }
