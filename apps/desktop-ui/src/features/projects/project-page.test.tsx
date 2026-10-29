@@ -267,7 +267,7 @@ describe("Edit…", { timeout: TEST_MS }, () => {
   const record: Project = { id: P, name: "Cygnus HOO", notes: null, lifecycle: "open", closedAt: null, revision: 7, createdAt: "2026-10-01T00:00:00Z", updatedAt: "2026-10-01T00:00:00Z", subjects: [], rigIds: [], goals: [] }
 
   async function openEdit(user: ReturnType<typeof userEvent.setup>, sent: (command: string) => unknown[]) {
-    renderAt(`/projects/${P}`)
+    const { client } = renderAt(`/projects/${P}`)
     await waitFor(() => expect(sent("project_get").length).toBeGreaterThan(0))
     // The Sessions tab's body replaces its loading page once its read lands; open the menu on the settled header.
     await screen.findByRole("rowheader", { name: "Rig · Framing 1" })
@@ -277,13 +277,18 @@ describe("Edit…", { timeout: TEST_MS }, () => {
     const edit = await screen.findByRole("menuitem", { name: new RegExp(m.project_edit()) })
     await waitFor(() => expect(edit).not.toHaveAttribute("aria-disabled", "true"))
     await user.click(edit)
-    return screen.findByRole("dialog", { name: m.project_edit() })
+    return { dialog: await screen.findByRole("dialog", { name: m.project_edit() }), client }
   }
 
   it("sends the revision of the record it opened on", async () => {
     const user = userEvent.setup()
-    const { sent } = host({ project_get: () => record, project_update: () => ({ ...record, name: "Cygnus HOO 2026", revision: 8 }) })
-    const dialog = await openEdit(user, sent)
+    let revision = 7
+    const { sent } = host({ project_get: () => ({ ...record, revision }), project_update: () => ({ ...record, name: "Cygnus HOO 2026", revision: 9 }) })
+    const { dialog, client } = await openEdit(user, sent)
+    // The record moves underneath the open dialog: the edit still names the revision it opened on.
+    revision = 8
+    await act(() => client.refetchQueries())
+    await waitFor(() => expect(sent("project_get").length).toBeGreaterThan(1))
     const name = within(dialog).getByRole("textbox", { name: m.newproject_field_name() })
     await user.clear(name)
     await user.type(name, "Cygnus HOO 2026")
@@ -300,7 +305,7 @@ describe("Edit…", { timeout: TEST_MS }, () => {
         throw { code: "conflict", retry: "review", successors: [] }
       },
     })
-    const dialog = await openEdit(user, sent)
+    const { dialog } = await openEdit(user, sent)
     await user.click(within(dialog).getByRole("button", { name: m.settings_save() }))
     await waitFor(() => expect(screen.queryByRole("dialog", { name: m.project_edit() })).toBeNull())
     expect(sent("project_update")).toHaveLength(1)

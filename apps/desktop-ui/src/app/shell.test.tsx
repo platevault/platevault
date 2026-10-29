@@ -174,9 +174,6 @@ function scanEvent(operationId: string, locationId: string, state: ScanProgressE
   return { operationId, revision: 2, locationId, state, progress, completeScopes: [], incompleteScopes: [] }
 }
 
-/** Each test drives the whole window; a loaded machine renders it slowly. */
-const SHELL_TEST_MS = 20_000
-
 const PERSISTENCE_FAILURE = { code: "persistence_failure", retry: "retry", successors: [] }
 
 async function openPalette(user: ReturnType<typeof userEvent.setup>) {
@@ -197,7 +194,7 @@ afterEach(() => {
   setSingleKeyShortcuts(true)
 })
 
-describe("boot", { timeout: SHELL_TEST_MS }, () => {
+describe("boot", () => {
   it("loads the app router, reads the startup state and fills the window", async () => {
     const host = libraryHost()
     const history = createMemoryHistory({ initialEntries: ["/design-system"] })
@@ -326,7 +323,7 @@ describe("boot", { timeout: SHELL_TEST_MS }, () => {
   })
 })
 
-describe("navigation", { timeout: SHELL_TEST_MS }, () => {
+describe("navigation", () => {
   it("lists only registered pages in the source list, the palette and Help", async () => {
     const user = userEvent.setup()
     libraryHost()
@@ -443,7 +440,7 @@ describe("navigation", { timeout: SHELL_TEST_MS }, () => {
   })
 })
 
-describe("app Actions", { timeout: SHELL_TEST_MS }, () => {
+describe("app Actions", () => {
   it("are one descriptor in the More menu and the palette", async () => {
     const user = userEvent.setup()
     libraryHost()
@@ -462,7 +459,7 @@ describe("app Actions", { timeout: SHELL_TEST_MS }, () => {
   })
 })
 
-describe("issue counters", { timeout: SHELL_TEST_MS }, () => {
+describe("issue counters", () => {
   it("open each registered owning page, filtered to the affected rows", async () => {
     const user = userEvent.setup()
     libraryHost()

@@ -98,7 +98,7 @@ function press(key: string, init: { shift?: boolean; mod?: boolean } = {}) {
   })
 }
 
-describe("session intake with the registered review", { timeout: TEST_MS }, () => {
+describe("session intake with the registered review", () => {
   it("renders the real review workspace on Review and opens the session once Finish review succeeds", async () => {
     const review = reviewHost({ marked: 6 })
     installHost(review, () => (commandsSent(review, "pix_finish_review").length > 0 ? "ready" : "needs_review"))
