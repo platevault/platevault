@@ -49,7 +49,7 @@ Done means:
 
   **Esc** closes the dialog, and focus returns to where it was before **?**.
 - **Expect (negative):** The list has no go-to entry for Plan or Storage.
-- **Trace:** src/app/shortcuts.tsx shortcutRows · HARNESS-V5-FEEDBACK-R1.md §Round 5 Navigation "Storage and Plan leave the source list" · FR-037, FR-042-AC-02 · D-W121, D-W164
+- **Trace:** src/app/shortcuts.tsx shortcutRows · HARNESS-V5-FEEDBACK-R1.md §Round 5 Navigation "Storage and Plan leave the source list" · 063 FR-037, FR-042, FR-042-AC-02 · D-W121, D-W164 · P-PLAN2, P-STO2
 
 ### S2 — Move around with go-to keys, the sidebar toggle and Back {#S2}
 
@@ -69,7 +69,7 @@ Done means:
   - `gp` appears in the field and filters the list. **Esc** empties the field, and focus stays in it.
   - `Sep` filters the list to the September sessions. The × button empties the field, focus returns to the field, and every session is listed again.
 - **Expect (negative):** Typing `g` then `p` in the field does not open Projects, and no other shortcut fires while the field has focus.
-- **Trace:** src/components/app/clearable-input.tsx · HARNESS-V5-FEEDBACK-R1.md §Copy rules "Every text field that filters or searches gets a clear (×) button" · messages shortcuts_description · FR-042, FR-042-AC-02
+- **Trace:** src/components/app/clearable-input.tsx · HARNESS-V5-FEEDBACK-R1.md §Copy rules "Every text field that filters or searches gets a clear (×) button" · messages shortcuts_description
 
 ### S3a — Move through a table with the keyboard {#S3a}
 
@@ -102,7 +102,7 @@ Done means:
 - **Do:** Tab to the toolbar's Import button and press Enter. Press **Esc**.
 - **Expect:** The Import sheet opens over the page with focus inside it. **Esc** closes it, the Project page is still shown, and focus is back on the Import button.
 - **Expect (negative):** Opening and closing the sheet starts no import.
-- **Trace:** HARNESS-V5-IA.md §Screens S13 "sheet over /import" · HARNESS-V5-IA.md §Fix pass "Sheets"
+- **Trace:** HARNESS-V5-IA.md §Screens S13 "sheet over /import" · HARNESS-V5-IA.md §Fix pass "Sheets" · 071 STO-IMP-FR-01
 
 ### S7 — Cancel running work from the status bar {#S7}
 
@@ -177,8 +177,8 @@ Done means:
 
 - **Do:** Outside PlateVault, recompute the J19/P5 manifest.
 - **Expect:** Every path, size and SHA-256 matches.
-- **Expect (negative):** No file was written, moved or trashed by any step.
-- **Trace:** root SC-002
+- **Expect (negative):** No library or user file was written, moved or trashed by any step; only PlateVault's own settings store changed.
+- **Trace:** D-W166 · J40 S12
 
 ## Success criteria
 
@@ -209,6 +209,6 @@ Done means:
 - **Δ4** 2026-10-17 · S3a · behavior-change
   On the `desktop-ui` (Windows) lane the Menu key opens a row's menu as **⇧F10** does; Apple keyboards have no Menu key, so the `desktop-ui-macos` lane uses **⇧F10** (with **fn** where needed). Tables keep native semantics with no ARIA grid role. The header stops and previous-row focus are the owner's rules, so G7 is dissolved.
   Evidence: HARNESS-V5-FEEDBACK-R1.md "Tables and the keyboard" P-KBD1 (OWNER, 2026-10-16; decision astro-plan-g3tx4) · D-W121 · prototype row-actions.tsx openMenuFromKeyboard (ContextMenu key or Shift+F10) on ui-harness-v5 · by: JourneysR9c (intent-gated)
-- **Δ5** 2026-10-27 · S1-S4, S8-S9 · behavior-change
-  Keyboard steps trace to the owning shortcut and navigation requirements, including go-to sequences, text-field exclusion, palette search, and focus return.
-  Evidence: FR-037, FR-042, FR-042-AC-01, FR-042-AC-02 · D-W121, D-W162, D-W164 · astro-plan-ocyuc.5 · by: SpecOwner2 (intent-gated)
+- **Δ5** 2026-10-28 · S1-S6, S8-S9, S15 · trace-only
+  Keyboard steps trace to their owning shortcuts, navigation and custody requirements. S1's key list is owned by FR-037 and FR-042; help focus return is not specified. S3 cites FR-042-AC-02 only for the text-field exclusion; slash search and Esc-clears-search have no owning requirement in this set. S6 cites STO-IMP-FR-01 for Import, while Escape/focus return is harness-only. S5's keyboard dismissal is owned by FR-025 and FR-031.
+  Evidence: 063 FR-025, FR-031, FR-037, FR-042, FR-042-AC-01, FR-042-AC-02; 071 STO-IMP-FR-01 · D-W91, D-W121, D-W162, D-W164 · D-W166 via LIB-AC-45 (J40 S10-S12) · astro-plan-ocyuc.5 · by: SpecOwner2 (intent-gated). No owner among 063-072 defines the help focus return in S1, slash-search/Esc-clears-search behavior in S3, or sheet Escape/focus-return behavior in S6.

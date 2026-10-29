@@ -3,7 +3,7 @@ id: J40
 title: Choose a theme and language in Settings › Appearance and keep them across restarts
 version: 5
 status: draft
-last_reviewed: 2026-10-27
+last_reviewed: 2026-10-28
 actors: [primary-user]
 surfaces: [settings, appearance, i18n, shell, status-bar, home, activity, keyboard]
 interfaces: [desktop-ui, desktop-ui-macos]
@@ -59,13 +59,13 @@ The user chooses how PlateVault looks and reads: they set its appearance mode, c
 - **Do:** Open Sessions, then Settings › Appearance, and inspect the density controls.
 - **Expect:** Appearance offers no density control. Sessions and the other visited screens use the app's single density.
 - **Expect (negative):** No density choice is available, and opening Appearance or Sessions changes no column, filter or sort.
-- **Trace:** LIB-FR-21 · LIB-AC-45 · D-W86, D-W166
+- **Trace:** LIB-FR-21 · D-W86
 
 ### S6 — Read the language picker {#S6}
 
 - **Do:** Read the Language section.
 - **Expect:** The language is a select that offers exactly two languages, each named in its own language: English (UK) and Português (Brasil). Português (Brasil) is marked machine-generated. English (UK) is selected.
-- **Trace:** LIB-FR-21 · LIB-AC-45 · D-W143, D-W166
+- **Trace:** LIB-FR-21 · D-W143 · Feedback §Shell 6 · IA §Screens S16 ("pt-BR marked machine-generated") · I18N.md §pt-BR · i18n.ts LOCALE_META
 
 ### S7 — Switch to Português (Brasil) {#S7}
 
@@ -79,39 +79,39 @@ The user chooses how PlateVault looks and reads: they set its appearance mode, c
   - Observing nights use pt-BR month names ("18 set", "30 set"), and decimal numbers and sizes use a decimal comma ("12,4 GB"). Activity's earlier entry reads `Projeto criado: NGC 7000 HOO`.
   - Every button, heading, column header, status word, tooltip, empty state and refusal on the visited screens is in Portuguese. Proper names stay as written: PlateVault, theme names, Target, rig, Project and file names, paths, header values, filter names and palette names (HOO, SHO, LRGB).
 - **Expect (negative):** No English UI word remains on any visited screen. No reload, re-index or rescan starts. Session names, Project names and file paths are not translated or changed.
-- **Trace:** Feedback §Shell 6 · §Round 1b i18n gate · I18N.md §Using a message (MessageRef worded at render) · format.ts (MONTHS, Intl locale) · ui-harness-v5@d9255cff, @277fc2ac
+- **Trace:** 063 FR-040 · Feedback §Shell 6 · §Round 1b i18n gate · I18N.md §Using a message (MessageRef worded at render) · format.ts (MONTHS, Intl locale) · ui-harness-v5@d9255cff, @277fc2ac
 
 ### S8 — Check the layout in Portuguese {#S8}
 
 - **Do:** At 1280 × 640, with Português (Brasil) active, open Home, Projects,
   the `NGC 7000 HOO` Project page, Sessions and Settings › Appearance.
 - **Expect:** On each screen the toolbar, page header and its actions, and the status bar stay fully visible. Only content panes scroll; the window itself never scrolls and shows no horizontal scrollbar. Any label cut short (the toolbar's Next) shows its whole text in its tooltip.
-- **Trace:** README §Notes (layout invariant at 1280×640) · IA §Fix pass (toolbar truncation with tooltip)
+- **Trace:** 063 FR-041 · README §Notes (layout invariant at 1280×640) · IA §Fix pass (toolbar truncation with tooltip)
 
 ### S9 — Turn single-key shortcuts off {#S9}
 
 - **Do:** Switch back to English (UK). In Keyboard, turn **Single-key shortcuts** off.
 - **Expect:** The switch reads off, and its ⓘ tip reads "?, /, [ and G sequences. ⌘K and Ctrl+K always work." (J42 owns what each shortcut does.)
-- **Trace:** appearance-page.tsx (Keyboard section) · J42
+- **Trace:** appearance-page.tsx (Keyboard section) · J42 · 063 FR-042
 
 ### S10 — Restart and find the choices kept {#S10}
 
 - **Do:** Set theme Gruvbox Dark and language Português (Brasil). Quit PlateVault and launch it again.
 - **Expect:** The first frame after launch is already painted in Gruvbox Dark and Portuguese, with no flash of PlateVault Dark or English. Settings › Aparência shows Gruvbox Dark, Português (Brasil) and single-key shortcuts off.
-- **Trace:** LIB-FR-21 · LIB-AC-45 · D-W166
+- **Trace:** LIB-FR-21 · LIB-AC-45 · D-W166 · preferences.ts (stored preferences; pre-paint script)
 
 ### S11 — Restore the defaults {#S11}
 
 - **Do:** In Aparência click **Restaurar padrões**, read the confirmation, and confirm.
 - **Expect:** After confirming, PlateVault reads English (UK) in PlateVault Dark with single-key shortcuts on, and **Restore defaults** is disabled again with "Already at the defaults". Cancelling the confirmation instead changes nothing.
-- **Trace:** LIB-FR-21 · LIB-AC-45 · D-W166
+- **Trace:** D-W143 · appearance-page.tsx (Restore defaults, ConfirmDialog)
 
 ### S12 — Confirm the library is untouched {#S12}
 
 - **Do:** Outside PlateVault, recompute the J19/P5 manifest. In PlateVault, count sessions, Projects and Activity entries.
 - **Expect:** Every path, size and SHA-256 matches P5. The session, Project and Activity entry counts equal the P3 counts.
 - **Expect (negative):** No appearance or language change in S2 to S11 created, edited or removed a catalog record or an Activity entry, or wrote, moved or renamed a library or user file. Only PlateVault's own settings store changed.
-- **Trace:** LIB-FR-21 · LIB-AC-45 · D-W166
+- **Trace:** LIB-FR-21 · LIB-AC-45 · D-W166 · preferences.ts (preferences stored outside the catalog)
 
 ## Success criteria
 
@@ -141,6 +141,6 @@ The user chooses how PlateVault looks and reads: they set its appearance mode, c
   The minimum window is now 1280×640 on macOS, Windows and Linux; a restored
   window is moved and shrunk at start-up to fit a connected screen.
   Evidence: D-W163, astro-plan-ocyuc.2, PR #1889 · by: WindowDocs (intent-gated)
-- **Δ5** 2026-10-27 · S1, S2, S4, S5, S6, S9-S12 · behavior-change
-  Appearance and language use the per-user settings store outside every library, apply at once and load before the first frame after restart; J40 stays density-free.
+- **Δ5** 2026-10-28 · S1, S2, S4, S5, S6, S9-S12 · behavior-change
+  Appearance and language use the per-user settings store outside every library, apply at once and load before the first frame after restart; J40 stays density-free. S3's contrast-ratio check remains without an owning requirement in specs 063-072.
   Evidence: LIB-FR-21, LIB-AC-45, D-W166 · astro-plan-0v2o0.3, astro-plan-ocyuc.5 · by: SpecOwner2 (intent-gated)

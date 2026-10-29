@@ -102,7 +102,7 @@ running, and the notifications history. Done means:
 
   After mounting, the bar reads `3 of 3 online` and ⚠ reads 3, and the row no longer shows the issue, with no action from the user.
 - **Expect (negative):** No `12 Sep` frame reads Missing, and no session is removed. No other issue appears or disappears.
-- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 5 P-SB3 "Left: locations online" · HARNESS-V5-IA.md §Round 2b "locations online (links to Settings › Locations)" · src/domain/issues.ts location-offline · J19/S15 · 063 FR-032, FR-038 · 064 LIB-FR-07, LIB-AC-44 · D-W144, D-W158
+- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 5 P-SB3 "Left: locations online" · HARNESS-V5-IA.md §Round 2b "locations online (links to Settings › Locations)" · src/domain/issues.ts location-offline · J19/S15 · 063 FR-032, FR-032-AC-01, FR-038 · 064 LIB-FR-07 · D-W144, D-W158
 
 ### S5a — Dismiss two issues on their rows and restore them {#S5a}
 
@@ -113,7 +113,7 @@ running, and the notifications history. Done means:
   - The rows keep their state: the 2 Oct Ha flat process still awaits Stack, and `M 31 OSC`'s Output step still shows its pending master offer with Add to calibration library and Hide actions.
   - With Show dismissed on, each page lists its dismissed issue on its row with **Restore**. After the first Restore ℹ reads 2, and after the second it reads 3.
 - **Expect (negative):** Dismissing or restoring an issue starts no stack, hides no master offer, and changes no Project, calibration process or file. No counter counts a dismissed issue, and no counter reads 0.
-- **Trace:** D-W92 · 063 FR-032 · 064 LIB-AC-44 · PRJ-FR-17 · CAL-FR-06 · RES-FR-11 (Dismiss and Restore act on rows; counters count undismissed issues).
+- **Trace:** D-W92 · 063 FR-032, FR-032-AC-01 · PRJ-FR-17 · CAL-FR-06 · RES-FR-11 (Dismiss and Restore act on rows; counters count undismissed issues).
 
 ### S5b — A dismissed issue returns when it changes {#S5b}
 
@@ -124,7 +124,7 @@ running, and the notifications history. Done means:
   - After the second eject, the `Cold-1 captures` row shows `Cold-1 captures offline` again with its ×, and ⚠ reads 4.
   - After the final mount, the bar reads `3 of 3 online` and ⚠ reads 3.
 - **Expect (negative):** Dismissing the issue marks no location online. No `12 Sep` frame reads Missing, and no session is removed.
-- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 8 P-ISS1 ("A dismissed issue stays hidden until it changes … a location going offline again brings it back", "its page still shows it") · D-W92 · src/domain/issues.ts location-offline · 063 FR-032 · 064 LIB-AC-44 · D-W158
+- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 8 P-ISS1 ("A dismissed issue stays hidden until it changes … a location going offline again brings it back", "its page still shows it") · D-W92 · src/domain/issues.ts location-offline · 063 FR-032, FR-032-AC-01 · D-W158
 
 ### S6 — Read the selection count {#S6}
 
@@ -174,7 +174,7 @@ running, and the notifications history. Done means:
 
   J39 continues the clean-up from here, with each duplicates issue on its session row and a row-level Dismiss.
 - **Expect (negative):** Neither the index, the scan nor opening the review moves, trashes or writes a file. Sessions still lists `4 Oct M 33` with the same frame count. The 12 `Card-2` sources, still connected, are not counted: the issue does not read 14 copies, and no group lists a `Card-2` path.
-- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 5 Storage and duplicates (⚠ issue "N duplicate copies · 2.1 GB" opening the Duplicates review) · HARNESS-V5-FEEDBACK-R1.md §Round 6 "registered library locations only … the copy in the earliest-registered location" · J39 · 063 FR-032 · 064 LIB-FR-22 · 065 PRJ-FR-15 · 071 STO-FR-16
+- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 5 Storage and duplicates (⚠ issue "N duplicate copies · 2.1 GB" opening the Duplicates review) · HARNESS-V5-FEEDBACK-R1.md §Round 6 "registered library locations only … the copy in the earliest-registered location" · J39 · 063 FR-032 · 064 LIB-FR-22, LIB-AC-43, LIB-AC-44 · 065 PRJ-FR-15 · 071 STO-FR-16
 
 ### S12 — Read and clear the notification history {#S12}
 
@@ -238,6 +238,6 @@ running, and the notifications history. Done means:
 - **Δ6** 2026-10-26 · S8 · behavior-change
   Work a restart interrupted reads "Interrupted when PlateVault restarted. Retry continues from the recorded progress."
   Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 11 (OWNER, 2026-10-23) on ui-harness-v5 @ 5dc245244; D-W149 · by: SpecAmend (intent-gated)
-- **Δ7** 2026-10-28 · S1, S2, S3, S4, S5a, S5b, S7, S8, S9, S10, S11, S12, S13, S14 · trace-only
-  Steps now also cite their owning FR/AC: status-bar groups (063 FR-038), row-level issues (063 FR-032), dismissal and recurrence (064 LIB-AC-44) and the automatic duplicate scan (064 LIB-AC-43). No step's behaviour changes. LIB-AC-44 restates S5a and S5b as D-W158 settles them; LIB-AC-43 restates S9 and S11 (after an import, after an index) under D-W164.
+- **Δ7** 2026-10-28 · S1, S2, S3, S4, S5, S5a, S5b, S6, S7, S8, S9, S10, S11, S12, S13, S14 · trace-only
+  Steps now cite their owning FR/AC: status-bar groups (063 FR-038), row-level issues (063 FR-032), general dismissal and recurrence across issue kinds (063 FR-032-AC-01), duplicate dismissal (064 LIB-AC-44) and the automatic duplicate scan (064 LIB-AC-43). No step's behaviour changes. LIB-AC-44 remains specific to duplicate issues; LIB-AC-43 restates S9 and S11 (after an import, after an index) under D-W164.
   Evidence: 063 FR-032, FR-037 to FR-040 · 064 LIB-FR-07, LIB-FR-17, LIB-FR-22, LIB-AC-43, LIB-AC-44 · 065 PRJ-FR-15 · 071 STO-FR-16, STO-IMP-FR-06 · D-W144, D-W149, D-W150, D-W158, D-W164 · astro-plan-0v2o0.2, astro-plan-ocyuc.5 · by: omp-lead-20261004 (intent-gated)
