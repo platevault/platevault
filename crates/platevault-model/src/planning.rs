@@ -137,6 +137,20 @@ pub struct PlanningSettings {
     pub revision: Revision,
 }
 
+/// Home's stored planning criteria (PLAN-FR-11/12, PRJ-FR-17): what Home's
+/// Tonight and calendar compute under. No spec gives a value for every field
+/// and [`PlanCriteria`] has no defaults, so a catalog that never saved them
+/// reads none at revision 0 and Home asks the user to set them. The revision
+/// is their own, so saving them never stales a reminder review's planning
+/// settings revision.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
+pub struct HomeCriteria {
+    pub criteria: Option<PlanCriteria>,
+    pub revision: Revision,
+}
+
 /// Every saved site with the default site and the settings revision.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

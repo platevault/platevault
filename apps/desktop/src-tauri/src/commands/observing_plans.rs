@@ -18,13 +18,15 @@
 
 use std::sync::Arc;
 
+use persistence_library::HOME_CRITERIA_ID;
 use platevault_core::library::Library;
 use platevault_core::planning_project::{ProjectGaps, ProjectPlanning, ProjectPlanningQuery};
 use platevault_core::tonight::{Tonight, TonightQuery};
 use platevault_core::{
     CalendarExportOutcome, CalendarExportReview, DefaultSiteSaved, EnableReminders, ErrorResponse,
-    ExportSelection, LibraryError, PlanningSites, ReminderInput, ReminderReview, ReminderStatus,
-    ReminderSubscription, Revision, SiteInput, SiteSaved, TargetPlan, WindowQuery, WindowSet,
+    ExportSelection, HomeCriteria, LibraryError, PlanCriteria, PlanningSites, ReminderInput,
+    ReminderReview, ReminderStatus, ReminderSubscription, Revision, SiteInput, SiteSaved,
+    TargetPlan, WindowQuery, WindowSet,
 };
 use serde::Serialize;
 use tauri::{AppHandle, State};
@@ -76,6 +78,36 @@ pub async fn planning_set_default_site(
     expected_revision: Revision,
 ) -> Reply<DefaultSiteSaved> {
     library.set_default_site(site_id, expected_revision).await.map_err(fail(site_id))
+}
+
+/// Home's stored criteria at their revision: none at revision 0 until the
+/// user sets them, because no criterion has a default.
+///
+/// # Errors
+/// `PersistenceFailure` when the catalog or the recorded criteria can't be
+/// read.
+#[tauri::command]
+#[specta::specta]
+pub async fn planning_home_criteria(library: State<'_, Arc<Library>>) -> Reply<HomeCriteria> {
+    library.home_criteria().await.map_err(fail(Some(HOME_CRITERIA_ID)))
+}
+
+/// Save Home's criteria over `expected_revision` (0 when never saved).
+///
+/// # Errors
+/// `InvalidInput` naming an invalid criterion and `Conflict` for a stale
+/// revision; nothing is stored on either.
+#[tauri::command]
+#[specta::specta]
+pub async fn planning_save_home_criteria(
+    library: State<'_, Arc<Library>>,
+    criteria: PlanCriteria,
+    expected_revision: Revision,
+) -> Reply<HomeCriteria> {
+    library
+        .save_home_criteria(expected_revision, &criteria)
+        .await
+        .map_err(fail(Some(HOME_CRITERIA_ID)))
 }
 
 /// The window set with its basis and one entry per night. Read-only: writes

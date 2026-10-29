@@ -149,7 +149,9 @@ macro_rules! asset_sql {
 mod naming;
 mod planning;
 mod rigs;
-pub use planning::{DeliveryClaim, DeliveryOutcome, SubscriptionWrite, PLANNING_SETTINGS_ID};
+pub use planning::{
+    DeliveryClaim, DeliveryOutcome, SubscriptionWrite, HOME_CRITERIA_ID, PLANNING_SETTINGS_ID,
+};
 mod calibration;
 use calibration::pinned_calibration_kinds;
 

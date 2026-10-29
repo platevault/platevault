@@ -1305,6 +1305,23 @@ export const commands = {
 	 */
 	planningSetDefaultSite: (siteId: string | null, expectedRevision: number) => typedError<DefaultSiteSaved, ErrorResponse>(__TAURI_INVOKE("planning_set_default_site", { siteId, expectedRevision })),
 	/**
+	 *  Home's stored criteria at their revision: none at revision 0 until the
+	 *  user sets them, because no criterion has a default.
+	 * 
+	 *  # Errors
+	 *  `PersistenceFailure` when the catalog or the recorded criteria can't be
+	 *  read.
+	 */
+	planningHomeCriteria: () => typedError<HomeCriteria, ErrorResponse>(__TAURI_INVOKE("planning_home_criteria")),
+	/**
+	 *  Save Home's criteria over `expected_revision` (0 when never saved).
+	 * 
+	 *  # Errors
+	 *  `InvalidInput` naming an invalid criterion and `Conflict` for a stale
+	 *  revision; nothing is stored on either.
+	 */
+	planningSaveHomeCriteria: (criteria: PlanCriteria, expectedRevision: number) => typedError<HomeCriteria, ErrorResponse>(__TAURI_INVOKE("planning_save_home_criteria", { criteria, expectedRevision })),
+	/**
 	 *  The window set with its basis and one entry per night. Read-only: writes
 	 *  nothing and starts nothing.
 	 * 
@@ -4049,6 +4066,19 @@ export type GroupOrigin = "framing" | "user";
 
 /**  Home's first section (PRJ-FR-17 section 1). */
 export type HomeAction = "import" | "new_project" | "plan_tonight";
+
+/**
+ *  Home's stored planning criteria (PLAN-FR-11/12, PRJ-FR-17): what Home's
+ *  Tonight and calendar compute under. No spec gives a value for every field
+ *  and [`PlanCriteria`] has no defaults, so a catalog that never saved them
+ *  reads none at revision 0 and Home asks the user to set them. The revision
+ *  is their own, so saving them never stales a reminder review's planning
+ *  settings revision.
+ */
+export type HomeCriteria = {
+	criteria: PlanCriteria | null,
+	revision: number,
+};
 
 /**
  *  Home (PRJ-FR-17, root FR-020): the top line, then its six sections in

@@ -276,6 +276,8 @@ macro_rules! library_commands {
             crate::commands::observing_plans::planning_list_sites,
             crate::commands::observing_plans::planning_save_site,
             crate::commands::observing_plans::planning_set_default_site,
+            crate::commands::observing_plans::planning_home_criteria,
+            crate::commands::observing_plans::planning_save_home_criteria,
             crate::commands::observing_plans::planning_compute_windows,
             crate::commands::observing_plans::planning_set_planned,
             crate::commands::observing_plans::planning_review_reminders,

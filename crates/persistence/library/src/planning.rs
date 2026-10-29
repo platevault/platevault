@@ -10,9 +10,9 @@
 //! transaction. Windows and upcoming reminders are never stored here.
 
 use platevault_model::{
-    BlockReason, DefaultSiteSaved, DeliveryState, LibraryError, ObservingSite, PlanCriteria,
-    PlanningSettings, PlanningSites, ReminderDelivery, ReminderInput, ReminderSubscription,
-    Revision, SiteInput, SiteSaved, SubscriptionState, TargetPlan, WindowKey,
+    BlockReason, DefaultSiteSaved, DeliveryState, HomeCriteria, LibraryError, ObservingSite,
+    PlanCriteria, PlanningSettings, PlanningSites, ReminderDelivery, ReminderInput,
+    ReminderSubscription, Revision, SiteInput, SiteSaved, SubscriptionState, TargetPlan, WindowKey,
 };
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -29,6 +29,9 @@ use super::{
 
 /// The identity a Conflict on the planning settings names.
 pub const PLANNING_SETTINGS_ID: Uuid = Uuid::from_u128(0x7a3c_51e0_0072_5000_8000_0000_0000_0001);
+
+/// The identity a Conflict on Home's criteria names.
+pub const HOME_CRITERIA_ID: Uuid = Uuid::from_u128(0x7a3c_51e0_0072_5000_8000_0000_0000_0002);
 
 /// An activation's subscription write: the default site, its revision and the
 /// settings revision the user confirmed, with explicit criteria and lead time.
@@ -221,6 +224,50 @@ impl Catalog {
                 settings: PlanningSettings { default_site_id: site, revision: next },
                 needs_reconfirmation,
             }
+        });
+        Ok(saved)
+    }
+
+    /// Home's criteria at their revision; none at revision 0 when never saved.
+    ///
+    /// # Errors
+    /// `PersistenceFailure` for an unreadable catalog or recorded criteria
+    /// that are not valid.
+    pub async fn home_criteria(&self) -> Result<HomeCriteria> {
+        let mut conn = self.reader().await?;
+        load_home_criteria(&mut conn).await
+    }
+
+    /// Save Home's criteria over revision `expected` (0 when never saved).
+    ///
+    /// # Errors
+    /// `InvalidInput` naming an invalid criterion; `Conflict` naming
+    /// [`HOME_CRITERIA_ID`] at the current revision when `expected` is stale.
+    /// Nothing is written on failure.
+    pub async fn save_home_criteria(
+        &self,
+        expected: Revision,
+        criteria: &PlanCriteria,
+    ) -> Result<HomeCriteria> {
+        criteria.validate()?;
+        let saved = write_txn!(self, |conn| {
+            let current = load_home_criteria(conn).await?.revision;
+            if current != expected {
+                return Err(conflict(HOME_CRITERIA_ID, current));
+            }
+            let next = current + 1;
+            sqlx::query(
+                "INSERT INTO home_criteria (id, criteria, revision, updated_at) \
+                 VALUES (1, ?1, ?2, ?3) ON CONFLICT (id) DO UPDATE SET \
+                 criteria = excluded.criteria, revision = excluded.revision, \
+                 updated_at = excluded.updated_at",
+            )
+            .bind(to_json(criteria)?)
+            .bind(db_revision(next)?)
+            .bind(now()?)
+            .execute(&mut *conn)
+            .await?;
+            HomeCriteria { criteria: Some(*criteria), revision: next }
         });
         Ok(saved)
     }
@@ -611,6 +658,20 @@ async fn load_settings(conn: &mut SqliteConnection) -> Result<PlanningSettings> 
         default_site_id: default.as_deref().map(parse_uuid).transpose()?,
         revision: revision(row.try_get("revision")?)?,
     })
+}
+
+async fn load_home_criteria(conn: &mut SqliteConnection) -> Result<HomeCriteria> {
+    let row = sqlx::query("SELECT criteria, revision FROM home_criteria WHERE id = 1")
+        .fetch_optional(&mut *conn)
+        .await?;
+    let Some(row) = row else {
+        return Ok(HomeCriteria { criteria: None, revision: 0 });
+    };
+    let criteria: PlanCriteria = from_json(&row.try_get::<String, _>("criteria")?)?;
+    criteria.validate().map_err(|error| {
+        LibraryError::PersistenceFailure(format!("recorded Home criteria: {error}"))
+    })?;
+    Ok(HomeCriteria { criteria: Some(criteria), revision: revision(row.try_get("revision")?)? })
 }
 
 async fn load_plan(conn: &mut SqliteConnection, target: Uuid) -> Result<TargetPlan> {
