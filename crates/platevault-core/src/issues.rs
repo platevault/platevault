@@ -8,10 +8,10 @@
 //! status bar counts the issues not dismissed (see [`IssueView`]).
 //!
 //! Sources, in the order the issues are listed:
-//! - the Sessions filters' counts and the Needs calibration queue: "need a
-//!   Target", "not in a Project" and "need calibration" as Library counts,
-//!   and each session's drifted pins;
-//! - each session's reviewed frames whose bytes changed (Changed content);
+//! - one walk of the Sessions scope: "need a Target", "not in a Project"
+//!   and "need calibration" as Library counts, each session's drifted pins,
+//!   and each session's reviewed frames whose bytes changed (Changed
+//!   content);
 //! - each active location that is offline or missing, or unreadable or
 //!   claimed by another folder;
 //! - the live duplicate copies: the copies beyond one per content, and their
@@ -22,43 +22,35 @@
 //!   files waiting for review, and its masters offered to the calibration
 //!   library.
 //!
-//! Reading the issues forgets every dismissal whose issue ended or changed,
-//! so an issue that returns counts again (D-W158): a location that goes
-//! offline again, or a count that drops to none and comes back. That is the
-//! read's only write, and it happens only when such a dismissal exists. An
-//! issue that ends and returns unchanged between two reads stays hidden; the
-//! status bar reads the issues on every library change, so the user never
-//! saw it gone.
-
-use std::collections::BTreeSet;
+//! Reading the issues writes nothing. A dismissed issue counts again when
+//! its fingerprint changes (D-W158): a new failure is a new operation, and
+//! another duplicate a new count and bytes. A location's offline or denied
+//! issue and an import's interrupted issue keep their fingerprint from one
+//! episode to the next, so the catalog forgets their dismissal in the same
+//! transaction that writes the end of the episode (the location available
+//! again, the import retried): going offline again, or an import
+//! interrupted again, brings it back whether or not anything read in
+//! between. A count that drops to none and returns unchanged is the same
+//! issue and stays hidden.
 
 use uuid::Uuid;
 
 use crate::library::Library;
 use crate::storage::duplicate_candidates;
 use crate::{
-    ApplyOutcome, Availability, CalibrationNeed, Issue, IssueKind, IssueOwner, IssueView,
-    LibraryError, Location, LocationLifecycle, MasterOfferState, PreviousItemReview, ProjectQuery,
-    RunState, ScanState,
+    ApplyOutcome, CalibrationNeed, Issue, IssueKind, IssueOwner, IssueView, LibraryError, Location,
+    LocationLifecycle, MasterOfferState, PreviousItemReview, ProjectQuery, RunState, ScanState,
 };
 
 impl Library {
     /// Every current issue, split into those that count and those dismissed,
-    /// with the status-bar counters and each page's count.
+    /// with the status-bar counters and each page's count. Read-only.
     ///
     /// # Errors
-    /// `PersistenceFailure` when the catalog cannot be read or a stale
-    /// dismissal cannot be forgotten.
+    /// `PersistenceFailure` when the catalog cannot be read.
     pub async fn issues(&self) -> Result<IssueView, LibraryError> {
-        let catalog = self.catalog();
-        let dismissed = catalog.issue_dismissals().await?;
-        let issues = self.current_issues().await?;
-        let current: BTreeSet<&str> =
-            issues.iter().map(|issue| issue.fingerprint.as_str()).collect();
-        let (kept, stale): (BTreeSet<String>, BTreeSet<String>) =
-            dismissed.into_iter().partition(|fingerprint| current.contains(fingerprint.as_str()));
-        catalog.forget_issue_dismissals(&stale).await?;
-        Ok(IssueView::split(issues, &kept))
+        let dismissed = self.catalog().issue_dismissals().await?;
+        Ok(IssueView::split(self.current_issues().await?, &dismissed))
     }
 
     /// Dismiss the current issue with `fingerprint`: it stops counting until
@@ -111,8 +103,8 @@ impl Library {
     }
 
     async fn session_issues(&self, out: &mut Vec<Issue>) -> Result<(), LibraryError> {
-        let catalog = self.catalog();
-        let counts = catalog.session_filter_counts().await?;
+        let sources = self.catalog().session_issue_sources().await?;
+        let counts = sources.counts;
         for (kind, count) in [
             (IssueKind::NeedsTarget, counts.needs_target),
             (IssueKind::NotInProject, counts.not_in_any_project),
@@ -122,7 +114,7 @@ impl Library {
                 out.push(library_count(kind, count, None));
             }
         }
-        for session in catalog.needs_calibration().await? {
+        for session in &sources.calibration {
             let pins = session
                 .needs
                 .iter()
@@ -132,7 +124,7 @@ impl Library {
                 out.push(on_session(IssueKind::PinDrift, session.session_id, count_of(pins)));
             }
         }
-        for (session_id, frames) in catalog.sessions_with_changed_frames().await? {
+        for &(session_id, frames) in &sources.changed_frames {
             out.push(on_session(IssueKind::Drift, session_id, frames));
         }
         Ok(())
@@ -145,14 +137,8 @@ impl Library {
     ) -> Result<(), LibraryError> {
         let catalog = self.catalog();
         for location in locations {
-            let kind = match location.availability {
-                Availability::Offline | Availability::Missing => IssueKind::LocationOffline,
-                Availability::Unreadable | Availability::IdentityConflict => {
-                    IssueKind::LocationDenied
-                }
-                Availability::Available | Availability::Retired | Availability::Trashed => {
-                    continue;
-                }
+            let Some(kind) = IssueKind::of_location(location.availability) else {
+                continue;
             };
             out.push(Issue::new(
                 kind,

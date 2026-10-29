@@ -199,6 +199,7 @@ pub use project_view::{
 };
 // Issue dismissals and the issue sources core reads in one snapshot (issues.sql).
 mod issues;
+pub use issues::SessionIssueSources;
 // A Project's inputs: whole-session membership through the admission rule,
 // groups, frame choices, View settings, pending changes and suggestions
 // (project_inputs.sql).
@@ -745,6 +746,7 @@ impl Catalog {
                 ));
             }
             plan_overlap(conn, Some(id), path, identity, StaleRoots::Compare).await?;
+            issues::end_availability_issue(conn, id, Availability::Available).await?;
             sqlx::query(
                 "UPDATE locations SET path_key = ?1, availability = 'available', \
                  unavailable_reason = NULL, unavailable_at = NULL, \
@@ -3296,6 +3298,7 @@ async fn set_location_unavailable(
     availability: Availability,
     reason: &str,
 ) -> Result<()> {
+    issues::end_availability_issue(conn, id, availability).await?;
     sqlx::query(
         "UPDATE locations SET availability = ?1, unavailable_reason = ?2, unavailable_at = ?3 \
          WHERE id = ?4",
@@ -3310,6 +3313,7 @@ async fn set_location_unavailable(
 }
 
 async fn mark_location_observed(conn: &mut SqliteConnection, id: Uuid) -> Result<()> {
+    issues::end_availability_issue(conn, id, Availability::Available).await?;
     sqlx::query(
         "UPDATE locations SET availability = 'available', unavailable_reason = NULL, \
          unavailable_at = NULL, last_observed_at = ?1 WHERE id = ?2",
@@ -6838,6 +6842,7 @@ async fn apply_remap_rows(
         let relative = item.candidate_path.relative_path()?;
         require_unchanged_contained(new_root, &relative, &item.candidate_fingerprint)?;
     }
+    issues::end_availability_issue(conn, review.location_id, Availability::Available).await?;
     sqlx::query(
         "UPDATE locations SET path_key = ?1, identity = ?2, volume_filesystem = ?3, \
          volume_stable_id = ?4, volume_kind = ?5, availability = 'available', \

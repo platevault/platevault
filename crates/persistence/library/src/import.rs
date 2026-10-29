@@ -14,7 +14,7 @@ use std::collections::HashMap;
 use platevault_model::{
     CaptureMetadata, EntryEvidence, ExpectedSession, FileIdentity, ImportBlock, ImportChoice,
     ImportDraft, ImportDuplicate, ImportItem, ImportItemPhase, ImportItemRecord, ImportMode,
-    ImportRecord, ImportRig, ImportState, ImportTargetChoice, ItemReason, LibraryError,
+    ImportRecord, ImportRig, ImportState, ImportTargetChoice, IssueKind, ItemReason, LibraryError,
     LocationRole, NamingFallback, NamingFrameType, NativePath, ObservationFingerprint, Revision,
     SavedSource, SettleObservation, SplitLimits, StorageRef, UnknownFilter,
 };
@@ -24,8 +24,8 @@ use sqlx::{Connection, Row};
 use uuid::Uuid;
 
 use super::{
-    conflict, db_size, from_json, from_text, now, parse_uuid, path_from_key, path_key, revision,
-    to_json, to_text, Catalog, Result,
+    conflict, db_size, from_json, from_text, issues, now, parse_uuid, path_from_key, path_key,
+    revision, to_json, to_text, Catalog, Result,
 };
 
 /// The item fields kept in the `detail` column.
@@ -325,6 +325,10 @@ impl Catalog {
                 .bind(&at)
                 .execute(&mut *conn)
                 .await?;
+            }
+            if state == ImportState::Interrupted && next != ImportState::Interrupted {
+                // Its interrupted issue ends; interrupting it again is a new one (D-W158).
+                issues::forget_dismissal(conn, IssueKind::WorkInterrupted, id).await?;
             }
             sqlx::query(
                 "UPDATE import_operations SET state = ?2, revision = revision + 1, \

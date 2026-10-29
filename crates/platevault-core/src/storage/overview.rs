@@ -148,7 +148,8 @@ impl Library {
     }
 }
 
-/// Group live copies by digest, largest reclaim first.
+/// Group live copies by digest, largest reclaim first. Crate-only: the
+/// module is private and `storage` re-exports this as `pub(crate)`.
 pub fn duplicate_candidates(copies: Vec<DuplicateCopy>) -> Vec<DuplicateCandidate> {
     let mut candidates: Vec<DuplicateCandidate> = Vec::new();
     for copy in copies {

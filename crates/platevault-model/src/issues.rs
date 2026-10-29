@@ -10,15 +10,21 @@
 //! A dismissal hides one issue until it changes (D-W158): it records the
 //! issue's [`Issue::fingerprint`], which is its kind, its subject, its count
 //! and its bytes. Any change to one of them is a different fingerprint, so
-//! the issue counts again. Dismissing leaves the state behind the issue as
-//! it was. A Project's own waiting work (`View (previous)/` to review) is
-//! never dismissable: the issue is how the user finds it.
+//! the issue counts again. A location's offline or denied issue, and an
+//! import's interrupted one, have the same fingerprint each time, so the
+//! catalog forgets the dismissal in the write that ends the issue
+//! ([`Issue::fingerprint_prefix`]): going offline again, or an import
+//! interrupted again, brings it back. Dismissing leaves the state behind
+//! the issue as it was. A Project's own waiting work (`View (previous)/` to
+//! review) is never dismissable: the issue is how the user finds it.
 
 use std::collections::BTreeSet;
 use std::fmt;
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+
+use crate::Availability;
 
 /// What an issue is about; the client words it by kind.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
@@ -91,6 +97,18 @@ impl IssueKind {
     #[must_use]
     pub const fn dismissable(self) -> bool {
         !matches!(self, Self::PreviousReview)
+    }
+
+    /// The issue an active location raises while its availability is
+    /// `availability`: offline for an absent volume or root, denied for an
+    /// unreadable one or another folder at its root, none otherwise.
+    #[must_use]
+    pub const fn of_location(availability: Availability) -> Option<Self> {
+        match availability {
+            Availability::Offline | Availability::Missing => Some(Self::LocationOffline),
+            Availability::Unreadable | Availability::IdentityConflict => Some(Self::LocationDenied),
+            Availability::Available | Availability::Retired | Availability::Trashed => None,
+        }
     }
 }
 
@@ -189,12 +207,8 @@ impl Issue {
         bytes: Option<u64>,
         name: Option<String>,
     ) -> Self {
-        let id = match about {
-            Some(record) => format!("{kind}|{record}"),
-            None => format!("{kind}|library"),
-        };
-        let bytes_text = bytes.map(|bytes| bytes.to_string()).unwrap_or_default();
-        let fingerprint = format!("{id}|{count}|{bytes_text}");
+        let id = issue_id(kind, about);
+        let fingerprint = format!("{id}|{count}|{}", bytes_text(bytes));
         let page = match (kind, owner) {
             (_, IssueOwner::Project { id }) => IssuePage::Project { id },
             (IssueKind::LocationDenied | IssueKind::LocationOffline, _) => IssuePage::Locations,
@@ -214,6 +228,25 @@ impl Issue {
             dismissable: kind.dismissable(),
         }
     }
+
+    /// The start every fingerprint of the issue of `kind` about `about`
+    /// shares, whatever its count and bytes: what forgets the dismissal of
+    /// that issue in SQL without knowing its count.
+    #[must_use]
+    pub fn fingerprint_prefix(kind: IssueKind, about: Option<Uuid>) -> String {
+        format!("{}|", issue_id(kind, about))
+    }
+}
+
+fn issue_id(kind: IssueKind, about: Option<Uuid>) -> String {
+    match about {
+        Some(record) => format!("{kind}|{record}"),
+        None => format!("{kind}|library"),
+    }
+}
+
+fn bytes_text(bytes: Option<u64>) -> String {
+    bytes.map(|bytes| bytes.to_string()).unwrap_or_default()
 }
 
 /// The issues of one severity whose action opens one page.
@@ -303,6 +336,11 @@ mod tests {
         let offline = Issue::new(IssueKind::LocationOffline, owner, Some(id), 1, None, None);
         assert_eq!(offline.fingerprint, format!("location-offline|{id}|1|"));
         assert_eq!(offline.page, IssuePage::Locations);
+        let prefix = Issue::fingerprint_prefix(IssueKind::LocationOffline, Some(id));
+        assert!(offline.fingerprint.starts_with(&prefix), "{prefix}");
+        let denied = Issue::fingerprint_prefix(IssueKind::LocationDenied, Some(id));
+        assert!(!offline.fingerprint.starts_with(&denied));
+        assert_eq!(Issue::fingerprint_prefix(IssueKind::Duplicates, None), "duplicates|library|");
     }
 
     #[test]
