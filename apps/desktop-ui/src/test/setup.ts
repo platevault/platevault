@@ -5,7 +5,7 @@
  * they hold in any locale.
  */
 import "@testing-library/jest-dom/vitest"
-import { cleanup } from "@testing-library/react"
+import { cleanup, configure } from "@testing-library/react"
 import { afterEach } from "vitest"
 
 // jsdom has no matchMedia, and preferences.ts asks for the OS colour scheme at import: no query matches.
@@ -16,6 +16,9 @@ window.matchMedia = (media: string): MediaQueryList =>
 const { setLocale } = await import("@/app/preferences")
 const { DEFAULT_LOCALE } = await import("@/lib/i18n")
 setLocale(DEFAULT_LOCALE)
+
+// Suites render whole pages; on a loaded CI machine a find can take longer than the default 1 s.
+configure({ asyncUtilTimeout: 10_000 })
 
 afterEach(() => {
   cleanup()

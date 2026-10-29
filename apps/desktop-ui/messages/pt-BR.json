@@ -7735,5 +7735,322 @@
   "criteria_error_separation": "Informe um ângulo acima de 0° e abaixo de 180°.",
   "criteria_error_duration": "Informe minutos inteiros de 1 a 1440.",
   "criteria_unit_degrees": "°",
-  "criteria_unit_minutes": "min"
+  "criteria_unit_minutes": "min",
+  "status_closing": "Encerrando",
+  "reason_trash_unsupported": "Este volume não tem Lixeira",
+  "reason_trash_failed": "O sistema recusou mover para a Lixeira",
+  "reason_source_drift": "Mudou desde a revisão",
+  "reason_source_unavailable": "Está ausente ou não pode ser lido",
+  "reason_kept_copy_unproven": "A cópia mantida não tem mais os bytes revisados",
+  "reason_destination_occupied": "Já existe outro arquivo no destino",
+  "reason_destination_mismatch": "A cópia no destino não corresponde à origem",
+  "reason_destination_changed": "O destino mudou",
+  "reason_interrupted": "Interrompido: não é possível comprovar o que aconteceu",
+  "reason_protected": "Protegido: o PlateVault nunca o move",
+  "project_record_unavailable": "Os detalhes do Projeto ainda não podem ser lidos",
+  "projects_read_failed": "Não foi possível ler os Projetos",
+  "wrapup_step_trash": "Lixeira",
+  "apply_blocker_operation_running": "{operation} está em andamento neste Projeto",
+  "apply_blocker_location_unavailable": "Não é possível usar o local de processamento {path}: escolha outro",
+  "apply_blocker_folder_occupied": "{path} já contém arquivos que o PlateVault não criou",
+  "apply_blocker_input_write_risk": "O aplicativo pode alterar suas entradas: use Cópias neste Projeto",
+  "apply_blocker_original_offline": "Original offline: {path}",
+  "apply_blocker_original_changed": "Original alterado: {path}",
+  "apply_blocker_folder_clash": "Dois grupos usariam a mesma pasta: renomeie um",
+  "apply_blocker_entry_name": "{name} não pode ser usado como nome de arquivo",
+  "apply_blocker_building_occupied": "View (building)/ contém arquivos que o PlateVault não colocou: {path}",
+  "apply_blocker_correction": "Não é possível gravar o {field} corrigido em {path}",
+  "apply_blocker_view_unreadable": "Não é possível ler View/: {path}",
+  "apply_stop_canceled": "Cancelado: a View antiga permanece",
+  "apply_stop_interrupted": "O PlateVault fechou antes de a nova View ficar no lugar: a View antiga foi restaurada",
+  "apply_stop_catalog_moved": "O Projeto ou a Biblioteca mudou durante a montagem: revise e aplique de novo",
+  "apply_stop_originals_unverified": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "count",
+        "countPlural"
+      ],
+      "match": {
+        "count=0, countPlural=*": "{count} originais não puderam ser verificados",
+        "count=*, countPlural=one": "{count} original não pôde ser verificado",
+        "count=*, countPlural=*": "{count} originais não puderam ser verificados"
+      }
+    }
+  ],
+  "apply_stop_building_not_cleared": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "count",
+        "countPlural"
+      ],
+      "match": {
+        "count=0, countPlural=*": "View (building)/ ainda contém {count} arquivos que o PlateVault não colocou",
+        "count=*, countPlural=one": "View (building)/ ainda contém {count} arquivo que o PlateVault não colocou",
+        "count=*, countPlural=*": "View (building)/ ainda contém {count} arquivos que o PlateVault não colocou"
+      }
+    }
+  ],
+  "apply_stop_entry_not_placed": "Não foi possível colocar uma entrada em View (building)/",
+  "apply_stop_build_unverified": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "count",
+        "countPlural"
+      ],
+      "match": {
+        "count=0, countPlural=*": "{count} entradas mudaram entre a montagem e a troca",
+        "count=*, countPlural=one": "{count} entrada mudou entre a montagem e a troca",
+        "count=*, countPlural=*": "{count} entradas mudaram entre a montagem e a troca"
+      }
+    }
+  ],
+  "apply_stop_view_unreadable": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "count",
+        "countPlural"
+      ],
+      "match": {
+        "count=0, countPlural=*": "{count} entradas em View/ não podem ser lidas",
+        "count=*, countPlural=one": "{count} entrada em View/ não pode ser lida",
+        "count=*, countPlural=*": "{count} entradas em View/ não podem ser lidas"
+      }
+    }
+  ],
+  "apply_stop_previous_unreadable": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "count",
+        "countPlural"
+      ],
+      "match": {
+        "count=0, countPlural=*": "{count} entradas em View (previous)/ não podem ser lidas",
+        "count=*, countPlural=one": "{count} entrada em View (previous)/ não pode ser lida",
+        "count=*, countPlural=*": "{count} entradas em View (previous)/ não podem ser lidas"
+      }
+    }
+  ],
+  "apply_stop_kept_not_moved": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "count",
+        "countPlural"
+      ],
+      "match": {
+        "count=0, countPlural=*": "{count} arquivos mantidos não puderam ser movidos para View (kept)/",
+        "count=*, countPlural=one": "{count} arquivo mantido não pôde ser movido para View (kept)/",
+        "count=*, countPlural=*": "{count} arquivos mantidos não puderam ser movidos para View (kept)/"
+      }
+    }
+  ],
+  "apply_stop_project_folder_replaced": "A pasta do Projeto não é mais a revisada",
+  "apply_stop_view_replaced": "View/ não é mais a pasta revisada",
+  "apply_stop_previous_appeared": "View (previous)/ apareceu durante a montagem",
+  "apply_stop_aside_failed": "O sistema recusou mover a View antiga para o lado",
+  "apply_stop_not_installed": "O sistema recusou colocar a nova View no lugar: a View antiga foi restaurada",
+  "pending_session_added": "Adicionou {session} a {group}",
+  "pending_group_added": "Adicionou o grupo {name}",
+  "pending_group_removed": "Removeu o grupo {name}",
+  "pending_group_panel": "Marcou {name} como painel de mosaico",
+  "pending_group_not_panel": "{name} não é mais um painel de mosaico",
+  "pending_calibration_unsettled": "{kind} de {session} precisa ser escolhido de novo",
+  "pending_session_regrouped": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "count",
+        "countPlural"
+      ],
+      "match": {
+        "count=0, countPlural=*": "{session} foi redividida: {count} sessões tomam o lugar",
+        "count=*, countPlural=one": "{session} foi redividida: {count} sessão toma o lugar",
+        "count=*, countPlural=*": "{session} foi redividida: {count} sessões tomam o lugar"
+      }
+    }
+  ],
+  "view_apply_run_title": "Aplicar",
+  "view_apply_cancel_not_yet": "Cancelar fica disponível quando a montagem começa",
+  "view_apply_canceling": "Cancelando",
+  "view_apply_running": "Aplicando a View",
+  "view_apply_review_again": "Revisar de novo",
+  "view_apply_applied": "View aplicada",
+  "view_apply_canceled": "Aplicação cancelada",
+  "view_apply_unsettled": "O PlateVault fechou durante a aplicação: a próxima abertura a conclui",
+  "view_apply_foreign_moved": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "count",
+        "countPlural"
+      ],
+      "match": {
+        "count=0, countPlural=*": "{count} arquivos movidos para a nova View",
+        "count=*, countPlural=one": "{count} arquivo movido para a nova View",
+        "count=*, countPlural=*": "{count} arquivos movidos para a nova View"
+      }
+    }
+  ],
+  "view_apply_foreign_failed": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "count",
+        "countPlural"
+      ],
+      "match": {
+        "count=0, countPlural=*": "{count} arquivos marcados ficaram em View (previous)/",
+        "count=*, countPlural=one": "{count} arquivo marcado ficou em View (previous)/",
+        "count=*, countPlural=*": "{count} arquivos marcados ficaram em View (previous)/"
+      }
+    }
+  ],
+  "view_apply_failures": "Arquivos citados pela montagem",
+  "view_previous_unverified_link": "Link não verificado",
+  "apply_sheet_blocker": "Impede a aplicação",
+  "apply_sheet_where": "Onde",
+  "apply_sheet_blockers": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "count",
+        "countPlural"
+      ],
+      "match": {
+        "count=0, countPlural=*": "{count} itens impedem a aplicação",
+        "count=*, countPlural=one": "{count} item impede a aplicação",
+        "count=*, countPlural=*": "{count} itens impedem a aplicação"
+      }
+    }
+  ],
+  "apply_sheet_foreign_hint": "Os arquivos marcados vão para a nova View; os demais ficam em View (previous)/.",
+  "wrapup_recorded_at": "Registrado",
+  "wrapup_archive_resumes": "O arquivamento parou antes de terminar: o PlateVault o retoma na próxima abertura",
+  "wrapup_kept_in_place": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "count",
+        "countPlural"
+      ],
+      "match": {
+        "count=0, countPlural=*": "{count} itens ficaram no lugar",
+        "count=*, countPlural=one": "{count} item ficou no lugar",
+        "count=*, countPlural=*": "{count} itens ficaram no lugar"
+      }
+    }
+  ],
+  "wrapup_cleanup_done": "Limpeza feita: {deleted} links apagados, {trashed} arquivos movidos para a Lixeira, {kept} mantidos",
+  "wrapup_trash_done": "{moved} arquivos movidos para a Lixeira · {refused} ficaram",
+  "wrapup_protected_masters": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "count",
+        "countPlural"
+      ],
+      "match": {
+        "count=0, countPlural=*": "{count} masters em Processing continuam protegidos: adicione-os primeiro à biblioteca de calibração",
+        "count=*, countPlural=one": "{count} master em Processing continua protegido: adicione-o primeiro à biblioteca de calibração",
+        "count=*, countPlural=*": "{count} masters em Processing continuam protegidos: adicione-os primeiro à biblioteca de calibração"
+      }
+    }
+  ],
+  "wrapup_moves": "Será movida",
+  "wrapup_choose_destination": "Escolha um destino",
+  "wrapup_close_without_archive": "Encerrar sem arquivar",
+  "wrapup_stop_archive": "Parar arquivamento",
+  "wrapup_closing": "Encerrando o Projeto e arquivando suas sessões",
+  "wrapup_move_pending": "Ainda não movido",
+  "wrapup_move_kept": "Arquivado · o original permanece",
+  "wrapup_archive_settled": "Arquivamento concluído",
+  "project_new_group_one_rig": "Selecione sessões de um equipamento",
+  "project_follow_library": "Seguir a Biblioteca",
+  "project_blocker_superseded": "Redividida desde então: escolha a sucessora",
+  "project_blocker_not_ready": "Não está Pronta na Biblioteca",
+  "project_blocker_rig_mismatch": "Outro equipamento",
+  "project_in_project": "No projeto",
+  "project_captured": "Capturado",
+  "project_goal_unknown_for_bar": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "count",
+        "countPlural"
+      ],
+      "match": {
+        "count=0, countPlural=*": "{count} quadros não podem ser avaliados",
+        "count=*, countPlural=one": "{count} quadro não pode ser avaliado",
+        "count=*, countPlural=*": "{count} quadros não podem ser avaliados"
+      }
+    }
+  ],
+  "project_name_required": "Digite um nome",
+  "output_kind_master": "Master de {kind}",
+  "output_rescan": "Reexaminar",
+  "output_origin": "Origem",
+  "output_origin_copied": "Copiado e verificado",
+  "output_origin_observed": "Salvo por uma ferramenta",
+  "output_locked": "O Output de um Projeto encerrado permanece como estava",
+  "output_choose_file": "Escolha o arquivo a copiar",
+  "output_source": "Arquivo a copiar",
+  "calibrate_master_revision": "Master (revisão {revision})",
+  "calibrate_declined": "Nenhum: recusado",
+  "calibrate_source": "Origem",
+  "calibrate_none_placed": "Nenhum arquivo de calibração na próxima View",
+  "calibrate_frozen_title": "Calibração usada no encerramento",
+  "newproject_subjects_hint": "Pesquise seus Alvos, os catálogos ou o SIMBAD",
+  "output_name_preview": "Output/{name}",
+  "project_leave_out_frames": "Deixar quadros de fora",
+  "project_use_unusable": "Usar quadros Inutilizáveis",
+  "view_open_unavailable": "O PlateVault ainda não abre a View em um aplicativo",
+  "newproject_rigs_unavailable": "Os equipamentos entram com as sessões adicionadas",
+  "wrapup_closing_state": "Encerrando: o arquivamento termina ou é retomado na próxima abertura do PlateVault",
+  "project_edit_unavailable": "A edição disto ainda não está disponível",
+  "project_reason_write_failed": "Não foi possível gravar lá: nada foi substituído",
+  "project_record_failed": "Não foi possível ler os detalhes do Projeto"
 }

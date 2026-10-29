@@ -30,6 +30,8 @@ import { ImportPage } from "@/features/library/import-page"
 import { SessionPage } from "@/features/library/session-page"
 import { SessionsPage } from "@/features/library/sessions-page"
 import { SessionReview } from "@/features/review/review-workspace"
+import { ProjectPage } from "@/features/projects/project-page"
+import { ProjectsPage } from "@/features/projects/projects-page"
 
 export type SearchParams = Record<string, string | undefined>
 
@@ -64,6 +66,8 @@ function appPages(appWindow: AnyRoute): AnyRoute[] {
     createRoute({ getParentRoute: () => appWindow, path: "/sessions", component: SessionsPage, validateSearch: looseSearch }),
     createRoute({ getParentRoute: () => appWindow, path: "/sessions/$sessionId", component: () => <SessionPage review={SessionReview} />, validateSearch: looseSearch }),
     createRoute({ getParentRoute: () => appWindow, path: "/import", component: ImportPage, validateSearch: looseSearch }),
+    createRoute({ getParentRoute: () => appWindow, path: "/projects", component: ProjectsPage, validateSearch: looseSearch }),
+    createRoute({ getParentRoute: () => appWindow, path: "/projects/$projectId", component: ProjectPage, validateSearch: looseSearch }),
   ]
 }
 

@@ -5,7 +5,8 @@
  * adds its `shell.tsx` export here when it lands.
  */
 import { homeShell } from "@/features/library/shell"
+import { projectsShell } from "@/features/projects/shell"
 import { reviewShell } from "@/features/review/shell"
 import type { ShellContribution } from "./shell-contract"
 
-export const SHELLS: readonly ShellContribution[] = [homeShell, reviewShell]
+export const SHELLS: readonly ShellContribution[] = [homeShell, reviewShell, projectsShell]

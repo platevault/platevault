@@ -8,7 +8,7 @@
 import { QueryClientProvider } from "@tanstack/react-query"
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } from "@tanstack/react-router"
 import { clearMocks, mockIPC } from "@tauri-apps/api/mocks"
-import { act, cleanup, configure, getConfig, render, screen, waitFor, within } from "@testing-library/react"
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest"
 import type {
@@ -122,23 +122,16 @@ function renderAt(path: string) {
 
 const conflict = { code: "conflict", identity: null, scope: null, retry: "review", currentRevision: 4, successors: [], window: null, correction: null }
 
-/** Each test drives whole pages over the mocked host; a loaded machine renders them slowly (as shell.test.tsx). */
-const LIBRARY_TEST_MS = 20_000
-
 const original = globalThis.ResizeObserver
-const asyncTimeout = getConfig().asyncUtilTimeout
 beforeAll(() => {
   globalThis.ResizeObserver = class {
     observe() {}
     unobserve() {}
     disconnect() {}
   }
-  // findBy* and waitFor wait as long as a test may run, so a slow render is not a failure.
-  configure({ asyncUtilTimeout: LIBRARY_TEST_MS })
 })
 afterAll(() => {
   globalThis.ResizeObserver = original
-  configure({ asyncUtilTimeout: asyncTimeout })
 })
 afterEach(() => {
   cleanup()
@@ -172,7 +165,7 @@ function eventHost(answer: (command: string, args: Record<string, unknown>) => u
 
 const PERSISTENCE = { ...conflict, code: "persistence_failure", retry: "retry", currentRevision: null }
 
-describe("Removable devices (STO-IMP-FR-10)", { timeout: LIBRARY_TEST_MS }, () => {
+describe("Removable devices (STO-IMP-FR-10)", () => {
   it.each(LOCALES)("names each recognised layout with every marker found, and a generic device as USB device, in %s", (locale) => {
     act(() => setLocale(locale))
     expect(deviceKind(m, CARD)).toBe(m.import_layout_asiair())
@@ -258,7 +251,7 @@ describe("Removable devices (STO-IMP-FR-10)", { timeout: LIBRARY_TEST_MS }, () =
   })
 })
 
-describe("Import", { timeout: LIBRARY_TEST_MS }, () => {
+describe("Import", () => {
   it("refuses a start on a stale preview, re-reads the import and keeps the chosen mode", async () => {
     let reads = 0
     const started: unknown[] = []
@@ -327,7 +320,7 @@ describe("Import", { timeout: LIBRARY_TEST_MS }, () => {
   })
 })
 
-describe("Session intake", { timeout: LIBRARY_TEST_MS }, () => {
+describe("Session intake", () => {
   it("confirms the chosen Target at the session's revisions; a stale one is refused and the choice stays", async () => {
     const associated: unknown[] = []
     let sessionReads = 0
@@ -455,7 +448,7 @@ function emptyHome(command: string): unknown {
   return null
 }
 
-describe("Home", { timeout: LIBRARY_TEST_MS }, () => {
+describe("Home", () => {
   it("keeps an offline Captures location as offline, never as everything imported", () => {
     const location = { id: "loc-1", name: "NAS captures", path: encode("/Volumes/NAS"), role: "captures", identity: FINGERPRINT.identity, decisionRevision: 1, availability: "offline", lastObservedAt: null, lifecycle: "active", volumeKind: "network" } as const
     expect(locationIngestion(location, undefined, 0)).toEqual({ kind: "location", location, state: { kind: "offline" } })
