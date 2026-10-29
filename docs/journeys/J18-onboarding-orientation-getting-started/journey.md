@@ -81,10 +81,10 @@ first Apply builds the Project's View from the original sessions.
 
 ### S6 — Read the Home dashboard {#S6}
 
-- **Do:** With the walk closed (S2 or S3), read Home's sections, the source list and the **Set criteria** dialog.
-- **Expect:** Home shows Pending ingestions, Pending work and Open work on the left, and Status, Tonight and the calendar on the right at 1280 px or wider. Below that width the same sections appear in one column in that order. Each section shows at most 5 rows before **All N ›**. Home has no tabs or header buttons. After S1, **Set criteria** shows the values from the Index step. After an S3 exit, it reads unset. Tonight shows its no-site state both times, because J18 has no site.
+- **Do:** With the walk closed (S2 or S3), read Home's sections and the source list.
+- **Expect:** Home shows Pending ingestions, Pending work and Open work on the left, and Status, Tonight and the calendar on the right at 1280 px or wider. Below that width the same sections appear in one column in that order. Each section shows at most 5 rows before **All N ›**. Home has no tabs or header buttons. J18 has no site, so Tonight shows its no-site state after S1 and after an S3 exit.
 - **Expect (negative):** Home shows no setup checklist, summary line above its sections or alerts list. The source list remains navigation only.
-- **Trace:** PRJ-FR-17, PRJ-FR-19, PRJ-FR-22 · PLAN-FR-11 · LIB-FR-31 · D-W89, D-W170
+- **Trace:** PRJ-FR-17, PRJ-FR-19, PRJ-FR-22 · PLAN-FR-11 · D-W89, D-W170
 
 ### S7 — Read Home's pending and open work {#S7}
 
@@ -221,5 +221,5 @@ steps above were checked against it.
   **Mark rest usable** asks for confirmation and names the number of Unreviewed frames.
   Evidence: PIX-FR-14 · D-W118 · owner's answer, 2026-10-19 in astro-plan-rzbzu.1 · by: OwnerAnswersDocsFix (intent-gated)
 - **Δ10** 2026-10-29 · S1, S3, S6 · behavior-change
-  The setup wizard's Index step sets Home's planning criteria, which have no defaults. S6 opens Set criteria, which shows S1's values or reads unset after an S3 exit. Tonight stays in its no-site state.
+  The setup wizard's Index step sets Home's planning criteria, which have no defaults. S1 sets them and the S3 exits leave them unset. J18 has no site, so S6 reads Tonight's no-site state both times.
   Evidence: D-W170, LIB-FR-31, PLAN-FR-11 · owner's answer, 2026-10-29, astro-plan-0v2o0.4 · by: Amend5Fix (intent-gated)

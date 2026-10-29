@@ -78,7 +78,7 @@ opens on Home, the control-panel dashboard. Done means:
 
 ### S5 — Start indexing with one denied location {#S5}
 
-- **Do:** Outside PlateVault, remove read permission from `Astro-T7/Calibration`. In the Index step, set Home's planning criteria. Click **Start indexing**.
+- **Do:** Outside PlateVault, remove read permission from `Astro-T7/Calibration`. In the Index step, read **Start indexing**, then set Home's planning criteria. Click **Start indexing**.
 - **Expect:** The Index step asks for Home's planning criteria and fills in no value. After **Start indexing**, progress shows these counts:
   - files discovered and metadata read;
   - unsupported items, at least the P2 note file;

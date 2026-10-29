@@ -834,7 +834,7 @@
     {
       "flowStep": "Tonight and calendar data for Home (D-W39, D-W89)",
       "owner": "072-observing-plans",
-      "journeyStep": "J18/S1, J18/S3, J18/S6, J19/S5, J19/S6a, J29/S13, J32/S7, J32/S7a",
+      "journeyStep": "J18/S1, J18/S3, J18/S6, J19/S5, J19/S6a, J29/S13, J32/S7, J32/S7a, J40/S3",
       "spec": "072-observing-plans PLAN-FR-08, PLAN-FR-11, PLAN-FR-12, PLAN-AC-11, PLAN-AC-12, PLAN-AC-17; 065-project-goals PRJ-FR-17, PRJ-FR-22; 064-library-inventory LIB-FR-31, LIB-AC-47; D-W89, D-W170",
       "action": "Set Home's planning criteria in the setup wizard's Index step, or leave setup without them, then read Home's Set criteria dialog and Tonight section before any site exists and with a default site, and compare its goal windows and five-week calendar with Targets' Plan areas.",
       "expect": "Set criteria shows the criteria from the Index step, or reads unset after an exit that skipped it, and until Home's planning criteria are saved Tonight and the calendar compute nothing. Without a saved site Tonight lists no windows and reads Add an observing site in Settings. With saved criteria and the default site it lists best windows for favourites and open-Project subjects, the Moon and darkness window; each names the site and time zone and matches the Plan area.",
