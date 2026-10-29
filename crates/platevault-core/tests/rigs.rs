@@ -121,6 +121,38 @@ async fn dual_band_osc_passes_rgb_ha_oiii() {
     assert_eq!(read.bands, vec![Band::R, Band::G, Band::B, Band::Ha, Band::Oiii]);
 }
 
+/// Settings > Equipment lists every rig as `rig` reads one: its filter list,
+/// the bands it captures and its field of view, by name.
+#[tokio::test]
+async fn lists_every_rig_with_its_filters_bands_and_field_of_view() {
+    let temp = tempfile::tempdir().unwrap();
+    let library = open(temp.path()).await;
+    assert!(library.rigs().await.unwrap().is_empty());
+    let redcat = saved(&library, &redcat()).await;
+    let esprit = saved(&library, &esprit()).await;
+    let dual = [filter("L-eXtreme", &["L-eXtreme"], &[Band::Oiii, Band::Ha])];
+    library.save_rig_filters(esprit.id, &dual, 0).await.unwrap();
+
+    let rigs = library.rigs().await.unwrap();
+    let read: Vec<(Uuid, u64, Vec<Band>)> = rigs
+        .iter()
+        .map(|rig| (rig.equipment.id, rig.filters.revision, rig.bands.clone()))
+        .collect();
+    assert_eq!(
+        read,
+        [
+            (esprit.id, 1, vec![Band::R, Band::G, Band::B, Band::Ha, Band::Oiii]),
+            (redcat.id, 0, Vec::new()),
+        ]
+    );
+    for rig in &rigs {
+        let one = library.rig(rig.equipment.id).await.unwrap();
+        assert_eq!(rig.filters, one.filters, "a listed rig reads as the single read does");
+        assert_eq!(rig.field_of_view, one.field_of_view);
+        assert!(rig.field_of_view.is_some());
+    }
+}
+
 const HALPHA_FRAMES: [&str; 2] = ["Halpha_001.fits", "Halpha_002.fits"];
 
 fn write_halpha(root: &Path, name: &str, start: &str) {

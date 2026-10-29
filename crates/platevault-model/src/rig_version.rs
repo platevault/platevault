@@ -25,6 +25,7 @@ fn invalid(message: String) -> LibraryError {
 /// One physical camera body.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct Camera {
     pub id: Uuid,
     pub model: String,

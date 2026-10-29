@@ -159,6 +159,23 @@ export const commands = {
 	 */
 	librarySaveEquipment: (equipment: EquipmentInput, expectedRevision: number | null) => typedError<Equipment, ErrorResponse>(__TAURI_INVOKE("library_save_equipment", { equipment, expectedRevision })),
 	/**
+	 *  Every saved rig, by name: the rig pickers' list (id, name and the
+	 *  revision a later save or delete expects).
+	 * 
+	 *  # Errors
+	 *  A retryable `PersistenceFailure` for an unreadable catalog.
+	 */
+	libraryListEquipment: () => typedError<Equipment[], ErrorResponse>(__TAURI_INVOKE("library_list_equipment")),
+	/**
+	 *  Delete a rig nothing refers to, with its filter list; nothing cascades.
+	 * 
+	 *  # Errors
+	 *  `InvalidInput` while a session, Project or rig version uses the rig, and
+	 *  then nothing changes; `Conflict` for a stale revision; `NotFound` for
+	 *  unknown equipment.
+	 */
+	libraryDeleteEquipment: (equipmentId: string, expectedRevision: number) => typedError<null, ErrorResponse>(__TAURI_INVOKE("library_delete_equipment", { equipmentId, expectedRevision })),
+	/**
 	 *  Explicitly confirm saved equipment for sessions; source evidence stays inspectable.
 	 * 
 	 *  # Errors
@@ -1307,6 +1324,29 @@ export const commands = {
 	 *  `NotFound` for an unknown `equipment_id`.
 	 */
 	rigUnknownFilters: (equipmentId: string | null) => typedError<RigFilterValues[], ErrorResponse>(__TAURI_INVOKE("rig_unknown_filters", { equipmentId })),
+	/**
+	 *  Every saved rig as [`rig_filters_get`] reads one, by name.
+	 * 
+	 *  # Errors
+	 *  A retryable `PersistenceFailure` for an unreadable catalog.
+	 */
+	libraryListRigFilters: () => typedError<Rig[], ErrorResponse>(__TAURI_INVOKE("library_list_rig_filters")),
+	/**
+	 *  Every camera of the rigs, by model and then alias.
+	 * 
+	 *  # Errors
+	 *  A retryable `PersistenceFailure` for an unreadable catalog.
+	 */
+	libraryListCameras: () => typedError<Camera[], ErrorResponse>(__TAURI_INVOKE("library_list_cameras")),
+	/**
+	 *  Delete a camera nothing refers to; nothing cascades.
+	 * 
+	 *  # Errors
+	 *  `InvalidInput` while a rig version, a session's camera link, an adopted
+	 *  master or a Project group uses the camera, and then nothing changes;
+	 *  `Conflict` for a stale revision; `NotFound` for an unknown camera.
+	 */
+	libraryDeleteCamera: (cameraId: string, expectedRevision: number) => typedError<null, ErrorResponse>(__TAURI_INVOKE("library_delete_camera", { cameraId, expectedRevision })),
 	/**
 	 *  Every saved site with its revision, the default site or null, and the
 	 *  settings revision.
@@ -2818,6 +2858,19 @@ export type CalibrationSettings = {
 	 *  [`DarkBiasRules`].
 	 */
 	oldMasterAfterDays: number,
+};
+
+/**  One physical camera body. */
+export type Camera = {
+	id: string,
+	model: string,
+	/**  The user's unique label; required once two cameras share a model. */
+	alias: string | null,
+	/**  "Don't use darks": its sessions start settled as No darks. */
+	noDarks: boolean,
+	/**  "Don't use bias": its sessions start settled as No bias. */
+	noBias: boolean,
+	revision: number,
 };
 
 /**  Any listed input, reusable or not. */

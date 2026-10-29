@@ -1,17 +1,19 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Rig filter-list IPC (spec 072 PLAN-EQ-FR-01..06, LIB-FR-05 unknown filter
-//! part), registered by the isolated library shell under its planning block.
+//! Rig filter-list and camera IPC (spec 072 PLAN-EQ-FR-01..06, -08, LIB-FR-05
+//! unknown filter part), registered by the isolated library shell under its
+//! planning block.
 //!
 //! A failed save returns its [`platevault_core::ErrorResponse`] with the last
 //! saved list still in effect; the UI keeps the edit unsaved and retries it
-//! with the same expected revision.
+//! with the same expected revision. A filter is deleted by saving its rig's
+//! list without it.
 
 use std::sync::Arc;
 
 use platevault_core::library::Library;
-use platevault_core::{Band, Revision, Rig, RigFilter, RigFilterValues};
+use platevault_core::{Band, Camera, Revision, Rig, RigFilter, RigFilterValues};
 use serde::Deserialize;
 use tauri::State;
 use uuid::Uuid;
@@ -37,6 +39,46 @@ pub struct RigFilterInput {
 #[specta::specta]
 pub async fn rig_filters_get(library: State<'_, Arc<Library>>, equipment_id: Uuid) -> Reply<Rig> {
     library.rig(equipment_id).await.map_err(fail(Some(equipment_id)))
+}
+
+/// Every saved rig as [`rig_filters_get`] reads one, by name.
+///
+/// # Errors
+/// A retryable `PersistenceFailure` for an unreadable catalog.
+#[tauri::command]
+#[specta::specta]
+pub async fn library_list_rig_filters(library: State<'_, Arc<Library>>) -> Reply<Vec<Rig>> {
+    library.rigs().await.map_err(fail(None))
+}
+
+/// Every camera of the rigs, by model and then alias.
+///
+/// # Errors
+/// A retryable `PersistenceFailure` for an unreadable catalog.
+#[tauri::command]
+#[specta::specta]
+pub async fn library_list_cameras(library: State<'_, Arc<Library>>) -> Reply<Vec<Camera>> {
+    library.catalog().cameras().await.map_err(fail(None))
+}
+
+/// Delete a camera nothing refers to; nothing cascades.
+///
+/// # Errors
+/// `InvalidInput` while a rig version, a session's camera link, an adopted
+/// master or a Project group uses the camera, and then nothing changes;
+/// `Conflict` for a stale revision; `NotFound` for an unknown camera.
+#[tauri::command]
+#[specta::specta]
+pub async fn library_delete_camera(
+    library: State<'_, Arc<Library>>,
+    camera_id: Uuid,
+    expected_revision: Revision,
+) -> Reply<()> {
+    library
+        .catalog()
+        .delete_camera(camera_id, expected_revision)
+        .await
+        .map_err(fail(Some(camera_id)))
 }
 
 /// Replace a rig's filter list whole; only that rig's settings change.
