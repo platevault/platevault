@@ -156,6 +156,7 @@ macro_rules! library_commands {
             crate::commands::session_filters::project_add_session,
             // projects
             crate::commands::project_goals::project_create,
+            crate::commands::project_goals::project_get,
             crate::commands::project_goals::project_update,
             crate::commands::project_goals::project_set_subjects,
             crate::commands::project_goals::project_set_rigs,

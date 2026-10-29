@@ -24,6 +24,16 @@ use uuid::Uuid;
 
 use super::library::{fail, Reply};
 
+/// Read a Project, including its subjects, rigs, goals and current lifecycle.
+///
+/// # Errors
+/// `NotFound` for an unknown Project; catalog errors.
+#[tauri::command]
+#[specta::specta]
+pub async fn project_get(library: State<'_, Arc<Library>>, project_id: Uuid) -> Reply<Project> {
+    library.catalog().project(project_id).await.map_err(fail(Some(project_id)))
+}
+
 /// Create an open Project at revision 1 with its subjects (the Target it was
 /// opened from first), rigs and goals. Writes only Project rows.
 ///
