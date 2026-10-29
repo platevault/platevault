@@ -7122,7 +7122,6 @@
   "home_goal_in_project": "{goal} in {project}",
   "home_not_graded": "Not graded",
   "home_ungraded_no_band": "The Project's rigs don't capture this channel",
-  "home_ungraded_unsupported_frame": "Coordinates in an unsupported frame",
   "home_window_peak": "{range} · peak {altitude}°",
   "home_no_gradable_goal": "No goal can be graded: none has a band and a known position.",
   "home_no_goals_suit_within": [

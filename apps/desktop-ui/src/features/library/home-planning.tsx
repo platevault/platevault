@@ -83,7 +83,7 @@ function goalName(m: Messages, g: GoalGrade_Serialize): string {
 
 const NO_POSITION: Record<WindowUnavailableReason, (m: Messages) => string> = {
   target_coordinates_unknown: (m) => m.tonight_no_coordinates(),
-  unsupported_coordinate_frame: (m) => m.home_ungraded_unsupported_frame(),
+  unsupported_coordinate_frame: (m) => m.targets_reason_unsupported_frame(),
 }
 
 /** Why a goal has no grade, in the user's words. */
