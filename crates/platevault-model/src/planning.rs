@@ -21,8 +21,28 @@ use crate::{LibraryError, NativePath, Revision};
 
 /// Most nights one window request covers.
 pub const MAX_NIGHTS: u32 = 366;
-/// Longest minimum window duration and longest reminder lead time, in minutes.
+/// Longest minimum window duration, in minutes.
 pub const MAX_MINUTES: u32 = 1440;
+/// Shortest reminder lead time, in whole minutes: PLAN-FR-06 makes every
+/// lead time longer than 30 minutes.
+pub const MIN_LEAD_MINUTES: u32 = 31;
+/// Longest reminder lead time, in minutes: 7 days (PLAN-FR-06).
+pub const MAX_LEAD_MINUTES: u32 = 7 * 24 * 60;
+
+/// Check a reminder lead time, a reminder's or the default one: longer than
+/// 30 minutes and at most 7 days (PLAN-FR-06).
+///
+/// # Errors
+/// `InvalidInput` naming `leadMinutes`.
+pub fn validate_lead_minutes(lead_minutes: u32) -> Result<(), LibraryError> {
+    if (MIN_LEAD_MINUTES..=MAX_LEAD_MINUTES).contains(&lead_minutes) {
+        return Ok(());
+    }
+    Err(invalid(format!(
+        "leadMinutes {lead_minutes} is not a whole number of minutes from \
+         {MIN_LEAD_MINUTES} to {MAX_LEAD_MINUTES}"
+    )))
+}
 
 fn invalid(message: String) -> LibraryError {
     LibraryError::InvalidInput(message)
@@ -155,12 +175,9 @@ pub struct HomeCriteria {
 /// (PLAN-FR-06): 12 hours, in minutes.
 pub const DEFAULT_REMINDER_LEAD_MINUTES: u32 = 12 * 60;
 
-/// The shortest default reminder lead time, in whole minutes: PLAN-FR-06
-/// makes it longer than 30 minutes.
-pub const MIN_DEFAULT_LEAD_MINUTES: u32 = 31;
-
 /// The stored default reminder lead time (PLAN-FR-06), set in Settings, at
-/// its own revision. A catalog that never saved it reads
+/// its own revision, within [`validate_lead_minutes`]'s range so a new
+/// reminder can start from it. A catalog that never saved it reads
 /// [`DEFAULT_REMINDER_LEAD_MINUTES`] at revision 0. Its revision is its own,
 /// so saving it stales no reminder review and no other planning setting.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -169,24 +186,6 @@ pub const MIN_DEFAULT_LEAD_MINUTES: u32 = 31;
 pub struct ReminderLeadTime {
     pub lead_minutes: u32,
     pub revision: Revision,
-}
-
-impl ReminderLeadTime {
-    /// Check a default lead time: longer than 30 minutes and no longer than
-    /// a reminder's longest, [`MAX_MINUTES`], so a new reminder can start
-    /// from it.
-    ///
-    /// # Errors
-    /// `InvalidInput` naming `leadMinutes`.
-    pub fn validate_minutes(lead_minutes: u32) -> Result<(), LibraryError> {
-        if (MIN_DEFAULT_LEAD_MINUTES..=MAX_MINUTES).contains(&lead_minutes) {
-            return Ok(());
-        }
-        Err(invalid(format!(
-            "leadMinutes {lead_minutes} is not a whole number of minutes from \
-             {MIN_DEFAULT_LEAD_MINUTES} to {MAX_MINUTES}"
-        )))
-    }
 }
 
 /// Every saved site with the default site and the settings revision.
@@ -642,15 +641,10 @@ pub struct ReminderInput {
 
 impl ReminderInput {
     /// # Errors
-    /// `InvalidInput` naming `leadMinutes` outside 1 to 1440, or the invalid
-    /// criterion.
+    /// `InvalidInput` naming `leadMinutes` outside [`validate_lead_minutes`]'s
+    /// range, or the invalid criterion.
     pub fn validate(&self) -> Result<(), LibraryError> {
-        if !(1..=MAX_MINUTES).contains(&self.lead_minutes) {
-            return Err(invalid(format!(
-                "leadMinutes {} is not a whole number of minutes from 1 to {MAX_MINUTES}",
-                self.lead_minutes
-            )));
-        }
+        validate_lead_minutes(self.lead_minutes)?;
         self.criteria.validate()
     }
 }

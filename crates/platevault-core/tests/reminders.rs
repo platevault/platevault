@@ -26,7 +26,7 @@ use platevault_core::{
     BlockReason, Darkness, DeliveryState, MoonCriterion, ObservingSite, ObservingWindow,
     PermissionState, PlanCriteria, Provenance, RecoveryAction, ReminderSubscription, SiteInput,
     SkyCoordinates, SubscriptionState, TargetAlias, TargetCandidate, TargetRecord, WindowKey,
-    WindowQuery, WindowSet,
+    WindowQuery, WindowSet, MAX_LEAD_MINUTES, MIN_LEAD_MINUTES,
 };
 use time::macros::date;
 use time::{Date, Duration, OffsetDateTime};
@@ -697,7 +697,7 @@ async fn a_wall_clock_jump_is_caught_within_one_recheck_and_never_after_window_s
     let lead =
         u32::try_from((rising.start_utc - (ngc.start_utc + Duration::minutes(5))).whole_minutes())
             .unwrap();
-    assert!((1..=1440).contains(&lead), "{lead}");
+    assert!((MIN_LEAD_MINUTES..=MAX_LEAD_MINUTES).contains(&lead), "{lead}");
     planning.subscribe(&pleiades, open_sky, lead).await;
     assert!(due_at(&rising, lead) <= jump && jump < rising.start_utc);
 

@@ -129,7 +129,7 @@ pub async fn planning_reminder_lead_time(
 ///
 /// # Errors
 /// `InvalidInput` naming `leadMinutes` for 30 minutes or less, or more than
-/// a day, and `Conflict` for a stale revision; nothing is stored on either.
+/// 7 days, and `Conflict` for a stale revision; nothing is stored on either.
 #[tauri::command]
 #[specta::specta]
 pub async fn planning_save_reminder_lead_time(

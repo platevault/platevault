@@ -10,10 +10,10 @@
 //! transaction. Windows and upcoming reminders are never stored here.
 
 use platevault_model::{
-    BlockReason, DefaultSiteSaved, DeliveryState, HomeCriteria, LibraryError, ObservingSite,
-    PlanCriteria, PlanningSettings, PlanningSites, ReminderDelivery, ReminderInput,
-    ReminderLeadTime, ReminderSubscription, Revision, SiteInput, SiteSaved, SubscriptionState,
-    TargetPlan, WindowKey, DEFAULT_REMINDER_LEAD_MINUTES,
+    validate_lead_minutes, BlockReason, DefaultSiteSaved, DeliveryState, HomeCriteria,
+    LibraryError, ObservingSite, PlanCriteria, PlanningSettings, PlanningSites, ReminderDelivery,
+    ReminderInput, ReminderLeadTime, ReminderSubscription, Revision, SiteInput, SiteSaved,
+    SubscriptionState, TargetPlan, WindowKey, DEFAULT_REMINDER_LEAD_MINUTES,
 };
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -292,7 +292,7 @@ impl Catalog {
     ///
     /// # Errors
     /// `InvalidInput` naming `leadMinutes` for a lead time of 30 minutes or
-    /// less, or longer than a reminder's; `Conflict` naming
+    /// less, or longer than 7 days; `Conflict` naming
     /// [`REMINDER_LEAD_TIME_ID`] at the current revision when `expected` is
     /// stale. Nothing is written on failure.
     pub async fn save_reminder_lead_time(
@@ -300,7 +300,7 @@ impl Catalog {
         expected: Revision,
         lead_minutes: u32,
     ) -> Result<ReminderLeadTime> {
-        ReminderLeadTime::validate_minutes(lead_minutes)?;
+        validate_lead_minutes(lead_minutes)?;
         let saved = write_txn!(self, |conn| {
             let current = load_lead_time(conn).await?.revision;
             if current != expected {
