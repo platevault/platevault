@@ -3,17 +3,17 @@
 
 //! Targets list records (spec 072 PLAN-TGT-FR-01/03/08/10) on the catalog's
 //! single serialized writer: ★ favourites, current associated session Targets
-//! and open-Project subjects read beside them as My targets, "Add to targets",
-//! Sessions and Captured per channel over `live_assets`, and saved presets. A
-//! favourite or preset write changes only its own table; Add to targets also
-//! writes the Target record when it is not saved yet, in the same transaction.
+//! and open-Project subjects read beside them as My targets, search-result
+//! actions, Sessions and Captured per channel over `live_assets`, and saved
+//! presets. Favourite and preset writes change only their own table; a result
+//! click atomically opens a current My targets member or adds it as a favourite.
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use platevault_model::{
     counts_as_confirmed, validate_preset_name, AssociationState, Availability, ChannelIntegration,
     EvidenceItem, LibraryError, MyTargetMarks, PresetFilters, ProjectBadge, Revision, SavedPreset,
-    TargetActivity, TargetCandidate, TargetRecord,
+    TargetActivity, TargetCandidate, TargetsSearchAction,
 };
 use sqlx::sqlite::SqliteConnection;
 use sqlx::{Connection, Row};
@@ -34,49 +34,8 @@ impl Catalog {
     pub async fn my_target_marks(&self) -> Result<MyTargetMarks> {
         let mut conn = self.reader().await?;
         let mut snapshot = conn.begin().await?;
-        let favourites: Vec<String> =
-            sqlx::query_scalar("SELECT target_id FROM target_favourites ORDER BY target_id")
-                .fetch_all(&mut *snapshot)
-                .await?;
-        let session_rows = sqlx::query(
-            "SELECT a.target_id, a.state, a.evidence FROM associations a \
-             JOIN sessions s ON s.id = a.session_id AND s.superseded_by IS NULL \
-             WHERE a.kind = 'target' AND a.target_id IS NOT NULL \
-             AND EXISTS (SELECT 1 FROM live_assets la WHERE la.session_id = s.id) \
-             ORDER BY a.target_id, s.id",
-        )
-        .fetch_all(&mut *snapshot)
-        .await?;
-        let mut sessions = BTreeSet::new();
-        for row in &session_rows {
-            let state: AssociationState = from_text(&row.try_get::<String, _>("state")?)?;
-            let evidence: Vec<EvidenceItem> = from_json(&row.try_get::<String, _>("evidence")?)?;
-            if !counts_as_confirmed(&state, &evidence) {
-                continue;
-            }
-            let target = parse_uuid(&row.try_get::<String, _>("target_id")?)?;
-            sessions.insert(target);
-        }
-        let rows = sqlx::query(
-            "SELECT s.target_id, p.id, p.name FROM project_subjects s \
-             JOIN projects p ON p.id = s.project_id WHERE p.lifecycle = 'open' \
-             ORDER BY s.target_id, p.name, p.id",
-        )
-        .fetch_all(&mut *snapshot)
-        .await?;
+        let marks = my_target_marks_in(&mut snapshot).await?;
         snapshot.rollback().await?;
-        let mut marks = MyTargetMarks {
-            favourites: favourites.iter().map(|id| parse_uuid(id)).collect::<Result<_>>()?,
-            sessions,
-            badges: BTreeMap::new(),
-        };
-        for row in &rows {
-            let target = parse_uuid(&row.try_get::<String, _>("target_id")?)?;
-            marks.badges.entry(target).or_default().push(ProjectBadge {
-                project_id: parse_uuid(&row.try_get::<String, _>("id")?)?,
-                name: row.try_get("name")?,
-            });
-        }
         Ok(marks)
     }
 
@@ -100,17 +59,23 @@ impl Catalog {
         Ok(favourite)
     }
 
-    /// Add to targets: save `candidate` at revision 1 when no record has its
-    /// id, keep an existing record unchanged, and mark it ★ in the same
-    /// transaction.
+    /// Open the current record if it is already in My targets; otherwise add
+    /// the canonical candidate and favourite it in one writer transaction.
+    /// The membership test and add are atomic, so a concurrent membership
+    /// change cannot make a stale search snapshot change the selected action.
     ///
     /// # Errors
-    /// `InvalidInput` for an invalid candidate that is not saved yet.
-    pub async fn add_to_my_targets(&self, candidate: &TargetCandidate) -> Result<TargetRecord> {
-        let record = write_txn!(self, |conn| {
+    /// `NotFound` when the saved Target does not exist; `PersistenceFailure`
+    /// when the writer transaction fails.
+    pub async fn act_on_target_search_result(
+        &self,
+        candidate: &TargetCandidate,
+        may_restore: bool,
+    ) -> Result<TargetsSearchAction> {
+        write_txn!(self, |conn| {
             let record = match load_target(conn, candidate.id).await {
                 Ok(record) => record,
-                Err(LibraryError::NotFound(_)) => {
+                Err(LibraryError::NotFound(_)) if may_restore => {
                     validate_target(candidate)?;
                     upsert_target(conn, candidate, 1).await?;
                     next_counter(conn, "target_generation").await?;
@@ -118,10 +83,13 @@ impl Catalog {
                 }
                 Err(error) => return Err(error),
             };
+            let marks = my_target_marks_in(conn).await?;
+            if marks.contains(candidate.id) {
+                return Ok(TargetsSearchAction::Open { target: record });
+            }
             insert_favourite(conn, candidate.id).await?;
-            record
-        });
-        Ok(record)
+            Ok(TargetsSearchAction::Added { target: record })
+        })
     }
 
     /// Sessions and Captured of every Target that has a confirmed session:
@@ -290,6 +258,49 @@ struct Tally {
     channels: BTreeMap<Option<String>, (f64, u32)>,
 }
 
+async fn my_target_marks_in(conn: &mut SqliteConnection) -> Result<MyTargetMarks> {
+    let favourites: Vec<String> =
+        sqlx::query_scalar("SELECT target_id FROM target_favourites ORDER BY target_id")
+            .fetch_all(&mut *conn)
+            .await?;
+    let session_rows = sqlx::query(
+        "SELECT a.target_id, a.state, a.evidence FROM associations a \
+         JOIN sessions s ON s.id = a.session_id AND s.superseded_by IS NULL \
+         WHERE a.kind = 'target' AND a.target_id IS NOT NULL \
+         AND EXISTS (SELECT 1 FROM live_assets la WHERE la.session_id = s.id) \
+         ORDER BY a.target_id, s.id",
+    )
+    .fetch_all(&mut *conn)
+    .await?;
+    let mut sessions = BTreeSet::new();
+    for row in &session_rows {
+        let state: AssociationState = from_text(&row.try_get::<String, _>("state")?)?;
+        let evidence: Vec<EvidenceItem> = from_json(&row.try_get::<String, _>("evidence")?)?;
+        if counts_as_confirmed(&state, &evidence) {
+            sessions.insert(parse_uuid(&row.try_get::<String, _>("target_id")?)?);
+        }
+    }
+    let rows = sqlx::query(
+        "SELECT s.target_id, p.id, p.name FROM project_subjects s \
+         JOIN projects p ON p.id = s.project_id WHERE p.lifecycle = 'open' \
+         ORDER BY s.target_id, p.name, p.id",
+    )
+    .fetch_all(&mut *conn)
+    .await?;
+    let mut marks = MyTargetMarks {
+        favourites: favourites.iter().map(|id| parse_uuid(id)).collect::<Result<_>>()?,
+        sessions,
+        badges: BTreeMap::new(),
+    };
+    for row in &rows {
+        let target = parse_uuid(&row.try_get::<String, _>("target_id")?)?;
+        marks.badges.entry(target).or_default().push(ProjectBadge {
+            project_id: parse_uuid(&row.try_get::<String, _>("id")?)?,
+            name: row.try_get("name")?,
+        });
+    }
+    Ok(marks)
+}
 async fn insert_favourite(conn: &mut SqliteConnection, target: Uuid) -> Result<()> {
     sqlx::query(
         "INSERT INTO target_favourites (target_id, added_at) VALUES (?1, ?2) \

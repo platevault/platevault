@@ -107,7 +107,7 @@ async fn project_planning_lists_only_its_subjects() {
     let ngc7000 = seed(&library, "NGC 7000").await;
     let ic1396 = seed(&library, "IC 1396").await;
     let m31 = seed(&library, "M 31").await;
-    library.add_to_my_targets(&AddTarget::Seed { id: m31.id }).await.unwrap();
+    library.catalog().set_favourite(m31.id, true).await.unwrap();
     let catalog = library.catalog();
     let esprit = catalog.save_equipment(&rig("Esprit 100"), None).await.unwrap().id;
     let redcat = catalog.save_equipment(&rig("RedCat 51"), None).await.unwrap().id;

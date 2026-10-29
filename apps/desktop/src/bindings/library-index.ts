@@ -1494,12 +1494,15 @@ export const commands = {
 	 */
 	targetsSearch: (text: string) => typedError<TargetsSearchResults, ErrorResponse>(__TAURI_INVOKE("targets_search", { text })),
 	/**
-	 *  Add to targets: save the Target when it is not saved yet and mark it ★.
+	 *  The action for clicking a search result. Existing My targets open unchanged;
+	 *  other results are added as favourites. The search remains a separate,
+	 *  read-only operation.
 	 * 
 	 *  # Errors
-	 *  `NotFound` for an unknown Target; provider errors for a SIMBAD result.
+	 *  `NotFound` when the candidate no longer resolves; provider or persistence
+	 *  errors when the target cannot be added.
 	 */
-	targetsAdd: (target: AddTarget) => typedError<TargetRecord, ErrorResponse>(__TAURI_INVOKE("targets_add", { target })),
+	targetsSearchResultAction: (result: TargetsSearchResult) => typedError<TargetsSearchAction, ErrorResponse>(__TAURI_INVOKE("targets_search_result_action", { result })),
 	/**
 	 *  Add or remove a saved Target's ★; returns the new state.
 	 * 
@@ -1676,15 +1679,6 @@ export const NEW_CAPTURES_EVENT = "library_new_captures" as const;
 export const SCAN_PROGRESS_EVENT = "library_scan_progress" as const;
 
 /* Types */
-/**  The Target "Add to targets" writes into the library and My targets. */
-export type AddTarget = 
-/**  A saved library Target. */
-{ source: "saved"; id: string } | 
-/**  A bundled catalogue object. */
-{ source: "seed"; id: string } | 
-/**  A SIMBAD result, resolved again from its query. */
-{ source: "simbad"; query: string };
-
 /**  The session's rig that Add to Project adds because the Project lacks it. */
 export type AddedRig = {
 	id: string,
@@ -8622,7 +8616,17 @@ export type TargetsRig = {
 	fieldOfView: FieldOfView | null,
 };
 
-/**  One search result. A result outside My targets offers "Add to targets". */
+/**
+ *  The action to take when a search result is clicked. Opening a Target is
+ *  distinct from adding one: My-target membership must not implicitly star it.
+ */
+export type TargetsSearchAction = 
+/**  Open the current saved Target unchanged. */
+{ action: "open"; target: TargetRecord } | 
+/**  Add the Target to My targets and favourite it. */
+{ action: "added"; target: TargetRecord };
+
+/**  One search result. A result outside My targets is added as a favourite. */
 export type TargetsSearchResult = {
 	target: TargetCandidate,
 	source: TargetsSearchSource,

@@ -4,17 +4,17 @@
 //! Targets list IPC (spec 072 PLAN-TGT-FR-01..13), registered only by the
 //! isolated rebuilt shell ([`crate::library_shell`]) under its targets label.
 //! The rows and every planning value, Fit per selected rig and the Filters
-//! strip come from Rust; the page presents them. Reads write nothing; ★ and
-//! Add to targets write only the favourite and, for a Target not saved yet,
-//! its record. Failures follow the library [`platevault_core::ErrorResponse`]
+//! strip come from Rust; the page presents them. Search and page reads write
+//! nothing; a result click opens a current My targets member unchanged or adds
+//! it as a favourite. Failures follow the library [`platevault_core::ErrorResponse`]
 //! conventions, naming the Target or preset.
 
 use std::sync::Arc;
 
 use platevault_core::library::Library;
 use platevault_core::{
-    AddTarget, PresetFilters, PresetRef, Revision, RigSelection, SavedPreset, TargetRecord,
-    TargetsPage, TargetsPresets, TargetsQuery, TargetsSearchResults,
+    PresetFilters, PresetRef, Revision, RigSelection, SavedPreset, TargetsPage, TargetsPresets,
+    TargetsQuery, TargetsSearchAction, TargetsSearchResult, TargetsSearchResults,
 };
 use tauri::State;
 use uuid::Uuid;
@@ -55,21 +55,21 @@ pub async fn targets_search(
     library.targets_search(&text).await.map_err(fail(None))
 }
 
-/// Add to targets: save the Target when it is not saved yet and mark it ★.
+/// The action for clicking a search result. Existing My targets open unchanged;
+/// other results are added as favourites. The search remains a separate,
+/// read-only operation.
 ///
 /// # Errors
-/// `NotFound` for an unknown Target; provider errors for a SIMBAD result.
+/// `NotFound` when the candidate no longer resolves; provider or persistence
+/// errors when the target cannot be added.
 #[tauri::command]
 #[specta::specta]
-pub async fn targets_add(
+pub async fn targets_search_result_action(
     library: State<'_, Arc<Library>>,
-    target: AddTarget,
-) -> Reply<TargetRecord> {
-    let identity = match &target {
-        AddTarget::Saved { id } | AddTarget::Seed { id } => Some(*id),
-        AddTarget::Simbad { .. } => None,
-    };
-    library.add_to_my_targets(&target).await.map_err(fail(identity))
+    result: TargetsSearchResult,
+) -> Reply<TargetsSearchAction> {
+    let identity = Some(result.target.id);
+    library.targets_search_result_action(&result).await.map_err(fail(identity))
 }
 
 /// Add or remove a saved Target's ★; returns the new state.
