@@ -8,8 +8,9 @@
  *   Continue opens Locations.
  * - Locations: one table per role. Continue needs a Captures location;
  *   Calibration and Results are optional. Folders come from the native
- *   picker (locations.tsx). The Developer Mode row checks a picked folder
- *   for symlinks (`library_check_symlinks`) and never blocks setup.
+ *   picker (locations.tsx). On Windows, the Developer Mode row checks the
+ *   processing location for symlinks (`library_check_symlinks`) and never
+ *   blocks setup; macOS and Linux show no such row.
  * - Index: Home's planning criteria, with no value filled in (D-W170), and
  *   the locations to index. Start indexing stays unavailable until the
  *   criteria are whole and valid and a Captures location is registered
@@ -33,9 +34,10 @@ import { useNavigate } from "@tanstack/react-router"
 import { Aperture, FolderPlus, Play } from "lucide-react"
 import { type ReactNode, useState } from "react"
 import { useRefreshOnEvent } from "@/api/events"
-import { type ActionResult, library, type LocationRole, type PlanCriteria, SCAN_PROGRESS_EVENT, type SymlinkCapability } from "@/api/ipc"
-import { libraryKey } from "@/api/query"
+import { type ActionResult, library, type LocationRole, type NativePathWire, type PlanCriteria, SCAN_PROGRESS_EVENT } from "@/api/ipc"
+import { libraryKey, libraryQuery } from "@/api/query"
 import { useMessages } from "@/app/preferences"
+import { onWindows } from "@/app/shortcuts"
 import { ActionBar } from "@/components/app/actions"
 import { Box } from "@/components/app/box"
 import type { Action, FlowStep, StepFlow, StepLink } from "@/components/app/contracts"
@@ -209,7 +211,7 @@ export function SetupLocationsPage() {
                 </Section>
               )
             })}
-            <DeveloperModeCheck />
+            {onWindows() ? <DeveloperModeCheck rows={active} /> : null}
             <AddLocationDialog role={adding} open={adding !== null} onOpenChange={(open) => !open && setAdding(null)} />
             {actions.dialogs}
           </>
@@ -367,28 +369,42 @@ export function SetupIndexPage() {
 
 /**
  * Windows Developer Mode (J18 S1, PREP-AC-08): whether PlateVault can make
- * the symlinks a Symlinks View needs in a folder the user picks
- * (`library_check_symlinks`). Copies always work, so the check never
- * blocks setup.
+ * the symlinks a Symlinks View needs, checked on the registered processing
+ * location (`library_check_symlinks`): the Results location, else the
+ * Captures one. The row shows on Windows only and reads On or Off by
+ * itself; Check again reads it again. Copies always work, so the check
+ * never blocks setup. The library has no command that opens Windows
+ * settings, so Open Windows settings names that gap instead of acting.
  */
-function DeveloperModeCheck() {
+function DeveloperModeCheck({ rows }: { rows: LocationRow[] }) {
   const m = useMessages()
-  const [result, setResult] = useState<SymlinkCapability | null>(null)
-  const check: Action = {
-    id: "check-symlinks",
-    label: m.settings_check_symlinks(),
-    run: async () => {
-      const picked = await library.libraryPickFolder()
-      if (!picked.ok || !picked.data) return picked.ok ? undefined : picked
-      const checked = await library.libraryCheckSymlinks(picked.data)
-      if (checked.ok) setResult(checked.data)
-      return checked
-    },
+  const target = rows.find((r) => r.state.location.role === "results") ?? rows.find((r) => r.state.location.role === "captures")
+  const path = target?.state.location.path ?? null
+  const checked = useQuery({ ...libraryQuery("libraryCheckSymlinks", path as NativePathWire), enabled: path !== null })
+  const again: Action = { id: "check-symlinks", label: m.apps_check_again(), run: () => void checked.refetch() }
+  const openSettings: Action = {
+    id: "open-windows-settings",
+    label: m.settings_open_windows_settings(),
+    unavailable: { action: m.settings_open_windows_settings(), reason: m.settings_gap_windows_settings(), blockers: [] },
+    run: () => undefined,
   }
-  const value = result === null ? m.status_not_set() : result === "available" ? <StatusBadge kind="developerMode" value="on" /> : result === "developer_mode_off" ? <StatusBadge kind="developerMode" value="off" /> : m.location_links_none()
+  const result = checked.data
+  const value =
+    path === null
+      ? m.setup_no_locations()
+      : result === "available"
+        ? <StatusBadge kind="developerMode" value="on" />
+        : result === "developer_mode_off"
+          ? <StatusBadge kind="developerMode" value="off" />
+          : result === "unsupported"
+            ? m.location_links_none()
+            : checked.isError
+              ? readError(m, checked.error)
+              : m.common_loading()
+  const actions = path === null ? [] : result === "developer_mode_off" ? [again, openSettings] : [again]
   return (
-    <Section id="setup-developer-mode" title={m.settings_developer_mode()} description={m.settings_symlinks_note()} actions={<ActionBar actions={[check]} />}>
-      <KeyValueList items={[{ label: m.location_link_symlinks(), value }]} />
+    <Section id="setup-developer-mode" title={m.settings_developer_mode()} description={m.settings_symlinks_note()} actions={actions.length > 0 ? <ActionBar actions={actions} /> : undefined}>
+      <KeyValueList items={[{ label: target ? m.settings_symlinks_in({ name: target.state.location.name }) : m.location_link_symlinks(), value }]} />
     </Section>
   )
 }

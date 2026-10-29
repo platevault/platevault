@@ -33,15 +33,20 @@ export function kindText(m: Messages, kind: ProfileKind): string {
   return words[kind]
 }
 
-/** Launch arguments as one line: an argument with a space, a quote or a backslash, or an empty one, is quoted, its quotes and backslashes escaped. */
+/**
+ * Launch arguments as one line. Only an argument with whitespace or a quote,
+ * or an empty one, is quoted, with its quotes and backslashes escaped; any
+ * other argument, a Windows path included, reads as typed.
+ */
 export function argsText(args: readonly string[]): string {
-  return args.map((arg) => (arg === "" || /[\s"\\]/.test(arg) ? `"${arg.replace(/["\\]/g, "\\$&")}"` : arg)).join(" ")
+  return args.map((arg) => (arg === "" || /[\s"]/.test(arg) ? `"${arg.replace(/["\\]/g, "\\$&")}"` : arg)).join(" ")
 }
 
 /**
- * One line of arguments split at spaces outside double quotes. A backslash
- * before a quote or a backslash keeps that character; any other backslash
- * (a Windows path) is kept as typed. `parseArgs(argsText(args))` is `args`.
+ * One line of arguments split at spaces outside double quotes. Inside
+ * quotes a backslash before a quote or a backslash keeps that character;
+ * every other backslash is kept as typed. `parseArgs(argsText(args))` is
+ * `args`.
  */
 export function parseArgs(line: string): string[] {
   const args: string[] = []
@@ -51,9 +56,8 @@ export function parseArgs(line: string): string[] {
   for (let i = 0; i < line.length; i++) {
     const char = line[i] as string
     const next = line[i + 1]
-    if (char === "\\" && (next === '"' || next === "\\")) {
+    if (quoted && char === "\\" && (next === '"' || next === "\\")) {
       current += next
-      started = true
       i++
     } else if (char === '"') {
       quoted = !quoted

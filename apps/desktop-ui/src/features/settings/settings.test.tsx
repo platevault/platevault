@@ -10,7 +10,7 @@ import { createMemoryHistory } from "@tanstack/react-router"
 import { clearMocks, mockIPC } from "@tauri-apps/api/mocks"
 import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest"
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 import { createQueryClient } from "@/api/query"
 import { setLocale } from "@/app/preferences"
 import { AppRoot } from "@/app/root"
@@ -48,6 +48,7 @@ afterAll(() => {
   Element.prototype.scrollIntoView = original.scrollIntoView
 })
 afterEach(() => {
+  vi.restoreAllMocks()
   act(endWalk)
   cleanup()
   clearMocks()
@@ -195,7 +196,7 @@ describe.each(LOCALES)("Settings in %s", (locale) => {
       cleanup()
       mockIPC(host.handler)
       renderAt("/settings/matching")
-      expect(await screen.findByText(`120 ${m.calibration_unit_days()}`)).toBeInTheDocument()
+      expect(await screen.findByText(m.settings_value_days({ count: 120, n: "120" }))).toBeInTheDocument()
     },
     TEST_MS,
   )
@@ -280,6 +281,40 @@ describe.each(LOCALES)("First-run setup in %s", (locale) => {
   )
 
   it(
+    "shows no Developer Mode row on macOS or Linux",
+    async () => {
+      for (const platform of ["MacIntel", "Linux x86_64"]) {
+        vi.spyOn(navigator, "platform", "get").mockReturnValue(platform)
+        const host = serve(catalog({ locations: [location("loc-1", "Lights", "captures")] }))
+        renderAt("/setup/locations")
+        await screen.findByRole("rowheader", { name: "Lights" })
+        expect(screen.queryByRole("heading", { name: m.settings_developer_mode() })).toBeNull()
+        expect(host.sent("library_check_symlinks")).toEqual([])
+        cleanup()
+      }
+    },
+    TEST_MS,
+  )
+
+  it(
+    "on Windows checks the processing location by itself, reads Off, offers Check again and names the Windows settings gap",
+    async () => {
+      vi.spyOn(navigator, "platform", "get").mockReturnValue("Win32")
+      const results = location("loc-2", "Results", "results")
+      const host = serve(catalog({ locations: [location("loc-1", "Lights", "captures"), results] }))
+      const { user } = renderAt("/setup/locations")
+      const row = (await screen.findByRole("heading", { name: m.settings_developer_mode() })).closest("section") as HTMLElement
+      expect(await within(row).findByText(m.status_off())).toBeInTheDocument()
+      expect(host.sent("library_check_symlinks")).toEqual([{ folder: results.location.path }])
+      expect(host.sent("library_pick_folder")).toEqual([])
+      expect(within(row).getByRole("button", { name: m.settings_open_windows_settings() })).toHaveAttribute("aria-disabled", "true")
+      await user.click(within(row).getByRole("button", { name: m.apps_check_again() }))
+      await waitFor(() => expect(host.sent("library_check_symlinks")).toHaveLength(2))
+    },
+    TEST_MS,
+  )
+
+  it(
     "asks for Home's criteria with no value filled in, keeps Start indexing unavailable until they are set, then saves them and scans",
     async () => {
       const host = serve(catalog({ locations: [location("loc-1", "Lights", "captures"), location("loc-2", "Darks", "calibration")] }))
@@ -343,8 +378,11 @@ describe("orientation walk stops (LIB-FR-27)", () => {
 
 describe("launch arguments", () => {
   it("round-trips arguments with spaces through one line", () => {
-    const args = ["-r", "{view}", "My Script.js", "", 'say "hi"', "C:\\PixInsight\\bin", "a\\"]
+    const args = ["-r", "{view}", "My Script.js", "", 'say "hi"', "C:\\PixInsight\\bin", "a\\", "C:\\Program Files\\PixInsight\\"]
     expect(parseArgs(argsText(args))).toEqual(args)
+  })
+  it("writes an ordinary Windows path as typed, unquoted", () => {
+    expect(argsText(["C:\\Tools\\run.exe", "{view}"])).toBe("C:\\Tools\\run.exe {view}")
   })
   it("keeps a typed Windows path's backslashes", () => {
     expect(parseArgs("C:\\Tools\\run.exe --input {view}")).toEqual(["C:\\Tools\\run.exe", "--input", "{view}"])

@@ -25,7 +25,17 @@ import { ALL_NAV_ITEMS, isRoutable, type NavItem, useRoutable } from "./navigati
 import { getPreferences, setSingleKeyShortcuts, useMessages, usePreferences } from "./preferences"
 import { closePanel, openPanel, toggleSidebar, useShellUi } from "./ui-state"
 
-const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform)
+/** The OS the webview reports: the one place the app reads it. */
+function platform(): string {
+  return typeof navigator !== "undefined" ? navigator.platform : ""
+}
+
+const isMac = /Mac|iPhone|iPad/.test(platform())
+
+/** True on Windows, where symlinks need Developer Mode (setup's Locations step). Read when called, so a test can stub the platform. */
+export function onWindows(): boolean {
+  return /^Win/.test(platform())
+}
 /** The modifier's key-cap legend, printed on the key and the same in every shipped locale. */
 export const MOD_LABEL = isMac ? "⌘" : "Ctrl"
 /** The command palette's chord, as printed on the keys. */
