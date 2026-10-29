@@ -349,8 +349,10 @@ export function StatusBar() {
   const wide = useMediaQuery(WIDE)
   const issues = useQuery(ISSUES_QUERY)
   const locations = useQuery(LOCATIONS_QUERY)
-  const scans = useQuery(SCANS_QUERY)
-  const running = (scans.data ?? []).filter((scan) => scan.state === "running")
+  // Running work opens Activity: until that page is registered the bar neither reads nor announces it.
+  const activity = routable("/activity")
+  const scans = useQuery({ ...SCANS_QUERY, enabled: activity })
+  const running = activity ? (scans.data ?? []).filter((scan) => scan.state === "running") : []
   const names = new Map((locations.data ?? []).map(({ location }) => [location.id, location.name]))
   const nameOf = (scan: ScanOperation) => names.get(scan.locationId) ?? m.common_locations()
   const announcement = useStatusAnnouncement({
@@ -358,9 +360,9 @@ export function StatusBar() {
     failures: [
       ...(issues.isError ? [m.status_bar_issues_failed()] : []),
       ...(locations.isError ? [m.status_bar_locations_failed()] : []),
-      ...(scans.isError ? [m.status_bar_scans_failed()] : []),
+      ...(activity && scans.isError ? [m.status_bar_scans_failed()] : []),
     ],
-    running: scans.data ? new Map(running.map((scan) => [scan.id, nameOf(scan)])) : null,
+    running: activity && scans.data ? new Map(running.map((scan) => [scan.id, nameOf(scan)])) : null,
   })
   return (
     <StatusBarFrame
@@ -372,7 +374,7 @@ export function StatusBar() {
           <SelectionItem />
         </>
       }
-      middle={routable("/activity") ? <RunningWork running={running} nameOf={nameOf} wide={wide} failed={scans.isError} onRetry={() => void scans.refetch()} /> : null}
+      middle={activity ? <RunningWork running={running} nameOf={nameOf} wide={wide} failed={scans.isError} onRetry={() => void scans.refetch()} /> : null}
       end={<IssueCounters />}
     />
   )

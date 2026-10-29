@@ -110,6 +110,22 @@ function libraryHost(answers: Record<string, (args: Record<string, unknown>) => 
     emit(event: string, payload: unknown) {
       for (const [id, name] of [...listeners]) if (name === event) internals.runCallback(id, { event, id, payload })
     },
+    /** How many listeners are attached to `event`. */
+    listening(event: string): number {
+      return [...listeners.values()].filter((name) => name === event).length
+    },
+  }
+}
+
+/** How long counts must hold still to count as settled. */
+const QUIET_MS = 300
+
+/** Wait until `read` returns the same counts across one quiet window, so no read is still on its way. */
+async function quiet(read: () => unknown): Promise<void> {
+  for (;;) {
+    const before = JSON.stringify(read())
+    await act(() => new Promise((resolve) => setTimeout(resolve, QUIET_MS)))
+    if (JSON.stringify(read()) === before) return
   }
 }
 
@@ -195,6 +211,8 @@ describe("boot", { timeout: SHELL_TEST_MS }, () => {
     await waitFor(() => expect(host.calls).toEqual(expect.arrayContaining(["library_issues", "library_list_locations", "library_native_menu_set_labels"])))
     // What the window shows at start is not news.
     expect(announcer()).toHaveTextContent("")
+    // Running work opens Activity, which is not built: the bar does not read it.
+    expect(host.calls).not.toContain("library_list_operations")
   })
 
   it("reads each status query once per refresh", async () => {
@@ -202,12 +220,15 @@ describe("boot", { timeout: SHELL_TEST_MS }, () => {
     renderShell(["/", "/sessions", "/projects"], "/")
     await screen.findByRole("heading", { level: 1, name: "page /" })
     await waitFor(() => expect(within(windowStatusBar()).getByRole("button", { name: m.status_bar_warnings({ count: 2 }) })).toBeInTheDocument())
-    const reads = (command: string) => host.calls.filter((call) => call === command).length
-    await waitFor(() => expect(reads("library_issues")).toBeGreaterThan(0))
-    const before = { issues: reads("library_issues"), locations: reads("library_list_locations") }
+    const reads = () => ({ issues: host.calls.filter((call) => call === "library_issues").length, locations: host.calls.filter((call) => call === "library_list_locations").length })
+    // Every refresher's listener is attached and its first read is done: the counts stop changing.
+    await waitFor(() => expect(host.listening(SCAN_PROGRESS_EVENT)).toBeGreaterThan(0))
+    await quiet(reads)
+    const before = reads()
     act(() => host.emit(SCAN_PROGRESS_EVENT, scanEvent("scan-1", "Captures", "completed")))
-    await waitFor(() => expect(reads("library_issues")).toBe(before.issues + 1))
-    expect(reads("library_list_locations")).toBe(before.locations + 1)
+    await waitFor(() => expect(reads().issues).toBeGreaterThan(before.issues))
+    await quiet(reads)
+    expect(reads()).toEqual({ issues: before.issues + 1, locations: before.locations + 1 })
   })
 
   it("shows an unregistered page inside the one window, which stays mounted when the user moves on", async () => {
@@ -251,10 +272,10 @@ describe("boot", { timeout: SHELL_TEST_MS }, () => {
     await waitFor(() => expect(announcer()).toHaveTextContent(`${m.status_bar_errors({ count: 1 })} and ${m.status_bar_warnings({ count: 2 })}`))
   })
 
-  it("announces a scan that finished, once", async () => {
+  it("announces a scan that finished, once Activity is registered", async () => {
     let running = true
     const host = libraryHost({ library_list_operations: () => (running ? [scan("scan-1", "Captures", "running")] : [scan("scan-1", "Captures", "completed")]) })
-    renderShell(["/"], "/")
+    renderShell(["/", "/activity"], "/")
     await screen.findByRole("heading", { level: 1, name: "page /" })
     await waitFor(() => expect(host.calls).toContain("library_list_operations"))
     await waitFor(() => expect(within(windowStatusBar()).getByRole("img", { name: m.status_bar_errors({ count: 1 }) })).toBeInTheDocument())
