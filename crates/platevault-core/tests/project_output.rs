@@ -715,6 +715,66 @@ async fn a_hidden_master_offer_is_restored_while_its_source_is_unchanged() {
     );
     assert_eq!(world.offers().await[0].state, MasterOfferState::Dismissed);
 }
+/// RES-FR-07, CAL-FR-06: Hide and Restore share Copy to Output's read-only
+/// refusal for Closed and Archived Projects; an open Project still allows both.
+#[tokio::test]
+async fn a_master_offer_cannot_be_hidden_or_restored_on_a_closed_or_archived_project() {
+    for lifecycle in ["closed", "archived"] {
+        let world = World::new().await;
+        let source = world.processing().join("WBPP/master/masterDark_300s.fit");
+        stack(&source, &MASTER_DARK);
+        let watch = world.watch();
+        world.settled(&watch).await;
+        watch.shutdown().await;
+        let [offer] = <[_; 1]>::try_from(world.offers().await).unwrap();
+        world.library.dismiss_processing_master(offer.id, &offer.sha256).await.unwrap();
+
+        if lifecycle == "closed" {
+            world.close().await;
+        } else {
+            for (step, outcome) in
+                [("clean_up", "skipped"), ("trash", "skipped"), ("archive", "finished")]
+            {
+                world
+                    .sql(
+                        "INSERT INTO project_wrap_up_steps (project_id, step, outcome, recorded_at) \
+                         VALUES (?1, ?2, ?3, ?4)",
+                        &[&world.project.to_string(), step, outcome, AT],
+                    )
+                    .await
+                    .unwrap();
+            }
+            world
+                .sql(
+                    "INSERT INTO project_snapshots (project_id, applied_generation, snapshot, taken_at) \
+                     VALUES (?1, NULL, json_object('projectId', ?1, 'appliedGeneration', NULL), ?2)",
+                    &[&world.project.to_string(), AT],
+                )
+                .await
+                .unwrap();
+            world
+                .sql(
+                    "UPDATE projects SET lifecycle = 'closing', closed_at = ?2 WHERE id = ?1",
+                    &[&world.project.to_string(), AT],
+                )
+                .await
+                .unwrap();
+            world
+                .sql(
+                    "UPDATE projects SET lifecycle = 'archived' WHERE id = ?1",
+                    &[&world.project.to_string()],
+                )
+                .await
+                .unwrap();
+        }
+
+        let hidden = world.library.dismiss_processing_master(offer.id, &offer.sha256).await;
+        refused(&hidden.unwrap_err(), "read-only");
+        let restored = world.library.restore_processing_master(offer.id, &offer.sha256).await;
+        refused(&restored.unwrap_err(), "read-only");
+        assert_eq!(world.offers().await[0].state, MasterOfferState::Dismissed);
+    }
+}
 
 /// A hidden offer is not restored once its source changed or is gone: the
 /// offer names those bytes; changed bytes are offered afresh by the next pass.
