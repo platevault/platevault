@@ -40,10 +40,11 @@ const NIGHTS: [(&str, (f64, f64)); 3] =
     [("2026-09-18", BACKYARD), ("2026-09-19", BACKYARD), ("2026-09-20", SECOND_SITE)];
 const FILTERS: [&str; 2] = ["Ha", "OIII"];
 /// Planning tables, children first.
-const PLANNING_TABLES: [&str; 5] = [
+const PLANNING_TABLES: [&str; 6] = [
     "reminder_deliveries",
     "reminder_subscriptions",
     "target_plans",
+    "home_criteria",
     "planning_settings",
     "observing_sites",
 ];

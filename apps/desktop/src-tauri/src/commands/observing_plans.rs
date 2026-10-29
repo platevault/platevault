@@ -299,17 +299,20 @@ pub async fn planning_export_calendar(
 }
 
 // ---------------------------------------------------------------------------
-// Tonight and Project planning (PLAN-FR-02/09/10/11)
+// Tonight, the calendar and Project planning (PLAN-FR-02/09/10/11/12)
 // ---------------------------------------------------------------------------
 
-/// Home's Tonight at the default site: the best window tonight of each Target
-/// in My targets that has one, the Moon and the darkness window, each naming
-/// the site and time zone. Without a default site it lists no windows and
-/// names the reason. Read-only.
+/// Home's Tonight at the default site under Home's stored criteria: every
+/// unfinished goal of an open Project graded for tonight under its band's
+/// Moon-avoidance curve, best first, with when they are next suited; the
+/// best window tonight of each Target in My targets that has one; the Moon
+/// and the darkness window, each naming the site and time zone. Without a
+/// default site or Home's criteria it computes nothing and names the reason
+/// (`no_site`, `no_criteria`). Read-only.
 ///
 /// # Errors
-/// `InvalidInput` for invalid criteria or a night outside the supported
-/// calendar.
+/// `InvalidInput` for a night outside the supported calendar;
+/// `PersistenceFailure` when Home's recorded criteria cannot be read.
 #[tauri::command]
 #[specta::specta]
 pub async fn planning_tonight(

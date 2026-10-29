@@ -12,6 +12,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use persistence_library::NewGroup;
+use platevault_core::goal_grades::HomePlanningUnavailable;
 use platevault_core::library::Library;
 use platevault_core::targets::{user_target, ObjectType, TargetQuery, UserTargetInput, ICRS_FRAME};
 use platevault_core::tonight::{Tonight, TonightQuery, TonightWindow};
@@ -38,10 +39,12 @@ async fn site(library: &Library, name: &str) -> Uuid {
     library.save_site(None, None, &input).await.unwrap().site.id
 }
 
+/// `name` as the default site, with Home's criteria set.
 async fn default_site(library: &Library, name: &str) -> Uuid {
     let id = site(library, name).await;
     let settings = library.catalog().list_sites().await.unwrap().settings_revision;
     library.set_default_site(Some(id), settings).await.unwrap();
+    library.save_home_criteria(0, &criteria()).await.unwrap();
     id
 }
 
@@ -55,7 +58,7 @@ fn criteria() -> PlanCriteria {
 }
 
 fn query() -> TonightQuery {
-    TonightQuery { night: Some(NIGHT), criteria: criteria() }
+    TonightQuery { night: Some(NIGHT) }
 }
 
 async fn seed(library: &Library, text: &str) -> TargetCandidate {
@@ -275,7 +278,7 @@ async fn no_site_returns_reason() {
 
     for name in ["Backyard", "Not the default"] {
         let tonight = library.tonight(&query()).await.unwrap();
-        assert_eq!(tonight.unavailable_reason, Some(PlanningUnknownReason::NoSite));
+        assert_eq!(tonight.unavailable_reason, Some(HomePlanningUnavailable::NoSite));
         assert_eq!(tonight.windows, [] as [platevault_core::tonight::TonightWindow; 0]);
         assert!(!tonight.has_window(m31.id));
         assert_eq!((tonight.site, tonight.time_zone, tonight.night), (None, None, None));
@@ -285,4 +288,37 @@ async fn no_site_returns_reason() {
     let wire = serde_json::to_value(library.tonight(&query()).await.unwrap()).unwrap();
     assert_eq!(wire["unavailableReason"], "no_site");
     assert_eq!(wire["windows"], serde_json::json!([]));
+}
+
+/// PLAN-FR-11: Tonight reads Home's stored criteria, the one source Home's
+/// Tonight and calendar share. With a default site but none stored, it
+/// computes nothing, names the site and `no_criteria`; once they are saved
+/// it computes under them.
+#[tokio::test]
+async fn tonight_reads_stored_home_criteria() {
+    let temp = tempfile::tempdir().unwrap();
+    let library = open(&temp.path().join("library.sqlite")).await;
+    let backyard = site(&library, "Backyard").await;
+    let settings = library.catalog().list_sites().await.unwrap().settings_revision;
+    library.set_default_site(Some(backyard), settings).await.unwrap();
+    let m31 = seed(&library, "M 31").await;
+    library.add_to_my_targets(&AddTarget::Seed { id: m31.id }).await.unwrap();
+
+    let unset = library.tonight(&query()).await.unwrap();
+    assert_eq!(unset.unavailable_reason, Some(HomePlanningUnavailable::NoCriteria));
+    assert_eq!(unset.site.as_ref().map(|site| site.name.as_str()), Some("Backyard"));
+    assert_eq!(unset.criteria, None);
+    assert_eq!((unset.night, &unset.moon, unset.next_good_night), (None, &None, None));
+    assert!(!unset.has_window(m31.id));
+    let wire = serde_json::to_value(&unset).unwrap();
+    assert_eq!(wire["unavailableReason"], "no_criteria");
+
+    let nautical = PlanCriteria { darkness: Darkness::Nautical, ..criteria() };
+    library.save_home_criteria(0, &nautical).await.unwrap();
+    let set = library.tonight(&query()).await.unwrap();
+    assert_eq!(set.unavailable_reason, None);
+    assert_eq!(set.criteria, Some(nautical));
+    let sky = library.night_sky(backyard, NIGHT, Darkness::Nautical).await.unwrap();
+    assert_eq!(set.darkness, sky.darkness);
+    assert!(set.has_window(m31.id));
 }

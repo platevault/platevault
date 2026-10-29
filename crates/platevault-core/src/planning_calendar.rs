@@ -17,11 +17,12 @@
 use serde::{Deserialize, Serialize};
 use time::Date;
 
-use crate::goal_grades::{grade_night, GoalGrade};
+use crate::goal_grades::{grade_night, GoalGrade, HomePlanningUnavailable, NightGrade};
 use crate::library::{blocking, Library};
 use crate::planning::{self, NightContext};
 use crate::{
-    DarknessWindow, LibraryError, NightMoon, ObservingSite, PlanCriteria, SiteBasis, MAX_NIGHTS,
+    DarknessWindow, GoalProgress, LibraryError, NightMoon, ObservingSite, PlanCriteria, Project,
+    SiteBasis, MAX_NIGHTS,
 };
 
 time::serde::format_description!(iso_date, Date, "[year]-[month]-[day]");
@@ -37,17 +38,6 @@ pub struct CalendarQuery {
     #[serde(with = "iso_date")]
     pub first_night: Date,
     pub nights: u32,
-}
-
-/// Why the calendar lists no night.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
-pub enum CalendarUnavailableReason {
-    /// "Add an observing site in Settings".
-    NoSite,
-    /// Home's criteria are not set yet.
-    NoCriteria,
 }
 
 /// One night of Home's calendar.
@@ -83,7 +73,7 @@ pub struct PlanningCalendar {
     pub criteria: Option<PlanCriteria>,
     pub nights: Vec<CalendarNight>,
     pub method: String,
-    pub unavailable_reason: Option<CalendarUnavailableReason>,
+    pub unavailable_reason: Option<HomePlanningUnavailable>,
 }
 
 impl Library {
@@ -114,17 +104,20 @@ impl Library {
         };
         let Some(site) = self.catalog().list_sites().await?.default_site_id else {
             let criteria = self.home_criteria().await?.criteria;
-            return Ok(unavailable(CalendarUnavailableReason::NoSite, criteria));
+            return Ok(unavailable(HomePlanningUnavailable::NoSite, criteria));
         };
         let site = self.catalog().site(site).await?;
         let Some(criteria) = self.home_criteria().await?.criteria else {
             return Ok(PlanningCalendar {
                 site: Some(site.basis()),
                 time_zone: Some(site.time_zone),
-                ..unavailable(CalendarUnavailableReason::NoCriteria, None)
+                ..unavailable(HomePlanningUnavailable::NoCriteria, None)
             });
         };
-        let goals = self.unfinished_goals().await?;
+        let projects = self.open_project_goals().await?;
+        let projects: Vec<(&Project, &[GoalProgress])> =
+            projects.iter().map(|(project, goals)| (project, goals.as_slice())).collect();
+        let goals = self.unfinished_goals(&projects).await?;
         let avoidance = self.catalog().workflow_settings().await?.0.moon_avoidance;
         let basis = (site.basis(), site.time_zone.clone());
         let nights = blocking(move || {
@@ -134,8 +127,9 @@ impl Library {
                 if index > 0 {
                     night = next_night(night)?;
                 }
-                let graded = grade_night(&goals, &site, night, criteria, &avoidance)?;
-                listed.push(calendar_night(&site, night, criteria, graded)?);
+                let context = NightContext::new(&site, night, &criteria)?;
+                let graded = grade_night(&goals, &site, &context, &avoidance)?;
+                listed.push(calendar_night(&site, &context, night, criteria, graded)?);
             }
             Ok(listed)
         })
@@ -159,12 +153,13 @@ fn next_night(night: Date) -> Result<Date, LibraryError> {
 
 fn calendar_night(
     site: &ObservingSite,
+    context: &NightContext,
     night: Date,
     criteria: PlanCriteria,
-    graded: Vec<crate::goal_grades::NightGrade>,
+    graded: Vec<NightGrade>,
 ) -> Result<CalendarNight, LibraryError> {
     let sky = planning::night_sky(site, night, criteria.darkness)?;
-    let dark_seconds = NightContext::new(site, night, &criteria)?.dark_seconds();
+    let dark_seconds = context.dark_seconds();
     let mut suited_goals = Vec::new();
     let mut moon_ruled_out_goals = Vec::new();
     for graded in graded {

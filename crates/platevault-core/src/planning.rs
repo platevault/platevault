@@ -303,6 +303,12 @@ fn position(target: &TargetRecord) -> Result<Equatorial, WindowUnavailableReason
     .map_err(|_| WindowUnavailableReason::TargetCoordinatesUnknown)
 }
 
+/// Why `target` has no usable position for windows; `None` when it has one.
+#[must_use]
+pub fn position_unavailable(target: &TargetRecord) -> Option<WindowUnavailableReason> {
+    position(target).err()
+}
+
 fn location(site: &ObservingSite) -> Result<Location, LibraryError> {
     // Elevation only moves the topocentric Moon by meters of parallax; an
     // unknown elevation computes at sea level.
@@ -354,6 +360,7 @@ fn local_noon(zone: &TimeZone, date: Date) -> Result<OffsetDateTime, LibraryErro
 /// of criteria: the night's bounds, its dark interval and where the Moon is
 /// up. Every Target of a Targets list page shares one, so each listed window
 /// comes from the same computation as [`compute_windows`].
+#[derive(Clone)]
 pub struct NightContext {
     zone: TimeZone,
     location: Location,
@@ -421,6 +428,14 @@ impl NightContext {
             .sum();
         u32::try_from(total).unwrap_or(u32::MAX)
     }
+
+    /// This night under the same criteria with Moon limit `moon`: the night's
+    /// bounds, darkness and Moon intervals do not depend on it, so they are
+    /// reused.
+    #[must_use]
+    pub fn with_moon(&self, moon: MoonCriterion) -> Self {
+        Self { criteria: PlanCriteria { moon, ..self.criteria }, ..self.clone() }
+    }
 }
 
 /// Half a mean synodic month, in days.
@@ -462,13 +477,10 @@ pub fn target_night(
     target: &TargetRecord,
     site: &ObservingSite,
 ) -> Result<Result<TargetNight, WindowUnavailableReason>, LibraryError> {
-    let position = match position(target) {
-        Ok(position) => position,
+    let (sky, spans, plan) = match planned(context, target, site)? {
+        Ok(planned) => planned,
         Err(reason) => return Ok(Err(reason)),
     };
-    let sky = Sky { position, location: context.location, criteria: context.criteria };
-    let spans = sky.spans(context);
-    let plan = plan_night(&sky, &context.zone, target, site, &spans)?;
     let img_time_minutes = plan.windows.iter().map(|window| window.duration_minutes).sum();
     let windows: Vec<Span> = plan
         .windows
@@ -488,11 +500,42 @@ pub fn target_night(
         img_time_minutes,
         img_time_zero_reason,
         peak_dark_altitude_deg,
-        lunar_separation_deg: lunar_separation(position, context.middle(), &context.location)
+        lunar_separation_deg: lunar_separation(sky.position, context.middle(), &context.location)
             .degrees(),
         moon_up_window_minutes,
-        next_opposition: next_opposition(position, context)?,
+        next_opposition: next_opposition(sky.position, context)?,
     }))
+}
+
+/// One Target's windows of the context's night, exactly as
+/// [`compute_windows`] lists them for that night and criteria, without the
+/// Targets list's other values.
+///
+/// # Errors
+/// As [`target_night`].
+pub fn night_windows(
+    context: &NightContext,
+    target: &TargetRecord,
+    site: &ObservingSite,
+) -> Result<Result<Vec<ObservingWindow>, WindowUnavailableReason>, LibraryError> {
+    Ok(planned(context, target, site)?.map(|(_, _, plan)| plan.windows))
+}
+
+/// The Sky, intervals and plan of one Target over a shared night context;
+/// `Ok(Err(reason))` without a usable position.
+fn planned(
+    context: &NightContext,
+    target: &TargetRecord,
+    site: &ObservingSite,
+) -> Result<Result<(Sky, NightSpans, NightPlan), WindowUnavailableReason>, LibraryError> {
+    let position = match position(target) {
+        Ok(position) => position,
+        Err(reason) => return Ok(Err(reason)),
+    };
+    let sky = Sky { position, location: context.location, criteria: context.criteria };
+    let spans = sky.spans(context);
+    let plan = plan_night(&sky, &context.zone, target, site, &spans)?;
+    Ok(Ok((sky, spans, plan)))
 }
 
 /// What keeps a night with no window empty: no darkness, the Target never

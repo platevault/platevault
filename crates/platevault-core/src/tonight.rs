@@ -2,43 +2,46 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! Tonight (spec 072 PLAN-FR-11, PLAN-AC-11/12, D-W39, D-W63, D-W89) on the
-//! [`Library`] facade: Home's Tonight section at the default site. It holds
-//! every unfinished goal of an open Project graded for tonight under its
-//! channel's Moon-avoidance curve ([`crate::goal_grades`]), best first, with
-//! the next good night when none suits tonight, and the best window tonight
-//! of every Target in My targets, which are the ★ favourites and every
-//! subject of an open Project (D-W60), with the night's Moon and darkness
-//! window. Every window comes from [`planning::compute_windows`] for that one
-//! night, the computation behind the Plan area, so it is the Plan area's
-//! window for the same site, night and criteria (PV-PLAN-SC-04). A mosaic
-//! subject is planned at its subject Target's position. Targets without a
-//! window tonight are left out. Read-only.
+//! [`Library`] facade: Home's Tonight section at the default site under
+//! Home's stored criteria ([`Library::home_criteria`]), the one source Home's
+//! Tonight and calendar read. It holds every unfinished goal of an open
+//! Project graded for tonight under its channel's Moon-avoidance curve
+//! ([`crate::goal_grades`]), best first, with when they are next suited, and
+//! the best window tonight of every Target in My targets, which are the ★
+//! favourites and every subject of an open Project (D-W60), with the night's
+//! Moon and darkness window. Every window comes from
+//! [`planning::compute_windows`] for that one night, the computation behind
+//! the Plan area, so it is the Plan area's window for the same site, night
+//! and criteria (PV-PLAN-SC-04). A mosaic subject is planned at its subject
+//! Target's position. Targets without a window tonight are left out.
+//! Read-only.
 
 use serde::{Deserialize, Serialize};
 use time::{Date, OffsetDateTime};
 use uuid::Uuid;
 
-use crate::goal_grades::{grade_night, next_good_night, GoalGrade};
+use crate::goal_grades::{
+    grade_night, next_good_night, GoalGrade, HomePlanningUnavailable, NextGoodNight,
+};
 use crate::library::{blocking, Library};
-use crate::planning;
+use crate::planning::{self, NightContext};
 use crate::{
-    DarknessWindow, LibraryError, NightMoon, ObservingSite, ObservingWindow, PlanCriteria,
-    PlanningUnknownReason, ProjectBadge, SiteBasis, TargetRecord, WindowQuery,
+    DarknessWindow, GoalProgress, LibraryError, NightMoon, ObservingSite, ObservingWindow,
+    PlanCriteria, Project, ProjectBadge, SiteBasis, TargetRecord, WindowQuery,
 };
 
 time::serde::format_description!(iso_date, Date, "[year]-[month]-[day]");
 
-/// What Home asks Tonight for: explicit criteria and, for a fixed night, its
-/// site-local evening date; absent, the night that holds now at the default
-/// site.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+/// What Home asks Tonight for: for a fixed night, its site-local evening
+/// date; absent, the night that holds now at the default site. The criteria
+/// are Home's stored ones.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct TonightQuery {
     #[cfg_attr(feature = "wire", specta(type = Option<String>), schemars(with = "Option<String>"))]
     #[serde(default, with = "iso_date::option")]
     pub night: Option<Date>,
-    pub criteria: PlanCriteria,
 }
 
 /// One Target's best window tonight, with why it is in My targets.
@@ -57,10 +60,11 @@ pub struct TonightWindow {
     pub window: ObservingWindow,
 }
 
-/// Home's Tonight section. Without a default site nothing is computed:
-/// `site`, `night`, `moon`, `darkness` and `nextGoodNight` are absent,
-/// `goals` and `windows` are empty and `unavailableReason` reads "Add an
-/// observing site in Settings".
+/// Home's Tonight section. Without a default site, or with one but without
+/// Home's criteria, nothing is computed: `night`, `moon`, `darkness` and
+/// `nextGoodNight` are absent, `goals` and `windows` are empty and
+/// `unavailableReason` names what is missing, the site first; `site` and
+/// `timeZone` name the default site when there is one.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
@@ -70,17 +74,14 @@ pub struct Tonight {
     #[cfg_attr(feature = "wire", specta(type = Option<String>), schemars(with = "Option<String>"))]
     #[serde(default, with = "iso_date::option")]
     pub night: Option<Date>,
-    pub criteria: PlanCriteria,
+    /// Home's stored criteria, as computed under.
+    pub criteria: Option<PlanCriteria>,
     /// Every unfinished goal of an open Project graded for tonight, best
     /// first; the criteria's Moon limit gives way to each band's curve.
     pub goals: Vec<GoalGrade>,
-    /// When no goal suits tonight, the first of the next
-    /// [`crate::goal_grades::NEXT_GOOD_NIGHT_SEARCH`] nights that suits one;
-    /// absent when a goal suits tonight, there is no unfinished goal, or no
-    /// night in that span suits one.
-    #[cfg_attr(feature = "wire", specta(type = Option<String>), schemars(with = "Option<String>"))]
-    #[serde(default, with = "iso_date::option")]
-    pub next_good_night: Option<Date>,
+    /// Whether a goal suits tonight and, when none does, the next night
+    /// that suits one, no gradable goal, or none in the searched span.
+    pub next_good_night: Option<NextGoodNight>,
     /// One per Target with a window tonight, by start, then designation.
     pub windows: Vec<TonightWindow>,
     pub moon: Option<NightMoon>,
@@ -88,7 +89,7 @@ pub struct Tonight {
     /// never that dark.
     pub darkness: Option<DarknessWindow>,
     pub method: String,
-    pub unavailable_reason: Option<PlanningUnknownReason>,
+    pub unavailable_reason: Option<HomePlanningUnavailable>,
 }
 
 impl Tonight {
@@ -101,40 +102,57 @@ impl Tonight {
 }
 
 impl Library {
-    /// Tonight at the default site: the best window of each Target in My
-    /// targets that has one, the Moon and the darkness window. Read-only.
+    /// Tonight at the default site under Home's stored criteria: every
+    /// unfinished goal of an open Project graded for tonight with when they
+    /// are next suited, the best window of each Target in My targets that
+    /// has one, the Moon and the darkness window. Read-only.
     ///
     /// # Errors
-    /// `InvalidInput` for invalid criteria, an unbundled zone or a night
-    /// outside the supported calendar; `PersistenceFailure` when the catalog
-    /// cannot be read.
+    /// `InvalidInput` for an unbundled zone or a night outside the supported
+    /// calendar; `PersistenceFailure` when the catalog or Home's recorded
+    /// criteria cannot be read.
     pub async fn tonight(&self, query: &TonightQuery) -> Result<Tonight, LibraryError> {
-        query.criteria.validate()?;
-        let sites = self.catalog().list_sites().await?;
-        let Some(site) = sites.default_site_id else {
-            return Ok(Tonight {
-                site: None,
-                time_zone: None,
-                night: None,
-                criteria: query.criteria,
-                goals: Vec::new(),
-                next_good_night: None,
-                windows: Vec::new(),
-                moon: None,
-                darkness: None,
-                method: planning::METHOD.into(),
-                unavailable_reason: Some(PlanningUnknownReason::NoSite),
-            });
+        let projects = self.open_project_goals().await?;
+        let projects: Vec<(&Project, &[GoalProgress])> =
+            projects.iter().map(|(project, goals)| (project, goals.as_slice())).collect();
+        self.tonight_of(query, &projects).await
+    }
+
+    /// [`Self::tonight`] for `projects`, every open Project with its goal
+    /// progress, which Home has already read.
+    pub(crate) async fn tonight_of(
+        &self,
+        query: &TonightQuery,
+        projects: &[(&Project, &[GoalProgress])],
+    ) -> Result<Tonight, LibraryError> {
+        let unavailable = |reason, site: Option<&ObservingSite>| Tonight {
+            site: site.map(ObservingSite::basis),
+            time_zone: site.map(|site| site.time_zone.clone()),
+            night: None,
+            criteria: None,
+            goals: Vec::new(),
+            next_good_night: None,
+            windows: Vec::new(),
+            moon: None,
+            darkness: None,
+            method: planning::METHOD.into(),
+            unavailable_reason: Some(reason),
+        };
+        let Some(site) = self.catalog().list_sites().await?.default_site_id else {
+            return Ok(unavailable(HomePlanningUnavailable::NoSite, None));
         };
         let site = self.catalog().site(site).await?;
+        let Some(criteria) = self.home_criteria().await?.criteria else {
+            return Ok(unavailable(HomePlanningUnavailable::NoCriteria, Some(&site)));
+        };
         let marks = self.catalog().my_target_marks().await?;
         let mut records = Vec::new();
         for id in marks.ids() {
             records.push(self.catalog().target(id).await?);
         }
-        let goals = self.unfinished_goals().await?;
+        let goals = self.unfinished_goals(projects).await?;
         let avoidance = self.catalog().workflow_settings().await?.0.moon_avoidance;
-        let (criteria, night) = (query.criteria, query.night);
+        let night = query.night;
         let (night, sky, best, graded, next) = blocking(move || {
             let night = match night {
                 Some(night) => night,
@@ -142,14 +160,15 @@ impl Library {
             };
             let sky = planning::night_sky(&site, night, criteria.darkness)?;
             let best = best_windows(records, &site, night, criteria)?;
-            let graded: Vec<GoalGrade> = grade_night(&goals, &site, night, criteria, &avoidance)?
+            let context = NightContext::new(&site, night, &criteria)?;
+            let graded: Vec<GoalGrade> = grade_night(&goals, &site, &context, &avoidance)?
                 .into_iter()
                 .map(|graded| graded.grade)
                 .collect();
-            let next = if goals.is_empty() || graded.iter().any(GoalGrade::suits) {
-                None
+            let next = if graded.iter().any(GoalGrade::suits) {
+                NextGoodNight::Tonight
             } else {
-                next_good_night(&goals, &site, night, criteria, &avoidance)?
+                next_good_night(&goals, &site, night, &criteria, &avoidance)?
             };
             Ok((night, sky, best, graded, next))
         })
@@ -179,9 +198,9 @@ impl Library {
             site: Some(sky.site),
             time_zone: Some(sky.time_zone),
             night: Some(night),
-            criteria,
+            criteria: Some(criteria),
             goals: graded,
-            next_good_night: next,
+            next_good_night: Some(next),
             windows,
             moon: Some(sky.moon),
             darkness: sky.darkness,

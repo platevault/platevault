@@ -18,12 +18,12 @@ use super::library::{fail, Reply};
 
 /// Home: the top line "N sessions need a Target · M not in any Project",
 /// then Actions, the open Projects with goals, pending changes and one Next
-/// action, New sessions, Tonight for `tonight`, Target status and Running
-/// work.
+/// action, New sessions, Tonight for `tonight` under Home's stored criteria,
+/// Target status and Running work.
 ///
 /// # Errors
-/// `InvalidInput` for invalid Tonight criteria; `PersistenceFailure` when the
-/// catalog cannot be read.
+/// `InvalidInput` for a night outside the supported calendar;
+/// `PersistenceFailure` when the catalog cannot be read.
 #[tauri::command]
 #[specta::specta]
 pub async fn home_dashboard(

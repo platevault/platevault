@@ -1399,14 +1399,17 @@ export const commands = {
 	 */
 	planningExportCalendar: (selection: ExportSelection_Deserialize, snapshotDigest: string) => typedError<CalendarExportOutcome, ErrorResponse>(__TAURI_INVOKE("planning_export_calendar", { selection, snapshotDigest })),
 	/**
-	 *  Home's Tonight at the default site: the best window tonight of each Target
-	 *  in My targets that has one, the Moon and the darkness window, each naming
-	 *  the site and time zone. Without a default site it lists no windows and
-	 *  names the reason. Read-only.
+	 *  Home's Tonight at the default site under Home's stored criteria: every
+	 *  unfinished goal of an open Project graded for tonight under its band's
+	 *  Moon-avoidance curve, best first, with when they are next suited; the
+	 *  best window tonight of each Target in My targets that has one; the Moon
+	 *  and the darkness window, each naming the site and time zone. Without a
+	 *  default site or Home's criteria it computes nothing and names the reason
+	 *  (`no_site`, `no_criteria`). Read-only.
 	 * 
 	 *  # Errors
-	 *  `InvalidInput` for invalid criteria or a night outside the supported
-	 *  calendar.
+	 *  `InvalidInput` for a night outside the supported calendar;
+	 *  `PersistenceFailure` when Home's recorded criteria cannot be read.
 	 */
 	planningTonight: (query: TonightQuery_Deserialize) => typedError<Tonight_Serialize, ErrorResponse>(__TAURI_INVOKE("planning_tonight", { query })),
 	/**
@@ -1514,12 +1517,12 @@ export const commands = {
 	/**
 	 *  Home: the top line "N sessions need a Target · M not in any Project",
 	 *  then Actions, the open Projects with goals, pending changes and one Next
-	 *  action, New sessions, Tonight for `tonight`, Target status and Running
-	 *  work.
+	 *  action, New sessions, Tonight for `tonight` under Home's stored criteria,
+	 *  Target status and Running work.
 	 * 
 	 *  # Errors
-	 *  `InvalidInput` for invalid Tonight criteria; `PersistenceFailure` when the
-	 *  catalog cannot be read.
+	 *  `InvalidInput` for a night outside the supported calendar;
+	 *  `PersistenceFailure` when the catalog cannot be read.
 	 */
 	homeDashboard: (tonight: TonightQuery_Deserialize) => typedError<HomeDashboard_Serialize, ErrorResponse>(__TAURI_INVOKE("home_dashboard", { tonight })),
 	/**
@@ -2685,13 +2688,6 @@ export type CalendarSnapshot_Serialize = {
 	criteria: PlanCriteria,
 	windows: ObservingWindow_Serialize[],
 };
-
-/**  Why the calendar lists no night. */
-export type CalendarUnavailableReason = 
-/**  "Add an observing site in Settings". */
-"no_site" | 
-/**  Home's criteria are not set yet. */
-"no_criteria";
 
 /**
  *  The health of each pinned kind of one session; a kind that is not pinned
@@ -4049,13 +4045,11 @@ export type GoalGrade_Deserialize = {
 	designation: string,
 	/**  The goal's trimmed channel; `None` for frames without a FILTER. */
 	channel: string | null,
-	/**
-	 *  The band whose curve grades the goal; absent when the channel names
-	 *  no filter on the Project's rigs, so no curve applies.
-	 */
+	/**  The band whose curve grades the goal; absent when it is ungraded. */
 	band: Band | null,
-	/**  Absent exactly when `band` is. */
+	/**  Absent exactly when `ungraded` is set. */
 	grade: BandGrade | null,
+	ungraded: Ungraded | null,
 	/**
 	 *  The best window under the band's curve, as the Plan area lists it;
 	 *  absent when the goal is not good or marginal.
@@ -4075,13 +4069,11 @@ export type GoalGrade_Serialize = {
 	designation: string,
 	/**  The goal's trimmed channel; `None` for frames without a FILTER. */
 	channel: string | null,
-	/**
-	 *  The band whose curve grades the goal; absent when the channel names
-	 *  no filter on the Project's rigs, so no curve applies.
-	 */
+	/**  The band whose curve grades the goal; absent when it is ungraded. */
 	band: Band | null,
-	/**  Absent exactly when `band` is. */
+	/**  Absent exactly when `ungraded` is set. */
 	grade: BandGrade | null,
+	ungraded: Ungraded | null,
 	/**
 	 *  The best window under the band's curve, as the Plan area lists it;
 	 *  absent when the goal is not good or marginal.
@@ -4284,6 +4276,13 @@ export type HomeDashboard_Serialize = {
 	 */
 	runningWork: RunningWork[],
 };
+
+/**  Why Home's Tonight or calendar computes nothing. */
+export type HomePlanningUnavailable = 
+/**  "Add an observing site in Settings". */
+"no_site" | 
+/**  Home's criteria are not set yet; Home asks for them. */
+"no_criteria";
 
 /**  One open Project on Home (PRJ-FR-17 section 3, PRJ-FR-32). */
 export type HomeProject = {
@@ -5597,6 +5596,43 @@ export type NextAction =
 /**  Rule 4, "Add sessions" before the first Apply (provisional copy). */
 { kind: "add_sessions" };
 
+/**  When Tonight's goals are next suited. */
+export type NextGoodNight = NextGoodNight_Serialize | NextGoodNight_Deserialize;
+
+/**  When Tonight's goals are next suited. */
+export type NextGoodNight_Deserialize = 
+/**  A goal suits tonight. */
+({ state: "tonight" }) & { night?: never; nights?: never } | 
+/**
+ *  No goal can be graded: there is no unfinished goal, or none has a
+ *  band and a Target with a usable position.
+ */
+({ state: "no_gradable_goal" }) & { night?: never; nights?: never } | 
+/**
+ *  No goal suits tonight; this later night, by its site-local evening
+ *  date, is the first that suits one.
+ */
+({ state: "night"; night: string }) & { nights?: never } | 
+/**  No goal suits tonight or any of the next `nights` nights. */
+({ state: "none_within"; nights: number }) & { night?: never };
+
+/**  When Tonight's goals are next suited. */
+export type NextGoodNight_Serialize = 
+/**  A goal suits tonight. */
+({ state: "tonight" }) & { night?: never; nights?: never } | 
+/**
+ *  No goal can be graded: there is no unfinished goal, or none has a
+ *  band and a Target with a usable position.
+ */
+({ state: "no_gradable_goal" }) & { night?: never; nights?: never } | 
+/**
+ *  No goal suits tonight; this later night, by its site-local evening
+ *  date, is the first that suits one.
+ */
+({ state: "night"; night: string }) & { nights?: never } | 
+/**  No goal suits tonight or any of the next `nights` nights. */
+({ state: "none_within"; nights: number }) & { night?: never };
+
 /**
  *  The Moon on one night at one site. Illumination and phase are taken at the
  *  night's midpoint. `rise_utc` and `set_utc` are the first topocentric
@@ -6139,7 +6175,7 @@ export type PlanningCalendar_Deserialize = {
 	criteria: PlanCriteria | null,
 	nights: CalendarNight_Deserialize[],
 	method: string,
-	unavailableReason: CalendarUnavailableReason | null,
+	unavailableReason: HomePlanningUnavailable | null,
 };
 
 /**
@@ -6153,7 +6189,7 @@ export type PlanningCalendar_Serialize = {
 	criteria: PlanCriteria | null,
 	nights: CalendarNight_Serialize[],
 	method: string,
-	unavailableReason: CalendarUnavailableReason | null,
+	unavailableReason: HomePlanningUnavailable | null,
 };
 
 /**
@@ -8609,38 +8645,37 @@ export type ThumbnailState_Serialize =
 export type Tolerance = "none";
 
 /**
- *  Home's Tonight section. Without a default site nothing is computed:
- *  `site`, `night`, `moon`, `darkness` and `nextGoodNight` are absent,
- *  `goals` and `windows` are empty and `unavailableReason` reads "Add an
- *  observing site in Settings".
+ *  Home's Tonight section. Without a default site, or with one but without
+ *  Home's criteria, nothing is computed: `night`, `moon`, `darkness` and
+ *  `nextGoodNight` are absent, `goals` and `windows` are empty and
+ *  `unavailableReason` names what is missing, the site first; `site` and
+ *  `timeZone` name the default site when there is one.
  */
 export type Tonight = Tonight_Serialize | Tonight_Deserialize;
 
 /**
- *  What Home asks Tonight for: explicit criteria and, for a fixed night, its
- *  site-local evening date; absent, the night that holds now at the default
- *  site.
+ *  What Home asks Tonight for: for a fixed night, its site-local evening
+ *  date; absent, the night that holds now at the default site. The criteria
+ *  are Home's stored ones.
  */
 export type TonightQuery = TonightQuery_Serialize | TonightQuery_Deserialize;
 
 /**
- *  What Home asks Tonight for: explicit criteria and, for a fixed night, its
- *  site-local evening date; absent, the night that holds now at the default
- *  site.
+ *  What Home asks Tonight for: for a fixed night, its site-local evening
+ *  date; absent, the night that holds now at the default site. The criteria
+ *  are Home's stored ones.
  */
 export type TonightQuery_Deserialize = {
 	night?: string | null,
-	criteria: PlanCriteria,
 };
 
 /**
- *  What Home asks Tonight for: explicit criteria and, for a fixed night, its
- *  site-local evening date; absent, the night that holds now at the default
- *  site.
+ *  What Home asks Tonight for: for a fixed night, its site-local evening
+ *  date; absent, the night that holds now at the default site. The criteria
+ *  are Home's stored ones.
  */
 export type TonightQuery_Serialize = {
 	night: string | null,
-	criteria: PlanCriteria,
 };
 
 /**  One Target's best window tonight, with why it is in My targets. */
@@ -8677,28 +8712,28 @@ export type TonightWindow_Serialize = {
 };
 
 /**
- *  Home's Tonight section. Without a default site nothing is computed:
- *  `site`, `night`, `moon`, `darkness` and `nextGoodNight` are absent,
- *  `goals` and `windows` are empty and `unavailableReason` reads "Add an
- *  observing site in Settings".
+ *  Home's Tonight section. Without a default site, or with one but without
+ *  Home's criteria, nothing is computed: `night`, `moon`, `darkness` and
+ *  `nextGoodNight` are absent, `goals` and `windows` are empty and
+ *  `unavailableReason` names what is missing, the site first; `site` and
+ *  `timeZone` name the default site when there is one.
  */
 export type Tonight_Deserialize = {
 	site: SiteBasis | null,
 	timeZone: string | null,
 	night?: string | null,
-	criteria: PlanCriteria,
+	/**  Home's stored criteria, as computed under. */
+	criteria: PlanCriteria | null,
 	/**
 	 *  Every unfinished goal of an open Project graded for tonight, best
 	 *  first; the criteria's Moon limit gives way to each band's curve.
 	 */
 	goals: GoalGrade_Deserialize[],
 	/**
-	 *  When no goal suits tonight, the first of the next
-	 *  [`crate::goal_grades::NEXT_GOOD_NIGHT_SEARCH`] nights that suits one;
-	 *  absent when a goal suits tonight, there is no unfinished goal, or no
-	 *  night in that span suits one.
+	 *  Whether a goal suits tonight and, when none does, the next night
+	 *  that suits one, no gradable goal, or none in the searched span.
 	 */
-	nextGoodNight?: string | null,
+	nextGoodNight: NextGoodNight_Deserialize | null,
 	/**  One per Target with a window tonight, by start, then designation. */
 	windows: TonightWindow_Deserialize[],
 	moon: NightMoon_Deserialize | null,
@@ -8708,32 +8743,32 @@ export type Tonight_Deserialize = {
 	 */
 	darkness: DarknessWindow_Deserialize | null,
 	method: string,
-	unavailableReason: PlanningUnknownReason | null,
+	unavailableReason: HomePlanningUnavailable | null,
 };
 
 /**
- *  Home's Tonight section. Without a default site nothing is computed:
- *  `site`, `night`, `moon`, `darkness` and `nextGoodNight` are absent,
- *  `goals` and `windows` are empty and `unavailableReason` reads "Add an
- *  observing site in Settings".
+ *  Home's Tonight section. Without a default site, or with one but without
+ *  Home's criteria, nothing is computed: `night`, `moon`, `darkness` and
+ *  `nextGoodNight` are absent, `goals` and `windows` are empty and
+ *  `unavailableReason` names what is missing, the site first; `site` and
+ *  `timeZone` name the default site when there is one.
  */
 export type Tonight_Serialize = {
 	site: SiteBasis | null,
 	timeZone: string | null,
 	night: string | null,
-	criteria: PlanCriteria,
+	/**  Home's stored criteria, as computed under. */
+	criteria: PlanCriteria | null,
 	/**
 	 *  Every unfinished goal of an open Project graded for tonight, best
 	 *  first; the criteria's Moon limit gives way to each band's curve.
 	 */
 	goals: GoalGrade_Serialize[],
 	/**
-	 *  When no goal suits tonight, the first of the next
-	 *  [`crate::goal_grades::NEXT_GOOD_NIGHT_SEARCH`] nights that suits one;
-	 *  absent when a goal suits tonight, there is no unfinished goal, or no
-	 *  night in that span suits one.
+	 *  Whether a goal suits tonight and, when none does, the next night
+	 *  that suits one, no gradable goal, or none in the searched span.
 	 */
-	nextGoodNight: string | null,
+	nextGoodNight: NextGoodNight_Serialize | null,
 	/**  One per Target with a window tonight, by start, then designation. */
 	windows: TonightWindow_Serialize[],
 	moon: NightMoon_Serialize | null,
@@ -8743,7 +8778,7 @@ export type Tonight_Serialize = {
 	 */
 	darkness: DarknessWindow_Serialize | null,
 	method: string,
-	unavailableReason: PlanningUnknownReason | null,
+	unavailableReason: HomePlanningUnavailable | null,
 };
 
 /**  One item a Trash row moves under its approval. */
@@ -8868,6 +8903,16 @@ export type UndeliverableCorrection = {
 	field: string,
 	refusal: PatchRefusal,
 };
+
+/**  Why a goal has no grade. */
+export type Ungraded = 
+/**
+ *  The channel captures no band on the Project's rigs: its FILTER value
+ *  names no filter on them, or it has none and no rig is one-shot colour.
+ */
+{ kind: "no_band" } | 
+/**  The subject Target has no usable position, so it has no window. */
+{ kind: "no_position"; reason: WindowUnavailableReason };
 
 /**  Units as declared; values are never converted. */
 export type Units = "count" | "px" | "dimensionless" | "deg" | "dn" | "normalized" | "data_unit" | "arcsec" | "e-";
