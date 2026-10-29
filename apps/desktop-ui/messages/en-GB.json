@@ -7039,5 +7039,15 @@
     }
   ],
   "menu_quit_work_apply": "Apply in {project}",
-  "info_tip_more_information": "More information"
+  "info_tip_more_information": "More information",
+  "history_label": "History",
+  "shell_error_doc_title": "Page not shown",
+  "shell_error_title": "PlateVault couldn't show this page",
+  "shell_error_body": "Your library and its files are unchanged.",
+  "shell_error_reload": "Reload",
+  "status_bar_issues_failed": "Couldn't read issues",
+  "status_bar_locations_failed": "Couldn't read locations",
+  "shell_not_found_search_action": "Search",
+  "status_bar_scan_finished": "Indexing {name} finished",
+  "status_bar_scans_failed": "Couldn't read running work"
 }

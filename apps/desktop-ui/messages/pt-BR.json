@@ -7553,5 +7553,15 @@
     }
   ],
   "menu_quit_work_apply": "Aplicar em {project}",
-  "info_tip_more_information": "Mais informações"
+  "info_tip_more_information": "Mais informações",
+  "history_label": "Histórico",
+  "shell_error_doc_title": "Página não exibida",
+  "shell_error_title": "O PlateVault não conseguiu mostrar esta página",
+  "shell_error_body": "Sua biblioteca e os arquivos dela não foram alterados.",
+  "shell_error_reload": "Recarregar",
+  "status_bar_issues_failed": "Não foi possível ler os problemas",
+  "status_bar_locations_failed": "Não foi possível ler os locais",
+  "shell_not_found_search_action": "Pesquisar",
+  "status_bar_scan_finished": "Indexação de {name} concluída",
+  "status_bar_scans_failed": "Não foi possível ler as tarefas em execução"
 }
