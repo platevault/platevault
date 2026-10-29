@@ -5746,8 +5746,19 @@ async fn load_equipment(conn: &mut SqliteConnection, id: Uuid) -> Result<Equipme
         .fetch_optional(&mut *conn)
         .await?
         .ok_or_else(|| LibraryError::NotFound(format!("equipment {id}")))?;
+    equipment_from_row(&row)
+}
+
+/// Every saved rig, by name and then id.
+async fn load_all_equipment(conn: &mut SqliteConnection) -> Result<Vec<Equipment>> {
+    let rows =
+        sqlx::query("SELECT * FROM equipment ORDER BY name, id").fetch_all(&mut *conn).await?;
+    rows.iter().map(equipment_from_row).collect()
+}
+
+fn equipment_from_row(row: &SqliteRow) -> Result<Equipment> {
     Ok(Equipment {
-        id,
+        id: parse_uuid(&row.try_get::<String, _>("id")?)?,
         name: row.try_get("name")?,
         camera: row.try_get("camera")?,
         telescope: row.try_get("telescope")?,

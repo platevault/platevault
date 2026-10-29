@@ -408,6 +408,37 @@ pub async fn library_save_equipment(
     library.catalog().save_equipment(&record, expected_revision).await.map_err(fail(Some(id)))
 }
 
+/// Every saved rig, by name: the rig pickers' list (id, name and the
+/// revision a later save or delete expects).
+///
+/// # Errors
+/// A retryable `PersistenceFailure` for an unreadable catalog.
+#[tauri::command]
+#[specta::specta]
+pub async fn library_list_equipment(library: State<'_, Arc<Library>>) -> Reply<Vec<Equipment>> {
+    library.catalog().list_equipment().await.map_err(fail(None))
+}
+
+/// Delete a rig nothing refers to, with its filter list; nothing cascades.
+///
+/// # Errors
+/// `InvalidInput` while a session, Project or rig version uses the rig, and
+/// then nothing changes; `Conflict` for a stale revision; `NotFound` for
+/// unknown equipment.
+#[tauri::command]
+#[specta::specta]
+pub async fn library_delete_equipment(
+    library: State<'_, Arc<Library>>,
+    equipment_id: Uuid,
+    expected_revision: Revision,
+) -> Reply<()> {
+    library
+        .catalog()
+        .delete_equipment(equipment_id, expected_revision)
+        .await
+        .map_err(fail(Some(equipment_id)))
+}
+
 /// Explicitly confirm saved equipment for sessions; source evidence stays inspectable.
 ///
 /// # Errors

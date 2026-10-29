@@ -5,10 +5,12 @@
 //! row's list of filters, replaced whole in one writer transaction, and the
 //! FILTER values observed on the sessions confirmed to each rig. Physical
 //! cameras and calibration camera links live in [`cameras`]; rig versions
-//! and the version each session recorded in [`versions`]. Their
+//! and the version each session recorded in [`versions`]; listing every rig
+//! and deleting an unused rig or camera in `inventory`. Their
 //! connection-level functions run inside other units' transactions.
 
 pub mod cameras;
+mod inventory;
 pub mod versions;
 
 use platevault_model::{

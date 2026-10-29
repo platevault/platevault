@@ -62,6 +62,16 @@ impl Library {
         Ok(rig(equipment, filters))
     }
 
+    /// Every saved rig as [`Self::rig`] reads one, by name, from one catalog
+    /// snapshot.
+    ///
+    /// # Errors
+    /// `PersistenceFailure` for an unreadable catalog.
+    pub async fn rigs(&self) -> Result<Vec<Rig>, LibraryError> {
+        let listed = self.catalog().rigs_with_filters().await?;
+        Ok(listed.into_iter().map(|(equipment, filters)| rig(equipment, filters)).collect())
+    }
+
     /// Replace a rig's filter list; only that rig's list changes. A failed save
     /// leaves the last saved list in effect, and retrying the same list with the
     /// same `expected_revision` saves it.
