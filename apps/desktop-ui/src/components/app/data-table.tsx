@@ -47,12 +47,20 @@
  * - Windowing: only the rows in and near view mount (`@tanstack/react-virtual`,
  *   lib/virtual.ts), so a table of thousands of rows renders a few dozen.
  *   Spacer rows keep the full scroll height; the current row and the open
- *   row (`activeRowId`) stay mounted wherever the view is, so the Tab stop,
- *   focus and a host's scroll-into-view of the open row hold. The keys move
- *   over the table's rows, mounted or not: End mounts and focuses the last
- *   row. The table carries `aria-rowcount` and each row its `aria-rowindex`
- *   (the header row is 1). A `scroll="none"` table windows against its
- *   nearest scrolling ancestor; with none, every row mounts.
+ *   row (`activeRowId`), with their open details and group headers, stay
+ *   mounted wherever the view is, so the Tab stop, focus (in a detail too),
+ *   `aria-controls` and a host's scroll-into-view of the open row hold. The
+ *   keys move over the table's rows, mounted or not: End mounts and focuses
+ *   the last row. The table carries `aria-rowcount` and each row its
+ *   `aria-rowindex` (the header row is 1). A `scroll="none"` table windows
+ *   against its nearest scrolling ancestor; with none, every row mounts.
+ *   Known limits: columns keep `table-layout: auto`, so a column can widen
+ *   when a row with wider content scrolls in (revisit if that jitter is
+ *   reported, with fixed widths from a `<colgroup>`); and a `scroll="none"`
+ *   body's offset in its ancestor is measured on each render of the table,
+ *   not when content above it resizes (revisit when a host grows content
+ *   above a long `scroll="none"` table without re-rendering it, by observing
+ *   that content).
  * - Grouping (opt-in `groups`): group header rows inside this one table, so
  *   every group shares the column widths and the pinned header row.
  * - Pinned first column (opt-in `stickyFirstColumn`): the selection column
@@ -407,18 +415,20 @@ export function DataTable<T>({
   const lastPinnedHeader = useRef<HTMLTableCellElement>(null)
   const slot = useRef<HTMLDivElement>(null)
   const slotHadFocus = useRef(false)
-  // The rows as last committed, and the order before that, so the row after a removed one can be found.
-  const shownOrder = useRef<{ now: string[]; before: string[] }>({ now: [], before: [] })
+  // The rows as last committed (`shown` for lookups), and the order before that, so the row after a removed one can be found.
+  const shownOrder = useRef<{ now: string[]; before: string[]; shown: ReadonlySet<string> }>({ now: [], before: [], shown: new Set() })
 
   /** This table's data rows in order, across groups; a nested table's rows are its own. */
   const ownRows = () => Array.from(tableRef.current?.querySelectorAll<HTMLElement>(":scope > tbody > tr[data-row]") ?? [])
   const rowElement = (id: string) => ownRows().find((row) => row.dataset.row === id) ?? null
-  /** The row, or the one that took its place when it went: the next row, else the previous one. */
+  /** The id of the row, or of the one that took its place when it went (the next row, else the previous one), mounted or not. */
+  const successorId = (id: string): string | null => {
+    const { before, shown } = shownOrder.current
+    return shown.has(id) ? id : successorOf(before, id, (other) => shown.has(other))
+  }
+  /** The row, or the one that took its place, when it is mounted. */
   const rowOrSuccessor = (id: string): HTMLElement | null => {
-    const present = rowElement(id)
-    if (present) return present
-    const { now, before } = shownOrder.current
-    const next = successorOf(now.includes(id) ? now : before, id, (other) => rowElement(other) !== null)
+    const next = successorId(id)
     return next === null ? null : rowElement(next)
   }
 
@@ -551,15 +561,19 @@ export function DataTable<T>({
   const currentRowId = roving ? (remembered ?? (activeRowId != null && shownIds.includes(activeRowId) ? activeRowId : (shownIds[0] ?? null))) : null
 
   useLayoutEffect(() => {
-    shownOrder.current = { now: shownIds, before: shownOrder.current.now }
+    shownOrder.current = { now: shownIds, before: shownOrder.current.now, shown: new Set(shownIds) }
   }, [shownKey])
 
   // Windowing: the body as one list of lines (group headers, rows, open details).
   const lines = useMemo(() => {
     const list: Line<T>[] = []
     const rowLine = new Map<string, number>()
+    const groupLine: number[] = []
     bodies.forEach((body, bodyIndex) => {
-      if (body.key !== null && groups) list.push({ kind: "group", key: `group:${body.key}`, bodyIndex, group: body.key, rows: body.rows })
+      if (body.key !== null && groups) {
+        groupLine[bodyIndex] = list.length
+        list.push({ kind: "group", key: `group:${body.key}`, bodyIndex, group: body.key, rows: body.rows })
+      }
       body.rows.forEach((row, rowIndex) => {
         const id = getRowId(row)
         rowLine.set(id, list.length)
@@ -567,7 +581,7 @@ export function DataTable<T>({
         if (expand !== undefined && (expand.isExpandable?.(row) ?? true) && expanded.has(id)) list.push({ kind: "detail", key: `detail:${id}`, bodyIndex, row, id, rowIndex })
       })
     })
-    return { list, rowLine }
+    return { list, rowLine, groupLine }
   }, [bodies, groups, getRowId, expand, expanded])
   const rowsShown = !loading && !error && sorted.length > 0
 
@@ -592,6 +606,18 @@ export function DataTable<T>({
     if (top !== bodyTop) setBodyTop(top)
   })
   const lineOf = (id: string | null | undefined) => (id == null ? -1 : (lines.rowLine.get(id) ?? -1))
+  /** The line of the row's open detail, else -1. */
+  const detailLine = (id: string | null | undefined) => {
+    const at = lineOf(id)
+    return at >= 0 && lines.list[at + 1]?.kind === "detail" ? at + 1 : -1
+  }
+  /** The line of the row's group header, else -1. */
+  const groupLineOf = (id: string | null | undefined) => {
+    const line = lines.list[lineOf(id)]
+    return line === undefined ? -1 : (lines.groupLine[line.bodyIndex] ?? -1)
+  }
+  // The current and open rows, their details (focus inside one, `aria-controls`) and their group headers stay mounted.
+  const kept = [currentRowId, activeRowId].flatMap((id) => [lineOf(id), detailLine(id), groupLineOf(id)])
   const getItemKey = useCallback((index: number) => lines.list[index]?.key ?? index, [lines])
   const virtualizer = useVirtualizer<HTMLElement, HTMLTableRowElement>({
     count: rowsShown ? lines.list.length : 0,
@@ -605,7 +631,7 @@ export function DataTable<T>({
     initialRect: initialRect(),
     observeElementRect: observeRect,
     measureElement: measureOrEstimate,
-    rangeExtractor: keepMounted([lineOf(currentRowId), lineOf(activeRowId)]),
+    rangeExtractor: keepMounted(kept),
   })
 
   // A row the keys moved to that is not mounted becomes the current row, which mounts it; it takes focus then.
@@ -637,40 +663,38 @@ export function DataTable<T>({
     const previous = committed.current
     committed.current = { row: currentRowId, activeRowId }
     if (previous.row === null || shownIds.includes(previous.row)) return
-    const next = previous.activeRowId !== activeRowId && currentRowId !== null ? rowElement(currentRowId) : rowOrSuccessor(previous.row)
-    const id = next?.dataset.row
-    if (next === null) {
+    const nextId = previous.activeRowId !== activeRowId && currentRowId !== null ? currentRowId : successorId(previous.row)
+    if (nextId === null) {
       if (rowsHadFocus.current && focusLost()) slotFirst()?.focus()
       return
     }
-    if (id === undefined) return
-    if (id !== currentRowId) setFocusedRow({ id, activeRowId })
-    if (rowsHadFocus.current && focusLost()) next.focus()
+    if (nextId !== currentRowId) setFocusedRow({ id: nextId, activeRowId })
+    // focusRow mounts the row first when the window holds it no more.
+    if (rowsHadFocus.current && focusLost()) focusRow(nextId)
   })
 
   // Only the current row's controls, and those of its detail, stay in the Tab order; a nested table's rows are its own.
   useLayoutEffect(() => {
     for (const control of tableRef.current?.querySelectorAll<HTMLElement>(ROW_FOCUSABLE) ?? []) {
-      const row = ownerRow(control)
+      const owner = ownerId(control)
       const inner = control.closest("tr[data-row]")
-      if (row === null || control === row || (inner !== null && inner !== row)) continue
-      setTabbable(control, inCurrentRow && (!roving || row.dataset.row === currentRowId))
+      if (owner === null || control === inner || (inner !== null && inner.parentElement?.parentElement !== tableRef.current)) continue
+      setTabbable(control, inCurrentRow && (!roving || owner === currentRowId))
     }
   })
 
-  /** The data row an element in the body belongs to: its own row, or the row whose detail holds it. */
-  function ownerRow(element: Element): HTMLElement | null {
+  /** The id of the data row an element in the body belongs to: its own row, or the row whose detail holds it (`data-row-detail`). */
+  function ownerId(element: Element): string | null {
     let row = element.closest<HTMLElement>("tr")
     while (row !== null && row.parentElement?.parentElement !== tableRef.current) row = row.parentElement?.closest<HTMLElement>("tr") ?? null
     if (row === null || row.parentElement?.tagName !== "TBODY") return null
-    const owner = row.hasAttribute("data-row-detail") ? row.previousElementSibling : row
-    return owner instanceof HTMLElement && owner.hasAttribute("data-row") ? owner : null
+    return row.dataset.rowDetail ?? row.dataset.row ?? null
   }
 
   /** A click or focus on a row, or on anything in it, makes that row current (APG). */
   function makeCurrent(target: EventTarget) {
-    const id = target instanceof Element ? ownerRow(target)?.dataset.row : undefined
-    if (id !== undefined && id !== currentRowId) setFocusedRow({ id, activeRowId })
+    const id = target instanceof Element ? ownerId(target) : null
+    if (id !== null && id !== currentRowId) setFocusedRow({ id, activeRowId })
   }
 
   const rowFocus = {
@@ -976,7 +1000,7 @@ export function DataTable<T>({
                 return (
                   <Fragment key={line.key}>
                     {spacer}
-                    <TableRow kind="detail" data-row-detail="" ref={virtualizer.measureElement} data-index={index} aria-rowindex={index + 2}>
+                    <TableRow kind="detail" data-row-detail={id} ref={virtualizer.measureElement} data-index={index} aria-rowindex={index + 2}>
                       <td id={detailId} colSpan={columnCount} className="px-3 py-2">
                         <InCurrentRow.Provider value={inCurrentRow && (!roving || id === currentRowId)}>{expand?.render(row)}</InCurrentRow.Provider>
                       </td>

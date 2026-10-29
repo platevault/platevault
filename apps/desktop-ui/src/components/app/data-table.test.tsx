@@ -870,4 +870,45 @@ describe("DataTable windowing", () => {
     await waitFor(() => expect(checkboxOf("Light_0000")).toBeChecked())
     expect(rowNamed("Light_0000")).toHaveAttribute("data-selected", "true")
   })
+
+  it('windows a scroll="none" table against its scrolling ancestor and follows that ancestor\'s scroll', async () => {
+    render(
+      <div data-testid="page" style={{ overflowY: "auto", height: 600 }}>
+        <DataTable label="Frames" rows={MANY} columns={COLUMNS} getRowId={(row) => row.id} scroll="none" />
+      </div>,
+    )
+    const page = screen.getByTestId("page")
+    // jsdom has no layout: the table's box moves up as the page scrolls.
+    vi.spyOn(screen.getByRole("table", { name: "Frames" }), "getBoundingClientRect").mockImplementation(() => ({ top: -page.scrollTop }) as DOMRect)
+    expect(mountedRows().length).toBeGreaterThan(10)
+    expect(mountedRows().length).toBeLessThan(100)
+    page.scrollTop = 2500 * 26
+    fireEvent.scroll(page)
+    await waitFor(() => expect(screen.queryByRole("rowheader", { name: "Light_0000" })).not.toBeInTheDocument())
+    expect(screen.getByRole("rowheader", { name: "Light_2500" })).toBeInTheDocument()
+    expect(mountedRows().length).toBeLessThan(100)
+  })
+
+  it("numbers group headers and open details among the rows", () => {
+    render(
+      <DataTable
+        label="Frames"
+        rows={ROWS}
+        columns={COLUMNS}
+        getRowId={(row) => row.id}
+        groups={{ key: (row) => (row.size % 2 === 0 ? "Even" : "Odd"), label: (key) => key }}
+        rowLabel={(row) => row.name}
+        expand={{ render: (row) => <p>{`Details of ${row.name}`}</p>, defaultExpanded: ["c"] }}
+      />,
+    )
+    const lineOf = (text: string) => screen.getByText(text).closest("tr")
+    // Even: Deneb and its open detail; Odd: Vega, Altair. The header row is 1.
+    expect(screen.getByRole("table", { name: "Frames" })).toHaveAttribute("aria-rowcount", "7")
+    expect(lineOf("Even")).toHaveAttribute("aria-rowindex", "2")
+    expect(rowNamed("Deneb")).toHaveAttribute("aria-rowindex", "3")
+    expect(lineOf("Details of Deneb")).toHaveAttribute("aria-rowindex", "4")
+    expect(lineOf("Odd")).toHaveAttribute("aria-rowindex", "5")
+    expect(rowNamed("Vega")).toHaveAttribute("aria-rowindex", "6")
+    expect(rowNamed("Altair")).toHaveAttribute("aria-rowindex", "7")
+  })
 })
