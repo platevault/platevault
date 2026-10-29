@@ -7495,7 +7495,62 @@
   "menu_select_all": "Selecionar tudo",
   "menu_close_window": "Fechar janela",
   "menu_show": "Mostrar PlateVault",
-  "menu_quit_confirm_title": "Encerrar o PlateVault?",
-  "menu_quit_confirm_summary": "Há uma importação, indexação ou aplicação em andamento. Se você sair, ela será interrompida e poderá ser retomada na próxima vez.",
+  "menu_quit_confirm_title": "Sair do PlateVault?",
+  "menu_quit_confirm_work": [
+    {
+      "declarations": [
+        "input count",
+        "input work",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "count",
+        "countPlural"
+      ],
+      "match": {
+        "count=0, countPlural=*": "Em execução: {work}. Se você sair, as tarefas são interrompidas, e a próxima abertura oferece Tentar de novo.",
+        "count=*, countPlural=one": "Em execução: {work}. Se você sair, a tarefa é interrompida, e a próxima abertura oferece Tentar de novo.",
+        "count=*, countPlural=*": "Em execução: {work}. Se você sair, as tarefas são interrompidas, e a próxima abertura oferece Tentar de novo."
+      }
+    }
+  ],
+  "menu_quit_confirm_unknown": "O PlateVault não conseguiu ler o que está em execução. Se você sair, qualquer importação, indexação ou Aplicar em execução é interrompido, e a próxima abertura oferece Tentar de novo.",
+  "menu_quit_work_imports": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "count",
+        "countPlural"
+      ],
+      "match": {
+        "count=0, countPlural=*": "{n} importações",
+        "count=*, countPlural=one": "{n} importação",
+        "count=*, countPlural=*": "{n} importações"
+      }
+    }
+  ],
+  "menu_quit_work_indexes": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "count",
+        "countPlural"
+      ],
+      "match": {
+        "count=0, countPlural=*": "{n} indexações",
+        "count=*, countPlural=one": "{n} indexação",
+        "count=*, countPlural=*": "{n} indexações"
+      }
+    }
+  ],
+  "menu_quit_work_apply": "Aplicar em {project}",
   "info_tip_more_information": "Mais informações"
 }

@@ -8,11 +8,21 @@
  *   result unchanged, for a ConfirmDialog to show a failure. A Quit the UI
  *   never saw (one emitted while the webview reloaded) keeps PlateVault open;
  *   choosing Quit again asks again.
+ * - `nativeQuitCopy` words that Quit's confirmation, naming the work it
+ *   would interrupt.
  */
 import { useEffect, useState } from "react"
 import { useLibraryEvent } from "./events"
-import { type ActionResult, library, NATIVE_QUIT_CONFIRM_EVENT, type NativeMenuLabels, type NativeQuitRequest } from "./ipc"
+import {
+  type ActionResult,
+  library,
+  NATIVE_QUIT_CONFIRM_EVENT,
+  type NativeMenuLabels,
+  type NativeQuitRequest,
+  type QuitWork,
+} from "./ipc"
 import { useMessages } from "@/app/preferences"
+import { formatCount, formatList } from "@/lib/format"
 import type { Messages } from "@/lib/i18n"
 
 /** The labels of every native menu-bar and tray item, from `m`'s catalogue. */
@@ -40,6 +50,25 @@ export function useNativeMenuLocale(): void {
   useEffect(() => {
     void library.libraryNativeMenuSetLabels(nativeMenuLabels(m))
   }, [m])
+}
+
+/**
+ * The title and summary of the Quit confirmation: "Quit with 3 tasks
+ * running?", then "Running: 1 import, 1 index and Apply in Cygnus. …". When
+ * the host could not read the running work (`null`), it asks without naming it.
+ */
+export function nativeQuitCopy(m: Messages, work: QuitWork | null): { title: string; summary: string } {
+  if (!work) return { title: m.menu_quit_confirm_title(), summary: m.menu_quit_confirm_unknown() }
+  const items = [
+    ...(work.imports > 0 ? [m.menu_quit_work_imports({ count: work.imports, n: formatCount(work.imports) })] : []),
+    ...(work.indexes > 0 ? [m.menu_quit_work_indexes({ count: work.indexes, n: formatCount(work.indexes) })] : []),
+    ...work.applies.map((project) => m.menu_quit_work_apply({ project })),
+  ]
+  const count = work.imports + work.indexes + work.applies.length
+  return {
+    title: m.shell_quit_title({ count, n: formatCount(count) }),
+    summary: m.menu_quit_confirm_work({ count, work: formatList(items) }),
+  }
 }
 
 /** The host's pending Quit, if any, and the answer to it. */

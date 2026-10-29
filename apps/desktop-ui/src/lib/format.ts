@@ -58,6 +58,19 @@ export function formatCount(value: number): string {
   return numberFormat(0).format(value)
 }
 
+const listFormats = new Map<string, Intl.ListFormat>()
+
+/** Items joined in the locale's words: "2 imports, 1 index and Apply in Cygnus" (en-GB), "… e …" (pt-BR). */
+export function formatList(items: readonly string[]): string {
+  const locale = getLocale()
+  let format = listFormats.get(locale)
+  if (!format) {
+    format = new Intl.ListFormat(locale, { style: "long", type: "conjunction" })
+    listFormats.set(locale, format)
+  }
+  return format.format(items)
+}
+
 // Product copy uses short months ("18 Sep", "18 set"); ICU's en-GB short month
 // for September is "Sept", so months come from these tables instead.
 const MONTHS: Record<Locale, readonly string[]> = {
