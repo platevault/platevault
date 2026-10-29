@@ -26,7 +26,10 @@ describe("nativeQuitCopy", () => {
   })
 
   it("asks without naming the work when the host could not read it", () => {
-    expect(nativeQuitCopy(m, null)).toEqual({ title: m.menu_quit_confirm_title(), summary: m.menu_quit_confirm_unknown() })
+    expect(nativeQuitCopy(m, null)).toEqual({
+      title: "Quit PlateVault?",
+      summary: "PlateVault couldn't read what is running. If you quit, any import, index or Apply is interrupted, and the next launch offers Retry.",
+    })
   })
 
   it("words the list in Portuguese", () => {

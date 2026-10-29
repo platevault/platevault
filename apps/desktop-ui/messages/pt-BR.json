@@ -7495,7 +7495,7 @@
   "menu_select_all": "Selecionar tudo",
   "menu_close_window": "Fechar janela",
   "menu_show": "Mostrar PlateVault",
-  "menu_quit_confirm_title": "Encerrar o PlateVault?",
+  "menu_quit_confirm_title": "Sair do PlateVault?",
   "menu_quit_confirm_work": [
     {
       "declarations": [
@@ -7514,7 +7514,7 @@
       }
     }
   ],
-  "menu_quit_confirm_unknown": "O PlateVault não conseguiu ler o que está em execução. Se você sair, qualquer importação, indexação ou aplicação é interrompida, e a próxima abertura oferece Tentar de novo.",
+  "menu_quit_confirm_unknown": "O PlateVault não conseguiu ler o que está em execução. Se você sair, qualquer importação, indexação ou Aplicar em execução é interrompido, e a próxima abertura oferece Tentar de novo.",
   "menu_quit_work_imports": [
     {
       "declarations": [
