@@ -1,6 +1,10 @@
 import { clearMocks, mockIPC } from "@tauri-apps/api/mocks"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import type { AppearancePreferences, PreferencesView } from "@/api/ipc"
+import type { AppearancePreferences, ErrorResponse, PreferencesView } from "@/api/ipc"
+import { m } from "@/lib/i18n"
+
+const { toast } = vi.hoisted(() => ({ toast: vi.fn() }))
+vi.mock("@/components/app/feedback", () => ({ toast }))
 
 type Shell = typeof globalThis & { isTauri?: boolean }
 
@@ -30,6 +34,7 @@ const view = (preferences: AppearancePreferences): PreferencesView => ({ prefere
 
 beforeEach(() => {
   vi.resetModules()
+  toast.mockClear()
   window.localStorage.clear()
 })
 
@@ -37,6 +42,7 @@ afterEach(() => {
   delete window.__PLATEVAULT_PREFERENCES__
   delete (globalThis as Shell).isTauri
   clearMocks()
+  vi.restoreAllMocks()
 })
 
 // The test setup's matchMedia matches no query: the OS reads as light.
@@ -100,6 +106,33 @@ describe("preferences", () => {
       { field: "language", language: "pt-BR" },
       { field: "singleKeyShortcuts", enabled: false },
     ])
+    expect(window.localStorage).toHaveLength(0)
+  })
+
+  it("says in a toast when a change can't be saved, and keeps it for this session", async () => {
+    const unsaved: ErrorResponse = {
+      code: "persistence_failure",
+      identity: null,
+      scope: null,
+      retry: "retry",
+      currentRevision: null,
+      successors: [],
+      window: null,
+      correction: null,
+    }
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    // The store's boot read answers English, so the toast is worded in en-GB.
+    const english = view({ ...stored, language: "en-GB" })
+    const calls = inShell((command) => (command === "library_change_preference" ? Promise.reject(unsaved) : english))
+    const { getPreferences, setTheme } = await load()
+    await vi.waitFor(() => expect(calls).toHaveLength(1))
+
+    setTheme("nord")
+
+    await vi.waitFor(() => expect(toast).toHaveBeenCalledTimes(1))
+    expect(toast).toHaveBeenCalledWith({ message: m.settings_preference_unsaved({ reason: m.action_failure_persistence_failure() }) })
+    expect(getPreferences().theme).toBe("nord")
+    expect(document.documentElement.dataset.theme).toBe("nord")
     expect(window.localStorage).toHaveLength(0)
   })
 

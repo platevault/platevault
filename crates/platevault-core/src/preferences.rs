@@ -10,13 +10,18 @@
 //! Reading never fails. A missing file, or a missing preference, reads as
 //! the default. A value the app doesn't know reads as its default with a
 //! recorded [`PreferenceFallback`], which is logged and listed in every
-//! [`PreferencesView`] of the session. The stored value stays on disk until
-//! any preference is next changed, which saves every preference in effect.
+//! [`PreferencesView`] of the session.
+//!
+//! A save rewrites only the preferences it changes. Every other key of the
+//! file stays as it was: a value this build read as a default, and the keys
+//! a newer build added. The file carries its format [`VERSION`]; a build
+//! reads the preferences it knows from a file of any version, and a save
+//! never lowers the version a newer build wrote.
 
 use std::fs;
 use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, PoisonError};
+use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use serde::de::DeserializeOwned;
 use serde::Deserialize as _;
@@ -30,13 +35,26 @@ use crate::{
 /// The store's file name inside the directory the shell gives it.
 pub const PREFERENCES_FILE: &str = "preferences.json";
 
+/// The file format this build writes, under [`VERSION_KEY`].
+pub const VERSION: u64 = 1;
+
+/// The file's key for its format version.
+pub const VERSION_KEY: &str = "version";
+
 /// The appearance preferences in effect and the file that keeps them.
 #[derive(Debug)]
 pub struct PreferenceStore {
     path: PathBuf,
     /// Held across each write, so changes reach the file in the order they
     /// were made and memory only ever holds what the file holds.
-    view: Mutex<PreferencesView>,
+    state: Mutex<State>,
+}
+
+#[derive(Debug)]
+struct State {
+    view: PreferencesView,
+    /// The file's object as last read or written.
+    file: Map<String, Value>,
 }
 
 impl PreferenceStore {
@@ -44,7 +62,7 @@ impl PreferenceStore {
     #[must_use]
     pub fn open(path: impl Into<PathBuf>) -> Self {
         let path = path.into();
-        let view = read(&path);
+        let (view, file) = read(&path);
         for fallback in &view.fallbacks {
             tracing::warn!(
                 path = %path.display(),
@@ -54,13 +72,13 @@ impl PreferenceStore {
                 "stored preference read as its default"
             );
         }
-        Self { path, view: Mutex::new(view) }
+        Self { path, state: Mutex::new(State { view, file }) }
     }
 
     /// The preferences in effect.
     #[must_use]
     pub fn view(&self) -> PreferencesView {
-        self.lock().clone()
+        self.lock().view.clone()
     }
 
     /// Save one changed preference and return the preferences in effect.
@@ -70,20 +88,27 @@ impl PreferenceStore {
     /// whose light theme is dark; `PersistenceFailure` when the file can't
     /// be written, which leaves the preferences as they were.
     pub fn change(&self, change: PreferenceChange) -> Result<PreferencesView, LibraryError> {
-        let mut view = self.lock();
-        let mut next = view.preferences;
-        match change {
-            PreferenceChange::Theme { choice } => next.theme = choice,
+        let mut next = self.lock().view.preferences;
+        let field = match change {
+            PreferenceChange::Theme { choice } => {
+                next.theme = choice;
+                PreferenceField::Theme
+            }
             PreferenceChange::SystemThemes { themes } => {
                 require_schemes(themes)?;
                 next.system_themes = themes;
+                PreferenceField::SystemThemes
             }
-            PreferenceChange::Language { language } => next.language = language,
-            PreferenceChange::SingleKeyShortcuts { enabled } => next.single_key_shortcuts = enabled,
-        }
-        self.write(next)?;
-        view.preferences = next;
-        Ok(view.clone())
+            PreferenceChange::Language { language } => {
+                next.language = language;
+                PreferenceField::Language
+            }
+            PreferenceChange::SingleKeyShortcuts { enabled } => {
+                next.single_key_shortcuts = enabled;
+                PreferenceField::SingleKeyShortcuts
+            }
+        };
+        self.save(next, &[field])
     }
 
     /// Restore defaults: `platevault-dark`, the `platevault-dark` and
@@ -94,20 +119,37 @@ impl PreferenceStore {
     /// `PersistenceFailure` when the file can't be written, which leaves the
     /// preferences as they were.
     pub fn restore_defaults(&self) -> Result<PreferencesView, LibraryError> {
-        let mut view = self.lock();
-        let defaults = AppearancePreferences::default();
-        self.write(defaults)?;
-        view.preferences = defaults;
-        Ok(view.clone())
+        self.save(AppearancePreferences::default(), &FIELDS)
     }
 
-    fn lock(&self) -> std::sync::MutexGuard<'_, PreferencesView> {
+    fn lock(&self) -> MutexGuard<'_, State> {
         // A panic mid-change leaves the last value both memory and file agree on.
-        self.view.lock().unwrap_or_else(PoisonError::into_inner)
+        self.state.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
-    /// Replace the file in one rename, so a crash leaves the old or the new one.
-    fn write(&self, preferences: AppearancePreferences) -> Result<(), LibraryError> {
+    /// Write `fields` of `preferences` into the file, keeping its other keys,
+    /// and make `preferences` the ones in effect.
+    fn save(
+        &self,
+        preferences: AppearancePreferences,
+        fields: &[PreferenceField],
+    ) -> Result<PreferencesView, LibraryError> {
+        let mut state = self.lock();
+        let mut file = state.file.clone();
+        for &field in fields {
+            file.insert(field.key().to_owned(), stored_value(preferences, field));
+        }
+        let version = file.get(VERSION_KEY).and_then(Value::as_u64).unwrap_or(0).max(VERSION);
+        file.insert(VERSION_KEY.to_owned(), version.into());
+        self.write(&file)?;
+        state.file = file;
+        state.view.preferences = preferences;
+        Ok(state.view.clone())
+    }
+
+    /// Replace the file in one rename, so a crash leaves the old or the new
+    /// one, then make the rename durable on Unix by syncing the directory.
+    fn write(&self, file: &Map<String, Value>) -> Result<(), LibraryError> {
         let failed = |error: io::Error| {
             LibraryError::PersistenceFailure(format!(
                 "cannot save preferences {}: {error}",
@@ -117,14 +159,38 @@ impl PreferenceStore {
         let dir = self.path.parent().filter(|dir| !dir.as_os_str().is_empty());
         let dir = dir.unwrap_or_else(|| Path::new("."));
         fs::create_dir_all(dir).map_err(failed)?;
-        let mut file = tempfile::NamedTempFile::new_in(dir).map_err(failed)?;
-        let text =
-            serde_json::to_vec_pretty(&preferences).map_err(io::Error::from).map_err(failed)?;
-        file.write_all(&text).map_err(failed)?;
-        file.as_file().sync_all().map_err(failed)?;
-        file.persist(&self.path).map_err(|error| failed(error.error))?;
+        let mut temp = tempfile::NamedTempFile::new_in(dir).map_err(failed)?;
+        let text = serde_json::to_vec_pretty(file).map_err(io::Error::from).map_err(failed)?;
+        temp.write_all(&text).map_err(failed)?;
+        temp.as_file().sync_all().map_err(failed)?;
+        temp.persist(&self.path).map_err(|error| failed(error.error))?;
+        // The new file is already the one every read sees, so a failed sync
+        // is no failed save: it only leaves the rename's durability to the OS.
+        #[cfg(unix)]
+        if let Err(error) = fs::File::open(dir).and_then(|dir| dir.sync_all()) {
+            tracing::warn!(dir = %dir.display(), %error, "preferences directory not synced");
+        }
         Ok(())
     }
+}
+
+/// Every preference, in the file's order.
+const FIELDS: [PreferenceField; 4] = [
+    PreferenceField::Theme,
+    PreferenceField::SystemThemes,
+    PreferenceField::Language,
+    PreferenceField::SingleKeyShortcuts,
+];
+
+/// `field` of `preferences` as the file stores it.
+fn stored_value(preferences: AppearancePreferences, field: PreferenceField) -> Value {
+    let value = match field {
+        PreferenceField::Theme => serde_json::to_value(preferences.theme),
+        PreferenceField::SystemThemes => serde_json::to_value(preferences.system_themes),
+        PreferenceField::Language => serde_json::to_value(preferences.language),
+        PreferenceField::SingleKeyShortcuts => Ok(preferences.single_key_shortcuts.into()),
+    };
+    value.expect("appearance preferences serialize to JSON")
 }
 
 fn require_schemes(themes: SystemThemes) -> Result<(), LibraryError> {
@@ -141,18 +207,25 @@ fn require_schemes(themes: SystemThemes) -> Result<(), LibraryError> {
     Ok(())
 }
 
-fn read(path: &Path) -> PreferencesView {
-    let unreadable = || PreferencesView {
-        preferences: AppearancePreferences::default(),
-        fallbacks: vec![PreferenceFallback {
-            field: None,
-            stored: None,
-            reason: FallbackReason::Unreadable,
-        }],
+/// The preferences in `path` and the file's object; an unreadable file is
+/// an empty object, which the next save replaces.
+fn read(path: &Path) -> (PreferencesView, Map<String, Value>) {
+    let unreadable = || {
+        let view = PreferencesView {
+            preferences: AppearancePreferences::default(),
+            fallbacks: vec![PreferenceFallback {
+                field: None,
+                stored: None,
+                reason: FallbackReason::Unreadable,
+            }],
+        };
+        (view, Map::new())
     };
     let text = match fs::read_to_string(path) {
         Ok(text) => text,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => return PreferencesView::default(),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            return (PreferencesView::default(), Map::new())
+        }
         Err(error) => {
             tracing::warn!(path = %path.display(), %error, "preferences file unreadable");
             return unreadable();
@@ -184,7 +257,7 @@ fn read(path: &Path) -> PreferencesView {
     if let Some(enabled) = known(&stored, PreferenceField::SingleKeyShortcuts, &mut fallbacks) {
         preferences.single_key_shortcuts = enabled;
     }
-    PreferencesView { preferences, fallbacks }
+    (PreferencesView { preferences, fallbacks }, stored)
 }
 
 /// The stored `field`, when present and known.

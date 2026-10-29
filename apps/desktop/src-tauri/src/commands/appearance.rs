@@ -103,7 +103,12 @@ impl<R: Runtime> Plugin<R> for FirstFrame<R> {
     }
 }
 
-/// Publish `view` as `window.__PLATEVAULT_PREFERENCES__` and set the
+/// The function that paints the first frame (`first_frame.js`, which the
+/// frontend's `first-frame.test.ts` runs in jsdom).
+const PAINT_FIRST_FRAME: &str = include_str!("first_frame.js");
+
+/// Call [`PAINT_FIRST_FRAME`] with `view` and the registry's dark themes: it
+/// publishes `view` as `window.__PLATEVAULT_PREFERENCES__` and sets the
 /// document root's theme, `dark` class and language as the frontend's
 /// `preferences.ts` does. The script runs before the document is parsed, so
 /// it waits for the root element when there is none yet.
@@ -115,29 +120,7 @@ fn first_frame_script(view: &PreferencesView) -> serde_json::Result<String> {
         .collect();
     let dark = serde_json::to_string(&dark)?;
     let view = serde_json::to_string(view)?;
-    Ok(format!(
-        r#"const view = {view};
-window.__PLATEVAULT_PREFERENCES__ = view;
-const p = view.preferences;
-const theme = p.theme.mode === "system"
-  ? (window.matchMedia("(prefers-color-scheme: dark)").matches ? p.systemThemes.dark : p.systemThemes.light)
-  : p.theme.theme;
-const paint = (root) => {{
-  root.dataset.theme = theme;
-  root.classList.toggle("dark", {dark}.includes(theme));
-  root.lang = p.language;
-}};
-if (document.documentElement) {{
-  paint(document.documentElement);
-}} else {{
-  const watch = new MutationObserver(() => {{
-    if (!document.documentElement) return;
-    watch.disconnect();
-    paint(document.documentElement);
-  }});
-  watch.observe(document, {{ childList: true }});
-}}"#
-    ))
+    Ok(format!("{}({view}, {dark});", PAINT_FIRST_FRAME.trim_end()))
 }
 
 #[cfg(test)]
@@ -156,9 +139,14 @@ mod tests {
             fallbacks: vec![],
         };
         let script = first_frame_script(&view).unwrap();
-        assert!(
-            script.starts_with(&format!("const view = {};", serde_json::to_string(&view).unwrap()))
+        let call = format!(
+            r#"({}, ["platevault-dark","gruvbox-dark","nord","dracula","solarized-dark","catppuccin-mocha","tokyo-night","one-dark","rose-pine"]);"#,
+            serde_json::to_string(&view).unwrap()
         );
-        assert!(script.contains(r#"["platevault-dark","gruvbox-dark","nord","dracula","solarized-dark","catppuccin-mocha","tokyo-night","one-dark","rose-pine"].includes(theme)"#));
+        assert_eq!(script, format!("{}{call}", PAINT_FIRST_FRAME.trim_end()));
+        assert!(
+            PAINT_FIRST_FRAME.trim_end().ends_with("})"),
+            "the file is one function expression"
+        );
     }
 }

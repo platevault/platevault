@@ -5808,9 +5808,8 @@ export type PreferenceField = "theme" | "systemThemes" | "language" | "singleKey
 
 /**
  *  The preferences in effect, with what the store read as a default when
- *  the app started. A fallback stays listed for the session. The stored
- *  value stays on disk until any preference is next changed, which saves
- *  every preference as it is in effect.
+ *  the app started. A fallback stays listed for the session, and the
+ *  stored value stays on disk until that preference is next changed.
  */
 export type PreferencesView = {
 	preferences: AppearancePreferences,

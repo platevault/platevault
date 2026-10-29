@@ -10,7 +10,7 @@
 use std::fs;
 use std::path::Path;
 
-use platevault_core::preferences::{PreferenceStore, PREFERENCES_FILE};
+use platevault_core::preferences::{PreferenceStore, PREFERENCES_FILE, VERSION, VERSION_KEY};
 use platevault_core::*;
 use serde_json::json;
 
@@ -144,11 +144,21 @@ fn unknown_stored_values_fall_back_with_a_reason() {
     );
     assert_eq!(fs::read_to_string(&path).unwrap(), stored, "reading repairs nothing");
 
+    // Saving the language rewrites only the language: the values read as
+    // defaults stay in the file, so a later start falls back again.
     store.change(PreferenceChange::Language { language: Language::PtBr }).unwrap();
     assert_eq!(store.view().fallbacks, view.fallbacks, "the start's record stays listed");
     drop(store);
     let reopened = PreferenceStore::open(&path).view();
-    assert!(reopened.fallbacks.is_empty(), "{reopened:?}");
+    let fields: Vec<_> = reopened.fallbacks.iter().map(|fallback| fallback.field).collect();
+    assert_eq!(
+        fields,
+        [
+            Some(PreferenceField::Theme),
+            Some(PreferenceField::SystemThemes),
+            Some(PreferenceField::SystemThemes)
+        ]
+    );
     assert_eq!(
         reopened.preferences,
         AppearancePreferences {
@@ -157,6 +167,74 @@ fn unknown_stored_values_fall_back_with_a_reason() {
             ..AppearancePreferences::default()
         }
     );
+
+    // Changing the fallen-back preference replaces its stored value.
+    let store = PreferenceStore::open(&path);
+    store.change(PreferenceChange::Theme { choice: ThemeChoice::System }).unwrap();
+    store.change(PreferenceChange::SystemThemes { themes: SystemThemes::default() }).unwrap();
+    drop(store);
+    let view = PreferenceStore::open(&path).view();
+    assert!(view.fallbacks.is_empty(), "{view:?}");
+}
+
+/// A save writes the format version, and a fresh file starts at this
+/// build's [`VERSION`].
+#[test]
+fn a_save_writes_the_format_version() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join(PREFERENCES_FILE);
+    let store = PreferenceStore::open(&path);
+    store.change(PreferenceChange::Language { language: Language::PtBr }).unwrap();
+    let file: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+    assert_eq!(file, json!({ VERSION_KEY: VERSION, "language": "pt-BR" }));
+
+    store.restore_defaults().unwrap();
+    let file: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+    assert_eq!(
+        file,
+        json!({
+            VERSION_KEY: VERSION,
+            "theme": { "mode": "fixed", "theme": "platevault-dark" },
+            "systemThemes": { "dark": "platevault-dark", "light": "platevault-light" },
+            "language": "en-GB",
+            "singleKeyShortcuts": true,
+        })
+    );
+}
+
+/// A newer build's file keeps its version and its keys when this build
+/// saves, Restore defaults included, and this build reads what it knows.
+#[test]
+fn a_newer_builds_keys_and_version_survive_a_save() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join(PREFERENCES_FILE);
+    let newer = json!({
+        VERSION_KEY: VERSION + 1,
+        "theme": { "mode": "fixed", "theme": "aurora" },
+        "language": "pt-BR",
+        "density": "compact",
+        "sidebar": { "collapsed": true },
+    });
+    fs::write(&path, newer.to_string()).unwrap();
+
+    let store = PreferenceStore::open(&path);
+    assert_eq!(store.view().preferences.language, Language::PtBr, "a known value of any version");
+    store.change(PreferenceChange::SingleKeyShortcuts { enabled: false }).unwrap();
+    let file: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+    let mut expected = newer;
+    expected["singleKeyShortcuts"] = json!(false);
+    assert_eq!(file, expected, "only the changed preference is rewritten");
+
+    store.restore_defaults().unwrap();
+    let file: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+    assert_eq!(file[VERSION_KEY], VERSION + 1, "a save never lowers the version");
+    assert_eq!(file["density"], "compact");
+    assert_eq!(file["sidebar"], json!({ "collapsed": true }));
+    assert_eq!(file["theme"], json!({ "mode": "fixed", "theme": "platevault-dark" }));
 }
 
 /// A file that isn't a JSON object reads as the defaults, recorded as

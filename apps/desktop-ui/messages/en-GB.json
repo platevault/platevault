@@ -2246,6 +2246,7 @@
   "settings_at_defaults": "Already at the defaults",
   "settings_restore_defaults": "Restore defaults",
   "settings_keyboard": "Keyboard",
+  "settings_preference_unsaved": "{reason} The change applies until PlateVault restarts.",
   "settings_restore_title": "Restore appearance defaults?",
   "settings_edit_title": "Edit {name}",
   "settings_save": "Save",

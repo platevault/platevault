@@ -3,7 +3,8 @@
  * dark themes "system" switches between, language, and whether single-key
  * shortcuts are on (WCAG 2.1.4). Each applies at once and persists in
  * PlateVault's per-user settings store, outside every library (LIB-FR-21,
- * D-W166), through the library IPC. The store is the only copy.
+ * D-W166), through the library IPC. The store is the only copy. A save that
+ * fails says so in a toast, and the choice applies until PlateVault restarts.
  *
  * The shell hands each webview the stored preferences before its page loads
  * (`window.__PLATEVAULT_PREFERENCES__`, `commands/appearance.rs`), so this
@@ -18,7 +19,8 @@
  * `m.*()`, and `useMessages()` re-renders a component when it changes.
  */
 import { useSyncExternalStore } from "react"
-import { type AppearancePreferences, inShell, library, type PreferenceChange, type PreferencesView } from "../api/ipc"
+import { type ActionResult, type AppearancePreferences, inShell, type LibraryFailure, library, type PreferenceChange, type PreferencesView } from "../api/ipc"
+import { failureMessage } from "../components/app/run-result"
 import { DEFAULT_LOCALE, isLocale, type Locale, m } from "../lib/i18n"
 import { defineCustomClientStrategy } from "../paraglide/runtime"
 import { DEFAULT_SYSTEM_THEMES, DEFAULT_THEME, type ThemeId, type ThemeScheme, themeInfo } from "./themes"
@@ -103,14 +105,22 @@ let saving: Promise<void> = Promise.resolve()
 /** Set by the first change, after which the store's boot read no longer applies. */
 let changed = false
 
-function save(write: () => Promise<{ ok: boolean }>, what: string): void {
+function save(write: () => Promise<ActionResult<PreferencesView>>, what: string): void {
   changed = true
   if (!inShell()) return
   saving = saving.then(async () => {
     const result = await write()
-    // The choice still applies for this session.
-    if (!result.ok) console.error(`PlateVault could not save the ${what} preference`, result)
+    if (result.ok) return
+    console.error(`PlateVault could not save the ${what} preference`, result.failure)
+    await reportUnsaved(result.failure)
   })
+}
+
+/** A save that failed says why in a toast; the choice still applies until PlateVault restarts. */
+async function reportUnsaved(failure: LibraryFailure): Promise<void> {
+  // Loaded on demand: the toast's components read this module's hooks, so a static import would be a cycle.
+  const { toast } = await import("../components/app/feedback")
+  toast({ message: m.settings_preference_unsaved({ reason: failureMessage(m, failure) }) })
 }
 
 function change(next: Partial<Chosen>, stored: PreferenceChange): void {
