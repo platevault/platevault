@@ -69,7 +69,7 @@ Done means:
   - `gp` appears in the field and filters the list. **Esc** empties the field, and focus stays in it.
   - `Sep` filters the list to the September sessions. The × button empties the field, focus returns to the field, and every session is listed again.
 - **Expect (negative):** Typing `g` then `p` in the field does not open Projects, and no other shortcut fires while the field has focus.
-- **Trace:** src/components/app/clearable-input.tsx · HARNESS-V5-FEEDBACK-R1.md §Copy rules "Every text field that filters or searches gets a clear (×) button" · messages shortcuts_description
+- **Trace:** src/components/app/clearable-input.tsx · HARNESS-V5-FEEDBACK-R1.md §Copy rules "Every text field that filters or searches gets a clear (×) button" · messages shortcuts_description · FR-042, FR-042-AC-02 (no shortcut fires while a text field has focus)
 
 ### S3a — Move through a table with the keyboard {#S3a}
 
