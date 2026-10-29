@@ -207,7 +207,8 @@ describe("boot", { timeout: SHELL_TEST_MS }, () => {
     const status = windowStatusBar()
     expect(await within(status).findByText(`${m.common_locations()}: ${m.status_bar_locations_online({ online: 1, total: 2 })}`)).toBeInTheDocument()
     expect(within(status).getByRole("img", { name: m.status_bar_errors({ count: 1 }) })).toBeInTheDocument()
-    expect(within(status).getByRole("img", { name: m.status_bar_warnings({ count: 2 }) })).toBeInTheDocument()
+    // Sessions is registered, so the warnings counter links to it.
+    expect(within(status).getByRole("button", { name: m.status_bar_warnings({ count: 2 }) })).toBeInTheDocument()
     await waitFor(() => expect(host.calls).toEqual(expect.arrayContaining(["library_issues", "library_list_locations", "library_native_menu_set_labels"])))
     // What the window shows at start is not news.
     expect(announcer()).toHaveTextContent("")
@@ -234,7 +235,9 @@ describe("boot", { timeout: SHELL_TEST_MS }, () => {
   it("shows an unregistered page inside the one window, which stays mounted when the user moves on", async () => {
     const user = userEvent.setup()
     libraryHost()
-    render(<AppRoot router={createAppRouter(createMemoryHistory({ initialEntries: ["/"] }))} client={createQueryClient()} />)
+    // The palette path: Home is not among these pages, so not-found offers the palette (with Home it offers Home).
+    const router = createShellRouter(createMemoryHistory({ initialEntries: ["/"] }), (appWindow) => [createRoute({ getParentRoute: () => appWindow, path: "/design-system", component: testPage("/design-system") })])
+    render(<AppRoot router={router} client={createQueryClient()} />)
     expect(await screen.findByRole("heading", { level: 1, name: m.shell_not_found_title() })).toBeInTheDocument()
     const bar = windowStatusBar()
     const search = screen.getByRole("button", { name: m.shell_not_found_search_action() })
@@ -248,7 +251,7 @@ describe("boot", { timeout: SHELL_TEST_MS }, () => {
     await user.click(search)
     const again = await screen.findByRole("dialog", { name: m.palette_title() })
     await user.click(within(again).getByRole("option", { name: m.nav_design_system() }))
-    expect(await screen.findByRole("heading", { level: 1, name: m.nav_design_system() })).toBeInTheDocument()
+    expect(await screen.findByRole("heading", { level: 1, name: "page /design-system" })).toBeInTheDocument()
     expect(windowStatusBar()).toBe(bar)
   })
 
