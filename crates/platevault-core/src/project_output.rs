@@ -363,7 +363,8 @@ impl Library {
     ///
     /// # Errors
     /// `NotFound` for an unknown offer; `InvalidInput` for a digest the offer
-    /// does not have, an adopted master, or a read-only Project Output.
+    /// does not have, an adopted master, a read-only Project Output, or no
+    /// processing location.
     pub async fn dismiss_processing_master(
         &self,
         offer_id: Uuid,
@@ -384,7 +385,7 @@ impl Library {
     ///
     /// # Errors
     /// `NotFound` for an unknown offer; `InvalidInput` for a digest the offer
-    /// does not have, an offer that is not hidden, an adopted master, or a
+    /// does not have, an offer that is not hidden, an adopted master, a
     /// read-only Project Output, no processing location, or a changed or gone
     /// source; access errors reading the source.
     pub async fn restore_processing_master(

@@ -65,8 +65,9 @@ pub async fn project_output_rescan(
 /// in Calibration and its source file is untouched.
 ///
 /// # Errors
-/// `NotFound` for an unknown offer; `InvalidInput` for a digest the offer does
-/// not have or an adopted master.
+/// `NotFound` for an unknown offer; `InvalidInput` for a Project that is not
+/// open, has no processing location, a digest the offer does not have or an
+/// adopted master.
 #[tauri::command]
 #[specta::specta]
 pub async fn project_dismiss_processing_master(
@@ -84,9 +85,10 @@ pub async fn project_dismiss_processing_master(
 /// source in `Processing/` still holds the bytes with `expected_sha256`.
 ///
 /// # Errors
-/// `NotFound` for an unknown offer; `InvalidInput` for a digest the offer does
-/// not have, a source that changed or is gone, an offer that is not hidden or
-/// an adopted master; access errors reading the source.
+/// `NotFound` for an unknown offer; `InvalidInput` for a Project that is not
+/// open, has no processing location, a digest the offer does not have, a source
+/// that changed or is gone, an offer that is not hidden or an adopted master;
+/// access errors reading the source.
 #[tauri::command]
 #[specta::specta]
 pub async fn project_restore_processing_master(

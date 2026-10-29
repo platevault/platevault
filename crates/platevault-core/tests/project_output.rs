@@ -715,8 +715,8 @@ async fn a_hidden_master_offer_is_restored_while_its_source_is_unchanged() {
     );
     assert_eq!(world.offers().await[0].state, MasterOfferState::Dismissed);
 }
-/// RES-FR-07, CAL-FR-06: Hide and Restore share Copy to Output's read-only
-/// refusal for Closed and Archived Projects; an open Project still allows both.
+/// RES-FR-07, CAL-FR-06: Hide and Restore refuse a Closed or Archived
+/// Project's read-only Output step and leave its offer unchanged.
 #[tokio::test]
 async fn a_master_offer_cannot_be_hidden_or_restored_on_a_closed_or_archived_project() {
     for lifecycle in ["closed", "archived"] {

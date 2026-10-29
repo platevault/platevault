@@ -40,6 +40,7 @@ use uuid::Uuid;
 use super::inventory::{self, Listed};
 use super::{light_capture, load_master, night_of};
 use crate::admission::read_calibration;
+use crate::project_output::require_open;
 use crate::rigs::cameras::{
     link_session_camera_by_model, load_cameras, load_session_camera, load_session_camera_link,
 };
@@ -347,8 +348,8 @@ impl Catalog {
     /// as a candidate in Calibration. Hiding it again changes nothing.
     ///
     /// # Errors
-    /// `NotFound` for an unknown offer; `InvalidInput` for a stale digest or an
-    /// adopted offer.
+    /// `NotFound` for an unknown offer; `InvalidInput` for a stale digest, an
+    /// adopted offer, or a Project whose Output is read-only.
     pub async fn dismiss_processing_master(
         &self,
         offer_id: Uuid,
@@ -356,6 +357,7 @@ impl Catalog {
     ) -> Result<ProcessingMasterOffer> {
         write_txn!(self, |conn| {
             let mut offer = load_offer(conn, offer_id).await?;
+            require_open(conn, offer.project_id).await?;
             if offer.sha256 != expected_sha256 {
                 return Err(LibraryError::InvalidInput(format!(
                     "offer {offer_id} changed; refresh the Output step"
@@ -391,7 +393,7 @@ impl Catalog {
     ///
     /// # Errors
     /// `NotFound` for an unknown offer; `InvalidInput` if it changed, was
-    /// adopted, or is no longer dismissed.
+    /// adopted, is no longer dismissed or its Project's Output is read-only.
     pub async fn restore_processing_master(
         &self,
         offer_id: Uuid,
@@ -399,6 +401,7 @@ impl Catalog {
     ) -> Result<ProcessingMasterOffer> {
         write_txn!(self, |conn| {
             let mut offer = load_offer(conn, offer_id).await?;
+            require_open(conn, offer.project_id).await?;
             if offer.sha256 != expected_sha256 {
                 return Err(LibraryError::InvalidInput(format!(
                     "offer {offer_id} changed; refresh the Output step"
