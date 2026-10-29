@@ -304,7 +304,7 @@ async fn tonight_reads_stored_home_criteria() {
     let settings = library.catalog().list_sites().await.unwrap().settings_revision;
     library.set_default_site(Some(backyard), settings).await.unwrap();
     let m31 = seed(&library, "M 31").await;
-    library.add_to_my_targets(&AddTarget::Seed { id: m31.id }).await.unwrap();
+    library.catalog().set_favourite(m31.id, true).await.unwrap();
 
     let unset = library.tonight(&query()).await.unwrap();
     assert_eq!(unset.unavailable_reason, Some(HomePlanningUnavailable::NoCriteria));
