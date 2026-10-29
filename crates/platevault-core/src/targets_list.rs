@@ -24,9 +24,9 @@ use crate::{
     FieldOfView, Fit, FitUnknownReason, LibraryError, MoonAvoidanceCurve, MyTargetMarks,
     ObservingSite, PlanningUnknownReason, PresetFilters, PresetRef, Recommendation, Revision,
     RigFit, RigSelection, SavedPreset, SimbadSearch, TargetActivity, TargetRecord, TargetRow,
-    TargetsBasis, TargetsColumn, TargetsPage, TargetsPresets, TargetsQuery, TargetsRig, TargetsSearchAction,
-    TargetsSearchResult, TargetsSearchResults, TargetsSearchSource, TargetsShow, TargetsSort,
-    WindowUnavailableReason, FIT_MIN_COVERAGE,
+    TargetsBasis, TargetsColumn, TargetsPage, TargetsPresets, TargetsQuery, TargetsRig,
+    TargetsSearchAction, TargetsSearchResult, TargetsSearchResults, TargetsSearchSource,
+    TargetsShow, TargetsSort, WindowUnavailableReason, FIT_MIN_COVERAGE,
 };
 
 /// Local search results listed before the SIMBAD result.
