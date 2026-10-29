@@ -82,7 +82,7 @@ opens on Home, the control-panel dashboard. Done means:
   - Minimum altitude 25°
   - Darkness Astronomical
   - Moon No limit
-  - Shortest window 30 min
+  - Shortest window 60 min
 
   Click **Start indexing**.
 - **Expect:** The Index step asks for Home's planning criteria and fills in no value. After **Start indexing**, progress shows these counts:

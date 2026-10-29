@@ -225,7 +225,7 @@ Use the [root vocabulary](../063-clean-rebuild-contract/spec.md#key-entities). F
 - **PV-PLAN-SC-01**: Every acceptance scenario produces its stated outcome and refusal behavior.
 - **PV-PLAN-SC-02**: Every owned interaction step has a requirement and independently observable acceptance evidence.
 - **PV-PLAN-SC-03**: Original inputs remain unchanged except through separately reviewed and approved filesystem operations.
-- **PV-PLAN-SC-04**: For every fixture Target, the Targets list's Max alt and Img time match the Plan area for the same site, night and criteria. Tonight's windows match the Plan area's best window. (D-W18, D-W39)
+- **PV-PLAN-SC-04**: For every fixture Target, the Targets list's Max alt and Img time match the Plan area for the same site, night and criteria. Tonight's windows match the Plan area's best window under the same site, night and criteria. (D-W18, D-W39)
 - **PV-PLAN-SC-05**: Browse catalogues lists zero rows while no catalogue and no preset is chosen. (D-W17)
 - **PV-PLAN-SC-06**: For every fixture rig, the Filters strip shows exactly the bands its filter list passes. No narrowband preset appears for a rig without a narrowband filter. (D-W23, D-W31)
 
