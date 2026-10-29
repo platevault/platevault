@@ -449,7 +449,8 @@ describe("Review read-only while intake's Review step is locked (astro-plan-ocyu
     expect(unavailable[m.review_cmd_next()]).toBeUndefined()
   })
 
-  it("keeps a ⌘A selection's marks unavailable without asking, and names the lock in fullscreen, which covers the step footer", async () => {
+  it.each(LOCALES)("%s: keeps a ⌘A selection's marks unavailable without asking, and names the lock in fullscreen, which covers the step footer", async (locale) => {
+    setLocale(locale)
     const reason = m.stepflow_finish_first({ step: m.sessions_column_rig() })
     await renderReview({ readOnly: { reason } })
     press("a", { mod: true })

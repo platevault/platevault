@@ -201,6 +201,8 @@ function ReviewWorkspace({ sessionId, onFinished, readOnly }: SessionReviewProps
       id: `mark-${quality}`,
       label,
       shortcut: MARK_KEY[quality],
+      // Read-only is checked when a mark starts: one already running, or confirmed, when the step locks still lands.
+      // No current path locks a mounted Review step (intake only moves forward), so that stays as is.
       unavailable: readOnly
         ? { action: label, reason: readOnly.reason, blockers: [] }
         : list.length === 0

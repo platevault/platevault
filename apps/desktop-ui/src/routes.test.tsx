@@ -53,13 +53,14 @@ function librarySession() {
   }
 }
 
-type Readiness = "needs_target" | "needs_review" | "ready"
+type Readiness = "needs_target" | "needs_rig" | "needs_review" | "ready"
 
 function admission(readiness: Readiness) {
   const unresolved = { state: "unresolved" }
   const targetConfirmed = readiness !== "needs_target"
+  const rigConfirmed = targetConfirmed && readiness !== "needs_rig"
   return {
-    intake: { sessionId: SESSION_ID, groupingRevision: 4, superseded: false, targetConfirmed, rigId: targetConfirmed ? "rig-1" : null, reviewFinished: readiness === "ready", unreviewedFrames: 0, changedFrames: 0 },
+    intake: { sessionId: SESSION_ID, groupingRevision: 4, superseded: false, targetConfirmed, rigId: rigConfirmed ? "rig-1" : null, reviewFinished: readiness === "ready", unreviewedFrames: 0, changedFrames: 0 },
     calibration: { sessionId: SESSION_ID, generation: 0, matchingPending: false, dark: unresolved, flat: unresolved, bias: unresolved },
     health: { bias: "intact", dark: "intact", flat: "intact" },
     blockers: readiness === "ready" ? [] : [{ blocker: "not_ready", readiness }],
@@ -111,10 +112,11 @@ describe("session intake with the registered review", { timeout: TEST_MS }, () =
   })
 
   // astro-plan-ocyuc.11: Review stays read-only until Target and rig are confirmed.
-  it.each(LOCALES)("%s: on the locked Review step, P, X, U and ⌘↩ send nothing, and the step to confirm first is named", async (locale) => {
+  const LOCKED = LOCALES.flatMap((locale) => (["needs_target", "needs_rig"] as const).map((readiness) => [locale, readiness] as const))
+  it.each(LOCKED)("%s, %s: on the locked Review step, P, X, U and ⌘↩ send nothing, and the step to confirm first is named", async (locale, readiness) => {
     setLocale(locale)
     const review = reviewHost({ marked: 6 })
-    installHost(review, () => "needs_target")
+    installHost(review, () => readiness)
     openReviewStep()
     await waitFor(() => expect(caption()).toContain(frameName(1)), { timeout: TEST_MS })
     for (const key of ["p", "x", "u"]) press(key)
@@ -125,11 +127,22 @@ describe("session intake with the registered review", { timeout: TEST_MS }, () =
     await waitFor(() => expect(caption()).toContain(frameName(2)), { timeout: TEST_MS })
     expect(commandsSent(review, "pix_session_review_mark")).toEqual([])
     expect(commandsSent(review, "pix_finish_review")).toEqual([])
-    const reason = m.stepflow_finish_first({ step: m.sessions_column_target() })
+    const reason = m.stepflow_finish_first({ step: readiness === "needs_target" ? m.sessions_column_target() : m.sessions_column_rig() })
     // "Read-only · <reason>": the gap is the layout's, so the text runs together.
     expect(document.querySelector("[data-step-locked]")).toHaveTextContent(`${m.stepflow_read_only()}·${reason}`)
     const finish = m.stepflow_finish_review()
     expect(screen.getByRole("button", { name: finish })).toHaveAccessibleDescription(`${finish} · ${reason}`)
+  })
+
+  // LIB-FR-20, PIX-FR-18, LIB-AC-22: a Ready session's review stays open to marks.
+  it("keeps a Ready session's Review editable: P marks, and no step is locked", async () => {
+    const review = reviewHost({ marked: 6 })
+    installHost(review, () => "ready")
+    openReviewStep()
+    await waitFor(() => expect(caption()).toContain(frameName(1)), { timeout: TEST_MS })
+    press("p")
+    await waitFor(() => expect(commandsSent(review, "pix_session_review_mark")).toHaveLength(1), { timeout: TEST_MS })
+    expect(document.querySelector("[data-step-locked]")).toBeNull()
   })
 
   it.each(LOCALES)("%s: on the current Review step, U, P and X mark and ⌘↩ finishes", async (locale) => {

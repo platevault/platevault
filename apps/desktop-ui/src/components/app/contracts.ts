@@ -224,17 +224,6 @@ interface ColumnBase<T> {
 }
 
 /**
- * The session intake Review step's body (P-REV2, C14): the review workspace
- * for one session. The intake StepPage (P3) hosts it with `fill`; P4
- * implements it (`SessionReview`), and the route injects it.
- */
-export interface SessionReviewProps {
-  sessionId: string
-  /** The host's Finish review; the workspace's Finish command (⌘↵) calls it once no frame is Unreviewed. */
-  onFinished?: () => void
-}
-
-/**
  * "Add {value} to {rig}" in a session (PLAN-EQ-FR-04, D-W127): what Settings ›
  * Equipment offers for a FILTER value no filter of the session's confirmed rig
  * matches. Each filter record that already matches it, from another rig, is
