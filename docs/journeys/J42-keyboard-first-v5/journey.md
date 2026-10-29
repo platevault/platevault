@@ -95,7 +95,7 @@ Done means:
 - **Do:** On the `NGC 7000 HOO` Project page, Tab to the **Project ▾** menu and press Enter. Read the menu, then press **Esc**.
 - **Expect:** The menu offers **Edit…** and **Duplicate…**. **Esc** closes it, and focus returns to **Project ▾**.
 - **Expect (negative):** Opening and closing the menu changes no Project setting, group, session or file.
-- **Trace:** FR-025 · PRJ-FR-07 · PRJ-FR-30 · PRJ-FR-32
+- **Trace:** FR-025 · FR-031 · PRJ-FR-07 · PRJ-FR-30 · PRJ-FR-32
 
 ### S6 — Open a sheet and return {#S6}
 
@@ -178,7 +178,7 @@ Done means:
 - **Do:** Outside PlateVault, recompute the J19/P5 manifest.
 - **Expect:** Every path, size and SHA-256 matches.
 - **Expect (negative):** No library or user file was written, moved or trashed by any step; only PlateVault's own settings store changed.
-- **Trace:** D-W166 · J40 S12
+- **Trace:** root SC-002 · LIB-AC-45 · D-W166 · J40 S12
 
 ## Success criteria
 
@@ -209,6 +209,6 @@ Done means:
 - **Δ4** 2026-10-17 · S3a · behavior-change
   On the `desktop-ui` (Windows) lane the Menu key opens a row's menu as **⇧F10** does; Apple keyboards have no Menu key, so the `desktop-ui-macos` lane uses **⇧F10** (with **fn** where needed). Tables keep native semantics with no ARIA grid role. The header stops and previous-row focus are the owner's rules, so G7 is dissolved.
   Evidence: HARNESS-V5-FEEDBACK-R1.md "Tables and the keyboard" P-KBD1 (OWNER, 2026-10-16; decision astro-plan-g3tx4) · D-W121 · prototype row-actions.tsx openMenuFromKeyboard (ContextMenu key or Shift+F10) on ui-harness-v5 · by: JourneysR9c (intent-gated)
-- **Δ5** 2026-10-28 · S1-S6, S8-S9, S15 · trace-only
+- **Δ5** 2026-10-28 · S1-S6, S8-S9, S15 · behavior-change
   Keyboard steps trace to their owning shortcuts, navigation and custody requirements. S1's key list is owned by FR-037 and FR-042; help focus return is not specified. S3 cites FR-042-AC-02 only for the text-field exclusion; slash search and Esc-clears-search have no owning requirement in this set. S6 cites STO-IMP-FR-01 for Import, while Escape/focus return is harness-only. S5's keyboard dismissal is owned by FR-025 and FR-031.
   Evidence: 063 FR-025, FR-031, FR-037, FR-042, FR-042-AC-01, FR-042-AC-02; 071 STO-IMP-FR-01 · D-W91, D-W121, D-W162, D-W164 · D-W166 via LIB-AC-45 (J40 S10-S12) · astro-plan-ocyuc.5 · by: SpecOwner2 (intent-gated). No owner among 063-072 defines the help focus return in S1, slash-search/Esc-clears-search behavior in S3, or sheet Escape/focus-return behavior in S6.

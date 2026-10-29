@@ -8,7 +8,7 @@
 
 **Amended**: 2026-10-26, to the Round 11 decisions D-W144 and D-W149, to the Rounds 5 to 9 decisions recorded that day (D-W150, D-W157 to D-W159, D-W161 and D-W162), the owner's answer D-W156, and the 2026-10-14 Q35 window decision D-W163 (astro-plan-ocyuc.2; PR #1889).
 
-**Amended**: 2026-10-27, to the owner's answers D-W164 (the Round 5 lead answers confirmed) and D-W165 (better match available: C + A), astro-plan-ygihm; and on 2026-10-28 to the owner's appearance-storage decision D-W166, with FR-042 for the keyboard model (astro-plan-so0jv).
+**Amended**: 2026-10-27, to the owner's answers D-W164 (the Round 5 lead answers confirmed) and D-W165 (better match available: C + A), astro-plan-ygihm; and on 2026-10-28 to the owner's appearance-storage decision D-W166, with FR-042 for the keyboard model and FR-032-AC-01 for issue dismissal and recurrence (astro-plan-so0jv).
 
 **Status**: Active, reconciled 2026-10-26 (`specs/SPEC_STATUS.md`). Landed: this contract and its journeys (#1776, #1778), the Round 9 amendments (#1804, #1836, #1840, #1844), the owner's answers (#1849, #1850, #1855) and the F4 backend cut-over (#1851). Remains: the clean-slate frontend (epic astro-plan-ocyuc), the coverage review astro-plan-lzrq, the requirements reviews in `checklists/requirements.md`, and every step of molecule astro-plan-mol-92n after specify. Conservative product decisions and all human-approval gate waivers are authorised.
 

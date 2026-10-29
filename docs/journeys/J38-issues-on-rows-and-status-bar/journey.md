@@ -102,7 +102,7 @@ running, and the notifications history. Done means:
 
   After mounting, the bar reads `3 of 3 online` and ⚠ reads 3, and the row no longer shows the issue, with no action from the user.
 - **Expect (negative):** No `12 Sep` frame reads Missing, and no session is removed. No other issue appears or disappears.
-- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 5 P-SB3 "Left: locations online" · HARNESS-V5-IA.md §Round 2b "locations online (links to Settings › Locations)" · src/domain/issues.ts location-offline · J19/S15 · 063 FR-032, FR-032-AC-01, FR-038 · 064 LIB-FR-07 · D-W144, D-W158
+- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 5 P-SB3 "Left: locations online" · HARNESS-V5-IA.md §Round 2b "locations online (links to Settings › Locations)" · src/domain/issues.ts location-offline · J19/S15 · 063 FR-032, FR-038 · 064 LIB-FR-07 · D-W144, D-W158
 
 ### S5a — Dismiss two issues on their rows and restore them {#S5a}
 
