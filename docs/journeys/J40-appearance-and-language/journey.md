@@ -104,7 +104,7 @@ The user chooses how PlateVault looks and reads: they set its appearance mode, c
 
 - **Do:** In Aparência click **Restaurar padrões**, read the confirmation, and confirm.
 - **Expect:** After confirming, PlateVault reads English (UK) in PlateVault Dark with single-key shortcuts on, and **Restore defaults** is disabled again with "Already at the defaults". Cancelling the confirmation instead changes nothing.
-- **Trace:** D-W143 · appearance-page.tsx (Restore defaults, ConfirmDialog)
+- **Trace:** LIB-FR-21 · LIB-AC-45 · D-W143 (the theme pair) · appearance-page.tsx (Restore defaults, ConfirmDialog)
 
 ### S12 — Confirm the library is untouched {#S12}
 
