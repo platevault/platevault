@@ -282,7 +282,7 @@ impl Library {
         &self,
         request: &EnableReminders,
     ) -> Result<ReminderSubscription, LibraryError> {
-        request.reminder.validate()?;
+        request.reminder.validate().map_err(|error| error.within_field("reminder"))?;
         default_site(&self.catalog().list_sites().await?)?;
         let permission = self.activation_permission().await;
         let (state, block_reason) = match permission.block_reason() {

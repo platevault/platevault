@@ -159,19 +159,20 @@ fn normalized(cameras: &[Camera]) -> Result<Vec<Camera>> {
     let mut ids = BTreeSet::new();
     cameras
         .iter()
-        .map(|camera| {
+        .enumerate()
+        .map(|(index, camera)| {
             if !ids.insert(camera.id) {
-                return Err(LibraryError::InvalidInput(format!(
-                    "camera {} is listed twice",
-                    camera.id
-                )));
+                return Err(LibraryError::invalid_field(
+                    &format!("{index}.id"),
+                    format!("camera {} is listed twice", camera.id),
+                ));
             }
             let normalized = Camera {
                 model: camera.model.trim().to_owned(),
                 alias: camera.alias.as_deref().map(|alias| alias.trim().to_owned()),
                 ..camera.clone()
             };
-            normalized.validate()?;
+            normalized.validate().map_err(|error| error.within_field(&index.to_string()))?;
             Ok(normalized)
         })
         .collect()

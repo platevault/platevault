@@ -55,10 +55,16 @@ impl Camera {
     /// `InvalidInput` naming the camera.
     pub fn validate(&self) -> Result<(), LibraryError> {
         if self.model_key().is_empty() {
-            return Err(invalid(format!("camera {}: the model is blank", self.id)));
+            return Err(LibraryError::invalid_field(
+                "model",
+                format!("camera {}: the model is blank", self.id),
+            ));
         }
         if self.alias_key().is_some_and(|alias| alias.is_empty()) {
-            return Err(invalid(format!("camera {}: the alias is blank", self.id)));
+            return Err(LibraryError::invalid_field(
+                "alias",
+                format!("camera {}: the alias is blank", self.id),
+            ));
         }
         Ok(())
     }
@@ -67,13 +73,15 @@ impl Camera {
     /// alias on every camera of a model two or more cameras share.
     ///
     /// # Errors
-    /// `InvalidInput` naming the camera or alias.
+    /// `InvalidInput` naming the camera or alias; an invalid camera's field
+    /// is named below its position, while a clash between cameras names no
+    /// one field.
     pub fn validate_all(cameras: &[Self]) -> Result<(), LibraryError> {
         let mut ids = BTreeSet::new();
         let mut aliases = BTreeSet::new();
         let mut models: BTreeMap<String, u32> = BTreeMap::new();
-        for camera in cameras {
-            camera.validate()?;
+        for (index, camera) in cameras.iter().enumerate() {
+            camera.validate().map_err(|error| error.within_field(&index.to_string()))?;
             if !ids.insert(camera.id) {
                 return Err(invalid(format!("camera {} is listed twice", camera.id)));
             }
@@ -224,12 +232,15 @@ impl OpticsSignature {
                 .filter(|value| value.is_finite() && *value > 0.0)
                 .is_some_and(|value| canonical_decimal(value) == *text);
             if !canonical {
-                return Err(invalid(format!("focal length {text} mm is not a positive length")));
+                return Err(LibraryError::invalid_field(
+                    "focalLengthMm",
+                    format!("focal length {text} mm is not a positive length"),
+                ));
             }
         }
         if let Some(reducer) = &self.reducer {
             if reducer.is_empty() || reducer.trim() != reducer {
-                return Err(invalid("the reducer is blank".into()));
+                return Err(LibraryError::invalid_field("reducer", "the reducer is blank"));
             }
         }
         Ok(())
@@ -281,6 +292,6 @@ impl RigVersion {
     /// # Errors
     /// `InvalidInput` for an invalid optics signature.
     pub fn validate(&self) -> Result<(), LibraryError> {
-        self.optics.validate()
+        self.optics.validate().map_err(|error| error.within_field("optics"))
     }
 }

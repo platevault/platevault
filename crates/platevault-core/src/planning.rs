@@ -272,16 +272,20 @@ fn whole_second(at: OffsetDateTime) -> OffsetDateTime {
 
 fn zone(name: &str) -> Result<TimeZone, LibraryError> {
     let unknown = || {
-        LibraryError::InvalidInput(format!(
-            "timeZone {name:?} is not an IANA name in the bundled time-zone database"
-        ))
+        LibraryError::invalid_field(
+            "timeZone",
+            format!("timeZone {name:?} is not an IANA name in the bundled time-zone database"),
+        )
     };
     let zone = ZONES.get(name).map_err(|_| unknown())?;
     match zone.iana_name() {
         Some(canonical) if canonical == name && !zone.is_unknown() => Ok(zone),
-        Some(canonical) if !zone.is_unknown() => Err(LibraryError::InvalidInput(format!(
-            "timeZone {name:?} is not canonical; the bundled database names it {canonical:?}"
-        ))),
+        Some(canonical) if !zone.is_unknown() => Err(LibraryError::invalid_field(
+            "timeZone",
+            format!(
+                "timeZone {name:?} is not canonical; the bundled database names it {canonical:?}"
+            ),
+        )),
         _ => Err(unknown()),
     }
 }

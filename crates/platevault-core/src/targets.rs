@@ -284,9 +284,9 @@ impl TargetQuery {
         };
         let cone = match self.cone {
             Some(cone) => {
-                cone.validate()?;
+                cone.validate().map_err(|error| error.within_field("cone"))?;
                 let center = match_position(cone.ra_deg, cone.dec_deg).ok_or_else(|| {
-                    LibraryError::InvalidInput("invalid sky cone in degrees".into())
+                    LibraryError::invalid_field("cone", "invalid sky cone in degrees")
                 })?;
                 Some((center, match_sky::Angle::from_degrees(cone.radius_deg)))
             }

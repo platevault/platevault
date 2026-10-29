@@ -39,11 +39,18 @@ pub trait Ipc {
     /// The command ran and refused with a library `ErrorResponse` of `code`
     /// naming `identity`, and sent no English text.
     fn refuses(&self, cmd: &str, args: &Value, code: LibraryErrorCode, identity: Uuid) {
+        self.refusal(cmd, args, code, identity);
+    }
+
+    /// [`Self::refuses`], returning the `ErrorResponse` for the params a
+    /// test checks beyond the code and identity.
+    fn refusal(&self, cmd: &str, args: &Value, code: LibraryErrorCode, identity: Uuid) -> Value {
         let error = self.invoke(cmd, args).expect_err(cmd);
         assert!(error.is_object(), "{cmd} reached its handler: {error}");
         assert_eq!(error["code"], json!(code), "{cmd}: {error}");
         assert_eq!(error["identity"], json!(identity), "{cmd}: {error}");
         assert!(error.get("message").is_none(), "{cmd} sent English text: {error}");
+        error
     }
 }
 

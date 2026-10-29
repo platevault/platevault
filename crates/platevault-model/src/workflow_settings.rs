@@ -13,15 +13,14 @@ use serde::{Deserialize, Serialize};
 
 use crate::{Band, GroupKeywords, LibraryError, Revision, ViewMode};
 
-fn invalid(message: String) -> LibraryError {
-    LibraryError::InvalidInput(message)
-}
-
 fn require_percent(field: &str, value: f64) -> Result<(), LibraryError> {
     if value.is_finite() && value > 0.0 && value <= 100.0 {
         Ok(())
     } else {
-        Err(invalid(format!("{field} {value} must be a percentage in (0, 100]")))
+        Err(LibraryError::invalid_field(
+            field,
+            format!("{field} {value} must be a percentage in (0, 100]"),
+        ))
     }
 }
 
@@ -29,7 +28,10 @@ fn require_angle(field: &str, value: f64) -> Result<(), LibraryError> {
     if value.is_finite() && (0.0..180.0).contains(&value) {
         Ok(())
     } else {
-        Err(invalid(format!("{field} {value} must be an angle in [0, 180) degrees")))
+        Err(LibraryError::invalid_field(
+            field,
+            format!("{field} {value} must be an angle in [0, 180) degrees"),
+        ))
     }
 }
 
@@ -64,9 +66,10 @@ impl SplitLimits {
     pub fn validate(&self) -> Result<(), LibraryError> {
         let centre = self.max_centre_offset_arcmin;
         if !(centre.is_finite() && centre > 0.0 && centre < 10_800.0) {
-            return Err(invalid(format!(
-                "maxCentreOffsetArcmin {centre} must be an angle in (0, 10800) arcminutes"
-            )));
+            return Err(LibraryError::invalid_field(
+                "maxCentreOffsetArcmin",
+                format!("maxCentreOffsetArcmin {centre} must be an angle in (0, 10800) arcminutes"),
+            ));
         }
         require_angle("maxRotationDeg", self.max_rotation_deg)
     }
@@ -111,13 +114,19 @@ impl FramingMargins {
         require_percent("panelOverlapPercent", low)?;
         require_percent("panelOverlapPercent", high)?;
         if low >= high {
-            return Err(invalid(format!("panel overlap {low}% to {high}% is not a range")));
+            return Err(LibraryError::invalid_field(
+                "panelOverlapPercent",
+                format!("panel overlap {low}% to {high}% is not a range"),
+            ));
         }
         if high >= self.min_overlap_percent {
-            return Err(invalid(format!(
-                "panel overlap up to {high}% reaches the same-framing overlap {}%",
-                self.min_overlap_percent
-            )));
+            return Err(LibraryError::invalid_field(
+                "panelOverlapPercent",
+                format!(
+                    "panel overlap up to {high}% reaches the same-framing overlap {}%",
+                    self.min_overlap_percent
+                ),
+            ));
         }
         Ok(())
     }
@@ -151,10 +160,13 @@ impl FlatRules {
         require_angle("fineWithinDeg", self.fine_within_deg)?;
         require_angle("offeredWithinDeg", self.offered_within_deg)?;
         if self.fine_within_deg > self.offered_within_deg {
-            return Err(invalid(format!(
-                "a flat fine within {}° is never offered beyond {}°",
-                self.fine_within_deg, self.offered_within_deg
-            )));
+            return Err(LibraryError::invalid_field(
+                "fineWithinDeg",
+                format!(
+                    "a flat fine within {}° is never offered beyond {}°",
+                    self.fine_within_deg, self.offered_within_deg
+                ),
+            ));
         }
         Ok(())
     }
@@ -200,7 +212,10 @@ impl CalibrationSettings {
     /// `InvalidInput` for an old-master age under one day.
     pub fn validate(&self) -> Result<(), LibraryError> {
         if self.old_master_after_days == 0 {
-            return Err(invalid("oldMasterAfterDays must be at least 1 day".into()));
+            return Err(LibraryError::invalid_field(
+                "oldMasterAfterDays",
+                "oldMasterAfterDays must be at least 1 day",
+            ));
         }
         Ok(())
     }
@@ -231,14 +246,18 @@ impl MoonAvoidanceCurve {
     fn validate(&self, band: &str) -> Result<(), LibraryError> {
         let Self { distance_deg, width_days } = *self;
         if !(0.0..=180.0).contains(&distance_deg) {
-            return Err(invalid(format!(
-                "{band} Moon distance {distance_deg} must be in [0, 180] degrees"
-            )));
+            return Err(LibraryError::invalid_field(
+                "distanceDeg",
+                format!("{band} Moon distance {distance_deg} must be in [0, 180] degrees"),
+            )
+            .within_field(band));
         }
         if !(0.5..=30.0).contains(&width_days) {
-            return Err(invalid(format!(
-                "{band} Moon width {width_days} must be in [0.5, 30] days"
-            )));
+            return Err(LibraryError::invalid_field(
+                "widthDays",
+                format!("{band} Moon width {width_days} must be in [0.5, 30] days"),
+            )
+            .within_field(band));
         }
         Ok(())
     }
@@ -344,10 +363,10 @@ impl WorkflowSettings {
     /// # Errors
     /// `InvalidInput` naming the invalid field.
     pub fn validate(&self) -> Result<(), LibraryError> {
-        self.framing.validate()?;
-        self.flats.validate()?;
-        self.calibration.validate()?;
-        self.moon_avoidance.validate()
+        self.framing.validate().map_err(|error| error.within_field("framing"))?;
+        self.flats.validate().map_err(|error| error.within_field("flats"))?;
+        self.calibration.validate().map_err(|error| error.within_field("calibration"))?;
+        self.moon_avoidance.validate().map_err(|error| error.within_field("moonAvoidance"))
     }
 }
 

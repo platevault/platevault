@@ -55,7 +55,8 @@ fn references_are_project_or_calibration() {
 }
 
 fn names_field(error: &LibraryError, field: &str) -> bool {
-    matches!(error, LibraryError::InvalidInput(message) if message.contains(field))
+    error.code() == platevault_core::LibraryErrorCode::InvalidInput
+        && error.field().is_some_and(|path| path.as_str() == field)
 }
 
 #[test]

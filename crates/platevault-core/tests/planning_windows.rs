@@ -455,7 +455,8 @@ fn targets_without_icrs_coordinates_have_no_nights_and_zones_must_be_bundled_ian
     }
     for zone in ["Mars/Olympus", "europe/amsterdam", " Europe/Amsterdam", "Etc/Unknown", ""] {
         match validate_time_zone(zone) {
-            Err(LibraryError::InvalidInput(message)) => {
+            Err(LibraryError::InvalidField { field, message }) => {
+                assert_eq!(field.as_str(), "timeZone", "{message}");
                 assert!(message.contains("timeZone"), "{message}");
             }
             other => panic!("{zone:?} accepted: {other:?}"),
@@ -463,10 +464,8 @@ fn targets_without_icrs_coordinates_have_no_nights_and_zones_must_be_bundled_ian
     }
     let mars = ObservingSite { time_zone: "Mars/Olympus".into(), ..backyard };
     let query = query(&ngc_7000(), &mars, date!(2026 - 10 - 20), 1, quickstart());
-    assert!(matches!(
-        compute_windows(&ngc_7000(), &mars, &query),
-        Err(LibraryError::InvalidInput(_))
-    ));
+    let refused = compute_windows(&ngc_7000(), &mars, &query).unwrap_err();
+    assert_eq!(refused.code(), platevault_core::LibraryErrorCode::InvalidInput, "{refused:?}");
 }
 
 fn instant(value: &serde_json::Value) -> OffsetDateTime {

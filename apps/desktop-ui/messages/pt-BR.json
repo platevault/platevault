@@ -7526,6 +7526,7 @@
   "status_bar_page_in": "{area} › {page}",
   "status_bar_issue_page": "{page} ({count})",
   "action_failure_invalid_input": "O PlateVault não pode aceitar um valor desta solicitação. Verifique os campos.",
+  "form_field_refused": "O PlateVault não pode aceitar este valor. Altere-o e tente novamente.",
   "action_failure_not_found": "O registro não está mais na biblioteca.",
   "action_failure_conflict": "O registro mudou em outro lugar. Revise a versão atual.",
   "action_failure_identity_conflict": "Outro registro já tem esta identidade.",

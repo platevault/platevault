@@ -5,12 +5,13 @@
 //! 065 PRJ-FR-31, 068 CAL-FR-15/20/21, J36 S8, 072 PLAN-FR-02): the defaults
 //! at revision 0, a revision-checked save of non-defaults that reads back
 //! whole, a stale save refused naming the settings, an invalid one refused
-//! with nothing stored, and per-band Moon-avoidance curves kept per band.
+//! naming its field with nothing stored, and per-band Moon-avoidance curves
+//! kept per band.
 
 use persistence_library::{Catalog, WORKFLOW_SETTINGS_ID};
 use platevault_model::{
-    Band, CalibrationSettings, DarkBiasRules, FlatRules, LibraryError, MoonAvoidanceCurve,
-    Revision, ViewMode, WorkflowSettings,
+    Band, CalibrationSettings, DarkBiasRules, FlatRules, LibraryError, LibraryErrorCode,
+    MoonAvoidanceCurve, Revision, ViewMode, WorkflowSettings,
 };
 
 async fn catalog() -> (tempfile::TempDir, Catalog) {
@@ -73,17 +74,32 @@ async fn a_stale_save_is_refused_naming_the_settings_at_their_revision() {
 }
 
 #[tokio::test]
-async fn an_invalid_setting_is_refused_and_nothing_is_stored() {
+async fn an_invalid_setting_is_refused_naming_its_field_and_nothing_is_stored() {
     let (_dir, catalog) = catalog().await;
     let mut zero_days = changed();
     zero_days.calibration.old_master_after_days = 0;
     let mut far = changed();
     far.moon_avoidance.set(Band::Ha, MoonAvoidanceCurve { distance_deg: 200.0, width_days: 7.0 });
+    let mut narrow = changed();
+    narrow
+        .moon_avoidance
+        .set(Band::Sii, MoonAvoidanceCurve { distance_deg: 60.0, width_days: 0.0 });
     let mut inverted = changed();
     inverted.flats.fine_within_deg = 9.0;
-    for invalid in [zero_days, far, inverted] {
-        let refused = catalog.save_workflow_settings(0, &invalid).await.unwrap_err();
-        assert!(matches!(refused, LibraryError::InvalidInput(_)), "{refused:?}");
+    let mut turned = changed();
+    turned.framing.split.max_rotation_deg = 180.0;
+    for (invalid, field) in [
+        (zero_days, "calibration.oldMasterAfterDays"),
+        (far, "moonAvoidance.Ha.distanceDeg"),
+        (narrow, "moonAvoidance.SII.widthDays"),
+        (inverted, "flats.fineWithinDeg"),
+        // The split limits are flattened into the framing margins on the wire.
+        (turned, "framing.maxRotationDeg"),
+    ] {
+        let refused: LibraryError = catalog.save_workflow_settings(0, &invalid).await.unwrap_err();
+        assert_eq!(refused.code(), LibraryErrorCode::InvalidInput, "{refused:?}");
+        assert_eq!(refused.field().map(|path| path.as_str()), Some(field), "{refused:?}");
+        assert_eq!(refused.response(None, None).field.as_ref(), refused.field());
     }
     let revision: Revision = catalog.workflow_settings().await.unwrap().1;
     assert_eq!(revision, 0, "no refused save is recorded");

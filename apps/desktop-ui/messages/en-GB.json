@@ -7018,6 +7018,7 @@
   "status_bar_page_in": "{area} › {page}",
   "status_bar_issue_page": "{page} ({count})",
   "action_failure_invalid_input": "PlateVault can't accept a value in this request. Check the fields.",
+  "form_field_refused": "PlateVault can't accept this value. Change it and try again.",
   "action_failure_not_found": "The record is no longer in the library.",
   "action_failure_conflict": "The record changed elsewhere. Review the current version.",
   "action_failure_identity_conflict": "Another record already has this identity.",

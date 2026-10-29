@@ -39,7 +39,7 @@ import type { Action, StepFlow } from "./contracts"
 import { ConfirmDialog } from "./confirm-dialog"
 import { ActionError } from "./feedback"
 import { BlockersPreview } from "./previews"
-import { failureMessage, isPromise, type RunFailure, type RunOutcome, type Settled, settled, settlePending } from "./run-result"
+import { failureMessage, isPromise, type RunFailure, type RunOutcome, type RunResult, type Settled, settled, settlePending } from "./run-result"
 import { StepStrip, stepEditable, useStepActions } from "./step-flow"
 
 /** What a dialog's action runs (run-result.ts): a failure keeps the dialog open; a promise shows it busy until it settles. */
@@ -365,7 +365,8 @@ function DialogFrame({ trigger, title, size = "md", confirm, cancel, strip, skip
 }
 
 // ---------------------------------------------------------------------------
-// Form checks: the action stays unavailable while a field fails; a field shows its message once changed
+// Form checks: the action stays unavailable while a field fails; a field shows its message once changed, or once the
+// library refuses the value it holds
 // ---------------------------------------------------------------------------
 
 /** A form's checks: each field's message, or undefined when it passes. */
@@ -387,27 +388,62 @@ export function shownErrors<K extends string>(errors: FieldErrors<K>, touched: R
 }
 
 /**
+ * Each form field's path on the value the dialog saves: the `field` a library
+ * `invalid_input` refusal names (`ErrorResponse.field`, the wire names from
+ * the saved value down, such as `moon.minSeparationDeg`).
+ */
+export type FieldPaths<K extends string> = Readonly<Partial<Record<K, string>>>
+
+/**
+ * The form field a run's failure names: a library `invalid_input` whose
+ * `field` is the path of one of `paths`, or below it (a list entry's field
+ * shows on the list). Undefined for any other failure, or a field the form
+ * doesn't hold.
+ */
+export function refusedField<K extends string>(failure: RunFailure, paths: FieldPaths<K>): K | undefined {
+  if (failure.source !== "library" || failure.error.code !== "invalid_input") return undefined
+  const keys = Object.keys(paths) as K[]
+  for (let path = failure.error.field; path; path = path.slice(0, Math.max(path.lastIndexOf("."), 0))) {
+    const key = keys.find((candidate) => paths[candidate] === path)
+    if (key !== undefined) return key
+  }
+  return undefined
+}
+
+/**
  * A controlled dialog's form: it starts from `initial` each time the dialog
  * opens; `set` records which fields the user changed, and `shown` gives a
- * field's message only once it has.
+ * field's message only once it has. `refusing` runs the dialog's save: a
+ * library refusal naming one of `paths` shows on that field until the user
+ * changes it or saves again, while the dialog keeps its error and Retry.
  */
 export function useDialogForm<T extends object>(open: boolean, initial: () => T) {
+  const m = useMessages()
   const [values, setValues] = useState<T>(initial)
   const [touched, setTouched] = useState<ReadonlySet<keyof T & string>>(new Set())
+  const [refused, setRefused] = useState<(keyof T & string) | undefined>(undefined)
   const [wasOpen, setWasOpen] = useState(open)
   if (open !== wasOpen) {
     setWasOpen(open)
     if (open) {
       setValues(initial())
       setTouched(new Set())
+      setRefused(undefined)
     }
   }
   function set(patch: Partial<T>) {
     setValues((current) => ({ ...current, ...patch }))
     setTouched((current) => new Set([...current, ...(Object.keys(patch) as (keyof T & string)[])]))
+    setRefused((current) => (current !== undefined && current in patch ? undefined : current))
   }
   function shown<K extends keyof T & string>(errors: FieldErrors<K>, key: K): string | undefined {
-    return shownErrors(errors, touched as ReadonlySet<K>)[key]
+    return shownErrors(errors, touched as ReadonlySet<K>)[key] ?? (refused === key ? m.form_field_refused() : undefined)
   }
-  return { values, set, shown }
+  async function refusing<R extends RunResult>(save: Promise<R>, paths: FieldPaths<keyof T & string>): Promise<R> {
+    setRefused(undefined)
+    const result = await save
+    if (result && !result.ok) setRefused(refusedField(result.failure, paths))
+    return result
+  }
+  return { values, set, shown, refusing }
 }

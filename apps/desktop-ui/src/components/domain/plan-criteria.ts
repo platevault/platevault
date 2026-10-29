@@ -7,9 +7,8 @@
  * asks for them (`no_criteria`).
  *
  * The form checks the ranges the library refuses (`PlanCriteria::validate`)
- * on their field before it saves. The library's `invalid_input` names no
- * field on the wire, so a refusal it still makes shows as the dialog's
- * error.
+ * on their field before it saves. A refusal the library still makes names
+ * its field on the wire, and the dialog shows it there.
  */
 import type { Darkness, PlanCriteria } from "@/api/ipc"
 import { libraryQuery } from "@/api/query"

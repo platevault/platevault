@@ -12,8 +12,8 @@ use uuid::Uuid;
 
 fn refused_naming(result: Result<(), LibraryError>, field: &str) {
     match result {
-        Err(LibraryError::InvalidInput(message)) => {
-            assert!(message.contains(field), "{message:?} should name {field:?}");
+        Err(LibraryError::InvalidField { field: path, message }) => {
+            assert_eq!(path.as_str(), field, "{message:?} should name {field:?}");
         }
         other => panic!("expected InvalidInput naming {field:?}, got {other:?}"),
     }
@@ -100,7 +100,8 @@ fn tile_and_sample_requests_refuse_sizes_and_levels_outside_their_bounds() {
     refused_naming(tile(16, 0, 0, Stretch::Auto).validate(), "height");
     refused_naming(tile(16, 1025, 0, Stretch::Auto).validate(), "height");
     refused_naming(tile(16, 16, 9, Stretch::Auto).validate(), "level");
-    refused_naming(tile(16, 16, 0, Stretch::Linear { black: 1.0, white: 0.0 }).validate(), "black");
+    let inverted = Stretch::Linear { black: 1.0, white: 0.0 };
+    refused_naming(tile(16, 16, 0, inverted).validate(), "stretch.black");
     assert!(tile(1024, 1024, 8, Stretch::Auto).validate().is_ok());
     assert!(tile(1, 1, 0, Stretch::Auto).validate().is_ok());
     let sample = |width, height| SampleRequest {
