@@ -22,6 +22,7 @@ import { Eye, FolderPlus, LayoutGrid, Pencil, Plus, Scissors, Trash2 } from "luc
 import { useState } from "react"
 import { type ActionResult, type GoalProgress, library, type ProjectCapture_Serialize, type ProjectDesired_Serialize, type ProjectGroup, type ProjectInputs_Serialize, type ProjectSessionMember, type ProjectSuggestion } from "@/api/ipc"
 import { useMessages } from "@/app/preferences"
+import { labelOf, useSessionSummaries } from "@/components/domain/session-label"
 import { BoxTable } from "@/components/app/box"
 import type { Action, Column, MenuItem } from "@/components/app/contracts"
 import { DataTable } from "@/components/app/data-table"
@@ -36,7 +37,6 @@ import { formatCount, formatDateTime, formatHours, numberText } from "@/lib/form
 import type { Messages } from "@/lib/i18n"
 import type { ProjectTabProps } from "./project-page"
 import { inputsQuery, isLocked, type ProjectHeader, progressQuery, projectWrite, rigQuery, useProjectRecord } from "./queries"
-import { labelOf, useSessionSummaries } from "./sessions"
 
 /** Each rig's saved name, read once per rig. */
 function useRigNames(rigIds: readonly string[]): (rigId: string) => string {
@@ -65,7 +65,7 @@ function SessionsBody({ header, chrome, inputs }: { header: ProjectHeader; chrom
   const progress = useQuery(progressQuery(header.id))
   const rigName = useRigNames([...desired.groups.map((g) => g.rigId), ...inputs.suggestions.map((s) => s.rigId)])
   const sessions = useSessionSummaries([...desired.sessions.map((s) => s.sessionId), ...inputs.suggestions.map((s) => s.sessionId)])
-  const sessionName = (id: string) => labelOf(sessions, id)
+  const sessionName = (id: string) => labelOf(m, sessions, id)
   const groupName = (id: string) => desired.groups.find((g) => g.id === id)?.name ?? m.project_group_missing()
   const subjectName = (subjectId: string): string => {
     if (record.state === "ready") {

@@ -7208,7 +7208,6 @@
   "reason_destination_occupied": "Another file is already at the destination",
   "reason_destination_mismatch": "The destination copy doesn't match the source",
   "reason_destination_changed": "The destination changed",
-  "reason_write_failed": "The destination couldn't be written",
   "reason_interrupted": "Interrupted: what happened can't be proven",
   "reason_protected": "Protected: PlateVault never moves it",
   "project_record_unavailable": "The Project's details can't be read yet",

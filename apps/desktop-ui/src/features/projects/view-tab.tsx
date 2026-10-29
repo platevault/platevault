@@ -21,6 +21,7 @@ import { useEffect, useState } from "react"
 import { type ApplyReport_Serialize, library, type NativePathWire, type PendingChange_Serialize, type PreviousItem_Serialize, type ProjectViewSettings_Serialize, type ViewMode } from "@/api/ipc"
 import { libraryQuery } from "@/api/query"
 import { useMessages } from "@/app/preferences"
+import { labelOf, useSessionSummaries } from "@/components/domain/session-label"
 import { ActionButton } from "@/components/app/actions"
 import type { Action, Column, MenuItem } from "@/components/app/contracts"
 import { KeyValueList } from "@/components/app/data"
@@ -38,7 +39,6 @@ import { type ApplyRun, applyOperationFound, cancelApply, dismissApply, useApply
 import { changeSession, changeSource, changeText, sourceText, stopText } from "./apply-words"
 import type { ProjectTabProps } from "./project-page"
 import { applyPreviewQuery, inputsQuery, isLocked, previousItemsQuery, projectWrite } from "./queries"
-import { labelOf, useSessionSummaries } from "./sessions"
 import { modeText, pathText, reasonText } from "./words"
 
 export function ViewTab({ header, chrome, search }: ProjectTabProps) {
@@ -76,7 +76,7 @@ export function ViewTab({ header, chrome, search }: ProjectTabProps) {
     title: m.project_pending_changes(),
     count: pending.length,
     flush: true,
-    content: <PendingTable projectName={header.name} pending={pending} sessionName={(id) => labelOf(sessions, id)} groupName={groupName} />,
+    content: <PendingTable projectName={header.name} pending={pending} sessionName={(id) => labelOf(m, sessions, id)} groupName={groupName} />,
   })
   sections.push({
     id: "previous",

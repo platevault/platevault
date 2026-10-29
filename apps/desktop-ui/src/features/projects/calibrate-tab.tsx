@@ -12,6 +12,7 @@
 import { useQuery } from "@tanstack/react-query"
 import { failureOf, type InputRef, type SettledPin_Serialize, type ViewPlanEntry } from "@/api/ipc"
 import { useMessages } from "@/app/preferences"
+import { labelOf, useSessionSummaries } from "@/components/domain/session-label"
 import { BoxTable } from "@/components/app/box"
 import type { Blocker, Column } from "@/components/app/contracts"
 import { useFollowLink } from "@/components/app/links"
@@ -23,7 +24,6 @@ import type { Messages } from "@/lib/i18n"
 import { applyBlocker } from "./apply-words"
 import type { ProjectTabProps } from "./project-page"
 import { applyPreviewQuery, closedSnapshotQuery, isLocked } from "./queries"
-import { labelOf, useSessionSummaries } from "./sessions"
 import { kindText } from "./words"
 
 interface SourceRow {
@@ -77,7 +77,7 @@ function PlannedCalibration({ header, chrome }: Pick<ProjectTabProps, "header" |
     ...(preview.data?.entries ?? []).flatMap((e) => (e.source.source === "calibration_frame" ? [e.source.sessionId] : [])),
   ]
   const sessions = useSessionSummaries(ids)
-  const sessionName = (id: string) => labelOf(sessions, id)
+  const sessionName = (id: string) => labelOf(m, sessions, id)
   if (!preview.data) return <DetailPage {...chrome} title={header.name} sections={[{ id: "calibration", title: m.calibrate_check_title(), content: <ReadState read={preview} /> }]} />
   const viewLink = { to: "/projects/$projectId", params: { projectId: header.id }, search: { stage: "view" } }
   const problems: (Blocker & { id: string })[] = preview.data.blockers
@@ -146,7 +146,7 @@ function FrozenCalibration({ header, chrome }: Pick<ProjectTabProps, "header" | 
   const held = snapshot.data?.basis.groups.flatMap((g) => g.sessions) ?? []
   const pinned = held.flatMap((s) => [s.calibration.dark, s.calibration.flat, s.calibration.bias]).flatMap((p) => (p.state === "pinned" && p.target.input.form === "raw_set" ? [p.target.input.sessionId] : []))
   const sessions = useSessionSummaries([...held.map((s) => s.sessionId), ...pinned])
-  const sessionName = (id: string) => labelOf(sessions, id)
+  const sessionName = (id: string) => labelOf(m, sessions, id)
   if (snapshot.data === undefined) return <DetailPage {...chrome} title={header.name} sections={[{ id: "calibration", title: m.calibrate_check_title(), content: <ReadState read={snapshot} /> }]} />
   const rows: FrozenRow[] = held.map((s) => ({
     id: s.sessionId,

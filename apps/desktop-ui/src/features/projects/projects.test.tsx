@@ -15,7 +15,6 @@ import { ApplySheet } from "./apply-sheet"
 import { resetApplyRuns, startApply } from "./apply-run"
 import { applyBlocker, stopText } from "./apply-words"
 import { outputName } from "./output-tab"
-import { keyParts } from "./sessions"
 import { wrapUpSteps } from "./wrap-up"
 
 const PROJECT = "11111111-1111-1111-1111-111111111111"
@@ -142,10 +141,6 @@ describe("words", () => {
     expect(blocker.label).toBe(m.view_blocker_unsettled({ name: "18 Sep · Ha" }))
   })
 
-  it("reads the night and filter from a capture key, and nothing it doesn't name", () => {
-    expect(keyParts("capture-v1|type=light|night=2026-09-12@date-loc-noon|filter=Ha")).toEqual({ night: "2026-09-12", filter: "Ha" })
-    expect(keyParts("capture-v1|type=light")).toEqual({ night: null, filter: null })
-  })
 
   it("encodes an Output name like the source path", () => {
     expect(outputName("é.fits", path("/x")).payload).toEqual([...new TextEncoder().encode("é.fits")])

@@ -15,12 +15,12 @@ import { useNavigate } from "@tanstack/react-router"
 import { useState } from "react"
 import { library } from "@/api/ipc"
 import { useMessages } from "@/app/preferences"
+import { labelOf, useSessionSummaries } from "@/components/domain/session-label"
 import type { Action } from "@/components/app/contracts"
 import { ChoiceListField, SwitchField, TextField } from "@/components/app/fields"
 import { FormDialog } from "@/components/app/form-dialog"
 import { toast } from "@/components/app/feedback"
 import { inputsQuery, type ProjectHeader, projectWrite } from "./queries"
-import { labelOf, useSessionSummaries } from "./sessions"
 
 export function DuplicateProjectDialog({ header, open, onOpenChange }: { header: ProjectHeader; open: boolean; onOpenChange: (open: boolean) => void }) {
   return open ? <DuplicateForm header={header} onClose={() => onOpenChange(false)} /> : null
@@ -61,7 +61,7 @@ function DuplicateForm({ header, onClose }: { header: ProjectHeader; onClose: ()
         label={m.project_duplicate_part_count({ part: m.project_duplicate_part_sessions(), count: chosen.length })}
         description={m.project_duplicate_current_pins()}
         value={chosen}
-        options={held.map((id) => ({ value: id, label: labelOf(sessions, id) }))}
+        options={held.map((id) => ({ value: id, label: labelOf(m, sessions, id) }))}
         onChange={setTicked}
         empty={m.project_sessions_none()}
       />

@@ -18,6 +18,7 @@ import { RefreshCw } from "lucide-react"
 import { useState } from "react"
 import type { ApplyPreview_Serialize, ForeignFile_Serialize, ViewPlanEntry } from "@/api/ipc"
 import { useMessages } from "@/app/preferences"
+import { labelOf, useSessionSummaries } from "@/components/domain/session-label"
 import { ActionButton } from "@/components/app/actions"
 import { BoxTable } from "@/components/app/box"
 import type { Action, Blocker, Column } from "@/components/app/contracts"
@@ -34,7 +35,6 @@ import type { Messages } from "@/lib/i18n"
 import { startApply } from "./apply-run"
 import { applyBlocker } from "./apply-words"
 import { applyPreviewQuery, inputsQuery, type ProjectHeader } from "./queries"
-import { labelOf, useSessionSummaries } from "./sessions"
 import { modeText, pathText } from "./words"
 
 /** The sheet's two reads differ in what Apply would do. */
@@ -106,7 +106,7 @@ function useBlockers(header: ProjectHeader, preview: ApplyPreview_Serialize | nu
   const sessionIds = (preview?.blockers ?? []).flatMap((b) => ("sessionId" in b && typeof b.sessionId === "string" ? [b.sessionId] : []))
   const sessions = useSessionSummaries(sessionIds)
   const viewLink = { to: "/projects/$projectId", params: { projectId: header.id }, search: { stage: "view" } }
-  return (preview?.blockers ?? []).map((b) => applyBlocker(m, b, (id) => labelOf(sessions, id), viewLink))
+  return (preview?.blockers ?? []).map((b) => applyBlocker(m, b, (id) => labelOf(m, sessions, id), viewLink))
 }
 
 function SheetBody({ header, preview, blockers, ticked, onTick }: { header: ProjectHeader; preview: ApplyPreview_Serialize; blockers: Blocker[]; ticked: string[]; onTick: (ids: string[]) => void }) {

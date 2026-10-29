@@ -42,6 +42,7 @@ import {
 } from "@/api/ipc"
 import { libraryQuery } from "@/api/query"
 import { useMessages } from "@/app/preferences"
+import { labelOf, useSessionSummaries } from "@/components/domain/session-label"
 import { ActionButton } from "@/components/app/actions"
 import { BoxTable } from "@/components/app/box"
 import type { Action, Blocker, Column, FileRow, FlowStep, StepFlow, StepLink } from "@/components/app/contracts"
@@ -57,7 +58,6 @@ import type { Messages } from "@/lib/i18n"
 import { operationText } from "./apply-words"
 import type { ProjectTabProps } from "./project-page"
 import { isLocked, locationsQuery, type ProjectHeader, projectWrite, wrapUpStatusQuery } from "./queries"
-import { labelOf, useSessionSummaries } from "./sessions"
 import { pathText, reasonText } from "./words"
 
 export const WRAP_UP_STEPS: readonly WrapUpStep[] = ["clean_up", "trash", "archive"]
@@ -423,14 +423,14 @@ function useArchiveStep(header: ProjectHeader, status: WrapUpStatus, enabled: bo
     run: close(null),
   }
   const columns: Column<ArchiveSessionOffer>[] = [
-    { id: "session", header: m.project_col_session(), cell: (s) => labelOf(sessions, s.sessionId), sortValue: (s) => labelOf(sessions, s.sessionId), rowHeader: true, truncate: true },
+    { id: "session", header: m.project_col_session(), cell: (s) => labelOf(m, sessions, s.sessionId), sortValue: (s) => labelOf(m, sessions, s.sessionId), rowHeader: true, truncate: true },
     { id: "files", header: m.wrapup_col_detail(), cell: (s) => m.wrapup_items({ count: s.files.length }), sortValue: (s) => s.files.length, align: "right" },
     { id: "size", header: m.dialog_col_size(), cell: (s) => formatBytes(s.files.reduce((t, f) => t + f.sizeBytes, 0)), sortValue: (s) => s.files.reduce((t, f) => t + f.sizeBytes, 0), align: "right" },
     { id: "status", header: m.dialog_col_status(), cell: (s) => offerStatus(m, s), sortValue: (s) => offerStatus(m, s), truncate: true },
   ]
   const body = (editable: boolean) =>
     closing !== null ? (
-      <ClosingView projectId={header.id} closing={closing} sessionName={(id) => labelOf(sessions, id)} />
+      <ClosingView projectId={header.id} closing={closing} sessionName={(id) => labelOf(m, sessions, id)} />
     ) : (
       <>
         <SelectField
@@ -452,7 +452,7 @@ function useArchiveStep(header: ProjectHeader, status: WrapUpStatus, enabled: bo
                 rows={data.sessions}
                 columns={columns}
                 getRowId={(s) => s.sessionId}
-                selection={editable ? { selected: picked, onChange: setTicked, rowLabel: (s) => labelOf(sessions, s.sessionId), isSelectable: movable } : undefined}
+                selection={editable ? { selected: picked, onChange: setTicked, rowLabel: (s) => labelOf(m, sessions, s.sessionId), isSelectable: movable } : undefined}
                 empty={m.wrapup_nothing_to_archive()}
               />
             )}

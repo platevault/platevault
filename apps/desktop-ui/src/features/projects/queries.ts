@@ -11,12 +11,8 @@
  * revision instead of repeating the stale one; any other failure keeps the
  * reads and the draft as they are.
  *
- * The full Project record (name, notes, subjects with their Targets, rigs,
- * goals, closedAt) has no read yet (astro-plan-wre19.3, `project_get`). The
- * header reads `project_list`'s summary; `useProjectRecord` is the one place
- * that changes when the read lands. Until then it reports the record as
- * unavailable, and every edit that replaces a whole list (subjects, rigs,
- * goals, notes) is refused with that reason instead of guessing the list.
+ * The header reads `project_list`'s summary; the full record comes from
+ * `project_get` (`useProjectRecord`), which Edit… writes against.
  */
 import { type QueryClient, type QueryKey, useQuery } from "@tanstack/react-query"
 import { type ActionResult, type LibraryCommand, type Project, type ProjectSummary } from "@/api/ipc"
@@ -46,6 +42,7 @@ export const locationsQuery = () => libraryQuery("libraryListLocations")
  */
 const PROJECT_READS: readonly LibraryCommand[] = [
   "projectList",
+  "projectGet",
   "projectInputs",
   "projectProgress",
   "projectCandidates",
@@ -99,15 +96,16 @@ export function useProjectHeader(projectId: string): { header: ProjectHeader | n
 }
 
 /**
- * The full Project record. It reads `unavailable` until `project_get`
- * (astro-plan-wre19.3, PR #1923) is in the generated client; then this one
- * function becomes `useQuery(libraryQuery("projectGet", projectId))` and
- * `projectGet` joins PROJECT_READS. Callers handle both states: the edits
- * that replace a whole list stay visibly unavailable until their dialogs
- * exist, whatever this returns.
+ * The full Project record (`project_get`, astro-plan-wre19.3): name, notes,
+ * subjects with their Targets, rigs and goals at its revision. It reads
+ * `unavailable` while the read is on its way or failed, so an edit that
+ * needs the record never writes against a guessed one. The edits that
+ * replace a whole list (goals, subjects, rigs) stay visibly unavailable
+ * until their dialogs exist, whatever this returns.
  */
-export function useProjectRecord(_projectId: string): { state: "unavailable" } | { state: "ready"; project: Project } {
-  return { state: "unavailable" }
+export function useProjectRecord(projectId: string): { state: "unavailable" } | { state: "ready"; project: Project } {
+  const read = useQuery(libraryQuery("projectGet", projectId))
+  return read.data ? { state: "ready", project: read.data } : { state: "unavailable" }
 }
 
 /** The key of every read of `command` for one Project. */

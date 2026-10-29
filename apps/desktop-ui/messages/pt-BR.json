@@ -7722,7 +7722,6 @@
   "reason_destination_occupied": "Já existe outro arquivo no destino",
   "reason_destination_mismatch": "A cópia no destino não corresponde à origem",
   "reason_destination_changed": "O destino mudou",
-  "reason_write_failed": "Não foi possível gravar no destino",
   "reason_interrupted": "Interrompido: não é possível comprovar o que aconteceu",
   "reason_protected": "Protegido: o PlateVault nunca o move",
   "project_record_unavailable": "Os detalhes do Projeto ainda não podem ser lidos",
