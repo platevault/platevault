@@ -384,7 +384,7 @@ mod tests {
         let opener = FakeOpener { reveal_fails: true, ..FakeOpener::default() };
 
         assert_eq!(reveal_path(&opener, &file).unwrap(), RevealSelection::DirectoryOnly);
-        assert_eq!(*opener.revealed.borrow(), vec![file.clone()]);
+        assert_eq!(*opener.revealed.borrow(), vec![file]);
         assert_eq!(*opener.opened.borrow(), vec![scratch.path().to_path_buf()]);
     }
 
