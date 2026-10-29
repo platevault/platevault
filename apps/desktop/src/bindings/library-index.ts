@@ -1251,6 +1251,11 @@ export const commands = {
 	 */
 	importChooseTarget: (id: string, expectedRevision: number, seq: number, targetId: string | null) => typedError<ImportOperation_Serialize, ErrorResponse>(__TAURI_INVOKE("import_choose_target", { id, expectedRevision, seq, targetId })),
 	/**
+	 *  The connected removable devices, by name. A device whose layout no rule
+	 *  recognised has no `layout`: a generic device.
+	 */
+	importDevicesList: () => __TAURI_INVOKE<RemovableDevice[]>("import_devices_list"),
+	/**
 	 *  A rig with its filter list, the bands it captures and its field of view.
 	 * 
 	 *  # Errors
@@ -1588,6 +1593,8 @@ export const commands = {
 
 /* Constants */
 export const APPLY_WAITING_EVENT = "project_apply_waiting" as const;
+
+export const IMPORT_DEVICES_EVENT = "import_devices" as const;
 
 export const MEASUREMENT_PROGRESS_EVENT = "pix_measurement_progress" as const;
 
@@ -2723,6 +2730,36 @@ export type CaptureEvidence = {
 export type CaptureInclusion = { state: "included"; basis: InclusionBasis } | { state: "excluded"; basis: ExclusionBasis };
 
 export type CaptureKey = string;
+
+/**
+ *  A capture application whose default folder layout Import recognises
+ *  on a removable device, so Import names the device by it (STO-IMP-FR-10).
+ */
+export type CaptureLayout = 
+/**
+ *  ZWO ASIAIR: `Autorun/`, `Plan/` or `Live/` at the volume root, or in
+ *  an `ASIAIR/` folder there.
+ */
+"asiair" | 
+/**
+ *  N.I.N.A.: frame-type folders in capitals (`LIGHT/`, `FLAT/`, `DARK/`,
+ *  `BIAS/`, `DARKFLAT/`), as its default `$$IMAGETYPE$$` path writes them.
+ */
+"nina" | 
+/**
+ *  `SharpCap`: a `SharpCap Captures/` folder or `*.CameraSettings.txt`
+ *  sidecars.
+ */
+"sharpcap" | 
+/**
+ *  Ekos in `KStars`: `*.esq` sequence or `*.esl` schedule files, or frame
+ *  names such as `M31_Light_Ha_300_secs_2026-10-02T21-30-12_001.fits`.
+ */
+"ekos" | 
+/**  Sequence Generator Pro: `*.sgf` sequence files. */
+"sgp" | 
+/**  Voyager: frame names such as `M31_LIGHT_Ha_300s_BIN1_-10C_….fit`. */
+"voyager";
 
 /**
  *  Serialization adapter over the canonical `metadata_core` extractor contract.
@@ -4906,6 +4943,16 @@ export type Language =
 /**  Portuguese (Brazil). */
 "pt-BR";
 
+/**  How a removable device's layout was recognised. */
+export type LayoutRecognition = {
+	layout: CaptureLayout,
+	/**
+	 *  The first entry the layout's rule matched, relative to the device
+	 *  root with `/` separators, such as `Autorun` or `2026-10-02/LIGHT`.
+	 */
+	matched: string,
+};
+
 /**
  *  The stable machine code of a [`LibraryError`]: what the client switches on
  *  and the key of its user-facing message. The desktop catalogues
@@ -6791,6 +6838,22 @@ export type ReminderSubscription = {
 	revision: number,
 	activatedAt: string,
 	updatedAt: string,
+};
+
+/**
+ *  A connected removable volume (USB or SD) that Import lists under
+ *  Removable devices without a folder pick (STO-IMP-FR-10).
+ */
+export type RemovableDevice = {
+	/**  The volume's mount point; preview it as `ImportSourceSpec::Folder`. */
+	root: NativePathWire,
+	/**
+	 *  The volume's name: its mount folder (`Card-1`), or its drive (`E:`)
+	 *  on Windows.
+	 */
+	name: string,
+	/**  The recognised capture layout; absent (`null`) for a generic device. */
+	layout: LayoutRecognition | null,
 };
 
 /**  A recorded copy of a location under a Retire location review. */

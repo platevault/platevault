@@ -232,3 +232,7 @@ Sources: the legacy facts are in legacy-frontend-facts.md.
 ## Owner's answer, 2026-10-28
 
 - D-W166 (appearance and language storage; owner's decision, 2026-10-28): Theme, language and the single-key shortcut preference persist in PlateVault's per-user settings store outside every library, and are applied immediately and from the first frame after restart. Appearance changes never touch the library.
+
+## Owner's approval, 2026-10-14, recorded 2026-10-29
+
+- D-W167 (removable import devices; HARNESS-V5-FEEDBACK-R1.md Round 1, Domain and seed, Import sources: "no named 'ASIAIR card'. Removable devices are detected when connected (USB / SD). Recognise common layouts (ASIAIR, NINA, SharpCap, Ekos/KStars, SGP, Voyager) by folder structure and name the device type when recognised"; the owner's "Apply all" of 2026-10-14 for coverage gap DG2, astro-plan-7wl6w): Import lists each connected USB or SD volume under Removable devices without a folder pick, named by the capture layout its folder structure and file names show, or as a generic `USB device` when no layout is recognised. Choose folder… and Saved sources stay (STO-IMP-FR-10, STO-IMP-AC-14, STO-IMP-AC-15).

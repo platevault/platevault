@@ -14,9 +14,12 @@
 //! every online Captures location (a start-up walk and a live folder watcher
 //! each). It manages the running Applies, which Cancel stops and whose waits
 //! for a tool it emits as `project_apply_waiting`, and the running Closes,
-//! which Stop interrupts. Both watchers stop in the exit step. On Windows the
-//! removal notices of each watched volume that is not a network share reach
-//! the capture watcher, so the drive can eject, and they end after it stops.
+//! which Stop interrupts. It also starts [`DeviceWatch`], which lists the
+//! connected removable devices for Import (071 STO-IMP-FR-10) and emits
+//! `import_devices` on each change. The watchers stop in the exit step. On
+//! Windows the removal notices of each watched volume that is not a network
+//! share reach the capture watcher, so the drive can eject, and they end
+//! after it stops.
 //! The one window is labelled `library`, so it holds
 //! `capabilities/library.json` (plus the dev bridge grant with `dev-tools`) and
 //! none of the legacy `default.json`.
@@ -63,6 +66,7 @@ use std::sync::Arc;
 use contracts_core::captures::NEW_CAPTURES_EVENT;
 use desktop_services::captures::NewCapturesFeed;
 use desktop_services::jobs::{MeasurementProgressFeed, ScanProgressFeed};
+use platevault_core::import::devices::DeviceWatch;
 use platevault_core::library::Library;
 use platevault_core::new_captures::CaptureWatch;
 use platevault_core::preferences::{PreferenceStore, PREFERENCES_FILE};
@@ -263,6 +267,8 @@ macro_rules! library_commands {
             crate::commands::import::import_split_preview,
             crate::commands::import::import_set_split_limits,
             crate::commands::import::import_choose_target,
+            // removable import devices (071 STO-IMP-FR-10)
+            crate::commands::import_devices::import_devices_list,
             // planning
             crate::commands::rigs::rig_filters_get,
             crate::commands::rigs::rig_filters_save,
@@ -345,6 +351,7 @@ pub fn library_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             crate::native_shell_surfaces::NATIVE_QUIT_CONFIRM_EVENT,
         )
         .typ::<crate::native_shell_surfaces::NativeQuitRequest>()
+        .constant("IMPORT_DEVICES_EVENT", crate::commands::import_devices::IMPORT_DEVICES_EVENT)
         .commands(library_commands!(collect_commands))
 }
 
@@ -442,10 +449,21 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         NewCapturesFeed::subscribe(&captures),
         |_, error| tracing::error!(%error, "new captures event not delivered"),
     ));
+    // Removable import devices (071 STO-IMP-FR-10): a poll of the OS mount
+    // table on the async runtime, so it starts inside it; each change of the
+    // list is emitted, and the exit step below stops it.
+    let devices = tauri::async_runtime::block_on(async { DeviceWatch::start() });
+    tauri::async_runtime::spawn(crate::bootstrap::feeds::forward(
+        app.handle().clone(),
+        crate::commands::import_devices::IMPORT_DEVICES_EVENT,
+        desktop_services::channels::Latest::new(devices.subscribe()),
+        |_, error| tracing::error!(%error, "import devices event not delivered"),
+    ));
     app.manage(library);
     app.manage(trash);
     app.manage(output_watch);
     app.manage(captures);
+    app.manage(devices);
     // Apply's Cancel and its waiting event, and Close's Stop (069 PREP-FR-18,
     // 071 STO-FR-08).
     app.manage(ApplyRuns::emitting(app.handle().clone()));
@@ -471,6 +489,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         if let RunEvent::Exit = event {
             tauri::async_runtime::block_on(handle.state::<OutputWatch>().shutdown());
             tauri::async_runtime::block_on(handle.state::<CaptureWatch>().shutdown());
+            tauri::async_runtime::block_on(handle.state::<DeviceWatch>().shutdown());
             // Once discovery is stopping, a removal request that waited on it
             // has returned, so dropping the notices never waits on one.
             #[cfg(windows)]

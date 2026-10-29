@@ -466,6 +466,57 @@ pub struct ImportOperation {
     pub settled_at: Option<String>,
 }
 
+/// A capture application whose default folder layout Import recognises
+/// on a removable device, so Import names the device by it (STO-IMP-FR-10).
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
+pub enum CaptureLayout {
+    /// ZWO ASIAIR: `Autorun/`, `Plan/` or `Live/` at the volume root, or in
+    /// an `ASIAIR/` folder there.
+    Asiair,
+    /// N.I.N.A.: frame-type folders in capitals (`LIGHT/`, `FLAT/`, `DARK/`,
+    /// `BIAS/`, `DARKFLAT/`), as its default `$$IMAGETYPE$$` path writes them.
+    Nina,
+    /// `SharpCap`: a `SharpCap Captures/` folder or `*.CameraSettings.txt`
+    /// sidecars.
+    #[serde(rename = "sharpcap")]
+    SharpCap,
+    /// Ekos in `KStars`: `*.esq` sequence or `*.esl` schedule files, or frame
+    /// names such as `M31_Light_Ha_300_secs_2026-10-02T21-30-12_001.fits`.
+    Ekos,
+    /// Sequence Generator Pro: `*.sgf` sequence files.
+    Sgp,
+    /// Voyager: frame names such as `M31_LIGHT_Ha_300s_BIN1_-10C_….fit`.
+    Voyager,
+}
+
+/// How a removable device's layout was recognised.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
+pub struct LayoutRecognition {
+    pub layout: CaptureLayout,
+    /// The first entry the layout's rule matched, relative to the device
+    /// root with `/` separators, such as `Autorun` or `2026-10-02/LIGHT`.
+    pub matched: String,
+}
+
+/// A connected removable volume (USB or SD) that Import lists under
+/// Removable devices without a folder pick (STO-IMP-FR-10).
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
+pub struct RemovableDevice {
+    /// The volume's mount point; preview it as `ImportSourceSpec::Folder`.
+    pub root: NativePath,
+    /// The volume's name: its mount folder (`Card-1`), or its drive (`E:`)
+    /// on Windows.
+    pub name: String,
+    /// The recognised capture layout; absent (`null`) for a generic device.
+    pub layout: Option<LayoutRecognition>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -498,5 +549,26 @@ mod tests {
         }
         let wire = serde_json::to_value(ImportDuplicate::IndexedFrame { asset_id: id }).unwrap();
         assert_eq!(wire["kind"], "indexed_frame", "variant tags stay snake_case");
+    }
+
+    #[test]
+    fn capture_layouts_cross_the_wire_by_their_product_names() {
+        let layouts = [
+            (CaptureLayout::Asiair, "asiair"),
+            (CaptureLayout::Nina, "nina"),
+            (CaptureLayout::SharpCap, "sharpcap"),
+            (CaptureLayout::Ekos, "ekos"),
+            (CaptureLayout::Sgp, "sgp"),
+            (CaptureLayout::Voyager, "voyager"),
+        ];
+        for (layout, name) in layouts {
+            assert_eq!(serde_json::to_value(layout).unwrap(), name);
+        }
+        let generic = RemovableDevice {
+            root: NativePath::UnixBytes(b"/Volumes/Card-2".to_vec()),
+            name: "Card-2".into(),
+            layout: None,
+        };
+        assert!(serde_json::to_value(&generic).unwrap()["layout"].is_null());
     }
 }

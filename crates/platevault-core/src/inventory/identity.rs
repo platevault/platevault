@@ -934,7 +934,7 @@ fn probe_volume(root: &Path, _meta: &Metadata) -> Result<Probed, LibraryError> {
 
 /// Run a read-only system query with a deadline; stdout only, capped at 1 MiB.
 #[cfg(target_os = "macos")]
-fn run_bounded(
+pub fn run_bounded(
     mut command: std::process::Command,
     timeout: std::time::Duration,
 ) -> Result<Vec<u8>, String> {

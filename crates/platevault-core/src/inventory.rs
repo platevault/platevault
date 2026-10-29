@@ -53,6 +53,8 @@ use crate::{
 
 #[cfg(unix)]
 pub(crate) use identity::file_id;
+#[cfg(target_os = "macos")]
+pub(crate) use identity::run_bounded;
 pub use identity::FolderId;
 #[cfg(test)]
 pub(crate) use identity::Probed;

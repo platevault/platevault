@@ -29,6 +29,7 @@
 //! Import review shows the sessions the lights form, split by framing, and
 //! the user can merge or re-split them before the import starts.
 
+pub mod devices;
 mod review;
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
