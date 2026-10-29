@@ -100,20 +100,27 @@ function update(next: Partial<Chosen>): void {
   for (const listener of listeners) listener()
 }
 
-/** Store calls, one at a time in the order the changes were made. */
+/** Store calls, one at a time in the order the changes were made. It never rejects, so one failed step never skips the next. */
 let saving: Promise<void> = Promise.resolve()
 /** Set by the first change, after which the store's boot read no longer applies. */
 let changed = false
 
+/** Queue `step` behind the store calls before it; a step that throws is logged and the chain goes on. */
+function enqueue(step: () => Promise<void>, what: string): void {
+  saving = saving.then(step).catch((error: unknown) => {
+    console.error(`PlateVault preferences: ${what} failed`, error)
+  })
+}
+
 function save(write: () => Promise<ActionResult<PreferencesView>>, what: string): void {
   changed = true
   if (!inShell()) return
-  saving = saving.then(async () => {
+  enqueue(async () => {
     const result = await write()
     if (result.ok) return
     console.error(`PlateVault could not save the ${what} preference`, result.failure)
     await reportUnsaved(result.failure)
-  })
+  }, `saving the ${what} preference`)
 }
 
 /** A save that failed says why in a toast; the choice still applies until PlateVault restarts. */
@@ -131,10 +138,10 @@ function change(next: Partial<Chosen>, stored: PreferenceChange): void {
 // The values handed at load are those of the webview's first page: after a
 // reload they can trail the store, so the store's own read follows them up.
 if (inShell()) {
-  saving = saving.then(async () => {
+  enqueue(async () => {
     const result = await library.libraryPreferences()
     if (result.ok && !changed) update(chosen(result.data.preferences))
-  })
+  }, "reading the stored preferences")
 }
 
 // The OS theme can change at any time; "system" follows it live.

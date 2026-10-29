@@ -262,6 +262,38 @@ fn an_unreadable_file_reads_as_the_defaults() {
     assert_eq!(view.preferences.language, Language::PtBr);
 }
 
+/// Changes to different preferences from two threads at once both apply:
+/// neither is lost in memory or in the file. Each round starts both
+/// changes together on a fresh store, so many interleavings are tried.
+#[test]
+fn overlapping_changes_to_different_preferences_all_apply() {
+    let expected = AppearancePreferences {
+        language: Language::PtBr,
+        single_key_shortcuts: false,
+        ..AppearancePreferences::default()
+    };
+    for round in 0..200 {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join(PREFERENCES_FILE);
+        let store = PreferenceStore::open(&path);
+        let start = std::sync::Barrier::new(2);
+        std::thread::scope(|scope| {
+            scope.spawn(|| {
+                start.wait();
+                store.change(PreferenceChange::Language { language: Language::PtBr }).unwrap();
+            });
+            scope.spawn(|| {
+                start.wait();
+                store.change(PreferenceChange::SingleKeyShortcuts { enabled: false }).unwrap();
+            });
+        });
+        assert_eq!(store.view().preferences, expected, "in memory, round {round}");
+        drop(store);
+        let reopened = PreferenceStore::open(&path).view().preferences;
+        assert_eq!(reopened, expected, "in the file, round {round}");
+    }
+}
+
 /// A Match system pair needs a dark theme for dark and a light one for
 /// light; a refused pair changes nothing.
 #[test]

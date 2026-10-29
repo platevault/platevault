@@ -88,27 +88,7 @@ impl PreferenceStore {
     /// whose light theme is dark; `PersistenceFailure` when the file can't
     /// be written, which leaves the preferences as they were.
     pub fn change(&self, change: PreferenceChange) -> Result<PreferencesView, LibraryError> {
-        let mut next = self.lock().view.preferences;
-        let field = match change {
-            PreferenceChange::Theme { choice } => {
-                next.theme = choice;
-                PreferenceField::Theme
-            }
-            PreferenceChange::SystemThemes { themes } => {
-                require_schemes(themes)?;
-                next.system_themes = themes;
-                PreferenceField::SystemThemes
-            }
-            PreferenceChange::Language { language } => {
-                next.language = language;
-                PreferenceField::Language
-            }
-            PreferenceChange::SingleKeyShortcuts { enabled } => {
-                next.single_key_shortcuts = enabled;
-                PreferenceField::SingleKeyShortcuts
-            }
-        };
-        self.save(next, &[field])
+        self.save(|next| apply(change, next))
     }
 
     /// Restore defaults: `platevault-dark`, the `platevault-dark` and
@@ -119,7 +99,10 @@ impl PreferenceStore {
     /// `PersistenceFailure` when the file can't be written, which leaves the
     /// preferences as they were.
     pub fn restore_defaults(&self) -> Result<PreferencesView, LibraryError> {
-        self.save(AppearancePreferences::default(), &FIELDS)
+        self.save(|next| {
+            *next = AppearancePreferences::default();
+            Ok(&FIELDS)
+        })
     }
 
     fn lock(&self) -> MutexGuard<'_, State> {
@@ -127,14 +110,19 @@ impl PreferenceStore {
         self.state.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
-    /// Write `fields` of `preferences` into the file, keeping its other keys,
-    /// and make `preferences` the ones in effect.
+    /// Under one lock, `edit` the preferences in effect, write the fields it
+    /// names into the file, keeping its other keys, and make the edited
+    /// preferences the ones in effect. Overlapping saves therefore apply one
+    /// after the other, each to the result of the last.
     fn save(
         &self,
-        preferences: AppearancePreferences,
-        fields: &[PreferenceField],
+        edit: impl FnOnce(
+            &mut AppearancePreferences,
+        ) -> Result<&'static [PreferenceField], LibraryError>,
     ) -> Result<PreferencesView, LibraryError> {
         let mut state = self.lock();
+        let mut preferences = state.view.preferences;
+        let fields = edit(&mut preferences)?;
         let mut file = state.file.clone();
         for &field in fields {
             file.insert(field.key().to_owned(), stored_value(preferences, field));
@@ -172,6 +160,32 @@ impl PreferenceStore {
         }
         Ok(())
     }
+}
+
+/// Apply `change` to `preferences`; the preference it changed is the one to save.
+fn apply(
+    change: PreferenceChange,
+    preferences: &mut AppearancePreferences,
+) -> Result<&'static [PreferenceField], LibraryError> {
+    Ok(match change {
+        PreferenceChange::Theme { choice } => {
+            preferences.theme = choice;
+            &[PreferenceField::Theme]
+        }
+        PreferenceChange::SystemThemes { themes } => {
+            require_schemes(themes)?;
+            preferences.system_themes = themes;
+            &[PreferenceField::SystemThemes]
+        }
+        PreferenceChange::Language { language } => {
+            preferences.language = language;
+            &[PreferenceField::Language]
+        }
+        PreferenceChange::SingleKeyShortcuts { enabled } => {
+            preferences.single_key_shortcuts = enabled;
+            &[PreferenceField::SingleKeyShortcuts]
+        }
+    })
 }
 
 /// Every preference, in the file's order.

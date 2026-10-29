@@ -30,6 +30,18 @@ function inShell(answer: (command: string, args: unknown) => unknown): [string, 
   return calls
 }
 
+/** The library's answer when the settings store can't be written. */
+const UNSAVED: ErrorResponse = {
+  code: "persistence_failure",
+  identity: null,
+  scope: null,
+  retry: "retry",
+  currentRevision: null,
+  successors: [],
+  window: null,
+  correction: null,
+}
+
 const view = (preferences: AppearancePreferences): PreferencesView => ({ preferences, fallbacks: [] })
 
 beforeEach(() => {
@@ -110,20 +122,10 @@ describe("preferences", () => {
   })
 
   it("says in a toast when a change can't be saved, and keeps it for this session", async () => {
-    const unsaved: ErrorResponse = {
-      code: "persistence_failure",
-      identity: null,
-      scope: null,
-      retry: "retry",
-      currentRevision: null,
-      successors: [],
-      window: null,
-      correction: null,
-    }
     vi.spyOn(console, "error").mockImplementation(() => {})
     // The store's boot read answers English, so the toast is worded in en-GB.
     const english = view({ ...stored, language: "en-GB" })
-    const calls = inShell((command) => (command === "library_change_preference" ? Promise.reject(unsaved) : english))
+    const calls = inShell((command) => (command === "library_change_preference" ? Promise.reject(UNSAVED) : english))
     const { getPreferences, setTheme } = await load()
     await vi.waitFor(() => expect(calls).toHaveLength(1))
 
@@ -134,6 +136,28 @@ describe("preferences", () => {
     expect(getPreferences().theme).toBe("nord")
     expect(document.documentElement.dataset.theme).toBe("nord")
     expect(window.localStorage).toHaveLength(0)
+  })
+
+  it("a failure to report an unsaved change never skips a later save", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {})
+    toast.mockImplementationOnce(() => {
+      throw new Error("no toaster")
+    })
+    let saves = 0
+    const calls = inShell((command) => {
+      if (command !== "library_change_preference") return view(stored)
+      saves += 1
+      return saves === 1 ? Promise.reject(UNSAVED) : view(stored)
+    })
+    const { setLocale, setTheme } = await load()
+
+    setTheme("nord")
+    await vi.waitFor(() => expect(toast).toHaveBeenCalledTimes(1))
+    setLocale("pt-BR")
+
+    await vi.waitFor(() => expect(calls).toHaveLength(3))
+    expect(calls[2]).toEqual(["library_change_preference", { change: { field: "language", language: "pt-BR" } }])
+    expect(logged).toHaveBeenCalledWith("PlateVault preferences: saving the theme preference failed", new Error("no toaster"))
   })
 
   it("Restore defaults returns PlateVault Dark, the PlateVault pair, English (UK) and shortcuts on", async () => {
