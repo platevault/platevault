@@ -120,7 +120,9 @@ function ReviewWorkspace({ sessionId, onFinished }: SessionReviewProps) {
   const [corners, setCorners] = useState(false)
   const gridCols = useRef(4)
   const markRuns = useRef(0)
-  const currentRef = useRef<string | null>(null)
+  // The frame the user chose, not the derived current one: that falls back to the first frame shown while a mark's
+  // answers take the marked frame out of the filtered list, which is no move of the user's.
+  const storedRef = useRef<string | null>(null)
 
   const frames = useMemo(() => review.data?.frames ?? [], [review.data])
   const frameIds = useMemo(() => frames.map((f) => f.asset.id), [frames])
@@ -131,7 +133,7 @@ function ReviewWorkspace({ sessionId, onFinished }: SessionReviewProps) {
   const orderedIds = useMemo(() => ordered.map((f) => f.asset.id), [ordered])
   const shownIds = useMemo(() => new Set(orderedIds), [orderedIds])
   const currentId = currentIn(orderedIds, storedCurrent)
-  currentRef.current = currentId
+  storedRef.current = storedCurrent
   const current = ordered.find((f) => f.asset.id === currentId) ?? null
   const index = current ? orderedIds.indexOf(current.asset.id) : -1
   const selectedFrames = frames.filter((f) => selection.ids.has(f.asset.id))
@@ -171,13 +173,13 @@ function ReviewWorkspace({ sessionId, onFinished }: SessionReviewProps) {
   }
 
   async function mark(quality: Quality, list: readonly Frame[], always: boolean) {
-    const before = { ordered: orderedIds, current: currentId, filter, autoAdvance: prefs.autoAdvance }
+    const before = { ordered: orderedIds, current: currentId, stored: storedCurrent, filter, autoAdvance: prefs.autoAdvance }
     const { marked, result } = await writes.mark(list, quality)
     if (result.ok) {
       announce(m.review_mark_announcement({ mark: qualityName(m, quality), what: list.length === 1 ? name(list[0]!) : m.review_frames_count({ count: list.length }) }))
       const next = currentAfterMark({ ...before, marked: list.map((f) => f.asset.id), quality, always })
       // A frame the user moved to while the mark was under way stays current.
-      if (next !== null && currentRef.current === before.current) select(next)
+      if (next !== null && storedRef.current === before.stored) select(next)
     } else if (marked > 0) {
       toast({ message: m.review_marked_before_refusal({ marked: formatCount(marked), total: formatCount(list.length) }) })
     }

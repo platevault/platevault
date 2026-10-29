@@ -459,6 +459,30 @@ describe("Review marks in flight", () => {
   })
 })
 
+describe("Review batch marks under a filter", () => {
+  it("advances past the batch, not to the first frame, when its answers take the marked frames out of the list", async () => {
+    await renderReview()
+    host.markDelayMs = 5
+    press("4", { alt: true, code: "Digit4" })
+    press("j")
+    press("j")
+    press(" ")
+    press("j")
+    press(" ")
+    press("k")
+    await expectCurrent(3)
+    expect(statusLine()).toContain(m.status_bar_selected({ count: 2 }))
+    press("p")
+    await waitFor(() => expect(marksSent()).toEqual([
+      { assetId: "asset-3", quality: "usable" },
+      { assetId: "asset-4", quality: "usable" },
+    ]))
+    await waitFor(() => expect(listed()).toEqual([nameOf(1), nameOf(2), nameOf(5), nameOf(6)]))
+    // Frame 5 is third in the Unreviewed list now.
+    await expectCurrent(5, 3, 4)
+  })
+})
+
 describe("Review keys stay quiet where they do not belong", () => {
   it("marks nothing when the ⌘A confirmation is cancelled, and the keys wait while it is open", async () => {
     await renderReview()
@@ -496,17 +520,16 @@ describe("Review keys stay quiet where they do not belong", () => {
     expect(marksSent()).toEqual([])
   })
 
-  it("leaves Space on a row's checkbox to the checkbox instead of ticking the current frame (FR-037)", async () => {
+  it("leaves Space on a row's checkbox to the checkbox, which ticks its own row, not the current frame (FR-037)", async () => {
     await renderReview()
+    const user = userEvent.setup()
     const checkbox = screen.getByRole("checkbox", { name: new RegExp(nameOf(3)) })
     act(() => checkbox.focus())
-    act(() => {
-      fireEvent.keyDown(checkbox, { key: " " })
-      fireEvent.keyUp(checkbox, { key: " " })
-    })
+    await user.keyboard(" ")
+    await waitFor(() => expect(screen.getByRole("checkbox", { name: new RegExp(nameOf(3)) })).toBeChecked())
     // The current frame (1) is not ticked by Review's Space.
     expect(screen.getByRole("checkbox", { name: new RegExp(nameOf(1)) })).not.toBeChecked()
-    expect(currentId()).toBe("asset-1")
+    expect(statusLine()).toContain(m.status_bar_selected({ count: 1 }))
   })
 })
 

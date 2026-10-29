@@ -166,6 +166,8 @@ export interface ReviewHost {
   calls: { command: string; args: Record<string, unknown> }[]
   /** While set, marks wait for it before they answer. */
   hold: Promise<void> | null
+  /** Each mark answers this many ms later, after a timer, as a catalog write over IPC does. */
+  markDelayMs: number
   /** Commands that answer with a refusal instead. */
   refuse: Partial<Record<string, ErrorResponse>>
   /** Answers one IPC call; the test hands it to `mockIPC`. */
@@ -187,6 +189,7 @@ export function reviewHost({ count = 6, marked = 0 }: { count?: number; marked?:
     groupingRevision: 4,
     calls: [],
     hold: null,
+    markDelayMs: 0,
     refuse: {},
     handle: (command, payload) => answer(command, payload),
   }
@@ -205,7 +208,8 @@ export function reviewHost({ count = 6, marked = 0 }: { count?: number; marked?:
       case "pix_session_review_mark": {
         const { mark } = args as { mark: ReviewMark_Deserialize }
         // A held host answers once the test lets it go, as a slow catalog write would.
-        return (host.hold ?? Promise.resolve()).then(() => {
+        const answered = host.markDelayMs > 0 ? new Promise<void>((resolve) => setTimeout(resolve, host.markDelayMs)) : Promise.resolve()
+        return Promise.all([host.hold, answered]).then(() => {
           const at = host.frames.findIndex((f) => f.asset.id === mark.asset.assetId)
           const current = host.frames[at]
           if (!current) return Promise.reject(refusal("not_found", "none"))
