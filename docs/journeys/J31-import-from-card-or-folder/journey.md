@@ -1,13 +1,13 @@
 ---
 id: J31
 title: Import from a card or folder with Copy or Move and templated paths
-version: 10
+version: 11
 status: draft
 last_reviewed: 2026-10-06
 actors: [primary-user]
 surfaces: [home, import, settings, naming, sessions, calibration, calibration-process, locations, activity, status-bar, issues, duplicates]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 064-library-inventory, 068-calibration-inputs, 071-storage-custody, D19, D-W89, D-W11, D-W12, D-W20, D-W24, D-W96, D-W58, D-W93, D-W94, D-W101, D-W102, D-W103, D-W104, D-W105, specs/063-clean-rebuild-contract/spec.md, specs/064-library-inventory/spec.md, specs/068-calibration-inputs/spec.md, specs/071-storage-custody/spec.md, HARNESS-V5-IA.md#S1, HARNESS-V5-IA.md#S12, HARNESS-V5-IA.md#S13, HARNESS-V5-IA.md#S14, HARNESS-V5-IA.md#S16, HARNESS-V5-IA.md#round-2-foundation, HARNESS-V5-IA.md#round-2b-foundation, HARNESS-V5-FEEDBACK-R1.md#domain-and-seed, HARNESS-V5-FEEDBACK-R1.md#round-1b-decisions, HARNESS-V5-FEEDBACK-R1.md#round-5, HARNESS-V5-FEEDBACK-R1.md#round-6, P-CAL3, P-SB3, P-IMP2, apps/prototype/src/domain/devices.ts, apps/prototype/src/domain/templates.ts, apps/prototype/src/features/v5/a-home/import-model.ts, apps/prototype/src/features/v5/a-home/import-run.ts, D-W107]
+trace: [063-clean-rebuild-contract, 064-library-inventory, 068-calibration-inputs, 071-storage-custody, D19, D-W89, D-W11, D-W12, D-W20, D-W24, D-W96, D-W58, D-W93, D-W94, D-W101, D-W102, D-W103, D-W104, D-W105, specs/063-clean-rebuild-contract/spec.md, specs/064-library-inventory/spec.md, specs/068-calibration-inputs/spec.md, specs/071-storage-custody/spec.md, HARNESS-V5-IA.md#S1, HARNESS-V5-IA.md#S12, HARNESS-V5-IA.md#S13, HARNESS-V5-IA.md#S14, HARNESS-V5-IA.md#S16, HARNESS-V5-IA.md#round-2-foundation, HARNESS-V5-IA.md#round-2b-foundation, HARNESS-V5-FEEDBACK-R1.md#domain-and-seed, HARNESS-V5-FEEDBACK-R1.md#round-1b-decisions, HARNESS-V5-FEEDBACK-R1.md#round-5, HARNESS-V5-FEEDBACK-R1.md#round-6, P-CAL3, P-SB3, P-IMP2, apps/prototype/src/domain/devices.ts, apps/prototype/src/domain/templates.ts, apps/prototype/src/features/v5/a-home/import-model.ts, apps/prototype/src/features/v5/a-home/import-run.ts, D-W107, D-W167]
 ---
 
 ## Goal
@@ -70,7 +70,7 @@ folder is added in place. Done means:
 
   Card-1 is preselected, because it is the connected device with new frames.
 - **Expect (negative):** No "File into library" action or Inbox exists anywhere. No field accepts an SMB or URL address, and PlateVault offers no way to mount a share. Opening the sheet writes nothing (P7 still matches).
-- **Trace:** Import · STO-IMP-FR-01 · LIB-FR-10, LIB-FR-19 · PRJ-FR-17 · D-W7, D-W11, D-W12, D-W39 · HARNESS-V5-IA.md §Screens S13, §Round 2 foundation (`devices.ts`) · HARNESS-V5-FEEDBACK-R1.md §Domain and seed (Import sources), §Screens A (Import)
+- **Trace:** Import · STO-IMP-FR-01, STO-IMP-FR-10 · STO-IMP-AC-14 · LIB-FR-10, LIB-FR-19 · PRJ-FR-17 · D-W7, D-W11, D-W12, D-W39, D-W167 · HARNESS-V5-IA.md §Screens S13, §Round 2 foundation (`devices.ts`) · HARNESS-V5-FEEDBACK-R1.md §Domain and seed (Import sources), §Screens A (Import)
 
 ### S2 — Pick Card-1 and choose the destination {#S2}
 
@@ -166,7 +166,7 @@ folder is added in place. Done means:
   - The 12 files are in the OS Trash and can be put back.
   - Sessions lists a new 4 Oct Ha session of 12 frames with no Target, under **Needs a Target**, with `OBJECT NGC7000` shown as a label. Its frames sit under `unclassified/Ha/2026-10-04/light/`.
 - **Expect (negative):** No source is permanently deleted, and no source reached the Trash before its destination verified. OBJECT `NGC7000` sets neither the session's Target nor `{target}`: no `NGC7000/` folder and no `NGC 7000/Ha/2026-10-04/` folder is created, and no file moves after the import.
-- **Trace:** Import · STO-IMP-FR-04, STO-IMP-FR-06 · STO-IMP-AC-03 · LIB-FR-04, LIB-FR-17 · LIB-AC-34 · D19, D-W11, D-W107 · owner's answer, 2026-10-19 (astro-plan-rzbzu.1) · HARNESS-V5-IA.md §Screens S13 (Move verifies, then sends the source to the OS Trash) · HARNESS-V5-FEEDBACK-R1.md §Domain and seed (removable devices detected when connected), §Round 5 (OBJECT is a label, never evidence), §Round 6 (P-IMP2: OBJECT shown only as a hint; Unclassified sessions go to an Unclassified folder)
+- **Trace:** Import · STO-IMP-FR-04, STO-IMP-FR-06, STO-IMP-FR-10 · STO-IMP-AC-03, STO-IMP-AC-14, STO-IMP-AC-15 · LIB-FR-04, LIB-FR-17 · LIB-AC-34 · D19, D-W11, D-W107, D-W167 · owner's answer, 2026-10-19 (astro-plan-rzbzu.1) · HARNESS-V5-IA.md §Screens S13 (Move verifies, then sends the source to the OS Trash) · HARNESS-V5-FEEDBACK-R1.md §Domain and seed (removable devices detected when connected), §Round 5 (OBJECT is a label, never evidence), §Round 6 (P-IMP2: OBJECT shown only as a hint; Unclassified sessions go to an Unclassified folder)
 
 ### S10 — Import from a network share that drops mid-import {#S10}
 
@@ -187,7 +187,7 @@ folder is added in place. Done means:
   - The import splits with the limits set when it started, so the summary reads `34 frames · <size> · 1 session`, and Sessions lists one session, "NGC 7000 · Ha · 300 s · 6 Oct", with 34 frames. This needs both import limits: under either Settings limit, framing B starts a second session.
   - Settings still reads the default limits, a centre limit of 5′ and rotation within 5°.
 - **Expect (negative):** The meridian flip starts no session. Merging and re-splitting write nothing, and no file is written before the import starts. Slider changes also write nothing.
-- **Trace:** Import · STO-IMP-FR-03 · LIB-FR-04, LIB-FR-24 · LIB-AC-31 · D-W107 · D-W114
+- **Trace:** Import · STO-IMP-FR-03, STO-IMP-FR-10 · LIB-FR-04, LIB-FR-24 · LIB-AC-31 · D-W107 · D-W114 · D-W167
 
 ### S11 — Add an existing library folder {#S11}
 
@@ -208,6 +208,13 @@ folder is added in place. Done means:
 - **Expect (negative):** No source file is missing outside the OS Trash, and no existing destination file was changed. No imported file moved after its import, and no folder named after an OBJECT value (`NGC7000/`) exists.
 - **Trace:** root FR-017, SC-002 · STO-IMP-FR-04, STO-IMP-FR-05 · D19
 
+### S13 — Eject Card-4 {#S13}
+
+- **Do:** With the Import sheet open on `From a source`, eject `Card-4` in the OS. Read Removable devices.
+- **Expect:** `Card-4` leaves Removable devices without a reload or a folder pick. `Card-1` still reads ASIAIR and `Card-2` still reads `USB device`, and Saved sources and **Choose folder…** are still offered.
+- **Expect (negative):** No folder picker opens. Recomputed again after the eject, the `Card-1` and `Card-2` manifests still match S12's, so listing the devices wrote nothing to them.
+- **Trace:** Import · STO-IMP-FR-10 · STO-IMP-AC-15 · D-W167 · HARNESS-V5-FEEDBACK-R1.md §Domain and seed (removable devices detected when connected)
+
 ## Success criteria
 
 - SC1: Zero bytes are written before S6 starts (S2 to S5a).
@@ -217,7 +224,7 @@ folder is added in place. Done means:
 - SC5: Move at S9 puts exactly 12 sources in the OS Trash. At S10, Move is unavailable, the import reads `Interrupted` after the unmount, 0 share files are removed and 0 verified items are copied twice.
 - SC6: S11 copies, renames or moves 0 files.
 - SC7: At S12, 100% of imported destination files match their source's SHA-256, and 0 files were permanently deleted or overwritten.
-- SC8: Card-1 reads ASIAIR (S1) and Card-2 reads USB device (S9). 0 duplicate-copies issues are raised after S6, S8, S9, S10, S10a or S11, and 0 duplicates warnings name a `Card-1` file.
+- SC8: Card-1 reads ASIAIR (S1) and Card-2 reads USB device (S9), each listed under Removable devices once connected with no folder pick, and Card-4 leaves the list when ejected (S13). 0 duplicate-copies issues are raised after S6, S8, S9, S10, S10a or S11, and 0 duplicates warnings name a `Card-1` file.
 - SC9: The 5 imported light sessions land with the Target their preview showed: 4 with NGC 7000 Confirmed (`2 Oct Ha`, `5 Oct OIII` and the 6 Oct session of S10a prefilled from pointing, `2 Oct OIII` changed at S5a) and 1 with no Target under `unclassified/`, where Unclassified was preselected (`4 Oct Ha`, S9; owner's answer, 2026-10-19, astro-plan-rzbzu.1). 0 Targets and 0 folders come from OBJECT, and 0 files move after an import (S10a, S12).
 - SC10: At S10a the preview lists exactly 2 sessions, of 24 and 10 lights. The merge shows 1 session of 34, the re-split restores the 2 sessions, and 0 bytes are written before the import starts. The import, started with a 12′ centre limit and a 6° rotation limit, lands 1 session of 34, and Settings still reads 5′ and 5°.
 
@@ -267,3 +274,6 @@ folder is added in place. Done means:
 - **Δ10** 2026-10-26 · S10a · behavior-change
   The framing limits live on Settings › Matching, a page of their own in the Library group of Settings.
   Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 11 (OWNER, 2026-10-23) on ui-harness-v5 @ 5dc245244; D-W148, CAL-FR-24 · by: SpecAmend (intent-gated)
+- **Δ11** 2026-10-29 · S1, S9, S10a, +S13, SC8 · behavior-change
+  Removable devices are listed when connected and leave the list when ejected (S13), each named by the capture layout its folder structure and file names show, or as a generic `USB device`; S1, S9 and S10a trace the new requirement.
+  Evidence: D-W167 (HARNESS-V5-FEEDBACK-R1.md Round 1 Domain and seed; the owner's "Apply all" of 2026-10-14, astro-plan-7wl6w), 071 STO-IMP-FR-10, STO-IMP-AC-14, STO-IMP-AC-15 · by: Devices (intent-gated)

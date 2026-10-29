@@ -35,6 +35,7 @@ pub mod firstrun;
 pub mod frame_review;
 pub mod home;
 pub mod import;
+pub mod import_devices;
 pub mod inbox;
 pub mod ingestion;
 pub mod inventory;

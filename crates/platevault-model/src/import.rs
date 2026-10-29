@@ -466,6 +466,116 @@ pub struct ImportOperation {
     pub settled_at: Option<String>,
 }
 
+/// A capture application whose default folder layout Import recognises
+/// on a removable device, so Import names the device by it (STO-IMP-FR-10).
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
+pub enum CaptureLayout {
+    /// ZWO ASIAIR: `Autorun/`, `Plan/` or `Live/` at the volume root, or in
+    /// an `ASIAIR/` folder there.
+    Asiair,
+    /// N.I.N.A.: frame-type folders in capitals (`LIGHT/`, `FLAT/`, `DARK/`,
+    /// `BIAS/`, `DARKFLAT/`), as its default `$$IMAGETYPE$$` path writes them.
+    Nina,
+    /// `SharpCap`: a `SharpCap Captures/` folder or `*.CameraSettings.txt`
+    /// sidecars.
+    #[serde(rename = "sharpcap")]
+    SharpCap,
+    /// Ekos in `KStars`: `*.esq` sequence or `*.esl` schedule files, or frame
+    /// names such as `M31_Light_Ha_300_secs_2026-10-02T21-30-12_001.fits`.
+    Ekos,
+    /// Sequence Generator Pro: `*.sgf` sequence files.
+    Sgp,
+    /// Voyager: frame names such as `M31_LIGHT_Ha_300s_BIN1_-10C_….fit`.
+    Voyager,
+}
+
+/// One marker of a capture layout that recognition found on a device; the
+/// device's "How it was recognised" note names each one.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
+pub enum LayoutMarker {
+    /// ASIAIR's `Autorun/` folder.
+    AutorunFolder,
+    /// ASIAIR's `Plan/` folder.
+    PlanFolder,
+    /// ASIAIR's `Live/` folder.
+    LiveFolder,
+    /// N.I.N.A.'s `LIGHT/` folder.
+    LightFolder,
+    /// N.I.N.A.'s `FLAT/` folder.
+    FlatFolder,
+    /// N.I.N.A.'s `DARK/` folder.
+    DarkFolder,
+    /// N.I.N.A.'s `BIAS/` folder.
+    BiasFolder,
+    /// N.I.N.A.'s `DARKFLAT/` folder.
+    DarkflatFolder,
+    /// The `SharpCap Captures/` folder.
+    SharpcapCapturesFolder,
+    /// `SharpCap`'s `*.CameraSettings.txt` sidecars.
+    CameraSettingsFiles,
+    /// Ekos `*.esq` sequence files.
+    EkosSequenceFiles,
+    /// Ekos `*.esl` schedule files.
+    EkosScheduleFiles,
+    /// Ekos frame names (`…_Light_Ha_300_secs_…`).
+    EkosFrameNames,
+    /// SGP `*.sgf` sequence files.
+    SgpSequenceFiles,
+    /// Voyager frame names (`…_LIGHT_Ha_300s_BIN1_…`).
+    VoyagerFrameNames,
+}
+
+impl LayoutMarker {
+    /// The layout this marker belongs to.
+    #[must_use]
+    pub const fn layout(self) -> CaptureLayout {
+        match self {
+            Self::AutorunFolder | Self::PlanFolder | Self::LiveFolder => CaptureLayout::Asiair,
+            Self::LightFolder
+            | Self::FlatFolder
+            | Self::DarkFolder
+            | Self::BiasFolder
+            | Self::DarkflatFolder => CaptureLayout::Nina,
+            Self::SharpcapCapturesFolder | Self::CameraSettingsFiles => CaptureLayout::SharpCap,
+            Self::EkosSequenceFiles | Self::EkosScheduleFiles | Self::EkosFrameNames => {
+                CaptureLayout::Ekos
+            }
+            Self::SgpSequenceFiles => CaptureLayout::Sgp,
+            Self::VoyagerFrameNames => CaptureLayout::Voyager,
+        }
+    }
+}
+
+/// How a removable device's layout was recognised.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
+pub struct LayoutRecognition {
+    pub layout: CaptureLayout,
+    /// Every marker of `layout` found on the device, in [`LayoutMarker`]
+    /// order, such as `[autorun_folder, plan_folder]`; never empty.
+    pub matched: Vec<LayoutMarker>,
+}
+
+/// A connected removable volume (USB or SD) that Import lists under
+/// Removable devices without a folder pick (STO-IMP-FR-10).
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
+pub struct RemovableDevice {
+    /// The volume's mount point; preview it as `ImportSourceSpec::Folder`.
+    pub root: NativePath,
+    /// The volume's name: its mount folder (`Card-1`), or its drive (`E:`)
+    /// on Windows.
+    pub name: String,
+    /// The recognised capture layout; absent (`null`) for a generic device.
+    pub layout: Option<LayoutRecognition>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -498,5 +608,37 @@ mod tests {
         }
         let wire = serde_json::to_value(ImportDuplicate::IndexedFrame { asset_id: id }).unwrap();
         assert_eq!(wire["kind"], "indexed_frame", "variant tags stay snake_case");
+    }
+
+    #[test]
+    fn capture_layouts_cross_the_wire_by_their_product_names() {
+        let layouts = [
+            (CaptureLayout::Asiair, "asiair"),
+            (CaptureLayout::Nina, "nina"),
+            (CaptureLayout::SharpCap, "sharpcap"),
+            (CaptureLayout::Ekos, "ekos"),
+            (CaptureLayout::Sgp, "sgp"),
+            (CaptureLayout::Voyager, "voyager"),
+        ];
+        for (layout, name) in layouts {
+            assert_eq!(serde_json::to_value(layout).unwrap(), name);
+        }
+        let generic = RemovableDevice {
+            root: NativePath::UnixBytes(b"/Volumes/Card-2".to_vec()),
+            name: "Card-2".into(),
+            layout: None,
+        };
+        assert!(serde_json::to_value(&generic).unwrap()["layout"].is_null());
+        let card = RemovableDevice {
+            layout: Some(LayoutRecognition {
+                layout: CaptureLayout::Asiair,
+                matched: vec![LayoutMarker::AutorunFolder, LayoutMarker::PlanFolder],
+            }),
+            ..generic
+        };
+        let wire = serde_json::to_value(&card).unwrap();
+        assert_eq!(wire["layout"]["matched"], serde_json::json!(["autorun_folder", "plan_folder"]));
+        assert_eq!(serde_json::from_value::<RemovableDevice>(wire).unwrap(), card);
+        assert_eq!(LayoutMarker::SharpcapCapturesFolder.layout(), CaptureLayout::SharpCap);
     }
 }
