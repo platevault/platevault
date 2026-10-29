@@ -54,6 +54,35 @@
 - **Manual:** the auditor also measured Add-site dialog Time zone combobox name, focus/Escape/restoration; product-route text contrast in dark/light; Sessions row arrow-key navigation; target size/spacing and contrast; zoom-reflow at 320 CSS px. Sessions unchecked checkbox border is 4.68:1 against the dark table surface; its 16×16 border box is enlarged to 38×24 effective hit area, adjacent centres 25.75–26.25 px apart, satisfying 2.5.8 spacing exception in the measured list. Forced-colors, screen-reader platform narration, and exhaustive error/loading/disabled states across every route were not exercised.
 - **Width contract:** declared native minimum is 1280×640; 1280 and 1440 fit, while 1024/768/375 are unsupported layout widths. Zoom to 400% produces 320 CSS px and is still subject to WCAG 1.4.10; the current 1280 CSS minimum fails it.
 
+## Independent code review
+
+The reviewed range was `git diff edb05dbf..origin/ui-harness-v5 -- apps/prototype`, at head `5dc24524434a6ce15ed8ebfd1422267a64f21311`. The independent reviewer checked W4 contract removals and composition/lint wiring. Its checked findings:
+
+17. **P2 — Duplicating a mosaic with Goals included but Groups omitted duplicates panel goals as project-wide goals.** `src/store/actions/projects.ts:550-551` copies every goal and maps each groupId to `null` when groups are omitted. Trigger: duplicate the seeded IC 5070 mosaic (three panels) with Groups unticked and Goals ticked. Three Ha and three OIII per-panel goals become project-wide, duplicating goal rows and progress. This breaks the invariant in `setGroupPanel` (`projects.ts:432-450`), which restores one subject-wide goal set when the last panel is removed. Normalize copied goals when panels are omitted.
+
+18. **P2 — Finishing Review while Target/Rig is current executes that step’s Proceed.** `src/features/v5/a-home/session-intake.tsx:104-118` renders Review for `?step=review` but passes current-flow `proceed` as `onFinished`. Intake is unordered and Proceed dispatches on `state.current` (`src/store/actions/flows.ts:108-129`); Review calls `onFinished` once no frames are unreviewed (`src/features/v5/d-review/frame-review.tsx:304-307`). Thus an early-opened Review can confirm/file a target or confirm a rig instead of finishing Review and advancing. Gate the callback on `flow.current === "review"` or invoke the Review-specific action.
+
+19. **P2 — Closing with no archive location can mark Archive complete without moving sessions.** `src/features/v5/b-projects/wrap-up.tsx:226-231` permits an empty archive plan with a blocker to reach Proceed; the step then reports “nothing left” and closes, leaving held sessions unmoved. Block Proceed or select an explicit skipped/blocked outcome.
+
+20. **P2 — Setup can reach Start indexing or Index later without a capture location.** `src/features/t1/setup/setup-pages.tsx:359` and `src/features/t1/setup/setup-flow.tsx:62-68`: unordered navigation allows bypassing Locations; Indexing checks only that some location exists, and Skip has no gate. This breaks plan §5.2’s minimum capture-location requirement. Gate both exits or force required setup.
+
+21. **P2 — Session row selection survives navigation to another Project.** `src/features/v5/b-projects/groups.tsx:297-303` stores selected rows in component state, but `src/features/v5/b-projects/project.tsx:59` does not key the page by project id. Duplicate navigates to a new Project on success (`src/features/v5/b-projects/duplicate-dialog.tsx:44-48`); previous ticks can survive, so bulk Remove may act on the new Project. Reset selection on project-id change.
+
+22. **P2 — Dark-flat masters are excluded from the Old age badge.** `src/domain/calibration.ts:738-739,751` ages darks and bias but not dark-flats, although decision C9 includes dark-flats and exempts only flats. Older dark-flat masters are not flagged for review.
+
+23. **P3 — Right-click opens an empty context menu where a row has no actions.** `src/components/app/data-table.tsx:685-697,920-926` enables the menu from table-level callback presence, even if the callback returns no items for a row. Retired locations have no actions (`src/features/t1/settings/locations-page.tsx:234`) but still open an empty menu. Do not open it when row actions are empty.
+
+24. **P3 — Saving a Targets preset drops the sort order.** `src/features/v5/e-targets-plan-settings/targets.tsx:455-462,583`: preset shape supports `sort`, but saving omits current sort and the URL does not carry it. Reapplying a saved preset loses the chosen order. Persist the sort with the preset.
+
+25. **P3 — Catalogue registry advertises a nonexistent `Tag` export.** `src/app/catalogue/registry.ts:52` lists `Tag` without a matching `src/components` export. `scripts/check-catalogue.mjs:58-67` detects missing registry entries, not names without exports, so this phantom component passes the catalogue gate.
+
+The independent code review also checked W4 API/file removals, enforcement wiring, token definitions and i18n parity. Coverage was incomplete for component internals, store slices/simulation/operations/notifications, some domain modules, remaining feature files and catalogue stories; these areas are not represented as clean.
+
+### Additional a11y best-practice note
+
+The auditor identified a NightPicker popover with `role="dialog"` but no accessible name. This was reported as policy/best-practice, not a WCAG AA failure.
+
+ 
 ## Disposition
 
-Findings 1–3 are blockers (WCAG A/AA or a keyboard-operability failure on the catalogue reference page). Findings 4–16 are should-fix, with 4–7 WCAG accessibility failures on shared controls or the catalogue specimen. The owner's manual walk remains pending; record their feedback as Round 10 as specified in plan §7.6.
+Findings 1–3 are blockers (WCAG A/AA or keyboard-operability failures). Findings 4–25 are should-fix. Follow-ups filed under `astro-plan-409cm`: `.4` reviews mixed-checkbox and intake candidates; `.5` mosaic duplication; `.6` intake Finish path; `.7` Archive destination; `.8` setup capture-location gate; `.9` Project selection reset; `.10` dark-flat age; `.11` empty row menu and preset sort; `.12`–`.24` the remaining WCAG, UI and design-record findings. The governing bead remains open for the user walk and Round 10 record.
