@@ -7,7 +7,7 @@ last_reviewed: 2026-10-29
 actors: [primary-user]
 surfaces: [settings, appearance, i18n, shell, status-bar, home, activity, keyboard]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [HARNESS-V5-IA.md#S16, HARNESS-V5-IA.md#round-2-foundation, HARNESS-V5-IA.md#fix-pass, HARNESS-V5-FEEDBACK-R1.md#shell-and-navigation, HARNESS-V5-FEEDBACK-R1.md#round-1b, HARNESS-V5-FEEDBACK-R1.md#copy-rules, I18N.md, themes-contrast.md, apps/prototype/src/features/t1/settings/appearance-page.tsx, apps/prototype/src/app/appearance.tsx, apps/prototype/src/app/preferences.ts, apps/prototype/src/app/themes.ts, apps/prototype/src/lib/i18n.ts, apps/prototype/src/lib/format.ts, apps/prototype/messages/en-GB.json, apps/prototype/messages/pt-BR.json, ui-harness-v5@b5e813a5, ui-harness-v5@d9255cff, ui-harness-v5@277fc2ac, docs/journeys/J10-settings-appearance-i18n/journey.md, LIB-FR-21, LIB-AC-01, FR-030, D-W86, D-W93 to D-W106, D-W170]
+trace: [HARNESS-V5-IA.md#S16, HARNESS-V5-IA.md#round-2-foundation, HARNESS-V5-IA.md#fix-pass, HARNESS-V5-FEEDBACK-R1.md#shell-and-navigation, HARNESS-V5-FEEDBACK-R1.md#round-1b, HARNESS-V5-FEEDBACK-R1.md#copy-rules, I18N.md, themes-contrast.md, apps/prototype/src/features/t1/settings/appearance-page.tsx, apps/prototype/src/app/appearance.tsx, apps/prototype/src/app/preferences.ts, apps/prototype/src/app/themes.ts, apps/prototype/src/lib/i18n.ts, apps/prototype/src/lib/format.ts, apps/prototype/messages/en-GB.json, apps/prototype/messages/pt-BR.json, ui-harness-v5@b5e813a5, ui-harness-v5@d9255cff, ui-harness-v5@277fc2ac, docs/journeys/J10-settings-appearance-i18n/journey.md, LIB-FR-21, LIB-FR-31, FR-030, D-W86, D-W93 to D-W106, D-W170]
 ---
 
 ## Goal
@@ -146,4 +146,4 @@ The user chooses how PlateVault looks and reads: they set its appearance mode, c
   Evidence: LIB-FR-21, LIB-AC-45, D-W166 · astro-plan-0v2o0.3, astro-plan-ocyuc.5 · by: SpecOwner2 (intent-gated)
 - **Δ6** 2026-10-29 · P1 · behavior-change
   P1 starts after setup saved Home's planning criteria. The setup wizard sets them, and they have no defaults.
-  Evidence: D-W170, LIB-FR-01, LIB-AC-01 · owner's answer, 2026-10-29, astro-plan-0v2o0.4 · by: Amend5Fix (intent-gated)
+  Evidence: D-W170, LIB-FR-31 · owner's answer, 2026-10-29, astro-plan-0v2o0.4 · by: Amend5Fix (intent-gated)

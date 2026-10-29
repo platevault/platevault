@@ -140,7 +140,7 @@ The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody,
   - Pending ingestions: "Everything is imported."; on first run, "Add a Captures location to find new captures." with Add location.
   - Pending work: "Nothing to sort or review."; on first run, "Import captures to start sorting them." with Import….
   - Open work: "No Projects in progress." with New Project….
-  - Tonight, until the setup wizard saves Home's planning criteria: no grades and no next good night (PLAN-FR-11).
+  - Tonight, until Home's planning criteria are saved: no grades and no next good night (PLAN-FR-11).
   - Tonight, when no goal suits the night: "No goals suit tonight. Next good night: {date}."; on first run, "Add a site to see tonight's darkness and Moon." with Add site.
   - Tonight, when there are no goals at all: "No unfinished goals." with Add a Goal (the owner's exact label, astro-plan-b66vy), which opens a menu of open Projects and then that Project's add-goal dialog.
   - Status, background jobs: "Nothing running." (D-W89, D-W170)

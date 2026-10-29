@@ -137,7 +137,7 @@ The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody,
 
   Each value names its site and time zone. When no goal suits tonight, Tonight gives the date of the next good night. Provisional: a panel group's goals are graded from the subject's window, like any other goal. The same computation tells Home whether a subject has a window tonight. The user changes the site on Targets. Home has no site control. (D-W35, D-W39, D-W88, D-W89, D-W95)
 
-  Tonight and the calendar (PLAN-FR-12) grade under Home's planning criteria, which take the form PLAN-FR-02 defines. These criteria have no defaults, and the setup wizard sets them (LIB-FR-01). Before the wizard saves them, Tonight and the calendar return no window, grade or suited-goal count. (D-W170)
+  Tonight and the calendar (PLAN-FR-12) grade under Home's planning criteria, which take the form PLAN-FR-02 defines. These criteria have no defaults. The setup wizard sets them (LIB-FR-31), and Home's Set criteria and Settings can save them too. Until Home's planning criteria are saved, Tonight and the calendar return no window, grade or suited-goal count. (D-W170)
 - **PLAN-FR-12**: The calendar supplies Home's calendar for the default site: five weeks of nights, starting with the week of the request. Each night has its Moon phase, its hours of darkness, the number of unfinished goals it suits and the number of Targets in its plan. A card opens on hover or focus with the night's dark window and the Moon's illumination, moonrise and moonset. The card also lists the goals the night suits, best first, the goals the Moon rules out, and the Targets in its plan. Choosing a night opens Targets set to that night (PLAN-TGT-FR-16). (D-W88, D-W89, D-W151)
 
 #### Targets list

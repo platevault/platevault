@@ -52,7 +52,7 @@ opens on Home, the control-panel dashboard. Done means:
 ### S1 — Read the Welcome and Locations steps {#S1}
 
 - **Do:** Launch PlateVault. On Welcome, click **Set up locations**, then read the Locations step without adding anything.
-- **Expect:** Onboarding shows three steps, Welcome, Locations and Index, and opens on Welcome. Welcome lists what PlateVault does and what it never does, including `Needs an account or a network connection`. On Locations, Captures is marked Required. Calibration and Results are marked Optional, and each offers **Set up later**. **Continue** is unavailable and names Captures as the missing role: `Add a capture location to continue. Captures is the only required role.` Calibration is optional because compatible masters can be imported later; raw calibration indexed in a registered location is matched at ingestion (LIB-FR-01, LIB-FR-23). The Index step asks for Home's planning criteria and fills in no value (D-W170).
+- **Expect:** Onboarding shows three steps, Welcome, Locations and Index, and opens on Welcome. Welcome lists what PlateVault does and what it never does, including `Needs an account or a network connection`. On Locations, Captures is marked Required. Calibration and Results are marked Optional, and each offers **Set up later**. **Continue** is unavailable and names Captures as the missing role: `Add a capture location to continue. Captures is the only required role.` Calibration is optional because compatible masters can be imported later; raw calibration indexed in a registered location is matched at ingestion (LIB-FR-01, LIB-FR-23).
 - **Expect (negative):** No step asks for a processing application, a Project, a workspace root, or an account.
 - **Trace:** flow A1 · LIB-FR-01 · root FR-001, FR-015 · D18 · HARNESS-V5-IA.md §Screens (onboarding kept at its v4 path, `src/features/t1/setup/setup-pages.tsx`)
 
@@ -79,14 +79,14 @@ opens on Home, the control-panel dashboard. Done means:
 ### S5 — Start indexing with one denied location {#S5}
 
 - **Do:** Outside PlateVault, remove read permission from `Astro-T7/Calibration`. In the Index step, set Home's planning criteria. Click **Start indexing**.
-- **Expect:** Progress shows these counts:
+- **Expect:** The Index step asks for Home's planning criteria and fills in no value. After **Start indexing**, progress shows these counts:
   - files discovered and metadata read;
   - unsupported items, at least the P2 note file;
   - unreadable items and completed scope.
 
   The Calibration row names the access failure and offers **Choose folder again** and **Retry**. Both Captures locations keep indexing.
-- **Expect (negative):** The denied folder is not reported as empty, and none of its files is labelled Missing.
-- **Trace:** flow A3, A4 · LIB-FR-01, LIB-FR-03, LIB-FR-06, LIB-FR-07 · LIB-AC-07 · D-W170
+- **Expect (negative):** The denied folder is not reported as empty, and none of its files is labelled Missing. **Start indexing** stays unavailable until the user sets Home's planning criteria.
+- **Trace:** flow A3, A4 · LIB-FR-03, LIB-FR-06, LIB-FR-07, LIB-FR-31 · LIB-AC-07, LIB-AC-47 · D-W170
 
 ### S6 — Browse while indexing runs {#S6}
 
@@ -267,6 +267,6 @@ opens on Home, the control-panel dashboard. Done means:
   A status-bar counter with one issue opens the same menu of owning pages as several do, and My targets marks a favourite in its Favourite column instead of with ★.
   At S6a, clicking NGC 7000's search result would open it, because a click on a result adds it or opens it and no result row has an Add button.
   Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 11 (OWNER, 2026-10-23) and §Round 6 "Clicking a result" on ui-harness-v5 @ 5dc245244; D-W142, D-W144, D-W152, FR-032 · by: SpecAmend (intent-gated)
-- **Δ10** 2026-10-29 · S1, S5, S6a · behavior-change
+- **Δ10** 2026-10-29 · S5, S6a · behavior-change
   The setup wizard's Index step asks for Home's planning criteria, which have no defaults. S5 sets them before indexing starts. S6a computes nothing under assumed criteria.
-  Evidence: D-W170, LIB-FR-01, PLAN-FR-11 · owner's answer, 2026-10-29, astro-plan-0v2o0.4 · by: Amend5Fix (intent-gated)
+  Evidence: D-W170, LIB-FR-31, LIB-AC-47, PLAN-FR-11 · owner's answer, 2026-10-29, astro-plan-0v2o0.4 · by: Amend5Fix (intent-gated)
