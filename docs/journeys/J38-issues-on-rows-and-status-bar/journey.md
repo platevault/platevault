@@ -1,7 +1,7 @@
 ---
 id: J38
 title: Handle issues from the status bar and on their rows
-version: 6
+version: 7
 status: draft
 last_reviewed: 2026-10-12
 actors: [primary-user]
@@ -59,7 +59,7 @@ running, and the notifications history. Done means:
   - Output: `M 31 OSC`'s `1 master offered` (Add to calibration library) on its Project's Output step and Open work.
   - Drift: `1 changed` (Review) on the `1 Oct Ha` session row, and Changed content on the F-drift frame row.
 - **Expect (negative):** The toolbar has no Issues button and the app has no Issues hub. Home has no alerts list. The status bar shows no pills and no inline notification. Opening these pages changes no catalog or Project record and no file.
-- **Trace:** PRJ-FR-17 · D-W89, D-W92, D-W94, D-W105 · 063 FR-032 · 064 LIB-FR-17, LIB-FR-23 · 065 PRJ-FR-17, PRJ-FR-18 · 070 RES-FR-11
+- **Trace:** PRJ-FR-17 · D-W89, D-W92, D-W94, D-W105 · 063 FR-032, FR-038 · 064 LIB-FR-17, LIB-FR-23 · 065 PRJ-FR-17, PRJ-FR-18 · 070 RES-FR-11
 
 ### S2 — Open each severity counter {#S2}
 
@@ -71,7 +71,7 @@ running, and the notifications history. Done means:
 
   Together the filtered pages show the 7 issues of S1, each exactly once. The `1 Oct Ha` row carries separate Needs calibration and drift issues; following the drift row's Review opens the session, where F-drift reads Changed content.
 - **Expect (negative):** No counter or menu lists an issue's text, and no filtered page shows a row with no issue. Choosing a counter changes nothing.
-- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 5 P-SB3 · D-W92 (counts only, each opening the owning page filtered; owner's answer of 2026-10-14, F7) · src/domain/issues.ts severities
+- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 5 P-SB3 · D-W92 (counts only, each opening the owning page filtered; owner's answer of 2026-10-14, F7) · src/domain/issues.ts severities · D-W144, D-W158 · 063 FR-032, FR-038
 
 ### S3 — Follow the failed Apply issue {#S3}
 
@@ -90,7 +90,7 @@ running, and the notifications history. Done means:
 
   ℹ still reads 3.
 - **Expect (negative):** Following an issue starts no stack, adopts or hides no master, and adds no session to a Project.
-- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 1b P-CAL3, §Round 1 P-CAL2 · D-W92 · src/domain/issues.ts master-offer, not-in-project
+- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 1b P-CAL3, §Round 1 P-CAL2 · D-W92 · src/domain/issues.ts master-offer, not-in-project · 063 FR-032
 
 ### S5 — Take a drive offline and reconnect it {#S5}
 
@@ -102,7 +102,7 @@ running, and the notifications history. Done means:
 
   After mounting, the bar reads `3 of 3 online` and ⚠ reads 3, and the row no longer shows the issue, with no action from the user.
 - **Expect (negative):** No `12 Sep` frame reads Missing, and no session is removed. No other issue appears or disappears.
-- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 5 P-SB3 "Left: locations online" · HARNESS-V5-IA.md §Round 2b "locations online (links to Settings › Locations)" · src/domain/issues.ts location-offline · J19/S15
+- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 5 P-SB3 "Left: locations online" · HARNESS-V5-IA.md §Round 2b "locations online (links to Settings › Locations)" · src/domain/issues.ts location-offline · J19/S15 · 063 FR-032, FR-038 · 064 LIB-FR-07 · D-W144, D-W158
 
 ### S5a — Dismiss two issues on their rows and restore them {#S5a}
 
@@ -113,7 +113,7 @@ running, and the notifications history. Done means:
   - The rows keep their state: the 2 Oct Ha flat process still awaits Stack, and `M 31 OSC`'s Output step still shows its pending master offer with Add to calibration library and Hide actions.
   - With Show dismissed on, each page lists its dismissed issue on its row with **Restore**. After the first Restore ℹ reads 2, and after the second it reads 3.
 - **Expect (negative):** Dismissing or restoring an issue starts no stack, hides no master offer, and changes no Project, calibration process or file. No counter counts a dismissed issue, and no counter reads 0.
-- **Trace:** D-W92 · 063 FR-032 · PRJ-FR-17 · CAL-FR-06 · RES-FR-11 (Dismiss and Restore act on rows; counters count undismissed issues).
+- **Trace:** D-W92 · 063 FR-032, FR-032-AC-01 · PRJ-FR-17 · CAL-FR-06 · RES-FR-11 (Dismiss and Restore act on rows; counters count undismissed issues).
 
 ### S5b — A dismissed issue returns when it changes {#S5b}
 
@@ -124,21 +124,21 @@ running, and the notifications history. Done means:
   - After the second eject, the `Cold-1 captures` row shows `Cold-1 captures offline` again with its ×, and ⚠ reads 4.
   - After the final mount, the bar reads `3 of 3 online` and ⚠ reads 3.
 - **Expect (negative):** Dismissing the issue marks no location online. No `12 Sep` frame reads Missing, and no session is removed.
-- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 8 P-ISS1 ("A dismissed issue stays hidden until it changes … a location going offline again brings it back", "its page still shows it") · D-W92 · src/domain/issues.ts location-offline
+- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 8 P-ISS1 ("A dismissed issue stays hidden until it changes … a location going offline again brings it back", "its page still shows it") · D-W92 · src/domain/issues.ts location-offline · 063 FR-032, FR-032-AC-01 · D-W158
 
 ### S6 — Read the selection count {#S6}
 
 - **Do:** Open Project `NGC 7000 HOO` and, in **Add sessions…** on its Sessions step, select the `12 Sep` and `24 Sep` sessions. Then clear the selection.
 - **Expect:** While the two sessions are selected, the left of the status bar reads `2 selected` after the locations. After clearing, the selection count is gone.
 - **Expect (negative):** Selecting starts no operation and changes no counter.
-- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 5 P-SB3 "then the selection count when a list has a selection" · src/app/status-selection.ts
+- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 5 P-SB3 "then the selection count when a list has a selection" · src/app/status-selection.ts · 063 FR-038
 
 ### S7 — Watch an import {#S7}
 
 - **Do:** Open Import on `Card-2`. In the preview, choose NGC 7000 as the `4 Oct` Ha session's Target (its lights carry no pointing, so none is prefilled; `OBJECT NGC7000` is only a hint), then import into `Astro-T7 captures` with Copy. While it runs, hover the running work in the status bar, move the pointer away, then move keyboard focus onto it.
 - **Expect:** The middle of the bar shows the import as plain text with a mini progress bar, in place of "Idle". Cancel appears while the pointer hovers the item, disappears when the pointer leaves, and appears again when the item has keyboard focus.
 - **Expect (negative):** Running work raises no issue, and no counter changes because of it. Cancel is not activated.
-- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 5 P-SB3 "running work as plain text with a mini progress bar and Cancel on hover/focus" · src/app/status-bar.tsx OperationItem · HARNESS-V5-FEEDBACK-R1.md §Round 6 P-IMP2 · J31/S6
+- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 5 P-SB3 "running work as plain text with a mini progress bar and Cancel on hover/focus" · src/app/status-bar.tsx OperationItem · HARNESS-V5-FEEDBACK-R1.md §Round 6 P-IMP2 · J31/S6 · 063 FR-038
 
 ### S8 — Retry interrupted work {#S8}
 
@@ -148,21 +148,21 @@ running, and the notifications history. Done means:
   - ⚠ returns to 3, and no row shows the interrupted issue.
   - Sessions lists a new `4 Oct` Ha session of 12 frames with its Target NGC 7000 confirmed. Home's Pending work still reads `2 need a Target`, equal to the number of sessions under the Sessions filter Needs a Target.
 - **Expect (negative):** PlateVault does not quit while the import runs without that confirmation. No verified item is copied a second time, and every `Card-2` file still matches P7. The imported session is not listed under Needs a Target.
-- **Trace:** src/store/operations.ts interruptRunningOperations, resumeOperation · messages op_interrupted_summary · src/domain/issues.ts work-interrupted · D-W11 · HARNESS-V5-FEEDBACK-R1.md §Round 6 P-IMP2 · J31/S10
+- **Trace:** src/store/operations.ts interruptRunningOperations, resumeOperation · messages op_interrupted_summary · src/domain/issues.ts work-interrupted · D-W11 · HARNESS-V5-FEEDBACK-R1.md §Round 6 P-IMP2 · J31/S10 · 063 FR-032, FR-038, FR-039 · 064 LIB-FR-17 · 071 STO-IMP-FR-06 · D-W149
 
 ### S9 — See the automatic duplicate scan {#S9}
 
 - **Do:** After the import finishes, read the status bar, then open Activity.
 - **Expect:** A duplicate scan starts as background work in the middle of the bar after the import. Activity records that scan after the import with an outcome of no duplicates. The bar then reads "Idle".
 - **Expect (negative):** The scan raises no duplicates issue and moves, renames or writes no file. `Card-2`, still connected and now holding 12 sources byte-identical to the imported lights, is not part of the scan: no duplicate copy is counted and no `Card-2` path is listed.
-- **Trace:** src/store/actions/storage.ts duplicate-scan · HARNESS-V5-FEEDBACK-R1.md §Round 5 Storage and duplicates · HARNESS-V5-FEEDBACK-R1.md §Round 6 "Capture cards never raise the duplicates warning"
+- **Trace:** src/store/actions/storage.ts duplicate-scan · HARNESS-V5-FEEDBACK-R1.md §Round 5 Storage and duplicates · HARNESS-V5-FEEDBACK-R1.md §Round 6 "Capture cards never raise the duplicates warning" · 063 FR-038 · 064 LIB-AC-43 · D-W164
 
 ### S10 — Cancel running work by keyboard {#S10}
 
 - **Do:** In Settings › Locations, start Rescan on `Astro-T7 captures`. While it runs, move keyboard focus onto it in the status bar and activate Cancel.
 - **Expect:** The rescan stops, and Activity records it as Canceled. The middle of the bar reads "Idle", and keyboard focus moves to the bell.
 - **Expect (negative):** Canceling removes no session and changes no file.
-- **Trace:** HARNESS-V5-IA.md §Round 2b "cancelling moves focus to the next operation, else to the notifications trigger" · messages setup_footer_canceled, location_rescan · src/store/operations.ts cancelOperation
+- **Trace:** HARNESS-V5-IA.md §Round 2b "cancelling moves focus to the next operation, else to the notifications trigger" · messages setup_footer_canceled, location_rescan · src/store/operations.ts cancelOperation · 063 FR-037, FR-038 · D-W121, D-W150, D-W162
 
 ### S11 — Raise and follow the duplicates issue {#S11}
 
@@ -174,7 +174,7 @@ running, and the notifications history. Done means:
 
   J39 continues the clean-up from here, with each duplicates issue on its session row and a row-level Dismiss.
 - **Expect (negative):** Neither the index, the scan nor opening the review moves, trashes or writes a file. Sessions still lists `4 Oct M 33` with the same frame count. The 12 `Card-2` sources, still connected, are not counted: the issue does not read 14 copies, and no group lists a `Card-2` path.
-- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 5 Storage and duplicates (⚠ issue "N duplicate copies · 2.1 GB" opening the Duplicates review) · HARNESS-V5-FEEDBACK-R1.md §Round 6 "registered library locations only … the copy in the earliest-registered location" · J39
+- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 5 Storage and duplicates (⚠ issue "N duplicate copies · 2.1 GB" opening the Duplicates review) · HARNESS-V5-FEEDBACK-R1.md §Round 6 "registered library locations only … the copy in the earliest-registered location" · J39 · 063 FR-032 · 064 LIB-FR-22, LIB-AC-43 · 065 PRJ-FR-15 · 071 STO-FR-16
 
 ### S12 — Read and clear the notification history {#S12}
 
@@ -185,21 +185,21 @@ running, and the notifications history. Done means:
   - Opening the history removes the unread count.
   - The import's entry opens the surface that owns its outcome. The Activity link opens Activity, which lists the same events.
 - **Expect (negative):** Opening the history or following an entry changes no counter and no catalog record.
-- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 5 P-SB3 "the bell with the unread count, opening the notification history" · HARNESS-V5-IA.md §Round 2b "history trigger with the unread count (latest 12, each linked to its surface, plus Activity). Opening the history marks every notification read" · src/store/notifications.ts
+- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 5 P-SB3 "the bell with the unread count, opening the notification history" · HARNESS-V5-IA.md §Round 2b "history trigger with the unread count (latest 12, each linked to its surface, plus Activity). Opening the history marks every notification read" · src/store/notifications.ts · 063 FR-038 · D-W92, D-W150
 
 ### S13 — Confirm nothing changed outside the actions {#S13}
 
 - **Do:** Outside PlateVault, recompute the P7 manifests.
 - **Expect:** `Cold-1`, `Card-2` and `Spare` match P7. On `Astro-T7`, the only new files are the 12 imported `Card-2` lights, each with its source's SHA-256, filed at once under the Target confirmed in S7: `Astro-T7/Captures/NGC 7000/Ha/2026-10-04/light/` (the default Lights template). Every other file matches P7.
 - **Expect (negative):** No file was moved, trashed or deleted. No imported light sits in an Unclassified folder.
-- **Trace:** specs/071-storage-custody/spec.md · D-W11
+- **Trace:** specs/071-storage-custody/spec.md · D-W11 · 063 FR-040 · 071 STO-IMP-FR-06
 
 ### S14 — Read a bar with no issues {#S14}
 
 - **Do:** Quit PlateVault and launch it on catalog B (P6). Read the status bar, then open Home and the `Pleiades 2025` Project.
 - **Expect:** The right of the bar shows only a muted ✓ before the bell. No row on Home or the Project page shows an issue, and the toolbar has no Issues button. The left of the bar reads `1 of 1 online`.
 - **Expect (negative):** No counter shows 0, and there are no pills or "0 issues" text.
-- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 5 P-SB3 "With no issues: a muted ✓ and nothing else" · messages issues_none
+- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 5 P-SB3 "With no issues: a muted ✓ and nothing else" · messages issues_none · 063 FR-032, FR-038
 
 ## Success criteria
 
@@ -238,3 +238,6 @@ running, and the notifications history. Done means:
 - **Δ6** 2026-10-26 · S8 · behavior-change
   Work a restart interrupted reads "Interrupted when PlateVault restarted. Retry continues from the recorded progress."
   Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 11 (OWNER, 2026-10-23) on ui-harness-v5 @ 5dc245244; D-W149 · by: SpecAmend (intent-gated)
+- **Δ7** 2026-10-28 · S1, S2, S3, S4, S5, S5a, S5b, S6, S7, S8, S9, S10, S11, S12, S13, S14 · trace-only
+  Steps now cite their owning FR/AC: status-bar groups (063 FR-038), row-level issues (063 FR-032), dismissal and recurrence across issue kinds (063 FR-032-AC-01) and the automatic duplicate scan (064 LIB-AC-43). No step's behaviour changes. LIB-AC-43 restates S9 and S11 (after an import, after an index) under D-W164.
+  Evidence: 063 FR-032, FR-032-AC-01, FR-037 to FR-040 · 064 LIB-FR-07, LIB-FR-17, LIB-FR-22, LIB-AC-43 · 065 PRJ-FR-15 · 071 STO-FR-16, STO-IMP-FR-06 · D-W144, D-W149, D-W150, D-W158, D-W164 · astro-plan-0v2o0.2, astro-plan-ocyuc.5 · by: omp-lead-20261004 (intent-gated)

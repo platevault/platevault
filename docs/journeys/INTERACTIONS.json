@@ -839,6 +839,33 @@
       "action": "Read Home's Tonight section before any site exists and with a default site, then compare its goal windows and five-week calendar with Targets' Plan areas.",
       "expect": "Without a saved site Tonight lists no windows and reads Add an observing site in Settings. With the default site it lists best windows for favourites and open-Project subjects, the Moon and darkness window; each names the site and time zone and matches the Plan area.",
       "negative": "No window is computed for an assumed location or for another planning site's selector value. Reading Tonight schedules no reminder and starts no indexing."
+    },
+    {
+      "flowStep": "Status bar and row-level issues, with no Issues hub (D-W92)",
+      "owner": "063-clean-rebuild-contract",
+      "journeyStep": "J38/S1, J38/S2, J38/S3, J38/S4, J38/S5, J38/S5a, J38/S5b, J38/S6, J38/S7, J38/S8, J38/S9, J38/S10, J38/S11, J38/S12, J38/S13, J38/S14",
+      "spec": "063-clean-rebuild-contract FR-032, FR-032-AC-01, FR-038; 064-library-inventory LIB-FR-17, LIB-FR-18, LIB-FR-22, LIB-FR-23, LIB-AC-43; 065-project-goals PRJ-FR-17, PRJ-FR-18; 068-calibration-inputs CAL-FR-06; 070-results-reuse RES-FR-11; 071-storage-custody STO-IMP-FR-06, STO-FR-18; D-W92, D-W144, D-W150, D-W157, D-W158; astro-plan-0v2o0.2, astro-plan-ocyuc.5",
+      "action": "Read the status bar and affected rows, open each severity counter, follow row-owned issues, take a location offline and reconnect it, dismiss and restore row issues, import and retry interrupted work, observe duplicate scans, and read notification history.",
+      "expect": "Issues appear on affected rows with actions; no Issues hub exists. The status bar shows online locations and selection, running work or Idle, nonzero issue counts, and notification history. Counters show counts only and open owning pages filtered to affected rows (or a page menu); dismissed issues leave counts while state remains unchanged and return when their identity changes.",
+      "negative": "No issue list appears in the bar or hub. Opening counters or history does not mutate files, catalog records or Projects; no counter shows 0, and no dismissed issue is counted."
+    },
+    {
+      "flowStep": "Settings > Appearance: theme and language only; one density, no density control (D-W86, D-W143)",
+      "owner": "064-library-inventory",
+      "journeyStep": "J40/S1, J40/S2, J40/S3, J40/S4, J40/S5, J40/S6, J40/S7, J40/S8, J40/S9, J40/S10, J40/S11, J40/S12",
+      "spec": "064-library-inventory LIB-FR-21, LIB-AC-45; 063-clean-rebuild-contract FR-042; D-W86, D-W143, D-W166; astro-plan-0v2o0.3; astro-plan-k9fil; astro-plan-ocyuc.5",
+      "action": "Set the appearance mode and theme, choose interface language, relaunch to check persistence, and restore defaults.",
+      "expect": "Theme, mode, language and single-key shortcut choices apply immediately and persist across relaunch before the first frame. Match system follows the OS using its selected dark/light pair. Density has no setting; J40 covers appearance and language only.",
+      "negative": "Appearance changes no catalog record, Activity entry, or library or user file; only PlateVault's own settings store changes. There is no density setting. Keyboard behavior is J42's contract."
+    },
+    {
+      "flowStep": "Keyboard model, shortcuts, go-to keys and command palette (D-W91, D-W121, D-W162)",
+      "owner": "063-clean-rebuild-contract",
+      "journeyStep": "J42/S1, J42/S2, J42/S3, J42/S3a, J42/S4, J42/S5, J42/S6, J42/S7, J42/S8, J42/S9, J42/S10, J42/S11, J42/S12, J42/S13, J42/S14, J42/S15",
+      "spec": "063-clean-rebuild-contract FR-025, FR-026, FR-027, FR-031, FR-037, FR-042, FR-042-AC-01, FR-042-AC-02; 064-library-inventory LIB-FR-21, LIB-AC-45; D-W91, D-W121, D-W162, D-W164, D-W166; astro-plan-ocyuc.5",
+      "action": "Work from launch through the Project View with keyboard-only shortcuts, go-to navigation, Back/Forward, table row navigation and menus, sheets, status-bar Cancel and the command palette.",
+      "expect": "Keyboard help lists available keys and go-to sequences. Shortcuts do not fire while typing; the preference disables single-key navigation while ⌘K/Ctrl+K remains active. Table navigation follows the settled P-KBD1 model. The command palette searches pages, actions and entities, opens its highlighted result, excludes unavailable Plan and Storage surfaces, and restores focus on Escape.",
+      "negative": "No pointer interaction, stray navigation while typing, tab stops on non-current rows, or unintended data/file mutation occurs. Theme/language and density are owned by J40, not J42."
     }
   ]
 }

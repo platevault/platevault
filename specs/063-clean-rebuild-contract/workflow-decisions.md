@@ -228,3 +228,7 @@ The owner answered two open questions of the contract amendment on 2026-10-27; d
 - D-W165 (better match available; owner's answer, 2026-10-27: "Better match: go with C + A"; amends D-W101, D-W102, D-W103 and D-W106): A calibration in the library that the existing CAL-FR-20 or CAL-FR-21 ranking places strictly above a session's current pinned assignment is a better match for that session, and a tie is not one. (C) When a better match arrives by import, Import review lists the sessions it outranks as an unticked "Better for: …" choice beside D-W106's "Used for:" list. Ticking it reassigns the pin through the existing Reassign… path, and an unticked choice changes nothing. (A) While a better match exists, however it reached the library (imported, adopted or restored), the session's details show a passive "Better match available" hint on that calibration kind's row, next to Reassign…. The hint is passive: it is no issue, no Update notice (D-W103), no count, and it doesn't put the session in Needs calibration. The ranking itself stays as D-W102 and D-W103 mark it.
 
 Sources: the legacy facts are in legacy-frontend-facts.md.
+
+## Owner's answer, 2026-10-28
+
+- D-W166 (appearance and language storage; owner's decision, 2026-10-28): Theme, language and the single-key shortcut preference persist in PlateVault's per-user settings store outside every library, and are applied immediately and from the first frame after restart. Appearance changes never touch the library.
