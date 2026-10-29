@@ -9,7 +9,8 @@
 
 use persistence_library::{Catalog, WORKFLOW_SETTINGS_ID};
 use platevault_model::{
-    Band, LibraryError, MoonAvoidanceCurve, Revision, ViewMode, WorkflowSettings,
+    Band, CalibrationSettings, DarkBiasRules, FlatRules, LibraryError, MoonAvoidanceCurve,
+    Revision, ViewMode, WorkflowSettings,
 };
 
 async fn catalog() -> (tempfile::TempDir, Catalog) {
@@ -19,13 +20,14 @@ async fn catalog() -> (tempfile::TempDir, Catalog) {
 }
 
 fn changed() -> WorkflowSettings {
-    let mut settings = WorkflowSettings::default();
-    settings.view_mode = ViewMode::Copies;
-    settings.flats.window_nights = 3;
-    settings.dark_bias.window_days = 180;
-    settings.calibration.keep_raw_frames = true;
-    settings.calibration.old_master_after_days = 30;
-    settings
+    let defaults = WorkflowSettings::default();
+    WorkflowSettings {
+        view_mode: ViewMode::Copies,
+        flats: FlatRules { window_nights: 3, ..defaults.flats },
+        dark_bias: DarkBiasRules { window_days: 180 },
+        calibration: CalibrationSettings { keep_raw_frames: true, old_master_after_days: 30 },
+        ..defaults
+    }
 }
 
 #[tokio::test]
