@@ -1133,3 +1133,79 @@ async fn discard_refuses_what_it_cannot_restore_and_writes_nothing() {
     let error = discard(&world, state.revision).await.unwrap_err();
     assert!(refusal(&error).contains("takes no edit"), "{error}");
 }
+
+/// astro-plan-mts3e: a rig and a camera whose only group the Project removed
+/// after its View recorded it stay in use, since a Discard brings the group
+/// back on them: deleting either is refused and writes nothing, and the
+/// Discard still restores the group.
+#[tokio::test]
+async fn a_group_the_view_recorded_keeps_its_rig_and_camera_in_use() {
+    let world = world().await;
+    let catalog = world.catalog();
+    let ha = world.admissible(HA[0]).await;
+    add(&world, &[ha.id]).await.unwrap();
+    let camera = Camera {
+        id: Uuid::new_v4(),
+        model: "ASI183MM".into(),
+        alias: None,
+        no_darks: false,
+        no_bias: false,
+        revision: 0,
+    };
+    let camera = catalog.save_cameras(&[camera]).await.unwrap().remove(0);
+    let esprit = Equipment {
+        id: Uuid::new_v4(),
+        name: "Esprit 100".into(),
+        camera: Some("ASI183MM".into()),
+        telescope: Some("Esprit 100".into()),
+        focal_length_mm: Some(550.0),
+        pixel_size_um: None,
+        sensor_width_px: None,
+        sensor_height_px: None,
+        color_kind: None,
+        decision_revision: 0,
+        state: AssociationState::Confirmed,
+        provenance: Provenance::User,
+    };
+    let esprit = catalog.save_equipment(&esprit, None).await.unwrap();
+    let revision = desired(&world).await.revision;
+    catalog.set_project_rigs(world.project, revision, &[world.rig, esprit.id]).await.unwrap();
+    let group = persistence_library::NewGroup {
+        id: Uuid::new_v4(),
+        rig_id: esprit.id,
+        name: GroupName::new("Esprit nights").unwrap(),
+        origin: GroupOrigin::User,
+        optics: OpticsSignature::new(Some(camera.id), Some(550.0), None).unwrap(),
+        framing: None,
+    };
+    let revision = desired(&world).await.revision;
+    catalog.create_project_group(world.project, revision, &group, &[]).await.unwrap();
+    world.apply().await;
+    let mut conn = world.conn().await;
+    let recorded: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM view_manifests m, json_each(m.basis, '$.groups') g \
+         WHERE m.state = 'installed' AND json_extract(g.value, '$.id') = ?1",
+    )
+    .bind(group.id.to_string())
+    .fetch_one(&mut conn)
+    .await
+    .unwrap();
+    assert_eq!(recorded, 1, "the View recorded the empty Esprit group");
+
+    let revision = desired(&world).await.revision;
+    catalog.remove_project_group(world.project, revision, group.id).await.unwrap();
+    let revision = desired(&world).await.revision;
+    catalog.set_project_rigs(world.project, revision, &[world.rig]).await.unwrap();
+    let before = desired(&world).await;
+
+    let error = catalog.delete_equipment(esprit.id, esprit.decision_revision).await.unwrap_err();
+    assert!(refusal(&error).contains("rig Esprit 100 is used by 1 Project(s)"), "{error}");
+    let error = catalog.delete_camera(camera.id, camera.revision).await.unwrap_err();
+    assert!(refusal(&error).contains("camera ASI183MM is used by 1 Project(s)"), "{error}");
+    assert!(catalog.equipment(esprit.id).await.is_ok() && catalog.camera(camera.id).await.is_ok());
+    assert_eq!(desired(&world).await, before, "a refusal writes nothing");
+
+    let restored = discard(&world, before.revision).await.unwrap();
+    let back = restored.groups.iter().find(|held| held.id == group.id).expect("restored");
+    assert_eq!((back.rig_id, back.optics.camera_id), (esprit.id, Some(camera.id)));
+}

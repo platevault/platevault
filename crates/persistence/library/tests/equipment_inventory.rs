@@ -5,21 +5,26 @@
 //! PLAN-EQ-FR-01, D-W87): every saved rig, camera and rig filter list is
 //! listed, and a rig or camera is deleted only while nothing refers to it.
 //! A refused delete writes nothing: no cascade into sessions, associations,
-//! rig versions, camera links or Projects.
+//! rig versions, camera links, adopted masters or Projects.
 #![cfg(unix)]
 
 #[path = "support/calibration.rs"]
 mod calibration_support;
 mod support;
 
-use calibration_support::{dump_tables, raw};
-use persistence_library::Catalog;
+use std::path::Path;
+
+use calibration_support::{
+    calibration_frame, dump_tables, frame, location_at, raw, scan_frames, with_train, TestRules,
+};
+use persistence_library::{Catalog, NewGroup};
 use platevault_model::{
-    AssociationState, Band, Camera, Equipment, LibraryError, OpticsSignature, ProjectInput,
+    AdoptionDestination, AdoptionSource, AssociationState, Band, Camera, Equipment, GroupName,
+    GroupOrigin, LibraryError, LocationRole, NativePath, OpticsSignature, Project, ProjectInput,
     Provenance, RigFilter, RigVersion, RotatorPresence, Session, SubjectInput,
 };
 use sqlx::Connection;
-use support::{expected_session, kind, scan, target, Fixture};
+use support::{expected, expected_session, kind, scan, target, DiskProbe, Fixture};
 use time::macros::date;
 use uuid::Uuid;
 
@@ -27,7 +32,7 @@ use uuid::Uuid;
 const FRAMES: [&str; 3] = ["Ha_1.fits", "OIII_1.fits", "Dark_1.fits"];
 
 /// Tables a refused delete must leave byte-for-byte as they were.
-const GUARDED_TABLES: [&str; 11] = [
+const GUARDED_TABLES: [&str; 14] = [
     "equipment",
     "rig_filter_lists",
     "rig_filters",
@@ -35,10 +40,13 @@ const GUARDED_TABLES: [&str; 11] = [
     "session_rig_versions",
     "cameras",
     "session_cameras",
+    "adopted_masters",
     "associations",
     "sessions",
     "projects",
     "project_rigs",
+    "project_groups",
+    "project_snapshots",
 ];
 
 struct Inventory {
@@ -113,6 +121,21 @@ impl Inventory {
         .unwrap_or_else(|error| panic!("no session {prefix}: {error}"));
         raw.close().await.unwrap();
         self.catalog.session(id.parse().unwrap()).await.unwrap().summary.session
+    }
+
+    /// An open Project on NGC 7000 with `rig`.
+    async fn project(&self, rig: &Equipment) -> Project {
+        let ngc = self.catalog.save_target(&target("NGC 7000", "ngc 7000"), None).await.unwrap();
+        self.catalog
+            .create_project(&ProjectInput {
+                name: "NGC 7000 HOO".into(),
+                notes: None,
+                subjects: vec![SubjectInput { target_id: ngc.candidate.id, name: None }],
+                rig_ids: vec![rig.id],
+                goals: Vec::new(),
+            })
+            .await
+            .unwrap()
     }
 
     /// Every row of the guarded tables, each value quoted by SQLite.
@@ -224,17 +247,7 @@ async fn refuses_a_rig_that_a_session_project_or_version_uses() {
 
     let ha = inv.session("LIGHT").await;
     inv.catalog.confirm_equipment(&[expected_session(&ha)], confirmed.id).await.unwrap();
-    let ngc = inv.catalog.save_target(&target("NGC 7000", "ngc 7000"), None).await.unwrap();
-    inv.catalog
-        .create_project(&ProjectInput {
-            name: "NGC 7000 HOO".into(),
-            notes: None,
-            subjects: vec![SubjectInput { target_id: ngc.candidate.id, name: None }],
-            rig_ids: vec![in_project.id],
-            goals: Vec::new(),
-        })
-        .await
-        .unwrap();
+    inv.project(&in_project).await;
     inv.version(&versioned, &camera).await;
 
     let before = inv.snapshot().await;
@@ -254,16 +267,34 @@ async fn deletes_an_unreferenced_camera_and_refuses_a_used_one() {
     let spare = inv.camera("ASI533MC").await;
     let mounted = inv.camera("ASI2600MM").await;
     let linked = inv.camera("ASI294MM").await;
+    let linked = Camera { alias: Some("Guide cam".into()), ..linked };
+    let linked = inv.catalog.save_cameras(&[linked]).await.unwrap().remove(0);
+    let grouped = inv.camera("ASI183MM").await;
     let rig = inv.rig("RedCat 51").await;
     inv.version(&rig, &mounted).await;
     let dark = inv.session("DARK").await;
     inv.catalog.confirm_session_camera(&[expected_session(&dark)], linked.id).await.unwrap();
+    // A user group of a Project whose optics name the camera.
+    let project = inv.project(&rig).await;
+    let group = NewGroup {
+        id: Uuid::new_v4(),
+        rig_id: rig.id,
+        name: GroupName::new("ASI183 nights").unwrap(),
+        origin: GroupOrigin::User,
+        optics: OpticsSignature::new(Some(grouped.id), Some(250.0), None).unwrap(),
+        framing: None,
+    };
+    inv.catalog.create_project_group(project.id, project.revision, &group, &[]).await.unwrap();
 
     let before = inv.snapshot().await;
-    for camera in [&mounted, &linked] {
+    for (camera, label) in [
+        (&mounted, "camera ASI2600MM is used by 1 rig version(s)"),
+        (&linked, "camera Guide cam (ASI294MM) is used by 1 session(s)"),
+        (&grouped, "camera ASI183MM is used by 1 Project(s)"),
+    ] {
         let error = inv.catalog.delete_camera(camera.id, camera.revision).await.unwrap_err();
         assert!(refused(&error), "{} must be refused: {error:?}", camera.model);
-        assert!(error.to_string().contains(&camera.model), "the refusal names it: {error}");
+        assert!(error.to_string().contains(label), "the refusal names it: {error}");
     }
     assert_eq!(inv.snapshot().await, before, "a refused delete writes nothing");
 
@@ -271,8 +302,66 @@ async fn deletes_an_unreferenced_camera_and_refuses_a_used_one() {
     assert!(matches!(stale, Err(LibraryError::Conflict { .. })), "{stale:?}");
     inv.catalog.delete_camera(spare.id, spare.revision).await.unwrap();
     assert!(matches!(inv.catalog.camera(spare.id).await, Err(LibraryError::NotFound(_))));
-    assert_eq!(inv.catalog.cameras().await.unwrap(), [mounted, linked]);
+    assert_eq!(inv.catalog.cameras().await.unwrap(), [grouped, mounted, linked]);
     let again = inv.catalog.delete_camera(spare.id, spare.revision).await;
     assert!(matches!(again, Err(LibraryError::NotFound(_))), "{again:?}");
     inv.catalog.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn refuses_a_camera_an_adopted_master_was_taken_with() {
+    let fx = Fixture::new();
+    let catalog = Catalog::open(&fx.db).await.unwrap();
+    let (calibration, calibration_root) =
+        location_at(&catalog, &fx, "Astro-T7/Calibration", LocationRole::Calibration).await;
+    std::fs::create_dir_all(calibration_root.join("masters")).unwrap();
+    let (results, results_root) =
+        location_at(&catalog, &fx, "Work/Processing", LocationRole::Results).await;
+    let mut flat = with_train(calibration_frame("Flat", Some("Ha"), 2.0, "2026-09-20"));
+    flat.stack_count = Some(30);
+    scan_frames(&catalog, &results, vec![frame(&results_root, "master_flat_Ha.fit", flat)]).await;
+    // The schema records the camera a master was taken with (LIB-FR-26), but
+    // no adoption writes it yet, so the link is written as a later import
+    // would: by model, the rigs holding one ASI2600MM.
+    let camera = Camera {
+        id: Uuid::new_v4(),
+        model: "ASI2600MM".into(),
+        alias: None,
+        no_darks: false,
+        no_bias: false,
+        revision: 0,
+    };
+    let camera = catalog.save_cameras(&[camera]).await.unwrap().remove(0);
+    let source = catalog.location_assets(results.id).await.unwrap().remove(0);
+    let review = catalog
+        .review_adoption(
+            &AdoptionSource::Asset { asset_id: source.id, expected: expected(&source) },
+            &AdoptionDestination {
+                location_id: calibration.id,
+                relative_path: NativePath::from_path(Path::new("masters/master_flat_Ha.fit")),
+            },
+            &TestRules,
+            DiskProbe,
+        )
+        .await
+        .unwrap();
+    Box::pin(catalog.adopt_master(review.id, review.revision, DiskProbe)).await.unwrap();
+    let mut conn = raw(&fx.db).await;
+    let linked = sqlx::query(
+        "UPDATE adopted_masters SET camera_id = ?1, camera_basis = 'model' WHERE review_id = ?2",
+    )
+    .bind(camera.id.to_string())
+    .bind(review.id.to_string())
+    .execute(&mut conn)
+    .await
+    .unwrap();
+    conn.close().await.unwrap();
+    assert_eq!(linked.rows_affected(), 1, "one adopted master names the camera");
+
+    let before = dump_tables(&fx.db, &GUARDED_TABLES).await;
+    let error = catalog.delete_camera(camera.id, camera.revision).await.unwrap_err();
+    assert!(refused(&error), "{error:?}");
+    assert!(error.to_string().contains("1 calibration master(s)"), "{error}");
+    assert_eq!(dump_tables(&fx.db, &GUARDED_TABLES).await, before, "nothing is written");
+    catalog.close().await.unwrap();
 }

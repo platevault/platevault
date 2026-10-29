@@ -53,8 +53,9 @@ impl Catalog {
     /// # Errors
     /// `NotFound` for an unknown rig; `Conflict` when `expected` is not its
     /// current revision; `InvalidInput` naming the rig while a session's
-    /// association (confirmed or automatic), a Project or a rig version
-    /// refers to it, and then nothing is written.
+    /// association (confirmed or automatic), a rig version or a Project
+    /// refers to it: the Project's rigs, its groups, or a group of its
+    /// installed or previous View or Closed snapshot. Nothing is then written.
     pub async fn delete_equipment(&self, id: Uuid, expected: Revision) -> Result<()> {
         write_txn!(self, |conn| {
             let rig = load_equipment(conn, id).await?;
@@ -83,18 +84,21 @@ impl Catalog {
     /// # Errors
     /// `NotFound` for an unknown camera; `Conflict` when `expected` is not
     /// its current revision; `InvalidInput` naming the camera while a rig
-    /// version, a session's camera link, an adopted master or a Project group
-    /// refers to it, and then nothing is written.
+    /// version, a session's camera link, an adopted master or a Project
+    /// group's optics refer to it (as for rigs, a group of a View or Closed
+    /// snapshot counts). Nothing is then written.
     pub async fn delete_camera(&self, id: Uuid, expected: Revision) -> Result<()> {
         write_txn!(self, |conn| {
             let camera = load_camera(conn, id).await?;
             require_revision(id, camera.revision, expected)?;
             let uses = camera_uses(conn, id).await?;
             if !uses.is_empty() {
-                let label = camera.alias.as_deref().unwrap_or(&camera.model);
+                let label = camera.alias.as_ref().map_or_else(
+                    || camera.model.clone(),
+                    |alias| format!("{alias} ({})", camera.model),
+                );
                 return Err(LibraryError::InvalidInput(format!(
-                    "camera {label} ({}) is used by {}",
-                    camera.model,
+                    "camera {label} is used by {}",
                     uses.join(", ")
                 )));
             }
@@ -107,15 +111,33 @@ impl Catalog {
     }
 }
 
+/// The groups each Project holds as `(project_id, grp)`, `grp` a group's JSON:
+/// its desired groups, the groups of its installed and previous Views, and
+/// those its Closed snapshot froze. A Discard or a reopen brings a View's or
+/// snapshot's group back, so a group the Project removed still refers to its
+/// rig and camera.
+macro_rules! project_groups_sql {
+    () => {
+        "SELECT project_id, json_object('rigId', rig_id, 'optics', json(optics)) AS grp \
+         FROM project_groups \
+         UNION ALL SELECT m.project_id, g.value FROM view_manifests m, \
+         json_each(m.basis, '$.groups') g WHERE m.state IN ('installed', 'previous') \
+         UNION ALL SELECT s.project_id, g.value FROM project_snapshots s, \
+         json_each(s.snapshot, '$.basis.groups') g"
+    };
+}
+
 /// What refers to a rig, as "N kind" phrases; empty when nothing does.
 async fn rig_uses(conn: &mut SqliteConnection, id: Uuid) -> Result<Vec<String>> {
-    let (sessions, projects, versions): (i64, i64, i64) = sqlx::query_as(
+    let (sessions, projects, versions): (i64, i64, i64) = sqlx::query_as(concat!(
         "SELECT \
          (SELECT count(DISTINCT session_id) FROM associations WHERE equipment_id = ?1), \
          (SELECT count(*) FROM (SELECT project_id FROM project_rigs WHERE equipment_id = ?1 \
-          UNION SELECT project_id FROM project_groups WHERE rig_id = ?1)), \
+          UNION SELECT project_id FROM (",
+        project_groups_sql!(),
+        ") WHERE json_extract(grp, '$.rigId') = ?1)), \
          (SELECT count(*) FROM rig_versions WHERE equipment_id = ?1)",
-    )
+    ))
     .bind(id.to_string())
     .fetch_one(&mut *conn)
     .await?;
@@ -124,13 +146,15 @@ async fn rig_uses(conn: &mut SqliteConnection, id: Uuid) -> Result<Vec<String>> 
 
 /// What refers to a camera, as "N kind" phrases; empty when nothing does.
 async fn camera_uses(conn: &mut SqliteConnection, id: Uuid) -> Result<Vec<String>> {
-    let (versions, sessions, masters, groups): (i64, i64, i64, i64) = sqlx::query_as(
+    let (versions, sessions, masters, projects): (i64, i64, i64, i64) = sqlx::query_as(concat!(
         "SELECT \
-         (SELECT count(*) FROM rig_versions WHERE camera_id = ?1), \
-         (SELECT count(*) FROM session_cameras WHERE camera_id = ?1), \
-         (SELECT count(*) FROM adopted_masters WHERE camera_id = ?1), \
-         (SELECT count(*) FROM project_groups WHERE json_extract(optics, '$.cameraId') = ?1)",
-    )
+             (SELECT count(*) FROM rig_versions WHERE camera_id = ?1), \
+             (SELECT count(*) FROM session_cameras WHERE camera_id = ?1), \
+             (SELECT count(*) FROM adopted_masters WHERE camera_id = ?1), \
+             (SELECT count(DISTINCT project_id) FROM (",
+        project_groups_sql!(),
+        ") WHERE json_extract(grp, '$.optics.cameraId') = ?1)",
+    ))
     .bind(id.to_string())
     .fetch_one(&mut *conn)
     .await?;
@@ -138,7 +162,7 @@ async fn camera_uses(conn: &mut SqliteConnection, id: Uuid) -> Result<Vec<String
         (versions, "rig version(s)"),
         (sessions, "session(s)"),
         (masters, "calibration master(s)"),
-        (groups, "Project group(s)"),
+        (projects, "Project(s)"),
     ]))
 }
 
