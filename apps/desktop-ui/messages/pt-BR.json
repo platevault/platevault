@@ -7712,5 +7712,19 @@
   "import_sources_kept": "Origens mantidas",
   "import_missing": "Esta importação não está no catálogo",
   "home_import_ellipsis": "Importar…",
-  "home_no_new_files": "Nenhum arquivo novo encontrado nos locais de Capturas."
+  "home_no_new_files": "Nenhum arquivo novo encontrado nos locais de Capturas.",
+  "status_closing": "Encerrando",
+  "reason_trash_unsupported": "Este volume não tem Lixeira",
+  "reason_trash_failed": "O sistema recusou mover para a Lixeira",
+  "reason_source_drift": "Mudou desde a revisão",
+  "reason_source_unavailable": "Está ausente ou não pode ser lido",
+  "reason_kept_copy_unproven": "A cópia mantida não tem mais os bytes revisados",
+  "reason_destination_occupied": "Já existe outro arquivo no destino",
+  "reason_destination_mismatch": "A cópia no destino não corresponde à origem",
+  "reason_destination_changed": "O destino mudou",
+  "reason_write_failed": "Não foi possível gravar no destino",
+  "reason_interrupted": "Interrompido: não é possível comprovar o que aconteceu",
+  "reason_protected": "Protegido: o PlateVault nunca o move",
+  "project_record_unavailable": "Os detalhes do Projeto ainda não podem ser lidos",
+  "projects_read_failed": "Não foi possível ler os Projetos"
 }

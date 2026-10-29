@@ -7198,5 +7198,19 @@
   "import_sources_kept": "Sources kept",
   "import_missing": "This import is not in the catalogue",
   "home_import_ellipsis": "Import…",
-  "home_no_new_files": "No new files found in the Captures locations."
+  "home_no_new_files": "No new files found in the Captures locations.",
+  "status_closing": "Closing",
+  "reason_trash_unsupported": "This volume has no Trash",
+  "reason_trash_failed": "The system refused to move it to the Trash",
+  "reason_source_drift": "It changed since the review",
+  "reason_source_unavailable": "It is missing or can't be read",
+  "reason_kept_copy_unproven": "The kept copy no longer holds its reviewed bytes",
+  "reason_destination_occupied": "Another file is already at the destination",
+  "reason_destination_mismatch": "The destination copy doesn't match the source",
+  "reason_destination_changed": "The destination changed",
+  "reason_write_failed": "The destination couldn't be written",
+  "reason_interrupted": "Interrupted: what happened can't be proven",
+  "reason_protected": "Protected: PlateVault never moves it",
+  "project_record_unavailable": "The Project's details can't be read yet",
+  "projects_read_failed": "Couldn't read Projects"
 }
