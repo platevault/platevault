@@ -328,11 +328,10 @@ fn serve_tap(basic: &'static str, ident: &'static str) -> String {
     endpoint
 }
 
-/// PLAN-TGT-FR-03, PLAN-TGT-AC-03: "M31", "M 31", "m31" and " m 31 " find the
-/// same Target; every result names its source; searching writes nothing; Add
-/// to targets puts a catalogue result into the library and My targets.
+/// PLAN-TGT-AC-03/15, PLAN-TGT-FR-03: search is read-only; clicking resolves
+/// current library state and opens an existing My target or favourites a result.
 #[tokio::test]
-async fn search_ignores_case_whitespace_and_names_source() {
+async fn search_is_read_only_and_result_action_uses_current_membership() {
     let endpoint = serve_tap(
         "oid\tmain_id\tra\tdec\totype_txt\tV\n\
          9001\t\"PVQ  Nebula\"\t300.0\t40.0\t\"HII\"\t12.0\n",
@@ -342,45 +341,98 @@ async fn search_ignores_case_whitespace_and_names_source() {
     let config = SimbadConfig::from_settings(endpoint, 5);
     let library = Library::open(&temp.path().join("library.sqlite"), Some(&config)).await.unwrap();
     let m31 = seed(&library, "M 31").await;
-    library.add_to_my_targets(&AddTarget::Seed { id: m31.id }).await.unwrap();
+
     let generation = library.catalog().target_generation().await.unwrap();
-
-    for text in ["M31", "M 31", "m31", " m 31 "] {
-        let found = library.targets_search(text).await.unwrap();
-        let first = &found.results[0];
-        assert_eq!(first.target.id, m31.id, "{text:?}");
-        assert_eq!(first.source, TargetsSearchSource::MyTargets, "{text:?}");
-        assert!(first.in_my_targets);
-        assert_eq!(found.results.iter().filter(|r| r.target.id == m31.id).count(), 1);
-    }
-
-    let found = library.targets_search("ngc 7000").await.unwrap();
-    let ngc = found.results.iter().find(|r| r.target.designation == "NGC 7000").unwrap();
-    assert_eq!(ngc.source, TargetsSearchSource::Catalogue);
-    assert!(!ngc.in_my_targets);
-    assert_eq!(found.simbad, SimbadSearch::Searched);
-
-    let found = library.targets_search("PVQ Nebula").await.unwrap();
-    let simbad = found.results.iter().find(|r| r.source == TargetsSearchSource::Simbad).unwrap();
-    assert_eq!(simbad.target.designation, "PVQ Nebula");
-    assert!(!simbad.in_my_targets);
+    let stale_unmarked = library.targets_search("M31").await.unwrap().results.remove(0);
+    assert_eq!(stale_unmarked.source, TargetsSearchSource::Catalogue);
     assert_eq!(
         library.catalog().target_generation().await.unwrap(),
         generation,
-        "search writes nothing"
+        "search alone writes nothing"
     );
+    library.add_to_my_targets(&AddTarget::Seed { id: m31.id }).await.unwrap();
+    let existing = library.targets_search_result_action(&stale_unmarked).await.unwrap();
+    let current = library.catalog().target(m31.id).await.unwrap();
+    assert_eq!(existing, TargetsSearchAction::Open { target: current.clone() });
+    assert_eq!(library.catalog().target_generation().await.unwrap(), generation + 1);
+    assert!(library.catalog().my_target_marks().await.unwrap().favourites.contains(&m31.id));
 
-    let added = library.add_to_my_targets(&AddTarget::Seed { id: ngc.target.id }).await.unwrap();
-    assert_eq!(added.candidate.id, ngc.target.id);
-    let again = library.targets_search("NGC7000").await.unwrap();
-    let ngc = again.results.iter().find(|r| r.target.id == added.candidate.id).unwrap();
-    assert_eq!(ngc.source, TargetsSearchSource::MyTargets);
-    let added = library.add_to_my_targets(&AddTarget::Simbad { query: "PVQ Nebula".into() }).await;
-    let added = added.unwrap();
-    assert!(matches!(added.candidate.provenance, Provenance::Provider { .. }));
-    let mine =
-        library.target_rows(&query(TargetsShow::MyTargets, None, date!(2026 - 10 - 10))).await;
-    assert_eq!(designations(&mine.unwrap()), ["M 31", "NGC 7000", "PVQ Nebula"]);
+    let stale_marked = library.targets_search("M31").await.unwrap().results.remove(0);
+    library.set_favourite(m31.id, false).await.unwrap();
+    let readded = library.targets_search_result_action(&stale_marked).await.unwrap();
+    assert!(
+        matches!(readded, TargetsSearchAction::Added { target } if target.candidate.id == m31.id)
+    );
+    assert!(library.catalog().my_target_marks().await.unwrap().favourites.contains(&m31.id));
+
+    let catalogue = library
+        .targets_search("ngc 7000")
+        .await
+        .unwrap()
+        .results
+        .into_iter()
+        .find(|result| result.target.designation == "NGC 7000")
+        .unwrap();
+    assert_eq!(catalogue.source, TargetsSearchSource::Catalogue);
+    assert_eq!(
+        library.catalog().target_generation().await.unwrap(),
+        generation + 1,
+        "search alone writes nothing"
+    );
+    let added = library.targets_search_result_action(&catalogue).await.unwrap();
+    assert!(matches!(added, TargetsSearchAction::Added { .. }));
+    assert!(library
+        .catalog()
+        .my_target_marks()
+        .await
+        .unwrap()
+        .favourites
+        .contains(&catalogue.target.id));
+
+    let simbad = library
+        .targets_search("PVQ Nebula")
+        .await
+        .unwrap()
+        .results
+        .into_iter()
+        .find(|result| result.source == TargetsSearchSource::Simbad)
+        .unwrap();
+    assert!(matches!(
+        library.targets_search_result_action(&simbad).await.unwrap(),
+        TargetsSearchAction::Added { .. }
+    ));
+    assert!(library
+        .catalog()
+        .my_target_marks()
+        .await
+        .unwrap()
+        .favourites
+        .contains(&simbad.target.id));
+}
+
+/// A stale candidate that no longer resolves through the live library, seed or
+/// provider cannot use its client-supplied Target fields to create a record.
+#[tokio::test]
+async fn stale_search_result_without_canonical_target_is_refused() {
+    let temp = tempfile::tempdir().unwrap();
+    let library = open(&temp.path().join("library.sqlite")).await;
+    let missing = TargetsSearchResult {
+        target: user_target(&UserTargetInput {
+            designation: "Gone custom target".into(),
+            aliases: Vec::new(),
+            common_name: None,
+            object_type: ObjectType::Galaxy,
+            coordinates: None,
+        })
+        .unwrap(),
+        source: TargetsSearchSource::Catalogue,
+        in_my_targets: false,
+        matched_alias: None,
+    };
+    assert!(matches!(
+        library.targets_search_result_action(&missing).await,
+        Err(LibraryError::NotFound(_))
+    ));
 }
 
 /// PLAN-TGT-AC-04: with SIMBAD unreachable, or no provider at all, the local

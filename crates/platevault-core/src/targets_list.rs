@@ -24,7 +24,7 @@ use crate::{
     FieldOfView, Fit, FitUnknownReason, LibraryError, MoonAvoidanceCurve, MyTargetMarks,
     ObservingSite, PlanningUnknownReason, PresetFilters, PresetRef, Recommendation, Revision,
     RigFit, RigSelection, SavedPreset, SimbadSearch, TargetActivity, TargetRecord, TargetRow,
-    TargetsBasis, TargetsColumn, TargetsPage, TargetsPresets, TargetsQuery, TargetsRig,
+    TargetsBasis, TargetsColumn, TargetsPage, TargetsPresets, TargetsQuery, TargetsRig, TargetsSearchAction,
     TargetsSearchResult, TargetsSearchResults, TargetsSearchSource, TargetsShow, TargetsSort,
     WindowUnavailableReason, FIT_MIN_COVERAGE,
 };
@@ -229,6 +229,51 @@ impl Library {
             Err(error) => SimbadSearch::NotSearched { reason: error.to_string() },
         };
         Ok(TargetsSearchResults { results, simbad })
+    }
+
+    /// Act on a result against current library state, not the search snapshot.
+    /// A result that has entered My targets opens the live record unchanged;
+    /// otherwise its stable id is re-resolved from the trusted saved library,
+    /// bundled seed or provider before the atomic add-and-favourite write.
+    ///
+    /// # Errors
+    /// `NotFound` when neither the current library nor a canonical seed/provider
+    /// source can resolve the candidate; provider and persistence errors pass
+    /// through unchanged.
+    pub async fn targets_search_result_action(
+        &self,
+        result: &TargetsSearchResult,
+    ) -> Result<TargetsSearchAction, LibraryError> {
+        let saved = match self.catalog().target(result.target.id).await {
+            Ok(record) => Some(record),
+            Err(LibraryError::NotFound(_)) => None,
+            Err(error) => return Err(error),
+        };
+        let (candidate, may_restore) = match saved {
+            Some(record) => (record.candidate, false),
+            None => match self.seed_target(result.target.id) {
+                Some(seed) => (seed, true),
+                None if matches!(result.source, TargetsSearchSource::Simbad)
+                    || matches!(result.target.provenance, crate::Provenance::Provider { .. }) =>
+                {
+                    let candidate = self.resolve_target(&result.target.designation).await?;
+                    if candidate.id != result.target.id {
+                        return Err(LibraryError::NotFound(format!(
+                            "target {} no longer resolves",
+                            result.target.id
+                        )));
+                    }
+                    (candidate, true)
+                }
+                None => return Err(LibraryError::NotFound(format!("target {}", result.target.id))),
+            },
+        };
+        match self.catalog().act_on_target_search_result(&candidate, may_restore).await? {
+            TargetsSearchAction::Open { target } => Ok(TargetsSearchAction::Open { target }),
+            TargetsSearchAction::Added { target } => {
+                Ok(TargetsSearchAction::Added { target: self.with_facts(target) })
+            }
+        }
     }
 
     /// Add to targets: write the Target into the library when it is not

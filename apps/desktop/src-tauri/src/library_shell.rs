@@ -294,6 +294,7 @@ macro_rules! library_commands {
             // targets
             crate::commands::targets_list::planning_target_rows,
             crate::commands::targets_list::targets_search,
+            crate::commands::targets_list::targets_search_result_action,
             crate::commands::targets_list::targets_add,
             crate::commands::targets_list::targets_set_favourite,
             crate::commands::targets_list::targets_presets_list,

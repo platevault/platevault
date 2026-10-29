@@ -14,7 +14,7 @@ use uuid::Uuid;
 
 use crate::{
     Band, Catalogue, FieldOfView, LibraryError, NightMoon, PlanCriteria, Revision, SiteBasis,
-    TargetCandidate,
+    TargetCandidate, TargetRecord,
 };
 
 time::serde::format_description!(iso_date, Date, "[year]-[month]-[day]");
@@ -590,6 +590,18 @@ pub enum AddTarget {
     Seed { id: Uuid },
     /// A SIMBAD result, resolved again from its query.
     Simbad { query: String },
+}
+
+/// The action to take when a search result is clicked. Opening a Target is
+/// distinct from adding one: My-target membership must not implicitly star it.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "action", rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
+pub enum TargetsSearchAction {
+    /// Open the current saved Target unchanged.
+    Open { target: TargetRecord },
+    /// Add the Target to My targets and favourite it.
+    Added { target: TargetRecord },
 }
 
 // ---------------------------------------------------------------------------
