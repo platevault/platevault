@@ -7212,5 +7212,277 @@
   "reason_interrupted": "Interrupted: what happened can't be proven",
   "reason_protected": "Protected: PlateVault never moves it",
   "project_record_unavailable": "The Project's details can't be read yet",
-  "projects_read_failed": "Couldn't read Projects"
+  "projects_read_failed": "Couldn't read Projects",
+  "wrapup_step_trash": "Trash",
+  "apply_blocker_operation_running": "{operation} is running on this Project",
+  "apply_blocker_location_unavailable": "Can't use the processing location {path}: choose another",
+  "apply_blocker_folder_occupied": "{path} already holds files PlateVault didn't make",
+  "apply_blocker_input_write_risk": "The application may change its inputs: use Copies for this Project",
+  "apply_blocker_original_offline": "Original offline: {path}",
+  "apply_blocker_original_changed": "Original changed: {path}",
+  "apply_blocker_folder_clash": "Two groups would use the same folder: rename one",
+  "apply_blocker_entry_name": "{name} can't be used as a file name",
+  "apply_blocker_building_occupied": "View (building)/ holds files PlateVault didn't place: {path}",
+  "apply_blocker_correction": "A corrected {field} can't be written to {path}",
+  "apply_blocker_view_unreadable": "Can't read View/: {path}",
+  "apply_stop_canceled": "Cancelled: the old View stays",
+  "apply_stop_interrupted": "PlateVault closed before the new View was in place: the old View was put back",
+  "apply_stop_catalog_moved": "The Project or the Library changed during the build: review and apply again",
+  "apply_stop_originals_unverified": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} original couldn't be verified",
+        "countPlural=*": "{count} originals couldn't be verified"
+      }
+    }
+  ],
+  "apply_stop_building_not_cleared": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "View (building)/ still holds {count} file PlateVault didn't place",
+        "countPlural=*": "View (building)/ still holds {count} files PlateVault didn't place"
+      }
+    }
+  ],
+  "apply_stop_entry_not_placed": "An entry couldn't be placed in View (building)/",
+  "apply_stop_build_unverified": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} entry changed between the build and the swap",
+        "countPlural=*": "{count} entries changed between the build and the swap"
+      }
+    }
+  ],
+  "apply_stop_view_unreadable": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} entry in View/ can't be read",
+        "countPlural=*": "{count} entries in View/ can't be read"
+      }
+    }
+  ],
+  "apply_stop_previous_unreadable": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} entry in View (previous)/ can't be read",
+        "countPlural=*": "{count} entries in View (previous)/ can't be read"
+      }
+    }
+  ],
+  "apply_stop_kept_not_moved": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} kept file couldn't be moved to View (kept)/",
+        "countPlural=*": "{count} kept files couldn't be moved to View (kept)/"
+      }
+    }
+  ],
+  "apply_stop_project_folder_replaced": "The Project folder is no longer the one reviewed",
+  "apply_stop_view_replaced": "View/ is no longer the folder reviewed",
+  "apply_stop_previous_appeared": "View (previous)/ appeared during the build",
+  "apply_stop_aside_failed": "The system refused to move the old View aside",
+  "apply_stop_not_installed": "The system refused to put the new View in place: the old View was put back",
+  "pending_session_added": "Added {session} to {group}",
+  "pending_group_added": "Added group {name}",
+  "pending_group_removed": "Removed group {name}",
+  "pending_group_panel": "Marked {name} as a mosaic panel",
+  "pending_group_not_panel": "{name} is no longer a mosaic panel",
+  "pending_calibration_unsettled": "{kind} of {session} needs choosing again",
+  "pending_session_regrouped": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{session} was re-split: {count} session takes its place",
+        "countPlural=*": "{session} was re-split: {count} sessions take its place"
+      }
+    }
+  ],
+  "view_apply_run_title": "Apply",
+  "view_apply_cancel_not_yet": "Cancel is available once the build has started",
+  "view_apply_canceling": "Cancelling",
+  "view_apply_running": "Applying the View",
+  "view_apply_review_again": "Review again",
+  "view_apply_applied": "View applied",
+  "view_apply_canceled": "Apply cancelled",
+  "view_apply_unsettled": "PlateVault closed during Apply: the next start settles it",
+  "view_apply_foreign_moved": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} file moved into the new View",
+        "countPlural=*": "{count} files moved into the new View"
+      }
+    }
+  ],
+  "view_apply_foreign_failed": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} ticked file stayed in View (previous)/",
+        "countPlural=*": "{count} ticked files stayed in View (previous)/"
+      }
+    }
+  ],
+  "view_apply_failures": "Files the build names",
+  "view_previous_unverified_link": "Link not verified",
+  "apply_sheet_blocker": "Blocks Apply",
+  "apply_sheet_where": "Where",
+  "apply_sheet_blockers": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} thing blocks Apply",
+        "countPlural=*": "{count} things block Apply"
+      }
+    }
+  ],
+  "apply_sheet_foreign_hint": "Ticked files move into the new View; the rest stay in View (previous)/.",
+  "wrapup_recorded_at": "Recorded",
+  "wrapup_archive_resumes": "The archive stopped before it finished: PlateVault resumes it at the next start",
+  "wrapup_kept_in_place": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} item stayed in place",
+        "countPlural=*": "{count} items stayed in place"
+      }
+    }
+  ],
+  "wrapup_cleanup_done": "Cleaned up: {deleted} links deleted, {trashed} files moved to the Trash, {kept} kept",
+  "wrapup_trash_done": "Moved {moved} files to the Trash · {refused} stayed",
+  "wrapup_protected_masters": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} master in Processing stays protected: add it to the calibration library first",
+        "countPlural=*": "{count} masters in Processing stay protected: add them to the calibration library first"
+      }
+    }
+  ],
+  "wrapup_moves": "Moves",
+  "wrapup_choose_destination": "Choose a destination",
+  "wrapup_close_without_archive": "Close without archiving",
+  "wrapup_stop_archive": "Stop archiving",
+  "wrapup_closing": "Closing the Project and archiving its sessions",
+  "wrapup_move_pending": "Not moved yet",
+  "wrapup_move_kept": "Archived · the original stays",
+  "wrapup_archive_settled": "Archive finished",
+  "project_new_group_one_rig": "Select sessions of one rig",
+  "project_follow_library": "Follow the Library",
+  "project_blocker_superseded": "Re-split since: pick its successor",
+  "project_blocker_not_ready": "Not Ready in the Library",
+  "project_blocker_rig_mismatch": "Another rig",
+  "project_in_project": "In project",
+  "project_captured": "Captured",
+  "project_goal_unknown_for_bar": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} frame can't be judged",
+        "countPlural=*": "{count} frames can't be judged"
+      }
+    }
+  ],
+  "project_name_required": "Enter a name",
+  "output_kind_master": "{kind} master",
+  "output_rescan": "Rescan",
+  "output_origin": "Origin",
+  "output_origin_copied": "Copied and verified",
+  "output_origin_observed": "Saved by a tool",
+  "output_locked": "A closed Project's Output stays as it was",
+  "output_choose_file": "Choose the file to copy",
+  "output_source": "File to copy",
+  "calibrate_master_revision": "Master (revision {revision})",
+  "calibrate_declined": "None: declined",
+  "calibrate_source": "Source",
+  "calibrate_none_placed": "No calibration files in the next View",
+  "calibrate_frozen_title": "Calibration used at Close",
+  "newproject_subjects_hint": "Search your Targets, the catalogues or SIMBAD",
+  "output_name_preview": "Output/{name}",
+  "project_leave_out_frames": "Leave out frames",
+  "project_use_unusable": "Use Unusable frames"
 }
