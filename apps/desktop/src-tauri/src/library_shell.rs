@@ -288,6 +288,7 @@ macro_rules! library_commands {
             crate::commands::observing_plans::planning_review_calendar_export,
             crate::commands::observing_plans::planning_export_calendar,
             crate::commands::observing_plans::planning_tonight,
+            crate::commands::observing_plans::planning_calendar,
             crate::commands::observing_plans::planning_project_windows,
             crate::commands::observing_plans::planning_target_gaps,
             // targets

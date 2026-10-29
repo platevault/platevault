@@ -408,6 +408,19 @@ impl NightContext {
     pub fn moon_age_days(&self) -> f64 {
         moon_phase_angle(self.middle()).degrees() / 180.0 * HALF_SYNODIC_DAYS
     }
+
+    /// Seconds of darkness at the criteria's level, each dark interval's
+    /// bounds rounded to whole seconds as [`night_sky`]'s darkness window
+    /// rounds them.
+    #[must_use]
+    pub fn dark_seconds(&self) -> u32 {
+        let total: i64 = self
+            .dark
+            .iter()
+            .map(|span| (whole_second(span.end) - whole_second(span.start)).whole_seconds())
+            .sum();
+        u32::try_from(total).unwrap_or(u32::MAX)
+    }
 }
 
 /// Half a mean synodic month, in days.

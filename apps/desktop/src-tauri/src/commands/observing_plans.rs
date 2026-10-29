@@ -1,7 +1,7 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Observing-plan IPC (spec 072, PLAN-FR-01..11).
+//! Observing-plan IPC (spec 072, PLAN-FR-01..12).
 //!
 //! Registered only by the isolated rebuilt shell ([`crate::library_shell`])
 //! beside the other library commands; the legacy `plan`, `plans` and
@@ -20,6 +20,7 @@ use std::sync::Arc;
 
 use persistence_library::HOME_CRITERIA_ID;
 use platevault_core::library::Library;
+use platevault_core::planning_calendar::{CalendarQuery, PlanningCalendar};
 use platevault_core::planning_project::{ProjectGaps, ProjectPlanning, ProjectPlanningQuery};
 use platevault_core::tonight::{Tonight, TonightQuery};
 use platevault_core::{
@@ -316,6 +317,24 @@ pub async fn planning_tonight(
     query: TonightQuery,
 ) -> Reply<Tonight> {
     library.tonight(&query).await.map_err(fail(None))
+}
+
+/// Home's calendar: `query.nights` nights from `query.firstNight` at the
+/// default site under Home's stored criteria, each with the Moon, its
+/// darkness and dark seconds, the unfinished goals it suits and the goals
+/// the Moon rules out. Without a default site or Home's criteria it lists
+/// no night and names the reason. Read-only.
+///
+/// # Errors
+/// `InvalidInput` for `nights` outside 1 to 366 or a night outside the
+/// supported calendar.
+#[tauri::command]
+#[specta::specta]
+pub async fn planning_calendar(
+    library: State<'_, Arc<Library>>,
+    query: CalendarQuery,
+) -> Reply<PlanningCalendar> {
+    library.planning_calendar(&query).await.map_err(fail(None))
 }
 
 /// A Project page's planning: the windows of its own subjects at the planning

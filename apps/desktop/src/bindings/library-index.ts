@@ -1410,6 +1410,18 @@ export const commands = {
 	 */
 	planningTonight: (query: TonightQuery_Deserialize) => typedError<Tonight_Serialize, ErrorResponse>(__TAURI_INVOKE("planning_tonight", { query })),
 	/**
+	 *  Home's calendar: `query.nights` nights from `query.firstNight` at the
+	 *  default site under Home's stored criteria, each with the Moon, its
+	 *  darkness and dark seconds, the unfinished goals it suits and the goals
+	 *  the Moon rules out. Without a default site or Home's criteria it lists
+	 *  no night and names the reason. Read-only.
+	 * 
+	 *  # Errors
+	 *  `InvalidInput` for `nights` outside 1 to 366 or a night outside the
+	 *  supported calendar.
+	 */
+	planningCalendar: (query: CalendarQuery_Deserialize) => typedError<PlanningCalendar_Serialize, ErrorResponse>(__TAURI_INVOKE("planning_calendar", { query })),
+	/**
 	 *  A Project page's planning: the windows of its own subjects at the planning
 	 *  site, each subject's and mosaic panel's goal gaps, and the "Open in
 	 *  Planner" context. Read-only.
@@ -2567,6 +2579,72 @@ export type CalendarFile = {
 	windowCount: number,
 };
 
+/**  One night of Home's calendar. */
+export type CalendarNight = CalendarNight_Serialize | CalendarNight_Deserialize;
+
+/**  One night of Home's calendar. */
+export type CalendarNight_Deserialize = {
+	/**  The site-local evening date. */
+	night: string,
+	moon: NightMoon_Deserialize,
+	/**  Absent on a night never dark at the criteria's level. */
+	darkness: DarknessWindow_Deserialize | null,
+	/**  Seconds of darkness at the criteria's level. */
+	darkSeconds: number,
+	/**  The unfinished goals the night suits (good or marginal), best first. */
+	suitedGoals: GoalGrade_Deserialize[],
+	/**
+	 *  The goals graded poor that the Moon-free criteria would leave a
+	 *  window: only the Moon rules them out.
+	 */
+	moonRuledOutGoals: GoalGrade_Deserialize[],
+};
+
+/**  One night of Home's calendar. */
+export type CalendarNight_Serialize = {
+	/**  The site-local evening date. */
+	night: string,
+	moon: NightMoon_Serialize,
+	/**  Absent on a night never dark at the criteria's level. */
+	darkness: DarknessWindow_Serialize | null,
+	/**  Seconds of darkness at the criteria's level. */
+	darkSeconds: number,
+	/**  The unfinished goals the night suits (good or marginal), best first. */
+	suitedGoals: GoalGrade_Serialize[],
+	/**
+	 *  The goals graded poor that the Moon-free criteria would leave a
+	 *  window: only the Moon rules them out.
+	 */
+	moonRuledOutGoals: GoalGrade_Serialize[],
+};
+
+/**
+ *  What Home asks the calendar for: the first night by its site-local
+ *  evening date and the number of nights, five weeks from the start of the
+ *  request's week on Home.
+ */
+export type CalendarQuery = CalendarQuery_Serialize | CalendarQuery_Deserialize;
+
+/**
+ *  What Home asks the calendar for: the first night by its site-local
+ *  evening date and the number of nights, five weeks from the start of the
+ *  request's week on Home.
+ */
+export type CalendarQuery_Deserialize = {
+	firstNight: string,
+	nights: number,
+};
+
+/**
+ *  What Home asks the calendar for: the first night by its site-local
+ *  evening date and the number of nights, five weeks from the start of the
+ *  request's week on Home.
+ */
+export type CalendarQuery_Serialize = {
+	firstNight: string,
+	nights: number,
+};
+
 /**
  *  A one-time calendar snapshot: the selected windows in time order with the
  *  site, zone, night range and criteria they were computed for. It is never
@@ -2607,6 +2685,13 @@ export type CalendarSnapshot_Serialize = {
 	criteria: PlanCriteria,
 	windows: ObservingWindow_Serialize[],
 };
+
+/**  Why the calendar lists no night. */
+export type CalendarUnavailableReason = 
+/**  "Add an observing site in Settings". */
+"no_site" | 
+/**  Home's criteria are not set yet. */
+"no_criteria";
 
 /**
  *  The health of each pinned kind of one session; a kind that is not pinned
@@ -6034,6 +6119,41 @@ export type PlannerContext = {
 	targetIds: string[],
 	/**  This Project's rigs in order. */
 	rigIds: string[],
+};
+
+/**
+ *  Home's calendar at the default site under Home's criteria. Without
+ *  either nothing is computed: `nights` is empty and `unavailableReason`
+ *  names what is missing, the site first.
+ */
+export type PlanningCalendar = PlanningCalendar_Serialize | PlanningCalendar_Deserialize;
+
+/**
+ *  Home's calendar at the default site under Home's criteria. Without
+ *  either nothing is computed: `nights` is empty and `unavailableReason`
+ *  names what is missing, the site first.
+ */
+export type PlanningCalendar_Deserialize = {
+	site: SiteBasis | null,
+	timeZone: string | null,
+	criteria: PlanCriteria | null,
+	nights: CalendarNight_Deserialize[],
+	method: string,
+	unavailableReason: CalendarUnavailableReason | null,
+};
+
+/**
+ *  Home's calendar at the default site under Home's criteria. Without
+ *  either nothing is computed: `nights` is empty and `unavailableReason`
+ *  names what is missing, the site first.
+ */
+export type PlanningCalendar_Serialize = {
+	site: SiteBasis | null,
+	timeZone: string | null,
+	criteria: PlanCriteria | null,
+	nights: CalendarNight_Serialize[],
+	method: string,
+	unavailableReason: CalendarUnavailableReason | null,
 };
 
 /**

@@ -15,6 +15,9 @@ use std::sync::Arc;
 use platevault_core::goal_grades::GoalGrade;
 use platevault_core::library::Library;
 use platevault_core::planning::{curve_criterion, NightContext};
+use platevault_core::planning_calendar::{
+    CalendarQuery, CalendarUnavailableReason, PlanningCalendar,
+};
 use platevault_core::tonight::{Tonight, TonightQuery};
 use platevault_core::*;
 use time::macros::date;
@@ -279,4 +282,81 @@ async fn tonight_without_goals_names_no_next_night() {
     let tonight = tonight(&library, FULL).await;
     assert_eq!(tonight.goals, []);
     assert_eq!(tonight.next_good_night, None);
+}
+
+async fn calendar(library: &Library, first: Date, nights: u32) -> PlanningCalendar {
+    let query = CalendarQuery { first_night: first, nights };
+    library.planning_calendar(&query).await.unwrap()
+}
+
+/// PLAN-FR-12: the calendar needs the default site and Home's criteria; it
+/// names what is missing and lists no night. Zero nights is refused.
+#[tokio::test]
+async fn calendar_names_missing_site_or_criteria() {
+    let temp = tempfile::tempdir().unwrap();
+    let library = open(&temp.path().join("library.sqlite")).await;
+    library.save_home_criteria(0, &criteria()).await.unwrap();
+    let none = calendar(&library, FULL, 35).await;
+    assert_eq!(none.unavailable_reason, Some(CalendarUnavailableReason::NoSite));
+    assert!(none.nights.is_empty() && none.site.is_none());
+
+    let temp = tempfile::tempdir().unwrap();
+    let library = open(&temp.path().join("library.sqlite")).await;
+    default_site(&library).await;
+    let unset = calendar(&library, FULL, 35).await;
+    assert_eq!(unset.unavailable_reason, Some(CalendarUnavailableReason::NoCriteria));
+    assert!(unset.nights.is_empty() && unset.criteria.is_none());
+
+    let zero = CalendarQuery { first_night: FULL, nights: 0 };
+    let error = library.planning_calendar(&zero).await.unwrap_err();
+    assert!(matches!(&error, LibraryError::InvalidInput(message) if message.contains("nights")));
+}
+
+/// PLAN-AC-14, PLAN-FR-12: five weeks of nights from the first, each with
+/// the night sky's Moon and darkness, its dark seconds, the goals it suits
+/// best first and the goals the Moon rules out, graded as Tonight grades
+/// them under Home's stored criteria.
+#[tokio::test]
+async fn calendar_lists_each_night_under_home_criteria() {
+    let temp = tempfile::tempdir().unwrap();
+    let library = open(&temp.path().join("library.sqlite")).await;
+    let site = default_site(&library).await;
+    curves(&library).await;
+    let target = ngc7000(&library).await;
+    project(&library, target, &["Ha", "OIII"]).await;
+    library.save_home_criteria(0, &criteria()).await.unwrap();
+    let first = FULL - Duration::days(3);
+
+    let calendar = calendar(&library, first, 35).await;
+    assert_eq!(calendar.unavailable_reason, None);
+    assert_eq!(calendar.site.as_ref().map(|site| site.name.as_str()), Some("Backyard"));
+    assert_eq!(calendar.time_zone.as_deref(), Some("Europe/Amsterdam"));
+    assert_eq!(calendar.criteria, Some(criteria()));
+    assert_eq!(calendar.nights.len(), 35);
+    for (index, entry) in calendar.nights.iter().enumerate() {
+        let night = first + Duration::days(i64::try_from(index).unwrap());
+        assert_eq!(entry.night, night);
+        let sky = library.night_sky(site.id, night, Darkness::Astronomical).await.unwrap();
+        assert_eq!(entry.moon, sky.moon);
+        assert_eq!(entry.darkness, sky.darkness);
+        let dark =
+            sky.darkness.as_ref().map_or(0, |dark| (dark.end_utc - dark.start_utc).whole_seconds());
+        assert_eq!(i64::from(entry.dark_seconds), dark, "{night}");
+        let graded = tonight(&library, night).await.goals;
+        let suited: Vec<_> = graded.iter().filter(|grade| grade.suits()).cloned().collect();
+        assert_eq!(entry.suited_goals, suited, "{night}");
+        for ruled_out in &entry.moon_ruled_out_goals {
+            assert_eq!(ruled_out.grade, Some(BandGrade::Poor));
+        }
+    }
+    let full = &calendar.nights[3];
+    assert_eq!(full.night, FULL);
+    assert_eq!(
+        full.suited_goals.iter().map(|g| g.channel.as_deref()).collect::<Vec<_>>(),
+        [Some("Ha")]
+    );
+    assert_eq!(
+        full.moon_ruled_out_goals.iter().map(|g| g.channel.as_deref()).collect::<Vec<_>>(),
+        [Some("OIII")]
+    );
 }
