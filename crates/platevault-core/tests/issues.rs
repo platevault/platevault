@@ -387,6 +387,57 @@ async fn another_duplicate_brings_the_duplicates_issue_back() {
     assert!(kinds(&view.issues).contains(&IssueKind::Duplicates), "it counts again");
 }
 
+/// FR-032, D-W158: frames of one camera are all the same size, so a new
+/// duplicate can repeat the count and bytes of one cleaned up. Its content
+/// differs, so the dismissed issue counts again.
+#[tokio::test]
+async fn a_new_duplicate_of_the_same_size_brings_the_issue_back() {
+    let temp = tempfile::tempdir().unwrap();
+    let library = Library::open(&temp.path().join("library.sqlite"), None).await.unwrap();
+    let duplicates = Duplicates::new(&library, temp.path()).await;
+    let [disk_a, disk_b, _] = &duplicates.locations;
+    let issue = find(&library.issues().await.unwrap(), IssueKind::Duplicates).clone();
+    assert_eq!(issue.count, 1);
+    dismiss(&library, &issue).await;
+
+    // Clean up the extra copy on Disk B: no duplicate is left.
+    fs::remove_file(&duplicates.paths[1]).unwrap();
+    assert_eq!(scan_to_end(&library, disk_b.id).await.state, ScanState::Completed);
+    let view = library.issues().await.unwrap();
+    assert!(!kinds(&view.issues).contains(&IssueKind::Duplicates), "{view:#?}");
+    assert!(!kinds(&view.dismissed).contains(&IssueKind::Duplicates), "{view:#?}");
+
+    // Another frame of the same size gets a copy on Disk B.
+    let frame = temp.path().join("Disk A/M31/light_002.fits");
+    support::fits(
+        &frame,
+        &[
+            ("IMAGETYP", "'LIGHT'"),
+            ("FILTER", "'Ha'"),
+            ("EXPTIME", "300"),
+            ("DATE-OBS", "'2026-08-02T23:15:00'"),
+        ],
+    )
+    .unwrap();
+    assert_eq!(
+        fs::metadata(&frame).unwrap().len(),
+        fs::metadata(&duplicates.paths[0]).unwrap().len(),
+        "the same size"
+    );
+    assert_ne!(support::digest(&frame), duplicates.sha256, "another frame");
+    fs::copy(&frame, temp.path().join("Disk B/M31/light_002.fits")).unwrap();
+    for disk in [disk_a, disk_b] {
+        assert_eq!(scan_to_end(&library, disk.id).await.state, ScanState::Completed);
+    }
+
+    let view = library.issues().await.unwrap();
+    let back = find(&view, IssueKind::Duplicates);
+    assert_eq!((back.count, back.bytes), (issue.count, issue.bytes), "same count and bytes");
+    assert_ne!(back.fingerprint, issue.fingerprint, "another duplicated content");
+    assert!(view.issues.contains(back), "it counts again: {view:#?}");
+    assert!(view.dismissed.is_empty(), "{view:#?}");
+}
+
 /// P-ISS1: a Project's `View (previous)/` files waiting for review are its
 /// own waiting work, on its row and page, and can't be dismissed.
 #[tokio::test]

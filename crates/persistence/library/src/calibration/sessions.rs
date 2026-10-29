@@ -133,13 +133,7 @@ impl Catalog {
         let mut conn = self.reader().await?;
         let mut snapshot = conn.begin().await?;
         let listed = listed_sessions(&mut snapshot, false, None, Members::Live).await?;
-        let mut queue = Vec::new();
-        for session_id in listed {
-            let needs = session_needs(&mut snapshot, session_id).await?;
-            if !needs.is_empty() {
-                queue.push(SessionNeeds { session_id, needs });
-            }
-        }
+        let queue = calibration_queue(&mut snapshot, &listed).await?;
         snapshot.rollback().await?;
         Ok(queue)
     }
@@ -1189,6 +1183,23 @@ pub async fn read_health(
         }
     }
     Ok(health)
+}
+
+/// The Needs calibration queue over `listed`, in their order: each session
+/// with a need. The one definition of "needs calibration" that the queue,
+/// the Sessions filter's count and the issues read.
+pub async fn calibration_queue(
+    conn: &mut SqliteConnection,
+    listed: &[Uuid],
+) -> Result<Vec<SessionNeeds>> {
+    let mut queue = Vec::new();
+    for &session_id in listed {
+        let needs = session_needs(conn, session_id).await?;
+        if !needs.is_empty() {
+            queue.push(SessionNeeds { session_id, needs });
+        }
+    }
+    Ok(queue)
 }
 
 /// Why a listed session waits in Needs calibration: a session with no

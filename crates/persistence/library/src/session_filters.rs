@@ -52,12 +52,8 @@ impl Catalog {
         let mut conn = self.reader().await?;
         let mut snapshot = conn.begin().await?;
         let listed = listed_sessions(&mut snapshot, false, None, Members::Live).await?;
-        let mut needs_calibration = 0;
-        for id in &listed {
-            if !calibration::session_needs(&mut snapshot, *id).await?.is_empty() {
-                needs_calibration += 1;
-            }
-        }
+        let queue = calibration::calibration_queue(&mut snapshot, &listed).await?;
+        let needs_calibration = u64::try_from(queue.len()).unwrap_or(u64::MAX);
         let counts = filter_counts(&mut snapshot, &listed, needs_calibration).await?;
         snapshot.rollback().await?;
         Ok(counts)

@@ -110,8 +110,8 @@ impl Catalog {
     }
 
     /// The Sessions filters' counts, the Needs calibration queue and each
-    /// session's changed frames, walking the default Sessions scope once.
-    /// Read-only.
+    /// session's changed frames, listing the default Sessions scope once in
+    /// one snapshot. Read-only.
     ///
     /// # Errors
     /// `PersistenceFailure` when the catalog cannot be read.
@@ -119,12 +119,9 @@ impl Catalog {
         let mut conn = self.reader().await?;
         let mut snapshot = conn.begin().await?;
         let listed = listed_sessions(&mut snapshot, false, None, Members::Live).await?;
-        let (mut calibration, mut changed_frames) = (Vec::new(), Vec::new());
+        let calibration = calibration::calibration_queue(&mut snapshot, &listed).await?;
+        let mut changed_frames = Vec::new();
         for &session_id in &listed {
-            let needs = calibration::session_needs(&mut snapshot, session_id).await?;
-            if !needs.is_empty() {
-                calibration.push(SessionNeeds { session_id, needs });
-            }
             let intake = admission::read_intake(&mut snapshot, session_id).await?;
             if intake.changed_frames > 0 {
                 changed_frames.push((session_id, intake.changed_frames));

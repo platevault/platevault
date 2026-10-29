@@ -15,7 +15,7 @@
 //! - each active location that is offline or missing, or unreadable or
 //!   claimed by another folder;
 //! - the live duplicate copies: the copies beyond one per content, and their
-//!   bytes;
+//!   bytes, about the set of duplicated contents;
 //! - each location's latest scan when it failed, the latest measurement run
 //!   when it failed or was interrupted, and every interrupted import;
 //! - each open Project's latest Apply when it failed, its `View (previous)/`
@@ -24,7 +24,7 @@
 //!
 //! Reading the issues writes nothing. A dismissed issue counts again when
 //! its fingerprint changes (D-W158): a new failure is a new operation, and
-//! another duplicate a new count and bytes. A location's offline or denied
+//! another duplicate new content. A location's offline or denied
 //! issue and an import's interrupted issue keep their fingerprint from one
 //! episode to the next, so the catalog forgets their dismissal in the same
 //! transaction that writes the end of the episode (the location available
@@ -36,7 +36,7 @@
 use uuid::Uuid;
 
 use crate::library::Library;
-use crate::storage::duplicate_candidates;
+use crate::storage::{duplicate_candidates, DuplicateCandidate};
 use crate::{
     ApplyOutcome, CalibrationNeed, Issue, IssueKind, IssueOwner, IssueView, LibraryError, Location,
     LocationLifecycle, MasterOfferState, PreviousItemReview, ProjectQuery, RunState, ScanState,
@@ -158,7 +158,15 @@ impl Library {
             bytes = bytes.saturating_add(candidate.size_bytes.saturating_mul(copies));
         }
         if extra > 0 {
-            out.push(library_count(IssueKind::Duplicates, extra, Some(bytes)));
+            let subject = duplicates_subject(&candidates);
+            out.push(Issue::new(
+                IssueKind::Duplicates,
+                IssueOwner::Library,
+                Some(subject),
+                extra,
+                Some(bytes),
+                None,
+            ));
         }
         Ok(())
     }
@@ -228,6 +236,23 @@ fn count_of(items: usize) -> u64 {
 fn library_count(kind: IssueKind, count: u64, bytes: Option<u64>) -> Issue {
     Issue::new(kind, IssueOwner::Library, None, count, bytes, None)
 }
+
+/// The Duplicates issue's subject: a stable digest of the sorted set of
+/// duplicated contents (their SHA-256). Frames of one camera are all the
+/// same size, so another duplicate can repeat the count and bytes of one
+/// cleaned up; its content differs, so it is a new subject and a dismissed
+/// issue counts again (FR-032, D-W158). Another copy of a content already
+/// duplicated changes the count instead.
+fn duplicates_subject(candidates: &[DuplicateCandidate]) -> Uuid {
+    let mut contents: Vec<&str> =
+        candidates.iter().map(|candidate| candidate.sha256.as_str()).collect();
+    contents.sort_unstable();
+    contents.dedup();
+    Uuid::new_v5(&DUPLICATES_NAMESPACE, contents.join(",").as_bytes())
+}
+
+/// The `UUIDv5` namespace of [`duplicates_subject`].
+const DUPLICATES_NAMESPACE: Uuid = Uuid::from_u128(0x7c1e_52a4_3b9d_4f0e_9a61_d2c8_0f4b_6e15);
 
 fn on_session(kind: IssueKind, session_id: Uuid, count: u64) -> Issue {
     Issue::new(kind, IssueOwner::Session { id: session_id }, Some(session_id), count, None, None)

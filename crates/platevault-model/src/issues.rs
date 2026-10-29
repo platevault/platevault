@@ -189,9 +189,10 @@ pub struct Issue {
 
 impl Issue {
     /// An issue of `kind` on `owner` about the record `about`: a session,
-    /// a location, a Project, or the operation that failed, so that a new
-    /// failure is a new subject (D-W158); `None` for a Library count, whose
-    /// kind is its subject. Its severity, dismissability, page, id and
+    /// a location, a Project, the operation that failed, so that a new
+    /// failure is a new subject (D-W158), or the digest of the duplicated
+    /// contents, so that another duplicate is one; `None` for a Library count,
+    /// whose kind is its subject. Its severity, dismissability, page, id and
     /// fingerprint follow from these; the page of work a Project ran is that
     /// Project.
     ///
