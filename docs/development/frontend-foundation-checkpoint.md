@@ -32,6 +32,8 @@ This checkpoint has no production router or route-injection API. `src/App.tsx` r
 
 The route owner is bead `astro-plan-iczs2`, “Build the real library frontend shell and route composition”. It owns `apps/desktop-ui/src/main.tsx`, `routes.tsx` and app composition. Its scope assigns SessionReview injection to the router. Feature workers expose their screen contracts for that owner to compose. They must not create a parallel router.
 
+The shell bead has since published that contract. `src/routes.tsx` registers each built page, and `src/app/navigation.ts` shows a source-list row, go-to key, palette destination or status-bar link only once its route is registered. `src/app/shell-contract.ts` defines `ShellContribution` (sidebar footer, overlay, palette commands) and `SessionReviewProps`/`SessionIntakeProps`, through which the router hands the review body to session intake. A feature area lists its contribution in `src/app/contributions.ts`.
+
 ### StepFlow
 
 `StepFlow` in `src/components/app/contracts.ts:137-164` carries ordered steps, the current step, proceed and next actions, and optional skip. `StepPage` in `src/components/templates/step-page.tsx:42-68` composes its header, strip, viewed-step region and footer. `src/components/app/step-flow.test.tsx` covers StepStrip. `src/components/templates/step-page.test.tsx` covers fill, scrolling and view composition.
