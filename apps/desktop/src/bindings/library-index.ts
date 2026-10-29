@@ -1593,13 +1593,12 @@ export const commands = {
 	/**
 	 *  Show `path` in the file manager with it selected (`target`) or, on Linux
 	 *  when that fails, its folder opened (`directory_only`). The same reveal as
-	 *  the legacy shell's; the library catalog keeps no legacy audit events, so a
-	 *  failure is logged instead.
+	 *  the legacy shell's; the library catalog keeps no legacy audit events.
 	 * 
 	 *  # Errors
 	 *  `NotFound` for a missing path; `SourceUnavailable` when it cannot be read
 	 *  or the file manager could not show it; `InvalidInput` for a path that is
-	 *  not local.
+	 *  not an absolute local path.
 	 */
 	libraryReveal: (path: NativePathWire) => typedError<RevealSelection, ErrorResponse>(__TAURI_INVOKE("library_reveal", { path })),
 	/**

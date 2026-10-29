@@ -273,31 +273,40 @@ mod tests {
 
     // ── reveal_path / reveal_path_with_audit ────────────────────────────────
 
-    /// Records what the reveal asked the OS for; fails every call when `fail`.
+    /// Records what the reveal asked the OS for: each reveal and each folder
+    /// opened, failing those its flags name.
     #[derive(Default)]
     struct FakeOpener {
-        fail: bool,
-        calls: std::cell::RefCell<Vec<std::path::PathBuf>>,
+        reveal_fails: bool,
+        open_fails: bool,
+        revealed: std::cell::RefCell<Vec<std::path::PathBuf>>,
+        opened: std::cell::RefCell<Vec<std::path::PathBuf>>,
     }
 
     impl FakeOpener {
-        fn outcome(&self, path: &Path) -> Result<(), String> {
-            self.calls.borrow_mut().push(path.to_path_buf());
-            if self.fail {
-                Err("opener unavailable".to_owned())
-            } else {
-                Ok(())
-            }
+        /// Both the reveal and the Linux fallback fail.
+        fn failing() -> Self {
+            Self { reveal_fails: true, open_fails: true, ..Self::default() }
+        }
+    }
+
+    fn outcome(fails: bool) -> Result<(), String> {
+        if fails {
+            Err("opener unavailable".to_owned())
+        } else {
+            Ok(())
         }
     }
 
     impl RevealOpener for FakeOpener {
         fn reveal_item(&self, path: &Path) -> Result<(), String> {
-            self.outcome(path)
+            self.revealed.borrow_mut().push(path.to_path_buf());
+            outcome(self.reveal_fails)
         }
 
         fn open_directory(&self, directory: &Path) -> Result<(), String> {
-            self.outcome(directory)
+            self.opened.borrow_mut().push(directory.to_path_buf());
+            outcome(self.open_fails)
         }
     }
 
@@ -342,7 +351,8 @@ mod tests {
         let error = reveal_path(&opener, &scratch.path().join("missing")).unwrap_err();
 
         assert_eq!(error.code, ErrorCode::PathNotExists);
-        assert!(opener.calls.borrow().is_empty(), "a missing path never reaches the OS");
+        assert!(opener.revealed.borrow().is_empty(), "a missing path never reaches the OS");
+        assert!(opener.opened.borrow().is_empty(), "a missing path never reaches the OS");
     }
 
     #[test]
@@ -351,17 +361,42 @@ mod tests {
         let opener = FakeOpener::default();
 
         assert_eq!(reveal_path(&opener, scratch.path()).unwrap(), RevealSelection::Target);
-        assert_eq!(*opener.calls.borrow(), vec![scratch.path().to_path_buf()]);
+        assert_eq!(*opener.revealed.borrow(), vec![scratch.path().to_path_buf()]);
+        assert_eq!(*opener.opened.borrow(), Vec::<std::path::PathBuf>::new());
     }
 
     #[test]
     fn reveal_reports_a_failed_opener_as_an_error() {
         let scratch = tempfile::tempdir().unwrap();
-        let opener = FakeOpener { fail: true, ..FakeOpener::default() };
 
-        let error = reveal_path(&opener, scratch.path()).unwrap_err();
+        let error = reveal_path(&FakeOpener::failing(), scratch.path()).unwrap_err();
 
         assert_eq!(error.code, ErrorCode::InternalError);
+    }
+
+    /// Linux falls back to opening the parent folder when the reveal fails.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_failed_reveal_opens_the_parent_folder_on_linux() {
+        let scratch = tempfile::tempdir().unwrap();
+        let file = scratch.path().join("masterDark.fit");
+        std::fs::write(&file, b"master").unwrap();
+        let opener = FakeOpener { reveal_fails: true, ..FakeOpener::default() };
+
+        assert_eq!(reveal_path(&opener, &file).unwrap(), RevealSelection::DirectoryOnly);
+        assert_eq!(*opener.revealed.borrow(), vec![file.clone()]);
+        assert_eq!(*opener.opened.borrow(), vec![scratch.path().to_path_buf()]);
+    }
+
+    /// Elsewhere a failed reveal is the answer: no folder is opened instead.
+    #[cfg(not(target_os = "linux"))]
+    #[test]
+    fn a_failed_reveal_opens_no_folder_off_linux() {
+        let scratch = tempfile::tempdir().unwrap();
+        let opener = FakeOpener { reveal_fails: true, ..FakeOpener::default() };
+
+        assert!(reveal_path(&opener, scratch.path()).is_err());
+        assert_eq!(*opener.opened.borrow(), Vec::<std::path::PathBuf>::new());
     }
 
     #[tokio::test]
@@ -384,7 +419,7 @@ mod tests {
     async fn audited_reveal_publishes_a_failed_opener() {
         let (bus, pool) = audit_bus().await;
         let scratch = tempfile::tempdir().unwrap();
-        let opener = FakeOpener { fail: true, ..FakeOpener::default() };
+        let opener = FakeOpener::failing();
         let request = reveal_request("req-audit-os", scratch.path());
 
         assert!(reveal_path_with_audit(&bus, &opener, &request).await.is_err());

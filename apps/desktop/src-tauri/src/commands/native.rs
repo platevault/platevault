@@ -133,14 +133,14 @@ pub(crate) async fn reveal_with_audit(
     state: &AppState,
     request: &RevealRequest,
 ) -> Result<RevealSelection, ContractError> {
-    native::reveal_path_with_audit(&state.bus, &TauriRevealOpener(app), request).await
+    native::reveal_path_with_audit(&state.bus, &TauriRevealOpener(app.clone()), request).await
 }
 
 /// The desktop OS behind [`native::RevealOpener`]: tauri-plugin-opener, and
 /// `xdg-open` for the Linux fallback. The legacy and library reveals share it.
-pub(crate) struct TauriRevealOpener<'a>(pub(crate) &'a tauri::AppHandle);
+pub(crate) struct TauriRevealOpener(pub(crate) tauri::AppHandle);
 
-impl native::RevealOpener for TauriRevealOpener<'_> {
+impl native::RevealOpener for TauriRevealOpener {
     fn reveal_item(&self, path: &Path) -> Result<(), String> {
         self.0.opener().reveal_item_in_dir(path).map_err(|error| error.to_string())
     }
