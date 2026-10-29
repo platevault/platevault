@@ -83,8 +83,8 @@ function SessionsBody({ header, chrome, inputs }: { header: ProjectHeader; chrom
     groupsSection(ctx, inputs),
     heldSection(ctx),
     suggestionsSection(ctx, inputs.suggestions, subjectName),
-    goalsSection(ctx, progress.data?.goals ?? [], subjectName, record.state === "ready"),
-    subjectsSection(ctx, record.state === "ready"),
+    goalsSection(ctx, progress.data?.goals ?? [], subjectName),
+    subjectsSection(ctx),
   ]
   if (record.state === "ready" && record.project.notes?.trim()) sections.unshift({ id: "notes", title: m.newproject_notes(), content: record.project.notes })
   return (
@@ -387,7 +387,7 @@ function goalLine(m: Messages, progress: GoalProgress): { goal: string; inProjec
   return { goal: bar, inProject: "–", captured: "–" }
 }
 
-function goalsSection(ctx: SectionContext, goals: GoalProgress[], subjectName: (id: string) => string, hasRecord: boolean): DetailSection {
+function goalsSection(ctx: SectionContext, goals: GoalProgress[], subjectName: (id: string) => string): DetailSection {
   const { m } = ctx
   const rows = goals.map((g, i) => ({ ...g, id: g.goal.id ?? String(i), line: goalLine(m, g) }))
   const columns: Column<(typeof rows)[number]>[] = [
@@ -403,14 +403,15 @@ function goalsSection(ctx: SectionContext, goals: GoalProgress[], subjectName: (
     id: "goals",
     title: m.project_goals_title(),
     count: goals.length,
-    // Goal edits replace the whole list by Target, so they wait for the Project record (astro-plan-wre19.3); until then the action shows why.
-    actions: hasRecord ? [] : [
+    // Goal edits replace the whole list by Target: they need the Project record (astro-plan-wre19.3) and the goal dialogs, so
+    // the action stays visibly unavailable until both exist.
+    actions: [
       {
         id: "add-goal",
         label: editLabel,
         icon: Plus,
         opensDialog: true,
-        unavailable: { action: m.actions_blocked({ action: editLabel }), reason: m.project_record_unavailable(), blockers: [] },
+        unavailable: { action: m.actions_blocked({ action: editLabel }), reason: m.project_edit_unavailable(), blockers: [] },
         run: () => undefined,
       },
     ],
@@ -423,20 +424,21 @@ function goalsSection(ctx: SectionContext, goals: GoalProgress[], subjectName: (
 // Subjects and rigs
 // ---------------------------------------------------------------------------
 
-function subjectsSection(ctx: SectionContext, hasRecord: boolean): DetailSection {
+function subjectsSection(ctx: SectionContext): DetailSection {
   const { m, header, desired } = ctx
   const rigs = [...new Set(desired.groups.map((g) => g.rigId))]
   const editLabel = m.project_edit()
   return {
     id: "subjects-rigs",
     title: `${m.project_subjects()} · ${m.project_rigs()}`,
-    actions: hasRecord ? [] : [
+    // Subject and rig edits replace whole lists too: unavailable until the record (astro-plan-wre19.3) and their dialogs exist.
+    actions: [
       {
         id: "edit-subjects",
         label: editLabel,
         icon: Pencil,
         opensDialog: true,
-        unavailable: { action: m.actions_blocked({ action: editLabel }), reason: m.project_record_unavailable(), blockers: [] },
+        unavailable: { action: m.actions_blocked({ action: editLabel }), reason: m.project_edit_unavailable(), blockers: [] },
         run: () => undefined,
       },
     ],

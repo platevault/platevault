@@ -6,7 +6,7 @@
  */
 import { type AnyRoute, createMemoryHistory, createRoute } from "@tanstack/react-router"
 import { clearMocks, mockIPC } from "@tauri-apps/api/mocks"
-import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react"
+import { act, cleanup, configure, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest"
 import type { ApplyPreview_Serialize, ApplyReport_Serialize, NativePathWire, ProjectInputs_Serialize, ProjectSummary, WrapUpStatus } from "@/api/ipc"
@@ -112,6 +112,8 @@ const enabled = (name: string) => waitFor(() => expect(screen.getByRole("button"
 const original = { resizeObserver: globalThis.ResizeObserver, scrollIntoView: Element.prototype.scrollIntoView }
 
 beforeAll(() => {
+  // The whole window renders per test; a loaded machine needs longer than the default 1 s.
+  configure({ asyncUtilTimeout: 10_000 })
   globalThis.ResizeObserver = class {
     observe() {}
     unobserve() {}
@@ -212,12 +214,24 @@ describe("View (previous)", { timeout: TEST_MS }, () => {
 describe("Wrap up", { timeout: TEST_MS }, () => {
   const recorded = (step: "clean_up" | "trash" | "archive") => ({ step, outcome: "finished" as const, operationId: null, recordedAt: "2026-10-29T10:00:00Z" })
 
-  it("keeps Close project unavailable without an archive destination, and offers Close without archiving", async () => {
-    host({ project_wrap_up_status: () => status({ records: [recorded("clean_up"), recorded("trash")], current: "archive" }) })
+  it("keeps Close project unavailable without an archive destination, and Close without archiving waits for its confirm", async () => {
+    const user = userEvent.setup()
+    const { sent } = host({ project_wrap_up_status: () => status({ records: [recorded("clean_up"), recorded("trash")], current: "archive" }) })
     renderAt(`/projects/${P}?stage=wrap-up&step=archive`)
-    expect((await screen.findAllByText(m.wrapup_no_archive_location())).length).toBeGreaterThan(0)
-    await waitFor(() => expect(screen.getByRole("button", { name: new RegExp(`^${m.stepflow_close_project()}`) })).toHaveAttribute("aria-disabled", "true"))
-    expect(screen.getByRole("button", { name: new RegExp(m.wrapup_close_without_archive()) })).toBeInTheDocument()
+    // State first: the locations read answered, then the step says there is no destination.
+    await waitFor(() => expect(sent("library_list_locations").length).toBeGreaterThan(0))
+    await waitFor(() => expect(screen.getAllByRole("status").some((el) => el.textContent?.includes(m.wrapup_no_archive_location()))).toBe(true))
+    const close = screen.getByRole("button", { name: new RegExp(`^${m.stepflow_close_project()}`) })
+    expect(close).toHaveAttribute("aria-disabled", "true")
+    expect(close).toHaveAccessibleDescription(`${m.actions_blocked({ action: m.stepflow_close_project() })} · ${m.wrapup_no_archive_location()}`)
+    expect(screen.queryByText(m.common_loading())).toBeNull()
+    await user.click(screen.getByRole("button", { name: new RegExp(m.wrapup_close_without_archive()) }))
+    const title = await screen.findByText(m.stepflow_close_project_title({ name: "Cygnus HOO" }))
+    const confirm = title.closest<HTMLElement>("[role=dialog], [role=alertdialog]")!
+    expect(sent("project_close")).toHaveLength(0)
+    await user.click(within(confirm).getByRole("button", { name: m.wrapup_close_without_archive() }))
+    await waitFor(() => expect(sent("project_close")).toHaveLength(1))
+    expect(sent("project_close")[0]!.args.request).toEqual({ projectId: P, desiredRevision: 4, archive: null })
   })
 
   it("reads a Project left Closing as Closing, with Stop", async () => {

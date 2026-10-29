@@ -71,7 +71,8 @@ export function applyOperationFound(projectId: string, operationId: string): voi
  */
 export async function cancelApply(projectId: string): Promise<ActionResult<null> | void> {
   const run = runs.get(projectId)
-  if (run?.phase !== "running" || run.operationId === null) return
+  // Cancel is offered only once the run has an id; asked anyway, it says nothing could be cancelled.
+  if (run?.phase !== "running" || run.operationId === null) return { ok: false, failure: { source: "ipc", command: "projectApplyCancel", detail: "no running Apply with an operation id" } }
   set(projectId, { ...run, canceling: true })
   const result = await library.projectApplyCancel(run.operationId)
   const now = runs.get(projectId)

@@ -74,6 +74,7 @@ describe("Apply sheet", () => {
     // A background re-read moves the basis: the sheet keeps what was reviewed and refuses to apply it blind.
     await act(() => client.refetchQueries())
     expect(await screen.findByText(m.view_sheet_stale())).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: m.project_apply() })).toHaveAttribute("aria-disabled", "true")
     expect(applied).toEqual([])
   })
 
