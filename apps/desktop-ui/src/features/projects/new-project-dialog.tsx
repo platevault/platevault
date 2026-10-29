@@ -1,8 +1,9 @@
 /**
  * New Project… (065 PRJ-FR-01/02): a name, notes and the subjects it
- * collects for, each a saved Target. A search result that is not saved yet
- * is added to the library first (`targets_add`), so the Project names a
- * Target the library holds. Goals and rigs can't be set here yet: goals wait
+ * collects for, each a saved Target. Picking a search result that is not
+ * saved yet acts on it first (`targets_search_result_action`, which adds and
+ * favourites it), so the Project names a Target the library holds. Goals and
+ * rigs can't be set here yet: goals wait
  * for goal editing (astro-plan-wre19.3 and the goal dialogs), and rigs
  * for a list of saved rigs (astro-plan-mts3e); both stay visibly unavailable
  * and a session that joins adds its rig.
@@ -65,12 +66,13 @@ function NewProjectForm({ onClose }: { onClose: () => void }) {
       setSubjects((was) => [...was, { targetId: result.target.id, name: result.target.designation }])
       return
     }
-    const saved = await library.targetsAdd(result.source === "simbad" ? { source: "simbad", query: text } : { source: "seed", id: result.target.id })
-    if (!saved.ok) {
-      setPickError(failureMessage(m, saved.failure))
+    const acted = await library.targetsSearchResultAction(result)
+    if (!acted.ok) {
+      setPickError(failureMessage(m, acted.failure))
       return
     }
-    setSubjects((was) => (was.some((s) => s.targetId === saved.data.candidate.id) ? was : [...was, { targetId: saved.data.candidate.id, name: saved.data.candidate.designation }]))
+    const target = acted.data.target.candidate
+    setSubjects((was) => (was.some((s) => s.targetId === target.id) ? was : [...was, { targetId: target.id, name: target.designation }]))
   }
   const label = m.newproject_create()
   const create: Action = {
