@@ -27,9 +27,9 @@ import { DesignSystemPage } from "@/app/catalogue/design-system-page"
 import { AppShell, NotFoundPage, RootLayout, RouteErrorPage, ShellErrorPage } from "@/app/shell"
 import { HomePage } from "@/features/library/home-page"
 import { ImportPage } from "@/features/library/import-page"
-import { ReviewNotRegistered } from "@/features/library/review-not-registered"
 import { SessionPage } from "@/features/library/session-page"
 import { SessionsPage } from "@/features/library/sessions-page"
+import { SessionReview } from "@/features/review/review-workspace"
 
 export type SearchParams = Record<string, string | undefined>
 
@@ -62,7 +62,7 @@ function appPages(appWindow: AnyRoute): AnyRoute[] {
     createRoute({ getParentRoute: () => appWindow, path: "/design-system", component: DesignSystemPage, validateSearch: looseSearch }),
     createRoute({ getParentRoute: () => appWindow, path: "/", component: HomePage, validateSearch: looseSearch }),
     createRoute({ getParentRoute: () => appWindow, path: "/sessions", component: SessionsPage, validateSearch: looseSearch }),
-    createRoute({ getParentRoute: () => appWindow, path: "/sessions/$sessionId", component: () => <SessionPage review={ReviewNotRegistered} />, validateSearch: looseSearch }),
+    createRoute({ getParentRoute: () => appWindow, path: "/sessions/$sessionId", component: () => <SessionPage review={SessionReview} />, validateSearch: looseSearch }),
     createRoute({ getParentRoute: () => appWindow, path: "/import", component: ImportPage, validateSearch: looseSearch }),
   ]
 }
