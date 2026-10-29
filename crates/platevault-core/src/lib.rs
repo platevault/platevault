@@ -43,5 +43,6 @@ pub mod subframe_csv;
 pub mod targets;
 pub mod targets_list;
 pub mod tonight;
+pub mod workflow_settings;
 pub mod wrap_up;
 pub use model::*;

@@ -4,10 +4,13 @@
 //! The F4 workflow settings (D-W114): intake reads the framing margins here
 //! when it splits sessions (LIB-FR-04), so the margins in force at intake set
 //! the split, Project grouping compares framings with the same margins
-//! (PRJ-FR-31), and calibration matching reads the flat and dark thresholds
-//! here inside its own transaction. With no recorded row every value is the
-//! owner-approved default at revision 0. Saving them is one revision-checked
-//! write; nothing already split, grouped or pinned changes by itself.
+//! (PRJ-FR-31), calibration matching reads the flat and dark thresholds
+//! here inside its own transaction, and the Targets list grades each band
+//! under its Moon-avoidance curve (PLAN-FR-02). The calibration settings
+//! (CAL-FR-15, J36 S8) are stored with them. With no recorded row every value
+//! is the owner-approved default at revision 0. Saving them is one
+//! revision-checked write; nothing already split, grouped or pinned changes
+//! by itself.
 
 use platevault_model::{LibraryError, Revision, WorkflowSettings};
 use sqlx::sqlite::SqliteConnection;

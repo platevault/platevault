@@ -102,6 +102,8 @@ impl Shell {
                 desktop_shell::commands::project_wrap_up::project_trash_review,
                 desktop_shell::commands::project_wrap_up::project_wrap_up_trash,
                 desktop_shell::commands::project_wrap_up::project_wrap_up_archive_review,
+                desktop_shell::commands::workflow_settings::workflow_settings_get,
+                desktop_shell::commands::workflow_settings::workflow_settings_save,
             ])
             .build(mock_context(noop_assets()))
             .expect("build mock app");
@@ -641,4 +643,44 @@ fn wrap_up_archive_review_family_lays_out_for_a_destination() {
     );
     assert_eq!(review["sessions"], json!([]), "the Project holds no session: {review}");
     assert!(review["digest"].as_str().is_some_and(|digest| digest.len() == 64), "{review}");
+}
+
+/// The library's workflow settings (D-W114; CAL-FR-15, J36 S8, PLAN-FR-02):
+/// the defaults at revision 0, a save of non-defaults with its expected
+/// revision, a stale save and an invalid one refused naming the settings.
+#[test]
+fn workflow_settings_family_reads_and_saves_with_revisions() {
+    let shell = Shell::new();
+    let settings = persistence_library::WORKFLOW_SETTINGS_ID;
+    let read = shell.call("workflow_settings_get", &json!({}));
+    assert_eq!(read["revision"], json!(0), "{read}");
+    assert_eq!(read["settings"]["viewMode"], json!("symlinks"));
+    assert_eq!(read["settings"]["calibration"]["keepRawFrames"], json!(false));
+    assert_eq!(read["settings"]["calibration"]["oldMasterAfterDays"], json!(90));
+    assert_eq!(read["settings"]["moonAvoidance"]["OIII"]["distanceDeg"], json!(110.0));
+
+    let mut changed = read["settings"].clone();
+    changed["viewMode"] = json!("copies");
+    changed["calibration"] = json!({"keepRawFrames": true, "oldMasterAfterDays": 30});
+    changed["moonAvoidance"]["Ha"] = json!({"distanceDeg": 45.0, "widthDays": 5.0});
+    let saved =
+        shell.call("workflow_settings_save", &json!({"settings": changed, "expectedRevision": 0}));
+    assert_eq!(saved, json!({"settings": changed, "revision": 1}));
+    assert_eq!(shell.call("workflow_settings_get", &json!({})), saved);
+
+    shell.refuses(
+        "workflow_settings_save",
+        &json!({"settings": changed, "expectedRevision": 0}),
+        LibraryErrorCode::Conflict,
+        settings,
+    );
+    let mut invalid = changed.clone();
+    invalid["moonAvoidance"]["SII"] = json!({"distanceDeg": 60.0, "widthDays": 0.0});
+    shell.refuses(
+        "workflow_settings_save",
+        &json!({"settings": invalid, "expectedRevision": 1}),
+        LibraryErrorCode::InvalidInput,
+        settings,
+    );
+    assert_eq!(shell.call("workflow_settings_get", &json!({})), saved, "nothing else stored");
 }

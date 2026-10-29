@@ -100,10 +100,12 @@ const SCHEMA: &str = schema_modules![
 /// Version 23 journals each ticked foreign file's claim
 /// (`apply_foreign_items.claimed`) and each kept file's move
 /// (`apply_kept_moves`) before the move starts; version 22 has neither.
+/// Version 24 adds the calibration settings and the per-band Moon-avoidance
+/// curves to the `workflow_settings` JSON, which a version 23 row lacks.
 /// Bump it with any DDL change that `IF NOT EXISTS` would leave stale in an
 /// existing catalog, and with any stored JSON shape an existing catalog's rows
 /// can't be read as.
-pub const SCHEMA_VERSION: i64 = 23;
+pub const SCHEMA_VERSION: i64 = 24;
 const BUSY_TIMEOUT: Duration = Duration::from_secs(10);
 const READER_CONNECTIONS: u32 = 4;
 const MAX_PAGE: u32 = 1000;

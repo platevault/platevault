@@ -495,6 +495,49 @@ async fn img_time_zero_names_altitude_moon_or_darkness() {
     }
 }
 
+/// PLAN-FR-02, PLAN-TGT-FR-06 (D-W88): each band of the Filters strip is
+/// graded under its own saved Moon-avoidance curve, saved through the
+/// library's revision-checked workflow settings.
+#[tokio::test]
+async fn bands_are_graded_under_the_saved_moon_avoidance_curves() {
+    let temp = tempfile::tempdir().unwrap();
+    let library = open(&temp.path().join("library.sqlite")).await;
+    let backyard = site(&library, "Backyard", BACKYARD, "Europe/Amsterdam").await;
+    let andromeda = mine(&library, "Andromeda", Some((10.684_708, 41.268_75))).await.candidate.id;
+    // Full Moon, up all night, with no Moon criterion: Img time is above zero
+    // and every band is judged by its curve.
+    let full = query(TargetsShow::MyTargets, Some(backyard), date!(2026 - 10 - 25));
+    let viable = |page: &TargetsPage| -> Vec<Band> {
+        let row = row(page, andromeda);
+        assert!(row.img_time_minutes.unwrap() > 0);
+        row.bands.iter().filter(|state| state.viable).map(|state| state.band).collect()
+    };
+
+    let record = library.workflow_settings().await.unwrap();
+    assert_eq!((record.settings.clone(), record.revision), (WorkflowSettings::default(), 0));
+    let mut settings = record.settings;
+    let never = MoonAvoidanceCurve { distance_deg: 180.0, width_days: 30.0 };
+    for band in [Band::L, Band::R, Band::G, Band::B, Band::Sii, Band::Oiii] {
+        settings.moon_avoidance.set(band, never);
+    }
+    settings
+        .moon_avoidance
+        .set(Band::Ha, MoonAvoidanceCurve { distance_deg: 0.0, width_days: 7.0 });
+    let saved = library.save_workflow_settings(0, &settings).await.unwrap();
+    assert_eq!((saved.settings.clone(), saved.revision), (settings.clone(), 1));
+    assert_eq!(viable(&library.target_rows(&full).await.unwrap()), [Band::Ha]);
+
+    settings.moon_avoidance.set(Band::Ha, never);
+    settings
+        .moon_avoidance
+        .set(Band::Oiii, MoonAvoidanceCurve { distance_deg: 0.0, width_days: 7.0 });
+    let stale = library.save_workflow_settings(0, &settings).await.unwrap_err();
+    assert!(matches!(stale, LibraryError::Conflict { current: 1, .. }), "{stale:?}");
+    assert_eq!(viable(&library.target_rows(&full).await.unwrap()), [Band::Ha], "stale: unchanged");
+    library.save_workflow_settings(1, &settings).await.unwrap();
+    assert_eq!(viable(&library.target_rows(&full).await.unwrap()), [Band::Oiii]);
+}
+
 /// PLAN-TGT-AC-07, PLAN-TGT-FR-04: unknown values sort last in either
 /// direction, and a Target without catalogued coordinates names the reason.
 #[tokio::test]
