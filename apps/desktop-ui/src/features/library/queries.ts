@@ -10,9 +10,9 @@
  * shows an import only as `import_status` reads it, never from the reply to
  * the write, so a start or a Retry settles from the durable status.
  */
-import { type QueryClient, type QueryKey, queryOptions, skipToken } from "@tanstack/react-query"
-import { type ActionResult, data, type ImportOperation_Serialize, library, type LibraryCommand, type PlanCriteria } from "@/api/ipc"
-import { libraryKey, libraryQuery } from "@/api/query"
+import type { QueryClient, QueryKey } from "@tanstack/react-query"
+import type { ActionResult, ImportOperation_Serialize, LibraryCommand } from "@/api/ipc"
+import { libraryQuery } from "@/api/query"
 
 /** How many sessions one Sessions read lists; the page names the rest it does not show. */
 export const SESSION_PAGE = 500
@@ -33,17 +33,15 @@ export const rigQuery = (equipmentId: string) => libraryQuery("rigFiltersGet", e
 export const devicesQuery = () => libraryQuery("importDevicesList")
 export const sourcesQuery = () => libraryQuery("importSourcesList")
 export const importQuery = (importId: string) => libraryQuery("importStatus", importId)
-/** Home's dashboard for `criteria`; it reads nothing while the Home criteria are unavailable (criteria.ts). */
-export function dashboardQuery(criteria: PlanCriteria | null) {
-  return queryOptions({
-    queryKey: [...libraryKey("homeDashboard"), criteria] as const,
-    queryFn: criteria ? () => data(library.homeDashboard({ criteria })) : skipToken,
-  })
-}
+/** Home's dashboard for tonight; the library computes Tonight under Home's stored criteria (criteria.ts). */
+export const dashboardQuery = () => libraryQuery("homeDashboard", {})
 
 /** The reads a session or import write can change, by command. */
 const LIBRARY_READS: readonly LibraryCommand[] = [
   "homeDashboard",
+  // Home's criteria: a save or a conflict re-reads them, so the next save names the current revision.
+  "planningHomeCriteria",
+  "planningCalendar",
   "libraryListSessions",
   "librarySessionFilterCounts",
   "librarySession",

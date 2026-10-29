@@ -11,7 +11,16 @@ import { clearMocks, mockIPC } from "@tauri-apps/api/mocks"
 import { act, cleanup, configure, getConfig, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest"
-import type { ImportOperation_Serialize, LibrarySession_Serialize, NativePathWire, RemovableDevice, SessionAdmission_Serialize } from "@/api/ipc"
+import type {
+  HomeDashboard_Serialize,
+  ImportOperation_Serialize,
+  LibrarySession_Serialize,
+  NativePathWire,
+  PlanCriteria,
+  RemovableDevice,
+  SessionAdmission_Serialize,
+  Tonight_Serialize,
+} from "@/api/ipc"
 import { createQueryClient } from "@/api/query"
 import type { SessionReviewProps } from "@/app/shell-contract"
 import { setLocale } from "@/app/preferences"
@@ -393,6 +402,59 @@ describe("Session intake", { timeout: LIBRARY_TEST_MS }, () => {
   })
 })
 
+const CRITERIA: PlanCriteria = { minAltitudeDeg: 30, darkness: "astronomical", moon: { kind: "none" }, minDurationMinutes: 30 }
+
+/** Tonight at Backyard under CRITERIA, with M 31's window. */
+function tonight(): Tonight_Serialize {
+  const window = {
+    key: "t-m31/site-1/2026-10-29T19:00Z",
+    startUtc: "2026-10-29T19:00:00Z",
+    endUtc: "2026-10-29T23:00:00Z",
+    startLocal: "2026-10-29T20:00:00+01:00",
+    endLocal: "2026-10-30T00:00:00+01:00",
+    timeZone: "Europe/Amsterdam",
+    durationMinutes: 240,
+    night: "2026-10-29",
+    siteName: "Backyard",
+    peakAltitudeDeg: 70,
+  }
+  return {
+    site: { id: "site-1", name: "Backyard", revision: 1, latitudeDeg: 52.09, longitudeDeg: 5.12, elevationM: null },
+    timeZone: "Europe/Amsterdam",
+    night: "2026-10-29",
+    criteria: CRITERIA,
+    goals: [],
+    nextGoodNight: { state: "no_gradable_goal" },
+    windows: [{ targetId: "t-m31", designation: "M 31", favourite: true, projects: [], window }],
+    moon: null,
+    darkness: null,
+    method: "skymath",
+    unavailableReason: null,
+  }
+}
+
+function dashboard(tonight: Tonight_Serialize): HomeDashboard_Serialize {
+  return {
+    topLine: { needsTarget: 0, notInAnyProject: 0, needsCalibration: 0 },
+    actions: ["import", "new_project", "plan_tonight"],
+    projects: [],
+    newSessions: { needsTarget: [], notInProject: [], unreviewed: [], readyToAdd: [] },
+    tonight,
+    targetStatus: [],
+    runningWork: [],
+  }
+}
+
+/** The reads of a Home with no location, no capture and no issue. */
+function emptyHome(command: string): unknown {
+  if (command === "library_list_locations") return []
+  if (command === "library_new_captures") return { locations: [] }
+  if (command === "library_list_operations") return []
+  if (command === "library_issues") return { issues: [], dismissed: [], counts: { danger: 0, warning: 0, info: 0 }, pages: [] }
+  if (command === "library_list_sessions") return []
+  return null
+}
+
 describe("Home", { timeout: LIBRARY_TEST_MS }, () => {
   it("keeps an offline Captures location as offline, never as everything imported", () => {
     const location = { id: "loc-1", name: "NAS captures", path: encode("/Volumes/NAS"), role: "captures", identity: FINGERPRINT.identity, decisionRevision: 1, availability: "offline", lastObservedAt: null, lifecycle: "active", volumeKind: "network" } as const
@@ -400,24 +462,80 @@ describe("Home", { timeout: LIBRARY_TEST_MS }, () => {
     expect(locationIngestion({ ...location, availability: "available" }, undefined, 0)).toMatchObject({ state: { kind: "never-scanned" } })
   })
 
-  it.each(LOCALES)("shows each section that waits on the Home criteria as unavailable, in %s", async (locale) => {
+  it.each(LOCALES)("asks for Home's criteria when none are stored, reading the dashboard for tonight only, in %s", async (locale) => {
     act(() => setLocale(locale))
-    const host = eventHost((command) => {
-      if (command === "library_list_locations") return []
-      if (command === "library_new_captures") return { locations: [] }
-      if (command === "library_list_operations") return []
-      if (command === "library_issues") return { issues: [], dismissed: [], counts: { danger: 0, warning: 0, info: 0 }, pages: [] }
-      return null
+    const asked: unknown[] = []
+    const host = eventHost((command, args) => {
+      if (command === "home_dashboard") {
+        asked.push(args)
+        return dashboard({ ...tonight(), criteria: null, windows: [], unavailableReason: "no_criteria" })
+      }
+      if (command === "planning_home_criteria") return { criteria: null, revision: 0 }
+      return emptyHome(command)
+    })
+    const { user } = renderAt("/")
+    expect(await screen.findByText(m.home_no_criteria_yet())).toBeInTheDocument()
+    expect(asked).toEqual([{ tonight: {} }])
+    expect(host.calls).toContain("planning_home_criteria")
+    // Pending work and Open work come from the same read, criteria or not.
+    expect(screen.queryByText(m.home_unavailable({ what: m.home_pending_work() }))).toBeNull()
+    expect(screen.queryByText(m.home_unavailable({ what: m.home_open_work() }))).toBeNull()
+    await user.click(await screen.findByRole("button", { name: m.home_set_criteria() }))
+    const dialog = await screen.findByRole("dialog", { name: m.home_criteria_title() })
+    const altitude = within(dialog).getByLabelText(m.fields_label_unit({ label: m.criteria_min_altitude(), unit: m.criteria_unit_degrees() }))
+    await user.type(altitude, "95")
+    expect(await within(dialog).findByText(m.criteria_error_altitude())).toBeInTheDocument()
+    expect(host.calls).not.toContain("planning_save_home_criteria")
+  })
+
+  it("saves the criteria at the revision read; a conflict reads them again and the next save names the new revision", async () => {
+    let revision = 2
+    const saved: { criteria: unknown; expectedRevision: unknown }[] = []
+    const host = eventHost((command, args) => {
+      if (command === "home_dashboard") return dashboard(tonight())
+      if (command === "planning_home_criteria") return { criteria: CRITERIA, revision }
+      if (command === "planning_save_home_criteria") {
+        saved.push({ criteria: args.criteria, expectedRevision: args.expectedRevision })
+        if (saved.length === 1) {
+          revision = 3
+          throw { ...conflict, currentRevision: 3 }
+        }
+        return { criteria: args.criteria, revision: 4 }
+      }
+      return emptyHome(command)
+    })
+    const { user } = renderAt("/")
+    await user.click(await screen.findByRole("button", { name: m.home_edit_criteria() }))
+    const dialog = await screen.findByRole("dialog", { name: m.home_criteria_title() })
+    const altitude = within(dialog).getByLabelText(m.fields_label_unit({ label: m.criteria_min_altitude(), unit: m.criteria_unit_degrees() }))
+    await user.clear(altitude)
+    await user.type(altitude, "35")
+    const save = within(dialog).getByRole("button", { name: m.home_save_criteria() })
+    await user.click(save)
+    await waitFor(() => expect(saved).toHaveLength(1))
+    expect(saved[0]).toEqual({ criteria: { ...CRITERIA, minAltitudeDeg: 35 }, expectedRevision: 2 })
+    // The conflict keeps the dialog and the user's value, and the criteria are read again.
+    await waitFor(() => expect(host.calls.filter((c) => c === "planning_home_criteria").length).toBeGreaterThan(1))
+    expect(altitude).toHaveValue(35)
+    await user.click(save)
+    await waitFor(() => expect(saved).toHaveLength(2))
+    expect(saved[1]).toEqual({ criteria: { ...CRITERIA, minAltitudeDeg: 35 }, expectedRevision: 3 })
+  })
+
+  it("renders the dashboard's sections once the criteria are set", async () => {
+    eventHost((command) => {
+      if (command === "home_dashboard") return dashboard(tonight())
+      if (command === "planning_home_criteria") return { criteria: CRITERIA, revision: 1 }
+      return emptyHome(command)
     })
     renderAt("/")
-    expect(await screen.findByText(m.home_unavailable({ what: m.home_pending_work() }))).toBeInTheDocument()
-    expect(screen.getByText(m.home_unavailable({ what: m.home_open_work() }))).toBeInTheDocument()
-    expect(screen.getByText(m.home_unavailable({ what: m.home_tonight() }))).toBeInTheDocument()
-    expect(screen.getByText(m.home_unavailable({ what: m.home_jobs() }))).toBeInTheDocument()
-    expect(screen.getByText(m.home_unavailable({ what: m.home_calendar() }))).toBeInTheDocument()
-    expect(await screen.findByText(m.home_add_captures_location())).toBeInTheDocument()
-    // Without the Home criteria the dashboard is never asked for (astro-plan-wre19.9).
-    expect(host.calls).not.toContain("home_dashboard")
+    expect(await screen.findByText("M 31")).toBeInTheDocument()
+    expect(screen.getByText(m.home_tonight_at({ site: "Backyard" }))).toBeInTheDocument()
+    expect(screen.queryByText(m.home_no_criteria_yet())).toBeNull()
+    for (const what of [m.home_pending_work(), m.home_open_work(), m.home_tonight(), m.home_jobs()]) {
+      expect(screen.queryByText(m.home_unavailable({ what }))).toBeNull()
+    }
+    expect(screen.getByRole("button", { name: m.home_edit_criteria() })).toBeInTheDocument()
   })
 
   it("never says everything is imported while running and failed imports can't be read", async () => {

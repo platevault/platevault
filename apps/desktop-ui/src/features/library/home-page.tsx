@@ -9,14 +9,15 @@
  *
  * Pending work, Open work (with each Project's Next action, PRJ-FR-18),
  * Status's background jobs and Tonight are `home_dashboard`'s, computed by
- * the library: Home never recomputes them. `home_dashboard` needs the Home
- * planning criteria, which wait on astro-plan-wre19.9 (`useHomeCriteria`):
- * until then each of those shows its "unavailable" state. Pending
- * ingestions and Status's locations read the library directly and work now.
- * The calendar waits on the night-summary read of astro-plan-wre19.9.
+ * the library: Home never recomputes them. The library computes Tonight
+ * under Home's stored criteria (criteria.ts); until the user sets them,
+ * Tonight reads `no_criteria` and offers to set them. Pending ingestions and
+ * Status's locations read the library directly. The calendar's view of
+ * `planning_calendar` (PLAN-FR-12) and Tonight's goal grades are not built
+ * on this page yet.
  */
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { FolderPlus, Import } from "lucide-react"
+import { FolderPlus, Import, SlidersHorizontal } from "lucide-react"
 import { type ReactNode, useState } from "react"
 import {
   type ExpectedSession,
@@ -43,7 +44,8 @@ import { DetailPage, type DetailSection } from "@/components/templates/detail-pa
 import { formatCount, formatTime } from "@/lib/format"
 import type { Messages } from "@/lib/i18n"
 import { AddToProjectDialog } from "./add-to-project"
-import { useHomeCriteria } from "./criteria"
+import { HomeCriteriaDialog } from "./criteria-dialog"
+import { homeCriteriaQuery } from "./criteria"
 import { IngestionsTable, ROWS, useIngestions } from "./ingestions"
 import { readError, Unavailable } from "./parts"
 import { dashboardQuery, homeWrite, locationsQuery, sessionsQuery } from "./queries"
@@ -62,17 +64,16 @@ function allAction(m: Messages, follow: Follow, id: string, count: number, link:
 export function HomePage() {
   const m = useMessages()
   const follow = useFollowLink()
-  const criteria = useHomeCriteria()
-  const dashboard = useQuery(dashboardQuery(criteria.state === "ready" ? criteria.criteria : null))
-  const data = criteria.state === "ready" ? (dashboard.data ?? null) : null
+  const criteria = useQuery(homeCriteriaQuery())
+  const [editing, setEditing] = useState(false)
+  const dashboard = useQuery(dashboardQuery())
+  const data = dashboard.data ?? null
   const ingestions = useIngestions(data)
   const locations = useQuery(locationsQuery())
+  const editCriteria = criteria.data ? () => setEditing(true) : undefined
 
-  // astro-plan-wre19.9: every section built on home_dashboard reads this until the Home criteria exist.
-  const waiting = (what: string) => <Unavailable what={what} />
-  const dashboardBody = (what: string, body: (data: HomeDashboard_Serialize) => ReactNode) =>
-    criteria.state !== "ready" ? waiting(what) : dashboard.error ? <ActionError message={readError(m, dashboard.error)} onRetry={() => void dashboard.refetch()} /> : data ? body(data) : null
-
+  const dashboardBody = (body: (data: HomeDashboard_Serialize) => ReactNode) =>
+    dashboard.error ? <ActionError message={readError(m, dashboard.error)} onRetry={() => void dashboard.refetch()} /> : data ? body(data) : null
   const work = data ? pendingWork(data) : []
   const sections: DetailSection[] = [
     {
@@ -88,7 +89,7 @@ export function HomePage() {
       title: m.home_pending_work(),
       count: data ? work.length + data.topLine.needsCalibration : undefined,
       flush: data !== null,
-      content: dashboardBody(m.home_pending_work(), (d) => <PendingTable dashboard={d} rows={work} follow={follow} />),
+      content: dashboardBody((d) => <PendingTable dashboard={d} rows={work} follow={follow} />),
     },
     {
       id: "home-open",
@@ -96,7 +97,7 @@ export function HomePage() {
       count: data?.projects.length,
       flush: data !== null,
       actions: data ? allAction(m, follow, "home-open", data.projects.length, { to: "/projects" }) : [],
-      content: dashboardBody(m.home_open_work(), (d) => <OpenWorkTable projects={d.projects} follow={follow} />),
+      content: dashboardBody((d) => <OpenWorkTable projects={d.projects} follow={follow} />),
     },
   ]
   const aside: DetailSection[] = [
@@ -107,7 +108,7 @@ export function HomePage() {
       content: (
         <>
           <LocationsTable locations={locations.data ?? []} loading={locations.isPending} error={locations.error ? { message: readError(m, locations.error), onRetry: () => void locations.refetch() } : undefined} follow={follow} />
-          {data ? <JobsTable work={data.runningWork} follow={follow} /> : waiting(m.home_jobs())}
+          {data ? <JobsTable work={data.runningWork} follow={follow} /> : null}
         </>
       ),
     },
@@ -115,16 +116,22 @@ export function HomePage() {
       id: "home-tonight",
       title: data?.tonight.site ? m.home_tonight_at({ site: data.tonight.site.name }) : m.home_tonight(),
       flush: data !== null,
-      content: dashboardBody(m.home_tonight(), (d) => <TonightTable dashboard={d} follow={follow} />),
+      actions: editCriteria && data?.tonight.criteria ? [{ id: "home-edit-criteria", label: m.home_edit_criteria(), run: editCriteria }] : [],
+      content: dashboardBody((d) => <TonightTable dashboard={d} follow={follow} onSetCriteria={editCriteria} />),
     },
     {
       id: "home-calendar",
       title: m.home_calendar(),
-      // astro-plan-wre19.9: no read serves five weeks of night summaries (PLAN-FR-12) yet.
+      // planning_calendar serves five weeks of nights (PLAN-FR-12); this page does not draw them yet.
       content: <Unavailable what={m.home_calendar()} />,
     },
   ]
-  return <DetailPage title={m.nav_home()} sections={sections} aside={aside} />
+  return (
+    <>
+      <DetailPage title={m.nav_home()} sections={sections} aside={aside} />
+      {criteria.data ? <HomeCriteriaDialog record={criteria.data} open={editing} onOpenChange={setEditing} /> : null}
+    </>
+  )
 }
 
 // Pending work -----------------------------------------------------------------
@@ -398,11 +405,15 @@ function JobsTable({ work, follow }: { work: RunningWork[]; follow: Follow }) {
 type TonightRow = HomeDashboard_Serialize["tonight"]["windows"][number]
 
 /** Each Target with a window tonight at the default site, as the library computed it (PLAN-FR-11). */
-function TonightTable({ dashboard, follow }: { dashboard: HomeDashboard_Serialize; follow: Follow }) {
+function TonightTable({ dashboard, follow, onSetCriteria }: { dashboard: HomeDashboard_Serialize; follow: Follow; onSetCriteria?: () => void }) {
   const m = useMessages()
   const tonight = dashboard.tonight
   if (tonight.unavailableReason === "no_site") {
     return <EmptyState icon={FolderPlus} title={m.home_no_site_yet()} action={<ActionButton action={{ id: "add-site", label: m.tonight_add_site(), run: () => follow({ to: "/settings/sites" }) }} />} />
+  }
+  if (tonight.unavailableReason === "no_criteria") {
+    const action = onSetCriteria ? <ActionButton action={{ id: "set-criteria", label: m.home_set_criteria(), run: onSetCriteria }} /> : undefined
+    return <EmptyState icon={SlidersHorizontal} title={m.home_no_criteria_yet()} action={action} />
   }
   const link = (r: TonightRow): StepLink => ({ to: "/targets/$targetId", params: { targetId: r.targetId } })
   const columns: Column<TonightRow>[] = [
@@ -421,7 +432,7 @@ function TonightTable({ dashboard, follow }: { dashboard: HomeDashboard_Serializ
         onRowClick={(r) => follow(link(r))}
         empty={m.home_no_goals_suit()}
       />
-      {/* astro-plan-wre19.9: per-goal grades (good, marginal, poor) and the next good night. */}
+      {/* Tonight's goal grades and next good night (PLAN-FR-11) are served; this page does not draw them yet. */}
       <Unavailable what={m.home_grades()} />
     </>
   )
