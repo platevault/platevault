@@ -4998,6 +4998,11 @@ export type NativePathWire = { encoding: "unix-bytes"; payload: number[]; displa
 /**  A Quit that waits on the user, because work is running. */
 export type NativeQuitRequest = {
 	requestId: string,
+	/**
+	 *  The work the Quit would interrupt; `None` when the catalog could not
+	 *  say, which asks rather than risk interrupting it.
+	 */
+	work: QuitWork | null,
 };
 
 /**  The new files of one online Captures location. */
@@ -6239,6 +6244,19 @@ export type QualityCriterion =
  *  its own frame choices, never through a review label.
  */
 export type QualityLabel = "unreviewed" | "picked" | "rejected";
+
+/**
+ *  What a Quit would interrupt (D-W157): the running imports and indexes
+ *  (scans), and the Project of each running Apply. Other work, such as a
+ *  measurement, a storage move or another Project operation, ends with the
+ *  app unasked.
+ */
+export type QuitWork = {
+	imports: number,
+	indexes: number,
+	/**  The name of each Project whose Apply runs. */
+	applies: string[],
+};
 
 /**
  *  A session an open Project suggests and doesn't hold (PRJ-FR-09,

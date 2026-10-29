@@ -8,12 +8,19 @@
 //! ([`library_native_menu_set_labels`]) on start and whenever the locale
 //! changes.
 //!
-//! Quit (the menu, the tray, or closing the last window) asks first only
-//! while an import, an index or an Apply runs (D-W157). Otherwise it exits at
-//! once. The question is the UI's confirmation dialog, so it keeps the shared
-//! Cancel-then-action order (D-W159): the host emits
-//! [`NATIVE_QUIT_CONFIRM_EVENT`] and exits only when the UI answers that
-//! request with Confirm ([`library_native_quit_answer`]).
+//! Quit (the menu or its ⌘Q / Ctrl+Q shortcut, the tray, or closing the last
+//! window) asks first only while an import, an index or an Apply runs
+//! (D-W157). Otherwise it exits at once. The question is the UI's
+//! confirmation dialog, so it keeps the shared Cancel-then-action order
+//! (D-W159): the host emits [`NATIVE_QUIT_CONFIRM_EVENT`] with the work a
+//! Quit would interrupt, and exits only when the UI answers that request with
+//! Confirm ([`library_native_quit_answer`]). Cancel leaves the work running.
+//! [`QuitGate`] owns that decision; the handlers here only carry it out.
+//!
+//! A quit from outside the app's own items exits unasked: the macOS Dock or
+//! app-switcher Quit (`terminate:`, which tao answers without an
+//! `ExitRequested`), signing out, a force quit or a crash. The work then reads
+//! Interrupted with Retry on the next launch, as after a confirmed Quit.
 
 use std::collections::HashSet;
 use std::sync::{Mutex, PoisonError};
@@ -161,15 +168,87 @@ fn relabel(item: &MenuItemKind<Wry>, text: &str) -> tauri::Result<()> {
 /// The labelled items of the installed menu bar and tray, for relabelling.
 struct NativeItems(Vec<(Label, MenuItemKind<Wry>)>);
 
-/// Quit requests the UI has not answered yet.
-#[derive(Default)]
-struct PendingQuits(Mutex<HashSet<Uuid>>);
+/// What a Quit would interrupt (D-W157): the running imports and indexes
+/// (scans), and the Project of each running Apply. Other work, such as a
+/// measurement, a storage move or another Project operation, ends with the
+/// app unasked.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct QuitWork {
+    pub imports: u32,
+    pub indexes: u32,
+    /// The name of each Project whose Apply runs.
+    pub applies: Vec<String>,
+}
+
+impl QuitWork {
+    fn of(running: &RunningOperations) -> Self {
+        let count = |ids: &[Uuid]| u32::try_from(ids.len()).unwrap_or(u32::MAX);
+        Self {
+            imports: count(&running.imports),
+            indexes: count(&running.scans),
+            applies: running
+                .projects
+                .iter()
+                .filter(|project| project.operation.kind == ProjectOperationKind::Apply)
+                .map(|project| project.project_name.clone())
+                .collect(),
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.imports == 0 && self.indexes == 0 && self.applies.is_empty()
+    }
+}
 
 /// A Quit that waits on the user, because work is running.
-#[derive(Clone, Copy, Debug, Serialize, specta::Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct NativeQuitRequest {
     pub request_id: Uuid,
+    /// The work the Quit would interrupt; `None` when the catalog could not
+    /// say, which asks rather than risk interrupting it.
+    pub work: Option<QuitWork>,
+}
+
+/// What a Quit request does next.
+#[derive(Debug, PartialEq, Eq)]
+enum QuitStep {
+    Exit,
+    Ask(NativeQuitRequest),
+}
+
+/// What the UI's answer to a [`NativeQuitRequest`] does.
+#[derive(Debug, PartialEq, Eq)]
+enum QuitAnswer {
+    Exit,
+    /// Cancel: the app stays open and the work keeps running.
+    StayOpen,
+}
+
+/// The D-W157 quit decision and the requests still waiting on the UI.
+#[derive(Default)]
+struct QuitGate(Mutex<HashSet<Uuid>>);
+
+impl QuitGate {
+    /// Exit at once when nothing a Quit would interrupt runs; otherwise
+    /// record a request for the UI to answer. `work` is `None` when the
+    /// running work is unknown.
+    fn request(&self, work: Option<QuitWork>) -> QuitStep {
+        if work.as_ref().is_some_and(QuitWork::is_empty) {
+            return QuitStep::Exit;
+        }
+        let request_id = Uuid::new_v4();
+        self.0.lock().unwrap_or_else(PoisonError::into_inner).insert(request_id);
+        QuitStep::Ask(NativeQuitRequest { request_id, work })
+    }
+
+    /// Settle a waiting request: Confirm exits, Cancel stays open. `None`
+    /// when `request_id` was already answered or never made.
+    fn answer(&self, request_id: Uuid, confirmed: bool) -> Option<QuitAnswer> {
+        let waiting = self.0.lock().unwrap_or_else(PoisonError::into_inner).remove(&request_id);
+        waiting.then_some(if confirmed { QuitAnswer::Exit } else { QuitAnswer::StayOpen })
+    }
 }
 
 fn menu_bar(
@@ -252,7 +331,7 @@ pub fn install(app: &AppHandle<Wry>) -> Result<(), String> {
         Err(_) => tracing::warn!("no tray: this desktop has no indicator library"),
     }
     app.manage(NativeItems(items));
-    app.manage(PendingQuits::default());
+    app.manage(QuitGate::default());
     Ok(())
 }
 
@@ -304,49 +383,36 @@ fn show_window(app: &AppHandle<Wry>) {
 fn request_quit(app: &AppHandle<Wry>) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
-        if !work_runs(&app).await {
-            app.exit(0);
-            return;
-        }
-        let request_id = Uuid::new_v4();
-        app.state::<PendingQuits>()
-            .0
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .insert(request_id);
+        let work = running_work(&app).await;
+        let request = match app.state::<QuitGate>().request(work) {
+            QuitStep::Exit => {
+                app.exit(0);
+                return;
+            }
+            QuitStep::Ask(request) => request,
+        };
         // A tray or ⌘Q Quit can come while the window is minimised or behind
         // others; the question is asked in it, so bring it forward first.
         show_window(&app);
-        if let Err(error) = app.emit(NATIVE_QUIT_CONFIRM_EVENT, NativeQuitRequest { request_id }) {
+        if let Err(error) = app.emit(NATIVE_QUIT_CONFIRM_EVENT, request) {
             tracing::error!(%error, "the quit confirmation did not reach the UI");
         }
     });
 }
 
-/// Whether an import, an index or an Apply runs. When the catalog cannot say,
-/// it counts as running, so the user is asked rather than interrupted.
-async fn work_runs(app: &AppHandle<Wry>) -> bool {
+/// The work a Quit would interrupt, or `None` when the catalog cannot say.
+/// A host without a library has none.
+async fn running_work(app: &AppHandle<Wry>) -> Option<QuitWork> {
     let Some(library) = app.try_state::<std::sync::Arc<Library>>() else {
-        return false;
+        return Some(QuitWork::default());
     };
     match library.catalog().running_operations().await {
-        Ok(running) => asks_before_quit(&running),
+        Ok(running) => Some(QuitWork::of(&running)),
         Err(error) => {
             tracing::error!(%error, "running work is unknown; Quit asks first");
-            true
+            None
         }
     }
-}
-
-/// Quit asks first while an import, an index (a scan) or an Apply runs
-/// (D-W157); other work, such as a measurement, ends with the app.
-fn asks_before_quit(running: &RunningOperations) -> bool {
-    !running.imports.is_empty()
-        || !running.scans.is_empty()
-        || running
-            .projects
-            .iter()
-            .any(|project| project.operation.kind == ProjectOperationKind::Apply)
 }
 
 /// Relabel the menu bar and the tray in the UI's active locale.
@@ -386,16 +452,15 @@ pub fn library_native_quit_answer(
     request_id: Uuid,
     confirmed: bool,
 ) -> Result<(), ErrorResponse> {
-    let answered = app.try_state::<PendingQuits>().is_some_and(|pending| {
-        pending.0.lock().unwrap_or_else(PoisonError::into_inner).remove(&request_id)
-    });
-    if !answered {
-        return Err(fail(Some(request_id))(LibraryError::NotFound(format!(
-            "quit request {request_id} is not waiting for an answer"
-        ))));
-    }
-    if confirmed {
-        app.exit(0);
+    let answer = app.try_state::<QuitGate>().and_then(|gate| gate.answer(request_id, confirmed));
+    match answer {
+        Some(QuitAnswer::Exit) => app.exit(0),
+        Some(QuitAnswer::StayOpen) => {}
+        None => {
+            return Err(fail(Some(request_id))(LibraryError::NotFound(format!(
+                "quit request {request_id} is not waiting for an answer"
+            ))));
+        }
     }
     Ok(())
 }
@@ -406,7 +471,9 @@ mod tests {
     use platevault_core::{ProjectOperation, ProjectOperationKind, ProjectOperationState};
     use uuid::Uuid;
 
-    use super::{asks_before_quit, catalogue_labels, Label, NativeMenuLabels};
+    use super::{
+        catalogue_labels, Label, NativeMenuLabels, QuitAnswer, QuitGate, QuitStep, QuitWork,
+    };
 
     const LABELS: [Label; 13] = [
         Label::About,
@@ -464,32 +531,89 @@ mod tests {
         }
     }
 
-    /// D-W157: Quit asks while an import, an index or an Apply runs, and
-    /// exits at once otherwise, including while a measurement, a storage
-    /// move or another Project operation runs.
+    fn running(projects: Vec<RunningProject>) -> RunningOperations {
+        RunningOperations { projects, ..RunningOperations::default() }
+    }
+
+    /// D-W157: Quit exits at once when idle, and while only a measurement, a
+    /// storage move or a Project operation other than Apply runs.
     #[test]
-    fn quit_asks_only_while_an_import_an_index_or_an_apply_runs() {
-        let idle = RunningOperations::default();
-        assert!(!asks_before_quit(&idle));
-        for asking in [
-            RunningOperations { imports: vec![Uuid::new_v4()], ..idle.clone() },
-            RunningOperations { scans: vec![Uuid::new_v4()], ..idle.clone() },
-            RunningOperations {
-                projects: vec![project(ProjectOperationKind::Apply)],
-                ..idle.clone()
-            },
-        ] {
-            assert!(asks_before_quit(&asking), "{asking:?}");
-        }
+    fn quit_exits_at_once_while_nothing_it_would_interrupt_runs() {
+        let gate = QuitGate::default();
         let other = RunningOperations {
             measurements: vec![Uuid::new_v4()],
             storage: vec![Uuid::new_v4()],
-            projects: vec![
+            ..running(vec![
                 project(ProjectOperationKind::CopyToOutput),
                 project(ProjectOperationKind::Archive),
-            ],
-            ..idle
+            ])
         };
-        assert!(!asks_before_quit(&other), "{other:?}");
+        for idle in [RunningOperations::default(), other] {
+            assert_eq!(gate.request(Some(QuitWork::of(&idle))), QuitStep::Exit, "{idle:?}");
+        }
+    }
+
+    /// D-W157: while an import, an index or an Apply runs, Quit asks, and the
+    /// request names that work.
+    #[test]
+    fn quit_asks_naming_a_running_import_index_or_apply() {
+        let gate = QuitGate::default();
+        let cases = [
+            (
+                RunningOperations {
+                    imports: vec![Uuid::new_v4(), Uuid::new_v4()],
+                    ..RunningOperations::default()
+                },
+                QuitWork { imports: 2, ..QuitWork::default() },
+            ),
+            (
+                RunningOperations { scans: vec![Uuid::new_v4()], ..RunningOperations::default() },
+                QuitWork { indexes: 1, ..QuitWork::default() },
+            ),
+            (
+                running(vec![
+                    project(ProjectOperationKind::Apply),
+                    project(ProjectOperationKind::CopyToOutput),
+                ]),
+                QuitWork { applies: vec!["Cygnus".to_owned()], ..QuitWork::default() },
+            ),
+        ];
+        for (busy, named) in cases {
+            match gate.request(Some(QuitWork::of(&busy))) {
+                QuitStep::Ask(request) => assert_eq!(request.work, Some(named)),
+                QuitStep::Exit => panic!("exited while {busy:?} runs"),
+            }
+        }
+    }
+
+    /// When the catalog cannot say what runs, Quit asks rather than risk
+    /// interrupting work.
+    #[test]
+    fn quit_asks_while_the_running_work_is_unknown() {
+        let QuitStep::Ask(request) = QuitGate::default().request(None) else {
+            panic!("exited with the running work unknown");
+        };
+        assert_eq!(request.work, None);
+    }
+
+    /// Cancel keeps the app open, Confirm exits, and each request is
+    /// answered once.
+    #[test]
+    fn cancel_stays_open_confirm_exits_and_each_request_answers_once() {
+        let gate = QuitGate::default();
+        let busy = Some(QuitWork { imports: 1, ..QuitWork::default() });
+        let (QuitStep::Ask(cancelled), QuitStep::Ask(confirmed)) =
+            (gate.request(busy.clone()), gate.request(busy))
+        else {
+            panic!("a busy Quit exited");
+        };
+        assert_eq!(gate.answer(cancelled.request_id, false), Some(QuitAnswer::StayOpen));
+        assert_eq!(
+            gate.answer(cancelled.request_id, true),
+            None,
+            "a cancelled request answers twice"
+        );
+        assert_eq!(gate.answer(confirmed.request_id, true), Some(QuitAnswer::Exit));
+        assert_eq!(gate.answer(Uuid::new_v4(), true), None, "a request never made answers");
     }
 }

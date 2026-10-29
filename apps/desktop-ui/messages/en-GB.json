@@ -6988,6 +6988,55 @@
   "menu_close_window": "Close Window",
   "menu_show": "Show PlateVault",
   "menu_quit_confirm_title": "Quit PlateVault?",
-  "menu_quit_confirm_summary": "An import, index or Apply is running. If you quit, it will be interrupted and can be retried next time.",
+  "menu_quit_confirm_work": [
+    {
+      "declarations": [
+        "input count",
+        "input work",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Running: {work}. If you quit, it is interrupted, and the next launch offers Retry.",
+        "countPlural=*": "Running: {work}. If you quit, they are interrupted, and the next launch offers Retry."
+      }
+    }
+  ],
+  "menu_quit_confirm_unknown": "PlateVault couldn't read what is running. If you quit, any import, index or Apply is interrupted, and the next launch offers Retry.",
+  "menu_quit_work_imports": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} import",
+        "countPlural=*": "{n} imports"
+      }
+    }
+  ],
+  "menu_quit_work_indexes": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} index",
+        "countPlural=*": "{n} indexes"
+      }
+    }
+  ],
+  "menu_quit_work_apply": "Apply in {project}",
   "info_tip_more_information": "More information"
 }
