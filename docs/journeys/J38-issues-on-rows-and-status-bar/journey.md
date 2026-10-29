@@ -174,7 +174,7 @@ running, and the notifications history. Done means:
 
   J39 continues the clean-up from here, with each duplicates issue on its session row and a row-level Dismiss.
 - **Expect (negative):** Neither the index, the scan nor opening the review moves, trashes or writes a file. Sessions still lists `4 Oct M 33` with the same frame count. The 12 `Card-2` sources, still connected, are not counted: the issue does not read 14 copies, and no group lists a `Card-2` path.
-- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 5 Storage and duplicates (⚠ issue "N duplicate copies · 2.1 GB" opening the Duplicates review) · HARNESS-V5-FEEDBACK-R1.md §Round 6 "registered library locations only … the copy in the earliest-registered location" · J39 · 063 FR-032 · 064 LIB-FR-22, LIB-AC-43, LIB-AC-44 · 065 PRJ-FR-15 · 071 STO-FR-16
+- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 5 Storage and duplicates (⚠ issue "N duplicate copies · 2.1 GB" opening the Duplicates review) · HARNESS-V5-FEEDBACK-R1.md §Round 6 "registered library locations only … the copy in the earliest-registered location" · J39 · 063 FR-032 · 064 LIB-FR-22, LIB-AC-43 · 065 PRJ-FR-15 · 071 STO-FR-16
 
 ### S12 — Read and clear the notification history {#S12}
 
@@ -239,5 +239,5 @@ running, and the notifications history. Done means:
   Work a restart interrupted reads "Interrupted when PlateVault restarted. Retry continues from the recorded progress."
   Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 11 (OWNER, 2026-10-23) on ui-harness-v5 @ 5dc245244; D-W149 · by: SpecAmend (intent-gated)
 - **Δ7** 2026-10-28 · S1, S2, S3, S4, S5, S5a, S5b, S6, S7, S8, S9, S10, S11, S12, S13, S14 · trace-only
-  Steps now cite their owning FR/AC: status-bar groups (063 FR-038), row-level issues (063 FR-032), general dismissal and recurrence across issue kinds (063 FR-032-AC-01), duplicate dismissal (064 LIB-AC-44) and the automatic duplicate scan (064 LIB-AC-43). No step's behaviour changes. LIB-AC-44 remains specific to duplicate issues; LIB-AC-43 restates S9 and S11 (after an import, after an index) under D-W164.
-  Evidence: 063 FR-032, FR-037 to FR-040 · 064 LIB-FR-07, LIB-FR-17, LIB-FR-22, LIB-AC-43, LIB-AC-44 · 065 PRJ-FR-15 · 071 STO-FR-16, STO-IMP-FR-06 · D-W144, D-W149, D-W150, D-W158, D-W164 · astro-plan-0v2o0.2, astro-plan-ocyuc.5 · by: omp-lead-20261004 (intent-gated)
+  Steps now cite their owning FR/AC: status-bar groups (063 FR-038), row-level issues (063 FR-032), dismissal and recurrence across issue kinds (063 FR-032-AC-01) and the automatic duplicate scan (064 LIB-AC-43). No step's behaviour changes. LIB-AC-43 restates S9 and S11 (after an import, after an index) under D-W164.
+  Evidence: 063 FR-032, FR-032-AC-01, FR-037 to FR-040 · 064 LIB-FR-07, LIB-FR-17, LIB-FR-22, LIB-AC-43 · 065 PRJ-FR-15 · 071 STO-FR-16, STO-IMP-FR-06 · D-W144, D-W149, D-W150, D-W158, D-W164 · astro-plan-0v2o0.2, astro-plan-ocyuc.5 · by: omp-lead-20261004 (intent-gated)
