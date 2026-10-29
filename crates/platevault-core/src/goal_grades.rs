@@ -185,11 +185,7 @@ pub(crate) fn grade_night(
     let mut best: BTreeMap<(Uuid, MoonKey), Option<ObservingWindow>> = BTreeMap::new();
     let mut graded = Vec::with_capacity(goals.len());
     for goal in goals {
-        let band = goal.bands.iter().copied().max_by(|first, second| {
-            let separation = |band: Band| avoidance.curve(band).min_separation_deg(age);
-            separation(*first).total_cmp(&separation(*second)).then(second.cmp(first))
-        });
-        let Some(band) = band else {
+        let Some(band) = strictest_band(goal, avoidance, age) else {
             graded.push(NightGrade { grade: goal.graded(None, None, None), moon_ruled_out: false });
             continue;
         };
@@ -225,9 +221,20 @@ pub(crate) fn grade_night(
     Ok(graded)
 }
 
+/// The band of `goal`'s channel that needs the most separation from a Moon
+/// `age` days from full, the earlier in band order on a tie; `None` when the
+/// channel passes no band.
+fn strictest_band(goal: &UnfinishedGoal, avoidance: &MoonAvoidance, age: f64) -> Option<Band> {
+    let separation = |band: Band| avoidance.curve(band).min_separation_deg(age);
+    goal.bands.iter().copied().max_by(|first, second| {
+        separation(*first).total_cmp(&separation(*second)).then(second.cmp(first))
+    })
+}
+
 /// The first of the [`NEXT_GOOD_NIGHT_SEARCH`] nights after `night` that
-/// suits one of `goals`, graded as [`grade_night`] grades; `None` when none
-/// does. Blocking.
+/// suits one of `goals`: its band's curve leaves the goal a window, so
+/// [`grade_night`] grades it good or marginal. `None` when none does.
+/// Blocking.
 ///
 /// # Errors
 /// As [`grade_night`].
@@ -245,9 +252,20 @@ pub(crate) fn next_good_night(
                 "night after {candidate} is outside the supported calendar"
             ))
         })?;
-        let graded = grade_night(goals, site, candidate, criteria, avoidance)?;
-        if graded.iter().any(|graded| graded.grade.suits()) {
-            return Ok(Some(candidate));
+        let age = NightContext::new(site, candidate, &criteria)?.moon_age_days();
+        let mut tried = Vec::new();
+        for goal in goals {
+            let Some(band) = strictest_band(goal, avoidance, age) else { continue };
+            let moon = planning::curve_criterion(avoidance.curve(band), age);
+            let key = (goal.target.candidate.id, MoonKey::of(moon));
+            if tried.contains(&key) {
+                continue;
+            }
+            tried.push(key);
+            let curved = PlanCriteria { moon, ..criteria };
+            if best_window(&goal.target, site, candidate, curved)?.is_some() {
+                return Ok(Some(candidate));
+            }
         }
     }
     Ok(None)
