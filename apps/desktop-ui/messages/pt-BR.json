@@ -7630,10 +7630,10 @@
   "home_job_project": "Operação de {name}",
   "home_goal_in_project": "{goal} em {project}",
   "home_not_graded": "Sem avaliação",
-  "home_ungraded_no_band": "Nenhuma banda nos setups do Projeto",
+  "home_ungraded_no_band": "Os setups do Projeto não capturam este canal",
   "home_ungraded_unsupported_frame": "Coordenadas em um referencial não suportado",
   "home_window_peak": "{range} · pico {altitude}°",
-  "home_no_gradable_goal": "Nenhuma meta pode ser avaliada esta noite.",
+  "home_no_gradable_goal": "Nenhuma meta pode ser avaliada: nenhuma tem uma banda e uma posição conhecida.",
   "home_no_goals_suit_within": [
     {
       "declarations": [
@@ -7652,6 +7652,7 @@
   ],
   "calendar_moon_phase": "Lua {phase}",
   "calendar_plan_unknown": "plano ainda não disponível",
+  "home_planned_unavailable": "Os alvos no plano ainda não estão disponíveis.",
   "sessions_no_match_query": "Nenhuma sessão corresponde a “{query}”",
   "sessions_first_count": "Primeiras {count} sessões de luz",
   "session_replaced_title": "Um reagrupamento substituiu esta sessão",

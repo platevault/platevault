@@ -43,7 +43,7 @@ import { formatCount, formatList, formatNight } from "@/lib/format"
 import { getLocale, type MessageRef, type Messages, msg } from "@/lib/i18n"
 import { dayInWeek, WEEK_START } from "@/lib/week"
 import { ROWS } from "./ingestions"
-import { readError, Unavailable } from "./parts"
+import { readError } from "./parts"
 import { calendarQuery } from "./queries"
 
 type Follow = (link: StepLink) => void
@@ -55,7 +55,7 @@ const targetLink = (targetId: string): StepLink => ({ to: "/targets/$targetId", 
 const projectLink = (projectId: string): StepLink => ({ to: "/projects/$projectId", params: { projectId } })
 
 /** Targets set to a night: no `night` for tonight, as Targets reads an absent night (PLAN-TGT-FR-16). */
-export function targetsLink(night: string, tonight: string): StepLink {
+function targetsLink(night: string, tonight: string): StepLink {
   return { to: "/targets", search: night === tonight ? {} : { night } }
 }
 
@@ -64,7 +64,7 @@ export function targetsLink(night: string, tonight: string): StepLink {
  * Home's criteria. Tonight passes the ways to set them; the calendar under
  * it names the same gap without repeating Tonight's buttons.
  */
-export function PlanningUnavailable({ reason, follow, onSetCriteria }: { reason: HomePlanningUnavailable; follow?: Follow; onSetCriteria?: () => void }) {
+function PlanningUnavailable({ reason, follow, onSetCriteria }: { reason: HomePlanningUnavailable; follow?: Follow; onSetCriteria?: () => void }) {
   const m = useMessages()
   if (reason === "no_site") {
     const action = follow ? <ActionButton action={{ id: "add-site", label: m.tonight_add_site(), run: () => follow({ to: "/settings/sites" }) }} /> : undefined
@@ -77,7 +77,7 @@ export function PlanningUnavailable({ reason, follow, onSetCriteria }: { reason:
 // Goals ------------------------------------------------------------------------
 
 /** "M 31 · Ha": the goal's subject and channel. */
-export function goalName(m: Messages, g: GoalGrade_Serialize): string {
+function goalName(m: Messages, g: GoalGrade_Serialize): string {
   return m.home_goal_item({ subject: g.designation, channel: g.channel ?? m.palette_session_no_filter() })
 }
 
@@ -87,7 +87,7 @@ const NO_POSITION: Record<WindowUnavailableReason, (m: Messages) => string> = {
 }
 
 /** Why a goal has no grade, in the user's words. */
-export function ungradedReason(m: Messages, ungraded: Ungraded): string {
+function ungradedReason(m: Messages, ungraded: Ungraded): string {
   return ungraded.kind === "no_band" ? m.home_ungraded_no_band() : NO_POSITION[ungraded.reason](m)
 }
 
@@ -189,7 +189,7 @@ const PHASE: Record<MoonPhaseName, MessageRef> = {
 const WAXING: ReadonlySet<MoonPhaseName> = new Set(["new", "waxing_crescent", "first_quarter", "waxing_gibbous"])
 
 /** The library's Moon as the night visuals take it: a percentage, the phase's name, rise and set. */
-export function moonTonight(moon: NightMoon_Serialize): MoonTonight {
+function moonTonight(moon: NightMoon_Serialize): MoonTonight {
   return { illuminationPct: moon.illumination === null ? null : Math.round(moon.illumination * 100), phase: PHASE[moon.phase], rise: moon.riseUtc, set: moon.setUtc }
 }
 
@@ -203,7 +203,7 @@ function moonText(m: Messages, moon: MoonTonight, timeZone: string): string {
 }
 
 /** Tonight through the last night of the calendar's fifth week. */
-export function calendarSpan(tonight: string): { firstNight: string; nights: number } {
+function calendarSpan(tonight: string): { firstNight: string; nights: number } {
   return { firstNight: tonight, nights: CALENDAR_WEEKS * 7 - dayInWeek(tonight, WEEK_START[getLocale()]) }
 }
 
@@ -244,7 +244,7 @@ export function HomeCalendar({ tonight, reason }: { tonight: string | null; reas
             { label: m.tonight_moon(), value: moonText(m, moon, timeZone) },
             { label: m.calendar_legend_goals(), value: names(n.suitedGoals) },
             { label: m.home_moon_rules_out(), value: names(n.moonRuledOutGoals) },
-            { label: m.calendar_legend_planned(), value: <UnknownValue label={m.home_unavailable({ what: m.calendar_legend_planned() })} /> },
+            { label: m.calendar_legend_planned(), value: <UnknownValue label={m.calendar_plan_unknown()} /> },
           ]}
         />
       ),
@@ -254,7 +254,7 @@ export function HomeCalendar({ tonight, reason }: { tonight: string | null; reas
     <>
       <NightCalendar label={m.home_calendar_label({ site: site.name })} today={tonight} nights={nights} />
       {/* astro-plan-wre19.14: the Targets in each night's plan (plannedTargets). */}
-      <Unavailable what={m.calendar_legend_planned()} className="mt-3" />
+      <Notice tone="info" title={m.home_planned_unavailable()} className="mt-3" />
     </>
   )
 }

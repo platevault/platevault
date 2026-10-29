@@ -12,9 +12,9 @@ import type { Messages } from "@/lib/i18n"
  * empty, so missing data is never mistaken for none. Each call site names
  * the bead that brings it in a comment, for the switch-over.
  */
-export function Unavailable({ what, className }: { what: string; className?: string }) {
+export function Unavailable({ what }: { what: string }) {
   const m = useMessages()
-  return <Notice tone="info" title={m.home_unavailable({ what })} className={className} />
+  return <Notice tone="info" title={m.home_unavailable({ what })} />
 }
 
 /** A failed read, worded for a table's error row: the library's code from the catalogue, or the transport failure. */

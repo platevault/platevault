@@ -12,8 +12,8 @@
  * the library: Home never recomputes them. The library computes Tonight
  * and the calendar (`planning_calendar`, PLAN-FR-12) under Home's stored
  * criteria (criteria.ts); until the user sets them, both read
- * `no_criteria` and offer to set them (home-planning.tsx). Pending
- * ingestions and Status's locations read the library directly.
+ * `no_criteria`, and only Tonight offers to set them (home-planning.tsx).
+ * Pending ingestions and Status's locations read the library directly.
  */
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { FolderPlus, Import } from "lucide-react"

@@ -25,13 +25,16 @@ import { setLocale } from "@/app/preferences"
 import { gradeStripLabel } from "@/components/domain/grade-badges"
 import { siteTime, siteTimeRange } from "@/components/domain/sky-lines"
 import { formatCount, formatHours, formatList, formatNight } from "@/lib/format"
-import { getLocale, LOCALES, m } from "@/lib/i18n"
-import { dayInWeek, WEEK_START } from "@/lib/week"
+import { type Locale, LOCALES, m } from "@/lib/i18n"
 import { HomePage } from "./home-page"
 
 const ZONE = "Europe/Amsterdam"
 /** A Thursday. */
 const TONIGHT = "2026-10-29"
+/** Nights from Thursday to the end of the fifth week: the week starts Monday in en-GB (3 nights gone), Sunday in pt-BR (4 gone). */
+const NIGHTS_FROM_THURSDAY: Record<Locale, number> = { "en-GB": 32, "pt-BR": 31 }
+/** The library's refusal when a read fails. */
+const PERSISTENCE = { code: "persistence_failure", identity: null, scope: null, retry: "retry", currentRevision: null, successors: [], window: null, correction: null }
 const SITE = { id: "site-1", name: "Backyard", revision: 1, latitudeDeg: 52.09, longitudeDeg: 5.12, elevationM: null }
 const CRITERIA: PlanCriteria = { minAltitudeDeg: 30, darkness: "astronomical", moon: { kind: "none" }, minDurationMinutes: 30 }
 
@@ -138,8 +141,8 @@ function quietHome(command: string): unknown {
   return null
 }
 
-/** Home over a host answering Tonight with `t` and the calendar with `cal`; it records each planning_calendar query. */
-function renderHome(t: Tonight_Serialize, cal: PlanningCalendar_Serialize = calendar()) {
+/** Home over a host answering Tonight with `t` and the calendar with `cal` (a function may throw a refusal); it records each planning_calendar query. */
+function renderHome(t: Tonight_Serialize, cal: PlanningCalendar_Serialize | (() => PlanningCalendar_Serialize) = calendar()) {
   const asked: unknown[] = []
   mockIPC((command, args) => {
     if (command === "plugin:event|listen") return (args as { handler: number }).handler
@@ -148,7 +151,7 @@ function renderHome(t: Tonight_Serialize, cal: PlanningCalendar_Serialize = cale
     if (command === "planning_home_criteria") return { criteria: t.criteria, revision: t.criteria ? 1 : 0 }
     if (command === "planning_calendar") {
       asked.push((args as { query: unknown }).query)
-      return cal
+      return typeof cal === "function" ? cal() : cal
     }
     return quietHome(command)
   })
@@ -196,8 +199,11 @@ describe.each(LOCALES)("Home planning in %s", (locale) => {
     const { asked, user } = renderHome(tonight())
     const cal = await region(m.home_calendar())
     expect(await within(cal).findByRole("grid", { name: m.home_calendar_label({ site: "Backyard" }) })).toBeInTheDocument()
-    // Tonight through the end of the fifth week, from the locale's first day.
-    expect(asked).toEqual([{ firstNight: TONIGHT, nights: 35 - dayInWeek(TONIGHT, WEEK_START[getLocale()]) }])
+    // Tonight (a Thursday) through the end of the fifth week, from the locale's first day: Monday in en-GB, Sunday in pt-BR.
+    expect(asked).toEqual([{ firstNight: TONIGHT, nights: NIGHTS_FROM_THURSDAY[locale] }])
+    // Tonight opens Targets as it is (no night); a later night sets it.
+    expect(night(TONIGHT)).toHaveAttribute("href", "/targets")
+    expect(night("2026-10-30")).toHaveAttribute("href", "/targets?night=2026-10-30")
 
     const moon = m.calendar_moon({ illumination: 42, phase: m.tonight_moon_phase_waxing_gibbous() })
     const first = night(TONIGHT).getAttribute("aria-label")!
@@ -212,8 +218,24 @@ describe.each(LOCALES)("Home planning in %s", (locale) => {
     expect(screen.getByText(goalName(IC_OIII))).toBeInTheDocument()
     expect(screen.getByText(siteTimeRange(NIGHTS[0]!.darkness!.startUtc, NIGHTS[0]!.darkness!.endUtc, ZONE))).toBeInTheDocument()
     expect(screen.getByText([moon, m.tonight_moon_rises({ time: siteTime(MOONRISE, ZONE) }), m.tonight_moon_no_set()].join(" · "))).toBeInTheDocument()
-    // The plan is not served yet (astro-plan-wre19.14): unavailable in the card and under the calendar, never 0.
-    expect(within(cal).getByText(m.home_unavailable({ what: m.calendar_legend_planned() }))).toBeInTheDocument()
+    // The plan is not served yet (astro-plan-wre19.14): unknown in the card and named under the calendar, never 0.
+    expect(screen.getByText(m.calendar_plan_unknown())).toBeInTheDocument()
+    expect(within(cal).getByText(m.home_planned_unavailable())).toBeInTheDocument()
+  })
+
+  it("offers Retry when the calendar can't be read, and draws the nights once it can", async () => {
+    let reads = 0
+    const { asked, user } = renderHome(tonight(), () => {
+      reads += 1
+      if (reads === 1) throw PERSISTENCE
+      return calendar()
+    })
+    const cal = await region(m.home_calendar())
+    const alert = await within(cal).findByRole("alert")
+    expect(within(cal).queryByRole("grid")).toBeNull()
+    await user.click(within(alert).getByRole("button", { name: m.verb_retry() }))
+    expect(await within(cal).findByRole("grid", { name: m.home_calendar_label({ site: "Backyard" }) })).toBeInTheDocument()
+    expect(asked).toHaveLength(2)
   })
 
   it.each([
