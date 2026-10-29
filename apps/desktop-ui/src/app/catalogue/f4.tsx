@@ -1,8 +1,9 @@
 /**
  * Catalogue entry (R9-COMPOSITION-PLAN §8.3; F4 prototype plan, unit V): the
  * shared F4 patterns. CalibrationDiagram, CalibrationChoices with its
- * CalibrationChoiceBadge, ViewFolderTree, PlaceLink and the session-row
- * badges (DuplicatesBadge, ReadinessBadge), on the sample calibration
+ * CalibrationChoiceBadge, ViewFolderTree, PlaceLink, the session-row
+ * badges (DuplicatesBadge, ReadinessBadge) and the rig pickers'
+ * NoSavedRigs, on the sample calibration
  * library (fixtures/calibration.ts, fixtures/view-tree.ts) and on a what-if
  * of it: a RedCat session pins the older dark version (mixed versions, darks
  * in the nights), a second flat set gets `NIGHT_…-2`, a session is set to No
@@ -19,6 +20,7 @@ import { CalibrationDiagram } from "@/components/domain/calibration-diagram"
 import type { CalibrationChoice } from "@/components/domain/calibration-model"
 import { DuplicatesBadge } from "@/components/domain/duplicates-badge"
 import { ReadinessBadge } from "@/components/domain/readiness-badge"
+import { NoSavedRigs } from "@/components/domain/saved-rigs"
 import { ViewFolderTree } from "@/components/domain/view-folder-tree"
 import { Button } from "@/components/ui/button"
 import { CHOICE_ROWS, DIAGRAM_GROUPS, DIAGRAM_MIXED, DIAGRAM_ONE_GROUP, DIAGRAM_PANELS, ONE_SESSION_ROWS, READ_ONLY_ROWS } from "./fixtures/calibration"
@@ -221,6 +223,18 @@ function Readiness() {
   )
 }
 
+/** A rig picker with no saved rig: where rigs are added, as text until Settings › Equipment is registered. */
+function NoRigs() {
+  const m = useMessages()
+  return (
+    <ComponentSection components={["NoSavedRigs"]} description={m.catalogue_f4_no_rigs_desc()} level={3}>
+      <Specimen caption={m.catalogue_f4_no_rigs_state()}>
+        <NoSavedRigs />
+      </Specimen>
+    </ComponentSection>
+  )
+}
+
 export function F4Catalogue() {
   const m = useMessages()
   return (
@@ -230,6 +244,7 @@ export function F4Catalogue() {
       <Trees />
       <Duplicates />
       <Readiness />
+      <NoRigs />
     </Section>
   )
 }

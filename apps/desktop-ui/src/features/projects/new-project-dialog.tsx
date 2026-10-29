@@ -1,28 +1,31 @@
 /**
- * New Project… (065 PRJ-FR-01/02): a name, notes and the subjects it
- * collects for, each a saved Target. Picking a search result that is not
+ * New Project… (065 PRJ-FR-01/02): a name, notes, the subjects it
+ * collects for, each a saved Target, and the rigs whose sessions it
+ * suggests, any of the saved rigs; Create needs a name, a subject and a
+ * rig. Picking a search result that is not
  * saved yet acts on it first (`targets_search_result_action`, which adds and
- * favourites it), so the Project names a Target the library holds. Goals and
- * rigs can't be set here yet: goals wait
- * for goal editing (astro-plan-wre19.3 and the goal dialogs), and rigs
- * for a list of saved rigs (astro-plan-mts3e); both stay visibly unavailable
- * and a session that joins adds its rig.
+ * favourites it), so the Project names a Target the library holds. Goals
+ * can't be set here yet: they wait for goal editing (astro-plan-wre19.3 and
+ * the goal dialogs) and stay visibly unavailable.
  * Create Project opens the new Project.
  */
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useNavigate } from "@tanstack/react-router"
 import { X } from "lucide-react"
 import { useState } from "react"
-import { library, type TargetsSearchResult } from "@/api/ipc"
+import { equipmentQuery } from "@/api/equipment"
+import { failureOf, library, type TargetsSearchResult } from "@/api/ipc"
 import { libraryQuery } from "@/api/query"
 import { useMessages } from "@/app/preferences"
 import { ActionButton } from "@/components/app/actions"
 import { BoxTable } from "@/components/app/box"
 import type { Action } from "@/components/app/contracts"
-import { TextAreaField, TextField } from "@/components/app/fields"
+import { ChoiceListField, TextAreaField, TextField } from "@/components/app/fields"
+import { ActionError } from "@/components/app/feedback"
 import { FormDialog } from "@/components/app/form-dialog"
 import { TargetPicker, type TargetResultGroup, type TargetSource } from "@/components/app/pickers"
 import { failureMessage } from "@/components/app/run-result"
+import { NoSavedRigs } from "@/components/domain/saved-rigs"
 import { projectWrite } from "./queries"
 
 interface Subject {
@@ -46,6 +49,9 @@ function NewProjectForm({ onClose }: { onClose: () => void }) {
   const [notes, setNotes] = useState("")
   const [query, setQuery] = useState("")
   const [subjects, setSubjects] = useState<Subject[]>([])
+  const [rigIds, setRigIds] = useState<string[]>([])
+  const rigs = useQuery(equipmentQuery())
+  const rigsFailure = rigs.error ? failureOf(rigs.error) : null
   const [pickError, setPickError] = useState<string | null>(null)
   const text = query.trim()
   const search = useQuery({ ...libraryQuery("targetsSearch", text), enabled: text.length > 0 })
@@ -75,18 +81,20 @@ function NewProjectForm({ onClose }: { onClose: () => void }) {
     setSubjects((was) => (was.some((s) => s.targetId === target.id) ? was : [...was, { targetId: target.id, name: target.designation }]))
   }
   const label = m.newproject_create()
+  // The library refuses a Project without a subject or a rig (project_create), so Create says so first.
+  const missing = name.trim() === "" ? m.project_name_required() : subjects.length === 0 ? m.project_subject_required() : rigIds.length === 0 ? m.project_rig_required() : null
   const create: Action = {
     id: "create-project",
     label,
     kind: "primary",
-    unavailable: name.trim() === "" ? { action: m.actions_blocked({ action: label }), reason: m.project_name_required(), blockers: [] } : undefined,
+    unavailable: missing ? { action: m.actions_blocked({ action: label }), reason: missing, blockers: [] } : undefined,
     run: async () => {
       const result = await projectWrite(client, () =>
         library.projectCreate(
           name.trim(),
           notes.trim() === "" ? null : notes.trim(),
           subjects.map((s) => ({ targetId: s.targetId })),
-          [],
+          rigIds,
           [],
         ),
       )
@@ -116,7 +124,17 @@ function NewProjectForm({ onClose }: { onClose: () => void }) {
           rowActions={(s) => [{ id: "remove", label: m.project_remove_named({ name: s.name }), icon: X, run: () => setSubjects((was) => was.filter((x) => x.targetId !== s.targetId)) }]}
         />
       ) : null}
-      <ActionButton action={{ id: "add-rig", label: m.project_add_rig(), unavailable: { action: m.actions_blocked({ action: m.project_add_rig() }), reason: m.newproject_rigs_unavailable(), blockers: [] }, run: () => undefined }} />
+      {rigs.error ? (
+        <ActionError message={rigsFailure ? failureMessage(m, rigsFailure) : m.action_failure_unreachable()} onRetry={() => void rigs.refetch()} />
+      ) : (
+        <ChoiceListField
+          label={m.project_rigs()}
+          value={rigIds}
+          options={(rigs.data ?? []).map((rig) => ({ value: rig.id, label: rig.name }))}
+          onChange={setRigIds}
+          empty={rigs.isPending ? m.common_loading() : <NoSavedRigs />}
+        />
+      )}
       {/* Goals wait for goal editing (the Project record, astro-plan-wre19.3, and the goal dialogs): a goal set wrong here could not be fixed afterwards. */}
       <ActionButton action={{ id: "add-goal", label: m.goal_add(), unavailable: { action: m.actions_blocked({ action: m.goal_add() }), reason: m.project_edit_unavailable(), blockers: [] }, run: () => undefined }} />
       <TextAreaField label={m.newproject_notes()} value={notes} onChange={setNotes} />

@@ -812,6 +812,13 @@
   "session_rig_confirmed": "Rig confirmed: {name}",
   "session_rig_for": "Rig for {name}",
   "session_choose_a_rig": "Choose a rig",
+  "session_other_saved_rigs": "Other saved rigs",
+  "rigs_none_saved": "No saved rigs yet.",
+  "rigs_add_in_settings": "Add one in Settings › Equipment",
+  "catalogue_f4_no_rigs_desc": "What a rig picker shows when no rig is saved: where rigs are added, linked once Settings › Equipment is registered",
+  "catalogue_f4_no_rigs_state": "No saved rig",
+  "project_subject_required": "Pick a subject",
+  "project_rig_required": "Pick a rig",
   "session_confirm_rig": "Confirm rig",
   "sessions_filter_all": "All",
   "sessions_empty_all": "No light sessions",
@@ -1308,7 +1315,6 @@
   "project_col_field": "Field",
   "project_camera_osc": "OSC",
   "project_camera_mono": "Mono",
-  "project_add_rig": "Add rig",
   "project_add_suggested": [
     {
       "declarations": [
@@ -7145,7 +7151,6 @@
   "session_evidence_unknown": "{field} unknown",
   "session_evidence_conflict": "{field} disagrees across frames",
   "session_no_rig_evidence": "The headers name no saved rig.",
-  "session_other_rigs": "Choosing a rig the headers don't name",
   "session_field_object": "OBJECT",
   "session_field_gain": "Gain",
   "session_field_offset": "Offset",
@@ -7507,7 +7512,6 @@
   "project_leave_out_frames": "Leave out frames",
   "project_use_unusable": "Use Unusable frames",
   "view_open_unavailable": "PlateVault can't open the View in an application yet",
-  "newproject_rigs_unavailable": "Rigs join with the sessions you add",
   "wrapup_closing_state": "Closing: the archive finishes, or resumes when PlateVault next starts",
   "project_edit_unavailable": "Editing this isn't available yet",
   "project_reason_write_failed": "Couldn't write it there: nothing was replaced",
