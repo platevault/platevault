@@ -673,6 +673,72 @@ async fn a_generated_master_is_offered_once_per_digest() {
     watch.shutdown().await;
 }
 
+/// RES-FR-11, CAL-FR-06: Hide on a generated master offer and its Restore
+/// change only the catalog decision; the source keeps its bytes and digest.
+/// A digest or id the offer does not have is refused.
+#[tokio::test]
+async fn a_hidden_master_offer_is_restored_while_its_source_is_unchanged() {
+    let world = World::new().await;
+    let source = world.processing().join("WBPP/master/masterDark_300s.fit");
+    stack(&source, &MASTER_DARK);
+    let watch = world.watch();
+    world.settled(&watch).await;
+    watch.shutdown().await;
+    let [offer] = <[_; 1]>::try_from(world.offers().await).unwrap();
+    let before = (fs::read(&source).unwrap(), digest(&source));
+
+    let hidden = world.library.dismiss_processing_master(offer.id, &offer.sha256).await.unwrap();
+    assert_eq!(hidden.state, MasterOfferState::Dismissed);
+    let restored = world.library.restore_processing_master(offer.id, &offer.sha256).await.unwrap();
+    assert_eq!(restored.state, MasterOfferState::Offered);
+    assert_eq!(restored.sha256, before.1);
+    assert_eq!((fs::read(&source).unwrap(), digest(&source)), before, "the source stays put");
+
+    let stale = "0".repeat(64);
+    assert_eq!(
+        world.library.dismiss_processing_master(offer.id, &stale).await.unwrap_err().code(),
+        LibraryErrorCode::InvalidInput
+    );
+    assert_eq!(
+        world
+            .library
+            .dismiss_processing_master(Uuid::new_v4(), &offer.sha256)
+            .await
+            .unwrap_err()
+            .code(),
+        LibraryErrorCode::NotFound
+    );
+    world.library.dismiss_processing_master(offer.id, &offer.sha256).await.unwrap();
+    assert_eq!(
+        world.library.restore_processing_master(offer.id, &stale).await.unwrap_err().code(),
+        LibraryErrorCode::InvalidInput
+    );
+    assert_eq!(world.offers().await[0].state, MasterOfferState::Dismissed);
+}
+
+/// A hidden offer is not restored once its source changed or is gone: the
+/// offer names those bytes, and a rescan offers new bytes afresh.
+#[tokio::test]
+async fn a_hidden_master_offer_is_not_restored_after_its_source_changed() {
+    let world = World::new().await;
+    let source = world.processing().join("WBPP/master/masterDark_300s.fit");
+    stack(&source, &MASTER_DARK);
+    let watch = world.watch();
+    world.settled(&watch).await;
+    watch.shutdown().await;
+    let [offer] = <[_; 1]>::try_from(world.offers().await).unwrap();
+    world.library.dismiss_processing_master(offer.id, &offer.sha256).await.unwrap();
+
+    stack(&source, &[("IMAGETYP", "'Dark'"), ("STACKCNT", "21")]);
+    let rewritten = world.library.restore_processing_master(offer.id, &offer.sha256).await;
+    assert_eq!(rewritten.unwrap_err().code(), LibraryErrorCode::InvalidInput);
+
+    fs::remove_file(&source).unwrap();
+    let removed = world.library.restore_processing_master(offer.id, &offer.sha256).await;
+    assert_eq!(removed.unwrap_err().code(), LibraryErrorCode::InvalidInput);
+    assert_eq!(world.offers().await[0].state, MasterOfferState::Dismissed);
+}
+
 /// RES-FR-06, CAL-FR-06: Clean up, Trash and Close never take anything in
 /// `Output/` or a master `Processing/` offered; other tool files are theirs.
 #[tokio::test]

@@ -30,6 +30,7 @@ pub const OUTPUT_PANELS: &str = "Panels";
 /// The state of the once-only Add to calibration library offer (CAL-FR-06).
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum MasterOfferState {
     Offered,
     /// Declined for this file and digest: the offer does not return, and the
@@ -123,6 +124,7 @@ impl OutputObservation {
 /// Processing path, never a Result.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ProcessingMasterOffer {
     pub id: Uuid,
     pub project_id: Uuid,

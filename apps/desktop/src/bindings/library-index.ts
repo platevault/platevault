@@ -579,6 +579,27 @@ export const commands = {
 	 */
 	projectOutputRescan: (projectId: string) => typedError<OutputObservation_Serialize[], ErrorResponse>(__TAURI_INVOKE("project_output_rescan", { projectId })),
 	/**
+	 *  Hide, on a generated calibration master offer in the Output step
+	 *  (RES-FR-11, CAL-FR-06): decline the offer of the bytes with
+	 *  `expected_sha256`, the digest the step showed. The master stays a candidate
+	 *  in Calibration and its source file is untouched.
+	 * 
+	 *  # Errors
+	 *  `NotFound` for an unknown offer; `InvalidInput` for a digest the offer does
+	 *  not have or an adopted master.
+	 */
+	projectDismissProcessingMaster: (offerId: string, expectedSha256: string) => typedError<ProcessingMasterOffer, ErrorResponse>(__TAURI_INVOKE("project_dismiss_processing_master", { offerId, expectedSha256 })),
+	/**
+	 *  Restore, on a hidden generated master offer: offer it again while its
+	 *  source in `Processing/` still holds the bytes with `expected_sha256`.
+	 * 
+	 *  # Errors
+	 *  `NotFound` for an unknown offer; `InvalidInput` for a digest the offer does
+	 *  not have, a source that changed or is gone, an offer that is not hidden or
+	 *  an adopted master; access errors reading the source.
+	 */
+	projectRestoreProcessingMaster: (offerId: string, expectedSha256: string) => typedError<ProcessingMasterOffer, ErrorResponse>(__TAURI_INVOKE("project_restore_processing_master", { offerId, expectedSha256 })),
+	/**
 	 *  Where the Project's Wrap up stands: its recorded steps, the current one,
 	 *  and why it doesn't open (pending changes, a running operation or a locked
 	 *  Project). Read-only.
@@ -5047,6 +5068,14 @@ export type MasterKeptCopy_Serialize = {
 	fingerprint: ObservationFingerprint_Serialize,
 };
 
+/**  The state of the once-only Add to calibration library offer (CAL-FR-06). */
+export type MasterOfferState = "offered" | 
+/**
+ *  Declined for this file and digest: the offer does not return, and the
+ *  master stays listed as a candidate in Calibration.
+ */
+"dismissed" | "adopted";
+
 /**  Where a master came from (R17): an indexed file, its location and path. */
 export type MasterOrigin = { kind: "location"; locationId: string; locationName: string; relativePath: NativePathWire };
 
@@ -6012,6 +6041,23 @@ export type PreviousItem_Serialize = {
 	reason: PreviousItemReason,
 	evidence: EntryEvidence_Serialize,
 	review: PreviousItemReview,
+};
+
+/**
+ *  CAL's once-only offer of a generated master found in `Processing/`
+ *  (RES-FR-11, CAL-FR-06): one per Project and digest, with its own
+ *  Processing path, never a Result.
+ */
+export type ProcessingMasterOffer = {
+	id: string,
+	projectId: string,
+	/**  Relative to the Project's `Processing/`. */
+	path: NativePathWire,
+	sha256: string,
+	classification: Classification,
+	state: MasterOfferState,
+	offeredAt: string,
+	decidedAt: string | null,
 };
 
 export type Profile = {

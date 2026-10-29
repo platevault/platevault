@@ -40,15 +40,16 @@ use uuid::Uuid;
 use workflow_artifacts::watcher::{check_stability, FileSnapshot, StabilityStatus};
 
 use crate::calibration::Rules;
-use crate::custody::observe_entry;
 use crate::custody::trash::{OsTrash, SystemTrash};
+use crate::custody::{observe_entry, observe_source};
 use crate::inventory::{self, VolumeCache};
 use crate::layout::{self, OUTPUT_FOLDER, PROCESSING_FOLDER};
 use crate::library::{blocking, Library};
 use crate::{
     CalibrationRules, CaptureMetadata, Classification, EntryKind, ItemOutcome, ItemReason,
-    LibraryError, MasterOfferState, NativePath, ObservationFingerprint, OutputObservation,
-    OutputOrigin, OutputState, ReasonCode, TransferDestination, OUTPUT_PANELS,
+    LibraryError, LibraryErrorCode, MasterOfferState, NativePath, ObservationFingerprint,
+    OutputObservation, OutputOrigin, OutputState, ProcessingMasterOffer, ReasonCode,
+    TransferDestination, OUTPUT_PANELS,
 };
 
 fn invalid(message: impl Into<String>) -> LibraryError {
@@ -350,6 +351,63 @@ fn classify(candidates: Vec<MasterCandidate>) -> Vec<Classified> {
             Some(Classified { candidate, master: Some((classification, sha256)) })
         })
         .collect()
+}
+
+// ── Hide and Restore on a Processing master offer ────────────────────────────
+
+impl Library {
+    /// Hide on a generated master offer in a Project's Output step
+    /// (RES-FR-11, CAL-FR-06): the decline for the bytes with
+    /// `expected_sha256`, the digest the step showed. The master stays a
+    /// candidate in Calibration; no file is touched.
+    ///
+    /// # Errors
+    /// `NotFound` for an unknown offer; `InvalidInput` for a digest the offer
+    /// does not have or an adopted master.
+    pub async fn dismiss_processing_master(
+        &self,
+        offer_id: Uuid,
+        expected_sha256: &str,
+    ) -> Result<ProcessingMasterOffer, LibraryError> {
+        self.catalog().dismiss_processing_master(offer_id, expected_sha256).await
+    }
+
+    /// Restore on a hidden generated master offer: offer it again, provided
+    /// its source in the Project's `Processing/` still holds the bytes the
+    /// offer names (`expected_sha256`). A source that changed or is gone is
+    /// offered afresh by the next pass instead. Only the catalog changes.
+    ///
+    /// # Errors
+    /// `NotFound` for an unknown offer or Project; `InvalidInput` for a digest
+    /// the offer does not have, a Project with no processing location, a
+    /// source that changed or is gone, an offer that is not hidden or an
+    /// adopted master; access errors reading the source.
+    pub async fn restore_processing_master(
+        &self,
+        offer_id: Uuid,
+        expected_sha256: &str,
+    ) -> Result<ProcessingMasterOffer, LibraryError> {
+        let offer = self.catalog().processing_master_offer(offer_id).await?;
+        let basis = self.catalog().output_basis(offer.project_id).await?;
+        let place = Place::of(&basis)?
+            .ok_or_else(|| invalid("choose the Project's processing location first"))?;
+        let processing = place.processing();
+        let source = processing.join(offer.path.relative_path()?);
+        let shown = source.display().to_string();
+        let unchanged = blocking(move || match observe_source(&processing, &source) {
+            Ok(evidence) => Ok(evidence.kind == EntryKind::File
+                && evidence.sha256.as_deref() == Some(offer.sha256.as_str())),
+            Err(error) if error.code() == LibraryErrorCode::NotFound => Ok(false),
+            Err(error) => Err(error),
+        })
+        .await?;
+        if !unchanged {
+            return Err(invalid(format!(
+                "{shown} changed since it was offered; rescan the Output step"
+            )));
+        }
+        self.catalog().restore_processing_master(offer_id, expected_sha256).await
+    }
 }
 
 // ── Copy to Output ───────────────────────────────────────────────────────────
