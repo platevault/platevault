@@ -7,9 +7,9 @@
 //! tauri-plugin-dialog. `native.reveal` delegates to tauri-plugin-opener with
 //! a Linux xdg-open fallback.
 
+use std::path::Path;
+
 use app_core::native;
-use audit::event_bus::{NativeRevealFailed, Source, TOPIC_NATIVE_REVEAL_FAILED};
-use contracts_core::native::error_codes;
 use contracts_core::native::{
     DirectoryPickRequest, DirectoryPickResponse, FilePickRequest, FilePickResponse, RevealRequest,
     RevealResponse, RevealSelection,
@@ -117,10 +117,8 @@ pub async fn native_reveal(
     Ok(native::reveal_success(selection))
 }
 
-/// Shared reveal core: validates the path exists, attempts the OS reveal
-/// (+ Linux `xdg-open` fallback), and emits `native.reveal.failed` on any
-/// failure path (path-not-exists via `validate_reveal_path`, OS command
-/// failure here).
+/// The legacy audited reveal: [`native::reveal_path_with_audit`] through the
+/// Tauri opener, publishing `native.reveal.failed` on any failure.
 ///
 /// #716: `manifest_reveal_in_os` (spec 024) used to reimplement this
 /// independently — same opener/xdg-open logic, no audit on failure. Both
@@ -128,61 +126,30 @@ pub async fn native_reveal(
 /// drift again.
 ///
 /// # Errors
-/// Returns `ContractError` (`path.not_exists` or `os.command_failed`) on
-/// failure.
+/// Returns `ContractError` (`path.not_exists`, `os.command_failed` or
+/// `internal.error`) on failure.
 pub(crate) async fn reveal_with_audit(
     app: &tauri::AppHandle,
     state: &AppState,
     request: &RevealRequest,
 ) -> Result<RevealSelection, ContractError> {
-    // Check path existence and emit audit event on failure.
-    native::validate_reveal_path(&state.bus, request).await?;
+    native::reveal_path_with_audit(&state.bus, &TauriRevealOpener(app.clone()), request).await
+}
 
-    // Attempt the platform reveal.
-    match app.opener().reveal_item_in_dir(&request.path) {
-        Ok(()) => {
-            // macOS and Windows select the item; Linux freedesktop ShowItems
-            // also selects. Return `target`.
-            Ok(RevealSelection::Target)
-        }
-        Err(opener_err) => {
-            // On Linux, fall back to xdg-open on the parent directory.
-            if cfg!(target_os = "linux") {
-                let parent = std::path::Path::new(&request.path)
-                    .parent()
-                    .unwrap_or_else(|| std::path::Path::new(&request.path));
+/// The desktop OS behind [`native::RevealOpener`]: tauri-plugin-opener, and
+/// `xdg-open` for the Linux fallback. The legacy and library reveals share it.
+pub(crate) struct TauriRevealOpener(pub(crate) tauri::AppHandle);
 
-                match std::process::Command::new("xdg-open").arg(parent).spawn() {
-                    Ok(_) => {
-                        return Ok(RevealSelection::DirectoryOnly);
-                    }
-                    Err(xdg_err) => {
-                        tracing::warn!("reveal: xdg-open fallback also failed: {xdg_err}");
-                    }
-                }
-            }
+impl native::RevealOpener for TauriRevealOpener {
+    fn reveal_item(&self, path: &Path) -> Result<(), String> {
+        self.0.opener().reveal_item_in_dir(path).map_err(|error| error.to_string())
+    }
 
-            // Emit audit event for the failure.
-            let _ = state
-                .bus
-                .publish(
-                    TOPIC_NATIVE_REVEAL_FAILED,
-                    Source::System,
-                    NativeRevealFailed {
-                        error_code: error_codes::OS_COMMAND_FAILED.to_owned(),
-                        entity_kind: request.entity_kind.map(|k| {
-                            serde_json::to_value(k)
-                                .ok()
-                                .and_then(|v| v.as_str().map(String::from))
-                                .unwrap_or_default()
-                        }),
-                        entity_id: request.entity_id.clone(),
-                        request_id: request.request_id.clone(),
-                    },
-                )
-                .await;
-
-            Err(ContractError::internal(format!("Failed to reveal path: {opener_err}")))
-        }
+    fn open_directory(&self, directory: &Path) -> Result<(), String> {
+        std::process::Command::new("xdg-open")
+            .arg(directory)
+            .spawn()
+            .map(drop)
+            .map_err(|error| error.to_string())
     }
 }

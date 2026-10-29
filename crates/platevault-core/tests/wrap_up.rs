@@ -296,14 +296,14 @@ async fn trash_moves_a_row_only_when_it_is_ticked() {
     assert!(assets.iter().all(|asset| asset.availability != Availability::Trashed));
 }
 
-/// A Project at the Trash step whose `Processing/WBPP/master/` holds a
-/// generated flat master the user adopted into the calibration library
-/// (`masters/masterFlat_Ha.fit`). Returns the source in `Processing/`.
+/// A Project whose `Processing/WBPP/master/` holds a generated flat master
+/// the user adopted into the calibration library (`masters/masterFlat_Ha.fit`).
+/// Returns the source in `Processing/` and its offer, read adopted.
 /// Unix only, as are the tests that use it: master adoption refuses on any
 /// other platform (`contained_write::require_supported`), since only Unix
 /// syncs the folder after a no-replace install.
 #[cfg(unix)]
-async fn adopted_master_at_trash() -> (World, std::path::PathBuf) {
+async fn adopted_master() -> (World, std::path::PathBuf, ProcessingMasterOffer) {
     let world = world(ViewMode::Symlinks).await;
     world.apply().await;
     let processing_root = world.folder().join("Processing");
@@ -383,7 +383,15 @@ async fn adopted_master_at_trash() -> (World, std::path::PathBuf) {
     let adopted = world.library.calibration_adopt(adoption.id, adoption.revision).await.unwrap();
     assert_eq!(adopted.state, AdoptionState::Completed, "{adopted:#?}");
     assert_eq!(offer.sha256, digest);
+    let offer = world.catalog().processing_master_offer(offer.id).await.unwrap();
+    assert_eq!(offer.state, MasterOfferState::Adopted);
+    (world, source, offer)
+}
 
+/// [`adopted_master`] at the Trash step.
+#[cfg(unix)]
+async fn adopted_master_at_trash() -> (World, std::path::PathBuf) {
+    let (world, source, _) = Box::pin(adopted_master()).await;
     let cleanup = world.library.clean_up_review(world.project).await.unwrap();
     world
         .library
@@ -399,6 +407,22 @@ async fn adopted_master_at_trash() -> (World, std::path::PathBuf) {
         .await
         .unwrap();
     (world, source)
+}
+
+/// CAL-FR-06: the Output step's Hide and Restore are for a generated offer
+/// only; an adopted master's offer is neither hidden nor restored, and stays
+/// adopted.
+#[cfg(unix)]
+#[tokio::test]
+async fn an_adopted_master_offer_is_neither_hidden_nor_restored() {
+    let (world, _, offer) = Box::pin(adopted_master()).await;
+
+    let hidden = world.library.dismiss_processing_master(offer.id, &offer.sha256).await;
+    assert_eq!(hidden.unwrap_err().code(), LibraryErrorCode::InvalidInput);
+    let restored = world.library.restore_processing_master(offer.id, &offer.sha256).await;
+    assert_eq!(restored.unwrap_err().code(), LibraryErrorCode::InvalidInput);
+    let offer = world.catalog().processing_master_offer(offer.id).await.unwrap();
+    assert_eq!(offer.state, MasterOfferState::Adopted);
 }
 
 /// The kept library copy of [`adopted_master_at_trash`].

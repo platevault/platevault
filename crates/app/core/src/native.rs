@@ -14,11 +14,13 @@
 //! public surface stays byte-identical.
 #![allow(clippy::doc_markdown)] // spec/domain terminology not appropriate for backticks
 
+use std::path::Path;
+
 use audit::bus::EventBus;
 use audit::event_bus::{NativeRevealFailed, Source, TOPIC_NATIVE_REVEAL_FAILED};
 use contracts_core::native::{
-    DirectoryPickRequest, DirectoryPickResponse, FilePickRequest, FilePickResponse, RevealRequest,
-    RevealResponse, RevealSelection,
+    error_codes, DirectoryPickRequest, DirectoryPickResponse, FilePickRequest, FilePickResponse,
+    RevealRequest, RevealResponse, RevealSelection,
 };
 use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 
@@ -98,58 +100,102 @@ pub fn file_pick_selected(path: String, selected_filter: Option<String>) -> File
 
 // ── Reveal ──────────────────────────────────────────────────────────────────
 
-/// Check that the target path exists before attempting to reveal it.
+/// The OS operations a reveal needs. The shells supply the platform opener;
+/// tests supply a fake, so the path rules run without a desktop.
+pub trait RevealOpener {
+    /// Show `path` in the OS file manager with the item selected.
+    ///
+    /// # Errors
+    /// Returns the OS failure message.
+    fn reveal_item(&self, path: &Path) -> Result<(), String>;
+
+    /// Open `directory` in the file manager without selecting anything: the
+    /// Linux fallback when [`Self::reveal_item`] fails.
+    ///
+    /// # Errors
+    /// Returns the OS failure message.
+    fn open_directory(&self, directory: &Path) -> Result<(), String>;
+}
+
+/// Reveal an existing path in the OS file manager, without auditing.
 ///
-/// Emits a `native.reveal.failed` audit event on failure.
+/// The one reveal boundary both shells share: a missing path is refused
+/// before the OS is asked, then the opener reveals the item, and on Linux a
+/// failed reveal falls back to opening the parent directory
+/// ([`RevealSelection::DirectoryOnly`]).
 ///
 /// # Errors
-///
-/// Returns `ContractError` with `path.not_exists` when the path does not
-/// exist on disk.
+/// `path.not_exists` when the path is missing, `os.command_failed` when its
+/// metadata cannot be read, and `internal.error` when the OS reveal fails.
 #[allow(clippy::result_large_err)] // ContractError size is acceptable at this boundary
-pub async fn validate_reveal_path(
-    bus: &EventBus,
-    req: &RevealRequest,
-) -> Result<(), ContractError> {
-    match std::fs::metadata(&req.path) {
-        Ok(_) => Ok(()),
-        Err(e) => {
-            let error_code = if e.kind() == std::io::ErrorKind::NotFound {
-                ErrorCode::PathNotExists
-            } else {
-                ErrorCode::OsCommandFailed
-            };
-            // Serialise the code to a dotted string for the audit event.
-            let error_code_str = serde_json::to_string(&error_code)
-                .map_or_else(|_| "internal.error".to_owned(), |s| s.trim_matches('"').to_owned());
-
-            // Emit audit event (best-effort).
-            let _ = bus
-                .publish(
-                    TOPIC_NATIVE_REVEAL_FAILED,
-                    Source::System,
-                    NativeRevealFailed {
-                        error_code: error_code_str,
-                        entity_kind: req.entity_kind.map(|k| {
-                            serde_json::to_value(k)
-                                .ok()
-                                .and_then(|v| v.as_str().map(String::from))
-                                .unwrap_or_default()
-                        }),
-                        entity_id: req.entity_id.clone(),
-                        request_id: req.request_id.clone(),
-                    },
-                )
-                .await;
-
-            Err(ContractError::new(
-                error_code,
-                format!("Path does not exist: {}", req.path),
-                ErrorSeverity::Blocking,
-                false,
-            ))
+pub fn reveal_path(
+    opener: &impl RevealOpener,
+    path: &Path,
+) -> Result<RevealSelection, ContractError> {
+    if let Err(error) = std::fs::metadata(path) {
+        let code = if error.kind() == std::io::ErrorKind::NotFound {
+            ErrorCode::PathNotExists
+        } else {
+            ErrorCode::OsCommandFailed
+        };
+        return Err(ContractError::new(
+            code,
+            format!("Path does not exist: {}", path.display()),
+            ErrorSeverity::Blocking,
+            false,
+        ));
+    }
+    let Err(reveal_error) = opener.reveal_item(path) else {
+        return Ok(RevealSelection::Target);
+    };
+    if cfg!(target_os = "linux") {
+        match opener.open_directory(path.parent().unwrap_or(path)) {
+            Ok(()) => return Ok(RevealSelection::DirectoryOnly),
+            Err(fallback_error) => {
+                tracing::warn!("reveal: xdg-open fallback also failed: {fallback_error}");
+            }
         }
     }
+    Err(ContractError::internal(format!("Failed to reveal path: {reveal_error}")))
+}
+
+/// [`reveal_path`] for the legacy shell, which publishes a best-effort
+/// `native.reveal.failed` audit event on every failure.
+///
+/// # Errors
+/// The [`reveal_path`] error, after the audit event is published.
+#[allow(clippy::result_large_err)] // ContractError size is acceptable at this boundary
+pub async fn reveal_path_with_audit(
+    bus: &EventBus,
+    opener: &impl RevealOpener,
+    req: &RevealRequest,
+) -> Result<RevealSelection, ContractError> {
+    let result = reveal_path(opener, Path::new(&req.path));
+    if let Err(error) = &result {
+        let error_code = if error.code == ErrorCode::PathNotExists {
+            error_codes::PATH_NOT_EXISTS
+        } else {
+            error_codes::OS_COMMAND_FAILED
+        };
+        let _ = bus
+            .publish(
+                TOPIC_NATIVE_REVEAL_FAILED,
+                Source::System,
+                NativeRevealFailed {
+                    error_code: error_code.to_owned(),
+                    entity_kind: req.entity_kind.map(|k| {
+                        serde_json::to_value(k)
+                            .ok()
+                            .and_then(|v| v.as_str().map(String::from))
+                            .unwrap_or_default()
+                    }),
+                    entity_id: req.entity_id.clone(),
+                    request_id: req.request_id.clone(),
+                },
+            )
+            .await;
+    }
+    result
 }
 
 /// Build a success response for reveal.
@@ -225,67 +271,55 @@ mod tests {
         assert_eq!(err.code, ErrorCode::FiltersInvalid);
     }
 
-    // ── validate_reveal_path ────────────────────────────────────────────────
+    // ── reveal_path / reveal_path_with_audit ────────────────────────────────
 
-    #[tokio::test]
-    async fn reveal_rejects_nonexistent_path() {
-        let pool = sqlx::SqlitePool::connect("sqlite::memory:").await.unwrap();
-        sqlx::query(
-            "CREATE TABLE IF NOT EXISTS events (\
-             event_id INTEGER PRIMARY KEY AUTOINCREMENT,\
-             topic TEXT NOT NULL,\
-             source TEXT NOT NULL,\
-             emitted_at TEXT NOT NULL,\
-             payload TEXT NOT NULL\
-             )",
-        )
-        .execute(&pool)
-        .await
-        .unwrap();
-        let bus = EventBus::with_pool(pool);
-
-        let req = RevealRequest {
-            request_id: "req-reveal-001".to_owned(),
-            path: "/nonexistent/path/that/does/not/exist".to_owned(),
-            entity_kind: Some(EntityKind::InventoryRow),
-            entity_id: Some("inv-42".to_owned()),
-        };
-
-        let err = validate_reveal_path(&bus, &req).await.unwrap_err();
-        assert_eq!(err.code, ErrorCode::PathNotExists);
+    /// Records what the reveal asked the OS for: each reveal and each folder
+    /// opened, failing those its flags name.
+    #[derive(Default)]
+    struct FakeOpener {
+        reveal_fails: bool,
+        open_fails: bool,
+        revealed: std::cell::RefCell<Vec<std::path::PathBuf>>,
+        opened: std::cell::RefCell<Vec<std::path::PathBuf>>,
     }
 
-    #[tokio::test]
-    async fn reveal_accepts_existing_path() {
-        let pool = sqlx::SqlitePool::connect("sqlite::memory:").await.unwrap();
-        sqlx::query(
-            "CREATE TABLE IF NOT EXISTS events (\
-             event_id INTEGER PRIMARY KEY AUTOINCREMENT,\
-             topic TEXT NOT NULL,\
-             source TEXT NOT NULL,\
-             emitted_at TEXT NOT NULL,\
-             payload TEXT NOT NULL\
-             )",
-        )
-        .execute(&pool)
-        .await
-        .unwrap();
-        let bus = EventBus::with_pool(pool);
-
-        // /tmp should exist on Unix.
-        if cfg!(unix) {
-            let req = RevealRequest {
-                request_id: "req-reveal-002".to_owned(),
-                path: "/tmp".to_owned(),
-                entity_kind: None,
-                entity_id: None,
-            };
-            assert!(validate_reveal_path(&bus, &req).await.is_ok());
+    impl FakeOpener {
+        /// Both the reveal and the Linux fallback fail.
+        fn failing() -> Self {
+            Self { reveal_fails: true, open_fails: true, ..Self::default() }
         }
     }
 
-    #[tokio::test]
-    async fn reveal_failure_emits_audit_event() {
+    fn outcome(fails: bool) -> Result<(), String> {
+        if fails {
+            Err("opener unavailable".to_owned())
+        } else {
+            Ok(())
+        }
+    }
+
+    impl RevealOpener for FakeOpener {
+        fn reveal_item(&self, path: &Path) -> Result<(), String> {
+            self.revealed.borrow_mut().push(path.to_path_buf());
+            outcome(self.reveal_fails)
+        }
+
+        fn open_directory(&self, directory: &Path) -> Result<(), String> {
+            self.opened.borrow_mut().push(directory.to_path_buf());
+            outcome(self.open_fails)
+        }
+    }
+
+    fn reveal_request(request_id: &str, path: &Path) -> RevealRequest {
+        RevealRequest {
+            request_id: request_id.to_owned(),
+            path: path.display().to_string(),
+            entity_kind: Some(EntityKind::MasterCalibration),
+            entity_id: Some("cal-99".to_owned()),
+        }
+    }
+
+    async fn audit_bus() -> (EventBus, sqlx::SqlitePool) {
         let pool = sqlx::SqlitePool::connect("sqlite::memory:").await.unwrap();
         sqlx::query(
             "CREATE TABLE IF NOT EXISTS events (\
@@ -299,24 +333,113 @@ mod tests {
         .execute(&pool)
         .await
         .unwrap();
-        let bus = EventBus::with_pool(pool.clone());
+        (EventBus::with_pool(pool.clone()), pool)
+    }
 
-        let req = RevealRequest {
-            request_id: "req-audit-001".to_owned(),
-            path: "/nonexistent/path/for/audit/test".to_owned(),
-            entity_kind: Some(EntityKind::MasterCalibration),
-            entity_id: Some("cal-99".to_owned()),
-        };
+    async fn reveal_failures(pool: &sqlx::SqlitePool) -> Vec<String> {
+        sqlx::query_scalar("SELECT payload FROM events WHERE topic = 'native.reveal.failed'")
+            .fetch_all(pool)
+            .await
+            .unwrap()
+    }
 
-        let _ = validate_reveal_path(&bus, &req).await;
+    #[test]
+    fn reveal_refuses_a_missing_path_before_opening() {
+        let scratch = tempfile::tempdir().unwrap();
+        let opener = FakeOpener::default();
 
-        // Verify the audit event was written to the durable store.
-        let count: (i64,) =
-            sqlx::query_as("SELECT COUNT(*) FROM events WHERE topic = 'native.reveal.failed'")
-                .fetch_one(&pool)
-                .await
-                .unwrap();
-        assert_eq!(count.0, 1, "should have emitted one native.reveal.failed audit event");
+        let error = reveal_path(&opener, &scratch.path().join("missing")).unwrap_err();
+
+        assert_eq!(error.code, ErrorCode::PathNotExists);
+        assert!(opener.revealed.borrow().is_empty(), "a missing path never reaches the OS");
+        assert!(opener.opened.borrow().is_empty(), "a missing path never reaches the OS");
+    }
+
+    #[test]
+    fn reveal_selects_an_existing_path_through_the_opener() {
+        let scratch = tempfile::tempdir().unwrap();
+        let opener = FakeOpener::default();
+
+        assert_eq!(reveal_path(&opener, scratch.path()).unwrap(), RevealSelection::Target);
+        assert_eq!(*opener.revealed.borrow(), vec![scratch.path().to_path_buf()]);
+        assert_eq!(*opener.opened.borrow(), Vec::<std::path::PathBuf>::new());
+    }
+
+    #[test]
+    fn reveal_reports_a_failed_opener_as_an_error() {
+        let scratch = tempfile::tempdir().unwrap();
+
+        let error = reveal_path(&FakeOpener::failing(), scratch.path()).unwrap_err();
+
+        assert_eq!(error.code, ErrorCode::InternalError);
+    }
+
+    /// Linux falls back to opening the parent folder when the reveal fails.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_failed_reveal_opens_the_parent_folder_on_linux() {
+        let scratch = tempfile::tempdir().unwrap();
+        let file = scratch.path().join("masterDark.fit");
+        std::fs::write(&file, b"master").unwrap();
+        let opener = FakeOpener { reveal_fails: true, ..FakeOpener::default() };
+
+        assert_eq!(reveal_path(&opener, &file).unwrap(), RevealSelection::DirectoryOnly);
+        assert_eq!(*opener.revealed.borrow(), vec![file]);
+        assert_eq!(*opener.opened.borrow(), vec![scratch.path().to_path_buf()]);
+    }
+
+    /// Elsewhere a failed reveal is the answer: no folder is opened instead.
+    #[cfg(not(target_os = "linux"))]
+    #[test]
+    fn a_failed_reveal_opens_no_folder_off_linux() {
+        let scratch = tempfile::tempdir().unwrap();
+        let opener = FakeOpener { reveal_fails: true, ..FakeOpener::default() };
+
+        assert!(reveal_path(&opener, scratch.path()).is_err());
+        assert_eq!(*opener.opened.borrow(), Vec::<std::path::PathBuf>::new());
+    }
+
+    #[tokio::test]
+    async fn audited_reveal_publishes_a_missing_path() {
+        let (bus, pool) = audit_bus().await;
+        let scratch = tempfile::tempdir().unwrap();
+        let request = reveal_request("req-audit-missing", &scratch.path().join("missing"));
+
+        let error =
+            reveal_path_with_audit(&bus, &FakeOpener::default(), &request).await.unwrap_err();
+
+        assert_eq!(error.code, ErrorCode::PathNotExists);
+        let failures = reveal_failures(&pool).await;
+        assert_eq!(failures.len(), 1, "one native.reveal.failed event: {failures:?}");
+        assert!(failures[0].contains("path.not_exists"), "{failures:?}");
+        assert!(failures[0].contains("req-audit-missing"), "{failures:?}");
+    }
+
+    #[tokio::test]
+    async fn audited_reveal_publishes_a_failed_opener() {
+        let (bus, pool) = audit_bus().await;
+        let scratch = tempfile::tempdir().unwrap();
+        let opener = FakeOpener::failing();
+        let request = reveal_request("req-audit-os", scratch.path());
+
+        assert!(reveal_path_with_audit(&bus, &opener, &request).await.is_err());
+
+        let failures = reveal_failures(&pool).await;
+        assert_eq!(failures.len(), 1, "one native.reveal.failed event: {failures:?}");
+        assert!(failures[0].contains("os.command_failed"), "{failures:?}");
+    }
+
+    #[tokio::test]
+    async fn audited_reveal_publishes_nothing_on_success() {
+        let (bus, pool) = audit_bus().await;
+        let scratch = tempfile::tempdir().unwrap();
+        let request = reveal_request("req-audit-ok", scratch.path());
+
+        let selection =
+            reveal_path_with_audit(&bus, &FakeOpener::default(), &request).await.unwrap();
+
+        assert_eq!(selection, RevealSelection::Target);
+        assert_eq!(reveal_failures(&pool).await, Vec::<String>::new());
     }
 
     // ── Response builders ───────────────────────────────────────────────────

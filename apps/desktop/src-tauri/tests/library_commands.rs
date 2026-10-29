@@ -21,8 +21,9 @@ use platevault_core::custody::trash::OsTrash;
 use platevault_core::library::Library;
 use platevault_core::targets::TargetQuery;
 use platevault_core::{
-    AssociationState, ColorKind, Equipment, LibraryErrorCode, LocationRole, NativePath,
-    ProjectInput, Provenance, SubjectInput, TrashSupport, TrashUnsupported,
+    AssociationState, ColorKind, Equipment, LibraryErrorCode, LocationRole, MeasurementMethod,
+    NativePath, ProjectInput, ProjectLifecycle, Provenance, SubjectInput, TrashSupport,
+    TrashUnsupported, WrapUpOutcome, WrapUpStep,
 };
 use serde_json::{json, Value};
 use support::{Ipc, NOT_FOUND};
@@ -64,6 +65,7 @@ impl Shell {
                 .expect("open library");
         let app = mock_builder()
             .invoke_handler(tauri::generate_handler![
+                desktop_shell::commands::project_goals::project_get,
                 desktop_shell::commands::project_inputs::project_inputs,
                 desktop_shell::commands::project_inputs::project_add_sessions,
                 desktop_shell::commands::project_inputs::project_remove_sessions,
@@ -122,7 +124,7 @@ impl Shell {
     }
 
     /// An open Project on a saved seed Target and rig, holding no session.
-    fn open_project(&self) -> Uuid {
+    fn open_project_details(&self) -> (Uuid, Uuid, Uuid) {
         let library = self.library();
         tauri::async_runtime::block_on(async move {
             let rig = Equipment {
@@ -139,7 +141,7 @@ impl Shell {
                 state: AssociationState::Confirmed,
                 provenance: Provenance::User,
             };
-            let rig = library.catalog().save_equipment(&rig, None).await.expect("rig").id;
+            let rig_id = library.catalog().save_equipment(&rig, None).await.expect("rig").id;
             let query = TargetQuery { text: Some("NGC 7000".into()), cone: None, limit: 1 };
             let target =
                 library.search_targets(&query).await.expect("seed search").remove(0).candidate;
@@ -148,11 +150,17 @@ impl Shell {
                 name: "NGC 7000 HOO".into(),
                 notes: None,
                 subjects: vec![SubjectInput { target_id: target.id, name: None }],
-                rig_ids: vec![rig],
+                rig_ids: vec![rig_id],
                 goals: Vec::new(),
             };
-            library.catalog().create_project(&input).await.expect("create the Project").id
+            let project =
+                library.catalog().create_project(&input).await.expect("create the Project");
+            (project.id, target.id, rig_id)
         })
+    }
+
+    fn open_project(&self) -> Uuid {
+        self.open_project_details().0
     }
 
     /// `root` registered as an active Captures location, an archive destination.
@@ -297,6 +305,66 @@ fn apply_family_takes_its_arguments() {
         NOT_FOUND,
         project,
     );
+}
+#[test]
+fn project_get_returns_the_current_revision_after_a_write() {
+    let shell = Shell::new();
+    let (project, target, rig) = shell.open_project_details();
+    let library = shell.library();
+    tauri::async_runtime::block_on(library.catalog().update_project(
+        project,
+        1,
+        "Updated",
+        Some("Current notes"),
+    ))
+    .expect("update the Project");
+    let actual = shell.call("project_get", &json!({ "projectId": project }));
+
+    assert_eq!(actual["name"], json!("Updated"));
+    assert_eq!(actual["notes"], json!("Current notes"));
+    assert_eq!(actual["revision"], json!(2));
+    assert_eq!(actual["subjects"][0]["targetId"], json!(target));
+    assert_eq!(actual["rigIds"], json!([rig]));
+}
+
+#[test]
+fn project_get_refuses_an_unknown_project_scoped_to_its_id() {
+    let shell = Shell::new();
+    let project = Uuid::new_v4();
+
+    shell.refuses("project_get", &json!({ "projectId": project }), NOT_FOUND, project);
+}
+
+#[test]
+fn project_get_reports_a_closed_project_lifecycle() {
+    let shell = Shell::new();
+    let project = shell.open_project();
+    let library = shell.library();
+    tauri::async_runtime::block_on(async {
+        let revision = library
+            .catalog()
+            .wrap_up_status(project)
+            .await
+            .expect("Wrap up status")
+            .desired_revision;
+        for step in [WrapUpStep::CleanUp, WrapUpStep::Trash] {
+            library
+                .catalog()
+                .record_wrap_up_step(project, revision, step, WrapUpOutcome::Skipped)
+                .await
+                .expect("record skipped Wrap up step");
+        }
+        library
+            .catalog()
+            .close_project(project, revision, &MeasurementMethod::new("platevault.stars", 1), &[])
+            .await
+            .expect("close Project without an archive");
+    });
+
+    let actual = shell.call("project_get", &json!({ "projectId": project }));
+
+    assert_eq!(actual["lifecycle"], json!(ProjectLifecycle::Closed));
+    assert!(actual["closedAt"].is_string(), "{actual}");
 }
 
 /// PREP-FR-15 (J18 S1, J41 S16a): setup and Settings check a chosen folder
