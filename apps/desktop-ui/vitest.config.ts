@@ -7,6 +7,8 @@ export default mergeConfig(
   defineConfig({
     test: {
       environment: "jsdom",
+      // Above the setup's 10 s Testing Library wait, so a find that times out reports its own error.
+      testTimeout: 20_000,
       globalSetup: ["./vitest.globalSetup.ts"],
       setupFiles: ["./src/test/setup.ts"],
       include: ["src/**/*.test.{ts,tsx}"],

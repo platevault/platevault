@@ -138,9 +138,10 @@ export const STATUS = {
     skipped: s(m.status_skipped, "muted", CircleSlash),
     uncertain: s(m.status_uncertain, "warning", CircleHelp),
   },
-  /** A Project's lifecycle (PRJ-FR-14, PRJ-FR-25): `ProjectState`, so a badge takes `project.state`. */
+  /** A Project's lifecycle (PRJ-FR-14, PRJ-FR-25, PRJ-FR-32): the library's `ProjectLifecycle`. Closing: Close was confirmed and its archive runs. */
   project: {
     open: s(m.status_open, "info", CircleDot),
+    closing: s(m.status_closing, "warning", Hourglass),
     closed: s(m.status_closed, "success", ShieldCheck),
     archived: s(m.status_archived, "neutral", Archive),
   },
