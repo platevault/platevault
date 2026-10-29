@@ -4702,7 +4702,12 @@ export type InputState = {
 
 /**  One issue as a row, a menu and a counter show it. */
 export type Issue = {
-	/**  The kind and subject: stable while the issue lasts. */
+	/**
+	 *  The kind and subject. It stays the same while the subject does; a
+	 *  Duplicates issue's subject is a digest of the duplicated contents, so its
+	 *  id changes whenever that set changes. Key client rows on `kind` and
+	 *  `owner`, not on `id`, where a row must survive that change.
+	 */
 	id: string,
 	/**  What a dismissal records: the kind, subject, count and bytes (D-W158). */
 	fingerprint: string,
