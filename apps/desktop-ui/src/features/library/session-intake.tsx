@@ -9,10 +9,10 @@
  *   evidence) and a search over saved and catalogue Targets. Proceed
  *   confirms the chosen one (`library_associate_target`), saving a
  *   catalogue Target first when the library has no record of it.
- * - Rig: the rigs the session's equipment evidence names. Proceed confirms
- *   the chosen one (`library_confirm_equipment`). Choosing a rig the
- *   evidence does not name needs the saved-equipment list, which waits on
- *   astro-plan-mts3e.
+ * - Rig: every saved rig (`library_list_equipment`), the ones the session's
+ *   equipment evidence names first as suggested. Proceed confirms the
+ *   chosen one (`library_confirm_equipment`); with no rig saved, the step
+ *   says where rigs are added.
  * - Review: the review workspace the router injects (`SessionIntakeProps`).
  *   It runs its own Finish review and then calls `onFinished` (409cm.6), so
  *   the footer offers no Proceed of its own there; intake then opens the
@@ -25,9 +25,10 @@
  * step stays editable through its own Change action while it is shown.
  */
 import { useNavigate } from "@tanstack/react-router"
-import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query"
+import { type UseQueryResult, useQuery, useQueryClient } from "@tanstack/react-query"
 import { type ReactNode, useState } from "react"
-import { type EvidenceItem, type ExpectedSession, type LibrarySession_Serialize, library, type SessionAdmission_Serialize, type TargetCandidate } from "@/api/ipc"
+import { equipmentQuery } from "@/api/equipment"
+import { type Equipment, type EvidenceItem, type ExpectedSession, type LibrarySession_Serialize, library, type SessionAdmission_Serialize, type TargetCandidate } from "@/api/ipc"
 import { libraryQuery } from "@/api/query"
 import type { SessionIntakeProps } from "@/app/shell-contract"
 import { useMessages } from "@/app/preferences"
@@ -35,16 +36,17 @@ import { ActionBar } from "@/components/app/actions"
 import { BoxTable } from "@/components/app/box"
 import type { Action, Column, FlowStep, StepFlow } from "@/components/app/contracts"
 import { KeyValueList } from "@/components/app/data"
-import { Notice } from "@/components/app/feedback"
-import { SelectField } from "@/components/app/fields"
+import { ActionError } from "@/components/app/feedback"
+import { ComboboxField } from "@/components/app/fields"
 import { Section } from "@/components/app/page"
 import { type TargetOption, TargetPicker } from "@/components/app/pickers"
 import { StatusBadge } from "@/components/app/status"
 import { ReadinessBadge } from "@/components/domain/readiness-badge"
+import { NoSavedRigs } from "@/components/domain/saved-rigs"
 import { StepPage } from "@/components/templates/step-page"
 import type { Messages } from "@/lib/i18n"
-import { Unavailable } from "./parts"
-import { homeWrite, invalidateLibraryReads, rigQuery } from "./queries"
+import { readError } from "./parts"
+import { homeWrite, invalidateLibraryReads } from "./queries"
 import { admissionReadiness } from "./words"
 import { sessionLabel } from "@/components/domain/session-label"
 
@@ -109,6 +111,9 @@ export function SessionIntake({ session, admission, viewing, review: Review, ref
   const [target, setTarget] = useState<ChosenTarget | null>(() => initialTarget(session))
   const rigIds = evidenceRigs(session)
   const [rigId, setRigId] = useState<string | null>(() => admission.intake.rigId ?? rigIds[0] ?? null)
+  const equipment = useQuery(equipmentQuery())
+  // Only a rig the list holds can be confirmed: the user sees what Proceed names.
+  const chosenRig = equipment.data?.find((rig) => rig.id === rigId) ?? null
   const current = currentStep(admission)
   const detail = { to: "/sessions/$sessionId", params: { sessionId } }
   const linkFor = (step: string) => ({ ...detail, search: { step } })
@@ -133,8 +138,10 @@ export function SessionIntake({ session, admission, viewing, review: Review, ref
   const confirmRig: Action = {
     id: "confirm-rig",
     label: m.session_confirm_rig(),
-    unavailable: rigId ? undefined : { action: m.actions_blocked({ action: m.session_confirm_rig() }), reason: m.session_choose_a_rig(), blockers: [] },
-    run: () => (rigId ? homeWrite(client, () => library.libraryConfirmEquipment([expectedSession(session)], rigId)) : undefined),
+    unavailable: chosenRig
+      ? undefined
+      : { action: m.actions_blocked({ action: m.session_confirm_rig() }), reason: equipment.error ? readError(m, equipment.error) : equipment.isPending ? m.home_reading() : m.session_choose_a_rig(), blockers: [] },
+    run: () => (chosenRig ? homeWrite(client, () => library.libraryConfirmEquipment([expectedSession(session)], chosenRig.id)) : undefined),
   }
   const stepState = (step: IntakeStep): FlowStep["state"] => {
     if (current === null) return "finished"
@@ -159,7 +166,7 @@ export function SessionIntake({ session, admission, viewing, review: Review, ref
     viewing === "target" ? (
       <TargetStep session={session} target={target} onTarget={setTarget} change={current !== "target" ? confirmTarget : null} />
     ) : viewing === "rig" ? (
-      <RigStep rigIds={rigIds} rigId={rigId} onRig={setRigId} locked={current === "target"} change={current !== "rig" && current !== "target" ? confirmRig : null} />
+      <RigStep equipment={equipment} suggested={rigIds} rigId={chosenRig?.id ?? null} onRig={setRigId} locked={current === "target"} change={current !== "rig" && current !== "target" ? confirmRig : null} />
     ) : (
       // A later step stays read-only until the current one is confirmed (C3); the footer and the workspace name it.
       <Review sessionId={sessionId} onFinished={onFinished} readOnly={current === "target" || current === "rig" ? { reason: m.stepflow_finish_first({ step: stepLabel(m, current) }) } : null} />
@@ -261,21 +268,39 @@ function evidenceText(m: Messages, evidence: EvidenceItem[]): string {
 
 // Rig --------------------------------------------------------------------------
 
-function RigStep({ rigIds, rigId, onRig, locked, change }: { rigIds: string[]; rigId: string | null; onRig: (id: string) => void; locked: boolean; change: Action | null }) {
+/** Every saved rig to choose from: the ones the session's evidence names under Suggested, the rest after them. */
+function RigStep({ equipment, suggested, rigId, onRig, locked, change }: { equipment: UseQueryResult<Equipment[]>; suggested: string[]; rigId: string | null; onRig: (id: string | null) => void; locked: boolean; change: Action | null }) {
   const m = useMessages()
-  const rigs = useQueries({ queries: rigIds.map((id) => rigQuery(id)) })
-  const options = rigIds.map((id, i) => ({ value: id, label: rigs[i]?.data?.equipment.name ?? "–" }))
+  const saved = equipment.data ?? []
+  const option = (rig: Equipment) => ({ value: rig.id, label: rig.name })
+  const named = saved.filter((rig) => suggested.includes(rig.id)).map(option)
+  const others = saved.filter((rig) => !suggested.includes(rig.id)).map(option)
+  const groups = [
+    { label: m.status_suggested(), items: named },
+    { label: m.session_other_saved_rigs(), items: others },
+  ].filter((group) => group.items.length > 0)
+  const field = (disabled: boolean, placeholder?: string) => (
+    <ComboboxField
+      label={m.session_choose_a_rig()}
+      value={rigId}
+      onChange={onRig}
+      groups={groups}
+      placeholder={placeholder}
+      disabled={disabled}
+      description={equipment.isPending || named.length > 0 ? undefined : m.session_no_rig_evidence()}
+    />
+  )
   return (
-    <>
-      <Section title={m.session_rig_status()} actions={change ? <ActionBar actions={[change]} /> : undefined}>
-        {options.length > 0 ? (
-          <SelectField label={m.session_choose_a_rig()} value={rigId ?? options[0]!.value} options={options} onChange={onRig} disabled={locked} />
-        ) : (
-          <Notice tone="info" title={m.session_no_rig_evidence()} />
-        )}
-      </Section>
-      {/* astro-plan-mts3e: choosing any saved rig needs the library's equipment list. */}
-      <Unavailable what={m.session_other_rigs()} />
-    </>
+    <Section title={m.session_rig_status()} actions={change ? <ActionBar actions={[change]} /> : undefined}>
+      {equipment.error ? (
+        <ActionError message={readError(m, equipment.error)} onRetry={() => void equipment.refetch()} />
+      ) : equipment.isPending ? (
+        field(true, m.common_loading())
+      ) : saved.length === 0 ? (
+        <NoSavedRigs />
+      ) : (
+        field(locked)
+      )}
+    </Section>
   )
 }

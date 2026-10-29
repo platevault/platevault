@@ -12,6 +12,7 @@ import { act, cleanup, render, screen, waitFor, within } from "@testing-library/
 import userEvent from "@testing-library/user-event"
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest"
 import type {
+  Equipment,
   HomeDashboard_Serialize,
   ImportOperation_Serialize,
   LibrarySession_Serialize,
@@ -121,6 +122,51 @@ function renderAt(path: string) {
 }
 
 const conflict = { code: "conflict", identity: null, scope: null, retry: "review", currentRevision: 4, successors: [], window: null, correction: null }
+
+const savedRig = (id: string, name: string): Equipment => ({
+  id,
+  name,
+  camera: null,
+  telescope: null,
+  focalLengthMm: null,
+  pixelSizeUm: null,
+  sensorWidthPx: null,
+  sensorHeightPx: null,
+  colorKind: null,
+  decisionRevision: 1,
+  state: "confirmed",
+  provenance: { source: "user" },
+})
+/** `library_list_equipment` answers by name. */
+const SAVED_RIGS = [savedRig("rig-esprit", "Esprit 100"), savedRig("rig-redcat", "RedCat 51")]
+
+/** A session whose headers suggest RedCat 51, read at `decisionRevision`. */
+function rigSession(decisionRevision = 7): LibrarySession_Serialize {
+  const read = librarySession()
+  read.detail.summary.session.decisionRevision = decisionRevision
+  read.detail.associations = [{ sessionId: SESSION_ID, kind: "equipment", subjectId: "rig-redcat", state: "suggested" } as never]
+  return read
+}
+
+/** Intake with its Target confirmed and its rig still to confirm. */
+function rigStep(): SessionAdmission_Serialize {
+  return { ...admission({ targetConfirmed: true }), blockers: [{ blocker: "not_ready", readiness: "needs_rig" }] } as SessionAdmission_Serialize
+}
+
+/** Opens the rig picker and picks `name`. */
+async function pickRig(user: ReturnType<typeof userEvent.setup>, name: string) {
+  const input = await screen.findByRole("combobox", { name: m.session_choose_a_rig() })
+  await waitFor(() => expect(input).toHaveValue("RedCat 51"))
+  await user.click(input)
+  await user.keyboard("{ArrowDown}")
+  const listbox = await screen.findByRole("listbox")
+  // The headers' rig comes first, as Suggested; every other saved rig follows.
+  expect(within(listbox).getAllByRole("option").map((o) => o.textContent)).toEqual(["RedCat 51", "Esprit 100"])
+  await user.click(within(listbox).getByRole("option", { name }))
+  await waitFor(() => expect(input).toHaveValue(name))
+}
+
+const confirmRigButton = () => screen.getByRole("button", { name: new RegExp(`^(${m.session_confirm_rig()}|${m.verb_retry()})$`) })
 
 const original = globalThis.ResizeObserver
 beforeAll(() => {
@@ -347,6 +393,69 @@ describe("Session intake", () => {
     const chosen = screen.getByText(m.session_chosen_target()).closest("section")!
     expect(within(chosen).getByText("NGC 7000")).toBeInTheDocument()
     expect(screen.queryByText(m.session_no_target_chosen())).toBeNull()
+  })
+
+  it("confirms a saved rig the headers don't name, at the session's revisions as read", async () => {
+    const confirmed: unknown[] = []
+    mockIPC((command, args) => {
+      if (command === "library_session") return rigSession()
+      if (command === "pix_session_intake") return rigStep()
+      if (command === "library_list_equipment") return SAVED_RIGS
+      if (command === "library_confirm_equipment") {
+        confirmed.push(args)
+        return []
+      }
+      return null
+    })
+    const { user } = renderAt(`/sessions/${SESSION_ID}?step=rig`)
+    await pickRig(user, "Esprit 100")
+    await user.click(confirmRigButton())
+    await waitFor(() => expect(confirmed).toHaveLength(1))
+    expect(confirmed[0]).toEqual({ expected: [{ sessionId: SESSION_ID, groupingRevision: 4, decisionRevision: 7 }], equipmentId: "rig-esprit" })
+  })
+
+  it("re-reads the session after a stale rig confirmation and confirms the same pick at the new revision", async () => {
+    let decisionRevision = 7
+    const confirmed: unknown[] = []
+    mockIPC((command, args) => {
+      if (command === "library_session") return rigSession(decisionRevision)
+      if (command === "pix_session_intake") return rigStep()
+      if (command === "library_list_equipment") return SAVED_RIGS
+      if (command === "library_confirm_equipment") {
+        confirmed.push(args)
+        if (confirmed.length === 1) {
+          decisionRevision = 8
+          throw conflict
+        }
+        return []
+      }
+      return null
+    })
+    const { user } = renderAt(`/sessions/${SESSION_ID}?step=rig`)
+    await pickRig(user, "Esprit 100")
+    await user.click(confirmRigButton())
+    expect(await screen.findByText(m.action_failure_conflict())).toBeInTheDocument()
+    expect(screen.getByRole("combobox", { name: m.session_choose_a_rig() })).toHaveValue("Esprit 100")
+    await user.click(confirmRigButton())
+    await waitFor(() => expect(confirmed).toHaveLength(2))
+    expect(confirmed[1]).toEqual({ expected: [{ sessionId: SESSION_ID, groupingRevision: 4, decisionRevision: 8 }], equipmentId: "rig-esprit" })
+  })
+
+  it.each(LOCALES)("says where rigs are added when none is saved, and confirms nothing (%s)", async (locale) => {
+    act(() => setLocale(locale))
+    mockIPC((command) => {
+      if (command === "library_session") return rigSession()
+      if (command === "pix_session_intake") return rigStep()
+      if (command === "library_list_equipment") return []
+      return null
+    })
+    renderAt(`/sessions/${SESSION_ID}?step=rig`)
+    expect(await screen.findByText(m.rigs_none_saved())).toBeInTheDocument()
+    // Settings › Equipment is not registered here, so the line names it without linking.
+    expect(screen.getByText(m.rigs_add_in_settings())).toBeInTheDocument()
+    expect(screen.queryByRole("link", { name: m.rigs_add_in_settings() })).toBeNull()
+    expect(screen.queryByRole("combobox", { name: m.session_choose_a_rig() })).toBeNull()
+    expect(screen.getByRole("button", { name: m.session_confirm_rig() })).toHaveAttribute("aria-disabled", "true")
   })
 
   it("hosts the injected review body on Review and opens the session once it reports Finish", async () => {
