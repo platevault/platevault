@@ -1,13 +1,13 @@
 ---
 id: J40
 title: Choose a theme and language in Settings › Appearance and keep them across restarts
-version: 6
+version: 5
 status: draft
-last_reviewed: 2026-10-29
+last_reviewed: 2026-10-28
 actors: [primary-user]
 surfaces: [settings, appearance, i18n, shell, status-bar, home, activity, keyboard]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [HARNESS-V5-IA.md#S16, HARNESS-V5-IA.md#round-2-foundation, HARNESS-V5-IA.md#fix-pass, HARNESS-V5-FEEDBACK-R1.md#shell-and-navigation, HARNESS-V5-FEEDBACK-R1.md#round-1b, HARNESS-V5-FEEDBACK-R1.md#copy-rules, I18N.md, themes-contrast.md, apps/prototype/src/features/t1/settings/appearance-page.tsx, apps/prototype/src/app/appearance.tsx, apps/prototype/src/app/preferences.ts, apps/prototype/src/app/themes.ts, apps/prototype/src/lib/i18n.ts, apps/prototype/src/lib/format.ts, apps/prototype/messages/en-GB.json, apps/prototype/messages/pt-BR.json, ui-harness-v5@b5e813a5, ui-harness-v5@d9255cff, ui-harness-v5@277fc2ac, docs/journeys/J10-settings-appearance-i18n/journey.md, LIB-FR-21, LIB-FR-31, FR-030, D-W86, D-W93 to D-W106, D-W170]
+trace: [HARNESS-V5-IA.md#S16, HARNESS-V5-IA.md#round-2-foundation, HARNESS-V5-IA.md#fix-pass, HARNESS-V5-FEEDBACK-R1.md#shell-and-navigation, HARNESS-V5-FEEDBACK-R1.md#round-1b, HARNESS-V5-FEEDBACK-R1.md#copy-rules, I18N.md, themes-contrast.md, apps/prototype/src/features/t1/settings/appearance-page.tsx, apps/prototype/src/app/appearance.tsx, apps/prototype/src/app/preferences.ts, apps/prototype/src/app/themes.ts, apps/prototype/src/lib/i18n.ts, apps/prototype/src/lib/format.ts, apps/prototype/messages/en-GB.json, apps/prototype/messages/pt-BR.json, ui-harness-v5@b5e813a5, ui-harness-v5@d9255cff, ui-harness-v5@277fc2ac, docs/journeys/J10-settings-appearance-i18n/journey.md, LIB-FR-21, FR-030, D-W86, D-W93 to D-W106]
 ---
 
 ## Goal
@@ -21,7 +21,7 @@ The user chooses how PlateVault looks and reads: they set its appearance mode, c
 
 ## Preconditions
 
-- P1: Fresh replay of J19 and J20: the catalogue holds the J19 sessions and the open Project `NGC 7000 HOO` (subject NGC 7000, rig `RedCat`), and Activity lists `Project created: NGC 7000 HOO`. Appearance is at its defaults: mode Match system, with PlateVault Dark as its dark theme and PlateVault Light as its light theme, language English (UK), single-key shortcuts on. Setup saved Home's planning criteria (J19/S5).
+- P1: Fresh replay of J19 and J20: the catalogue holds the J19 sessions and the open Project `NGC 7000 HOO` (subject NGC 7000, rig `RedCat`), and Activity lists `Project created: NGC 7000 HOO`. Appearance is at its defaults: mode Match system, with PlateVault Dark as its dark theme and PlateVault Light as its light theme, language English (UK), single-key shortcuts on.
 - P2: The PlateVault window is sized to 1280 × 640 (the minimum on macOS, Windows and Linux). At start-up, a restored window is moved and shrunk to fit fully on a connected screen. The OS appearance can be switched between Dark and Light during the run.
 - P3: The J19/P5 manifest is available, and the catalog's session, Project and Activity entry counts are recorded before S1.
 
@@ -43,10 +43,10 @@ The user chooses how PlateVault looks and reads: they set its appearance mode, c
 
 ### S3 — Switch themes and check legibility {#S3}
 
-- **Do:** Choose Nord, then open Home and its **Set criteria** dialog, Sessions and the `NGC 7000 HOO` Project page. Return to Appearance and choose Catppuccin Latte, then Solarized Light.
-- **Expect:** Each choice repaints the whole window, including the toolbar, source list and status bar, before the next action, with no reload. Nord, Catppuccin Latte and Solarized Light each match their swatch. In every theme chosen, body text and status-pill text measure at least 4.5:1 against the surface behind them, and UI glyphs and control borders at least 3:1. **Set criteria** shows the planning criteria set in J19/S5.
+- **Do:** Choose Nord, then open Home, Sessions and the `NGC 7000 HOO` Project page. Return to Appearance and choose Catppuccin Latte, then Solarized Light.
+- **Expect:** Each choice repaints the whole window, including the toolbar, source list and status bar, before the next action, with no reload. Nord, Catppuccin Latte and Solarized Light each match their swatch. In every theme chosen, body text and status-pill text measure at least 4.5:1 against the surface behind them, and UI glyphs and control borders at least 3:1.
 - **Expect (negative):** Activity gains no entry. Home, Sessions and the Project page show the same sessions, counts and goals as before the switch.
-- **Trace:** Feedback §Shell 5 (4.5:1 on every surface) · themes-contrast.md §Summary · preferences.ts setTheme · LIB-FR-31, LIB-AC-47 · D-W170
+- **Trace:** Feedback §Shell 5 (4.5:1 on every surface) · themes-contrast.md §Summary · preferences.ts setTheme
 
 ### S4 — Follow the OS appearance {#S4}
 
@@ -144,6 +144,3 @@ The user chooses how PlateVault looks and reads: they set its appearance mode, c
 - **Δ5** 2026-10-28 · S1, S2, S4, S5, S6, S9-S12 · behavior-change
   Appearance and language use the per-user settings store outside every library, apply at once and load before the first frame after restart; J40 stays density-free. S3's contrast-ratio check remains without an owning requirement in specs 063-072.
   Evidence: LIB-FR-21, LIB-AC-45, D-W166 · astro-plan-0v2o0.3, astro-plan-ocyuc.5 · by: SpecOwner2 (intent-gated)
-- **Δ6** 2026-10-29 · P1, S3 · behavior-change
-  P1 starts after setup saved Home's planning criteria, which have no defaults. S3 reads them back in Home's Set criteria dialog.
-  Evidence: D-W170, LIB-FR-31, LIB-AC-47 · owner's answer, 2026-10-29, astro-plan-0v2o0.4 · by: Amend5Fix (intent-gated)

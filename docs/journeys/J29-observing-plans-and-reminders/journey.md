@@ -1,9 +1,9 @@
 ---
 id: J29
 title: Plan nights on the Targets page's Planned view, opt into default-site reminders, see Tonight on Home, and export every planned night to a calendar
-version: 7
+version: 8
 status: draft
-last_reviewed: 2026-10-03
+last_reviewed: 2026-10-29
 actors: [primary-user]
 surfaces: [planning, targets, projects, home, settings, observing-sites]
 interfaces: [desktop-ui, desktop-ui-macos]
@@ -38,6 +38,11 @@ Project or session data and starts no indexing.
 - P2: The OS has not yet been asked for notification permission for PlateVault, so the first request can be denied.
 - P3: No calendar provider account is configured.
 - P4: A development-build clock control (D17) sets PlateVault's clock to a night before 2026-10-25. At S7a, it brings the first upcoming Backyard window to its reminder lead time while the app runs and holds it there across the S8 relaunch. NGC 7000 and M 31 have windows at Backyard and `Remote site` tonight, and NGC 7000 has a window at both sites on the following night (G3). The date picker reads this controlled tonight.
+- P5: Home's planning criteria are the ones J19/S5 set in setup:
+  - Minimum altitude 25°
+  - Darkness Astronomical
+  - Moon No limit
+  - Shortest window 30 min
 
 ## Steps
 
@@ -145,8 +150,8 @@ Project or session data and starts no indexing.
 
 ### S13 — Read Tonight on Home {#S13}
 
-- **Do:** With the planning site still on `Remote site`, open Home and read its Tonight box. Then follow its Plan link.
-- **Expect:** Tonight names `Remote site` and its time zone, and shows tonight's darkness window and the Moon's phase, illumination, rise and set. Its windows list NGC 7000 and M 31, a favourite, each with start, end, peak altitude and Moon separation. Each matches the best window that the "Planned" view lists for that Target at `Remote site` tonight. The Plan link opens the "Planned" view of the Targets page.
+- **Do:** With the planning site still on `Remote site`, open Home and read its Tonight box. Read the **Edit criteria** dialog. Then follow its Plan link.
+- **Expect:** Tonight names `Remote site` and its time zone, and shows tonight's darkness window and the Moon's phase, illumination, rise and set. Its windows list NGC 7000 and M 31, a favourite, each with start, end, peak altitude and Moon separation. Each matches the best window that the "Planned" view lists for that Target at `Remote site` tonight. The Plan link opens the "Planned" view of the Targets page. The **Edit criteria** dialog shows the P5 values (LIB-AC-47, D-W170).
 - **Expect (negative):** No Tonight value is computed for Backyard while `Remote site` is the picked planning site. Reading Tonight schedules no reminder and starts no indexing.
 - **Trace:** Home Tonight · PLAN-FR-08, PLAN-FR-11 · PLAN-AC-11 · PRJ-FR-17 · PV-PLAN-SC-04 · D-W39 · HARNESS-V5-IA.md S1 (Tonight) · HARNESS-V5-FEEDBACK-R1.md Domain and seed (Sites: Plan and Tonight use the default unless one is picked)
 
@@ -202,3 +207,6 @@ Project or session data and starts no indexing.
 - **Δ7** 2026-10-26 · P1, S1, S3a, S11, S13 · behavior-change
   ★ becomes Favourite: a favourite shows a star in the Favourite column of the Targets tables.
   Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 11 (OWNER, 2026-10-23) on ui-harness-v5 @ 5dc245244; D-W142, PLAN-TGT-FR-17 · by: SpecAmend (intent-gated)
+- **Δ8** 2026-10-29 · +P5, S13 · behavior-change
+  Home's planning criteria have no defaults, and J19/S5 sets them in setup. S13 opens **Edit criteria** on Home and reads those values back.
+  Evidence: D-W170, LIB-FR-31, LIB-AC-47 · owner's answer, 2026-10-29, astro-plan-0v2o0.4 · by: Amend5Fix (intent-gated)
