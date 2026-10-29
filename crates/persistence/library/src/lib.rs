@@ -125,6 +125,7 @@ macro_rules! write_txn {
 
 /// The asset row columns joined with their location's state, read from `assets`
 /// (every record, Trashed ones included) or with `live` from `live_assets`.
+/// `brief` reads only the columns of a [`CopyBrief`].
 macro_rules! asset_sql {
     ($tail:literal) => {
         asset_sql!(@from "assets", $tail)
@@ -132,11 +133,27 @@ macro_rules! asset_sql {
     (live $tail:literal) => {
         asset_sql!(@from "live_assets", $tail)
     };
+    (brief $tail:literal) => {
+        asset_sql!(@brief "assets", $tail)
+    };
+    (brief live $tail:literal) => {
+        asset_sql!(@brief "live_assets", $tail)
+    };
     (@from $table:literal, $tail:literal) => {
+        asset_sql!(@select
+            "a.id, a.location_id, a.path_key, a.fingerprint, a.format, a.availability, \
+             a.observed, a.effective, a.observation_revision, a.decision_revision, a.quality, \
+             a.quality_basis, a.verification_pending, a.last_observed_at, a.last_verified_at, ",
+            $table, $tail)
+    };
+    (@brief $table:literal, $tail:literal) => {
+        asset_sql!(@select
+            "a.id, a.location_id, a.availability, a.content_sha256, a.last_observed_at, ",
+            $table, $tail)
+    };
+    (@select $columns:literal, $table:literal, $tail:literal) => {
         concat!(
-            "SELECT a.id, a.location_id, a.path_key, a.fingerprint, a.format, a.availability, ",
-            "a.observed, a.effective, a.observation_revision, a.decision_revision, a.quality, ",
-            "a.quality_basis, a.verification_pending, a.last_observed_at, a.last_verified_at, ",
+            "SELECT ", $columns,
             "l.availability AS location_availability, l.lifecycle AS location_lifecycle ",
             "FROM ", $table, " a JOIN locations l ON l.id = a.location_id ",
             $tail
@@ -1255,21 +1272,21 @@ impl Catalog {
     /// `PersistenceFailure` when the catalog cannot be read.
     pub async fn list_sessions(&self, query: &SessionQuery) -> Result<Vec<SessionSummary>> {
         let mut conn = self.reader().await?;
-        let members = Members::of(query.filter);
-        let listed =
-            listed_sessions(&mut conn, query.include_superseded, query.location_id, members)
-                .await?;
-        let listed = session_filters::retain(&mut conn, query.filter, listed).await?;
-        let limit = if query.limit == 0 { MAX_PAGE } else { query.limit.min(MAX_PAGE) };
-        let page = listed
-            .into_iter()
-            .skip(usize::try_from(query.offset).unwrap_or(usize::MAX))
-            .take(usize::try_from(limit).unwrap_or(usize::MAX));
         let mut rows = Vec::new();
-        for id in page {
+        for id in session_page(&mut conn, query).await? {
             rows.push(load_session_row(&mut conn, id).await?);
         }
-        summarize_rows(&mut conn, rows, members).await
+        summarize_rows(&mut conn, rows, Members::of(query.filter)).await
+    }
+
+    /// The ids of the sessions [`Self::list_sessions`] returns for `query`, in
+    /// the same order, without reading their frames.
+    ///
+    /// # Errors
+    /// `PersistenceFailure` when the catalog cannot be read.
+    pub async fn list_session_ids(&self, query: &SessionQuery) -> Result<Vec<Uuid>> {
+        let mut conn = self.reader().await?;
+        session_page(&mut conn, query).await
     }
 
     /// One session over its live frames: a Trashed frame is in none of its
@@ -1280,7 +1297,7 @@ impl Catalog {
     pub async fn session(&self, id: Uuid) -> Result<SessionDetail> {
         let mut conn = self.reader().await?;
         let mut row = load_session_row(&mut conn, id).await?;
-        let assets = scoped_members(&mut conn, &mut row, Members::Live).await?;
+        let assets: Vec<Asset> = scoped_members(&mut conn, &mut row, Members::Live).await?;
         let view = CaptureView::read(&mut conn, &[id], &assets).await?;
         let members = view.members(&assets);
         let associations = load_associations(&mut conn, id).await?;
@@ -1320,8 +1337,8 @@ impl Members {
         }
     }
 
-    fn holds(self, asset: &Asset) -> bool {
-        (asset.availability == Availability::Trashed) == (self == Self::Trashed)
+    fn holds(self, copy: &impl CaptureCopy) -> bool {
+        (copy.availability() == Availability::Trashed) == (self == Self::Trashed)
     }
 }
 
@@ -1381,6 +1398,20 @@ async fn listed_sessions(
         }
     }
     Ok(listed)
+}
+
+/// The page of listed session ids `query` selects, in list order.
+async fn session_page(conn: &mut SqliteConnection, query: &SessionQuery) -> Result<Vec<Uuid>> {
+    let members = Members::of(query.filter);
+    let listed =
+        listed_sessions(conn, query.include_superseded, query.location_id, members).await?;
+    let listed = session_filters::retain(conn, query.filter, listed).await?;
+    let limit = if query.limit == 0 { MAX_PAGE } else { query.limit.min(MAX_PAGE) };
+    Ok(listed
+        .into_iter()
+        .skip(usize::try_from(query.offset).unwrap_or(usize::MAX))
+        .take(usize::try_from(limit).unwrap_or(usize::MAX))
+        .collect())
 }
 
 // ---------------------------------------------------------------------------
@@ -5049,39 +5080,40 @@ async fn successors_of(conn: &mut SqliteConnection, row: &SessionRow) -> Result<
 
 /// The row's recorded members within `members`, with the row's asset ids
 /// narrowed to them, so no Trashed id leaks into a live read or the reverse.
-async fn scoped_members(
+async fn scoped_members<T: CaptureCopy>(
     conn: &mut SqliteConnection,
     row: &mut SessionRow,
     members: Members,
-) -> Result<Vec<Asset>> {
+) -> Result<Vec<T>> {
     let ids: BTreeSet<Uuid> = row.session.asset_ids.iter().copied().collect();
-    let assets: Vec<Asset> =
-        load_assets(conn, &ids).await?.into_iter().filter(|asset| members.holds(asset)).collect();
-    let kept: BTreeSet<Uuid> = assets.iter().map(|asset| asset.id).collect();
+    let assets: Vec<T> =
+        load_copies(conn, &ids).await?.into_iter().filter(|asset| members.holds(asset)).collect();
+    let kept: BTreeSet<Uuid> = assets.iter().map(CaptureCopy::id).collect();
     row.session.asset_ids.retain(|id| kept.contains(id));
     Ok(assets)
 }
 
 /// Summaries of these sessions over their `members`, with one D16 view for the
-/// whole request.
+/// whole request. A summary reads only [`CopyBrief`]s; each session's copies
+/// are one span of the request's copies.
 async fn summarize_rows(
     conn: &mut SqliteConnection,
     mut rows: Vec<SessionRow>,
     members: Members,
 ) -> Result<Vec<SessionSummary>> {
-    let mut scoped = Vec::with_capacity(rows.len());
-    let mut all = Vec::new();
+    let mut spans = Vec::with_capacity(rows.len());
+    let mut all: Vec<CopyBrief> = Vec::new();
     for row in &mut rows {
-        let assets = scoped_members(conn, row, members).await?;
-        all.extend(assets.iter().cloned());
-        scoped.push(assets);
+        let start = all.len();
+        all.extend(scoped_members::<CopyBrief>(conn, row, members).await?);
+        spans.push(start..all.len());
     }
     let sessions: Vec<Uuid> = rows.iter().map(|row| row.session.id).collect();
     let view = CaptureView::read(conn, &sessions, &all).await?;
     let mut summaries = Vec::with_capacity(rows.len());
-    for (row, assets) in rows.into_iter().zip(scoped) {
+    for (row, span) in rows.into_iter().zip(spans) {
         let successors = successors_of(conn, &row).await?;
-        summaries.push(view.summary(row, &assets, successors, members));
+        summaries.push(view.summary(row, &all[span], successors, members));
     }
     Ok(summaries)
 }
@@ -5089,15 +5121,14 @@ async fn summarize_rows(
 /// The worst availability among a session's copies that are neither retired nor
 /// Trashed. When none is: Retired if any copy is, otherwise Trashed (a summary
 /// of the "Trashed" filter).
-fn session_availability(assets: &[Asset]) -> Availability {
-    let live: Vec<&Asset> = assets
+fn session_availability<T: CaptureCopy>(assets: &[T]) -> Availability {
+    let live: Vec<Availability> = assets
         .iter()
-        .filter(|asset| {
-            !matches!(asset.availability, Availability::Retired | Availability::Trashed)
-        })
+        .map(CaptureCopy::availability)
+        .filter(|state| !matches!(state, Availability::Retired | Availability::Trashed))
         .collect();
     if live.is_empty() && !assets.is_empty() {
-        return if assets.iter().any(|asset| asset.availability == Availability::Retired) {
+        return if assets.iter().any(|asset| asset.availability() == Availability::Retired) {
             Availability::Retired
         } else {
             Availability::Trashed
@@ -5110,7 +5141,7 @@ fn session_availability(assets: &[Asset]) -> Availability {
         Availability::Missing,
     ]
     .into_iter()
-    .find(|state| live.iter().any(|asset| asset.availability == *state))
+    .find(|state| live.contains(state))
     .unwrap_or(Availability::Available)
 }
 
@@ -5128,15 +5159,22 @@ async fn load_asset(conn: &mut SqliteConnection, id: Uuid) -> Result<Asset> {
 }
 
 async fn load_assets(conn: &mut SqliteConnection, ids: &BTreeSet<Uuid>) -> Result<Vec<Asset>> {
-    let rows =
-        sqlx::query(asset_sql!("WHERE a.id IN (SELECT value FROM json_each(?1)) ORDER BY a.id"))
-            .bind(json_ids(ids)?)
-            .fetch_all(&mut *conn)
-            .await?;
+    load_copies(conn, ids).await
+}
+
+/// Every recorded copy (Trashed ones included) with these ids, by id.
+///
+/// # Errors
+/// `NotFound` when any id has no record.
+async fn load_copies<T: CaptureCopy>(
+    conn: &mut SqliteConnection,
+    ids: &BTreeSet<Uuid>,
+) -> Result<Vec<T>> {
+    let rows = sqlx::query(T::RECORDED_BY_IDS).bind(json_ids(ids)?).fetch_all(&mut *conn).await?;
     if rows.len() != ids.len() {
         return Err(LibraryError::NotFound("one or more assets".into()));
     }
-    rows.iter().map(asset_from_row).collect()
+    rows.iter().map(T::from_row).collect()
 }
 
 async fn location_assets(conn: &mut SqliteConnection, location_id: Uuid) -> Result<Vec<Asset>> {
@@ -5147,7 +5185,98 @@ async fn location_assets(conn: &mut SqliteConnection, location_id: Uuid) -> Resu
     rows.iter().map(asset_from_row).collect()
 }
 
-fn asset_from_row(row: &SqliteRow) -> Result<Asset> {
+/// A recorded copy as D16 grouping, scoping and session summaries read it: a
+/// full [`Asset`], or a [`CopyBrief`] for reads that need no observation.
+trait CaptureCopy: Clone + Send + Sync {
+    /// Every recorded copy with the ids bound as a JSON array, by id.
+    const RECORDED_BY_IDS: &'static str;
+    /// See [`COPIES_BY_DIGEST`].
+    const BY_DIGEST: &'static str;
+    /// See [`ASSETS_BY_IDS`].
+    const BY_IDS: &'static str;
+
+    fn from_row(row: &SqliteRow) -> Result<Self>;
+    fn id(&self) -> Uuid;
+    fn location_id(&self) -> Uuid;
+    fn availability(&self) -> Availability;
+    fn content_sha256(&self) -> Option<&str>;
+    fn last_observed_at(&self) -> &String;
+}
+
+impl CaptureCopy for Asset {
+    const RECORDED_BY_IDS: &'static str =
+        asset_sql!("WHERE a.id IN (SELECT value FROM json_each(?1)) ORDER BY a.id");
+    const BY_DIGEST: &'static str = COPIES_BY_DIGEST;
+    const BY_IDS: &'static str = ASSETS_BY_IDS;
+
+    fn from_row(row: &SqliteRow) -> Result<Self> {
+        asset_from_row(row)
+    }
+    fn id(&self) -> Uuid {
+        self.id
+    }
+    fn location_id(&self) -> Uuid {
+        self.location_id
+    }
+    fn availability(&self) -> Availability {
+        self.availability
+    }
+    fn content_sha256(&self) -> Option<&str> {
+        self.fingerprint.content_sha256.as_deref()
+    }
+    fn last_observed_at(&self) -> &String {
+        &self.last_observed_at
+    }
+}
+
+/// The columns of a copy a session summary reads, without the observation and
+/// fingerprint JSON a full [`Asset`] decodes: a 20,000-frame Sessions page
+/// would otherwise decode tens of megabytes it never shows.
+#[derive(Clone, Debug)]
+struct CopyBrief {
+    id: Uuid,
+    location_id: Uuid,
+    availability: Availability,
+    /// The recorded fingerprint's digest (the generated `content_sha256` column).
+    content_sha256: Option<String>,
+    last_observed_at: String,
+}
+
+impl CaptureCopy for CopyBrief {
+    const RECORDED_BY_IDS: &'static str =
+        asset_sql!(brief "WHERE a.id IN (SELECT value FROM json_each(?1)) ORDER BY a.id");
+    const BY_DIGEST: &'static str = BRIEFS_BY_DIGEST;
+    const BY_IDS: &'static str = BRIEFS_BY_IDS;
+
+    fn from_row(row: &SqliteRow) -> Result<Self> {
+        Ok(Self {
+            id: parse_uuid(&row.try_get::<String, _>("id")?)?,
+            location_id: parse_uuid(&row.try_get::<String, _>("location_id")?)?,
+            availability: read_availability(row)?,
+            content_sha256: row.try_get("content_sha256")?,
+            last_observed_at: row.try_get("last_observed_at")?,
+        })
+    }
+    fn id(&self) -> Uuid {
+        self.id
+    }
+    fn location_id(&self) -> Uuid {
+        self.location_id
+    }
+    fn availability(&self) -> Availability {
+        self.availability
+    }
+    fn content_sha256(&self) -> Option<&str> {
+        self.content_sha256.as_deref()
+    }
+    fn last_observed_at(&self) -> &String {
+        &self.last_observed_at
+    }
+}
+
+/// A copy's availability as reads report it, from its stored state and its
+/// location's (`asset_sql!` columns).
+fn read_availability(row: &SqliteRow) -> Result<Availability> {
     let stored: Availability = from_text(&row.try_get::<String, _>("availability")?)?;
     let location: Availability = from_text(&row.try_get::<String, _>("location_availability")?)?;
     let lifecycle: LocationLifecycle = from_text(&row.try_get::<String, _>("location_lifecycle")?)?;
@@ -5155,12 +5284,16 @@ fn asset_from_row(row: &SqliteRow) -> Result<Asset> {
     // to the OS Trash, so that wins even over a retired location. Otherwise a
     // retired location's copies read Retired, never Missing; the stored state
     // stays as their last observation.
-    let availability = match (lifecycle, location, stored) {
+    Ok(match (lifecycle, location, stored) {
         (_, _, Availability::Trashed) => Availability::Trashed,
         (LocationLifecycle::Retired, _, _) => Availability::Retired,
         (_, Availability::Available, stored) | (_, _, stored @ Availability::Missing) => stored,
         (_, location, _) => location,
-    };
+    })
+}
+
+fn asset_from_row(row: &SqliteRow) -> Result<Asset> {
+    let availability = read_availability(row)?;
     let quality_basis: Option<String> = row.try_get("quality_basis")?;
     Ok(Asset {
         id: parse_uuid(&row.try_get::<String, _>("id")?)?,
@@ -6012,24 +6145,22 @@ async fn associations_of(
     Ok(index)
 }
 
-/// D16 state of one read request: logical captures of its assets, their
+/// D16 state of one read request: logical captures of its copies, their
 /// duplicate candidates and the provisional state of their locations, each read
-/// with one indexed query (location state once per location).
-struct CaptureView {
+/// with one indexed query (location state once per location). Session
+/// summaries read it over [`CopyBrief`]s; reads that judge a capture's quality
+/// over full [`Asset`]s.
+struct CaptureView<T = Asset> {
     /// Asset id → capture key: the capture's smallest asset id.
     key_of: HashMap<Uuid, String>,
     /// Capture key → every recorded copy, including Missing ones.
-    copies: HashMap<String, Vec<Asset>>,
+    copies: HashMap<String, Vec<T>>,
     candidates: BTreeSet<Uuid>,
     provisional: HashMap<Uuid, bool>,
 }
 
-impl CaptureView {
-    async fn read(
-        conn: &mut SqliteConnection,
-        sessions: &[Uuid],
-        assets: &[Asset],
-    ) -> Result<Self> {
+impl<T: CaptureCopy> CaptureView<T> {
+    async fn read(conn: &mut SqliteConnection, sessions: &[Uuid], assets: &[T]) -> Result<Self> {
         let candidates = candidates_in_sessions(conn, sessions).await?;
         let (key_of, copies) = logical_captures(conn, assets).await?;
         // A retired location is never scanned again and a Trashed copy is in no
@@ -6038,8 +6169,8 @@ impl CaptureView {
         let mut locations: BTreeMap<Uuid, bool> = BTreeMap::new();
         for asset in assets {
             let counted =
-                !matches!(asset.availability, Availability::Retired | Availability::Trashed);
-            *locations.entry(asset.location_id).or_default() |= counted;
+                !matches!(asset.availability(), Availability::Retired | Availability::Trashed);
+            *locations.entry(asset.location_id()).or_default() |= counted;
         }
         let mut provisional = HashMap::with_capacity(locations.len());
         for (id, counted) in locations {
@@ -6048,14 +6179,45 @@ impl CaptureView {
         Ok(Self { key_of, copies, candidates, provisional })
     }
 
-    fn key<'a>(&'a self, asset: &'a Asset) -> &'a str {
-        self.key_of.get(&asset.id).map_or("", String::as_str)
+    fn key(&self, asset: &T) -> &str {
+        self.key_of.get(&asset.id()).map_or("", String::as_str)
     }
 
     fn location_provisional(&self, id: Uuid) -> bool {
         self.provisional.get(&id).copied().unwrap_or(true)
     }
 
+    /// The session's summary over `assets`, its recorded members within `members`.
+    /// Retired copies count no capture; a live read counts no Trashed copy.
+    fn summary(
+        &self,
+        row: SessionRow,
+        assets: &[T],
+        successors: Vec<Uuid>,
+        members: Members,
+    ) -> SessionSummary {
+        let location_ids: BTreeSet<Uuid> = assets.iter().map(CaptureCopy::location_id).collect();
+        let provisional = location_ids.iter().any(|id| self.location_provisional(*id))
+            || assets.iter().any(|asset| self.candidates.contains(&asset.id()));
+        let captures: BTreeSet<&str> = assets
+            .iter()
+            .filter(|asset| asset.availability() != Availability::Retired && members.holds(*asset))
+            .map(|asset| self.key(asset))
+            .collect();
+        SessionSummary {
+            asset_count: u64::try_from(assets.len()).unwrap_or(u64::MAX),
+            capture_count: u64::try_from(captures.len()).unwrap_or(u64::MAX),
+            availability: session_availability(assets),
+            last_observed_at: latest(assets.iter().map(CaptureCopy::last_observed_at)),
+            provisional,
+            successors,
+            location_ids: location_ids.into_iter().collect(),
+            session: row.session,
+        }
+    }
+}
+
+impl CaptureView {
     /// These assets grouped by logical capture.
     fn group<'a>(&self, assets: &'a [Asset]) -> BTreeMap<String, Vec<&'a Asset>> {
         let mut groups: BTreeMap<String, Vec<&Asset>> = BTreeMap::new();
@@ -6103,35 +6265,6 @@ impl CaptureView {
             })
             .collect()
     }
-
-    /// The session's summary over `assets`, its recorded members within `members`.
-    /// Retired copies count no capture; a live read counts no Trashed copy.
-    fn summary(
-        &self,
-        row: SessionRow,
-        assets: &[Asset],
-        successors: Vec<Uuid>,
-        members: Members,
-    ) -> SessionSummary {
-        let location_ids: BTreeSet<Uuid> = assets.iter().map(|asset| asset.location_id).collect();
-        let provisional = location_ids.iter().any(|id| self.location_provisional(*id))
-            || assets.iter().any(|asset| self.candidates.contains(&asset.id));
-        let captures: BTreeSet<&str> = assets
-            .iter()
-            .filter(|asset| asset.availability != Availability::Retired && members.holds(asset))
-            .map(|asset| self.key(asset))
-            .collect();
-        SessionSummary {
-            asset_count: u64::try_from(assets.len()).unwrap_or(u64::MAX),
-            capture_count: u64::try_from(captures.len()).unwrap_or(u64::MAX),
-            availability: session_availability(assets),
-            last_observed_at: latest(assets.iter().map(|asset| &asset.last_observed_at)),
-            provisional,
-            successors,
-            location_ids: location_ids.into_iter().collect(),
-            session: row.session,
-        }
-    }
 }
 
 fn digests_of<'a>(copies: &[&'a Asset]) -> Vec<&'a str> {
@@ -6162,15 +6295,33 @@ fn capture_quality(copies: &[&Asset]) -> ApplicableQuality {
     }
 }
 
-/// Every recorded live copy, Missing included, of the given digests in Active
-/// locations: a retired copy is never joined to another (no decision transfers),
-/// and a Trashed copy never joins a live one (LIB-FR-18).
-const COPIES_BY_DIGEST: &str = asset_sql!(live
+/// Each D16 copy query, read as full assets (`$full`) and as copy briefs
+/// (`$brief`), so both readings select the same copies.
+macro_rules! copy_queries {
+    ($(#[$doc:meta])* $full:ident, $brief:ident, $tail:literal) => {
+        $(#[$doc])*
+        const $full: &str = asset_sql!(live $tail);
+        $(#[$doc])*
+        const $brief: &str = asset_sql!(brief live $tail);
+    };
+}
+
+copy_queries!(
+    /// Every recorded live copy, Missing included, of the given digests in Active
+    /// locations: a retired copy is never joined to another (no decision transfers),
+    /// and a Trashed copy never joins a live one (LIB-FR-18).
+    COPIES_BY_DIGEST,
+    BRIEFS_BY_DIGEST,
     "WHERE a.content_sha256 IN (SELECT value FROM json_each(?1)) \
      AND a.session_id IS NOT NULL AND l.lifecycle = 'active' ORDER BY a.location_id, a.id"
 );
 
-const ASSETS_BY_IDS: &str = asset_sql!(live "WHERE a.id IN (SELECT value FROM json_each(?1))");
+copy_queries!(
+    /// The live copies with the given ids.
+    ASSETS_BY_IDS,
+    BRIEFS_BY_IDS,
+    "WHERE a.id IN (SELECT value FROM json_each(?1))"
+);
 
 /// Recorded copy links touching any of the given assets, between live copies of
 /// Active locations only.
@@ -6256,79 +6407,82 @@ fn join_copies(parent: &mut HashMap<Uuid, Uuid>, left: Uuid, right: Uuid) {
 /// capture, joined to nothing (LIB-FR-18). Linked
 /// copies and their digest copies are followed until the capture is closed, so
 /// every entry point sees the same copies.
-async fn logical_captures(
+async fn logical_captures<T: CaptureCopy>(
     conn: &mut SqliteConnection,
-    assets: &[Asset],
-) -> Result<(HashMap<Uuid, String>, HashMap<String, Vec<Asset>>)> {
+    assets: &[T],
+) -> Result<(HashMap<Uuid, String>, HashMap<String, Vec<T>>)> {
     count_read("logical_captures");
-    let mut nodes: HashMap<Uuid, Asset> = HashMap::new();
+    let mut nodes: HashMap<Uuid, T> = HashMap::new();
     let mut parent = HashMap::new();
-    let mut fresh: Vec<Asset> = assets.to_vec();
+    let mut fresh: Vec<T> = assets.to_vec();
     let mut seen_digests: BTreeSet<String> = BTreeSet::new();
     while !fresh.is_empty() {
         let mut digests = BTreeSet::new();
         let mut ids = BTreeSet::new();
         for asset in fresh.drain(..) {
-            if nodes.contains_key(&asset.id) {
+            let id = asset.id();
+            if nodes.contains_key(&id) {
                 continue;
             }
-            if matches!(asset.availability, Availability::Retired | Availability::Trashed) {
-                nodes.insert(asset.id, asset);
+            if matches!(asset.availability(), Availability::Retired | Availability::Trashed) {
+                nodes.insert(id, asset);
                 continue;
             }
-            if let Some(digest) = &asset.fingerprint.content_sha256 {
-                if seen_digests.insert(digest.clone()) {
-                    digests.insert(digest.clone());
+            if let Some(digest) = asset.content_sha256() {
+                if !seen_digests.contains(digest) {
+                    seen_digests.insert(digest.to_owned());
+                    digests.insert(digest.to_owned());
                 }
             }
-            ids.insert(asset.id);
-            nodes.insert(asset.id, asset);
+            ids.insert(id);
+            nodes.insert(id, asset);
         }
         let mut found = copies_by_digest(conn, &digests, &mut parent).await?;
         found.extend(linked_copies(conn, &ids, &nodes, &mut parent).await?);
-        fresh = found.into_iter().filter(|copy| !nodes.contains_key(&copy.id)).collect();
+        fresh = found.into_iter().filter(|copy| !nodes.contains_key(&copy.id())).collect();
     }
-    let mut components: HashMap<Uuid, Vec<Asset>> = HashMap::new();
+    let mut components: HashMap<Uuid, Vec<T>> = HashMap::new();
     for (id, asset) in nodes {
         components.entry(find_root(&parent, id)).or_default().push(asset);
     }
     let mut key_of = HashMap::with_capacity(assets.len());
     let mut copies = HashMap::new();
     for asset in assets {
-        let root = find_root(&parent, asset.id);
+        let root = find_root(&parent, asset.id());
         let key = root.to_string();
         if !copies.contains_key(&key) {
-            let mut group = components.get(&root).cloned().unwrap_or_default();
-            group.sort_by_key(|copy| (copy.location_id, copy.id));
+            // Each root's component is taken once: later members find its key.
+            let mut group = components.remove(&root).unwrap_or_default();
+            group.sort_by_key(|copy| (copy.location_id(), copy.id()));
             copies.insert(key.clone(), group);
         }
-        key_of.insert(asset.id, key);
+        key_of.insert(asset.id(), key);
     }
     Ok((key_of, copies))
 }
 
 /// Every copy of these digests that spans two or more locations, joined.
-async fn copies_by_digest(
+async fn copies_by_digest<T: CaptureCopy>(
     conn: &mut SqliteConnection,
     digests: &BTreeSet<String>,
     parent: &mut HashMap<Uuid, Uuid>,
-) -> Result<Vec<Asset>> {
+) -> Result<Vec<T>> {
     let mut found = Vec::new();
     if digests.is_empty() {
         return Ok(found);
     }
-    let rows = sqlx::query(COPIES_BY_DIGEST).bind(to_json(digests)?).fetch_all(&mut *conn).await?;
-    let mut by_digest: BTreeMap<String, Vec<Asset>> = BTreeMap::new();
+    let rows = sqlx::query(T::BY_DIGEST).bind(to_json(digests)?).fetch_all(&mut *conn).await?;
+    let mut by_digest: BTreeMap<String, Vec<T>> = BTreeMap::new();
     for row in &rows {
-        let copy = asset_from_row(row)?;
-        if let Some(digest) = copy.fingerprint.content_sha256.clone() {
-            by_digest.entry(digest).or_default().push(copy);
+        let copy = T::from_row(row)?;
+        if let Some(digest) = copy.content_sha256() {
+            by_digest.entry(digest.to_owned()).or_default().push(copy);
         }
     }
     for group in by_digest.into_values() {
-        if group.iter().map(|copy| copy.location_id).collect::<BTreeSet<_>>().len() > 1 {
+        if group.iter().map(CaptureCopy::location_id).collect::<BTreeSet<_>>().len() > 1 {
             for pair in group.windows(2) {
-                join_copies(parent, pair[0].id, pair[1].id);
+                join_copies(parent, pair[0].id(), pair[1].id());
             }
             found.extend(group);
         }
@@ -6337,12 +6491,12 @@ async fn copies_by_digest(
 }
 
 /// The copies recorded links join to these assets, joined; returns those not yet seen.
-async fn linked_copies(
+async fn linked_copies<T: CaptureCopy>(
     conn: &mut SqliteConnection,
     ids: &BTreeSet<Uuid>,
-    nodes: &HashMap<Uuid, Asset>,
+    nodes: &HashMap<Uuid, T>,
     parent: &mut HashMap<Uuid, Uuid>,
-) -> Result<Vec<Asset>> {
+) -> Result<Vec<T>> {
     if ids.is_empty() {
         return Ok(Vec::new());
     }
@@ -6357,8 +6511,8 @@ async fn linked_copies(
     if linked.is_empty() {
         return Ok(Vec::new());
     }
-    let rows = sqlx::query(ASSETS_BY_IDS).bind(json_ids(&linked)?).fetch_all(&mut *conn).await?;
-    rows.iter().map(asset_from_row).collect()
+    let rows = sqlx::query(T::BY_IDS).bind(json_ids(&linked)?).fetch_all(&mut *conn).await?;
+    rows.iter().map(T::from_row).collect()
 }
 
 /// Assets of these sessions with a duplicate candidate, in one query.
@@ -7876,6 +8030,9 @@ mod tests {
             (MATCHES_OF_LOCATION, vec!["location"], true),
             (COPIES_BY_DIGEST, vec![r#"["digest"]"#], false),
             (ASSETS_BY_IDS, vec![ids], false),
+            (BRIEFS_BY_DIGEST, vec![r#"["digest"]"#], false),
+            (BRIEFS_BY_IDS, vec![ids], false),
+            (<CopyBrief as CaptureCopy>::RECORDED_BY_IDS, vec![ids], false),
             (LINKS_OF_ASSETS, vec![ids], false),
             (PENDING_IN_LOCATION, vec!["location"], false),
             (IS_ALIASED_COPY, vec!["digest", "location", "asset"], false),

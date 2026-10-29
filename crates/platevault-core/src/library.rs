@@ -30,7 +30,7 @@ use crate::{
 };
 use persistence_library::{
     Catalog, CorrectionOutcome, CorrectionPreview, LocationReferences, LocationRegistration,
-    SessionDetail, SessionQuery, SuggestedAssociation, TrashedAsset, TrashedFrame,
+    SessionDetail, SessionQuery, SourceProbe, SuggestedAssociation, TrashedAsset, TrashedFrame,
 };
 
 /// What [`AssetReferences::references_to`] returns.
@@ -835,9 +835,10 @@ impl Library {
         let saved = self.saved_targets().await?;
         let mut offset = 0_u32;
         loop {
-            let rows = self
+            // Only the ids: each session is read in full when it is assessed.
+            let ids = self
                 .catalog
-                .list_sessions(&SessionQuery {
+                .list_session_ids(&SessionQuery {
                     location_id: Some(location_id),
                     include_superseded: false,
                     filter: None,
@@ -845,14 +846,14 @@ impl Library {
                     limit: 1000,
                 })
                 .await?;
-            let count = u32::try_from(rows.len())
+            let count = u32::try_from(ids.len())
                 .map_err(|_| LibraryError::PersistenceFailure("session page exceeds u32".into()))?;
-            for row in rows {
-                match self.refresh_session_suggestion(row.session.id, &saved).await {
+            for id in ids {
+                match self.refresh_session_suggestion(id, &saved).await {
                     // Still conflicting after every re-read: the session is marked for
                     // review instead of keeping an assessment nobody recorded.
                     Err(LibraryError::Conflict { .. }) => {
-                        self.catalog.mark_assessment_conflict(row.session.id).await?;
+                        self.catalog.mark_assessment_conflict(id).await?;
                     }
                     other => other?,
                 }
@@ -1044,6 +1045,11 @@ impl Library {
         let handle = tokio::runtime::Handle::current();
         let scan_location = location.clone();
         let library = Arc::clone(self);
+        // One run of root checks for the whole scan, so each check reuses the
+        // root's volume probe wherever the platform can confirm it is still the
+        // same volume (`inventory::VolumeCache`).
+        let root_probe = InventoryProbe::default();
+        let walk_probe = root_probe.clone();
         let observation = blocking(move || {
             let options = ScanOptions { relative_scope, ..ScanOptions::default() };
             let mut next_assessment = u64::try_from(options.batch_size).unwrap_or(u64::MAX);
@@ -1053,7 +1059,7 @@ impl Library {
                 |batch| {
                     // The platform probe runs outside the writer lock. Catalog
                     // compares it with both registration and scan-begin identity.
-                    let identity = inventory::validate_location_root(&scan_location)?;
+                    let identity = walk_probe.root_identity(&scan_location)?;
                     let applied = handle.block_on(catalog.apply_scan_batch(
                         id,
                         &identity,
@@ -1082,7 +1088,7 @@ impl Library {
                     handle.block_on(catalog.finish_scan(
                         id,
                         &observation,
-                        inventory::validate_location_root,
+                        |location: &Location| root_probe.root_identity(location),
                         Intake(&margins),
                     ))
                 })
