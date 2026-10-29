@@ -202,15 +202,17 @@ describe("boot", () => {
 
     expect(await screen.findByRole("heading", { level: 1, name: m.nav_design_system() })).toBeInTheDocument()
     const status = windowStatusBar()
-    expect(await within(status).findByText(`${m.common_locations()}: ${m.status_bar_locations_online({ online: 1, total: 2 })}`)).toBeInTheDocument()
-    expect(within(status).getByRole("img", { name: m.status_bar_errors({ count: 1 }) })).toBeInTheDocument()
+    // Settings › Locations is registered, so the locations line is a link to it.
+    await waitFor(() => expect(status.querySelector("[data-status-locations]")).toHaveTextContent(m.status_bar_locations_online({ online: 1, total: 2 })))
+    // The error's owning page (Settings › Locations) is registered, so the errors counter links to it too.
+    expect(within(status).getByRole("button", { name: m.status_bar_errors({ count: 1 }) })).toBeInTheDocument()
     // Sessions is registered, so the warnings counter links to it.
     expect(within(status).getByRole("button", { name: m.status_bar_warnings({ count: 2 }) })).toBeInTheDocument()
     await waitFor(() => expect(host.calls).toEqual(expect.arrayContaining(["library_issues", "library_list_locations", "library_native_menu_set_labels"])))
     // What the window shows at start is not news.
     expect(announcer()).toHaveTextContent("")
-    // Running work opens Activity, which is not built: the bar does not read it.
-    expect(host.calls).not.toContain("library_list_operations")
+    // Running work opens Activity, which is registered: the bar reads the scans.
+    await waitFor(() => expect(host.calls).toContain("library_list_operations"))
   })
 
   it("reads each status query once per refresh", async () => {
