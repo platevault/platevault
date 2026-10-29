@@ -7563,5 +7563,11 @@
   "status_bar_locations_failed": "Não foi possível ler os locais",
   "shell_not_found_search_action": "Pesquisar",
   "status_bar_scan_finished": "Indexação de {name} concluída",
-  "status_bar_scans_failed": "Não foi possível ler as tarefas em execução"
+  "status_bar_scans_failed": "Não foi possível ler as tarefas em execução",
+  "review_value_px": "{value} px",
+  "review_value_arcsec": "{value}″",
+  "review_value_adu": "{value} ADU",
+  "review_value_electrons": "{value} e⁻",
+  "review_empty_picked": "Nenhum frame Aprovado",
+  "review_empty_rejected": "Nenhum frame Rejeitado"
 }

@@ -7049,5 +7049,11 @@
   "status_bar_locations_failed": "Couldn't read locations",
   "shell_not_found_search_action": "Search",
   "status_bar_scan_finished": "Indexing {name} finished",
-  "status_bar_scans_failed": "Couldn't read running work"
+  "status_bar_scans_failed": "Couldn't read running work",
+  "review_value_px": "{value} px",
+  "review_value_arcsec": "{value}″",
+  "review_value_adu": "{value} ADU",
+  "review_value_electrons": "{value} e⁻",
+  "review_empty_picked": "No Picked frames",
+  "review_empty_rejected": "No Rejected frames"
 }
