@@ -405,13 +405,14 @@ function goalsSection(ctx: SectionContext, goals: GoalProgress[], subjectName: (
     id: "goals",
     title: m.project_goals_title(),
     count: goals.length,
-    actions: [
+    // Goal edits replace the whole list by Target, so they wait for the Project record (astro-plan-wre19.3); until then the action shows why.
+    actions: hasRecord ? [] : [
       {
         id: "add-goal",
         label: editLabel,
         icon: Plus,
         opensDialog: true,
-        unavailable: ctx.locked ? lockedReason(ctx, editLabel) : !hasRecord ? { action: m.actions_blocked({ action: editLabel }), reason: m.project_record_unavailable(), blockers: [] } : undefined,
+        unavailable: { action: m.actions_blocked({ action: editLabel }), reason: m.project_record_unavailable(), blockers: [] },
         run: () => undefined,
       },
     ],
@@ -431,13 +432,13 @@ function subjectsSection(ctx: SectionContext, hasRecord: boolean): DetailSection
   return {
     id: "subjects-rigs",
     title: `${m.project_subjects()} · ${m.project_rigs()}`,
-    actions: [
+    actions: hasRecord ? [] : [
       {
         id: "edit-subjects",
         label: editLabel,
         icon: Pencil,
         opensDialog: true,
-        unavailable: ctx.locked ? lockedReason(ctx, editLabel) : !hasRecord ? { action: m.actions_blocked({ action: editLabel }), reason: m.project_record_unavailable(), blockers: [] } : undefined,
+        unavailable: { action: m.actions_blocked({ action: editLabel }), reason: m.project_record_unavailable(), blockers: [] },
         run: () => undefined,
       },
     ],
