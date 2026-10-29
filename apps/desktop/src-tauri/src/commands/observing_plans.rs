@@ -18,7 +18,7 @@
 
 use std::sync::Arc;
 
-use persistence_library::HOME_CRITERIA_ID;
+use persistence_library::{HOME_CRITERIA_ID, REMINDER_LEAD_TIME_ID};
 use platevault_core::library::Library;
 use platevault_core::planning_calendar::{CalendarQuery, PlanningCalendar};
 use platevault_core::planning_project::{ProjectGaps, ProjectPlanning, ProjectPlanningQuery};
@@ -26,8 +26,8 @@ use platevault_core::tonight::{Tonight, TonightQuery};
 use platevault_core::{
     CalendarExportOutcome, CalendarExportReview, DefaultSiteSaved, EnableReminders, ErrorResponse,
     ExportSelection, HomeCriteria, LibraryError, PlanCriteria, PlanningSites, ReminderInput,
-    ReminderReview, ReminderStatus, ReminderSubscription, Revision, SiteInput, SiteSaved,
-    TargetPlan, WindowQuery, WindowSet,
+    ReminderLeadTime, ReminderReview, ReminderStatus, ReminderSubscription, Revision, SiteInput,
+    SiteSaved, TargetPlan, WindowQuery, WindowSet,
 };
 use serde::Serialize;
 use tauri::{AppHandle, State};
@@ -109,6 +109,38 @@ pub async fn planning_save_home_criteria(
         .save_home_criteria(expected_revision, &criteria)
         .await
         .map_err(fail(Some(HOME_CRITERIA_ID)))
+}
+
+/// The default reminder lead time a new reminder starts from, at its
+/// revision: 12 hours at revision 0 until the user changes it.
+///
+/// # Errors
+/// `PersistenceFailure` when the catalog can't be read.
+#[tauri::command]
+#[specta::specta]
+pub async fn planning_reminder_lead_time(
+    library: State<'_, Arc<Library>>,
+) -> Reply<ReminderLeadTime> {
+    library.reminder_lead_time().await.map_err(fail(Some(REMINDER_LEAD_TIME_ID)))
+}
+
+/// Save the default reminder lead time, in minutes, over `expected_revision`
+/// (0 when never saved). Existing reminders keep their own lead times.
+///
+/// # Errors
+/// `InvalidInput` naming `leadMinutes` for 30 minutes or less, or more than
+/// a day, and `Conflict` for a stale revision; nothing is stored on either.
+#[tauri::command]
+#[specta::specta]
+pub async fn planning_save_reminder_lead_time(
+    library: State<'_, Arc<Library>>,
+    lead_minutes: u32,
+    expected_revision: Revision,
+) -> Reply<ReminderLeadTime> {
+    library
+        .save_reminder_lead_time(expected_revision, lead_minutes)
+        .await
+        .map_err(fail(Some(REMINDER_LEAD_TIME_ID)))
 }
 
 /// The window set with its basis and one entry per night. Read-only: writes

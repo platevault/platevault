@@ -141,6 +141,12 @@ fn criteria(moon: MoonCriterion) -> PlanCriteria {
     }
 }
 
+/// Store `criteria` as Home's criteria, the one source the Targets list reads.
+async fn store_criteria(library: &Library, criteria: PlanCriteria) {
+    let current = library.home_criteria().await.unwrap().revision;
+    library.save_home_criteria(current, &criteria).await.unwrap();
+}
+
 fn query(show: TargetsShow, site: Option<Uuid>, night: Date) -> TargetsQuery {
     TargetsQuery {
         show,
@@ -148,7 +154,6 @@ fn query(show: TargetsShow, site: Option<Uuid>, night: Date) -> TargetsQuery {
         preset: None,
         site_id: site,
         night: Some(night),
-        criteria: criteria(MoonCriterion::None),
         sort: None,
         offset: 0,
         limit: None,
@@ -532,6 +537,7 @@ async fn img_time_zero_names_altitude_moon_or_darkness() {
     let tromso = site(&library, "Tromsø", TROMSO, "Europe/Oslo").await;
     let andromeda = mine(&library, "Andromeda", Some((10.684_708, 41.268_75))).await.candidate.id;
     let southern = mine(&library, "Southern", Some((84.0, -69.0))).await.candidate.id;
+    store_criteria(&library, criteria(MoonCriterion::None)).await;
 
     // A moonless autumn night: Andromeda is up, the southern Target never clears 30°.
     let night = date!(2026 - 10 - 10);
@@ -546,9 +552,12 @@ async fn img_time_zero_names_altitude_moon_or_darkness() {
     assert_eq!(page.basis.as_ref().unwrap().night, night);
 
     // Full Moon with the Moon required below the horizon.
-    let mut full = query(TargetsShow::MyTargets, Some(backyard), date!(2026 - 10 - 25));
-    full.criteria = criteria(MoonCriterion::BelowHorizon);
-    let page = library.target_rows(&full).await.unwrap();
+    let full = criteria(MoonCriterion::BelowHorizon);
+    store_criteria(&library, full).await;
+    let page = library
+        .target_rows(&query(TargetsShow::MyTargets, Some(backyard), date!(2026 - 10 - 25)))
+        .await
+        .unwrap();
     assert!(page.moon.as_ref().unwrap().illumination > 0.95);
     let moonlit = row(&page, andromeda);
     assert_eq!(moonlit.img_time_minutes, Some(0));
@@ -567,18 +576,19 @@ async fn img_time_zero_names_altitude_moon_or_darkness() {
     // PV-PLAN-SC-04: Img time is the Plan area total; Max alt is no lower than
     // any window's peak.
     for (site, night, criteria) in [
-        (backyard, night, full.criteria),
-        (backyard, night, query(TargetsShow::MyTargets, None, night).criteria),
+        (backyard, night, full),
+        (backyard, night, criteria(MoonCriterion::None)),
         (
             backyard,
             date!(2026 - 10 - 20),
             criteria(MoonCriterion::MinSeparation { min_separation_deg: 60.0 }),
         ),
-        (tromso, date!(2026 - 12 - 01), full.criteria),
+        (tromso, date!(2026 - 12 - 01), full),
     ] {
-        let mut request = query(TargetsShow::MyTargets, Some(site), night);
-        request.criteria = criteria;
-        let page = library.target_rows(&request).await.unwrap();
+        store_criteria(&library, criteria).await;
+        let page =
+            library.target_rows(&query(TargetsShow::MyTargets, Some(site), night)).await.unwrap();
+        assert_eq!(page.basis.as_ref().unwrap().criteria, criteria, "the stored criteria");
         for id in [andromeda, southern] {
             let windows = plan_area(&library, id, site, night, criteria).await;
             let total: u32 = windows.windows().map(|window| window.duration_minutes).sum();
@@ -602,13 +612,21 @@ async fn bands_are_graded_under_the_saved_moon_avoidance_curves() {
     let library = open(&temp.path().join("library.sqlite")).await;
     let backyard = site(&library, "Backyard", BACKYARD, "Europe/Amsterdam").await;
     let andromeda = mine(&library, "Andromeda", Some((10.684_708, 41.268_75))).await.candidate.id;
+    store_criteria(&library, criteria(MoonCriterion::None)).await;
     // Full Moon, up all night, with no Moon criterion: Img time is above zero
     // and every band is judged by its curve.
     let full = query(TargetsShow::MyTargets, Some(backyard), date!(2026 - 10 - 25));
-    let viable = |page: &TargetsPage| -> Vec<Band> {
+    let suited = |page: &TargetsPage| -> Vec<Band> {
         let row = row(page, andromeda);
-        assert!(row.img_time_minutes.unwrap() > 0);
-        row.bands.iter().filter(|state| state.viable).map(|state| state.band).collect()
+        let img = row.img_time_minutes.unwrap();
+        assert!(img > 0);
+        for state in &row.bands {
+            // A curve asking 180° leaves only the Moon below the horizon, which
+            // it never is tonight; a curve asking nothing leaves the Img time.
+            let expected = if state.suits() { (BandGrade::Good, img) } else { (BandGrade::Poor, 0) };
+            assert_eq!((state.grade, state.clear_minutes), expected, "{:?}", state.band);
+        }
+        row.bands.iter().filter(|state| state.suits()).map(|state| state.band).collect()
     };
 
     let record = library.workflow_settings().await.unwrap();
@@ -623,7 +641,7 @@ async fn bands_are_graded_under_the_saved_moon_avoidance_curves() {
         .set(Band::Ha, MoonAvoidanceCurve { distance_deg: 0.0, width_days: 7.0 });
     let saved = library.save_workflow_settings(0, &settings).await.unwrap();
     assert_eq!((saved.settings.clone(), saved.revision), (settings.clone(), 1));
-    assert_eq!(viable(&library.target_rows(&full).await.unwrap()), [Band::Ha]);
+    assert_eq!(suited(&library.target_rows(&full).await.unwrap()), [Band::Ha]);
 
     settings.moon_avoidance.set(Band::Ha, never);
     settings
@@ -631,9 +649,151 @@ async fn bands_are_graded_under_the_saved_moon_avoidance_curves() {
         .set(Band::Oiii, MoonAvoidanceCurve { distance_deg: 0.0, width_days: 7.0 });
     let stale = library.save_workflow_settings(0, &settings).await.unwrap_err();
     assert!(matches!(stale, LibraryError::Conflict { current: 1, .. }), "{stale:?}");
-    assert_eq!(viable(&library.target_rows(&full).await.unwrap()), [Band::Ha], "stale: unchanged");
+    assert_eq!(suited(&library.target_rows(&full).await.unwrap()), [Band::Ha], "stale: unchanged");
     library.save_workflow_settings(1, &settings).await.unwrap();
-    assert_eq!(viable(&library.target_rows(&full).await.unwrap()), [Band::Oiii]);
+    assert_eq!(suited(&library.target_rows(&full).await.unwrap()), [Band::Oiii]);
+}
+
+/// PLAN-TGT-FR-06/15, PLAN-TGT-AC-18 (D-W88): each band's clear minutes are
+/// the Plan area total under its curve's Moon criterion at the night's Moon
+/// age, and its grade follows R10-MOON-MODEL §3 from the longest of those
+/// windows against the longest Moon-free window: good from 75%, marginal
+/// below, poor with none.
+#[tokio::test]
+async fn band_grades_and_clear_minutes_follow_the_plan_area_under_each_curve() {
+    let temp = tempfile::tempdir().unwrap();
+    let library = open(&temp.path().join("library.sqlite")).await;
+    let backyard = site(&library, "Backyard", BACKYARD, "Europe/Amsterdam").await;
+    let andromeda = mine(&library, "Andromeda", Some((10.684_708, 41.268_75))).await.candidate.id;
+    let pleiades = mine(&library, "Pleiades", Some((56.75, 24.116_667))).await.candidate.id;
+    let stored = criteria(MoonCriterion::MinSeparation { min_separation_deg: 20.0 });
+    store_criteria(&library, stored).await;
+    let avoidance = library.workflow_settings().await.unwrap().settings.moon_avoidance;
+    let site_record = library.catalog().site(backyard).await.unwrap();
+    let mut grades = Vec::new();
+    for night in [date!(2026 - 10 - 10), date!(2026 - 10 - 18), date!(2026 - 10 - 25)] {
+        let page =
+            library.target_rows(&query(TargetsShow::MyTargets, Some(backyard), night)).await;
+        let page = page.unwrap();
+        let age = planning::NightContext::new(&site_record, night, &stored).unwrap().moon_age_days();
+        for id in [andromeda, pleiades] {
+            let free = plan_area(&library, id, backyard, night, criteria(MoonCriterion::None)).await;
+            let free_longest = free.windows().map(|window| window.duration_minutes).max();
+            let listed = row(&page, id);
+            assert_eq!(listed.bands.len(), 7);
+            for state in &listed.bands {
+                let moon = planning::curve_criterion(avoidance.curve(state.band), age);
+                let curved =
+                    plan_area(&library, id, backyard, night, PlanCriteria { moon, ..stored }).await;
+                let total: u32 = curved.windows().map(|window| window.duration_minutes).sum();
+                let longest = curved.windows().map(|window| window.duration_minutes).max();
+                let grade = match (longest, free_longest) {
+                    (None, _) => BandGrade::Poor,
+                    (Some(curved), Some(free)) if 4 * curved < 3 * free => BandGrade::Marginal,
+                    (Some(_), _) => BandGrade::Good,
+                };
+                assert_eq!(
+                    (state.grade, state.clear_minutes),
+                    (grade, total),
+                    "{night} {id} {:?}",
+                    state.band
+                );
+                grades.push(grade);
+            }
+        }
+    }
+    for grade in [BandGrade::Good, BandGrade::Marginal, BandGrade::Poor] {
+        assert!(grades.contains(&grade), "the sweep grades a band {grade:?}");
+    }
+}
+
+/// PLAN-TGT-FR-04/18, PLAN-TGT-AC-24: each row carries its altitude across
+/// the night for the sparkline, at [`ALTITUDE_SAMPLES`] instants evenly
+/// spaced from the night's start to its end, which the basis names; a
+/// Target without coordinates has none.
+#[tokio::test]
+async fn rows_carry_altitude_samples_across_the_night() {
+    let temp = tempfile::tempdir().unwrap();
+    let library = open(&temp.path().join("library.sqlite")).await;
+    let backyard = site(&library, "Backyard", BACKYARD, "Europe/Amsterdam").await;
+    let andromeda = mine(&library, "Andromeda", Some((10.684_708, 41.268_75))).await.candidate.id;
+    let unknown = mine(&library, "Unknown", None).await.candidate.id;
+    store_criteria(&library, criteria(MoonCriterion::None)).await;
+    let night = date!(2026 - 10 - 10);
+    let page = library.target_rows(&query(TargetsShow::MyTargets, Some(backyard), night)).await;
+    let page = page.unwrap();
+
+    // The night runs from local noon (CEST, UTC+2) to the next local noon.
+    let basis = page.basis.as_ref().unwrap();
+    assert_eq!(basis.night_start_utc, time::macros::datetime!(2026-10-10 10:00 UTC));
+    assert_eq!(basis.night_end_utc, time::macros::datetime!(2026-10-11 10:00 UTC));
+
+    // Andromeda is circumpolar at 52.09° N: geometric altitude peaks at
+    // 90° - (52.09° - 41.27°) = 79.18° and bottoms at 41.27° + 52.09° - 90° =
+    // 3.36°, each culmination within 15 minutes of a sample.
+    let samples = &row(&page, andromeda).altitude_samples_deg;
+    assert_eq!(samples.len(), ALTITUDE_SAMPLES);
+    let highest = samples.iter().copied().fold(f64::MIN, f64::max);
+    let lowest = samples.iter().copied().fold(f64::MAX, f64::min);
+    // J2000 coordinates precessed to 2026 move the declination by under 0.5°.
+    assert!((78.6..=79.7).contains(&highest), "{highest}");
+    assert!((2.8..=3.9).contains(&lowest), "{lowest}");
+    assert!(row(&page, andromeda).max_altitude_deg.unwrap() <= highest + 0.1);
+    assert!(row(&page, unknown).altitude_samples_deg.is_empty());
+}
+
+/// PLAN-TGT-FR-07: the page carries the night's darkness window at the
+/// planning site, at the stored criteria's level, as the night sky gives it;
+/// a night never that dark has none.
+#[tokio::test]
+async fn the_page_carries_the_darkness_window_of_its_night_and_site() {
+    let temp = tempfile::tempdir().unwrap();
+    let library = open(&temp.path().join("library.sqlite")).await;
+    let backyard = site(&library, "Backyard", BACKYARD, "Europe/Amsterdam").await;
+    let tromso = site(&library, "Tromsø", TROMSO, "Europe/Oslo").await;
+    mine(&library, "Andromeda", Some((10.684_708, 41.268_75))).await;
+    store_criteria(&library, criteria(MoonCriterion::None)).await;
+    let night = date!(2026 - 10 - 10);
+    let page = library.target_rows(&query(TargetsShow::MyTargets, Some(backyard), night)).await;
+    let darkness = page.unwrap().darkness.expect("an autumn night is astronomically dark");
+    let sky = library.night_sky(backyard, night, Darkness::Astronomical).await.unwrap();
+    assert_eq!(Some(darkness), sky.darkness);
+
+    let summer = query(TargetsShow::MyTargets, Some(tromso), date!(2026 - 06 - 21));
+    let page = library.target_rows(&summer).await.unwrap();
+    assert!(page.basis.is_some() && page.darkness.is_none());
+}
+
+/// PLAN-TGT-FR-01: the Targets list reads Home's stored criteria, which have
+/// no defaults. Without them My targets still lists, every planning value is
+/// unavailable with the reason, and the page computes no night; the site is
+/// named first when both are missing.
+#[tokio::test]
+async fn without_stored_criteria_rows_list_with_planning_unavailable() {
+    let temp = tempfile::tempdir().unwrap();
+    let library = open(&temp.path().join("library.sqlite")).await;
+    let andromeda = mine(&library, "Andromeda", Some((10.684_708, 41.268_75))).await.candidate.id;
+    let night = date!(2026 - 10 - 10);
+    let page = library.target_rows(&query(TargetsShow::MyTargets, None, night)).await.unwrap();
+    assert_eq!(page.planning_unavailable, Some(PlanningUnknownReason::NoSite));
+
+    let backyard = site(&library, "Backyard", BACKYARD, "Europe/Amsterdam").await;
+    let request = query(TargetsShow::MyTargets, Some(backyard), night);
+    let page = library.target_rows(&request).await.unwrap();
+    assert_eq!(page.planning_unavailable, Some(PlanningUnknownReason::NoCriteria));
+    assert!(page.basis.is_none() && page.moon.is_none() && page.darkness.is_none());
+    assert_eq!((page.total, designations(&page)), (1, vec!["Andromeda"]));
+    let listed = row(&page, andromeda);
+    assert_eq!(listed.unknown_reason, Some(PlanningUnknownReason::NoCriteria));
+    assert!(listed.max_altitude_deg.is_none() && listed.img_time_minutes.is_none());
+    assert!(listed.bands.is_empty() && listed.altitude_samples_deg.is_empty());
+    assert!(listed.favourite);
+
+    store_criteria(&library, criteria(MoonCriterion::None)).await;
+    let page = library.target_rows(&request).await.unwrap();
+    assert_eq!(page.planning_unavailable, None);
+    assert_eq!(page.basis.as_ref().unwrap().criteria, criteria(MoonCriterion::None));
+    assert!(row(&page, andromeda).img_time_minutes.is_some());
 }
 
 /// PLAN-TGT-AC-07, PLAN-TGT-FR-04: unknown values sort last in either
@@ -646,7 +806,7 @@ async fn unknown_sorts_last() {
     let high = mine(&library, "B high", Some((10.684_708, 41.268_75))).await.candidate.id;
     let unknown = mine(&library, "A unknown", None).await.candidate.id;
     let low = mine(&library, "C low", Some((300.0, 5.0))).await.candidate.id;
-
+    store_criteria(&library, criteria(MoonCriterion::None)).await;
     let mut request = query(TargetsShow::MyTargets, Some(backyard), date!(2026 - 10 - 10));
     let page = library.target_rows(&request).await.unwrap();
     assert_eq!(designations(&page), ["A unknown", "B high", "C low"]);
@@ -655,6 +815,7 @@ async fn unknown_sorts_last() {
     assert!(blank.max_altitude_deg.is_none() && blank.lunar_separation_deg.is_none());
     assert!(blank.img_time_minutes.is_none() && blank.next_opposition.is_none());
     assert!(blank.bands.is_empty() && blank.recommendation.is_none());
+    assert!(blank.altitude_samples_deg.is_empty());
 
     for column in [
         TargetsColumn::MaxAlt,
@@ -711,11 +872,12 @@ async fn no_site_shows_dash_and_add_site_reason() {
     let backyard = site(&library, "Backyard", BACKYARD, "Europe/Amsterdam").await;
     let settings = library.catalog().list_sites().await.unwrap().settings_revision;
     library.set_default_site(Some(backyard), settings).await.unwrap();
+    store_criteria(&library, criteria(MoonCriterion::None)).await;
     let page =
         library.target_rows(&query(TargetsShow::MyTargets, None, date!(2026 - 10 - 10))).await;
     let page = page.unwrap();
     assert_eq!(page.basis.as_ref().unwrap().site.id, backyard);
-    assert!(page.moon.is_some() && page.planning_unavailable.is_none());
+    assert!(page.moon.is_some() && page.darkness.is_some() && page.planning_unavailable.is_none());
     assert!(row(&page, m31.id).img_time_minutes.is_some());
 
     let unknown = query(TargetsShow::MyTargets, Some(Uuid::new_v4()), date!(2026 - 10 - 10));
@@ -795,12 +957,13 @@ async fn builtin_presets_follow_their_definitions() {
     let temp = tempfile::tempdir().unwrap();
     let library = open(&temp.path().join("library.sqlite")).await;
     let backyard = site(&library, "Backyard", BACKYARD, "Europe/Amsterdam").await;
+    store_criteria(&library, criteria(MoonCriterion::None)).await;
     let mut request = query(TargetsShow::Browse, Some(backyard), date!(2026 - 10 - 20));
     request.catalogues = vec![Catalogue::Messier];
     let all = library.target_rows(&request).await.unwrap();
 
     let viable = |row: &TargetRow, bands: &[Band]| {
-        row.bands.iter().any(|state| state.viable && bands.contains(&state.band))
+        row.bands.iter().any(|state| state.suits() && bands.contains(&state.band))
     };
     let menu = library.targets_presets(RigSelection::None).await.unwrap().builtin;
     for preset in menu.into_iter().map(|info| info.preset) {

@@ -305,16 +305,8 @@ pub(crate) fn grade_night(
         };
         let curved = window(planning::curve_criterion(avoidance.curve(band), age))?;
         let free = window(MoonCriterion::None)?;
-        let grade = match (&curved, &free) {
-            (None, _) => BandGrade::Poor,
-            (Some(curved), Some(free))
-                if 4 * u64::from(curved.duration_minutes)
-                    < 3 * u64::from(free.duration_minutes) =>
-            {
-                BandGrade::Marginal
-            }
-            (Some(_), _) => BandGrade::Good,
-        };
+        let longest = |found: &Option<ObservingWindow>| found.as_ref().map(|w| w.duration_minutes);
+        let grade = band_grade(longest(&curved), longest(&free));
         let moon_ruled_out = curved.is_none() && free.is_some();
         graded
             .push(NightGrade { grade: goal.graded(Some(band), Ok(grade), curved), moon_ruled_out });
@@ -331,6 +323,21 @@ fn strictest_band(goal: &UnfinishedGoal, avoidance: &MoonAvoidance, age: f64) ->
     goal.bands.iter().copied().max_by(|first, second| {
         separation(*first).total_cmp(&separation(*second)).then(second.cmp(first))
     })
+}
+
+/// A band's grade for a night under its Moon-avoidance curve, by
+/// R10-MOON-MODEL.md §3, from the minutes of the longest window the curve
+/// leaves and of the longest the Moon-free criteria leave: poor when the
+/// curve leaves none, marginal when the Moon takes more than a quarter of
+/// the Moon-free time, else good.
+pub(crate) fn band_grade(curved: Option<u32>, free: Option<u32>) -> BandGrade {
+    match (curved, free) {
+        (None, _) => BandGrade::Poor,
+        (Some(curved), Some(free)) if 4 * u64::from(curved) < 3 * u64::from(free) => {
+            BandGrade::Marginal
+        }
+        (Some(_), _) => BandGrade::Good,
+    }
 }
 
 /// When `goals` are next suited after `night`, which none suits: the first
@@ -386,14 +393,14 @@ pub(crate) fn next_good_night(
 
 /// A Moon criterion as a map key: the separation by its bits.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
-enum MoonKey {
+pub(crate) enum MoonKey {
     None,
     BelowHorizon,
     MinSeparation(u64),
 }
 
 impl MoonKey {
-    fn of(moon: MoonCriterion) -> Self {
+    pub(crate) fn of(moon: MoonCriterion) -> Self {
         match moon {
             MoonCriterion::None => Self::None,
             MoonCriterion::BelowHorizon => Self::BelowHorizon,

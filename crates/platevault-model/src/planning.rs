@@ -151,6 +151,44 @@ pub struct HomeCriteria {
     pub revision: Revision,
 }
 
+/// The lead time a new reminder starts from until the user changes it
+/// (PLAN-FR-06): 12 hours, in minutes.
+pub const DEFAULT_REMINDER_LEAD_MINUTES: u32 = 12 * 60;
+
+/// The shortest default reminder lead time, in whole minutes: PLAN-FR-06
+/// makes it longer than 30 minutes.
+pub const MIN_DEFAULT_LEAD_MINUTES: u32 = 31;
+
+/// The stored default reminder lead time (PLAN-FR-06), set in Settings, at
+/// its own revision. A catalog that never saved it reads
+/// [`DEFAULT_REMINDER_LEAD_MINUTES`] at revision 0. Its revision is its own,
+/// so saving it stales no reminder review and no other planning setting.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
+pub struct ReminderLeadTime {
+    pub lead_minutes: u32,
+    pub revision: Revision,
+}
+
+impl ReminderLeadTime {
+    /// Check a default lead time: longer than 30 minutes and no longer than
+    /// a reminder's longest, [`MAX_MINUTES`], so a new reminder can start
+    /// from it.
+    ///
+    /// # Errors
+    /// `InvalidInput` naming `leadMinutes`.
+    pub fn validate_minutes(lead_minutes: u32) -> Result<(), LibraryError> {
+        if (MIN_DEFAULT_LEAD_MINUTES..=MAX_MINUTES).contains(&lead_minutes) {
+            return Ok(());
+        }
+        Err(invalid(format!(
+            "leadMinutes {lead_minutes} is not a whole number of minutes from \
+             {MIN_DEFAULT_LEAD_MINUTES} to {MAX_MINUTES}"
+        )))
+    }
+}
+
 /// Every saved site with the default site and the settings revision.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

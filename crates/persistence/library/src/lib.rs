@@ -151,6 +151,7 @@ mod planning;
 mod rigs;
 pub use planning::{
     DeliveryClaim, DeliveryOutcome, SubscriptionWrite, HOME_CRITERIA_ID, PLANNING_SETTINGS_ID,
+    REMINDER_LEAD_TIME_ID,
 };
 mod calibration;
 use calibration::pinned_calibration_kinds;

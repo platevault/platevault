@@ -9,18 +9,23 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
-use time::Date;
+use time::{Date, OffsetDateTime};
 use uuid::Uuid;
 
 use crate::{
-    Band, Catalogue, FieldOfView, LibraryError, NightMoon, PlanCriteria, Revision, SiteBasis,
-    TargetCandidate, TargetRecord,
+    Band, BandGrade, Catalogue, DarknessWindow, FieldOfView, LibraryError, NightMoon,
+    PlanCriteria, Revision, SiteBasis, TargetCandidate, TargetRecord,
 };
 
 time::serde::format_description!(iso_date, Date, "[year]-[month]-[day]");
 
 /// Longest saved preset name, in characters.
 pub const MAX_PRESET_NAME: usize = 80;
+
+/// Altitude samples each row's sparkline plots (PLAN-TGT-FR-04): about one
+/// every half hour of the night, both ends included; a night spans 23 to 25
+/// hours across a clock change.
+pub const ALTITUDE_SAMPLES: usize = 49;
 
 fn invalid(message: String) -> LibraryError {
     LibraryError::InvalidInput(message)
@@ -179,8 +184,9 @@ pub struct TargetsSort {
 
 /// One Targets list request: the Show mode, the chosen catalogues and preset,
 /// the planning site (absent: the default site), the night by its site-local
-/// evening date (absent: tonight), the planning criteria, the sort (absent: the
-/// preset's sort, else Designation ascending) and an optional page.
+/// evening date (absent: tonight), the sort (absent: the preset's sort, else
+/// Designation ascending) and an optional page. The criteria are Home's
+/// stored ones, the one source every planning read shares.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
@@ -196,7 +202,6 @@ pub struct TargetsQuery {
     #[cfg_attr(feature = "wire", specta(type = Option<String>), schemars(with = "Option<String>"))]
     #[serde(default, with = "iso_date::option")]
     pub night: Option<Date>,
-    pub criteria: PlanCriteria,
     #[serde(default)]
     pub sort: Option<TargetsSort>,
     #[serde(default)]
@@ -227,12 +232,12 @@ pub enum RigSelection {
 
 impl TargetsQuery {
     /// # Errors
-    /// `InvalidInput` for invalid criteria or a zero limit.
+    /// `InvalidInput` for a zero limit.
     pub fn validate(&self) -> Result<(), LibraryError> {
         if self.limit == Some(0) {
             return Err(invalid("limit must be at least 1 when given".into()));
         }
-        self.criteria.validate()
+        Ok(())
     }
 
     /// The sort in effect.
@@ -295,6 +300,8 @@ impl MyTargetMarks {
 pub enum PlanningUnknownReason {
     /// "Add an observing site in Settings".
     NoSite,
+    /// Home's criteria are not set yet; the planning values wait for them.
+    NoCriteria,
     /// "This target has no catalogued coordinates, so visibility can't be computed."
     TargetCoordinatesUnknown,
     UnsupportedCoordinateFrame,
@@ -313,13 +320,26 @@ pub enum ImgTimeZeroReason {
     Darkness,
 }
 
-/// One band of the Filters strip: viable tonight, or limited by the Moon.
+/// One band of the Filters strip graded for the night under its
+/// Moon-avoidance curve (PLAN-TGT-FR-06), by the rule Home's Tonight grades
+/// goals with: `clearMinutes` is the total of the Plan area windows the
+/// curve leaves, zero for a poor band.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct BandState {
     pub band: Band,
-    pub viable: bool,
+    pub grade: BandGrade,
+    pub clear_minutes: u32,
+}
+
+impl BandState {
+    /// Whether the band suits the night: good or marginal, as Suitable
+    /// filters admits it (PLAN-TGT-FR-15).
+    #[must_use]
+    pub const fn suits(&self) -> bool {
+        matches!(self.grade, BandGrade::Good | BandGrade::Marginal)
+    }
 }
 
 /// The Filters strip's recommendation label.
@@ -382,6 +402,9 @@ pub struct TargetRow {
     pub img_time_zero_reason: Option<ImgTimeZeroReason>,
     /// The Filters strip's bands (the page's `bands`); empty when unknown.
     pub bands: Vec<BandState>,
+    /// Geometric altitude at [`ALTITUDE_SAMPLES`] instants evenly spaced from
+    /// the basis's `nightStartUtc` to its `nightEndUtc`; empty when unknown.
+    pub altitude_samples_deg: Vec<f64>,
     pub recommendation: Option<Recommendation>,
     #[cfg_attr(feature = "wire", specta(type = Option<String>), schemars(with = "Option<String>"))]
     #[serde(with = "iso_date::option")]
@@ -497,7 +520,9 @@ pub struct RigFit {
     pub fit: Fit,
 }
 
-/// What a page's planning values were computed for.
+/// What a page's planning values were computed for: the site, the night by
+/// its site-local evening date and its bounds, local noon to the next local
+/// noon, which the altitude samples span, and Home's stored criteria.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
@@ -507,19 +532,29 @@ pub struct TargetsBasis {
     #[cfg_attr(feature = "wire", specta(type = String), schemars(with = "String"))]
     #[serde(with = "iso_date")]
     pub night: Date,
+    #[cfg_attr(feature = "wire", specta(type = String), schemars(with = "String"))]
+    #[serde(with = "time::serde::rfc3339")]
+    pub night_start_utc: OffsetDateTime,
+    #[cfg_attr(feature = "wire", specta(type = String), schemars(with = "String"))]
+    #[serde(with = "time::serde::rfc3339")]
+    pub night_end_utc: OffsetDateTime,
     pub criteria: PlanCriteria,
     pub method: String,
 }
 
-/// One Targets list page. The Moon appears here once, for the toolbar, and in
-/// no row. With no planning site, `basis` and `moon` are absent and
-/// `planningUnavailable` names the reason.
+/// One Targets list page. The Moon and the darkness window appear here once,
+/// for the toolbar and the sparklines, and in no row. Without a planning
+/// site, or without Home's criteria, `basis`, `moon` and `darkness` are
+/// absent and `planningUnavailable` names what is missing, the site first;
+/// the rows still list. `darkness` is also absent on a night never dark at
+/// the criteria's level.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct TargetsPage {
     pub basis: Option<TargetsBasis>,
     pub moon: Option<NightMoon>,
+    pub darkness: Option<DarknessWindow>,
     pub planning_unavailable: Option<PlanningUnknownReason>,
     /// Browse catalogues with neither a catalogue nor a preset: no rows.
     pub needs_catalogue_or_preset: bool,

@@ -27,10 +27,11 @@ use time::macros::{date, datetime};
 use uuid::Uuid;
 
 /// Planning tables, children first.
-const PLANNING_TABLES: [&str; 6] = [
+const PLANNING_TABLES: [&str; 7] = [
     "reminder_deliveries",
     "reminder_subscriptions",
     "target_plans",
+    "reminder_lead_time",
     "home_criteria",
     "planning_settings",
     "observing_sites",
@@ -359,6 +360,44 @@ async fn subscriptions_need_the_current_default_site_and_revisions_or_store_noth
     );
 }
 
+/// PLAN-FR-06: a reminder's lead time, and the default one a new reminder
+/// starts from, is longer than 30 minutes and at most 7 days, in the write's
+/// validation and in each table's CHECK, which a write around the
+/// validation still meets.
+#[tokio::test]
+async fn reminder_lead_times_run_from_over_thirty_minutes_to_seven_days() {
+    let Planning { fx, catalog, ngc, ic, backyard, .. } = planning().await;
+    catalog.set_default_site(Some(backyard.id), 0).await.unwrap();
+    for refused in [30, 10_081] {
+        let lead = SubscriptionWrite { lead_minutes: refused, ..write(&ngc, &backyard, 1) };
+        let error = catalog.put_reminder_subscription(&lead).await.unwrap_err();
+        assert!(error.to_string().contains("leadMinutes"), "{refused}: {error}");
+    }
+    let shortest = SubscriptionWrite { lead_minutes: 31, ..write(&ngc, &backyard, 1) };
+    assert_eq!(catalog.put_reminder_subscription(&shortest).await.unwrap().lead_minutes, 31);
+    let longest = SubscriptionWrite { lead_minutes: 10_080, ..write(&ic, &backyard, 1) };
+    assert_eq!(catalog.put_reminder_subscription(&longest).await.unwrap().lead_minutes, 10_080);
+    catalog.save_reminder_lead_time(0, 10_080).await.unwrap();
+    catalog.close().await.unwrap();
+
+    let mut conn = raw(&fx.db).await;
+    for (lead, kept) in [(30, false), (31, true), (10_080, true), (10_081, false)] {
+        let subscription =
+            sqlx::query("UPDATE reminder_subscriptions SET lead_minutes = ?1 WHERE target_id = ?2")
+                .bind(lead)
+                .bind(ngc.candidate.id.to_string())
+                .execute(&mut conn)
+                .await;
+        assert_eq!(subscription.is_ok(), kept, "subscription {lead}");
+        let default = sqlx::query("UPDATE reminder_lead_time SET lead_minutes = ?1 WHERE id = 1")
+            .bind(lead)
+            .execute(&mut conn)
+            .await;
+        assert_eq!(default.is_ok(), kept, "default {lead}");
+    }
+    conn.close().await.unwrap();
+}
+
 #[tokio::test]
 async fn a_delivery_identity_is_claimed_once_and_a_sending_row_reopens_uncertain() {
     let Planning { fx, catalog, ngc, ic, backyard, athens } = planning().await;
@@ -469,8 +508,8 @@ async fn a_catalog_recorded_at_an_older_schema_version_is_refused_before_any_ddl
     let mut conn = raw(&fx.db).await;
     let tables: Vec<String> = sqlx::query_scalar(
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN \
-         ('observing_sites', 'planning_settings', 'home_criteria', 'target_plans', \
-          'reminder_subscriptions', 'reminder_deliveries')",
+         ('observing_sites', 'planning_settings', 'home_criteria', 'reminder_lead_time', \
+          'target_plans', 'reminder_subscriptions', 'reminder_deliveries')",
     )
     .fetch_all(&mut conn)
     .await

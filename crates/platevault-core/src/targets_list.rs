@@ -5,9 +5,12 @@
 //! facade: My targets (★ favourites, qualifying current session Targets, and
 //! the subjects of open Projects, with their badges, D-W60/D-W125), Browse
 //! catalogues, unified search over My targets, the bundled catalogues and
-//! SIMBAD, tonight's planning columns, Sessions and Captured per channel over
-//! frames outside the Trash, built-in and saved presets, and rig-dependent Fit,
-//! Filters and presets. Planning values come from [`planning::target_night`].
+//! SIMBAD, the night's planning columns under Home's stored criteria (the
+//! one source, [`Library::home_criteria`]), Sessions and Captured per channel
+//! over frames outside the Trash, built-in and saved presets, and
+//! rig-dependent Fit, Filters and presets. Planning values and the altitude
+//! samples come from [`planning::target_night`]; each Filters band is graded
+//! by [`band_grade`], the rule Home's Tonight grades goals with.
 
 use std::cmp::Ordering;
 use std::collections::HashMap;
@@ -16,17 +19,18 @@ use std::num::NonZeroUsize;
 use time::{Date, OffsetDateTime};
 use uuid::Uuid;
 
+use crate::goal_grades::{band_grade, MoonKey};
 use crate::library::{blocking, Library};
 use crate::planning::{self, NightContext, TargetNight};
 use crate::targets::TargetQuery;
 use crate::{
     AngularSize, Band, BandState, BuiltinPreset, BuiltinPresetInfo, Catalogue, FieldOfView, Fit,
-    FitUnknownReason, LibraryError, MoonAvoidanceCurve, MyTargetMarks, ObservingSite,
-    PlanningUnknownReason, PresetFilters, PresetRef, Recommendation, Revision, RigFit,
-    RigSelection, SavedPreset, SimbadSearch, TargetActivity, TargetRecord, TargetRow, TargetsBasis,
-    TargetsColumn, TargetsPage, TargetsPresets, TargetsQuery, TargetsRig, TargetsSearchAction,
-    TargetsSearchResult, TargetsSearchResults, TargetsSearchSource, TargetsShow, TargetsSort,
-    WindowUnavailableReason, FIT_MIN_COVERAGE,
+    FitUnknownReason, HomeCriteria, LibraryError, MoonAvoidanceCurve, MoonCriterion,
+    MyTargetMarks, ObservingSite, ObservingWindow, PlanningUnknownReason, PresetFilters, PresetRef,
+    Recommendation, Revision, RigFit, RigSelection, SavedPreset, SimbadSearch, TargetActivity,
+    TargetRecord, TargetRow, TargetsBasis, TargetsColumn, TargetsPage, TargetsPresets,
+    TargetsQuery, TargetsRig, TargetsSearchAction, TargetsSearchResult, TargetsSearchResults,
+    TargetsSearchSource, TargetsShow, TargetsSort, WindowUnavailableReason, FIT_MIN_COVERAGE,
 };
 
 /// Local search results listed before the SIMBAD result.
@@ -36,19 +40,29 @@ const TARGET_PAGE: u32 = 1000;
 
 impl Library {
     /// One Targets list page: the rows of the Show mode, catalogues and preset
-    /// with tonight's planning values at the planning site (the query's, else
-    /// the default site), sorted with unknown values last, and the Moon once
-    /// for the toolbar. With rigs selected each row carries one Fit per rig and
-    /// the Filters strip is the union of their bands. Read-only.
+    /// with the night's planning values at the planning site (the query's,
+    /// else the default site) under Home's stored criteria, sorted with
+    /// unknown values last, and the Moon and darkness window once for the
+    /// toolbar. Without a site or the criteria the rows still list, their
+    /// planning values unknown with the reason, the site first. With rigs
+    /// selected each row carries one Fit per rig and the Filters strip is the
+    /// union of their bands. Read-only.
     ///
     /// # Errors
     /// `InvalidInput` for an invalid query or a preset the selected rigs do
-    /// not offer; `NotFound` for an unknown site, rig or Project.
+    /// not offer; `NotFound` for an unknown site, rig or Project;
+    /// `PersistenceFailure` when Home's recorded criteria cannot be read.
     pub async fn target_rows(&self, query: &TargetsQuery) -> Result<TargetsPage, LibraryError> {
         query.validate()?;
         let (rigs, strip) = self.targets_rigs(query.rigs).await?;
         query.preset.map_or(Ok(()), |preset| offer(preset, &rigs, &strip))?;
-        let site = self.planning_site(query.site_id).await?;
+        let planning = match (self.planning_site(query.site_id).await?, self.home_criteria().await?)
+        {
+            (None, _) => Err(PlanningUnknownReason::NoSite),
+            (Some(_), HomeCriteria { criteria: None, .. }) => Err(PlanningUnknownReason::NoCriteria),
+            (Some(site), HomeCriteria { criteria: Some(criteria), .. }) => Ok((site, criteria)),
+        };
+        let planning_unavailable = planning.as_ref().err().copied();
         if query.show == TargetsShow::Browse
             && query.catalogues.is_empty()
             && query.preset.is_none()
@@ -56,7 +70,8 @@ impl Library {
             return Ok(TargetsPage {
                 basis: None,
                 moon: None,
-                planning_unavailable: site.is_none().then_some(PlanningUnknownReason::NoSite),
+                darkness: None,
+                planning_unavailable,
                 needs_catalogue_or_preset: true,
                 total: 0,
                 rows: Vec::new(),
@@ -93,36 +108,39 @@ impl Library {
         let avoidance = self.catalog().workflow_settings().await?.0.moon_avoidance;
         let curves: Vec<(Band, MoonAvoidanceCurve)> =
             strip.iter().map(|band| (*band, avoidance.curve(*band))).collect();
-        let criteria = query.criteria;
         let night = query.night;
-        let computed = blocking(move || {
-            let Some(site) = site else {
-                return Ok((None, None, records.into_iter().map(|r| (r, None)).collect()));
+        let (sky, computed) = blocking(move || {
+            let (site, criteria) = match planning {
+                Ok(planning) => planning,
+                Err(reason) => {
+                    let rows: Vec<Computed> = records.into_iter().map(|r| (r, Err(reason))).collect();
+                    return Ok((None, rows));
+                }
             };
             let night = match night {
                 Some(night) => night,
                 None => planning::night_of(OffsetDateTime::now_utc(), &site)?,
             };
             let context = NightContext::new(&site, night, &criteria)?;
-            let moon = planning::night_sky(&site, night, criteria.darkness)?.moon;
-            let nights = nights_of(&context, &records, &site)?;
+            let sky = planning::night_sky(&site, night, criteria.darkness)?;
+            let nights = nights_of(&context, &records, &site, &curves)?;
+            let bounds = context.bounds();
             let basis = TargetsBasis {
                 site: site.basis(),
                 time_zone: site.time_zone,
                 night,
+                night_start_utc: bounds.start,
+                night_end_utc: bounds.end,
                 criteria,
                 method: planning::METHOD.into(),
             };
-            let age = context.moon_age_days();
-            let rows: Vec<Computed> =
-                records.into_iter().zip(nights).map(|(r, n)| (r, Some((n, age)))).collect();
-            Ok((Some(basis), Some(moon), rows))
+            let rows: Vec<Computed> = records.into_iter().zip(nights).collect();
+            Ok((Some((basis, sky.moon, sky.darkness)), rows))
         })
         .await?;
-        let (basis, moon, computed) = computed;
         let mut rows: Vec<Listed> = computed
             .into_iter()
-            .map(|(record, night)| listed(record, night, &marks, &saved, &activity, &rigs, &curves))
+            .map(|(record, night)| listed(record, night, &marks, &saved, &activity, &rigs))
             .collect();
         if let Some(preset) = query.preset {
             rows.retain(|row| admits(preset, row));
@@ -132,10 +150,15 @@ impl Library {
         let offset = usize::try_from(query.offset).unwrap_or(usize::MAX);
         let limit =
             query.limit.map_or(usize::MAX, |limit| usize::try_from(limit).unwrap_or(usize::MAX));
+        let (basis, moon, darkness) = match sky {
+            Some((basis, moon, darkness)) => (Some(basis), Some(moon), darkness),
+            None => (None, None, None),
+        };
         Ok(TargetsPage {
-            planning_unavailable: basis.is_none().then_some(PlanningUnknownReason::NoSite),
             basis,
             moon,
+            darkness,
+            planning_unavailable,
             needs_catalogue_or_preset: false,
             total,
             rows: rows.into_iter().skip(offset).take(limit).map(|listed| listed.row).collect(),
@@ -406,7 +429,8 @@ fn nights_of(
     context: &NightContext,
     records: &[TargetRecord],
     site: &ObservingSite,
-) -> Result<Vec<Result<TargetNight, WindowUnavailableReason>>, LibraryError> {
+    curves: &[(Band, MoonAvoidanceCurve)],
+) -> Result<Vec<Planned>, LibraryError> {
     if records.is_empty() {
         return Ok(Vec::new());
     }
@@ -418,7 +442,7 @@ fn nights_of(
             .map(|part| {
                 scope.spawn(move || {
                     part.iter()
-                        .map(|record| planning::target_night(context, record, site))
+                        .map(|record| graded_night(context, record, site, curves))
                         .collect::<Result<Vec<_>, _>>()
                 })
             })
@@ -434,8 +458,36 @@ fn nights_of(
     })
 }
 
-/// A record and its night with the night's Moon age, or none without a site.
-type Computed = (TargetRecord, Option<(Result<TargetNight, WindowUnavailableReason>, f64)>);
+/// A Target's night with each strip band graded, or why it has none.
+type Planned = Result<GradedNight, PlanningUnknownReason>;
+
+/// A Target's night and its strip bands, graded under their curves.
+struct GradedNight {
+    night: TargetNight,
+    bands: Vec<BandState>,
+}
+
+fn graded_night(
+    context: &NightContext,
+    record: &TargetRecord,
+    site: &ObservingSite,
+    curves: &[(Band, MoonAvoidanceCurve)],
+) -> Result<Planned, LibraryError> {
+    let night = match planning::target_night(context, record, site)? {
+        Ok(night) => night,
+        Err(WindowUnavailableReason::TargetCoordinatesUnknown) => {
+            return Ok(Err(PlanningUnknownReason::TargetCoordinatesUnknown));
+        }
+        Err(WindowUnavailableReason::UnsupportedCoordinateFrame) => {
+            return Ok(Err(PlanningUnknownReason::UnsupportedCoordinateFrame));
+        }
+    };
+    let bands = graded_bands(context, record, site, curves)?;
+    Ok(Ok(GradedNight { night, bands }))
+}
+
+/// A record and its graded night, or why it has none.
+type Computed = (TargetRecord, Planned);
 
 /// A row with the values its preset filters read that no column shows.
 struct Listed {
@@ -445,12 +497,11 @@ struct Listed {
 
 fn listed(
     record: TargetRecord,
-    night: Option<(Result<TargetNight, WindowUnavailableReason>, f64)>,
+    night: Planned,
     marks: &MyTargetMarks,
     saved: &HashMap<Uuid, TargetRecord>,
     activity: &std::collections::BTreeMap<Uuid, TargetActivity>,
     rigs: &[TargetsRig],
-    curves: &[(Band, MoonAvoidanceCurve)],
 ) -> Listed {
     let id = record.candidate.id;
     let TargetActivity { sessions, captured } = activity.get(&id).cloned().unwrap_or_default();
@@ -463,6 +514,7 @@ fn listed(
         img_time_minutes: None,
         img_time_zero_reason: None,
         bands: Vec::new(),
+        altitude_samples_deg: Vec::new(),
         recommendation: None,
         next_opposition: None,
         unknown_reason: None,
@@ -480,22 +532,11 @@ fn listed(
     };
     let mut moon_up_window_minutes = 0;
     match night {
-        None => row.unknown_reason = Some(PlanningUnknownReason::NoSite),
-        Some((Err(reason), _)) => {
-            row.unknown_reason = Some(match reason {
-                WindowUnavailableReason::TargetCoordinatesUnknown => {
-                    PlanningUnknownReason::TargetCoordinatesUnknown
-                }
-                WindowUnavailableReason::UnsupportedCoordinateFrame => {
-                    PlanningUnknownReason::UnsupportedCoordinateFrame
-                }
-            });
-        }
-        Some((Ok(night), moon_age_days)) => {
-            let moon_free = night.img_time_minutes > 0 && night.moon_up_window_minutes == 0;
-            let bands = band_states(curves, night.lunar_separation_deg, moon_age_days, moon_free);
+        Err(reason) => row.unknown_reason = Some(reason),
+        Ok(GradedNight { night, bands }) => {
             row.recommendation = Some(recommendation(&bands));
             row.bands = bands;
+            row.altitude_samples_deg = night.altitude_samples_deg;
             row.max_altitude_deg = night.peak_dark_altitude_deg;
             row.lunar_separation_deg = Some(night.lunar_separation_deg);
             row.img_time_minutes = Some(night.img_time_minutes);
@@ -564,23 +605,44 @@ fn offer(preset: BuiltinPreset, rigs: &[TargetsRig], strip: &[Band]) -> Result<(
     Err(LibraryError::InvalidInput(format!("the preset {:?} needs {needs}", preset.name())))
 }
 
-/// Each strip band viable or limited by the Moon tonight: viable when the
-/// Target's separation from the Moon is at least its saved Moon-avoidance
-/// curve's minimum at the night's Moon age (PLAN-FR-02, PLAN-TGT-FR-06). A
-/// Target whose windows all fall while the Moon is down is limited in no band.
-fn band_states(
+/// Each strip band graded for the context's night under its Moon-avoidance
+/// curve (PLAN-FR-02, PLAN-TGT-FR-06), by the rule Home's Tonight grades
+/// goals with ([`band_grade`]): the Plan area windows under the curve's Moon
+/// criterion at the night's Moon age against the Moon-free windows, the
+/// band's clear minutes their total. Bands whose curves set the same Moon
+/// criterion share one computation, and a Target without a Moon-free window
+/// has none under any curve. `record` has a usable position. Blocking.
+fn graded_bands(
+    context: &NightContext,
+    record: &TargetRecord,
+    site: &ObservingSite,
     curves: &[(Band, MoonAvoidanceCurve)],
-    separation_deg: f64,
-    moon_age_days: f64,
-    moon_free: bool,
-) -> Vec<BandState> {
-    curves
-        .iter()
-        .map(|(band, curve)| BandState {
-            band: *band,
-            viable: moon_free || separation_deg >= curve.min_separation_deg(moon_age_days),
-        })
-        .collect()
+) -> Result<Vec<BandState>, LibraryError> {
+    // A position target_night accepted always yields windows.
+    let windows = |moon| -> Result<Vec<ObservingWindow>, LibraryError> {
+        Ok(planning::night_windows(&context.with_moon(moon), record, site)?.unwrap_or_default())
+    };
+    let longest = |windows: &[ObservingWindow]| windows.iter().map(|w| w.duration_minutes).max();
+    let free = longest(&windows(MoonCriterion::None)?);
+    let age = context.moon_age_days();
+    let mut computed: Vec<(MoonKey, Option<u32>, u32)> = Vec::new();
+    let mut bands = Vec::with_capacity(curves.len());
+    for (band, curve) in curves {
+        let moon = planning::curve_criterion(*curve, age);
+        let key = MoonKey::of(moon);
+        let (curved, clear_minutes) = match computed.iter().find(|(known, ..)| *known == key) {
+            Some((_, curved, clear)) => (*curved, *clear),
+            None if free.is_none() => (None, 0),
+            None => {
+                let found = windows(moon)?;
+                let clear = found.iter().map(|w| w.duration_minutes).sum();
+                computed.push((key, longest(&found), clear));
+                (longest(&found), clear)
+            }
+        };
+        bands.push(BandState { band: *band, grade: band_grade(curved, free), clear_minutes });
+    }
+    Ok(bands)
 }
 
 const fn broadband(band: Band) -> bool {
@@ -588,17 +650,17 @@ const fn broadband(band: Band) -> bool {
 }
 
 fn recommendation(bands: &[BandState]) -> Recommendation {
-    if bands.iter().any(|state| state.viable && broadband(state.band)) {
+    if bands.iter().any(|state| state.suits() && broadband(state.band)) {
         Recommendation::BroadbandOk
-    } else if bands.iter().any(|state| state.viable) {
+    } else if bands.iter().any(BandState::suits) {
         Recommendation::NarrowbandOnly
     } else {
         Recommendation::AvoidTonight
     }
 }
 
-fn viable(row: &TargetRow, admit: impl Fn(Band) -> bool) -> bool {
-    row.bands.iter().any(|state| state.viable && admit(state.band))
+fn suits(row: &TargetRow, admit: impl Fn(Band) -> bool) -> bool {
+    row.bands.iter().any(|state| state.suits() && admit(state.band))
 }
 
 // ---------------------------------------------------------------------------
@@ -612,16 +674,16 @@ fn admits(preset: BuiltinPreset, listed: &Listed) -> bool {
     let img = row.img_time_minutes.unwrap_or(0);
     let kind = row.target.object_type.as_str();
     match preset {
-        BuiltinPreset::BestTonightBroadband => img > 0 && viable(row, broadband),
+        BuiltinPreset::BestTonightBroadband => img > 0 && suits(row, broadband),
         BuiltinPreset::NarrowbandMoonUp => {
-            img > 0 && listed.moon_up_window_minutes > 0 && viable(row, |band| !broadband(band))
+            img > 0 && listed.moon_up_window_minutes > 0 && suits(row, |band| !broadband(band))
         }
         BuiltinPreset::EmissionNebulaeHa => {
-            kind == "emission_nebula" && viable(row, |band| band == Band::Ha)
+            kind == "emission_nebula" && suits(row, |band| band == Band::Ha)
         }
         BuiltinPreset::GalaxiesDarkSky => kind == "galaxy" && img > listed.moon_up_window_minutes,
         BuiltinPreset::PlanetaryNebulaeOiii => {
-            kind == "planetary_nebula" && viable(row, |band| band == Band::Oiii)
+            kind == "planetary_nebula" && suits(row, |band| band == Band::Oiii)
         }
         BuiltinPreset::MosaicCandidates => row.fit.iter().any(|rig| rig.fit.is_mosaic_candidate()),
         BuiltinPreset::FitsNicely => row.fit.iter().any(|rig| rig.fit.fits_nicely()),
@@ -646,7 +708,7 @@ fn key(row: &TargetRow, column: TargetsColumn) -> Option<Key<'_>> {
         }
         TargetsColumn::Filters => (!row.bands.is_empty()).then(|| {
             Key::Number(f64::from(
-                u8::try_from(row.bands.iter().filter(|state| state.viable).count())
+                u8::try_from(row.bands.iter().filter(|state| state.suits()).count())
                     .unwrap_or(u8::MAX),
             ))
         }),
@@ -735,7 +797,7 @@ fn digits(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::MoonAvoidance;
+    use crate::BandGrade;
 
     #[test]
     fn natural_order_compares_digit_runs_by_value() {
@@ -744,18 +806,17 @@ mod tests {
         assert_eq!(names, ["IC 1396", "M 1", "m 2", "M 02x", "M 10", "NGC 224"]);
     }
 
-    /// The default curves at full Moon (spec 047 D4).
+    /// A suited broadband band recommends broadband; otherwise a suited
+    /// narrowband band, even a marginal one, recommends narrowband only.
     #[test]
-    fn full_moon_limits_broadband_before_narrowband() {
-        let defaults = MoonAvoidance::default();
-        let curves: Vec<_> = BANDS.iter().map(|band| (*band, defaults.curve(*band))).collect();
-        let bands = band_states(&curves, 80.0, 0.0, false);
-        let viable: Vec<Band> = bands.iter().filter(|s| s.viable).map(|s| s.band).collect();
-        assert_eq!(viable, [Band::Ha, Band::Sii]);
+    fn recommendation_follows_the_suited_bands() {
+        let state = |band, grade| BandState { band, grade, clear_minutes: 0 };
+        let mut bands =
+            vec![state(Band::L, BandGrade::Poor), state(Band::Ha, BandGrade::Marginal)];
         assert_eq!(recommendation(&bands), Recommendation::NarrowbandOnly);
-        assert!(band_states(&curves, 60.0, 14.7, false).iter().all(|state| state.viable));
-        assert!(band_states(&curves, 1.0, 0.0, true).iter().all(|state| state.viable));
-        let none = band_states(&curves, 1.0, 0.0, false);
-        assert_eq!(recommendation(&none), Recommendation::AvoidTonight);
+        bands[0].grade = BandGrade::Marginal;
+        assert_eq!(recommendation(&bands), Recommendation::BroadbandOk);
+        bands.iter_mut().for_each(|band| band.grade = BandGrade::Poor);
+        assert_eq!(recommendation(&bands), Recommendation::AvoidTonight);
     }
 }
