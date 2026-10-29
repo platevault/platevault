@@ -2384,6 +2384,15 @@ export type Availability = "available" | "offline" | "missing" | "unreadable" | 
 /**  A band a filter passes, in the order the Targets Filters strip lists them. */
 export type Band = "L" | "R" | "G" | "B" | "Ha" | "SII" | "OIII";
 
+/**
+ *  How well a night suits a band under its Moon-avoidance curve
+ *  (PLAN-FR-02, PLAN-FR-11, PLAN-TGT-FR-06), by R10-MOON-MODEL.md §3: good
+ *  when the curve leaves a window whose longest keeps at least 75% of the
+ *  longest Moon-free window, marginal when it leaves a shorter one, poor
+ *  when it leaves none.
+ */
+export type BandGrade = "good" | "marginal" | "poor";
+
 /**  One band of the Filters strip: viable tonight, or limited by the Moon. */
 export type BandState = {
 	band: Band,
@@ -3938,6 +3947,61 @@ export type GoalGap = {
 	remaining: GapRemaining,
 	/**  Read from "in project" only. */
 	met: boolean,
+};
+
+/**  One unfinished goal graded for one night. */
+export type GoalGrade = GoalGrade_Serialize | GoalGrade_Deserialize;
+
+/**  One unfinished goal graded for one night. */
+export type GoalGrade_Deserialize = {
+	projectId: string,
+	projectName: string,
+	goalId: string,
+	subjectId: string,
+	/**  The mosaic panel group of a panel goal. */
+	groupId: string | null,
+	targetId: string,
+	designation: string,
+	/**  The goal's trimmed channel; `None` for frames without a FILTER. */
+	channel: string | null,
+	/**
+	 *  The band whose curve grades the goal; absent when the channel names
+	 *  no filter on the Project's rigs, so no curve applies.
+	 */
+	band: Band | null,
+	/**  Absent exactly when `band` is. */
+	grade: BandGrade | null,
+	/**
+	 *  The best window under the band's curve, as the Plan area lists it;
+	 *  absent when the goal is not good or marginal.
+	 */
+	window: ObservingWindow_Deserialize | null,
+};
+
+/**  One unfinished goal graded for one night. */
+export type GoalGrade_Serialize = {
+	projectId: string,
+	projectName: string,
+	goalId: string,
+	subjectId: string,
+	/**  The mosaic panel group of a panel goal. */
+	groupId: string | null,
+	targetId: string,
+	designation: string,
+	/**  The goal's trimmed channel; `None` for frames without a FILTER. */
+	channel: string | null,
+	/**
+	 *  The band whose curve grades the goal; absent when the channel names
+	 *  no filter on the Project's rigs, so no curve applies.
+	 */
+	band: Band | null,
+	/**  Absent exactly when `band` is. */
+	grade: BandGrade | null,
+	/**
+	 *  The best window under the band's curve, as the Plan area lists it;
+	 *  absent when the goal is not good or marginal.
+	 */
+	window: ObservingWindow_Serialize | null,
 };
 
 /**
@@ -8426,8 +8490,9 @@ export type Tolerance = "none";
 
 /**
  *  Home's Tonight section. Without a default site nothing is computed:
- *  `site`, `night`, `moon` and `darkness` are absent, `windows` is empty and
- *  `unavailableReason` reads "Add an observing site in Settings".
+ *  `site`, `night`, `moon`, `darkness` and `nextGoodNight` are absent,
+ *  `goals` and `windows` are empty and `unavailableReason` reads "Add an
+ *  observing site in Settings".
  */
 export type Tonight = Tonight_Serialize | Tonight_Deserialize;
 
@@ -8493,14 +8558,27 @@ export type TonightWindow_Serialize = {
 
 /**
  *  Home's Tonight section. Without a default site nothing is computed:
- *  `site`, `night`, `moon` and `darkness` are absent, `windows` is empty and
- *  `unavailableReason` reads "Add an observing site in Settings".
+ *  `site`, `night`, `moon`, `darkness` and `nextGoodNight` are absent,
+ *  `goals` and `windows` are empty and `unavailableReason` reads "Add an
+ *  observing site in Settings".
  */
 export type Tonight_Deserialize = {
 	site: SiteBasis | null,
 	timeZone: string | null,
 	night?: string | null,
 	criteria: PlanCriteria,
+	/**
+	 *  Every unfinished goal of an open Project graded for tonight, best
+	 *  first; the criteria's Moon limit gives way to each band's curve.
+	 */
+	goals: GoalGrade_Deserialize[],
+	/**
+	 *  When no goal suits tonight, the first of the next
+	 *  [`crate::goal_grades::NEXT_GOOD_NIGHT_SEARCH`] nights that suits one;
+	 *  absent when a goal suits tonight, there is no unfinished goal, or no
+	 *  night in that span suits one.
+	 */
+	nextGoodNight?: string | null,
 	/**  One per Target with a window tonight, by start, then designation. */
 	windows: TonightWindow_Deserialize[],
 	moon: NightMoon_Deserialize | null,
@@ -8515,14 +8593,27 @@ export type Tonight_Deserialize = {
 
 /**
  *  Home's Tonight section. Without a default site nothing is computed:
- *  `site`, `night`, `moon` and `darkness` are absent, `windows` is empty and
- *  `unavailableReason` reads "Add an observing site in Settings".
+ *  `site`, `night`, `moon`, `darkness` and `nextGoodNight` are absent,
+ *  `goals` and `windows` are empty and `unavailableReason` reads "Add an
+ *  observing site in Settings".
  */
 export type Tonight_Serialize = {
 	site: SiteBasis | null,
 	timeZone: string | null,
 	night: string | null,
 	criteria: PlanCriteria,
+	/**
+	 *  Every unfinished goal of an open Project graded for tonight, best
+	 *  first; the criteria's Moon limit gives way to each band's curve.
+	 */
+	goals: GoalGrade_Serialize[],
+	/**
+	 *  When no goal suits tonight, the first of the next
+	 *  [`crate::goal_grades::NEXT_GOOD_NIGHT_SEARCH`] nights that suits one;
+	 *  absent when a goal suits tonight, there is no unfinished goal, or no
+	 *  night in that span suits one.
+	 */
+	nextGoodNight: string | null,
 	/**  One per Target with a window tonight, by start, then designation. */
 	windows: TonightWindow_Serialize[],
 	moon: NightMoon_Serialize | null,

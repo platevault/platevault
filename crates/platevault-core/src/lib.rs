@@ -13,6 +13,7 @@ pub mod calibration;
 pub mod calibration_inputs;
 pub mod custody;
 pub mod frame_review;
+pub mod goal_grades;
 pub mod grouping;
 pub mod home;
 pub mod import;

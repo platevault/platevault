@@ -230,6 +230,20 @@ pub enum MoonCriterion {
     MinSeparation { min_separation_deg: f64 },
 }
 
+/// How well a night suits a band under its Moon-avoidance curve
+/// (PLAN-FR-02, PLAN-FR-11, PLAN-TGT-FR-06), by R10-MOON-MODEL.md §3: good
+/// when the curve leaves a window whose longest keeps at least 75% of the
+/// longest Moon-free window, marginal when it leaves a shorter one, poor
+/// when it leaves none.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
+pub enum BandGrade {
+    Good,
+    Marginal,
+    Poor,
+}
+
 /// Explicit astronomical criteria; every field is required and none defaults.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

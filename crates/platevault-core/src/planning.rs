@@ -30,9 +30,10 @@ use skymath::{
 use time::{Date, Duration, OffsetDateTime, UtcOffset};
 
 use crate::{
-    Darkness, DarknessWindow, ImgTimeZeroReason, LibraryError, MoonCriterion, MoonPhase, NightMoon,
-    NightPlan, NightSky, NoWindowReason, ObservingSite, ObservingWindow, PlanCriteria,
-    TargetRecord, WindowBasis, WindowKey, WindowQuery, WindowSet, WindowUnavailableReason,
+    Darkness, DarknessWindow, ImgTimeZeroReason, LibraryError, MoonAvoidanceCurve, MoonCriterion,
+    MoonPhase, NightMoon, NightPlan, NightSky, NoWindowReason, ObservingSite, ObservingWindow,
+    PlanCriteria, TargetRecord, WindowBasis, WindowKey, WindowQuery, WindowSet,
+    WindowUnavailableReason,
 };
 
 /// How every window is computed; named in each window basis.
@@ -86,6 +87,23 @@ pub fn night_of(instant: OffsetDateTime, site: &ObservingSite) -> Result<Date, L
         local.date().previous_day().ok_or_else(|| out_of_range(instant))
     } else {
         Ok(local.date())
+    }
+}
+
+/// The Moon criterion a band's Moon-avoidance curve sets on a night whose
+/// Moon is `moon_age_days` from full (PLAN-FR-02): its least separation
+/// whenever the Moon is up, at the age the Targets list grades bands at.
+/// A curve asking no separation is no limit; one asking 180° or more leaves
+/// only the Moon below the horizon.
+#[must_use]
+pub fn curve_criterion(curve: MoonAvoidanceCurve, moon_age_days: f64) -> MoonCriterion {
+    let min_separation_deg = curve.min_separation_deg(moon_age_days);
+    if min_separation_deg <= 0.0 {
+        MoonCriterion::None
+    } else if min_separation_deg >= 180.0 {
+        MoonCriterion::BelowHorizon
+    } else {
+        MoonCriterion::MinSeparation { min_separation_deg }
     }
 }
 
