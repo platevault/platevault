@@ -1,7 +1,7 @@
 /**
  * Library events: the live half of a durable read.
  *
- * The library host emits five events, whose names and payload types the
+ * The library host emits six events, whose names and payload types the
  * generated client exports (`library_specta_builder`). An event can be lost:
  * one emitted before a listener attaches, while the webview reloads, or
  * across a restart reaches nobody. The status command it reports on stays
@@ -23,6 +23,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import {
   APPLY_WAITING_EVENT,
   type ApplyWaiting,
+  IMPORT_DEVICES_EVENT,
   MEASUREMENT_PROGRESS_EVENT,
   type MeasurementProgress_Serialize,
   NEW_CAPTURES_EVENT,
@@ -31,6 +32,7 @@ import {
   type ScanProgressEvent,
   NATIVE_QUIT_CONFIRM_EVENT,
   type NativeQuitRequest,
+  type RemovableDevice,
 } from "./ipc"
 
 /** The payload each library event carries, as the host serialises it. */
@@ -40,6 +42,8 @@ export interface LibraryEventPayloads {
   [NEW_CAPTURES_EVENT]: NewCaptures
   [APPLY_WAITING_EVENT]: ApplyWaiting
   [NATIVE_QUIT_CONFIRM_EVENT]: NativeQuitRequest
+  /** The whole removable-device list after each change, as `import_devices_list` returns it. */
+  [IMPORT_DEVICES_EVENT]: RemovableDevice[]
 }
 
 export type LibraryEventName = keyof LibraryEventPayloads

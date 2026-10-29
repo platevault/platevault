@@ -41,6 +41,7 @@ import type { ErrorResponse, RetryAction } from "../../../desktop/src/bindings/l
 export type * from "../../../desktop/src/bindings/library-index"
 export {
   APPLY_WAITING_EVENT,
+  IMPORT_DEVICES_EVENT,
   MEASUREMENT_PROGRESS_EVENT,
   NATIVE_QUIT_CONFIRM_EVENT,
   NEW_CAPTURES_EVENT,
