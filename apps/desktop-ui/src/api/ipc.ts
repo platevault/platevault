@@ -34,6 +34,7 @@
  *   request carries exactly as the previous read returned them; the library
  *   refuses a stale one with `conflict`.
  */
+import { isTauri } from "@tauri-apps/api/core"
 import * as generated from "../../../desktop/src/bindings/library-index"
 import type { ErrorResponse, RetryAction } from "../../../desktop/src/bindings/library-index"
 
@@ -102,6 +103,11 @@ export async function data<T>(pending: Promise<ActionResult<T>>): Promise<T> {
   const result = await pending
   if (result.ok) return result.data
   throw new LibraryError(result.failure)
+}
+
+/** True inside the desktop shell, where the library host answers; false in a browser preview or a test that sets up no shell. */
+export function inShell(): boolean {
+  return isTauri()
 }
 
 /** The `LibraryFailure` a query or mutation failed with; null for any other error. */

@@ -65,6 +65,7 @@ use desktop_services::captures::NewCapturesFeed;
 use desktop_services::jobs::{MeasurementProgressFeed, ScanProgressFeed};
 use platevault_core::library::Library;
 use platevault_core::new_captures::CaptureWatch;
+use platevault_core::preferences::{PreferenceStore, PREFERENCES_FILE};
 use platevault_core::project_output::OutputWatch;
 use platevault_core::targets::SimbadConfig;
 use tauri::{Manager, RunEvent};
@@ -73,8 +74,9 @@ use crate::commands::library as ipc;
 use crate::commands::project_apply::ApplyRuns;
 use crate::commands::project_wrap_up::{CloseRuns, WrapUpTrash};
 
-/// Catalog directory override, used verbatim. An `e2e` build requires it, so a
-/// test run never opens the catalog of the user's library shell.
+/// Catalog and settings-store directory override, used verbatim. An `e2e`
+/// build requires it, so a test run never opens the catalog or the
+/// preferences of the user's library shell.
 pub const DATA_DIR_ENV: &str = "PV_LIBRARY_DATA_DIR";
 /// Catalog directory under the platform app-data directory by default. That
 /// directory follows the config identifier, and `library-dev` has its own, so
@@ -295,6 +297,10 @@ macro_rules! library_commands {
             crate::commands::issues::library_issues,
             crate::commands::issues::library_dismiss_issue,
             crate::commands::issues::library_restore_issue,
+            // appearance: theme, language, single-key shortcuts (064 LIB-FR-21, D-W166)
+            crate::commands::appearance::library_preferences,
+            crate::commands::appearance::library_change_preference,
+            crate::commands::appearance::library_restore_default_preferences,
             // native shell (menu bar, tray, OS pickers)
             crate::commands::library_dialogs::library_pick_folder,
             crate::commands::library_dialogs::library_pick_file,
@@ -359,6 +365,10 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     // and managed before any webview can invoke a command.
     let app = builder.build(context)?;
     let data_dir = data_dir(&app)?;
+    // Appearance (D-W166): PlateVault's per-user settings store, outside every
+    // library. It is managed before any window opens, and each window's first
+    // frame paints with it (`FirstFrame`).
+    app.manage(Arc::new(PreferenceStore::open(preferences_path(&app)?)));
     let catalog = data_dir.join(CATALOG_FILE);
     let library = tauri::async_runtime::block_on(Library::open(&catalog, provider.as_ref()))
         .map_err(|error| format!("cannot open library catalog {}: {error}", catalog.display()))?;
@@ -486,6 +496,8 @@ fn shell_builder() -> Result<tauri::Builder<tauri::Wry>, String> {
     // The planning handlers call these through their Rust APIs, which need no
     // grant; window `library` holds only `capabilities/library.json`.
     let builder = builder.plugin(tauri_plugin_dialog::init()).plugin(tauri_plugin_opener::init());
+    // The stored appearance, handed to each webview before its page loads.
+    let builder = builder.plugin(crate::commands::appearance::FirstFrame::new());
     #[cfg(feature = "dev-tools")]
     let builder = builder.plugin(dev_bridge(
         std::env::var(BRIDGE_BIND_ENV).ok().as_deref(),
@@ -524,6 +536,17 @@ fn data_dir(app: &tauri::App) -> Result<PathBuf, Box<dyn Error>> {
         format!("cannot create library data directory {}: {error}", dir.display())
     })?;
     Ok(dir)
+}
+
+/// The settings store's file: beside the catalog when [`DATA_DIR_ENV`]
+/// isolates a run, else in the per-user config directory, which no library
+/// shares.
+fn preferences_path(app: &tauri::App) -> Result<PathBuf, Box<dyn Error>> {
+    let dir = match data_dir_override(std::env::var_os(DATA_DIR_ENV))? {
+        Some(dir) => dir,
+        None => app.path().app_config_dir()?,
+    };
+    Ok(dir.join(PREFERENCES_FILE))
 }
 
 /// The directory [`DATA_DIR_ENV`] names; unset or empty is none. An `e2e`

@@ -1514,6 +1514,28 @@ export const commands = {
 	 */
 	libraryRestoreIssue: (fingerprint: string) => typedError<null, ErrorResponse>(__TAURI_INVOKE("library_restore_issue", { fingerprint })),
 	/**
+	 *  The preferences in effect, with what the store read as a default when
+	 *  the app started. Reading never fails.
+	 */
+	libraryPreferences: () => __TAURI_INVOKE<PreferencesView>("library_preferences"),
+	/**
+	 *  Save one changed preference; the others keep their values.
+	 * 
+	 *  # Errors
+	 *  `InvalidInput` for a Match system pair of the wrong schemes;
+	 *  `PersistenceFailure` when the store can't be written.
+	 */
+	libraryChangePreference: (change: PreferenceChange) => typedError<PreferencesView, ErrorResponse>(__TAURI_INVOKE("library_change_preference", { change })),
+	/**
+	 *  Restore defaults: `platevault-dark`, the `platevault-dark` and
+	 *  `platevault-light` pair for Match system, English (UK) and single-key
+	 *  shortcuts on.
+	 * 
+	 *  # Errors
+	 *  `PersistenceFailure` when the store can't be written.
+	 */
+	libraryRestoreDefaultPreferences: () => typedError<PreferencesView, ErrorResponse>(__TAURI_INVOKE("library_restore_default_preferences")),
+	/**
 	 *  Pick a folder.
 	 * 
 	 *  # Errors
@@ -1744,6 +1766,18 @@ export type AppClosedDelivery = {
 };
 
 export type AppClosedReason = "no_installed_scheduler";
+
+/**  The appearance preferences. [`Default`] is what Restore defaults sets. */
+export type AppearancePreferences = {
+	theme: ThemeChoice,
+	systemThemes: SystemThemes,
+	language: Language,
+	/**
+	 *  `?`, `/`, `[`, G-sequences and Space on a table row (WCAG 2.1.4).
+	 *  Shortcuts with a modifier, such as ⌘K, stay on.
+	 */
+	singleKeyShortcuts: boolean,
+};
 
 export type ApplicableQuality = "unreviewed" | "usable" | "unusable" | ({ changed_content: {
 	previous: Quality,
@@ -3425,6 +3459,21 @@ export type ExportSelection_Serialize = {
 	windowKeys: string[],
 };
 
+/**  Why a stored preference reads as its default. */
+export type FallbackReason = 
+/**
+ *  The store's file can't be read or holds no JSON object, so every
+ *  preference reads as its default.
+ */
+"unreadable" | 
+/**
+ *  The value is not one the app knows: an unknown theme or language,
+ *  or a value of the wrong type.
+ */
+"unknown" | 
+/**  A Match system slot holds a theme of the other scheme. */
+"wrong_scheme";
+
 /**  Angular field of view of a rig's sensor at its focal length. */
 export type FieldOfView = {
 	widthDeg: number | null,
@@ -4781,6 +4830,13 @@ export type KeywordNames = {
 	panel: GroupKeyword,
 };
 
+/**  A language the app's message catalogues cover. */
+export type Language = 
+/**  English (UK). */
+"en-GB" | 
+/**  Portuguese (Brazil). */
+"pt-BR";
+
 /**
  *  The stable machine code of a [`LibraryError`]: what the client switches on
  *  and the key of its user-facing message. The desktop catalogues
@@ -5733,6 +5789,32 @@ export type PlanningUnknownReason =
 export type PreambleEntry = {
 	key: string,
 	value: string,
+};
+
+/**  One preference the user changed; the others keep their values. */
+export type PreferenceChange = { field: "theme"; choice: ThemeChoice } | { field: "systemThemes"; themes: SystemThemes } | { field: "language"; language: Language } | { field: "singleKeyShortcuts"; enabled: boolean };
+
+/**  A stored value the store read as its default, and why. */
+export type PreferenceFallback = {
+	/**  The preference that fell back; `None` when the whole file did. */
+	field: PreferenceField | null,
+	/**  The stored value as JSON text; `None` when the file was unreadable. */
+	stored: string | null,
+	reason: FallbackReason,
+};
+
+/**  A preference of [`AppearancePreferences`], as the store's file names it. */
+export type PreferenceField = "theme" | "systemThemes" | "language" | "singleKeyShortcuts";
+
+/**
+ *  The preferences in effect, with what the store read as a default when
+ *  the app started. A fallback stays listed for the session. The stored
+ *  value stays on disk until any preference is next changed, which saves
+ *  every preference as it is in effect.
+ */
+export type PreferencesView = {
+	preferences: AppearancePreferences,
+	fallbacks: PreferenceFallback[],
 };
 
 /**  The filters a saved preset restores. */
@@ -7712,6 +7794,15 @@ export type SymlinkCapability =
  */
 "unsupported";
 
+/**
+ *  The dark theme and the light theme Match system follows. The store
+ *  refuses a pair whose `dark` theme is light or whose `light` theme is dark.
+ */
+export type SystemThemes = {
+	dark: ThemeId,
+	light: ThemeId,
+};
+
 export type TargetAlias = {
 	text: string,
 	normalized: string,
@@ -8045,6 +8136,15 @@ export type TargetsSort = {
 	column: TargetsColumn,
 	descending?: boolean,
 };
+
+/**
+ *  One fixed theme (the Dark or Light mode), or Match system, which follows
+ *  the OS between the two themes of [`SystemThemes`].
+ */
+export type ThemeChoice = { mode: "fixed"; theme: ThemeId } | { mode: "system" };
+
+/**  A theme of the registry. */
+export type ThemeId = "platevault-dark" | "platevault-light" | "gruvbox-dark" | "gruvbox-light" | "nord" | "dracula" | "solarized-dark" | "solarized-light" | "catppuccin-mocha" | "catppuccin-latte" | "tokyo-night" | "one-dark" | "rose-pine";
 
 /**  One requested frame's thumbnail state. */
 export type ThumbnailEntry = ThumbnailEntry_Serialize | ThumbnailEntry_Deserialize;

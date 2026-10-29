@@ -18,6 +18,7 @@
 //! tolerances, ingestion settings, tools, inbox scan, and cleanup scan
 //! commands.
 
+pub mod appearance;
 pub mod artifacts;
 pub mod audit;
 pub mod calibration;

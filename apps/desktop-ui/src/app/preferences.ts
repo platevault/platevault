@@ -1,8 +1,15 @@
 /**
  * Shell preferences: theme (a registry theme or "system"), the light and
  * dark themes "system" switches between, language, and whether single-key
- * shortcuts are on (WCAG 2.1.4). Each applies at once and persists in this
- * webview's storage.
+ * shortcuts are on (WCAG 2.1.4). Each applies at once and persists in
+ * PlateVault's per-user settings store, outside every library (LIB-FR-21,
+ * D-W166), through the library IPC. The store is the only copy.
+ *
+ * The shell hands each webview the stored preferences before its page loads
+ * (`window.__PLATEVAULT_PREFERENCES__`, `commands/appearance.rs`), so this
+ * module reads them synchronously and the first frame paints with them.
+ * Outside the desktop shell there is no store: a change applies for the
+ * session only.
  *
  * The resolved theme is applied to the document root: `data-theme` selects
  * the theme's tokens (themes.css) and the `dark` class marks a dark theme for
@@ -11,19 +18,22 @@
  * `m.*()`, and `useMessages()` re-renders a component when it changes.
  */
 import { useSyncExternalStore } from "react"
+import { type AppearancePreferences, inShell, library, type PreferenceChange, type PreferencesView } from "../api/ipc"
 import { DEFAULT_LOCALE, isLocale, type Locale, m } from "../lib/i18n"
 import { defineCustomClientStrategy } from "../paraglide/runtime"
-import { DEFAULT_SYSTEM_THEMES, DEFAULT_THEME, isThemeId, type ThemeId, type ThemeScheme, themeInfo } from "./themes"
+import { DEFAULT_SYSTEM_THEMES, DEFAULT_THEME, type ThemeId, type ThemeScheme, themeInfo } from "./themes"
+
+declare global {
+  interface Window {
+    /** The stored preferences, set by the shell before the page loads. */
+    __PLATEVAULT_PREFERENCES__?: PreferencesView
+  }
+}
 
 export type ThemePreference = ThemeId | "system"
 
 /** The theme "system" applies while the OS is in each scheme. */
 export type SystemThemes = Record<ThemeScheme, ThemeId>
-
-const THEME_KEY = "platevault.theme"
-const LOCALE_KEY = "platevault.locale"
-const SYSTEM_THEME_KEY: Record<ThemeScheme, string> = { dark: "platevault.systemTheme.dark", light: "platevault.systemTheme.light" }
-const SINGLE_KEY_SHORTCUTS_KEY = "platevault.singleKeyShortcuts"
 
 export interface Preferences {
   theme: ThemePreference
@@ -37,54 +47,30 @@ export interface Preferences {
   singleKeyShortcuts: boolean
 }
 
+type Chosen = Omit<Preferences, "resolvedTheme" | "scheme">
+
+/** What Restore defaults sets: PlateVault Dark, the PlateVault pair, English (UK), shortcuts on. */
+const DEFAULTS: Chosen = { theme: DEFAULT_THEME, systemThemes: DEFAULT_SYSTEM_THEMES, locale: DEFAULT_LOCALE, singleKeyShortcuts: true }
+
 const listeners = new Set<() => void>()
 const media = window.matchMedia("(prefers-color-scheme: dark)")
 
-function stored(key: string): string | null {
-  try {
-    return localStorage.getItem(key)
-  } catch {
-    // Storage may be unavailable in test or restricted webview contexts.
-    return null
+function chosen(stored: AppearancePreferences): Chosen {
+  return {
+    theme: stored.theme.mode === "system" ? "system" : stored.theme.theme,
+    systemThemes: stored.systemThemes,
+    locale: stored.language,
+    singleKeyShortcuts: stored.singleKeyShortcuts,
   }
 }
 
-function store(key: string, value: string): void {
-  try {
-    localStorage.setItem(key, value)
-  } catch {
-    // The preference still applies for this session.
-  }
-}
-
-function readTheme(): ThemePreference {
-  const value = stored(THEME_KEY)
-  if (value === "system") return "system"
-  return value && isThemeId(value) ? value : DEFAULT_THEME
-}
-
-/** Saved system pair; a theme of the wrong scheme, or none, reads as the PlateVault one. */
-function readSystemThemes(): SystemThemes {
-  const pick = (scheme: ThemeScheme): ThemeId => {
-    const value = stored(SYSTEM_THEME_KEY[scheme])
-    return value && isThemeId(value) && themeInfo(value).scheme === scheme ? value : DEFAULT_SYSTEM_THEMES[scheme]
-  }
-  return { dark: pick("dark"), light: pick("light") }
-}
-
-function snapshot(theme: ThemePreference, rest: Omit<Preferences, "theme" | "resolvedTheme" | "scheme">): Preferences {
+function snapshot({ theme, ...rest }: Chosen): Preferences {
   const resolvedTheme = theme === "system" ? rest.systemThemes[media.matches ? "dark" : "light"] : theme
   return { ...rest, theme, resolvedTheme, scheme: themeInfo(resolvedTheme).scheme }
 }
 
-let current: Preferences = (() => {
-  const locale = stored(LOCALE_KEY)
-  return snapshot(readTheme(), {
-    systemThemes: readSystemThemes(),
-    locale: locale && isLocale(locale) ? locale : DEFAULT_LOCALE,
-    singleKeyShortcuts: stored(SINGLE_KEY_SHORTCUTS_KEY) !== "off",
-  })
-})()
+const handed = window.__PLATEVAULT_PREFERENCES__
+let current: Preferences = snapshot(handed ? chosen(handed.preferences) : DEFAULTS)
 
 // The strategy chain is declared in vite.config.ts and the i18n:compile script:
 // this preference first, then the base locale. Paraglide calls `setLocale`
@@ -105,11 +91,40 @@ function apply(): void {
   if (meta) meta.content = current.scheme
 }
 
-function update(next: Partial<Omit<Preferences, "resolvedTheme" | "scheme">>): void {
+function update(next: Partial<Chosen>): void {
   const { theme, systemThemes, locale, singleKeyShortcuts } = { ...current, ...next }
-  current = snapshot(theme, { systemThemes, locale, singleKeyShortcuts })
+  current = snapshot({ theme, systemThemes, locale, singleKeyShortcuts })
   apply()
   for (const listener of listeners) listener()
+}
+
+/** Store calls, one at a time in the order the changes were made. */
+let saving: Promise<void> = Promise.resolve()
+/** Set by the first change, after which the store's boot read no longer applies. */
+let changed = false
+
+function save(write: () => Promise<{ ok: boolean }>, what: string): void {
+  changed = true
+  if (!inShell()) return
+  saving = saving.then(async () => {
+    const result = await write()
+    // The choice still applies for this session.
+    if (!result.ok) console.error(`PlateVault could not save the ${what} preference`, result)
+  })
+}
+
+function change(next: Partial<Chosen>, stored: PreferenceChange): void {
+  update(next)
+  save(() => library.libraryChangePreference(stored), stored.field)
+}
+
+// The values handed at load are those of the webview's first page: after a
+// reload they can trail the store, so the store's own read follows them up.
+if (inShell()) {
+  saving = saving.then(async () => {
+    const result = await library.libraryPreferences()
+    if (result.ok && !changed) update(chosen(result.data.preferences))
+  })
 }
 
 // The OS theme can change at any time; "system" follows it live.
@@ -118,25 +133,26 @@ media.addEventListener("change", () => {
 })
 
 export function setTheme(theme: ThemePreference): void {
-  store(THEME_KEY, theme)
-  update({ theme })
+  change({ theme }, { field: "theme", choice: theme === "system" ? { mode: "system" } : { mode: "fixed", theme } })
 }
 
 /** The pair "system" follows; it applies at once while the theme is "system". */
 export function setSystemThemes(systemThemes: SystemThemes): void {
-  store(SYSTEM_THEME_KEY.dark, systemThemes.dark)
-  store(SYSTEM_THEME_KEY.light, systemThemes.light)
-  update({ systemThemes })
+  change({ systemThemes }, { field: "systemThemes", themes: systemThemes })
 }
 
 export function setLocale(locale: Locale): void {
-  store(LOCALE_KEY, locale)
-  update({ locale })
+  change({ locale }, { field: "language", language: locale })
 }
 
 export function setSingleKeyShortcuts(enabled: boolean): void {
-  store(SINGLE_KEY_SHORTCUTS_KEY, enabled ? "on" : "off")
-  update({ singleKeyShortcuts: enabled })
+  change({ singleKeyShortcuts: enabled }, { field: "singleKeyShortcuts", enabled })
+}
+
+/** Restore defaults (LIB-FR-21): the theme, the "system" pair, the language and the shortcut preference. */
+export function restoreDefaultPreferences(): void {
+  update(DEFAULTS)
+  save(() => library.libraryRestoreDefaultPreferences(), "default")
 }
 
 /** Current preferences, for event handlers outside React. */

@@ -28,6 +28,7 @@ pub mod observing_plans;
 mod patched_copy;
 pub mod planning;
 pub mod planning_project;
+pub mod preferences;
 pub mod project_groups;
 pub mod project_output;
 pub mod project_progress;
