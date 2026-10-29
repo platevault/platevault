@@ -7,6 +7,7 @@
 import { homeShell } from "@/features/library/shell"
 import { projectsShell } from "@/features/projects/shell"
 import { reviewShell } from "@/features/review/shell"
+import { targetsShell } from "@/features/targets/shell"
 import type { ShellContribution } from "./shell-contract"
 
-export const SHELLS: readonly ShellContribution[] = [homeShell, reviewShell, projectsShell]
+export const SHELLS: readonly ShellContribution[] = [homeShell, reviewShell, projectsShell, targetsShell]
