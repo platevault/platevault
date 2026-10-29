@@ -11,9 +11,13 @@ license.workspace = true
 # workspace `forbid`. Empty on every other target.
 [target.'cfg(windows)'.dependencies]
 # `GetVolumePathNameW`, `GetVolumeInformationW` and `GetDriveTypeW`
-# (`Win32_Storage_FileSystem`); the version `platevault_eject_windows` and
-# `fs_noreplace_windows` already lock.
-windows-sys = { version = "0.61.2", features = ["Win32_Storage_FileSystem"] }
+# (`Win32_Storage_FileSystem`), and `SetThreadErrorMode` for the
+# no-disk dialog (`Win32_System_Diagnostics_Debug`); the version
+# `platevault_eject_windows` and `fs_noreplace_windows` already lock.
+windows-sys = { version = "0.61.2", features = [
+  "Win32_Storage_FileSystem",
+  "Win32_System_Diagnostics_Debug",
+] }
 # The `\\?\` form a path reaches `GetVolumePathNameW` in (`long_path`).
 fs_pathsafe = { path = "../pathsafe" }
 

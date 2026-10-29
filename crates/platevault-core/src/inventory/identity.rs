@@ -575,11 +575,17 @@ fn smb_file_ids(listing: &str) -> bool {
     })
 }
 
-/// An external, ejectable or removable-media disk reads removable.
+/// An external, ejectable or removable-media disk reads removable. A mounted
+/// disk image (`BusProtocol` `Disk Image`) reads local whatever else it
+/// reports: it is a file on another volume, never a USB or SD device to
+/// import from (071 STO-IMP-FR-10). Locations treat local and removable
+/// volumes alike; only a network share differs.
 #[cfg(any(target_os = "macos", test))]
 fn mac_disk_kind(info: &std::collections::BTreeMap<String, String>) -> VolumeKind {
     let is = |key: &str, value: &str| info.get(key).is_some_and(|found| found == value);
-    if is("RemovableMediaOrExternalDevice", "true")
+    if is("BusProtocol", "Disk Image") {
+        VolumeKind::Local
+    } else if is("RemovableMediaOrExternalDevice", "true")
         || is("RemovableMedia", "true")
         || is("Ejectable", "true")
         || is("Internal", "false")
@@ -940,7 +946,7 @@ pub fn run_bounded(
 ) -> Result<Vec<u8>, String> {
     use std::io::Read;
     use std::process::Stdio;
-    use std::time::{Duration, Instant};
+    use std::sync::mpsc::{self, RecvTimeoutError};
 
     command.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null());
     let mut child = command.spawn().map_err(|error| format!("could not start: {error}"))?;
@@ -949,31 +955,29 @@ pub fn run_bounded(
         let _ = child.wait();
         return Err("produced no output pipe".into());
     };
-    let reader = std::thread::spawn(move || {
-        let mut output = Vec::new();
-        stdout.take(1 << 20).read_to_end(&mut output).map(|_| output)
+    let (read, output) = mpsc::channel();
+    std::thread::spawn(move || {
+        let mut bytes = Vec::new();
+        let _ = read.send(stdout.take(1 << 20).read_to_end(&mut bytes).map(|_| bytes));
     });
-    let deadline = Instant::now() + timeout;
-    let status = loop {
-        match child.try_wait() {
-            Ok(Some(status)) => break status,
-            Ok(None) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(5)),
-            Ok(None) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err(format!("did not answer within {} s", timeout.as_secs()));
-            }
-            Err(error) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err(error.to_string());
-            }
+    // The deadline bounds the query until its output closes, without
+    // polling. Each query run here (`mount`, `diskutil`, `smbutil`) closes
+    // its output as it exits, so the wait that follows returns at once.
+    let output = match output.recv_timeout(timeout) {
+        Ok(output) => output,
+        Err(why) => {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(match why {
+                RecvTimeoutError::Timeout => {
+                    format!("did not answer within {} s", timeout.as_secs())
+                }
+                RecvTimeoutError::Disconnected => "output reader panicked".to_owned(),
+            });
         }
     };
-    let output = reader
-        .join()
-        .map_err(|_| "output reader panicked".to_owned())?
-        .map_err(|error| format!("output unreadable: {error}"))?;
+    let status = child.wait().map_err(|error| error.to_string())?;
+    let output = output.map_err(|error| format!("output unreadable: {error}"))?;
     if !status.success() {
         return Err(format!("exited with {status}"));
     }
@@ -1030,7 +1034,33 @@ mod tests {
             &plist.replace("<key>RemovableMedia</key><false/>", "<key>RemovableMedia</key><true/>"),
         );
         assert_eq!(mac_disk_kind(&card), VolumeKind::Removable);
+        let image = plist_values(&plist.replacen("<true/>", "<false/>", 1).replace(
+            "<key>VolumeUUID</key>",
+            "<key>BusProtocol</key><string>Disk Image</string>\
+             <key>Ejectable</key><true/><key>VolumeUUID</key>",
+        ));
+        assert_eq!(image.get("BusProtocol").map(String::as_str), Some("Disk Image"));
+        assert_eq!(mac_disk_kind(&image), VolumeKind::Local, "a mounted disk image");
         assert_eq!(MNT_LOCAL, 0x1000);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn a_bounded_query_returns_its_output_or_is_killed_at_its_deadline() {
+        use std::process::Command;
+        use std::time::{Duration, Instant};
+
+        let mut echo = Command::new("/bin/echo");
+        echo.arg("mounted");
+        assert_eq!(run_bounded(echo, Duration::from_secs(5)).unwrap(), b"mounted\n");
+        assert!(run_bounded(Command::new("/usr/bin/false"), Duration::from_secs(5)).is_err());
+
+        let mut sleep = Command::new("/bin/sleep");
+        sleep.arg("30");
+        let started = Instant::now();
+        let refused = run_bounded(sleep, Duration::from_millis(200)).unwrap_err();
+        assert!(refused.starts_with("did not answer"), "{refused}");
+        assert!(started.elapsed() < Duration::from_secs(5));
     }
 
     #[test]

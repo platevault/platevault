@@ -491,15 +491,74 @@ pub enum CaptureLayout {
     Voyager,
 }
 
+/// One marker of a capture layout that recognition found on a device; the
+/// device's "How it was recognised" note names each one.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
+pub enum LayoutMarker {
+    /// ASIAIR's `Autorun/` folder.
+    AutorunFolder,
+    /// ASIAIR's `Plan/` folder.
+    PlanFolder,
+    /// ASIAIR's `Live/` folder.
+    LiveFolder,
+    /// N.I.N.A.'s `LIGHT/` folder.
+    LightFolder,
+    /// N.I.N.A.'s `FLAT/` folder.
+    FlatFolder,
+    /// N.I.N.A.'s `DARK/` folder.
+    DarkFolder,
+    /// N.I.N.A.'s `BIAS/` folder.
+    BiasFolder,
+    /// N.I.N.A.'s `DARKFLAT/` folder.
+    DarkflatFolder,
+    /// The `SharpCap Captures/` folder.
+    SharpcapCapturesFolder,
+    /// `SharpCap`'s `*.CameraSettings.txt` sidecars.
+    CameraSettingsFiles,
+    /// Ekos `*.esq` sequence files.
+    EkosSequenceFiles,
+    /// Ekos `*.esl` schedule files.
+    EkosScheduleFiles,
+    /// Ekos frame names (`…_Light_Ha_300_secs_…`).
+    EkosFrameNames,
+    /// SGP `*.sgf` sequence files.
+    SgpSequenceFiles,
+    /// Voyager frame names (`…_LIGHT_Ha_300s_BIN1_…`).
+    VoyagerFrameNames,
+}
+
+impl LayoutMarker {
+    /// The layout this marker belongs to.
+    #[must_use]
+    pub const fn layout(self) -> CaptureLayout {
+        match self {
+            Self::AutorunFolder | Self::PlanFolder | Self::LiveFolder => CaptureLayout::Asiair,
+            Self::LightFolder
+            | Self::FlatFolder
+            | Self::DarkFolder
+            | Self::BiasFolder
+            | Self::DarkflatFolder => CaptureLayout::Nina,
+            Self::SharpcapCapturesFolder | Self::CameraSettingsFiles => CaptureLayout::SharpCap,
+            Self::EkosSequenceFiles | Self::EkosScheduleFiles | Self::EkosFrameNames => {
+                CaptureLayout::Ekos
+            }
+            Self::SgpSequenceFiles => CaptureLayout::Sgp,
+            Self::VoyagerFrameNames => CaptureLayout::Voyager,
+        }
+    }
+}
+
 /// How a removable device's layout was recognised.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct LayoutRecognition {
     pub layout: CaptureLayout,
-    /// The first entry the layout's rule matched, relative to the device
-    /// root with `/` separators, such as `Autorun` or `2026-10-02/LIGHT`.
-    pub matched: String,
+    /// Every marker of `layout` found on the device, in [`LayoutMarker`]
+    /// order, such as `[autorun_folder, plan_folder]`; never empty.
+    pub matched: Vec<LayoutMarker>,
 }
 
 /// A connected removable volume (USB or SD) that Import lists under
@@ -570,5 +629,16 @@ mod tests {
             layout: None,
         };
         assert!(serde_json::to_value(&generic).unwrap()["layout"].is_null());
+        let card = RemovableDevice {
+            layout: Some(LayoutRecognition {
+                layout: CaptureLayout::Asiair,
+                matched: vec![LayoutMarker::AutorunFolder, LayoutMarker::PlanFolder],
+            }),
+            ..generic
+        };
+        let wire = serde_json::to_value(&card).unwrap();
+        assert_eq!(wire["layout"]["matched"], serde_json::json!(["autorun_folder", "plan_folder"]));
+        assert_eq!(serde_json::from_value::<RemovableDevice>(wire).unwrap(), card);
+        assert_eq!(LayoutMarker::SharpcapCapturesFolder.layout(), CaptureLayout::SharpCap);
     }
 }

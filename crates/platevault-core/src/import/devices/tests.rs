@@ -2,15 +2,22 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! Fixture devices for each recognised capture layout and a generic one
-//! (STO-IMP-AC-14), and the device list through connection and removal over
-//! a faked mount table and volume probe (STO-IMP-AC-15).
+//! (STO-IMP-AC-14), the host mount-table parsers, and the device list through
+//! connection and removal over a faked mount table and volume probe
+//! (STO-IMP-AC-15).
 
 use std::collections::HashSet;
 use std::fs::Metadata;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::Instant;
 
 use super::*;
 use crate::inventory::Probed;
+use crate::LayoutMarker::{
+    AutorunFolder, CameraSettingsFiles, EkosFrameNames, EkosScheduleFiles, EkosSequenceFiles,
+    FlatFolder, LightFolder, LiveFolder, PlanFolder, SgpSequenceFiles, SharpcapCapturesFolder,
+    VoyagerFrameNames,
+};
 use crate::{LibraryError, PathSensitivity, VolumeIdentity};
 
 /// A device folder holding `files` (relative paths; a trailing `/` makes a
@@ -29,7 +36,7 @@ fn device(files: &[&str]) -> tempfile::TempDir {
     root
 }
 
-fn recognised(files: &[&str]) -> Option<(CaptureLayout, String)> {
+fn recognised(files: &[&str]) -> Option<(CaptureLayout, Vec<LayoutMarker>)> {
     let root = device(files);
     recognise(root.path()).map(|found| (found.layout, found.matched))
 }
@@ -40,9 +47,9 @@ fn an_asiair_card_is_recognised_by_its_autorun_and_plan_folders() {
         "Autorun/Light/NGC 7000/Light_NGC 7000_300.0s_Bin1_H_gain100_20261002-203000_-10.0C_0001.fit",
         "Plan/",
     ]);
-    assert_eq!(found, Some((CaptureLayout::Asiair, "Autorun".into())));
+    assert_eq!(found, Some((CaptureLayout::Asiair, vec![AutorunFolder, PlanFolder])));
     let nested = recognised(&["ASIAIR/Live/Light/M31/Live_M31_10.0s_0001.fit"]);
-    assert_eq!(nested, Some((CaptureLayout::Asiair, "ASIAIR/Live".into())));
+    assert_eq!(nested, Some((CaptureLayout::Asiair, vec![LiveFolder])));
 }
 
 #[test]
@@ -51,50 +58,51 @@ fn a_nina_card_is_recognised_by_its_capitalised_frame_type_folders() {
         "2026-10-02/LIGHT/2026-10-02_20-30-00_Ha_-10.00_300.00s_0001.fits",
         "2026-10-02/FLAT/2026-10-02_06-10-00_Ha_-10.00_1.20s_0001.fits",
     ]);
-    assert_eq!(found, Some((CaptureLayout::Nina, "2026-10-02/FLAT".into())));
+    assert_eq!(found, Some((CaptureLayout::Nina, vec![LightFolder, FlatFolder])));
 }
 
 #[test]
 fn a_sharpcap_card_is_recognised_by_its_captures_folder_or_settings_sidecars() {
+    // SharpCap's default nesting puts the sidecars five levels down, below
+    // the walk; the folder alone names the layout there.
     let found = recognised(&[
         "SharpCap Captures/2026-10-02/M31/20_30_00/Capture_00001.fits",
         "SharpCap Captures/2026-10-02/M31/20_30_00/Capture_00001.CameraSettings.txt",
     ]);
-    assert_eq!(found, Some((CaptureLayout::SharpCap, "SharpCap Captures".into())));
-    let sidecar = recognised(&["M31/Capture_00001.fits", "M31/Capture_00001.CameraSettings.txt"]);
+    assert_eq!(found, Some((CaptureLayout::SharpCap, vec![SharpcapCapturesFolder])));
+    let both = recognised(&[
+        "SharpCap Captures/M31/Capture_00001.fits",
+        "SharpCap Captures/M31/Capture_00001.CameraSettings.txt",
+    ]);
     assert_eq!(
-        sidecar,
-        Some((CaptureLayout::SharpCap, "M31/Capture_00001.CameraSettings.txt".into()))
+        both,
+        Some((CaptureLayout::SharpCap, vec![SharpcapCapturesFolder, CameraSettingsFiles]))
     );
+    let sidecar = recognised(&["M31/Capture_00001.fits", "M31/Capture_00001.CameraSettings.txt"]);
+    assert_eq!(sidecar, Some((CaptureLayout::SharpCap, vec![CameraSettingsFiles])));
 }
 
 #[test]
 fn an_ekos_card_is_recognised_by_its_frame_names_or_sequence_files() {
     let found =
         recognised(&["NGC7000/Light/Ha/NGC7000_Light_Ha_300_secs_2026-10-02T20-30-00_001.fits"]);
-    assert_eq!(
-        found,
-        Some((
-            CaptureLayout::Ekos,
-            "NGC7000/Light/Ha/NGC7000_Light_Ha_300_secs_2026-10-02T20-30-00_001.fits".into()
-        ))
-    );
-    let queue = recognised(&["NGC7000.esq", "NGC7000/frame_001.fits"]);
-    assert_eq!(queue, Some((CaptureLayout::Ekos, "NGC7000.esq".into())));
+    assert_eq!(found, Some((CaptureLayout::Ekos, vec![EkosFrameNames])));
+    let queue = recognised(&["NGC7000.esq", "NGC7000.esl", "NGC7000/frame_001.fits"]);
+    assert_eq!(queue, Some((CaptureLayout::Ekos, vec![EkosSequenceFiles, EkosScheduleFiles])));
 }
 
 #[test]
 fn an_sgp_card_is_recognised_by_its_sequence_file() {
     let found = recognised(&["NGC7000.sgf", "NGC7000/NGC7000_Ha_300s_frame1.fit"]);
-    assert_eq!(found, Some((CaptureLayout::Sgp, "NGC7000.sgf".into())));
+    assert_eq!(found, Some((CaptureLayout::Sgp, vec![SgpSequenceFiles])));
 }
 
 #[test]
 fn a_voyager_card_is_recognised_by_its_frame_names() {
     let name = "NGC7000/NGC7000_LIGHT_Ha_300s_BIN1_-10C_GA100_20261002_203000_001_PA0.00_W.FIT";
-    assert_eq!(recognised(&[name]), Some((CaptureLayout::Voyager, name.into())));
+    assert_eq!(recognised(&[name]), Some((CaptureLayout::Voyager, vec![VoyagerFrameNames])));
     let dark = "Darks/DARK_300s_BIN1_-10C_GA100_20261002_063000_001.fit";
-    assert_eq!(recognised(&[dark]), Some((CaptureLayout::Voyager, dark.into())));
+    assert_eq!(recognised(&[dark]), Some((CaptureLayout::Voyager, vec![VoyagerFrameNames])));
 }
 
 #[test]
@@ -109,11 +117,11 @@ fn an_unrecognised_layout_is_a_generic_device() {
 }
 
 #[test]
-fn the_most_specific_layout_wins_where_several_match() {
+fn the_most_specific_layout_wins_and_names_only_its_own_markers() {
     let found = recognised(&["LIGHT/frame.fits", "SharpCap Captures/"]);
-    assert_eq!(found, Some((CaptureLayout::SharpCap, "SharpCap Captures".into())));
+    assert_eq!(found, Some((CaptureLayout::SharpCap, vec![SharpcapCapturesFolder])));
     let found = recognised(&["Autorun/", "M31/M31_LIGHT_L_60s_BIN1_x.fit", "x.sgf"]);
-    assert_eq!(found, Some((CaptureLayout::Sgp, "x.sgf".into())));
+    assert_eq!(found, Some((CaptureLayout::Sgp, vec![SgpSequenceFiles])));
 }
 
 #[test]
@@ -122,8 +130,24 @@ fn recognition_skips_hidden_and_deep_entries() {
     assert_eq!(recognised(&["a/b/c/d/LIGHT/frame.fits"]), None, "deeper than the walk reads");
     assert_eq!(
         recognised(&["a/b/c/LIGHT/frame.fits"]),
-        Some((CaptureLayout::Nina, "a/b/c/LIGHT".into()))
+        Some((CaptureLayout::Nina, vec![LightFolder]))
     );
+}
+
+#[test]
+fn recognition_stops_reading_at_its_entry_budget() {
+    const BUDGET: usize = 12;
+    // The root's two folders, then `a`'s files, are read before `b`.
+    let root = device(&["b/x.sgf"]);
+    fs::create_dir(root.path().join("a")).unwrap();
+    let walk = |files_in_a: usize| {
+        for index in 0..files_in_a {
+            fs::File::create(root.path().join("a").join(format!("{index:02}.txt"))).unwrap();
+        }
+        recognise_within(root.path(), BUDGET).map(|found| found.layout)
+    };
+    assert_eq!(walk(BUDGET - 3), Some(CaptureLayout::Sgp), "within the budget");
+    assert_eq!(walk(BUDGET), None, "the budget runs out inside `a`; `b` is never read");
 }
 
 #[cfg(unix)]
@@ -137,21 +161,65 @@ fn recognition_follows_no_link() {
     assert_eq!(recognise(root.path()), None);
 }
 
+// ── Host mount tables ───────────────────────────────────────────────────────
+
+fn mounted(root: &str, name: &str, instance: &str) -> Mount {
+    Mount { root: root.into(), name: name.into(), instance: instance.into() }
+}
+
 #[test]
-fn mac_mount_listings_keep_local_disk_volumes_under_volumes() {
+fn mac_mount_listings_keep_browsable_local_disk_volumes_under_volumes() {
     let listing = "/dev/disk3s1s1 on / (apfs, sealed, local, read-only, journaled)\n\
          devfs on /dev (devfs, local, nobrowse)\n\
          /dev/disk4s1 on /Volumes/Card-1 (msdos, local, nodev, nosuid, noowners)\n\
          /dev/disk5s2 on /Volumes/Astro T7 (apfs, local, nodev, nosuid, journaled, noowners)\n\
+         /dev/disk7s1 on /Volumes/Recovery (apfs, local, journaled, nobrowse)\n\
+         /dev/disk9s1 on /Volumes/Helper (hfs, local, nodev, nosuid, read-only, nobrowse)\n\
          //guest@nas.local/astro on /Volumes/astro (smbfs, nodev, nosuid, mounted by me)\n\
          map auto_home on /System/Volumes/Data/home (autofs, automounted, nobrowse)";
     assert_eq!(
         mac_mounts(listing),
         vec![
-            Mount { root: "/Volumes/Card-1".into(), instance: "/dev/disk4s1".into() },
-            Mount { root: "/Volumes/Astro T7".into(), instance: "/dev/disk5s2".into() },
+            mounted("/Volumes/Card-1", "Card-1", "/dev/disk4s1"),
+            mounted("/Volumes/Astro T7", "Astro T7", "/dev/disk5s2"),
         ]
     );
+}
+
+#[test]
+fn mac_listings_run_again_only_when_volumes_names_change_or_grow_old() {
+    let names = |list: &[&str]| list.iter().map(std::ffi::OsString::from).collect();
+    let card = vec![mounted("/Volumes/Card-1", "Card-1", "/dev/disk4s1")];
+    let listings = std::cell::Cell::new(0);
+    let list = |mounts: Vec<Mount>| {
+        let listings = &listings;
+        move || {
+            listings.set(listings.get() + 1);
+            Ok(mounts)
+        }
+    };
+    let start = Instant::now();
+    let mut kept = None;
+
+    assert_eq!(gated(&mut kept, names(&["Card-1"]), start, list(card.clone())).unwrap(), card);
+    let later = start + Duration::from_secs(10);
+    assert_eq!(gated(&mut kept, names(&["Card-1"]), later, list(Vec::new())).unwrap(), card);
+    assert_eq!(listings.get(), 1, "the same names within the window reuse the listing");
+
+    assert_eq!(gated(&mut kept, names(&[]), later, list(Vec::new())).unwrap(), Vec::new());
+    assert_eq!(listings.get(), 2, "a removed name lists again");
+
+    let swapped = vec![mounted("/Volumes/Card-1", "Card-1", "/dev/disk6s1")];
+    let stale = later + MAC_SAFETY_POLL;
+    assert_eq!(gated(&mut kept, names(&[]), stale, list(swapped.clone())).unwrap(), swapped);
+    assert_eq!(listings.get(), 3, "the safety poll lists again with the same names");
+
+    let failed = gated(&mut kept, names(&["Card-2"]), stale, || {
+        Err(std::io::Error::other("mount did not answer"))
+    });
+    assert!(failed.is_err());
+    let retried = gated(&mut kept, names(&["Card-2"]), stale, list(Vec::new()));
+    assert_eq!(retried.unwrap(), Vec::new(), "a failed listing is not kept");
 }
 
 #[test]
@@ -159,20 +227,17 @@ fn linux_mountinfo_keeps_device_mounts_by_mount_id() {
     let mountinfo = "22 1 259:2 / / rw,relatime shared:1 - ext4 /dev/nvme0n1p2 rw\n\
          25 22 0:5 / /proc rw shared:12 - proc proc rw\n\
          36 22 8:17 / /media/sjors/Card\\0401 rw,nosuid shared:20 - vfat /dev/sdb1 rw,uid=1000\n\
-         37 22 0:52 / /mnt/nas rw shared:21 - nfs4 nas:/export/astro rw";
+         37 22 0:52 / /mnt/nas rw shared:21 - nfs4 nas:/export/astro rw\n\
+         38 22 179:1 / /mnt/sd rw shared:22 - exfat /dev/mmcblk0p1 rw";
     assert_eq!(
         linux_mounts(mountinfo),
         vec![
-            Mount { root: "/".into(), instance: "22".into() },
-            Mount { root: "/media/sjors/Card 1".into(), instance: "36".into() },
-        ]
+            mounted("/", "nvme0n1p2", "22"),
+            mounted("/media/sjors/Card 1", "Card 1", "36"),
+            mounted("/mnt/sd", "sd", "38"),
+        ],
+        "a volume mounted at / is named by its device"
     );
-}
-
-#[test]
-fn drive_roots_are_named_by_their_drive() {
-    assert_eq!(device_name(Path::new("/Volumes/Card-1")), "Card-1");
-    assert_eq!(device_name(Path::new(r"E:\")), if cfg!(windows) { "E:" } else { r"E:\" });
 }
 
 /// The host's table is read without touching any volume; only the parse is
@@ -180,8 +245,12 @@ fn drive_roots_are_named_by_their_drive() {
 #[cfg(any(target_os = "macos", target_os = "linux", windows))]
 #[test]
 fn this_hosts_mount_table_is_read() {
-    let mounts = OsMounts.mounts().expect("the host's mount table");
-    assert!(mounts.iter().all(|mount| mount.root.is_absolute() && !mount.instance.is_empty()));
+    let table = OsMounts::default();
+    let mounts = table.mounts().expect("the host's mount table");
+    assert!(mounts.iter().all(|mount| {
+        mount.root.is_absolute() && !mount.name.is_empty() && !mount.instance.is_empty()
+    }));
+    assert_eq!(table.mounts().unwrap(), mounts, "an unchanged table reads the same");
 }
 
 // ── The device list through connection and removal ──────────────────────────
@@ -267,7 +336,11 @@ impl Rig {
 }
 
 fn mount(root: &Path, instance: &str) -> Mount {
-    Mount { root: root.to_path_buf(), instance: instance.into() }
+    Mount { root: root.to_path_buf(), name: folder_name(root).unwrap(), instance: instance.into() }
+}
+
+fn name_of(root: &Path) -> String {
+    folder_name(root).unwrap()
 }
 
 fn names(devices: &[RemovableDevice]) -> Vec<(String, Option<CaptureLayout>)> {
@@ -291,15 +364,16 @@ fn connected_removable_volumes_are_listed_with_their_layout_and_local_ones_are_n
 
     let mut devices = rig.devices();
     let listed = devices.refresh().expect("the first poll lists the connected devices");
-    let mut expected = vec![
-        (device_name(card.path()), Some(CaptureLayout::Asiair)),
-        (device_name(generic.path()), None),
-    ];
+    let mut expected =
+        vec![(name_of(card.path()), Some(CaptureLayout::Asiair)), (name_of(generic.path()), None)];
     expected.sort_by(|a, b| a.0.cmp(&b.0));
     assert_eq!(names(&listed), expected);
     let card_device =
         listed.iter().find(|device| device.root == NativePath::from_path(card.path()));
-    assert_eq!(card_device.unwrap().layout.as_ref().unwrap().matched, "Autorun");
+    assert_eq!(
+        card_device.unwrap().layout.as_ref().unwrap().matched,
+        vec![AutorunFolder, PlanFolder]
+    );
 
     // An unchanged table changes nothing and probes no mount again.
     let probes = rig.probes();
@@ -325,7 +399,7 @@ fn a_removed_device_leaves_the_list_and_one_inserted_again_is_recognised_afresh(
     fs::create_dir(card.path().join("LIGHT")).unwrap();
     rig.table.set(&[&mount(card.path(), "disk6s1")]);
     let listed = devices.refresh().unwrap();
-    assert_eq!(names(&listed), vec![(device_name(card.path()), Some(CaptureLayout::Nina))]);
+    assert_eq!(names(&listed), vec![(name_of(card.path()), Some(CaptureLayout::Nina))]);
 }
 
 #[test]
@@ -339,7 +413,7 @@ fn a_mount_still_mounting_is_tried_again_a_few_times() {
     assert_eq!(devices.refresh(), None);
     rig.volumes.unqualified.lock().unwrap().clear();
     let listed = devices.refresh().expect("the second poll qualifies it");
-    assert_eq!(names(&listed), vec![(device_name(card.path()), Some(CaptureLayout::Sgp))]);
+    assert_eq!(names(&listed), vec![(name_of(card.path()), Some(CaptureLayout::Sgp))]);
 
     let stuck = device(&[]);
     rig.removable(stuck.path());
@@ -378,10 +452,7 @@ async fn the_watch_publishes_connection_and_removal() {
     rig.table.set(&[&mount(card.path(), "disk4s1")]);
     let wait = Duration::from_secs(5);
     tokio::time::timeout(wait, updates.changed()).await.unwrap().unwrap();
-    assert_eq!(
-        names(&watch.devices()),
-        vec![(device_name(card.path()), Some(CaptureLayout::Asiair))]
-    );
+    assert_eq!(names(&watch.devices()), vec![(name_of(card.path()), Some(CaptureLayout::Asiair))]);
 
     rig.table.set(&[]);
     tokio::time::timeout(wait, updates.changed()).await.unwrap().unwrap();

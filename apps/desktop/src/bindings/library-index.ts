@@ -4943,14 +4943,50 @@ export type Language =
 /**  Portuguese (Brazil). */
 "pt-BR";
 
+/**
+ *  One marker of a capture layout that recognition found on a device; the
+ *  device's "How it was recognised" note names each one.
+ */
+export type LayoutMarker = 
+/**  ASIAIR's `Autorun/` folder. */
+"autorun_folder" | 
+/**  ASIAIR's `Plan/` folder. */
+"plan_folder" | 
+/**  ASIAIR's `Live/` folder. */
+"live_folder" | 
+/**  N.I.N.A.'s `LIGHT/` folder. */
+"light_folder" | 
+/**  N.I.N.A.'s `FLAT/` folder. */
+"flat_folder" | 
+/**  N.I.N.A.'s `DARK/` folder. */
+"dark_folder" | 
+/**  N.I.N.A.'s `BIAS/` folder. */
+"bias_folder" | 
+/**  N.I.N.A.'s `DARKFLAT/` folder. */
+"darkflat_folder" | 
+/**  The `SharpCap Captures/` folder. */
+"sharpcap_captures_folder" | 
+/**  `SharpCap`'s `*.CameraSettings.txt` sidecars. */
+"camera_settings_files" | 
+/**  Ekos `*.esq` sequence files. */
+"ekos_sequence_files" | 
+/**  Ekos `*.esl` schedule files. */
+"ekos_schedule_files" | 
+/**  Ekos frame names (`…_Light_Ha_300_secs_…`). */
+"ekos_frame_names" | 
+/**  SGP `*.sgf` sequence files. */
+"sgp_sequence_files" | 
+/**  Voyager frame names (`…_LIGHT_Ha_300s_BIN1_…`). */
+"voyager_frame_names";
+
 /**  How a removable device's layout was recognised. */
 export type LayoutRecognition = {
 	layout: CaptureLayout,
 	/**
-	 *  The first entry the layout's rule matched, relative to the device
-	 *  root with `/` separators, such as `Autorun` or `2026-10-02/LIGHT`.
+	 *  Every marker of `layout` found on the device, in [`LayoutMarker`]
+	 *  order, such as `[autorun_folder, plan_folder]`; never empty.
 	 */
-	matched: string,
+	matched: LayoutMarker[],
 };
 
 /**

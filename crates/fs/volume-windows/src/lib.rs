@@ -16,8 +16,11 @@
 //! path names; a caller that needs the volume an entry is actually on
 //! compares the serial with the one a handle on the entry reports.
 //! [`drive_type`] is `GetDriveTypeW` alone, for a drive letter's root.
+//! [`without_error_dialogs`] runs a query with this thread's critical-error
+//! dialogs off (`SetThreadErrorMode`), so an empty card-reader slot answers
+//! `ERROR_NOT_READY` instead of asking the user to insert a disk.
 //!
-//! The crate allows `unsafe` at those four calls, so `platevault_core` keeps
+//! The crate allows `unsafe` at those calls, so `platevault_core` keeps
 //! the workspace `forbid`. On every other target it is empty.
 #![cfg(windows)]
 
@@ -31,6 +34,9 @@ use fs_pathsafe::long_path;
 use windows_sys::Win32::Storage::FileSystem::{
     GetDiskSpaceInformationW, GetDriveTypeW, GetVolumeInformationW,
     GetVolumeNameForVolumeMountPointW, GetVolumePathNameW, DISK_SPACE_INFORMATION,
+};
+use windows_sys::Win32::System::Diagnostics::Debug::{
+    GetThreadErrorMode, SetThreadErrorMode, SEM_FAILCRITICALERRORS, THREAD_ERROR_MODE,
 };
 
 /// `MAX_PATH`, the longest name `GetVolumeInformationW` reports.
@@ -146,6 +152,38 @@ pub fn drive_type(root: &Path) -> io::Result<u32> {
     Ok(unsafe { GetDriveTypeW(root.as_ptr()) })
 }
 
+/// Run `work` with this thread's critical-error dialogs off
+/// (`SEM_FAILCRITICALERRORS`), so a query of a removable drive with no
+/// media, such as an empty card-reader slot, fails with `ERROR_NOT_READY`
+/// instead of showing "There is no disk in the drive". The thread's own mode
+/// is restored afterwards, also when `work` panics. Where the mode cannot be
+/// set, `work` still runs.
+pub fn without_error_dialogs<T>(work: impl FnOnce() -> T) -> T {
+    /// Puts the thread's previous mode back on drop.
+    struct Restore(THREAD_ERROR_MODE);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            // SAFETY: the old-mode output is optional and documented as
+            // skipped when null; the call reads only its mode argument.
+            #[allow(unsafe_code)]
+            unsafe {
+                SetThreadErrorMode(self.0, std::ptr::null_mut());
+            }
+        }
+    }
+
+    // SAFETY: takes no arguments and only reads this thread's mode.
+    #[allow(unsafe_code)]
+    let previous = unsafe { GetThreadErrorMode() };
+    let mut replaced: THREAD_ERROR_MODE = 0;
+    // SAFETY: `replaced` is a writable `THREAD_ERROR_MODE` that outlives the
+    // call, which writes the thread's previous mode to it.
+    #[allow(unsafe_code)]
+    let set = unsafe { SetThreadErrorMode(previous | SEM_FAILCRITICALERRORS, &raw mut replaced) };
+    let _restore = (set != 0).then_some(Restore(replaced));
+    work()
+}
+
 /// The volume's actual capacity, independent of the caller's disk quota.
 ///
 /// # Errors
@@ -205,6 +243,17 @@ mod tests {
     use std::fs;
 
     use super::*;
+
+    #[test]
+    fn error_dialogs_are_off_inside_and_the_mode_is_restored_after() {
+        // SAFETY: takes no arguments and only reads this thread's mode.
+        #[allow(unsafe_code)]
+        let mode = || unsafe { GetThreadErrorMode() };
+        let before = mode();
+        let inside = without_error_dialogs(mode);
+        assert_ne!(inside & SEM_FAILCRITICALERRORS, 0);
+        assert_eq!(mode(), before);
+    }
 
     #[cfg(windows)]
     #[test]
