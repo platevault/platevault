@@ -92,17 +92,19 @@ export function isLocked(lifecycle: ProjectSummary["lifecycle"]): boolean {
 }
 
 /** The Project `projectId` from the list read; `undefined` while it loads, `null` when no Project has that id. */
-export function useProjectHeader(projectId: string): { header: ProjectHeader | null | undefined; error: unknown } {
+export function useProjectHeader(projectId: string): { header: ProjectHeader | null | undefined; error: unknown; refetch: () => Promise<unknown> } {
   const list = useQuery(projectsQuery())
   const header = list.data ? (list.data.find((p) => p.id === projectId) ?? null) : undefined
-  return { header, error: list.error }
+  return { header, error: list.error, refetch: list.refetch }
 }
 
 /**
- * The full Project record, or `unavailable` while the library has no read
- * of it (astro-plan-wre19.3). Switch this one function to
- * `useQuery(libraryQuery("projectGet", projectId))` when `project_get`
- * lands; every caller already handles both states.
+ * The full Project record. It reads `unavailable` until `project_get`
+ * (astro-plan-wre19.3, PR #1923) is in the generated client; then this one
+ * function becomes `useQuery(libraryQuery("projectGet", projectId))` and
+ * `projectGet` joins PROJECT_READS. Callers handle both states: the edits
+ * that replace a whole list stay visibly unavailable until their dialogs
+ * exist, whatever this returns.
  */
 export function useProjectRecord(_projectId: string): { state: "unavailable" } | { state: "ready"; project: Project } {
   return { state: "unavailable" }

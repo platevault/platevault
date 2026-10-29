@@ -5,29 +5,17 @@
  * own waiting work (View (previous) to review) can't be dismissed.
  */
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { type ActionResult, type Issue as LibraryIssue, type IssuePage, library } from "@/api/ipc"
+import { type ActionResult, type Issue as LibraryIssue, library } from "@/api/ipc"
 import { libraryKey, libraryQuery } from "@/api/query"
 import { useMessages } from "@/app/preferences"
+import { issuePageLink } from "@/app/status-bar"
 import { toast } from "@/components/app/feedback"
 import type { Issue } from "@/components/app/issue-copy"
 import { failureMessage } from "@/components/app/run-result"
 import { type IssueCallbacks, type IssueView, NO_ISSUES, type OwnIssues, rowIssues } from "@/components/app/issue-actions"
 
-function pagePath(page: IssuePage): string {
-  switch (page.kind) {
-    case "sessions":
-      return "/sessions"
-    case "locations":
-      return "/settings/locations"
-    case "activity":
-      return "/activity"
-    case "project":
-      return "/projects/$projectId"
-  }
-}
-
 function clientIssue(issue: LibraryIssue): Issue {
-  return { id: issue.id, kind: issue.kind, severity: issue.severity, count: issue.count, bytes: issue.bytes ?? undefined, name: issue.name, owner: issue.owner, to: pagePath(issue.page), dismissable: issue.dismissable }
+  return { id: issue.id, kind: issue.kind, severity: issue.severity, count: issue.count, bytes: issue.bytes ?? undefined, name: issue.name, owner: issue.owner, to: issuePageLink(issue.page).to, dismissable: issue.dismissable }
 }
 
 export interface ProjectIssues {

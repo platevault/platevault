@@ -18,14 +18,13 @@ import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-quer
 import { useNavigate } from "@tanstack/react-router"
 import { CopyCheck, FolderOpen, Pencil, Trash2, X } from "lucide-react"
 import { useEffect, useState } from "react"
-import { useLibraryEvent } from "@/api/events"
-import { APPLY_WAITING_EVENT, type ApplyReport_Serialize, library, type NativePathWire, type PendingChange_Serialize, type PreviousItem_Serialize, type ProjectViewSettings_Serialize, type ViewMode } from "@/api/ipc"
+import { type ApplyReport_Serialize, library, type NativePathWire, type PendingChange_Serialize, type PreviousItem_Serialize, type ProjectViewSettings_Serialize, type ViewMode } from "@/api/ipc"
 import { libraryQuery } from "@/api/query"
 import { useMessages } from "@/app/preferences"
 import { ActionButton } from "@/components/app/actions"
 import type { Action, Column, MenuItem } from "@/components/app/contracts"
 import { KeyValueList } from "@/components/app/data"
-import { Notice } from "@/components/app/feedback"
+import { Notice, toast } from "@/components/app/feedback"
 import { SegmentedField, SelectField, TextField } from "@/components/app/fields"
 import { FormDialog } from "@/components/app/form-dialog"
 import { BoxTable } from "@/components/app/box"
@@ -35,7 +34,7 @@ import { DetailPage, type DetailSection } from "@/components/templates/detail-pa
 import { formatBytes, formatCount } from "@/lib/format"
 import type { Messages } from "@/lib/i18n"
 import { ApplySheet } from "./apply-sheet"
-import { type ApplyRun, applyOperationFound, applyWaiting, cancelApply, dismissApply, useApplyRun } from "./apply-run"
+import { type ApplyRun, applyOperationFound, cancelApply, dismissApply, useApplyRun } from "./apply-run"
 import { changeSession, changeSource, changeText, sourceText, stopText } from "./apply-words"
 import type { ProjectTabProps } from "./project-page"
 import { applyPreviewQuery, inputsQuery, isLocked, previousItemsQuery, projectWrite } from "./queries"
@@ -49,7 +48,6 @@ export function ViewTab({ header, chrome, search }: ProjectTabProps) {
   const inputs = useQuery(inputsQuery(header.id))
   const previous = useQuery(previousItemsQuery(header.id))
   const run = useApplyRun(header.id)
-  useLibraryEvent(APPLY_WAITING_EVENT, applyWaiting)
   const [editing, setEditing] = useState(false)
   const desired = inputs.data?.desired
   const pending = inputs.data?.pending ?? []
@@ -66,6 +64,11 @@ export function ViewTab({ header, chrome, search }: ProjectTabProps) {
       id: "view-settings",
       title: m.project_view_settings(),
       actions: locked ? [] : [{ id: "edit-view-settings", label: m.view_edit_settings(), icon: Pencil, opensDialog: true, run: () => setEditing(true) }],
+      // The library has no command to open the View in its application or reveal it yet (astro-plan-wre19.8, PREP-FR-10).
+      more: [
+        { id: "open-in", label: m.project_open_in({ name: m.view_your_tool() }), unavailable: { action: m.actions_blocked({ action: m.project_open_in({ name: m.view_your_tool() }) }), reason: m.view_open_unavailable(), blockers: [] }, run: () => undefined },
+        { id: "reveal-view", label: m.view_reveal(), unavailable: { action: m.actions_blocked({ action: m.view_reveal() }), reason: m.view_open_unavailable(), blockers: [] }, run: () => undefined },
+      ],
       content: <ViewSettingsSummary settings={desired.settings} />,
     })
   sections.push({
@@ -86,7 +89,7 @@ export function ViewTab({ header, chrome, search }: ProjectTabProps) {
   return (
     <>
       <DetailPage {...chrome} title={header.name} sections={sections} />
-      {desired && editing ? <ViewSettingsDialog projectId={header.id} revision={desired.revision} settings={desired.settings} onClose={() => setEditing(false)} /> : null}
+      {desired && editing ? <ViewSettingsDialog projectId={header.id} opened={desired} onClose={() => setEditing(false)} /> : null}
       {sheetOpen ? <ApplySheet header={header} onClose={() => setSheet(false)} /> : null}
     </>
   )
@@ -98,7 +101,8 @@ export function ViewTab({ header, chrome, search }: ProjectTabProps) {
 
 function ApplyRunPanel({ projectId, run, onReview }: { projectId: string; run: ApplyRun; onReview: () => void }) {
   const m = useMessages()
-  // While the run has no operation id yet, the sheet's read names it as `operation_running` (Cancel needs it).
+  // While the run has no operation id yet, the sheet's read names it as `operation_running` (Cancel needs it). Polling
+  // stands in for a start acknowledgement carrying the id, which astro-plan-wre19.6 adds.
   const preview = useQuery({ ...applyPreviewQuery(projectId), enabled: run.phase === "running" && run.operationId === null, refetchInterval: 2000 })
   const runningId = preview.data?.blockers.flatMap((b) => (b.blocker === "operation_running" && b.kind === "apply" ? [b.operationId] : []))[0] ?? null
   useEffect(() => {
@@ -132,7 +136,7 @@ function ApplyRunPanel({ projectId, run, onReview }: { projectId: string; run: A
     }
     return (
       <>
-        <Refusal action={m.actions_blocked({ action: m.project_apply() })} reason={failureMessage(m, run.result.failure)} blockers={[]} actions={<ActionButton action={review} />} />
+        <Refusal action={m.actions_blocked({ action: m.project_apply() })} reason={failureMessage(m, run.result.failure)} blockers={[]} />
         <ActionButton action={review} />
         <ActionButton action={dismiss} />
       </>
@@ -195,9 +199,11 @@ function ViewSettingsSummary({ settings }: { settings: ProjectViewSettings_Seria
 }
 
 /** Edit View settings…: the application, Symlinks or Copies, and the processing location; each reaches the View on the next Apply. */
-function ViewSettingsDialog({ projectId, revision, settings, onClose }: { projectId: string; revision: number; settings: ProjectViewSettings_Serialize; onClose: () => void }) {
+function ViewSettingsDialog({ projectId, opened, onClose }: { projectId: string; opened: { revision: number; settings: ProjectViewSettings_Serialize }; onClose: () => void }) {
   const m = useMessages()
   const client = useQueryClient()
+  // The draft is of what the dialog opened on: its revision and keywords never follow a re-read underneath it.
+  const [{ revision, settings }] = useState(opened)
   const profiles = useQuery(libraryQuery("prepareProfiles"))
   const [mode, setMode] = useState<ViewMode>(settings.mode)
   const [profileId, setProfileId] = useState(settings.profileId ?? "")
@@ -215,10 +221,17 @@ function ViewSettingsDialog({ projectId, revision, settings, onClose }: { projec
     id: "save-view-settings",
     label: m.settings_save(),
     kind: "primary",
-    run: () =>
-      projectWrite(client, () =>
+    run: async () => {
+      const result = await projectWrite(client, () =>
         library.projectSetViewSettings(projectId, revision, { mode, profileId: profileId === "" ? null : profileId, parent, keywords: settings.keywords }),
-      ),
+      )
+      // A stale draft is never sent again on the new revision: the dialog closes on the re-read and says why.
+      if (!result.ok && result.failure.source === "library" && result.failure.error.code === "conflict") {
+        toast({ message: failureMessage(m, result.failure) })
+        onClose()
+      }
+      return result
+    },
   }
   return (
     <FormDialog open onOpenChange={(next) => !next && onClose()} title={m.project_view_settings()} size="md" confirm={save}>

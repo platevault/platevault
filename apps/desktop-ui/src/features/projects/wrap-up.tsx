@@ -49,7 +49,9 @@ import { ActionError, Notice, TableSkeleton, toast } from "@/components/app/feed
 import { SelectField } from "@/components/app/fields"
 import { failureMessage } from "@/components/app/run-result"
 import { stepEditable } from "@/components/app/step-flow"
+import { DetailPage } from "@/components/templates/detail-page"
 import { StepPage } from "@/components/templates/step-page"
+import { startClose, stopClose, useCloseRun } from "./close-run"
 import { formatBytes, formatDateTime } from "@/lib/format"
 import type { Messages } from "@/lib/i18n"
 import { operationText } from "./apply-words"
@@ -86,11 +88,8 @@ function wrapUpGate(m: Messages, status: WrapUpStatus, viewLink: StepLink): Flow
 export function WrapUpPage({ header, chrome, search }: ProjectTabProps) {
   const m = useMessages()
   const status = useQuery(wrapUpStatusQuery(header.id))
-  if (status.error) {
-    const failure = failureOf(status.error)
-    return <ActionError message={failure ? failureMessage(m, failure) : m.action_failure_unreachable()} onRetry={() => void status.refetch()} />
-  }
-  if (!status.data) return <TableSkeleton rows={4} columns={3} label={m.common_loading()} />
+  // Loading and a failed read keep the Project's header and tabs.
+  if (!status.data) return <DetailPage {...chrome} title={header.name} sections={[{ id: "wrap-up", title: m.wrapup_action(), content: <Reviewed read={status}>{() => null}</Reviewed> }]} />
   return <WrapUpFlow header={header} chrome={chrome} status={status.data} viewing={search.step} />
 }
 
@@ -155,6 +154,7 @@ interface WrapUpStepView {
 /** A locked Project's Wrap up: each step as recorded, for good. */
 function WrapUpRecord({ status }: { status: WrapUpStatus }) {
   const m = useMessages()
+  const stop: Action = { id: "stop-archive", label: m.wrapup_stop_archive(), icon: Square, run: () => stopClose(status.projectId) }
   const rows = status.records.map((r) => ({ ...r, id: r.step }))
   const columns: Column<(typeof rows)[number]>[] = [
     { id: "step", header: m.project_col_step(), cell: (r) => stepLabel(m, r.step), sortValue: (r) => WRAP_UP_STEPS.indexOf(r.step), rowHeader: true },
@@ -163,19 +163,25 @@ function WrapUpRecord({ status }: { status: WrapUpStatus }) {
   ]
   return (
     <>
-      {status.lifecycle === "closing" ? <Notice tone="info" title={m.wrapup_archive_resumes()} /> : null}
+      {status.lifecycle === "closing" ? (
+        <Notice tone="info" title={m.wrapup_closing_state()}>
+          <ActionButton action={stop} />
+        </Notice>
+      ) : null}
       <BoxTable label={m.wrapup_steps()} rows={rows} columns={columns} getRowId={(r) => r.id} />
     </>
   )
 }
 
 /** The read a step opens on: loading, its failure with Retry, or the step. */
-function Reviewed<T>({ read, children }: { read: { data: T | undefined; error: unknown; refetch: () => unknown }; children: (data: T) => ReactNode }) {
+function Reviewed<T>({ read, children }: { read: { data: T | undefined; error: unknown; fetchStatus: string; refetch: () => unknown }; children: (data: T) => ReactNode }) {
   const m = useMessages()
   if (read.error) {
     const failure = failureOf(read.error)
     return <ActionError message={failure ? failureMessage(m, failure) : m.action_failure_unreachable()} onRetry={() => void read.refetch()} />
   }
+  // A read that is not enabled (a step neither viewed nor current) shows nothing rather than loading for ever.
+  if (read.data === undefined && read.fetchStatus === "idle") return null
   if (read.data === undefined) return <TableSkeleton rows={4} columns={3} label={m.common_loading()} />
   return <>{children(read.data)}</>
 }
@@ -369,24 +375,20 @@ function useArchiveStep(header: ProjectHeader, status: WrapUpStatus, enabled: bo
   const m = useMessages()
   const client = useQueryClient()
   const locations = useQuery({ ...locationsQuery(), enabled })
-  const destinations = (locations.data ?? []).filter((l) => l.location.lifecycle === "active" && l.location.role === "captures")
+  // Archive writes to any active location (the library refuses a retired one).
+  const destinations = (locations.data ?? []).filter((l) => l.location.lifecycle === "active")
   const [destination, setDestination] = useState("")
   const chosen = destinations.some((l) => l.location.id === destination) ? destination : ""
   const read = useQuery({ ...libraryQuery("projectWrapUpArchiveReview", header.id, chosen), enabled: enabled && chosen !== "" })
   const review = chosen === "" ? undefined : read.data
   const sessions = useSessionSummaries(review?.sessions.map((s) => s.sessionId) ?? [])
   const [ticked, setTicked] = useState<string[] | null>(null)
-  const [closing, setClosing] = useState<ArchiveProgress | "running" | null>(null)
+  const run = useCloseRun(header.id)
+  const closing: ArchiveProgress | "running" | null = run?.phase === "running" ? "running" : run?.phase === "settled" && run.result.ok ? run.result.data.archive : null
   const picked = ticked ?? review?.sessions.filter(movable).map((s) => s.sessionId) ?? []
 
-  const close = (archive: { review: ArchiveReview; sessions: string[] } | null) => async () => {
-    setClosing("running")
-    const result = await projectWrite(client, () =>
-      library.projectClose({ projectId: header.id, desiredRevision: status.desiredRevision, archive: archive ? { destination: archive.review.destination, sessions: archive.sessions, digest: archive.review.digest } : null }),
-    )
-    setClosing(result.ok ? result.data.archive : null)
-    return result
-  }
+  const close = (archive: { review: ArchiveReview; sessions: string[] } | null) => () =>
+    startClose(client, { projectId: header.id, desiredRevision: status.desiredRevision, archive: archive ? { destination: archive.review.destination, sessions: archive.sessions, digest: archive.review.digest } : null })
   const label = m.stepflow_close_project()
   const blocked = (reason: string, blockers: Blocker[] = []): Action["unavailable"] => ({ action: m.actions_blocked({ action: label }), reason, blockers })
   // Without a destination nothing tells what would stay unmoved, so Close project never closes as "nothing to archive"
@@ -465,7 +467,7 @@ function useArchiveStep(header: ProjectHeader, status: WrapUpStatus, enabled: bo
 function ClosingView({ projectId, closing, sessionName }: { projectId: string; closing: ArchiveProgress | "running"; sessionName: (id: string) => string }) {
   const m = useMessages()
   if (closing === "running") {
-    const stop: Action = { id: "stop-archive", label: m.wrapup_stop_archive(), icon: Square, run: () => library.projectCloseStop(projectId) }
+    const stop: Action = { id: "stop-archive", label: m.wrapup_stop_archive(), icon: Square, run: () => stopClose(projectId) }
     return (
       <Notice tone="info" title={m.wrapup_closing()}>
         <ActionButton action={stop} />

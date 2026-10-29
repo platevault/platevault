@@ -1,13 +1,17 @@
 /**
  * The Projects shell contribution (src/app/shell-contract.ts): the palette's
- * New Project… and one Open entry per Project. Reads nothing while the
+ * New Project… and one Open entry per Project, and the Apply waiting
+ * listener. Reads nothing while the
  * palette is closed: the Project list query runs only with `open`.
  */
 import { useQuery } from "@tanstack/react-query"
 import { useNavigate } from "@tanstack/react-router"
+import { useLibraryEvent } from "@/api/events"
+import { APPLY_WAITING_EVENT } from "@/api/ipc"
 import { useMessages } from "@/app/preferences"
 import type { PaletteState, ShellContribution } from "@/app/shell-contract"
 import type { PaletteCommand } from "@/components/app/contracts"
+import { applyWaiting } from "./apply-run"
 import { projectsQuery } from "./queries"
 
 function useCommands({ open }: PaletteState): PaletteCommand[] {
@@ -23,4 +27,14 @@ function useCommands({ open }: PaletteState): PaletteCommand[] {
   ]
 }
 
-export const projectsShell: ShellContribution = { useCommands }
+/**
+ * Always mounted, so a running Apply hears its waiting events whichever page
+ * is open. The run's state after a restart is not read here: that durable
+ * read belongs to astro-plan-wre19.6.
+ */
+function ApplyWaitingListener() {
+  useLibraryEvent(APPLY_WAITING_EVENT, applyWaiting)
+  return null
+}
+
+export const projectsShell: ShellContribution = { Overlay: ApplyWaitingListener, useCommands }

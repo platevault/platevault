@@ -8024,5 +8024,8 @@
   "newproject_subjects_hint": "Pesquise seus Alvos, os catálogos ou o SIMBAD",
   "output_name_preview": "Output/{name}",
   "project_leave_out_frames": "Deixar quadros de fora",
-  "project_use_unusable": "Usar quadros Inutilizáveis"
+  "project_use_unusable": "Usar quadros Inutilizáveis",
+  "view_open_unavailable": "O PlateVault ainda não abre a View em um aplicativo",
+  "newproject_rigs_unavailable": "Os equipamentos entram com as sessões adicionadas",
+  "wrapup_closing_state": "Encerrando: o arquivamento termina ou é retomado na próxima abertura do PlateVault"
 }

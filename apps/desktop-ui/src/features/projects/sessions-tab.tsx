@@ -32,7 +32,7 @@ import { FormDialog } from "@/components/app/form-dialog"
 import { failureMessage } from "@/components/app/run-result"
 import { DetailPage, type DetailSection } from "@/components/templates/detail-page"
 import { failureOf } from "@/api/ipc"
-import { formatCount, formatDateTime, formatHours } from "@/lib/format"
+import { formatCount, formatDateTime, formatHours, numberText } from "@/lib/format"
 import type { Messages } from "@/lib/i18n"
 import type { ProjectTabProps } from "./project-page"
 import { inputsQuery, isLocked, type ProjectHeader, progressQuery, projectWrite, rigQuery, useProjectRecord } from "./queries"
@@ -169,7 +169,6 @@ function groupsSection(ctx: SectionContext, inputs: ProjectInputs_Serialize): De
   ]
   const rowActions = (g: ProjectGroup): MenuItem[] => {
     if (ctx.locked) return []
-    const holds = count(g.id)
     const removeLabel = m.project_group_remove()
     return [
       { id: "rename", label: m.project_group_rename(), icon: Pencil, opensDialog: true, run: () => ctx.open({ kind: "rename", group: g }) },
@@ -181,7 +180,6 @@ function groupsSection(ctx: SectionContext, inputs: ProjectInputs_Serialize): De
         label: removeLabel,
         icon: Trash2,
         kind: "destructive",
-        unavailable: holds > 0 ? { action: m.actions_blocked({ action: removeLabel }), reason: m.project_reason_group_holds({ count: holds }), blockers: [] } : undefined,
         confirm: { title: m.project_group_remove_title({ name: g.name }), confirm: { label: removeLabel, kind: "destructive" } },
         run: () => ctx.writes.removeGroup(g.id),
       },
@@ -385,7 +383,7 @@ function goalLine(m: Messages, progress: GoalProgress): { goal: string; inProjec
   if (goal.kind === "integration")
     return { goal: formatHours(goal.goalSeconds), inProject: formatHours(progress.inProject.seconds ?? 0), captured: formatHours(progress.captured.seconds ?? 0) }
   if (goal.kind === "frame_count") return { goal: formatCount(goal.goalFrames), inProject: formatCount(progress.inProject.frames), captured: formatCount(progress.captured.frames) }
-  const bar = goal.criterion.criterion === "usable_only" ? m.goal_usable_frames() : `${m.goal_fwhm_max().replace("″", "")}${goal.criterion.maxArcsec ?? "–"}″`
+  const bar = goal.criterion.criterion === "usable_only" ? m.goal_usable_frames() : m.domain_quality_max_fwhm({ arcsec: goal.criterion.maxArcsec === null ? "–" : numberText(goal.criterion.maxArcsec) })
   return { goal: bar, inProject: "–", captured: "–" }
 }
 

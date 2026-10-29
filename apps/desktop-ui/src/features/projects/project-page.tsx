@@ -10,8 +10,8 @@
  * Search keys: `?stage=` picks the tab (Sessions by default); Wrap up takes
  * `&step=`; `?apply=open` opens the Apply sheet on the View tab;
  * `?duplicate=open` opens Duplicate… once and leaves the URL;
- * `?issues=with-issues` is the status-bar counters' link and opens the tab
- * that holds the Project's issues.
+ * `?issues=with-issues` (the status-bar counters' link) opens the Project,
+ * whose own issues are in the Project ▾ menu with Dismiss and Restore.
  *
  * Moving to another Project remounts the page under its id, so no selection,
  * draft or open sheet carries from one Project to the next (astro-plan-409cm.9).
@@ -27,7 +27,9 @@ import { DetailSkeleton, EmptyState, type PageNotice } from "@/components/app/fe
 import type { PathItem } from "@/components/app/page"
 import { StatusBadge } from "@/components/app/status"
 import type { ObjectMenu, PageViews } from "@/components/templates/parts"
+import { withIssueItems } from "@/components/app/issue-actions"
 import { formatDateTime } from "@/lib/format"
+import { useProjectIssues } from "./issues"
 import { CalibrateTab } from "./calibrate-tab"
 import { DuplicateProjectDialog } from "./duplicate-dialog"
 import { ProjectDetailsDialog } from "./details-dialog"
@@ -72,8 +74,11 @@ export function ProjectPage() {
 function ProjectRoute({ projectId }: { projectId: string }) {
   const m = useMessages()
   const search = useSearch({ strict: false }) as Search
-  const { header, error } = useProjectHeader(projectId)
-  if (error) return <EmptyState icon={FolderKanban} title={m.projects_read_failed()} titleAs="h1" action={null} />
+  const { header, error, refetch } = useProjectHeader(projectId)
+  if (error) {
+    const retry: Action = { id: "retry-project", label: m.verb_retry(), run: async () => void (await refetch()) }
+    return <EmptyState icon={FolderKanban} title={m.projects_read_failed()} titleAs="h1" action={<ActionButton action={retry} />} />
+  }
   if (header === undefined) return <DetailSkeleton label={m.common_loading()} />
   if (header === null) return <EmptyState icon={FolderKanban} title={m.project_missing_title()} titleAs="h1" action={null} />
   return <ProjectView header={header} search={search} />
@@ -147,6 +152,7 @@ function useProjectChrome(header: ProjectHeader, tab: ProjectTabId, dialogs: { e
   const m = useMessages()
   const navigate = useNavigate()
   const record = useProjectRecord(header.id)
+  const issues = useProjectIssues()
   const locked = isLocked(header.lifecycle)
   const inputs = useQuery(inputsQuery(header.id))
   const snapshot = useQuery({ ...closedSnapshotQuery(header.id), enabled: locked })
@@ -186,7 +192,7 @@ function useProjectChrome(header: ProjectHeader, tab: ProjectTabId, dialogs: { e
     path: [{ label: m.nav_projects(), link: { to: "/projects" } }],
     status: <StatusBadge kind="project" value={header.lifecycle} />,
     actions: locked ? [] : [apply],
-    menu: { label: m.project_noun(), items: [edit, duplicate] },
+    menu: { label: m.project_noun(), items: withIssueItems(m, [edit, duplicate], issues.of(header.id), issues.callbacks) },
     notice: locked
       ? {
           tone: "info",

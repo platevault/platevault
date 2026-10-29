@@ -69,13 +69,14 @@ export function applyOperationFound(projectId: string, operationId: string): voi
  * report says which. A refused cancel (it already ended) leaves the run as
  * the build reports it.
  */
-export async function cancelApply(projectId: string): Promise<ActionResult<null>> {
+export async function cancelApply(projectId: string): Promise<ActionResult<null> | void> {
   const run = runs.get(projectId)
-  if (run?.phase !== "running" || run.operationId === null) return { ok: true, data: null }
+  if (run?.phase !== "running" || run.operationId === null) return
   set(projectId, { ...run, canceling: true })
   const result = await library.projectApplyCancel(run.operationId)
   const now = runs.get(projectId)
-  if (!result.ok && now?.phase === "running") set(projectId, { ...now, canceling: false })
+  if (result.ok) return
+  if (now?.phase === "running") set(projectId, { ...now, canceling: false })
   return result
 }
 

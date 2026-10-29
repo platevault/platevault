@@ -10,7 +10,7 @@
 import { useQuery } from "@tanstack/react-query"
 import { useNavigate, useSearch } from "@tanstack/react-router"
 import { Copy, Eye, FolderKanban, PackageCheck, Plus } from "lucide-react"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { failureOf, type ProjectLifecycle, type ProjectSummary } from "@/api/ipc"
 import { useMessages } from "@/app/preferences"
 import { ActionButton } from "@/components/app/actions"
@@ -45,7 +45,15 @@ export function ProjectsPage() {
   // The counters' link asks for every Project with issues, closed ones too.
   const [state, setState] = useState<StateFilter>(linkedIssues ? "" : "open")
   const [issueFilter, setIssueFilter] = useState<IssueFilter | "">(linkedIssues)
-  const [creating, setCreating] = useState(search.new === "open")
+  const [creating, setCreating] = useState(false)
+  // `?new=open` (the palette's New Project…) opens the dialog once and leaves the URL.
+  const newLinked = search.new === "open"
+  useEffect(() => {
+    if (!newLinked) return
+    setCreating(true)
+    const { new: _, ...rest } = search
+    void navigate({ to: "/projects", search: rest, replace: true })
+  }, [newLinked, navigate, search])
   const [duplicating, setDuplicating] = useState<ProjectSummary | null>(null)
   const rows = [...(list.data ?? [])].sort((a, b) => a.name.localeCompare(b.name))
   const q = query.trim().toLocaleLowerCase()

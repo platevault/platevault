@@ -66,6 +66,7 @@ export function OutputTab({ header, chrome }: ProjectTabProps) {
   const locked = isLocked(header.lifecycle)
   const inputs = useQuery(inputsQuery(header.id))
   const hasLocation = inputs.data ? inputs.data.desired.settings.parent !== null : null
+  // The rescan stands in for a passive Output read until astro-plan-wre19.7 adds one.
   const output = useQuery({ ...libraryQuery("projectOutputRescan", header.id), enabled: !locked && hasLocation === true })
   const [copying, setCopying] = useState(false)
   const groupName = (id: string | null) => (id ? (inputs.data?.desired.groups.find((g) => g.id === id)?.name ?? m.project_group_missing()) : "–")

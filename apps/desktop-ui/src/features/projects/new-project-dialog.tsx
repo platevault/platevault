@@ -2,18 +2,21 @@
  * New Project… (065 PRJ-FR-01/02): a name, notes and the subjects it
  * collects for, each a saved Target. A search result that is not saved yet
  * is added to the library first (`targets_add`), so the Project names a
- * Target the library holds. Rigs and goals follow: a session that joins adds
- * its rig, and goals are set on the Project page. Create Project opens the
- * new Project.
+ * Target the library holds. Goals apply to every subject. Rigs can't be
+ * chosen here yet: the library has no list of saved rigs (astro-plan-mts3e),
+ * so Add rig stays visibly unavailable and a session that joins adds its rig.
+ * Create Project opens the new Project.
  */
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useNavigate } from "@tanstack/react-router"
 import { X } from "lucide-react"
 import { useState } from "react"
-import { library, type TargetsSearchResult } from "@/api/ipc"
+import { type GoalInput, library, type TargetsSearchResult } from "@/api/ipc"
 import { libraryQuery } from "@/api/query"
 import { useMessages } from "@/app/preferences"
+import { ActionButton } from "@/components/app/actions"
 import { BoxTable } from "@/components/app/box"
+import { type GoalTemplateValue, GoalValuesEditor, fwhmBar } from "@/components/domain/goal-fields"
 import type { Action } from "@/components/app/contracts"
 import { TextAreaField, TextField } from "@/components/app/fields"
 import { FormDialog } from "@/components/app/form-dialog"
@@ -24,6 +27,21 @@ import { projectWrite } from "./queries"
 interface Subject {
   targetId: string
   name: string
+}
+
+/** One subject's goals from the editor's values: time or frames per channel, then the subject's quality bar once. */
+export function goalInputs(targetId: string, values: readonly GoalTemplateValue[]): GoalInput[] {
+  const amounts = values.flatMap((v): GoalInput[] =>
+    v.integrationS !== null
+      ? [{ targetId, kind: "integration", channel: v.channel, goalSeconds: v.integrationS }]
+      : v.frameCount !== null
+        ? [{ targetId, kind: "frame_count", channel: v.channel, goalFrames: v.frameCount }]
+        : [],
+  )
+  const limits = values.map((v) => fwhmBar(v.qualityBar)).filter((x): x is number => x !== null)
+  // Every goal counts Usable frames only (C7); a FWHM limit is the subject's one quality bar, the strictest one set.
+  if (amounts.length === 0 || limits.length === 0) return amounts
+  return [...amounts, { targetId, kind: "quality_bar", criterion: { criterion: "max_fwhm_median", maxArcsec: Math.min(...limits) } }]
 }
 
 function pickerSource(result: TargetsSearchResult): TargetSource {
@@ -43,6 +61,7 @@ function NewProjectForm({ onClose }: { onClose: () => void }) {
   const [query, setQuery] = useState("")
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [pickError, setPickError] = useState<string | null>(null)
+  const [goals, setGoals] = useState<GoalTemplateValue[]>([])
   const text = query.trim()
   const search = useQuery({ ...libraryQuery("targetsSearch", text), enabled: text.length > 0 })
   const results = search.data?.results ?? []
@@ -82,7 +101,7 @@ function NewProjectForm({ onClose }: { onClose: () => void }) {
           notes.trim() === "" ? null : notes.trim(),
           subjects.map((s) => ({ targetId: s.targetId })),
           [],
-          [],
+          subjects.flatMap((s) => goalInputs(s.targetId, goals)),
         ),
       )
       if (result.ok) void navigate({ to: "/projects/$projectId", params: { projectId: result.data.id } })
@@ -111,6 +130,8 @@ function NewProjectForm({ onClose }: { onClose: () => void }) {
           rowActions={(s) => [{ id: "remove", label: m.project_remove_named({ name: s.name }), icon: X, run: () => setSubjects((was) => was.filter((x) => x.targetId !== s.targetId)) }]}
         />
       ) : null}
+      <ActionButton action={{ id: "add-rig", label: m.project_add_rig(), unavailable: { action: m.actions_blocked({ action: m.project_add_rig() }), reason: m.newproject_rigs_unavailable(), blockers: [] }, run: () => undefined }} />
+      <GoalValuesEditor values={goals} channels={[]} onChange={setGoals} />
       <TextAreaField label={m.newproject_notes()} value={notes} onChange={setNotes} />
     </FormDialog>
   )

@@ -7484,5 +7484,8 @@
   "newproject_subjects_hint": "Search your Targets, the catalogues or SIMBAD",
   "output_name_preview": "Output/{name}",
   "project_leave_out_frames": "Leave out frames",
-  "project_use_unusable": "Use Unusable frames"
+  "project_use_unusable": "Use Unusable frames",
+  "view_open_unavailable": "PlateVault can't open the View in an application yet",
+  "newproject_rigs_unavailable": "Rigs join with the sessions you add",
+  "wrapup_closing_state": "Closing: the archive finishes, or resumes when PlateVault next starts"
 }
