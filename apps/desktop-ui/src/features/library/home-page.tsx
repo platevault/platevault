@@ -10,14 +10,13 @@
  * Pending work, Open work (with each Project's Next action, PRJ-FR-18),
  * Status's background jobs and Tonight are `home_dashboard`'s, computed by
  * the library: Home never recomputes them. The library computes Tonight
- * under Home's stored criteria (criteria.ts); until the user sets them,
- * Tonight reads `no_criteria` and offers to set them. Pending ingestions and
- * Status's locations read the library directly. The calendar's view of
- * `planning_calendar` (PLAN-FR-12) and Tonight's goal grades are not built
- * on this page yet.
+ * and the calendar (`planning_calendar`, PLAN-FR-12) under Home's stored
+ * criteria (criteria.ts); until the user sets them, both read
+ * `no_criteria` and offer to set them (home-planning.tsx). Pending
+ * ingestions and Status's locations read the library directly.
  */
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { FolderPlus, Import, SlidersHorizontal } from "lucide-react"
+import { FolderPlus, Import } from "lucide-react"
 import { type ReactNode, useState } from "react"
 import {
   type ExpectedSession,
@@ -41,12 +40,13 @@ import { ActionError, EmptyState, UnknownValue } from "@/components/app/feedback
 import { useFollowLink } from "@/components/app/links"
 import { StatusBadge } from "@/components/app/status"
 import { DetailPage, type DetailSection } from "@/components/templates/detail-page"
-import { formatCount, formatTime } from "@/lib/format"
+import { formatCount } from "@/lib/format"
 import type { Messages } from "@/lib/i18n"
 import { AddToProjectDialog } from "./add-to-project"
 import { HomeCriteriaDialog } from "./criteria-dialog"
 import { homeCriteriaQuery } from "./criteria"
 import { IngestionsTable, ROWS, useIngestions } from "./ingestions"
+import { HomeCalendar, TonightGoals } from "./home-planning"
 import { readError, Unavailable } from "./parts"
 import { dashboardQuery, homeWrite, locationsQuery, sessionsQuery } from "./queries"
 import { sessionLabel, useSessionSummaries } from "@/components/domain/session-label"
@@ -115,15 +115,18 @@ export function HomePage() {
     {
       id: "home-tonight",
       title: data?.tonight.site ? m.home_tonight_at({ site: data.tonight.site.name }) : m.home_tonight(),
+      count: data && !data.tonight.unavailableReason ? data.tonight.goals.length : undefined,
       flush: data !== null,
-      actions: editCriteria && data?.tonight.criteria ? [{ id: "home-edit-criteria", label: m.home_edit_criteria(), run: editCriteria }] : [],
-      content: dashboardBody((d) => <TonightTable dashboard={d} follow={follow} onSetCriteria={editCriteria} />),
+      actions: [
+        ...(editCriteria && data?.tonight.criteria ? [{ id: "home-edit-criteria", label: m.home_edit_criteria(), run: editCriteria }] : []),
+        ...(data ? allAction(m, follow, "home-tonight", data.tonight.goals.length, { to: "/targets" }) : []),
+      ],
+      content: dashboardBody((d) => <TonightGoals tonight={d.tonight} follow={follow} onSetCriteria={editCriteria} />),
     },
     {
       id: "home-calendar",
       title: m.home_calendar(),
-      // planning_calendar serves five weeks of nights (PLAN-FR-12); this page does not draw them yet.
-      content: <Unavailable what={m.home_calendar()} />,
+      content: dashboardBody((d) => <HomeCalendar tonight={d.tonight.night} reason={d.tonight.unavailableReason} />),
     },
   ]
   return (
@@ -397,43 +400,5 @@ function JobsTable({ work, follow }: { work: RunningWork[]; follow: Follow }) {
       onRowClick={(w) => follow(workLink(w))}
       empty={m.home_nothing_running()}
     />
-  )
-}
-
-// Tonight ----------------------------------------------------------------------
-
-type TonightRow = HomeDashboard_Serialize["tonight"]["windows"][number]
-
-/** Each Target with a window tonight at the default site, as the library computed it (PLAN-FR-11). */
-function TonightTable({ dashboard, follow, onSetCriteria }: { dashboard: HomeDashboard_Serialize; follow: Follow; onSetCriteria?: () => void }) {
-  const m = useMessages()
-  const tonight = dashboard.tonight
-  if (tonight.unavailableReason === "no_site") {
-    return <EmptyState icon={FolderPlus} title={m.home_no_site_yet()} action={<ActionButton action={{ id: "add-site", label: m.tonight_add_site(), run: () => follow({ to: "/settings/sites" }) }} />} />
-  }
-  if (tonight.unavailableReason === "no_criteria") {
-    const action = onSetCriteria ? <ActionButton action={{ id: "set-criteria", label: m.home_set_criteria(), run: onSetCriteria }} /> : undefined
-    return <EmptyState icon={SlidersHorizontal} title={m.home_no_criteria_yet()} action={action} />
-  }
-  const link = (r: TonightRow): StepLink => ({ to: "/targets/$targetId", params: { targetId: r.targetId } })
-  const columns: Column<TonightRow>[] = [
-    { id: "target", header: m.home_column_goal(), rowHeader: true, truncate: true, sortValue: (r) => r.designation, cell: (r) => r.designation },
-    { id: "window", header: m.tonight_window(), align: "right", sortValue: (r) => r.window.startUtc, cell: (r) => `${formatTime(r.window.startUtc, r.window.timeZone)}–${formatTime(r.window.endUtc, r.window.timeZone)}` },
-  ]
-  return (
-    <>
-      <BoxTable
-        label={m.home_tonight()}
-        rows={tonight.windows.slice(0, ROWS)}
-        columns={columns}
-        getRowId={(r) => r.targetId}
-        rowLabel={(r) => r.designation}
-        rowActions={(r) => [{ id: "target", label: m.project_open_target(), run: () => follow(link(r)) }]}
-        onRowClick={(r) => follow(link(r))}
-        empty={m.home_no_goals_suit()}
-      />
-      {/* Tonight's goal grades and next good night (PLAN-FR-11) are served; this page does not draw them yet. */}
-      <Unavailable what={m.home_grades()} />
-    </>
   )
 }

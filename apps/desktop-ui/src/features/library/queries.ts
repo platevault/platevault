@@ -35,6 +35,8 @@ export const sourcesQuery = () => libraryQuery("importSourcesList")
 export const importQuery = (importId: string) => libraryQuery("importStatus", importId)
 /** Home's dashboard for tonight; the library computes Tonight under Home's stored criteria (criteria.ts). */
 export const dashboardQuery = () => libraryQuery("homeDashboard", {})
+/** Home's calendar: `nights` nights from `firstNight` (site-local evening dates), computed by the library under Home's stored criteria (PLAN-FR-12). */
+export const calendarQuery = (firstNight: string, nights: number) => libraryQuery("planningCalendar", { firstNight, nights })
 
 /** The reads a session or import write can change, by command. */
 const LIBRARY_READS: readonly LibraryCommand[] = [

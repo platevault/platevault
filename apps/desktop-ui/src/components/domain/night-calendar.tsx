@@ -38,8 +38,8 @@ export interface CalendarNight {
   darkS: number | null
   /** Unfinished goals the night suits. */
   goals: number
-  /** Targets on the night's plan. */
-  planned: number
+  /** Targets on the night's plan; null while the plan cannot be read, shown as "–", never as 0. */
+  planned: number | null
   /** Where the night leads: Targets set to it. */
   link: StepLink
   /** The card's body: the dark window, the Moon, the goals it suits and rules out, the plan. */
@@ -91,14 +91,20 @@ function dateFormat(options: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
 
 const atNoon = (night: string) => new Date(`${night}T12:00:00Z`)
 
+/** "Moon 40% Waxing gibbous", or the phase alone when the illumination is unknown. */
+export function moonPhrase(m: Messages, moon: MoonTonight): string {
+  const phase = say(m, moon.phase)
+  return moon.illuminationPct === null ? m.calendar_moon_phase({ phase }) : m.calendar_moon({ illumination: moon.illuminationPct, phase })
+}
+
 /** The night's figures as one sentence: the link's accessible name. */
 function nightName(m: Messages, n: CalendarNight, date: string): string {
   return m.calendar_night_name({
     date,
-    moon: m.calendar_moon({ illumination: n.moon.illuminationPct, phase: say(m, n.moon.phase) }),
+    moon: moonPhrase(m, n.moon),
     dark: n.darkS === null ? m.calendar_never_dark() : m.calendar_dark({ time: formatHours(n.darkS) }),
     goals: m.calendar_goals_suit({ count: n.goals, n: formatCount(n.goals) }),
-    plan: m.calendar_planned({ count: n.planned, n: formatCount(n.planned) }),
+    plan: n.planned === null ? m.calendar_plan_unknown() : m.calendar_planned({ count: n.planned, n: formatCount(n.planned) }),
   })
 }
 
@@ -217,11 +223,12 @@ export function NightCalendar({ label, today, nights }: NightCalendarProps) {
   )
 }
 
-function Figure({ icon: Icon, value }: { icon: typeof Goal; value: number }) {
+/** A figure, or "–" when it is not known: unknown never reads as 0. */
+function Figure({ icon: Icon, value }: { icon: typeof Goal; value: number | null }) {
   return (
-    <span className={cn("inline-flex items-center gap-0.5", value === 0 && "text-muted-foreground")}>
+    <span className={cn("inline-flex items-center gap-0.5", (value === null || value === 0) && "text-muted-foreground")}>
       <Icon aria-hidden="true" className="size-3" />
-      {formatCount(value)}
+      {value === null ? "–" : formatCount(value)}
     </span>
   )
 }
@@ -229,9 +236,11 @@ function Figure({ icon: Icon, value }: { icon: typeof Goal; value: number }) {
 /**
  * The Moon's phase as a glyph: the disk, with its lit part from the
  * illuminated fraction, on the right while waxing. Decorative: the night's
- * accessible name says the phase.
+ * accessible name says the phase. Without a known fraction it draws nothing,
+ * so an unknown Moon never reads as a new one.
  */
-export function MoonPhase({ illuminationPct, waxing }: { illuminationPct: number; waxing: boolean }) {
+export function MoonPhase({ illuminationPct, waxing }: { illuminationPct: number | null; waxing: boolean }) {
+  if (illuminationPct === null) return null
   const r = 6
   const lit = Math.min(1, Math.max(0, illuminationPct / 100))
   // The terminator is a half-ellipse; its width shrinks to 0 at the quarters.

@@ -24,8 +24,8 @@ function nights(count: number): CalendarNight[] {
   })
 }
 
-async function renderCalendar() {
-  const root = createRootRoute({ component: () => <NightCalendar label="Next 5 weeks" today={TODAY} nights={nights(19)} /> })
+async function renderCalendar(list: CalendarNight[] = nights(19)) {
+  const root = createRootRoute({ component: () => <NightCalendar label="Next 5 weeks" today={TODAY} nights={list} /> })
   const router = createRouter({ routeTree: root, history: createMemoryHistory({ initialEntries: ["/"] }) })
   render(<RouterProvider router={router} />)
   return screen.findByRole("grid", { name: "Next 5 weeks" })
@@ -87,5 +87,12 @@ describe("NightCalendar", () => {
     await user.keyboard("{Escape}")
     await waitFor(() => expect(screen.queryByText(`Card for ${TODAY}`)).toBeNull())
     expect(night(TODAY)).toHaveFocus()
+  })
+
+  it("reads an unknown plan and Moon fraction as unknown, never as 0 or a New Moon", async () => {
+    await renderCalendar(nights(2).map((n) => ({ ...n, moon: { ...n.moon, illuminationPct: null }, planned: null })))
+    expect(night(TODAY)).toHaveAccessibleName(new RegExp(`Moon Waxing gibbous, .*, ${m.calendar_plan_unknown()}$`))
+    expect(night(TODAY).querySelector("[data-moon-phase]")).toBeNull()
+    expect(night(TODAY)).toHaveTextContent("–")
   })
 })

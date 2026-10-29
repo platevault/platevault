@@ -50,8 +50,8 @@ const PHASES: ReadonlyArray<[number, MessageRef]> = [
   [SYNODIC_DAYS, msg("tonight_moon_phase_new")],
 ]
 
-/** The Moon at local midnight: illumination, phase, and rise and set about 50 minutes later each night. */
-export function moonOn(site: SampleSite, night: string): MoonTonight {
+/** The Moon at local midnight: illumination (always known here), phase, and rise and set about 50 minutes later each night. */
+export function moonOn(site: SampleSite, night: string): MoonTonight & { illuminationPct: number } {
   const midnight = noonMs(site, night) + 12 * HOUR_MS
   const age = moonAge(midnight)
   const illuminationPct = Math.round(((1 - Math.cos((2 * Math.PI * age) / SYNODIC_DAYS)) / 2) * 100)

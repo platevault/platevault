@@ -461,13 +461,15 @@ describe("Home", () => {
     const host = eventHost((command, args) => {
       if (command === "home_dashboard") {
         asked.push(args)
-        return dashboard({ ...tonight(), criteria: null, windows: [], unavailableReason: "no_criteria" })
+        return dashboard({ ...tonight(), night: null, criteria: null, windows: [], nextGoodNight: null, unavailableReason: "no_criteria" })
       }
       if (command === "planning_home_criteria") return { criteria: null, revision: 0 }
       return emptyHome(command)
     })
     const { user } = renderAt("/")
-    expect(await screen.findByText(m.home_no_criteria_yet())).toBeInTheDocument()
+    // Tonight and the calendar both name the gap; only Tonight offers to set the criteria, and the calendar is not read.
+    expect(await screen.findAllByText(m.home_no_criteria_yet())).toHaveLength(2)
+    expect(host.calls).not.toContain("planning_calendar")
     expect(asked).toEqual([{ tonight: {} }])
     expect(host.calls).toContain("planning_home_criteria")
     // Pending work and Open work come from the same read, criteria or not.
@@ -522,7 +524,7 @@ describe("Home", () => {
       return emptyHome(command)
     })
     renderAt("/")
-    expect(await screen.findByText("M 31")).toBeInTheDocument()
+    expect(await screen.findByText(m.home_no_unfinished_goals())).toBeInTheDocument()
     expect(screen.getByText(m.home_tonight_at({ site: "Backyard" }))).toBeInTheDocument()
     expect(screen.queryByText(m.home_no_criteria_yet())).toBeNull()
     for (const what of [m.home_pending_work(), m.home_open_work(), m.home_tonight(), m.home_jobs()]) {
