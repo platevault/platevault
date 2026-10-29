@@ -13,6 +13,10 @@ import { commandsSent, type ReviewHost, reviewHost, SESSION_ID } from "./__fixtu
 import { reloadReviewPrefs, ROWS_DEFAULT_PX, setReviewPrefs } from "./prefs"
 import { SessionReview } from "./review-workspace"
 
+// Toasts render in the app's toaster, which a component test does not mount: read what was shown instead.
+const toasts = vi.hoisted(() => vi.fn())
+vi.mock("@/components/app/feedback", async (actual) => ({ ...(await actual<typeof import("@/components/app/feedback")>()), toast: toasts }))
+
 // The plots fit their tick labels by measuring them; jsdom lays out no SVG text.
 ;(SVGElement.prototype as unknown as { getComputedTextLength: () => number }).getComputedTextLength ??= () => 24
 
@@ -41,6 +45,7 @@ function installReviewHost(options?: Parameters<typeof reviewHost>[0]): ReviewHo
   return installed
 }
 beforeEach(() => {
+  toasts.mockClear()
   localStorage.clear()
   reloadReviewPrefs()
   setSingleKeyShortcuts(true)
@@ -107,6 +112,14 @@ function listed(): string[] {
   const thumbs = [...list.querySelectorAll<HTMLElement>("[data-frame-item]")].map((b) => b.getAttribute("aria-label")!.split(",")[0]!)
   if (thumbs.length > 0) return thumbs
   return [...list.querySelectorAll("tbody tr[data-row] th")].map((th) => th.textContent ?? "")
+}
+
+/** The revision each mark named, in order. */
+function revisionsSent(): { assetId: string; decisionRevision: number; quality: Quality }[] {
+  return commandsSent(host, "pix_session_review_mark").map((c) => {
+    const mark = c.args.mark as { asset: { assetId: string; decisionRevision: number }; quality: Quality }
+    return { assetId: mark.asset.assetId, decisionRevision: mark.asset.decisionRevision, quality: mark.quality }
+  })
 }
 
 function marksSent(): { assetId: string; quality: Quality }[] {
@@ -400,5 +413,112 @@ describe("Finish review (409cm.6)", () => {
     press("Enter", { mod: true })
     expect(await screen.findByText(m.action_failure_conflict())).toBeInTheDocument()
     expect(onFinished).not.toHaveBeenCalled()
+  })
+})
+
+describe("Review marks in flight", () => {
+  it("names the revision the first mark recorded when U follows P on one frame at once", async () => {
+    await renderReview()
+    act(() => setReviewPrefs({ autoAdvance: false }))
+    press("p")
+    press("u")
+    await waitFor(() => expect(revisionsSent()).toHaveLength(2))
+    expect(revisionsSent()).toEqual([
+      { assetId: "asset-1", decisionRevision: 1, quality: "usable" },
+      { assetId: "asset-1", decisionRevision: 2, quality: "unreviewed" },
+    ])
+    expect(screen.queryByText(m.action_failure_conflict())).toBeNull()
+  })
+
+  it("keeps the frame the user moved to while a mark was under way", async () => {
+    await renderReview()
+    let release!: () => void
+    host.hold = new Promise((resolve) => {
+      release = resolve
+    })
+    press("p")
+    press("j")
+    press("j")
+    await expectCurrent(3)
+    act(() => release())
+    await waitFor(() => expect(marksSent()).toEqual([{ assetId: "asset-1", quality: "usable" }]))
+    await waitFor(() => expect(statusLine()).toContain(m.flow_frames_unreviewed({ count: 5 })))
+    await expectCurrent(3)
+  })
+
+  it("says how many frames a selection mark had marked when the library refused the rest", async () => {
+    await renderReview()
+    press(" ")
+    press("j")
+    press(" ")
+    // Another window marked frame 2 since this list was read.
+    host.frames[1] = { ...host.frames[1]!, asset: { ...host.frames[1]!.asset, decisionRevision: 9 } }
+    press("x")
+    expect(await screen.findByText(m.action_failure_conflict())).toBeInTheDocument()
+    expect(toasts).toHaveBeenCalledWith({ message: m.review_marked_before_refusal({ marked: "1", total: "2" }) })
+  })
+})
+
+describe("Review keys stay quiet where they do not belong", () => {
+  it("marks nothing when the ⌘A confirmation is cancelled, and the keys wait while it is open", async () => {
+    await renderReview()
+    press("a", { mod: true })
+    press("p")
+    const dialog = await screen.findByRole("alertdialog")
+    press("j")
+    expect(currentId()).toBe("asset-1")
+    await userEvent.setup().click(within(dialog).getByRole("button", { name: m.verb_cancel() }))
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull())
+    expect(marksSent()).toEqual([])
+  })
+
+  it("leaves a text field's keys to it", async () => {
+    await renderReview()
+    const field = document.createElement("input")
+    document.body.append(field)
+    act(() => field.focus())
+    press("p")
+    press("j")
+    press("a", { mod: true })
+    expect(marksSent()).toEqual([])
+    expect(currentId()).toBe("asset-1")
+    expect(statusLine()).not.toContain(m.status_bar_selected({ count: 6 }))
+    field.remove()
+  })
+
+  it("waits while a menu is open", async () => {
+    await renderReview()
+    await userEvent.setup().click(screen.getByRole("button", { name: m.review_display() }))
+    await screen.findByRole("menu")
+    press("j")
+    press("x")
+    expect(currentId()).toBe("asset-1")
+    expect(marksSent()).toEqual([])
+  })
+
+  it("leaves Space on a row's checkbox to the checkbox instead of ticking the current frame (FR-037)", async () => {
+    await renderReview()
+    const checkbox = screen.getByRole("checkbox", { name: new RegExp(nameOf(3)) })
+    act(() => checkbox.focus())
+    act(() => {
+      fireEvent.keyDown(checkbox, { key: " " })
+      fireEvent.keyUp(checkbox, { key: " " })
+    })
+    // The current frame (1) is not ticked by Review's Space.
+    expect(screen.getByRole("checkbox", { name: new RegExp(nameOf(1)) })).not.toBeChecked()
+    expect(currentId()).toBe("asset-1")
+  })
+})
+
+describe("Review thumbnails", () => {
+  it("keeps the thumbnails already read when the filter or sort changes", async () => {
+    await renderReview({ marked: 2 })
+    press("g")
+    await waitFor(() => expect(document.querySelectorAll("[data-frame-item] img")).toHaveLength(6))
+    const reads = commandsSent(host, "pix_thumbnails").length
+    press("2", { alt: true, code: "Digit2" })
+    await waitFor(() => expect(listed()).toEqual([nameOf(1), nameOf(2)]))
+    expect(document.querySelectorAll("[data-frame-item] img")).toHaveLength(2)
+    expect(commandsSent(host, "pix_thumbnails")).toHaveLength(reads)
   })
 })

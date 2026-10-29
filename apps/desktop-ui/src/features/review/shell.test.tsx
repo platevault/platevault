@@ -7,13 +7,14 @@ import { reviewShell } from "./shell"
 afterEach(() => registerReviewCommands(null))
 
 describe("reviewShell", () => {
-  it("lists the open review's commands with their keys under Review, and none while the palette is closed", () => {
-    const run = vi.fn()
-    registerReviewCommands([{ id: "pick", label: m.review_cmd_usable(), shortcut: "P", run }])
-    const open = renderHook(() => reviewShell.useCommands!({ open: true }))
-    expect(open.result.current).toEqual([{ id: "review:pick", label: m.review_cmd_usable(), group: m.step_review(), shortcut: "P", run }])
+  it("asks the open review for its commands under Review, and reads nothing while the palette is closed", () => {
+    const source = vi.fn((group: string) => [{ id: "action:mark-usable", label: m.review_cmd_usable(), group, shortcut: "P", unavailable: m.review_no_current_frame() }])
+    registerReviewCommands(source)
     const closed = renderHook(() => reviewShell.useCommands!({ open: false }))
     expect(closed.result.current).toEqual([])
+    expect(source).not.toHaveBeenCalled()
+    const open = renderHook(() => reviewShell.useCommands!({ open: true }))
+    expect(open.result.current).toEqual([{ id: "action:mark-usable", label: m.review_cmd_usable(), group: m.step_review(), shortcut: "P", unavailable: m.review_no_current_frame() }])
   })
 
   it("lists nothing while no review is open", () => {

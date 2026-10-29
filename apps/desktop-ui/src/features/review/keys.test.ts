@@ -64,6 +64,16 @@ describe("reviewKey (PIX-FR-13)", () => {
     button.remove()
   })
 
+  it("leaves Space to a row's checkbox inside the frame list (FR-037)", () => {
+    const row = document.createElement("tr")
+    row.setAttribute("data-frame-item", "")
+    const checkbox = document.createElement("span")
+    checkbox.setAttribute("role", "checkbox")
+    row.append(checkbox)
+    expect(reviewKey(key(" "), ctx({ target: checkbox }))).toBeNull()
+    expect(reviewKey(key(" "), ctx({ target: row }))).toEqual({ id: "toggle-selected" })
+  })
+
   it("ignores Shift on the keys Shift does not change", () => {
     expect(reviewKey(key("J", { shiftKey: true }), ctx())).toBeNull()
     expect(reviewKey(key("U", { shiftKey: true }), ctx())).toBeNull()

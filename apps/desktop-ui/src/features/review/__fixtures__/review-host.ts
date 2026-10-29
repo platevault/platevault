@@ -164,6 +164,8 @@ export interface ReviewHost {
   groupingRevision: number
   /** Every command the workspace sent, with its arguments, in order. */
   calls: { command: string; args: Record<string, unknown> }[]
+  /** While set, marks wait for it before they answer. */
+  hold: Promise<void> | null
   /** Commands that answer with a refusal instead. */
   refuse: Partial<Record<string, ErrorResponse>>
   /** Answers one IPC call; the test hands it to `mockIPC`. */
@@ -184,6 +186,7 @@ export function reviewHost({ count = 6, marked = 0 }: { count?: number; marked?:
     frames: Array.from({ length: count }, (_, i) => frame(asset(i + 1, i < marked ? "usable" : "unreviewed"), i === count - 1 ? null : 2.8 + i / 10)),
     groupingRevision: 4,
     calls: [],
+    hold: null,
     refuse: {},
     handle: (command, payload) => answer(command, payload),
   }
@@ -201,13 +204,16 @@ export function reviewHost({ count = 6, marked = 0 }: { count?: number; marked?:
       }
       case "pix_session_review_mark": {
         const { mark } = args as { mark: ReviewMark_Deserialize }
-        const at = host.frames.findIndex((f) => f.asset.id === mark.asset.assetId)
-        const current = host.frames[at]
-        if (!current) return Promise.reject(refusal("not_found", "none"))
-        if (current.asset.decisionRevision !== mark.asset.decisionRevision) return Promise.reject(refusal("conflict", "review", current.asset.decisionRevision))
-        const next = { ...current.asset, quality: mark.quality, decisionRevision: current.asset.decisionRevision + 1 }
-        host.frames[at] = { ...current, asset: next, label: LABEL[mark.quality], quality: mark.quality }
-        return { asset: next }
+        // A held host answers once the test lets it go, as a slow catalog write would.
+        return (host.hold ?? Promise.resolve()).then(() => {
+          const at = host.frames.findIndex((f) => f.asset.id === mark.asset.assetId)
+          const current = host.frames[at]
+          if (!current) return Promise.reject(refusal("not_found", "none"))
+          if (current.asset.decisionRevision !== mark.asset.decisionRevision) return Promise.reject(refusal("conflict", "review", current.asset.decisionRevision))
+          const next = { ...current.asset, quality: mark.quality, decisionRevision: current.asset.decisionRevision + 1 }
+          host.frames[at] = { ...current, asset: next, label: LABEL[mark.quality], quality: mark.quality }
+          return { asset: structuredClone(next) }
+        })
       }
       case "pix_finish_review": {
         const { expectedGroupingRevision } = args as { expectedGroupingRevision: number }

@@ -91,7 +91,8 @@ export function reviewKey(event: KeyEventLike, { singleKeys, target, zoomedPlate
   }
   if (!singleKeys) return null
   if (key === " ") {
-    if (event.shiftKey) return null
+    // A row's checkbox keeps Space for itself (FR-037): it ticks that row, not the current frame.
+    if (event.shiftKey || target?.closest("[role=checkbox]")) return null
     return target === null || target === target.ownerDocument.body || target.closest(SPACE_TARGETS) ? { id: "toggle-selected" } : null
   }
   const lower = key.toLowerCase()

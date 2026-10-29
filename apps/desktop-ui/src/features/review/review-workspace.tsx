@@ -28,11 +28,11 @@ import { failureOf, type Quality, type ReviewFilter, type ReviewFrame_Serialize 
 import { getPreferences, useMessages } from "@/app/preferences"
 import type { SessionReviewProps } from "@/app/shell-contract"
 import { MOD_LABEL } from "@/app/shortcuts"
-import { ActionBar, ActionButton, IconButton, useAction } from "@/components/app/actions"
-import type { Action, MenuItem } from "@/components/app/contracts"
+import { ActionBar, ActionButton, actionCommand, IconButton, useAction } from "@/components/app/actions"
+import type { Action, MenuItem, PaletteCommand } from "@/components/app/contracts"
 import { DataTable, sortRows, type TableSort } from "@/components/app/data-table"
 import { DisplayMenu, type DisplayGroup } from "@/components/app/display-menu"
-import { announce, EmptyState, UnknownValue } from "@/components/app/feedback"
+import { announce, EmptyState, toast, UnknownValue } from "@/components/app/feedback"
 import { FilterControls } from "@/components/app/filter-bar"
 import { failureMessage } from "@/components/app/run-result"
 import type { CornerOverlay } from "@/components/domain/corner-grid"
@@ -40,8 +40,9 @@ import { type FrameThumbnail, FrameThumbnails, type Thumbnail } from "@/componen
 import { type PlateView, STRETCH_LABEL, STRETCHES, type Stretch, ZOOM_LABEL, ZOOMS, type Zoom } from "@/components/domain/plate"
 import { type PlotSeries, SessionPlots } from "@/components/domain/session-plots"
 import { Workspace, type WorkspacePane } from "@/components/templates/workspace"
+import { formatCount } from "@/lib/format"
 import type { Messages } from "@/lib/i18n"
-import { registerReviewCommands, type ReviewCommand } from "./commands"
+import { registerReviewCommands } from "./commands"
 import { FRAME_METRICS, formatMetric, frameColumns, metricLabel, metricOf, QualityLabel, qualityWord, thumbnailReason } from "./columns"
 import { FramePlate } from "./frame-plate"
 import { REVIEW_KEYS, reviewKey } from "./keys"
@@ -52,12 +53,19 @@ import { useReviewWrites, useSessionReview, useThumbnails } from "./queries"
 
 type Frame = ReviewFrame_Serialize
 
-/** Text entry only: a Select trigger is not typing. */
+/**
+ * Text entry only: a Select trigger is not typing. The same rule as the
+ * shell's own (app/shortcuts.tsx), which does not export it.
+ */
 function isTyping(target: EventTarget | null): boolean {
   return target instanceof HTMLElement && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.getAttribute("role") === "combobox")
 }
 
-/** An open dialog, menu or list owns the keyboard; the workspace's own fullscreen does not count. */
+/**
+ * An open dialog, menu or list owns the keyboard. The shell waits on any
+ * `aria-modal` surface; Review also waits on an open menu or list, and its
+ * own fullscreen (modal, but Review's) does not count.
+ */
 function popupOpen(): boolean {
   return [...document.querySelectorAll("[role=dialog]:not([data-workspace-fullscreen]):not([data-workspace-aside]), [role=alertdialog], [role=menu], [role=listbox]")].some((el) => el.checkVisibility?.() ?? true)
 }
@@ -66,6 +74,10 @@ const withKey = (m: Messages, label: string, shortcut: string) => m.shell_with_s
 
 function filterLabel(m: Messages, filter: ReviewFilter): string {
   return filter === "all" ? m.review_filter_all() : filter === "picked" ? m.review_picked() : filter === "rejected" ? m.review_rejected() : m.status_unreviewed()
+}
+
+function viewLabel(m: Messages, view: ListView): string {
+  return view === "table" ? m.review_view_table() : view === "filmstrip" ? m.review_view_filmstrip() : m.review_view_grid()
 }
 
 function heightLabel(m: Messages, height: TableHeight): string {
@@ -108,32 +120,38 @@ function ReviewWorkspace({ sessionId, onFinished }: SessionReviewProps) {
   const [corners, setCorners] = useState(false)
   const gridCols = useRef(4)
   const markRuns = useRef(0)
+  const currentRef = useRef<string | null>(null)
 
   const frames = useMemo(() => review.data?.frames ?? [], [review.data])
+  const frameIds = useMemo(() => frames.map((f) => f.asset.id), [frames])
+  const byId = useMemo(() => new Map(frames.map((f) => [f.asset.id, f])), [frames])
   const counts = review.data?.counts ?? { all: 0, picked: 0, rejected: 0, unreviewed: 0 }
   const columns = useMemo(() => frameColumns(m), [m])
   const ordered = useMemo(() => sortRows(admitted(frames, filter), columns, sort), [frames, filter, columns, sort])
   const orderedIds = useMemo(() => ordered.map((f) => f.asset.id), [ordered])
+  const shownIds = useMemo(() => new Set(orderedIds), [orderedIds])
   const currentId = currentIn(orderedIds, storedCurrent)
+  currentRef.current = currentId
   const current = ordered.find((f) => f.asset.id === currentId) ?? null
   const index = current ? orderedIds.indexOf(current.asset.id) : -1
   const selectedFrames = frames.filter((f) => selection.ids.has(f.asset.id))
-  const hiddenSelected = selectedFrames.filter((f) => !orderedIds.includes(f.asset.id)).length
+  const hiddenSelected = selectedFrames.filter((f) => !shownIds.has(f.asset.id)).length
   const targets = selectedFrames.length > 1 ? selectedFrames : current ? [current] : []
   const reference = compare ? (frames.find((f) => f.asset.id === refId && f.asset.id !== currentId) ?? null) : null
   const overlay: CornerOverlay = { fwhm: prefs.cornerFwhm, eccentricity: prefs.cornerEccentricity }
   const name = (f: Frame) => f.display.name
 
-  const thumbnails = useThumbnails(orderedIds, view !== "table")
+  // Keyed on every frame, not the shown order: a new filter or sort keeps the thumbnails already read.
+  const thumbnails = useThumbnails(frameIds, view !== "table")
   const thumbOf = useMemo(() => {
-    const byId = new Map<string, Thumbnail>()
+    const thumbs = new Map<string, Thumbnail>()
     for (const entry of thumbnails.data ?? []) {
-      const frame = frames.find((f) => f.asset.id === entry.assetId)
+      const frame = byId.get(entry.assetId)
       if (!frame) continue
-      byId.set(entry.assetId, entry.state === "ready" ? { state: "ready", url: grayBmpUrl(grayTile(entry.thumbnail.image)) } : entry.state === "pending" ? { state: "pending" } : { state: "unreadable", reason: thumbnailReason(m, entry, frame) })
+      thumbs.set(entry.assetId, entry.state === "ready" ? { state: "ready", url: grayBmpUrl(grayTile(entry.thumbnail.image)) } : entry.state === "pending" ? { state: "pending" } : { state: "unreadable", reason: thumbnailReason(m, entry, frame) })
     }
-    return byId
-  }, [thumbnails.data, frames, m])
+    return thumbs
+  }, [thumbnails.data, byId, m])
 
   function select(id: string) {
     setStoredCurrent(id)
@@ -154,11 +172,14 @@ function ReviewWorkspace({ sessionId, onFinished }: SessionReviewProps) {
 
   async function mark(quality: Quality, list: readonly Frame[], always: boolean) {
     const before = { ordered: orderedIds, current: currentId, filter, autoAdvance: prefs.autoAdvance }
-    const result = await writes.mark(list, quality)
+    const { marked, result } = await writes.mark(list, quality)
     if (result.ok) {
       announce(m.review_mark_announcement({ mark: qualityName(m, quality), what: list.length === 1 ? name(list[0]!) : m.review_frames_count({ count: list.length }) }))
       const next = currentAfterMark({ ...before, marked: list.map((f) => f.asset.id), quality, always })
-      if (next !== null) select(next)
+      // A frame the user moved to while the mark was under way stays current.
+      if (next !== null && currentRef.current === before.current) select(next)
+    } else if (marked > 0) {
+      toast({ message: m.review_marked_before_refusal({ marked: formatCount(marked), total: formatCount(list.length) }) })
     }
     return result
   }
@@ -166,7 +187,8 @@ function ReviewWorkspace({ sessionId, onFinished }: SessionReviewProps) {
   function markAction(quality: Quality, list: readonly Frame[], always = false): Action {
     const label = markCommand(m, quality)
     const said = { count: list.length, n: list.length, quality: qualityName(m, quality) }
-    const askFirst = selection.origin === "all" && list.length > 1 && list.every((f) => selection.ids.has(f.asset.id))
+    // A mark on a ⌘A selection asks first, whatever its count (PIX-FR-14).
+    const askFirst = selection.origin === "all" && list.length > 0 && list.every((f) => selection.ids.has(f.asset.id))
     return {
       id: `mark-${quality}`,
       label,
@@ -204,6 +226,7 @@ function ReviewWorkspace({ sessionId, onFinished }: SessionReviewProps) {
   function chooseView(next: ListView) {
     if (next === "grid" && view !== "grid") setBeforeGrid(view === "filmstrip" ? "filmstrip" : "table")
     setView(next)
+    if (next !== view) announce(m.review_announce_view({ view: viewLabel(m, next) }))
   }
 
   function startCompare(withId?: string) {
@@ -217,6 +240,7 @@ function ReviewWorkspace({ sessionId, onFinished }: SessionReviewProps) {
     }
     if (compare) {
       setCompare(false)
+      announce(m.review_announce_compare_off())
       return
     }
     const other = selectedFrames.find((f) => f.asset.id !== currentId) ?? ordered[index - 1] ?? ordered[index + 1] ?? null
@@ -236,6 +260,23 @@ function ReviewWorkspace({ sessionId, onFinished }: SessionReviewProps) {
     const next = afterHeightKey(view, height)
     setView(next.view)
     setHeight(next.height)
+    announce(next.view !== view ? m.review_announce_view({ view: viewLabel(m, next.view) }) : m.review_announce_height({ height: heightLabel(m, next.height) }))
+  }
+
+  function toggleZoom() {
+    const zoom: Zoom = plateView.zoom === "fit" ? "1" : "fit"
+    setPlateView((v) => ({ ...v, zoom, centre: null }))
+    announce(m.review_announce_zoom({ zoom: ZOOM_LABEL[zoom] }))
+  }
+
+  function toggleFullscreen() {
+    if (!current && !fullscreen) return
+    setFullscreen(!fullscreen)
+    announce(fullscreen ? m.review_announce_fullscreen_off() : m.review_announce_fullscreen_on())
+  }
+
+  function toggleGrid() {
+    chooseView(view === "grid" ? beforeGrid : "grid")
   }
 
   function selectAll() {
@@ -260,17 +301,16 @@ function ReviewWorkspace({ sessionId, onFinished }: SessionReviewProps) {
           return true
         }
         case "zoom":
-          setPlateView((v) => ({ ...v, zoom: v.zoom === "fit" ? "1" : "fit", centre: null }))
+          toggleZoom()
           return true
         case "fullscreen":
-          if (current || fullscreen) setFullscreen(!fullscreen)
+          toggleFullscreen()
           return true
         case "compare":
           startCompare()
           return true
         case "grid":
-          if (view === "grid") setView(beforeGrid)
-          else chooseView("grid")
+          toggleGrid()
           return true
         case "height":
           cycleHeight()
@@ -292,7 +332,7 @@ function ReviewWorkspace({ sessionId, onFinished }: SessionReviewProps) {
           return true
         case "escape":
           if (fullscreen) {
-            setFullscreen(false)
+            toggleFullscreen()
             return true
           }
           if (selection.ids.size > 0) {
@@ -303,6 +343,33 @@ function ReviewWorkspace({ sessionId, onFinished }: SessionReviewProps) {
           return false
       }
     },
+    /** The palette's commands: the same actions the keys and controls run, with why one cannot run now. */
+    commands(group: string): PaletteCommand[] {
+      const noFrame = current ? null : m.review_no_current_frame()
+      const act = (id: string, label: string, shortcut: string, key: NonNullable<ReturnType<typeof reviewKey>>, reason: string | null = null): Action => ({
+        id: `review-${id}`,
+        label,
+        shortcut,
+        unavailable: reason ? { action: label, reason, blockers: [] } : undefined,
+        run: () => {
+          latest.run(key)
+        },
+      })
+      const actions: Action[] = [
+        act("next", m.review_cmd_next(), REVIEW_KEYS.next, { id: "step", delta: 1 }, noFrame),
+        act("previous", m.review_cmd_previous(), REVIEW_KEYS.previous, { id: "step", delta: -1 }, noFrame),
+        ...marksFor(targets),
+        act("zoom", m.review_cmd_zoom(), REVIEW_KEYS.zoom, { id: "zoom" }, noFrame),
+        act("fullscreen", m.review_cmd_fullscreen(), REVIEW_KEYS.fullscreen, { id: "fullscreen" }, noFrame),
+        act("compare", compare ? m.review_compare_end() : m.review_cmd_compare(), REVIEW_KEYS.compare, { id: "compare" }, noFrame ?? (frames.length < 2 ? m.review_compare_needs_other() : null)),
+        act("grid", m.review_cmd_grid(), REVIEW_KEYS.grid, { id: "grid" }),
+        act("height", m.review_cmd_height(), REVIEW_KEYS.height, { id: "height" }),
+        act("corners", m.review_corner_inspector(), `${MOD_LABEL}I`, { id: "corners" }, noFrame),
+        act("select-all", m.review_cmd_select_all(), `${MOD_LABEL}A`, { id: "select-all" }, orderedIds.length === 0 ? m.review_empty_none() : null),
+        finishAction,
+      ]
+      return actions.map((action) => actionCommand(action, group, runner))
+    },
     follow(id: string) {
       if (id !== currentId && orderedIds.includes(id)) select(id)
     },
@@ -312,7 +379,9 @@ function ReviewWorkspace({ sessionId, onFinished }: SessionReviewProps) {
   const handlers = useRef(latest)
   handlers.current = latest
 
-  // Review's keys, on the capture phase so they win over the app's single keys (G sequences) and ⌘↩ while Review is open.
+  // Review's keys, on the capture phase so they win over the app's own while Review is open: G is the grid here
+  // (PIX-FR-13) where the shell starts a G go-to sequence (spec 063 FR-042), and ⌘↩ is Finish review. That G
+  // conflict is an open owner question; until it is settled Review's G wins inside Review.
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (event.defaultPrevented || isTyping(event.target) || popupOpen()) return
@@ -330,32 +399,7 @@ function ReviewWorkspace({ sessionId, onFinished }: SessionReviewProps) {
     }
     window.addEventListener("keydown", onKeyDown, true)
     window.addEventListener("focusin", onFocusIn)
-    const run = (key: NonNullable<ReturnType<typeof reviewKey>>) => () => void handlers.current.run(key)
-    const command = (id: string, label: (m: Messages) => string, shortcut: string, key: NonNullable<ReturnType<typeof reviewKey>>): ReviewCommand => ({
-      id,
-      // A getter, so the palette reads each label in the language chosen now.
-      get label() {
-        return label(handlers.current.m)
-      },
-      shortcut,
-      run: run(key),
-    })
-    const commands: ReviewCommand[] = [
-      command("next", (m) => m.review_cmd_next(), REVIEW_KEYS.next, { id: "step", delta: 1 }),
-      command("previous", (m) => m.review_cmd_previous(), REVIEW_KEYS.previous, { id: "step", delta: -1 }),
-      command("pick", (m) => m.review_cmd_usable(), REVIEW_KEYS.pick, { id: "mark", quality: "usable", always: false }),
-      command("reject", (m) => m.review_cmd_unusable(), REVIEW_KEYS.reject, { id: "mark", quality: "unusable", always: false }),
-      command("unreviewed", (m) => m.review_cmd_unreviewed(), REVIEW_KEYS.unreviewed, { id: "mark", quality: "unreviewed", always: false }),
-      command("zoom", (m) => m.review_cmd_zoom(), REVIEW_KEYS.zoom, { id: "zoom" }),
-      command("fullscreen", (m) => m.review_cmd_fullscreen(), REVIEW_KEYS.fullscreen, { id: "fullscreen" }),
-      command("compare", (m) => m.review_cmd_compare(), REVIEW_KEYS.compare, { id: "compare" }),
-      command("grid", (m) => m.review_cmd_grid(), REVIEW_KEYS.grid, { id: "grid" }),
-      command("height", (m) => m.review_cmd_height(), REVIEW_KEYS.height, { id: "height" }),
-      command("corners", (m) => m.review_corner_inspector(), `${MOD_LABEL}I`, { id: "corners" }),
-      command("select-all", (m) => m.review_cmd_select_all(), `${MOD_LABEL}A`, { id: "select-all" }),
-      command("finish", (m) => m.review_cmd_finish(), `${MOD_LABEL}↩`, { id: "finish" }),
-    ]
-    registerReviewCommands(commands)
+    registerReviewCommands((group) => handlers.current.commands(group))
     return () => {
       window.removeEventListener("keydown", onKeyDown, true)
       window.removeEventListener("focusin", onFocusIn)
@@ -393,7 +437,7 @@ function ReviewWorkspace({ sessionId, onFinished }: SessionReviewProps) {
   }
 
   const emptyTitle = frames.length === 0 || filter === "all" ? m.review_empty_none() : filter === "picked" ? m.review_empty_picked() : filter === "rejected" ? m.review_empty_rejected() : m.review_empty_unreviewed()
-  const emptyList = <EmptyState icon={ImageOff} title={emptyTitle} action={filter !== "all" ? <ActionButton action={{ id: "show-all", label: m.review_show_all(), run: () => setFilter("all") }} /> : null} />
+  const emptyList = <EmptyState icon={ImageOff} title={emptyTitle} action={filter !== "all" ? <ActionButton action={{ id: "show-all", label: m.review_show_all(), run: () => chooseFilter("all") }} /> : null} />
   const loadFailure = review.error ? failureOf(review.error) : null
 
   const list =
@@ -403,7 +447,9 @@ function ReviewWorkspace({ sessionId, onFinished }: SessionReviewProps) {
         rows={height === "strip" ? (current ? [current] : []) : ordered}
         columns={columns}
         getRowId={(f) => f.asset.id}
-        selection={{ selected: [...selection.ids], onChange: (ids) => setSelection({ ids: new Set(ids), origin: ids.length === orderedIds.length && ids.length > 1 ? "all" : "hand" }), rowLabel: name }}
+        selection={{ selected: [...selection.ids], onChange: (ids) =>
+            // The header's select-all box ticks every shown row at once, as ⌘A does; ticking the rows one by one up to all of them stays a hand selection.
+            setSelection((was) => ({ ids: new Set(ids), origin: ids.length === orderedIds.length && ids.length - was.ids.size > 1 ? "all" : "hand" })), rowLabel: name }}
         sort={sort}
         onSortChange={setSort}
         activeRowId={currentId}
@@ -594,7 +640,12 @@ function ReviewWorkspace({ sessionId, onFinished }: SessionReviewProps) {
         onRowsPx={(px) => setReviewPrefs({ rowsHeightPx: px })}
         stage={panes}
         stageEmpty={<UnknownValue label={m.review_no_current_frame()} />}
-        strip={<SessionPlots series={series} count={frames.length} activeId={currentId} selected={selection.ids} onSelect={select} />}
+        strip={<SessionPlots series={series} count={frames.length} activeId={currentId} selected={selection.ids} onSelect={(id) => {
+              // A plot point of a frame the filter hides does not become current.
+              if (shownIds.has(id)) select(id)
+            }}
+          />
+        }
         status={status}
         statusLabel={m.review_status_line()}
         fullscreen={

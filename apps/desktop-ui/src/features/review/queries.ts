@@ -10,15 +10,17 @@
  *   so the read repeats while any is pending (PIX-FR-12).
  * - Tiles are bound to the bytes' SHA-256, so they never go stale; a frame
  *   is reopened when its observation changes.
- * - A mark names the asset revision and fingerprint the list returned; the
- *   library refuses a stale one with `conflict`. The list is re-read after
- *   every mark, and Sessions' totals too, since quality is library-wide.
+ * - A mark names the asset revision and fingerprint of the latest read; the
+ *   library refuses a stale one with `conflict`. Each mark's answer goes
+ *   into the list at once, and the list and Sessions' totals are re-read
+ *   after it, since quality is library-wide.
  */
 import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useMemo } from "react"
-import { type ActionResult, type Asset_Serialize, data, type ExpectedAsset_Deserialize, library, type Quality, type ReviewFrame_Serialize } from "@/api/ipc"
+import { type ActionResult, type Asset_Serialize, data, type ExpectedAsset_Deserialize, library, type Quality, type ReviewFrame_Serialize, type SessionReviewList_Serialize } from "@/api/ipc"
 import { libraryKey, libraryQuery } from "@/api/query"
 import type { PlateImage, Stretch, ViewWindow } from "@/components/domain/plate"
+import { labelAfterMark } from "./model"
 import { cornerRegions, detailBlocks, type GrayTile, grayTile, levelExtent, overviewLevel, type TileRect, tiledImage, wireStretch } from "./pixels"
 
 /** How often a list with pending thumbnails asks again. */
@@ -45,12 +47,26 @@ function expected(asset: Asset_Serialize): ExpectedAsset_Deserialize {
   return { assetId: asset.id, decisionRevision: asset.decisionRevision, fingerprint: asset.fingerprint }
 }
 
+/** The list with one frame's marked asset in place: its label, its quality and the counts follow it. */
+export function withMarked(list: SessionReviewList_Serialize, asset: Asset_Serialize): SessionReviewList_Serialize {
+  const frames = list.frames.map((f) => (f.asset.id === asset.id ? { ...f, asset, label: labelAfterMark(asset.quality), quality: asset.quality } : f))
+  const counts = { all: frames.length, picked: 0, rejected: 0, unreviewed: 0 }
+  for (const f of frames) counts[f.label] += 1
+  return { ...list, frames, counts }
+}
+
+/** What a mark did: how many frames it marked before it finished or was refused. */
+export interface MarkOutcome {
+  marked: number
+  result: ActionResult<number>
+}
+
 /**
  * Marks and Finish review for one session; each resolves the library's
  * result unchanged. Marks run one at a time, in the order they were made,
- * and each names the frame as the latest list read returned it: a quick
- * second key on a frame waits for the first mark and its re-read instead of
- * naming the revision that mark replaced.
+ * and each names the frame as the list holds it then. A mark's answer goes
+ * into the list before the next one runs, so a quick second key on a frame
+ * names the revision the first mark recorded.
  */
 export function useReviewWrites(sessionId: string) {
   const client = useQueryClient()
@@ -65,23 +81,26 @@ export function useReviewWrites(sessionId: string) {
       ])
     const latest = (frame: ReviewFrame_Serialize) => client.getQueryData(listKey)?.frames.find((f) => f.asset.id === frame.asset.id)?.asset ?? frame.asset
     let queue: Promise<unknown> = Promise.resolve()
-    async function markNow(frames: readonly ReviewFrame_Serialize[], quality: Quality): Promise<ActionResult<number>> {
+    async function markNow(frames: readonly ReviewFrame_Serialize[], quality: Quality): Promise<MarkOutcome> {
       let marked = 0
-      try {
-        for (const frame of frames) {
-          const result = await library.pixSessionReviewMark(sessionId, { asset: expected(latest(frame)), quality })
-          if (!result.ok) return result
-          marked += 1
+      for (const frame of frames) {
+        const result = await library.pixSessionReviewMark(sessionId, { asset: expected(latest(frame)), quality })
+        if (!result.ok) {
+          // A refusal (often a stale revision) waits for the re-read, so the next mark names what the library holds now.
+          await refresh()
+          return { marked, result }
         }
-        return { ok: true, data: marked }
-      } finally {
-        // Re-read either way, so the list shows what was written and the next mark names the current revisions.
-        await refresh()
+        // A re-read still in flight began before this mark: drop it, so it cannot put back the revision this mark replaced.
+        await client.cancelQueries({ queryKey: listKey })
+        client.setQueryData(listKey, (list) => (list ? withMarked(list, result.data.asset) : list))
+        marked += 1
       }
+      void refresh()
+      return { marked, result: { ok: true, data: marked } }
     }
     return {
       /** One mark per frame, in order; stops at the first refusal. */
-      mark(frames: readonly ReviewFrame_Serialize[], quality: Quality): Promise<ActionResult<number>> {
+      mark(frames: readonly ReviewFrame_Serialize[], quality: Quality): Promise<MarkOutcome> {
         const run = queue.then(() => markNow(frames, quality))
         queue = run.catch(() => undefined)
         return run

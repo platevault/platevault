@@ -7055,5 +7055,12 @@
   "review_value_adu": "{value} ADU",
   "review_value_electrons": "{value} e⁻",
   "review_empty_picked": "No Picked frames",
-  "review_empty_rejected": "No Rejected frames"
+  "review_empty_rejected": "No Rejected frames",
+  "review_announce_height": "Table height: {height}",
+  "review_announce_view": "View: {view}",
+  "review_announce_zoom": "Zoom: {zoom}",
+  "review_announce_fullscreen_on": "Fullscreen on",
+  "review_announce_fullscreen_off": "Fullscreen off",
+  "review_announce_compare_off": "Compare off",
+  "review_marked_before_refusal": "Marked {marked} of {total} frames before the refusal."
 }
