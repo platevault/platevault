@@ -13,7 +13,7 @@
 import { useParams, useSearch } from "@tanstack/react-router"
 import { useQuery } from "@tanstack/react-query"
 import { Layers, ListChecks, PencilLine } from "lucide-react"
-import { useState } from "react"
+import { type ReactNode, useState } from "react"
 import { type Asset_Serialize, failureOf, type LibrarySession_Serialize, type SessionAdmission_Serialize } from "@/api/ipc"
 import type { SessionIntakeProps } from "@/app/shell-contract"
 import { useMessages } from "@/app/preferences"
@@ -21,7 +21,7 @@ import { ActionButton } from "@/components/app/actions"
 import { BoxTable } from "@/components/app/box"
 import type { Action, Column, MenuItem } from "@/components/app/contracts"
 import { KeyValueList } from "@/components/app/data"
-import { DetailSkeleton, EmptyState, Notice, type PageNotice } from "@/components/app/feedback"
+import { ActionError, DetailSkeleton, EmptyState, Notice, type PageNotice } from "@/components/app/feedback"
 import { useFollowLink } from "@/components/app/links"
 import { StatusBadge } from "@/components/app/status"
 import { ReadinessBadge } from "@/components/domain/readiness-badge"
@@ -33,7 +33,8 @@ import { CorrectMetadataDialog } from "./correct-metadata"
 import { readError } from "./parts"
 import { admissionQuery, rigQuery, sessionQuery } from "./queries"
 import { INTAKE_STEPS, type IntakeStep, SessionIntake, confirmedTarget, expectedSession } from "./session-intake"
-import { admissionReadiness, pinText, sessionLabel } from "./words"
+import { admissionReadiness, pinText } from "./words"
+import { sessionLabel } from "@/components/domain/session-label"
 
 function stepOf(value: string | undefined): IntakeStep | null {
   return INTAKE_STEPS.find((step) => step === value) ?? null
@@ -47,13 +48,20 @@ export function SessionPage({ review }: SessionIntakeProps) {
   const session = useQuery(sessionQuery(sessionId))
   const admission = useQuery(admissionQuery(sessionId))
   const failure = failureOf(session.error)
-  if (failure?.source === "library" && failure.error.code === "not_found") return <EmptyState icon={Layers} title={m.session_missing_title()} titleAs="h1" action={null} />
-  if (session.error) return <EmptyState icon={Layers} title={readError(m, session.error)} titleAs="h1" action={null} />
-  if (!session.data || !admission.data) return <DetailSkeleton label={m.common_loading()} />
+  const retry = () => void Promise.all([session.refetch(), admission.refetch()])
+  // The whole page gives way only while either read has nothing to show; a failed re-read keeps the page and its draft.
+  if (!session.data || !admission.data) {
+    if (failure?.source === "library" && failure.error.code === "not_found") return <EmptyState icon={Layers} title={m.session_missing_title()} titleAs="h1" action={null} />
+    const error = session.error ?? admission.error
+    if (error) return <EmptyState icon={Layers} title={readError(m, error)} titleAs="h1" action={<ActionButton action={{ id: "retry", label: m.verb_retry(), run: retry }} />} />
+    return <DetailSkeleton label={m.common_loading()} />
+  }
+  const error = session.error ?? admission.error
+  const refreshError = error ? <ActionError message={readError(m, error)} onRetry={retry} /> : null
   const step = stepOf(search.step)
   // Keyed by session, so the pickers start from this session's own values.
-  if (step) return <SessionIntake key={sessionId} session={session.data} admission={admission.data} viewing={step} review={review} />
-  return <SessionDetail session={session.data} admission={admission.data} />
+  if (step) return <SessionIntake key={sessionId} session={session.data} admission={admission.data} viewing={step} review={review} refreshError={refreshError} />
+  return <SessionDetail session={session.data} admission={admission.data} refreshError={refreshError} />
 }
 
 /** The successors of a session a regroup replaced: it reads as history, and each write names a current one. */
@@ -74,7 +82,7 @@ export function supersededNotice(m: Messages, session: LibrarySession_Serialize,
   }
 }
 
-function SessionDetail({ session, admission }: { session: LibrarySession_Serialize; admission: SessionAdmission_Serialize }) {
+function SessionDetail({ session, admission, refreshError }: { session: LibrarySession_Serialize; admission: SessionAdmission_Serialize; refreshError: ReactNode }) {
   const m = useMessages()
   const follow = useFollowLink()
   const [correcting, setCorrecting] = useState(false)
@@ -118,6 +126,7 @@ function SessionDetail({ session, admission }: { session: LibrarySession_Seriali
         path={[{ label: m.nav_sessions(), link: { to: "/sessions" } }]}
         title={label}
         status={<ReadinessBadge readiness={readiness} unreviewed={intake.unreviewedFrames} trashed={trashed} />}
+        statusFeedback={refreshError}
         actions={superseded || trashed ? [] : [review]}
         menu={menu.length > 0 ? { label: m.session_label(), items: menu } : undefined}
         notice={supersededNotice(m, session, admission, follow) ?? (trashed ? { tone: "warning", title: m.session_in_os_trash() } : null)}

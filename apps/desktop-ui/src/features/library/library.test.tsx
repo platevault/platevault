@@ -17,6 +17,7 @@ import type { SessionReviewProps } from "@/app/shell-contract"
 import { setLocale } from "@/app/preferences"
 import { formatList } from "@/lib/format"
 import { LOCALES, m } from "@/lib/i18n"
+import { AddToProjectDialog } from "./add-to-project"
 import { HomePage } from "./home-page"
 import { ImportPage } from "./import-page"
 import { locationIngestion } from "./ingestions"
@@ -129,6 +130,32 @@ afterEach(() => {
   act(() => setLocale("en-GB"))
 })
 
+/** A mocked host that also records event listeners, so a test can emit what the library host emits. */
+function eventHost(answer: (command: string, args: Record<string, unknown>) => unknown) {
+  const listeners = new Map<number, string>()
+  const calls: string[] = []
+  mockIPC((command, args) => {
+    const fields = (args ?? {}) as Record<string, unknown>
+    if (command === "plugin:event|listen") {
+      listeners.set(fields.handler as number, fields.event as string)
+      return fields.handler
+    }
+    if (command === "plugin:event|unlisten") return null
+    calls.push(command)
+    return answer(command, fields)
+  })
+  const internals = () => (window as unknown as { __TAURI_INTERNALS__: { runCallback: (id: number, data: unknown) => void } }).__TAURI_INTERNALS__
+  return {
+    calls,
+    listening: (event: string) => [...listeners.values()].includes(event),
+    emit(event: string, payload: unknown) {
+      for (const [id, name] of listeners) if (name === event) internals().runCallback(id, { event, id, payload })
+    },
+  }
+}
+
+const PERSISTENCE = { ...conflict, code: "persistence_failure", retry: "retry", currentRevision: null }
+
 describe("Removable devices (STO-IMP-FR-10)", () => {
   it.each(LOCALES)("names each recognised layout with every marker found, and a generic device as USB device, in %s", (locale) => {
     act(() => setLocale(locale))
@@ -189,6 +216,30 @@ describe("Removable devices (STO-IMP-FR-10)", () => {
     expect(previewed[0]).toEqual({ kind: "folder", path: RAW_ROOT })
     expect((previewed[0] as { path: NativePathWire }).path.payload).toEqual([0x2f, 0x56, 0x6f, 0x6c, 0x2f, 0xff, 0xfe, 0x31])
   })
+
+  it("reads a saved source on a pulled card as Offline and blocks Preview, then Online again once it is back (STO-IMP-AC-15)", async () => {
+    let mounted = true
+    const saved = () => [{ id: "src-1", name: "Card-1 source", path: encode("/Volumes/Card-1"), lastImportedAt: null, createdAt: "2026-10-01T00:00:00Z", availability: mounted ? "available" : "offline" }]
+    const host = eventHost((command) => {
+      if (command === "import_devices_list") return mounted ? [CARD] : []
+      if (command === "import_sources_list") return saved()
+      return null
+    })
+    const { user } = renderAt("/import")
+    const row = (await screen.findByText("Card-1 source")).closest("tr")!
+    await user.click(within(row).getByRole("button", { name: m.import_use_source() }))
+    const preview = () => screen.getByRole("button", { name: m.import_preview() })
+    await waitFor(() => expect(preview()).not.toHaveAttribute("aria-disabled", "true"))
+    await waitFor(() => expect(host.listening("import_devices")).toBe(true))
+    mounted = false
+    act(() => host.emit("import_devices", []))
+    expect(await within(screen.getByText("Card-1 source").closest("tr")!).findByText(m.status_offline())).toBeInTheDocument()
+    await waitFor(() => expect(preview()).toHaveAttribute("aria-disabled", "true"))
+    mounted = true
+    act(() => host.emit("import_devices", [CARD]))
+    expect(await within(screen.getByText("Card-1 source").closest("tr")!).findByText(m.status_online())).toBeInTheDocument()
+    await waitFor(() => expect(preview()).not.toHaveAttribute("aria-disabled", "true"))
+  })
 })
 
 describe("Import", () => {
@@ -217,6 +268,27 @@ describe("Import", () => {
     expect(screen.getByRole("button", { name: m.import_move() })).toHaveAttribute("aria-pressed", "true")
   })
 
+  it("keeps the flow and the chosen mode when a re-read fails, with Retry beside it", async () => {
+    let reads = 0
+    mockIPC((command) => {
+      if (command === "import_status") {
+        reads += 1
+        if (reads > 1) throw PERSISTENCE
+        return importOp()
+      }
+      if (command === "import_start") throw conflict
+      return null
+    })
+    const { user } = renderAt("/import?import=imp-1&step=review")
+    await user.click(await screen.findByRole("button", { name: m.import_move() }))
+    await user.click(screen.getByRole("button", { name: new RegExp(`^${m.import_import_frames({ count: 2, frames: "2" })}`) }))
+    await user.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: m.import_move() }))
+    expect(await screen.findByText(m.action_failure_persistence_failure())).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: m.verb_retry() })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: m.import_move() })).toHaveAttribute("aria-pressed", "true")
+    expect(screen.getByRole("button", { name: new RegExp(`^${m.import_import_frames({ count: 2, frames: "2" })}`) })).toBeInTheDocument()
+  })
+
   it("after a restart reads where the running import stands, then settles from its durable status", async () => {
     let reads = 0
     mockIPC((command) => {
@@ -235,8 +307,12 @@ describe("Import", () => {
 describe("Session intake", () => {
   it("confirms the chosen Target at the session's revisions; a stale one is refused and the choice stays", async () => {
     const associated: unknown[] = []
+    let sessionReads = 0
     mockIPC((command, args) => {
-      if (command === "library_session") return librarySession()
+      if (command === "library_session") {
+        sessionReads += 1
+        return librarySession()
+      }
       if (command === "pix_session_intake") return admission()
       if (command === "library_associate_target") {
         associated.push(args)
@@ -245,10 +321,16 @@ describe("Session intake", () => {
       return null
     })
     const { user } = renderAt(`/sessions/${SESSION_ID}?step=target`)
-    await user.click(await screen.findByRole("button", { name: m.session_confirm_target() }))
+    const button = await screen.findByRole("button", { name: m.session_confirm_target() })
+    const before = sessionReads
+    await user.click(button)
     expect(await screen.findByText(m.action_failure_conflict())).toBeInTheDocument()
     expect(associated).toEqual([{ expected: [{ sessionId: SESSION_ID, groupingRevision: 4, decisionRevision: 7 }], targetId: "t-ngc7000" }])
-    expect(screen.getAllByText("NGC 7000").length).toBeGreaterThan(0)
+    // The refusal re-read the session; the user's choice is still the chosen Target.
+    await waitFor(() => expect(sessionReads).toBeGreaterThan(before))
+    const chosen = screen.getByRole("heading", { name: m.session_chosen_target() }).closest("section")!
+    expect(within(chosen).getByText("NGC 7000")).toBeInTheDocument()
+    expect(screen.queryByText(m.session_no_target_chosen())).toBeNull()
   })
 
   it("hosts the injected review body on Review and opens the session once it reports Finish", async () => {
@@ -263,6 +345,38 @@ describe("Session intake", () => {
     await waitFor(() => expect(router.state.location.search).toEqual({}))
     expect(await screen.findByRole("heading", { level: 1 })).toHaveTextContent("12 Sep · Ha")
   })
+
+  it("adds to a Project at the revisions read again after a conflict", async () => {
+    let revision = 4
+    const added: unknown[] = []
+    mockIPC((command, args) => {
+      if (command === "project_list") return [{ id: "p1", name: "Cygnus HOO", lifecycle: "open", revision, subjects: [], rigCount: 1, goalCount: 0 }]
+      if (command === "project_preview_session_addition")
+        return { projectId: "p1", projectRevision: revision, session: { sessionId: SESSION_ID, groupingRevision: 4, decisionRevision: revision + 3 }, targetId: "t-ngc7000", addsSubject: true, addedRig: null, note: null }
+      if (command === "project_add_session") {
+        added.push(args)
+        if (added.length === 1) {
+          revision = 5
+          throw conflict
+        }
+        return { project: {}, addition: {} }
+      }
+      return null
+    })
+    render(
+      <QueryClientProvider client={createQueryClient()}>
+        <AddToProjectDialog session={{ sessionId: SESSION_ID, groupingRevision: 4, decisionRevision: 7 }} sessionName="12 Sep · Ha" open onOpenChange={() => undefined} />
+      </QueryClientProvider>,
+    )
+    const user = userEvent.setup()
+    const add = () => screen.getByRole("button", { name: new RegExp(`^(${m.session_add_session()}|${m.verb_retry()})$`) })
+    await waitFor(() => expect(add()).not.toHaveAttribute("aria-disabled", "true"))
+    await user.click(add())
+    expect(await screen.findByText(m.action_failure_conflict())).toBeInTheDocument()
+    await user.click(add())
+    await waitFor(() => expect(added).toHaveLength(2))
+    expect(added[1]).toEqual({ session: { sessionId: SESSION_ID, groupingRevision: 4, decisionRevision: 8 }, projectId: "p1", expectedRevision: 5 })
+  })
 })
 
 describe("Home", () => {
@@ -274,7 +388,7 @@ describe("Home", () => {
 
   it.each(LOCALES)("shows each section that waits on the Home criteria as unavailable, in %s", async (locale) => {
     act(() => setLocale(locale))
-    mockIPC((command) => {
+    const host = eventHost((command) => {
       if (command === "library_list_locations") return []
       if (command === "library_new_captures") return { locations: [] }
       if (command === "library_list_operations") return []
@@ -284,7 +398,26 @@ describe("Home", () => {
     renderAt("/")
     expect(await screen.findByText(m.home_unavailable({ what: m.home_pending_work() }))).toBeInTheDocument()
     expect(screen.getByText(m.home_unavailable({ what: m.home_open_work() }))).toBeInTheDocument()
+    expect(screen.getByText(m.home_unavailable({ what: m.home_tonight() }))).toBeInTheDocument()
+    expect(screen.getByText(m.home_unavailable({ what: m.home_jobs() }))).toBeInTheDocument()
     expect(screen.getByText(m.home_unavailable({ what: m.home_calendar() }))).toBeInTheDocument()
     expect(await screen.findByText(m.home_add_captures_location())).toBeInTheDocument()
+    // Without the Home criteria the dashboard is never asked for (astro-plan-wre19.9).
+    expect(host.calls).not.toContain("home_dashboard")
+  })
+
+  it("never says everything is imported while running and failed imports can't be read", async () => {
+    const location = { id: "loc-1", name: "Captures", path: encode("/Astro/Captures"), role: "captures", identity: FINGERPRINT.identity, decisionRevision: 1, availability: "available", lastObservedAt: null, lifecycle: "active", volumeKind: "local" }
+    const scan = { id: "scan-1", locationId: "loc-1", state: "completed", progress: {}, issues: [], completeScopes: [], incompleteScopes: [], startedAt: "2026-10-29T10:00:00Z", finishedAt: "2026-10-29T10:01:00Z" }
+    mockIPC((command) => {
+      if (command === "library_list_locations") return [{ location, failure: null }]
+      if (command === "library_new_captures") return { locations: [{ locationId: "loc-1", newFiles: 0, live: true }] }
+      if (command === "library_list_operations") return [scan]
+      if (command === "library_issues") return { issues: [], dismissed: [], counts: { danger: 0, warning: 0, info: 0 }, pages: [] }
+      return null
+    })
+    renderAt("/")
+    expect(await screen.findByText(m.home_no_new_files())).toBeInTheDocument()
+    expect(screen.queryByText(m.home_everything_imported())).toBeNull()
   })
 })

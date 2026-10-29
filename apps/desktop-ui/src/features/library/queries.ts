@@ -6,8 +6,9 @@
  * `homeWrite` refreshes after success and after `conflict`: a stale revision
  * means the read is old, so the next attempt must read the current one. Any
  * other failure keeps the reads, and the caller keeps the user's draft, as
- * they are. Imports settle from their durable `import_status`, never from
- * the reply to the write that started them.
+ * they are. `importWrite` does the same for the import's own read: the page
+ * shows an import only as `import_status` reads it, never from the reply to
+ * the write, so a start or a Retry settles from the durable status.
  */
 import { type QueryClient, type QueryKey, queryOptions, skipToken } from "@tanstack/react-query"
 import { type ActionResult, data, type ImportOperation_Serialize, library, type LibraryCommand, type PlanCriteria } from "@/api/ipc"
@@ -21,8 +22,8 @@ export type SessionFilter = "needs_target" | "not_in_any_project" | "needs_calib
 
 export const locationsQuery = () => libraryQuery("libraryListLocations")
 export const newCapturesQuery = () => libraryQuery("libraryNewCaptures")
-/** The latest scans, newest first: enough to know each location's last one. */
-export const scansQuery = () => libraryQuery("libraryListOperations", null, 0, 200)
+/** One Captures location's last scan: `library_list_operations` lists newest first, so the first row is it. */
+export const lastScanQuery = (locationId: string) => libraryQuery("libraryListOperations", locationId, 0, 1)
 export const issuesQuery = () => libraryQuery("libraryIssues")
 export const filterCountsQuery = () => libraryQuery("librarySessionFilterCounts")
 export const sessionsQuery = (filter: SessionFilter | null) => libraryQuery("libraryListSessions", null, false, filter, 0, SESSION_PAGE)
@@ -53,6 +54,8 @@ const LIBRARY_READS: readonly LibraryCommand[] = [
   "calibrationNeeds",
   "projectList",
   "projectCandidates",
+  // Add to Project computes its addition at the Project's and the session's revisions; a write moves them.
+  "projectPreviewSessionAddition",
 ]
 
 function isLibraryRead(key: QueryKey): boolean {
@@ -77,14 +80,12 @@ export async function homeWrite<T>(client: QueryClient, write: () => Promise<Act
 }
 
 /**
- * Run one import write. The import's own read takes the answer (it is the
- * import's state at its new revision); after a `conflict` the import is
- * read again, since the user saw an older revision.
+ * Run one import write and re-read the import's durable status once it
+ * settles with success or `conflict`: the reply is never shown as the
+ * import's state. Any other failure keeps the read and the user's draft.
  */
 export async function importWrite(client: QueryClient, importId: string, write: () => Promise<ActionResult<ImportOperation_Serialize>>): Promise<ActionResult<ImportOperation_Serialize>> {
   const result = await write()
-  const key = importQuery(importId).queryKey
-  if (result.ok) client.setQueryData(key, result.data)
-  else if (result.failure.source === "library" && result.failure.error.code === "conflict") await client.invalidateQueries({ queryKey: key })
+  if (result.ok || (result.failure.source === "library" && result.failure.error.code === "conflict")) await client.invalidateQueries({ queryKey: importQuery(importId).queryKey })
   return result
 }

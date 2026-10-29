@@ -15,7 +15,7 @@
  * ingestions and Status's locations read the library directly and work now.
  * The calendar waits on the night-summary read of astro-plan-wre19.9.
  */
-import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { FolderPlus, Import } from "lucide-react"
 import { type ReactNode, useState } from "react"
 import {
@@ -46,8 +46,8 @@ import { AddToProjectDialog } from "./add-to-project"
 import { useHomeCriteria } from "./criteria"
 import { IngestionsTable, ROWS, useIngestions } from "./ingestions"
 import { readError, Unavailable } from "./parts"
-import { dashboardQuery, homeWrite, locationsQuery, sessionQuery, sessionsQuery } from "./queries"
-import { sessionLabel } from "./words"
+import { dashboardQuery, homeWrite, locationsQuery, sessionsQuery } from "./queries"
+import { sessionLabel, useSessionSummaries } from "@/components/domain/session-label"
 
 type Follow = (link: StepLink) => void
 
@@ -174,13 +174,8 @@ function PendingTable({ dashboard, rows: dashboardRows, follow }: { dashboard: H
   const all = [...dashboardRows, ...calibrationRows].sort((a, b) => PENDING_KINDS.indexOf(a.kind) - PENDING_KINDS.indexOf(b.kind))
   const shown = all.slice(0, ROWS)
   // Unreviewed and ready rows name only their session: read each shown one for its label.
-  const unnamed = shown.filter((w) => w.kind === "unreviewed" || w.kind === "ready-to-add").map((w) => w.sessionId)
-  const reads = useQueries({ queries: unnamed.map((id) => sessionQuery(id)) })
-  const summaries = new Map<string, SessionSummary>()
+  const summaries = new Map(useSessionSummaries(shown.filter((w) => w.kind === "unreviewed" || w.kind === "ready-to-add").map((w) => w.sessionId)))
   for (const w of shown) if ("summary" in w) summaries.set(w.sessionId, w.summary)
-  reads.forEach((read, i) => {
-    if (read.data) summaries.set(unnamed[i]!, read.data.detail.summary)
-  })
   const projectName = (id: string) => dashboard.projects.find((p) => p.project.id === id)?.project.name ?? "–"
   const name = (w: WorkRow) => {
     const summary = summaries.get(w.sessionId)

@@ -14,33 +14,11 @@ import type {
   NamingFrameType,
   PinState_Serialize,
   RemovableDevice,
-  Session,
   SessionAdmission_Serialize,
   SessionReadiness,
 } from "@/api/ipc"
-import { formatExposure, formatList, formatNight } from "@/lib/format"
+import { formatList } from "@/lib/format"
 import type { Messages } from "@/lib/i18n"
-
-/** The night, filter and exposure a capture key names, each null when the key doesn't name it. */
-export function keyParts(key: string): { night: string | null; filter: string | null; exposure: number | null } {
-  const part = (name: string) => key.split("|").find((p) => p.startsWith(`${name}=`))?.slice(name.length + 1) ?? null
-  const night = part("night")?.match(/^\d{4}-\d{2}-\d{2}/)?.[0] ?? null
-  const filter = part("filter")
-  const exposure = Number(part("exposure_s"))
-  return { night, filter: filter && filter !== "?" ? filter : null, exposure: Number.isFinite(exposure) && part("exposure_s") ? exposure : null }
-}
-
-/** "18 Sep · Ha · 300 s · framing 2": what a session's capture key and framing say; a dash for an unnamed night. */
-export function sessionLabel(m: Messages, session: Session): string {
-  const { night, filter, exposure } = keyParts(session.key)
-  const nightText = night ? formatNight(night) : "–"
-  const ordinal = session.framing?.ordinal ?? 1
-  return [
-    filter ? `${nightText} · ${filter}` : m.domain_session_no_filter({ night: nightText }),
-    ...(exposure !== null ? [formatExposure(exposure)] : []),
-    ...(session.framing?.label ? [session.framing.label] : ordinal > 1 ? [m.domain_session_framing({ n: ordinal })] : []),
-  ].join(" · ")
-}
 
 /** Where a session's intake stands, as the library's admission says: the step it still needs, else Ready. */
 export function admissionReadiness(admission: SessionAdmission_Serialize): SessionReadiness {

@@ -8,7 +8,7 @@ import type { PaletteState, ShellContribution } from "@/app/shell-contract"
 import { useMessages } from "@/app/preferences"
 import type { PaletteCommand } from "@/components/app/contracts"
 import { sessionsQuery } from "./queries"
-import { sessionLabel } from "./words"
+import { sessionLabel } from "@/components/domain/session-label"
 
 function useCommands({ open }: PaletteState): PaletteCommand[] {
   const m = useMessages()

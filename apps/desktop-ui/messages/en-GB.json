@@ -7197,5 +7197,6 @@
   "import_sources_trashed": "Sources in the OS Trash",
   "import_sources_kept": "Sources kept",
   "import_missing": "This import is not in the catalogue",
-  "home_import_ellipsis": "Import…"
+  "home_import_ellipsis": "Import…",
+  "home_no_new_files": "No new files found in the Captures locations."
 }

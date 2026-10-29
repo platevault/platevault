@@ -25,7 +25,7 @@
  */
 import { useNavigate } from "@tanstack/react-router"
 import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query"
-import { useState } from "react"
+import { type ReactNode, useState } from "react"
 import { type EvidenceItem, type ExpectedSession, type LibrarySession_Serialize, library, type SessionAdmission_Serialize, type TargetCandidate } from "@/api/ipc"
 import { libraryQuery } from "@/api/query"
 import type { SessionIntakeProps } from "@/app/shell-contract"
@@ -44,7 +44,8 @@ import { StepPage } from "@/components/templates/step-page"
 import type { Messages } from "@/lib/i18n"
 import { Unavailable } from "./parts"
 import { homeWrite, invalidateLibraryReads, rigQuery } from "./queries"
-import { admissionReadiness, sessionLabel } from "./words"
+import { admissionReadiness } from "./words"
+import { sessionLabel } from "@/components/domain/session-label"
 
 export const INTAKE_STEPS = ["target", "rig", "review"] as const
 export type IntakeStep = (typeof INTAKE_STEPS)[number]
@@ -63,13 +64,10 @@ export function confirmedTarget(session: LibrarySession_Serialize): { id: string
   return { id: association.subjectId, designation: candidate?.designation ?? "–" }
 }
 
-/** The first step the admission does not count as done; null once Review is finished too. */
+/** The step the library's readiness says the session still needs (C10); null once it is Ready. The rule stays the library's. */
 export function currentStep(admission: SessionAdmission_Serialize): IntakeStep | null {
-  const { intake } = admission
-  if (!intake.targetConfirmed) return "target"
-  if (!intake.rigId) return "rig"
-  if (!intake.reviewFinished || intake.unreviewedFrames > 0 || intake.changedFrames > 0) return "review"
-  return null
+  const readiness = admissionReadiness(admission)
+  return readiness === "needs_target" ? "target" : readiness === "needs_rig" ? "rig" : readiness === "needs_review" ? "review" : null
 }
 
 function stepLabel(m: Messages, step: IntakeStep): string {
@@ -102,7 +100,7 @@ function evidenceRigs(session: LibrarySession_Serialize): string[] {
   return [...new Set(rigs.map((a) => a.subjectId!))]
 }
 
-export function SessionIntake({ session, admission, viewing, review: Review }: { session: LibrarySession_Serialize; admission: SessionAdmission_Serialize; viewing: IntakeStep } & SessionIntakeProps) {
+export function SessionIntake({ session, admission, viewing, review: Review, refreshError }: { session: LibrarySession_Serialize; admission: SessionAdmission_Serialize; viewing: IntakeStep; refreshError: ReactNode } & SessionIntakeProps) {
   const m = useMessages()
   const client = useQueryClient()
   const navigate = useNavigate()
@@ -173,7 +171,12 @@ export function SessionIntake({ session, admission, viewing, review: Review }: {
       viewing={viewing}
       stepsLabel={m.session_intake_steps()}
       fill={viewing === "review"}
-      step={body}
+      step={
+        <>
+          {refreshError}
+          {body}
+        </>
+      }
     />
   )
 }

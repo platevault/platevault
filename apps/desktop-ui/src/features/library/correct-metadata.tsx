@@ -22,7 +22,7 @@ import { toast } from "@/components/app/feedback"
 import { formatCount } from "@/lib/format"
 import type { Messages } from "@/lib/i18n"
 import { homeWrite } from "./queries"
-import { sessionLabel } from "./words"
+import { sessionLabel } from "@/components/domain/session-label"
 
 /** The capture fields a session's correction offers, by their library name; numeric ones take a number. */
 const FIELDS = ["object", "filter", "exposureSeconds", "gain", "offset", "setTemperatureC", "focalLengthMm"] as const

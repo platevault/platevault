@@ -9,8 +9,9 @@
  * counted; it never reads as "Everything is imported".
  *
  * Sources, all durable reads: `library_list_locations`,
- * `library_new_captures` (refreshed on its event), the newest scans of
- * `library_list_operations`, and each import the issues name as left
+ * `library_new_captures` (refreshed on its event), each Captures
+ * location's own last scan (`library_list_operations` for that location,
+ * one row), and each import the issues name as left
  * unfinished (`work-interrupted`, read through `import_status`; an owner
  * that is no import, a measurement run, reads `not_found` and has no row
  * here). Running imports come from `home_dashboard`'s Running work, so they
@@ -33,7 +34,7 @@ import { StatusBadge } from "@/components/app/status"
 import { formatCount } from "@/lib/format"
 import type { Messages } from "@/lib/i18n"
 import { Unavailable, readError } from "./parts"
-import { homeWrite, importQuery, importWrite, issuesQuery, locationsQuery, newCapturesQuery, scansQuery } from "./queries"
+import { homeWrite, importQuery, importWrite, issuesQuery, lastScanQuery, locationsQuery, newCapturesQuery } from "./queries"
 
 /** Rows a Home section shows before "All N ›" (C8). */
 export const ROWS = 5
@@ -93,8 +94,9 @@ const importRunLink = (importId: string): StepLink => ({ to: "/import", search: 
 export function useIngestions(dashboard: HomeDashboard_Serialize | null) {
   const locations = useQuery(locationsQuery())
   const captures = useQuery(newCapturesQuery())
-  const scans = useQuery(scansQuery())
   const issues = useQuery(issuesQuery())
+  const captureLocations = (locations.data ?? []).map((state) => state.location).filter((l) => l.role === "captures" && l.lifecycle === "active")
+  const scans = useQueries({ queries: captureLocations.map((l) => lastScanQuery(l.id)) })
   useRefreshOnEvent(NEW_CAPTURES_EVENT, libraryKey("libraryNewCaptures"))
   const running = (dashboard?.runningWork ?? []).flatMap((work) => (work.kind === "import" ? [work.importId] : []))
   const stopped = (issues.data?.issues ?? []).flatMap((issue) => (issue.kind === "work-interrupted" && issue.owner.kind === "operation" ? [issue.owner.id] : []))
@@ -112,15 +114,15 @@ export function useIngestions(dashboard: HomeDashboard_Serialize | null) {
     return [{ kind: "import", importId, operation, running: running.includes(importId) || operation?.state === "running" }]
   })
   const newFiles = new Map((captures.data?.locations ?? []).map((c) => [c.locationId, c.newFiles]))
-  const lastScan = (locationId: string) => scans.data?.find((scan) => scan.locationId === locationId)
-  const locationRows = (locations.data ?? [])
-    .map((state) => state.location)
+  const lastScan = new Map(captureLocations.map((l, i) => [l.id, scans[i]?.data?.[0]]))
+  const locationRows = [...captureLocations]
     .sort((a, b) => a.name.localeCompare(b.name))
-    .flatMap((location) => locationIngestion(location, lastScan(location.id), newFiles.get(location.id) ?? 0) ?? [])
-  const error = locations.error ?? captures.error ?? scans.error
-  const hasCaptures = (locations.data ?? []).some((s) => s.location.role === "captures" && s.location.lifecycle === "active")
-  const refetch = () => void Promise.all([locations.refetch(), captures.refetch(), scans.refetch(), issues.refetch()])
-  return { rows: [...importRows, ...locationRows], loading: locations.isPending || captures.isPending || scans.isPending, error, hasCaptures, refetch }
+    .flatMap((location) => locationIngestion(location, lastScan.get(location.id), newFiles.get(location.id) ?? 0) ?? [])
+  // An unreadable issues read hides stopped imports: it is a failed read, never "nothing stopped".
+  const error = locations.error ?? captures.error ?? issues.error ?? scans.find((s) => s.error)?.error ?? null
+  const loading = locations.isPending || captures.isPending || issues.isPending || scans.some((s) => s.isPending)
+  const refetch = () => void Promise.all([locations.refetch(), captures.refetch(), issues.refetch(), ...scans.map((s) => s.refetch())])
+  return { rows: [...importRows, ...locationRows], loading, error, hasCaptures: captureLocations.length > 0, refetch }
 }
 
 export function IngestionsTable({ ingestions, dashboardReady }: { ingestions: ReturnType<typeof useIngestions>; dashboardReady: boolean }) {
@@ -176,8 +178,11 @@ export function IngestionsTable({ ingestions, dashboardReady }: { ingestions: Re
         return null
     }
   }
+  // "Everything is imported." (PRJ-FR-22) is a claim this section cannot back yet: running imports wait on
+  // astro-plan-wre19.9 and failed or partial imports on the import list of astro-plan-wre19.10. Switch to
+  // m.home_everything_imported() once both land; until then the empty text says only what was read.
   const empty = hasCaptures ? (
-    m.home_everything_imported()
+    m.home_no_new_files()
   ) : (
     <EmptyState icon={FolderPlus} title={m.home_add_captures_location()} action={<ActionButton action={{ id: "add-location", label: m.storage_add_location(), run: () => follow({ to: "/settings/locations", search: { add: "captures" } }) }} />} />
   )

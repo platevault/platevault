@@ -34,16 +34,21 @@ import { readError } from "./parts"
 import { devicesQuery, sourcesQuery } from "./queries"
 import { deviceKind, deviceNote } from "./words"
 
-/** The source the user picked, with what names it on screen. */
+/** The source the user picked, with what names it on screen. Whether it is online is read from the current sources, never kept from the pick. */
 export interface ChosenSource {
   spec: ImportSourceSpec
   label: string
-  /** Offline saved sources stay listed and cannot preview until their folder is back. */
-  offline: boolean
 }
 
 export function folderSource(path: NativePathWire): ChosenSource {
-  return { spec: { kind: "folder", path }, label: path.display, offline: false }
+  return { spec: { kind: "folder", path }, label: path.display }
+}
+
+/** Whether a saved source's folder is absent now, by the current `import_sources_list` read (STO-IMP-AC-15); a folder or device is never offline here. */
+export function sourceOffline(spec: ImportSourceSpec | undefined, sources: readonly SavedSourceView[] | undefined): boolean {
+  if (spec?.kind !== "saved") return false
+  const source = sources?.find((s) => s.id === spec.id)
+  return source !== undefined && source.availability !== "available"
 }
 
 const sameSpec = (a: ImportSourceSpec | undefined, b: ImportSourceSpec) =>
@@ -57,7 +62,9 @@ export function SourceStep({ chosen, onChoose, editable }: { chosen: ChosenSourc
   const m = useMessages()
   const devices = useQuery(devicesQuery())
   const sources = useQuery(sourcesQuery())
+  // A card pulled or plugged in changes the devices and whether a saved source on it is mounted: re-read both.
   useRefreshOnEvent(IMPORT_DEVICES_EVENT, libraryKey("importDevicesList"))
+  useRefreshOnEvent(IMPORT_DEVICES_EVENT, libraryKey("importSourcesList"))
   const picked = (spec: ImportSourceSpec) => sameSpec(chosen?.spec, spec)
   const deviceColumns: Column<RemovableDevice>[] = [
     { id: "name", header: m.import_column_source(), rowHeader: true, truncate: true, sortValue: (d) => d.name, cell: (d) => d.name },
@@ -85,7 +92,7 @@ export function SourceStep({ chosen, onChoose, editable }: { chosen: ChosenSourc
           getRowId={(d) => d.root.display}
           rowLabel={(d) => d.name}
           primaryRowAction={(d) => {
-            const source: ChosenSource = { spec: { kind: "folder", path: d.root }, label: d.name, offline: false }
+            const source: ChosenSource = { spec: { kind: "folder", path: d.root }, label: d.name }
             return picked(source.spec) || !editable ? null : { id: "use", label: m.import_use_source(), run: () => onChoose(source) }
           }}
           loading={devices.isPending}
@@ -101,7 +108,7 @@ export function SourceStep({ chosen, onChoose, editable }: { chosen: ChosenSourc
           getRowId={(s) => s.id}
           rowLabel={(s) => s.name}
           primaryRowAction={(s) => {
-            const source: ChosenSource = { spec: { kind: "saved", id: s.id }, label: s.name, offline: s.availability !== "available" }
+            const source: ChosenSource = { spec: { kind: "saved", id: s.id }, label: s.name }
             return picked(source.spec) || !editable ? null : { id: "use", label: m.import_use_source(), run: () => onChoose(source) }
           }}
           loading={sources.isPending}
@@ -156,7 +163,7 @@ function ChooseFolder({ chosen, onChoose, editable }: { chosen: ChosenSource | n
                     const result = await library.importSourceSave(name.trim(), folder)
                     if (result.ok) {
                       await client.invalidateQueries({ queryKey: libraryKey("importSourcesList") })
-                      onChoose({ spec: { kind: "saved", id: result.data.id }, label: result.data.name, offline: false })
+                      onChoose({ spec: { kind: "saved", id: result.data.id }, label: result.data.name })
                     }
                     return result
                   },

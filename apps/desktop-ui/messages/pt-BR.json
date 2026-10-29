@@ -7711,5 +7711,6 @@
   "import_sources_trashed": "Origens na Lixeira",
   "import_sources_kept": "Origens mantidas",
   "import_missing": "Esta importação não está no catálogo",
-  "home_import_ellipsis": "Importar…"
+  "home_import_ellipsis": "Importar…",
+  "home_no_new_files": "Nenhum arquivo novo encontrado nos locais de Capturas."
 }

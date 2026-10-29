@@ -28,7 +28,7 @@ import { formatCount, formatExposure, formatNight } from "@/lib/format"
 import type { Messages } from "@/lib/i18n"
 import { readError } from "./parts"
 import { filterCountsQuery, issuesQuery, SESSION_PAGE, type SessionFilter, sessionsQuery } from "./queries"
-import { keyParts, sessionLabel } from "./words"
+import { keyParts, sessionLabel } from "@/components/domain/session-label"
 
 /** The Status facet's values, as `?filter=` carries them. */
 const FILTERS = { "needs-target": "needs_target", "not-in-project": "not_in_any_project", "needs-calibration": "needs_calibration", trashed: "trashed" } as const satisfies Record<string, SessionFilter>

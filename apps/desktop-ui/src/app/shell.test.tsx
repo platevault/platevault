@@ -255,6 +255,16 @@ describe("boot", { timeout: SHELL_TEST_MS }, () => {
     expect(windowStatusBar()).toBe(bar)
   })
 
+  it("offers Go home on not-found once Home is registered, and opens it", async () => {
+    const user = userEvent.setup()
+    libraryHost()
+    render(<AppRoot router={createAppRouter(createMemoryHistory({ initialEntries: ["/no-such-page"] }))} client={createQueryClient()} />)
+    expect(await screen.findByRole("heading", { level: 1, name: m.shell_not_found_title() })).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: m.shell_not_found_search_action() })).toBeNull()
+    await user.click(screen.getByRole("button", { name: m.shell_not_found_home() }))
+    expect(await screen.findByRole("heading", { level: 1, name: m.nav_home() })).toBeInTheDocument()
+  })
+
   it("keeps a failed library read visible with Retry, and announces it", async () => {
     const user = userEvent.setup()
     let fail = true
