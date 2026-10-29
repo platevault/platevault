@@ -13,8 +13,8 @@ import { cn } from "@/lib/utils"
 
 /** The Moon on one night at one site. */
 export interface MoonTonight {
-  /** Illuminated fraction at the middle of the night, 0-100. */
-  illuminationPct: number
+  /** Illuminated fraction at the middle of the night, 0-100; null when the library could not compute it. */
+  illuminationPct: number | null
   /** The phase name: Waxing crescent, Full Moon, … */
   phase: MessageRef
   /** Rise and set during the night (local noon to noon); null when it does not rise or set then. */
@@ -44,7 +44,7 @@ function degrees(value: number): string {
 export function MoonLine({ moon, timeZone, className }: { moon: MoonTonight; timeZone: string; className?: string }) {
   const m = useMessages()
   const parts = [
-    `${moon.illuminationPct}%`,
+    ...(moon.illuminationPct === null ? [] : [`${moon.illuminationPct}%`]),
     say(m, moon.phase),
     moon.rise ? m.tonight_moon_rises({ time: siteTime(moon.rise, timeZone) }) : m.tonight_moon_no_rise(),
     moon.set ? m.tonight_moon_sets({ time: siteTime(moon.set, timeZone) }) : m.tonight_moon_no_set(),

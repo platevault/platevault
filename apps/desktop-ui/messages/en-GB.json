@@ -749,7 +749,6 @@
   "home_column_grade": "Grade",
   "home_goal_item": "{subject} · {channel}",
   "home_added_to_plan": "{name} added to tonight's plan",
-  "home_no_goals_suit": "No goals suit tonight.",
   "home_no_goals_suit_next": "No goals suit tonight. Next good night: {date}.",
   "home_no_unfinished_goals": "No unfinished goals.",
   "home_add_a_goal": "Add a Goal",
@@ -7120,7 +7119,31 @@
   "home_job_scan": "Scan",
   "home_job_measurement": "Measurement run",
   "home_job_project": "{name} operation",
-  "home_grades": "Goal grades and the next good night",
+  "home_goal_in_project": "{goal} in {project}",
+  "home_not_graded": "Not graded",
+  "home_ungraded_no_band": "The Project's rigs don't capture this channel",
+  "home_ungraded_unsupported_frame": "Coordinates in an unsupported frame",
+  "home_window_peak": "{range} · peak {altitude}°",
+  "home_no_gradable_goal": "No goal can be graded: none has a band and a known position.",
+  "home_no_goals_suit_within": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "No goals suit tonight or the next night.",
+        "countPlural=*": "No goals suit tonight or the next {n} nights."
+      }
+    }
+  ],
+  "calendar_moon_phase": "Moon {phase}",
+  "calendar_plan_unknown": "plan not available yet",
+  "home_planned_unavailable": "Targets in plan aren't available yet.",
   "sessions_no_match_query": "No session matches “{query}”",
   "sessions_first_count": "First {count} light sessions",
   "session_replaced_title": "A regroup replaced this session",
