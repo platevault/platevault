@@ -4,10 +4,11 @@
 //! Catalog read latency while a large index runs (astro-plan-ocyuc.6).
 //!
 //! One location of synthetic FITS lights (`PV_PERF_NIGHTS` x
-//! `PV_PERF_PER_NIGHT`, default 40 x 500 = 20,000 files) is indexed while a
-//! reader samples the status bar's reads every `PV_PERF_READ_MS` (default
-//! 100 ms). The test prints p50/p95/max per read, during and after the index,
-//! plus the index wall time. A release build also asserts the budget, which is
+//! `PV_PERF_PER_NIGHT`, default 40 x 500 = 20,000 files; one session per
+//! night, at most 540 lights a night) is indexed while a reader samples the
+//! status bar's reads every `PV_PERF_READ_MS` (default 100 ms). The test
+//! prints p50/p95/max per read, during and after the index, plus the index
+//! wall time. A release build also asserts the budget, which is
 //! set for the default size (a debug build only reports):
 //!
 //! - `scan_status`, `list_locations`, `list_operations`: p95 <= 50 ms;
@@ -59,11 +60,17 @@ fn write_fits(path: &Path, cards: &[String]) {
     file.write_all(&[0_u8; 2880]).unwrap();
 }
 
-/// `nights` session folders of `per_night` M31 lights, 20 s apart.
+/// Most lights one night holds: 20 s apart from 21:00, the last starts 23:59:40.
+const MAX_PER_NIGHT: usize = 540;
+
+/// `nights` session folders of `per_night` M31 lights, 20 s apart, one night
+/// per calendar date from 2026-09-01, so each folder is its own session.
 fn generate(root: &Path, nights: usize, per_night: usize) {
+    assert!(per_night <= MAX_PER_NIGHT, "PV_PERF_PER_NIGHT is at most {MAX_PER_NIGHT}");
+    let first = jiff::civil::date(2026, 9, 1);
     for night in 0..nights {
-        let day = night % 28 + 1;
-        let folder = root.join(format!("M31/2026-09-{day:02}_{night}/LIGHT"));
+        let day = first.checked_add(jiff::Span::new().days(i64::try_from(night).unwrap())).unwrap();
+        let folder = root.join(format!("M31/{day}_{night}/LIGHT"));
         std::fs::create_dir_all(&folder).unwrap();
         for frame in 0..per_night {
             let (hour, minute, second) = (21 + frame / 180, (frame / 3) % 60, (frame % 3) * 20);
@@ -77,7 +84,7 @@ fn generate(root: &Path, nights: usize, per_night: usize) {
                 "OBJECT  = 'M31'".to_owned(),
                 "FILTER  = 'L'".to_owned(),
                 "EXPTIME =                  300".to_owned(),
-                format!("DATE-OBS= '2026-09-{day:02}T{hour:02}:{minute:02}:{second:02}'"),
+                format!("DATE-OBS= '{day}T{hour:02}:{minute:02}:{second:02}'"),
                 "RA      =            10.684708".to_owned(),
                 "DEC     =             41.26875".to_owned(),
                 "FOCALLEN=                  530".to_owned(),
@@ -191,7 +198,9 @@ async fn reads_stay_within_budget_during_a_large_index() {
     assert_eq!(finished.state, ScanState::Completed, "{finished:?}");
     let files = nights * per_night;
     assert_eq!(finished.progress.metadata_read, u64::try_from(files).unwrap());
-    println!("index of {files} files: {index_time:.1?}");
+    let sessions = library.catalog().list_session_ids(&SessionQuery::default()).await.unwrap();
+    assert_eq!(sessions.len(), nights, "one session per night");
+    println!("index of {files} files in {nights} sessions: {index_time:.1?}");
     during.report("during");
 
     let stop = Arc::new(AtomicBool::new(false));
