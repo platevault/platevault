@@ -31,18 +31,10 @@ use crate::support;
 pub const NIGHT: Date = date!(2026 - 10 - 10);
 
 pub fn tonight() -> TonightQuery {
-    TonightQuery {
-        night: Some(NIGHT),
-        criteria: PlanCriteria {
-            min_altitude_deg: 30.0,
-            darkness: Darkness::Astronomical,
-            moon: MoonCriterion::None,
-            min_duration_minutes: 30,
-        },
-    }
+    TonightQuery { night: Some(NIGHT) }
 }
 
-/// Backyard as the default planning site.
+/// Backyard as the default planning site, with Home's criteria set.
 pub async fn default_site(library: &Library) {
     let input = SiteInput {
         name: "Backyard".into(),
@@ -54,6 +46,13 @@ pub async fn default_site(library: &Library) {
     let id = library.save_site(None, None, &input).await.unwrap().site.id;
     let settings = library.catalog().list_sites().await.unwrap().settings_revision;
     library.set_default_site(Some(id), settings).await.unwrap();
+    let criteria = PlanCriteria {
+        min_altitude_deg: 30.0,
+        darkness: Darkness::Astronomical,
+        moon: MoonCriterion::None,
+        min_duration_minutes: 30,
+    };
+    library.save_home_criteria(0, &criteria).await.unwrap();
 }
 
 fn expected_session(session: &Session) -> ExpectedSession {

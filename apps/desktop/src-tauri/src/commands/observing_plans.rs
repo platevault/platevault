@@ -1,7 +1,7 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Observing-plan IPC (spec 072, PLAN-FR-01..11).
+//! Observing-plan IPC (spec 072, PLAN-FR-01..12).
 //!
 //! Registered only by the isolated rebuilt shell ([`crate::library_shell`])
 //! beside the other library commands; the legacy `plan`, `plans` and
@@ -18,13 +18,16 @@
 
 use std::sync::Arc;
 
+use persistence_library::HOME_CRITERIA_ID;
 use platevault_core::library::Library;
+use platevault_core::planning_calendar::{CalendarQuery, PlanningCalendar};
 use platevault_core::planning_project::{ProjectGaps, ProjectPlanning, ProjectPlanningQuery};
 use platevault_core::tonight::{Tonight, TonightQuery};
 use platevault_core::{
     CalendarExportOutcome, CalendarExportReview, DefaultSiteSaved, EnableReminders, ErrorResponse,
-    ExportSelection, LibraryError, PlanningSites, ReminderInput, ReminderReview, ReminderStatus,
-    ReminderSubscription, Revision, SiteInput, SiteSaved, TargetPlan, WindowQuery, WindowSet,
+    ExportSelection, HomeCriteria, LibraryError, PlanCriteria, PlanningSites, ReminderInput,
+    ReminderReview, ReminderStatus, ReminderSubscription, Revision, SiteInput, SiteSaved,
+    TargetPlan, WindowQuery, WindowSet,
 };
 use serde::Serialize;
 use tauri::{AppHandle, State};
@@ -76,6 +79,36 @@ pub async fn planning_set_default_site(
     expected_revision: Revision,
 ) -> Reply<DefaultSiteSaved> {
     library.set_default_site(site_id, expected_revision).await.map_err(fail(site_id))
+}
+
+/// Home's stored criteria at their revision: none at revision 0 until the
+/// user sets them, because no criterion has a default.
+///
+/// # Errors
+/// `PersistenceFailure` when the catalog or the recorded criteria can't be
+/// read.
+#[tauri::command]
+#[specta::specta]
+pub async fn planning_home_criteria(library: State<'_, Arc<Library>>) -> Reply<HomeCriteria> {
+    library.home_criteria().await.map_err(fail(Some(HOME_CRITERIA_ID)))
+}
+
+/// Save Home's criteria over `expected_revision` (0 when never saved).
+///
+/// # Errors
+/// `InvalidInput` naming an invalid criterion and `Conflict` for a stale
+/// revision; nothing is stored on either.
+#[tauri::command]
+#[specta::specta]
+pub async fn planning_save_home_criteria(
+    library: State<'_, Arc<Library>>,
+    criteria: PlanCriteria,
+    expected_revision: Revision,
+) -> Reply<HomeCriteria> {
+    library
+        .save_home_criteria(expected_revision, &criteria)
+        .await
+        .map_err(fail(Some(HOME_CRITERIA_ID)))
 }
 
 /// The window set with its basis and one entry per night. Read-only: writes
@@ -266,17 +299,20 @@ pub async fn planning_export_calendar(
 }
 
 // ---------------------------------------------------------------------------
-// Tonight and Project planning (PLAN-FR-02/09/10/11)
+// Tonight, the calendar and Project planning (PLAN-FR-02/09/10/11/12)
 // ---------------------------------------------------------------------------
 
-/// Home's Tonight at the default site: the best window tonight of each Target
-/// in My targets that has one, the Moon and the darkness window, each naming
-/// the site and time zone. Without a default site it lists no windows and
-/// names the reason. Read-only.
+/// Home's Tonight at the default site under Home's stored criteria: every
+/// unfinished goal of an open Project graded for tonight under its band's
+/// Moon-avoidance curve, best first, with when they are next suited; the
+/// best window tonight of each Target in My targets that has one; the Moon
+/// and the darkness window, each naming the site and time zone. Without a
+/// default site or Home's criteria it computes nothing and names the reason
+/// (`no_site`, `no_criteria`). Read-only.
 ///
 /// # Errors
-/// `InvalidInput` for invalid criteria or a night outside the supported
-/// calendar.
+/// `InvalidInput` for a night outside the supported calendar;
+/// `PersistenceFailure` when Home's recorded criteria cannot be read.
 #[tauri::command]
 #[specta::specta]
 pub async fn planning_tonight(
@@ -284,6 +320,24 @@ pub async fn planning_tonight(
     query: TonightQuery,
 ) -> Reply<Tonight> {
     library.tonight(&query).await.map_err(fail(None))
+}
+
+/// Home's calendar: `query.nights` nights from `query.firstNight` at the
+/// default site under Home's stored criteria, each with the Moon, its
+/// darkness and dark seconds, the unfinished goals it suits and the goals
+/// the Moon rules out. Without a default site or Home's criteria it lists
+/// no night and names the reason. Read-only.
+///
+/// # Errors
+/// `InvalidInput` for `nights` outside 1 to 366 or a night outside the
+/// supported calendar.
+#[tauri::command]
+#[specta::specta]
+pub async fn planning_calendar(
+    library: State<'_, Arc<Library>>,
+    query: CalendarQuery,
+) -> Reply<PlanningCalendar> {
+    library.planning_calendar(&query).await.map_err(fail(None))
 }
 
 /// A Project page's planning: the windows of its own subjects at the planning

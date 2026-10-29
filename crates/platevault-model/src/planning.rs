@@ -137,6 +137,20 @@ pub struct PlanningSettings {
     pub revision: Revision,
 }
 
+/// Home's stored planning criteria (PLAN-FR-11/12, PRJ-FR-17): what Home's
+/// Tonight and calendar compute under. No spec gives a value for every field
+/// and [`PlanCriteria`] has no defaults, so a catalog that never saved them
+/// reads none at revision 0 and Home asks the user to set them. The revision
+/// is their own, so saving them never stales a reminder review's planning
+/// settings revision.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
+pub struct HomeCriteria {
+    pub criteria: Option<PlanCriteria>,
+    pub revision: Revision,
+}
+
 /// Every saved site with the default site and the settings revision.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -214,6 +228,20 @@ pub enum MoonCriterion {
     None,
     BelowHorizon,
     MinSeparation { min_separation_deg: f64 },
+}
+
+/// How well a night suits a band under its Moon-avoidance curve
+/// (PLAN-FR-02, PLAN-FR-11, PLAN-TGT-FR-06), by R10-MOON-MODEL.md §3: good
+/// when the curve leaves a window whose longest keeps at least 75% of the
+/// longest Moon-free window, marginal when it leaves a shorter one, poor
+/// when it leaves none.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
+pub enum BandGrade {
+    Good,
+    Marginal,
+    Poor,
 }
 
 /// Explicit astronomical criteria; every field is required and none defaults.

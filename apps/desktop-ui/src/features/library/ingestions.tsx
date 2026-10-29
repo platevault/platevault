@@ -15,7 +15,7 @@
  * unfinished (`work-interrupted`, read through `import_status`; an owner
  * that is no import, a measurement run, reads `not_found` and has no row
  * here). Running imports come from `home_dashboard`'s Running work, so they
- * wait on the Home criteria (astro-plan-wre19.9); a failed or partial
+ * show once that read answers; a failed or partial
  * settled import is listed nowhere until the import list of
  * astro-plan-wre19.10 exists.
  */
@@ -201,7 +201,7 @@ export function IngestionsTable({ ingestions, dashboardReady }: { ingestions: Re
         error={error ? { message: readError(m, error), onRetry: refetch } : undefined}
         empty={empty}
       />
-      {/* astro-plan-wre19.9: running imports arrive with home_dashboard's Running work. */}
+      {/* Running imports arrive with home_dashboard's Running work; until it answers they are not known. */}
       {dashboardReady ? null : <Unavailable what={m.home_running_imports()} />}
     </>
   )

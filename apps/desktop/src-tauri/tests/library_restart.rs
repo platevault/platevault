@@ -179,16 +179,7 @@ impl Shell {
 
     /// The Project's row on Home, with its pending changes and Next action.
     fn home(&self, project: &Value) -> Value {
-        let tonight = json!({
-            "night": null,
-            "criteria": {
-                "minAltitudeDeg": 30.0,
-                "darkness": "astronomical",
-                "moon": { "kind": "none" },
-                "minDurationMinutes": 30,
-            },
-        });
-        let home = self.call("home_dashboard", &json!({ "tonight": tonight }));
+        let home = self.call("home_dashboard", &json!({ "tonight": { "night": null } }));
         let projects = home["projects"].as_array().expect("Home projects");
         let [row] = projects.as_slice() else { panic!("one open Project on Home: {home:#}") };
         assert_eq!(row["project"]["id"], *project, "{row:#}");

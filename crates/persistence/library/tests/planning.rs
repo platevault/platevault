@@ -13,7 +13,8 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use persistence_library::{
-    Catalog, DeliveryClaim, DeliveryOutcome, SubscriptionWrite, PLANNING_SETTINGS_ID,
+    Catalog, DeliveryClaim, DeliveryOutcome, SubscriptionWrite, HOME_CRITERIA_ID,
+    PLANNING_SETTINGS_ID,
 };
 use platevault_model::{
     BlockReason, Darkness, DeliveryState, LibraryError, MoonCriterion, ObservingSite, PlanCriteria,
@@ -26,10 +27,11 @@ use time::macros::{date, datetime};
 use uuid::Uuid;
 
 /// Planning tables, children first.
-const PLANNING_TABLES: [&str; 5] = [
+const PLANNING_TABLES: [&str; 6] = [
     "reminder_deliveries",
     "reminder_subscriptions",
     "target_plans",
+    "home_criteria",
     "planning_settings",
     "observing_sites",
 ];
@@ -467,12 +469,41 @@ async fn a_catalog_recorded_at_an_older_schema_version_is_refused_before_any_ddl
     let mut conn = raw(&fx.db).await;
     let tables: Vec<String> = sqlx::query_scalar(
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN \
-         ('observing_sites', 'planning_settings', 'target_plans', 'reminder_subscriptions', \
-          'reminder_deliveries')",
+         ('observing_sites', 'planning_settings', 'home_criteria', 'target_plans', \
+          'reminder_subscriptions', 'reminder_deliveries')",
     )
     .fetch_all(&mut conn)
     .await
     .unwrap();
     conn.close().await.unwrap();
     assert!(tables.is_empty(), "no DDL of this version ran: {tables:?}");
+}
+
+/// Home's recorded criteria that are not valid criteria, or not criteria at
+/// all, fail the read as a `PersistenceFailure` naming them; a save over
+/// them still checks its revision.
+#[tokio::test]
+async fn corrupt_home_criteria_fail_the_read() {
+    let fx = Fixture::new();
+    let catalog = Catalog::open(&fx.db).await.unwrap();
+    catalog.save_home_criteria(0, &criteria()).await.unwrap();
+    let stale = catalog.save_home_criteria(0, &criteria()).await.unwrap_err();
+    conflict_at(&stale, HOME_CRITERIA_ID, 1);
+    catalog.close().await.unwrap();
+    for stored in [
+        r#"{"minAltitudeDeg":30.0,"darkness":"astronomical","moon":{"kind":"none"},"minDurationMinutes":0}"#,
+        "not json",
+    ] {
+        let mut conn = raw(&fx.db).await;
+        sqlx::query("UPDATE home_criteria SET criteria = ?1 WHERE id = 1")
+            .bind(stored)
+            .execute(&mut conn)
+            .await
+            .unwrap();
+        conn.close().await.unwrap();
+        let catalog = Catalog::open(&fx.db).await.unwrap();
+        let error = catalog.home_criteria().await.unwrap_err();
+        assert!(matches!(error, LibraryError::PersistenceFailure(_)), "{stored}: {error:?}");
+        catalog.close().await.unwrap();
+    }
 }

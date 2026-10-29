@@ -108,11 +108,12 @@ fn count(items: usize) -> u64 {
 
 impl Library {
     /// Home: the top line, then Actions, the open Projects, New sessions,
-    /// Tonight for `tonight`, Target status and Running work. Read-only.
+    /// Tonight for `tonight` under Home's stored criteria, Target status and
+    /// Running work. Read-only.
     ///
     /// # Errors
-    /// `InvalidInput` for invalid Tonight criteria; `PersistenceFailure` when
-    /// the catalog cannot be read.
+    /// `InvalidInput` for a night outside the supported calendar;
+    /// `PersistenceFailure` when the catalog cannot be read.
     pub async fn home_dashboard(
         &self,
         tonight: &TonightQuery,
@@ -127,13 +128,19 @@ impl Library {
                 &[SessionAction::CreateProject, SessionAction::AddToProject],
             )
             .await?;
-        let tonight = self.tonight(tonight).await?;
+        let mut open = Vec::new();
+        for summary in catalog.list_projects(&ProjectQuery::default()).await? {
+            let reads = self.project_reads(summary.id).await?;
+            open.push((summary, reads));
+        }
+        let goals: Vec<(&Project, &[GoalProgress])> =
+            open.iter().map(|(_, reads)| (&reads.project, reads.goals.as_slice())).collect();
+        let tonight = self.tonight_of(tonight, &goals).await?;
         let mut projects = Vec::new();
         let mut unreviewed = Vec::new();
         let mut ready_to_add = Vec::new();
         let mut status: BTreeMap<(String, Uuid), Vec<UnmetGoal>> = BTreeMap::new();
-        for summary in catalog.list_projects(&ProjectQuery::default()).await? {
-            let reads = self.project_reads(summary.id).await?;
+        for (summary, reads) in open {
             unreviewed.extend(unreviewed_sessions(&reads));
             ready_to_add.extend(ready_to_add_sessions(&reads));
             for (target, goal) in unmet_goals(&reads) {

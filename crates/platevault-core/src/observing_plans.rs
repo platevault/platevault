@@ -19,9 +19,10 @@ use crate::reminders::{self, ReminderScheduler};
 use crate::{
     calendar, planning, AppClosedDelivery, CalendarExportOutcome, CalendarExportReview,
     CalendarFile, CalendarSnapshot, Darkness, DefaultSiteSaved, EnableReminders, ExportSelection,
-    LibraryError, NativePath, NightSky, ObservingSite, ObservingWindow, PermissionState,
-    PlanningSites, ReminderInput, ReminderReview, ReminderStatus, ReminderSubscription, Revision,
-    SiteInput, SiteSaved, SubscriptionState, UnavailableReason, WindowQuery, WindowSet,
+    HomeCriteria, LibraryError, NativePath, NightSky, ObservingSite, ObservingWindow,
+    PermissionState, PlanCriteria, PlanningSites, ReminderInput, ReminderReview, ReminderStatus,
+    ReminderSubscription, Revision, SiteInput, SiteSaved, SubscriptionState, UnavailableReason,
+    WindowQuery, WindowSet,
 };
 
 /// The planning runtime: the attached notification adapter, the wall clock,
@@ -151,6 +152,27 @@ impl Library {
         let saved = self.catalog().set_default_site(site, expected).await?;
         self.sync_reminders().await;
         Ok(saved)
+    }
+
+    /// Home's stored criteria (PLAN-FR-11/12); none at revision 0 until the
+    /// user sets them.
+    ///
+    /// # Errors
+    /// See [`Catalog::home_criteria`].
+    pub async fn home_criteria(&self) -> Result<HomeCriteria, LibraryError> {
+        self.catalog().home_criteria().await
+    }
+
+    /// Save Home's criteria over revision `expected` (0 when never saved).
+    ///
+    /// # Errors
+    /// See [`Catalog::save_home_criteria`].
+    pub async fn save_home_criteria(
+        &self,
+        expected: Revision,
+        criteria: &PlanCriteria,
+    ) -> Result<HomeCriteria, LibraryError> {
+        self.catalog().save_home_criteria(expected, criteria).await
     }
 
     /// Observing windows of a saved Target at a saved site, computed off the

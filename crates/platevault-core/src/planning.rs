@@ -30,9 +30,10 @@ use skymath::{
 use time::{Date, Duration, OffsetDateTime, UtcOffset};
 
 use crate::{
-    Darkness, DarknessWindow, ImgTimeZeroReason, LibraryError, MoonCriterion, MoonPhase, NightMoon,
-    NightPlan, NightSky, NoWindowReason, ObservingSite, ObservingWindow, PlanCriteria,
-    TargetRecord, WindowBasis, WindowKey, WindowQuery, WindowSet, WindowUnavailableReason,
+    Darkness, DarknessWindow, ImgTimeZeroReason, LibraryError, MoonAvoidanceCurve, MoonCriterion,
+    MoonPhase, NightMoon, NightPlan, NightSky, NoWindowReason, ObservingSite, ObservingWindow,
+    PlanCriteria, TargetRecord, WindowBasis, WindowKey, WindowQuery, WindowSet,
+    WindowUnavailableReason,
 };
 
 /// How every window is computed; named in each window basis.
@@ -86,6 +87,23 @@ pub fn night_of(instant: OffsetDateTime, site: &ObservingSite) -> Result<Date, L
         local.date().previous_day().ok_or_else(|| out_of_range(instant))
     } else {
         Ok(local.date())
+    }
+}
+
+/// The Moon criterion a band's Moon-avoidance curve sets on a night whose
+/// Moon is `moon_age_days` from full (PLAN-FR-02): its least separation
+/// whenever the Moon is up, at the age the Targets list grades bands at.
+/// A curve asking no separation is no limit; one asking 180° or more leaves
+/// only the Moon below the horizon.
+#[must_use]
+pub fn curve_criterion(curve: MoonAvoidanceCurve, moon_age_days: f64) -> MoonCriterion {
+    let min_separation_deg = curve.min_separation_deg(moon_age_days);
+    if min_separation_deg <= 0.0 {
+        MoonCriterion::None
+    } else if min_separation_deg >= 180.0 {
+        MoonCriterion::BelowHorizon
+    } else {
+        MoonCriterion::MinSeparation { min_separation_deg }
     }
 }
 
@@ -285,6 +303,12 @@ fn position(target: &TargetRecord) -> Result<Equatorial, WindowUnavailableReason
     .map_err(|_| WindowUnavailableReason::TargetCoordinatesUnknown)
 }
 
+/// Why `target` has no usable position for windows; `None` when it has one.
+#[must_use]
+pub fn position_unavailable(target: &TargetRecord) -> Option<WindowUnavailableReason> {
+    position(target).err()
+}
+
 fn location(site: &ObservingSite) -> Result<Location, LibraryError> {
     // Elevation only moves the topocentric Moon by meters of parallax; an
     // unknown elevation computes at sea level.
@@ -336,6 +360,7 @@ fn local_noon(zone: &TimeZone, date: Date) -> Result<OffsetDateTime, LibraryErro
 /// of criteria: the night's bounds, its dark interval and where the Moon is
 /// up. Every Target of a Targets list page shares one, so each listed window
 /// comes from the same computation as [`compute_windows`].
+#[derive(Clone)]
 pub struct NightContext {
     zone: TimeZone,
     location: Location,
@@ -390,6 +415,27 @@ impl NightContext {
     pub fn moon_age_days(&self) -> f64 {
         moon_phase_angle(self.middle()).degrees() / 180.0 * HALF_SYNODIC_DAYS
     }
+
+    /// Seconds of darkness at the criteria's level, each dark interval's
+    /// bounds rounded to whole seconds as [`night_sky`]'s darkness window
+    /// rounds them.
+    #[must_use]
+    pub fn dark_seconds(&self) -> u32 {
+        let total: i64 = self
+            .dark
+            .iter()
+            .map(|span| (whole_second(span.end) - whole_second(span.start)).whole_seconds())
+            .sum();
+        u32::try_from(total).unwrap_or(u32::MAX)
+    }
+
+    /// This night under the same criteria with Moon limit `moon`: the night's
+    /// bounds, darkness and Moon intervals do not depend on it, so they are
+    /// reused.
+    #[must_use]
+    pub fn with_moon(&self, moon: MoonCriterion) -> Self {
+        Self { criteria: PlanCriteria { moon, ..self.criteria }, ..self.clone() }
+    }
 }
 
 /// Half a mean synodic month, in days.
@@ -431,13 +477,10 @@ pub fn target_night(
     target: &TargetRecord,
     site: &ObservingSite,
 ) -> Result<Result<TargetNight, WindowUnavailableReason>, LibraryError> {
-    let position = match position(target) {
-        Ok(position) => position,
+    let (sky, spans, plan) = match planned(context, target, site)? {
+        Ok(planned) => planned,
         Err(reason) => return Ok(Err(reason)),
     };
-    let sky = Sky { position, location: context.location, criteria: context.criteria };
-    let spans = sky.spans(context);
-    let plan = plan_night(&sky, &context.zone, target, site, &spans)?;
     let img_time_minutes = plan.windows.iter().map(|window| window.duration_minutes).sum();
     let windows: Vec<Span> = plan
         .windows
@@ -457,11 +500,42 @@ pub fn target_night(
         img_time_minutes,
         img_time_zero_reason,
         peak_dark_altitude_deg,
-        lunar_separation_deg: lunar_separation(position, context.middle(), &context.location)
+        lunar_separation_deg: lunar_separation(sky.position, context.middle(), &context.location)
             .degrees(),
         moon_up_window_minutes,
-        next_opposition: next_opposition(position, context)?,
+        next_opposition: next_opposition(sky.position, context)?,
     }))
+}
+
+/// One Target's windows of the context's night, exactly as
+/// [`compute_windows`] lists them for that night and criteria, without the
+/// Targets list's other values.
+///
+/// # Errors
+/// As [`target_night`].
+pub fn night_windows(
+    context: &NightContext,
+    target: &TargetRecord,
+    site: &ObservingSite,
+) -> Result<Result<Vec<ObservingWindow>, WindowUnavailableReason>, LibraryError> {
+    Ok(planned(context, target, site)?.map(|(_, _, plan)| plan.windows))
+}
+
+/// The Sky, intervals and plan of one Target over a shared night context;
+/// `Ok(Err(reason))` without a usable position.
+fn planned(
+    context: &NightContext,
+    target: &TargetRecord,
+    site: &ObservingSite,
+) -> Result<Result<(Sky, NightSpans, NightPlan), WindowUnavailableReason>, LibraryError> {
+    let position = match position(target) {
+        Ok(position) => position,
+        Err(reason) => return Ok(Err(reason)),
+    };
+    let sky = Sky { position, location: context.location, criteria: context.criteria };
+    let spans = sky.spans(context);
+    let plan = plan_night(&sky, &context.zone, target, site, &spans)?;
+    Ok(Ok((sky, spans, plan)))
 }
 
 /// What keeps a night with no window empty: no darkness, the Target never
