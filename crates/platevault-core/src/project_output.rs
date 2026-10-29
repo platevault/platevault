@@ -363,12 +363,18 @@ impl Library {
     ///
     /// # Errors
     /// `NotFound` for an unknown offer; `InvalidInput` for a digest the offer
-    /// does not have or an adopted master.
+    /// does not have, an adopted master, a read-only Project Output, or no
+    /// processing location.
     pub async fn dismiss_processing_master(
         &self,
         offer_id: Uuid,
         expected_sha256: &str,
     ) -> Result<ProcessingMasterOffer, LibraryError> {
+        let offer = self.catalog().processing_master_offer(offer_id).await?;
+        if offer.sha256 != expected_sha256 {
+            return Err(invalid(format!("offer {} changed; refresh the Output step", offer.id)));
+        }
+        open_place(self, offer.project_id).await?;
         self.catalog().dismiss_processing_master(offer_id, expected_sha256).await
     }
 
@@ -378,10 +384,10 @@ impl Library {
     /// bytes are offered afresh by the next pass.
     ///
     /// # Errors
-    /// `NotFound` for an unknown offer or Project; `InvalidInput` for a digest
-    /// the offer does not have, an offer that is not hidden, an adopted
-    /// master, a Project with no processing location, or a source that changed
-    /// or is gone; access errors reading the source.
+    /// `NotFound` for an unknown offer; `InvalidInput` for a digest the offer
+    /// does not have, an offer that is not hidden, an adopted master, a
+    /// read-only Project Output, no processing location, or a changed or gone
+    /// source; access errors reading the source.
     pub async fn restore_processing_master(
         &self,
         offer_id: Uuid,
@@ -389,9 +395,7 @@ impl Library {
     ) -> Result<ProcessingMasterOffer, LibraryError> {
         let offer = self.catalog().processing_master_offer(offer_id).await?;
         restorable(&offer, expected_sha256)?;
-        let basis = self.catalog().output_basis(offer.project_id).await?;
-        let place = Place::of(&basis)?
-            .ok_or_else(|| invalid("choose the Project's processing location first"))?;
+        let (_, place) = open_place(self, offer.project_id).await?;
         let processing = place.processing();
         let source = processing.join(offer.path.relative_path()?);
         let shown = source.display().to_string();

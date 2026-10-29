@@ -27,7 +27,8 @@ mod support;
 
 use persistence_library::{Catalog, ClosedProject};
 use platevault_model::{
-    DuplicateRequest, MeasurementMethod, ProjectLifecycle, Quality, SettledPin, WrapUpBlocker,
+    Classification, DuplicateRequest, InputKind, MasterBasis, MasterEvidence, MasterOfferState,
+    MeasurementMethod, NativePath, ProjectLifecycle, Quality, SettledPin, WrapUpBlocker,
     WrapUpOutcome, WrapUpStep,
 };
 use project_state_support::{ha_frames, world, World};
@@ -313,6 +314,44 @@ async fn archive_assets_use_only_evidence_qualified_suggested_targets() {
     assert_eq!(
         archive_target(&catalog.archive_assets(&sessions).await.unwrap()).as_deref(),
         Some("NGC 7000")
+    );
+    world.catalog.close().await.unwrap();
+}
+/// CAL-FR-06, RES-FR-07: the offer transaction independently refuses Hide and
+/// Restore after its Project closes, even when callers bypass core's early gate.
+#[tokio::test]
+async fn closed_project_refuses_master_offer_catalog_operations() {
+    let world = world().await;
+    let project = world.project("NGC 7000 Ha", vec![ha_frames(world.ngc.candidate.id, 2)]).await;
+    let path = NativePath::from_path(std::path::Path::new("WBPP/master/masterDark_300s.fit"));
+    let sha256 = "a".repeat(64);
+    let classification = Classification {
+        kind: InputKind::Dark,
+        master: Some(MasterEvidence {
+            basis: MasterBasis::HeaderStackCount,
+            stack_count: Some(30),
+            detector: "test".into(),
+        }),
+    };
+    let offer = world
+        .catalog
+        .offer_processing_master(project.id, &path, &sha256, &classification)
+        .await
+        .unwrap()
+        .unwrap();
+    close(&world.catalog, project.id).await;
+    let hidden = world.catalog.dismiss_processing_master(offer.id, &sha256).await.unwrap_err();
+    assert_eq!(kind(&hidden), "invalid_input", "{hidden}");
+    assert_eq!(hidden.to_string(), "invalid input: a closed Project's Output is read-only");
+    let restored = world.catalog.restore_processing_master(offer.id, &sha256).await;
+    assert_eq!(
+        restored.unwrap_err().to_string(),
+        "invalid input: a closed Project's Output is read-only"
+    );
+    assert_eq!(
+        world.catalog.processing_master_offer(offer.id).await.unwrap().state,
+        MasterOfferState::Offered,
+        "the refused catalog transactions leave the offer unchanged"
     );
     world.catalog.close().await.unwrap();
 }

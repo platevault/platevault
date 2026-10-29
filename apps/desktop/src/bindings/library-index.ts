@@ -609,8 +609,9 @@ export const commands = {
 	 *  in Calibration and its source file is untouched.
 	 * 
 	 *  # Errors
-	 *  `NotFound` for an unknown offer; `InvalidInput` for a digest the offer does
-	 *  not have or an adopted master.
+	 *  `NotFound` for an unknown offer; `InvalidInput` for a Project that is not
+	 *  open, has no processing location, a digest the offer does not have or an
+	 *  adopted master.
 	 */
 	projectDismissProcessingMaster: (offerId: string, expectedSha256: string) => typedError<ProcessingMasterOffer, ErrorResponse>(__TAURI_INVOKE("project_dismiss_processing_master", { offerId, expectedSha256 })),
 	/**
@@ -618,9 +619,10 @@ export const commands = {
 	 *  source in `Processing/` still holds the bytes with `expected_sha256`.
 	 * 
 	 *  # Errors
-	 *  `NotFound` for an unknown offer; `InvalidInput` for a digest the offer does
-	 *  not have, a source that changed or is gone, an offer that is not hidden or
-	 *  an adopted master; access errors reading the source.
+	 *  `NotFound` for an unknown offer; `InvalidInput` for a Project that is not
+	 *  open, has no processing location, a digest the offer does not have, a source
+	 *  that changed or is gone, an offer that is not hidden or an adopted master;
+	 *  access errors reading the source.
 	 */
 	projectRestoreProcessingMaster: (offerId: string, expectedSha256: string) => typedError<ProcessingMasterOffer, ErrorResponse>(__TAURI_INVOKE("project_restore_processing_master", { offerId, expectedSha256 })),
 	/**

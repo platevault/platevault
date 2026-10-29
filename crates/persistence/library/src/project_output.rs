@@ -456,7 +456,7 @@ async fn lifecycle(conn: &mut SqliteConnection, project_id: Uuid) -> Result<Proj
     from_text(&lifecycle.ok_or_else(|| LibraryError::NotFound(format!("project {project_id}")))?)
 }
 
-async fn require_open(conn: &mut SqliteConnection, project_id: Uuid) -> Result<()> {
+pub async fn require_open(conn: &mut SqliteConnection, project_id: Uuid) -> Result<()> {
     let lifecycle = lifecycle(conn, project_id).await?;
     if lifecycle.is_open() {
         Ok(())
