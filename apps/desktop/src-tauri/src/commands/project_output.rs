@@ -1,8 +1,8 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Project Output IPC (RES-FR-01/02, RES-AC-02/25): Copy to Output and
-//! Rescan.
+//! Project Output IPC (RES-FR-01/02/11, RES-AC-02/25): Copy to Output,
+//! Rescan, and Hide and Restore on a generated master offer.
 //!
 //! Registered only by the isolated rebuilt shell ([`crate::library_shell`])
 //! under its `output` block. `Output/` itself is followed by the
@@ -16,7 +16,7 @@ use std::sync::Arc;
 
 use platevault_core::library::Library;
 use platevault_core::project_output::OutputWatch;
-use platevault_core::{NativePath, OutputObservation};
+use platevault_core::{NativePath, OutputObservation, ProcessingMasterOffer};
 use tauri::State;
 use uuid::Uuid;
 
@@ -57,4 +57,45 @@ pub async fn project_output_rescan(
     project_id: Uuid,
 ) -> Reply<Vec<OutputObservation>> {
     watch.rescan(project_id).await.map_err(fail(Some(project_id)))
+}
+
+/// Hide, on a generated calibration master offer in the Output step
+/// (RES-FR-11, CAL-FR-06): decline the offer of the bytes with
+/// `expected_sha256`, the digest the step showed. The master stays a candidate
+/// in Calibration and its source file is untouched.
+///
+/// # Errors
+/// `NotFound` for an unknown offer; `InvalidInput` for a digest the offer does
+/// not have or an adopted master.
+#[tauri::command]
+#[specta::specta]
+pub async fn project_dismiss_processing_master(
+    library: State<'_, Arc<Library>>,
+    offer_id: Uuid,
+    expected_sha256: String,
+) -> Reply<ProcessingMasterOffer> {
+    library
+        .dismiss_processing_master(offer_id, &expected_sha256)
+        .await
+        .map_err(fail(Some(offer_id)))
+}
+
+/// Restore, on a hidden generated master offer: offer it again while its
+/// source in `Processing/` still holds the bytes with `expected_sha256`.
+///
+/// # Errors
+/// `NotFound` for an unknown offer; `InvalidInput` for a digest the offer does
+/// not have, a source that changed or is gone, an offer that is not hidden or
+/// an adopted master; access errors reading the source.
+#[tauri::command]
+#[specta::specta]
+pub async fn project_restore_processing_master(
+    library: State<'_, Arc<Library>>,
+    offer_id: Uuid,
+    expected_sha256: String,
+) -> Reply<ProcessingMasterOffer> {
+    library
+        .restore_processing_master(offer_id, &expected_sha256)
+        .await
+        .map_err(fail(Some(offer_id)))
 }

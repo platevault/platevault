@@ -188,6 +188,8 @@ macro_rules! library_commands {
             // output (070 RES-FR-01/02)
             crate::commands::project_output::project_copy_to_output,
             crate::commands::project_output::project_output_rescan,
+            crate::commands::project_output::project_dismiss_processing_master,
+            crate::commands::project_output::project_restore_processing_master,
             // wrap up (065 PRJ-FR-14/25/30, 071)
             crate::commands::project_wrap_up::project_wrap_up_status,
             crate::commands::project_wrap_up::project_close,
@@ -315,6 +317,7 @@ macro_rules! library_commands {
             // native shell (menu bar, tray, OS pickers)
             crate::commands::library_dialogs::library_pick_folder,
             crate::commands::library_dialogs::library_pick_file,
+            crate::commands::library_dialogs::library_reveal,
             crate::native_shell_surfaces::library_native_menu_set_labels,
             crate::native_shell_surfaces::library_native_quit_answer,
         ]
@@ -857,6 +860,13 @@ mod registry {
             unregistered.is_empty() && uncalled.is_empty(),
             "the client invokes unregistered {unregistered:?}; no client call for {uncalled:?}"
         );
+        for exposed in [
+            "library_reveal",
+            "project_dismiss_processing_master",
+            "project_restore_processing_master",
+        ] {
+            assert!(registered.contains(exposed), "the library client lacks {exposed}");
+        }
     }
 }
 

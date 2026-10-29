@@ -343,30 +343,82 @@ impl Catalog {
     }
 
     /// Hide on a Processing master offer (CAL-FR-06): the decline for that
-    /// file and digest, so the offer does not return; the master stays
-    /// listed as a candidate in Calibration. Hiding it again changes nothing.
+    /// file and digest, so the offer does not return; the master stays listed
+    /// as a candidate in Calibration. Hiding it again changes nothing.
     ///
     /// # Errors
-    /// `NotFound` for an unknown offer; `InvalidInput` for an adopted one.
-    pub async fn dismiss_processing_master(&self, offer_id: Uuid) -> Result<ProcessingMasterOffer> {
-        let offer = write_txn!(self, |conn| {
+    /// `NotFound` for an unknown offer; `InvalidInput` for a stale digest or an
+    /// adopted offer.
+    pub async fn dismiss_processing_master(
+        &self,
+        offer_id: Uuid,
+        expected_sha256: &str,
+    ) -> Result<ProcessingMasterOffer> {
+        write_txn!(self, |conn| {
             let mut offer = load_offer(conn, offer_id).await?;
+            if offer.sha256 != expected_sha256 {
+                return Err(LibraryError::InvalidInput(format!(
+                    "offer {offer_id} changed; refresh the Output step"
+                )));
+            }
             match offer.state {
-                platevault_model::MasterOfferState::Dismissed => offer,
-                platevault_model::MasterOfferState::Adopted => {
-                    return Err(LibraryError::InvalidInput(format!(
-                        "offer {offer_id} was adopted into the calibration library"
-                    )))
-                }
+                platevault_model::MasterOfferState::Dismissed => Ok(offer),
+                platevault_model::MasterOfferState::Adopted => Err(LibraryError::InvalidInput(
+                    format!("offer {offer_id} was adopted into the calibration library"),
+                )),
                 platevault_model::MasterOfferState::Offered => {
                     offer.state = platevault_model::MasterOfferState::Dismissed;
                     offer.decided_at = Some(now()?);
                     write_offer(conn, &offer).await?;
-                    offer
+                    Ok(offer)
                 }
             }
-        });
-        Ok(offer)
+        })
+    }
+
+    /// The offer a Project's Output step identifies by id.
+    ///
+    /// # Errors
+    /// `NotFound` for an unknown offer.
+    pub async fn processing_master_offer(&self, offer_id: Uuid) -> Result<ProcessingMasterOffer> {
+        let mut conn = self.reader().await?;
+        load_offer(&mut conn, offer_id).await
+    }
+
+    /// Restore a hidden Processing master offer in Output (RES-FR-11),
+    /// provided the hidden row still has the digest the user saw. No source
+    /// file is touched. Only a dismissed offer can be restored.
+    ///
+    /// # Errors
+    /// `NotFound` for an unknown offer; `InvalidInput` if it changed, was
+    /// adopted, or is no longer dismissed.
+    pub async fn restore_processing_master(
+        &self,
+        offer_id: Uuid,
+        expected_sha256: &str,
+    ) -> Result<ProcessingMasterOffer> {
+        write_txn!(self, |conn| {
+            let mut offer = load_offer(conn, offer_id).await?;
+            if offer.sha256 != expected_sha256 {
+                return Err(LibraryError::InvalidInput(format!(
+                    "offer {offer_id} changed; refresh the Output step"
+                )));
+            }
+            match offer.state {
+                platevault_model::MasterOfferState::Dismissed => {
+                    offer.state = platevault_model::MasterOfferState::Offered;
+                    offer.decided_at = None;
+                    write_offer(conn, &offer).await?;
+                    Ok(offer)
+                }
+                platevault_model::MasterOfferState::Offered => {
+                    Err(LibraryError::InvalidInput(format!("offer {offer_id} is not hidden")))
+                }
+                platevault_model::MasterOfferState::Adopted => Err(LibraryError::InvalidInput(
+                    format!("offer {offer_id} was adopted into the calibration library"),
+                )),
+            }
+        })
     }
 
     /// Every generated master a Project's `Processing/` offered that is not
