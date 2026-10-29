@@ -10,10 +10,11 @@
 //! share whose server went away never stalls a poll:
 //! - macOS lists the kernel's cached table (`mount`), dropping `nobrowse`
 //!   mounts. The names in `/Volumes` are read on every poll, without a
-//!   `stat`, and `mount` runs only when that set of names changed or the
-//!   last listing is 30 s old. The trade-off: a card swapped for another of
-//!   the same name within that window keeps the old card's answer until the
-//!   next listing.
+//!   `stat`, and `mount` runs again only when that set of names changed, a
+//!   name is not yet a mount root of the last listing (a volume still
+//!   mounting), or the last listing is 30 s old. The trade-off: a card
+//!   swapped for another of the same name within that window keeps the old
+//!   card's answer until the next listing.
 //! - Linux reads `/proc/self/mountinfo`, mounts of a `/dev/` device only.
 //! - Windows asks each drive letter's type and volume serial, with the
 //!   no-disk dialog of an empty card-reader slot suppressed.
@@ -307,12 +308,15 @@ fn folder_name(root: &Path) -> Option<String> {
 /// names; `None` for a generic device.
 ///
 /// The walk reads at most [`MAX_ENTRIES`] entries, counted as each folder is
-/// read, [`MAX_DEPTH`] levels deep, breadth first and in name order, and
-/// follows no link. Hidden entries and the operating systems' own folders are
-/// skipped, and an unreadable folder is passed over. Where several layouts
-/// match, the most specific wins in this order: `SharpCap`, SGP, ASIAIR,
-/// Voyager, Ekos, NINA. The recognition names every marker of the winning
-/// layout the walk found.
+/// read, [`MAX_DEPTH`] levels deep and breadth first, and follows no link.
+/// It visits each folder's subfolders in name order. When the budget runs
+/// out inside a folder, the entries read there are the first ones the
+/// operating system returned, not the first by name, and the walk stops.
+/// Hidden entries and the operating systems' own folders are skipped, and an
+/// unreadable folder is passed over. Where several layouts match, the most
+/// specific wins in this order: `SharpCap`, SGP, ASIAIR, Voyager, Ekos,
+/// NINA. The recognition names every marker of the winning layout the walk
+/// found.
 #[must_use]
 pub fn recognise(root: &Path) -> Option<LayoutRecognition> {
     recognise_within(root, MAX_ENTRIES)
@@ -466,38 +470,58 @@ fn ekos_name(tokens: &[&str]) -> bool {
 struct MacListing {
     names: BTreeSet<std::ffi::OsString>,
     at: std::time::Instant,
-    mounts: Vec<Mount>,
+    table: MacTable,
 }
 
-/// The mounts for the `/Volumes` entries `names` at `now`: `previous`'s
-/// while it was taken with the same names less than [`MAC_SAFETY_POLL`] ago,
-/// else a fresh `listing`, which `previous` then keeps. A failed listing
-/// keeps nothing, so the next poll lists again.
+/// What one `mount` listing says.
+#[cfg(any(target_os = "macos", test))]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct MacTable {
+    /// The browsable local disk volumes under `/Volumes` ([`mac_table`]).
+    mounts: Vec<Mount>,
+    /// The name of every `/Volumes/<name>` mount root, of any kind.
+    roots: BTreeSet<std::ffi::OsString>,
+}
+
+/// The mounts for the `/Volumes` entries `names` (links left out) at `now`:
+/// `previous`'s while it was taken with the same names less than
+/// [`MAC_SAFETY_POLL`] ago and listed every one of them as a mount root,
+/// else a fresh `listing`, which `previous` then keeps. A name appears in
+/// `/Volumes` shortly before its volume is mounted there, so a listing taken
+/// in between is never reused: the next poll lists again. A failed listing
+/// keeps nothing, so the next poll lists again too. A leftover folder in
+/// `/Volumes` that is no mount makes every poll list.
 #[cfg(any(target_os = "macos", test))]
 fn gated(
     previous: &mut Option<MacListing>,
     names: BTreeSet<std::ffi::OsString>,
     now: std::time::Instant,
-    listing: impl FnOnce() -> std::io::Result<Vec<Mount>>,
+    listing: impl FnOnce() -> std::io::Result<MacTable>,
 ) -> std::io::Result<Vec<Mount>> {
     if let Some(kept) = previous.as_ref().filter(|kept| {
-        kept.names == names && now.saturating_duration_since(kept.at) < MAC_SAFETY_POLL
+        kept.names == names
+            && names.is_subset(&kept.table.roots)
+            && now.saturating_duration_since(kept.at) < MAC_SAFETY_POLL
     }) {
-        return Ok(kept.mounts.clone());
+        return Ok(kept.table.mounts.clone());
     }
-    let mounts = listing()?;
-    *previous = Some(MacListing { names, at: now, mounts: mounts.clone() });
+    let table = listing()?;
+    let mounts = table.mounts.clone();
+    *previous = Some(MacListing { names, at: now, table });
     Ok(mounts)
 }
 
 #[cfg(target_os = "macos")]
 impl OsMounts {
-    /// `mount` only when `/Volumes` holds other names than at the last
-    /// listing, or that listing is [`MAC_SAFETY_POLL`] old. Reading the
-    /// names stats no mount.
+    /// `mount` only when a `/Volumes` name is not a mount root of the last
+    /// listing, the names changed since, or that listing is
+    /// [`MAC_SAFETY_POLL`] old. Reading the names stats no mount.
     fn read(&self) -> std::io::Result<Vec<Mount>> {
-        let names =
-            fs::read_dir("/Volumes")?.filter_map(Result::ok).map(|e| e.file_name()).collect();
+        let names = fs::read_dir("/Volumes")?
+            .filter_map(Result::ok)
+            .filter(|entry| entry.file_type().is_ok_and(|kind| !kind.is_symlink()))
+            .map(|entry| entry.file_name())
+            .collect();
         let mut last = self.listed.lock().unwrap_or_else(PoisonError::into_inner);
         gated(&mut last, names, std::time::Instant::now(), || {
             let listing = crate::inventory::run_bounded(
@@ -505,33 +529,38 @@ impl OsMounts {
                 Duration::from_secs(5),
             )
             .map_err(std::io::Error::other)?;
-            Ok(mac_mounts(&String::from_utf8_lossy(&listing)))
+            Ok(mac_table(&String::from_utf8_lossy(&listing)))
         })
     }
 }
 
-/// The browsable local disk volumes under `/Volumes` in a `mount` listing,
-/// whose lines read `/dev/disk4s1 on /Volumes/Card-1 (msdos, local, nodev, …)`.
-/// A `nobrowse` mount (a system or helper volume Finder hides) is left out.
+/// A `mount` listing, whose lines read
+/// `/dev/disk4s1 on /Volumes/Card-1 (msdos, local, nodev, …)`: the browsable
+/// local disk volumes under `/Volumes`, and the name of every `/Volumes`
+/// mount root. A `nobrowse` mount (a system or helper volume Finder hides)
+/// is no listed volume, but its root still counts.
 #[cfg(any(target_os = "macos", test))]
-fn mac_mounts(listing: &str) -> Vec<Mount> {
-    listing
-        .lines()
-        .filter_map(|line| {
-            let (source, rest) = line.split_once(" on ")?;
-            let (root, options) = rest.rsplit_once(" (")?;
-            let options: Vec<&str> = options.trim_end_matches(')').split(", ").collect();
-            if !source.starts_with("/dev/")
-                || !options.contains(&"local")
-                || options.contains(&"nobrowse")
-                || !root.starts_with("/Volumes/")
-            {
-                return None;
-            }
+fn mac_table(listing: &str) -> MacTable {
+    let mut table = MacTable::default();
+    for line in listing.lines() {
+        let Some((source, rest)) = line.split_once(" on ") else { continue };
+        let Some((root, options)) = rest.rsplit_once(" (") else { continue };
+        let Some(name) = root.strip_prefix("/Volumes/").filter(|name| !name.contains('/')) else {
+            continue;
+        };
+        table.roots.insert(name.into());
+        let options: Vec<&str> = options.trim_end_matches(')').split(", ").collect();
+        if source.starts_with("/dev/")
+            && options.contains(&"local")
+            && !options.contains(&"nobrowse")
+        {
             let root = PathBuf::from(root);
-            Some(Mount { name: folder_name(&root)?, root, instance: source.to_owned() })
-        })
-        .collect()
+            if let Some(name) = folder_name(&root) {
+                table.mounts.push(Mount { name, root, instance: source.to_owned() });
+            }
+        }
+    }
+    table
 }
 
 #[cfg(target_os = "linux")]

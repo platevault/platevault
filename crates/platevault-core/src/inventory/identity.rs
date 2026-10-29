@@ -947,7 +947,10 @@ pub fn run_bounded(
     use std::io::Read;
     use std::process::Stdio;
     use std::sync::mpsc::{self, RecvTimeoutError};
+    use std::time::{Duration, Instant};
 
+    let deadline = Instant::now() + timeout;
+    let late = || format!("did not answer within {} s", timeout.as_secs());
     command.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null());
     let mut child = command.spawn().map_err(|error| format!("could not start: {error}"))?;
     let Some(stdout) = child.stdout.take() else {
@@ -961,22 +964,37 @@ pub fn run_bounded(
         let _ = read.send(stdout.take(1 << 20).read_to_end(&mut bytes).map(|_| bytes));
     });
     // The deadline bounds the query until its output closes, without
-    // polling. Each query run here (`mount`, `diskutil`, `smbutil`) closes
-    // its output as it exits, so the wait that follows returns at once.
+    // polling: each query run here (`mount`, `diskutil`, `smbutil`) closes
+    // its output as it exits.
     let output = match output.recv_timeout(timeout) {
         Ok(output) => output,
         Err(why) => {
             let _ = child.kill();
             let _ = child.wait();
             return Err(match why {
-                RecvTimeoutError::Timeout => {
-                    format!("did not answer within {} s", timeout.as_secs())
-                }
+                RecvTimeoutError::Timeout => late(),
                 RecvTimeoutError::Disconnected => "output reader panicked".to_owned(),
             });
         }
     };
-    let status = child.wait().map_err(|error| error.to_string())?;
+    // Its exit then normally comes at once; whatever is left of the deadline
+    // still bounds one that closed its output and kept running.
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(5)),
+            Ok(None) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(late());
+            }
+            Err(error) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(error.to_string());
+            }
+        }
+    };
     let output = output.map_err(|error| format!("output unreadable: {error}"))?;
     if !status.success() {
         return Err(format!("exited with {status}"));
@@ -1059,6 +1077,15 @@ mod tests {
         sleep.arg("30");
         let started = Instant::now();
         let refused = run_bounded(sleep, Duration::from_millis(200)).unwrap_err();
+        assert!(refused.starts_with("did not answer"), "{refused}");
+        assert!(started.elapsed() < Duration::from_secs(5));
+
+        // Output closed, process still running: the rest of the deadline
+        // bounds the exit wait.
+        let mut lingering = Command::new("/bin/sh");
+        lingering.args(["-c", "exec >&-; exec sleep 30"]);
+        let started = Instant::now();
+        let refused = run_bounded(lingering, Duration::from_millis(300)).unwrap_err();
         assert!(refused.starts_with("did not answer"), "{refused}");
         assert!(started.elapsed() < Duration::from_secs(5));
     }

@@ -167,8 +167,12 @@ fn mounted(root: &str, name: &str, instance: &str) -> Mount {
     Mount { root: root.into(), name: name.into(), instance: instance.into() }
 }
 
+fn os_names(list: &[&str]) -> BTreeSet<std::ffi::OsString> {
+    list.iter().map(std::ffi::OsString::from).collect()
+}
+
 #[test]
-fn mac_mount_listings_keep_browsable_local_disk_volumes_under_volumes() {
+fn mac_mount_listings_keep_browsable_local_disk_volumes_and_every_volumes_root() {
     let listing = "/dev/disk3s1s1 on / (apfs, sealed, local, read-only, journaled)\n\
          devfs on /dev (devfs, local, nobrowse)\n\
          /dev/disk4s1 on /Volumes/Card-1 (msdos, local, nodev, nosuid, noowners)\n\
@@ -176,50 +180,81 @@ fn mac_mount_listings_keep_browsable_local_disk_volumes_under_volumes() {
          /dev/disk7s1 on /Volumes/Recovery (apfs, local, journaled, nobrowse)\n\
          /dev/disk9s1 on /Volumes/Helper (hfs, local, nodev, nosuid, read-only, nobrowse)\n\
          //guest@nas.local/astro on /Volumes/astro (smbfs, nodev, nosuid, mounted by me)\n\
+         /dev/disk8s1 on /Volumes/Astro T7/nested (apfs, local, nodev)\n\
          map auto_home on /System/Volumes/Data/home (autofs, automounted, nobrowse)";
+    let table = mac_table(listing);
     assert_eq!(
-        mac_mounts(listing),
+        table.mounts,
         vec![
             mounted("/Volumes/Card-1", "Card-1", "/dev/disk4s1"),
             mounted("/Volumes/Astro T7", "Astro T7", "/dev/disk5s2"),
         ]
     );
+    assert_eq!(table.roots, os_names(&["Card-1", "Astro T7", "Recovery", "Helper", "astro"]));
 }
 
 #[test]
-fn mac_listings_run_again_only_when_volumes_names_change_or_grow_old() {
-    let names = |list: &[&str]| list.iter().map(std::ffi::OsString::from).collect();
+fn mac_listings_run_again_only_when_volumes_names_change_mount_or_grow_old() {
     let card = vec![mounted("/Volumes/Card-1", "Card-1", "/dev/disk4s1")];
     let listings = std::cell::Cell::new(0);
     let list = |mounts: Vec<Mount>| {
         let listings = &listings;
         move || {
             listings.set(listings.get() + 1);
-            Ok(mounts)
+            let roots = mounts.iter().map(|mount| mount.name.clone().into()).collect();
+            Ok(MacTable { mounts, roots })
         }
     };
     let start = Instant::now();
     let mut kept = None;
 
-    assert_eq!(gated(&mut kept, names(&["Card-1"]), start, list(card.clone())).unwrap(), card);
+    assert_eq!(gated(&mut kept, os_names(&["Card-1"]), start, list(card.clone())).unwrap(), card);
     let later = start + Duration::from_secs(10);
-    assert_eq!(gated(&mut kept, names(&["Card-1"]), later, list(Vec::new())).unwrap(), card);
+    assert_eq!(gated(&mut kept, os_names(&["Card-1"]), later, list(Vec::new())).unwrap(), card);
     assert_eq!(listings.get(), 1, "the same names within the window reuse the listing");
 
-    assert_eq!(gated(&mut kept, names(&[]), later, list(Vec::new())).unwrap(), Vec::new());
+    assert_eq!(gated(&mut kept, os_names(&[]), later, list(Vec::new())).unwrap(), Vec::new());
     assert_eq!(listings.get(), 2, "a removed name lists again");
 
     let swapped = vec![mounted("/Volumes/Card-1", "Card-1", "/dev/disk6s1")];
     let stale = later + MAC_SAFETY_POLL;
-    assert_eq!(gated(&mut kept, names(&[]), stale, list(swapped.clone())).unwrap(), swapped);
+    assert_eq!(gated(&mut kept, os_names(&[]), stale, list(swapped.clone())).unwrap(), swapped);
     assert_eq!(listings.get(), 3, "the safety poll lists again with the same names");
 
-    let failed = gated(&mut kept, names(&["Card-2"]), stale, || {
+    let failed = gated(&mut kept, os_names(&["Card-2"]), stale, || {
         Err(std::io::Error::other("mount did not answer"))
     });
     assert!(failed.is_err());
-    let retried = gated(&mut kept, names(&["Card-2"]), stale, list(Vec::new()));
+    let retried = gated(&mut kept, os_names(&["Card-2"]), stale, list(Vec::new()));
     assert_eq!(retried.unwrap(), Vec::new(), "a failed listing is not kept");
+}
+
+#[test]
+fn a_volumes_name_not_yet_mounted_lists_again_on_the_next_poll() {
+    let card = vec![mounted("/Volumes/Card-1", "Card-1", "/dev/disk4s1")];
+    let listings = std::cell::Cell::new(0);
+    let list = |mounts: Vec<Mount>| {
+        let listings = &listings;
+        move || {
+            listings.set(listings.get() + 1);
+            let roots = mounts.iter().map(|mount| mount.name.clone().into()).collect();
+            Ok(MacTable { mounts, roots })
+        }
+    };
+    let start = Instant::now();
+    let mut kept = None;
+
+    // `Card-1` is in /Volumes a moment before its volume is mounted there.
+    let early = gated(&mut kept, os_names(&["Card-1"]), start, list(Vec::new())).unwrap();
+    assert_eq!(early, Vec::new());
+    let next = start + POLL;
+    let mounted = gated(&mut kept, os_names(&["Card-1"]), next, list(card.clone())).unwrap();
+    assert_eq!(mounted, card, "the next poll lists again, so the card shows at once");
+    assert_eq!(listings.get(), 2);
+
+    let after = next + POLL;
+    assert_eq!(gated(&mut kept, os_names(&["Card-1"]), after, list(Vec::new())).unwrap(), card);
+    assert_eq!(listings.get(), 2, "once every name is a mount root the listing is reused");
 }
 
 #[test]
