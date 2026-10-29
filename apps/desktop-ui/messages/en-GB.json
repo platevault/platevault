@@ -7487,5 +7487,7 @@
   "view_open_unavailable": "PlateVault can't open the View in an application yet",
   "newproject_rigs_unavailable": "Rigs join with the sessions you add",
   "wrapup_closing_state": "Closing: the archive finishes, or resumes when PlateVault next starts",
-  "project_edit_unavailable": "Editing this isn't available yet"
+  "project_edit_unavailable": "Editing this isn't available yet",
+  "project_reason_write_failed": "Couldn't write it there: nothing was replaced",
+  "project_record_failed": "The Project's details couldn't be read"
 }

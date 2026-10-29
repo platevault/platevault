@@ -9,7 +9,9 @@ import { library, type Project } from "@/api/ipc"
 import { useMessages } from "@/app/preferences"
 import type { Action } from "@/components/app/contracts"
 import { TextAreaField, TextField } from "@/components/app/fields"
+import { toast } from "@/components/app/feedback"
 import { FormDialog } from "@/components/app/form-dialog"
+import { failureMessage } from "@/components/app/run-result"
 import { type ProjectHeader, projectWrite, useProjectRecord } from "./queries"
 
 export function ProjectDetailsDialog({ header, open, onOpenChange }: { header: ProjectHeader; open: boolean; onOpenChange: (open: boolean) => void }) {
@@ -20,6 +22,8 @@ export function ProjectDetailsDialog({ header, open, onOpenChange }: { header: P
 function DetailsForm({ project, onClose }: { project: Project; onClose: () => void }) {
   const m = useMessages()
   const client = useQueryClient()
+  // The edit is of the record the dialog opened on: a re-read underneath it never moves the revision it sends.
+  const [{ id, revision }] = useState(project)
   const [name, setName] = useState(project.name)
   const [notes, setNotes] = useState(project.notes ?? "")
   const label = m.settings_save()
@@ -28,7 +32,15 @@ function DetailsForm({ project, onClose }: { project: Project; onClose: () => vo
     label,
     kind: "primary",
     unavailable: name.trim() === "" ? { action: m.actions_blocked({ action: label }), reason: m.project_name_required(), blockers: [] } : undefined,
-    run: () => projectWrite(client, () => library.projectUpdate(project.id, project.revision, name.trim(), notes.trim() === "" ? null : notes)),
+    run: async () => {
+      const result = await projectWrite(client, () => library.projectUpdate(id, revision, name.trim(), notes.trim() === "" ? null : notes))
+      // A stale edit is never sent again on the new revision: the dialog closes on the re-read and says why.
+      if (!result.ok && result.failure.source === "library" && result.failure.error.code === "conflict") {
+        toast({ message: failureMessage(m, result.failure) })
+        onClose()
+      }
+      return result
+    },
   }
   return (
     <FormDialog open onOpenChange={(next) => !next && onClose()} title={m.project_edit()} size="md" confirm={confirm}>

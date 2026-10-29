@@ -8027,5 +8027,7 @@
   "view_open_unavailable": "O PlateVault ainda não abre a View em um aplicativo",
   "newproject_rigs_unavailable": "Os equipamentos entram com as sessões adicionadas",
   "wrapup_closing_state": "Encerrando: o arquivamento termina ou é retomado na próxima abertura do PlateVault",
-  "project_edit_unavailable": "A edição disto ainda não está disponível"
+  "project_edit_unavailable": "A edição disto ainda não está disponível",
+  "project_reason_write_failed": "Não foi possível gravar lá: nada foi substituído",
+  "project_record_failed": "Não foi possível ler os detalhes do Projeto"
 }

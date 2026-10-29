@@ -167,7 +167,9 @@ function useProjectChrome(header: ProjectHeader, tab: ProjectTabId, dialogs: { e
       ? { action: m.actions_blocked({ action: editLabel }), reason: m.project_closed(), blockers: [{ label: m.project_duplicate(), link: duplicateLink }] }
       : record.state === "unavailable"
         ? { action: m.actions_blocked({ action: editLabel }), reason: m.project_record_unavailable(), blockers: [] }
-        : undefined,
+        : record.state === "failed"
+          ? { action: m.actions_blocked({ action: editLabel }), reason: m.project_record_failed(), blockers: [] }
+          : undefined,
     run: dialogs.edit,
   }
   const duplicate: Action = { id: "duplicate", label: m.project_duplicate(), icon: Copy, opensDialog: true, run: dialogs.duplicate }
@@ -192,7 +194,10 @@ function useProjectChrome(header: ProjectHeader, tab: ProjectTabId, dialogs: { e
     path: [{ label: m.nav_projects(), link: { to: "/projects" } }],
     status: <StatusBadge kind="project" value={header.lifecycle} />,
     actions: locked ? [] : [apply],
-    menu: { label: m.project_noun(), items: withIssueItems(m, [edit, duplicate], issues.of(header.id), issues.callbacks) },
+    menu: {
+      label: m.project_noun(),
+      items: withIssueItems(m, [edit, ...(record.state === "failed" ? [{ id: "retry-record", label: m.verb_retry(), run: async () => void (await record.retry()) }] : []), duplicate], issues.of(header.id), issues.callbacks),
+    },
     notice: locked
       ? {
           tone: "info",

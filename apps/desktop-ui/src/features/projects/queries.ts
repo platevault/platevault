@@ -31,7 +31,6 @@ export const closedSnapshotQuery = (projectId: string) => libraryQuery("projectC
 export const applyPreviewQuery = (projectId: string) => libraryQuery("projectApplyPreview", projectId)
 export const previousItemsQuery = (projectId: string) => libraryQuery("projectPreviousItems", projectId)
 export const candidatesQuery = (projectId: string) => libraryQuery("projectCandidates", projectId)
-export const sessionQuery = (sessionId: string) => libraryQuery("librarySession", sessionId)
 export const rigQuery = (rigId: string) => libraryQuery("rigFiltersGet", rigId)
 export const locationsQuery = () => libraryQuery("libraryListLocations")
 
@@ -98,14 +97,18 @@ export function useProjectHeader(projectId: string): { header: ProjectHeader | n
 /**
  * The full Project record (`project_get`, astro-plan-wre19.3): name, notes,
  * subjects with their Targets, rigs and goals at its revision. It reads
- * `unavailable` while the read is on its way or failed, so an edit that
- * needs the record never writes against a guessed one. The edits that
+ * `unavailable` while the read is on its way and `failed` (with Retry) when
+ * it didn't come back, so an edit that needs the record never writes
+ * against a guessed one. The edits that
  * replace a whole list (goals, subjects, rigs) stay visibly unavailable
  * until their dialogs exist, whatever this returns.
  */
-export function useProjectRecord(projectId: string): { state: "unavailable" } | { state: "ready"; project: Project } {
+export type ProjectRecord = { state: "unavailable" } | { state: "failed"; retry: () => Promise<unknown> } | { state: "ready"; project: Project }
+
+export function useProjectRecord(projectId: string): ProjectRecord {
   const read = useQuery(libraryQuery("projectGet", projectId))
-  return read.data ? { state: "ready", project: read.data } : { state: "unavailable" }
+  if (read.data) return { state: "ready", project: read.data }
+  return read.error ? { state: "failed", retry: read.refetch } : { state: "unavailable" }
 }
 
 /** The key of every read of `command` for one Project. */

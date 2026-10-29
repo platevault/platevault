@@ -6,10 +6,10 @@
  */
 import { type AnyRoute, createMemoryHistory, createRoute } from "@tanstack/react-router"
 import { clearMocks, mockIPC } from "@tauri-apps/api/mocks"
-import { act, cleanup, configure, render, screen, waitFor, within } from "@testing-library/react"
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest"
-import type { ApplyPreview_Serialize, ApplyReport_Serialize, NativePathWire, ProjectInputs_Serialize, ProjectSummary, WrapUpStatus } from "@/api/ipc"
+import type { ApplyPreview_Serialize, ApplyReport_Serialize, NativePathWire, Project, ProjectInputs_Serialize, ProjectSummary, WrapUpStatus } from "@/api/ipc"
 import { createQueryClient } from "@/api/query"
 import { AppRoot } from "@/app/root"
 import { m } from "@/lib/i18n"
@@ -112,8 +112,6 @@ const enabled = (name: string) => waitFor(() => expect(screen.getByRole("button"
 const original = { resizeObserver: globalThis.ResizeObserver, scrollIntoView: Element.prototype.scrollIntoView }
 
 beforeAll(() => {
-  // The whole window renders per test; a loaded machine needs longer than the default 1 s.
-  configure({ asyncUtilTimeout: 10_000 })
   globalThis.ResizeObserver = class {
     observe() {}
     unobserve() {}
@@ -262,5 +260,49 @@ describe("A locked Project", { timeout: TEST_MS }, () => {
     await user.click(within(dialog).getByRole("button", { name: m.project_duplicate() }))
     await waitFor(() => expect(sent("project_duplicate")).toHaveLength(1))
     expect(sent("project_duplicate")[0]!.args.request).toEqual({ projectId: P, name: m.project_duplicate_name({ name: "Cygnus HOO" }), sessions: [S1], goals: true, notes: true, settings: true })
+  })
+})
+
+describe("Edit…", { timeout: TEST_MS }, () => {
+  const record: Project = { id: P, name: "Cygnus HOO", notes: null, lifecycle: "open", closedAt: null, revision: 7, createdAt: "2026-10-01T00:00:00Z", updatedAt: "2026-10-01T00:00:00Z", subjects: [], rigIds: [], goals: [] }
+
+  async function openEdit(user: ReturnType<typeof userEvent.setup>, sent: (command: string) => unknown[]) {
+    renderAt(`/projects/${P}`)
+    await waitFor(() => expect(sent("project_get").length).toBeGreaterThan(0))
+    // The Sessions tab's body replaces its loading page once its read lands; open the menu on the settled header.
+    await screen.findByRole("rowheader", { name: "Rig · Framing 1" })
+    const trigger = await screen.findByRole("button", { name: m.project_noun() })
+    act(() => trigger.focus())
+    await user.keyboard("{Enter}")
+    const edit = await screen.findByRole("menuitem", { name: new RegExp(m.project_edit()) })
+    await waitFor(() => expect(edit).not.toHaveAttribute("aria-disabled", "true"))
+    await user.click(edit)
+    return screen.findByRole("dialog", { name: m.project_edit() })
+  }
+
+  it("sends the revision of the record it opened on", async () => {
+    const user = userEvent.setup()
+    const { sent } = host({ project_get: () => record, project_update: () => ({ ...record, name: "Cygnus HOO 2026", revision: 8 }) })
+    const dialog = await openEdit(user, sent)
+    const name = within(dialog).getByRole("textbox", { name: m.newproject_field_name() })
+    await user.clear(name)
+    await user.type(name, "Cygnus HOO 2026")
+    await user.click(within(dialog).getByRole("button", { name: m.settings_save() }))
+    await waitFor(() => expect(sent("project_update")).toHaveLength(1))
+    expect(sent("project_update")[0]!.args).toEqual({ projectId: P, expectedRevision: 7, name: "Cygnus HOO 2026", notes: null })
+  })
+
+  it("closes on a conflict and never sends the stale edit again", async () => {
+    const user = userEvent.setup()
+    const { sent } = host({
+      project_get: () => record,
+      project_update: () => {
+        throw { code: "conflict", retry: "review", successors: [] }
+      },
+    })
+    const dialog = await openEdit(user, sent)
+    await user.click(within(dialog).getByRole("button", { name: m.settings_save() }))
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: m.project_edit() })).toBeNull())
+    expect(sent("project_update")).toHaveLength(1)
   })
 })

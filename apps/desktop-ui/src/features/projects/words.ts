@@ -29,7 +29,7 @@ const REASON: Record<ReasonCode, (m: Messages) => string> = {
   destination_occupied: (m) => m.reason_destination_occupied(),
   destination_mismatch: (m) => m.reason_destination_mismatch(),
   destination_changed: (m) => m.reason_destination_changed(),
-  write_failed: (m) => m.import_reason_write_failed(),
+  write_failed: (m) => m.project_reason_write_failed(),
   interrupted: (m) => m.reason_interrupted(),
   protected: (m) => m.reason_protected(),
 }
