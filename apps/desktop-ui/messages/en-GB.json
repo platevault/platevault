@@ -7558,5 +7558,8 @@
   "targets_settings_not_opened": "The system settings didn't open. Open them from the system menu.",
   "targets_block_undecided": "permission not decided yet",
   "targets_export_calendar_title": "Export calendar for {name}",
-  "targets_rig_none": "No rig selected"
+  "targets_rig_none": "No rig selected",
+  "targets_filter_needs_library": "Needs filtering by the library: this list has more targets than one page",
+  "targets_lead_range": "Over 30 min, up to 24 h",
+  "targets_lead_out_of_range": "the lead time must be over 30 minutes and at most 24 hours"
 }

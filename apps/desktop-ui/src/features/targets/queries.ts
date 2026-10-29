@@ -67,6 +67,8 @@ const TARGET_READS: readonly LibraryCommand[] = [
   "planningTonight",
   "planningCalendar",
   "planningReminderStatus",
+  "planningReviewReminders",
+  "planningReviewCalendarExport",
   "workflowSettingsGet",
   "homeDashboard",
 ]

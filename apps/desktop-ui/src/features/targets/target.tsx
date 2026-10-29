@@ -32,7 +32,7 @@ import { ActionToggle } from "@/components/app/action-toggle"
 import { BoxTable } from "@/components/app/box"
 import type { Action, Column } from "@/components/app/contracts"
 import { KeyValueList, type KeyValueItem } from "@/components/app/data"
-import { DetailSkeleton, EmptyState } from "@/components/app/feedback"
+import { ActionError, DetailSkeleton, EmptyState, TableSkeleton } from "@/components/app/feedback"
 import { MoonLine } from "@/components/domain/sky-lines"
 import { type GradeBadge, GradeBadges } from "@/components/domain/grade-badges"
 import type { PathItem } from "@/components/app/page"
@@ -40,7 +40,7 @@ import { type DetailSection, DetailPage } from "@/components/templates/detail-pa
 import { formatCount, formatDec, formatDegrees, formatHours, formatList, formatNight, formatRa, numberText } from "@/lib/format"
 import type { Messages } from "@/lib/i18n"
 import { goalGradesFor } from "./good-tonight"
-import { favouriteAction, notYet, Unknown, windowText } from "./parts"
+import { favouriteAction, notYet, readFailure, Unknown, windowText } from "./parts"
 import { ExportCalendarDialog, NotificationsPanel, RemindersDialog } from "./planned-tools"
 import { gapsQuery, homeCriteriaQuery, libraryQueryWhen, myTargetsRequest, PLAN_NIGHTS } from "./queries"
 import { moonTonight } from "./sky-tonight"
@@ -55,9 +55,26 @@ export function TargetPage() {
   const stored = criteria.data?.criteria ?? null
   const rows = useQuery(libraryQueryWhen("planningTargetRows", stored ? [myTargetsRequest(stored, search.site ?? null, search.night ?? null)] : null))
   const page = rows.data
-  const row = page?.rows.find((r) => r.target.id === targetId) ?? null
+  const found = page?.rows.find((r) => r.target.id === targetId) ?? null
+  // astro-plan-wre19.20 (targets_get): there is no read of one Target, so the page reads it from My targets. A Target
+  // that is only a favourite leaves My targets when Favourite goes off; the page keeps the row it last read, now not a
+  // favourite, so the page and its toggle stay where they are until the user leaves (PLAN-TGT-FR-17).
+  const [kept, setKept] = useState<TargetRow_Serialize | null>(null)
+  if (found && found !== kept) setKept(found)
+  const row = found ?? (page && kept?.target.id === targetId ? { ...kept, favourite: false } : null)
   const basis = page?.basis ?? null
   const path = [{ label: m.nav_targets(), link: { to: "/targets", search: search as Record<string, string> } }]
+  const failed = criteria.error ? { error: criteria.error, retry: criteria.refetch } : rows.error ? { error: rows.error, retry: rows.refetch } : null
+
+  if (failed) {
+    return (
+      <DetailPage
+        path={path}
+        title={m.nav_targets()}
+        sections={[{ id: "failed", title: m.target_tonight(), content: <ActionError message={readFailure(m, failed.error)} onRetry={() => void failed.retry()} /> }]}
+      />
+    )
+  }
 
   if (criteria.isSuccess && stored === null) {
     // astro-plan-wre19.19: the rows need criteria until the library reads the stored ones itself.
@@ -69,7 +86,7 @@ export function TargetPage() {
       />
     )
   }
-  if (!page) return <DetailSkeleton label={m.common_loading()} />
+  if (!page || !criteria.isSuccess) return <DetailSkeleton label={m.common_loading()} />
   if (!row) {
     return (
       <DetailPage
@@ -111,8 +128,8 @@ function TargetBody({ row, basis, moon, path }: { row: TargetRow_Serialize; basi
 
   const sections: DetailSection[] = [
     { id: "tonight", title: m.target_tonight(), content: <KeyValueList items={tonightItems(m, row, basis, moon, grades)} /> },
-    { id: "windows", title: m.tonight_window(), content: windowsContent(m, windows.data, windows.isError) },
-    goalsSection(m, gaps.data ?? null),
+    { id: "windows", title: m.tonight_window(), content: windowsContent(m, basis, windows) },
+    goalsSection(m, gaps),
     { id: "notifications", title: m.plan_reminders(), content: <NotificationsPanel targetId={target.id} onEnable={() => setDialog("reminders")} /> },
   ]
   const aside: DetailSection[] = [
@@ -188,9 +205,11 @@ function nightText(m: Messages, night: NightPlan_Serialize): string {
   return night.noWindowReason ? noWindowText(m, night.noWindowReason) : m.plan_night_empty({ night: formatNight(night.night) })
 }
 
-function windowsContent(m: Messages, set: WindowSet_Serialize | undefined, failed: boolean) {
-  if (failed) return <Unknown reason={null} />
-  if (!set) return <Unknown reason="no_site" />
+function windowsContent(m: Messages, basis: TargetsBasis_Serialize | null, windows: { data?: WindowSet_Serialize; error: unknown; refetch: () => Promise<unknown> }) {
+  if (!basis) return <Unknown reason="no_site" />
+  if (windows.error) return <ActionError message={readFailure(m, windows.error)} onRetry={() => void windows.refetch()} />
+  const set = windows.data
+  if (!set) return <TableSkeleton rows={3} columns={2} label={m.common_loading()} />
   if (set.unavailableReason) return <Unknown reason={set.unavailableReason} />
   return <KeyValueList items={set.nights.map((night) => ({ label: formatNight(night.night), value: nightText(m, night) }))} />
 }
@@ -232,8 +251,8 @@ function gapRows(projects: ProjectGaps[]): GapRow[] {
 }
 
 /** Each open Project's per-channel goal gap, with its "in project" and "captured" amounts (PLAN-FR-02). */
-function goalsSection(m: Messages, projects: ProjectGaps[] | null): DetailSection {
-  const rows = gapRows(projects ?? [])
+function goalsSection(m: Messages, read: { data?: ProjectGaps[]; error: unknown; isPending: boolean; refetch: () => Promise<unknown> }): DetailSection {
+  const rows = gapRows(read.data ?? [])
   const columns: Column<GapRow>[] = [
     { id: "project", header: m.project_noun(), rowHeader: true, truncate: true, sortValue: (r) => r.project, cell: (r) => r.project },
     { id: "part", header: m.targets_panel(), truncate: true, sortValue: (r) => r.part, cell: (r) => r.part },
@@ -248,7 +267,17 @@ function goalsSection(m: Messages, projects: ProjectGaps[] | null): DetailSectio
     title: m.plan_goals(),
     count: rows.length,
     flush: true,
-    content: <BoxTable label={m.plan_goals()} rows={rows} columns={columns} getRowId={(r) => r.id} loading={projects === null} empty={m.targets_no_open_goals()} />,
+    content: (
+      <BoxTable
+        label={m.plan_goals()}
+        rows={rows}
+        columns={columns}
+        getRowId={(r) => r.id}
+        loading={read.isPending}
+        error={read.error ? { message: readFailure(m, read.error), onRetry: () => void read.refetch() } : undefined}
+        empty={m.targets_no_open_goals()}
+      />
+    ),
   }
 }
 

@@ -28,11 +28,11 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useNavigate, useSearch } from "@tanstack/react-router"
 import { CalendarClock, Check, Crosshair, MoonStar, Search, SlidersHorizontal, Star, Telescope } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
-import { failureOf, type TargetRow_Serialize, type TargetsPage_Serialize, type TargetsSearchResult, type TargetsSearchSource } from "@/api/ipc"
+import { type TargetRow_Serialize, type TargetsPage_Serialize, type TargetsSearchResult, type TargetsSearchSource } from "@/api/ipc"
 import { useMessages } from "@/app/preferences"
 import { ActionButton } from "@/components/app/actions"
 import type { Action, Column, Facet, MenuItem } from "@/components/app/contracts"
-import { EmptyState, type PageNotice } from "@/components/app/feedback"
+import { EmptyState, type PageNotice, UnknownValue } from "@/components/app/feedback"
 import type { FacetPatch } from "@/components/app/filter-bar"
 import { NightPicker, SitePicker } from "@/components/app/pickers"
 import { failureMessage } from "@/components/app/run-result"
@@ -42,7 +42,7 @@ import { formatCount, formatDegrees, formatList } from "@/lib/format"
 import type { Messages } from "@/lib/i18n"
 import { suitableFacet } from "./good-tonight"
 import { MoonLimitsDialog } from "./moon-limits"
-import { favouriteAction, notYet, Unknown } from "./parts"
+import { favouriteAction, notYet, readFailure, Unknown } from "./parts"
 import { equipmentQuery, homeCriteriaQuery, libraryQueryWhen, presetsQuery, sitesQuery } from "./queries"
 import { useResultAction } from "./search"
 import { moonTonight } from "./sky-tonight"
@@ -55,9 +55,10 @@ import {
   inMyTargets,
   matchesRow,
   oppositionText,
+  facetSearch,
   parseBands,
-  parseCatalogues,
   parseFavourite,
+  presetDefinition,
   presetFilters,
   presetSearch,
   readState,
@@ -116,7 +117,7 @@ export function TargetsPage() {
 
   const setParams = (patch: SearchParams) => void navigate({ to: "/targets", search: cleaned({ ...search, ...patch }), replace: true })
   const openTarget = (targetId: string) => void navigate({ to: "/targets/$targetId", params: { targetId }, search: cleaned(search) })
-  const result = useResultAction(openTarget)
+  const result = useResultAction(openTarget, query)
   const savedPresets = presets.data?.saved ?? []
   const activeSaved = savedPresets.find((p) => p.id === search.saved) ?? null
   const writes = usePresetWrites(
@@ -127,13 +128,16 @@ export function TargetsPage() {
 
   const data: TargetsPage_Serialize | undefined = page.data
   const rows = data?.rows ?? []
-  const shown: RowView[] = rows.map((row, position) => ({ row, position })).filter((v) => matchesRow(v.row, { favourite, bands, projectId }))
+  // astro-plan-wre19.20: over one page of rows these filters need the library; filtering the first page here would hide matches.
+  const partial = data ? data.total > data.rows.length : false
+  const filters = partial ? { favourite: "" as const, bands: [], projectId: null } : { favourite, bands, projectId }
+  const shown: RowView[] = rows.map((row, position) => ({ row, position })).filter((v) => matchesRow(v.row, filters))
   const projectName = projectId ? (rows.flatMap((r) => r.projects).find((p) => p.projectId === projectId)?.name ?? null) : null
 
   /** Open a row in My targets; add any other row to My targets as a favourite. */
   const activate = (row: TargetRow_Serialize) => (inMyTargets(row) ? openTarget(row.target.id) : void result.act(asResult(row)))
 
-  const columns = targetColumns(m, state, data)
+  const columns = targetColumns(m, state, data, result.pending)
   const rowActions = (v: RowView): MenuItem[] => {
     const row = v.row
     const open: MenuItem[] = inMyTargets(row) ? [{ id: "open", label: m.verb_open(), run: () => openTarget(row.target.id) }, { separator: true }] : []
@@ -146,8 +150,8 @@ export function TargetsPage() {
   const facets: Facet[] = []
   if (state.view === "browse")
     facets.push({ id: "cat", label: m.targets_catalogues(), kind: "multi", value: state.catalogues, options: CATALOGUES.map((c) => ({ value: c, label: catalogueName(c) })) })
-  if (data && data.bands.length > 0) facets.push(suitableFacet(m, data.bands, rows, bands))
-  if (state.view !== "planned")
+  if (data && data.bands.length > 0 && !partial) facets.push(suitableFacet(m, data.bands, rows, bands))
+  if (state.view !== "planned" && !partial)
     facets.push({
       id: "fav",
       label: m.targets_favourite(),
@@ -158,15 +162,18 @@ export function TargetsPage() {
         { value: "no", label: m.targets_favourite_no(), count: rows.filter((r) => !r.favourite).length },
       ],
     })
-  const onFacets = (patch: FacetPatch) => {
-    if (Array.isArray(patch.cat)) setParams({ cat: parseCatalogues(patch.cat.join(",")).join(","), saved: undefined })
-    if (Array.isArray(patch.good)) setParams({ good: parseBands(patch.good.join(",")).join(",") })
-    if (typeof patch.fav === "string") setParams({ fav: parseFavourite(patch.fav) })
-  }
+  // Clear empties every facet in one patch, so the URL changes once with all of them.
+  const onFacets = (patch: FacetPatch) => setParams(facetSearch(patch))
 
   const toolbarActions: Action[] = []
   if (state.preset || activeSaved) toolbarActions.push({ id: "clear-preset", label: m.targets_clear_preset(), run: () => setParams({ preset: undefined, saved: undefined }) })
-  if (projectId) toolbarActions.push({ id: "clear-project", label: m.targets_clear_project(), run: () => setParams({ project: undefined, rig: undefined }) })
+  if (partial) {
+    const needsLibrary = (id: string, label: string): Action => ({ id, label, run: () => undefined, unavailable: { action: m.actions_blocked({ action: label }), reason: m.targets_filter_needs_library(), blockers: [] } })
+    toolbarActions.push(needsLibrary("filter-favourite", m.targets_favourite()), needsLibrary("filter-suitable", m.domain_suitable_filters()))
+    if (projectId) toolbarActions.push(needsLibrary("filter-project", m.targets_caption_project({ name: projectName ?? m.project_noun() })))
+  }
+  // Clear Project leaves a single chosen rig; only "this Project's rigs" goes with the Project.
+  if (projectId) toolbarActions.push({ id: "clear-project", label: m.targets_clear_project(), run: () => setParams({ project: undefined, rig: state.rigs.kind === "project" ? undefined : search.rig }) })
 
   const views = {
     label: m.targets_view(),
@@ -202,13 +209,14 @@ export function TargetsPage() {
   const notice = pageNotice(m, {
     result,
     presetFailure: writes.failure,
+    dismissPreset: writes.dismiss,
     page: data,
     simbadSkipped: searching && results.data?.simbad.state === "not_searched",
     onAddSite: () => void navigate({ to: "/settings/sites" }),
   })
 
   const actions: Action[] = [{ id: "moon-limits", label: m.tonight_moon_limits(), icon: MoonStar, opensDialog: true, run: () => setDialog("moon") }]
-  const menu = activeSaved ? { label: m.filter_bar_presets(), items: [{ id: "rename-preset", label: m.targets_rename_preset(), opensDialog: true, run: () => setDialog("rename") }] } : undefined
+  if (activeSaved) actions.push({ id: "rename-preset", label: m.targets_rename_preset(), opensDialog: true, run: () => setDialog("rename") })
   const searchBox = useSearchBox(search.q ?? "", (q) => setParams({ q: q || undefined }))
   const presetMenu = presets.data
     ? {
@@ -229,7 +237,7 @@ export function TargetsPage() {
       }
     : undefined
 
-  const header = { title: m.nav_targets(), context, actions, menu, views, notice }
+  const header = { title: m.nav_targets(), context, actions, views, notice }
   const dialogs = (
     <>
       {settings.data ? <MoonLimitsDialog record={settings.data} open={dialog === "moon"} onOpenChange={(open) => setDialog(open ? "moon" : null)} /> : null}
@@ -247,7 +255,7 @@ export function TargetsPage() {
           table={{
             label: m.targets_caption_search({ query }),
             rows: found,
-            columns: resultColumns(m),
+            columns: resultColumns(m, result.pending),
             getRowId: (r) => `${r.source}:${r.target.id}`,
             onRowClick: (r) => void result.act(r),
             rowLabel: (r) => r.target.designation,
@@ -265,7 +273,8 @@ export function TargetsPage() {
   }
 
   const sort = state.sort ? { columnId: state.sort.column, direction: state.sort.descending ? ("desc" as const) : ("asc" as const) } : null
-  const summary = data ? listSummary(m, data, shown.length, projectName) : undefined
+  // A built-in preset states its definition while it is on (PLAN-TGT-FR-09), worded from the catalogue by id.
+  const summary = data ? [listSummary(m, data, shown.length, projectName), state.preset ? presetDefinition(m, state.preset) : null].filter(Boolean).join(" · ") : undefined
   return (
     <>
       <ListPage
@@ -347,11 +356,6 @@ function asResult(row: TargetRow_Serialize): TargetsSearchResult {
   return { target: row.target, source: row.saved ? "library" : "catalogue", inMyTargets: inMyTargets(row), matchedAlias: null }
 }
 
-function readFailure(m: Messages, error: unknown): string {
-  const failure = failureOf(error)
-  return failure ? failureMessage(m, failure) : m.action_failure_unreachable()
-}
-
 function listSummary(m: Messages, data: TargetsPage_Serialize, shown: number, projectName: string | null): string {
   const count = data.total > data.rows.length ? m.targets_count_partial({ shown: formatCount(data.rows.length), total: formatCount(data.total) }) : m.plan_targets_count({ count: shown })
   return projectName ? `${m.targets_caption_project({ name: projectName })} · ${count}` : count
@@ -360,7 +364,14 @@ function listSummary(m: Messages, data: TargetsPage_Serialize, shown: number, pr
 /** The page's one standing notice: a failed add (with Retry), a refused preset write, no planning site, or SIMBAD left out. */
 function pageNotice(
   m: Messages,
-  input: { result: ReturnType<typeof useResultAction>; presetFailure: ReturnType<typeof usePresetWrites>["failure"]; page: TargetsPage_Serialize | undefined; simbadSkipped: boolean; onAddSite: () => void },
+  input: {
+    result: ReturnType<typeof useResultAction>
+    presetFailure: ReturnType<typeof usePresetWrites>["failure"]
+    dismissPreset: () => void
+    page: TargetsPage_Serialize | undefined
+    simbadSkipped: boolean
+    onAddSite: () => void
+  },
 ): PageNotice | null {
   const { result } = input
   if (result.failed) {
@@ -378,7 +389,13 @@ function pageNotice(
       ),
     }
   }
-  if (input.presetFailure) return { tone: "warning", title: m.targets_preset_failed(), detail: failureMessage(m, input.presetFailure) }
+  if (input.presetFailure)
+    return {
+      tone: "warning",
+      title: m.targets_preset_failed(),
+      detail: failureMessage(m, input.presetFailure),
+      actions: <ActionButton action={{ id: "dismiss-preset", label: m.verb_dismiss(), run: input.dismissPreset }} />,
+    }
   if (input.page?.planningUnavailable === "no_site")
     return { tone: "info", title: m.home_no_site_yet(), actions: <ActionButton action={{ id: "add-site", label: m.tonight_add_site(), run: input.onAddSite }} /> }
   if (input.simbadSkipped) return { tone: "offline", title: m.targets_simbad_not_searched() }
@@ -407,13 +424,18 @@ function emptyState(
   )
 }
 
-function targetColumns(m: Messages, state: TargetsState, data: TargetsPage_Serialize | undefined): Column<RowView>[] {
+/** The row's designation, saying so while its open-or-add action runs. */
+function designationCell(m: Messages, designation: string, busy: boolean): string {
+  return busy ? `${designation} · ${m.common_loading()}` : designation
+}
+
+function targetColumns(m: Messages, state: TargetsState, data: TargetsPage_Serialize | undefined, pending: string | null): Column<RowView>[] {
   // The library ordered the rows for the requested sort; the table keeps that order.
   const order = (v: RowView) => (state.sort?.descending ? -v.position : v.position)
   const night = data?.basis?.night ?? null
   const unknown = (row: TargetRow_Serialize) => <Unknown reason={row.unknownReason} />
   const columns: Column<RowView>[] = [
-    { id: "designation", header: m.targets_designation(), rowHeader: true, truncate: true, truncateMin: "name", sortValue: order, cell: (v) => v.row.target.designation },
+    { id: "designation", header: m.targets_designation(), rowHeader: true, truncate: true, truncateMin: "name", sortValue: order, cell: (v) => designationCell(m, v.row.target.designation, pending === v.row.target.id) },
     // The library does not sort by Favourite (TargetsColumn), so the column is static.
     {
       id: "favourite",
@@ -475,9 +497,11 @@ const SOURCE_WORDS: Record<TargetsSearchSource, (m: Messages) => string> = {
   simbad: (m) => m.targets_source_simbad(),
 }
 
-function resultColumns(m: Messages): Column<TargetsSearchResult>[] {
+function resultColumns(m: Messages, pending: string | null): Column<TargetsSearchResult>[] {
   return [
-    { id: "designation", header: m.targets_designation(), rowHeader: true, truncate: true, truncateMin: "name", sortValue: (r) => r.target.designation, cell: (r) => r.target.designation },
+    { id: "designation", header: m.targets_designation(), rowHeader: true, truncate: true, truncateMin: "name", sortValue: (r) => r.target.designation, cell: (r) => designationCell(m, r.target.designation, pending === r.target.id) },
+    // astro-plan-wre19.20: a search result does not say whether it is a favourite yet.
+    { id: "favourite", header: m.targets_favourite(), static: true, cell: () => <UnknownValue label={m.home_unavailable({ what: m.targets_favourite() })} /> },
     { id: "name", header: m.home_column_name(), truncate: true, sortValue: (r) => r.target.commonName ?? r.matchedAlias, cell: (r) => r.target.commonName ?? r.matchedAlias ?? "–" },
     { id: "type", header: m.targets_type(), truncate: true, sortValue: (r) => r.target.objectType, cell: (r) => r.target.objectType },
     { id: "source", header: m.targets_source(), sortValue: (r) => SOURCE_WORDS[r.source](m), cell: (r) => SOURCE_WORDS[r.source](m) },

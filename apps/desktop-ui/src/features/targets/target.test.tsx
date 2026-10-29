@@ -6,7 +6,7 @@
  */
 import { type AnyRoute, createMemoryHistory, createRoute } from "@tanstack/react-router"
 import { clearMocks, mockIPC } from "@tauri-apps/api/mocks"
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react"
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest"
 import type { ObservingWindow_Serialize, ReminderSubscription } from "@/api/ipc"
@@ -255,6 +255,133 @@ describe("Target page", () => {
       await user.click(within(dialog).getByRole("button", { name: m.plan_export_calendar() }))
       await waitFor(() => expect(lib.sent("planning_export_calendar")).toHaveLength(1))
       expect(lib.sent("planning_export_calendar")[0]?.args).toEqual({ selection: { query: WINDOWS.basis && { targetId: "t-m31", siteId: SITE.id, firstNight: NIGHT, nights: 7, criteria: CRITERIA }, windowKeys: ["w-1"] }, snapshotDigest: "digest-a" })
+    },
+    TEST_MS,
+  )
+
+  it(
+    "keeps a favourite-only Target on screen after Favourite goes off, with the toggle off",
+    async () => {
+      const user = userEvent.setup()
+      let favourite = true
+      const lib = host({
+        planning_target_rows: () => targetsPage(favourite ? [row(M31, { sessions: 0, projects: [] })] : []),
+        targets_set_favourite: (args) => {
+          favourite = args.favourite as boolean
+          return favourite
+        },
+      })
+      renderTarget()
+      await user.click(await screen.findByRole("button", { name: m.targets_favourite(), pressed: true }))
+      await waitFor(() => expect(lib.sent("planning_target_rows").length).toBeGreaterThan(1))
+      expect(await screen.findByRole("button", { name: m.targets_favourite(), pressed: false })).toBeInTheDocument()
+      expect(screen.getByRole("heading", { name: "M 31" })).toBeInTheDocument()
+      expect(screen.queryByText(m.targets_not_in_my_targets())).toBeNull()
+    },
+    TEST_MS,
+  )
+
+  it(
+    "offers Retry when My targets can't be read, and when the goal gaps can't",
+    async () => {
+      const user = userEvent.setup()
+      let rowReads = 0
+      host({
+        planning_target_rows: () => {
+          rowReads += 1
+          if (rowReads === 1) refuse("persistence_failure")
+          return rows()
+        },
+        planning_target_gaps: () => refuse("persistence_failure"),
+      })
+      renderTarget()
+      expect(await screen.findByText(m.action_failure_persistence_failure())).toBeInTheDocument()
+      await user.click(screen.getByRole("button", { name: m.verb_retry() }))
+      expect(await screen.findByRole("heading", { name: "M 31" })).toBeInTheDocument()
+      // The rows came back; the goal gaps did not, and say so with their own Retry.
+      expect(await screen.findByText(m.action_failure_persistence_failure())).toBeInTheDocument()
+      expect(screen.getByRole("button", { name: m.verb_retry() })).toBeInTheDocument()
+    },
+    TEST_MS,
+  )
+
+  it(
+    "after a stale review the dialog stays, the review is read again, and Enable sends the new revisions",
+    async () => {
+      const user = userEvent.setup()
+      let reviews = 0
+      let enables = 0
+      const lib = host({
+        planning_target_rows: rows,
+        planning_review_reminders: (args) => {
+          reviews += 1
+          return {
+            targetId: "t-m31",
+            designation: "M 31",
+            site: { ...SITE, revision: reviews === 1 ? 2 : 3 },
+            timeZone: "Europe/Amsterdam",
+            settingsRevision: reviews === 1 ? 5 : 6,
+            criteria: CRITERIA,
+            leadMinutes: (args.reminder as { leadMinutes: number }).leadMinutes,
+            permission: { state: "granted" },
+            appClosedDelivery: { available: false, reason: "no_installed_scheduler" },
+            subscriptionRevision: null,
+            upcoming: [],
+          }
+        },
+        planning_enable_reminders: () => {
+          enables += 1
+          if (enables === 1) refuse("conflict", "review")
+          return subscription()
+        },
+      })
+      renderTarget()
+      await user.click(await screen.findByRole("button", { name: `${m.targets_enable_notifications()}…` }))
+      const dialog = await screen.findByRole("dialog")
+      await within(dialog).findByText(m.targets_permission_granted())
+      await user.click(within(dialog).getByRole("button", { name: m.targets_enable_notifications() }))
+      expect(await within(dialog).findByText(m.action_failure_conflict())).toBeInTheDocument()
+      await waitFor(() => expect(reviews).toBe(2))
+      await act(async () => {})
+      await user.click(within(dialog).getByRole("button", { name: m.verb_retry() }))
+      await waitFor(() => expect(enables).toBe(2))
+      expect(lib.sent("planning_enable_reminders")[1]?.args).toMatchObject({ siteRevision: 3, settingsRevision: 6 })
+    },
+    TEST_MS,
+  )
+
+  it(
+    "after a stale export digest the dialog stays, the export is reviewed again, and Export sends the new digest",
+    async () => {
+      const user = userEvent.setup()
+      let reviews = 0
+      let exports = 0
+      const lib = host({
+        planning_target_rows: rows,
+        planning_compute_windows: () => WINDOWS,
+        planning_review_calendar_export: () => {
+          reviews += 1
+          return { snapshotDigest: reviews === 1 ? "digest-a" : "digest-b", suggestedFileName: "M31.ics", targetId: "t-m31", targetRevision: 1, designation: "M 31", site: SITE, timeZone: "Europe/Amsterdam", firstNight: NIGHT, lastNight: NIGHT, criteria: CRITERIA, windows: [WINDOW] }
+        },
+        planning_export_calendar: () => {
+          exports += 1
+          if (exports === 1) refuse("conflict", "review")
+          return null
+        },
+      })
+      renderTarget()
+      const trigger = await screen.findByRole("button", { name: `${m.plan_export_calendar()}…` })
+      await waitFor(() => expect(trigger).not.toHaveAttribute("aria-disabled", "true"))
+      await user.click(trigger)
+      const dialog = await screen.findByRole("dialog")
+      await within(dialog).findByText("M31.ics")
+      await user.click(within(dialog).getByRole("button", { name: m.plan_export_calendar() }))
+      expect(await within(dialog).findByText(m.action_failure_conflict())).toBeInTheDocument()
+      await waitFor(() => expect(reviews).toBe(2))
+      await act(async () => {})
+      await user.click(within(dialog).getByRole("button", { name: m.verb_retry() }))
+      await waitFor(() => expect(exports).toBe(2))
+      expect(lib.sent("planning_export_calendar")[1]?.args.snapshotDigest).toBe("digest-b")
     },
     TEST_MS,
   )

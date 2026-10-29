@@ -3,7 +3,7 @@
  * explicit, reviewed opt-ins over the library's own reads.
  *
  * - Enable notifications…: a lead time (minutes, hours or days, over 30
- *   minutes and at most 7 days), then the library's review of what turning
+ *   minutes and at most 24 hours), then the library's review of what turning
  *   them on means (`planning_review_reminders`): the default site and its
  *   zone, the criteria, the lead time, the permission, whether reminders
  *   arrive while PlateVault is closed, and the next reminders. Enable sends
@@ -48,8 +48,14 @@ import { libraryQueryWhen, reminderStatusQuery, sitesQuery, targetsWrite } from 
 
 type LeadUnit = "minutes" | "hours" | "days"
 const UNIT_MINUTES: Record<LeadUnit, number> = { minutes: 1, hours: 60, days: 1440 }
+/**
+ * The lead time a reminder accepts: over 30 minutes (PLAN-FR-06), and at
+ * most what the library stores, 1440 minutes (`MAX_MINUTES`, checked by
+ * `ReminderInput::validate` in crates/platevault-model/src/planning.rs).
+ * The spec's "up to 7 days" is wider than the library accepts.
+ */
 const LEAD_MIN = 30
-const LEAD_MAX = 7 * 1440
+const LEAD_MAX = 1440
 
 /**
  * The lead time a new reminder starts from: 12 hours, the setting's
@@ -57,7 +63,7 @@ const LEAD_MAX = 7 * 1440
  */
 const DEFAULT_LEAD = { amount: 12, unit: "hours" as LeadUnit }
 
-/** The lead time in minutes, or null when it is not a whole amount over 30 minutes and at most 7 days. */
+/** The lead time in minutes, or null when it is not a whole amount over 30 minutes and at most 24 hours. */
 export function leadMinutes(amount: number | null, unit: LeadUnit): number | null {
   if (amount === null || !Number.isInteger(amount)) return null
   const minutes = amount * UNIT_MINUTES[unit]
@@ -112,7 +118,7 @@ export function RemindersDialog({ targetId, criteria, open, onOpenChange, onMana
   const unavailable = noDefaultSite
     ? blocked(m.targets_reminders_need_default_site())
     : lead === null
-      ? blocked(m.plan_reason_lead_out_of_range())
+      ? blocked(m.targets_lead_out_of_range())
       : !reviewed
         ? blocked(review.isError ? m.targets_review_failed() : m.common_loading())
         : undefined
@@ -135,7 +141,7 @@ export function RemindersDialog({ targetId, criteria, open, onOpenChange, onMana
       }}
     >
       {noDefaultSite ? <Notice tone="info" title={m.targets_reminders_need_default_site()} actions={<ActionBar actions={[{ id: "manage-sites", label: m.tonight_add_site(), run: onManageSites }]} />} /> : null}
-      <NumberField label={m.plan_lead_amount()} min={1} step={1} value={values.amount} onChange={(amount) => set({ amount })} description={m.plan_lead_out_of_range()} error={lead === null ? m.plan_reason_lead_out_of_range() : undefined} />
+      <NumberField label={m.plan_lead_amount()} min={1} step={1} value={values.amount} onChange={(amount) => set({ amount })} description={m.targets_lead_range()} error={lead === null ? m.targets_lead_out_of_range() : undefined} />
       <SelectField
         label={m.plan_lead_unit()}
         value={values.unit}

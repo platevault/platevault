@@ -20,7 +20,11 @@ import type { Messages } from "@/lib/i18n"
 import { targetsWrite } from "./queries"
 import { BANDS } from "./targets-model"
 
-/** The library's ranges for a curve (`MoonAvoidanceCurve`). */
+/**
+ * The library's ranges for a curve, as `MoonAvoidanceCurve` validates them in
+ * crates/platevault-model/src/workflow_settings.rs: distance in [0, 180]
+ * degrees, width in [0.5, 30] days.
+ */
 const DISTANCE = { min: 0, max: 180 }
 const WIDTH = { min: 0.5, max: 30 }
 

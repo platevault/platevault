@@ -5,10 +5,11 @@
  */
 import type { QueryClient } from "@tanstack/react-query"
 import { Star } from "lucide-react"
-import { library, type ObservingWindow_Serialize, type PlanningUnknownReason } from "@/api/ipc"
+import { failureOf, library, type ObservingWindow_Serialize, type PlanningUnknownReason } from "@/api/ipc"
 import { useMessages } from "@/app/preferences"
 import type { Action } from "@/components/app/contracts"
 import { Notice, UnknownValue } from "@/components/app/feedback"
+import { failureMessage } from "@/components/app/run-result"
 import { siteTimeRange } from "@/components/domain/sky-lines"
 import { formatHours } from "@/lib/format"
 import type { Messages } from "@/lib/i18n"
@@ -23,6 +24,12 @@ export function favouriteAction(m: Messages, client: QueryClient, targetId: stri
     icon: Star,
     run: () => targetsWrite(client, () => library.targetsSetFavourite(targetId, !favourite)),
   }
+}
+
+/** A failed read's message in the reader's language. */
+export function readFailure(m: Messages, error: unknown): string {
+  const failure = failureOf(error)
+  return failure ? failureMessage(m, failure) : m.action_failure_unreachable()
 }
 
 /** A part whose library read or write does not exist yet; the caller's comment names the bead that adds it. */

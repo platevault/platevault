@@ -4,10 +4,11 @@
  * unchanged and adds any other result to My targets as a favourite. Result
  * rows carry no Add button: the row's click is the action. The search stays
  * open after an add, and a failed add stays visible with Retry until the
- * next attempt or a new search.
+ * next attempt or a new search. While one result's action runs, its row
+ * shows a spinner and every other click is ignored.
  */
 import { useQueryClient } from "@tanstack/react-query"
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { type LibraryFailure, library, type TargetsSearchResult } from "@/api/ipc"
 import { useMessages } from "@/app/preferences"
 import { toast } from "@/components/app/feedback"
@@ -23,15 +24,22 @@ export interface ResultAction {
   dismiss: () => void
 }
 
-export function useResultAction(open: (targetId: string) => void): ResultAction {
+/** `query` is the search text: a new search drops the last failure, which named an earlier result. */
+export function useResultAction(open: (targetId: string) => void, query: string): ResultAction {
   const m = useMessages()
   const client = useQueryClient()
   const [pending, setPending] = useState<string | null>(null)
   const [failed, setFailed] = useState<ResultAction["failed"]>(null)
+  // A ref as well as the state, so a second click before the re-render is ignored too.
+  const running = useRef(false)
+  useEffect(() => setFailed(null), [query])
   async function act(result: TargetsSearchResult) {
+    if (running.current) return
+    running.current = true
     setPending(result.target.id)
     setFailed(null)
     const outcome = await targetsWrite(client, () => library.targetsSearchResultAction(result))
+    running.current = false
     setPending(null)
     if (!outcome.ok) {
       setFailed({ result, failure: outcome.failure })

@@ -8098,5 +8098,8 @@
   "targets_settings_not_opened": "As configurações do sistema não abriram. Abra-as pelo menu do sistema.",
   "targets_block_undecided": "permissão ainda não decidida",
   "targets_export_calendar_title": "Exportar calendário de {name}",
-  "targets_rig_none": "Nenhum equipamento selecionado"
+  "targets_rig_none": "Nenhum equipamento selecionado",
+  "targets_filter_needs_library": "Precisa de filtragem pela biblioteca: esta lista tem mais alvos que uma página",
+  "targets_lead_range": "Mais de 30 min, até 24 h",
+  "targets_lead_out_of_range": "o tempo de antecedência deve ser maior que 30 minutos e no máximo 24 horas"
 }

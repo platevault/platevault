@@ -74,6 +74,18 @@ export const parseCatalogues = (value: string | undefined) => listOf(CATALOGUES,
 export const parseBands = (value: string | undefined) => listOf(BANDS, value)
 export const parsePreset = (value: string | undefined) => oneOf(BUILTIN_PRESETS, value)
 
+/** One URL patch for every facet a FilterBar change names (Clear names them all at once). */
+export function facetSearch(patch: Record<string, string | string[]>): SearchParams {
+  const out: SearchParams = {}
+  if (Array.isArray(patch.cat)) {
+    out.cat = parseCatalogues(patch.cat.join(",")).join(",")
+    out.saved = undefined
+  }
+  if (Array.isArray(patch.good)) out.good = parseBands(patch.good.join(",")).join(",")
+  if (typeof patch.fav === "string") out.fav = parseFavourite(patch.fav)
+  return out
+}
+
 export function parseFavourite(value: string | undefined): FavouriteFilter {
   return value === "yes" || value === "no" ? value : ""
 }
