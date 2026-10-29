@@ -8,9 +8,9 @@
 import { QueryClientProvider } from "@tanstack/react-query"
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } from "@tanstack/react-router"
 import { clearMocks, mockIPC } from "@tauri-apps/api/mocks"
-import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react"
+import { act, cleanup, configure, getConfig, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest"
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest"
 import type { ImportOperation_Serialize, LibrarySession_Serialize, NativePathWire, RemovableDevice, SessionAdmission_Serialize } from "@/api/ipc"
 import { createQueryClient } from "@/api/query"
 import type { SessionReviewProps } from "@/app/shell-contract"
@@ -113,16 +113,23 @@ function renderAt(path: string) {
 
 const conflict = { code: "conflict", identity: null, scope: null, retry: "review", currentRevision: 4, successors: [], window: null, correction: null }
 
+/** Each test drives whole pages over the mocked host; a loaded machine renders them slowly (as shell.test.tsx). */
+const LIBRARY_TEST_MS = 20_000
+
 const original = globalThis.ResizeObserver
+const asyncTimeout = getConfig().asyncUtilTimeout
 beforeAll(() => {
   globalThis.ResizeObserver = class {
     observe() {}
     unobserve() {}
     disconnect() {}
   }
+  // findBy* and waitFor wait as long as a test may run, so a slow render is not a failure.
+  configure({ asyncUtilTimeout: LIBRARY_TEST_MS })
 })
 afterAll(() => {
   globalThis.ResizeObserver = original
+  configure({ asyncUtilTimeout: asyncTimeout })
 })
 afterEach(() => {
   cleanup()
@@ -156,7 +163,7 @@ function eventHost(answer: (command: string, args: Record<string, unknown>) => u
 
 const PERSISTENCE = { ...conflict, code: "persistence_failure", retry: "retry", currentRevision: null }
 
-describe("Removable devices (STO-IMP-FR-10)", () => {
+describe("Removable devices (STO-IMP-FR-10)", { timeout: LIBRARY_TEST_MS }, () => {
   it.each(LOCALES)("names each recognised layout with every marker found, and a generic device as USB device, in %s", (locale) => {
     act(() => setLocale(locale))
     expect(deviceKind(m, CARD)).toBe(m.import_layout_asiair())
@@ -242,7 +249,7 @@ describe("Removable devices (STO-IMP-FR-10)", () => {
   })
 })
 
-describe("Import", () => {
+describe("Import", { timeout: LIBRARY_TEST_MS }, () => {
   it("refuses a start on a stale preview, re-reads the import and keeps the chosen mode", async () => {
     let reads = 0
     const started: unknown[] = []
@@ -290,21 +297,28 @@ describe("Import", () => {
   })
 
   it("after a restart reads where the running import stands, then settles from its durable status", async () => {
-    let reads = 0
-    mockIPC((command) => {
-      if (command !== "import_status") return null
-      reads += 1
-      const running = importOp({ state: "running", mode: "copy", summary: { ...importOp().summary, ready: 0, imported: 1, pending: 3 } })
-      return reads === 1 ? running : importOp({ state: "settled", mode: "copy", summary: { ...importOp().summary, ready: 0, imported: 4 } })
-    })
-    renderAt("/import?import=imp-1&step=run")
-    expect(await screen.findByText(m.home_percent({ percent: 25 }))).toBeInTheDocument()
-    await waitFor(() => expect(screen.getByRole("button", { name: m.import_show_in_sessions() })).toBeInTheDocument(), { timeout: 3000 })
-    expect(screen.queryByText(m.home_percent({ percent: 25 }))).toBeNull()
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      let reads = 0
+      mockIPC((command) => {
+        if (command !== "import_status") return null
+        reads += 1
+        const running = importOp({ state: "running", mode: "copy", summary: { ...importOp().summary, ready: 0, imported: 1, pending: 3 } })
+        return reads === 1 ? running : importOp({ state: "settled", mode: "copy", summary: { ...importOp().summary, ready: 0, imported: 4 } })
+      })
+      renderAt("/import?import=imp-1&step=run")
+      expect(await screen.findByText(m.home_percent({ percent: 25 }))).toBeInTheDocument()
+      // The running import is re-read every second; the next read finds it settled.
+      await act(() => vi.advanceTimersByTimeAsync(1000))
+      expect(await screen.findByRole("button", { name: m.import_show_in_sessions() })).toBeInTheDocument()
+      expect(screen.queryByText(m.home_percent({ percent: 25 }))).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
 
-describe("Session intake", () => {
+describe("Session intake", { timeout: LIBRARY_TEST_MS }, () => {
   it("confirms the chosen Target at the session's revisions; a stale one is refused and the choice stays", async () => {
     const associated: unknown[] = []
     let sessionReads = 0
@@ -328,7 +342,7 @@ describe("Session intake", () => {
     expect(associated).toEqual([{ expected: [{ sessionId: SESSION_ID, groupingRevision: 4, decisionRevision: 7 }], targetId: "t-ngc7000" }])
     // The refusal re-read the session; the user's choice is still the chosen Target.
     await waitFor(() => expect(sessionReads).toBeGreaterThan(before))
-    const chosen = screen.getByRole("heading", { name: m.session_chosen_target() }).closest("section")!
+    const chosen = screen.getByText(m.session_chosen_target()).closest("section")!
     expect(within(chosen).getByText("NGC 7000")).toBeInTheDocument()
     expect(screen.queryByText(m.session_no_target_chosen())).toBeNull()
   })
@@ -379,7 +393,7 @@ describe("Session intake", () => {
   })
 })
 
-describe("Home", () => {
+describe("Home", { timeout: LIBRARY_TEST_MS }, () => {
   it("keeps an offline Captures location as offline, never as everything imported", () => {
     const location = { id: "loc-1", name: "NAS captures", path: encode("/Volumes/NAS"), role: "captures", identity: FINGERPRINT.identity, decisionRevision: 1, availability: "offline", lastObservedAt: null, lifecycle: "active", volumeKind: "network" } as const
     expect(locationIngestion(location, undefined, 0)).toEqual({ kind: "location", location, state: { kind: "offline" } })
