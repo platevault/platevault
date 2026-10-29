@@ -52,10 +52,10 @@ export function useAppActions(): Action[] {
   ]
 }
 
-function usePaletteGroups(appActions: Action[], runner: ActionRunner): PaletteGroup[] {
+function usePaletteGroups(open: boolean, appActions: Action[], runner: ActionRunner): PaletteGroup[] {
   const m = useMessages()
   const routable = useRoutable()
-  const extra = contributed.flatMap((hook) => hook())
+  const extra = contributed.flatMap((hook) => hook({ open }))
   // Built-in items carry their group heading, so typing the heading finds them.
   const goTo = m.palette_group_go_to()
   const actions = m.palette_group_actions()
@@ -84,9 +84,10 @@ function usePaletteGroups(appActions: Action[], runner: ActionRunner): PaletteGr
 
 export function CommandPalette() {
   const { panel } = useShellUi()
+  const open = panel === "palette"
   const router = useRouter()
   const runner = useAction()
-  const groups = usePaletteGroups(useAppActions(), runner)
+  const groups = usePaletteGroups(open, useAppActions(), runner)
 
   function run(command: PaletteCommand) {
     if (command.to) {
@@ -101,7 +102,7 @@ export function CommandPalette() {
 
   return (
     <>
-      <PaletteDialog open={panel === "palette"} onOpenChange={(open) => !open && closePanel()} groups={groups} onRun={run} />
+      <PaletteDialog open={open} onOpenChange={(open) => !open && closePanel()} groups={groups} onRun={run} />
       {runner.feedback}
       {runner.dialog}
     </>

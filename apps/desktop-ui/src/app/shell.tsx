@@ -20,6 +20,7 @@
  *   Retry; a failure of the window itself shows in the bare frame, with
  *   Reload. Neither discards library state.
  */
+import { useQuery } from "@tanstack/react-query"
 import { type ErrorComponentProps, Outlet, useRouter, useRouterState } from "@tanstack/react-router"
 import { Aperture, ChevronDown, Download, MapPinOff, Palette, RotateCw, TriangleAlert } from "lucide-react"
 import { type ReactNode, useEffect, useState } from "react"
@@ -44,7 +45,7 @@ import { HistoryControl } from "./history"
 import { NAV_GROUPS, type NavItem, PRIMARY_ITEMS, UTILITY_ITEMS, useRoutable } from "./navigation"
 import { useMessages } from "./preferences"
 import { PALETTE_SHORTCUT, ShortcutsDialog, useGlobalShortcuts } from "./shortcuts"
-import { StatusBar, useLibraryIssues } from "./status-bar"
+import { ISSUES_QUERY, StatusBar, useStatusRefresh } from "./status-bar"
 import { openPanel, toggleSidebar, useShellUi } from "./ui-state"
 
 /** The palette field shows its whole label from 1200 px; below that an icon button with the same name. */
@@ -87,7 +88,7 @@ function useSourceList(): SourceList {
   const m = useMessages()
   const routable = useRoutable()
   const pathname = useRouterState({ select: (s) => s.location.pathname })
-  const counts = issueBadgeCounts(useLibraryIssues().data)
+  const counts = issueBadgeCounts(useQuery(ISSUES_QUERY).data)
   const badges: Record<string, NavBadge | undefined> = {
     "/sessions": counts.sessions > 0 ? { count: counts.sessions, label: m.shell_nav_sessions_badge({ count: counts.sessions }), tone: "warning" } : undefined,
     "/projects": counts.projects > 0 ? { count: counts.projects, label: m.shell_nav_projects_badge({ count: counts.projects }), tone: "warning" } : undefined,
@@ -216,7 +217,7 @@ function useRouteFocus(): string {
 // Windows
 // ---------------------------------------------------------------------------
 
-/** The app window: source list, toolbar, content and status bar. */
+/** The app window: source list, toolbar, content and status bar. Every app route, the not-found one included, renders inside this one window, so moving between them keeps the window mounted. */
 function AppWindow({ children }: { children: ReactNode }) {
   const m = useMessages()
   const { sidebarCollapsed } = useShellUi()
@@ -224,6 +225,7 @@ function AppWindow({ children }: { children: ReactNode }) {
   const list = useSourceList()
   const wideSearch = useMediaQuery(WIDE_SEARCH)
   const footers = SHELLS.filter((shell) => shell.SidebarFooter)
+  useStatusRefresh()
   return (
     <AppFrame
       brand={{ name: m.app_name(), icon: Aperture }}
@@ -261,7 +263,7 @@ export function AppShell() {
   )
 }
 
-/** Unknown route: say so inside the app window and offer Home, or the palette while Home is not registered. */
+/** Unknown route, inside the app window (the app layout's catch-all): say so and offer Home, or the palette while Home is not registered. */
 export function NotFoundPage() {
   const m = useMessages()
   const router = useRouter()
@@ -270,11 +272,7 @@ export function NotFoundPage() {
   const next: Action = routable("/")
     ? { id: "go-home", label: m.shell_not_found_home(), kind: "primary", run: () => router.history.push("/") }
     : { id: "open-palette", label: m.shell_not_found_search_action(), kind: "primary", run: () => openPanel("palette") }
-  return (
-    <AppWindow>
-      <EmptyState icon={MapPinOff} title={m.shell_not_found_title()} titleAs="h1" className="m-auto max-w-lg flex-none" action={<ActionButton action={next} />} />
-    </AppWindow>
-  )
+  return <EmptyState icon={MapPinOff} title={m.shell_not_found_title()} titleAs="h1" className="m-auto max-w-lg flex-none" action={<ActionButton action={next} />} />
 }
 
 /** Logs a render failure for diagnosis; its English never reaches the window. */

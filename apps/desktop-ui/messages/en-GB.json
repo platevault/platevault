@@ -7047,5 +7047,7 @@
   "shell_error_reload": "Reload",
   "status_bar_issues_failed": "Couldn't read issues",
   "status_bar_locations_failed": "Couldn't read locations",
-  "shell_not_found_search_action": "Search"
+  "shell_not_found_search_action": "Search",
+  "status_bar_scan_finished": "Indexing {name} finished",
+  "status_bar_scans_failed": "Couldn't read running work"
 }

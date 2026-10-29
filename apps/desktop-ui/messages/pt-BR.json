@@ -7561,5 +7561,7 @@
   "shell_error_reload": "Recarregar",
   "status_bar_issues_failed": "Não foi possível ler os problemas",
   "status_bar_locations_failed": "Não foi possível ler os locais",
-  "shell_not_found_search_action": "Pesquisar"
+  "shell_not_found_search_action": "Pesquisar",
+  "status_bar_scan_finished": "Indexação de {name} concluída",
+  "status_bar_scans_failed": "Não foi possível ler as tarefas em execução"
 }

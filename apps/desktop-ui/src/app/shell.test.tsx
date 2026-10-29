@@ -3,21 +3,21 @@
  * boot reads the library's startup state, navigation reaches only registered
  * routes, the keyboard model (spec 063 FR-042), the palette and the More
  * menu sharing one descriptor, counters opening the affected rows (D-W92,
- * D-W144), failures staying visible and the native Quit confirmation.
+ * D-W144), failures staying visible with Retry, the status live region and
+ * the native Quit confirmation.
  */
-import { createMemoryHistory, createRootRoute, createRoute, createRouter, type RouterHistory } from "@tanstack/react-router"
+import { type AnyRoute, createMemoryHistory, createRoute } from "@tanstack/react-router"
 import { clearMocks, mockIPC } from "@tauri-apps/api/mocks"
 import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest"
-import type { Issue, IssueView, LocationState, NativeQuitRequest } from "@/api/ipc"
-import { NATIVE_QUIT_CONFIRM_EVENT } from "@/api/ipc"
+import type { Issue, IssueView, LocationState, NativeQuitRequest, ScanOperation, ScanProgressEvent } from "@/api/ipc"
+import { NATIVE_QUIT_CONFIRM_EVENT, SCAN_PROGRESS_EVENT } from "@/api/ipc"
 import { createQueryClient } from "@/api/query"
 import { m } from "@/lib/i18n"
-import { createAppRouter } from "@/routes"
+import { createAppRouter, createShellRouter } from "@/routes"
 import { setSingleKeyShortcuts } from "./preferences"
 import { AppRoot } from "./root"
-import { AppShell, NotFoundPage, RootLayout, RouteErrorPage, ShellErrorPage } from "./shell"
 import { closePanel } from "./ui-state"
 
 // DataTable (the keyboard help) measures its room and keeps rows in view; jsdom has neither.
@@ -113,26 +113,64 @@ function libraryHost(answers: Record<string, (args: Record<string, unknown>) => 
   }
 }
 
-/** The shell with test pages at `paths`, each titled by its path, plus one that fails to render. */
-function shellRouter(paths: string[], history: RouterHistory) {
-  const root = createRootRoute({ component: RootLayout, errorComponent: ShellErrorPage, notFoundComponent: NotFoundPage })
-  const app = createRoute({ getParentRoute: () => root, id: "app", component: AppShell, errorComponent: ShellErrorPage })
-  const pages = paths.map((path) => createRoute({ getParentRoute: () => app, path, component: () => <h1>{`page ${path}`}</h1> }))
-  const broken = createRoute({
-    getParentRoute: () => app,
-    path: "/broken",
-    component: () => {
-      throw new Error("render failed")
-    },
-  })
-  return createRouter({ routeTree: root.addChildren([app.addChildren([...pages, broken])]), history, defaultErrorComponent: RouteErrorPage })
+/** A test page titled by its path, with a text field, a page search, and a plain button to open the palette from. */
+function testPage(path: string) {
+  return () => (
+    <>
+      <h1>{`page ${path}`}</h1>
+      <input aria-label="Notes" />
+      <input aria-label="Filter" data-page-search="" />
+      <button type="button">Opener</button>
+    </>
+  )
 }
 
+/** The shell's own router over test pages at `paths`, plus one that fails to render. */
 function renderShell(paths: string[], at: string) {
   const history = createMemoryHistory({ initialEntries: [at] })
-  const router = shellRouter(paths, history)
-  render(<AppRoot router={router as never} client={createQueryClient()} />)
+  const pages = (appWindow: AnyRoute): AnyRoute[] => [
+    ...paths.map((path) => createRoute({ getParentRoute: () => appWindow, path, component: testPage(path) })),
+    createRoute({
+      getParentRoute: () => appWindow,
+      path: "/broken",
+      component: () => {
+        throw new Error("render failed")
+      },
+    }),
+  ]
+  render(<AppRoot router={createShellRouter(history, pages)} client={createQueryClient()} />)
   return { history }
+}
+
+function announcer(): HTMLElement {
+  const region = windowStatusBar().querySelector<HTMLElement>("[data-status-announcer]")
+  if (!region) throw new Error("no status live region")
+  return region
+}
+
+function scan(id: string, locationId: string, state: ScanOperation["state"]): ScanOperation {
+  const progress = { discovered: 1, metadataRead: 0, unsupported: 0, unreadable: 0, completeDirectories: 0 }
+  return { id, locationId, state, progress, issues: [], completeScopes: [], incompleteScopes: [], startedAt: "2026-10-29T08:00:00Z", finishedAt: null }
+}
+
+function scanEvent(operationId: string, locationId: string, state: ScanProgressEvent["state"]): ScanProgressEvent {
+  const progress = { discovered: 1, metadataRead: 0, unsupported: 0, unreadable: 0, completeDirectories: 0 }
+  return { operationId, revision: 2, locationId, state, progress, completeScopes: [], incompleteScopes: [] }
+}
+
+/** Each test drives the whole window; a loaded machine renders it slowly. */
+const SHELL_TEST_MS = 20_000
+
+const PERSISTENCE_FAILURE = { code: "persistence_failure", retry: "retry", successors: [] }
+
+async function openPalette(user: ReturnType<typeof userEvent.setup>) {
+  await user.keyboard("{Control>}k{/Control}")
+  return screen.findByRole("dialog", { name: m.palette_title() })
+}
+
+async function closePalette(user: ReturnType<typeof userEvent.setup>) {
+  await user.keyboard("{Escape}")
+  await waitFor(() => expect(screen.queryByRole("dialog", { name: m.palette_title() })).toBeNull())
 }
 
 afterEach(() => {
@@ -143,7 +181,7 @@ afterEach(() => {
   setSingleKeyShortcuts(true)
 })
 
-describe("boot", () => {
+describe("boot", { timeout: SHELL_TEST_MS }, () => {
   it("loads the app router, reads the startup state and fills the window", async () => {
     const host = libraryHost()
     const history = createMemoryHistory({ initialEntries: ["/design-system"] })
@@ -152,31 +190,77 @@ describe("boot", () => {
     expect(await screen.findByRole("heading", { level: 1, name: m.nav_design_system() })).toBeInTheDocument()
     const status = windowStatusBar()
     expect(await within(status).findByText(`${m.common_locations()}: ${m.status_bar_locations_online({ online: 1, total: 2 })}`)).toBeInTheDocument()
-    expect(within(status).getByRole("button", { name: m.status_bar_errors({ count: 1 }) })).toBeInTheDocument()
-    expect(within(status).getByRole("button", { name: m.status_bar_warnings({ count: 2 }) })).toBeInTheDocument()
+    expect(within(status).getByRole("img", { name: m.status_bar_errors({ count: 1 }) })).toBeInTheDocument()
+    expect(within(status).getByRole("img", { name: m.status_bar_warnings({ count: 2 }) })).toBeInTheDocument()
     await waitFor(() => expect(host.calls).toEqual(expect.arrayContaining(["library_issues", "library_list_locations", "library_native_menu_set_labels"])))
+    // What the window shows at start is not news.
+    expect(announcer()).toHaveTextContent("")
   })
 
-  it("says an unregistered page does not exist, inside the window, and offers the palette while Home is not built", async () => {
+  it("reads each status query once per refresh", async () => {
+    const host = libraryHost()
+    renderShell(["/", "/sessions", "/projects"], "/")
+    await screen.findByRole("heading", { level: 1, name: "page /" })
+    await waitFor(() => expect(within(windowStatusBar()).getByRole("button", { name: m.status_bar_warnings({ count: 2 }) })).toBeInTheDocument())
+    const reads = (command: string) => host.calls.filter((call) => call === command).length
+    await waitFor(() => expect(reads("library_issues")).toBeGreaterThan(0))
+    const before = { issues: reads("library_issues"), locations: reads("library_list_locations") }
+    act(() => host.emit(SCAN_PROGRESS_EVENT, scanEvent("scan-1", "Captures", "completed")))
+    await waitFor(() => expect(reads("library_issues")).toBe(before.issues + 1))
+    expect(reads("library_list_locations")).toBe(before.locations + 1)
+  })
+
+  it("shows an unregistered page inside the one window, which stays mounted when the user moves on", async () => {
     const user = userEvent.setup()
     libraryHost()
     render(<AppRoot router={createAppRouter(createMemoryHistory({ initialEntries: ["/"] }))} client={createQueryClient()} />)
     expect(await screen.findByRole("heading", { level: 1, name: m.shell_not_found_title() })).toBeInTheDocument()
-    expect(screen.getByRole("contentinfo", { name: m.status_bar() })).toBeInTheDocument()
-    await user.click(screen.getByRole("button", { name: m.shell_not_found_search_action() }))
-    const palette = await screen.findByRole("dialog", { name: m.palette_title() })
-    expect(within(palette).getByRole("option", { name: m.nav_design_system() })).toBeInTheDocument()
+    const bar = windowStatusBar()
+    const search = screen.getByRole("button", { name: m.shell_not_found_search_action() })
+    await user.click(search)
+    await screen.findByRole("dialog", { name: m.palette_title() })
+    // Escape closes without navigating and gives focus back to its opener.
+    await closePalette(user)
+    await waitFor(() => expect(search).toHaveFocus())
+    expect(screen.getByRole("heading", { level: 1, name: m.shell_not_found_title() })).toBeInTheDocument()
+
+    await user.click(search)
+    const again = await screen.findByRole("dialog", { name: m.palette_title() })
+    await user.click(within(again).getByRole("option", { name: m.nav_design_system() }))
+    expect(await screen.findByRole("heading", { level: 1, name: m.nav_design_system() })).toBeInTheDocument()
+    expect(windowStatusBar()).toBe(bar)
   })
 
-  it("keeps a failed library read visible in the status bar", async () => {
+  it("keeps a failed library read visible with Retry, and announces it", async () => {
+    const user = userEvent.setup()
+    let fail = true
     libraryHost({
       library_issues: () => {
-        throw { code: "persistence_failure", retry: "retry", successors: [] }
+        if (fail) throw PERSISTENCE_FAILURE
+        return ISSUES
       },
     })
     renderShell(["/"], "/")
-    const status = await screen.findByRole("contentinfo", { name: m.status_bar() })
-    expect(await within(status).findByRole("img", { name: m.status_bar_issues_failed() })).toBeInTheDocument()
+    await screen.findByRole("heading", { level: 1, name: "page /" })
+    const status = windowStatusBar()
+    expect(await within(status).findByRole("group", { name: m.status_bar_issues_failed() })).toHaveTextContent(m.status_bar_issues_failed())
+    await waitFor(() => expect(announcer()).toHaveTextContent(m.status_bar_issues_failed()))
+    fail = false
+    await user.click(within(status).getByRole("button", { name: `${m.verb_retry()}: ${m.status_bar_issues_failed()}` }))
+    expect(await within(status).findByRole("img", { name: m.status_bar_errors({ count: 1 }) })).toBeInTheDocument()
+    await waitFor(() => expect(announcer()).toHaveTextContent(`${m.status_bar_errors({ count: 1 })} and ${m.status_bar_warnings({ count: 2 })}`))
+  })
+
+  it("announces a scan that finished, once", async () => {
+    let running = true
+    const host = libraryHost({ library_list_operations: () => (running ? [scan("scan-1", "Captures", "running")] : [scan("scan-1", "Captures", "completed")]) })
+    renderShell(["/"], "/")
+    await screen.findByRole("heading", { level: 1, name: "page /" })
+    await waitFor(() => expect(host.calls).toContain("library_list_operations"))
+    await waitFor(() => expect(within(windowStatusBar()).getByRole("img", { name: m.status_bar_errors({ count: 1 }) })).toBeInTheDocument())
+    running = false
+    act(() => host.emit(SCAN_PROGRESS_EVENT, scanEvent("scan-1", "Captures", "completed")))
+    await waitFor(() => expect(announcer()).toHaveTextContent(m.status_bar_scan_finished({ name: "Captures" })))
   })
 
   it("shows a page that fails to render inside the window, with Retry", async () => {
@@ -184,14 +268,14 @@ describe("boot", () => {
     renderShell(["/"], "/broken")
     expect(await screen.findByRole("heading", { level: 1, name: m.shell_error_title() })).toBeInTheDocument()
     expect(screen.getByRole("button", { name: m.verb_retry() })).toBeInTheDocument()
-    expect(screen.getByRole("contentinfo", { name: m.status_bar() })).toBeInTheDocument()
+    expect(windowStatusBar()).toBeInTheDocument()
   })
 
   it("asks before a native Quit that would interrupt work, and keeps a failed answer visible", async () => {
     const user = userEvent.setup()
     const host = libraryHost({
       library_native_quit_answer: () => {
-        throw { code: "persistence_failure", retry: "retry", successors: [] }
+        throw PERSISTENCE_FAILURE
       },
     })
     renderShell(["/"], "/")
@@ -208,7 +292,7 @@ describe("boot", () => {
   })
 })
 
-describe("navigation", () => {
+describe("navigation", { timeout: SHELL_TEST_MS }, () => {
   it("lists only registered pages in the source list, the palette and Help", async () => {
     const user = userEvent.setup()
     libraryHost()
@@ -218,13 +302,11 @@ describe("navigation", () => {
     expect(within(nav).getAllByRole("link").map((link) => link.textContent)).toEqual([m.nav_home(), expect.stringContaining(m.nav_sessions())])
     expect(screen.queryByRole("navigation", { name: m.shell_nav_utilities() })).toBeNull()
 
-    await user.keyboard("{Control>}k{/Control}")
-    const palette = await screen.findByRole("dialog", { name: m.palette_title() })
+    const palette = await openPalette(user)
     const options = within(palette).getAllByRole("option").map((option) => option.textContent)
     expect(options).toEqual(expect.arrayContaining([m.nav_home(), m.nav_sessions()]))
     expect(options).not.toContain(m.nav_projects())
-    await user.keyboard("{Escape}")
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: m.palette_title() })).toBeNull())
+    await closePalette(user)
 
     await user.keyboard("?")
     const help = await screen.findByRole("dialog", { name: m.shortcuts_title() })
@@ -232,27 +314,79 @@ describe("navigation", () => {
     expect(within(help).queryByText(m.shortcuts_go_to({ name: m.nav_projects() }))).toBeNull()
   })
 
-  it("opens a page by its G key only while single-key shortcuts are on and focus is outside a field", async () => {
+  it("opens a page by its G key with single-key shortcuts on, never while typing in a field", async () => {
     const user = userEvent.setup()
     libraryHost()
-    const { history } = renderShell(["/", "/sessions", "/projects"], "/")
+    const { history } = renderShell(["/", "/projects"], "/")
     await screen.findByRole("heading", { level: 1, name: "page /" })
 
-    setSingleKeyShortcuts(false)
-    await user.keyboard("gp")
+    await user.click(screen.getByRole("textbox", { name: "Notes" }))
+    await user.keyboard("gp?")
     expect(history.location.pathname).toBe("/")
-    await user.keyboard("{Control>}k{/Control}")
-    const palette = await screen.findByRole("dialog", { name: m.palette_title() })
-    await user.keyboard("gs")
-    expect(history.location.pathname).toBe("/")
-    expect(within(palette).getByRole("combobox")).toHaveValue("gs")
-    await user.keyboard("{Escape}")
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: m.palette_title() })).toBeNull())
+    expect(screen.getByRole("textbox", { name: "Notes" })).toHaveValue("gp?")
+    expect(screen.queryByRole("dialog", { name: m.shortcuts_title() })).toBeNull()
 
-    setSingleKeyShortcuts(true)
+    await user.click(screen.getByRole("button", { name: "Opener" }))
     await user.keyboard("gp")
     await waitFor(() => expect(history.location.pathname).toBe("/projects"))
     expect(await screen.findByRole("heading", { level: 1, name: "page /projects" })).toBeInTheDocument()
+  })
+
+  it("fires no single-key shortcut while the setting is off", async () => {
+    const user = userEvent.setup()
+    libraryHost()
+    const { history } = renderShell(["/", "/projects"], "/")
+    await screen.findByRole("heading", { level: 1, name: "page /" })
+    const rail = () => document.querySelector("aside")?.getAttribute("data-sidebar")
+    setSingleKeyShortcuts(false)
+    await user.click(screen.getByRole("button", { name: "Opener" }))
+    await user.keyboard("gp")
+    await user.keyboard("?")
+    await user.keyboard("[[")
+    await user.keyboard("/")
+    expect(history.location.pathname).toBe("/")
+    expect(screen.queryByRole("dialog", { name: m.shortcuts_title() })).toBeNull()
+    expect(rail()).toBe("full")
+    expect(screen.getByRole("textbox", { name: "Filter" })).not.toHaveFocus()
+    // ⌘K / Ctrl+K stays on.
+    expect(await openPalette(user)).toBeInTheDocument()
+  })
+
+  it("fires no single-key shortcut while a dialog is open", async () => {
+    const user = userEvent.setup()
+    libraryHost()
+    const { history } = renderShell(["/", "/projects"], "/")
+    await screen.findByRole("heading", { level: 1, name: "page /" })
+    const rail = () => document.querySelector("aside")?.getAttribute("data-sidebar")
+    await user.click(screen.getByRole("button", { name: "Opener" }))
+    await user.keyboard("?")
+    const help = await screen.findByRole("dialog", { name: m.shortcuts_title() })
+    // Focus is inside the dialog, on no text field.
+    await waitFor(() => expect(help.contains(document.activeElement)).toBe(true))
+    await user.keyboard("gp")
+    await user.keyboard("[[")
+    expect(history.location.pathname).toBe("/")
+    expect(rail()).toBe("full")
+  })
+
+  it("opens the palette with Ctrl+K from a text field, and Escape gives focus back to the opener", async () => {
+    const user = userEvent.setup()
+    libraryHost()
+    const { history } = renderShell(["/", "/sessions"], "/")
+    await screen.findByRole("heading", { level: 1, name: "page /" })
+
+    const notes = screen.getByRole("textbox", { name: "Notes" })
+    await user.click(notes)
+    await openPalette(user)
+    await closePalette(user)
+    await waitFor(() => expect(notes).toHaveFocus())
+
+    const opener = screen.getByRole("button", { name: "Opener" })
+    await user.click(opener)
+    await openPalette(user)
+    await closePalette(user)
+    await waitFor(() => expect(opener).toHaveFocus())
+    expect(history.location.pathname).toBe("/")
   })
 
   it("runs the highlighted palette result on Enter and toggles the sidebar with [", async () => {
@@ -261,21 +395,21 @@ describe("navigation", () => {
     const { history } = renderShell(["/", "/sessions"], "/")
     await screen.findByRole("heading", { level: 1, name: "page /" })
     const rail = () => document.querySelector("aside")?.getAttribute("data-sidebar")
+    await user.click(screen.getByRole("button", { name: "Opener" }))
     expect(rail()).toBe("full")
     await user.keyboard("[[")
     expect(rail()).toBe("rail")
     await user.keyboard("[[")
     expect(rail()).toBe("full")
 
-    await user.keyboard("{Control>}k{/Control}")
-    await screen.findByRole("dialog", { name: m.palette_title() })
+    await openPalette(user)
     await user.keyboard(m.nav_sessions())
     await user.keyboard("{Enter}")
     await waitFor(() => expect(history.location.pathname).toBe("/sessions"))
   })
 })
 
-describe("app Actions", () => {
+describe("app Actions", { timeout: SHELL_TEST_MS }, () => {
   it("are one descriptor in the More menu and the palette", async () => {
     const user = userEvent.setup()
     libraryHost()
@@ -288,14 +422,13 @@ describe("app Actions", () => {
     await user.keyboard("{Escape}")
     await waitFor(() => expect(screen.queryByRole("dialog", { name: m.shortcuts_title() })).toBeNull())
 
-    await user.keyboard("{Control>}k{/Control}")
-    const palette = await screen.findByRole("dialog", { name: m.palette_title() })
+    const palette = await openPalette(user)
     await user.click(within(palette).getByRole("option", { name: m.shortcuts_show() }))
     expect(await screen.findByRole("dialog", { name: m.shortcuts_title() })).toBeInTheDocument()
   })
 })
 
-describe("issue counters", () => {
+describe("issue counters", { timeout: SHELL_TEST_MS }, () => {
   it("open each registered owning page, filtered to the affected rows", async () => {
     const user = userEvent.setup()
     libraryHost()
@@ -316,14 +449,13 @@ describe("issue counters", () => {
     await waitFor(() => expect(history.location.pathname).toBe("/sessions"))
   })
 
-  it("leave out an owning page that is not registered", async () => {
-    const user = userEvent.setup()
+  it("show a count with no menu while none of its owning pages is registered", async () => {
     libraryHost()
     renderShell(["/"], "/")
     await screen.findByRole("heading", { level: 1, name: "page /" })
-    await user.click(await screen.findByRole("button", { name: m.status_bar_errors({ count: 1 }) }))
-    const menu = await screen.findByRole("menu")
-    expect(within(menu).queryAllByRole("menuitem")).toEqual([])
+    const status = windowStatusBar()
+    expect(await within(status).findByRole("img", { name: m.status_bar_errors({ count: 1 }) })).toBeInTheDocument()
+    expect(within(status).queryByRole("button", { name: m.status_bar_errors({ count: 1 }) })).toBeNull()
   })
 
   it("badge the source list's Sessions and Projects rows", async () => {

@@ -11,24 +11,31 @@
  *   the rest under "+N".
  * - Right: one counter per severity with issues, from `libraryIssues`
  *   (counts only). Each opens a menu of the pages its issues are on, each
- *   filtered to the affected rows, with its count. There is no Issues hub,
- *   and Dismiss and Restore stay on the rows (issue-actions.ts).
+ *   filtered to the affected rows, with its count; a counter none of whose
+ *   pages is registered yet shows its count without a menu. There is no
+ *   Issues hub, and Dismiss and Restore stay on the rows (issue-actions.ts).
  *
  * Every link appears once its page's route is registered (navigation.ts);
- * until then the item shows its words without a link. A failed read stays
- * visible in the bar. Scans refresh these reads when they settle; a write
- * that changes issues invalidates `libraryKey("libraryIssues")` itself.
+ * until then the item shows its words without a link. A failed read says so
+ * in the bar, with Retry. The bar's polite live region reads each change
+ * once: the counters changing, a scan finishing, a read failing; what the
+ * window shows at start is not announced.
+ *
+ * `useStatusRefresh`, mounted once per window, keeps one refresher per
+ * read: a settled scan refreshes issues and locations, and a scan that
+ * starts or settles refreshes the running list. A write that changes issues
+ * invalidates `libraryKey("libraryIssues")` itself.
  */
-import { useQuery } from "@tanstack/react-query"
+import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-query"
 import { CircleAlert, CircleCheck, HardDrive } from "lucide-react"
-import { type RefObject, useRef, useState } from "react"
+import { type RefObject, useEffect, useRef, useState } from "react"
 import { useRefreshOnEvent } from "@/api/events"
-import { type IssuePage, type IssueSeverity, type IssueView, type Issue as LibraryIssue, library, type Location, SCAN_PROGRESS_EVENT, type ScanOperation } from "@/api/ipc"
+import { type IssuePage, type IssueSeverity, type IssueView, type Issue as LibraryIssue, library, SCAN_PROGRESS_EVENT, type ScanOperation, type ScanProgressEvent } from "@/api/ipc"
 import { libraryKey, libraryQuery } from "@/api/query"
+import type { StepLink } from "@/components/app/contracts"
 import { toast } from "@/components/app/feedback"
 import { ISSUE_SEVERITY_ICON } from "@/components/app/issue-copy"
 import { failureMessage } from "@/components/app/run-result"
-import type { StepLink } from "@/components/app/contracts"
 import {
   ListOperationRow,
   ListPopover,
@@ -43,9 +50,11 @@ import {
   StatusText,
 } from "@/components/app/status-bar"
 import { useSelectionContext } from "@/components/app/status-selection"
-import { formatCount } from "@/lib/format"
+import { Button } from "@/components/ui/button"
+import { formatCount, formatList } from "@/lib/format"
 import type { Messages } from "@/lib/i18n"
 import { useMediaQuery } from "@/lib/use-media-query"
+import { cn } from "@/lib/utils"
 import { useRoutable } from "./navigation"
 import { useMessages } from "./preferences"
 
@@ -55,7 +64,14 @@ const WIDE = "(min-width: 1440px)"
 /** The newest scans the bar reads; running ones are always among them. */
 const RECENT_SCANS = 20
 
+/** The status bar's library reads. */
+export const ISSUES_QUERY = libraryQuery("libraryIssues")
+const LOCATIONS_QUERY = libraryQuery("libraryListLocations")
+const SCANS_QUERY = libraryQuery("libraryListOperations", null, 0, RECENT_SCANS)
+
 const SEVERITY_ORDER: readonly IssueSeverity[] = ["danger", "warning", "info"]
+
+const SEVERITY_TEXT: Record<IssueSeverity, string> = { danger: "text-destructive", warning: "text-warning", info: "text-info" }
 
 /** The Issues facet value each owning page filters its rows by (issue-actions.ts). */
 const WITH_ISSUES = { issues: "with-issues" }
@@ -99,6 +115,12 @@ function counterLabel(m: Messages, severity: IssueSeverity, count: number): stri
   return m.status_bar_info({ count })
 }
 
+/** All the counters in words, "1 error and 2 warnings", or "No issues". */
+function issuesWords(m: Messages, view: IssueView): string {
+  const counters = SEVERITY_ORDER.filter((severity) => view.counts[severity] > 0).map((severity) => counterLabel(m, severity, view.counts[severity]))
+  return counters.length > 0 ? formatList(counters) : m.issues_none()
+}
+
 /** The pages one severity's issues are on, in the library's order, each with its count; a page whose route is not registered yet is left out. */
 export function counterPages(m: Messages, view: IssueView, severity: IssueSeverity, routable: (to: string) => boolean): StatusCounterPage[] {
   return view.pages
@@ -112,36 +134,53 @@ export function counterPages(m: Messages, view: IssueView, severity: IssueSeveri
     }))
 }
 
-/** The library's issues, read again whenever a scan settles. */
-export function useLibraryIssues() {
-  useRefreshOnEvent(SCAN_PROGRESS_EVENT, libraryKey("libraryIssues"), (event) => event.state !== "running")
-  return useQuery(libraryQuery("libraryIssues"))
+function settled(event: ScanProgressEvent): boolean {
+  return event.state !== "running"
+}
+
+/** Whether the last running-list read already lists `operationId` as running. */
+function listedRunning(client: QueryClient, operationId: string): boolean {
+  return (client.getQueryData(SCANS_QUERY.queryKey) ?? []).some((scan) => scan.id === operationId && scan.state === "running")
+}
+
+/** One refresher per status read, for the window's lifetime (see the module comment). */
+export function useStatusRefresh(): void {
+  const client = useQueryClient()
+  useRefreshOnEvent(SCAN_PROGRESS_EVENT, libraryKey("libraryIssues"), settled)
+  useRefreshOnEvent(SCAN_PROGRESS_EVENT, libraryKey("libraryListLocations"), settled)
+  // A scan that starts or settles changes the list; progress within a listed scan does not.
+  useRefreshOnEvent(SCAN_PROGRESS_EVENT, libraryKey("libraryListOperations"), (event) => settled(event) || !listedRunning(client, event.operationId))
+}
+
+/** A read that failed: what failed, then Retry. */
+function FailedRead({ text, onRetry, ...data }: { text: string; onRetry: () => void } & { [key: `data-${string}`]: string }) {
+  const m = useMessages()
+  return (
+    <StatusGroup label={text} {...data}>
+      <StatusText>
+        <CircleAlert aria-hidden="true" className="mr-1 inline size-3 text-destructive" />
+        {text}
+      </StatusText>
+      <Button variant="ghost" size="xs" aria-label={`${m.verb_retry()}: ${text}`} onClick={onRetry}>
+        {m.verb_retry()}
+      </Button>
+    </StatusGroup>
+  )
 }
 
 // ---------------------------------------------------------------------------
 // Left: locations and the selection
 // ---------------------------------------------------------------------------
 
-function onlineOf(locations: readonly { location: Location }[]): { online: number; total: number } {
-  const live = locations.filter(({ location }) => location.lifecycle === "active")
-  return { total: live.length, online: live.filter(({ location }) => location.availability === "available").length }
-}
-
 function LocationsItem({ narrow }: { narrow: boolean }) {
   const m = useMessages()
   const routable = useRoutable()
-  useRefreshOnEvent(SCAN_PROGRESS_EVENT, libraryKey("libraryListLocations"), (event) => event.state !== "running")
-  const read = useQuery(libraryQuery("libraryListLocations"))
+  const read = useQuery(LOCATIONS_QUERY)
   if (read.isPending) return null
-  if (read.isError) {
-    return (
-      <StatusText data-status-locations="failed">
-        <CircleAlert role="img" aria-label={m.status_bar_locations_failed()} className="size-3 text-destructive" />
-      </StatusText>
-    )
-  }
-  const { online, total } = onlineOf(read.data)
-  const text = total === 0 ? m.storage_no_locations() : m.status_bar_locations_online({ online, total })
+  if (read.isError) return <FailedRead text={m.status_bar_locations_failed()} onRetry={() => void read.refetch()} data-status-locations="failed" />
+  const live = read.data.filter(({ location }) => location.lifecycle === "active")
+  const online = live.filter(({ location }) => location.availability === "available").length
+  const text = live.length === 0 ? m.storage_no_locations() : m.status_bar_locations_online({ online, total: live.length })
   if (routable("/settings/locations")) return <StatusLink to="/settings/locations" icon={HardDrive} label={m.common_locations()} text={text} compact={narrow} data-status-locations="" />
   return <StatusText data-status-locations="">{`${m.common_locations()}: ${text}`}</StatusText>
 }
@@ -157,14 +196,6 @@ function SelectionItem() {
 // Middle: running scans
 // ---------------------------------------------------------------------------
 
-function useRunningScans(): ScanOperation[] {
-  const read = useQuery(libraryQuery("libraryListOperations", null, 0, RECENT_SCANS))
-  const running = (read.data ?? []).filter((scan) => scan.state === "running")
-  // A scan that starts or settles changes the list; progress within a listed scan does not.
-  useRefreshOnEvent(SCAN_PROGRESS_EVENT, libraryKey("libraryListOperations"), (event) => event.state !== "running" || !running.some((scan) => scan.id === event.operationId))
-  return running
-}
-
 /** A cancelled scan settles through its next event; a refused Cancel says why. */
 async function cancelScan(m: Messages, scan: ScanOperation): Promise<void> {
   const result = await library.libraryCancelScan(scan.id)
@@ -178,12 +209,11 @@ function ScanItem({ scan, name, expanded = false, onCancel }: { scan: ScanOperat
 }
 
 /** Running scans, newest first: `inline` in the bar, the rest under "+N". */
-function RunningScans({ running, inline, names, group }: { running: ScanOperation[]; inline: ScanOperation[]; names: Map<string, string>; group: RefObject<HTMLDivElement | null> }) {
+function RunningScans({ running, inline, nameOf, group }: { running: ScanOperation[]; inline: ScanOperation[]; nameOf: (scan: ScanOperation) => string; group: RefObject<HTMLDivElement | null> }) {
   const m = useMessages()
   const [open, setOpen] = useState(false)
   const rows = useRef<HTMLUListElement>(null)
   const rest = running.length - inline.length
-  const name = (scan: ScanOperation) => names.get(scan.locationId) ?? m.common_locations()
   // Focus moves before the cancelled item unmounts (WCAG 2.4.3): to the next scan in its list, else to the first issue counter.
   const cancel = (scan: ScanOperation, listed: boolean) => {
     const listGoes = listed && rest <= 1
@@ -199,14 +229,14 @@ function RunningScans({ running, inline, names, group }: { running: ScanOperatio
   return (
     <StatusGroup ref={group} label={m.status_running()} layout="work" data-status-work="">
       {inline.map((scan) => (
-        <ScanItem key={scan.id} scan={scan} name={name(scan)} onCancel={() => cancel(scan, false)} />
+        <ScanItem key={scan.id} scan={scan} name={nameOf(scan)} onCancel={() => cancel(scan, false)} />
       ))}
       {rest > 0 ? (
         <ListPopover open={open} onOpenChange={setOpen} align="center" width="sm" label={m.status_running()} trigger={{ label: m.status_bar_more_running({ count: rest }), content: `+${rest}`, "data-status-more": "work" }}>
           <ListRows ref={rows} dense>
             {running.map((scan) => (
               <ListOperationRow key={scan.id}>
-                <ScanItem scan={scan} name={name(scan)} expanded onCancel={() => cancel(scan, true)} />
+                <ScanItem scan={scan} name={nameOf(scan)} expanded onCancel={() => cancel(scan, true)} />
               </ListOperationRow>
             ))}
           </ListRows>
@@ -216,34 +246,36 @@ function RunningScans({ running, inline, names, group }: { running: ScanOperatio
   )
 }
 
-/** The running scans, once Activity, where each opens, is registered. */
-function RunningWork({ wide }: { wide: boolean }) {
-  const running = useRunningScans()
-  const locations = useQuery(libraryQuery("libraryListLocations"))
+/** The running scans; shown once Activity, where each opens, is registered. */
+function RunningWork({ running, nameOf, wide, failed, onRetry }: { running: ScanOperation[]; nameOf: (scan: ScanOperation) => string; wide: boolean; failed: boolean; onRetry: () => void }) {
+  const m = useMessages()
   const group = useRef<HTMLDivElement>(null)
+  if (failed) return <FailedRead text={m.status_bar_scans_failed()} onRetry={onRetry} data-status-work="failed" />
   if (running.length === 0) return null
-  const names = new Map((locations.data ?? []).map(({ location }) => [location.id, location.name]))
-  return <RunningScans running={running} inline={running.slice(0, wide ? 2 : 1)} names={names} group={group} />
+  return <RunningScans running={running} inline={running.slice(0, wide ? 2 : 1)} nameOf={nameOf} group={group} />
 }
 
 // ---------------------------------------------------------------------------
 // Right: the issue counters
 // ---------------------------------------------------------------------------
 
+/** A counter whose pages are not registered yet: its count, with no menu. */
+function CountOnly({ label, severity, count }: { label: string; severity: IssueSeverity; count: number }) {
+  const Icon = ISSUE_SEVERITY_ICON[severity]
+  return (
+    <StatusText data-status-counter={severity} data-count={count}>
+      <Icon role="img" aria-label={label} className={cn("mr-1 inline size-3", SEVERITY_TEXT[severity])} />
+      <span aria-hidden="true">{count}</span>
+    </StatusText>
+  )
+}
+
 function IssueCounters() {
   const m = useMessages()
   const routable = useRoutable()
-  const read = useLibraryIssues()
+  const read = useQuery(ISSUES_QUERY)
   if (read.isPending) return null
-  if (read.isError) {
-    return (
-      <StatusGroup label={m.issues_title()} data-status-issues="failed">
-        <StatusText>
-          <CircleAlert role="img" aria-label={m.status_bar_issues_failed()} className="size-3 text-destructive" />
-        </StatusText>
-      </StatusGroup>
-    )
-  }
+  if (read.isError) return <FailedRead text={m.status_bar_issues_failed()} onRetry={() => void read.refetch()} data-status-issues="failed" />
   const view = read.data
   const total = view.counts.danger + view.counts.warning + view.counts.info
   return (
@@ -256,22 +288,54 @@ function IssueCounters() {
         SEVERITY_ORDER.map((severity) => {
           const count = view.counts[severity]
           if (count === 0) return null
-          return (
-            <StatusCounter
-              key={severity}
-              label={counterLabel(m, severity, count)}
-              icon={ISSUE_SEVERITY_ICON[severity]}
-              tone={severity}
-              count={count}
-              pages={counterPages(m, view, severity, routable)}
-              data-status-counter={severity}
-              data-count={count}
-            />
-          )
+          const label = counterLabel(m, severity, count)
+          const pages = counterPages(m, view, severity, routable)
+          if (pages.length === 0) return <CountOnly key={severity} label={label} severity={severity} count={count} />
+          return <StatusCounter key={severity} label={label} icon={ISSUE_SEVERITY_ICON[severity]} tone={severity} count={count} pages={pages} data-status-counter={severity} data-count={count} />
         })
       )}
     </StatusGroup>
   )
+}
+
+// ---------------------------------------------------------------------------
+// The live region
+// ---------------------------------------------------------------------------
+
+interface StatusSnapshot {
+  /** The counters in words; null until the first read answers or while it fails. */
+  issues: string | null
+  failures: string[]
+  /** Running scan id to its location's name; null while the list is unread. */
+  running: Map<string, string> | null
+}
+
+/** What changed between two snapshots, in words; a failure is news even at start, the first counts are not. */
+function statusNews(m: Messages, before: StatusSnapshot, now: StatusSnapshot): string[] {
+  const news: string[] = []
+  if (now.issues !== null && before.issues !== null && now.issues !== before.issues) news.push(now.issues)
+  if (now.issues !== null && before.issues === null && before.failures.includes(m.status_bar_issues_failed())) news.push(now.issues)
+  news.push(...now.failures.filter((failure) => !before.failures.includes(failure)))
+  if (before.running && now.running) {
+    for (const [id, name] of before.running) if (!now.running.has(id)) news.push(m.status_bar_scan_finished({ name }))
+  }
+  return news
+}
+
+/** The words the bar's live region reads: set only when something changes, so one change is read once. */
+function useStatusAnnouncement(snapshot: StatusSnapshot): string {
+  const m = useMessages()
+  const previous = useRef<StatusSnapshot | null>(null)
+  const [announcement, setAnnouncement] = useState("")
+  const key = JSON.stringify([snapshot.issues, snapshot.failures, snapshot.running ? [...snapshot.running] : null])
+  useEffect(() => {
+    const before = previous.current
+    previous.current = snapshot
+    if (!before) return
+    const news = statusNews(m, before, snapshot)
+    if (news.length > 0) setAnnouncement(news.join(". "))
+  }, [key]) // `key` is the snapshot's words: the effect runs once per change.
+  return announcement
 }
 
 // ---------------------------------------------------------------------------
@@ -283,16 +347,32 @@ export function StatusBar() {
   const routable = useRoutable()
   const narrow = useMediaQuery(NARROW)
   const wide = useMediaQuery(WIDE)
+  const issues = useQuery(ISSUES_QUERY)
+  const locations = useQuery(LOCATIONS_QUERY)
+  const scans = useQuery(SCANS_QUERY)
+  const running = (scans.data ?? []).filter((scan) => scan.state === "running")
+  const names = new Map((locations.data ?? []).map(({ location }) => [location.id, location.name]))
+  const nameOf = (scan: ScanOperation) => names.get(scan.locationId) ?? m.common_locations()
+  const announcement = useStatusAnnouncement({
+    issues: issues.data ? issuesWords(m, issues.data) : null,
+    failures: [
+      ...(issues.isError ? [m.status_bar_issues_failed()] : []),
+      ...(locations.isError ? [m.status_bar_locations_failed()] : []),
+      ...(scans.isError ? [m.status_bar_scans_failed()] : []),
+    ],
+    running: scans.data ? new Map(running.map((scan) => [scan.id, nameOf(scan)])) : null,
+  })
   return (
     <StatusBarFrame
       label={m.status_bar()}
+      announcement={announcement}
       start={
         <>
           <LocationsItem narrow={narrow} />
           <SelectionItem />
         </>
       }
-      middle={routable("/activity") ? <RunningWork wide={wide} /> : null}
+      middle={routable("/activity") ? <RunningWork running={running} nameOf={nameOf} wide={wide} failed={scans.isError} onRetry={() => void scans.refetch()} /> : null}
       end={<IssueCounters />}
     />
   )

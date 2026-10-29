@@ -7,6 +7,7 @@
  *   single-key shortcuts on, `G` then a page's key opens it, `[` toggles the
  *   sidebar, `?` opens the keyboard help and `/` focuses the page's search.
  *   ⌘↩ runs the Proceed of the step page on screen, and ⌃1–⌃9 open its steps.
+ *   None but ⌘K acts while a modal surface (a dialog, the palette) is open.
  *   A go-to key works once its page's route is registered (navigation.ts).
  * - `ShortcutsTable`: every shortcut in one DataTable, for the `?` dialog and
  *   Settings › Help.
@@ -95,7 +96,8 @@ export function useGlobalShortcuts() {
         return
       }
       if (event.metaKey || event.ctrlKey || event.altKey || isTyping(event.target)) return
-      if (!getPreferences().singleKeyShortcuts) return
+      // A dialog, menu or the palette holds the keyboard: the page's single keys wait, as ⌘↩ does.
+      if (!getPreferences().singleKeyShortcuts || modalOpen()) return
       if (goPending) {
         goPending = false
         window.clearTimeout(goTimer)

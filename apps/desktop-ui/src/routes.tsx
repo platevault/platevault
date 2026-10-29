@@ -11,14 +11,18 @@
  * follow HARNESS-V5-IA § Screens: `/`, `/projects`, `/projects/$projectId`,
  * `/targets`, `/targets/$targetId`, `/sessions`, `/sessions/$sessionId`
  * (`?step=` is session intake), `/import`, `/calibration`, `/activity`,
- * `/settings/<section>`. An owning page filters its rows to those with
- * issues on `?issues=with-issues` (the status-bar counters' links).
+ * `/settings/<section>`. The Settings bead also registers a bare `/settings`
+ * route (its layout or index): the source-list row and `G ,` open that path.
+ * An owning page filters its rows to those with issues on
+ * `?issues=with-issues` (the status-bar counters' links).
  *
- * Hash history keeps the static build portable inside the Tauri webview.
- * Search params are loose string maps, so a page adds keys without a shell
- * change.
+ * Every app page hangs off the one app window (`AppShell`), and so does the
+ * catch-all not-found route, so moving between them never remounts the
+ * window or its status bar. Hash history keeps the static build portable
+ * inside the Tauri webview. Search params are loose string maps, so a page
+ * adds keys without a shell change.
  */
-import { createHashHistory, createRootRoute, createRoute, createRouter, type RouterHistory } from "@tanstack/react-router"
+import { type AnyRoute, createHashHistory, createRootRoute, createRoute, createRouter, type RouterHistory } from "@tanstack/react-router"
 import { DesignSystemPage } from "@/app/catalogue/design-system-page"
 import { AppShell, NotFoundPage, RootLayout, RouteErrorPage, ShellErrorPage } from "@/app/shell"
 
@@ -33,18 +37,30 @@ function looseSearch(search: Record<string, unknown>): SearchParams {
   return out
 }
 
-const rootRoute = createRootRoute({ component: RootLayout, errorComponent: ShellErrorPage, notFoundComponent: NotFoundPage })
+/** The shell's root and app-window routes around `pages`, the routes that hang off the window, then the catch-all not-found route. */
+function shellRouteTree(pages: (appWindow: AnyRoute) => AnyRoute[]) {
+  const root = createRootRoute({ component: RootLayout, errorComponent: ShellErrorPage })
+  const appWindow = createRoute({ getParentRoute: () => root, id: "app", component: AppShell, errorComponent: ShellErrorPage, notFoundComponent: NotFoundPage })
+  const notFound = createRoute({ getParentRoute: () => appWindow, path: "$", component: NotFoundPage })
+  return root.addChildren([appWindow.addChildren([...pages(appWindow), notFound])])
+}
 
-const appLayout = createRoute({ getParentRoute: () => rootRoute, id: "app", component: AppShell, errorComponent: ShellErrorPage })
+/** The shell's router over `pages`; the app passes its built pages, a test its own. */
+export function createShellRouter(history: RouterHistory, pages: (appWindow: AnyRoute) => AnyRoute[]) {
+  return createRouter({ routeTree: shellRouteTree(pages), history, scrollRestoration: true, defaultErrorComponent: RouteErrorPage })
+}
 
-// The design-system reference: the palette lists it, the source list does not.
-const designSystemRoute = createRoute({ getParentRoute: () => appLayout, path: "/design-system", component: DesignSystemPage, validateSearch: looseSearch })
-
-const routeTree = rootRoute.addChildren([appLayout.addChildren([designSystemRoute])])
+/** The built pages. */
+function appPages(appWindow: AnyRoute): AnyRoute[] {
+  return [
+    // The design-system reference: the palette lists it, the source list does not.
+    createRoute({ getParentRoute: () => appWindow, path: "/design-system", component: DesignSystemPage, validateSearch: looseSearch }),
+  ]
+}
 
 /** The app's router; tests pass a memory history. */
 export function createAppRouter(history: RouterHistory = createHashHistory()) {
-  return createRouter({ routeTree, history, scrollRestoration: true, defaultErrorComponent: RouteErrorPage })
+  return createShellRouter(history, appPages)
 }
 
 export type AppRouter = ReturnType<typeof createAppRouter>
