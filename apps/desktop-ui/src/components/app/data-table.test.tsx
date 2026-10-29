@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { type ReactNode, useState } from "react"
 import { describe, expect, it, vi } from "vitest"
@@ -814,5 +814,152 @@ describe("DataTable", () => {
       await user.tab()
       expect(after()).toHaveFocus()
     })
+  })
+})
+
+describe("DataTable windowing", () => {
+  const MANY: Frame[] = Array.from({ length: 5000 }, (_, i) => ({ id: `f${i}`, name: `Light_${String(i).padStart(4, "0")}`, size: i }))
+  const mountedRows = () => document.querySelectorAll("tbody > tr[data-row]")
+  const rowNamed = (name: string) => screen.getByRole("rowheader", { name }).closest("tr")!
+  const checkboxOf = (name: string) => screen.getByRole("checkbox", { name: m.table_select_row({ name }) })
+  /** jsdom has no layout: a scroll sets the frame's offset, which the virtualizer reads on the scroll event. Found by its slot: an open dialog hides it from role queries. */
+  const scrollFrameTo = (top: number) => {
+    const frame = document.querySelector("[data-slot=table]")!.parentElement!
+    frame.scrollTop = top
+    fireEvent.scroll(frame)
+  }
+  function Many() {
+    const [selected, setSelected] = useState<string[]>([])
+    return <DataTable label="Frames" rows={MANY} columns={COLUMNS} getRowId={(row) => row.id} selection={{ selected, onChange: setSelected, rowLabel: (row) => row.name }} />
+  }
+
+  it("mounts a bounded window of a 5,000-row table and numbers its rows among all of them", () => {
+    render(<Many />)
+    expect(mountedRows().length).toBeGreaterThan(10)
+    expect(mountedRows().length).toBeLessThan(100)
+    expect(screen.getByRole("table", { name: "Frames" })).toHaveAttribute("aria-rowcount", "5001")
+    expect(rowNamed("Light_0000")).toHaveAttribute("aria-rowindex", "2")
+  })
+
+  it("End mounts and focuses the last row, and the keys keep moving from there", async () => {
+    const user = userEvent.setup()
+    render(<Many />)
+    act(() => rowNamed("Light_0000").focus())
+    await user.keyboard("{End}")
+    expect(rowNamed("Light_4999")).toHaveFocus()
+    expect(rowNamed("Light_4999")).toHaveAttribute("aria-rowindex", "5001")
+    expect(mountedRows().length).toBeLessThan(100)
+    await user.keyboard("{ArrowUp}")
+    expect(rowNamed("Light_4998")).toHaveFocus()
+    await user.keyboard("{Home}")
+    expect(rowNamed("Light_0000")).toHaveFocus()
+  })
+
+  it("keeps an off-screen row's selection when it scrolls back into view", async () => {
+    const user = userEvent.setup()
+    render(<Many />)
+    act(() => rowNamed("Light_0000").focus())
+    await user.keyboard(" ")
+    expect(checkboxOf("Light_0000")).toBeChecked()
+    // The current row moves to the end, so the first row is no longer kept mounted.
+    await user.keyboard("{End}")
+    scrollFrameTo(2500 * 26)
+    await waitFor(() => expect(screen.queryByRole("rowheader", { name: "Light_0000" })).not.toBeInTheDocument())
+    expect(screen.getByRole("rowheader", { name: "Light_2500" })).toBeInTheDocument()
+    scrollFrameTo(0)
+    await waitFor(() => expect(checkboxOf("Light_0000")).toBeChecked())
+    expect(rowNamed("Light_0000")).toHaveAttribute("data-selected", "true")
+  })
+
+  it('windows a scroll="none" table against its scrolling ancestor and follows that ancestor\'s scroll', async () => {
+    render(
+      <div data-testid="page" style={{ overflowY: "auto", height: 600 }}>
+        <DataTable label="Frames" rows={MANY} columns={COLUMNS} getRowId={(row) => row.id} scroll="none" />
+      </div>,
+    )
+    const page = screen.getByTestId("page")
+    // jsdom has no layout: the table's box moves up as the page scrolls.
+    vi.spyOn(screen.getByRole("table", { name: "Frames" }), "getBoundingClientRect").mockImplementation(() => ({ top: -page.scrollTop }) as DOMRect)
+    expect(mountedRows().length).toBeGreaterThan(10)
+    expect(mountedRows().length).toBeLessThan(100)
+    page.scrollTop = 2500 * 26
+    fireEvent.scroll(page)
+    await waitFor(() => expect(screen.queryByRole("rowheader", { name: "Light_0000" })).not.toBeInTheDocument())
+    expect(screen.getByRole("rowheader", { name: "Light_2500" })).toBeInTheDocument()
+    expect(mountedRows().length).toBeLessThan(100)
+  })
+
+  it("numbers group headers and open details among the rows", () => {
+    render(
+      <DataTable
+        label="Frames"
+        rows={ROWS}
+        columns={COLUMNS}
+        getRowId={(row) => row.id}
+        groups={{ key: (row) => (row.size % 2 === 0 ? "Even" : "Odd"), label: (key) => key }}
+        rowLabel={(row) => row.name}
+        expand={{ render: (row) => <p>{`Details of ${row.name}`}</p>, defaultExpanded: ["c"] }}
+      />,
+    )
+    const lineOf = (text: string) => screen.getByText(text).closest("tr")
+    // Even: Deneb and its open detail; Odd: Vega, Altair. The header row is 1.
+    expect(screen.getByRole("table", { name: "Frames" })).toHaveAttribute("aria-rowcount", "7")
+    expect(lineOf("Even")).toHaveAttribute("aria-rowindex", "2")
+    expect(rowNamed("Deneb")).toHaveAttribute("aria-rowindex", "3")
+    expect(lineOf("Details of Deneb")).toHaveAttribute("aria-rowindex", "4")
+    expect(lineOf("Odd")).toHaveAttribute("aria-rowindex", "5")
+    expect(rowNamed("Vega")).toHaveAttribute("aria-rowindex", "6")
+    expect(rowNamed("Altair")).toHaveAttribute("aria-rowindex", "7")
+  })
+
+  it("keeps an open detail mounted, with focus in it, when the frame scrolls far away", async () => {
+    render(
+      <DataTable
+        label="Frames"
+        rows={MANY}
+        columns={COLUMNS}
+        getRowId={(row) => row.id}
+        rowLabel={(row) => row.name}
+        expand={{ render: (row) => <button type="button">{`Inspect ${row.name}`}</button>, defaultExpanded: ["f0"] }}
+      />,
+    )
+    const inspect = screen.getByRole("button", { name: "Inspect Light_0000" })
+    act(() => inspect.focus())
+    scrollFrameTo(2500 * 26)
+    await waitFor(() => expect(screen.getByRole("rowheader", { name: "Light_2500" })).toBeInTheDocument())
+    expect(screen.queryByRole("rowheader", { name: "Light_0001" })).not.toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Inspect Light_0000" })).toBe(inspect)
+    expect(inspect).toHaveFocus()
+    expect(inspect.closest("tr")).toHaveAttribute("data-row-detail", "f0")
+  })
+
+  it("after a confirmed action removes an off-screen current row, focus goes to the row after it, not the toolbar", async () => {
+    const user = userEvent.setup()
+    function Removable() {
+      const [rows, setRows] = useState(MANY)
+      const remove = (row: Frame): MenuItem => ({
+        id: "remove",
+        label: "Remove",
+        confirm: { title: `Remove ${row.name}?`, confirm: { label: "Remove" } },
+        run: () => {
+          setRows((current) => current.filter((other) => other.id !== row.id))
+          return SUCCEEDED
+        },
+      })
+      const add: Action = { id: "add", label: "Add frames", run: vi.fn() }
+      return <DataTable label="Frames" rows={rows} columns={COLUMNS} getRowId={(row) => row.id} rowLabel={(row) => row.name} rowActions={(row) => [remove(row)]} toolbar={{ actions: [add] }} />
+    }
+    render(<Removable />)
+    act(() => rowNamed("Light_0000").focus())
+    await user.click(screen.getByRole("button", { name: m.actions_for({ name: "Light_0000" }) }))
+    await user.click(await screen.findByRole("menuitem", { name: "Remove…" }))
+    const dialog = await screen.findByRole("alertdialog", { name: "Remove Light_0000?" })
+    // While the dialog asks, the frame scrolls far from the row: only the row itself stays mounted.
+    scrollFrameTo(2500 * 26)
+    await waitFor(() => expect(document.querySelector('[data-row="f1"]')).toBeNull())
+    await user.click(within(dialog).getByRole("button", { name: "Remove" }))
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument())
+    await waitFor(() => expect(rowNamed("Light_0001")).toHaveFocus())
+    expect(screen.getByRole("button", { name: "Add frames" })).not.toHaveFocus()
   })
 })

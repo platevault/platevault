@@ -114,15 +114,17 @@ export interface DialogCommitOptions {
   /**
    * Where focus goes after a successful commit, typically the heading of the
    * outcome. Use it when committing unmounts the element that opened the
-   * dialog; Cancel and Escape still return focus to the opener.
+   * dialog; Cancel and Escape still return focus to the opener. `false`
+   * leaves focus where it is: the host moves it itself.
    */
-  focusAfterConfirm?: () => HTMLElement | null | undefined
+  focusAfterConfirm?: () => HTMLElement | false | null | undefined
   /**
    * Where focus goes after Cancel or Escape, for a dialog without a trigger
    * of its own (a runner's): the control that opened it. Nothing (or no
-   * option) keeps the default, the element focused before it opened.
+   * option) keeps the default, the element focused before it opened; `false`
+   * as above.
    */
-  focusAfterCancel?: () => HTMLElement | null | undefined
+  focusAfterCancel?: () => HTMLElement | false | null | undefined
 }
 
 export interface DialogCommitState {
@@ -196,6 +198,7 @@ export function useDialogCommit({ open, onOpenChange, focusAfterConfirm, focusAf
   function finalFocus(): HTMLElement | boolean {
     const target = (confirmed.current ? focusAfterConfirm : focusAfterCancel)?.()
     confirmed.current = false
+    if (target === false) return false
     if (!target) return opener.current?.isConnected ? opener.current : true
     // Headings and regions are not focusable until they carry a tabindex.
     if (!target.hasAttribute("tabindex") && target.tabIndex < 0) target.tabIndex = -1
