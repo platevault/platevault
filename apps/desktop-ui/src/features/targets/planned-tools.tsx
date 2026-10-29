@@ -52,7 +52,8 @@ const UNIT_MINUTES: Record<LeadUnit, number> = { minutes: 1, hours: 60, days: 14
  * The lead time a reminder accepts: over 30 minutes (PLAN-FR-06), and at
  * most what the library stores, 1440 minutes (`MAX_MINUTES`, checked by
  * `ReminderInput::validate` in crates/platevault-model/src/planning.rs).
- * The spec's "up to 7 days" is wider than the library accepts.
+ * The spec's "up to 7 days" is wider than the library accepts until
+ * astro-plan-wre19.19 raises `MAX_MINUTES` to 10080; then LEAD_MAX follows.
  */
 const LEAD_MIN = 30
 const LEAD_MAX = 1440
