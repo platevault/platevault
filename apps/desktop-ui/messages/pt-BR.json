@@ -7636,7 +7636,6 @@
   "home_goal_in_project": "{goal} em {project}",
   "home_not_graded": "Sem avaliação",
   "home_ungraded_no_band": "Os setups do Projeto não capturam este canal",
-  "home_ungraded_unsupported_frame": "Coordenadas em um referencial não suportado",
   "home_window_peak": "{range} · pico {altitude}°",
   "home_no_gradable_goal": "Nenhuma meta pode ser avaliada: nenhuma tem uma banda e uma posição conhecida.",
   "home_no_goals_suit_within": [

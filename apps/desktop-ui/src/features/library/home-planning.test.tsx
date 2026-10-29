@@ -271,7 +271,7 @@ describe.each(LOCALES)("Home planning in %s", (locale) => {
     expect(within(m31).getByText(siteTimeRange(WINDOW.startUtc, WINDOW.endUtc, ZONE))).toBeInTheDocument()
     expect(within(row(t, goalName(NO_BAND))).getByText(`${m.home_not_graded()} · ${m.home_ungraded_no_band()}`)).toBeInTheDocument()
     expect(within(row(t, goalName(NO_POSITION))).getByText(`${m.home_not_graded()} · ${m.tonight_no_coordinates()}`)).toBeInTheDocument()
-    expect(within(row(t, goalName(ODD_FRAME))).getByText(`${m.home_not_graded()} · ${m.home_ungraded_unsupported_frame()}`)).toBeInTheDocument()
+    expect(within(row(t, goalName(ODD_FRAME))).getByText(`${m.home_not_graded()} · ${m.targets_reason_unsupported_frame()}`)).toBeInTheDocument()
   })
 
   const notes = () => [m.home_no_goals_suit_next({ date: formatNight("2026-11-03") }), m.home_no_goals_suit_within({ count: 30, n: formatCount(30) }), m.home_no_gradable_goal()]
