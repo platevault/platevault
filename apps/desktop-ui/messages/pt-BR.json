@@ -869,6 +869,8 @@
   "rigs_add_in_settings": "Adicione um em Configurações › Equipamento",
   "catalogue_f4_no_rigs_desc": "O que um seletor de setup mostra quando nenhum setup está salvo: onde os setups são adicionados, com link quando Configurações › Equipamento estiver registrado",
   "catalogue_f4_no_rigs_state": "Nenhum setup salvo",
+  "project_subject_required": "Selecione um objeto",
+  "project_rig_required": "Selecione um setup",
   "session_confirm_rig": "Confirmar setup",
   "sessions_filter_all": "Todas",
   "sessions_empty_all": "Nenhuma sessão de luz",
@@ -1419,7 +1421,6 @@
   "project_col_field": "Campo",
   "project_camera_osc": "OSC",
   "project_camera_mono": "Mono",
-  "project_add_rig": "Adicionar setup",
   "project_add_suggested": [
     {
       "declarations": [

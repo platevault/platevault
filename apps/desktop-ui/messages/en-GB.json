@@ -817,6 +817,8 @@
   "rigs_add_in_settings": "Add one in Settings › Equipment",
   "catalogue_f4_no_rigs_desc": "What a rig picker shows when no rig is saved: where rigs are added, linked once Settings › Equipment is registered",
   "catalogue_f4_no_rigs_state": "No saved rig",
+  "project_subject_required": "Pick a subject",
+  "project_rig_required": "Pick a rig",
   "session_confirm_rig": "Confirm rig",
   "sessions_filter_all": "All",
   "sessions_empty_all": "No light sessions",
@@ -1313,7 +1315,6 @@
   "project_col_field": "Field",
   "project_camera_osc": "OSC",
   "project_camera_mono": "Mono",
-  "project_add_rig": "Add rig",
   "project_add_suggested": [
     {
       "declarations": [

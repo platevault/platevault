@@ -1,7 +1,8 @@
 /**
  * New Project… (065 PRJ-FR-01/02): a name, notes, the subjects it
  * collects for, each a saved Target, and the rigs whose sessions it
- * suggests, any of the saved rigs. Picking a search result that is not
+ * suggests, any of the saved rigs; Create needs a name, a subject and a
+ * rig. Picking a search result that is not
  * saved yet acts on it first (`targets_search_result_action`, which adds and
  * favourites it), so the Project names a Target the library holds. Goals
  * can't be set here yet: they wait for goal editing (astro-plan-wre19.3 and
@@ -80,11 +81,13 @@ function NewProjectForm({ onClose }: { onClose: () => void }) {
     setSubjects((was) => (was.some((s) => s.targetId === target.id) ? was : [...was, { targetId: target.id, name: target.designation }]))
   }
   const label = m.newproject_create()
+  // The library refuses a Project without a subject or a rig (project_create), so Create says so first.
+  const missing = name.trim() === "" ? m.project_name_required() : subjects.length === 0 ? m.project_subject_required() : rigIds.length === 0 ? m.project_rig_required() : null
   const create: Action = {
     id: "create-project",
     label,
     kind: "primary",
-    unavailable: name.trim() === "" ? { action: m.actions_blocked({ action: label }), reason: m.project_name_required(), blockers: [] } : undefined,
+    unavailable: missing ? { action: m.actions_blocked({ action: label }), reason: missing, blockers: [] } : undefined,
     run: async () => {
       const result = await projectWrite(client, () =>
         library.projectCreate(

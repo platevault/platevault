@@ -458,6 +458,26 @@ describe("Session intake", () => {
     expect(screen.getByRole("button", { name: m.session_confirm_rig() })).toHaveAttribute("aria-disabled", "true")
   })
 
+  it("words a failed rig read with Retry, and offers the saved rigs once a retry reads them", async () => {
+    let reads = 0
+    mockIPC((command) => {
+      if (command === "library_session") return rigSession()
+      if (command === "pix_session_intake") return rigStep()
+      if (command === "library_list_equipment") {
+        reads += 1
+        if (reads === 1) throw { ...conflict, code: "persistence_failure", retry: "retry", currentRevision: null }
+        return SAVED_RIGS
+      }
+      return null
+    })
+    const { user } = renderAt(`/sessions/${SESSION_ID}?step=rig`)
+    expect(await screen.findByText(m.action_failure_persistence_failure())).toBeInTheDocument()
+    expect(screen.queryByRole("combobox", { name: m.session_choose_a_rig() })).toBeNull()
+    await user.click(screen.getByRole("button", { name: m.verb_retry() }))
+    await pickRig(user, "Esprit 100")
+    expect(screen.queryByText(m.action_failure_persistence_failure())).toBeNull()
+  })
+
   it("hosts the injected review body on Review and opens the session once it reports Finish", async () => {
     mockIPC((command) => {
       if (command === "library_session") return librarySession()

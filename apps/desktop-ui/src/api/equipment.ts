@@ -1,6 +1,6 @@
 /**
  * The saved rigs, as every rig picker reads them: New Project's rigs
- * (065 PRJ-FR-01/02) and the intake rig step (LIB-FR-04/24) offer the same
+ * (065 PRJ-FR-01/02) and the intake rig step (LIB-FR-05) offer the same
  * list, so they share one query and one cache entry.
  */
 import { libraryQuery } from "./query"

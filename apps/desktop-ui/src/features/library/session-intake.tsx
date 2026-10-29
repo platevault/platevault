@@ -1,6 +1,6 @@
 /**
- * Session intake as a StepPage (`/sessions/$sessionId?step=`; LIB-FR-04,
- * LIB-FR-24, C10, C14): Target → Rig → Review, in that order. The library's
+ * Session intake as a StepPage (`/sessions/$sessionId?step=`; LIB-FR-05,
+ * C10, C14): Target → Rig → Review, in that order. The library's
  * admission (`pix_session_intake`) says which steps are done, so the
  * current step is the first it does not count as done; later steps stay
  * read-only until then.
