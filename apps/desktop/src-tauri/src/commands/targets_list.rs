@@ -4,9 +4,9 @@
 //! Targets list IPC (spec 072 PLAN-TGT-FR-01..13), registered only by the
 //! isolated rebuilt shell ([`crate::library_shell`]) under its targets label.
 //! The rows and every planning value, Fit per selected rig and the Filters
-//! strip come from Rust; the page presents them. Reads write nothing; ★ and
-//! Add to targets write only the favourite and, for a Target not saved yet,
-//! its record. Failures follow the library [`platevault_core::ErrorResponse`]
+//! strip come from Rust; the page presents them. Search and page reads write
+//! nothing; a result click opens a current My targets member unchanged or adds
+//! it as a favourite. Failures follow the library [`platevault_core::ErrorResponse`]
 //! conventions, naming the Target or preset.
 
 use std::sync::Arc;

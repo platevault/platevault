@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! The Targets list records (spec 072 PLAN-TGT-FR-01/03/08/10): ★ favourites
-//! and the open-Project subjects that together make My targets, "Add to
-//! targets", Sessions and Captured per channel over frames outside the Trash,
+//! and the open-Project subjects that together make My targets, search-result
+//! actions, Sessions and Captured per channel over frames outside the Trash,
 //! and saved presets. Fixture files are real and only read.
 #![cfg(unix)]
 
@@ -212,39 +212,6 @@ async fn my_targets_include_confirmed_sessions_but_not_unqualified_suggestions()
     let saved = catalog.list_targets(0, 0).await.unwrap();
     assert_eq!(saved.len(), 3, "membership reads do not create Target records");
     assert!(saved.iter().any(|record| record.candidate.id == confirmed_target.candidate.id));
-}
-
-/// PLAN-TGT-FR-03: Add to targets writes an unsaved Target into the library
-/// and My targets in one transaction; a saved Target keeps its record.
-#[tokio::test]
-async fn add_to_my_targets_saves_once_and_marks_the_favourite() {
-    let fx = Fixture::new();
-    let catalog = Catalog::open(&fx.db).await.unwrap();
-    let candidate = target("NGC 7000", "ngc 7000");
-    let generation = catalog.target_generation().await.unwrap();
-
-    let added = catalog.add_to_my_targets(&candidate).await.unwrap();
-    assert_eq!(added.candidate.id, candidate.id);
-    assert_eq!(added.decision_revision, 1);
-    assert_eq!(catalog.target_generation().await.unwrap(), generation + 1);
-    assert!(catalog.my_target_marks().await.unwrap().favourites.contains(&candidate.id));
-
-    let mut edited = added.candidate.clone();
-    edited.common_name = Some("North America Nebula".into());
-    let saved = catalog.save_target(&edited, Some(1)).await.unwrap();
-    catalog.set_favourite(candidate.id, false).await.unwrap();
-    let again = catalog.add_to_my_targets(&candidate).await.unwrap();
-    assert_eq!(again, saved, "an existing record is kept, not overwritten");
-    assert_eq!(catalog.target_generation().await.unwrap(), generation + 2);
-    assert!(catalog.my_target_marks().await.unwrap().favourites.contains(&candidate.id));
-
-    let mut blank = target("x", "x");
-    blank.designation = "  ".into();
-    assert!(matches!(
-        catalog.add_to_my_targets(&blank).await.unwrap_err(),
-        LibraryError::InvalidInput(_)
-    ));
-    assert!(!catalog.my_target_marks().await.unwrap().favourites.contains(&blank.id));
 }
 
 // ---------------------------------------------------------------------------

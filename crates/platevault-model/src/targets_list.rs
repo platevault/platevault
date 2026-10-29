@@ -550,7 +550,7 @@ pub enum TargetsSearchSource {
     Simbad,
 }
 
-/// One search result. A result outside My targets offers "Add to targets".
+/// One search result. A result outside My targets is added as a favourite.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
@@ -577,19 +577,6 @@ pub enum SimbadSearch {
 pub struct TargetsSearchResults {
     pub results: Vec<TargetsSearchResult>,
     pub simbad: SimbadSearch,
-}
-
-/// The Target "Add to targets" writes into the library and My targets.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "source", rename_all = "snake_case")]
-#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
-pub enum AddTarget {
-    /// A saved library Target.
-    Saved { id: Uuid },
-    /// A bundled catalogue object.
-    Seed { id: Uuid },
-    /// A SIMBAD result, resolved again from its query.
-    Simbad { query: String },
 }
 
 /// The action to take when a search result is clicked. Opening a Target is

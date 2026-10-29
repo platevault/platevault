@@ -60,7 +60,9 @@ fn query() -> TonightQuery {
 
 async fn seed(library: &Library, text: &str) -> TargetCandidate {
     let query = TargetQuery { text: Some(text.into()), cone: None, limit: 1 };
-    library.search_targets(&query).await.unwrap().remove(0).candidate
+    let candidate = library.search_targets(&query).await.unwrap().remove(0).candidate;
+    library.catalog().record_seed_target(&candidate).await.unwrap();
+    candidate
 }
 
 /// A saved user Target, not in My targets.
@@ -164,7 +166,7 @@ async fn tonight_best_window_for_open_project_subjects_and_favourites() {
     let backyard = default_site(&library, "Backyard").await;
     let m31 = seed(&library, "M 31").await;
     let ngc7000 = seed(&library, "NGC 7000").await;
-    library.add_to_my_targets(&AddTarget::Seed { id: m31.id }).await.unwrap();
+    library.catalog().set_favourite(m31.id, true).await.unwrap();
     library.catalog().record_seed_target(&ngc7000).await.unwrap();
     let summer = project(&library, "Summer nebulae", vec![subject(ngc7000.id)]).await;
     let elsewhere = saved(&library, "Saved only", Some((10.68, 41.27))).await;
@@ -212,7 +214,7 @@ async fn tonight_omits_targets_without_window() {
     let library = open(&temp.path().join("library.sqlite")).await;
     default_site(&library, "Backyard").await;
     let m31 = seed(&library, "M 31").await;
-    library.add_to_my_targets(&AddTarget::Seed { id: m31.id }).await.unwrap();
+    library.catalog().set_favourite(m31.id, true).await.unwrap();
     let south = saved(&library, "Far south", Some((84.0, -69.0))).await;
     let unknown = saved(&library, "No coordinates", None).await;
     for id in [south, unknown] {
@@ -271,7 +273,7 @@ async fn no_site_returns_reason() {
     let temp = tempfile::tempdir().unwrap();
     let library = open(&temp.path().join("library.sqlite")).await;
     let m31 = seed(&library, "M 31").await;
-    library.add_to_my_targets(&AddTarget::Seed { id: m31.id }).await.unwrap();
+    library.catalog().set_favourite(m31.id, true).await.unwrap();
 
     for name in ["Backyard", "Not the default"] {
         let tonight = library.tonight(&query()).await.unwrap();

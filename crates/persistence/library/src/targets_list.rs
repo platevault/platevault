@@ -3,17 +3,17 @@
 
 //! Targets list records (spec 072 PLAN-TGT-FR-01/03/08/10) on the catalog's
 //! single serialized writer: ★ favourites, current associated session Targets
-//! and open-Project subjects read beside them as My targets, "Add to targets",
-//! Sessions and Captured per channel over `live_assets`, and saved presets. A
-//! favourite or preset write changes only its own table; Add to targets also
-//! writes the Target record when it is not saved yet, in the same transaction.
+//! and open-Project subjects read beside them as My targets, search-result
+//! actions, Sessions and Captured per channel over `live_assets`, and saved
+//! presets. Favourite and preset writes change only their own table; a result
+//! click atomically opens a current My targets member or adds it as a favourite.
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use platevault_model::{
     counts_as_confirmed, validate_preset_name, AssociationState, Availability, ChannelIntegration,
     EvidenceItem, LibraryError, MyTargetMarks, PresetFilters, ProjectBadge, Revision, SavedPreset,
-    TargetActivity, TargetCandidate, TargetRecord, TargetsSearchAction,
+    TargetActivity, TargetCandidate, TargetsSearchAction,
 };
 use sqlx::sqlite::SqliteConnection;
 use sqlx::{Connection, Row};
@@ -57,30 +57,6 @@ impl Catalog {
             }
         });
         Ok(favourite)
-    }
-
-    /// Add to targets: save `candidate` at revision 1 when no record has its
-    /// id, keep an existing record unchanged, and mark it ★ in the same
-    /// transaction.
-    ///
-    /// # Errors
-    /// `InvalidInput` for an invalid candidate that is not saved yet.
-    pub async fn add_to_my_targets(&self, candidate: &TargetCandidate) -> Result<TargetRecord> {
-        let record = write_txn!(self, |conn| {
-            let record = match load_target(conn, candidate.id).await {
-                Ok(record) => record,
-                Err(LibraryError::NotFound(_)) => {
-                    validate_target(candidate)?;
-                    upsert_target(conn, candidate, 1).await?;
-                    next_counter(conn, "target_generation").await?;
-                    load_target(conn, candidate.id).await?
-                }
-                Err(error) => return Err(error),
-            };
-            insert_favourite(conn, candidate.id).await?;
-            record
-        });
-        Ok(record)
     }
 
     /// Open the current record if it is already in My targets; otherwise add

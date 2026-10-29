@@ -8376,7 +8376,7 @@ export type TargetsSearchAction =
 /**  Add the Target to My targets and favourite it. */
 { action: "added"; target: TargetRecord };
 
-/**  One search result. A result outside My targets offers "Add to targets". */
+/**  One search result. A result outside My targets is added as a favourite. */
 export type TargetsSearchResult = {
 	target: TargetCandidate,
 	source: TargetsSearchSource,

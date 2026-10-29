@@ -3,10 +3,9 @@
 
 //! The Targets list over the library facade (spec 072 PLAN-TGT-FR-01..05/07..10,
 //! PLAN-TGT-AC-01..10/15/16, PV-PLAN-SC-04/05): My targets with Project badges,
-//! Browse catalogues, unified search with its sources and "SIMBAD not
-//! searched", tonight's planning columns against the Plan area windows, the
-//! zero-Img-time reasons, unknown values sorting last, no-site rows, and the
-//! built-in and saved presets.
+//! Browse catalogues, unified search with its sources and "SIMBAD not searched",
+//! tonight's planning columns against the Plan area windows, zero-Img-time
+//! reasons, unknown values sorting last, no-site rows, and saved presets.
 
 #[path = "support/scan.rs"]
 mod scan_support;
@@ -177,7 +176,8 @@ async fn mine(library: &Library, designation: &str, at: Option<(f64, f64)>) -> T
     })
     .unwrap();
     library.catalog().save_target(&candidate, None).await.unwrap();
-    library.add_to_my_targets(&AddTarget::Saved { id: candidate.id }).await.unwrap()
+    library.catalog().set_favourite(candidate.id, true).await.unwrap();
+    library.catalog().target(candidate.id).await.unwrap()
 }
 
 fn designations(page: &TargetsPage) -> Vec<&str> {
@@ -202,7 +202,8 @@ async fn my_targets_is_favourites_plus_open_project_subjects_with_badge() {
     let m31 = seed(&library, "M 31").await;
     let ic1396 = seed(&library, "IC 1396").await;
     let ngc7000 = seed(&library, "NGC 7000").await;
-    library.add_to_my_targets(&AddTarget::Seed { id: m31.id }).await.unwrap();
+    library.catalog().record_seed_target(&m31).await.unwrap();
+    library.catalog().set_favourite(m31.id, true).await.unwrap();
     library.catalog().record_seed_target(&ic1396).await.unwrap();
     library.catalog().record_seed_target(&ngc7000).await.unwrap();
     let rig = Equipment {
@@ -235,7 +236,7 @@ async fn my_targets_is_favourites_plus_open_project_subjects_with_badge() {
     let page =
         library.target_rows(&query(TargetsShow::MyTargets, None, date!(2026 - 10 - 10))).await;
     let page = page.unwrap();
-    assert_eq!(designations(&page), ["IC 1396", "M 31"], "NGC 7000 is saved but not listed");
+    assert_eq!(designations(&page), ["IC 1396", "M 31"], "NGC 7000 is recorded but not listed");
     let ic = row(&page, ic1396.id);
     assert!(!ic.favourite);
     assert_eq!(
@@ -329,7 +330,7 @@ fn serve_tap(basic: &'static str, ident: &'static str) -> String {
 }
 
 /// PLAN-TGT-AC-03/15, PLAN-TGT-FR-03: search is read-only; clicking resolves
-/// current library state and opens an existing My target or favourites a result.
+/// current library state, opening an existing member unchanged or adding it as a favourite.
 #[tokio::test]
 async fn search_is_read_only_and_result_action_uses_current_membership() {
     let endpoint = serve_tap(
@@ -350,7 +351,8 @@ async fn search_is_read_only_and_result_action_uses_current_membership() {
         generation,
         "search alone writes nothing"
     );
-    library.add_to_my_targets(&AddTarget::Seed { id: m31.id }).await.unwrap();
+    library.catalog().record_seed_target(&m31).await.unwrap();
+    library.catalog().set_favourite(m31.id, true).await.unwrap();
     let existing = library.targets_search_result_action(&stale_unmarked).await.unwrap();
     let current = library.catalog().target(m31.id).await.unwrap();
     assert_eq!(existing, TargetsSearchAction::Open { target: current.clone() });
@@ -633,14 +635,15 @@ async fn unknown_sorts_last() {
 }
 
 /// PLAN-TGT-AC-15: with no saved planning site the planning columns read "-"
-/// with "Add an observing site in Settings"; ★, Sessions, search and Add to
-/// targets still work, and the toolbar has no Moon.
+/// with "Add an observing site in Settings"; ★, Sessions and search still work,
+/// and the toolbar has no Moon.
 #[tokio::test]
 async fn no_site_shows_dash_and_add_site_reason() {
     let temp = tempfile::tempdir().unwrap();
     let library = open(&temp.path().join("library.sqlite")).await;
     let m31 = seed(&library, "M 31").await;
-    library.add_to_my_targets(&AddTarget::Seed { id: m31.id }).await.unwrap();
+    library.catalog().record_seed_target(&m31).await.unwrap();
+    library.catalog().set_favourite(m31.id, true).await.unwrap();
 
     let page =
         library.target_rows(&query(TargetsShow::MyTargets, None, date!(2026 - 10 - 10))).await;
@@ -660,7 +663,7 @@ async fn no_site_shows_dash_and_add_site_reason() {
     assert_eq!(page.unwrap().rows, [] as [platevault_core::TargetRow; 0]);
 
     // A saved default site becomes the planning site when the query names none.
-    library.add_to_my_targets(&AddTarget::Saved { id: m31.id }).await.unwrap();
+    library.catalog().set_favourite(m31.id, true).await.unwrap();
     let backyard = site(&library, "Backyard", BACKYARD, "Europe/Amsterdam").await;
     let settings = library.catalog().list_sites().await.unwrap().settings_revision;
     library.set_default_site(Some(backyard), settings).await.unwrap();

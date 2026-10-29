@@ -20,13 +20,13 @@ use crate::library::{blocking, Library};
 use crate::planning::{self, NightContext, TargetNight};
 use crate::targets::TargetQuery;
 use crate::{
-    AddTarget, AngularSize, Band, BandState, BuiltinPreset, BuiltinPresetInfo, Catalogue,
-    FieldOfView, Fit, FitUnknownReason, LibraryError, MoonAvoidanceCurve, MyTargetMarks,
-    ObservingSite, PlanningUnknownReason, PresetFilters, PresetRef, Recommendation, Revision,
-    RigFit, RigSelection, SavedPreset, SimbadSearch, TargetActivity, TargetRecord, TargetRow,
-    TargetsBasis, TargetsColumn, TargetsPage, TargetsPresets, TargetsQuery, TargetsRig,
-    TargetsSearchAction, TargetsSearchResult, TargetsSearchResults, TargetsSearchSource,
-    TargetsShow, TargetsSort, WindowUnavailableReason, FIT_MIN_COVERAGE,
+    AngularSize, Band, BandState, BuiltinPreset, BuiltinPresetInfo, Catalogue, FieldOfView, Fit,
+    FitUnknownReason, LibraryError, MoonAvoidanceCurve, MyTargetMarks, ObservingSite,
+    PlanningUnknownReason, PresetFilters, PresetRef, Recommendation, Revision, RigFit,
+    RigSelection, SavedPreset, SimbadSearch, TargetActivity, TargetRecord, TargetRow, TargetsBasis,
+    TargetsColumn, TargetsPage, TargetsPresets, TargetsQuery, TargetsRig, TargetsSearchAction,
+    TargetsSearchResult, TargetsSearchResults, TargetsSearchSource, TargetsShow, TargetsSort,
+    WindowUnavailableReason, FIT_MIN_COVERAGE,
 };
 
 /// Local search results listed before the SIMBAD result.
@@ -274,28 +274,6 @@ impl Library {
                 Ok(TargetsSearchAction::Added { target: self.with_facts(target) })
             }
         }
-    }
-
-    /// Add to targets: write the Target into the library when it is not
-    /// saved yet and mark it ★, in one transaction. A SIMBAD result is resolved
-    /// again from its query.
-    ///
-    /// # Errors
-    /// `NotFound` for an unknown saved or seed Target; the provider's errors
-    /// for a SIMBAD result; `InvalidInput` for an invalid candidate.
-    pub async fn add_to_my_targets(
-        &self,
-        target: &AddTarget,
-    ) -> Result<TargetRecord, LibraryError> {
-        let candidate = match target {
-            AddTarget::Saved { id } => self.catalog().target(*id).await?.candidate,
-            AddTarget::Seed { id } => self
-                .seed_target(*id)
-                .ok_or_else(|| LibraryError::NotFound(format!("seed target {id}")))?,
-            AddTarget::Simbad { query } => self.resolve_target(query).await?,
-        };
-        let record = self.catalog().add_to_my_targets(&candidate).await?;
-        Ok(self.with_facts(record))
     }
 
     /// Add or remove a saved Target's ★; a subject of an open Project stays in
