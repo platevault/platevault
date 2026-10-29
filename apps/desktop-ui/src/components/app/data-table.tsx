@@ -426,10 +426,17 @@ export function DataTable<T>({
     const { before, shown } = shownOrder.current
     return shown.has(id) ? id : successorOf(before, id, (other) => shown.has(other))
   }
-  /** The row, or the one that took its place, when it is mounted. */
-  const rowOrSuccessor = (id: string): HTMLElement | null => {
+  /**
+   * Where focus returns for a row: the row, or the one that took its place. When that row is not mounted,
+   * `focusRow` mounts and focuses it and the caller leaves focus alone (`false`); null when no row is left.
+   */
+  const returnToRow = (id: string): HTMLElement | false | null => {
     const next = successorId(id)
-    return next === null ? null : rowElement(next)
+    if (next === null) return null
+    const element = rowElement(next)
+    if (element !== null) return element
+    focusRow(next)
+    return false
   }
 
   // One runner for the table: the batch bar, the toolbar actions, every row's ⋯ and the context menu.
@@ -443,7 +450,8 @@ export function DataTable<T>({
   const afterAction = () => {
     const from = origin.current
     if (from === null) return slotFirst()
-    return (from.opener?.isConnected ? from.opener : rowOrSuccessor(from.id)) ?? slotFirst()
+    if (from.opener?.isConnected) return from.opener
+    return returnToRow(from.id) ?? slotFirst()
   }
   const actions = useAction({ focusAfterConfirm: afterAction, focusAfterCancel: afterAction })
   const runner: ActionRunner = {
@@ -850,7 +858,7 @@ export function DataTable<T>({
   const menuItems =
     menuRow === undefined || menuTarget === null || !rowActions ? null : <MenuItems items={rowActions(menuRow)} runner={rowRunner(menuTarget.key, () => rowElement(menuTarget.key))} />
   // Closing the row's menu returns focus to the row, or to the row that took its place when an item removed it.
-  const menuFinalFocus = () => (menuTarget === null ? null : rowOrSuccessor(menuTarget.key)) ?? true
+  const menuFinalFocus = () => (menuTarget === null ? true : (returnToRow(menuTarget.key) ?? true))
   const frameClass = cn(
     // The frame is the scroll container in both axes so the header row
     // stays pinned while long tables scroll inside it. Scroll padding the

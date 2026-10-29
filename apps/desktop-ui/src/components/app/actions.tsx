@@ -214,14 +214,15 @@ export interface ActionRunner {
 export interface UseActionOptions {
   /**
    * Where focus goes after a confirmed action, when confirming unmounts its
-   * trigger (a batch action that empties the selection).
+   * trigger (a batch action that empties the selection); `false` when the
+   * host moves focus itself (a row it has to mount first).
    */
-  focusAfterConfirm?: () => HTMLElement | null | undefined
+  focusAfterConfirm?: () => HTMLElement | false | null | undefined
   /**
    * Where focus goes after Cancel or Escape when the button that opened the
-   * dialog is gone; while it is there, focus goes back to it.
+   * dialog is gone; while it is there, focus goes back to it. `false` as above.
    */
-  focusAfterCancel?: () => HTMLElement | null | undefined
+  focusAfterCancel?: () => HTMLElement | false | null | undefined
 }
 
 /** One runner per host (a header, a menu, a table): the dialog and the feedback of every action the host shows. */
@@ -261,7 +262,7 @@ export function useAction({ focusAfterConfirm, focusAfterCancel }: UseActionOpti
   }
 
   // Without an opener (a menu item, a shortcut) the dialog keeps its default: the element focused before it opened.
-  function cancelTarget(opener: HTMLElement | undefined): HTMLElement | null | undefined {
+  function cancelTarget(opener: HTMLElement | undefined): HTMLElement | false | null | undefined {
     if (opener === undefined) return undefined
     return opener.isConnected ? opener : focusAfterCancel?.()
   }
