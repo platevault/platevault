@@ -169,7 +169,10 @@ pub enum IssuePage {
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct Issue {
-    /// The kind and subject: stable while the issue lasts.
+    /// The kind and subject. It stays the same while the subject does; a
+    /// Duplicates issue's subject is a digest of the duplicated contents, so its
+    /// id changes whenever that set changes. Key client rows on `kind` and
+    /// `owner`, not on `id`, where a row must survive that change.
     pub id: String,
     /// What a dismissal records: the kind, subject, count and bytes (D-W158).
     pub fingerprint: String,

@@ -2418,6 +2418,7 @@
   "settings_at_defaults": "Já está no padrão",
   "settings_restore_defaults": "Restaurar padrões",
   "settings_keyboard": "Teclado",
+  "settings_preference_unsaved": "{reason} A alteração vale até o PlateVault reiniciar.",
   "settings_restore_title": "Restaurar o padrão da aparência?",
   "settings_edit_title": "Editar {name}",
   "settings_save": "Salvar",

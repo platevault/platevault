@@ -1,4 +1,5 @@
-import { act, render, screen, within } from "@testing-library/react"
+import { clearMocks, mockIPC } from "@tauri-apps/api/mocks"
+import { act, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, describe, expect, it } from "vitest"
 import { getPreferences, setSystemThemes, setTheme } from "@/app/preferences"
@@ -7,16 +8,26 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/compon
 import { m } from "@/lib/i18n"
 import { ThemeMenuItems, ThemePicker } from "./theme-picker"
 
+type Shell = typeof globalThis & { isTauri?: boolean }
+
 afterEach(() => {
+  delete (globalThis as Shell).isTauri
   act(() => {
     setTheme(DEFAULT_THEME)
     setSystemThemes(DEFAULT_SYSTEM_THEMES)
   })
+  clearMocks()
 })
 
 // The test setup's matchMedia matches no query: the OS reads as light.
 describe("ThemePicker", () => {
   it("Match system offers a dark theme and a light theme and saves each choice", async () => {
+    const saved: unknown[] = []
+    ;(globalThis as Shell).isTauri = true
+    mockIPC((command, args) => {
+      if (command === "library_change_preference") saved.push((args as { change: unknown }).change)
+      return { preferences: {}, fallbacks: [] }
+    })
     const user = userEvent.setup()
     render(<ThemePicker />)
     await user.click(screen.getByRole("button", { name: m.shell_theme_match_system() }))
@@ -36,8 +47,9 @@ describe("ThemePicker", () => {
     expect(document.documentElement.dataset.theme).toBe("gruvbox-light")
     // A light theme leaves the `dark:` variant off; the dark themes turn it on.
     expect(document.documentElement).not.toHaveClass("dark")
-    expect(window.localStorage.getItem("platevault.systemTheme.dark")).toBe("nord")
-    expect(window.localStorage.getItem("platevault.systemTheme.light")).toBe("gruvbox-light")
+    // Each choice goes to PlateVault's settings store, in the order it was made.
+    await waitFor(() => expect(saved.at(-1)).toEqual({ field: "systemThemes", themes: { dark: "nord", light: "gruvbox-light" } }))
+    expect(saved[0]).toEqual({ field: "theme", choice: { mode: "system" } })
   })
 
   it("Dark and Light keep one theme choice; leaving Match system applies the pair's theme of that mode", async () => {

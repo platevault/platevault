@@ -64,6 +64,8 @@ mod prepare;
 pub use prepare::*;
 mod issues;
 pub use issues::*;
+mod preferences;
+pub use preferences::*;
 mod home;
 pub use home::*;
 
