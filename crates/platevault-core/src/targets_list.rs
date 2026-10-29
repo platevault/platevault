@@ -21,12 +21,12 @@ use crate::planning::{self, NightContext, TargetNight};
 use crate::targets::TargetQuery;
 use crate::{
     AddTarget, AngularSize, Band, BandState, BuiltinPreset, BuiltinPresetInfo, Catalogue,
-    FieldOfView, Fit, FitUnknownReason, LibraryError, MyTargetMarks, ObservingSite,
-    PlanningUnknownReason, PresetFilters, PresetRef, Recommendation, Revision, RigFit,
-    RigSelection, SavedPreset, SimbadSearch, TargetActivity, TargetRecord, TargetRow, TargetsBasis,
-    TargetsColumn, TargetsPage, TargetsPresets, TargetsQuery, TargetsRig, TargetsSearchResult,
-    TargetsSearchResults, TargetsSearchSource, TargetsShow, TargetsSort, WindowUnavailableReason,
-    FIT_MIN_COVERAGE,
+    FieldOfView, Fit, FitUnknownReason, LibraryError, MoonAvoidanceCurve, MyTargetMarks,
+    ObservingSite, PlanningUnknownReason, PresetFilters, PresetRef, Recommendation, Revision,
+    RigFit, RigSelection, SavedPreset, SimbadSearch, TargetActivity, TargetRecord, TargetRow,
+    TargetsBasis, TargetsColumn, TargetsPage, TargetsPresets, TargetsQuery, TargetsRig,
+    TargetsSearchResult, TargetsSearchResults, TargetsSearchSource, TargetsShow, TargetsSort,
+    WindowUnavailableReason, FIT_MIN_COVERAGE,
 };
 
 /// Local search results listed before the SIMBAD result.
@@ -90,6 +90,9 @@ impl Library {
             }
         };
         let activity = self.catalog().target_activity().await?;
+        let avoidance = self.catalog().workflow_settings().await?.0.moon_avoidance;
+        let curves: Vec<(Band, MoonAvoidanceCurve)> =
+            strip.iter().map(|band| (*band, avoidance.curve(*band))).collect();
         let criteria = query.criteria;
         let night = query.night;
         let computed = blocking(move || {
@@ -119,7 +122,7 @@ impl Library {
         let (basis, moon, computed) = computed;
         let mut rows: Vec<Listed> = computed
             .into_iter()
-            .map(|(record, night)| listed(record, night, &marks, &saved, &activity, &rigs, &strip))
+            .map(|(record, night)| listed(record, night, &marks, &saved, &activity, &rigs, &curves))
             .collect();
         if let Some(preset) = query.preset {
             rows.retain(|row| admits(preset, row));
@@ -422,7 +425,7 @@ fn listed(
     saved: &HashMap<Uuid, TargetRecord>,
     activity: &std::collections::BTreeMap<Uuid, TargetActivity>,
     rigs: &[TargetsRig],
-    strip: &[Band],
+    curves: &[(Band, MoonAvoidanceCurve)],
 ) -> Listed {
     let id = record.candidate.id;
     let TargetActivity { sessions, captured } = activity.get(&id).cloned().unwrap_or_default();
@@ -465,7 +468,7 @@ fn listed(
         }
         Some((Ok(night), moon_age_days)) => {
             let moon_free = night.img_time_minutes > 0 && night.moon_up_window_minutes == 0;
-            let bands = band_states(strip, night.lunar_separation_deg, moon_age_days, moon_free);
+            let bands = band_states(curves, night.lunar_separation_deg, moon_age_days, moon_free);
             row.recommendation = Some(recommendation(&bands));
             row.bands = bands;
             row.max_altitude_deg = night.peak_dark_altitude_deg;
@@ -536,34 +539,21 @@ fn offer(preset: BuiltinPreset, rigs: &[TargetsRig], strip: &[Band]) -> Result<(
     Err(LibraryError::InvalidInput(format!("the preset {:?} needs {needs}", preset.name())))
 }
 
-/// The Moon-avoidance rule of spec 047 D4: a band is viable when the Target's
-/// separation from the Moon is at least the band's Lorentzian minimum,
-/// `distance / (1 + (age / width)^2)` with `age` in days from full Moon. The
-/// parameters are its shipped defaults: LRGB 120°/14 d, Ha and SII 60°/7 d,
-/// OIII 110°/10 d.
-const fn band_params(band: Band) -> (f64, f64) {
-    match band {
-        Band::L | Band::R | Band::G | Band::B => (120.0, 14.0),
-        Band::Ha | Band::Sii => (60.0, 7.0),
-        Band::Oiii => (110.0, 10.0),
-    }
-}
-
-/// Each strip band viable or limited by the Moon tonight. A Target whose
-/// windows all fall while the Moon is down is limited in no band.
+/// Each strip band viable or limited by the Moon tonight: viable when the
+/// Target's separation from the Moon is at least its saved Moon-avoidance
+/// curve's minimum at the night's Moon age (PLAN-FR-02, PLAN-TGT-FR-06). A
+/// Target whose windows all fall while the Moon is down is limited in no band.
 fn band_states(
-    strip: &[Band],
+    curves: &[(Band, MoonAvoidanceCurve)],
     separation_deg: f64,
     moon_age_days: f64,
     moon_free: bool,
 ) -> Vec<BandState> {
-    strip
+    curves
         .iter()
-        .map(|band| {
-            let (distance, width) = band_params(*band);
-            let ratio = moon_age_days.max(0.0) / width;
-            let minimum = distance / ratio.mul_add(ratio, 1.0);
-            BandState { band: *band, viable: moon_free || separation_deg >= minimum }
+        .map(|(band, curve)| BandState {
+            band: *band,
+            viable: moon_free || separation_deg >= curve.min_separation_deg(moon_age_days),
         })
         .collect()
 }
@@ -720,6 +710,7 @@ fn digits(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::MoonAvoidance;
 
     #[test]
     fn natural_order_compares_digit_runs_by_value() {
@@ -728,15 +719,18 @@ mod tests {
         assert_eq!(names, ["IC 1396", "M 1", "m 2", "M 02x", "M 10", "NGC 224"]);
     }
 
+    /// The default curves at full Moon (spec 047 D4).
     #[test]
     fn full_moon_limits_broadband_before_narrowband() {
-        let bands = band_states(&BANDS, 80.0, 0.0, false);
+        let defaults = MoonAvoidance::default();
+        let curves: Vec<_> = BANDS.iter().map(|band| (*band, defaults.curve(*band))).collect();
+        let bands = band_states(&curves, 80.0, 0.0, false);
         let viable: Vec<Band> = bands.iter().filter(|s| s.viable).map(|s| s.band).collect();
         assert_eq!(viable, [Band::Ha, Band::Sii]);
         assert_eq!(recommendation(&bands), Recommendation::NarrowbandOnly);
-        assert!(band_states(&BANDS, 60.0, 14.7, false).iter().all(|state| state.viable));
-        assert!(band_states(&BANDS, 1.0, 0.0, true).iter().all(|state| state.viable));
-        let none = band_states(&BANDS, 1.0, 0.0, false);
+        assert!(band_states(&curves, 60.0, 14.7, false).iter().all(|state| state.viable));
+        assert!(band_states(&curves, 1.0, 0.0, true).iter().all(|state| state.viable));
+        let none = band_states(&curves, 1.0, 0.0, false);
         assert_eq!(recommendation(&none), Recommendation::AvoidTonight);
     }
 }

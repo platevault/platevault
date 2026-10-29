@@ -301,6 +301,10 @@ macro_rules! library_commands {
             crate::commands::appearance::library_preferences,
             crate::commands::appearance::library_change_preference,
             crate::commands::appearance::library_restore_default_preferences,
+            // workflow settings: matching, View mode, calibration, Moon curves
+            // (D-W114; 068 CAL-FR-15/20/21, J36 S8, 072 PLAN-FR-02)
+            crate::commands::workflow_settings::workflow_settings_get,
+            crate::commands::workflow_settings::workflow_settings_save,
             // native shell (menu bar, tray, OS pickers)
             crate::commands::library_dialogs::library_pick_folder,
             crate::commands::library_dialogs::library_pick_file,

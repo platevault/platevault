@@ -10,21 +10,21 @@
 
 use platevault_model::{
     admit_session, session_blockers, AdmissionBlocker, ApplicableQuality, ApplyJournal,
-    ApplyOutcome, ApplyPhase, BasisCapture, BasisGroup, BasisSession, CalibrationHealth,
+    ApplyOutcome, ApplyPhase, Band, BasisCapture, BasisGroup, BasisSession, CalibrationHealth,
     CalibrationNeed, Camera, CameraBasis, CameraLink, CaptureInclusion, ChangeSource,
     Classification, ClosePolicy, ClosedSnapshot, CopyBasis, CorrectedField, DeclineOrigin,
     EntryEvidence, EntryInput, EntryKind, EntryName, EntryPlacement, EntrySource, Evaluation,
     ExclusionBasis, ExpectedTree, FileIdentity, ForeignItem, ForeignItemState, GroupKeywords,
     GroupName, GroupOrigin, InclusionBasis, InputKind, InputRef, ManifestEntry, ManifestState,
-    MasterBasis, MasterEvidence, MasterOfferState, NativePath, ObservationFingerprint,
-    OpticsSignature, OutputKind, OutputObservation, OutputOrigin, OutputState, PathSensitivity,
-    PendingChange, PinHealth, PinOrigin, PinState, PinTarget, PinnedFile, PreviousItem,
-    PreviousItemReason, PreviousItemReview, ProcessingMasterOffer, ProjectBasis, ProjectCapture,
-    ProjectDesired, ProjectGroup, ProjectLifecycle, ProjectOperation, ProjectOperationKind,
-    ProjectOperationState, ProjectSessionMember, ProjectViewSettings, RigVersion, RotatorPresence,
-    SessionCalibration, SessionIntake, SessionPlacement, SessionReadiness, SettledPin,
-    ViewManifest, ViewMode, VolumeIdentity, WorkflowSettings, WrapUpOutcome, WrapUpRecord,
-    WrapUpStep,
+    MasterBasis, MasterEvidence, MasterOfferState, MoonAvoidanceCurve, NativePath,
+    ObservationFingerprint, OpticsSignature, OutputKind, OutputObservation, OutputOrigin,
+    OutputState, PathSensitivity, PendingChange, PinHealth, PinOrigin, PinState, PinTarget,
+    PinnedFile, PreviousItem, PreviousItemReason, PreviousItemReview, ProcessingMasterOffer,
+    ProjectBasis, ProjectCapture, ProjectDesired, ProjectGroup, ProjectLifecycle, ProjectOperation,
+    ProjectOperationKind, ProjectOperationState, ProjectSessionMember, ProjectViewSettings,
+    RigVersion, RotatorPresence, SessionCalibration, SessionIntake, SessionPlacement,
+    SessionReadiness, SettledPin, ViewManifest, ViewMode, VolumeIdentity, WorkflowSettings,
+    WrapUpOutcome, WrapUpRecord, WrapUpStep,
 };
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -361,6 +361,16 @@ fn workflow_defaults_are_the_owner_approved_starting_values() {
             "darkBias": {"windowDays": 365},
             "keywords": {"group": "GROUP", "panel": "PANEL"},
             "viewMode": "symlinks",
+            "calibration": {"keepRawFrames": false, "oldMasterAfterDays": 90},
+            "moonAvoidance": {
+                "L": {"distanceDeg": 120.0, "widthDays": 14.0},
+                "R": {"distanceDeg": 120.0, "widthDays": 14.0},
+                "G": {"distanceDeg": 120.0, "widthDays": 14.0},
+                "B": {"distanceDeg": 120.0, "widthDays": 14.0},
+                "Ha": {"distanceDeg": 60.0, "widthDays": 7.0},
+                "SII": {"distanceDeg": 60.0, "widthDays": 7.0},
+                "OIII": {"distanceDeg": 110.0, "widthDays": 10.0},
+            },
         })
     );
     round_trip(&settings);
@@ -379,6 +389,58 @@ fn workflow_defaults_are_the_owner_approved_starting_values() {
         limits.framing.split.max_centre_offset_arcmin = centre;
         assert!(limits.validate().is_err(), "the centre limit is an angle: {centre}");
     }
+}
+
+/// CAL-FR-15 (D-W103): the "Old · {n} d" threshold is a whole number of days
+/// of at least one; J36 P1/S8: raws are not kept by default.
+#[test]
+fn calibration_settings_refuse_a_zero_day_old_master_threshold() {
+    let mut kept = WorkflowSettings::default();
+    kept.calibration.keep_raw_frames = true;
+    kept.calibration.old_master_after_days = 1;
+    kept.validate().unwrap();
+    round_trip(&kept);
+    let mut zero = WorkflowSettings::default();
+    zero.calibration.old_master_after_days = 0;
+    assert!(zero.validate().is_err(), "an old-master threshold of 0 days");
+}
+
+/// PLAN-FR-02 (D-W88): one Moon-avoidance curve per band, the required
+/// separation `distance / (1 + (age / width)^2)` greatest at full Moon.
+#[test]
+fn each_band_has_its_own_moon_avoidance_curve() {
+    let mut settings = WorkflowSettings::default();
+    let curves = &settings.moon_avoidance;
+    assert_eq!(curves.curve(Band::Ha), MoonAvoidanceCurve { distance_deg: 60.0, width_days: 7.0 });
+    assert_eq!(curves.curve(Band::Oiii).min_separation_deg(0.0), 110.0);
+    assert!((curves.curve(Band::L).min_separation_deg(14.0) - 60.0).abs() < 1e-9);
+    assert_eq!(curves.curve(Band::Sii).min_separation_deg(-1.0), 60.0, "age clamps at full");
+
+    settings
+        .moon_avoidance
+        .set(Band::Oiii, MoonAvoidanceCurve { distance_deg: 30.0, width_days: 2.0 });
+    settings.validate().unwrap();
+    assert_eq!(settings.moon_avoidance.curve(Band::Oiii).distance_deg, 30.0);
+    assert_eq!(settings.moon_avoidance.curve(Band::Ha).distance_deg, 60.0, "only OIII changed");
+    round_trip(&settings);
+
+    for curve in [
+        MoonAvoidanceCurve { distance_deg: -1.0, width_days: 7.0 },
+        MoonAvoidanceCurve { distance_deg: 181.0, width_days: 7.0 },
+        MoonAvoidanceCurve { distance_deg: f64::NAN, width_days: 7.0 },
+        MoonAvoidanceCurve { distance_deg: 60.0, width_days: 0.4 },
+        MoonAvoidanceCurve { distance_deg: 60.0, width_days: 31.0 },
+    ] {
+        let mut invalid = WorkflowSettings::default();
+        invalid.moon_avoidance.set(Band::Sii, curve);
+        let refused = invalid.validate().unwrap_err().to_string();
+        assert!(refused.contains("SII"), "the refusal names the band: {refused}");
+    }
+    let missing = serde_json::json!({"L": {"distanceDeg": 120.0, "widthDays": 14.0}});
+    assert!(
+        serde_json::from_value::<platevault_model::MoonAvoidance>(missing).is_err(),
+        "every band has a curve"
+    );
 }
 
 #[test]

@@ -2,14 +2,16 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! The F4 workflow defaults (D-W95, D-W102, D-W103, D-W114; PRJ-FR-28/29/31,
-//! LIB-FR-04, CAL-FR-20/21): the owner-approved starting values for the same
-//! framing, mosaic panels, flat rotation and age, the dark and bias age
-//! window, the group keyword names and the input mode. All are adjustable in
-//! Settings; a catalog that records none reads these defaults.
+//! LIB-FR-04, CAL-FR-15/20/21, J36 S8, PLAN-FR-02): the owner-approved
+//! starting values for the same framing, mosaic panels, flat rotation and
+//! age, the dark and bias age window, the group keyword names, the input
+//! mode, whether raw calibration frames are kept, the old-master badge age
+//! and the Moon-avoidance curve of each band. All are adjustable in Settings;
+//! a catalog that records none reads these defaults.
 
 use serde::{Deserialize, Serialize};
 
-use crate::{GroupKeywords, LibraryError, ViewMode};
+use crate::{Band, GroupKeywords, LibraryError, Revision, ViewMode};
 
 fn invalid(message: String) -> LibraryError {
     LibraryError::InvalidInput(message)
@@ -75,6 +77,7 @@ impl SplitLimits {
 /// limits (LIB-FR-04).
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct FramingMargins {
     /// Least coverage, in percent, of the same framing.
     pub min_overlap_percent: f64,
@@ -125,6 +128,7 @@ impl FramingMargins {
 /// between flats and lights, in either direction.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct FlatRules {
     pub fine_within_deg: f64,
     /// Over this a flat is not offered.
@@ -159,6 +163,7 @@ impl FlatRules {
 /// The dark and bias age window in days from capture time (CAL-FR-21).
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct DarkBiasRules {
     pub window_days: u32,
 }
@@ -169,9 +174,160 @@ impl Default for DarkBiasRules {
     }
 }
 
-/// The library's F4 workflow settings.
+/// The Settings › Calibration values that are not matching thresholds.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
+pub struct CalibrationSettings {
+    /// Keep a raw calibration set where it is once its master registers;
+    /// off, the default, moves the raws to the OS Trash (J36 P1/S8, P-CAL3).
+    pub keep_raw_frames: bool,
+    /// A dark or bias master whose newest version is older than this many
+    /// days carries the "Old · {n} d" badge; flats are exempt (CAL-FR-15,
+    /// D-W103). It decides only the badge, not the matching window of
+    /// [`DarkBiasRules`].
+    pub old_master_after_days: u32,
+}
+
+impl Default for CalibrationSettings {
+    fn default() -> Self {
+        Self { keep_raw_frames: false, old_master_after_days: 90 }
+    }
+}
+
+impl CalibrationSettings {
+    /// # Errors
+    /// `InvalidInput` for an old-master age under one day.
+    pub fn validate(&self) -> Result<(), LibraryError> {
+        if self.old_master_after_days == 0 {
+            return Err(invalid("oldMasterAfterDays must be at least 1 day".into()));
+        }
+        Ok(())
+    }
+}
+
+/// One band's Moon-avoidance curve (PLAN-FR-02, D-W88): the Lorentzian of
+/// ACP and Target Scheduler, so the separation it requires from the Moon is
+/// `distance` at full Moon and shrinks with `width` as the Moon dims.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
+pub struct MoonAvoidanceCurve {
+    /// The separation required at full Moon, in [0, 180] degrees.
+    pub distance_deg: f64,
+    /// The half width in days from full Moon, in [0.5, 30].
+    pub width_days: f64,
+}
+
+impl MoonAvoidanceCurve {
+    /// The least separation from the Moon, `distance / (1 + (age / width)^2)`,
+    /// at `moon_age_days` from full Moon; a negative age reads as full.
+    #[must_use]
+    pub fn min_separation_deg(&self, moon_age_days: f64) -> f64 {
+        let ratio = moon_age_days.max(0.0) / self.width_days;
+        self.distance_deg / ratio.mul_add(ratio, 1.0)
+    }
+
+    fn validate(&self, band: &str) -> Result<(), LibraryError> {
+        let Self { distance_deg, width_days } = *self;
+        if !(0.0..=180.0).contains(&distance_deg) {
+            return Err(invalid(format!(
+                "{band} Moon distance {distance_deg} must be in [0, 180] degrees"
+            )));
+        }
+        if !(0.5..=30.0).contains(&width_days) {
+            return Err(invalid(format!(
+                "{band} Moon width {width_days} must be in [0.5, 30] days"
+            )));
+        }
+        Ok(())
+    }
+}
+
+/// The Moon-avoidance curve of every band the Filters strip grades
+/// (PLAN-FR-02, PLAN-TGT-FR-06), keyed by the band's wire name. The
+/// defaults are spec 047 D4's: LRGB 120°/14 d, Ha and SII 60°/7 d, OIII
+/// 110°/10 d.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
+pub struct MoonAvoidance {
+    #[serde(rename = "L")]
+    l: MoonAvoidanceCurve,
+    #[serde(rename = "R")]
+    r: MoonAvoidanceCurve,
+    #[serde(rename = "G")]
+    g: MoonAvoidanceCurve,
+    #[serde(rename = "B")]
+    b: MoonAvoidanceCurve,
+    #[serde(rename = "Ha")]
+    ha: MoonAvoidanceCurve,
+    #[serde(rename = "SII")]
+    sii: MoonAvoidanceCurve,
+    #[serde(rename = "OIII")]
+    oiii: MoonAvoidanceCurve,
+}
+
+impl Default for MoonAvoidance {
+    fn default() -> Self {
+        let broadband = MoonAvoidanceCurve { distance_deg: 120.0, width_days: 14.0 };
+        let narrow = MoonAvoidanceCurve { distance_deg: 60.0, width_days: 7.0 };
+        Self {
+            l: broadband,
+            r: broadband,
+            g: broadband,
+            b: broadband,
+            ha: narrow,
+            sii: narrow,
+            oiii: MoonAvoidanceCurve { distance_deg: 110.0, width_days: 10.0 },
+        }
+    }
+}
+
+impl MoonAvoidance {
+    /// The curve `band` is graded under.
+    #[must_use]
+    pub const fn curve(&self, band: Band) -> MoonAvoidanceCurve {
+        match band {
+            Band::L => self.l,
+            Band::R => self.r,
+            Band::G => self.g,
+            Band::B => self.b,
+            Band::Ha => self.ha,
+            Band::Sii => self.sii,
+            Band::Oiii => self.oiii,
+        }
+    }
+
+    /// Replace `band`'s curve; [`Self::validate`] checks it.
+    pub fn set(&mut self, band: Band, curve: MoonAvoidanceCurve) {
+        *match band {
+            Band::L => &mut self.l,
+            Band::R => &mut self.r,
+            Band::G => &mut self.g,
+            Band::B => &mut self.b,
+            Band::Ha => &mut self.ha,
+            Band::Sii => &mut self.sii,
+            Band::Oiii => &mut self.oiii,
+        } = curve;
+    }
+
+    /// # Errors
+    /// `InvalidInput` naming the first band whose curve is out of range.
+    pub fn validate(&self) -> Result<(), LibraryError> {
+        self.l.validate("L")?;
+        self.r.validate("R")?;
+        self.g.validate("G")?;
+        self.b.validate("B")?;
+        self.ha.validate("Ha")?;
+        self.sii.validate("SII")?;
+        self.oiii.validate("OIII")
+    }
+}
+
+/// The library's F4 workflow settings: one document under one revision.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct WorkflowSettings {
     pub framing: FramingMargins,
     pub flats: FlatRules,
@@ -180,6 +336,8 @@ pub struct WorkflowSettings {
     pub keywords: GroupKeywords,
     /// The input mode a new Project starts with.
     pub view_mode: ViewMode,
+    pub calibration: CalibrationSettings,
+    pub moon_avoidance: MoonAvoidance,
 }
 
 impl WorkflowSettings {
@@ -187,6 +345,18 @@ impl WorkflowSettings {
     /// `InvalidInput` naming the invalid field.
     pub fn validate(&self) -> Result<(), LibraryError> {
         self.framing.validate()?;
-        self.flats.validate()
+        self.flats.validate()?;
+        self.calibration.validate()?;
+        self.moon_avoidance.validate()
     }
+}
+
+/// The workflow settings at their revision, 0 while none are recorded; a
+/// save names the revision it replaces.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
+pub struct WorkflowSettingsRecord {
+    pub settings: WorkflowSettings,
+    pub revision: Revision,
 }

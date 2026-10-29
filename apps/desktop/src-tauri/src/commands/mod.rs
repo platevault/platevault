@@ -82,3 +82,4 @@ pub mod targets_list;
 pub mod tools;
 pub mod update;
 pub mod view_previous;
+pub mod workflow_settings;

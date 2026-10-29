@@ -1536,6 +1536,24 @@ export const commands = {
 	 */
 	libraryRestoreDefaultPreferences: () => typedError<PreferencesView, ErrorResponse>(__TAURI_INVOKE("library_restore_default_preferences")),
 	/**
+	 *  The workflow settings at their revision; the defaults at revision 0
+	 *  while none are saved.
+	 * 
+	 *  # Errors
+	 *  `PersistenceFailure` when the catalog or its recorded settings can't be
+	 *  read.
+	 */
+	workflowSettingsGet: () => typedError<WorkflowSettingsRecord_Serialize, ErrorResponse>(__TAURI_INVOKE("workflow_settings_get")),
+	/**
+	 *  Save the whole settings document over `expected_revision`.
+	 * 
+	 *  # Errors
+	 *  `InvalidInput` for an invalid setting, `Conflict` for a stale revision and
+	 *  a retryable `PersistenceFailure` when the save did not commit; nothing is
+	 *  stored on any of them.
+	 */
+	workflowSettingsSave: (settings: WorkflowSettings_Deserialize, expectedRevision: number) => typedError<WorkflowSettingsRecord_Serialize, ErrorResponse>(__TAURI_INVOKE("workflow_settings_save", { settings, expectedRevision })),
+	/**
 	 *  Pick a folder.
 	 * 
 	 *  # Errors
@@ -2639,6 +2657,22 @@ export type CalibrationNeed =
 /**  The pin stays, but its file changed or went missing. */
 { need: "pin_drift"; kind: InputKind; health: PinHealth };
 
+/**  The Settings › Calibration values that are not matching thresholds. */
+export type CalibrationSettings = {
+	/**
+	 *  Keep a raw calibration set where it is once its master registers;
+	 *  off, the default, moves the raws to the OS Trash (J36 P1/S8, P-CAL3).
+	 */
+	keepRawFrames: boolean,
+	/**
+	 *  A dark or bias master whose newest version is older than this many
+	 *  days carries the "Old · {n} d" badge; flats are exempt (CAL-FR-15,
+	 *  D-W103). It decides only the badge, not the matching window of
+	 *  [`DarkBiasRules`].
+	 */
+	oldMasterAfterDays: number,
+};
+
 /**  Any listed input, reusable or not. */
 export type CandidateRef = { form: "raw_set"; sessionId: string; groupingRevision: number } | { form: "master"; masterId: string; revision: number } | { form: "candidate"; assetId: string };
 
@@ -3153,6 +3187,11 @@ export type CustodyFact_Serialize = {
 
 export type CustodyKind = "candidate_master" | "adopted_master" | "generated_source";
 
+/**  The dark and bias age window in days from capture time (CAL-FR-21). */
+export type DarkBiasRules = {
+	windowDays: number,
+};
+
 /**  How dark the sky must be: the Sun below -6, -12 or -18 degrees. */
 export type Darkness = "civil" | "nautical" | "astronomical";
 
@@ -3507,6 +3546,19 @@ export type FitUnknownReason =
 "field_of_view_unknown";
 
 /**
+ *  Flat matching thresholds (CAL-FR-20): the rotation that is fine, the
+ *  rotation still offered with a warning, and the age window in nights
+ *  between flats and lights, in either direction.
+ */
+export type FlatRules = {
+	fineWithinDeg: number | null,
+	/**  Over this a flat is not offered. */
+	offeredWithinDeg: number | null,
+	/**  0 is the same night only; the default 1 is the same or the next. */
+	windowNights: number,
+};
+
+/**
  *  A file in the current View that `PlateVault` didn't place (VSEL-FR-20),
  *  offered with a tick box.
  */
@@ -3789,6 +3841,18 @@ export type FramingEvidence = {
 	skyAngleDeg?: number | null,
 	field?: FieldOfView | null,
 };
+
+/**
+ *  When two framings are the same and when they are panels of one mosaic
+ *  (PRJ-FR-29/31). Intake splits sessions with the same centre and rotation
+ *  limits (LIB-FR-04).
+ */
+export type FramingMargins = {
+	/**  Least coverage, in percent, of the same framing. */
+	minOverlapPercent: number | null,
+	/**  The overlap range, in percent, that offers two framings as panels. */
+	panelOverlapPercent: [number | null, number | null],
+} & SplitLimits;
 
 /**  One labelled amount of a goal. */
 export type GapAmount = {
@@ -5088,6 +5152,34 @@ export type MetricValue = {
 	state: MetricState,
 	reason: string | null,
 	source: ValueSource,
+};
+
+/**
+ *  The Moon-avoidance curve of every band the Filters strip grades
+ *  (PLAN-FR-02, PLAN-TGT-FR-06), keyed by the band's wire name. The
+ *  defaults are spec 047 D4's: LRGB 120°/14 d, Ha and SII 60°/7 d, OIII
+ *  110°/10 d.
+ */
+export type MoonAvoidance = {
+	L: MoonAvoidanceCurve,
+	R: MoonAvoidanceCurve,
+	G: MoonAvoidanceCurve,
+	B: MoonAvoidanceCurve,
+	Ha: MoonAvoidanceCurve,
+	SII: MoonAvoidanceCurve,
+	OIII: MoonAvoidanceCurve,
+};
+
+/**
+ *  One band's Moon-avoidance curve (PLAN-FR-02, D-W88): the Lorentzian of
+ *  ACP and Target Scheduler, so the separation it requires from the Moon is
+ *  `distance` at full Moon and shrinks with `width` as the Moon dims.
+ */
+export type MoonAvoidanceCurve = {
+	/**  The separation required at full Moon, in [0, 180] degrees. */
+	distanceDeg: number | null,
+	/**  The half width in days from full Moon, in [0.5, 30]. */
+	widthDays: number | null,
 };
 
 /**
@@ -8659,6 +8751,59 @@ export type WindowUnavailableReason = "target_coordinates_unknown" | "unsupporte
  *  of a non-finite value. Exists only for the IPC type derives.
  */
 export type Wire = number | null | NonFinite;
+
+/**  The library's F4 workflow settings: one document under one revision. */
+export type WorkflowSettings = WorkflowSettings_Serialize | WorkflowSettings_Deserialize;
+
+/**
+ *  The workflow settings at their revision, 0 while none are recorded; a
+ *  save names the revision it replaces.
+ */
+export type WorkflowSettingsRecord = WorkflowSettingsRecord_Serialize | WorkflowSettingsRecord_Deserialize;
+
+/**
+ *  The workflow settings at their revision, 0 while none are recorded; a
+ *  save names the revision it replaces.
+ */
+export type WorkflowSettingsRecord_Deserialize = {
+	settings: WorkflowSettings_Deserialize,
+	revision: number,
+};
+
+/**
+ *  The workflow settings at their revision, 0 while none are recorded; a
+ *  save names the revision it replaces.
+ */
+export type WorkflowSettingsRecord_Serialize = {
+	settings: WorkflowSettings_Serialize,
+	revision: number,
+};
+
+/**  The library's F4 workflow settings: one document under one revision. */
+export type WorkflowSettings_Deserialize = {
+	framing: FramingMargins,
+	flats: FlatRules,
+	darkBias: DarkBiasRules,
+	/**  The GROUP and PANEL keyword names; a Project may override them. */
+	keywords: GroupKeywords_Deserialize,
+	/**  The input mode a new Project starts with. */
+	viewMode: ViewMode,
+	calibration: CalibrationSettings,
+	moonAvoidance: MoonAvoidance,
+};
+
+/**  The library's F4 workflow settings: one document under one revision. */
+export type WorkflowSettings_Serialize = {
+	framing: FramingMargins,
+	flats: FlatRules,
+	darkBias: DarkBiasRules,
+	/**  The GROUP and PANEL keyword names; a Project may override them. */
+	keywords: GroupKeywords_Serialize,
+	/**  The input mode a new Project starts with. */
+	viewMode: ViewMode,
+	calibration: CalibrationSettings,
+	moonAvoidance: MoonAvoidance,
+};
 
 /**  Why Wrap up doesn't open, or one of its steps can't run now. */
 export type WrapUpBlocker = 
