@@ -291,6 +291,10 @@ macro_rules! library_commands {
             crate::commands::targets_list::targets_preset_delete,
             // home
             crate::commands::home::home_dashboard,
+            // issues on rows (063 FR-032, D-W92, D-W158)
+            crate::commands::issues::library_issues,
+            crate::commands::issues::library_dismiss_issue,
+            crate::commands::issues::library_restore_issue,
             // native shell (menu bar, tray, OS pickers)
             crate::commands::library_dialogs::library_pick_folder,
             crate::commands::library_dialogs::library_pick_file,

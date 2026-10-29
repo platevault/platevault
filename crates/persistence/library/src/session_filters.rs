@@ -52,20 +52,11 @@ impl Catalog {
         let mut conn = self.reader().await?;
         let mut snapshot = conn.begin().await?;
         let listed = listed_sessions(&mut snapshot, false, None, Members::Live).await?;
-        let standing = Standing::read(&mut snapshot).await?;
-        let mut needs_calibration = 0;
-        for id in &listed {
-            if !calibration::session_needs(&mut snapshot, *id).await?.is_empty() {
-                needs_calibration += 1;
-            }
-        }
+        let queue = calibration::calibration_queue(&mut snapshot, &listed).await?;
+        let needs_calibration = u64::try_from(queue.len()).unwrap_or(u64::MAX);
+        let counts = filter_counts(&mut snapshot, &listed, needs_calibration).await?;
         snapshot.rollback().await?;
-        let count = |filter| listed.iter().filter(|id| standing.holds(filter, **id)).count() as u64;
-        Ok(SessionFilterCounts {
-            needs_target: count(SessionFilter::NeedsTarget),
-            not_in_any_project: count(SessionFilter::NotInAnyProject),
-            needs_calibration,
-        })
+        Ok(counts)
     }
 
     /// Create Project's prefill from a session: named after its confirmed
@@ -206,6 +197,22 @@ pub async fn retain(
     let standing = Standing::read(conn).await?;
     listed.retain(|id| standing.holds(filter, *id));
     Ok(listed)
+}
+
+/// The Sessions filters' counts over `listed`, the default Sessions scope,
+/// given how many of them need calibration.
+pub async fn filter_counts(
+    conn: &mut SqliteConnection,
+    listed: &[Uuid],
+    needs_calibration: u64,
+) -> Result<SessionFilterCounts> {
+    let standing = Standing::read(conn).await?;
+    let count = |filter| listed.iter().filter(|id| standing.holds(filter, **id)).count() as u64;
+    Ok(SessionFilterCounts {
+        needs_target: count(SessionFilter::NeedsTarget),
+        not_in_any_project: count(SessionFilter::NotInAnyProject),
+        needs_calibration,
+    })
 }
 
 /// Which sessions have a confirmed Target and which are in a Project.

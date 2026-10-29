@@ -4,6 +4,7 @@
 //! Storage custody (spec 071).
 
 mod overview;
+pub(crate) use overview::duplicate_candidates;
 pub use overview::{
     DuplicateCandidate, LocationAvailability, StorageOverview, TransferItemView, TransferView,
 };
