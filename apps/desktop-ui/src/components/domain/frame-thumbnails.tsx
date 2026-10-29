@@ -14,15 +14,22 @@
  *   items as its table row (`menu`).
  * - The grid reports how many columns fit (`onColumns`), so ↑/↓ can step by
  *   a row.
+ * - Windowing: only the tiles in and near view mount (`@tanstack/react-virtual`,
+ *   lib/virtual.ts): the strip by tile, the grid by row. The current frame
+ *   (else the first, the Tab stop) stays mounted wherever the view is, so it
+ *   scrolls into view and takes focus; each tile carries its place in the
+ *   list (`aria-posinset` of `aria-setsize`).
  */
+import { useVirtualizer } from "@tanstack/react-virtual"
 import { ImageOff, Loader } from "lucide-react"
-import { type MouseEvent, type ReactNode, useEffect, useLayoutEffect, useRef } from "react"
+import { type CSSProperties, type MouseEvent, type ReactNode, type RefObject, useCallback, useEffect, useLayoutEffect, useRef } from "react"
 import { useMessages } from "@/app/preferences"
 import type { ActionRunner } from "@/components/app/actions"
 import type { MenuItem } from "@/components/app/contracts"
 import { RowContextMenu } from "@/components/app/row-actions"
 import { useSize } from "@/lib/use-size"
 import { cn } from "@/lib/utils"
+import { initialRect, keepMounted, measureOrEstimate, observeRect, spacing } from "@/lib/virtual"
 
 export type ThumbnailActivation = "set" | "toggle" | "range"
 
@@ -64,6 +71,11 @@ export interface FrameThumbnailsProps {
 
 const GRID_MIN = 152
 const GRID_GAP = 4
+/** A strip tile's width (`w-32`), and the room around the tiles (`p-1`). */
+const STRIP_W = 128
+const PAD = 4
+/** Under a grid tile's 3:2 image: its padding, the name line and the badge line. */
+const TILE_TEXT_H = 48
 
 function modeOf(event: MouseEvent): ThumbnailActivation {
   return event.shiftKey ? "range" : event.metaKey || event.ctrlKey ? "toggle" : "set"
@@ -103,7 +115,14 @@ function Thumb({ thumb }: { thumb: Thumbnail }) {
   )
 }
 
-function ThumbItem({ item, props, tabbable }: { item: FrameThumbnail; props: FrameThumbnailsProps; tabbable: boolean }) {
+/** Where a tile sits: its place in the list, the room its unmounted predecessors take, and the virtualizer's measure for the one tile per strip slot or grid row it measures by. */
+interface TilePlace {
+  index: number
+  style: CSSProperties
+  measure?: { ref: (node: HTMLLIElement | null) => void; index: number }
+}
+
+function ThumbItem({ item, props, tabbable, place }: { item: FrameThumbnail; props: FrameThumbnailsProps; tabbable: boolean; place: TilePlace }) {
   const { thumb } = item
   const active = props.activeId === item.id
   const selected = props.selected.has(item.id)
@@ -139,7 +158,14 @@ function ThumbItem({ item, props, tabbable }: { item: FrameThumbnail; props: Fra
     </button>
   )
   return (
-    <li className={props.layout === "strip" ? "w-32 shrink-0" : "min-w-0"}>
+    <li
+      ref={place.measure?.ref}
+      data-index={place.measure?.index}
+      aria-setsize={props.items.length}
+      aria-posinset={place.index + 1}
+      style={place.style}
+      className={props.layout === "strip" ? "w-32 shrink-0" : "min-w-0"}
+    >
       {props.menu ? (
         <RowContextMenu name={item.name} items={props.menu.items(item.id)} runner={props.menu.runner}>
           {button}
@@ -153,8 +179,7 @@ function ThumbItem({ item, props, tabbable }: { item: FrameThumbnail; props: Fra
 
 /** The filmstrip (`layout="strip"`) or the frame grid (`layout="grid"`). */
 export function FrameThumbnails(props: FrameThumbnailsProps) {
-  const { layout, label, items, activeId, empty, onColumns } = props
-  const box = useFollowFocus(activeId)
+  const { layout, items, empty, onColumns } = props
   const [sizeRef, size] = useSize<HTMLDivElement>()
   const columns = Math.max(1, Math.floor((size.width - 8 + GRID_GAP) / (GRID_MIN + GRID_GAP)))
   const reported = useRef(0)
@@ -163,18 +188,67 @@ export function FrameThumbnails(props: FrameThumbnailsProps) {
     reported.current = columns
     onColumns?.(columns)
   }, [layout, columns, onColumns])
-  const tabbable = items.some((item) => item.id === activeId) ? activeId : (items[0]?.id ?? null)
   return (
     <div ref={sizeRef} className={layout === "grid" ? "min-h-0 flex-1 overflow-y-auto bg-background" : "shrink-0 overflow-x-auto overflow-y-hidden bg-background"} data-frame-thumbnails={layout}>
       {items.length === 0 ? (
         <div className="p-3">{empty}</div>
       ) : (
-        <ul ref={box} aria-label={label} className={layout === "grid" ? "grid gap-1 p-1" : "flex gap-1 p-1"} style={layout === "grid" ? { gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` } : undefined}>
-          {items.map((item) => (
-            <ThumbItem key={item.id} item={item} props={props} tabbable={item.id === tabbable} />
-          ))}
-        </ul>
+        // One virtualizer per layout: the strip windows by tile, the grid by row.
+        <ThumbList key={layout} props={props} scroller={sizeRef} columns={layout === "grid" ? columns : 1} width={size.width} />
       )}
     </div>
+  )
+}
+
+/** The mounted tiles of the strip (by tile) or the grid (by row of `columns` tiles), in a list as long as all of them. */
+function ThumbList({ props, scroller, columns, width }: { props: FrameThumbnailsProps; scroller: RefObject<HTMLDivElement | null>; columns: number; width: number }) {
+  const { layout, label, items, activeId } = props
+  const strip = layout === "strip"
+  const tabIndex = Math.max(0, items.findIndex((item) => item.id === activeId))
+  const tabbable = items[tabIndex]?.id ?? null
+  // A grid row before it is measured: the tile's 3:2 image at the column width, and the text under it.
+  const tileW = (Math.max(width, GRID_MIN) - 2 * PAD - (columns - 1) * GRID_GAP) / columns
+  const rowEstimate = Math.round(((tileW - 2 * PAD) * 2) / 3) + TILE_TEXT_H
+  const getItemKey = useCallback((index: number) => (strip ? (items[index]?.id ?? index) : `${columns}:${index}`), [strip, items, columns])
+  const virtualizer = useVirtualizer<HTMLDivElement, HTMLLIElement>({
+    count: strip ? items.length : Math.ceil(items.length / columns),
+    horizontal: strip,
+    getScrollElement: () => scroller.current,
+    initialOffset: () => (strip ? scroller.current?.scrollLeft : scroller.current?.scrollTop) ?? 0,
+    estimateSize: () => (strip ? STRIP_W : rowEstimate),
+    getItemKey,
+    gap: GRID_GAP,
+    paddingStart: PAD,
+    paddingEnd: PAD,
+    overscan: strip ? 6 : 2,
+    initialRect: initialRect(),
+    observeElementRect: observeRect,
+    measureElement: measureOrEstimate,
+    rangeExtractor: keepMounted([strip ? tabIndex : Math.floor(tabIndex / columns)]),
+  })
+  // After the virtualizer attaches to the scroller, so its first read keeps the scroll the current frame set.
+  const box = useFollowFocus(activeId)
+  const mounted = virtualizer.getVirtualItems()
+  const total = virtualizer.getTotalSize()
+  const { before } = spacing(mounted, 0, total, GRID_GAP)
+  const tile = (index: number, place: Omit<TilePlace, "index">) => {
+    const item = items[index]
+    return item === undefined ? null : <ThumbItem key={item.id} item={item} props={props} tabbable={item.id === tabbable} place={{ index, ...place }} />
+  }
+  if (strip) {
+    return (
+      <ul ref={box} aria-label={label} className="flex gap-1 py-1" style={{ width: total }}>
+        {mounted.map((slot, k) => tile(slot.index, { style: { marginLeft: before[k] }, measure: { ref: virtualizer.measureElement, index: slot.index } }))}
+      </ul>
+    )
+  }
+  return (
+    <ul ref={box} aria-label={label} className="grid content-start gap-1 px-1" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, height: total }}>
+      {mounted.flatMap((row, k) =>
+        Array.from({ length: columns }, (_, column) =>
+          tile(row.index * columns + column, { style: { marginTop: before[k] }, measure: column === 0 ? { ref: virtualizer.measureElement, index: row.index } : undefined }),
+        ),
+      )}
+    </ul>
   )
 }

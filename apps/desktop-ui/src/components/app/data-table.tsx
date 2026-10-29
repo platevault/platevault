@@ -44,6 +44,15 @@
  *   the previous one. An expanded row's nested table is one stop of its own.
  *   Native table semantics stay: no grid role. Row height and cell padding
  *   follow the row tokens `--row-h` and `--row-py`.
+ * - Windowing: only the rows in and near view mount (`@tanstack/react-virtual`,
+ *   lib/virtual.ts), so a table of thousands of rows renders a few dozen.
+ *   Spacer rows keep the full scroll height; the current row and the open
+ *   row (`activeRowId`) stay mounted wherever the view is, so the Tab stop,
+ *   focus and a host's scroll-into-view of the open row hold. The keys move
+ *   over the table's rows, mounted or not: End mounts and focuses the last
+ *   row. The table carries `aria-rowcount` and each row its `aria-rowindex`
+ *   (the header row is 1). A `scroll="none"` table windows against its
+ *   nearest scrolling ancestor; with none, every row mounts.
  * - Grouping (opt-in `groups`): group header rows inside this one table, so
  *   every group shares the column widths and the pinned header row.
  * - Pinned first column (opt-in `stickyFirstColumn`): the selection column
@@ -77,6 +86,7 @@ import {
   type MouseEvent,
   type PointerEvent,
   type ReactNode,
+  useCallback,
   useContext,
   useId,
   useLayoutEffect,
@@ -84,6 +94,7 @@ import {
   useRef,
   useState,
 } from "react"
+import { useVirtualizer } from "@tanstack/react-virtual"
 import { getPreferences, useMessages } from "@/app/preferences"
 import { useStatusSelection } from "./status-selection"
 import { Button } from "@/components/ui/button"
@@ -93,6 +104,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenu
 import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { formatCount } from "@/lib/format"
+import { initialRect, keepMounted, measureOrEstimate, observeRect, spacing } from "@/lib/virtual"
 import { cn } from "@/lib/utils"
 import { ActionBar, ActionButton, type ActionRunner, isAction, MenuItems, useAction } from "./actions"
 import { isColumnHideable, isColumnShown, useColumnChoice } from "./column-choice"
@@ -142,6 +154,40 @@ function successorOf(order: readonly string[], id: string, shown: (id: string) =
 /** Whether focus went nowhere: its element was removed, or nothing has it. */
 function focusLost(): boolean {
   return document.activeElement === null || document.activeElement === document.body
+}
+
+/** A row's height before it is measured: the `--row-h` token (1.625rem). */
+const ROW_ESTIMATE = 26
+
+/** The nearest ancestor that scrolls vertically: where a `scroll="none"` table's rows scroll. */
+function scrollParentOf(element: HTMLElement): HTMLElement | null {
+  for (let node = element.parentElement; node !== null; node = node.parentElement) {
+    const { overflowY } = getComputedStyle(node)
+    if (overflowY === "auto" || overflowY === "scroll") return node
+  }
+  return null
+}
+
+/** One line of the body the virtualizer windows: a group header, a data row, or the detail an open row shows. */
+type Line<T> =
+  | { kind: "group"; key: string; bodyIndex: number; group: string; rows: T[] }
+  | { kind: "row" | "detail"; key: string; bodyIndex: number; row: T; id: string; rowIndex: number }
+
+/** The mounted lines of one body, each with the room the unmounted lines before it take, and after the last. */
+interface Segment<T> {
+  bodyIndex: number
+  lines: { line: Line<T>; index: number; before: number }[]
+  after: number
+}
+
+/** The room unmounted rows take, kept out of the accessibility tree. */
+function Spacer({ height, columns }: { height: number; columns: number }) {
+  if (height <= 0) return null
+  return (
+    <tr aria-hidden="true" style={{ height }}>
+      <td colSpan={columns} className="p-0" />
+    </tr>
+  )
 }
 
 export interface DataTableSelection<T> {
@@ -508,6 +554,81 @@ export function DataTable<T>({
     shownOrder.current = { now: shownIds, before: shownOrder.current.now }
   }, [shownKey])
 
+  // Windowing: the body as one list of lines (group headers, rows, open details).
+  const lines = useMemo(() => {
+    const list: Line<T>[] = []
+    const rowLine = new Map<string, number>()
+    bodies.forEach((body, bodyIndex) => {
+      if (body.key !== null && groups) list.push({ kind: "group", key: `group:${body.key}`, bodyIndex, group: body.key, rows: body.rows })
+      body.rows.forEach((row, rowIndex) => {
+        const id = getRowId(row)
+        rowLine.set(id, list.length)
+        list.push({ kind: "row", key: `row:${id}`, bodyIndex, row, id, rowIndex })
+        if (expand !== undefined && (expand.isExpandable?.(row) ?? true) && expanded.has(id)) list.push({ kind: "detail", key: `detail:${id}`, bodyIndex, row, id, rowIndex })
+      })
+    })
+    return { list, rowLine }
+  }, [bodies, groups, getRowId, expand, expanded])
+  const rowsShown = !loading && !error && sorted.length > 0
+
+  // The rows scroll in the frame, or with `scroll="none"` in the nearest scrolling ancestor; with none the frame
+  // holds every row, so all of them mount.
+  const scroller = useRef<HTMLElement | null>(null)
+  const scrollElement = (): HTMLElement | null => {
+    const own = frame.current
+    if (scroll !== "none" || own === null) return own
+    if (scroller.current === null || !scroller.current.contains(own)) scroller.current = scrollParentOf(own) ?? own
+    return scroller.current
+  }
+  // Where the body starts in the scroll element's content: under the header row, past what sits above the table
+  // (the frame is the table's offset parent; an ancestor's content offset comes from the boxes and its scroll).
+  const [bodyTop, setBodyTop] = useState(0)
+  useLayoutEffect(() => {
+    const element = scrollElement()
+    const table = tableRef.current
+    if (element === null || table === null) return
+    const above = element === frame.current ? table.offsetTop : table.getBoundingClientRect().top - element.getBoundingClientRect().top - element.clientTop + element.scrollTop
+    const top = Math.round(above + (table.tHead?.offsetHeight ?? 0))
+    if (top !== bodyTop) setBodyTop(top)
+  })
+  const lineOf = (id: string | null | undefined) => (id == null ? -1 : (lines.rowLine.get(id) ?? -1))
+  const getItemKey = useCallback((index: number) => lines.list[index]?.key ?? index, [lines])
+  const virtualizer = useVirtualizer<HTMLElement, HTMLTableRowElement>({
+    count: rowsShown ? lines.list.length : 0,
+    getScrollElement: scrollElement,
+    // The virtualizer scrolls its element to this offset when it attaches: keep where the page already is.
+    initialOffset: () => scrollElement()?.scrollTop ?? 0,
+    estimateSize: () => ROW_ESTIMATE,
+    getItemKey,
+    scrollMargin: bodyTop,
+    overscan: 8,
+    initialRect: initialRect(),
+    observeElementRect: observeRect,
+    measureElement: measureOrEstimate,
+    rangeExtractor: keepMounted([lineOf(currentRowId), lineOf(activeRowId)]),
+  })
+
+  // A row the keys moved to that is not mounted becomes the current row, which mounts it; it takes focus then.
+  const focusRequest = useRef<string | null>(null)
+  function focusRow(id: string) {
+    const element = rowElement(id)
+    if (element !== null) {
+      element.focus()
+      return
+    }
+    focusRequest.current = id
+    setFocusedRow({ id, activeRowId })
+  }
+  useLayoutEffect(() => {
+    const id = focusRequest.current
+    if (id === null) return
+    const element = rowElement(id)
+    // Wait for the row to mount; drop the request when the row went.
+    if (element === null && lines.rowLine.has(id)) return
+    focusRequest.current = null
+    element?.focus()
+  })
+
   // When the current row goes (an action removed it, a filter hid it), the next row takes its place, else
   // the previous one, and takes focus when focus went with the row (APG). A new open row from the host wins.
   // With no row left, focus goes to the first control of the toolbar row, as after a batch action (WCAG 2.4.3).
@@ -606,25 +727,34 @@ export function DataTable<T>({
     const target = event.target as HTMLElement
     const row = target.closest<HTMLElement>("tr[data-row]")
     if (!row || row.parentElement?.parentElement !== tableRef.current) return
-    // Data rows of the whole table, so the keys also cross group boundaries.
-    const rows = ownRows()
-    const at = rows.indexOf(row)
+    // The table's data rows, mounted or not, so the keys also cross group boundaries and reach the last row.
+    const at = shownIds.indexOf(row.dataset.row ?? "")
     if (target === row) {
       if (event.shiftKey) return
       const page = event.key === "PageDown" || event.key === "PageUp" ? rowsPerPage(row) : 0
-      const moves: Record<string, number> = { ArrowDown: at + 1, ArrowUp: at - 1, Home: 0, End: rows.length - 1, PageDown: at + page, PageUp: at - page }
+      const moves: Record<string, number> = { ArrowDown: at + 1, ArrowUp: at - 1, Home: 0, End: shownIds.length - 1, PageDown: at + page, PageUp: at - page }
       const to: number | undefined = moves[event.key]
       if (to === undefined) return
       event.preventDefault()
-      rows[Math.min(rows.length - 1, Math.max(0, to))]?.focus()
+      const id = shownIds[Math.min(shownIds.length - 1, Math.max(0, to))]
+      if (id !== undefined) focusRow(id)
       return
     }
     // On a control, ↑/↓ move to the same column's control in the adjacent row; fields, menus and lists keep their arrows.
     if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return
     if (target.closest("input, textarea, select, [role=listbox], [role=menu]") && target.tagName !== "BUTTON") return
     const cell = target.closest("td, th")
-    const sibling = rows[at + (event.key === "ArrowDown" ? 1 : -1)]
-    if (!cell || !sibling) return
+    const siblingId = shownIds[at + (event.key === "ArrowDown" ? 1 : -1)]
+    if (!cell || siblingId === undefined) return
+    const sibling = rowElement(siblingId)
+    if (sibling === null) {
+      // Not mounted (the view scrolled away from the focused row): move to the row itself.
+      if (roving) {
+        event.preventDefault()
+        focusRow(siblingId)
+      }
+      return
+    }
     const index = Array.from(row.children).indexOf(cell)
     const focusable = "a[href], button:not([disabled]), [role=checkbox], input:not([disabled])"
     const next = sibling.children[index]?.querySelector<HTMLElement>(focusable) ?? sibling.querySelector<HTMLElement>(focusable) ?? (roving ? sibling : null)
@@ -727,15 +857,32 @@ export function DataTable<T>({
     )
   }
 
+  // The mounted lines by body, in order; a spacer row stands in for the unmounted lines before each mounted one
+  // and after the last, so the table keeps its whole height.
+  const mounted = virtualizer.getVirtualItems()
+  const room = spacing(mounted, bodyTop, virtualizer.getTotalSize())
+  const segments: Segment<T>[] = []
+  mounted.forEach((item, k) => {
+    const line = lines.list[item.index]
+    if (line === undefined) return
+    const last = segments.at(-1)
+    const segment: Segment<T> = last !== undefined && last.bodyIndex === line.bodyIndex ? last : { bodyIndex: line.bodyIndex, lines: [], after: 0 }
+    if (segment !== last) segments.push(segment)
+    segment.lines.push({ line, index: item.index, before: room.before[k] ?? 0 })
+  })
+  const lastSegment = segments.at(-1)
+  if (lastSegment !== undefined) lastSegment.after = room.after
+
   const table = (
     <Table
       ref={tableRef}
+      aria-rowcount={rowsShown ? lines.list.length + 1 : undefined}
       onContextMenu={menuEnabled ? onContextMenu : undefined}
       onKeyDown={menuEnabled ? (event) => !event.defaultPrevented && openMenuFromKeyboard(event, "data-row-id") : undefined}
     >
       <TableCaption>{loading ? m.table_loading({ name: label }) : label}</TableCaption>
       <TableHeader>
-        <tr>
+        <tr aria-rowindex={rowsShown ? 1 : undefined}>
           {selection ? (
             <TableHead data-column-kind="selection" className={cn("w-10", pinned("first", true))}>
               <Checkbox
@@ -806,27 +953,49 @@ export function DataTable<T>({
           </TableRow>
         </TableBody>
       ) : (
-        bodies.map((body, bodyIndex) => (
-          <TableBody key={body.key ?? "rows"} onKeyDown={onKeyDown} {...(roving ? rowFocus : {})}>
-            {body.key !== null && groups ? (
-              <TableRow kind="group">
-                <th scope="rowgroup" colSpan={columnCount} className="px-3 text-left text-xs font-semibold">
-                  {/* The label stays in view while the table scrolls sideways. */}
-                  <span className={cn(stickyFirstColumn && "sticky left-3")}>{groups.label(body.key, body.rows)}</span>
-                </th>
-              </TableRow>
-            ) : null}
-            {body.rows.map((row, rowIndex) => {
-              const id = getRowId(row)
+        segments.map((segment) => (
+          <TableBody key={bodies[segment.bodyIndex]?.key ?? "rows"} onKeyDown={onKeyDown} {...(roving ? rowFocus : {})}>
+            {segment.lines.map(({ line, index, before }) => {
+              const spacer = <Spacer height={before} columns={columnCount} />
+              if (line.kind === "group") {
+                return (
+                  <Fragment key={line.key}>
+                    {spacer}
+                    <TableRow kind="group" ref={virtualizer.measureElement} data-index={index} aria-rowindex={index + 2}>
+                      <th scope="rowgroup" colSpan={columnCount} className="px-3 text-left text-xs font-semibold">
+                        {/* The label stays in view while the table scrolls sideways. */}
+                        <span className={cn(stickyFirstColumn && "sticky left-3")}>{groups?.label(line.group, line.rows)}</span>
+                      </th>
+                    </TableRow>
+                  </Fragment>
+                )
+              }
+              const { row, id, rowIndex, bodyIndex } = line
+              const detailId = `${baseId}-detail-${bodyIndex}-${rowIndex}`
+              if (line.kind === "detail") {
+                return (
+                  <Fragment key={line.key}>
+                    {spacer}
+                    <TableRow kind="detail" data-row-detail="" ref={virtualizer.measureElement} data-index={index} aria-rowindex={index + 2}>
+                      <td id={detailId} colSpan={columnCount} className="px-3 py-2">
+                        <InCurrentRow.Provider value={inCurrentRow && (!roving || id === currentRowId)}>{expand?.render(row)}</InCurrentRow.Provider>
+                      </td>
+                    </TableRow>
+                  </Fragment>
+                )
+              }
               const isSelected = selectedSet.has(id)
               const canSelect = selection?.isSelectable?.(row) ?? true
               const canExpand = expand !== undefined && (expand.isExpandable?.(row) ?? true)
               const isExpanded = canExpand && expanded.has(id)
-              const detailId = `${baseId}-detail-${bodyIndex}-${rowIndex}`
               const primary = primaryRowAction?.(row) ?? null
               return (
-                <Fragment key={id}>
+                <Fragment key={line.key}>
+                  {spacer}
                   <TableRow
+                    ref={virtualizer.measureElement}
+                    data-index={index}
+                    aria-rowindex={index + 2}
                     data-row={id}
                     data-row-id={menuEnabled ? id : undefined}
                     data-alt={rowIndex % 2 === 1 || undefined}
@@ -898,16 +1067,10 @@ export function DataTable<T>({
                       </TableCell>
                     ) : null}
                   </TableRow>
-                  {isExpanded ? (
-                    <TableRow kind="detail" data-row-detail="">
-                      <td id={detailId} colSpan={columnCount} className="px-3 py-2">
-                        <InCurrentRow.Provider value={inCurrentRow && (!roving || id === currentRowId)}>{expand.render(row)}</InCurrentRow.Provider>
-                      </td>
-                    </TableRow>
-                  ) : null}
                 </Fragment>
               )
             })}
+            <Spacer height={segment.after} columns={columnCount} />
           </TableBody>
         ))
       )}

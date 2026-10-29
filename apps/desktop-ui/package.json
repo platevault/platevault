@@ -27,6 +27,7 @@
     "@inlang/paraglide-js": "^2.22.0",
     "@tanstack/react-query": "5.101.2",
     "@tanstack/react-router": "^1.170.41",
+    "@tanstack/react-virtual": "3.14.23",
     "@tauri-apps/api": "^2.12.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

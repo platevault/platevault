@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { type ReactNode, useState } from "react"
 import { describe, expect, it, vi } from "vitest"
@@ -814,5 +814,60 @@ describe("DataTable", () => {
       await user.tab()
       expect(after()).toHaveFocus()
     })
+  })
+})
+
+describe("DataTable windowing", () => {
+  const MANY: Frame[] = Array.from({ length: 5000 }, (_, i) => ({ id: `f${i}`, name: `Light_${String(i).padStart(4, "0")}`, size: i }))
+  const mountedRows = () => document.querySelectorAll("tbody > tr[data-row]")
+  const rowNamed = (name: string) => screen.getByRole("rowheader", { name }).closest("tr")!
+  const checkboxOf = (name: string) => screen.getByRole("checkbox", { name: m.table_select_row({ name }) })
+  /** jsdom has no layout: a scroll sets the frame's offset, which the virtualizer reads on the scroll event. */
+  const scrollFrameTo = (top: number) => {
+    const frame = screen.getByRole("table", { name: "Frames" }).parentElement!
+    frame.scrollTop = top
+    fireEvent.scroll(frame)
+  }
+  function Many() {
+    const [selected, setSelected] = useState<string[]>([])
+    return <DataTable label="Frames" rows={MANY} columns={COLUMNS} getRowId={(row) => row.id} selection={{ selected, onChange: setSelected, rowLabel: (row) => row.name }} />
+  }
+
+  it("mounts a bounded window of a 5,000-row table and numbers its rows among all of them", () => {
+    render(<Many />)
+    expect(mountedRows().length).toBeGreaterThan(10)
+    expect(mountedRows().length).toBeLessThan(100)
+    expect(screen.getByRole("table", { name: "Frames" })).toHaveAttribute("aria-rowcount", "5001")
+    expect(rowNamed("Light_0000")).toHaveAttribute("aria-rowindex", "2")
+  })
+
+  it("End mounts and focuses the last row, and the keys keep moving from there", async () => {
+    const user = userEvent.setup()
+    render(<Many />)
+    act(() => rowNamed("Light_0000").focus())
+    await user.keyboard("{End}")
+    expect(rowNamed("Light_4999")).toHaveFocus()
+    expect(rowNamed("Light_4999")).toHaveAttribute("aria-rowindex", "5001")
+    expect(mountedRows().length).toBeLessThan(100)
+    await user.keyboard("{ArrowUp}")
+    expect(rowNamed("Light_4998")).toHaveFocus()
+    await user.keyboard("{Home}")
+    expect(rowNamed("Light_0000")).toHaveFocus()
+  })
+
+  it("keeps an off-screen row's selection when it scrolls back into view", async () => {
+    const user = userEvent.setup()
+    render(<Many />)
+    act(() => rowNamed("Light_0000").focus())
+    await user.keyboard(" ")
+    expect(checkboxOf("Light_0000")).toBeChecked()
+    // The current row moves to the end, so the first row is no longer kept mounted.
+    await user.keyboard("{End}")
+    scrollFrameTo(2500 * 26)
+    await waitFor(() => expect(screen.queryByRole("rowheader", { name: "Light_0000" })).not.toBeInTheDocument())
+    expect(screen.getByRole("rowheader", { name: "Light_2500" })).toBeInTheDocument()
+    scrollFrameTo(0)
+    await waitFor(() => expect(checkboxOf("Light_0000")).toBeChecked())
+    expect(rowNamed("Light_0000")).toHaveAttribute("data-selected", "true")
   })
 })
