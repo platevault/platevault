@@ -268,12 +268,14 @@ impl Library {
                 None => return Err(LibraryError::NotFound(format!("target {}", result.target.id))),
             },
         };
-        match self.catalog().act_on_target_search_result(&candidate, may_restore).await? {
-            TargetsSearchAction::Open { target } => Ok(TargetsSearchAction::Open { target }),
-            TargetsSearchAction::Added { target } => {
-                Ok(TargetsSearchAction::Added { target: self.with_facts(target) })
+        Ok(match self.catalog().act_on_target_search_result(&candidate, may_restore).await? {
+            TargetsSearchAction::Open { target } => {
+                TargetsSearchAction::Open { target: self.with_facts(target) }
             }
-        }
+            TargetsSearchAction::Added { target } => {
+                TargetsSearchAction::Added { target: self.with_facts(target) }
+            }
+        })
     }
 
     /// Add or remove a saved Target's ★; a subject of an open Project stays in

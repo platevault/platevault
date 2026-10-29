@@ -188,6 +188,25 @@ fn row(page: &TargetsPage, id: Uuid) -> &TargetRow {
     page.rows.iter().find(|row| row.target.id == id).unwrap()
 }
 
+/// A saved mono rig, so a Project can be created.
+async fn rig(library: &Library) -> Uuid {
+    let rig = Equipment {
+        id: Uuid::new_v4(),
+        name: "Esprit 100 + ASI2600MM".into(),
+        camera: Some("ASI2600MM".into()),
+        telescope: Some("Esprit 100".into()),
+        focal_length_mm: Some(550.0),
+        pixel_size_um: Some(3.76),
+        sensor_width_px: Some(6248),
+        sensor_height_px: Some(4176),
+        color_kind: Some(ColorKind::Mono),
+        decision_revision: 0,
+        state: AssociationState::Confirmed,
+        provenance: Provenance::User,
+    };
+    library.catalog().save_equipment(&rig, None).await.unwrap().id
+}
+
 // ---------------------------------------------------------------------------
 // My targets and Browse
 // ---------------------------------------------------------------------------
@@ -206,28 +225,13 @@ async fn my_targets_is_favourites_plus_open_project_subjects_with_badge() {
     library.catalog().set_favourite(m31.id, true).await.unwrap();
     library.catalog().record_seed_target(&ic1396).await.unwrap();
     library.catalog().record_seed_target(&ngc7000).await.unwrap();
-    let rig = Equipment {
-        id: Uuid::new_v4(),
-        name: "Esprit 100 + ASI2600MM".into(),
-        camera: Some("ASI2600MM".into()),
-        telescope: Some("Esprit 100".into()),
-        focal_length_mm: Some(550.0),
-        pixel_size_um: Some(3.76),
-        sensor_width_px: Some(6248),
-        sensor_height_px: Some(4176),
-        color_kind: Some(ColorKind::Mono),
-        decision_revision: 0,
-        state: AssociationState::Confirmed,
-        provenance: Provenance::User,
-    };
-    let rig = library.catalog().save_equipment(&rig, None).await.unwrap();
     let summer = library
         .catalog()
         .create_project(&ProjectInput {
             name: "Summer nebulae".into(),
             notes: None,
             subjects: vec![SubjectInput { target_id: ic1396.id, name: None }],
-            rig_ids: vec![rig.id],
+            rig_ids: vec![rig(&library).await],
             goals: Vec::new(),
         })
         .await
@@ -355,7 +359,13 @@ async fn search_is_read_only_and_result_action_uses_current_membership() {
     library.catalog().set_favourite(m31.id, true).await.unwrap();
     let existing = library.targets_search_result_action(&stale_unmarked).await.unwrap();
     let current = library.catalog().target(m31.id).await.unwrap();
-    assert_eq!(existing, TargetsSearchAction::Open { target: current.clone() });
+    let mine = library
+        .target_rows(&query(TargetsShow::MyTargets, None, date!(2026 - 10 - 10)))
+        .await
+        .unwrap();
+    let with_facts = TargetRecord { candidate: row(&mine, m31.id).target.clone(), ..current };
+    assert!(with_facts.candidate.angular_size.is_some(), "Open carries the catalogue facts");
+    assert_eq!(existing, TargetsSearchAction::Open { target: with_facts });
     assert_eq!(library.catalog().target_generation().await.unwrap(), generation + 1);
     assert!(library.catalog().my_target_marks().await.unwrap().favourites.contains(&m31.id));
 
@@ -367,49 +377,52 @@ async fn search_is_read_only_and_result_action_uses_current_membership() {
     );
     assert!(library.catalog().my_target_marks().await.unwrap().favourites.contains(&m31.id));
 
-    let catalogue = library
-        .targets_search("ngc 7000")
-        .await
-        .unwrap()
-        .results
-        .into_iter()
-        .find(|result| result.target.designation == "NGC 7000")
-        .unwrap();
+    let generation = library.catalog().target_generation().await.unwrap();
+    for text in ["M31", "M 31", "m31", " m 31 "] {
+        let found = library.targets_search(text).await.unwrap();
+        let first = &found.results[0];
+        assert_eq!(first.target.id, m31.id, "{text:?}");
+        assert_eq!(first.source, TargetsSearchSource::MyTargets, "{text:?}");
+        assert!(first.in_my_targets, "{text:?}");
+        assert_eq!(found.results.iter().filter(|r| r.target.id == m31.id).count(), 1);
+    }
+
+    let found = library.targets_search("ngc 7000").await.unwrap();
+    let catalogue = found.results.iter().find(|r| r.target.designation == "NGC 7000").unwrap();
+    let catalogue = catalogue.clone();
     assert_eq!(catalogue.source, TargetsSearchSource::Catalogue);
+    assert!(!catalogue.in_my_targets);
+    assert_eq!(found.simbad, SimbadSearch::Searched);
+
+    let found = library.targets_search("PVQ Nebula").await.unwrap();
+    let simbad = found.results.iter().find(|r| r.source == TargetsSearchSource::Simbad).unwrap();
+    let simbad = simbad.clone();
+    assert_eq!(simbad.target.designation, "PVQ Nebula");
+    assert!(!simbad.in_my_targets);
     assert_eq!(
         library.catalog().target_generation().await.unwrap(),
-        generation + 1,
-        "search alone writes nothing"
+        generation,
+        "search writes nothing"
     );
-    let added = library.targets_search_result_action(&catalogue).await.unwrap();
-    assert!(matches!(added, TargetsSearchAction::Added { .. }));
-    assert!(library
-        .catalog()
-        .my_target_marks()
-        .await
-        .unwrap()
-        .favourites
-        .contains(&catalogue.target.id));
 
-    let simbad = library
-        .targets_search("PVQ Nebula")
-        .await
-        .unwrap()
-        .results
-        .into_iter()
-        .find(|result| result.source == TargetsSearchSource::Simbad)
-        .unwrap();
+    let added = library.targets_search_result_action(&catalogue).await.unwrap();
     assert!(matches!(
-        library.targets_search_result_action(&simbad).await.unwrap(),
-        TargetsSearchAction::Added { .. }
+        added,
+        TargetsSearchAction::Added { target } if target.candidate.id == catalogue.target.id
     ));
-    assert!(library
-        .catalog()
-        .my_target_marks()
-        .await
-        .unwrap()
-        .favourites
-        .contains(&simbad.target.id));
+    let again = library.targets_search("NGC7000").await.unwrap();
+    let ngc = again.results.iter().find(|r| r.target.id == catalogue.target.id).unwrap();
+    assert_eq!(ngc.source, TargetsSearchSource::MyTargets);
+
+    let TargetsSearchAction::Added { target } =
+        library.targets_search_result_action(&simbad).await.unwrap()
+    else {
+        panic!("a SIMBAD result outside My targets is added");
+    };
+    assert!(matches!(target.candidate.provenance, Provenance::Provider { .. }));
+    let mine =
+        library.target_rows(&query(TargetsShow::MyTargets, None, date!(2026 - 10 - 10))).await;
+    assert_eq!(designations(&mine.unwrap()), ["M 31", "NGC 7000", "PVQ Nebula"]);
 }
 
 /// A stale candidate that no longer resolves through the live library, seed or
@@ -435,6 +448,37 @@ async fn stale_search_result_without_canonical_target_is_refused() {
         library.targets_search_result_action(&missing).await,
         Err(LibraryError::NotFound(_))
     ));
+}
+
+/// PLAN-TGT-AC-19: clicking an open Project's subject that is not a favourite
+/// opens it; being in My targets through the Project does not star it.
+#[tokio::test]
+async fn result_action_opens_open_project_subject_without_starring() {
+    let temp = tempfile::tempdir().unwrap();
+    let library = open(&temp.path().join("library.sqlite")).await;
+    let ic1396 = seed(&library, "IC 1396").await;
+    library.catalog().record_seed_target(&ic1396).await.unwrap();
+    library
+        .catalog()
+        .create_project(&ProjectInput {
+            name: "Summer nebulae".into(),
+            notes: None,
+            subjects: vec![SubjectInput { target_id: ic1396.id, name: None }],
+            rig_ids: vec![rig(&library).await],
+            goals: Vec::new(),
+        })
+        .await
+        .unwrap();
+    let generation = library.catalog().target_generation().await.unwrap();
+
+    let found = library.targets_search("IC 1396").await.unwrap();
+    let result = found.results.iter().find(|r| r.target.id == ic1396.id).unwrap();
+    assert!(matches!(
+        library.targets_search_result_action(result).await.unwrap(),
+        TargetsSearchAction::Open { target } if target.candidate.id == ic1396.id
+    ));
+    assert!(!library.catalog().my_target_marks().await.unwrap().favourites.contains(&ic1396.id));
+    assert_eq!(library.catalog().target_generation().await.unwrap(), generation);
 }
 
 /// PLAN-TGT-AC-04: with SIMBAD unreachable, or no provider at all, the local

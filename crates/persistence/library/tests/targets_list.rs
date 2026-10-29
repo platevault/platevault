@@ -16,8 +16,8 @@ use platevault_model::{
     AssociationKind, AssociationState, Availability, BuiltinPreset, Catalogue, ChannelIntegration,
     Equipment, EvidenceItem, LibraryError, Location, MeasurementMethod, PresetFilters,
     ProjectBadge, ProjectInput, Provenance, ScanFile, ScanObservation, ScanProgress, ScanState,
-    Session, SubjectInput, TargetActivity, TargetRecord, TargetsColumn, TargetsShow, TargetsSort,
-    WrapUpOutcome, WrapUpStep,
+    Session, SubjectInput, TargetActivity, TargetRecord, TargetsColumn, TargetsSearchAction,
+    TargetsShow, TargetsSort, WrapUpOutcome, WrapUpStep,
 };
 use sqlx::sqlite::{SqliteConnectOptions, SqliteConnection};
 use sqlx::Connection;
@@ -212,6 +212,46 @@ async fn my_targets_include_confirmed_sessions_but_not_unqualified_suggestions()
     let saved = catalog.list_targets(0, 0).await.unwrap();
     assert_eq!(saved.len(), 3, "membership reads do not create Target records");
     assert!(saved.iter().any(|record| record.candidate.id == confirmed_target.candidate.id));
+}
+
+/// PLAN-TGT-FR-03: acting on a result outside My targets saves the Target and
+/// marks it ★ in one transaction; acting again opens the kept record.
+#[tokio::test]
+async fn act_on_target_search_result_adds_once_then_opens_the_kept_record() {
+    let fx = Fixture::new();
+    let catalog = Catalog::open(&fx.db).await.unwrap();
+    let candidate = target("NGC 7000", "ngc 7000");
+    let generation = catalog.target_generation().await.unwrap();
+
+    let TargetsSearchAction::Added { target: added } =
+        catalog.act_on_target_search_result(&candidate, true).await.unwrap()
+    else {
+        panic!("a Target outside My targets is added");
+    };
+    assert_eq!(added.candidate.id, candidate.id);
+    assert_eq!(added.decision_revision, 1);
+    assert_eq!(catalog.target_generation().await.unwrap(), generation + 1);
+    assert!(catalog.my_target_marks().await.unwrap().favourites.contains(&candidate.id));
+
+    let mut edited = added.candidate.clone();
+    edited.common_name = Some("North America Nebula".into());
+    let saved = catalog.save_target(&edited, Some(1)).await.unwrap();
+    let generation = catalog.target_generation().await.unwrap();
+    let opened = catalog.act_on_target_search_result(&candidate, true).await.unwrap();
+    assert_eq!(
+        opened,
+        TargetsSearchAction::Open { target: saved },
+        "the edited record is kept, not overwritten"
+    );
+    assert_eq!(catalog.target_generation().await.unwrap(), generation, "opening writes nothing");
+
+    let mut blank = target("x", "x");
+    blank.designation = "  ".into();
+    assert!(matches!(
+        catalog.act_on_target_search_result(&blank, true).await.unwrap_err(),
+        LibraryError::InvalidInput(_)
+    ));
+    assert!(!catalog.my_target_marks().await.unwrap().favourites.contains(&blank.id));
 }
 
 // ---------------------------------------------------------------------------
