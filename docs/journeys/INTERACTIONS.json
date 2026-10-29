@@ -727,10 +727,10 @@
       "flowStep": "Output step: Results, Copy to Output and the master offer",
       "owner": "070-results-reuse",
       "journeyStep": "J26/S1, J26/S1a, J26/S2, J26/S3, J26/S3a, J26/S8",
-      "spec": "070-results-reuse RES-FR-01, RES-FR-02, RES-FR-06, RES-FR-11, RES-AC-01, RES-AC-02, RES-AC-28, RES-AC-15; 068-calibration-inputs CAL-FR-06; D-W93, D-W97, D-W98",
-      "action": "Open the Project's Output step, copy a tool file to Output/, inspect result rows and the one-time generated-master offer.",
-      "expect": "Every file in Output/ is listed as a Result; Copy to Output verifies a copy from Processing/, and a master newly found in Processing/ is offered once for the calibration library.",
-      "negative": "No file needs accepting, no lineage or provenance is recorded, Results never become inputs, and tools never write into Output/."
+      "spec": "070-results-reuse RES-FR-01, RES-FR-02, RES-FR-06, RES-FR-07, RES-FR-11, RES-AC-01, RES-AC-02, RES-AC-28, RES-AC-15, RES-AC-29; 068-calibration-inputs CAL-FR-06, CAL-FR-16; D-W93, D-W97, D-W98, D-W168",
+      "action": "Open the Project's Output step, copy a tool file to Output/, inspect result rows and the one-time generated-master offer, then try Hide and Restore of the offer on a Closed and an Archived Project.",
+      "expect": "Every file in Output/ is listed as a Result; Copy to Output verifies a copy from Processing/, and a master newly found in Processing/ is offered once for the calibration library. On a Closed or Archived Project, Hide and Restore of that offer are refused, also from Calibration's Show hidden list.",
+      "negative": "No file needs accepting, no lineage or provenance is recorded, Results never become inputs, and tools never write into Output/. A refused Hide or Restore changes no offer state and no file."
     },
     {
       "flowStep": "Mosaic outputs in `Output/Panels/`",
@@ -834,11 +834,11 @@
     {
       "flowStep": "Tonight and calendar data for Home (D-W39, D-W89)",
       "owner": "072-observing-plans",
-      "journeyStep": "J19/S6a, J29/S13, J32/S7, J32/S7a",
-      "spec": "072-observing-plans PLAN-FR-08, PLAN-FR-11, PLAN-FR-12, PLAN-AC-11, PLAN-AC-12; 065-project-goals PRJ-FR-17; D-W89",
-      "action": "Read Home's Tonight section before any site exists and with a default site, then compare its goal windows and five-week calendar with Targets' Plan areas.",
-      "expect": "Without a saved site Tonight lists no windows and reads Add an observing site in Settings. With the default site it lists best windows for favourites and open-Project subjects, the Moon and darkness window; each names the site and time zone and matches the Plan area.",
-      "negative": "No window is computed for an assumed location or for another planning site's selector value. Reading Tonight schedules no reminder and starts no indexing."
+      "journeyStep": "J18/S1, J18/S3, J18/S6, J19/S5, J19/S6a, J29/S13, J32/S7, J32/S7a",
+      "spec": "072-observing-plans PLAN-FR-08, PLAN-FR-11, PLAN-FR-12, PLAN-AC-11, PLAN-AC-12, PLAN-AC-17; 065-project-goals PRJ-FR-17, PRJ-FR-22; 064-library-inventory LIB-FR-31, LIB-AC-47; D-W89, D-W170",
+      "action": "Set Home's planning criteria in the setup wizard's Index step, or leave setup without them, then read Home's Tonight section and criteria dialog before any site exists and with a default site, and compare its goal windows and five-week calendar with Targets' Plan areas.",
+      "expect": "Until Home's planning criteria are saved, Tonight and the calendar compute nothing. Without a saved site Tonight lists no windows and reads Add an observing site in Settings. With the criteria from the Index step and the default site, Edit criteria shows those values and Tonight lists best windows for favourites and open-Project subjects, the Moon and darkness window; each names the site and time zone and matches the Plan area.",
+      "negative": "No window is computed for assumed criteria, for an assumed location or for another planning site's selector value. Reading Tonight schedules no reminder and starts no indexing."
     },
     {
       "flowStep": "Status bar and row-level issues, with no Issues hub (D-W92)",

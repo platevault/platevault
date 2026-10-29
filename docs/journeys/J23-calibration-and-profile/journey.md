@@ -1,9 +1,9 @@
 ---
 id: J23
 title: Review Project calibration and configure its View
-version: 10
+version: 11
 status: draft
-last_reviewed: 2026-10-03
+last_reviewed: 2026-10-29
 actors: [primary-user]
 surfaces: [calibration, projects, view-review, applications]
 interfaces: [desktop-ui, desktop-ui-macos]
@@ -106,8 +106,8 @@ The user checks the pinned calibration for the sessions in Project `NGC 7000 HOO
 
 - **Do:** Choose **Hide** on the unused ASI294MM dark, open **Show hidden**, and choose **Restore**.
 - **Expect:** The unused master leaves the active Calibration list and is absent from matching and offers while hidden. Show hidden lists it with Restore; after restoration it returns to the active list.
-- **Expect (negative):** Hide and Restore do not move, rename or delete the master file.
-- **Trace:** CAL-FR-16 · D-W76, D-W106
+- **Expect (negative):** Hide and Restore do not move, rename or delete the master file. Hide and Restore of a generated master offer are refused, as read-only, while the offer's Project is Closed or Archived (J26/S8).
+- **Trace:** CAL-FR-16 · D-W76, D-W106, D-W168
 
 ### S7d — A closer dark arrives for sessions that already have one {#S7d}
 
@@ -199,3 +199,6 @@ The user checks the pinned calibration for the sessions in Project `NGC 7000 HOO
 - **Δ10** 2026-10-27 · +P7, +S7d · behavior-change
   Owner's answer "Better match: go with C + A" (D-W165): a newly imported calibration that outranks a session's pin is offered in the import review as an unticked **Better for: …** choice, and the session's details show a passive **Better match available** hint beside **Reassign…**. S7d imports a closer dark and asserts both, and that leaving the choice unticked changes nothing. SC9 is new.
   Evidence: D-W165 (owner's answer, 2026-10-27, astro-plan-ygihm), LIB-FR-29, LIB-AC-41, CAL-FR-25 · by: Main (intent-gated)
+- **Δ11** 2026-10-29 · S7c · behavior-change
+  PlateVault refuses Hide and Restore of a generated master offer that belongs to a Closed or Archived Project, and J26/S8 exercises it. S7c's Hide and Restore of an unused adopted master stay unchanged.
+  Evidence: D-W168, CAL-FR-16, RES-FR-07, RES-AC-29 · owner's answer, 2026-10-29, astro-plan-0v2o0.4 · by: Amend5Fix (intent-gated)

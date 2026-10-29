@@ -236,3 +236,12 @@ Sources: the legacy facts are in legacy-frontend-facts.md.
 ## Owner's approval, 2026-10-14, recorded 2026-10-29
 
 - D-W167 (removable import devices; HARNESS-V5-FEEDBACK-R1.md Round 1, Domain and seed, Import sources: "no named 'ASIAIR card'. Removable devices are detected when connected (USB / SD). Recognise common layouts (ASIAIR, NINA, SharpCap, Ekos/KStars, SGP, Voyager) by folder structure and name the device type when recognised"; the owner's "Apply all" of 2026-10-14 for coverage gap DG2, astro-plan-7wl6w): Import lists each connected USB or SD volume under Removable devices without a folder pick, named by the capture layout its folder structure and file names show, or as a generic `USB device` when no layout is recognised. Choose folder… and Saved sources stay (STO-IMP-FR-10, STO-IMP-AC-14, STO-IMP-AC-15).
+
+## Owner's answers, 2026-10-29
+
+The owner answered four questions of contract amendment 5 on 2026-10-29. Bead `astro-plan-0v2o0.4` records the answers.
+
+- D-W168 (generated-master offer lifecycle, owner's answer 1 of 2026-10-29, astro-plan-0v2o0.4). PlateVault refuses Hide and Restore of a generated master offer that belongs to a Closed or Archived Project. The refusal applies on the Output step and in Calibration's Show hidden list. A finished Project keeps its Output read-only, and these two actions are no exception. (RES-FR-07, CAL-FR-16, J26/S8 and J23/S7c, implemented by astro-plan-wre19.17.)
+- D-W169 (virtualized lists, owner's answer 3 of 2026-10-29, astro-plan-0v2o0.4). PlateVault virtualizes every table and every thumbnail strip, including the frame table, filmstrip and grid. Navigation and selection still cover the complete list. (FR-043, PIX-FR-10 and PIX-FR-11, implemented by astro-plan-ocyuc.12.)
+- D-W170 (Home planning criteria, owner's answer 4 of 2026-10-29, astro-plan-0v2o0.4). Home's planning criteria have no defaults, and the setup wizard's Index step sets them. Home's Set criteria and Settings can save them too. Until Home's planning criteria are saved, planning calculations and Home's planning results use no assumed criteria. (FR-044, PLAN-FR-11 and LIB-FR-31 in J18, J19 and J29, implemented by astro-plan-wtyb7.)
+- D-W171 (InvalidInput field, owner's answer 5 of 2026-10-29, astro-plan-0v2o0.4). When a field failed validation, a Library refusal with code InvalidInput also names that field by a stable identifier rather than display text. (FR-045 and LIB-FR-30, implemented by astro-plan-wre19.18.)

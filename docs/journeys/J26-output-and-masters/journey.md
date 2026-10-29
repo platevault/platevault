@@ -1,9 +1,9 @@
 ---
 id: J26
 title: Discover Project Output and adopt a calibration master
-version: 7
+version: 8
 status: draft
-last_reviewed: 2026-10-03
+last_reviewed: 2026-10-29
 actors: [primary-user]
 surfaces: [results, calibration, projects, activity]
 interfaces: [desktop-ui, desktop-ui-macos]
@@ -18,6 +18,7 @@ The user opens the Project's Output step to find its Results, saves finished ima
 - A tool rerun may overwrite files in `Processing/` without changing Results already in `Output/`.
 - A generated master is offered once from `Processing/`; explicit adoption registers it only after its source and verified copy match the reviewed digest.
 - A hidden master can be restored from Show hidden, and a changed adopted master is marked drifted and is not offered as an input until its bytes return.
+- A Closed or Archived Project keeps a read-only Output, and PlateVault refuses Hide and Restore of its generated master offer (D-W168).
 
 ## Preconditions
 
@@ -29,6 +30,7 @@ The user opens the Project's Output step to find its Results, saves finished ima
 - P6: A fault control pauses master adoption after the destination copy is read back and verified and before the master is registered (G4).
 - P7: The proposed master destination in Calibration storage can be occupied by an unrelated file whose digest is recorded before adoption is attempted.
 - P8: `Output/final/` contains two image files that the Output table lists with paths relative to `Output/`.
+- P9: The library holds the Closed Project `M 31 Ha` and the Archived Project `M 33 Ha`. Each one's `Processing/Siril/` holds two generated masters that PlateVault found while the Project was open. One offer is still on the Output step. The user hid the other offer before the Project closed. The P4 manifest records their digests.
 
 ## Steps
 
@@ -111,10 +113,10 @@ The user opens the Project's Output step to find its Results, saves finished ima
 
 ### S8 — Hide and restore the generated master offer {#S8}
 
-- **Do:** In the Project's Output step, open the once-only offer for `masterFlat_BIN-1_FILTER-Ha.fit` found in `Processing/Siril/`. Choose **Hide**, then open the Calibration library's Show hidden list and choose **Restore** for that candidate.
-- **Expect:** Output offers the generated master once with **Add to calibration library** and **Hide**. Hiding records the decline and the offer does not return; the candidate remains listed in Calibration. Show hidden lists it with Restore, and Restore returns it to the Calibration list.
-- **Expect (negative):** Hiding and restoring the offer do not move or change the generated file, which remains in `Processing/Siril/` with its recorded digest.
-- **Trace:** CAL-FR-06, CAL-FR-16, RES-FR-11, RES-AC-15 · D-W98
+- **Do:** In the Project's Output step, open the once-only offer for `masterFlat_BIN-1_FILTER-Ha.fit` found in `Processing/Siril/`. Choose **Hide**, then open the Calibration library's Show hidden list and choose **Restore** for that candidate. Then try the same Hide and Restore on the P9 offers of `M 31 Ha` and `M 33 Ha`.
+- **Expect:** Output offers the generated master once with **Add to calibration library** and **Hide**. Hiding records the decline and the offer does not return; the candidate remains listed in Calibration. Show hidden lists it with Restore, and Restore returns it to the Calibration list. Both P9 Projects refuse each Hide and Restore, because a finished Project keeps its Output read-only.
+- **Expect (negative):** Hiding and restoring the offer do not move or change the generated file, which remains in `Processing/Siril/` with its recorded digest. Hide and Restore are refused, as read-only, while the offer's Project is Closed or Archived, and the refusals change no offer or file.
+- **Trace:** CAL-FR-06, CAL-FR-16, RES-FR-07, RES-FR-11, RES-AC-15, RES-AC-29 · D-W98, D-W168
 
 ### S8a — Refuse an occupied master destination {#S8a}
 
@@ -176,6 +178,7 @@ The user opens the Project's Output step to find its Results, saves finished ima
 - SC7: Adoption registers the master only after the reviewed source digest, verified destination digest and final source recheck agree, and PlateVault's own copy at the destination reaches the OS Trash only through the reviewed move (S9).
 - SC8: A changed adopted master reads drifted and is not offered as a valid input, and no session's calibration changes; restoring the bytes restores the digest without a new adoption (S9a, S9b).
 - SC9: Hide and Restore change 0 bytes and 0 paths for the master file (S9c).
+- SC10: A Closed and an Archived Project each refuse Hide and Restore of their generated master offer, with 0 offers and 0 bytes changed (S8).
 
 ## Known gaps
 
@@ -212,3 +215,6 @@ The user opens the Project's Output step to find its Results, saves finished ima
 - **Δ7** 2026-10-16 · S8c, S9 · behavior-change
   S9 no longer moves the copy S8c left by hand: adoption refuses it as PlateVault's own unregistered copy, offers a reviewed Move to Trash, and retries once the copy is in the OS Trash. G9 is dissolved.
   Evidence: D-W119 (owner's second batch of 2026-10-16) in PR #1804, CAL-FR-07, CAL-AC-08, CAL-AC-09, STO-FR-12 · by: EncodeOwnerAnswers2 (intent-gated)
+- **Δ8** 2026-10-29 · +P9, S8 · behavior-change
+  The offer of a generated master accepts Hide and Restore only while its Project is open. S8 now also tries both on a Closed and an Archived Project. Both refuse them and change no offer or file. SC10 is new.
+  Evidence: D-W168, RES-FR-07, CAL-FR-16, RES-AC-29 · owner's answer, 2026-10-29, astro-plan-0v2o0.4 · by: Amend5Fix (intent-gated)

@@ -1,9 +1,9 @@
 ---
 id: J19
 title: Index capture folders in place and inspect sessions on first use
-version: 9
+version: 10
 status: draft
-last_reviewed: 2026-10-03
+last_reviewed: 2026-10-29
 actors: [primary-user]
 surfaces: [onboarding, locations, indexing, home, sessions, targets, planning, status-bar, issues, calibration, duplicates, equipment]
 interfaces: [desktop-ui, desktop-ui-macos]
@@ -78,15 +78,21 @@ opens on Home, the control-panel dashboard. Done means:
 
 ### S5 — Start indexing with one denied location {#S5}
 
-- **Do:** Outside PlateVault, remove read permission from `Astro-T7/Calibration`. Click **Start indexing**.
-- **Expect:** Progress shows these counts:
+- **Do:** Outside PlateVault, remove read permission from `Astro-T7/Calibration`. In the Index step, read **Start indexing**, then set Home's planning criteria:
+  - Minimum altitude 25°
+  - Darkness Astronomical
+  - Moon No limit
+  - Shortest window 60 min
+
+  Click **Start indexing**.
+- **Expect:** The Index step asks for Home's planning criteria and fills in no value. After **Start indexing**, progress shows these counts:
   - files discovered and metadata read;
   - unsupported items, at least the P2 note file;
   - unreadable items and completed scope.
 
   The Calibration row names the access failure and offers **Choose folder again** and **Retry**. Both Captures locations keep indexing.
-- **Expect (negative):** The denied folder is not reported as empty, and none of its files is labelled Missing.
-- **Trace:** flow A3, A4 · LIB-FR-03, LIB-FR-06, LIB-FR-07 · LIB-AC-07
+- **Expect (negative):** The denied folder is not reported as empty, and none of its files is labelled Missing. **Start indexing** stays unavailable until the user sets Home's planning criteria.
+- **Trace:** flow A3, A4 · LIB-FR-03, LIB-FR-06, LIB-FR-07, LIB-FR-31 · LIB-AC-07, LIB-AC-47 · D-W170
 
 ### S6 — Browse while indexing runs {#S6}
 
@@ -99,8 +105,8 @@ opens on Home, the control-panel dashboard. Done means:
 
 - **Do:** When both Captures locations finish indexing, on Home, read Tonight. Open Targets and search for `NGC 7000`.
 - **Expect:** Tonight reads `No site` and offers **Add site**, which leads to Settings › Observing sites. Targets opens on My targets, with tonight in its header date picker and a toggle to Browse catalogues. My targets lists NGC 7000, because its sessions are indexed, not as a favourite and with no Project badge. The altitude column draws no sparkline and the page offers **Add site**. The search lists NGC 7000 from the bundled catalogues with its source, and the result shows it is in My targets, so clicking it would open NGC 7000 and add nothing (PLAN-TGT-FR-03). The results read `SIMBAD off` or `SIMBAD unreachable`, never `SIMBAD searched`.
-- **Expect (negative):** No window, altitude or Img time is computed for an assumed location. Searching writes nothing: this step clicks no result row, and the search adds no Target to My targets.
-- **Trace:** PLAN-FR-11 · PLAN-AC-12 · PLAN-TGT-FR-01, PLAN-TGT-FR-03 · PLAN-TGT-AC-03, PLAN-TGT-AC-04, PLAN-TGT-AC-15 · D-W17, D-W39 · HARNESS-V5-IA.md §Screens S1 (Tonight), S10, S11 · HARNESS-V5-FEEDBACK-R1.md §Round 6 "Targets opens on My targets"
+- **Expect (negative):** No window, altitude or Img time is computed for an assumed location or for criteria other than those from S5. Searching writes nothing: this step clicks no result row, and the search adds no Target to My targets.
+- **Trace:** PLAN-FR-11 · PLAN-AC-12 · PLAN-TGT-FR-01, PLAN-TGT-FR-03 · PLAN-TGT-AC-03, PLAN-TGT-AC-04, PLAN-TGT-AC-15 · D-W17, D-W39, D-W170 · HARNESS-V5-IA.md §Screens S1 (Tonight), S10, S11 · HARNESS-V5-FEEDBACK-R1.md §Round 6 "Targets opens on My targets"
 
 ### S7 — Recover the denied location {#S7}
 
@@ -267,3 +273,6 @@ opens on Home, the control-panel dashboard. Done means:
   A status-bar counter with one issue opens the same menu of owning pages as several do, and My targets marks a favourite in its Favourite column instead of with ★.
   At S6a, clicking NGC 7000's search result would open it, because a click on a result adds it or opens it and no result row has an Add button.
   Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 11 (OWNER, 2026-10-23) and §Round 6 "Clicking a result" on ui-harness-v5 @ 5dc245244; D-W142, D-W144, D-W152, FR-032 · by: SpecAmend (intent-gated)
+- **Δ10** 2026-10-29 · S5, S6a · behavior-change
+  The setup wizard's Index step asks for Home's planning criteria, which have no defaults. S5 sets them before indexing starts. S6a computes nothing under assumed criteria.
+  Evidence: D-W170, LIB-FR-31, LIB-AC-47, PLAN-FR-11 · owner's answer, 2026-10-29, astro-plan-0v2o0.4 · by: Amend5Fix (intent-gated)
