@@ -21,8 +21,9 @@ use platevault_core::custody::trash::OsTrash;
 use platevault_core::library::Library;
 use platevault_core::targets::TargetQuery;
 use platevault_core::{
-    AssociationState, ColorKind, Equipment, LibraryErrorCode, LocationRole, NativePath,
-    ProjectInput, Provenance, SubjectInput, TrashSupport, TrashUnsupported,
+    AssociationState, ColorKind, Equipment, LibraryErrorCode, LocationRole, MeasurementMethod,
+    NativePath, ProjectInput, ProjectLifecycle, Provenance, SubjectInput, TrashSupport,
+    TrashUnsupported, WrapUpOutcome, WrapUpStep,
 };
 use serde_json::{json, Value};
 use support::{Ipc, NOT_FOUND};
@@ -64,6 +65,7 @@ impl Shell {
                 .expect("open library");
         let app = mock_builder()
             .invoke_handler(tauri::generate_handler![
+                desktop_shell::commands::project_goals::project_get,
                 desktop_shell::commands::project_inputs::project_inputs,
                 desktop_shell::commands::project_inputs::project_add_sessions,
                 desktop_shell::commands::project_inputs::project_remove_sessions,
@@ -167,6 +169,65 @@ impl Shell {
                 .id
         })
     }
+}
+
+#[test]
+fn project_get_returns_the_current_revision_after_a_write() {
+    let shell = Shell::new();
+    let project = shell.open_project();
+    let library = shell.library();
+    let updated = tauri::async_runtime::block_on(library.catalog().update_project(
+        project,
+        1,
+        "Updated",
+        Some("Current notes"),
+    ))
+    .expect("update the Project");
+
+    let actual = shell.call("project_get", &json!({ "projectId": project }));
+
+    assert_eq!(actual["name"], json!("Updated"));
+    assert_eq!(actual["notes"], json!("Current notes"));
+    assert_eq!(actual["revision"], json!(updated.revision));
+}
+
+#[test]
+fn project_get_refuses_an_unknown_project_scoped_to_its_id() {
+    let shell = Shell::new();
+    let project = Uuid::new_v4();
+
+    shell.refuses("project_get", &json!({ "projectId": project }), NOT_FOUND, project);
+}
+
+#[test]
+fn project_get_reports_a_closed_project_lifecycle() {
+    let shell = Shell::new();
+    let project = shell.open_project();
+    let library = shell.library();
+    tauri::async_runtime::block_on(async {
+        let revision = library
+            .catalog()
+            .wrap_up_status(project)
+            .await
+            .expect("Wrap up status")
+            .desired_revision;
+        for step in [WrapUpStep::CleanUp, WrapUpStep::Trash] {
+            library
+                .catalog()
+                .record_wrap_up_step(project, revision, step, WrapUpOutcome::Skipped)
+                .await
+                .expect("record skipped Wrap up step");
+        }
+        library
+            .catalog()
+            .close_project(project, revision, &MeasurementMethod::new("platevault.stars", 1), &[])
+            .await
+            .expect("close Project without an archive");
+    });
+
+    let actual = shell.call("project_get", &json!({ "projectId": project }));
+
+    assert_eq!(actual["lifecycle"], json!(ProjectLifecycle::Closed));
 }
 
 impl Ipc for Shell {

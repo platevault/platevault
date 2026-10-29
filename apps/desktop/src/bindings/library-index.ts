@@ -308,6 +308,13 @@ export const commands = {
 	 */
 	projectCreate: (name: string, notes: string | null, subjects: SubjectInput[], rigIds: string[], goals: GoalInput[]) => typedError<Project, ErrorResponse>(__TAURI_INVOKE("project_create", { name, notes, subjects, rigIds, goals })),
 	/**
+	 *  Read a Project, including its subjects, rigs, goals and current lifecycle.
+	 * 
+	 *  # Errors
+	 *  `NotFound` for an unknown Project; catalog errors.
+	 */
+	projectGet: (projectId: string) => typedError<Project, ErrorResponse>(__TAURI_INVOKE("project_get", { projectId })),
+	/**
 	 *  Replace the Project's name and notes.
 	 * 
 	 *  # Errors
