@@ -374,20 +374,21 @@ impl Library {
 
     /// Restore on a hidden generated master offer: offer it again, provided
     /// its source in the Project's `Processing/` still holds the bytes the
-    /// offer names (`expected_sha256`). A source that changed or is gone is
-    /// offered afresh by the next pass instead. Only the catalog changes.
+    /// offer names (`expected_sha256`). Only the catalog changes; changed
+    /// bytes are offered afresh by the next pass.
     ///
     /// # Errors
     /// `NotFound` for an unknown offer or Project; `InvalidInput` for a digest
-    /// the offer does not have, a Project with no processing location, a
-    /// source that changed or is gone, an offer that is not hidden or an
-    /// adopted master; access errors reading the source.
+    /// the offer does not have, an offer that is not hidden, an adopted
+    /// master, a Project with no processing location, or a source that changed
+    /// or is gone; access errors reading the source.
     pub async fn restore_processing_master(
         &self,
         offer_id: Uuid,
         expected_sha256: &str,
     ) -> Result<ProcessingMasterOffer, LibraryError> {
         let offer = self.catalog().processing_master_offer(offer_id).await?;
+        restorable(&offer, expected_sha256)?;
         let basis = self.catalog().output_basis(offer.project_id).await?;
         let place = Place::of(&basis)?
             .ok_or_else(|| invalid("choose the Project's processing location first"))?;
@@ -397,16 +398,40 @@ impl Library {
         let unchanged = blocking(move || match observe_source(&processing, &source) {
             Ok(evidence) => Ok(evidence.kind == EntryKind::File
                 && evidence.sha256.as_deref() == Some(offer.sha256.as_str())),
-            Err(error) if error.code() == LibraryErrorCode::NotFound => Ok(false),
+            // Gone, or no longer reached the same way from `Processing/`.
+            Err(error)
+                if matches!(
+                    error.code(),
+                    LibraryErrorCode::NotFound | LibraryErrorCode::IdentityConflict
+                ) =>
+            {
+                Ok(false)
+            }
             Err(error) => Err(error),
         })
         .await?;
         if !unchanged {
             return Err(invalid(format!(
-                "{shown} changed since it was offered; rescan the Output step"
+                "{shown} no longer holds the hidden master's bytes, so it can't be restored"
             )));
         }
+        // The transaction checks the digest and the state again.
         self.catalog().restore_processing_master(offer_id, expected_sha256).await
+    }
+}
+
+/// Whether Restore may answer `offer`, read before its source is hashed: the
+/// digest the caller saw, and a hidden offer.
+fn restorable(offer: &ProcessingMasterOffer, expected_sha256: &str) -> Result<(), LibraryError> {
+    if offer.sha256 != expected_sha256 {
+        return Err(invalid(format!("offer {} changed; refresh the Output step", offer.id)));
+    }
+    match offer.state {
+        MasterOfferState::Dismissed => Ok(()),
+        MasterOfferState::Offered => Err(invalid(format!("offer {} is not hidden", offer.id))),
+        MasterOfferState::Adopted => {
+            Err(invalid(format!("offer {} was adopted into the calibration library", offer.id)))
+        }
     }
 }
 

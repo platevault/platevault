@@ -649,6 +649,11 @@ async fn a_processing_master_offer_hidden_once_stays_a_candidate() {
         std::slice::from_ref(&hidden),
         "it stays listed in Calibration"
     );
+    assert_eq!(
+        catalog.dismiss_processing_master(offer.id, &offer.sha256).await.unwrap(),
+        hidden,
+        "once"
+    );
     let restored = catalog.restore_processing_master(offer.id, &offer.sha256).await.unwrap();
     assert_eq!(restored.state, MasterOfferState::Offered);
     assert_eq!(catalog.processing_master_candidates().await.unwrap(), [restored]);

@@ -717,7 +717,7 @@ async fn a_hidden_master_offer_is_restored_while_its_source_is_unchanged() {
 }
 
 /// A hidden offer is not restored once its source changed or is gone: the
-/// offer names those bytes, and a rescan offers new bytes afresh.
+/// offer names those bytes; changed bytes are offered afresh by the next pass.
 #[tokio::test]
 async fn a_hidden_master_offer_is_not_restored_after_its_source_changed() {
     let world = World::new().await;
@@ -736,6 +736,10 @@ async fn a_hidden_master_offer_is_not_restored_after_its_source_changed() {
     fs::remove_file(&source).unwrap();
     let removed = world.library.restore_processing_master(offer.id, &offer.sha256).await;
     assert_eq!(removed.unwrap_err().code(), LibraryErrorCode::InvalidInput);
+
+    fs::remove_dir_all(world.processing().join("WBPP/master")).unwrap();
+    let folder_gone = world.library.restore_processing_master(offer.id, &offer.sha256).await;
+    assert_eq!(folder_gone.unwrap_err().code(), LibraryErrorCode::InvalidInput);
     assert_eq!(world.offers().await[0].state, MasterOfferState::Dismissed);
 }
 
