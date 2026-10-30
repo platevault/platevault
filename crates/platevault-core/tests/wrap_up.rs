@@ -620,7 +620,11 @@ async fn a_stopped_close_resumes_to_archived_with_its_kept_view_repointed() {
     let report = world.library.close_project(&request, trash.dyn_trash(), &stop).await.unwrap();
     assert_eq!(report.lifecycle, ProjectLifecycle::Closing, "{report:#?}");
     assert!(!report.archive.as_ref().unwrap().settled);
-    let listed = world.library.project_list(&ProjectQuery { include_closed: true, ..ProjectQuery::default() }).await.unwrap();
+    let listed = world
+        .library
+        .project_list(&ProjectQuery { include_closed: true, ..ProjectQuery::default() })
+        .await
+        .unwrap();
     let closing = listed.iter().find(|summary| summary.id == world.project).unwrap();
     assert_eq!(closing.lifecycle, ProjectLifecycle::Closing);
     assert_eq!(closing.next_step, None);
@@ -639,7 +643,11 @@ async fn a_stopped_close_resumes_to_archived_with_its_kept_view_repointed() {
     assert!(progress.moves.iter().all(|step| step.outcome == Some(ArchiveMoveOutcome::Archived)));
     assert_eq!(progress.repointed_links.len(), 4);
     let status = world.library.wrap_up_status(world.project).await.unwrap();
-    let listed = world.library.project_list(&ProjectQuery { include_closed: true, ..ProjectQuery::default() }).await.unwrap();
+    let listed = world
+        .library
+        .project_list(&ProjectQuery { include_closed: true, ..ProjectQuery::default() })
+        .await
+        .unwrap();
     let archived = listed.iter().find(|summary| summary.id == world.project).unwrap();
     assert_eq!(archived.lifecycle, ProjectLifecycle::Archived);
     assert_eq!(archived.next_step, None);

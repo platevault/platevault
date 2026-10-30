@@ -39,8 +39,8 @@ import { ActionError, EmptyState, UnknownValue } from "@/components/app/feedback
 import { useFollowLink } from "@/components/app/links"
 import { StatusBadge } from "@/components/app/status"
 import { DetailPage, type DetailSection } from "@/components/templates/detail-page"
+import { projectNextStep } from "@/components/domain/project-next-step"
 import { formatCount } from "@/lib/format"
-import { nextAction } from "@/features/projects/next-step"
 import { AddToProjectDialog } from "./add-to-project"
 import { homeCriteriaQuery } from "@/components/domain/plan-criteria"
 import { PlanCriteriaDialog } from "@/components/domain/plan-criteria-dialog"
@@ -48,6 +48,7 @@ import { IngestionsTable, ROWS, useIngestions } from "./ingestions"
 import { HomeCalendar, TonightGoals } from "./home-planning"
 import { readError, Unavailable } from "./parts"
 import { dashboardQuery, homeWrite, locationsQuery, sessionsQuery } from "./queries"
+import { sessionLabel, useSessionSummaries } from "@/components/domain/session-label"
 import type { Messages } from "@/lib/i18n"
 
 type Follow = (link: StepLink) => void
@@ -280,7 +281,7 @@ function OpenWorkTable({ projects, follow }: { projects: HomeProject[]; follow: 
   const stands = (p: HomeProject) => (p.goals.length === 0 ? m.projects_no_goals() : m.home_goals_met({ met: p.goals.filter((g) => g.met).length, total: p.goals.length }))
   const columns: Column<HomeProject>[] = [
     { id: "name", header: m.home_column_name(), rowHeader: true, truncate: true, sortValue: (p) => p.project.name, cell: (p) => p.project.name },
-    { id: "stands", header: m.home_column_progress(), truncate: true, sortValue: stands, cell: (p) => `${stands(p)} · ${m.home_next_step({ step: nextAction(m, p.project.id, p.next).label })}` },
+    { id: "stands", header: m.home_column_progress(), truncate: true, sortValue: stands, cell: (p) => `${stands(p)} · ${m.home_next_step({ step: projectNextStep(m, p.project.id, p.next).label })}` }
   ]
   return (
     <>
@@ -291,13 +292,13 @@ function OpenWorkTable({ projects, follow }: { projects: HomeProject[]; follow: 
         getRowId={(p) => p.project.id}
         rowLabel={(p) => p.project.name}
         rowActions={(p) => {
-          const next = nextAction(m, p.project.id, p.next)
+          const next = projectNextStep(m, p.project.id, p.next)
           return [
             { id: "next", label: next.label, run: () => follow(next.link) },
             { id: "open", label: m.target_open_project(), run: () => follow(projectLink(p.project.id)) },
           ]
         }}
-        onRowClick={(p) => follow(nextAction(m, p.project.id, p.next).link)}
+        onRowClick={(p) => follow(projectNextStep(m, p.project.id, p.next).link)}
         empty={<EmptyState icon={FolderPlus} title={m.home_no_projects_in_progress()} action={<ActionButton action={{ id: "new-project", label: m.newproject_open_ellipsis(), opensDialog: true, run: () => follow({ to: "/projects", search: { new: "open" } }) }} />} />}
       />
       {/* astro-plan-wre19.10: goal deadlines and season windows ("N nights left", PRJ-FR-23); 1dhpb: calibration processes. */}

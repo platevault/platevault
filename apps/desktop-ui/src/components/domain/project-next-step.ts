@@ -1,10 +1,10 @@
 import type { NextAction } from "@/api/ipc"
-import type { Messages } from "@/lib/i18n"
-import { formatCount } from "@/lib/format"
 import type { StepLink } from "@/components/app/contracts"
+import { formatCount } from "@/lib/format"
+import type { Messages } from "@/lib/i18n"
 
-/** Word and link the library's Project next-action result identically on Home and Projects. */
-export function nextAction(m: Messages, projectId: string, next: NextAction): { label: string; link: StepLink } {
+/** Word and link a Project's library-computed next action consistently across its surfaces. */
+export function projectNextStep(m: Messages, projectId: string, next: NextAction): { label: string; link: StepLink } {
   const project: StepLink = { to: "/projects/$projectId", params: { projectId } }
   switch (next.kind) {
     case "review_new_frames":

@@ -21,7 +21,7 @@ import { ListPage } from "@/components/templates/list-page"
 import { failureMessage } from "@/components/app/run-result"
 import { StatusBadge, statusMeta } from "@/components/app/status"
 import { formatCount } from "@/lib/format"
-import { nextAction } from "./next-step"
+import { projectNextStep } from "@/components/domain/project-next-step"
 import { DuplicateProjectDialog } from "./duplicate-dialog"
 import { useProjectIssues } from "./issues"
 import { NewProjectDialog } from "./new-project-dialog"
@@ -63,14 +63,13 @@ export function ProjectsPage() {
   )
   const open = (p: ProjectSummary, extra: Record<string, string> = {}) => void navigate({ to: "/projects/$projectId", params: { projectId: p.id }, search: extra })
   const newProject: Action = { id: "new-project", label: m.newproject_title(), icon: Plus, kind: "primary", opensDialog: true, run: () => setCreating(true) }
-
   const columns: Column<ProjectSummary>[] = [
     { id: "name", header: m.project_noun(), cell: (p) => p.name, sortValue: (p) => p.name, rowHeader: true, truncate: true, truncateMin: "name" },
     { id: "subjects", header: m.project_subjects(), cell: (p) => p.subjects.join(", ") || m.projects_no_subjects(), sortValue: (p) => p.subjects.length, truncate: true },
     { id: "rigs", header: m.project_rigs(), cell: (p) => formatCount(p.rigCount), sortValue: (p) => p.rigCount, align: "right" },
     { id: "goals", header: m.projects_col_goals(), cell: (p) => (p.goalCount === 0 ? m.projects_no_goals() : m.project_goals_count({ count: p.goalCount })), sortValue: (p) => p.goalCount },
-    { id: "next-step", header: m.projects_col_next_step(), cell: (p) => (p.nextStep ? nextAction(m, p.id, p.nextStep).label : m.projects_no_next_step()), sortValue: (p) => p.nextStep?.kind ?? "" },
-    { id: "pending-changes", header: m.projects_col_pending_changes(), cell: (p) => formatCount(p.pendingChanges), sortValue: (p) => p.pendingChanges, align: "right" },
+    { id: "next-step", header: m.projects_col_next_step(), cell: (p) => (p.nextStep ? projectNextStep(m, p.id, p.nextStep).label : m.projects_no_next_step()), sortValue: (p) => p.nextStep?.kind ?? "" },
+    { id: "pending-changes", header: m.project_pending_changes(), cell: (p) => formatCount(p.pendingChanges), sortValue: (p) => p.pendingChanges, align: "right" },
     { id: "state", header: m.projects_col_state(), cell: (p) => <StatusBadge kind="project" value={p.lifecycle} />, sortValue: (p) => statusMeta("project", p.lifecycle).label },
   ]
   const rowActions = (p: ProjectSummary): MenuItem[] =>

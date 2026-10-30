@@ -24,8 +24,8 @@ use crate::tonight::{Tonight, TonightQuery};
 use crate::{
     AdmissionBlocker, ApplyJournal, ApplyOutcome, GoalProgress, GoalShortfall, HomeAction,
     HomeProject, ImportState, LibraryError, NextAction, PreviousItemReview, Project,
-    ProjectCandidate, ProjectQuery, ProjectSuggestion, ProjectSummary, ProjectWait, QualityLabel, ReadyToAdd,
-    ReviewContext, ReviewFilter, RunState, RunningWork, ScanState, SessionAction,
+    ProjectCandidate, ProjectQuery, ProjectSuggestion, ProjectSummary, ProjectWait, QualityLabel,
+    ReadyToAdd, ReviewContext, ReviewFilter, RunState, RunningWork, ScanState, SessionAction,
     SessionFilterCounts, StorageOperationState, TargetStatus, UnmetGoal, UnreviewedSession,
 };
 
@@ -111,7 +111,8 @@ impl Library {
         let catalog = self.catalog();
         let goals = self.project_progress(id).await?.goals;
         let candidates = catalog.project_candidates(id).await?;
-        let basis = catalog.review_basis(ReviewContext::ProjectCandidates { project_id: id }).await?;
+        let basis =
+            catalog.review_basis(ReviewContext::ProjectCandidates { project_id: id }).await?;
         let mut unreviewed = BTreeMap::new();
         for capture in &basis.captures {
             if QualityLabel::of(&capture.quality) == QualityLabel::Unreviewed {
@@ -137,8 +138,6 @@ impl Library {
         })
     }
 }
-
-
 
 impl Library {
     /// Home: the top line, then Actions, the open Projects, New sessions,
@@ -182,7 +181,11 @@ impl Library {
             }
             let next = next_action(&reads, &tonight);
             projects.push(HomeProject {
-                project: ProjectSummary { next_step: Some(next.clone()), pending_changes: reads.pending_changes, ..summary },
+                project: ProjectSummary {
+                    next_step: Some(next.clone()),
+                    pending_changes: reads.pending_changes,
+                    ..summary
+                },
                 pending_changes: reads.pending_changes,
                 next,
                 goals: reads.goals,
@@ -238,7 +241,6 @@ impl Library {
         }
         Ok(summaries)
     }
-
 
     async fn home_sessions(
         &self,
