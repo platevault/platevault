@@ -6989,6 +6989,10 @@ export type ProjectSummary = {
 	subjects: string[],
 	rigCount: number,
 	goalCount: number,
+	/**  The first rule of PRJ-FR-18 that applies to this open Project. */
+	nextStep: NextAction | null,
+	/**  Changes waiting for Apply. Closed Projects have none. */
+	pendingChanges: number,
 };
 
 /**  The View step's settings (VSEL-FR-16, PREP-FR-06). */
