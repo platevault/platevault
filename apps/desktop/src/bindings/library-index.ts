@@ -1392,6 +1392,23 @@ export const commands = {
 	 */
 	planningSaveHomeCriteria: (criteria: PlanCriteria, expectedRevision: number) => typedError<HomeCriteria, ErrorResponse>(__TAURI_INVOKE("planning_save_home_criteria", { criteria, expectedRevision })),
 	/**
+	 *  The default reminder lead time a new reminder starts from, at its
+	 *  revision: 12 hours at revision 0 until the user changes it.
+	 * 
+	 *  # Errors
+	 *  `PersistenceFailure` when the catalog can't be read.
+	 */
+	planningReminderLeadTime: () => typedError<ReminderLeadTime, ErrorResponse>(__TAURI_INVOKE("planning_reminder_lead_time")),
+	/**
+	 *  Save the default reminder lead time, in minutes, over `expected_revision`
+	 *  (0 when never saved). Existing reminders keep their own lead times.
+	 * 
+	 *  # Errors
+	 *  `InvalidInput` naming `leadMinutes` for 30 minutes or less, or more than
+	 *  7 days, and `Conflict` for a stale revision; nothing is stored on either.
+	 */
+	planningSaveReminderLeadTime: (leadMinutes: number, expectedRevision: number) => typedError<ReminderLeadTime, ErrorResponse>(__TAURI_INVOKE("planning_save_reminder_lead_time", { leadMinutes, expectedRevision })),
+	/**
 	 *  The window set with its basis and one entry per night. Read-only: writes
 	 *  nothing and starts nothing.
 	 * 
@@ -2483,10 +2500,16 @@ export type Band = "L" | "R" | "G" | "B" | "Ha" | "SII" | "OIII";
  */
 export type BandGrade = "good" | "marginal" | "poor";
 
-/**  One band of the Filters strip: viable tonight, or limited by the Moon. */
+/**
+ *  One band of the Filters strip graded for the night under its
+ *  Moon-avoidance curve (PLAN-TGT-FR-06), by the rule Home's Tonight grades
+ *  goals with: `clearMinutes` is the total of the Plan area windows the
+ *  curve leaves, zero for a poor band.
+ */
 export type BandState = {
 	band: Band,
-	viable: boolean,
+	grade: BandGrade,
+	clearMinutes: number,
 };
 
 /**
@@ -6308,6 +6331,8 @@ export type PlanningSites = {
 export type PlanningUnknownReason = 
 /**  "Add an observing site in Settings". */
 "no_site" | 
+/**  Home's criteria are not set yet; the planning values wait for them. */
+"no_criteria" | 
 /**  "This target has no catalogued coordinates, so visibility can't be computed." */
 "target_coordinates_unknown" | "unsupported_coordinate_frame";
 
@@ -7159,6 +7184,18 @@ export type ReminderInput = {
 	targetId: string,
 	criteria: PlanCriteria,
 	leadMinutes: number,
+};
+
+/**
+ *  The stored default reminder lead time (PLAN-FR-06), set in Settings, at
+ *  its own revision, within [`validate_lead_minutes`]'s range so a new
+ *  reminder can start from it. A catalog that never saved it reads
+ *  [`DEFAULT_REMINDER_LEAD_MINUTES`] at revision 0. Its revision is its own,
+ *  so saving it stales no reminder review and no other planning setting.
+ */
+export type ReminderLeadTime = {
+	leadMinutes: number,
+	revision: number,
 };
 
 /**  A read-only review of reminder activation against the default site. */
@@ -8471,6 +8508,11 @@ export type TargetRow_Deserialize = {
 	imgTimeZeroReason: ImgTimeZeroReason | null,
 	/**  The Filters strip's bands (the page's `bands`); empty when unknown. */
 	bands: BandState[],
+	/**
+	 *  Geometric altitude at [`ALTITUDE_SAMPLES`] instants evenly spaced from
+	 *  the basis's `nightStartUtc` to its `nightEndUtc`; empty when unknown.
+	 */
+	altitudeSamplesDeg: (number | null)[],
 	recommendation: Recommendation | null,
 	nextOpposition: string | null,
 	unknownReason: PlanningUnknownReason | null,
@@ -8500,6 +8542,11 @@ export type TargetRow_Serialize = {
 	imgTimeZeroReason: ImgTimeZeroReason | null,
 	/**  The Filters strip's bands (the page's `bands`); empty when unknown. */
 	bands: BandState[],
+	/**
+	 *  Geometric altitude at [`ALTITUDE_SAMPLES`] instants evenly spaced from
+	 *  the basis's `nightStartUtc` to its `nightEndUtc`; empty when unknown.
+	 */
+	altitudeSamplesDeg: (number | null)[],
 	recommendation: Recommendation | null,
 	nextOpposition: string | null,
 	unknownReason: PlanningUnknownReason | null,
@@ -8528,23 +8575,39 @@ export type TargetStatus = {
 	goals: UnmetGoal[],
 };
 
-/**  What a page's planning values were computed for. */
+/**
+ *  What a page's planning values were computed for: the site, the night by
+ *  its site-local evening date and its bounds, local noon to the next local
+ *  noon, which the altitude samples span, and Home's stored criteria.
+ */
 export type TargetsBasis = TargetsBasis_Serialize | TargetsBasis_Deserialize;
 
-/**  What a page's planning values were computed for. */
+/**
+ *  What a page's planning values were computed for: the site, the night by
+ *  its site-local evening date and its bounds, local noon to the next local
+ *  noon, which the altitude samples span, and Home's stored criteria.
+ */
 export type TargetsBasis_Deserialize = {
 	site: SiteBasis,
 	timeZone: string,
 	night: string,
+	nightStartUtc: string,
+	nightEndUtc: string,
 	criteria: PlanCriteria,
 	method: string,
 };
 
-/**  What a page's planning values were computed for. */
+/**
+ *  What a page's planning values were computed for: the site, the night by
+ *  its site-local evening date and its bounds, local noon to the next local
+ *  noon, which the altitude samples span, and Home's stored criteria.
+ */
 export type TargetsBasis_Serialize = {
 	site: SiteBasis,
 	timeZone: string,
 	night: string,
+	nightStartUtc: string,
+	nightEndUtc: string,
 	criteria: PlanCriteria,
 	method: string,
 };
@@ -8553,20 +8616,27 @@ export type TargetsBasis_Serialize = {
 export type TargetsColumn = "designation" | "type" | "max_alt" | "lunar" | "img_time" | "filters" | "opposition" | "sessions" | "captured";
 
 /**
- *  One Targets list page. The Moon appears here once, for the toolbar, and in
- *  no row. With no planning site, `basis` and `moon` are absent and
- *  `planningUnavailable` names the reason.
+ *  One Targets list page. The Moon and the darkness window appear here once,
+ *  for the toolbar and the sparklines, and in no row. Without a planning
+ *  site, or without Home's criteria, `basis`, `moon` and `darkness` are
+ *  absent and `planningUnavailable` names what is missing, the site first;
+ *  the rows still list. `darkness` is also absent on a night never dark at
+ *  the criteria's level.
  */
 export type TargetsPage = TargetsPage_Serialize | TargetsPage_Deserialize;
 
 /**
- *  One Targets list page. The Moon appears here once, for the toolbar, and in
- *  no row. With no planning site, `basis` and `moon` are absent and
- *  `planningUnavailable` names the reason.
+ *  One Targets list page. The Moon and the darkness window appear here once,
+ *  for the toolbar and the sparklines, and in no row. Without a planning
+ *  site, or without Home's criteria, `basis`, `moon` and `darkness` are
+ *  absent and `planningUnavailable` names what is missing, the site first;
+ *  the rows still list. `darkness` is also absent on a night never dark at
+ *  the criteria's level.
  */
 export type TargetsPage_Deserialize = {
 	basis: TargetsBasis_Deserialize | null,
 	moon: NightMoon_Deserialize | null,
+	darkness: DarknessWindow_Deserialize | null,
 	planningUnavailable: PlanningUnknownReason | null,
 	/**  Browse catalogues with neither a catalogue nor a preset: no rows. */
 	needsCatalogueOrPreset: boolean,
@@ -8583,13 +8653,17 @@ export type TargetsPage_Deserialize = {
 };
 
 /**
- *  One Targets list page. The Moon appears here once, for the toolbar, and in
- *  no row. With no planning site, `basis` and `moon` are absent and
- *  `planningUnavailable` names the reason.
+ *  One Targets list page. The Moon and the darkness window appear here once,
+ *  for the toolbar and the sparklines, and in no row. Without a planning
+ *  site, or without Home's criteria, `basis`, `moon` and `darkness` are
+ *  absent and `planningUnavailable` names what is missing, the site first;
+ *  the rows still list. `darkness` is also absent on a night never dark at
+ *  the criteria's level.
  */
 export type TargetsPage_Serialize = {
 	basis: TargetsBasis_Serialize | null,
 	moon: NightMoon_Serialize | null,
+	darkness: DarknessWindow_Serialize | null,
 	planningUnavailable: PlanningUnknownReason | null,
 	/**  Browse catalogues with neither a catalogue nor a preset: no rows. */
 	needsCatalogueOrPreset: boolean,
@@ -8614,16 +8688,18 @@ export type TargetsPresets = {
 /**
  *  One Targets list request: the Show mode, the chosen catalogues and preset,
  *  the planning site (absent: the default site), the night by its site-local
- *  evening date (absent: tonight), the planning criteria, the sort (absent: the
- *  preset's sort, else Designation ascending) and an optional page.
+ *  evening date (absent: tonight), the sort (absent: the preset's sort, else
+ *  Designation ascending) and an optional page. The criteria are Home's
+ *  stored ones, the one source every planning read shares.
  */
 export type TargetsQuery = TargetsQuery_Serialize | TargetsQuery_Deserialize;
 
 /**
  *  One Targets list request: the Show mode, the chosen catalogues and preset,
  *  the planning site (absent: the default site), the night by its site-local
- *  evening date (absent: tonight), the planning criteria, the sort (absent: the
- *  preset's sort, else Designation ascending) and an optional page.
+ *  evening date (absent: tonight), the sort (absent: the preset's sort, else
+ *  Designation ascending) and an optional page. The criteria are Home's
+ *  stored ones, the one source every planning read shares.
  */
 export type TargetsQuery_Deserialize = {
 	show?: TargetsShow,
@@ -8631,7 +8707,6 @@ export type TargetsQuery_Deserialize = {
 	preset?: BuiltinPreset | null,
 	siteId?: string | null,
 	night?: string | null,
-	criteria: PlanCriteria,
 	sort?: TargetsSort | null,
 	offset?: number,
 	/**  Rows after `offset`; absent lists every remaining row. */
@@ -8643,8 +8718,9 @@ export type TargetsQuery_Deserialize = {
 /**
  *  One Targets list request: the Show mode, the chosen catalogues and preset,
  *  the planning site (absent: the default site), the night by its site-local
- *  evening date (absent: tonight), the planning criteria, the sort (absent: the
- *  preset's sort, else Designation ascending) and an optional page.
+ *  evening date (absent: tonight), the sort (absent: the preset's sort, else
+ *  Designation ascending) and an optional page. The criteria are Home's
+ *  stored ones, the one source every planning read shares.
  */
 export type TargetsQuery_Serialize = {
 	show: TargetsShow,
@@ -8652,7 +8728,6 @@ export type TargetsQuery_Serialize = {
 	preset: BuiltinPreset | null,
 	siteId: string | null,
 	night: string | null,
-	criteria: PlanCriteria,
 	sort: TargetsSort | null,
 	offset: number,
 	/**  Rows after `offset`; absent lists every remaining row. */
