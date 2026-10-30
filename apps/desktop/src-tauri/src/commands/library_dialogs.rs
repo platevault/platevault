@@ -16,43 +16,50 @@ use super::library::fail;
 use super::native::TauriRevealOpener;
 
 /// The native data directory holding `catalog.sqlite` and its SQLite journals.
-/// # Errors: this read has no runtime failure after the library shell starts.
+///
+/// # Errors
+/// This read has no runtime failure after the library shell starts.
 #[tauri::command]
 #[specta::specta]
 pub async fn library_data_location(
-    directory: tauri::State<'_, NativePath>,
+    directory: tauri::State<'_, DataDirectory>,
 ) -> Result<NativePath, ErrorResponse> {
-    Ok(directory.inner().clone())
+    Ok(directory.inner().0.clone())
 }
 
 /// Open Windows' Developer Mode settings page from Setup (J18 S1).
-/// # Errors: `SourceUnavailable` if the opener refuses or the platform is not Windows.
+///
+/// # Errors
+/// `SourceUnavailable` if the opener refuses or the platform is not Windows.
 #[tauri::command]
 #[specta::specta]
-pub async fn library_open_developer_settings() -> Result<(), ErrorResponse> {
+pub async fn library_open_developer_settings(app: AppHandle) -> Result<(), ErrorResponse> {
     #[cfg(target_os = "windows")]
     {
-        open_developer_settings()
+        app.opener().open_url("ms-settings:developers", None::<&str>).map_err(|error| {
+            fail(None)(LibraryError::SourceUnavailable(format!(
+                "cannot open Developer Mode settings: {error}"
+            )))
+        })
     }
     #[cfg(not(target_os = "windows"))]
     {
+        let _ = app;
         Err(fail(None)(LibraryError::SourceUnavailable(
             "Developer Mode settings are only available on Windows".into(),
         )))
     }
 }
 
-#[cfg(target_os = "windows")]
-fn open_developer_settings() -> Result<(), ErrorResponse> {
-    std::process::Command::new("cmd")
-        .args(["/C", "start", "", "ms-settings:developers"])
-        .spawn()
-        .map(drop)
-        .map_err(|error| {
-            fail(None)(LibraryError::SourceUnavailable(format!(
-                "cannot open Developer Mode settings: {error}"
-            )))
-        })
+/// The canonical catalog data directory managed by the library shell.
+pub struct DataDirectory(NativePath);
+
+impl DataDirectory {
+    /// Build the managed native directory state used by the shell and IPC tests.
+    #[must_use]
+    pub fn from_path(path: &std::path::Path) -> Self {
+        Self(NativePath::from_path(path))
+    }
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -64,10 +71,11 @@ mod settings_tests {
 
     #[test]
     fn unsupported_platform_refuses_the_settings_target() {
-        let refused = tauri::async_runtime::block_on(library_open_developer_settings())
-            .expect_err("Windows settings unavailable");
-        assert_eq!(refused.code, LibraryErrorCode::SourceUnavailable);
-        assert!(refused.scope.is_none());
+        let error = fail(None)(LibraryError::SourceUnavailable(
+            "Developer Mode settings are only available on Windows".into(),
+        ));
+        assert_eq!(error.code, LibraryErrorCode::SourceUnavailable);
+        assert!(error.scope.is_none());
     }
 }
 

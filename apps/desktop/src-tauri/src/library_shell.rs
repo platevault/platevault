@@ -75,6 +75,7 @@ use platevault_core::targets::SimbadConfig;
 use tauri::{Manager, RunEvent};
 
 use crate::commands::library as ipc;
+use crate::commands::library_dialogs::DataDirectory;
 use crate::commands::project_apply::ApplyRuns;
 use crate::commands::project_wrap_up::{CloseRuns, WrapUpTrash};
 
@@ -397,8 +398,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     // library. It is managed before any window opens, and each window's first
     // frame paints with it (`FirstFrame`).
     app.manage(Arc::new(PreferenceStore::open(preferences_path(&app)?)));
-    // About reports the catalog directory itself, preserving native path encoding.
-    app.manage(platevault_core::NativePath::from_path(&data_dir));
+    app.manage(managed_data_directory(&data_dir));
     let catalog = data_dir.join(CATALOG_FILE);
     let library = tauri::async_runtime::block_on(Library::open(&catalog, provider.as_ref()))
         .map_err(|error| format!("cannot open library catalog {}: {error}", catalog.display()))?;
@@ -578,6 +578,10 @@ fn data_dir(app: &tauri::App) -> Result<PathBuf, Box<dyn Error>> {
         format!("cannot create library data directory {}: {error}", dir.display())
     })?;
     Ok(dir)
+}
+
+pub(crate) fn managed_data_directory(path: &std::path::Path) -> DataDirectory {
+    DataDirectory::from_path(path)
 }
 
 /// The settings store's file: beside the catalog when [`DATA_DIR_ENV`]

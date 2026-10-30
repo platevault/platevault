@@ -313,6 +313,9 @@ describe.each(LOCALES)("First-run setup in %s", (locale) => {
       await user.click(open)
       expect(host.sent("library_open_developer_settings")).toEqual([{}])
       expect(await within(row).findByText(m.status_off())).toBeInTheDocument()
+      expect(host.sent("library_pick_folder")).toEqual([])
+      await user.click(within(row).getByRole("button", { name: m.apps_check_again() }))
+      await waitFor(() => expect(host.sent("library_check_symlinks")).toHaveLength(2))
     },
     TEST_MS,
   )

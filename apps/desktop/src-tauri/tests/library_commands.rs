@@ -16,6 +16,7 @@ mod support;
 use std::path::Path;
 use std::sync::Arc;
 
+use desktop_shell::commands::library_dialogs::DataDirectory;
 use desktop_shell::commands::project_wrap_up::WrapUpTrash;
 use platevault_core::custody::trash::OsTrash;
 use platevault_core::library::Library;
@@ -112,7 +113,7 @@ impl Shell {
             .build(mock_context(noop_assets()))
             .expect("build mock app");
         app.manage(library);
-        app.manage(NativePath::from_path(dir.path()));
+        app.manage(shared_data_directory(dir.path()));
         app.manage(WrapUpTrash::new(Arc::new(NoTrash)));
         support::manage_runs(&app);
         let webview = WebviewWindowBuilder::new(&app, "library", WebviewUrl::default())
@@ -184,6 +185,10 @@ impl Ipc for Shell {
     fn webview(&self) -> &WebviewWindow<MockRuntime> {
         &self.webview
     }
+}
+
+fn shared_data_directory(path: &Path) -> DataDirectory {
+    desktop_shell::library_shell::managed_data_directory(path)
 }
 
 fn unix_path(path: &str) -> Value {
@@ -771,5 +776,5 @@ fn opening_developer_settings_refuses_outside_windows() {
         .invoke("library_open_developer_settings", &json!({}))
         .expect_err("Windows Developer Mode settings are not available here");
     assert_eq!(refused["code"], json!(LibraryErrorCode::SourceUnavailable));
-    assert!(refused["message"].is_null(), "refusal contains no English message: {refused}");
+    assert_eq!(refused["scope"], serde_json::Value::Null);
 }
