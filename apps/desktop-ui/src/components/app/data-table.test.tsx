@@ -131,6 +131,14 @@ describe("DataTable", () => {
     expect(alert).toHaveTextContent(m.action_failure_input_write_risk())
   })
 
+  it("renders a table with no toolbar prop and no filter controls", () => {
+    render(<DataTable label="Frames" rows={ROWS} columns={COLUMNS} getRowId={(row) => row.id} />)
+    expect(screen.getByRole("table", { name: "Frames" })).toBeInTheDocument()
+    expect(rowOrder()).toEqual(["Vega", "Altair", "Deneb"])
+    expect(screen.queryByRole("group", { name: m.filter_bar_label() })).not.toBeInTheDocument()
+  })
+
+
   it("toolbar select: one labelled choice, keyboard operable, with no All and no filter chip", async () => {
     const user = userEvent.setup()
     const onChange = vi.fn()

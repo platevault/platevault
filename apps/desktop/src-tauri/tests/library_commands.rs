@@ -109,6 +109,7 @@ impl Shell {
                 desktop_shell::commands::project_wrap_up::project_wrap_up_archive_review,
                 desktop_shell::commands::workflow_settings::workflow_settings_get,
                 desktop_shell::commands::workflow_settings::workflow_settings_save,
+                desktop_shell::commands::rigs::library_save_camera,
             ])
             .build(mock_context(noop_assets()))
             .expect("build mock app");
@@ -775,6 +776,53 @@ fn workflow_settings_family_reads_and_saves_with_revisions() {
     assert_eq!(shell.call("workflow_settings_get", &json!({})), saved, "nothing else stored");
 }
 
+/// Camera IPC accepts one create, one revision-checked edit and refuses stale or invalid saves.
+#[test]
+fn library_save_camera_uses_camera_revisions_and_validation() {
+    let shell = Shell::new();
+    let camera = Uuid::new_v4();
+    let args = |id: Option<Uuid>, model: &str, expected_revision: Option<u64>| {
+        json!({
+            "input": {
+                "id": id,
+                "model": model,
+                "alias": null,
+                "noDarks": false,
+                "noBias": false,
+            },
+            "expectedRevision": expected_revision,
+        })
+    };
+
+    let created = shell.call("library_save_camera", &args(Some(camera), "ASI533MC", None));
+    assert_eq!(created["id"], json!(camera));
+    assert_eq!(created["revision"], json!(1));
+
+    let edited = shell.call("library_save_camera", &args(Some(camera), "ASI533MC Pro", Some(1)));
+    assert_eq!(edited["model"], json!("ASI533MC Pro"));
+    assert_eq!(edited["revision"], json!(2));
+    shell.refuses(
+        "library_save_camera",
+        &args(Some(camera), "Stale Model", Some(1)),
+        LibraryErrorCode::Conflict,
+        camera,
+    );
+    let invalid_id = Uuid::new_v4();
+    shell.refuses(
+        "library_save_camera",
+        &args(Some(invalid_id), "  ", None),
+        LibraryErrorCode::InvalidInput,
+        invalid_id,
+    );
+    let missing_id = shell
+        .invoke("library_save_camera", &args(None, "Missing id", Some(1)))
+        .expect_err("an edit without an id is refused");
+    assert_eq!(missing_id["code"], json!(LibraryErrorCode::InvalidInput));
+    assert_eq!(missing_id["identity"], Value::Null);
+    let saved = shell.call("library_save_camera", &args(Some(camera), "ASI533MC Pro", Some(2)));
+    assert_eq!(saved["model"], json!("ASI533MC Pro"));
+    assert_eq!(saved["revision"], json!(3));
+}
 #[test]
 fn library_data_location_returns_the_native_catalog_directory() {
     let shell = Shell::new();

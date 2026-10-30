@@ -31,6 +31,18 @@ pub struct RigFilterInput {
     pub bands: Vec<Band>,
 }
 
+/// Editable fields for one camera create or update.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(specta::Type)]
+pub struct CameraSaveInput {
+    pub id: Option<Uuid>,
+    pub model: String,
+    pub alias: Option<String>,
+    pub no_darks: bool,
+    pub no_bias: bool,
+}
+
 /// A rig with its filter list, the bands it captures and its field of view.
 ///
 /// # Errors
@@ -59,6 +71,40 @@ pub async fn library_list_rig_filters(library: State<'_, Arc<Library>>) -> Reply
 #[specta::specta]
 pub async fn library_list_cameras(library: State<'_, Arc<Library>>) -> Reply<Vec<Camera>> {
     library.catalog().cameras().await.map_err(fail(None))
+}
+
+/// Create a camera or edit it at its expected revision, leaving every rig version and calibration link unchanged.
+///
+/// # Errors
+/// `InvalidInput` for invalid camera fields, an alias/model collision or an edit without an id;
+/// `Conflict` for a stale revision or a new id already in use;
+/// `NotFound` for an edit of an unknown camera.
+#[tauri::command]
+#[specta::specta]
+pub async fn library_save_camera(
+    library: State<'_, Arc<Library>>,
+    input: CameraSaveInput,
+    expected_revision: Option<Revision>,
+) -> Reply<Camera> {
+    let id = match (input.id, expected_revision) {
+        (Some(id), _) => id,
+        (None, None) => Uuid::new_v4(),
+        (None, Some(_)) => {
+            return Err(fail(None)(platevault_core::LibraryError::InvalidInput(
+                "a camera update needs the camera id".into(),
+            )))
+        }
+    };
+    let camera = Camera {
+        id,
+        model: input.model,
+        alias: input.alias,
+        no_darks: input.no_darks,
+        no_bias: input.no_bias,
+        revision: expected_revision.unwrap_or_default(),
+    };
+    let mut saved = library.catalog().save_cameras(&[camera]).await.map_err(fail(Some(id)))?;
+    Ok(saved.remove(0))
 }
 
 /// Delete a camera nothing refers to; nothing cascades.

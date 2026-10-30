@@ -210,6 +210,8 @@ export function settingsHost(state: Catalog = catalog()) {
         return state.workflow
       case "library_list_rig_filters":
         return state.rigs
+      case "library_list_cameras":
+        return state.cameras
       case "library_list_equipment":
         return state.rigs.map((r) => r.equipment)
       case "library_save_equipment": {
@@ -235,8 +237,19 @@ export function settingsHost(state: Catalog = catalog()) {
       case "library_delete_equipment":
         state.rigs = state.rigs.filter((r) => r.equipment.id !== a.equipmentId)
         return null
-      case "library_list_cameras":
-        return state.cameras
+      case "library_save_camera": {
+        const input = a.input as Omit<Camera, "revision">
+        const expectedRevision = a.expectedRevision as number | null
+        const old = state.cameras.find((camera) => camera.id === input.id)
+        if (old && expectedRevision !== old.revision) throw refusal("conflict", "review", old.revision)
+        if (!old && expectedRevision !== null) throw refusal("not_found", "none")
+        if (state.cameras.some((camera) => camera.id !== input.id && camera.model.toLowerCase() === input.model.toLowerCase() && camera.alias === input.alias)) {
+          throw refusal("invalid_input", "none")
+        }
+        const saved: Camera = { ...input, id: old?.id ?? `cam-${next++}`, revision: old ? old.revision + 1 : 1 }
+        state.cameras = old ? state.cameras.map((camera) => (camera === old ? saved : camera)) : [...state.cameras, saved]
+        return saved
+      }
       case "library_delete_camera":
         state.cameras = state.cameras.filter((c) => c.id !== a.cameraId)
         return null
