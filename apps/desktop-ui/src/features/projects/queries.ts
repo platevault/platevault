@@ -52,7 +52,7 @@ const PROJECT_READS: readonly LibraryCommand[] = [
   "projectCleanUpReview",
   "projectTrashReview",
   "projectWrapUpArchiveReview",
-  "projectOutputRescan",
+  "projectOutputList",
   "libraryListSessions",
   "librarySessionFilterCounts",
   "libraryIssues",

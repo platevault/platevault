@@ -593,6 +593,15 @@ export const commands = {
 	 */
 	projectCopyToOutput: (projectId: string, source: NativePathWire, name: NativePathWire) => typedError<OutputObservation_Serialize, ErrorResponse>(__TAURI_INVOKE("project_copy_to_output", { projectId, source, name })),
 	/**
+	 *  Read the Project's Output as last recorded by the watcher. This catalog read
+	 *  does not access the filesystem; Rescan remains explicit via
+	 *  [`project_output_rescan`].
+	 * 
+	 *  # Errors
+	 *  `NotFound` for an unknown Project; catalog errors.
+	 */
+	projectOutputList: (projectId: string) => typedError<OutputObservation_Serialize[], ErrorResponse>(__TAURI_INVOKE("project_output_list", { projectId })),
+	/**
 	 *  Rescan, in the Output step's More menu: walk the Project's `Output/` now
 	 *  and return its Output step as recorded, a file saved since included.
 	 * 

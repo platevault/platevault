@@ -1109,3 +1109,49 @@ async fn output_paths_panels_and_master_offers_hold_once() {
     )
     .await;
 }
+/// The Output catalog read remains available for a closed Project and a missing
+/// Output folder and returns records sorted by their relative path.
+#[tokio::test]
+async fn project_outputs_reads_recorded_rows_after_close_without_walking() {
+    use platevault_model::{NativePath, OutputObservation, OutputOrigin, OutputState};
+
+    let mut f4 = F4::new().await;
+    let make = |name: &str| OutputObservation {
+        path: NativePath::from_path(Path::new(name)),
+        kind: None,
+        channel: None,
+        panel_group_id: None,
+        state: OutputState::Settled,
+        size_bytes: 0,
+        fingerprint: None,
+        sha256: None,
+        origin: OutputOrigin::Observed,
+    };
+    let z = make("z.fit");
+    let a = make("a.fit");
+    for observation in [&z, &a] {
+        let mut key = vec![0];
+        key.extend_from_slice(observation.path.display().as_bytes());
+        sqlx::query(
+            "INSERT INTO project_outputs (project_id, path_key, observation, state, origin, \
+             panel_group_id, sha256, first_seen_at, last_observed_at) \
+             VALUES (?1, ?2, ?3, 'settled', 'observed', NULL, NULL, ?4, ?4)",
+        )
+        .bind(&f4.project)
+        .bind(key)
+        .bind(serde_json::to_string(observation).unwrap())
+        .bind(AT)
+        .execute(&mut f4.conn)
+        .await
+        .unwrap();
+    }
+    let id = f4.project.parse().unwrap();
+    for step in ["clean_up", "trash", "archive"] {
+        f4.wrap_up(step, "skipped").await.unwrap();
+    }
+    f4.snapshot().await;
+    f4.close("closed").await.unwrap();
+    let listed = f4.world.catalog.project_outputs(id).await.unwrap();
+    assert_eq!(listed, [a, z]);
+    f4.conn.close().await.unwrap();
+}

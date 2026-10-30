@@ -79,6 +79,7 @@ impl Shell {
                 desktop_shell::commands::project_apply::project_apply,
                 desktop_shell::commands::project_apply::library_check_symlinks,
                 desktop_shell::commands::project_output::project_copy_to_output,
+                desktop_shell::commands::project_output::project_output_list,
                 desktop_shell::commands::project_wrap_up::project_wrap_up_status,
                 desktop_shell::commands::project_wrap_up::project_close,
                 desktop_shell::commands::project_wrap_up::project_duplicate,
@@ -366,6 +367,17 @@ fn project_get_reports_a_closed_project_lifecycle() {
     assert_eq!(actual["lifecycle"], json!(ProjectLifecycle::Closed));
     assert!(actual["closedAt"].is_string(), "{actual}");
 }
+/// The Output listing IPC reads catalog records even when Output is absent.
+#[test]
+fn project_output_list_returns_recorded_observations_without_scanning() {
+    let shell = Shell::new();
+    let project = shell.open_project();
+    let listed = shell.call("project_output_list", &json!({ "projectId": project }));
+    assert_eq!(listed, json!([]));
+
+    let unknown = Uuid::new_v4();
+    shell.refuses("project_output_list", &json!({ "projectId": unknown }), NOT_FOUND, unknown);
+}
 
 /// PREP-FR-15 (J18 S1, J41 S16a): setup and Settings check a chosen folder
 /// for symlinks; a folder that can't hold a file is refused scoped to it.
@@ -473,6 +485,7 @@ fn output_family_takes_its_arguments() {
         NOT_FOUND,
         project,
     );
+    shell.refuses("project_output_list", &json!({ "projectId": project }), NOT_FOUND, project);
 }
 
 #[test]

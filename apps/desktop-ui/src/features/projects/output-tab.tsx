@@ -1,14 +1,8 @@
 /**
- * The Project's Output tab (070 RES-FR as amended by F4): what its
- * `Output/` folder holds as the library observes it, each file with its
+ * The Project's Output tab (070 RES-FR-01/02/06 to RES-FR-08/11): what its
+ * `Output/` folder holds as last observed by the library, each file with its
  * kind, channel, mosaic panel, state and origin, and Copy to Output… for a
- * file a tool saved elsewhere. Nothing here is accepted or attached: Output
- * lists actual files, observed by the watcher or copied and verified by
- * PlateVault. Rescan (More) walks `Output/` now.
- *
- * The library reads Output by walking it (`project_output_rescan`); a Project
- * that is not open, or has no processing location yet, has no Output to
- * read, and the tab says so instead of showing an empty list.
+ * file a tool saved elsewhere. Rescan (More) explicitly refreshes the listing.
  */
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { Copy, RefreshCw } from "lucide-react"
@@ -66,8 +60,7 @@ export function OutputTab({ header, chrome }: ProjectTabProps) {
   const locked = isLocked(header.lifecycle)
   const inputs = useQuery(inputsQuery(header.id))
   const hasLocation = inputs.data ? inputs.data.desired.settings.parent !== null : null
-  // The rescan stands in for a passive Output read until astro-plan-wre19.7 adds one.
-  const output = useQuery({ ...libraryQuery("projectOutputRescan", header.id), enabled: !locked && hasLocation === true })
+  const output = useQuery({ ...libraryQuery("projectOutputList", header.id), enabled: !locked, refetchInterval: locked ? false : 1000 })
   const [copying, setCopying] = useState(false)
   const groupName = (id: string | null) => (id ? (inputs.data?.desired.groups.find((g) => g.id === id)?.name ?? m.project_group_missing()) : "–")
   const copyLabel = m.project_copy_to_output()
@@ -83,7 +76,7 @@ export function OutputTab({ header, chrome }: ProjectTabProps) {
         : undefined,
     run: () => setCopying(true),
   }
-  const rescan: Action = { id: "rescan-output", label: m.output_rescan(), icon: RefreshCw, run: async () => void (await output.refetch()) }
+  const rescan: Action = { id: "rescan-output", label: m.output_rescan(), icon: RefreshCw, run: async () => { const result = await library.projectOutputRescan(header.id); if (result.ok) client.setQueryData(libraryKey("projectOutputList", header.id), result.data); return result } }
   const columns: Column<OutputObservation_Serialize>[] = [
     { id: "file", header: m.dialog_col_file(), cell: (f) => pathText(f.path), sortValue: (f) => pathText(f.path), rowHeader: true, truncate: true },
     { id: "kind", header: m.output_kind_channel(), cell: (f) => [outputKindText(m, f.kind), f.channel].filter(Boolean).join(" · "), sortValue: (f) => outputKindText(m, f.kind) },
@@ -112,7 +105,7 @@ export function OutputTab({ header, chrome }: ProjectTabProps) {
           run={async (source, name) => {
             const result = await projectWrite(client, () => library.projectCopyToOutput(header.id, source, outputName(name, source)))
             if (result.ok) {
-              client.setQueryData(libraryKey("projectOutputRescan", header.id), (was: OutputObservation_Serialize[] | undefined) => [...(was ?? []).filter((f) => pathText(f.path) !== pathText(result.data.path)), result.data])
+              client.setQueryData(libraryKey("projectOutputList", header.id), (was: OutputObservation_Serialize[] | undefined) => [...(was ?? []).filter((f) => pathText(f.path) !== pathText(result.data.path)), result.data])
               toast({ message: m.output_copied({ name }) })
             }
             return result
