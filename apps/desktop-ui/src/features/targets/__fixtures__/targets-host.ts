@@ -8,6 +8,12 @@ import type { PlanCriteria, TargetCandidate, TargetRow_Serialize, TargetsBasis_S
 export const CRITERIA: PlanCriteria = { minAltitudeDeg: 30, darkness: "astronomical", moon: { kind: "none" }, minDurationMinutes: 60 }
 export const SITE = { id: "site-1", name: "Backyard", revision: 2, latitudeDeg: 52.1, longitudeDeg: 5.1, elevationM: 10 }
 export const NIGHT = "2026-10-29"
+/** The night's bounds, local noon to local noon in Amsterdam (CET), and its astronomical darkness. */
+export const NIGHT_START = "2026-10-29T11:00:00Z"
+export const NIGHT_END = "2026-10-30T11:00:00Z"
+export const DARKNESS = { startUtc: "2026-10-29T17:45:00Z", endUtc: "2026-10-30T04:20:00Z", startLocal: "2026-10-29T18:45:00+01:00", endLocal: "2026-10-30T05:20:00+01:00" }
+/** The library's 49 half-hourly samples over the night: the Target culminates at 71.4° at sample 22, 22:00 UTC. */
+export const SAMPLES = Array.from({ length: 49 }, (_, i) => 71.4 - 0.25 * (i - 22) ** 2)
 
 export function candidate(id: string, designation: string, over: Partial<TargetCandidate> = {}): TargetCandidate {
   return { id, designation, aliases: [], commonName: null, objectType: "Galaxy", coordinates: { raDeg: 10.68, decDeg: 41.27, frame: "icrs" }, provenance: { source: "seed", dataset: "messier" }, providerId: null, ...over }
@@ -24,10 +30,11 @@ export function row(target: TargetCandidate, over: Partial<TargetRow_Serialize> 
     imgTimeMinutes: 130,
     imgTimeZeroReason: null,
     bands: [
-      { band: "L", viable: true },
-      { band: "Ha", viable: true },
-      { band: "OIII", viable: false },
+      { band: "L", grade: "good", clearMinutes: 130 },
+      { band: "Ha", grade: "marginal", clearMinutes: 90 },
+      { band: "OIII", grade: "poor", clearMinutes: 0 },
     ],
+    altitudeSamplesDeg: SAMPLES,
     recommendation: "broadband_ok",
     nextOpposition: "2026-11-02",
     unknownReason: null,
@@ -38,12 +45,13 @@ export function row(target: TargetCandidate, over: Partial<TargetRow_Serialize> 
   }
 }
 
-export const BASIS: TargetsBasis_Serialize = { site: SITE, timeZone: "Europe/Amsterdam", night: NIGHT, criteria: CRITERIA, method: "skymath" }
+export const BASIS: TargetsBasis_Serialize = { site: SITE, timeZone: "Europe/Amsterdam", night: NIGHT, nightStartUtc: NIGHT_START, nightEndUtc: NIGHT_END, criteria: CRITERIA, method: "skymath" }
 
 export function targetsPage(rows: TargetRow_Serialize[], over: Partial<TargetsPage_Serialize> = {}): TargetsPage_Serialize {
   return {
     basis: BASIS,
     moon: { illumination: 0.42, phase: "waxing_crescent", riseUtc: "2026-10-29T12:10:00Z", setUtc: "2026-10-29T21:40:00Z" },
+    darkness: DARKNESS,
     planningUnavailable: null,
     needsCatalogueOrPreset: false,
     total: rows.length,
@@ -75,6 +83,8 @@ export function host(answers: Record<string, Answer> = {}) {
         return { issues: [], dismissed: [], counts: { danger: 0, warning: 0, info: 0 }, pages: [] }
       case "planning_home_criteria":
         return { criteria: CRITERIA, revision: 3 }
+      case "planning_reminder_lead_time":
+        return { leadMinutes: 720, revision: 0 }
       case "planning_list_sites":
         return { sites: [{ ...SITE, timeZone: "Europe/Amsterdam", createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z" }], defaultSiteId: SITE.id, settingsRevision: 5 }
       case "targets_presets_list":

@@ -35,6 +35,7 @@ use crate::planning::{compute_windows, night_of};
 use crate::{
     LibraryError, ObservingSite, ObservingWindow, PlanCriteria, ReminderInput,
     ReminderSubscription, Revision, SubscriptionState, UpcomingReminder, WindowQuery, WindowSet,
+    MAX_LEAD_MINUTES,
 };
 use uuid::Uuid;
 
@@ -43,8 +44,12 @@ use uuid::Uuid;
 pub const RECHECK_INTERVAL: StdDuration = StdDuration::from_secs(30);
 
 /// Nights scheduled per subscription: the night before the current
-/// site-local night through two nights after it (R16).
-const SCHEDULED_NIGHTS: u32 = 4;
+/// site-local night, the current one, and as many nights after it as the
+/// longest lead time spans, so a window that far ahead is scheduled by the
+/// time its reminder is due (R16, PLAN-FR-06).
+const SCHEDULED_NIGHTS: u32 = MAX_LEAD_MINUTES.div_ceil(MINUTES_PER_DAY) + 2;
+/// Minutes in a day, the unit the horizon counts the lead time in.
+const MINUTES_PER_DAY: u32 = 24 * 60;
 
 /// The reminders due at `now`: windows of the subscription's schedule whose
 /// start minus the lead time is at or before `now` and whose start is after it.
@@ -90,7 +95,7 @@ pub fn prospective_reminders(
 }
 
 /// The window request a schedule at `site` covers at `now`: the night before
-/// the current site-local night through two nights after it.
+/// the current site-local night through [`MAX_LEAD_MINUTES`] (7 days) after it.
 ///
 /// # Errors
 /// `InvalidInput` when the site's zone is not bundled or no earlier night

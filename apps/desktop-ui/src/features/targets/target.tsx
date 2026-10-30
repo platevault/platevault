@@ -6,8 +6,9 @@
  *   the Favourite toggle beside the title, Export calendar… and Add to Plan
  *   (a night's plan waits for astro-plan-wre19.14).
  * - Tonight: the page's night at its planning site and zone, with the
- *   Target's Max alt, Img time, the bands viable under their Moon curves,
- *   the Moon and the grade of each of its unfinished goals tonight.
+ *   Target's Max alt, Img time, each band graded under its Moon curve, the
+ *   darkness window, the Moon and the grade of each of its unfinished
+ *   goals tonight.
  * - Windows: each night of the coming week with its windows
  *   (`planning_compute_windows`), or why it has none.
  * - Goals: each open Project's goal gaps for this Target, per subject and
@@ -19,13 +20,26 @@
  *
  * The page finds the Target among My targets' rows: there is no read of one
  * Target yet (astro-plan-wre19.20), and every Target a click opens is in
- * My targets. Those rows need Home's criteria (astro-plan-wre19.19).
+ * My targets. The rows list without Home's criteria; the planning values
+ * then read unknown with that reason.
  */
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useNavigate, useParams, useSearch } from "@tanstack/react-router"
-import { CalendarArrowDown, CalendarClock, Crosshair, SlidersHorizontal, Star } from "lucide-react"
+import { CalendarArrowDown, CalendarClock, Crosshair, Star } from "lucide-react"
 import { useState } from "react"
-import type { AngularSize, GoalGap, NightMoon_Serialize, NightPlan_Serialize, NoWindowReason, ProjectGaps, SkyCoordinates, TargetRow_Serialize, TargetsBasis_Serialize, WindowSet_Serialize } from "@/api/ipc"
+import type {
+  AngularSize,
+  DarknessWindow_Serialize,
+  GoalGap,
+  NightMoon_Serialize,
+  NightPlan_Serialize,
+  NoWindowReason,
+  ProjectGaps,
+  SkyCoordinates,
+  TargetRow_Serialize,
+  TargetsBasis_Serialize,
+  WindowSet_Serialize,
+} from "@/api/ipc"
 import { useMessages } from "@/app/preferences"
 import { ActionButton, useAction } from "@/components/app/actions"
 import { ActionToggle } from "@/components/app/action-toggle"
@@ -33,7 +47,7 @@ import { BoxTable } from "@/components/app/box"
 import type { Action, Column } from "@/components/app/contracts"
 import { KeyValueList, type KeyValueItem } from "@/components/app/data"
 import { ActionError, DetailSkeleton, EmptyState, TableSkeleton } from "@/components/app/feedback"
-import { MoonLine } from "@/components/domain/sky-lines"
+import { DarkLine, MoonLine } from "@/components/domain/sky-lines"
 import { type GradeBadge, GradeBadges } from "@/components/domain/grade-badges"
 import type { PathItem } from "@/components/app/page"
 import { type DetailSection, DetailPage } from "@/components/templates/detail-page"
@@ -42,18 +56,16 @@ import type { Messages } from "@/lib/i18n"
 import { goalGradesFor } from "./good-tonight"
 import { favouriteAction, notYet, readFailure, Unknown, windowText } from "./parts"
 import { ExportCalendarDialog, NotificationsPanel, RemindersDialog } from "./planned-tools"
-import { gapsQuery, homeCriteriaQuery, libraryQueryWhen, myTargetsRequest, PLAN_NIGHTS } from "./queries"
-import { moonTonight } from "./sky-tonight"
-import { capturedText, imgTimeText, recommendationText, type SearchParams, viableBands } from "./targets-model"
+import { gapsQuery, libraryQueryWhen, myTargetsRequest, PLAN_NIGHTS } from "./queries"
+import { darknessTonight, moonTonight } from "./sky-tonight"
+import { bandGrades, capturedText, imgTimeText, recommendationText, type SearchParams } from "./targets-model"
 
 export function TargetPage() {
   const m = useMessages()
   const navigate = useNavigate()
   const { targetId } = useParams({ strict: false }) as { targetId: string }
   const search = useSearch({ strict: false }) as SearchParams
-  const criteria = useQuery(homeCriteriaQuery())
-  const stored = criteria.data?.criteria ?? null
-  const rows = useQuery(libraryQueryWhen("planningTargetRows", stored ? [myTargetsRequest(stored, search.site ?? null, search.night ?? null)] : null))
+  const rows = useQuery(libraryQueryWhen("planningTargetRows", [myTargetsRequest(search.site ?? null, search.night ?? null)]))
   const page = rows.data
   const found = page?.rows.find((r) => r.target.id === targetId) ?? null
   // astro-plan-wre19.20 (targets_get): there is no read of one Target, so the page reads it from My targets. A Target
@@ -64,7 +76,7 @@ export function TargetPage() {
   const row = found ?? (page && kept?.target.id === targetId ? { ...kept, favourite: false } : null)
   const basis = page?.basis ?? null
   const path = [{ label: m.nav_targets(), link: { to: "/targets", search: search as Record<string, string> } }]
-  const failed = criteria.error ? { error: criteria.error, retry: criteria.refetch } : rows.error ? { error: rows.error, retry: rows.refetch } : null
+  const failed = rows.error ? { error: rows.error, retry: rows.refetch } : null
 
   if (failed) {
     return (
@@ -76,17 +88,7 @@ export function TargetPage() {
     )
   }
 
-  if (criteria.isSuccess && stored === null) {
-    // astro-plan-wre19.19: the rows need criteria until the library reads the stored ones itself.
-    return (
-      <DetailPage
-        path={path}
-        title={m.nav_targets()}
-        sections={[{ id: "criteria", title: m.tonight_criteria(), content: <EmptyState icon={SlidersHorizontal} title={m.targets_needs_criteria()} action={<ActionButton action={{ id: "set-criteria", label: m.shell_not_found_home(), run: () => void navigate({ to: "/" }) }} />} /> }]}
-      />
-    )
-  }
-  if (!page || !criteria.isSuccess) return <DetailSkeleton label={m.common_loading()} />
+  if (!page) return <DetailSkeleton label={m.common_loading()} />
   if (!row) {
     return (
       <DetailPage
@@ -96,10 +98,22 @@ export function TargetPage() {
       />
     )
   }
-  return <TargetBody row={row} basis={basis} moon={page.moon} path={path} />
+  return <TargetBody row={row} basis={basis} moon={page.moon} darkness={page.darkness} path={path} />
 }
 
-function TargetBody({ row, basis, moon, path }: { row: TargetRow_Serialize; basis: TargetsBasis_Serialize | null; moon: NightMoon_Serialize | null; path: PathItem[] }) {
+function TargetBody({
+  row,
+  basis,
+  moon,
+  darkness,
+  path,
+}: {
+  row: TargetRow_Serialize
+  basis: TargetsBasis_Serialize | null
+  moon: NightMoon_Serialize | null
+  darkness: DarknessWindow_Serialize | null
+  path: PathItem[]
+}) {
   const m = useMessages()
   const navigate = useNavigate()
   const client = useQueryClient()
@@ -127,7 +141,7 @@ function TargetBody({ row, basis, moon, path }: { row: TargetRow_Serialize; basi
   const grades = tonight.data && basis && tonight.data.site?.id === basis.site.id ? goalGradesFor(tonight.data, target.id) : null
 
   const sections: DetailSection[] = [
-    { id: "tonight", title: m.target_tonight(), content: <KeyValueList items={tonightItems(m, row, basis, moon, grades)} /> },
+    { id: "tonight", title: m.target_tonight(), content: <KeyValueList items={tonightItems(m, row, basis, moon, darkness, grades)} /> },
     { id: "windows", title: m.tonight_window(), content: windowsContent(m, basis, windows) },
     goalsSection(m, gaps),
     { id: "notifications", title: m.plan_reminders(), content: <NotificationsPanel targetId={target.id} onEnable={() => setDialog("reminders")} /> },
@@ -166,17 +180,36 @@ function TargetBody({ row, basis, moon, path }: { row: TargetRow_Serialize; basi
   )
 }
 
-function tonightItems(m: Messages, row: TargetRow_Serialize, basis: TargetsBasis_Serialize | null, moon: NightMoon_Serialize | null, grades: ReturnType<typeof goalGradesFor> | null): KeyValueItem[] {
+function tonightItems(
+  m: Messages,
+  row: TargetRow_Serialize,
+  basis: TargetsBasis_Serialize | null,
+  moon: NightMoon_Serialize | null,
+  darkness: DarknessWindow_Serialize | null,
+  grades: ReturnType<typeof goalGradesFor> | null,
+): KeyValueItem[] {
   const unknown = <Unknown reason={row.unknownReason} />
   const items: KeyValueItem[] = [
     { label: m.plan_site(), value: basis ? `${basis.site.name} · ${basis.timeZone}` : unknown },
     { label: m.tonight_night(), value: basis ? formatNight(basis.night, true) : unknown },
-    { label: m.tonight_altitude(), value: row.maxAltitudeDeg === null ? unknown : formatDegrees(row.maxAltitudeDeg, 0) },
+    { label: m.targets_max_alt(), value: row.maxAltitudeDeg === null ? unknown : formatDegrees(row.maxAltitudeDeg, 0) },
     { label: m.tonight_img_time(), value: imgTimeText(m, row) ?? unknown },
-    { label: m.domain_suitable_filters(), value: row.bands.length === 0 ? unknown : [viableBands(row.bands).join(", ") || m.targets_no_band_viable(), row.recommendation ? recommendationText(m, row.recommendation) : null].filter(Boolean).join(" · ") },
+    {
+      label: m.domain_suitable_filters(),
+      value:
+        row.bands.length === 0 ? (
+          unknown
+        ) : (
+          <>
+            <GradeBadges grades={bandGrades(row.bands)} wrap />
+            {row.recommendation ? ` ${recommendationText(m, row.recommendation)}` : null}
+          </>
+        ),
+    },
     { label: m.tonight_lunar(), value: row.lunarSeparationDeg === null ? unknown : formatDegrees(row.lunarSeparationDeg, 0) },
   ]
   const moonLine = moon ? moonTonight(moon) : null
+  if (basis) items.push({ label: m.plan_dark(), value: <DarkLine darkness={darknessTonight(darkness)} timeZone={basis.timeZone} /> })
   if (moonLine && basis) items.push({ label: m.tonight_moon(), value: <MoonLine moon={moonLine} timeZone={basis.timeZone} /> })
   if (grades && grades.length > 0) {
     const badges: GradeBadge[] = grades.flatMap((g) => (g.band && g.grade ? [{ band: g.band, grade: g.grade }] : []))

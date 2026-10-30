@@ -3,7 +3,8 @@
  * rows (PLAN-TGT-FR-01..18). Nothing here computes a planning value: the
  * library sorts, plans and grades; this module reads the URL into a
  * `TargetsQuery`, filters the rows it returned by values they carry
- * (Favourite, a viable band, a Project badge), and words them.
+ * (Favourite, a band that suits the night, a Project badge), orders them by
+ * the clear time it graded, and words them.
  *
  * The view lives in the URL, so opening a Target and coming back keeps it:
  * `view` (planned), `mode` (browse), `cat`, `preset`, `saved`, `fav`, `good`,
@@ -16,7 +17,6 @@ import type {
   Catalogue,
   ChannelIntegration,
   Fit,
-  PlanCriteria,
   PlanningUnknownReason,
   PresetFilters,
   Recommendation,
@@ -27,6 +27,7 @@ import type {
   TargetsShow,
   TargetsSort,
 } from "@/api/ipc"
+import type { GradeBadge } from "@/components/domain/grade-badges"
 import { formatCount, formatHours, formatNight } from "@/lib/format"
 import type { Messages } from "@/lib/i18n"
 import { TARGET_PAGE } from "./queries"
@@ -141,8 +142,8 @@ export function readState(search: SearchParams): TargetsState {
   }
 }
 
-/** The library request for the state under `criteria`; My targets and the Planned view both read My targets. */
-export function targetsQuery(state: TargetsState, criteria: PlanCriteria): TargetsQuery_Deserialize {
+/** The library request for the state, under Home's stored criteria; My targets and the Planned view both read My targets. */
+export function targetsQuery(state: TargetsState): TargetsQuery_Deserialize {
   const show: TargetsShow = state.view === "browse" ? "browse" : "my_targets"
   return {
     show,
@@ -150,7 +151,6 @@ export function targetsQuery(state: TargetsState, criteria: PlanCriteria): Targe
     preset: state.preset,
     siteId: state.siteId,
     night: state.night,
-    criteria,
     sort: state.sort,
     offset: 0,
     limit: TARGET_PAGE,
@@ -180,8 +180,8 @@ export function presetSearch(filters: PresetFilters, savedId: string): SearchPar
 /**
  * The row filters the library's request has no field for, over values each
  * row carries: the Favourite filter, Suitable filters (a chosen band the
- * library marks viable tonight, PLAN-TGT-FR-15) and a Project's subjects
- * (PLAN-FR-10, a row's open-Project badges).
+ * library grades good or marginal for the night, PLAN-TGT-FR-15) and a
+ * Project's subjects (PLAN-FR-10, a row's open-Project badges).
  */
 export interface RowFilters {
   favourite: FavouriteFilter
@@ -193,8 +193,31 @@ export function matchesRow(row: TargetRow_Serialize, filters: RowFilters): boole
   if (filters.favourite === "yes" && !row.favourite) return false
   if (filters.favourite === "no" && row.favourite) return false
   if (filters.projectId && !row.projects.some((p) => p.projectId === filters.projectId)) return false
-  if (filters.bands.length > 0 && !row.bands.some((b) => b.viable && filters.bands.includes(b.band))) return false
+  if (filters.bands.length > 0 && !row.bands.some((b) => suits(b) && filters.bands.includes(b.band))) return false
   return true
+}
+
+/** Good or marginal: a band Suitable filters admits, as the library's `BandState::suits` reads it. */
+export function suits(band: BandState): boolean {
+  return band.grade === "good" || band.grade === "marginal"
+}
+
+/** The longest clear time the library graded among `bands` for the row, in minutes; 0 when none suits. */
+function clearMinutes(row: TargetRow_Serialize, bands: readonly Band[]): number {
+  return Math.max(0, ...row.bands.filter((b) => bands.includes(b.band)).map((b) => b.clearMinutes))
+}
+
+/**
+ * Suitable filters' order (PLAN-TGT-FR-15): the longest clear time among the
+ * chosen bands, descending; ties keep the library's order. With no band
+ * chosen the rows keep the library's order.
+ */
+export function byClearTime<T>(rows: readonly T[], row: (item: T) => TargetRow_Serialize, bands: readonly Band[]): T[] {
+  if (bands.length === 0) return [...rows]
+  return rows
+    .map((item, index) => ({ item, index, minutes: clearMinutes(row(item), bands) }))
+    .sort((a, b) => b.minutes - a.minutes || a.index - b.index)
+    .map((v) => v.item)
 }
 
 /**
@@ -212,6 +235,8 @@ export function unknownReasonText(m: Messages, reason: PlanningUnknownReason): s
   switch (reason) {
     case "no_site":
       return m.targets_reason_no_site()
+    case "no_criteria":
+      return m.targets_reason_no_criteria()
     case "target_coordinates_unknown":
       return m.tonight_no_coordinates()
     case "unsupported_coordinate_frame":
@@ -261,9 +286,9 @@ export function recommendationText(m: Messages, recommendation: Recommendation):
   }
 }
 
-/** The bands the library marks viable tonight, in strip order. */
-export function viableBands(bands: readonly BandState[]): Band[] {
-  return bands.filter((b) => b.viable).map((b) => b.band)
+/** The Filters strip's grades as the library graded each band for the night, in strip order (PLAN-TGT-FR-06). */
+export function bandGrades(bands: readonly BandState[]): GradeBadge[] {
+  return bands.map((b) => ({ band: b.band, grade: b.grade }))
 }
 
 /** "2 Nov", or "2 Aug 2027" when it falls in another year than the page's night. */

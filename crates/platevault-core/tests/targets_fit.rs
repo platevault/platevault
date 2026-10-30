@@ -121,12 +121,6 @@ fn messier(rigs: RigSelection) -> TargetsQuery {
         preset: None,
         site_id: None,
         night: None,
-        criteria: PlanCriteria {
-            min_altitude_deg: 30.0,
-            darkness: Darkness::Astronomical,
-            moon: MoonCriterion::None,
-            min_duration_minutes: 30,
-        },
         sort: None,
         offset: 0,
         limit: None,
@@ -260,6 +254,13 @@ async fn union_of_bands_across_project_rigs() {
     let esprit = esprit(&library).await;
     let redcat = redcat_dual_band(&library).await;
     let autumn = project(&library, "M 31", vec![esprit, redcat]).await;
+    let criteria = PlanCriteria {
+        min_altitude_deg: 30.0,
+        darkness: Darkness::Astronomical,
+        moon: MoonCriterion::None,
+        min_duration_minutes: 30,
+    };
+    library.save_home_criteria(0, &criteria).await.unwrap();
     let my_targets = |rigs| TargetsQuery {
         show: TargetsShow::MyTargets,
         catalogues: Vec::new(),

@@ -44,6 +44,8 @@ const LIBRARY_READS: readonly LibraryCommand[] = [
   // Home's criteria: a save or a conflict re-reads them, so the next save names the current revision.
   "planningHomeCriteria",
   "planningCalendar",
+  // The Targets list reads Home's stored criteria and the sessions' Targets, so either write moves its rows.
+  "planningTargetRows",
   "libraryListSessions",
   "librarySessionFilterCounts",
   "librarySession",

@@ -6,7 +6,8 @@
  *
  * - Header: the night (NightPicker, `?night=`, tonight by default) and the
  *   planning site (SitePicker, `?site=`, the default site by default) with
- *   the night's Moon, once (PLAN-TGT-FR-07). Actions: Moon limits….
+ *   the night's darkness window and Moon, once (PLAN-TGT-FR-07). Actions:
+ *   Moon limits….
  * - Views: My targets (the default), Browse catalogues (`?mode=browse`) and
  *   Planned (`?view=planned`). The night's plan has no library read yet
  *   (astro-plan-wre19.14), so Planned shows that it isn't available.
@@ -17,18 +18,22 @@
  *   `library_list_equipment`, or this Project's rigs) picks the rigs Fit,
  *   the Filters strip and the presets plan for (PLAN-TGT-FR-11).
  * - Rows: the library sorts (unknown values last, catalogue order); a header
- *   click asks it for that sort. A row in My targets opens its Target page;
- *   any other row, like a search result, is added to My targets as a
- *   favourite and the list stays as it is (search.ts).
+ *   click asks it for that sort. With Suitable filters and no header sort,
+ *   the rows order by the longest clear time among the chosen bands
+ *   (PLAN-TGT-FR-15). Altitude plots the library's samples across the night
+ *   with its darkness shaded (PLAN-TGT-FR-04); Filters is the graded band
+ *   strip (PLAN-TGT-FR-06). A row in My targets opens its Target page; any
+ *   other row, like a search result, is added to My targets as a favourite
+ *   and the list stays as it is (search.ts).
  *
- * Without Home's criteria the library lists no row at all, so the list asks
- * for them; listing without criteria comes with astro-plan-wre19.19.
+ * Without Home's criteria the rows still list: the planning values read
+ * unknown with that reason, and the page's notice sends the user to Home.
  */
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useNavigate, useSearch } from "@tanstack/react-router"
-import { CalendarClock, Check, Crosshair, MoonStar, Search, SlidersHorizontal, Star, Telescope } from "lucide-react"
+import { CalendarClock, Check, Crosshair, MoonStar, Search, Star, Telescope } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
-import { library, type TargetRow_Serialize, type TargetsPage_Serialize, type TargetsSearchResult, type TargetsSearchSource } from "@/api/ipc"
+import { library, type TargetRow_Serialize, type TargetsBasis_Serialize, type TargetsPage_Serialize, type TargetsSearchResult, type TargetsSearchSource } from "@/api/ipc"
 import { useMessages } from "@/app/preferences"
 import { ActionButton } from "@/components/app/actions"
 import type { Action, Column, Facet, MenuItem } from "@/components/app/contracts"
@@ -36,17 +41,20 @@ import { EmptyState, type PageNotice, UnknownValue } from "@/components/app/feed
 import type { FacetPatch } from "@/components/app/filter-bar"
 import { NightPicker, SitePicker } from "@/components/app/pickers"
 import { failureMessage } from "@/components/app/run-result"
+import { GradeBadges } from "@/components/domain/grade-badges"
 import { MoonLimitsDialog } from "@/components/domain/moon-limits"
-import { MoonLine } from "@/components/domain/sky-lines"
+import { AltitudeSpark, DarkLine, MoonLine, type Darkness } from "@/components/domain/sky-lines"
 import { ListPage } from "@/components/templates/list-page"
 import { formatCount, formatDegrees, formatList } from "@/lib/format"
 import type { Messages } from "@/lib/i18n"
 import { suitableFacet } from "./good-tonight"
 import { favouriteAction, notYet, readFailure, Unknown } from "./parts"
-import { equipmentQuery, homeCriteriaQuery, libraryQueryWhen, presetsQuery, sitesQuery, targetsWrite } from "./queries"
+import { equipmentQuery, libraryQueryWhen, presetsQuery, sitesQuery, targetsWrite } from "./queries"
 import { useResultAction } from "./search"
-import { moonTonight } from "./sky-tonight"
+import { darknessTonight, moonTonight, sparkNight, sparkOf } from "./sky-tonight"
 import {
+  bandGrades,
+  byClearTime,
   CATALOGUES,
   capturedText,
   catalogueName,
@@ -69,7 +77,6 @@ import {
   type TargetsState,
   type TargetsView,
   targetsQuery,
-  viableBands,
   viewSearch,
 } from "./targets-model"
 import { activePreset, parsePresetId, presetItems, RenamePresetDialog, usePresetWrites } from "./targets-presets"
@@ -102,11 +109,9 @@ export function TargetsPage() {
   const query = (search.q ?? "").trim()
   const searching = query.length >= MIN_QUERY
 
-  const criteria = useQuery(homeCriteriaQuery())
-  const stored = criteria.data?.criteria ?? null
   const sites = useQuery(sitesQuery())
-  const listed = state.view !== "planned" && !searching && stored !== null
-  const page = useQuery(libraryQueryWhen("planningTargetRows", listed && stored ? [targetsQuery(state, stored)] : null))
+  const listed = state.view !== "planned" && !searching
+  const page = useQuery(libraryQueryWhen("planningTargetRows", listed ? [targetsQuery(state)] : null))
   const presets = useQuery(presetsQuery(state.rigs))
   const equipment = useQuery(equipmentQuery())
   const results = useQuery(libraryQueryWhen("targetsSearch", searching ? [query] : null))
@@ -131,13 +136,16 @@ export function TargetsPage() {
   // astro-plan-wre19.20: over one page of rows these filters need the library; filtering the first page here would hide matches.
   const partial = data ? data.total > data.rows.length : false
   const filters = partial ? { favourite: "" as const, bands: [], projectId: null } : { favourite, bands, projectId }
-  const shown: RowView[] = rows.map((row, position) => ({ row, position })).filter((v) => matchesRow(v.row, filters))
+  const matched = rows.map((row, position) => ({ row, position })).filter((v) => matchesRow(v.row, filters))
+  // A header sort is the library's; without one, Suitable filters order by clear time (PLAN-TGT-FR-15).
+  const shown: RowView[] = (state.sort ? matched : byClearTime(matched, (v) => v.row, filters.bands)).map((v, position) => ({ row: v.row, position }))
   const projectName = projectId ? (rows.flatMap((r) => r.projects).find((p) => p.projectId === projectId)?.name ?? null) : null
 
   /** Open a row in My targets; add any other row to My targets as a favourite. */
   const activate = (row: TargetRow_Serialize) => (inMyTargets(row) ? openTarget(row.target.id) : void result.act(asResult(row)))
 
-  const columns = targetColumns(m, state, data, result.pending)
+  const darkness = darknessTonight(data?.darkness ?? null)
+  const columns = targetColumns(m, state, data, darkness, result.pending)
   const rowActions = (v: RowView): MenuItem[] => {
     const row = v.row
     const open: MenuItem[] = inMyTargets(row) ? [{ id: "open", label: m.verb_open(), run: () => openTarget(row.target.id) }, { separator: true }] : []
@@ -201,7 +209,7 @@ export function TargetsPage() {
           onManage={() => void navigate({ to: "/settings/sites" })}
         />
       ) : null}
-      {/* astro-plan-wre19.19: the page's darkness window (DarkLine) is not part of its read yet. */}
+      {basis ? <DarkLine darkness={darkness} timeZone={basis.timeZone} /> : null}
       {moon && basis ? <MoonLine moon={moon} timeZone={basis.timeZone} /> : null}
     </>
   )
@@ -213,6 +221,7 @@ export function TargetsPage() {
     page: data,
     simbadSkipped: searching && results.data?.simbad.state === "not_searched",
     onAddSite: () => void navigate({ to: "/settings/sites" }),
+    onSetCriteria: () => void navigate({ to: "/" }),
   })
 
   const actions: Action[] = [{ id: "moon-limits", label: m.tonight_moon_limits(), icon: MoonStar, opensDialog: true, run: () => setDialog("moon") }]
@@ -301,12 +310,8 @@ export function TargetsPage() {
             const column = sortColumn(next.columnId)
             if (column) setParams({ sort: sortParam({ column, descending: next.direction === "desc" }), saved: undefined })
           },
-          loading: criteria.isPending || page.isLoading,
-          error: criteria.error
-            ? { message: readFailure(m, criteria.error), onRetry: () => void criteria.refetch() }
-            : page.error
-              ? { message: readFailure(m, page.error), onRetry: () => void page.refetch() }
-              : undefined,
+          loading: page.isLoading,
+          error: page.error ? { message: readFailure(m, page.error), onRetry: () => void page.refetch() } : undefined,
           toolbar: {
             search: searchBox,
             facets: { items: facets, onChange: onFacets },
@@ -324,7 +329,7 @@ export function TargetsPage() {
             actions: toolbarActions,
             matchCount: shown.length,
           },
-          empty: emptyState(m, { state, data, criteriaMissing: criteria.isSuccess && stored === null, filtered: rows.length > 0, setParams, goHome: () => void navigate({ to: "/" }) }),
+          empty: emptyState(m, { state, data, filtered: rows.length > 0, setParams }),
           columnsId: "targets",
           stickyFirstColumn: true,
         }}
@@ -369,7 +374,7 @@ function listSummary(m: Messages, data: TargetsPage_Serialize, shown: number, pr
   return projectName ? `${m.targets_caption_project({ name: projectName })} · ${count}` : count
 }
 
-/** The page's one standing notice: a failed add (with Retry), a refused preset write, no planning site, or SIMBAD left out. */
+/** The page's one standing notice: a failed add (with Retry), a refused preset write, no planning site or criteria, or SIMBAD left out. */
 function pageNotice(
   m: Messages,
   input: {
@@ -379,6 +384,7 @@ function pageNotice(
     page: TargetsPage_Serialize | undefined
     simbadSkipped: boolean
     onAddSite: () => void
+    onSetCriteria: () => void
   },
 ): PageNotice | null {
   const { result } = input
@@ -406,20 +412,16 @@ function pageNotice(
     }
   if (input.page?.planningUnavailable === "no_site")
     return { tone: "info", title: m.home_no_site_yet(), actions: <ActionButton action={{ id: "add-site", label: m.tonight_add_site(), run: input.onAddSite }} /> }
+  if (input.page?.planningUnavailable === "no_criteria")
+    return { tone: "info", title: m.targets_needs_criteria(), actions: <ActionButton action={{ id: "set-criteria", label: m.shell_not_found_home(), run: input.onSetCriteria }} /> }
   if (input.simbadSkipped) return { tone: "offline", title: m.targets_simbad_not_searched() }
   return null
 }
 
-function emptyState(
-  m: Messages,
-  input: { state: TargetsState; data: TargetsPage_Serialize | undefined; criteriaMissing: boolean; filtered: boolean; setParams: (patch: SearchParams) => void; goHome: () => void },
-) {
+function emptyState(m: Messages, input: { state: TargetsState; data: TargetsPage_Serialize | undefined; filtered: boolean; setParams: (patch: SearchParams) => void }) {
   const { state, data, setParams } = input
   // astro-plan-wre19.14: the night's plan has no library read yet.
   if (state.view === "planned") return <EmptyState icon={CalendarClock} title={m.home_unavailable({ what: m.targets_view_planned() })} action={null} />
-  // astro-plan-wre19.19: the library lists rows only under criteria; until it reads the stored ones itself, ask for them.
-  if (input.criteriaMissing)
-    return <EmptyState icon={SlidersHorizontal} title={m.targets_needs_criteria()} action={<ActionButton action={{ id: "set-criteria", label: m.shell_not_found_home(), run: input.goHome }} />} />
   if (data?.needsCatalogueOrPreset)
     return <EmptyState icon={Telescope} title={m.targets_choose_catalogue()} action={<ActionButton action={{ id: "browse-messier", label: m.targets_browse_messier(), run: () => setParams({ cat: "messier" }) }} />} />
   if (input.filtered) return <EmptyState icon={Crosshair} title={m.targets_none_suitable()} action={<ActionButton action={{ id: "clear-filters", label: m.targets_clear_filter(), run: () => setParams({ fav: undefined, good: undefined }) }} />} />
@@ -437,10 +439,11 @@ function designationCell(m: Messages, designation: string, busy: boolean): strin
   return busy ? `${designation} · ${m.common_loading()}` : designation
 }
 
-function targetColumns(m: Messages, state: TargetsState, data: TargetsPage_Serialize | undefined, pending: string | null): Column<RowView>[] {
+function targetColumns(m: Messages, state: TargetsState, data: TargetsPage_Serialize | undefined, darkness: Darkness, pending: string | null): Column<RowView>[] {
   // The library ordered the rows for the requested sort; the table keeps that order.
   const order = (v: RowView) => (state.sort?.descending ? -v.position : v.position)
-  const night = data?.basis?.night ?? null
+  const basis = data?.basis ?? null
+  const night = basis?.night ?? null
   const unknown = (row: TargetRow_Serialize) => <Unknown reason={row.unknownReason} />
   const columns: Column<RowView>[] = [
     { id: "designation", header: m.targets_designation(), rowHeader: true, truncate: true, truncateMin: "name", sortValue: order, cell: (v) => designationCell(m, v.row.target.designation, pending === v.row.target.id) },
@@ -461,8 +464,9 @@ function targetColumns(m: Messages, state: TargetsState, data: TargetsPage_Seria
     })
   columns.push(
     { id: "type", header: m.targets_type(), truncate: true, sortValue: order, cell: (v) => v.row.target.objectType },
-    // astro-plan-wre19.19: the altitude sparkline needs the library's samples across the night; until then the cell is the peak.
-    { id: "max_alt", header: m.tonight_altitude(), align: "right", sortValue: order, cell: (v) => (v.row.maxAltitudeDeg === null ? unknown(v.row) : formatDegrees(v.row.maxAltitudeDeg, 0)) },
+    // The library sorts by the peak (Max alt), not by the curve, so Altitude is static.
+    { id: "altitude", header: m.tonight_altitude(), static: true, cell: (v) => altitudeCell(basis, darkness, v.row) },
+    { id: "max_alt", header: m.targets_max_alt(), align: "right", sortValue: order, cell: (v) => (v.row.maxAltitudeDeg === null ? unknown(v.row) : formatDegrees(v.row.maxAltitudeDeg, 0)) },
     { id: "lunar", header: m.tonight_lunar(), align: "right", hideable: true, defaultHidden: true, sortValue: order, cell: (v) => (v.row.lunarSeparationDeg === null ? unknown(v.row) : formatDegrees(v.row.lunarSeparationDeg, 0)) },
     { id: "img_time", header: m.tonight_img_time(), align: "right", sortValue: order, cell: (v) => imgTimeText(m, v.row) ?? unknown(v.row) },
     { id: "filters", header: m.domain_suitable_filters(), sortValue: order, cell: (v) => filtersCell(m, v.row) },
@@ -489,13 +493,26 @@ function targetColumns(m: Messages, state: TargetsState, data: TargetsPage_Seria
   return columns
 }
 
-/** The bands the library marks viable tonight, then its recommendation; unknown with the row's reason. */
+/** The row's altitude across the page's night from the library's samples, darkness shaded and the criteria's altitude limit dashed; unknown with the row's reason without them. */
+function altitudeCell(basis: TargetsBasis_Serialize | null, darkness: Darkness, row: TargetRow_Serialize) {
+  const unknown = <Unknown reason={row.unknownReason} />
+  if (!basis) return unknown
+  const grid = sparkNight(basis, row.altitudeSamplesDeg.length)
+  const sky = sparkOf(grid, darkness, row)
+  const limit = basis.criteria.minAltitudeDeg
+  if (!sky || limit === null) return unknown
+  return <AltitudeSpark night={grid} sky={sky} darkness={darkness} minAltitudeDeg={limit} timeZone={basis.timeZone} />
+}
+
+/** Each band graded for the night, then the library's recommendation; unknown with the row's reason. */
 function filtersCell(m: Messages, row: TargetRow_Serialize) {
   if (row.bands.length === 0) return <Unknown reason={row.unknownReason} />
-  const viable = viableBands(row.bands)
-  const parts = [viable.length > 0 ? viable.join(", ") : m.targets_no_band_viable()]
-  if (row.recommendation) parts.push(recommendationText(m, row.recommendation))
-  return parts.join(" · ")
+  return (
+    <>
+      <GradeBadges grades={bandGrades(row.bands)} />
+      {row.recommendation ? ` ${recommendationText(m, row.recommendation)}` : null}
+    </>
+  )
 }
 
 const SOURCE_WORDS: Record<TargetsSearchSource, (m: Messages) => string> = {

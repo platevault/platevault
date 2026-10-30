@@ -37,6 +37,16 @@ CREATE TABLE IF NOT EXISTS home_criteria (
     updated_at TEXT NOT NULL
 ) STRICT;
 
+-- The default reminder lead time (PLAN-FR-06) in minutes under its own
+-- revision, longer than 30 minutes and at most 7 days like every reminder's;
+-- no row reads the spec's 12 hours at revision 0.
+CREATE TABLE IF NOT EXISTS reminder_lead_time (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    lead_minutes INTEGER NOT NULL CHECK (lead_minutes > 30 AND lead_minutes <= 10080),
+    revision INTEGER NOT NULL CHECK (revision > 0),
+    updated_at TEXT NOT NULL
+) STRICT;
+
 -- The Planned mark, keyed by Target; never a column of `targets`.
 CREATE TABLE IF NOT EXISTS target_plans (
     target_id TEXT PRIMARY KEY NOT NULL REFERENCES targets (id),
@@ -53,7 +63,7 @@ CREATE TABLE IF NOT EXISTS reminder_subscriptions (
     site_revision INTEGER NOT NULL CHECK (site_revision > 0),
     settings_revision INTEGER NOT NULL CHECK (settings_revision > 0),
     criteria TEXT NOT NULL,
-    lead_minutes INTEGER NOT NULL CHECK (lead_minutes >= 1 AND lead_minutes <= 1440),
+    lead_minutes INTEGER NOT NULL CHECK (lead_minutes > 30 AND lead_minutes <= 10080),
     state TEXT NOT NULL
         CHECK (state IN ('enabled', 'blocked', 'needs_reconfirmation', 'disabled')),
     block_reason TEXT,

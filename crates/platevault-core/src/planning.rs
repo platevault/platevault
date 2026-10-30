@@ -33,7 +33,7 @@ use crate::{
     Darkness, DarknessWindow, ImgTimeZeroReason, LibraryError, MoonAvoidanceCurve, MoonCriterion,
     MoonPhase, NightMoon, NightPlan, NightSky, NoWindowReason, ObservingSite, ObservingWindow,
     PlanCriteria, TargetRecord, WindowBasis, WindowKey, WindowQuery, WindowSet,
-    WindowUnavailableReason,
+    WindowUnavailableReason, ALTITUDE_SAMPLES,
 };
 
 /// How every window is computed; named in each window basis.
@@ -429,6 +429,22 @@ impl NightContext {
         u32::try_from(total).unwrap_or(u32::MAX)
     }
 
+    /// The night's bounds: local noon of its date to the next local noon.
+    #[must_use]
+    pub const fn bounds(&self) -> Span {
+        self.bounds
+    }
+
+    /// The [`ALTITUDE_SAMPLES`] instants a Target's altitude is sampled at,
+    /// evenly spaced from the night's start to its end, both included.
+    fn sample_instants(&self) -> impl Iterator<Item = OffsetDateTime> + '_ {
+        // The count is a small constant, so the casts are exact.
+        #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
+        let last = (ALTITUDE_SAMPLES - 1) as i32;
+        let length = self.bounds.end - self.bounds.start;
+        (0..=last).map(move |index| self.bounds.start + length * index / last)
+    }
+
     /// This night under the same criteria with Moon limit `moon`: the night's
     /// bounds, darkness and Moon intervals do not depend on it, so they are
     /// reused.
@@ -464,6 +480,9 @@ pub struct TargetNight {
     /// The first night, from this one, the Sun is opposite the Target in right
     /// ascension, to the day within the next year.
     pub next_opposition: Date,
+    /// Geometric altitude at the context's [`ALTITUDE_SAMPLES`] instants,
+    /// evenly spaced over the night (PLAN-TGT-FR-04's sparkline).
+    pub altitude_samples_deg: Vec<f64>,
 }
 
 /// One Target's [`TargetNight`] over a shared night context.
@@ -504,6 +523,7 @@ pub fn target_night(
             .degrees(),
         moon_up_window_minutes,
         next_opposition: next_opposition(sky.position, context)?,
+        altitude_samples_deg: context.sample_instants().map(|at| sky.altitude(at)).collect(),
     }))
 }
 
@@ -678,7 +698,7 @@ impl Sky {
     /// transit nearest the middle when it falls inside. Any transit inside a
     /// window shorter than a sidereal day is the one nearest its middle.
     fn peak_altitude(&self, start: OffsetDateTime, end: OffsetDateTime) -> f64 {
-        let altitude = |at| alt_az(self.position, at, &self.location).altitude.degrees();
+        let altitude = |at| self.altitude(at);
         let culmination = transit(self.position, start + (end - start) / 2, &self.location);
         let edges = altitude(start).max(altitude(end));
         if start < culmination && culmination < end {
@@ -686,6 +706,11 @@ impl Sky {
         } else {
             edges
         }
+    }
+
+    /// The Target's geometric altitude at `at`.
+    fn altitude(&self, at: OffsetDateTime) -> f64 {
+        alt_az(self.position, at, &self.location).altitude.degrees()
     }
 }
 

@@ -3,10 +3,12 @@
  * explicit, reviewed opt-ins over the library's own reads.
  *
  * - Enable notifications…: a lead time (minutes, hours or days, over 30
- *   minutes and at most 24 hours), then the library's review of what turning
- *   them on means (`planning_review_reminders`): the default site and its
- *   zone, the criteria, the lead time, the permission, whether reminders
- *   arrive while PlateVault is closed, and the next reminders. Enable sends
+ *   minutes and at most 7 days), starting from the stored default
+ *   (`planning_reminder_lead_time`, 12 hours until changed), then the
+ *   library's review of what turning them on means
+ *   (`planning_review_reminders`): the default site and its zone, the
+ *   criteria, the lead time, the permission, whether reminders arrive
+ *   while PlateVault is closed, and the next reminders. Enable sends
  *   exactly the reviewed values and revisions (`planning_enable_reminders`);
  *   the library asks the OS first when the permission is undecided, then
  *   records the subscription enabled or blocked. Reminders always use the
@@ -43,28 +45,28 @@ import { NumberField, SelectField } from "@/components/app/fields"
 import { FormDialog, useDialogForm } from "@/components/app/form-dialog"
 import { fileName, formatDateTime, formatNight, zoneAbbreviation } from "@/lib/format"
 import type { Messages } from "@/lib/i18n"
-import { windowText } from "./parts"
-import { libraryQueryWhen, reminderStatusQuery, sitesQuery, targetsWrite } from "./queries"
+import { readFailure, windowText } from "./parts"
+import { libraryQueryWhen, reminderLeadTimeQuery, reminderStatusQuery, sitesQuery, targetsWrite } from "./queries"
 
 type LeadUnit = "minutes" | "hours" | "days"
 const UNIT_MINUTES: Record<LeadUnit, number> = { minutes: 1, hours: 60, days: 1440 }
 /**
- * The lead time a reminder accepts: over 30 minutes (PLAN-FR-06), and at
- * most what the library stores, 1440 minutes (`MAX_MINUTES`, checked by
- * `ReminderInput::validate` in crates/platevault-model/src/planning.rs).
- * The spec's "up to 7 days" is wider than the library accepts until
- * astro-plan-wre19.19 raises `MAX_MINUTES` to 10080; then LEAD_MAX follows.
+ * The lead time a reminder accepts (PLAN-FR-06): over 30 minutes and at
+ * most 7 days, as `validate_lead_minutes` checks it
+ * (`MIN_LEAD_MINUTES`..=`MAX_LEAD_MINUTES` in
+ * crates/platevault-model/src/planning.rs).
  */
 const LEAD_MIN = 30
-const LEAD_MAX = 1440
+const LEAD_MAX = 7 * 1440
 
-/**
- * The lead time a new reminder starts from: 12 hours, the setting's
- * default (PLAN-FR-06); the setting itself waits for astro-plan-wre19.19.
- */
-const DEFAULT_LEAD = { amount: 12, unit: "hours" as LeadUnit }
+/** A lead time in minutes as the form edits it: whole days, else whole hours, else minutes. */
+function leadAmount(minutes: number): { amount: number; unit: LeadUnit } {
+  if (minutes % UNIT_MINUTES.days === 0) return { amount: minutes / UNIT_MINUTES.days, unit: "days" }
+  if (minutes % UNIT_MINUTES.hours === 0) return { amount: minutes / UNIT_MINUTES.hours, unit: "hours" }
+  return { amount: minutes, unit: "minutes" }
+}
 
-/** The lead time in minutes, or null when it is not a whole amount over 30 minutes and at most 24 hours. */
+/** The lead time in minutes, or null when it is not a whole amount over 30 minutes and at most 7 days. */
 export function leadMinutes(amount: number | null, unit: LeadUnit): number | null {
   if (amount === null || !Number.isInteger(amount)) return null
   const minutes = amount * UNIT_MINUTES[unit]
@@ -107,9 +109,11 @@ function permissionText(m: Messages, permission: PermissionState): string {
 export function RemindersDialog({ targetId, criteria, open, onOpenChange, onManageSites }: { targetId: string; criteria: PlanCriteria; open: boolean; onOpenChange: (open: boolean) => void; onManageSites: () => void }) {
   const m = useMessages()
   const client = useQueryClient()
-  const { values, set } = useDialogForm(open, () => ({ amount: DEFAULT_LEAD.amount as number | null, unit: DEFAULT_LEAD.unit }))
+  const stored = useQuery(reminderLeadTimeQuery())
+  // The form starts once the stored default is read, so it opens on the user's lead time rather than a guess.
+  const { values, set } = useDialogForm(open && stored.isSuccess, () => (stored.data ? leadAmount(stored.data.leadMinutes) : { amount: null as number | null, unit: "hours" as LeadUnit }))
   const sites = useQuery(sitesQuery())
-  const lead = leadMinutes(values.amount, values.unit)
+  const lead = stored.isSuccess ? leadMinutes(values.amount, values.unit) : null
   const noDefaultSite = sites.data ? sites.data.defaultSiteId === null : false
   const reminder: ReminderInput | null = lead !== null && open && sites.data && !noDefaultSite ? { targetId, criteria, leadMinutes: lead } : null
   const review = useQuery(libraryQueryWhen("planningReviewReminders", reminder ? [reminder] : null))
@@ -118,11 +122,13 @@ export function RemindersDialog({ targetId, criteria, open, onOpenChange, onMana
   const blocked = (reason: string): Action["unavailable"] => ({ action: m.actions_blocked({ action: label }), reason, blockers: [] })
   const unavailable = noDefaultSite
     ? blocked(m.targets_reminders_need_default_site())
-    : lead === null
-      ? blocked(m.targets_lead_out_of_range())
-      : !reviewed
-        ? blocked(review.isError ? m.targets_review_failed() : m.common_loading())
-        : undefined
+    : !stored.isSuccess
+      ? blocked(stored.isError ? readFailure(m, stored.error) : m.common_loading())
+      : lead === null
+        ? blocked(m.plan_reason_lead_out_of_range())
+        : !reviewed
+          ? blocked(review.isError ? m.targets_review_failed() : m.common_loading())
+          : undefined
   return (
     <FormDialog
       open={open}
@@ -142,7 +148,15 @@ export function RemindersDialog({ targetId, criteria, open, onOpenChange, onMana
       }}
     >
       {noDefaultSite ? <Notice tone="info" title={m.targets_reminders_need_default_site()} actions={<ActionBar actions={[{ id: "manage-sites", label: m.tonight_add_site(), run: onManageSites }]} />} /> : null}
-      <NumberField label={m.plan_lead_amount()} min={1} step={1} value={values.amount} onChange={(amount) => set({ amount })} description={m.targets_lead_range()} error={lead === null ? m.targets_lead_out_of_range() : undefined} />
+      <NumberField
+        label={m.plan_lead_amount()}
+        min={1}
+        step={1}
+        value={values.amount}
+        onChange={(amount) => set({ amount })}
+        description={m.plan_lead_out_of_range()}
+        error={stored.isSuccess && lead === null ? m.plan_reason_lead_out_of_range() : undefined}
+      />
       <SelectField
         label={m.plan_lead_unit()}
         value={values.unit}

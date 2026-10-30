@@ -10,9 +10,10 @@
 //! transaction. Windows and upcoming reminders are never stored here.
 
 use platevault_model::{
-    BlockReason, DefaultSiteSaved, DeliveryState, HomeCriteria, LibraryError, ObservingSite,
-    PlanCriteria, PlanningSettings, PlanningSites, ReminderDelivery, ReminderInput,
-    ReminderSubscription, Revision, SiteInput, SiteSaved, SubscriptionState, TargetPlan, WindowKey,
+    validate_lead_minutes, BlockReason, DefaultSiteSaved, DeliveryState, HomeCriteria,
+    LibraryError, ObservingSite, PlanCriteria, PlanningSettings, PlanningSites, ReminderDelivery,
+    ReminderInput, ReminderLeadTime, ReminderSubscription, Revision, SiteInput, SiteSaved,
+    SubscriptionState, TargetPlan, WindowKey, DEFAULT_REMINDER_LEAD_MINUTES,
 };
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -32,6 +33,9 @@ pub const PLANNING_SETTINGS_ID: Uuid = Uuid::from_u128(0x7a3c_51e0_0072_5000_800
 
 /// The identity a Conflict on Home's criteria names.
 pub const HOME_CRITERIA_ID: Uuid = Uuid::from_u128(0x7a3c_51e0_0072_5000_8000_0000_0000_0002);
+
+/// The identity a Conflict on the default reminder lead time names.
+pub const REMINDER_LEAD_TIME_ID: Uuid = Uuid::from_u128(0x7a3c_51e0_0072_5000_8000_0000_0000_0003);
 
 /// An activation's subscription write: the default site, its revision and the
 /// settings revision the user confirmed, with explicit criteria and lead time.
@@ -268,6 +272,52 @@ impl Catalog {
             .execute(&mut *conn)
             .await?;
             HomeCriteria { criteria: Some(*criteria), revision: next }
+        });
+        Ok(saved)
+    }
+
+    /// The default reminder lead time at its revision; 12 hours at revision
+    /// 0 when never saved.
+    ///
+    /// # Errors
+    /// `PersistenceFailure` for an unreadable catalog.
+    pub async fn reminder_lead_time(&self) -> Result<ReminderLeadTime> {
+        let mut conn = self.reader().await?;
+        load_lead_time(&mut conn).await
+    }
+
+    /// Save the default reminder lead time over revision `expected` (0 when
+    /// never saved).
+    ///
+    /// # Errors
+    /// `InvalidInput` naming `leadMinutes` for a lead time of 30 minutes or
+    /// less, or longer than 7 days; `Conflict` naming
+    /// [`REMINDER_LEAD_TIME_ID`] at the current revision when `expected` is
+    /// stale. Nothing is written on failure.
+    pub async fn save_reminder_lead_time(
+        &self,
+        expected: Revision,
+        lead_minutes: u32,
+    ) -> Result<ReminderLeadTime> {
+        validate_lead_minutes(lead_minutes)?;
+        let saved = write_txn!(self, |conn| {
+            let current = load_lead_time(conn).await?.revision;
+            if current != expected {
+                return Err(conflict(REMINDER_LEAD_TIME_ID, current));
+            }
+            let next = current + 1;
+            sqlx::query(
+                "INSERT INTO reminder_lead_time (id, lead_minutes, revision, updated_at) \
+                 VALUES (1, ?1, ?2, ?3) ON CONFLICT (id) DO UPDATE SET \
+                 lead_minutes = excluded.lead_minutes, revision = excluded.revision, \
+                 updated_at = excluded.updated_at",
+            )
+            .bind(i64::from(lead_minutes))
+            .bind(db_revision(next)?)
+            .bind(now()?)
+            .execute(&mut *conn)
+            .await?;
+            ReminderLeadTime { lead_minutes, revision: next }
         });
         Ok(saved)
     }
@@ -672,6 +722,20 @@ async fn load_home_criteria(conn: &mut SqliteConnection) -> Result<HomeCriteria>
         LibraryError::PersistenceFailure(format!("recorded Home criteria: {error}"))
     })?;
     Ok(HomeCriteria { criteria: Some(criteria), revision: revision(row.try_get("revision")?)? })
+}
+
+async fn load_lead_time(conn: &mut SqliteConnection) -> Result<ReminderLeadTime> {
+    let row = sqlx::query("SELECT lead_minutes, revision FROM reminder_lead_time WHERE id = 1")
+        .fetch_optional(&mut *conn)
+        .await?;
+    let Some(row) = row else {
+        return Ok(ReminderLeadTime { lead_minutes: DEFAULT_REMINDER_LEAD_MINUTES, revision: 0 });
+    };
+    let lead: i64 = row.try_get("lead_minutes")?;
+    let lead_minutes = u32::try_from(lead).map_err(|_| {
+        LibraryError::PersistenceFailure(format!("corrupt default lead time {lead}"))
+    })?;
+    Ok(ReminderLeadTime { lead_minutes, revision: revision(row.try_get("revision")?)? })
 }
 
 async fn load_plan(conn: &mut SqliteConnection, target: Uuid) -> Result<TargetPlan> {

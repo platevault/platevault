@@ -1,20 +1,35 @@
 import { describe, expect, it } from "vitest"
 import { m } from "@/lib/i18n"
-import { CRITERIA, candidate, row } from "./__fixtures__/targets-host"
-import { capturedText, fitText, imgTimeText, inMyTargets, matchesRow, parseRigs, parseSort, presetFilters, presetName, presetSearch, readState, targetsQuery, unknownReasonText } from "./targets-model"
+import { candidate, row } from "./__fixtures__/targets-host"
+import {
+  bandGrades,
+  byClearTime,
+  capturedText,
+  fitText,
+  imgTimeText,
+  inMyTargets,
+  matchesRow,
+  parseRigs,
+  parseSort,
+  presetFilters,
+  presetName,
+  presetSearch,
+  readState,
+  targetsQuery,
+  unknownReasonText,
+} from "./targets-model"
 
 const M31 = row(candidate("t-m31", "M 31"))
 
 describe("the Targets URL", () => {
-  it("reads Browse with its catalogues, preset, sort, night and site into the library's request", () => {
+  it("reads Browse with its catalogues, preset, sort, night and site into the library's request, which carries no criteria", () => {
     const state = readState({ mode: "browse", cat: "messier,ngc,bogus", preset: "galaxies_dark_sky", sort: "-img_time", night: "2026-11-01", site: "s2" })
-    expect(targetsQuery(state, CRITERIA)).toEqual({
+    expect(targetsQuery(state)).toEqual({
       show: "browse",
       catalogues: ["messier", "ngc"],
       preset: "galaxies_dark_sky",
       siteId: "s2",
       night: "2026-11-01",
-      criteria: CRITERIA,
       sort: { column: "img_time", descending: true },
       offset: 0,
       limit: 1000,
@@ -23,7 +38,7 @@ describe("the Targets URL", () => {
   })
 
   it("lists My targets for the Planned view and sends no catalogue outside Browse", () => {
-    const query = targetsQuery(readState({ view: "planned", cat: "messier" }), CRITERIA)
+    const query = targetsQuery(readState({ view: "planned", cat: "messier" }))
     expect(query.show).toBe("my_targets")
     expect(query.catalogues).toEqual([])
   })
@@ -43,13 +58,31 @@ describe("the Targets URL", () => {
 })
 
 describe("row filters", () => {
-  it("filters by Favourite, a viable chosen band and a Project badge", () => {
+  it("filters by Favourite, a chosen band graded good or marginal, and a Project badge", () => {
     const other = row(candidate("t-n7000", "NGC 7000"), { favourite: false, projects: [{ projectId: "p1", name: "Cygnus HOO" }] })
     expect(matchesRow(M31, { favourite: "no", bands: [], projectId: null })).toBe(false)
     expect(matchesRow(other, { favourite: "no", bands: [], projectId: "p1" })).toBe(true)
-    // OIII is listed but not viable for M 31 tonight.
+    // OIII is graded poor for M 31 tonight; Ha is marginal.
     expect(matchesRow(M31, { favourite: "", bands: ["OIII"], projectId: null })).toBe(false)
     expect(matchesRow(M31, { favourite: "", bands: ["OIII", "Ha"], projectId: null })).toBe(true)
+  })
+
+  it("orders by the longest clear time among the chosen bands, ties in the library's order", () => {
+    const a = row(candidate("a", "A"), { bands: [{ band: "Ha", grade: "good", clearMinutes: 60 }, { band: "OIII", grade: "good", clearMinutes: 200 }] })
+    const b = row(candidate("b", "B"), { bands: [{ band: "Ha", grade: "good", clearMinutes: 120 }] })
+    const c = row(candidate("c", "C"), { bands: [{ band: "Ha", grade: "marginal", clearMinutes: 120 }] })
+    const ids = (rows: readonly (typeof a)[]) => rows.map((r) => r.target.id)
+    expect(ids(byClearTime([a, b, c], (r) => r, ["Ha"]))).toEqual(["b", "c", "a"])
+    expect(ids(byClearTime([a, b, c], (r) => r, ["Ha", "OIII"]))).toEqual(["a", "b", "c"])
+    expect(ids(byClearTime([c, b, a], (r) => r, []))).toEqual(["c", "b", "a"])
+  })
+
+  it("grades every band of the strip as the library graded it", () => {
+    expect(bandGrades(M31.bands)).toEqual([
+      { band: "L", grade: "good" },
+      { band: "Ha", grade: "marginal" },
+      { band: "OIII", grade: "poor" },
+    ])
   })
 
   it("counts a favourite, a Project subject or a Target with a session as in My targets", () => {
@@ -70,6 +103,7 @@ describe("planning words", () => {
     expect(fitText(m, { state: "unknown", reason: "field_of_view_unknown" })).toEqual({ text: m.domain_fov_unknown(), unknown: true })
     expect(capturedText(m, [{ channel: null, seconds: 3600, frames: 12 }])).toBe(`${m.palette_session_no_filter()} 1h`)
     expect(unknownReasonText(m, "no_site")).toBe(m.targets_reason_no_site())
+    expect(unknownReasonText(m, "no_criteria")).toBe(m.targets_reason_no_criteria())
     expect(presetName(m, "best_tonight_broadband")).toBe(m.targets_preset_best())
   })
 })

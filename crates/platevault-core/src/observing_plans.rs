@@ -20,9 +20,9 @@ use crate::{
     calendar, planning, AppClosedDelivery, CalendarExportOutcome, CalendarExportReview,
     CalendarFile, CalendarSnapshot, Darkness, DefaultSiteSaved, EnableReminders, ExportSelection,
     HomeCriteria, LibraryError, NativePath, NightSky, ObservingSite, ObservingWindow,
-    PermissionState, PlanCriteria, PlanningSites, ReminderInput, ReminderReview, ReminderStatus,
-    ReminderSubscription, Revision, SiteInput, SiteSaved, SubscriptionState, UnavailableReason,
-    WindowQuery, WindowSet,
+    PermissionState, PlanCriteria, PlanningSites, ReminderInput, ReminderLeadTime, ReminderReview,
+    ReminderStatus, ReminderSubscription, Revision, SiteInput, SiteSaved, SubscriptionState,
+    UnavailableReason, WindowQuery, WindowSet,
 };
 
 /// The planning runtime: the attached notification adapter, the wall clock,
@@ -173,6 +173,28 @@ impl Library {
         criteria: &PlanCriteria,
     ) -> Result<HomeCriteria, LibraryError> {
         self.catalog().save_home_criteria(expected, criteria).await
+    }
+
+    /// The default reminder lead time (PLAN-FR-06) a new reminder starts
+    /// from; 12 hours at revision 0 until the user changes it.
+    ///
+    /// # Errors
+    /// See [`Catalog::reminder_lead_time`].
+    pub async fn reminder_lead_time(&self) -> Result<ReminderLeadTime, LibraryError> {
+        self.catalog().reminder_lead_time().await
+    }
+
+    /// Save the default reminder lead time over revision `expected` (0 when
+    /// never saved). Existing subscriptions keep their own lead times.
+    ///
+    /// # Errors
+    /// See [`Catalog::save_reminder_lead_time`].
+    pub async fn save_reminder_lead_time(
+        &self,
+        expected: Revision,
+        lead_minutes: u32,
+    ) -> Result<ReminderLeadTime, LibraryError> {
+        self.catalog().save_reminder_lead_time(expected, lead_minutes).await
     }
 
     /// Observing windows of a saved Target at a saved site, computed off the

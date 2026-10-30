@@ -3,10 +3,11 @@
  *
  * Every read is a `libraryQuery`, so a write refreshes the reads it changes
  * by command name. The library computes every planning value: the Targets
- * rows and their Moon (`planning_target_rows`), a Target's windows
- * (`planning_compute_windows`), its goal gaps (`planning_target_gaps`) and
- * tonight's goal grades (`planning_tonight`). Nothing here derives a window,
- * an altitude or an offset.
+ * rows, their night's Moon and darkness under Home's stored criteria
+ * (`planning_target_rows`), a Target's windows (`planning_compute_windows`),
+ * its goal gaps (`planning_target_gaps`) and tonight's goal grades
+ * (`planning_tonight`). Nothing here derives a window, an altitude or an
+ * offset.
  *
  * `targetsWrite` refreshes the reads after a write succeeds and after a
  * `conflict` (a stale revision or digest), so the next attempt names the
@@ -34,7 +35,6 @@ export const PLAN_NIGHTS = 7
 /** How many reminder subscriptions one status read lists. */
 const REMINDER_PAGE = 500
 
-export const homeCriteriaQuery = () => libraryQuery("planningHomeCriteria")
 export const sitesQuery = () => libraryQuery("planningListSites")
 /** The saved rigs by name: the rig selector's single rigs. */
 export const equipmentQuery = () => libraryQuery("libraryListEquipment")
@@ -46,10 +46,12 @@ export const windowsQuery = (targetId: string, siteId: string, firstNight: strin
 export const gapsQuery = (targetId: string) => libraryQuery("planningTargetGaps", targetId)
 export const tonightQuery = (night: string | null) => libraryQuery("planningTonight", { night })
 export const reminderStatusQuery = () => libraryQuery("planningReminderStatus", 0, REMINDER_PAGE)
+/** The stored lead time a new reminder starts from (PLAN-FR-06). */
+export const reminderLeadTimeQuery = () => libraryQuery("planningReminderLeadTime")
 
-/** My targets under `criteria`: the Target page and the palette find a Target among these rows. */
-export function myTargetsRequest(criteria: PlanCriteria, siteId: string | null = null, night: string | null = null): TargetsQuery_Deserialize {
-  return { show: "my_targets", criteria, siteId, night, limit: TARGET_PAGE }
+/** My targets under Home's stored criteria: the Target page and the palette find a Target among these rows. */
+export function myTargetsRequest(siteId: string | null = null, night: string | null = null): TargetsQuery_Deserialize {
+  return { show: "my_targets", siteId, night, limit: TARGET_PAGE }
 }
 
 /**

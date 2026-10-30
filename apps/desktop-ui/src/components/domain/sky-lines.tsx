@@ -82,13 +82,15 @@ export interface SparkSky {
   /** Peak altitude in darkness and when; null without darkness. */
   peakDeg: number | null
   peakAt: string | null
-  best: { start: string; end: string } | null
+  /** The best window; null when the night has none, absent when the read does not say where it falls. */
+  best?: { start: string; end: string } | null
 }
 
 /** "Max 81° at 22:40 · window 20:10-02:30 CEST": the sparkline's tooltip and accessible name, one string. */
 export function altitudeFacts(m: Messages, sky: SparkSky, timeZone: string): string {
   if (sky.peakDeg === null || sky.peakAt === null) return m.tonight_no_darkness()
   const altitude = degrees(sky.peakDeg)
+  if (sky.best === undefined) return m.tonight_spark_peak({ altitude, time: siteTime(sky.peakAt, timeZone) })
   if (!sky.best) return m.tonight_spark_no_window({ altitude, time: siteTime(sky.peakAt, timeZone) })
   return m.tonight_spark_window({ altitude, time: formatTime(sky.peakAt, timeZone), window: siteTimeRange(sky.best.start, sky.best.end, timeZone) })
 }
