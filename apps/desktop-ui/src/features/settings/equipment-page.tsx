@@ -110,7 +110,7 @@ export function EquipmentPage() {
           />
         )}
       </Read>
-      {/* astro-plan-wre19.22: no camera create or edit command; astro-plan-c6rcr: rig filter editing. */}
+      {/* astro-plan-wre19.22: no camera create or edit command. */}
       <Gap what={m.equipment_add_camera()} detail={m.settings_gap_camera_edit()} />
       {editing === "new" || editedRig ? <RigDialog rig={editedRig ?? null} open onOpenChange={(open) => !open && setEditing(null)} /> : null}
       {filtersRig ? <RigFiltersDialog rig={filtersRig} open onOpenChange={(open) => !open && setFiltersOf(null)} /> : null}

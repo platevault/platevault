@@ -2328,7 +2328,9 @@
   "location_retire": "Aposentar local",
   "location_choose_folder_again": "Escolher pasta de novo",
   "location_remap": "Remapear",
-  "location_remap_collision": [
+  "location_remap_root_overlaps": "{path} se sobrepõe a outro local registrado",
+  "location_remap_root_unverified": "O PlateVault não consegue verificar o volume de {path}",
+  "location_remap_no_proof": [
     {
       "declarations": [
         "input count",
@@ -2339,8 +2341,24 @@
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{frames} colide com outro arquivo",
-        "countPlural=*": "{frames} colidem com outro arquivo"
+        "countPlural=one": "{frames} frame sem prova byte a byte",
+        "countPlural=*": "{frames} frames sem prova byte a byte"
+      }
+    }
+  ],
+  "location_remap_identity_mismatch": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{frames} frame fora do volume da pasta",
+        "countPlural=*": "{frames} frames fora do volume da pasta"
       }
     }
   ],

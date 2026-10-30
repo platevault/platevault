@@ -41,7 +41,7 @@ import { blockedByErrors, FormDialog, useDialogForm } from "@/components/app/for
 import { StatusBadge } from "@/components/app/status"
 import { formatCount, formatList } from "@/lib/format"
 import type { Messages } from "@/lib/i18n"
-import { lastScanQuery, locationsQuery, settingsWrite } from "./queries"
+import { isConflict, lastScanQuery, locationsQuery, settingsWrite } from "./queries"
 
 export const ROLES: readonly LocationRole[] = ["captures", "calibration", "results"]
 
@@ -209,7 +209,7 @@ export function useLocationActions(rows: LocationRow[] | null): { rowActions: (r
     <>
       {dialog?.kind === "rename" ? <RenameLocationDialog row={live} open onOpenChange={close} /> : null}
       {dialog?.kind === "retire" ? <RetireLocationDialog row={live} open onOpenChange={close} /> : null}
-      {dialog?.kind === "remap" ? <RemapLocationDialog row={live} review={dialog.review} open onOpenChange={close} /> : null}
+      {dialog?.kind === "remap" ? <RemapLocationDialog row={live} review={dialog.review} onReviewed={(review) => setDialog({ kind: "remap", locationId: live.state.location.id, review })} open onOpenChange={close} /> : null}
     </>
   ) : null
   return { rowActions, dialogs }
@@ -324,47 +324,103 @@ function RetireLocationDialog({ row, open, onOpenChange }: { row: LocationRow; o
   )
 }
 
-/** What blocks a remap, one line per reason with the frames it holds back. */
-function blockText(m: Messages, reason: RemapBlockReason, count: number): string {
+/** A block on the picked folder itself (no asset): it overlaps another registered location, or its volume can't be verified. */
+function rootBlockText(m: Messages, reason: RemapBlockReason, path: string): string {
+  return reason === "collision" ? m.location_remap_root_overlaps({ path }) : m.location_remap_root_unverified({ path })
+}
+
+/** Frames held back for one reason, counted. */
+function framesBlockText(m: Messages, reason: RemapBlockReason, count: number, path: string): string {
   const frames = formatCount(count)
   switch (reason) {
     case "no_byte_proof":
-      return m.action_failure_no_byte_proof()
+      return m.location_remap_no_proof({ count, frames })
     case "identity_conflict":
-      return m.action_failure_identity_conflict()
+      return m.location_remap_identity_mismatch({ count, frames })
     case "mismatch":
       return m.location_remap_differ({ count, frames })
-    case "collision":
-      return m.location_remap_collision({ count, frames })
     case "drift":
       return m.location_remap_drift({ count, frames })
+    case "collision":
+      // The library raises a collision only on the root; read one on a frame the same way.
+      return m.location_remap_root_overlaps({ path })
   }
 }
 
-/** Remap… (LIB-FR-07): the review of the picked folder, then Remap at the review's revision. No file changes. */
-function RemapLocationDialog({ row, review, open, onOpenChange }: { row: LocationRow; review: RemapReview_Serialize; open: boolean; onOpenChange: (open: boolean) => void }) {
+/** What blocks a remap: each root block, then one line per reason with the frames it holds back. */
+function blockLines(m: Messages, review: RemapReview_Serialize): string[] {
+  const path = review.proposedRoot.display
+  const lines: string[] = []
+  const frames = new Map<RemapBlockReason, number>()
+  for (const block of review.blocked) {
+    if (block.assetId === null) lines.push(rootBlockText(m, block.reason, path))
+    else frames.set(block.reason, (frames.get(block.reason) ?? 0) + 1)
+  }
+  for (const [reason, count] of frames) lines.push(framesBlockText(m, reason, count, path))
+  return [...new Set(lines)]
+}
+
+/**
+ * Remap… (LIB-FR-07): the review of the picked folder, then Remap at the
+ * review's revision. No file changes. A review is pinned to the location's
+ * revision and assets when it was made, so after `conflict` the folder is
+ * reviewed again and `onReviewed` swaps that review in: the conflict shows
+ * above it and Retry applies the fresh one.
+ */
+function RemapLocationDialog({
+  row,
+  review,
+  onReviewed,
+  open,
+  onOpenChange,
+}: {
+  row: LocationRow
+  review: RemapReview_Serialize
+  onReviewed: (review: RemapReview_Serialize) => void
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
   const m = useMessages()
   const client = useQueryClient()
   const { location } = row.state
   const matched = review.items.length
   const label = m.location_remap_confirm({ count: matched, frames: formatCount(matched) })
-  const reasons = new Map<RemapBlockReason, number>()
-  for (const block of review.blocked) reasons.set(block.reason, (reasons.get(block.reason) ?? 0) + 1)
-  const unavailable: Action["unavailable"] =
-    reasons.size > 0 ? { action: m.actions_blocked({ action: label }), reason: m.location_remap_refused(), blockers: [...reasons].map(([reason, count]) => ({ label: blockText(m, reason, count) })) } : undefined
+  const blocked = blockLines(m, review)
+  const unavailable: Action["unavailable"] = blocked.length > 0 ? { action: m.actions_blocked({ action: label }), reason: m.location_remap_refused(), blockers: blocked.map((line) => ({ label: line })) } : undefined
+  const apply = async () => {
+    const applied = await settingsWrite(client, () => library.libraryApplyRemap(review.id, review.expectedRevision))
+    if (!isConflict(applied)) return applied
+    const fresh = await library.libraryReviewRemap(location.id, review.proposedRoot)
+    if (!fresh.ok) return fresh
+    onReviewed(fresh.data)
+    return applied
+  }
   return (
     <FormDialog
       open={open}
       onOpenChange={onOpenChange}
       title={m.location_remap_title({ name: location.name, path: review.proposedRoot.display })}
-      confirm={{ id: "remap-location", label, kind: "primary", unavailable, run: () => settingsWrite(client, () => library.libraryApplyRemap(review.id, review.expectedRevision)) }}
+      confirm={{ id: "remap-location", label, kind: "primary", unavailable, run: apply }}
     >
       <KeyValueList
         items={[
           { label: m.location_from(), value: <PathText path={location.path.display} /> },
           { label: m.location_to(), value: <PathText path={review.proposedRoot.display} /> },
           { label: m.location_col_frames(), value: m.location_remap_same_bytes({ count: matched, frames: formatCount(matched) }) },
-          ...[...reasons].map(([reason, count]) => ({ label: m.location_remap_refused(), value: blockText(m, reason, count) })),
+          ...(blocked.length > 0
+            ? [
+                {
+                  label: m.location_remap_refused(),
+                  value: (
+                    <ul>
+                      {blocked.map((line) => (
+                        <li key={line}>{line}</li>
+                      ))}
+                    </ul>
+                  ),
+                },
+              ]
+            : []),
           { label: m.settings_retire_files(), value: m.location_no_file_changes() },
         ]}
       />

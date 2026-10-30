@@ -234,9 +234,10 @@ describe.each(LOCALES)("Settings in %s", (locale) => {
   }
   // Read in the locale the test runs in, not when the suite is collected.
   const remapTitle = () => m.location_remap_title({ name: "Lights", path: "/Volumes/Cold-1/Lights" })
+  const remapOne = () => m.location_remap_confirm({ count: 1, frames: formatCount(1) })
 
   it(
-    "remaps a location only to a picked folder: Cancel sends nothing, a pick sends the path and the row reads the new folder",
+    "remaps a location only to a picked folder: Cancel sends nothing, a pick sends the path, Remap names the review's revision and the row reads the new folder",
     async () => {
       const host = serve(catalog({ locations: [location("loc-1", "Lights", "captures")] }))
       const { user } = renderAt("/settings/locations")
@@ -246,14 +247,46 @@ describe.each(LOCALES)("Settings in %s", (locale) => {
       expect(host.sent("library_review_remap")).toEqual([])
       expect(screen.queryByRole("dialog")).toBeNull()
 
+      // The location changed since the page read it (revision 1): the review names the current revision.
+      const [loc] = host.state.locations
+      if (loc) host.state.locations = [{ ...loc, location: { ...loc.location, decisionRevision: 6 } }]
       host.state.picked = nativePath("/Volumes/Cold-1/Lights")
       const row = await chooseRemap(user)
-      const dialog = await screen.findByRole("dialog", { name: remapTitle() })
+      let dialog = await screen.findByRole("dialog", { name: remapTitle() })
       expect(host.sent("library_review_remap")).toEqual([{ locationId: "loc-1", proposedPath: nativePath("/Volumes/Cold-1/Lights") }])
-      await user.click(within(dialog).getByRole("button", { name: m.location_remap_confirm({ count: 1, frames: formatCount(1) }) }))
+      // Cancel in the review: nothing is applied.
+      await user.click(within(dialog).getByRole("button", { name: m.verb_cancel() }))
       await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())
-      expect(host.sent("library_apply_remap")).toEqual([{ reviewId: host.state.reviews[0]?.id, expectedRevision: 1 }])
+      expect(host.sent("library_apply_remap")).toEqual([])
+
+      await chooseRemap(user)
+      dialog = await screen.findByRole("dialog", { name: remapTitle() })
+      await user.click(within(dialog).getByRole("button", { name: remapOne() }))
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())
+      expect(host.sent("library_apply_remap")).toEqual([{ reviewId: host.state.reviews[1]?.id, expectedRevision: 6 }])
       expect(await within(row).findByText("/Volumes/Cold-1/Lights")).toBeInTheDocument()
+    },
+    TEST_MS,
+  )
+
+  it(
+    "reviews the folder again after a remap conflict, and Retry applies the fresh review",
+    async () => {
+      const host = serve(catalog({ locations: [location("loc-1", "Lights", "captures")], picked: nativePath("/Volumes/Cold-1/Lights") }))
+      const { user } = renderAt("/settings/locations")
+      await chooseRemap(user)
+      const dialog = await screen.findByRole("dialog", { name: remapTitle() })
+      host.fail("library_apply_remap", "conflict", "review")
+      await user.click(within(dialog).getByRole("button", { name: remapOne() }))
+      expect(await within(dialog).findByText(m.action_failure_conflict())).toBeInTheDocument()
+      await waitFor(() => expect(host.sent("library_review_remap")).toHaveLength(2))
+      await user.click(within(dialog).getByRole("button", { name: new RegExp(`^(${remapOne()}|${m.verb_retry()})$`) }))
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())
+      const [first, second] = host.sent("library_apply_remap").map((args) => args.reviewId)
+      expect(first).toBe(host.state.reviews[0]?.id)
+      expect(second).toBe(host.state.reviews[1]?.id)
+      expect(second).not.toBe(first)
+      expect(host.state.locations[0]?.location.path.display).toBe("/Volumes/Cold-1/Lights")
     },
     TEST_MS,
   )
@@ -271,7 +304,7 @@ describe.each(LOCALES)("Settings in %s", (locale) => {
       host.fail("library_apply_remap", "identity_conflict", "none")
       await chooseRemap(user)
       const dialog = await screen.findByRole("dialog", { name: remapTitle() })
-      await user.click(within(dialog).getByRole("button", { name: m.location_remap_confirm({ count: 1, frames: formatCount(1) }) }))
+      await user.click(within(dialog).getByRole("button", { name: remapOne() }))
       expect(await within(dialog).findByText(m.action_failure_identity_conflict())).toBeInTheDocument()
       expect(host.state.locations[0]?.location.path.display).toBe("/Astro/Lights")
       expect(within(row).getByText("/Astro/Lights")).toBeInTheDocument()
@@ -280,15 +313,22 @@ describe.each(LOCALES)("Settings in %s", (locale) => {
   )
 
   it(
-    "keeps Remap unavailable when the review blocks frames, and names what blocks them",
+    "keeps Remap unavailable when the review blocks the folder or frames, and names each block",
     async () => {
       const host = serve(catalog({ locations: [location("loc-1", "Lights", "captures")], picked: nativePath("/Volumes/Cold-1/Lights") }))
-      host.state.remapBlocked = [{ assetId: "asset-2", reason: "mismatch", message: "bytes differ" }]
+      host.state.remapBlocked = [
+        { assetId: null, reason: "collision", message: "overlaps NAS" },
+        { assetId: "asset-2", reason: "drift", message: "changed" },
+        { assetId: "asset-3", reason: "no_byte_proof", message: "offline" },
+        { assetId: "asset-4", reason: "no_byte_proof", message: "offline" },
+      ]
       const { user } = renderAt("/settings/locations")
       await chooseRemap(user)
       const dialog = await screen.findByRole("dialog", { name: remapTitle() })
-      expect(within(dialog).getByText(m.location_remap_differ({ count: 1, frames: formatCount(1) }))).toBeInTheDocument()
-      const remap = within(dialog).getByRole("button", { name: m.location_remap_confirm({ count: 1, frames: formatCount(1) }) })
+      expect(within(dialog).getByText(m.location_remap_root_overlaps({ path: "/Volumes/Cold-1/Lights" }))).toBeInTheDocument()
+      expect(within(dialog).getByText(m.location_remap_drift({ count: 1, frames: formatCount(1) }))).toBeInTheDocument()
+      expect(within(dialog).getByText(m.location_remap_no_proof({ count: 2, frames: formatCount(2) }))).toBeInTheDocument()
+      const remap = within(dialog).getByRole("button", { name: remapOne() })
       expect(remap).toHaveAttribute("aria-disabled", "true")
       await user.click(remap)
       expect(host.sent("library_apply_remap")).toEqual([])
