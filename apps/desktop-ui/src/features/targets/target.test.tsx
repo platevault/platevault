@@ -184,6 +184,48 @@ describe("Target page", () => {
     TEST_MS,
   )
 
+  it.each(["en-GB", "pt-BR"] as const)(
+    "starts the lead time from the stored default and takes up to 7 days, refusing longer, in %s",
+    async (locale) => {
+      setLocale(locale)
+      const user = userEvent.setup()
+      const lib = host({
+        planning_target_rows: rows,
+        planning_reminder_lead_time: () => ({ leadMinutes: 2880, revision: 1 }),
+        planning_review_reminders: (args) => ({
+          targetId: "t-m31",
+          designation: "M 31",
+          site: SITE,
+          timeZone: "Europe/Amsterdam",
+          settingsRevision: 5,
+          criteria: CRITERIA,
+          leadMinutes: (args.reminder as { leadMinutes: number }).leadMinutes,
+          permission: { state: "granted" },
+          appClosedDelivery: { available: false, reason: "no_installed_scheduler" },
+          subscriptionRevision: null,
+          upcoming: [],
+        }),
+        planning_enable_reminders: () => subscription(),
+      })
+      renderTarget()
+      await user.click(await screen.findByRole("button", { name: `${m.targets_enable_notifications()}…` }))
+      const dialog = await screen.findByRole("dialog")
+      const amount = await within(dialog).findByRole("spinbutton", { name: m.plan_lead_amount() })
+      // 2880 minutes stored: the form opens on 2 days.
+      await waitFor(() => expect(amount).toHaveValue(2))
+      await user.clear(amount)
+      await user.type(amount, "8")
+      expect(await within(dialog).findByText(m.plan_reason_lead_out_of_range())).toBeInTheDocument()
+      await user.clear(amount)
+      await user.type(amount, "7")
+      expect(await within(dialog).findByText(m.plan_lead_days({ count: 7 }))).toBeInTheDocument()
+      await user.click(within(dialog).getByRole("button", { name: m.targets_enable_notifications() }))
+      await waitFor(() => expect(lib.sent("planning_enable_reminders")).toHaveLength(1))
+      expect(lib.sent("planning_enable_reminders")[0]?.args.reminder).toEqual({ targetId: "t-m31", criteria: CRITERIA, leadMinutes: 10_080 })
+    },
+    TEST_MS,
+  )
+
   it(
     "keeps a denial visible with Settings and Retry; Retry repeats the confirmed values",
     async () => {

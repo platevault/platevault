@@ -1,7 +1,9 @@
 /**
  * The Targets list over a mocked library host: what the user sees without
- * criteria or a planning site, the library's own values in the rows, and
- * what a search result's click sends when it opens, adds or fails.
+ * criteria or a planning site, the library's own values in the rows (the
+ * graded band strip, the altitude sparkline, the darkness window and the
+ * Moon), Suitable filters' clear-time order, and what a search result's
+ * click sends when it opens, adds or fails.
  */
 import { type AnyRoute, createMemoryHistory, createRoute } from "@tanstack/react-router"
 import { clearMocks, mockIPC } from "@tauri-apps/api/mocks"
@@ -11,9 +13,11 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest"
 import { createQueryClient } from "@/api/query"
 import { setLocale } from "@/app/preferences"
 import { AppRoot } from "@/app/root"
+import { gradeStripLabel } from "@/components/domain/grade-badges"
+import { siteTime, siteTimeRange } from "@/components/domain/sky-lines"
 import { DEFAULT_LOCALE, m } from "@/lib/i18n"
 import { createShellRouter } from "@/routes"
-import { CRITERIA, candidate, host as answers, refuse, row, targetsPage } from "./__fixtures__/targets-host"
+import { candidate, DARKNESS, host as answers, refuse, row, targetsPage } from "./__fixtures__/targets-host"
 import { TargetPage } from "./target"
 import { TargetsPage } from "./targets"
 
@@ -59,38 +63,77 @@ afterEach(() => {
 
 describe("Targets list", () => {
   it.each(["en-GB", "pt-BR"] as const)(
-    "asks for planning criteria instead of an empty list when Home has none, in %s",
+    "lists My targets without Home's criteria, says why each planning value is unknown and sends the user to Home, in %s",
     async (locale) => {
       setLocale(locale)
-      const lib = host({ planning_home_criteria: () => ({ criteria: null, revision: 0 }) })
+      const lib = host({
+        planning_target_rows: () =>
+          targetsPage([row(M31, { maxAltitudeDeg: null, imgTimeMinutes: null, lunarSeparationDeg: null, bands: [], altitudeSamplesDeg: [], recommendation: null, unknownReason: "no_criteria" })], {
+            basis: null,
+            moon: null,
+            darkness: null,
+            planningUnavailable: "no_criteria",
+          }),
+      })
       renderAt("/targets")
       expect(await screen.findByText(m.targets_needs_criteria())).toBeInTheDocument()
       expect(screen.getByRole("button", { name: m.shell_not_found_home() })).toBeInTheDocument()
-      expect(screen.getByRole("tab", { name: m.project_search_my_targets() })).toBeInTheDocument()
-      // The library lists no row without criteria, so nothing asks it to.
-      expect(lib.sent("planning_target_rows")).toEqual([])
+      const table = screen.getByRole("table", { name: m.nav_targets() })
+      expect(await within(table).findByText("M 31")).toBeInTheDocument()
+      expect(within(table).getAllByText(`${m.status_unknown()} · ${m.targets_reason_no_criteria()}`).length).toBeGreaterThan(0)
+      // The library reads Home's stored criteria itself: the request carries none.
+      expect(lib.sent("planning_target_rows")[0]?.args.query).not.toHaveProperty("criteria")
     },
     TEST_MS,
   )
 
-  it(
-    "shows the library's planning values and Moon, and sends the URL's view, night, site and sort",
-    async () => {
+  it.each(["en-GB", "pt-BR"] as const)(
+    "shows the library's graded bands, altitude samples, darkness and Moon, and sends the URL's view, night, site and sort, in %s",
+    async (locale) => {
+      setLocale(locale)
       const lib = host({ planning_target_rows: () => targetsPage([row(M31)]) })
       renderAt("/targets?night=2026-10-30&site=site-1&sort=-img_time")
       const table = await screen.findByRole("table", { name: m.nav_targets() })
       expect(await within(table).findByText("M 31")).toBeInTheDocument()
       expect(within(table).getByText("2h10")).toBeInTheDocument()
-      expect(within(table).getByText(`L, Ha · ${m.targets_recommend_broadband()}`)).toBeInTheDocument()
+      const strip = [
+        { band: "L", grade: "good" },
+        { band: "Ha", grade: "marginal" },
+        { band: "OIII", grade: "poor" },
+      ] as const
+      expect(within(table).getByRole("img", { name: gradeStripLabel(m, strip) })).toBeInTheDocument()
+      expect(within(table).getByText(m.targets_recommend_broadband())).toBeInTheDocument()
+      // The peak is the library's Max alt; its time is the 22:00 UTC sample, where the samples culminate in darkness.
+      expect(within(table).getByRole("img", { name: m.tonight_spark_peak({ altitude: "71", time: siteTime("2026-10-29T22:00:00.000Z", "Europe/Amsterdam") }) })).toBeInTheDocument()
+      // The darkness line: "Dark" beside the window in the site's zone.
+      expect(screen.getByText(siteTimeRange(DARKNESS.startUtc, DARKNESS.endUtc, "Europe/Amsterdam")).closest("[data-dark]")).toHaveTextContent(m.plan_dark())
       expect(screen.getByText(m.tonight_moon())).toBeInTheDocument()
-      expect(lib.sent("planning_target_rows")[0]?.args.query).toMatchObject({
-        show: "my_targets",
-        night: "2026-10-30",
-        siteId: "site-1",
-        criteria: CRITERIA,
-        sort: { column: "img_time", descending: true },
-        rigs: { kind: "none" },
+      const query = lib.sent("planning_target_rows")[0]?.args.query
+      expect(query).toMatchObject({ show: "my_targets", night: "2026-10-30", siteId: "site-1", sort: { column: "img_time", descending: true }, rigs: { kind: "none" } })
+      expect(query).not.toHaveProperty("criteria")
+    },
+    TEST_MS,
+  )
+
+  it(
+    "with Suitable filters lists the rows a chosen band suits, longest clear time first",
+    async () => {
+      const haOnly = (minutes: number, grade: "good" | "marginal" | "poor") => [{ band: "Ha" as const, grade, clearMinutes: minutes }]
+      host({
+        planning_target_rows: () =>
+          targetsPage([
+            row(M31, { bands: haOnly(90, "marginal") }),
+            row(M33, { bands: haOnly(150, "good") }),
+            row(candidate("t-m42", "M 42"), { bands: haOnly(0, "poor") }),
+          ]),
       })
+      renderAt("/targets?good=Ha")
+      const table = await screen.findByRole("table", { name: m.nav_targets() })
+      await within(table).findByText("M 33")
+      const names = within(table)
+        .getAllByRole("rowheader")
+        .map((cell) => cell.textContent)
+      expect(names).toEqual(["M 33", "M 31"])
     },
     TEST_MS,
   )
@@ -100,9 +143,10 @@ describe("Targets list", () => {
     async () => {
       host({
         planning_target_rows: () =>
-          targetsPage([row(M31, { maxAltitudeDeg: null, imgTimeMinutes: null, lunarSeparationDeg: null, bands: [], recommendation: null, unknownReason: "no_site" })], {
+          targetsPage([row(M31, { maxAltitudeDeg: null, imgTimeMinutes: null, lunarSeparationDeg: null, bands: [], altitudeSamplesDeg: [], recommendation: null, unknownReason: "no_site" })], {
             basis: null,
             moon: null,
+            darkness: null,
             planningUnavailable: "no_site",
           }),
       })
