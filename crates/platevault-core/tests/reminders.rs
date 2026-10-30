@@ -20,7 +20,8 @@ use persistence_library::{Catalog, SubscriptionWrite};
 use platevault_core::notifier::{Clock, Notifier, NotifierFuture, ReminderNotice, SubmitOutcome};
 use platevault_core::planning::compute_windows;
 use platevault_core::reminders::{
-    due_reminders, notice, upcoming_reminders, ReminderScheduler, RECHECK_INTERVAL,
+    due_reminders, notice, scheduled_windows, upcoming_reminders, ReminderScheduler,
+    RECHECK_INTERVAL,
 };
 use platevault_core::{
     BlockReason, Darkness, DeliveryState, MoonCriterion, ObservingSite, ObservingWindow,
@@ -353,6 +354,23 @@ fn due_at(window: &ObservingWindow, lead_minutes: u32) -> OffsetDateTime {
     window.start_utc - Duration::minutes(i64::from(lead_minutes))
 }
 
+/// The windows the scheduler computes for `subscription` at `now`, with the
+/// due and the upcoming reminders' window identities over them.
+async fn scheduled_keys(
+    planning: &Planning,
+    subscription: &ReminderSubscription,
+    now: OffsetDateTime,
+) -> (Vec<WindowKey>, Vec<WindowKey>) {
+    let windows = scheduled_windows(&planning.catalog, subscription, now).await.unwrap();
+    let keys = |reminders: Vec<platevault_core::UpcomingReminder>| {
+        reminders.into_iter().map(|reminder| reminder.window_key).collect()
+    };
+    (
+        keys(due_reminders(subscription, &windows, now)),
+        keys(upcoming_reminders(subscription, &windows, now)),
+    )
+}
+
 /// Poll `condition` until it holds or [`PATIENCE`] runs out.
 async fn eventually<F, Fut>(what: &str, mut condition: F)
 where
@@ -453,6 +471,29 @@ async fn a_reminder_is_due_from_start_minus_lead_until_start_and_names_its_site(
     ] {
         assert!(text.body.contains(&expected), "{expected:?} missing from {:?}", text.body);
     }
+}
+
+/// The longest lead time (7 days, PLAN-FR-06) holds through the scheduler's
+/// own window horizon: at window start minus 7 days the scheduled windows
+/// already reach the window and its reminder is due; a minute earlier it is
+/// upcoming, not due.
+#[tokio::test]
+async fn a_seven_day_lead_is_due_seven_days_before_its_window_and_not_before() {
+    let planning = Planning::new().await;
+    let subscription = planning.subscribe(&planning.ngc, criteria(), MAX_LEAD_MINUTES).await;
+    let window =
+        first_window(&windows_at(&planning.ngc, &planning.backyard, criteria(), NIGHT, 1), NIGHT);
+    let due = due_at(&window, MAX_LEAD_MINUTES);
+    assert_eq!(due, window.start_utc - Duration::days(7));
+
+    let (due_now, upcoming) = scheduled_keys(&planning, &subscription, due).await;
+    assert!(due_now.contains(&window.key), "{due_now:?} at {due}");
+    assert!(upcoming.contains(&window.key), "{upcoming:?} at {due}");
+
+    let early = due - Duration::minutes(1);
+    let (due_early, upcoming_early) = scheduled_keys(&planning, &subscription, early).await;
+    assert!(!due_early.contains(&window.key), "{due_early:?} at {early}");
+    assert!(upcoming_early.contains(&window.key), "{upcoming_early:?} at {early}");
 }
 
 #[tokio::test]
