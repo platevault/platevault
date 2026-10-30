@@ -28,7 +28,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useNavigate, useSearch } from "@tanstack/react-router"
 import { CalendarClock, Check, Crosshair, MoonStar, Search, SlidersHorizontal, Star, Telescope } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
-import { type TargetRow_Serialize, type TargetsPage_Serialize, type TargetsSearchResult, type TargetsSearchSource } from "@/api/ipc"
+import { library, type TargetRow_Serialize, type TargetsPage_Serialize, type TargetsSearchResult, type TargetsSearchSource } from "@/api/ipc"
 import { useMessages } from "@/app/preferences"
 import { ActionButton } from "@/components/app/actions"
 import type { Action, Column, Facet, MenuItem } from "@/components/app/contracts"
@@ -36,14 +36,14 @@ import { EmptyState, type PageNotice, UnknownValue } from "@/components/app/feed
 import type { FacetPatch } from "@/components/app/filter-bar"
 import { NightPicker, SitePicker } from "@/components/app/pickers"
 import { failureMessage } from "@/components/app/run-result"
+import { MoonLimitsDialog } from "@/components/domain/moon-limits"
 import { MoonLine } from "@/components/domain/sky-lines"
 import { ListPage } from "@/components/templates/list-page"
 import { formatCount, formatDegrees, formatList } from "@/lib/format"
 import type { Messages } from "@/lib/i18n"
 import { suitableFacet } from "./good-tonight"
-import { MoonLimitsDialog } from "./moon-limits"
 import { favouriteAction, notYet, readFailure, Unknown } from "./parts"
-import { equipmentQuery, homeCriteriaQuery, libraryQueryWhen, presetsQuery, sitesQuery } from "./queries"
+import { equipmentQuery, homeCriteriaQuery, libraryQueryWhen, presetsQuery, sitesQuery, targetsWrite } from "./queries"
 import { useResultAction } from "./search"
 import { moonTonight } from "./sky-tonight"
 import {
@@ -238,9 +238,17 @@ export function TargetsPage() {
     : undefined
 
   const header = { title: m.nav_targets(), context, actions, views, notice }
+  const workflow = settings.data
   const dialogs = (
     <>
-      {settings.data ? <MoonLimitsDialog record={settings.data} open={dialog === "moon"} onOpenChange={(open) => setDialog(open ? "moon" : null)} /> : null}
+      {workflow ? (
+        <MoonLimitsDialog
+          record={workflow}
+          open={dialog === "moon"}
+          onOpenChange={(open) => setDialog(open ? "moon" : null)}
+          save={(moonAvoidance) => targetsWrite(client, () => library.workflowSettingsSave({ ...workflow.settings, moonAvoidance }, workflow.revision))}
+        />
+      ) : null}
       {activeSaved ? <RenamePresetDialog preset={activeSaved} open={dialog === "rename"} onOpenChange={(open) => setDialog(open ? "rename" : null)} /> : null}
     </>
   )
