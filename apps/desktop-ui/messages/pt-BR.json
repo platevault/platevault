@@ -2327,6 +2327,61 @@
   "location_locate_or_remap": "Localizar ou remapear",
   "location_retire": "Aposentar local",
   "location_choose_folder_again": "Escolher pasta de novo",
+  "location_remap": "Remapear",
+  "location_remap_root_overlaps": "{path} se sobrepõe a outro local registrado",
+  "location_remap_root_unverified": "O PlateVault não consegue verificar o volume de {path}",
+  "location_remap_no_proof": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{frames} frame sem prova byte a byte",
+        "countPlural=*": "{frames} frames sem prova byte a byte"
+      }
+    }
+  ],
+  "location_remap_identity_mismatch": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{frames} frame fora do volume da pasta",
+        "countPlural=*": "{frames} frames fora do volume da pasta"
+      }
+    }
+  ],
+  "location_remap_drift": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{frames} mudou desde a última indexação",
+        "countPlural=*": "{frames} mudaram desde a última indexação"
+      }
+    }
+  ],
+  "equipment_edit_filters": "Editar filtros",
+  "equipment_filters_title": "Filtros de {name}",
+  "equipment_filter_numbered": "Filtro {n}",
+  "equipment_remove_filter": "Remover filtro {n}",
   "settings_sections": "Seções das configurações",
   "settings_back_to_session": "Voltar à sessão",
   "settings_back_to_plan": "Voltar ao Plano",
@@ -7471,6 +7526,7 @@
   "status_bar_page_in": "{area} › {page}",
   "status_bar_issue_page": "{page} ({count})",
   "action_failure_invalid_input": "O PlateVault não pode aceitar um valor desta solicitação. Verifique os campos.",
+  "form_field_refused": "O PlateVault não pode aceitar este valor. Altere-o e tente novamente.",
   "action_failure_not_found": "O registro não está mais na biblioteca.",
   "action_failure_conflict": "O registro mudou em outro lugar. Revise a versão atual.",
   "action_failure_identity_conflict": "Outro registro já tem esta identidade.",
@@ -8144,7 +8200,6 @@
   "settings_gap_refusals": "A biblioteca ainda não guarda histórico de recusas nem de salvamentos que falharam, então Atividade lista só operações.",
   "settings_gap_refusals_paged": "A biblioteca ainda não guarda histórico de recusas nem de salvamentos que falharam, então Atividade lista só operações: as {n} mais recentes de cada tipo.",
   "settings_gap_target_lookup": "A biblioteca ainda não tem comando para ler ou mudar a busca online. A busca de alvos continua consultando o provedor.",
-  "settings_gap_windows_settings": "O PlateVault ainda não abre as configurações do Windows: a biblioteca não tem comando para isso. Ative o Modo de desenvolvedor em Configurações do Windows › Sistema › Para desenvolvedores.",
   "settings_joined": "{first} · {second}",
   "settings_locale_status": "{name}: {status}",
   "settings_location_space_title": "Frames, ocupação e espaço do volume",

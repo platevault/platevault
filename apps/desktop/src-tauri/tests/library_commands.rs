@@ -16,6 +16,7 @@ mod support;
 use std::path::Path;
 use std::sync::Arc;
 
+use desktop_shell::commands::library_dialogs::DataDirectory;
 use desktop_shell::commands::project_wrap_up::WrapUpTrash;
 use platevault_core::custody::trash::OsTrash;
 use platevault_core::library::Library;
@@ -52,7 +53,7 @@ impl OsTrash for NoTrash {
 struct Shell {
     webview: WebviewWindow<MockRuntime>,
     _app: tauri::App<MockRuntime>,
-    _dir: tempfile::TempDir,
+    dir: tempfile::TempDir,
 }
 
 impl Shell {
@@ -78,6 +79,7 @@ impl Shell {
                 desktop_shell::commands::project_apply::project_apply_preview,
                 desktop_shell::commands::project_apply::project_apply,
                 desktop_shell::commands::project_apply::library_check_symlinks,
+                desktop_shell::commands::library_dialogs::library_data_location,
                 desktop_shell::commands::project_output::project_copy_to_output,
                 desktop_shell::commands::project_output::project_output_list,
                 desktop_shell::commands::project_wrap_up::project_wrap_up_status,
@@ -112,12 +114,13 @@ impl Shell {
             .build(mock_context(noop_assets()))
             .expect("build mock app");
         app.manage(library);
+        app.manage(shared_data_directory(dir.path()));
         app.manage(WrapUpTrash::new(Arc::new(NoTrash)));
         support::manage_runs(&app);
         let webview = WebviewWindowBuilder::new(&app, "library", WebviewUrl::default())
             .build()
             .expect("library window");
-        Self { webview, _app: app, _dir: dir }
+        Self { webview, _app: app, dir }
     }
 
     /// The library the handlers run on, to arrange what a test calls on.
@@ -183,6 +186,10 @@ impl Ipc for Shell {
     fn webview(&self) -> &WebviewWindow<MockRuntime> {
         &self.webview
     }
+}
+
+fn shared_data_directory(path: &Path) -> DataDirectory {
+    desktop_shell::library_shell::managed_data_directory(path)
 }
 
 fn unix_path(path: &str) -> Value {
@@ -729,7 +736,8 @@ fn wrap_up_archive_review_family_lays_out_for_a_destination() {
 
 /// The library's workflow settings (D-W114; CAL-FR-15, J36 S8, PLAN-FR-02):
 /// the defaults at revision 0, a save of non-defaults with its expected
-/// revision, a stale save and an invalid one refused naming the settings.
+/// revision, a stale save refused naming the settings, and an invalid one
+/// refused naming the settings and the field that failed.
 #[test]
 fn workflow_settings_family_reads_and_saves_with_revisions() {
     let shell = Shell::new();
@@ -758,15 +766,17 @@ fn workflow_settings_family_reads_and_saves_with_revisions() {
     );
     let mut invalid = changed.clone();
     invalid["moonAvoidance"]["SII"] = json!({"distanceDeg": 60.0, "widthDays": 0.0});
-    shell.refuses(
+    let refused = shell.refusal(
         "workflow_settings_save",
         &json!({"settings": invalid, "expectedRevision": 1}),
         LibraryErrorCode::InvalidInput,
         settings,
     );
+    assert_eq!(refused["field"], json!("moonAvoidance.SII.widthDays"), "{refused}");
     assert_eq!(shell.call("workflow_settings_get", &json!({})), saved, "nothing else stored");
 }
 
+// keep both tests
 /// Camera IPC accepts one create, one revision-checked edit and refuses stale or invalid saves.
 #[test]
 fn library_save_camera_uses_camera_revisions_and_validation() {
@@ -813,4 +823,11 @@ fn library_save_camera_uses_camera_revisions_and_validation() {
     let saved = shell.call("library_save_camera", &args(Some(camera), "ASI533MC Pro", Some(2)));
     assert_eq!(saved["model"], json!("ASI533MC Pro"));
     assert_eq!(saved["revision"], json!(3));
+}
+#[test]
+fn library_data_location_returns_the_native_catalog_directory() {
+    let shell = Shell::new();
+    let actual = shell.call("library_data_location", &json!({}));
+    assert_eq!(actual, native_path(shell.dir.path()));
+}
 }

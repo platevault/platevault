@@ -810,7 +810,7 @@ async fn a_selected_key_absent_from_the_recomputed_set_is_a_conflict_naming_it()
     let review = refused.response(None, None);
     assert_eq!(review.code.as_str(), "conflict", "{refused}");
     assert_eq!(
-        (review.identity, review.current_revision, review.window),
+        (review.identity, review.current_revision, review.window.as_deref().copied()),
         (Some(worked.target.candidate.id), Some(worked.target.decision_revision), Some(absent))
     );
     let export = library.prepare_calendar_export(&stale, &digest).await.unwrap_err();

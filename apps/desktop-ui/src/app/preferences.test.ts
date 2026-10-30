@@ -40,6 +40,7 @@ const UNSAVED: ErrorResponse = {
   successors: [],
   window: null,
   correction: null,
+  field: null,
 }
 
 const view = (preferences: AppearancePreferences): PreferencesView => ({ preferences, fallbacks: [] })

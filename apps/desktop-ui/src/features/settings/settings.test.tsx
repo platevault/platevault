@@ -3,8 +3,9 @@
  * (`__fixtures__/settings-host.ts`): what each section reads and sends, a
  * save that survives a remount, a failed save that keeps the user's edits, a
  * stale revision that is read again, refusals shown beside their control,
- * the native folder picker's Cancel and pick, and the Index step's planning
- * criteria (LIB-FR-31, LIB-AC-47) in both locales.
+ * the native folder picker's Cancel and pick (Add location… and Remap…), a
+ * rig's filter list, and the Index step's planning criteria (LIB-FR-31,
+ * LIB-AC-47) in both locales.
  */
 import { createMemoryHistory } from "@tanstack/react-router"
 import { clearMocks, mockIPC } from "@tauri-apps/api/mocks"
@@ -14,6 +15,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { createQueryClient } from "@/api/query"
 import { setLocale } from "@/app/preferences"
 import { AppRoot } from "@/app/root"
+import { formatCount, formatList } from "@/lib/format"
 import { DEFAULT_LOCALE, LOCALES, m } from "@/lib/i18n"
 import { createAppRouter } from "@/routes"
 import { CRITERIA, catalog, location, nativePath, scan, settingsHost } from "./__fixtures__/settings-host"
@@ -134,6 +136,59 @@ describe.each(LOCALES)("Settings in %s", (locale) => {
   )
 
   it(
+    "shows a library refusal beside a matching field it names",
+    async () => {
+      const host = serve()
+      const { user } = renderAt("/settings/matching")
+      await user.click(await screen.findByRole("button", { name: named(m.settings_edit()) }))
+      const dialog = await screen.findByRole("dialog", { name: m.settings_label_matching() })
+      const centre = within(dialog).getByLabelText(label(m.equipment_matching_centre(), m.settings_unit_arcmin()))
+      host.fail("workflow_settings_save", "invalid_input", "retry", "framing.maxCentreOffsetArcmin")
+      await user.click(within(dialog).getByRole("button", { name: m.settings_save() }))
+      expect(await within(dialog).findByText(m.form_field_refused())).toBeInTheDocument()
+      expect(centre).toHaveAttribute("aria-invalid", "true")
+    },
+    TEST_MS,
+  )
+  it(
+    "requires dark and bias window days to be whole numbers",
+    async () => {
+      serve()
+      const { user } = renderAt("/settings/matching")
+      await user.click(await screen.findByRole("button", { name: named(m.settings_edit()) }))
+      const dialog = await screen.findByRole("dialog", { name: m.settings_label_matching() })
+      const days = within(dialog).getByLabelText(label(m.equipment_matching_window_days(), m.calibration_unit_days()))
+      await user.clear(days)
+      expect(await within(dialog).findByText(m.common_enter_number())).toBeInTheDocument()
+      expect(within(dialog).getByRole("button", { name: m.settings_save() })).toHaveAttribute("aria-disabled", "true")
+
+      await user.clear(days)
+      await user.type(days, "1.5")
+      expect(within(dialog).getByText(m.common_enter_number())).toBeInTheDocument()
+      expect(within(dialog).getByRole("button", { name: m.settings_save() })).toHaveAttribute("aria-disabled", "true")
+    },
+    TEST_MS,
+  )
+  it(
+    "requires the flat window nights to be a whole number",
+    async () => {
+      serve()
+      const { user } = renderAt("/settings/matching")
+      await user.click(await screen.findByRole("button", { name: named(m.settings_edit()) }))
+      const dialog = await screen.findByRole("dialog", { name: m.settings_label_matching() })
+      const nights = within(dialog).getByLabelText(label(m.equipment_matching_window_nights(), m.equipment_unit_nights()))
+      await user.clear(nights)
+      expect(await within(dialog).findByText(m.common_enter_number())).toBeInTheDocument()
+      expect(within(dialog).getByRole("button", { name: m.settings_save() })).toHaveAttribute("aria-disabled", "true")
+
+      await user.type(nights, "1.5")
+      expect(within(dialog).getByText(m.common_enter_number())).toBeInTheDocument()
+      expect(within(dialog).getByRole("button", { name: m.settings_save() })).toHaveAttribute("aria-disabled", "true")
+    },
+    TEST_MS,
+  )
+
+  it(
     "keeps a rig's edits through a stale revision and saves them over the revision read again",
     async () => {
       const host = serve()
@@ -155,6 +210,181 @@ describe.each(LOCALES)("Settings in %s", (locale) => {
       await user.click(within(dialog).getByRole("button", { name: new RegExp(`^(${m.settings_save()}|${m.verb_retry()})$`) }))
       await waitFor(() => expect(host.sent("library_save_equipment").map((args) => args.expectedRevision)).toEqual([4, 7]))
       expect(host.state.rigs[0]?.equipment.telescope).toBe("Esprit 100")
+    },
+    TEST_MS,
+  )
+
+  async function openRigFilters(user: ReturnType<typeof userEvent.setup>) {
+    const row = (await screen.findByRole("rowheader", { name: "RedCat 51" })).closest("tr") as HTMLElement
+    await user.click(within(row).getByRole("button", { name: new RegExp("RedCat 51") }))
+    await user.click(await screen.findByRole("menuitem", { name: named(m.equipment_edit_filters()) }))
+    return screen.findByRole("dialog", { name: m.equipment_filters_title({ name: "RedCat 51" }) })
+  }
+
+  it(
+    "saves a rig's filter list over its revision, and the saved list shows after a remount",
+    async () => {
+      const host = serve()
+      const first = renderAt("/settings/equipment")
+      const dialog = await openRigFilters(first.user)
+      await first.user.click(within(dialog).getByRole("button", { name: m.equipment_add_filter() }))
+      const added = within(dialog).getByRole("group", { name: m.equipment_filter_numbered({ n: "2" }) })
+      await first.user.type(within(added).getByRole("textbox", { name: m.equipment_name() }), "OIII 3nm")
+      await first.user.type(within(added).getByRole("textbox", { name: m.equipment_matches_filter() }), "OIII, O3")
+      // Save stays unavailable until the new filter passes a band.
+      expect(within(dialog).getByRole("button", { name: m.settings_save() })).toHaveAttribute("aria-disabled", "true")
+      await first.user.click(within(added).getByRole("checkbox", { name: "OIII" }))
+      await first.user.click(within(dialog).getByRole("button", { name: m.settings_save() }))
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())
+      expect(host.sent("rig_filters_save")).toEqual([
+        {
+          equipmentId: "rig-1",
+          filters: [
+            { id: "f-ha", name: "Ha", matchValues: ["Ha"], bands: ["Ha"] },
+            { id: null, name: "OIII 3nm", matchValues: ["OIII", "O3"], bands: ["OIII"] },
+          ],
+          expectedRevision: 2,
+        },
+      ])
+
+      cleanup()
+      mockIPC(host.handler)
+      renderAt("/settings/equipment")
+      const row = (await screen.findByRole("rowheader", { name: "RedCat 51" })).closest("tr") as HTMLElement
+      expect(await within(row).findByText(formatList(["Ha", "OIII 3nm"]))).toBeInTheDocument()
+    },
+    TEST_MS,
+  )
+
+  it(
+    "keeps a rig's filter edits through a stale revision and saves them over the revision read again",
+    async () => {
+      const host = serve()
+      const { user } = renderAt("/settings/equipment")
+      const dialog = await openRigFilters(user)
+      // Someone else saved the list since the page read it.
+      const [rig] = host.state.rigs
+      if (rig) host.state.rigs = [{ ...rig, filters: { ...rig.filters, revision: 5 } }]
+      const name = within(within(dialog).getByRole("group", { name: m.equipment_filter_numbered({ n: "1" }) })).getByRole("textbox", { name: m.equipment_name() })
+      await user.clear(name)
+      await user.type(name, "H-alpha")
+      await user.click(within(dialog).getByRole("button", { name: m.settings_save() }))
+      expect(await within(dialog).findByText(m.action_failure_conflict())).toBeInTheDocument()
+      await waitFor(() => expect(host.sent("library_list_rig_filters").length).toBeGreaterThan(1))
+      expect(name).toHaveValue("H-alpha")
+      await user.click(within(dialog).getByRole("button", { name: new RegExp(`^(${m.settings_save()}|${m.verb_retry()})$`) }))
+      await waitFor(() => expect(host.sent("rig_filters_save").map((args) => args.expectedRevision)).toEqual([2, 5]))
+      expect(host.state.rigs[0]?.filters.filters.map((f) => f.name)).toEqual(["H-alpha"])
+    },
+    TEST_MS,
+  )
+
+  async function chooseRemap(user: ReturnType<typeof userEvent.setup>) {
+    const row = (await screen.findByRole("rowheader", { name: "Lights" })).closest("tr") as HTMLElement
+    await user.click(within(row).getByRole("button", { name: new RegExp("Lights") }))
+    await user.click(await screen.findByRole("menuitem", { name: named(m.location_remap()) }))
+    return row
+  }
+  // Read in the locale the test runs in, not when the suite is collected.
+  const remapTitle = () => m.location_remap_title({ name: "Lights", path: "/Volumes/Cold-1/Lights" })
+  const remapOne = () => m.location_remap_confirm({ count: 1, frames: formatCount(1) })
+
+  it(
+    "remaps a location only to a picked folder: Cancel sends nothing, a pick sends the path, Remap names the review's revision and the row reads the new folder",
+    async () => {
+      const host = serve(catalog({ locations: [location("loc-1", "Lights", "captures")] }))
+      const { user } = renderAt("/settings/locations")
+      // Cancel in the native picker: no review, no remap, no dialog.
+      await chooseRemap(user)
+      await waitFor(() => expect(host.sent("library_pick_folder")).toHaveLength(1))
+      expect(host.sent("library_review_remap")).toEqual([])
+      expect(screen.queryByRole("dialog")).toBeNull()
+
+      // The location changed since the page read it (revision 1): the review names the current revision.
+      const [loc] = host.state.locations
+      if (loc) host.state.locations = [{ ...loc, location: { ...loc.location, decisionRevision: 6 } }]
+      host.state.picked = nativePath("/Volumes/Cold-1/Lights")
+      const row = await chooseRemap(user)
+      let dialog = await screen.findByRole("dialog", { name: remapTitle() })
+      expect(host.sent("library_review_remap")).toEqual([{ locationId: "loc-1", proposedPath: nativePath("/Volumes/Cold-1/Lights") }])
+      // Cancel in the review: nothing is applied.
+      await user.click(within(dialog).getByRole("button", { name: m.verb_cancel() }))
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())
+      expect(host.sent("library_apply_remap")).toEqual([])
+
+      await chooseRemap(user)
+      dialog = await screen.findByRole("dialog", { name: remapTitle() })
+      await user.click(within(dialog).getByRole("button", { name: remapOne() }))
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())
+      expect(host.sent("library_apply_remap")).toEqual([{ reviewId: host.state.reviews[1]?.id, expectedRevision: 6 }])
+      expect(await within(row).findByText("/Volumes/Cold-1/Lights")).toBeInTheDocument()
+    },
+    TEST_MS,
+  )
+
+  it(
+    "reviews the folder again after a remap conflict, and Retry applies the fresh review",
+    async () => {
+      const host = serve(catalog({ locations: [location("loc-1", "Lights", "captures")], picked: nativePath("/Volumes/Cold-1/Lights") }))
+      const { user } = renderAt("/settings/locations")
+      await chooseRemap(user)
+      const dialog = await screen.findByRole("dialog", { name: remapTitle() })
+      host.fail("library_apply_remap", "conflict", "review")
+      await user.click(within(dialog).getByRole("button", { name: remapOne() }))
+      expect(await within(dialog).findByText(m.action_failure_conflict())).toBeInTheDocument()
+      await waitFor(() => expect(host.sent("library_review_remap")).toHaveLength(2))
+      await user.click(within(dialog).getByRole("button", { name: new RegExp(`^(${remapOne()}|${m.verb_retry()})$`) }))
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())
+      const [first, second] = host.sent("library_apply_remap").map((args) => args.reviewId)
+      expect(first).toBe(host.state.reviews[0]?.id)
+      expect(second).toBe(host.state.reviews[1]?.id)
+      expect(second).not.toBe(first)
+      expect(host.state.locations[0]?.location.path.display).toBe("/Volumes/Cold-1/Lights")
+    },
+    TEST_MS,
+  )
+
+  it(
+    "shows the library's refusal of a remap's review and of the remap, and keeps the location's folder",
+    async () => {
+      const host = serve(catalog({ locations: [location("loc-1", "Lights", "captures")], picked: nativePath("/Volumes/Cold-1/Lights") }))
+      const { user } = renderAt("/settings/locations")
+      host.fail("library_review_remap", "access_denied", "none")
+      const row = await chooseRemap(user)
+      expect(await screen.findByText(m.action_failure_access_denied())).toBeInTheDocument()
+      expect(screen.queryByRole("dialog")).toBeNull()
+
+      host.fail("library_apply_remap", "identity_conflict", "none")
+      await chooseRemap(user)
+      const dialog = await screen.findByRole("dialog", { name: remapTitle() })
+      await user.click(within(dialog).getByRole("button", { name: remapOne() }))
+      expect(await within(dialog).findByText(m.action_failure_identity_conflict())).toBeInTheDocument()
+      expect(host.state.locations[0]?.location.path.display).toBe("/Astro/Lights")
+      expect(within(row).getByText("/Astro/Lights")).toBeInTheDocument()
+    },
+    TEST_MS,
+  )
+
+  it(
+    "keeps Remap unavailable when the review blocks the folder or frames, and names each block",
+    async () => {
+      const host = serve(catalog({ locations: [location("loc-1", "Lights", "captures")], picked: nativePath("/Volumes/Cold-1/Lights") }))
+      host.state.remapBlocked = [
+        { assetId: null, reason: "collision", message: "overlaps NAS" },
+        { assetId: "asset-2", reason: "drift", message: "changed" },
+        { assetId: "asset-3", reason: "no_byte_proof", message: "offline" },
+        { assetId: "asset-4", reason: "no_byte_proof", message: "offline" },
+      ]
+      const { user } = renderAt("/settings/locations")
+      await chooseRemap(user)
+      const dialog = await screen.findByRole("dialog", { name: remapTitle() })
+      expect(within(dialog).getByText(m.location_remap_root_overlaps({ path: "/Volumes/Cold-1/Lights" }))).toBeInTheDocument()
+      expect(within(dialog).getByText(m.location_remap_drift({ count: 1, frames: formatCount(1) }))).toBeInTheDocument()
+      expect(within(dialog).getByText(m.location_remap_no_proof({ count: 2, frames: formatCount(2) }))).toBeInTheDocument()
+      const remap = within(dialog).getByRole("button", { name: remapOne() })
+      expect(remap).toHaveAttribute("aria-disabled", "true")
+      await user.click(remap)
+      expect(host.sent("library_apply_remap")).toEqual([])
     },
     TEST_MS,
   )
@@ -214,6 +444,23 @@ describe.each(LOCALES)("Settings in %s", (locale) => {
       expect(await within(dialog).findByText(m.action_failure_invalid_input())).toBeInTheDocument()
       await waitFor(() => expect(host.sent("library_save_camera").map((args) => args.expectedRevision)).toEqual([3, 8]))
       expect(within(dialog).getByRole("textbox", { name: m.equipment_camera() })).toHaveValue("ASI2600MM Pro")
+    },
+    TEST_MS,
+  )
+  it(
+    "shows a camera alias refusal on the alias field",
+    async () => {
+      const host = serve()
+      const { user } = renderAt("/settings/equipment")
+      const row = await screen.findByRole("rowheader", { name: "ASI2600MM" })
+      await user.click(within(row.closest("tr") as HTMLElement).getByRole("button", { name: new RegExp("ASI2600MM") }))
+      await user.click(await screen.findByRole("menuitem", { name: named(m.settings_edit()) }))
+      const dialog = await screen.findByRole("dialog")
+      host.fail("library_save_camera", "invalid_input", "none", "0.alias")
+      await user.click(within(dialog).getByRole("button", { name: m.settings_save() }))
+      expect(await within(dialog).findByText(m.form_field_refused())).toBeInTheDocument()
+      expect(within(dialog).getByRole("textbox", { name: m.equipment_camera_alias() })).toHaveAttribute("aria-invalid", "true")
+      expect(within(dialog).getByRole("textbox", { name: m.equipment_camera() })).not.toHaveAttribute("aria-invalid", "true")
     },
     TEST_MS,
   )
@@ -286,11 +533,13 @@ describe.each(LOCALES)("Settings in %s", (locale) => {
   )
 
   it(
-    "names the gaps instead of inventing data: About's data location and Target lookup",
+    "shows the native catalog directory on About and keeps unrelated gaps named",
     async () => {
-      serve()
+      const host = serve()
       const { user } = renderAt("/settings/about")
-      expect(await screen.findByText(m.settings_gap_data_location())).toBeInTheDocument()
+      expect(await screen.findByText(m.about_stored_in())).toBeInTheDocument()
+      expect(await screen.findByText("/PlateVault/Data")).toBeInTheDocument()
+      expect(host.sent("library_data_location")).toEqual([{}])
       await user.click(screen.getByRole("link", { name: m.settings_target_lookup() }))
       expect(await screen.findByText(m.settings_gap_target_lookup())).toBeInTheDocument()
     },
@@ -356,7 +605,7 @@ describe.each(LOCALES)("First-run setup in %s", (locale) => {
   )
 
   it(
-    "on Windows checks the processing location by itself, reads Off, offers Check again and names the Windows settings gap",
+    "on Windows opens Developer Mode settings when the check reads Off",
     async () => {
       vi.spyOn(navigator, "platform", "get").mockReturnValue("Win32")
       const results = location("loc-2", "Results", "results")
@@ -365,8 +614,12 @@ describe.each(LOCALES)("First-run setup in %s", (locale) => {
       const row = (await screen.findByRole("heading", { name: m.settings_developer_mode() })).closest("section") as HTMLElement
       expect(await within(row).findByText(m.status_off())).toBeInTheDocument()
       expect(host.sent("library_check_symlinks")).toEqual([{ folder: results.location.path }])
+      const open = within(row).getByRole("button", { name: m.settings_open_windows_settings() })
+      expect(open).not.toHaveAttribute("aria-disabled", "true")
+      await user.click(open)
+      expect(host.sent("library_open_developer_settings")).toEqual([{}])
+      expect(await within(row).findByText(m.status_off())).toBeInTheDocument()
       expect(host.sent("library_pick_folder")).toEqual([])
-      expect(within(row).getByRole("button", { name: m.settings_open_windows_settings() })).toHaveAttribute("aria-disabled", "true")
       await user.click(within(row).getByRole("button", { name: m.apps_check_again() }))
       await waitFor(() => expect(host.sent("library_check_symlinks")).toHaveLength(2))
     },

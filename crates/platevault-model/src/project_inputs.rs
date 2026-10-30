@@ -247,23 +247,37 @@ impl FramingEvidence {
     pub fn validate(&self) -> Result<(), LibraryError> {
         let (ra, dec) = (self.ra_deg, self.dec_deg);
         if !(ra.is_finite() && (0.0..360.0).contains(&ra)) {
-            return Err(invalid(format!("framing raDeg {ra} must be in [0, 360)")));
+            return Err(LibraryError::invalid_field(
+                "raDeg",
+                format!("framing raDeg {ra} must be in [0, 360)"),
+            ));
         }
         if !(dec.is_finite() && (-90.0..=90.0).contains(&dec)) {
-            return Err(invalid(format!("framing decDeg {dec} must be in [-90, 90]")));
+            return Err(LibraryError::invalid_field(
+                "decDeg",
+                format!("framing decDeg {dec} must be in [-90, 90]"),
+            ));
         }
         for (name, angle) in [("rotatorDeg", self.rotator_deg), ("skyAngleDeg", self.sky_angle_deg)]
         {
             if let Some(angle) = angle {
                 if !(angle.is_finite() && (0.0..360.0).contains(&angle)) {
-                    return Err(invalid(format!("framing {name} {angle} must be in [0, 360)")));
+                    return Err(LibraryError::invalid_field(
+                        name,
+                        format!("framing {name} {angle} must be in [0, 360)"),
+                    ));
                 }
             }
         }
         if let Some(field) = self.field {
             let positive = |value: f64| value.is_finite() && value > 0.0;
-            if !positive(field.width_deg) || !positive(field.height_deg) {
-                return Err(invalid("a framing field must be positive".into()));
+            for (name, value) in [("widthDeg", field.width_deg), ("heightDeg", field.height_deg)] {
+                if !positive(value) {
+                    return Err(LibraryError::invalid_field(
+                        &format!("field.{name}"),
+                        "a framing field must be positive",
+                    ));
+                }
             }
         }
         Ok(())

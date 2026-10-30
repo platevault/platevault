@@ -35,6 +35,7 @@ fn every_variant() -> Vec<LibraryError> {
         format!("{id}/{}/2026-10-20T20:00Z", Uuid::new_v4()).parse().expect("window key");
     let errors = vec![
         LibraryError::InvalidInput(text()),
+        LibraryError::invalid_field("moonAvoidance.Ha.distanceDeg", text()),
         LibraryError::NotFound(text()),
         LibraryError::Conflict { id, current: 3, successors: vec![Uuid::new_v4()] },
         LibraryError::WindowConflict { key, site: DIAGNOSTIC.into(), current: 2 },
@@ -89,9 +90,10 @@ fn every_variant() -> Vec<LibraryError> {
         LibraryError::CorrectionUndeliverable { .. } => 16,
         LibraryError::SessionNotReady(_) => 17,
         LibraryError::InputWriteRisk(_) => 18,
+        LibraryError::InvalidField { .. } => 19,
     };
     let seen: BTreeSet<usize> = errors.iter().map(variant).collect();
-    assert_eq!(seen, (0..=18).collect(), "one error per variant");
+    assert_eq!(seen, (0..=19).collect(), "one error per variant");
     errors
 }
 

@@ -265,6 +265,20 @@ export const commands = {
 	 */
 	libraryNewCaptures: () => __TAURI_INVOKE<NewCaptures>("library_new_captures"),
 	/**
+	 *  The native data directory holding `catalog.sqlite` and its SQLite journals.
+	 * 
+	 *  # Errors
+	 *  This read has no runtime failure after the library shell starts.
+	 */
+	libraryDataLocation: () => typedError<NativePathWire, ErrorResponse>(__TAURI_INVOKE("library_data_location")),
+	/**
+	 *  Open Windows' Developer Mode settings page from Setup (J18 S1).
+	 * 
+	 *  # Errors
+	 *  `SourceUnavailable` if the platform is not Windows or the opener refuses.
+	 */
+	libraryOpenDeveloperSettings: () => typedError<null, ErrorResponse>(__TAURI_INVOKE("library_open_developer_settings")),
+	/**
 	 *  The "Needs a Target", "Not in any Project" and "Needs calibration" list
 	 *  lengths, which Home's top line reports. Read-only.
 	 * 
@@ -3701,7 +3715,9 @@ export type ErrorResponse = {
 	successors: string[],
 	/**
 	 *  The selected window a `conflict` found missing from the windows
-	 *  recomputed at its site; the key names the Target and the site.
+	 *  recomputed at its site; the key names the Target and the site. Boxed,
+	 *  like `correction`, so the response stays below the workspace's
+	 *  `large-error-threshold`.
 	 */
 	window: string | null,
 	/**
@@ -3710,6 +3726,11 @@ export type ErrorResponse = {
 	 *  below the workspace's `large-error-threshold`.
 	 */
 	correction: UndeliverableCorrection | null,
+	/**
+	 *  The input field an `invalid_input` refusal names, when its validator
+	 *  knows which one failed; the client shows the refusal on that field.
+	 */
+	field: FieldPath | null,
 };
 
 /**
@@ -3808,6 +3829,14 @@ export type FieldOfView = {
 	widthDeg: number | null,
 	heightDeg: number | null,
 };
+
+/**
+ *  The stable machine path of the input field a refusal names: the wire
+ *  (camelCase) names from the validated value down to the field, joined by
+ *  `.`, such as `minAltitudeDeg` or `moonAvoidance.Ha.distanceDeg`. Never
+ *  English text; the client maps it onto the form field holding the value.
+ */
+export type FieldPath = string;
 
 export type FileIdentity = {
 	volume: VolumeIdentity,

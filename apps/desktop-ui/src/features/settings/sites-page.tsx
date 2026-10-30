@@ -22,7 +22,7 @@ import { ActionButton } from "@/components/app/actions"
 import type { Column, MenuItem } from "@/components/app/contracts"
 import { KeyValueList } from "@/components/app/data"
 import { NumberField, TextField } from "@/components/app/fields"
-import { blockedByErrors, FormDialog, useDialogForm } from "@/components/app/form-dialog"
+import { blockedByErrors, type FieldPaths, FormDialog, useDialogForm } from "@/components/app/form-dialog"
 import { Section } from "@/components/app/page"
 import { StatusBadge } from "@/components/app/status"
 import { homeCriteriaQuery } from "@/components/domain/plan-criteria"
@@ -132,11 +132,19 @@ interface SiteDraft {
   elevationM: number | null
   timeZone: string
 }
+const SITE_PATHS: FieldPaths<keyof SiteDraft> = {
+  name: "name",
+  latitudeDeg: "latitudeDeg",
+  longitudeDeg: "longitudeDeg",
+  elevationM: "elevationM",
+  timeZone: "timeZone",
+}
+
 
 function SiteDialog({ site, open, onOpenChange }: { site: ObservingSite | null; open: boolean; onOpenChange: (open: boolean) => void }) {
   const m = useMessages()
   const client = useQueryClient()
-  const { values, set, shown } = useDialogForm<SiteDraft>(open, () => ({
+  const { values, set, shown, refusing } = useDialogForm<SiteDraft>(open, () => ({
     name: site?.name ?? "",
     latitudeDeg: site?.latitudeDeg ?? null,
     longitudeDeg: site?.longitudeDeg ?? null,
@@ -163,7 +171,7 @@ function SiteDialog({ site, open, onOpenChange }: { site: ObservingSite | null; 
         label,
         kind: "primary",
         unavailable: blockedByErrors(m, label, errors),
-        run: () => settingsWrite(client, () => library.planningSaveSite(site?.id ?? null, site?.revision ?? null, input)),
+        run: () => refusing(settingsWrite(client, () => library.planningSaveSite(site?.id ?? null, site?.revision ?? null, input)), SITE_PATHS),
       }}
     >
       <TextField label={m.site_name()} placeholder={m.site_name_placeholder()} value={values.name} onChange={(name) => set({ name })} error={shown(errors, "name")} autoFocus />

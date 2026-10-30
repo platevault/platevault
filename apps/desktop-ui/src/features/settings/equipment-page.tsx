@@ -9,11 +9,12 @@ import { type Camera, type ColorKind, type EquipmentInput, library, type Rig } f
 import { useMessages } from "@/app/preferences"
 import type { Column, MenuItem } from "@/components/app/contracts"
 import { NumberField, SelectField, SwitchField, TextField } from "@/components/app/fields"
-import { blockedByErrors, FormDialog, useDialogForm } from "@/components/app/form-dialog"
+import { blockedByErrors, type FieldPaths, FormDialog, useDialogForm } from "@/components/app/form-dialog"
 import { ListSection, SettingsPage } from "@/components/templates/settings-page"
 import { formatList, numberText } from "@/lib/format"
 import type { Messages } from "@/lib/i18n"
 import { Read } from "./parts"
+import { RigFiltersDialog } from "./rig-filters-dialog"
 import { camerasQuery, rigsQuery, settingsWrite } from "./queries"
 
 
@@ -57,8 +58,11 @@ export function EquipmentPage() {
   const [editingCamera, setEditingCamera] = useState<string | null>(null)
   const editedCamera = editingCamera && editingCamera !== "new" ? cameras.data?.find((camera: Camera) => camera.id === editingCamera) : undefined
   const editedRig = editing && editing !== "new" ? rigs.data?.find((r: Rig) => r.equipment.id === editing) : undefined
+  const [filtersOf, setFiltersOf] = useState<string | null>(null)
+  const filtersRig = filtersOf ? rigs.data?.find((r) => r.equipment.id === filtersOf) : undefined
   const rigActions = (rig: Rig): MenuItem[] => [
     { id: "edit-rig", label: m.settings_edit(), opensDialog: true, run: () => setEditing(rig.equipment.id) },
+    { id: "edit-rig-filters", label: m.equipment_edit_filters(), opensDialog: true, run: () => setFiltersOf(rig.equipment.id) },
     { separator: true },
     {
       id: "delete-rig",
@@ -101,6 +105,7 @@ export function EquipmentPage() {
       </Read>
       {editingCamera === "new" || editedCamera ? <CameraDialog camera={editedCamera ?? null} open onOpenChange={(open) => !open && setEditingCamera(null)} /> : null}
       {editing === "new" || editedRig ? <RigDialog rig={editedRig ?? null} open onOpenChange={(open) => !open && setEditing(null)} /> : null}
+      {filtersRig ? <RigFiltersDialog rig={filtersRig} open onOpenChange={(open) => !open && setFiltersOf(null)} /> : null}
     </SettingsPage>
   )
 }
@@ -115,6 +120,14 @@ interface RigDraft {
   sensorHeightPx: number | null
   colorKind: ColorChoice
 }
+const RIG_PATHS: FieldPaths<keyof RigDraft> = {
+  name: "name",
+  focalLengthMm: "focalLengthMm",
+  pixelSizeUm: "pixelSizeUm",
+  sensorWidthPx: "sensorWidthPx",
+  sensorHeightPx: "sensorHeightPx",
+}
+
 
 function draftOf(rig: Rig | null): RigDraft {
   const e = rig?.equipment
@@ -152,7 +165,7 @@ const wholePositive = (value: number | null) => value === null || (Number.isInte
 function RigDialog({ rig, open, onOpenChange }: { rig: Rig | null; open: boolean; onOpenChange: (open: boolean) => void }) {
   const m = useMessages()
   const client = useQueryClient()
-  const { values, set, shown } = useDialogForm<RigDraft>(open, () => draftOf(rig))
+  const { values, set, shown, refusing } = useDialogForm<RigDraft>(open, () => draftOf(rig))
   const label = m.settings_save()
   const errors = {
     name: values.name.trim() ? undefined : m.settings_name_required(),
@@ -176,7 +189,7 @@ function RigDialog({ rig, open, onOpenChange }: { rig: Rig | null; open: boolean
         label,
         kind: "primary",
         unavailable: blockedByErrors(m, label, errors),
-        run: () => settingsWrite(client, () => library.librarySaveEquipment(inputOf(rig, values), rig ? rig.equipment.decisionRevision : null)),
+        run: () => refusing(settingsWrite(client, () => library.librarySaveEquipment(inputOf(rig, values), rig ? rig.equipment.decisionRevision : null)), RIG_PATHS),
       }}
     >
       <TextField label={m.equipment_rig_name()} value={values.name} onChange={(name) => set({ name })} error={shown(errors, "name")} autoFocus />
@@ -197,6 +210,7 @@ interface CameraDraft {
   noDarks: boolean
   noBias: boolean
 }
+const CAMERA_PATHS: FieldPaths<keyof CameraDraft> = { model: "0.model", alias: "0.alias" }
 
 function cameraDraftOf(camera: Camera | null): CameraDraft {
   return {
@@ -210,7 +224,7 @@ function cameraDraftOf(camera: Camera | null): CameraDraft {
 function CameraDialog({ camera, open, onOpenChange }: { camera: Camera | null; open: boolean; onOpenChange: (open: boolean) => void }) {
   const m = useMessages()
   const client = useQueryClient()
-  const { values, set, shown } = useDialogForm<CameraDraft>(open, () => cameraDraftOf(camera))
+  const { values, set, shown, refusing } = useDialogForm<CameraDraft>(open, () => cameraDraftOf(camera))
   const label = m.settings_save()
   const errors = { model: values.model.trim() ? undefined : m.settings_name_required() }
   const save = () => settingsWrite(client, () => library.librarySaveCamera({
@@ -226,10 +240,10 @@ function CameraDialog({ camera, open, onOpenChange }: { camera: Camera | null; o
       open={open}
       onOpenChange={onOpenChange}
       title={camera ? m.settings_edit_title({ name: camera.alias ?? camera.model }) : m.equipment_add_camera()}
-      confirm={{ id: "save-camera", label, kind: "primary", unavailable: blockedByErrors(m, label, errors), run: save }}
+      confirm={{ id: "save-camera", label, kind: "primary", unavailable: blockedByErrors(m, label, errors), run: () => refusing(save(), CAMERA_PATHS) }}
     >
       <TextField label={m.equipment_camera()} value={values.model} onChange={(model) => set({ model })} error={shown(errors, "model")} autoFocus />
-      <TextField label={m.equipment_camera_alias()} value={values.alias} onChange={(alias) => set({ alias })} />
+      <TextField label={m.equipment_camera_alias()} value={values.alias} onChange={(alias) => set({ alias })} error={shown(errors, "alias")} />
       <SwitchField label={m.equipment_no_darks()} checked={values.noDarks} onChange={(noDarks) => set({ noDarks })} />
       <SwitchField label={m.equipment_no_bias()} checked={values.noBias} onChange={(noBias) => set({ noBias })} />
     </FormDialog>

@@ -12,10 +12,6 @@ use uuid::Uuid;
 
 use crate::{LibraryError, NativePath, Revision};
 
-fn invalid(message: impl Into<String>) -> LibraryError {
-    LibraryError::InvalidInput(message.into())
-}
-
 // ---------------------------------------------------------------------------
 // Profiles (PREP-FR-01, PREP-FR-02)
 // ---------------------------------------------------------------------------
@@ -125,11 +121,17 @@ impl CapabilityEvidence {
     /// # Errors
     /// `InvalidInput` for blank evidence, or a claim without its proof.
     pub fn validate(&self) -> Result<(), LibraryError> {
-        if self.proofs.iter().any(|proof| proof.evidence.trim().is_empty()) {
-            return Err(invalid("capability evidence names what was observed"));
+        if let Some(index) = self.proofs.iter().position(|proof| proof.evidence.trim().is_empty()) {
+            return Err(LibraryError::invalid_field(
+                &format!("proofs.{index}.evidence"),
+                "capability evidence names what was observed",
+            ));
         }
         if self.input_behavior == InputBehavior::ReadOnly && !self.inputs_read_only() {
-            return Err(invalid("read-only input needs recorded input-behaviour evidence"));
+            return Err(LibraryError::invalid_field(
+                "inputBehavior",
+                "read-only input needs recorded input-behaviour evidence",
+            ));
         }
         Ok(())
     }
@@ -162,9 +164,11 @@ impl ProfileInput {
     /// capability evidence [`CapabilityEvidence::validate`] refuses.
     pub fn validate(&self) -> Result<(), LibraryError> {
         if self.name.trim().is_empty() {
-            return Err(invalid("a profile needs a name"));
+            return Err(LibraryError::invalid_field("name", "a profile needs a name"));
         }
-        for arg in &self.args {
+        for (index, arg) in self.args.iter().enumerate() {
+            let invalid =
+                |message: String| LibraryError::invalid_field(&format!("args.{index}"), message);
             let mut rest = arg.as_str();
             while let Some(start) = rest.find('{') {
                 let tail = &rest[start..];
@@ -180,7 +184,9 @@ impl ProfileInput {
                 rest = &tail[end + 1..];
             }
         }
-        self.capability_evidence.validate()
+        self.capability_evidence
+            .validate()
+            .map_err(|error| error.within_field("capabilityEvidence"))
     }
 }
 

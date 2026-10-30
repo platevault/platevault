@@ -27,10 +27,6 @@ pub const MAX_PRESET_NAME: usize = 80;
 /// hours across a clock change.
 pub const ALTITUDE_SAMPLES: usize = 49;
 
-fn invalid(message: String) -> LibraryError {
-    LibraryError::InvalidInput(message)
-}
-
 // ---------------------------------------------------------------------------
 // Query
 // ---------------------------------------------------------------------------
@@ -235,11 +231,13 @@ impl TargetsQuery {
     /// `InvalidInput` for a zero limit.
     pub fn validate(&self) -> Result<(), LibraryError> {
         if self.limit == Some(0) {
-            return Err(invalid("limit must be at least 1 when given".into()));
+            return Err(LibraryError::invalid_field(
+                "limit",
+                "limit must be at least 1 when given",
+            ));
         }
         Ok(())
     }
-
     /// The sort in effect.
     #[must_use]
     pub fn effective_sort(&self) -> TargetsSort {
@@ -691,15 +689,19 @@ pub enum PresetRef {
 pub fn validate_preset_name(name: &str) -> Result<(), LibraryError> {
     let name = name.trim();
     if name.is_empty() {
-        return Err(invalid("name: a preset needs a name".into()));
+        return Err(LibraryError::invalid_field("name", "name: a preset needs a name"));
     }
     if name.chars().count() > MAX_PRESET_NAME {
-        return Err(invalid(format!(
-            "name: a preset name has at most {MAX_PRESET_NAME} characters"
-        )));
+        return Err(LibraryError::invalid_field(
+            "name",
+            format!("name: a preset name has at most {MAX_PRESET_NAME} characters"),
+        ));
     }
     if BuiltinPreset::ALL.iter().any(|preset| preset.name().eq_ignore_ascii_case(name)) {
-        return Err(invalid(format!("name: {name:?} is a built-in preset")));
+        return Err(LibraryError::invalid_field(
+            "name",
+            format!("name: {name:?} is a built-in preset"),
+        ));
     }
     Ok(())
 }

@@ -90,9 +90,10 @@ impl Library {
     ) -> Result<PlanningCalendar, LibraryError> {
         let CalendarQuery { first_night, nights } = *query;
         if !(1..=MAX_NIGHTS).contains(&nights) {
-            return Err(LibraryError::InvalidInput(format!(
-                "nights {nights} is not a whole number of nights from 1 to {MAX_NIGHTS}"
-            )));
+            return Err(LibraryError::invalid_field(
+                "nights",
+                format!("nights {nights} is not a whole number of nights from 1 to {MAX_NIGHTS}"),
+            ));
         }
         let unavailable = |reason, criteria| PlanningCalendar {
             site: None,

@@ -49,7 +49,7 @@ fn seed(query: &str) -> TargetCandidate {
 }
 
 fn invalid(result: Result<impl std::fmt::Debug, LibraryError>) -> bool {
-    result.is_err_and(|error| matches!(error, LibraryError::InvalidInput(_)))
+    result.is_err_and(|error| error.code() == platevault_core::LibraryErrorCode::InvalidInput)
 }
 
 fn separation(a: (f64, f64), b: (f64, f64)) -> f64 {

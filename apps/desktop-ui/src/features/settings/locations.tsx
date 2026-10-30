@@ -17,6 +17,11 @@
  *   blocks. A dialog keeps only the location's id and reads the row from the
  *   current read on every render, so a Save after `conflict` names the
  *   revision read again and the user's edits stay.
+ * - Remap… (LIB-FR-07, D11): a folder from the native picker (Cancel sends
+ *   nothing), the library's durable review of moving the location there
+ *   (`library_review_remap`: the frames whose bytes match, and what blocks
+ *   the move), then Remap at that review's revision (`library_apply_remap`).
+ *   No file changes; a refusal of either shows and the row keeps its path.
  *
  * The frame count, footprint and volume space columns of LIB-FR-21 have no
  * library read yet (astro-plan-wre19.10); the table says so under itself.
@@ -24,7 +29,7 @@
 import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query"
 import { FolderSearch, Play, RotateCw } from "lucide-react"
 import { type ReactNode, useState } from "react"
-import { type Availability, library, type LocationRole, type LocationState, type NativePathWire, type ScanOperation, type VolumeKind } from "@/api/ipc"
+import { type Availability, library, type LocationRole, type LocationState, type NativePathWire, type RemapBlockReason, type RemapReview_Serialize, type ScanOperation, type VolumeKind } from "@/api/ipc"
 import { libraryQuery } from "@/api/query"
 import { useMessages } from "@/app/preferences"
 import { ActionButton } from "@/components/app/actions"
@@ -36,7 +41,7 @@ import { blockedByErrors, FormDialog, useDialogForm } from "@/components/app/for
 import { StatusBadge } from "@/components/app/status"
 import { formatCount, formatList } from "@/lib/format"
 import type { Messages } from "@/lib/i18n"
-import { lastScanQuery, locationsQuery, settingsWrite } from "./queries"
+import { isConflict, lastScanQuery, locationsQuery, settingsWrite } from "./queries"
 
 export const ROLES: readonly LocationRole[] = ["captures", "calibration", "results"]
 
@@ -143,7 +148,7 @@ export async function pickFolder(onPicked: (path: NativePathWire) => void) {
   return picked
 }
 
-type Dialog = { kind: "rename" | "retire"; locationId: string } | null
+type Dialog = { kind: "rename" | "retire"; locationId: string } | { kind: "remap"; locationId: string; review: RemapReview_Serialize } | null
 
 /** The row actions of `rows` and the dialogs they open; `rowActions` is empty for a retired location. */
 export function useLocationActions(rows: LocationRow[] | null): { rowActions: (row: LocationRow) => MenuItem[]; dialogs: ReactNode } {
@@ -181,6 +186,19 @@ export function useLocationActions(rows: LocationRow[] | null): { rowActions: (r
         },
       })
     }
+    items.push({
+      id: "remap",
+      label: m.location_remap(),
+      opensDialog: true,
+      run: async () => {
+        const picked = await library.libraryPickFolder()
+        if (!picked.ok) return picked
+        if (!picked.data) return
+        const review = await library.libraryReviewRemap(location.id, picked.data)
+        if (!review.ok) return review
+        setDialog({ kind: "remap", locationId: location.id, review: review.data })
+      },
+    })
     items.push({ separator: true }, { id: "retire", label: m.location_retire(), kind: "destructive", opensDialog: true, run: () => setDialog({ kind: "retire", locationId: location.id }) })
     return items
   }
@@ -191,6 +209,7 @@ export function useLocationActions(rows: LocationRow[] | null): { rowActions: (r
     <>
       {dialog?.kind === "rename" ? <RenameLocationDialog row={live} open onOpenChange={close} /> : null}
       {dialog?.kind === "retire" ? <RetireLocationDialog row={live} open onOpenChange={close} /> : null}
+      {dialog?.kind === "remap" ? <RemapLocationDialog row={live} review={dialog.review} onReviewed={(review) => setDialog({ kind: "remap", locationId: live.state.location.id, review })} open onOpenChange={close} /> : null}
     </>
   ) : null
   return { rowActions, dialogs }
@@ -298,6 +317,110 @@ function RetireLocationDialog({ row, open, onOpenChange }: { row: LocationRow; o
           { label: m.location_path(), value: <PathText path={location.path.display} /> },
           { label: m.nav_sessions(), value: reviewed ? m.location_sessions_count({ count: reviewed.sessions.length, n: formatCount(reviewed.sessions.length) }) : "–" },
           { label: m.nav_projects(), value: reviewed ? (reviewed.projects.length > 0 ? formatList(reviewed.projects.map((p) => p.name)) : m.location_retire_pin_no_project()) : "–" },
+          { label: m.settings_retire_files(), value: m.location_no_file_changes() },
+        ]}
+      />
+    </FormDialog>
+  )
+}
+
+/** A block on the picked folder itself (no asset): it overlaps another registered location, or its volume can't be verified. */
+function rootBlockText(m: Messages, reason: RemapBlockReason, path: string): string {
+  return reason === "collision" ? m.location_remap_root_overlaps({ path }) : m.location_remap_root_unverified({ path })
+}
+
+/** Frames held back for one reason, counted. */
+function framesBlockText(m: Messages, reason: RemapBlockReason, count: number, path: string): string {
+  const frames = formatCount(count)
+  switch (reason) {
+    case "no_byte_proof":
+      return m.location_remap_no_proof({ count, frames })
+    case "identity_conflict":
+      return m.location_remap_identity_mismatch({ count, frames })
+    case "mismatch":
+      return m.location_remap_differ({ count, frames })
+    case "drift":
+      return m.location_remap_drift({ count, frames })
+    case "collision":
+      // The library raises a collision only on the root; read one on a frame the same way.
+      return m.location_remap_root_overlaps({ path })
+  }
+}
+
+/** What blocks a remap: each root block, then one line per reason with the frames it holds back. */
+function blockLines(m: Messages, review: RemapReview_Serialize): string[] {
+  const path = review.proposedRoot.display
+  const lines: string[] = []
+  const frames = new Map<RemapBlockReason, number>()
+  for (const block of review.blocked) {
+    if (block.assetId === null) lines.push(rootBlockText(m, block.reason, path))
+    else frames.set(block.reason, (frames.get(block.reason) ?? 0) + 1)
+  }
+  for (const [reason, count] of frames) lines.push(framesBlockText(m, reason, count, path))
+  return [...new Set(lines)]
+}
+
+/**
+ * Remap… (LIB-FR-07): the review of the picked folder, then Remap at the
+ * review's revision. No file changes. A review is pinned to the location's
+ * revision and assets when it was made, so after `conflict` the folder is
+ * reviewed again and `onReviewed` swaps that review in: the conflict shows
+ * above it and Retry applies the fresh one.
+ */
+function RemapLocationDialog({
+  row,
+  review,
+  onReviewed,
+  open,
+  onOpenChange,
+}: {
+  row: LocationRow
+  review: RemapReview_Serialize
+  onReviewed: (review: RemapReview_Serialize) => void
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
+  const m = useMessages()
+  const client = useQueryClient()
+  const { location } = row.state
+  const matched = review.items.length
+  const label = m.location_remap_confirm({ count: matched, frames: formatCount(matched) })
+  const blocked = blockLines(m, review)
+  const unavailable: Action["unavailable"] = blocked.length > 0 ? { action: m.actions_blocked({ action: label }), reason: m.location_remap_refused(), blockers: blocked.map((line) => ({ label: line })) } : undefined
+  const apply = async () => {
+    const applied = await settingsWrite(client, () => library.libraryApplyRemap(review.id, review.expectedRevision))
+    if (!isConflict(applied)) return applied
+    const fresh = await library.libraryReviewRemap(location.id, review.proposedRoot)
+    if (!fresh.ok) return fresh
+    onReviewed(fresh.data)
+    return applied
+  }
+  return (
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={m.location_remap_title({ name: location.name, path: review.proposedRoot.display })}
+      confirm={{ id: "remap-location", label, kind: "primary", unavailable, run: apply }}
+    >
+      <KeyValueList
+        items={[
+          { label: m.location_from(), value: <PathText path={location.path.display} /> },
+          { label: m.location_to(), value: <PathText path={review.proposedRoot.display} /> },
+          { label: m.location_col_frames(), value: m.location_remap_same_bytes({ count: matched, frames: formatCount(matched) }) },
+          ...(blocked.length > 0
+            ? [
+                {
+                  label: m.location_remap_refused(),
+                  value: (
+                    <ul>
+                      {blocked.map((line) => (
+                        <li key={line}>{line}</li>
+                      ))}
+                    </ul>
+                  ),
+                },
+              ]
+            : []),
           { label: m.settings_retire_files(), value: m.location_no_file_changes() },
         ]}
       />

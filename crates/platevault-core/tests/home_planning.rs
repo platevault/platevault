@@ -444,7 +444,7 @@ async fn calendar_names_missing_site_or_criteria() {
 
     let zero = CalendarQuery { first_night: FULL, nights: 0 };
     let error = library.planning_calendar(&zero).await.unwrap_err();
-    assert!(matches!(&error, LibraryError::InvalidInput(message) if message.contains("nights")));
+    assert_eq!(error.field().map(FieldPath::as_str), Some("nights"), "{error:?}");
 }
 
 /// PLAN-AC-14, PLAN-FR-12: five weeks of nights from the first, each with
