@@ -402,8 +402,10 @@ export type FieldPaths<K extends string> = Readonly<Partial<Record<K, string>>>
  */
 export function refusedField<K extends string>(failure: RunFailure, paths: FieldPaths<K>): K | undefined {
   if (failure.source !== "library" || failure.error.code !== "invalid_input") return undefined
+  const field = failure.error.field
+  if (field === null) return undefined
   const keys = Object.keys(paths) as K[]
-  for (let path = failure.error.field; path; path = path.slice(0, Math.max(path.lastIndexOf("."), 0))) {
+  for (let path = field; path; path = path.slice(0, Math.max(path.lastIndexOf("."), 0))) {
     const key = keys.find((candidate) => paths[candidate] === path)
     if (key !== undefined) return key
   }
@@ -417,11 +419,11 @@ export function refusedField<K extends string>(failure: RunFailure, paths: Field
  * library refusal naming one of `paths` shows on that field until the user
  * changes it or saves again, while the dialog keeps its error and Retry.
  */
-export function useDialogForm<T extends object>(open: boolean, initial: () => T) {
+export function useDialogForm<T extends object, K extends string = keyof T & string>(open: boolean, initial: () => T) {
   const m = useMessages()
   const [values, setValues] = useState<T>(initial)
-  const [touched, setTouched] = useState<ReadonlySet<keyof T & string>>(new Set())
-  const [refused, setRefused] = useState<(keyof T & string) | undefined>(undefined)
+  const [touched, setTouched] = useState<ReadonlySet<K>>(new Set<K>())
+  const [refused, setRefused] = useState<K | undefined>(undefined)
   const [wasOpen, setWasOpen] = useState(open)
   if (open !== wasOpen) {
     setWasOpen(open)
@@ -431,15 +433,16 @@ export function useDialogForm<T extends object>(open: boolean, initial: () => T)
       setRefused(undefined)
     }
   }
-  function set(patch: Partial<T>) {
+  function set(patch: Partial<T>, affected?: readonly K[]) {
     setValues((current) => ({ ...current, ...patch }))
-    setTouched((current) => new Set([...current, ...(Object.keys(patch) as (keyof T & string)[])]))
-    setRefused((current) => (current !== undefined && current in patch ? undefined : current))
+    const changed = affected ?? (Object.keys(patch) as unknown as K[])
+    setTouched((current) => new Set([...current, ...changed]))
+    setRefused((current) => (current !== undefined && changed.includes(current) ? undefined : current))
   }
-  function shown<K extends keyof T & string>(errors: FieldErrors<K>, key: K): string | undefined {
-    return shownErrors(errors, touched as ReadonlySet<K>)[key] ?? (refused === key ? m.form_field_refused() : undefined)
+  function shown(errors: FieldErrors<K>, key: K): string | undefined {
+    return shownErrors(errors, touched)[key] ?? (refused === key ? m.form_field_refused() : undefined)
   }
-  async function refusing<R extends RunResult>(save: Promise<R>, paths: FieldPaths<keyof T & string>): Promise<R> {
+  async function refusing<R extends RunResult>(save: Promise<R>, paths: FieldPaths<K>): Promise<R> {
     setRefused(undefined)
     const result = await save
     if (result && !result.ok) setRefused(refusedField(result.failure, paths))

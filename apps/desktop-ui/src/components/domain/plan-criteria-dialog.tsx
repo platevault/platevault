@@ -9,9 +9,18 @@
  */
 import type { ActionResult, HomeCriteria, PlanCriteria } from "@/api/ipc"
 import { useMessages } from "@/app/preferences"
-import { blockedByErrors, FormDialog, useDialogForm } from "@/components/app/form-dialog"
-import { type CriteriaDraft, criteriaErrors, criteriaOf, draftOf } from "@/components/domain/plan-criteria"
+import { blockedByErrors, type FieldPaths, FormDialog, useDialogForm } from "@/components/app/form-dialog"
+import { type CriteriaDraft, type CriteriaField, criteriaErrors, criteriaOf, draftOf } from "@/components/domain/plan-criteria"
 import { PlanCriteriaFields } from "@/components/domain/plan-criteria-fields"
+
+/** Maps PlanCriteria's stable refusal paths to the fields in its shared editor. */
+const CRITERIA_PATHS: FieldPaths<CriteriaField> = {
+  minAltitudeDeg: "minAltitudeDeg",
+  darkness: "darkness",
+  moon: "moon",
+  minSeparationDeg: "moon.minSeparationDeg",
+  minDurationMinutes: "minDurationMinutes",
+}
 
 export interface PlanCriteriaDialogProps {
   record: HomeCriteria
@@ -23,7 +32,7 @@ export interface PlanCriteriaDialogProps {
 
 export function PlanCriteriaDialog({ record, open, onOpenChange, save }: PlanCriteriaDialogProps) {
   const m = useMessages()
-  const { values, set, shown } = useDialogForm<CriteriaDraft>(open, () => draftOf(record.criteria))
+  const { values, set, shown, refusing } = useDialogForm<CriteriaDraft>(open, () => draftOf(record.criteria))
   const errors = criteriaErrors(m, values)
   const label = m.home_save_criteria()
   return (
@@ -39,7 +48,7 @@ export function PlanCriteriaDialog({ record, open, onOpenChange, save }: PlanCri
         run: async () => {
           const criteria = criteriaOf(values)
           if (!criteria) return
-          return save(criteria, record.revision)
+          return refusing(save(criteria, record.revision), CRITERIA_PATHS)
         },
       }}
     >

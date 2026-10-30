@@ -19,7 +19,7 @@ import { useMessages } from "@/app/preferences"
 import { ActionButton } from "@/components/app/actions"
 import { KeyValueList } from "@/components/app/data"
 import { NumberField, SegmentedField, SwitchField } from "@/components/app/fields"
-import { blockedByErrors, type FieldErrors, FormDialog, useDialogForm } from "@/components/app/form-dialog"
+import { blockedByErrors, type FieldErrors, type FieldPaths, FormDialog, useDialogForm } from "@/components/app/form-dialog"
 import { Section } from "@/components/app/page"
 import { curveText, MOON_BANDS, MoonLimitsDialog } from "@/components/domain/moon-limits"
 import { SettingsPage } from "@/components/templates/settings-page"
@@ -121,7 +121,7 @@ export function MatchingPage() {
   )
 }
 
-type Field = "centre" | "rotation" | "overlap" | "panels" | "flatFine" | "flatOffered" | "windowNights" | "windowDays" | "oldAfter"
+type Field = "centre" | "rotation" | "overlap" | "panels" | "flatFine" | "flatOffered" | "windowNights" | "oldAfter"
 
 const atLeast = (value: number | null, min: number) => value === null || (Number.isFinite(value) && value >= min)
 
@@ -139,15 +139,25 @@ function matchingErrors(m: Messages, v: Matching): FieldErrors<Field> {
       !atLeast(v.flats.fineWithinDeg, 0) ? m.common_enter_number() : v.flats.fineWithinDeg !== null && v.flats.offeredWithinDeg !== null && v.flats.fineWithinDeg > v.flats.offeredWithinDeg ? m.settings_matching_flat_rotation_order() : undefined,
     flatOffered: atLeast(v.flats.offeredWithinDeg, 0) ? undefined : m.common_enter_number(),
     windowNights: whole(v.flats.windowNights) ? undefined : m.common_enter_number(),
-    windowDays: whole(v.darkBias.windowDays) ? undefined : m.common_enter_number(),
     oldAfter: whole(v.calibration.oldMasterAfterDays) && v.calibration.oldMasterAfterDays > 0 ? undefined : m.common_enter_number(),
   }
+}
+
+const MATCHING_PATHS: FieldPaths<Field> = {
+  centre: "framing.maxCentreOffsetArcmin",
+  rotation: "framing.maxRotationDeg",
+  overlap: "framing.minOverlapPercent",
+  panels: "framing.panelOverlapPercent",
+  flatFine: "flats.fineWithinDeg",
+  flatOffered: "flats.offeredWithinDeg",
+  windowNights: "flats.windowNights",
+  oldAfter: "calibration.oldMasterAfterDays",
 }
 
 function MatchingDialog({ record, open, onOpenChange }: { record: WorkflowSettingsRecord_Serialize; open: boolean; onOpenChange: (open: boolean) => void }) {
   const m = useMessages()
   const client = useQueryClient()
-  const { values, set } = useDialogForm<Matching>(open, () => {
+  const { values, set, shown, refusing } = useDialogForm<Matching, Field>(open, () => {
     const { framing, flats, darkBias, calibration, viewMode } = record.settings
     return { framing, flats, darkBias, calibration, viewMode }
   })
@@ -155,8 +165,8 @@ function MatchingDialog({ record, open, onOpenChange }: { record: WorkflowSettin
   const label = m.settings_save()
   const deg = m.criteria_unit_degrees()
   const pct = m.settings_unit_percent()
-  const framing = (patch: Partial<Matching["framing"]>) => set({ framing: { ...values.framing, ...patch } })
-  const flats = (patch: Partial<Matching["flats"]>) => set({ flats: { ...values.flats, ...patch } })
+  const framing = (patch: Partial<Matching["framing"]>, affected: readonly Field[]) => set({ framing: { ...values.framing, ...patch } }, affected)
+  const flats = (patch: Partial<Matching["flats"]>, affected: readonly Field[]) => set({ flats: { ...values.flats, ...patch } }, affected)
   const [low, high] = values.framing.panelOverlapPercent
   return (
     <FormDialog
@@ -169,24 +179,27 @@ function MatchingDialog({ record, open, onOpenChange }: { record: WorkflowSettin
         label,
         kind: "primary",
         unavailable: blockedByErrors(m, label, errors),
-        run: () => settingsWrite(client, () => library.workflowSettingsSave({ ...record.settings, ...values }, record.revision)),
+        run: () => refusing(
+          settingsWrite(client, () => library.workflowSettingsSave({ ...record.settings, ...values }, record.revision)),
+          MATCHING_PATHS,
+        ),
       }}
     >
-      <NumberField label={m.equipment_matching_centre()} unit={m.settings_unit_arcmin()} min={0} step={1} value={values.framing.maxCentreOffsetArcmin} onChange={(maxCentreOffsetArcmin) => framing({ maxCentreOffsetArcmin })} error={errors.centre} />
-      <NumberField label={m.equipment_matching_rotation()} unit={deg} min={0} max={180} step={1} value={values.framing.maxRotationDeg} onChange={(maxRotationDeg) => framing({ maxRotationDeg })} error={errors.rotation} />
-      <NumberField label={m.equipment_matching_overlap()} unit={pct} min={0} max={100} step={1} value={values.framing.minOverlapPercent} onChange={(minOverlapPercent) => framing({ minOverlapPercent })} error={errors.overlap} />
-      <NumberField label={m.equipment_matching_panel_min()} unit={pct} min={0} max={100} step={1} value={low} onChange={(next) => framing({ panelOverlapPercent: [next, high] })} error={errors.panels} />
-      <NumberField label={m.equipment_matching_panel_max()} unit={pct} min={0} max={100} step={1} value={high} onChange={(next) => framing({ panelOverlapPercent: [low, next] })} />
-      <NumberField label={m.equipment_matching_flat_fine()} unit={deg} min={0} step={0.5} value={values.flats.fineWithinDeg} onChange={(fineWithinDeg) => flats({ fineWithinDeg })} error={errors.flatFine} />
-      <NumberField label={m.equipment_matching_flat_warn()} unit={deg} min={0} step={0.5} value={values.flats.offeredWithinDeg} onChange={(offeredWithinDeg) => flats({ offeredWithinDeg })} error={errors.flatOffered} />
+      <NumberField label={m.equipment_matching_centre()} unit={m.settings_unit_arcmin()} min={0} step={1} value={values.framing.maxCentreOffsetArcmin} onChange={(maxCentreOffsetArcmin) => framing({ maxCentreOffsetArcmin }, ["centre"])} error={shown(errors, "centre")} />
+      <NumberField label={m.equipment_matching_rotation()} unit={deg} min={0} max={180} step={1} value={values.framing.maxRotationDeg} onChange={(maxRotationDeg) => framing({ maxRotationDeg }, ["rotation"])} error={shown(errors, "rotation")} />
+      <NumberField label={m.equipment_matching_overlap()} unit={pct} min={0} max={100} step={1} value={values.framing.minOverlapPercent} onChange={(minOverlapPercent) => framing({ minOverlapPercent }, ["overlap"])} error={shown(errors, "overlap")} />
+      <NumberField label={m.equipment_matching_panel_min()} unit={pct} min={0} max={100} step={1} value={low} onChange={(next) => framing({ panelOverlapPercent: [next, high] }, ["panels"])} error={shown(errors, "panels")} />
+      <NumberField label={m.equipment_matching_panel_max()} unit={pct} min={0} max={100} step={1} value={high} onChange={(next) => framing({ panelOverlapPercent: [low, next] }, ["panels"])} />
+      <NumberField label={m.equipment_matching_flat_fine()} unit={deg} min={0} step={0.5} value={values.flats.fineWithinDeg} onChange={(fineWithinDeg) => flats({ fineWithinDeg }, ["flatFine"])} error={shown(errors, "flatFine")} />
+      <NumberField label={m.equipment_matching_flat_warn()} unit={deg} min={0} step={0.5} value={values.flats.offeredWithinDeg} onChange={(offeredWithinDeg) => flats({ offeredWithinDeg }, ["flatOffered"])} error={shown(errors, "flatOffered")} />
       <NumberField
         label={m.equipment_matching_window_nights()}
         unit={m.equipment_unit_nights()}
         min={0}
         step={1}
         value={values.flats.windowNights}
-        onChange={(windowNights) => flats({ windowNights: windowNights ?? Number.NaN })}
-        error={errors.windowNights}
+        onChange={(windowNights) => flats({ windowNights: windowNights ?? Number.NaN }, ["windowNights"])}
+        error={shown(errors, "windowNights")}
       />
       <NumberField
         label={m.equipment_matching_window_days()}
@@ -195,7 +208,6 @@ function MatchingDialog({ record, open, onOpenChange }: { record: WorkflowSettin
         step={1}
         value={values.darkBias.windowDays}
         onChange={(windowDays) => set({ darkBias: { windowDays: windowDays ?? Number.NaN } })}
-        error={errors.windowDays}
       />
       <SwitchField label={m.settings_keep_raws()} description={m.settings_keep_raws_help()} checked={values.calibration.keepRawFrames} onChange={(keepRawFrames) => set({ calibration: { ...values.calibration, keepRawFrames } })} />
       <NumberField
@@ -205,8 +217,8 @@ function MatchingDialog({ record, open, onOpenChange }: { record: WorkflowSettin
         min={1}
         step={1}
         value={values.calibration.oldMasterAfterDays}
-        onChange={(oldMasterAfterDays) => set({ calibration: { ...values.calibration, oldMasterAfterDays: oldMasterAfterDays ?? Number.NaN } })}
-        error={errors.oldAfter}
+        onChange={(oldMasterAfterDays) => set({ calibration: { ...values.calibration, oldMasterAfterDays: oldMasterAfterDays ?? Number.NaN } }, ["oldAfter"])}
+        error={shown(errors, "oldAfter")}
       />
       <SegmentedField<ViewMode>
         label={m.settings_default_input_mode()}

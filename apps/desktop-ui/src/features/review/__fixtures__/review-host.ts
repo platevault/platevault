@@ -129,7 +129,7 @@ function tile(level: number, x: number, y: number, width: number, height: number
 }
 
 function refusal(code: LibraryErrorCode, retry: ErrorResponse["retry"], currentRevision: number | null = null): ErrorResponse {
-  return { code, identity: null, scope: null, retry, currentRevision, successors: [], window: null, correction: null }
+  return { code, identity: null, scope: null, retry, currentRevision, successors: [], window: null, correction: null, field: null }
 }
 
 const STARS: StarRecord[] = [

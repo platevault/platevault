@@ -5,7 +5,7 @@
  * makes the next call of a command answer with the library's structured
  * refusal instead.
  */
-import type { Band, Camera, GoalTemplate, HomeCriteria, LocationState, NamingTemplate, NativePathWire, ObservingSite, PlanCriteria, Profile, RemapBlock, RemapReview_Serialize, Rig, RigFilterInput, ScanOperation, WorkflowSettingsRecord_Serialize } from "@/api/ipc"
+import type { Band, Camera, ErrorResponse, GoalTemplate, HomeCriteria, LocationState, NamingTemplate, NativePathWire, ObservingSite, PlanCriteria, Profile, RemapBlock, RemapReview_Serialize, Rig, RigFilterInput, ScanOperation, WorkflowSettingsRecord_Serialize } from "@/api/ipc"
 
 export const CRITERIA: PlanCriteria = { minAltitudeDeg: 30, darkness: "astronomical", moon: { kind: "below_horizon" }, minDurationMinutes: 60 }
 
@@ -123,14 +123,14 @@ export function catalog(over: Partial<Catalog> = {}): Catalog {
 }
 
 /** The library's structured refusal, as the generated client receives it. */
-export function refusal(code: string, retry = "retry", currentRevision: number | null = null) {
-  return { code, identity: null, scope: null, retry, currentRevision, successors: [], window: null, correction: null }
+export function refusal(code: ErrorResponse["code"], retry: ErrorResponse["retry"] = "retry", currentRevision: number | null = null, field: ErrorResponse["field"] = null): ErrorResponse {
+  return { code, identity: null, scope: null, retry, currentRevision, successors: [], window: null, correction: null, field }
 }
 
 /** The stateful host over `state`; a test installs `handler` with `mockIPC`. */
 export function settingsHost(state: Catalog = catalog()) {
   const calls: { command: string; args: Record<string, unknown> }[] = []
-  const failures = new Map<string, ReturnType<typeof refusal>>()
+  const failures = new Map<string, ErrorResponse>()
   let next = 1
   const handler = (command: string, args?: unknown): unknown => {
     const a = (args ?? {}) as Record<string, unknown>
@@ -264,7 +264,7 @@ export function settingsHost(state: Catalog = catalog()) {
     state,
     calls,
     sent: (command: string) => calls.filter((c) => c.command === command).map((c) => c.args),
-    /** The next call of `command` is refused with `code`. */
-    fail: (command: string, code: string, retry = "retry") => failures.set(command, refusal(code, retry)),
+    /** The next `command` call is refused with `code`. */
+    fail: (command: string, code: ErrorResponse["code"], retry: ErrorResponse["retry"] = "retry", field: ErrorResponse["field"] = null) => failures.set(command, refusal(code, retry, null, field)),
   }
 }

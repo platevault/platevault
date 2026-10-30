@@ -136,6 +136,22 @@ describe.each(LOCALES)("Settings in %s", (locale) => {
   )
 
   it(
+    "shows a library refusal beside a matching field it names",
+    async () => {
+      const host = serve()
+      const { user } = renderAt("/settings/matching")
+      await user.click(await screen.findByRole("button", { name: named(m.settings_edit()) }))
+      const dialog = await screen.findByRole("dialog", { name: m.settings_label_matching() })
+      const centre = within(dialog).getByLabelText(label(m.equipment_matching_centre(), m.settings_unit_arcmin()))
+      host.fail("workflow_settings_save", "invalid_input", "retry", "framing.maxCentreOffsetArcmin")
+      await user.click(within(dialog).getByRole("button", { name: m.settings_save() }))
+      expect(await within(dialog).findByText(m.form_field_refused())).toBeInTheDocument()
+      expect(centre).toHaveAttribute("aria-invalid", "true")
+    },
+    TEST_MS,
+  )
+
+  it(
     "keeps a rig's edits through a stale revision and saves them over the revision read again",
     async () => {
       const host = serve()

@@ -14,6 +14,7 @@ const conflict: ErrorResponse = {
   successors: [],
   window: null,
   correction: null,
+  field: null,
 }
 
 afterEach(() => {
