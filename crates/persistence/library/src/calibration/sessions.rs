@@ -833,7 +833,7 @@ fn key_night(key: &CaptureKey) -> Option<Date> {
 }
 
 /// The date part of a header date such as DATE-OBS.
-fn header_date(text: Option<&str>) -> Option<Date> {
+pub(super) fn header_date(text: Option<&str>) -> Option<Date> {
     Date::parse(text?.get(..10)?, DATE).ok()
 }
 

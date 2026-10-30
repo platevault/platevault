@@ -13,9 +13,9 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use platevault_model::{
-    AdoptedMaster, ApplicableQuality, Asset, Availability, CalibrationRules, CandidateRef,
-    CaptureEvidence, Classification, EvidenceField, InputForm, InputKind, InputState, Location,
-    LocationLifecycle, MasterOrigin, Session,
+    AdoptedMaster, ApplicableQuality, Asset, Availability, CalibrationMasterAge, CalibrationRules,
+    CandidateRef, CaptureEvidence, CaptureMetadata, Classification, EvidenceField, InputForm,
+    InputKind, InputState, Location, LocationLifecycle, MasterOrigin, Session,
 };
 use sqlx::sqlite::SqliteConnection;
 use uuid::Uuid;
@@ -63,6 +63,12 @@ pub async fn list_inputs<R: CalibrationRules + ?Sized>(
     conn: &mut SqliteConnection,
     rules: &R,
 ) -> Result<Vec<Listed>> {
+    let today = time::OffsetDateTime::now_utc().date();
+    let old_after_days = crate::workflow_settings::read_workflow_settings(conn)
+        .await?
+        .0
+        .calibration
+        .old_master_after_days;
     let mut locations = HashMap::new();
     let masters = load_masters(conn).await?;
     // An adopted master's indexed destination and its source are never new candidates (R16).
@@ -74,25 +80,11 @@ pub async fn list_inputs<R: CalibrationRules + ?Sized>(
     for master in masters {
         let location = cached_location(conn, &mut locations, master.location_id).await?;
         if location.lifecycle == LocationLifecycle::Active {
-            listed.push(master_listed(master, &location));
+            listed.push(master_listed(master, &location, today, old_after_days));
         }
     }
 
-    let rows: Vec<(String, String)> = sqlx::query_as(CURRENT_ASSETS).fetch_all(&mut *conn).await?;
-    let mut session_of = HashMap::with_capacity(rows.len());
-    for (asset, session) in &rows {
-        session_of.insert(parse_uuid(asset)?, parse_uuid(session)?);
-    }
-    let ids: BTreeSet<Uuid> = session_of.keys().copied().collect();
-    let mut by_session: BTreeMap<Uuid, Vec<(Asset, Classification)>> = BTreeMap::new();
-    for asset in load_assets(conn, &ids).await? {
-        if destinations.contains(&(asset.location_id, path_key(&asset.relative_path))) {
-            continue;
-        }
-        if let Some(classification) = rules.classify(&asset.effective, &asset.relative_path) {
-            by_session.entry(session_of[&asset.id]).or_default().push((asset, classification));
-        }
-    }
+    let by_session = classified_by_session(conn, rules, &destinations).await?;
     let classified: Vec<Asset> =
         by_session.values().flatten().map(|(asset, _)| asset.clone()).collect();
     let session_ids: Vec<Uuid> = by_session.keys().copied().collect();
@@ -109,12 +101,48 @@ pub async fn list_inputs<R: CalibrationRules + ?Sized>(
         for (asset, classification) in masters {
             if !sources.contains(&asset.id) {
                 let location = cached_location(conn, &mut locations, asset.location_id).await?;
-                listed.push(candidate(conn, &session, &location, asset, classification).await?);
+                listed.push(
+                    candidate(
+                        conn,
+                        &session,
+                        &location,
+                        asset,
+                        classification,
+                        today,
+                        old_after_days,
+                    )
+                    .await?,
+                );
             }
         }
     }
     listed.sort_by(listing_order);
     Ok(listed)
+}
+
+/// The current assets `rules` classify as calibration, grouped by session,
+/// leaving out adopted masters' indexed `destinations`.
+async fn classified_by_session<R: CalibrationRules + ?Sized>(
+    conn: &mut SqliteConnection,
+    rules: &R,
+    destinations: &BTreeSet<(Uuid, Vec<u8>)>,
+) -> Result<BTreeMap<Uuid, Vec<(Asset, Classification)>>> {
+    let rows: Vec<(String, String)> = sqlx::query_as(CURRENT_ASSETS).fetch_all(&mut *conn).await?;
+    let mut session_of = HashMap::with_capacity(rows.len());
+    for (asset, session) in &rows {
+        session_of.insert(parse_uuid(asset)?, parse_uuid(session)?);
+    }
+    let ids: BTreeSet<Uuid> = session_of.keys().copied().collect();
+    let mut by_session: BTreeMap<Uuid, Vec<(Asset, Classification)>> = BTreeMap::new();
+    for asset in load_assets(conn, &ids).await? {
+        if destinations.contains(&(asset.location_id, path_key(&asset.relative_path))) {
+            continue;
+        }
+        if let Some(classification) = rules.classify(&asset.effective, &asset.relative_path) {
+            by_session.entry(session_of[&asset.id]).or_default().push((asset, classification));
+        }
+    }
+    Ok(by_session)
 }
 
 async fn cached_location(
@@ -266,8 +294,24 @@ async fn raw_set(
         reusable: true,
         location_ids: location_ids.into_iter().collect(),
         member_assets: included_copies.iter().map(|copy| copy.id).collect(),
+        age_days: None,
+        old: false,
     };
     Ok(Listed { summary, members, excluded })
+}
+
+fn master_age(
+    kind: InputKind,
+    observed: &CaptureMetadata,
+    today: time::Date,
+    old_after_days: u32,
+) -> Option<CalibrationMasterAge> {
+    if !matches!(kind, InputKind::Dark | InputKind::Bias) {
+        return None;
+    }
+    let captured = super::sessions::header_date(observed.date_obs.as_deref())
+        .or_else(|| super::sessions::header_date(observed.date_local.as_deref()))?;
+    Some(CalibrationMasterAge::from_capture_date(captured, today, old_after_days))
 }
 
 /// A detected master: labelled with its evidence basis and origin, never reusable.
@@ -277,6 +321,8 @@ async fn candidate(
     location: &Location,
     asset: Asset,
     classification: Classification,
+    today: time::Date,
+    old_after_days: u32,
 ) -> Result<Listed> {
     let evidence = CaptureEvidence::from_metadata(
         &asset.effective,
@@ -285,6 +331,7 @@ async fn candidate(
         None,
     );
     let kind = classification.kind;
+    let age = master_age(kind, &asset.effective, today, old_after_days);
     let available = asset.availability == Availability::Available;
     let summary = CalibrationInputSummary {
         input: CandidateRef::Candidate { asset_id: asset.id },
@@ -311,6 +358,8 @@ async fn candidate(
         reusable: false,
         location_ids: vec![asset.location_id],
         member_assets: vec![asset.id],
+        age_days: age.map(|age| age.days),
+        old: age.is_some_and(|age| age.old),
     };
     let members = vec![InputMember {
         member_key: asset.id,
@@ -321,9 +370,15 @@ async fn candidate(
 }
 
 /// An adopted master: header evidence of the copied bytes only (R8, R16).
-fn master_listed(master: AdoptedMaster, location: &Location) -> Listed {
+fn master_listed(
+    master: AdoptedMaster,
+    location: &Location,
+    today: time::Date,
+    old_after_days: u32,
+) -> Listed {
     let evidence = CaptureEvidence::from_metadata(&master.observed, &BTreeSet::new(), None, None);
     let kind = master.kind;
+    let age = master_age(kind, &master.observed, today, old_after_days);
     let available = location.availability == Availability::Available;
     let summary = CalibrationInputSummary {
         input: CandidateRef::Master { master_id: master.id, revision: master.revision },
@@ -346,6 +401,8 @@ fn master_listed(master: AdoptedMaster, location: &Location) -> Listed {
         reusable: true,
         location_ids: vec![master.location_id],
         member_assets: master.asset_id.into_iter().collect(),
+        age_days: age.map(|age| age.days),
+        old: age.is_some_and(|age| age.old),
     };
     Listed { summary, members: Vec::new(), excluded: Vec::new() }
 }

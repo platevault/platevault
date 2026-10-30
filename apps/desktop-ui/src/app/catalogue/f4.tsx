@@ -2,9 +2,9 @@
  * Catalogue entry (R9-COMPOSITION-PLAN §8.3; F4 prototype plan, unit V): the
  * shared F4 patterns. CalibrationDiagram, CalibrationChoices with its
  * CalibrationChoiceBadge, ViewFolderTree, PlaceLink, the session-row
- * badges (DuplicatesBadge, ReadinessBadge) and the rig pickers'
- * NoSavedRigs, on the sample calibration
- * library (fixtures/calibration.ts, fixtures/view-tree.ts) and on a what-if
+ * badges (DuplicatesBadge, ReadinessBadge), the Calibration library's
+ * master-row MasterAgeBadge and the rig pickers' NoSavedRigs, on the sample
+ * calibration library (fixtures/calibration.ts, fixtures/view-tree.ts) and on a what-if
  * of it: a RedCat session pins the older dark version (mixed versions, darks
  * in the nights), a second flat set gets `NIGHT_…-2`, a session is set to No
  * bias and a pinned flat file changed on disk. The working CalibrationChoices
@@ -19,6 +19,7 @@ import { CalibrationChoices, type CalibrationChoiceRow, type CalibrationChoicesP
 import { CalibrationDiagram } from "@/components/domain/calibration-diagram"
 import type { CalibrationChoice } from "@/components/domain/calibration-model"
 import { DuplicatesBadge } from "@/components/domain/duplicates-badge"
+import { MasterAgeBadge } from "@/components/domain/master-age-badge"
 import { ReadinessBadge } from "@/components/domain/readiness-badge"
 import { NoSavedRigs } from "@/components/domain/saved-rigs"
 import { ViewFolderTree } from "@/components/domain/view-folder-tree"
@@ -223,6 +224,18 @@ function Readiness() {
   )
 }
 
+/** A Calibration library master, detected or adopted, past the configured age threshold. */
+function MasterAge() {
+  const m = useMessages()
+  return (
+    <ComponentSection components={["MasterAgeBadge"]} description={m.catalogue_f4_master_age_desc()} level={3}>
+      <Specimen caption={m.flow_master_old({ n: 165 })}>
+        <MasterAgeBadge ageDays={165} />
+      </Specimen>
+    </ComponentSection>
+  )
+}
+
 /** A rig picker with no saved rig: where rigs are added, as text until Settings › Equipment is registered. */
 function NoRigs() {
   const m = useMessages()
@@ -244,6 +257,7 @@ export function F4Catalogue() {
       <Trees />
       <Duplicates />
       <Readiness />
+      <MasterAge />
       <NoRigs />
     </Section>
   )

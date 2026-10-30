@@ -2844,6 +2844,10 @@ export type CalibrationInputSummary_Deserialize = {
 	locationIds: string[],
 	/**  Every copy of the included members. */
 	memberAssets: string[],
+	/**  Whole-day age; populated only for dark/bias masters and candidates with capture dates. */
+	ageDays: number | null,
+	/**  Whether this dark/bias master or candidate exceeds the configured CAL-FR-15 threshold. */
+	old: boolean,
 };
 
 /**  One listed input: a raw set, an adopted master or a detected candidate. */
@@ -2866,6 +2870,10 @@ export type CalibrationInputSummary_Serialize = {
 	locationIds: string[],
 	/**  Every copy of the included members. */
 	memberAssets: string[],
+	/**  Whole-day age; populated only for dark/bias masters and candidates with capture dates. */
+	ageDays: number | null,
+	/**  Whether this dark/bias master or candidate exceeds the configured CAL-FR-15 threshold. */
+	old: boolean,
 };
 
 /**

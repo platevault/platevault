@@ -6015,6 +6015,7 @@
   "catalogue_f4_duplicates_counts": "one extra copy, and twelve",
   "catalogue_f4_readiness_desc": "A session's intake status on every session row: Ready or the next step. A reopened review can return a held session to Unreviewed, shown as Needs review in its Projects.",
   "catalogue_f4_readiness_states": "Ready · needs a Target · needs a rig · 1 frame unreviewed · Trashed",
+  "catalogue_f4_master_age_desc": "The Old badge on a Calibration library master row: a dark or bias master captured longer ago than the age limit in Settings › Matching.",
   "import_column_files": "Files",
   "import_column_state": "State",
   "import_skip_imported_before": "Imported before",
