@@ -295,22 +295,65 @@ async fn project_output_list_reads_catalog_without_filesystem_access() {
     let recorded = world.settled(&watch).await;
     assert_eq!(paths(&recorded), ["a.fit", "z.fit"]);
 
+    watch.shutdown().await;
     fs::remove_dir_all(world.output()).unwrap();
     let read = world.library.project_output_list(world.project).await.unwrap();
     assert_eq!(read, recorded, "the catalog preserves full observation contents and order");
 
     world.close().await;
     assert_eq!(world.library.project_output_list(world.project).await.unwrap(), recorded);
-    watch.shutdown().await;
 }
 
 /// An empty Output reads as an empty catalog listing without walking its folder.
 #[tokio::test]
 async fn project_output_list_returns_an_empty_recorded_listing() {
     let world = World::new().await;
-    assert!(world.library.project_output_list(world.project).await.unwrap().is_empty());
+    assert_eq!(world.library.project_output_list(world.project).await.unwrap(), []);
 }
 
+/// A recorded Output listing remains available after the Project is Archived.
+#[tokio::test]
+async fn project_output_list_remains_available_after_archive() {
+    let world = World::new().await;
+    let watch = world.watch();
+    write(&world.output().join("result.fit"), b"result");
+    let recorded = world.settled(&watch).await;
+    watch.shutdown().await;
+
+    let project = world.project.to_string();
+    for (step, outcome) in [("clean_up", "skipped"), ("trash", "skipped"), ("archive", "finished")]
+    {
+        world
+            .sql(
+                "INSERT INTO project_wrap_up_steps (project_id, step, outcome, recorded_at) \
+                 VALUES (?1, ?2, ?3, ?4)",
+                &[&project, step, outcome, AT],
+            )
+            .await
+            .unwrap();
+    }
+    world
+        .sql(
+            "INSERT INTO project_snapshots (project_id, applied_generation, snapshot, taken_at) \
+             VALUES (?1, NULL, json_object('projectId', ?1, 'appliedGeneration', NULL), ?2)",
+            &[&project, AT],
+        )
+        .await
+        .unwrap();
+    world
+        .sql(
+            "UPDATE projects SET lifecycle = 'closing', closed_at = ?2 WHERE id = ?1",
+            &[&project, AT],
+        )
+        .await
+        .unwrap();
+    world
+        .sql("UPDATE projects SET lifecycle = 'archived' WHERE id = ?1", &[&project])
+        .await
+        .unwrap();
+
+    assert_eq!(world.library.project_output_list(world.project).await.unwrap(), recorded);
+}
 
 /// RES-AC-01, RES-AC-23, RES-AC-27: a file saved into `Output/` appears
 /// without a scan, reads "Still being written" while it grows and Settled

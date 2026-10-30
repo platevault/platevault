@@ -439,6 +439,7 @@ fn restorable(offer: &ProcessingMasterOffer, expected_sha256: &str) -> Result<()
     }
 }
 
+// ── Output listing ──────────────────────────────────────────────────────────
 impl Library {
     /// The Project's Output listing as recorded by the last folder observation.
     /// This reads the catalog only; use [`OutputWatch::rescan`] for an explicit
@@ -454,6 +455,7 @@ impl Library {
     }
 }
 
+// ── Copy to Output ──────────────────────────────────────────────────────────
 impl Library {
     /// Copy to Output… (RES-FR-02, RES-AC-02/25): copy the regular file at
     /// `source` into the Project's `Output/` as `name`, a path relative to it,

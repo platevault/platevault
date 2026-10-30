@@ -184,7 +184,6 @@ impl Catalog {
         Ok(outputs)
     }
 
-
     /// Record one pass over the Project's `Output/` (RES-FR-01): a found file
     /// takes its state, size, fingerprint and panel, keeping the Kind and
     /// Channel the user chose; a new one is listed as Observed; a recorded one

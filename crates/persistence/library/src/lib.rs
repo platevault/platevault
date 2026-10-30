@@ -190,7 +190,6 @@ mod project_output;
 pub use project_output::{
     OutputBasis, OutputCopy, OutputFolder, OutputPanel, OutputScan, OutputScanRecord, ScannedOutput,
 };
-pub use platevault_model::OutputObservation;
 // The F4 admission contract (only Ready, calibration-settled sessions join a
 // Project); its `require_admission` runs inside membership-add transactions.
 mod admission;

@@ -78,6 +78,7 @@ impl Shell {
                 desktop_shell::commands::project_apply::project_apply_preview,
                 desktop_shell::commands::project_apply::project_apply,
                 desktop_shell::commands::project_apply::library_check_symlinks,
+                desktop_shell::commands::project_output::project_copy_to_output,
                 desktop_shell::commands::project_output::project_output_list,
                 desktop_shell::commands::project_wrap_up::project_wrap_up_status,
                 desktop_shell::commands::project_wrap_up::project_close,
@@ -484,6 +485,7 @@ fn output_family_takes_its_arguments() {
         NOT_FOUND,
         project,
     );
+    shell.refuses("project_output_list", &json!({ "projectId": project }), NOT_FOUND, project);
 }
 
 #[test]
