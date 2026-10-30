@@ -46,10 +46,14 @@ export function sparkNight(basis: TargetsBasis_Serialize, samples: number): Spar
  * its time is the sample or darkness boundary in the window where the
  * samples, interpolated at the boundaries, peak, so it is as fine as the
  * library's sample spacing. The best window is not part of the row read:
- * with no Img time there is none (`null`), otherwise it is left out.
+ * with no Img time there is none (`null`), otherwise it is left out. Null
+ * without samples (planning values unknown) or with one missing, which is
+ * how the wire carries a non-finite number.
  */
-export function sparkOf(night: SparkNight, darkness: Darkness, row: TargetRow_Serialize): SparkSky {
-  const altitudes = row.altitudeSamplesDeg
+export function sparkOf(night: SparkNight, darkness: Darkness, row: TargetRow_Serialize): SparkSky | null {
+  const samples = row.altitudeSamplesDeg
+  if (samples.length === 0 || !samples.every((alt): alt is number => alt !== null)) return null
+  const altitudes: readonly number[] = samples
   const best = row.imgTimeMinutes === 0 ? null : undefined
   if (!darkness || row.maxAltitudeDeg === null) return { altitudes, peakDeg: null, peakAt: null, best }
   const startMs = Date.parse(darkness.start)

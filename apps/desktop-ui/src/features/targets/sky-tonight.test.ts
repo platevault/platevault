@@ -20,13 +20,19 @@ describe("the altitude sparkline's values", () => {
     expect(culminating).toMatchObject({ peakDeg: 71.4, peakAt: "2026-10-29T22:00:00.000Z" })
     // Setting all night: the peak in darkness is where darkness starts.
     const setting = sparkOf(grid, darkness, row(M31, { altitudeSamplesDeg: Array.from({ length: 49 }, (_, i) => 80 - i), maxAltitudeDeg: 66.5 }))
-    expect(setting.peakAt).toBe(DARKNESS.startUtc.replace("Z", ".000Z"))
+    expect(setting!.peakAt).toBe(DARKNESS.startUtc.replace("Z", ".000Z"))
   })
 
   it("leaves out the best window it isn't given, and says there is none with no Img time", () => {
     const grid = sparkNight(BASIS, 49)
-    expect(sparkOf(grid, darkness, row(M31)).best).toBeUndefined()
-    expect(sparkOf(grid, darkness, row(M31, { imgTimeMinutes: 0, imgTimeZeroReason: "altitude" })).best).toBeNull()
+    expect(sparkOf(grid, darkness, row(M31))!.best).toBeUndefined()
+    expect(sparkOf(grid, darkness, row(M31, { imgTimeMinutes: 0, imgTimeZeroReason: "altitude" }))!.best).toBeNull()
     expect(sparkOf(grid, null, row(M31))).toMatchObject({ peakDeg: null, peakAt: null })
+  })
+
+  it("draws no sparkline without samples or with one missing, as the wire sends a non-finite number", () => {
+    const grid = sparkNight(BASIS, 49)
+    expect(sparkOf(grid, darkness, row(M31, { altitudeSamplesDeg: [] }))).toBeNull()
+    expect(sparkOf(grid, darkness, row(M31, { altitudeSamplesDeg: Array.from({ length: 49 }, (_, i) => (i === 20 ? null : 40)) }))).toBeNull()
   })
 })

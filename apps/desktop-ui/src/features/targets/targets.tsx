@@ -43,7 +43,7 @@ import { NightPicker, SitePicker } from "@/components/app/pickers"
 import { failureMessage } from "@/components/app/run-result"
 import { GradeBadges } from "@/components/domain/grade-badges"
 import { MoonLimitsDialog } from "@/components/domain/moon-limits"
-import { AltitudeSpark, DarkLine, MoonLine, type Darkness, type SparkNight } from "@/components/domain/sky-lines"
+import { AltitudeSpark, DarkLine, MoonLine, type Darkness } from "@/components/domain/sky-lines"
 import { ListPage } from "@/components/templates/list-page"
 import { formatCount, formatDegrees, formatList } from "@/lib/format"
 import type { Messages } from "@/lib/i18n"
@@ -465,7 +465,7 @@ function targetColumns(m: Messages, state: TargetsState, data: TargetsPage_Seria
   columns.push(
     { id: "type", header: m.targets_type(), truncate: true, sortValue: order, cell: (v) => v.row.target.objectType },
     // The library sorts by the peak (Max alt), not by the curve, so Altitude is static.
-    { id: "altitude", header: m.tonight_altitude(), static: true, cell: (v) => (basis && v.row.altitudeSamplesDeg.length > 0 ? altitudeCell(basis, darkness, v.row) : unknown(v.row)) },
+    { id: "altitude", header: m.tonight_altitude(), static: true, cell: (v) => altitudeCell(basis, darkness, v.row) },
     { id: "max_alt", header: m.targets_max_alt(), align: "right", sortValue: order, cell: (v) => (v.row.maxAltitudeDeg === null ? unknown(v.row) : formatDegrees(v.row.maxAltitudeDeg, 0)) },
     { id: "lunar", header: m.tonight_lunar(), align: "right", hideable: true, defaultHidden: true, sortValue: order, cell: (v) => (v.row.lunarSeparationDeg === null ? unknown(v.row) : formatDegrees(v.row.lunarSeparationDeg, 0)) },
     { id: "img_time", header: m.tonight_img_time(), align: "right", sortValue: order, cell: (v) => imgTimeText(m, v.row) ?? unknown(v.row) },
@@ -493,20 +493,25 @@ function targetColumns(m: Messages, state: TargetsState, data: TargetsPage_Seria
   return columns
 }
 
-/** The row's altitude across the page's night from the library's samples, darkness shaded and the criteria's altitude limit dashed. */
-function altitudeCell(basis: TargetsBasis_Serialize, darkness: Darkness, row: TargetRow_Serialize) {
-  const grid: SparkNight = sparkNight(basis, row.altitudeSamplesDeg.length)
-  return <AltitudeSpark night={grid} sky={sparkOf(grid, darkness, row)} darkness={darkness} minAltitudeDeg={basis.criteria.minAltitudeDeg} timeZone={basis.timeZone} />
+/** The row's altitude across the page's night from the library's samples, darkness shaded and the criteria's altitude limit dashed; unknown with the row's reason without them. */
+function altitudeCell(basis: TargetsBasis_Serialize | null, darkness: Darkness, row: TargetRow_Serialize) {
+  const unknown = <Unknown reason={row.unknownReason} />
+  if (!basis) return unknown
+  const grid = sparkNight(basis, row.altitudeSamplesDeg.length)
+  const sky = sparkOf(grid, darkness, row)
+  const limit = basis.criteria.minAltitudeDeg
+  if (!sky || limit === null) return unknown
+  return <AltitudeSpark night={grid} sky={sky} darkness={darkness} minAltitudeDeg={limit} timeZone={basis.timeZone} />
 }
 
 /** Each band graded for the night, then the library's recommendation; unknown with the row's reason. */
 function filtersCell(m: Messages, row: TargetRow_Serialize) {
   if (row.bands.length === 0) return <Unknown reason={row.unknownReason} />
   return (
-    <span className="inline-flex items-center gap-1.5">
+    <>
       <GradeBadges grades={bandGrades(row.bands)} />
-      {row.recommendation ? <span>{recommendationText(m, row.recommendation)}</span> : null}
-    </span>
+      {row.recommendation ? ` ${recommendationText(m, row.recommendation)}` : null}
+    </>
   )
 }
 

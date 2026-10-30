@@ -200,10 +200,10 @@ function tonightItems(
         row.bands.length === 0 ? (
           unknown
         ) : (
-          <span className="inline-flex flex-wrap items-center gap-1">
+          <>
             <GradeBadges grades={bandGrades(row.bands)} wrap />
-            {row.recommendation ? <span>{recommendationText(m, row.recommendation)}</span> : null}
-          </span>
+            {row.recommendation ? ` ${recommendationText(m, row.recommendation)}` : null}
+          </>
         ),
     },
     { label: m.tonight_lunar(), value: row.lunarSeparationDeg === null ? unknown : formatDegrees(row.lunarSeparationDeg, 0) },
