@@ -84,21 +84,7 @@ pub async fn list_inputs<R: CalibrationRules + ?Sized>(
         }
     }
 
-    let rows: Vec<(String, String)> = sqlx::query_as(CURRENT_ASSETS).fetch_all(&mut *conn).await?;
-    let mut session_of = HashMap::with_capacity(rows.len());
-    for (asset, session) in &rows {
-        session_of.insert(parse_uuid(asset)?, parse_uuid(session)?);
-    }
-    let ids: BTreeSet<Uuid> = session_of.keys().copied().collect();
-    let mut by_session: BTreeMap<Uuid, Vec<(Asset, Classification)>> = BTreeMap::new();
-    for asset in load_assets(conn, &ids).await? {
-        if destinations.contains(&(asset.location_id, path_key(&asset.relative_path))) {
-            continue;
-        }
-        if let Some(classification) = rules.classify(&asset.effective, &asset.relative_path) {
-            by_session.entry(session_of[&asset.id]).or_default().push((asset, classification));
-        }
-    }
+    let by_session = classified_by_session(conn, rules, &destinations).await?;
     let classified: Vec<Asset> =
         by_session.values().flatten().map(|(asset, _)| asset.clone()).collect();
     let session_ids: Vec<Uuid> = by_session.keys().copied().collect();
@@ -132,6 +118,31 @@ pub async fn list_inputs<R: CalibrationRules + ?Sized>(
     }
     listed.sort_by(listing_order);
     Ok(listed)
+}
+
+/// The current assets `rules` classify as calibration, grouped by session,
+/// leaving out adopted masters' indexed `destinations`.
+async fn classified_by_session<R: CalibrationRules + ?Sized>(
+    conn: &mut SqliteConnection,
+    rules: &R,
+    destinations: &BTreeSet<(Uuid, Vec<u8>)>,
+) -> Result<BTreeMap<Uuid, Vec<(Asset, Classification)>>> {
+    let rows: Vec<(String, String)> = sqlx::query_as(CURRENT_ASSETS).fetch_all(&mut *conn).await?;
+    let mut session_of = HashMap::with_capacity(rows.len());
+    for (asset, session) in &rows {
+        session_of.insert(parse_uuid(asset)?, parse_uuid(session)?);
+    }
+    let ids: BTreeSet<Uuid> = session_of.keys().copied().collect();
+    let mut by_session: BTreeMap<Uuid, Vec<(Asset, Classification)>> = BTreeMap::new();
+    for asset in load_assets(conn, &ids).await? {
+        if destinations.contains(&(asset.location_id, path_key(&asset.relative_path))) {
+            continue;
+        }
+        if let Some(classification) = rules.classify(&asset.effective, &asset.relative_path) {
+            by_session.entry(session_of[&asset.id]).or_default().push((asset, classification));
+        }
+    }
+    Ok(by_session)
 }
 
 async fn cached_location(
