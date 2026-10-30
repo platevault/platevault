@@ -376,8 +376,8 @@ fn project_get_reports_a_closed_project_lifecycle() {
     assert_eq!(actual["lifecycle"], json!(ProjectLifecycle::Closed));
     assert!(actual["closedAt"].is_string(), "{actual}");
 }
-/// project_list returns the Project's computed next step and pending count through IPC.
 #[test]
+/// `project_list` returns the Project's computed next step and pending count through IPC.
 fn project_list_returns_next_step_and_pending_changes() {
     let shell = Shell::new();
     let project = shell.open_project();
