@@ -121,7 +121,7 @@ export function MatchingPage() {
   )
 }
 
-type Field = "centre" | "rotation" | "overlap" | "panels" | "flatFine" | "flatOffered" | "windowDays" | "oldAfter"
+type Field = "centre" | "rotation" | "overlap" | "panels" | "flatFine" | "flatOffered" | "windowNights" | "windowDays" | "oldAfter"
 
 const atLeast = (value: number | null, min: number) => value === null || (Number.isFinite(value) && value >= min)
 
@@ -138,6 +138,7 @@ function matchingErrors(m: Messages, v: Matching): FieldErrors<Field> {
     flatFine:
       !atLeast(v.flats.fineWithinDeg, 0) ? m.common_enter_number() : v.flats.fineWithinDeg !== null && v.flats.offeredWithinDeg !== null && v.flats.fineWithinDeg > v.flats.offeredWithinDeg ? m.settings_matching_flat_rotation_order() : undefined,
     flatOffered: atLeast(v.flats.offeredWithinDeg, 0) ? undefined : m.common_enter_number(),
+    windowNights: whole(v.flats.windowNights) ? undefined : m.common_enter_number(),
     windowDays: whole(v.darkBias.windowDays) ? undefined : m.common_enter_number(),
     oldAfter: whole(v.calibration.oldMasterAfterDays) && v.calibration.oldMasterAfterDays > 0 ? undefined : m.common_enter_number(),
   }
@@ -197,7 +198,8 @@ function MatchingDialog({ record, open, onOpenChange }: { record: WorkflowSettin
         min={0}
         step={1}
         value={values.flats.windowNights}
-        onChange={(windowNights) => set({ flats: { ...values.flats, windowNights: windowNights ?? Number.NaN } })}
+        onChange={(windowNights) => flats({ windowNights: windowNights ?? Number.NaN }, ["windowNights"])}
+        error={shown(errors, "windowNights")}
       />
       <NumberField
         label={m.equipment_matching_window_days()}

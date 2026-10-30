@@ -169,6 +169,24 @@ describe.each(LOCALES)("Settings in %s", (locale) => {
     },
     TEST_MS,
   )
+  it(
+    "requires the flat window nights to be a whole number",
+    async () => {
+      serve()
+      const { user } = renderAt("/settings/matching")
+      await user.click(await screen.findByRole("button", { name: named(m.settings_edit()) }))
+      const dialog = await screen.findByRole("dialog", { name: m.settings_label_matching() })
+      const nights = within(dialog).getByLabelText(label(m.equipment_matching_window_nights(), m.equipment_unit_nights()))
+      await user.clear(nights)
+      expect(await within(dialog).findByText(m.common_enter_number())).toBeInTheDocument()
+      expect(within(dialog).getByRole("button", { name: m.settings_save() })).toHaveAttribute("aria-disabled", "true")
+
+      await user.type(nights, "1.5")
+      expect(within(dialog).getByText(m.common_enter_number())).toBeInTheDocument()
+      expect(within(dialog).getByRole("button", { name: m.settings_save() })).toHaveAttribute("aria-disabled", "true")
+    },
+    TEST_MS,
+  )
 
   it(
     "keeps a rig's edits through a stale revision and saves them over the revision read again",
