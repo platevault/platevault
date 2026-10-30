@@ -411,30 +411,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     let clock = Arc::new(platevault_core::notifier::SystemClock);
     tauri::async_runtime::block_on(library.attach_notifier(notifier, clock))
         .map_err(|error| format!("cannot attach the reminder notifier: {error}"))?;
-    tauri::async_runtime::spawn(crate::bootstrap::feeds::forward(
-        app.handle().clone(),
-        SCAN_PROGRESS_EVENT,
-        ScanProgressFeed::subscribe(Arc::clone(&library)),
-        |event, error| {
-            tracing::error!(
-                operation = %event.operation_id(),
-                %error,
-                "scan progress event not delivered"
-            );
-        },
-    ));
-    tauri::async_runtime::spawn(crate::bootstrap::feeds::forward(
-        app.handle().clone(),
-        crate::commands::frame_review::MEASUREMENT_PROGRESS_EVENT,
-        MeasurementProgressFeed::subscribe(Arc::clone(&library)),
-        |progress, error| {
-            tracing::error!(
-                run = %progress.operation_id,
-                %error,
-                "measurement progress event not delivered"
-            );
-        },
-    ));
+    forward_progress(&app, &library);
     // CLOSE (071): settle what a stop left of Wrap up (an interrupted Clean
     // up, a Trash step, every unsettled archive) through the host Trash (the
     // headless double in an `e2e` build). It can move whole archives, so it
@@ -518,6 +495,35 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+/// Forward scan and measurement progress from `library` to the webview as
+/// events; a delivery failure is logged, not returned.
+fn forward_progress(app: &tauri::App, library: &Arc<Library>) {
+    tauri::async_runtime::spawn(crate::bootstrap::feeds::forward(
+        app.handle().clone(),
+        SCAN_PROGRESS_EVENT,
+        ScanProgressFeed::subscribe(Arc::clone(library)),
+        |event, error| {
+            tracing::error!(
+                operation = %event.operation_id(),
+                %error,
+                "scan progress event not delivered"
+            );
+        },
+    ));
+    tauri::async_runtime::spawn(crate::bootstrap::feeds::forward(
+        app.handle().clone(),
+        crate::commands::frame_review::MEASUREMENT_PROGRESS_EVENT,
+        MeasurementProgressFeed::subscribe(Arc::clone(library)),
+        |progress, error| {
+            tracing::error!(
+                run = %progress.operation_id,
+                %error,
+                "measurement progress event not delivered"
+            );
+        },
+    ));
+}
+
 /// The shell's commands, native menu routing and plugins.
 ///
 /// # Errors
@@ -580,7 +586,10 @@ fn data_dir(app: &tauri::App) -> Result<PathBuf, Box<dyn Error>> {
     Ok(dir)
 }
 
-pub(crate) fn managed_data_directory(path: &std::path::Path) -> DataDirectory {
+/// The data directory state `run` manages for `library_data_location`; the
+/// IPC tests manage the same value.
+#[must_use]
+pub fn managed_data_directory(path: &std::path::Path) -> DataDirectory {
     DataDirectory::from_path(path)
 }
 

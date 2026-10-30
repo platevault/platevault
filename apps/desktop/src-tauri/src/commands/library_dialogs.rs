@@ -11,6 +11,7 @@ use contracts_core::native::RevealSelection;
 use platevault_core::{ErrorResponse, LibraryError, NativePath};
 use tauri::AppHandle;
 use tauri_plugin_dialog::{DialogExt, FilePath};
+use tauri_plugin_opener::OpenerExt;
 
 use super::library::fail;
 use super::native::TauriRevealOpener;
@@ -30,24 +31,30 @@ pub async fn library_data_location(
 /// Open Windows' Developer Mode settings page from Setup (J18 S1).
 ///
 /// # Errors
-/// `SourceUnavailable` if the opener refuses or the platform is not Windows.
+/// `SourceUnavailable` if the platform is not Windows or the opener refuses.
 #[tauri::command]
 #[specta::specta]
 pub async fn library_open_developer_settings(app: AppHandle) -> Result<(), ErrorResponse> {
-    #[cfg(target_os = "windows")]
-    {
-        app.opener().open_url("ms-settings:developers", None::<&str>).map_err(|error| {
-            fail(None)(LibraryError::SourceUnavailable(format!(
-                "cannot open Developer Mode settings: {error}"
-            )))
-        })
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        let _ = app;
-        Err(fail(None)(LibraryError::SourceUnavailable(
-            "Developer Mode settings are only available on Windows".into(),
+    let target = developer_settings_target().map_err(fail(None))?;
+    app.opener().open_url(target, None::<&str>).map_err(|error| {
+        fail(None)(LibraryError::SourceUnavailable(format!(
+            "cannot open Developer Mode settings: {error}"
         )))
+    })
+}
+
+/// The settings URI holding Windows' Developer Mode switch; a fixed target,
+/// never built from input.
+///
+/// # Errors
+/// `SourceUnavailable` on any platform other than Windows.
+fn developer_settings_target() -> Result<&'static str, LibraryError> {
+    if cfg!(target_os = "windows") {
+        Ok("ms-settings:developers")
+    } else {
+        Err(LibraryError::SourceUnavailable(
+            "Developer Mode settings are only available on Windows".into(),
+        ))
     }
 }
 
@@ -62,7 +69,6 @@ impl DataDirectory {
     }
 }
 
-#[cfg(not(target_os = "windows"))]
 #[cfg(test)]
 mod settings_tests {
     use platevault_core::LibraryErrorCode;
@@ -70,12 +76,15 @@ mod settings_tests {
     use super::*;
 
     #[test]
-    fn unsupported_platform_refuses_the_settings_target() {
-        let error = fail(None)(LibraryError::SourceUnavailable(
-            "Developer Mode settings are only available on Windows".into(),
-        ));
-        assert_eq!(error.code, LibraryErrorCode::SourceUnavailable);
-        assert!(error.scope.is_none());
+    fn the_developer_settings_target_exists_only_on_windows() {
+        let target = developer_settings_target();
+        if cfg!(target_os = "windows") {
+            assert_eq!(target.unwrap(), "ms-settings:developers");
+        } else {
+            let refused = fail(None)(target.unwrap_err());
+            assert_eq!(refused.code, LibraryErrorCode::SourceUnavailable);
+            assert!(refused.scope.is_none());
+        }
     }
 }
 

@@ -266,12 +266,16 @@ export const commands = {
 	libraryNewCaptures: () => __TAURI_INVOKE<NewCaptures>("library_new_captures"),
 	/**
 	 *  The native data directory holding `catalog.sqlite` and its SQLite journals.
-	 *  # Errors: this read has no runtime failure after the library shell starts.
+	 * 
+	 *  # Errors
+	 *  This read has no runtime failure after the library shell starts.
 	 */
 	libraryDataLocation: () => typedError<NativePathWire, ErrorResponse>(__TAURI_INVOKE("library_data_location")),
 	/**
 	 *  Open Windows' Developer Mode settings page from Setup (J18 S1).
-	 *  # Errors: `SourceUnavailable` if the opener refuses or the platform is not Windows.
+	 * 
+	 *  # Errors
+	 *  `SourceUnavailable` if the platform is not Windows or the opener refuses.
 	 */
 	libraryOpenDeveloperSettings: () => typedError<null, ErrorResponse>(__TAURI_INVOKE("library_open_developer_settings")),
 	/**

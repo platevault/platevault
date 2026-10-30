@@ -53,7 +53,7 @@ impl OsTrash for NoTrash {
 struct Shell {
     webview: WebviewWindow<MockRuntime>,
     _app: tauri::App<MockRuntime>,
-    _dir: tempfile::TempDir,
+    dir: tempfile::TempDir,
 }
 
 impl Shell {
@@ -80,7 +80,6 @@ impl Shell {
                 desktop_shell::commands::project_apply::project_apply,
                 desktop_shell::commands::project_apply::library_check_symlinks,
                 desktop_shell::commands::library_dialogs::library_data_location,
-                desktop_shell::commands::library_dialogs::library_open_developer_settings,
                 desktop_shell::commands::project_output::project_copy_to_output,
                 desktop_shell::commands::project_wrap_up::project_wrap_up_status,
                 desktop_shell::commands::project_wrap_up::project_close,
@@ -119,7 +118,7 @@ impl Shell {
         let webview = WebviewWindowBuilder::new(&app, "library", WebviewUrl::default())
             .build()
             .expect("library window");
-        Self { webview, _app: app, _dir: dir }
+        Self { webview, _app: app, dir }
     }
 
     /// The library the handlers run on, to arrange what a test calls on.
@@ -765,16 +764,5 @@ fn workflow_settings_family_reads_and_saves_with_revisions() {
 fn library_data_location_returns_the_native_catalog_directory() {
     let shell = Shell::new();
     let actual = shell.call("library_data_location", &json!({}));
-    assert_eq!(actual, native_path(&shell._dir.path()));
-}
-
-#[cfg(not(target_os = "windows"))]
-#[test]
-fn opening_developer_settings_refuses_outside_windows() {
-    let shell = Shell::new();
-    let refused = shell
-        .invoke("library_open_developer_settings", &json!({}))
-        .expect_err("Windows Developer Mode settings are not available here");
-    assert_eq!(refused["code"], json!(LibraryErrorCode::SourceUnavailable));
-    assert_eq!(refused["scope"], serde_json::Value::Null);
+    assert_eq!(actual, native_path(shell.dir.path()));
 }
