@@ -1350,6 +1350,15 @@ export const commands = {
 	 */
 	libraryListCameras: () => typedError<Camera[], ErrorResponse>(__TAURI_INVOKE("library_list_cameras")),
 	/**
+	 *  Create or edit one camera, leaving every rig version and calibration link unchanged.
+	 * 
+	 *  # Errors
+	 *  `InvalidInput` for invalid camera fields or an alias/model collision;
+	 *  `Conflict` for a stale revision or a new id already in use;
+	 *  `NotFound` for an edit of an unknown camera.
+	 */
+	librarySaveCamera: (input: CameraSaveInput) => typedError<Camera, ErrorResponse>(__TAURI_INVOKE("library_save_camera", { input })),
+	/**
 	 *  Delete a camera nothing refers to; nothing cascades.
 	 * 
 	 *  # Errors
@@ -2911,6 +2920,16 @@ export type Camera = {
 	/**  "Don't use darks": its sessions start settled as No darks. */
 	noDarks: boolean,
 	/**  "Don't use bias": its sessions start settled as No bias. */
+	noBias: boolean,
+	revision: number,
+};
+
+/**  One camera create or update and the revision it expects. */
+export type CameraSaveInput = {
+	id: string | null,
+	model: string,
+	alias: string | null,
+	noDarks: boolean,
 	noBias: boolean,
 	revision: number,
 };

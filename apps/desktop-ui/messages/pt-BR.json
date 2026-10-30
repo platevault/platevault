@@ -8139,7 +8139,6 @@
   "settings_app_kind_seti": "SETI Astro Suite Pro",
   "settings_app_kind_siril": "Siril",
   "settings_app_kind_wbpp": "PixInsight WBPP",
-  "settings_gap_camera_edit": "A biblioteca ainda não tem comando para criar ou editar uma câmera. As câmeras entram na lista pelos equipamentos e importações que as citam.",
   "settings_gap_data_location": "A biblioteca ainda não informa onde guarda seu catálogo.",
   "settings_gap_location_space": "A biblioteca ainda não informa contagem de frames, ocupação nem espaço do volume por local.",
   "settings_gap_refusals": "A biblioteca ainda não guarda histórico de recusas nem de salvamentos que falharam, então Atividade lista só operações.",

@@ -105,8 +105,8 @@ impl Shell {
                 desktop_shell::commands::project_wrap_up::project_trash_review,
                 desktop_shell::commands::project_wrap_up::project_wrap_up_trash,
                 desktop_shell::commands::project_wrap_up::project_wrap_up_archive_review,
-                desktop_shell::commands::workflow_settings::workflow_settings_get,
                 desktop_shell::commands::workflow_settings::workflow_settings_save,
+                desktop_shell::commands::rigs::library_save_camera,
             ])
             .build(mock_context(noop_assets()))
             .expect("build mock app");
@@ -764,4 +764,47 @@ fn workflow_settings_family_reads_and_saves_with_revisions() {
         settings,
     );
     assert_eq!(shell.call("workflow_settings_get", &json!({})), saved, "nothing else stored");
+}
+
+/// Camera IPC accepts one create, one revision-checked edit and refuses stale or invalid saves.
+#[test]
+fn library_save_camera_uses_camera_revisions_and_validation() {
+    let shell = Shell::new();
+    let camera = Uuid::new_v4();
+    let input = |id, model: &str, revision| {
+        json!({
+            "input": {
+                "id": id,
+                "model": model,
+                "alias": null,
+                "noDarks": false,
+                "noBias": false,
+                "revision": revision,
+            }
+        })
+    };
+
+    let created = shell.call("library_save_camera", &input(camera, "ASI533MC", 0));
+    assert_eq!(created["id"], json!(camera));
+    assert_eq!(created["revision"], json!(1));
+
+    let edited = shell.call("library_save_camera", &input(camera, "ASI533MC Pro", 1));
+    assert_eq!(edited["model"], json!("ASI533MC Pro"));
+    assert_eq!(edited["revision"], json!(2));
+    shell.refuses(
+        "library_save_camera",
+        &input(camera, "Stale Model", 1),
+        LibraryErrorCode::Conflict,
+        camera,
+    );
+    let invalid_id = Uuid::new_v4();
+    shell.refuses(
+        "library_save_camera",
+        &input(invalid_id, "  ", 0),
+        LibraryErrorCode::InvalidInput,
+        invalid_id,
+    );
+    let saved = shell.call("library_save_camera", &input(camera, "ASI533MC Pro", 2));
+    assert_eq!(saved["model"], json!("ASI533MC Pro"));
+    assert_eq!(saved["revision"], json!(3));
 }

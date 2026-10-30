@@ -281,6 +281,7 @@ macro_rules! library_commands {
             crate::commands::rigs::rig_unknown_filters,
             crate::commands::rigs::library_list_rig_filters,
             crate::commands::rigs::library_list_cameras,
+            crate::commands::rigs::library_save_camera,
             crate::commands::rigs::library_delete_camera,
             crate::commands::observing_plans::planning_list_sites,
             crate::commands::observing_plans::planning_save_site,

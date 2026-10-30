@@ -562,6 +562,27 @@ async fn cameras_of_one_model_need_unique_aliases() {
     assert_eq!(kind(&fx.catalog.save_cameras(&[]).await.unwrap_err()), "invalid_input");
 }
 
+#[tokio::test]
+async fn saving_one_camera_creates_edits_and_rejects_stale_revisions() {
+    let fx = Rigs::new(&three_nights()).await;
+    let created = fx.camera(" ASI533MC ", None).await;
+    assert_eq!(created.model, "ASI533MC");
+    assert_eq!(created.revision, 1);
+
+    let edited = Camera { alias: Some("Main camera".into()), no_darks: true, ..created.clone() };
+    let saved = fx.catalog.save_cameras(&[edited]).await.unwrap().remove(0);
+    assert_eq!(saved.revision, 2);
+    assert_eq!(saved.alias.as_deref(), Some("Main camera"));
+    assert!(saved.no_darks);
+
+    let stale = Camera { model: "Changed model".into(), ..created.clone() };
+    assert_eq!(kind(&fx.catalog.save_cameras(&[stale]).await.unwrap_err()), "conflict");
+    assert_eq!(fx.catalog.camera(created.id).await.unwrap(), saved);
+
+    let invalid = Camera { model: "  ".into(), revision: 0, ..created };
+    assert_eq!(kind(&fx.catalog.save_cameras(&[invalid]).await.unwrap_err()), "invalid_input");
+}
+
 /// LIB-AC-28, Q5: a dark session links by model while the rigs hold one
 /// camera of it and keeps that link after a second camera arrives; a new
 /// one then waits for the user's choice, which is the explicit match.

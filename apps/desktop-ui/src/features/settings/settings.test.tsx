@@ -160,6 +160,63 @@ describe.each(LOCALES)("Settings in %s", (locale) => {
   )
 
   it(
+    "creates and edits cameras with their independent revision",
+    async () => {
+      const host = serve()
+      const { user } = renderAt("/settings/equipment")
+      await screen.findByRole("rowheader", { name: "ASI2600MM" })
+      const [camera] = host.state.cameras
+      const row = screen.getByRole("rowheader", { name: "ASI2600MM" }).closest("tr") as HTMLElement
+      await user.click(within(row).getByRole("button", { name: new RegExp("ASI2600MM") }))
+      await user.click(await screen.findByRole("menuitem", { name: named(m.settings_edit()) }))
+      const dialog = await screen.findByRole("dialog")
+      const alias = within(dialog).getByRole("textbox", { name: m.equipment_camera_alias() })
+      await user.clear(alias)
+      await user.type(alias, "Guide camera")
+      await user.click(within(dialog).getByRole("button", { name: m.settings_save() }))
+      await waitFor(() => expect(host.sent("library_save_camera")).toEqual([{
+        input: { id: camera?.id, model: "ASI2600MM", alias: "Guide camera", noDarks: false, noBias: false, revision: 3 },
+      }]))
+      expect(host.state.cameras[0]?.alias).toBe("Guide camera")
+
+      await user.click(screen.getByRole("button", { name: named(m.equipment_add_camera()) }))
+      const add = await screen.findByRole("dialog")
+      await user.type(within(add).getByRole("textbox", { name: m.equipment_camera() }), "ASI533MC")
+      await user.click(within(add).getByRole("button", { name: m.settings_save() }))
+      await waitFor(() => expect(host.sent("library_save_camera")).toHaveLength(2))
+      expect(host.sent("library_save_camera")[1]).toMatchObject({ input: { id: null, model: "ASI533MC", revision: 0 } })
+      expect(await screen.findByRole("rowheader", { name: "ASI533MC" })).toBeInTheDocument()
+    },
+    TEST_MS,
+  )
+
+  it(
+    "keeps camera edits after a stale revision and a library refusal",
+    async () => {
+      const host = serve()
+      const { user } = renderAt("/settings/equipment")
+      const row = await screen.findByRole("rowheader", { name: "ASI2600MM" })
+      await user.click(within(row.closest("tr") as HTMLElement).getByRole("button", { name: new RegExp("ASI2600MM") }))
+      await user.click(await screen.findByRole("menuitem", { name: named(m.settings_edit()) }))
+      const dialog = await screen.findByRole("dialog")
+      const model = within(dialog).getByRole("textbox", { name: m.equipment_camera() })
+      await user.clear(model)
+      await user.type(model, "ASI2600MM Pro")
+      const current = host.state.cameras.find((camera) => camera.id === "cam-1")
+      if (current) host.state.cameras = host.state.cameras.map((camera) => (camera === current ? { ...camera, revision: 8 } : camera))
+      await user.click(within(dialog).getByRole("button", { name: m.settings_save() }))
+      expect(await within(dialog).findByText(m.action_failure_conflict())).toBeInTheDocument()
+      await waitFor(() => expect(host.sent("library_save_camera").map((args) => (args.input as { revision: number }).revision)).toEqual([3]))
+      expect(within(dialog).getByRole("textbox", { name: m.equipment_camera() })).toHaveValue("ASI2600MM Pro")
+      host.fail("library_save_camera", "invalid_input", "none")
+      await user.click(within(dialog).getByRole("button", { name: m.verb_retry() }))
+      expect(await within(dialog).findByText(m.action_failure_invalid_input())).toBeInTheDocument()
+      expect(within(dialog).getByRole("textbox", { name: m.equipment_camera() })).toHaveValue("ASI2600MM Pro")
+    },
+    TEST_MS,
+  )
+
+  it(
     "narrows Locations to the locations that need attention from the status bar's link, with Show all",
     async () => {
       serve(catalog({ locations: [location("loc-1", "Lights", "captures"), location("loc-2", "NAS", "captures", { availability: "offline" })] }))

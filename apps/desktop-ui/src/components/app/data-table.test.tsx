@@ -131,6 +131,13 @@ describe("DataTable", () => {
     expect(alert).toHaveTextContent(m.action_failure_input_write_risk())
   })
 
+  it("renders a table with no toolbar prop", () => {
+    render(<DataTable label="Frames" rows={ROWS} columns={COLUMNS} getRowId={(row) => row.id} />)
+    expect(screen.getByRole("table", { name: "Frames" })).toBeInTheDocument()
+    expect(rowOrder()).toEqual(["Vega", "Altair", "Deneb"])
+  })
+
+
   it("toolbar select: one labelled choice, keyboard operable, with no All and no filter chip", async () => {
     const user = userEvent.setup()
     const onChange = vi.fn()

@@ -1,17 +1,6 @@
 /**
- * Settings › Equipment (PLAN-EQ-FR-01..08): the saved rigs with their
- * filters and bands (`library_list_rig_filters`) and the cameras of those
- * rigs (`library_list_cameras`).
- *
- * - Add rig… and Edit… save a rig's camera and optics over its decision
- *   revision (`library_save_equipment`); a refusal keeps the dialog and the
- *   draft.
- * - Delete removes a rig or a camera nothing refers to. The library refuses
- *   one a session, Project or master still uses; the refusal shows beside
- *   the row's menu and nothing changes.
- *
- * The library has no command that creates or edits a camera, so cameras
- * are listed and deleted only, and the section names that gap.
+ * Settings › Equipment: saved rigs and cameras, filters, bands and camera defaults.
+ * Rigs and cameras have independent revision-checked edit dialogs.
  */
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { Plus } from "lucide-react"
@@ -19,13 +8,14 @@ import { useState } from "react"
 import { type Camera, type ColorKind, type EquipmentInput, library, type Rig } from "@/api/ipc"
 import { useMessages } from "@/app/preferences"
 import type { Column, MenuItem } from "@/components/app/contracts"
-import { NumberField, SelectField, TextField } from "@/components/app/fields"
+import { NumberField, SelectField, SwitchField, TextField } from "@/components/app/fields"
 import { blockedByErrors, FormDialog, useDialogForm } from "@/components/app/form-dialog"
 import { ListSection, SettingsPage } from "@/components/templates/settings-page"
 import { formatList, numberText } from "@/lib/format"
 import type { Messages } from "@/lib/i18n"
-import { Gap, Read } from "./parts"
+import { Read } from "./parts"
 import { camerasQuery, rigsQuery, settingsWrite } from "./queries"
+
 
 type ColorChoice = ColorKind | "unknown"
 
@@ -64,7 +54,9 @@ export function EquipmentPage() {
   const cameras = useQuery(camerasQuery())
   // Only the id: the dialog reads the rig from the current read, so a Save after `conflict` names the revision read again.
   const [editing, setEditing] = useState<string | null>(null)
-  const editedRig = editing && editing !== "new" ? rigs.data?.find((r) => r.equipment.id === editing) : undefined
+  const [editingCamera, setEditingCamera] = useState<string | null>(null)
+  const editedCamera = editingCamera && editingCamera !== "new" ? cameras.data?.find((camera: Camera) => camera.id === editingCamera) : undefined
+  const editedRig = editing && editing !== "new" ? rigs.data?.find((r: Rig) => r.equipment.id === editing) : undefined
   const rigActions = (rig: Rig): MenuItem[] => [
     { id: "edit-rig", label: m.settings_edit(), opensDialog: true, run: () => setEditing(rig.equipment.id) },
     { separator: true },
@@ -77,6 +69,8 @@ export function EquipmentPage() {
     },
   ]
   const cameraActions = (camera: Camera): MenuItem[] => [
+    { id: "edit-camera", label: m.settings_edit(), opensDialog: true, run: () => setEditingCamera(camera.id) },
+    { separator: true },
     {
       id: "delete-camera",
       label: m.settings_remove(),
@@ -101,11 +95,11 @@ export function EquipmentPage() {
           <ListSection
             title={m.equipment_cameras()}
             table={{ label: m.equipment_cameras(), rows, columns: cameraColumns(m), getRowId: (c) => c.id, rowLabel: (c) => c.alias ?? c.model, rowActions: cameraActions, empty: m.equipment_no_cameras() }}
+            add={{ id: "add-camera", label: m.equipment_add_camera(), icon: Plus, opensDialog: true, run: () => setEditingCamera("new") }}
           />
         )}
       </Read>
-      {/* astro-plan-wre19.22: no camera create or edit command; astro-plan-c6rcr: rig filter editing. */}
-      <Gap what={m.equipment_add_camera()} detail={m.settings_gap_camera_edit()} />
+      {editingCamera === "new" || editedCamera ? <CameraDialog camera={editedCamera ?? null} open onOpenChange={(open) => !open && setEditingCamera(null)} /> : null}
       {editing === "new" || editedRig ? <RigDialog rig={editedRig ?? null} open onOpenChange={(open) => !open && setEditing(null)} /> : null}
     </SettingsPage>
   )
@@ -193,6 +187,52 @@ function RigDialog({ rig, open, onOpenChange }: { rig: Rig | null; open: boolean
       <NumberField label={m.equipment_pixel_size()} min={0.1} step={0.01} value={values.pixelSizeUm} onChange={(pixelSizeUm) => set({ pixelSizeUm })} error={shown(errors, "pixelSizeUm")} />
       <NumberField label={m.equipment_sensor_width()} min={1} step={1} value={values.sensorWidthPx} onChange={(sensorWidthPx) => set({ sensorWidthPx })} error={shown(errors, "sensorWidthPx")} />
       <NumberField label={m.equipment_sensor_height()} min={1} step={1} value={values.sensorHeightPx} onChange={(sensorHeightPx) => set({ sensorHeightPx })} error={shown(errors, "sensorHeightPx")} />
+    </FormDialog>
+  )
+}
+
+interface CameraDraft {
+  model: string
+  alias: string
+  noDarks: boolean
+  noBias: boolean
+}
+
+function cameraDraftOf(camera: Camera | null): CameraDraft {
+  return {
+    model: camera?.model ?? "",
+    alias: camera?.alias ?? "",
+    noDarks: camera?.noDarks ?? false,
+    noBias: camera?.noBias ?? false,
+  }
+}
+
+function CameraDialog({ camera, open, onOpenChange }: { camera: Camera | null; open: boolean; onOpenChange: (open: boolean) => void }) {
+  const m = useMessages()
+  const client = useQueryClient()
+  const { values, set, shown } = useDialogForm<CameraDraft>(open, () => cameraDraftOf(camera))
+  const label = m.settings_save()
+  const errors = { model: values.model.trim() ? undefined : m.settings_name_required() }
+  const save = () => settingsWrite(client, () => library.librarySaveCamera({
+    id: camera?.id ?? null,
+    model: values.model.trim(),
+    alias: values.alias.trim() || null,
+    noDarks: values.noDarks,
+    noBias: values.noBias,
+    revision: camera?.revision ?? 0,
+  }))
+
+  return (
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={camera ? m.settings_edit_title({ name: camera.alias ?? camera.model }) : m.equipment_add_camera()}
+      confirm={{ id: "save-camera", label, kind: "primary", unavailable: blockedByErrors(m, label, errors), run: save }}
+    >
+      <TextField label={m.equipment_camera()} value={values.model} onChange={(model) => set({ model })} error={shown(errors, "model")} autoFocus />
+      <TextField label={m.equipment_camera_alias()} value={values.alias} onChange={(alias) => set({ alias })} />
+      <SwitchField label={m.equipment_no_darks()} checked={values.noDarks} onChange={(noDarks) => set({ noDarks })} />
+      <SwitchField label={m.equipment_no_bias()} checked={values.noBias} onChange={(noBias) => set({ noBias })} />
     </FormDialog>
   )
 }
