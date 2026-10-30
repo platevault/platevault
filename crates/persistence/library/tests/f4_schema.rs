@@ -1146,6 +1146,10 @@ async fn project_outputs_reads_recorded_rows_after_close_without_walking() {
         .unwrap();
     }
     let id = f4.project.parse().unwrap();
+    for step in ["clean_up", "trash", "archive"] {
+        f4.wrap_up(step, "skipped").await.unwrap();
+    }
+    f4.snapshot().await;
     f4.close("closed").await.unwrap();
     let listed = f4.world.catalog.project_outputs(id).await.unwrap();
     assert_eq!(listed, [a, z]);
