@@ -38,14 +38,13 @@ pub fn validate_lead_minutes(lead_minutes: u32) -> Result<(), LibraryError> {
     if (MIN_LEAD_MINUTES..=MAX_LEAD_MINUTES).contains(&lead_minutes) {
         return Ok(());
     }
-    Err(invalid(format!(
-        "leadMinutes {lead_minutes} is not a whole number of minutes from \
-         {MIN_LEAD_MINUTES} to {MAX_LEAD_MINUTES}"
-    )))
-}
-
-fn invalid(message: String) -> LibraryError {
-    LibraryError::InvalidInput(message)
+    Err(LibraryError::invalid_field(
+        "leadMinutes",
+        format!(
+            "leadMinutes {lead_minutes} is not a whole number of minutes from \
+             {MIN_LEAD_MINUTES} to {MAX_LEAD_MINUTES}"
+        ),
+    ))
 }
 
 time::serde::format_description!(iso_date, Date, "[year]-[month]-[day]");
@@ -79,25 +78,34 @@ impl SiteInput {
     /// empty zone name.
     pub fn validate(&self) -> Result<(), LibraryError> {
         if self.name.trim().is_empty() {
-            return Err(invalid("name: a site needs a non-empty name".into()));
+            return Err(LibraryError::invalid_field("name", "name: a site needs a non-empty name"));
         }
         if !self.latitude_deg.is_finite() || !(-90.0..=90.0).contains(&self.latitude_deg) {
-            return Err(invalid(format!(
-                "latitudeDeg {} is not a finite angle in [-90, 90]",
-                self.latitude_deg
-            )));
+            return Err(LibraryError::invalid_field(
+                "latitudeDeg",
+                format!("latitudeDeg {} is not a finite angle in [-90, 90]", self.latitude_deg),
+            ));
         }
         if !self.longitude_deg.is_finite() || !(-180.0..=180.0).contains(&self.longitude_deg) {
-            return Err(invalid(format!(
-                "longitudeDeg {} is not a finite east-positive angle in [-180, 180]",
-                self.longitude_deg
-            )));
+            return Err(LibraryError::invalid_field(
+                "longitudeDeg",
+                format!(
+                    "longitudeDeg {} is not a finite east-positive angle in [-180, 180]",
+                    self.longitude_deg
+                ),
+            ));
         }
         if let Some(elevation) = self.elevation_m.filter(|value| !value.is_finite()) {
-            return Err(invalid(format!("elevationM {elevation} is not a finite height")));
+            return Err(LibraryError::invalid_field(
+                "elevationM",
+                format!("elevationM {elevation} is not a finite height"),
+            ));
         }
         if self.time_zone.trim().is_empty() {
-            return Err(invalid("timeZone: a site needs an IANA time-zone name".into()));
+            return Err(LibraryError::invalid_field(
+                "timeZone",
+                "timeZone: a site needs an IANA time-zone name",
+            ));
         }
         Ok(())
     }
@@ -301,25 +309,35 @@ impl PlanCriteria {
     /// (0, 180) degrees.
     pub fn validate(&self) -> Result<(), LibraryError> {
         if !self.min_altitude_deg.is_finite() || !(0.0..90.0).contains(&self.min_altitude_deg) {
-            return Err(invalid(format!(
-                "minAltitudeDeg {} is not a finite altitude in [0, 90)",
-                self.min_altitude_deg
-            )));
+            return Err(LibraryError::invalid_field(
+                "minAltitudeDeg",
+                format!(
+                    "minAltitudeDeg {} is not a finite altitude in [0, 90)",
+                    self.min_altitude_deg
+                ),
+            ));
         }
         if !(1..=MAX_MINUTES).contains(&self.min_duration_minutes) {
-            return Err(invalid(format!(
-                "minDurationMinutes {} is not a whole number of minutes from 1 to {MAX_MINUTES}",
-                self.min_duration_minutes
-            )));
+            return Err(LibraryError::invalid_field(
+                "minDurationMinutes",
+                format!(
+                    "minDurationMinutes {} is not a whole number of minutes from 1 to {MAX_MINUTES}",
+                    self.min_duration_minutes
+                ),
+            ));
         }
         if let MoonCriterion::MinSeparation { min_separation_deg } = self.moon {
             if !min_separation_deg.is_finite()
                 || min_separation_deg <= 0.0
                 || min_separation_deg >= 180.0
             {
-                return Err(invalid(format!(
-                    "moon.minSeparationDeg {min_separation_deg} is not a finite angle in (0, 180)"
-                )));
+                return Err(LibraryError::invalid_field(
+                    "minSeparationDeg",
+                    format!(
+                        "moon.minSeparationDeg {min_separation_deg} is not a finite angle in (0, 180)"
+                    ),
+                )
+                .within_field("moon"));
             }
         }
         Ok(())
@@ -347,12 +365,12 @@ impl WindowQuery {
     /// `InvalidInput` naming `nights` outside 1 to 366, or the invalid criterion.
     pub fn validate(&self) -> Result<(), LibraryError> {
         if !(1..=MAX_NIGHTS).contains(&self.nights) {
-            return Err(invalid(format!(
-                "nights {} is not a count from 1 to {MAX_NIGHTS}",
-                self.nights
-            )));
+            return Err(LibraryError::invalid_field(
+                "nights",
+                format!("nights {} is not a count from 1 to {MAX_NIGHTS}", self.nights),
+            ));
         }
-        self.criteria.validate()
+        self.criteria.validate().map_err(|error| error.within_field("criteria"))
     }
 }
 
@@ -383,7 +401,9 @@ impl WindowKey {
     ) -> Result<Self, LibraryError> {
         let start_utc = start.to_offset(UtcOffset::UTC);
         if start_utc.second() != 0 || start_utc.nanosecond() != 0 {
-            return Err(invalid(format!("windowKey start {start_utc} is not a whole UTC minute")));
+            return Err(LibraryError::InvalidInput(format!(
+                "windowKey start {start_utc} is not a whole UTC minute"
+            )));
         }
         Ok(Self { target_id, site_id, start_utc })
     }
@@ -425,7 +445,9 @@ impl FromStr for WindowKey {
     type Err = LibraryError;
 
     fn from_str(text: &str) -> Result<Self, Self::Err> {
-        let malformed = || invalid(format!("windowKey {text:?} is not <target>/<site>/<start>"));
+        let malformed = || {
+            LibraryError::InvalidInput(format!("windowKey {text:?} is not <target>/<site>/<start>"))
+        };
         let mut parts = text.split('/');
         let (Some(target), Some(site), Some(start), None) =
             (parts.next(), parts.next(), parts.next(), parts.next())
@@ -645,7 +667,7 @@ impl ReminderInput {
     /// range, or the invalid criterion.
     pub fn validate(&self) -> Result<(), LibraryError> {
         validate_lead_minutes(self.lead_minutes)?;
-        self.criteria.validate()
+        self.criteria.validate().map_err(|error| error.within_field("criteria"))
     }
 }
 
@@ -927,9 +949,12 @@ impl ExportSelection {
     /// `InvalidInput` naming `windowKeys` when it is empty, or the invalid query.
     pub fn validate(&self) -> Result<(), LibraryError> {
         if self.window_keys.is_empty() {
-            return Err(invalid("windowKeys: a calendar export needs at least one window".into()));
+            return Err(LibraryError::invalid_field(
+                "windowKeys",
+                "windowKeys: a calendar export needs at least one window",
+            ));
         }
-        self.query.validate()
+        self.query.validate().map_err(|error| error.within_field("query"))
     }
 }
 

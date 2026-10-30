@@ -14,7 +14,7 @@ use std::path::Path;
 use persistence_library::{Catalog, SessionQuery, SuggestedAssociation};
 use platevault_model::{
     AssociationKind, AssociationState, Availability, BuiltinPreset, Catalogue, ChannelIntegration,
-    Equipment, EvidenceItem, LibraryError, Location, MeasurementMethod, PresetFilters,
+    Equipment, EvidenceItem, FieldPath, LibraryError, Location, MeasurementMethod, PresetFilters,
     ProjectBadge, ProjectInput, Provenance, ScanFile, ScanObservation, ScanProgress, ScanState,
     Session, SubjectInput, TargetActivity, TargetRecord, TargetsColumn, TargetsSearchAction,
     TargetsShow, TargetsSort, WrapUpOutcome, WrapUpStep,
@@ -247,10 +247,8 @@ async fn act_on_target_search_result_adds_once_then_opens_the_kept_record() {
 
     let mut blank = target("x", "x");
     blank.designation = "  ".into();
-    assert!(matches!(
-        catalog.act_on_target_search_result(&blank, true).await.unwrap_err(),
-        LibraryError::InvalidInput(_)
-    ));
+    let refused = catalog.act_on_target_search_result(&blank, true).await.unwrap_err();
+    assert_eq!(refused.field().map(FieldPath::as_str), Some("designation"), "{refused:?}");
     assert!(!catalog.my_target_marks().await.unwrap().favourites.contains(&blank.id));
 }
 
@@ -475,7 +473,7 @@ async fn saved_presets_persist_rename_and_delete_at_their_revision() {
     let duplicate = catalog.create_preset("autumn GALAXIES", &autumn()).await.unwrap_err();
     assert!(matches!(duplicate, LibraryError::Conflict { .. }), "{duplicate:?}");
     let builtin = catalog.create_preset("Galaxies dark sky", &autumn()).await.unwrap_err();
-    assert!(matches!(builtin, LibraryError::InvalidInput(_)), "{builtin:?}");
+    assert_eq!(builtin.field().map(FieldPath::as_str), Some("name"), "{builtin:?}");
     catalog.close().await.unwrap();
 
     let catalog = Catalog::open(&fx.db).await.unwrap();

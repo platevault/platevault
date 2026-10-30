@@ -19,7 +19,7 @@ import { LOCALES, m } from "@/lib/i18n"
 
 const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..")
 const FONT_SANS = '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, "Helvetica Neue", sans-serif'
-const ACCESS_DENIED: ErrorResponse = { code: "access_denied", identity: null, scope: null, retry: "retry", currentRevision: null, successors: [], window: null, correction: null }
+const ACCESS_DENIED: ErrorResponse = { code: "access_denied", identity: null, scope: null, retry: "retry", currentRevision: null, successors: [], window: null, correction: null, field: null }
 
 afterEach(() => {
   clearMocks()

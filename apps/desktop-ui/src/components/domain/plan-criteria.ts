@@ -7,9 +7,8 @@
  * asks for them (`no_criteria`).
  *
  * The form checks the ranges the library refuses (`PlanCriteria::validate`)
- * on their field before it saves. The library's `invalid_input` names no
- * field on the wire, so a refusal it still makes shows as the dialog's
- * error.
+ * on their field before it saves. Refusal paths are mapped by the shared
+ * PlanCriteria dialog, and the dialog shows the library's named field.
  */
 import type { Darkness, PlanCriteria } from "@/api/ipc"
 import { libraryQuery } from "@/api/query"
@@ -31,7 +30,6 @@ export interface CriteriaDraft {
 }
 
 export type CriteriaField = keyof CriteriaDraft
-
 /** The longest minimum window the library takes, in minutes (`MAX_MINUTES`). */
 const MAX_MINUTES = 1440
 

@@ -5544,21 +5544,26 @@ fn next_revision(
 
 fn validate_target(candidate: &TargetCandidate) -> Result<()> {
     if candidate.designation.trim().is_empty() {
-        return Err(LibraryError::InvalidInput("target designation is empty".into()));
+        return Err(LibraryError::invalid_field("designation", "target designation is empty"));
     }
     if let Some(coordinates) = &candidate.coordinates {
-        let valid = (0.0..360.0).contains(&coordinates.ra_deg)
-            && (-90.0..=90.0).contains(&coordinates.dec_deg)
-            && !coordinates.frame.trim().is_empty();
-        if !valid {
-            return Err(LibraryError::InvalidInput("invalid target coordinates".into()));
+        let invalid = |field| Err(LibraryError::invalid_field(field, "invalid target coordinates"));
+        if !(0.0..360.0).contains(&coordinates.ra_deg) {
+            return invalid("coordinates.raDeg");
+        }
+        if !(-90.0..=90.0).contains(&coordinates.dec_deg) {
+            return invalid("coordinates.decDeg");
+        }
+        if coordinates.frame.trim().is_empty() {
+            return invalid("coordinates.frame");
         }
     }
     let mut keys = BTreeSet::new();
-    for alias in &candidate.aliases {
+    for (index, alias) in candidate.aliases.iter().enumerate() {
         if alias.normalized.is_empty() || !keys.insert(alias.normalized.as_str()) {
-            return Err(LibraryError::InvalidInput(
-                "alias keys must be non-empty and unique".into(),
+            return Err(LibraryError::invalid_field(
+                &format!("aliases.{index}.normalized"),
+                "alias keys must be non-empty and unique",
             ));
         }
     }
@@ -5696,14 +5701,26 @@ fn within_cone(cone: &TargetCone, ra_deg: f64, dec_deg: f64) -> bool {
 
 fn validate_equipment(equipment: &Equipment) -> Result<()> {
     if equipment.name.trim().is_empty() {
-        return Err(LibraryError::InvalidInput("equipment name is empty".into()));
+        return Err(LibraryError::invalid_field("name", "equipment name is empty"));
     }
     let positive = |value: Option<f64>| value.is_none_or(|value| value.is_finite() && value > 0.0);
-    if !positive(equipment.focal_length_mm) || !positive(equipment.pixel_size_um) {
-        return Err(LibraryError::InvalidInput("equipment dimensions must be positive".into()));
+    for (field, value) in
+        [("focalLengthMm", equipment.focal_length_mm), ("pixelSizeUm", equipment.pixel_size_um)]
+    {
+        if !positive(value) {
+            return Err(LibraryError::invalid_field(
+                field,
+                "equipment dimensions must be positive",
+            ));
+        }
     }
-    if equipment.sensor_width_px == Some(0) || equipment.sensor_height_px == Some(0) {
-        return Err(LibraryError::InvalidInput("sensor size must be positive".into()));
+    for (field, value) in [
+        ("sensorWidthPx", equipment.sensor_width_px),
+        ("sensorHeightPx", equipment.sensor_height_px),
+    ] {
+        if value == Some(0) {
+            return Err(LibraryError::invalid_field(field, "sensor size must be positive"));
+        }
     }
     Ok(())
 }

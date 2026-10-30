@@ -14,7 +14,7 @@ import type { ActionResult, Band, MoonAvoidance, MoonAvoidanceCurve, WorkflowSet
 import { useMessages } from "@/app/preferences"
 import { KeyValueList } from "@/components/app/data"
 import { NumberField, SelectField } from "@/components/app/fields"
-import { type FieldErrors, FormDialog, useDialogForm } from "@/components/app/form-dialog"
+import { type FieldErrors, type FieldPaths, FormDialog, useDialogForm } from "@/components/app/form-dialog"
 import { numberText } from "@/lib/format"
 import type { Messages } from "@/lib/i18n"
 
@@ -30,12 +30,13 @@ const DISTANCE = { min: 0, max: 180 }
 const WIDTH = { min: 0.5, max: 30 }
 
 type CurveField = "distanceDeg" | "widthDays"
+type MoonField = `${Band}.${CurveField}`
 
-function curveErrors(m: Messages, curve: MoonAvoidanceCurve): FieldErrors<CurveField> {
+function curveErrors(m: Messages, curve: MoonAvoidanceCurve, prefix = ""): FieldErrors<CurveField | MoonField> {
   const { distanceDeg: d, widthDays: w } = curve
   return {
-    distanceDeg: d !== null && d >= DISTANCE.min && d <= DISTANCE.max ? undefined : m.targets_curve_distance_range(),
-    widthDays: w !== null && w >= WIDTH.min && w <= WIDTH.max ? undefined : m.targets_curve_width_range(),
+    [`${prefix}distanceDeg`]: d !== null && d >= DISTANCE.min && d <= DISTANCE.max ? undefined : m.targets_curve_distance_range(),
+    [`${prefix}widthDays`]: w !== null && w >= WIDTH.min && w <= WIDTH.max ? undefined : m.targets_curve_width_range(),
   }
 }
 
@@ -43,8 +44,6 @@ function curveErrors(m: Messages, curve: MoonAvoidanceCurve): FieldErrors<CurveF
 function firstInvalid(m: Messages, curves: MoonAvoidance): Band | null {
   return MOON_BANDS.find((b) => Object.values(curveErrors(m, curves[b])).some(Boolean)) ?? null
 }
-
-/** "Moon ≥ 120° at full · 7 d", or "–" for an incomplete curve. */
 export function curveText(m: Messages, curve: MoonAvoidanceCurve): string {
   if (curve.distanceDeg === null || curve.widthDays === null) return "–"
   return m.tonight_avoidance({ separation: numberText(curve.distanceDeg), width: numberText(curve.widthDays) })
@@ -61,12 +60,21 @@ export interface MoonLimitsDialogProps {
 export function MoonLimitsDialog({ record, open, onOpenChange, save }: MoonLimitsDialogProps) {
   const m = useMessages()
   const [band, setBand] = useState<Band>("L")
-  const { values, set } = useDialogForm<MoonAvoidance>(open, () => record.settings.moonAvoidance)
+  const { values, set, shown, refusing } = useDialogForm<MoonAvoidance, MoonField>(open, () => record.settings.moonAvoidance)
   const current = values[band]
-  const errors = curveErrors(m, current)
+  const errors = curveErrors(m, current, `${band}.`)
   const invalid = firstInvalid(m, values)
   const label = m.settings_save()
-  const edit = (patch: Partial<MoonAvoidanceCurve>) => set({ [band]: { ...current, ...patch } })
+  const edit = (patch: Partial<MoonAvoidanceCurve>) => set({ [band]: { ...current, ...patch } }, [`${band}.distanceDeg`, `${band}.widthDays`])
+  const paths: FieldPaths<MoonField> = {
+    "L.distanceDeg": "moonAvoidance.L.distanceDeg", "L.widthDays": "moonAvoidance.L.widthDays",
+    "R.distanceDeg": "moonAvoidance.R.distanceDeg", "R.widthDays": "moonAvoidance.R.widthDays",
+    "G.distanceDeg": "moonAvoidance.G.distanceDeg", "G.widthDays": "moonAvoidance.G.widthDays",
+    "B.distanceDeg": "moonAvoidance.B.distanceDeg", "B.widthDays": "moonAvoidance.B.widthDays",
+    "Ha.distanceDeg": "moonAvoidance.Ha.distanceDeg", "Ha.widthDays": "moonAvoidance.Ha.widthDays",
+    "SII.distanceDeg": "moonAvoidance.SII.distanceDeg", "SII.widthDays": "moonAvoidance.SII.widthDays",
+    "OIII.distanceDeg": "moonAvoidance.OIII.distanceDeg", "OIII.widthDays": "moonAvoidance.OIII.widthDays",
+  }
   return (
     <FormDialog
       open={open}
@@ -77,7 +85,7 @@ export function MoonLimitsDialog({ record, open, onOpenChange, save }: MoonLimit
         label,
         kind: "primary",
         unavailable: invalid ? { action: m.actions_blocked({ action: label }), reason: m.tonight_curve_incomplete({ band: invalid }), blockers: [] } : undefined,
-        run: () => save(values),
+        run: () => refusing(save(values), paths),
       }}
     >
       <SelectField label={m.tonight_filter()} value={band} options={MOON_BANDS.map((b) => ({ value: b, label: b }))} onChange={setBand} />
@@ -89,7 +97,7 @@ export function MoonLimitsDialog({ record, open, onOpenChange, save }: MoonLimit
         step={1}
         value={current.distanceDeg}
         onChange={(distanceDeg) => edit({ distanceDeg })}
-        error={errors.distanceDeg}
+        error={shown(errors, `${band}.distanceDeg`)}
       />
       <NumberField
         label={m.tonight_curve_width()}
@@ -99,7 +107,7 @@ export function MoonLimitsDialog({ record, open, onOpenChange, save }: MoonLimit
         step={0.5}
         value={current.widthDays}
         onChange={(widthDays) => edit({ widthDays })}
-        error={errors.widthDays}
+        error={shown(errors, `${band}.widthDays`)}
       />
       <KeyValueList items={MOON_BANDS.map((b) => ({ label: b, value: curveText(m, values[b]) }))} />
     </FormDialog>

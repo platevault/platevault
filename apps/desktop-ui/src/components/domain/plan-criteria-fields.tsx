@@ -15,7 +15,7 @@ const MOON: readonly Exclude<MoonKind, "">[] = ["none", "below_horizon", "min_se
 export interface PlanCriteriaFieldsProps {
   values: CriteriaDraft
   set: (patch: Partial<CriteriaDraft>) => void
-  /** The message a field shows now: `useDialogForm`'s `shown` over `criteriaErrors`, so a field speaks once the user changed it. */
+  /** The message a field shows now, including a refusal the library named. */
   errorOf: (field: CriteriaField) => string | undefined
 }
 

@@ -1556,8 +1556,12 @@ async fn a_split_preview_recalculates_for_each_limit_without_writing_anything() 
     assert_eq!(split(10.0, 5.0).await, [4], "10′ holds all four");
     assert_eq!(split(5.0, 3.0).await, [2, 1, 1], "3°: the light turned 4° splits");
     assert_eq!(split(2.0, 3.0).await, [1, 1, 1, 1], "both limits move together");
-    let invalid = library.preview_import_split(preview.id, &limits(0.0, 5.0)).await;
-    assert!(matches!(invalid, Err(LibraryError::InvalidInput(_))), "{invalid:?}");
+    let invalid = library.preview_import_split(preview.id, &limits(0.0, 5.0)).await.unwrap_err();
+    assert_eq!(
+        invalid.field().map(FieldPath::as_str),
+        Some("maxCentreOffsetArcmin"),
+        "{invalid:?}"
+    );
 
     let unchanged = library.import_operation(preview.id).await.unwrap();
     assert_eq!(unchanged.revision, preview.revision, "a split preview saves nothing");

@@ -62,7 +62,7 @@ async fn lead_times_run_from_over_thirty_minutes_to_seven_days() {
     for minutes in [0, 30, 10_081] {
         let error = library.save_reminder_lead_time(0, minutes).await.unwrap_err();
         assert!(
-            matches!(&error, LibraryError::InvalidInput(message) if message.contains("leadMinutes")),
+            matches!(&error, LibraryError::InvalidField { field, .. } if field.as_str() == "leadMinutes"),
             "{minutes}: {error:?}"
         );
     }

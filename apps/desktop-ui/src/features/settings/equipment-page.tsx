@@ -22,7 +22,7 @@ import { type Camera, type ColorKind, type EquipmentInput, library, type Rig } f
 import { useMessages } from "@/app/preferences"
 import type { Column, MenuItem } from "@/components/app/contracts"
 import { NumberField, SelectField, TextField } from "@/components/app/fields"
-import { blockedByErrors, FormDialog, useDialogForm } from "@/components/app/form-dialog"
+import { blockedByErrors, type FieldPaths, FormDialog, useDialogForm } from "@/components/app/form-dialog"
 import { ListSection, SettingsPage } from "@/components/templates/settings-page"
 import { formatList, numberText } from "@/lib/format"
 import type { Messages } from "@/lib/i18n"
@@ -128,6 +128,14 @@ interface RigDraft {
   sensorHeightPx: number | null
   colorKind: ColorChoice
 }
+const RIG_PATHS: FieldPaths<keyof RigDraft> = {
+  name: "name",
+  focalLengthMm: "focalLengthMm",
+  pixelSizeUm: "pixelSizeUm",
+  sensorWidthPx: "sensorWidthPx",
+  sensorHeightPx: "sensorHeightPx",
+}
+
 
 function draftOf(rig: Rig | null): RigDraft {
   const e = rig?.equipment
@@ -165,7 +173,7 @@ const wholePositive = (value: number | null) => value === null || (Number.isInte
 function RigDialog({ rig, open, onOpenChange }: { rig: Rig | null; open: boolean; onOpenChange: (open: boolean) => void }) {
   const m = useMessages()
   const client = useQueryClient()
-  const { values, set, shown } = useDialogForm<RigDraft>(open, () => draftOf(rig))
+  const { values, set, shown, refusing } = useDialogForm<RigDraft>(open, () => draftOf(rig))
   const label = m.settings_save()
   const errors = {
     name: values.name.trim() ? undefined : m.settings_name_required(),
@@ -189,7 +197,7 @@ function RigDialog({ rig, open, onOpenChange }: { rig: Rig | null; open: boolean
         label,
         kind: "primary",
         unavailable: blockedByErrors(m, label, errors),
-        run: () => settingsWrite(client, () => library.librarySaveEquipment(inputOf(rig, values), rig ? rig.equipment.decisionRevision : null)),
+        run: () => refusing(settingsWrite(client, () => library.librarySaveEquipment(inputOf(rig, values), rig ? rig.equipment.decisionRevision : null)), RIG_PATHS),
       }}
     >
       <TextField label={m.equipment_rig_name()} value={values.name} onChange={(name) => set({ name })} error={shown(errors, "name")} autoFocus />

@@ -136,6 +136,59 @@ describe.each(LOCALES)("Settings in %s", (locale) => {
   )
 
   it(
+    "shows a library refusal beside a matching field it names",
+    async () => {
+      const host = serve()
+      const { user } = renderAt("/settings/matching")
+      await user.click(await screen.findByRole("button", { name: named(m.settings_edit()) }))
+      const dialog = await screen.findByRole("dialog", { name: m.settings_label_matching() })
+      const centre = within(dialog).getByLabelText(label(m.equipment_matching_centre(), m.settings_unit_arcmin()))
+      host.fail("workflow_settings_save", "invalid_input", "retry", "framing.maxCentreOffsetArcmin")
+      await user.click(within(dialog).getByRole("button", { name: m.settings_save() }))
+      expect(await within(dialog).findByText(m.form_field_refused())).toBeInTheDocument()
+      expect(centre).toHaveAttribute("aria-invalid", "true")
+    },
+    TEST_MS,
+  )
+  it(
+    "requires dark and bias window days to be whole numbers",
+    async () => {
+      serve()
+      const { user } = renderAt("/settings/matching")
+      await user.click(await screen.findByRole("button", { name: named(m.settings_edit()) }))
+      const dialog = await screen.findByRole("dialog", { name: m.settings_label_matching() })
+      const days = within(dialog).getByLabelText(label(m.equipment_matching_window_days(), m.calibration_unit_days()))
+      await user.clear(days)
+      expect(await within(dialog).findByText(m.common_enter_number())).toBeInTheDocument()
+      expect(within(dialog).getByRole("button", { name: m.settings_save() })).toHaveAttribute("aria-disabled", "true")
+
+      await user.clear(days)
+      await user.type(days, "1.5")
+      expect(within(dialog).getByText(m.common_enter_number())).toBeInTheDocument()
+      expect(within(dialog).getByRole("button", { name: m.settings_save() })).toHaveAttribute("aria-disabled", "true")
+    },
+    TEST_MS,
+  )
+  it(
+    "requires the flat window nights to be a whole number",
+    async () => {
+      serve()
+      const { user } = renderAt("/settings/matching")
+      await user.click(await screen.findByRole("button", { name: named(m.settings_edit()) }))
+      const dialog = await screen.findByRole("dialog", { name: m.settings_label_matching() })
+      const nights = within(dialog).getByLabelText(label(m.equipment_matching_window_nights(), m.equipment_unit_nights()))
+      await user.clear(nights)
+      expect(await within(dialog).findByText(m.common_enter_number())).toBeInTheDocument()
+      expect(within(dialog).getByRole("button", { name: m.settings_save() })).toHaveAttribute("aria-disabled", "true")
+
+      await user.type(nights, "1.5")
+      expect(within(dialog).getByText(m.common_enter_number())).toBeInTheDocument()
+      expect(within(dialog).getByRole("button", { name: m.settings_save() })).toHaveAttribute("aria-disabled", "true")
+    },
+    TEST_MS,
+  )
+
+  it(
     "keeps a rig's edits through a stale revision and saves them over the revision read again",
     async () => {
       const host = serve()

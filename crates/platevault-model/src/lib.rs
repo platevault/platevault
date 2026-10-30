@@ -3,6 +3,7 @@
 
 use std::borrow::Cow;
 use std::collections::BTreeMap;
+use std::fmt;
 use std::path::{Component, Path, PathBuf};
 use std::sync::LazyLock;
 
@@ -158,6 +159,10 @@ pub type Revision = u64;
 pub enum LibraryError {
     #[error("invalid input: {0}")]
     InvalidInput(String),
+    /// An `InvalidInput` refusal of one value whose field the validator
+    /// names: `field` crosses IPC, `message` is the English diagnostic.
+    #[error("invalid input: {message}")]
+    InvalidField { field: FieldPath, message: String },
     #[error("not found: {0}")]
     NotFound(String),
     #[error("revision conflict for {id}; current revision {current}")]
@@ -346,12 +351,52 @@ pub struct ErrorResponse {
     /// The records that superseded a `conflict`'s record.
     pub successors: Vec<Uuid>,
     /// The selected window a `conflict` found missing from the windows
-    /// recomputed at its site; the key names the Target and the site.
-    pub window: Option<WindowKey>,
+    /// recomputed at its site; the key names the Target and the site. Boxed,
+    /// like `correction`, so the response stays below the workspace's
+    /// `large-error-threshold`.
+    pub window: Option<Box<WindowKey>>,
     /// The corrected field a `correction_*` refusal names and why no
     /// isolated patched copy can carry it; boxed so the response stays
     /// below the workspace's `large-error-threshold`.
     pub correction: Option<Box<UndeliverableCorrection>>,
+    /// The input field an `invalid_input` refusal names, when its validator
+    /// knows which one failed; the client shows the refusal on that field.
+    pub field: Option<FieldPath>,
+}
+
+/// The stable machine path of the input field a refusal names: the wire
+/// (camelCase) names from the validated value down to the field, joined by
+/// `.`, such as `minAltitudeDeg` or `moonAvoidance.Ha.distanceDeg`. Never
+/// English text; the client maps it onto the form field holding the value.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(transparent)]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
+pub struct FieldPath(Box<str>);
+
+impl FieldPath {
+    /// The path of the field named `name` on the validated value.
+    #[must_use]
+    pub fn new(name: &str) -> Self {
+        Self(name.into())
+    }
+
+    /// This path below `parent`, the field of the enclosing value that holds
+    /// the value this path is relative to.
+    #[must_use]
+    pub fn within(self, parent: &str) -> Self {
+        Self(format!("{parent}.{}", self.0).into())
+    }
+
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Display for FieldPath {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
 }
 
 /// A corrected capture field no isolated patched copy can carry, and why.
@@ -380,6 +425,43 @@ impl LibraryError {
         }
     }
 
+    /// An `InvalidInput` refusal of the field at `field`, its path on the
+    /// validated value (see [`FieldPath`]), `message` the English diagnostic.
+    #[must_use]
+    pub fn invalid_field(field: &str, message: impl Into<String>) -> Self {
+        Self::InvalidField { field: FieldPath::new(field), message: message.into() }
+    }
+
+    /// This refusal of a value as the refusal of the field `parent` of the
+    /// enclosing value that holds it, so an outer validator names the field
+    /// from its own value down: a named field moves below `parent`, and a
+    /// refusal of the whole value names `parent`. Any other failure is
+    /// unchanged.
+    #[must_use]
+    pub fn within_field(self, parent: &str) -> Self {
+        match self {
+            Self::InvalidField { field, message } => {
+                Self::InvalidField { field: field.within(parent), message }
+            }
+            Self::InvalidInput(message) => Self::invalid_field(parent, message),
+            Self::Context { error, scope, identity } => {
+                Self::Context { error: Box::new(error.within_field(parent)), scope, identity }
+            }
+            error => error,
+        }
+    }
+
+    /// The input field this failure names; a [`Self::Context`] has its
+    /// inner error's.
+    #[must_use]
+    pub fn field(&self) -> Option<&FieldPath> {
+        match self {
+            Self::InvalidField { field, .. } => Some(field),
+            Self::Context { error, .. } => error.field(),
+            _ => None,
+        }
+    }
+
     /// This failure naming `identity` as the record it concerns, unless it
     /// names one already: a conflict names its own record and a context keeps
     /// its identity. A request over many records uses it to say which failed.
@@ -404,7 +486,7 @@ impl LibraryError {
     #[must_use]
     pub fn code(&self) -> LibraryErrorCode {
         match self {
-            Self::InvalidInput(_) => LibraryErrorCode::InvalidInput,
+            Self::InvalidInput(_) | Self::InvalidField { .. } => LibraryErrorCode::InvalidInput,
             Self::NotFound(_) => LibraryErrorCode::NotFound,
             Self::Conflict { .. } | Self::WindowConflict { .. } => LibraryErrorCode::Conflict,
             Self::IdentityConflict(_) => LibraryErrorCode::IdentityConflict,
@@ -444,6 +526,7 @@ impl LibraryError {
             successors: Vec::new(),
             window: None,
             correction: None,
+            field: None,
         };
         match self {
             Self::Conflict { id, current, successors } => {
@@ -454,7 +537,7 @@ impl LibraryError {
             Self::WindowConflict { key, current, .. } => {
                 response.identity = Some(key.target_id());
                 response.current_revision = Some(*current);
-                response.window = Some(*key);
+                response.window = Some(Box::new(*key));
             }
             Self::CorrectionUndeliverable { identity, path, field, refusal } => {
                 response.identity = Some(*identity);
@@ -466,6 +549,7 @@ impl LibraryError {
                     refusal: *refusal,
                 }));
             }
+            Self::InvalidField { field, .. } => response.field = Some(field.clone()),
             _ => {}
         }
         response
@@ -1489,16 +1573,18 @@ impl TargetCone {
     /// Validate a finite spherical cone in degrees.
     ///
     /// # Errors
-    /// Refuses coordinates outside their physical ranges or non-finite values.
+    /// `InvalidInput` naming the field for a coordinate outside its physical
+    /// range or a non-finite value.
     pub fn validate(&self) -> Result<(), LibraryError> {
-        if !self.ra_deg.is_finite()
-            || !(0.0..360.0).contains(&self.ra_deg)
-            || !self.dec_deg.is_finite()
-            || !(-90.0..=90.0).contains(&self.dec_deg)
-            || !self.radius_deg.is_finite()
-            || !(0.0..=180.0).contains(&self.radius_deg)
-        {
-            return Err(LibraryError::InvalidInput("invalid sky cone in degrees".into()));
+        let refuse = |field| Err(LibraryError::invalid_field(field, "invalid sky cone in degrees"));
+        if !self.ra_deg.is_finite() || !(0.0..360.0).contains(&self.ra_deg) {
+            return refuse("raDeg");
+        }
+        if !self.dec_deg.is_finite() || !(-90.0..=90.0).contains(&self.dec_deg) {
+            return refuse("decDeg");
+        }
+        if !self.radius_deg.is_finite() || !(0.0..=180.0).contains(&self.radius_deg) {
+            return refuse("radiusDeg");
         }
         Ok(())
     }

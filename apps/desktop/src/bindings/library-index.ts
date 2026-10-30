@@ -3697,7 +3697,9 @@ export type ErrorResponse = {
 	successors: string[],
 	/**
 	 *  The selected window a `conflict` found missing from the windows
-	 *  recomputed at its site; the key names the Target and the site.
+	 *  recomputed at its site; the key names the Target and the site. Boxed,
+	 *  like `correction`, so the response stays below the workspace's
+	 *  `large-error-threshold`.
 	 */
 	window: string | null,
 	/**
@@ -3706,6 +3708,11 @@ export type ErrorResponse = {
 	 *  below the workspace's `large-error-threshold`.
 	 */
 	correction: UndeliverableCorrection | null,
+	/**
+	 *  The input field an `invalid_input` refusal names, when its validator
+	 *  knows which one failed; the client shows the refusal on that field.
+	 */
+	field: FieldPath | null,
 };
 
 /**
@@ -3804,6 +3811,14 @@ export type FieldOfView = {
 	widthDeg: number | null,
 	heightDeg: number | null,
 };
+
+/**
+ *  The stable machine path of the input field a refusal names: the wire
+ *  (camelCase) names from the validated value down to the field, joined by
+ *  `.`, such as `minAltitudeDeg` or `moonAvoidance.Ha.distanceDeg`. Never
+ *  English text; the client maps it onto the form field holding the value.
+ */
+export type FieldPath = string;
 
 export type FileIdentity = {
 	volume: VolumeIdentity,

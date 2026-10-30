@@ -646,6 +646,32 @@ describe("Home", () => {
     expect(saved[1]).toEqual({ criteria: { ...CRITERIA, minAltitudeDeg: 35 }, expectedRevision: 3 })
   })
 
+  it("shows a library refusal that names a field on that field, until the user changes it", async () => {
+    let saves = 0
+    eventHost((command) => {
+      if (command === "home_dashboard") return dashboard(tonight())
+      if (command === "planning_home_criteria") return { criteria: CRITERIA, revision: 2 }
+      if (command === "planning_save_home_criteria") {
+        saves += 1
+        throw { ...conflict, code: "invalid_input", retry: "retry", currentRevision: null, field: "minDurationMinutes" }
+      }
+      return emptyHome(command)
+    })
+    const { user } = renderAt("/")
+    await user.click(await screen.findByRole("button", { name: m.home_edit_criteria() }))
+    const dialog = await screen.findByRole("dialog", { name: m.home_criteria_title() })
+    const duration = within(dialog).getByLabelText(m.fields_label_unit({ label: m.criteria_min_duration(), unit: m.criteria_unit_minutes() }))
+    const altitude = within(dialog).getByLabelText(m.fields_label_unit({ label: m.criteria_min_altitude(), unit: m.criteria_unit_degrees() }))
+    await user.click(within(dialog).getByRole("button", { name: m.home_save_criteria() }))
+    await waitFor(() => expect(saves).toBe(1))
+    expect(await within(dialog).findByText(m.form_field_refused())).toBeInTheDocument()
+    expect(duration).toHaveAttribute("aria-invalid", "true")
+    expect(duration).toHaveAccessibleDescription(expect.stringContaining(m.form_field_refused()))
+    expect(altitude).not.toHaveAttribute("aria-invalid", "true")
+    await user.type(duration, "5")
+    expect(within(dialog).queryByText(m.form_field_refused())).toBeNull()
+  })
+
   it("renders the dashboard's sections once the criteria are set", async () => {
     eventHost((command) => {
       if (command === "home_dashboard") return dashboard(tonight())

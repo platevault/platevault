@@ -115,7 +115,10 @@ impl SubjectInput {
     /// `InvalidInput` naming the Target for a blank label.
     pub fn validate(&self) -> Result<(), LibraryError> {
         if self.label().is_some_and(str::is_empty) {
-            return Err(invalid(format!("subject {}: name is blank", self.target_id)));
+            return Err(LibraryError::invalid_field(
+                "name",
+                format!("subject {}: name is blank", self.target_id),
+            ));
         }
         Ok(())
     }
@@ -130,10 +133,13 @@ pub fn validate_subjects(subjects: &[SubjectInput]) -> Result<(), LibraryError> 
         return Err(invalid("a Project needs at least one subject".into()));
     }
     let mut targets = BTreeSet::new();
-    for subject in subjects {
-        subject.validate()?;
+    for (index, subject) in subjects.iter().enumerate() {
+        subject.validate().map_err(|error| error.within_field(&index.to_string()))?;
         if !targets.insert(subject.target_id) {
-            return Err(invalid(format!("Target {} is a subject twice", subject.target_id)));
+            return Err(LibraryError::invalid_field(
+                &format!("{index}.targetId"),
+                format!("Target {} is a subject twice", subject.target_id),
+            ));
         }
     }
     Ok(())
@@ -148,8 +154,11 @@ pub fn validate_rigs(rig_ids: &[Uuid]) -> Result<(), LibraryError> {
         return Err(invalid("a Project needs at least one rig".into()));
     }
     let mut seen = BTreeSet::new();
-    if let Some(twice) = rig_ids.iter().find(|id| !seen.insert(**id)) {
-        return Err(invalid(format!("rig {twice} is listed twice")));
+    if let Some(index) = rig_ids.iter().position(|id| !seen.insert(*id)) {
+        return Err(LibraryError::invalid_field(
+            &index.to_string(),
+            format!("rig {} is listed twice", rig_ids[index]),
+        ));
     }
     Ok(())
 }
@@ -282,7 +291,7 @@ impl GoalSpec {
     pub fn validate(&self) -> Result<(), LibraryError> {
         let kind = self.kind_name();
         if self.channel().is_some_and(str::is_empty) {
-            return Err(invalid(format!("{kind} channel is blank")));
+            return Err(LibraryError::invalid_field("channel", format!("{kind} channel is blank")));
         }
         let in_range = |value: u64| value >= 1 && i64::try_from(value).is_ok();
         match self {
@@ -290,23 +299,26 @@ impl GoalSpec {
                 if !in_range(*goal_seconds)
                     || Microseconds::from_whole_seconds(*goal_seconds).is_none()
                 {
-                    return Err(invalid(format!(
-                        "integration goalSeconds {goal_seconds} is out of range"
-                    )));
+                    return Err(LibraryError::invalid_field(
+                        "goalSeconds",
+                        format!("integration goalSeconds {goal_seconds} is out of range"),
+                    ));
                 }
             }
             Self::FrameCount { goal_frames, .. } => {
                 if !in_range(*goal_frames) {
-                    return Err(invalid(format!(
-                        "frame_count goalFrames {goal_frames} is out of range"
-                    )));
+                    return Err(LibraryError::invalid_field(
+                        "goalFrames",
+                        format!("frame_count goalFrames {goal_frames} is out of range"),
+                    ));
                 }
             }
             Self::QualityBar { criterion: QualityCriterion::MaxFwhmMedian { max_arcsec } } => {
                 if !max_arcsec.is_finite() || *max_arcsec <= 0.0 {
-                    return Err(invalid(format!(
-                        "quality bar maxArcsec {max_arcsec} must be above 0"
-                    )));
+                    return Err(LibraryError::invalid_field(
+                        "criterion.maxArcsec",
+                        format!("quality bar maxArcsec {max_arcsec} must be above 0"),
+                    ));
                 }
             }
             Self::QualityBar { criterion: QualityCriterion::UsableOnly } => {}
@@ -337,15 +349,18 @@ pub struct GoalInput {
 /// `InvalidInput` for an invalid value or a repeated goal.
 pub fn validate_goals(goals: &[GoalInput]) -> Result<(), LibraryError> {
     let mut seen = BTreeSet::new();
-    for item in goals {
-        item.goal.validate()?;
+    for (index, item) in goals.iter().enumerate() {
+        item.goal.validate().map_err(|error| error.within_field(&index.to_string()))?;
         if !seen.insert((item.target_id, item.group_id, item.goal.identity())) {
-            return Err(invalid(format!(
-                "Target {} lists the {} goal {:?} twice",
-                item.target_id,
-                item.goal.kind_name(),
-                item.goal.identity().key
-            )));
+            return Err(LibraryError::invalid_field(
+                &index.to_string(),
+                format!(
+                    "Target {} lists the {} goal {:?} twice",
+                    item.target_id,
+                    item.goal.kind_name(),
+                    item.goal.identity().key
+                ),
+            ));
         }
     }
     Ok(())
@@ -366,13 +381,13 @@ pub struct ProjectInput {
     pub goals: Vec<GoalInput>,
 }
 
-/// Refuse a blank Project name.
+/// Refuse a blank Project name, naming the `name` field that holds it.
 ///
 /// # Errors
 /// `InvalidInput` for a blank name.
 pub fn validate_project_name(name: &str) -> Result<(), LibraryError> {
     if name.trim().is_empty() {
-        return Err(invalid("project name is empty".into()));
+        return Err(LibraryError::invalid_field("name", "project name is empty"));
     }
     Ok(())
 }
@@ -384,9 +399,9 @@ impl ProjectInput {
     /// `InvalidInput` naming the field.
     pub fn validate(&self) -> Result<(), LibraryError> {
         validate_project_name(&self.name)?;
-        validate_subjects(&self.subjects)?;
-        validate_rigs(&self.rig_ids)?;
-        validate_goals(&self.goals)
+        validate_subjects(&self.subjects).map_err(|error| error.within_field("subjects"))?;
+        validate_rigs(&self.rig_ids).map_err(|error| error.within_field("rigIds"))?;
+        validate_goals(&self.goals).map_err(|error| error.within_field("goals"))
     }
 }
 
@@ -407,19 +422,23 @@ impl GoalTemplateInput {
     /// `InvalidInput` naming the field.
     pub fn validate(&self) -> Result<(), LibraryError> {
         if self.name.trim().is_empty() {
-            return Err(invalid("goal template name is empty".into()));
+            return Err(LibraryError::invalid_field("name", "goal template name is empty"));
         }
         if self.goals.is_empty() {
-            return Err(invalid("a goal template needs at least one goal".into()));
+            return Err(LibraryError::invalid_field(
+                "goals",
+                "a goal template needs at least one goal",
+            ));
         }
         let mut seen = BTreeSet::new();
-        for goal in &self.goals {
-            goal.validate()?;
+        for (index, goal) in self.goals.iter().enumerate() {
+            let path = format!("goals.{index}");
+            goal.validate().map_err(|error| error.within_field(&path))?;
             if !seen.insert(goal.identity()) {
-                return Err(invalid(format!(
-                    "goal template lists the {} goal twice",
-                    goal.kind_name()
-                )));
+                return Err(LibraryError::invalid_field(
+                    &path,
+                    format!("goal template lists the {} goal twice", goal.kind_name()),
+                ));
             }
         }
         Ok(())

@@ -19,7 +19,7 @@ import { ActionButton } from "@/components/app/actions"
 import type { Action, Column, MenuItem } from "@/components/app/contracts"
 import { PathText } from "@/components/app/data"
 import { ArgumentsField, FieldGroup, SelectField, TextField } from "@/components/app/fields"
-import { blockedByErrors, FormDialog, useDialogForm } from "@/components/app/form-dialog"
+import { blockedByErrors, type FieldPaths, FormDialog, useDialogForm } from "@/components/app/form-dialog"
 import { ListSection, SettingsPage } from "@/components/templates/settings-page"
 import type { Messages } from "@/lib/i18n"
 import { Read } from "./parts"
@@ -113,11 +113,12 @@ interface ProfileDraft {
   executable: NativePathWire | null
   args: string
 }
+const PROFILE_PATHS: FieldPaths<keyof ProfileDraft> = { name: "name", args: "args" }
 
 function ProfileDialog({ profile, open, onOpenChange }: { profile: Profile | null; open: boolean; onOpenChange: (open: boolean) => void }) {
   const m = useMessages()
   const client = useQueryClient()
-  const { values, set, shown } = useDialogForm<ProfileDraft>(open, () => ({ name: profile?.name ?? "", kind: profile?.kind ?? "wbpp", executable: profile?.executable ?? null, args: argsText(profile?.args ?? []) }))
+  const { values, set, shown, refusing } = useDialogForm<ProfileDraft>(open, () => ({ name: profile?.name ?? "", kind: profile?.kind ?? "wbpp", executable: profile?.executable ?? null, args: argsText(profile?.args ?? []) }))
   const label = m.settings_save()
   const errors = { name: values.name.trim() ? undefined : m.settings_name_required() }
   const locate: Action = {
@@ -148,7 +149,7 @@ function ProfileDialog({ profile, open, onOpenChange }: { profile: Profile | nul
         label,
         kind: "primary",
         unavailable: blockedByErrors(m, label, errors),
-        run: () => settingsWrite(client, () => (profile ? library.prepareProfileUpdate(profile.id, profile.revision, input()) : library.prepareProfileCreate(input()))),
+        run: () => refusing(settingsWrite(client, () => (profile ? library.prepareProfileUpdate(profile.id, profile.revision, input()) : library.prepareProfileCreate(input()))), PROFILE_PATHS),
       }}
     >
       <TextField label={m.apps_name()} value={values.name} onChange={(name) => set({ name })} error={shown(errors, "name")} autoFocus />
@@ -156,7 +157,7 @@ function ProfileDialog({ profile, open, onOpenChange }: { profile: Profile | nul
       <FieldGroup label={m.apps_col_path()} action={<ActionButton action={locate} />}>
         {values.executable ? <PathText path={values.executable.display} /> : m.apps_not_located()}
       </FieldGroup>
-      <ArgumentsField label={m.apps_launch_arguments()} value={values.args} onChange={(args) => set({ args })} tokens={TOKENS} placeholder={m.apps_launch_placeholder({ token: "{view}" })} />
+      <ArgumentsField label={m.apps_launch_arguments()} value={values.args} onChange={(args) => set({ args })} tokens={TOKENS} placeholder={m.apps_launch_placeholder({ token: "{view}" })} error={shown({}, "args")} />
     </FormDialog>
   )
 }

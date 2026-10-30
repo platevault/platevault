@@ -26,10 +26,6 @@ pub const MAX_SAMPLE_SIDE: u32 = 64;
 /// Smallest comparison region side.
 pub const MIN_COMPARE_SIZE: u32 = 16;
 
-fn invalid(message: String) -> LibraryError {
-    LibraryError::InvalidInput(message)
-}
-
 /// Serde helper for an `f64` that may be non-finite: finite values are JSON
 /// numbers, NaN and the infinities are the strings `NaN`, `Infinity` and
 /// `-Infinity`.
@@ -733,29 +729,48 @@ impl Stretch {
         match *self {
             Self::Linear { black, white } => {
                 if !black.is_finite() {
-                    return Err(invalid("stretch black must be finite".into()));
+                    return Err(LibraryError::invalid_field(
+                        "black",
+                        "stretch black must be finite",
+                    ));
                 }
                 if !white.is_finite() {
-                    return Err(invalid("stretch white must be finite".into()));
+                    return Err(LibraryError::invalid_field(
+                        "white",
+                        "stretch white must be finite",
+                    ));
                 }
                 if black >= white {
-                    return Err(invalid("stretch black must be below white".into()));
+                    return Err(LibraryError::invalid_field(
+                        "black",
+                        "stretch black must be below white",
+                    ));
                 }
             }
             Self::Mtf { shadows, midtones, highlights } => {
                 if !(midtones > 0.0 && midtones < 1.0) {
-                    return Err(invalid(
-                        "stretch midtones must lie strictly between 0 and 1".into(),
+                    return Err(LibraryError::invalid_field(
+                        "midtones",
+                        "stretch midtones must lie strictly between 0 and 1",
                     ));
                 }
                 if !(0.0..=1.0).contains(&shadows) {
-                    return Err(invalid("stretch shadows must lie in [0, 1]".into()));
+                    return Err(LibraryError::invalid_field(
+                        "shadows",
+                        "stretch shadows must lie in [0, 1]",
+                    ));
                 }
                 if !(0.0..=1.0).contains(&highlights) {
-                    return Err(invalid("stretch highlights must lie in [0, 1]".into()));
+                    return Err(LibraryError::invalid_field(
+                        "highlights",
+                        "stretch highlights must lie in [0, 1]",
+                    ));
                 }
                 if shadows >= highlights {
-                    return Err(invalid("stretch shadows must be below highlights".into()));
+                    return Err(LibraryError::invalid_field(
+                        "shadows",
+                        "stretch shadows must be below highlights",
+                    ));
                 }
             }
             Self::Auto => {}
@@ -790,7 +805,10 @@ pub struct AppliedStretch {
 
 fn check_side(field: &str, value: u32, min: u32, max: u32) -> Result<(), LibraryError> {
     if value < min || value > max {
-        return Err(invalid(format!("{field} must lie in [{min}, {max}], got {value}")));
+        return Err(LibraryError::invalid_field(
+            field,
+            format!("{field} must lie in [{min}, {max}], got {value}"),
+        ));
     }
     Ok(())
 }
@@ -818,12 +836,12 @@ impl TileRequest {
         check_side("width", self.width, 1, MAX_TILE_SIDE)?;
         check_side("height", self.height, 1, MAX_TILE_SIDE)?;
         if self.level > MAX_TILE_LEVEL {
-            return Err(invalid(format!(
-                "level must lie in [0, {MAX_TILE_LEVEL}], got {}",
-                self.level
-            )));
+            return Err(LibraryError::invalid_field(
+                "level",
+                format!("level must lie in [0, {MAX_TILE_LEVEL}], got {}", self.level),
+            ));
         }
-        self.stretch.validate()
+        self.stretch.validate().map_err(|error| error.within_field("stretch"))
     }
 }
 
@@ -844,7 +862,7 @@ impl RegionsRequest {
     /// `InvalidInput` naming `size` or the stretch field.
     pub fn validate(&self) -> Result<(), LibraryError> {
         check_side("size", self.size, MIN_COMPARE_SIZE, MAX_TILE_SIDE)?;
-        self.stretch.validate()
+        self.stretch.validate().map_err(|error| error.within_field("stretch"))
     }
 }
 

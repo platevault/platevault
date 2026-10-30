@@ -10,7 +10,7 @@ export const SUCCEEDED: ActionResult<null> = { ok: true, data: null }
 
 /** The library's structured refusal of `command` with `code`; `retry` is the library's next-step hint. */
 export function libraryFailure(code: LibraryErrorCode, retry: RetryAction, command: LibraryCommand = "libraryUpdateLocation"): ActionResult<never> {
-  const error: ErrorResponse = { code, identity: null, scope: null, retry, currentRevision: null, successors: [], window: null, correction: null }
+  const error: ErrorResponse = { code, identity: null, scope: null, retry, currentRevision: null, successors: [], window: null, correction: null, field: null }
   return { ok: false, failure: { source: "library", command, error } }
 }
 

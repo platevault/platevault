@@ -129,9 +129,10 @@ impl Catalog {
                     .fetch_optional(&mut *conn)
                     .await?;
             if let Some(holder) = holder {
-                return Err(LibraryError::InvalidInput(format!(
-                    "name {name:?} already names site {holder}"
-                )));
+                return Err(LibraryError::invalid_field(
+                    "name",
+                    format!("name {name:?} already names site {holder}"),
+                ));
             }
             let at = now()?;
             sqlx::query(

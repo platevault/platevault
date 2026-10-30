@@ -108,7 +108,7 @@ export function availabilityWord(m: Messages, availability: Availability): strin
 /** A thumbnail that has no pixels, worded: the decode's failure code or the copy's availability. */
 export function thumbnailReason(m: Messages, entry: ThumbnailState_Serialize, frame: Frame): string {
   if (entry.state === "unreadable") {
-    return failureMessage(m, { source: "library", command: "pixThumbnails", error: { code: entry.code, identity: null, scope: null, retry: "none", currentRevision: null, successors: [], window: null, correction: null } })
+    return failureMessage(m, { source: "library", command: "pixThumbnails", error: { code: entry.code, identity: null, scope: null, retry: "none", currentRevision: null, successors: [], window: null, correction: null, field: null } })
   }
   return availabilityWord(m, frame.state.availability)
 }

@@ -66,11 +66,6 @@ mod master_age_tests {
         );
     }
 }
-
-fn invalid(message: String) -> LibraryError {
-    LibraryError::InvalidInput(message)
-}
-
 // ── Kinds and forms ──────────────────────────────────────────────────────────
 
 /// The calibration kinds CAL matches (R2). Dark flats stay outside matching:
@@ -606,7 +601,8 @@ impl AdoptionDestination {
     /// `InvalidInput` naming `relativePath` for an absolute path, parent
     /// traversal, the location root itself or an empty file name.
     pub fn validate(&self) -> Result<PathBuf, LibraryError> {
-        let refuse = |why: &str| invalid(format!("relativePath {why}"));
+        let refuse =
+            |why: &str| LibraryError::invalid_field("relativePath", format!("relativePath {why}"));
         let path = self.relative_path.to_path_buf().map_err(|_| refuse("is not a native path"))?;
         if path.components().any(|part| matches!(part, Component::Prefix(_) | Component::RootDir)) {
             return Err(refuse("is absolute"));

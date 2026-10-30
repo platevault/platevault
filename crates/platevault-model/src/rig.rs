@@ -122,37 +122,40 @@ pub struct RigFilterValues {
 /// `InvalidInput` for an empty name or match value, a filter passing no band, a
 /// repeated filter id, or a FILTER value that two filters both match.
 pub fn normalize_rig_filters(filters: &[RigFilter]) -> Result<Vec<RigFilter>, LibraryError> {
-    let invalid = |message: String| Err(LibraryError::InvalidInput(message));
     let mut ids = HashSet::new();
     let mut owners: HashMap<String, &str> = HashMap::new();
     let mut normalized = Vec::with_capacity(filters.len());
-    for filter in filters {
+    for (index, filter) in filters.iter().enumerate() {
+        let invalid = |field: &str, message: String| {
+            Err(LibraryError::invalid_field(&format!("{index}.{field}"), message))
+        };
         let name = filter.name.trim();
         if name.is_empty() {
-            return invalid("a filter name is empty".into());
+            return invalid("name", "a filter name is empty".into());
         }
         if !ids.insert(filter.id) {
-            return invalid(format!("filter {} is listed twice", filter.id));
+            return invalid("id", format!("filter {} is listed twice", filter.id));
         }
         let bands: BTreeSet<Band> = filter.bands.iter().copied().collect();
         if bands.is_empty() {
-            return invalid(format!("filter {name} passes no band"));
+            return invalid("bands", format!("filter {name} passes no band"));
         }
         let mut match_values = Vec::with_capacity(filter.match_values.len());
         let mut own = HashSet::new();
-        for value in &filter.match_values {
+        for (value_index, value) in filter.match_values.iter().enumerate() {
+            let field = format!("matchValues.{value_index}");
             let key = filter_key(value);
             if key.is_empty() {
-                return invalid(format!("filter {name} has an empty FILTER value"));
+                return invalid(&field, format!("filter {name} has an empty FILTER value"));
             }
             if !own.insert(key.clone()) {
                 continue;
             }
             if let Some(other) = owners.insert(key, name) {
-                return invalid(format!(
-                    "FILTER value {} is matched by both {other} and {name}",
-                    value.trim()
-                ));
+                return invalid(
+                    &field,
+                    format!("FILTER value {} is matched by both {other} and {name}", value.trim()),
+                );
             }
             match_values.push(value.trim().to_owned());
         }

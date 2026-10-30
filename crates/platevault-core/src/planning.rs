@@ -73,13 +73,13 @@ pub struct NightSpans {
 /// # Errors
 /// `InvalidInput` naming `timeZone` for an unknown or non-canonical name.
 pub fn validate_time_zone(name: &str) -> Result<(), LibraryError> {
-    zone(name).map(drop)
+    zone(name).map(drop).map_err(|error| error.within_field("timeZone"))
 }
 
 /// The night, by its site-local evening date, that holds `instant`.
 ///
 /// # Errors
-/// `InvalidInput` naming `timeZone` when the site's zone is not bundled.
+/// `InvalidInput` if the site's zone is not bundled.
 pub fn night_of(instant: OffsetDateTime, site: &ObservingSite) -> Result<Date, LibraryError> {
     let zone = zone(&site.time_zone)?;
     let local = local(&zone, instant)?;
@@ -271,18 +271,18 @@ fn whole_second(at: OffsetDateTime) -> OffsetDateTime {
 // ---------------------------------------------------------------------------
 
 fn zone(name: &str) -> Result<TimeZone, LibraryError> {
-    let unknown = || {
+    let invalid = || {
         LibraryError::InvalidInput(format!(
             "timeZone {name:?} is not an IANA name in the bundled time-zone database"
         ))
     };
-    let zone = ZONES.get(name).map_err(|_| unknown())?;
+    let zone = ZONES.get(name).map_err(|_| invalid())?;
     match zone.iana_name() {
         Some(canonical) if canonical == name && !zone.is_unknown() => Ok(zone),
         Some(canonical) if !zone.is_unknown() => Err(LibraryError::InvalidInput(format!(
             "timeZone {name:?} is not canonical; the bundled database names it {canonical:?}"
         ))),
-        _ => Err(unknown()),
+        _ => Err(invalid()),
     }
 }
 

@@ -735,7 +735,8 @@ fn wrap_up_archive_review_family_lays_out_for_a_destination() {
 
 /// The library's workflow settings (D-W114; CAL-FR-15, J36 S8, PLAN-FR-02):
 /// the defaults at revision 0, a save of non-defaults with its expected
-/// revision, a stale save and an invalid one refused naming the settings.
+/// revision, a stale save refused naming the settings, and an invalid one
+/// refused naming the settings and the field that failed.
 #[test]
 fn workflow_settings_family_reads_and_saves_with_revisions() {
     let shell = Shell::new();
@@ -764,12 +765,13 @@ fn workflow_settings_family_reads_and_saves_with_revisions() {
     );
     let mut invalid = changed.clone();
     invalid["moonAvoidance"]["SII"] = json!({"distanceDeg": 60.0, "widthDays": 0.0});
-    shell.refuses(
+    let refused = shell.refusal(
         "workflow_settings_save",
         &json!({"settings": invalid, "expectedRevision": 1}),
         LibraryErrorCode::InvalidInput,
         settings,
     );
+    assert_eq!(refused["field"], json!("moonAvoidance.SII.widthDays"), "{refused}");
     assert_eq!(shell.call("workflow_settings_get", &json!({})), saved, "nothing else stored");
 }
 
