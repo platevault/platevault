@@ -19,6 +19,65 @@ use crate::{
     NativePath, ObservationFingerprint, Revision,
 };
 
+/// The capture age of a dark or bias master, and whether it exceeds the Old threshold.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
+pub struct CalibrationMasterAge {
+    pub days: u32,
+    pub old: bool,
+}
+
+impl CalibrationMasterAge {
+    /// Compute age from the capture date, never from import time.
+    #[must_use]
+    pub fn from_capture_date(
+        captured: Option<time::Date>,
+        today: time::Date,
+        old_after_days: u32,
+    ) -> Option<Self> {
+        let days = u32::try_from((today - captured?).whole_days().max(0)).ok()?;
+        Some(Self { days, old: days > old_after_days })
+    }
+}
+
+#[cfg(test)]
+mod master_age_tests {
+    use super::CalibrationMasterAge;
+    use time::{macros::date, Duration};
+
+    #[test]
+    fn age_badge_boundary_is_configured_day_and_one_day_either_side() {
+        let today = date!(2026 - 10 - 30);
+        let age = |days, threshold| {
+            CalibrationMasterAge::from_capture_date(
+                Some(today - Duration::days(days)),
+                today,
+                threshold,
+            )
+            .unwrap()
+        };
+
+        assert_eq!(age(89, 90), CalibrationMasterAge { days: 89, old: false });
+        assert_eq!(age(90, 90), CalibrationMasterAge { days: 90, old: false });
+        assert_eq!(age(91, 90), CalibrationMasterAge { days: 91, old: true });
+    }
+
+    #[test]
+    fn age_badge_respects_a_changed_setting_and_unknown_dates() {
+        let today = date!(2026 - 10 - 30);
+        let captured = Some(today - Duration::days(91));
+
+        assert!(CalibrationMasterAge::from_capture_date(captured, today, 90).unwrap().old);
+        assert!(!CalibrationMasterAge::from_capture_date(captured, today, 91).unwrap().old);
+        assert_eq!(CalibrationMasterAge::from_capture_date(None, today, 90), None);
+        assert_eq!(
+            CalibrationMasterAge::from_capture_date(Some(today + Duration::days(1)), today, 0),
+            Some(CalibrationMasterAge { days: 0, old: false }),
+        );
+    }
+}
+
 fn invalid(message: String) -> LibraryError {
     LibraryError::InvalidInput(message)
 }

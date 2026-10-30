@@ -63,6 +63,12 @@ pub async fn list_inputs<R: CalibrationRules + ?Sized>(
     conn: &mut SqliteConnection,
     rules: &R,
 ) -> Result<Vec<Listed>> {
+    let today = time::OffsetDateTime::now_utc().date();
+    let old_after_days = crate::workflow_settings::read_workflow_settings(conn)
+        .await?
+        .0
+        .calibration
+        .old_master_after_days;
     let mut locations = HashMap::new();
     let masters = load_masters(conn).await?;
     // An adopted master's indexed destination and its source are never new candidates (R16).
@@ -74,7 +80,7 @@ pub async fn list_inputs<R: CalibrationRules + ?Sized>(
     for master in masters {
         let location = cached_location(conn, &mut locations, master.location_id).await?;
         if location.lifecycle == LocationLifecycle::Active {
-            listed.push(master_listed(master, &location));
+            listed.push(master_listed(master, &location, today, old_after_days));
         }
     }
 
@@ -109,7 +115,18 @@ pub async fn list_inputs<R: CalibrationRules + ?Sized>(
         for (asset, classification) in masters {
             if !sources.contains(&asset.id) {
                 let location = cached_location(conn, &mut locations, asset.location_id).await?;
-                listed.push(candidate(conn, &session, &location, asset, classification).await?);
+                listed.push(
+                    candidate(
+                        conn,
+                        &session,
+                        &location,
+                        asset,
+                        classification,
+                        today,
+                        old_after_days,
+                    )
+                    .await?,
+                );
             }
         }
     }
@@ -266,6 +283,8 @@ async fn raw_set(
         reusable: true,
         location_ids: location_ids.into_iter().collect(),
         member_assets: included_copies.iter().map(|copy| copy.id).collect(),
+        age_days: None,
+        old: false,
     };
     Ok(Listed { summary, members, excluded })
 }
@@ -277,6 +296,8 @@ async fn candidate(
     location: &Location,
     asset: Asset,
     classification: Classification,
+    today: time::Date,
+    old_after_days: u32,
 ) -> Result<Listed> {
     let evidence = CaptureEvidence::from_metadata(
         &asset.effective,
@@ -285,6 +306,16 @@ async fn candidate(
         None,
     );
     let kind = classification.kind;
+    let age = matches!(kind, InputKind::Dark | InputKind::Bias)
+        .then(|| super::sessions::header_date(asset.effective.date_obs.as_deref()))
+        .flatten()
+        .and_then(|captured| {
+            platevault_model::CalibrationMasterAge::from_capture_date(
+                Some(captured),
+                today,
+                old_after_days,
+            )
+        });
     let available = asset.availability == Availability::Available;
     let summary = CalibrationInputSummary {
         input: CandidateRef::Candidate { asset_id: asset.id },
@@ -311,6 +342,8 @@ async fn candidate(
         reusable: false,
         location_ids: vec![asset.location_id],
         member_assets: vec![asset.id],
+        age_days: age.map(|age| age.days),
+        old: age.is_some_and(|age| age.old),
     };
     let members = vec![InputMember {
         member_key: asset.id,
@@ -321,9 +354,24 @@ async fn candidate(
 }
 
 /// An adopted master: header evidence of the copied bytes only (R8, R16).
-fn master_listed(master: AdoptedMaster, location: &Location) -> Listed {
+fn master_listed(
+    master: AdoptedMaster,
+    location: &Location,
+    today: time::Date,
+    old_after_days: u32,
+) -> Listed {
     let evidence = CaptureEvidence::from_metadata(&master.observed, &BTreeSet::new(), None, None);
     let kind = master.kind;
+    let age = matches!(kind, InputKind::Dark | InputKind::Bias)
+        .then(|| super::sessions::header_date(master.observed.date_obs.as_deref()))
+        .flatten()
+        .and_then(|captured| {
+            platevault_model::CalibrationMasterAge::from_capture_date(
+                Some(captured),
+                today,
+                old_after_days,
+            )
+        });
     let available = location.availability == Availability::Available;
     let summary = CalibrationInputSummary {
         input: CandidateRef::Master { master_id: master.id, revision: master.revision },
@@ -346,6 +394,8 @@ fn master_listed(master: AdoptedMaster, location: &Location) -> Listed {
         reusable: true,
         location_ids: vec![master.location_id],
         member_assets: master.asset_id.into_iter().collect(),
+        age_days: age.map(|age| age.days),
+        old: age.is_some_and(|age| age.old),
     };
     Listed { summary, members: Vec::new(), excluded: Vec::new() }
 }

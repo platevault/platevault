@@ -18,8 +18,8 @@ use calibration_support::*;
 use persistence_library::{Catalog, InputQuery, LocationReferences};
 use platevault_model::{
     AdoptionDestination, AdoptionPhase, AdoptionSource, AdoptionState, Asset, Availability,
-    CandidateRef, InputForm, InputKind, Location, LocationRole, MasterBasis, MasterOrigin,
-    NativePath, ReferenceKind, ReviewState,
+    CalibrationSettings, CandidateRef, InputForm, InputKind, Location, LocationRole, MasterBasis,
+    MasterOrigin, NativePath, ReferenceKind, ReviewState, WorkflowSettings,
 };
 use support::*;
 
@@ -279,6 +279,63 @@ async fn adoption_copies_verifies_and_registers_the_master_with_provenance() {
         .await
         .unwrap()
         .is_empty());
+}
+
+#[tokio::test]
+async fn calibration_master_rows_report_age_from_capture_date_and_current_threshold() {
+    use time::Duration;
+
+    let lib = library().await;
+    let today = time::OffsetDateTime::now_utc().date();
+    let capture = today - Duration::days(100);
+    let mut dark = calibration_frame("MASTER DARK", None, 300.0, &capture.to_string());
+    dark.date_obs = Some(format!("{capture}T22:00:00Z"));
+    dark.stack_count = Some(20);
+    let generated = frame(&lib.results_root, "dark/master_dark.fit", dark);
+    scan_frames(&lib.catalog, &lib.results, vec![generated]).await;
+    let source = asset_at(&lib.catalog, &lib.results, "dark/master_dark.fit").await;
+    let destination = into(&lib.calibration, "masters/master_dark.fit");
+    let review = lib
+        .catalog
+        .review_adoption(
+            &AdoptionSource::Asset { asset_id: source.id, expected: expected(&source) },
+            &destination,
+            &TestRules,
+            DiskProbe,
+        )
+        .await
+        .unwrap();
+    let master = lib
+        .catalog
+        .adopt_master(review.id, review.revision, DiskProbe)
+        .await
+        .unwrap()
+        .master
+        .unwrap();
+
+    let read_master = || async {
+        lib.catalog
+            .calibration_inputs(
+                &InputQuery { form: Some(InputForm::Master), ..InputQuery::default() },
+                &TestRules,
+            )
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|row| row.input.id() == master.id)
+            .unwrap()
+    };
+    let old = read_master().await;
+    assert_eq!((old.age_days, old.old), (Some(100), true));
+
+    let (settings, revision) = lib.catalog.workflow_settings().await.unwrap();
+    let settings = WorkflowSettings {
+        calibration: CalibrationSettings { old_master_after_days: 91, ..settings.calibration },
+        ..settings
+    };
+    lib.catalog.save_workflow_settings(revision, &settings).await.unwrap();
+    let exact = read_master().await;
+    assert_eq!((exact.age_days, exact.old), (Some(100), false));
 }
 
 #[tokio::test]

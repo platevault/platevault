@@ -120,6 +120,10 @@ pub struct CalibrationInputSummary {
     pub location_ids: Vec<Uuid>,
     /// Every copy of the included members.
     pub member_assets: Vec<Uuid>,
+    /// Whole-day age; populated only for dark/bias masters and candidates with capture dates.
+    pub age_days: Option<u32>,
+    /// Whether this dark/bias master or candidate exceeds the configured CAL-FR-15 threshold.
+    pub old: bool,
 }
 
 /// One input with its members and its Library-Unusable members.
