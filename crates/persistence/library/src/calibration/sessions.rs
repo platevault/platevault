@@ -837,6 +837,7 @@ pub(super) fn header_date(text: Option<&str>) -> Option<Date> {
     Date::parse(text?.get(..10)?, DATE).ok()
 }
 
+/// The camera one side names: a confirmed link, a model link while its model
 /// still names one camera, else the one camera of the header model.
 fn match_camera(cameras: &[Camera], link: Option<CameraLink>, model: Option<&str>) -> MatchCamera {
     let by_model =

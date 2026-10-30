@@ -6455,6 +6455,7 @@
   "catalogue_f4_duplicates_counts": "uma cópia extra, e doze",
   "catalogue_f4_readiness_desc": "Status da entrada em cada linha de sessão: Pronta ou a próxima etapa. Uma revisão reaberta pode devolver uma sessão retida a Não revisado, exibida como Precisa de revisão nos Projetos.",
   "catalogue_f4_readiness_states": "Pronta · precisa de um Alvo · precisa de um rig · 1 frame não revisado · na Lixeira",
+  "catalogue_f4_master_age_desc": "O selo Antigo numa linha de master da biblioteca de Calibração: um master de dark ou bias capturado há mais tempo que o limite de idade em Configurações › Correspondência.",
   "import_column_files": "Arquivos",
   "import_column_state": "Estado",
   "import_skip_imported_before": "Importados antes",
