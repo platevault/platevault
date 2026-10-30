@@ -1,6 +1,18 @@
 /**
- * Settings › Equipment: saved rigs and cameras, filters, bands and camera defaults.
- * Rigs and cameras have independent revision-checked edit dialogs.
+ * Settings › Equipment (PLAN-EQ-FR-01..08): the saved rigs with their
+ * filters and bands (`library_list_rig_filters`) and the cameras of those
+ * rigs (`library_list_cameras`).
+ *
+ * - Add rig… and Edit… save a rig's camera and optics over its decision
+ *   revision (`library_save_equipment`); a refusal keeps the dialog and the
+ *   draft.
+ * - Edit filters… replaces a rig's filter list over the list's revision
+ *   (`rig_filters_save`; rig-filters-dialog.tsx), the same way.
+ * - Add camera… and Edit… save a camera over its revision
+ *   (`library_save_camera`); a refusal keeps the dialog and the draft.
+ * - Delete removes a rig or a camera nothing refers to. The library refuses
+ *   one a session, Project or master still uses; the refusal shows beside
+ *   the row's menu and nothing changes.
  */
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { Plus } from "lucide-react"

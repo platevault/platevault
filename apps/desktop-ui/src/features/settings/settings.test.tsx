@@ -448,7 +448,7 @@ describe.each(LOCALES)("Settings in %s", (locale) => {
     TEST_MS,
   )
   it(
-    "shows a camera alias refusal on the alias field",
+    "routes a camera refusal that names a field to that field",
     async () => {
       const host = serve()
       const { user } = renderAt("/settings/equipment")
