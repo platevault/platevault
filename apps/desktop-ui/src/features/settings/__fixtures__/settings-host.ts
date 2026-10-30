@@ -5,7 +5,7 @@
  * makes the next call of a command answer with the library's structured
  * refusal instead.
  */
-import type { Camera, GoalTemplate, HomeCriteria, LocationState, NamingTemplate, NativePathWire, ObservingSite, PlanCriteria, Profile, Rig, ScanOperation, WorkflowSettingsRecord_Serialize } from "@/api/ipc"
+import type { Band, Camera, GoalTemplate, HomeCriteria, LocationState, NamingTemplate, NativePathWire, ObservingSite, PlanCriteria, Profile, RemapBlock, RemapReview_Serialize, Rig, RigFilterInput, ScanOperation, WorkflowSettingsRecord_Serialize } from "@/api/ipc"
 
 export const CRITERIA: PlanCriteria = { minAltitudeDeg: 30, darkness: "astronomical", moon: { kind: "below_horizon" }, minDurationMinutes: 60 }
 
@@ -96,6 +96,9 @@ export interface Catalog {
   profiles: Profile[]
   /** What the next `library_pick_folder` / `library_pick_file` answers: a path, or `null` for Cancel. */
   picked: NativePathWire | null
+  /** What the next `library_review_remap` blocks; the reviews it made, by id. */
+  remapBlocked: RemapBlock[]
+  reviews: RemapReview_Serialize[]
 }
 
 export function catalog(over: Partial<Catalog> = {}): Catalog {
@@ -113,6 +116,8 @@ export function catalog(over: Partial<Catalog> = {}): Catalog {
     templates: TEMPLATES,
     profiles: [PROFILE],
     picked: null,
+    remapBlocked: [],
+    reviews: [],
     ...over,
   }
 }
@@ -155,6 +160,32 @@ export function settingsHost(state: Catalog = catalog()) {
       case "library_pick_folder":
       case "library_pick_file":
         return state.picked
+      case "library_review_remap": {
+        const loc = state.locations.find((l) => l.location.id === a.locationId)
+        if (!loc) throw refusal("not_found")
+        const review = {
+          id: `review-${next++}`,
+          locationId: loc.location.id,
+          expectedRevision: loc.location.decisionRevision,
+          proposedRoot: a.proposedPath as NativePathWire,
+          proposedIdentity: loc.location.identity,
+          proposedVolumeKind: "local",
+          items: [{ assetId: "asset-1" }],
+          blocked: state.remapBlocked,
+        } as RemapReview_Serialize
+        state.reviews = [...state.reviews, review]
+        return review
+      }
+      case "library_apply_remap": {
+        const review = state.reviews.find((r) => r.id === a.reviewId)
+        const loc = state.locations.find((l) => l.location.id === review?.locationId)
+        if (!review || !loc) throw refusal("not_found")
+        if (review.blocked.length > 0) throw refusal("no_byte_proof", "none")
+        if (a.expectedRevision !== loc.location.decisionRevision) throw refusal("conflict", "review", loc.location.decisionRevision)
+        const moved: LocationState = { ...loc, location: { ...loc.location, path: review.proposedRoot, decisionRevision: loc.location.decisionRevision + 1 } }
+        state.locations = state.locations.map((l) => (l === loc ? moved : l))
+        return moved.location
+      }
       case "library_register_location": {
         const created = location(`loc-${next++}`, a.displayName as string, a.role as LocationState["location"]["role"], { path: a.path as NativePathWire })
         state.locations = [...state.locations, created]
@@ -190,6 +221,16 @@ export function settingsHost(state: Catalog = catalog()) {
           : { ...structuredClone(RIG), equipment: { ...RIG.equipment, ...input, id: `rig-${next++}`, decisionRevision: 1 } }
         state.rigs = old ? state.rigs.map((r) => (r === old ? saved : r)) : [...state.rigs, saved]
         return saved.equipment
+      }
+      case "rig_filters_save": {
+        const old = state.rigs.find((r) => r.equipment.id === a.equipmentId)
+        if (!old) throw refusal("not_found")
+        if (a.expectedRevision !== old.filters.revision) throw refusal("conflict", "review", old.filters.revision)
+        const filters = (a.filters as RigFilterInput[]).map((f) => ({ ...f, id: f.id ?? `f-${next++}` }))
+        const bands = (["L", "R", "G", "B", "Ha", "SII", "OIII"] as Band[]).filter((band) => filters.some((f) => f.bands.includes(band)))
+        const saved: Rig = { ...old, filters: { equipmentId: old.equipment.id, revision: old.filters.revision + 1, filters }, bands }
+        state.rigs = state.rigs.map((r) => (r === old ? saved : r))
+        return saved
       }
       case "library_delete_equipment":
         state.rigs = state.rigs.filter((r) => r.equipment.id !== a.equipmentId)

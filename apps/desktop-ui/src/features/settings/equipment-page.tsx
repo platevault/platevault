@@ -6,6 +6,8 @@
  * - Add rig… and Edit… save a rig's camera and optics over its decision
  *   revision (`library_save_equipment`); a refusal keeps the dialog and the
  *   draft.
+ * - Edit filters… replaces a rig's filter list over the list's revision
+ *   (`rig_filters_save`; rig-filters-dialog.tsx), the same way.
  * - Delete removes a rig or a camera nothing refers to. The library refuses
  *   one a session, Project or master still uses; the refusal shows beside
  *   the row's menu and nothing changes.
@@ -25,6 +27,7 @@ import { ListSection, SettingsPage } from "@/components/templates/settings-page"
 import { formatList, numberText } from "@/lib/format"
 import type { Messages } from "@/lib/i18n"
 import { Gap, Read } from "./parts"
+import { RigFiltersDialog } from "./rig-filters-dialog"
 import { camerasQuery, rigsQuery, settingsWrite } from "./queries"
 
 type ColorChoice = ColorKind | "unknown"
@@ -65,8 +68,11 @@ export function EquipmentPage() {
   // Only the id: the dialog reads the rig from the current read, so a Save after `conflict` names the revision read again.
   const [editing, setEditing] = useState<string | null>(null)
   const editedRig = editing && editing !== "new" ? rigs.data?.find((r) => r.equipment.id === editing) : undefined
+  const [filtersOf, setFiltersOf] = useState<string | null>(null)
+  const filtersRig = filtersOf ? rigs.data?.find((r) => r.equipment.id === filtersOf) : undefined
   const rigActions = (rig: Rig): MenuItem[] => [
     { id: "edit-rig", label: m.settings_edit(), opensDialog: true, run: () => setEditing(rig.equipment.id) },
+    { id: "edit-rig-filters", label: m.equipment_edit_filters(), opensDialog: true, run: () => setFiltersOf(rig.equipment.id) },
     { separator: true },
     {
       id: "delete-rig",
@@ -104,9 +110,10 @@ export function EquipmentPage() {
           />
         )}
       </Read>
-      {/* astro-plan-wre19.22: no camera create or edit command; astro-plan-c6rcr: rig filter editing. */}
+      {/* astro-plan-wre19.22: no camera create or edit command. */}
       <Gap what={m.equipment_add_camera()} detail={m.settings_gap_camera_edit()} />
       {editing === "new" || editedRig ? <RigDialog rig={editedRig ?? null} open onOpenChange={(open) => !open && setEditing(null)} /> : null}
+      {filtersRig ? <RigFiltersDialog rig={filtersRig} open onOpenChange={(open) => !open && setFiltersOf(null)} /> : null}
     </SettingsPage>
   )
 }

@@ -2327,6 +2327,61 @@
   "location_locate_or_remap": "Localizar ou remapear",
   "location_retire": "Aposentar local",
   "location_choose_folder_again": "Escolher pasta de novo",
+  "location_remap": "Remapear",
+  "location_remap_root_overlaps": "{path} se sobrepõe a outro local registrado",
+  "location_remap_root_unverified": "O PlateVault não consegue verificar o volume de {path}",
+  "location_remap_no_proof": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{frames} frame sem prova byte a byte",
+        "countPlural=*": "{frames} frames sem prova byte a byte"
+      }
+    }
+  ],
+  "location_remap_identity_mismatch": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{frames} frame fora do volume da pasta",
+        "countPlural=*": "{frames} frames fora do volume da pasta"
+      }
+    }
+  ],
+  "location_remap_drift": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{frames} mudou desde a última indexação",
+        "countPlural=*": "{frames} mudaram desde a última indexação"
+      }
+    }
+  ],
+  "equipment_edit_filters": "Editar filtros",
+  "equipment_filters_title": "Filtros de {name}",
+  "equipment_filter_numbered": "Filtro {n}",
+  "equipment_remove_filter": "Remover filtro {n}",
   "settings_sections": "Seções das configurações",
   "settings_back_to_session": "Voltar à sessão",
   "settings_back_to_plan": "Voltar ao Plano",
