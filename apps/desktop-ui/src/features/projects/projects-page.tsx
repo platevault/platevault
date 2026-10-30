@@ -17,10 +17,11 @@ import { ActionButton } from "@/components/app/actions"
 import type { Action, Column, Facet, MenuItem } from "@/components/app/contracts"
 import { EmptyState } from "@/components/app/feedback"
 import { type IssueFilter, issuesFacet, matchesIssueFilter, parseIssueFilter, withIssueItems } from "@/components/app/issue-actions"
+import { ListPage } from "@/components/templates/list-page"
 import { failureMessage } from "@/components/app/run-result"
 import { StatusBadge, statusMeta } from "@/components/app/status"
-import { ListPage } from "@/components/templates/list-page"
 import { formatCount } from "@/lib/format"
+import { nextAction } from "./next-step"
 import { DuplicateProjectDialog } from "./duplicate-dialog"
 import { useProjectIssues } from "./issues"
 import { NewProjectDialog } from "./new-project-dialog"
@@ -68,6 +69,8 @@ export function ProjectsPage() {
     { id: "subjects", header: m.project_subjects(), cell: (p) => p.subjects.join(", ") || m.projects_no_subjects(), sortValue: (p) => p.subjects.length, truncate: true },
     { id: "rigs", header: m.project_rigs(), cell: (p) => formatCount(p.rigCount), sortValue: (p) => p.rigCount, align: "right" },
     { id: "goals", header: m.projects_col_goals(), cell: (p) => (p.goalCount === 0 ? m.projects_no_goals() : m.project_goals_count({ count: p.goalCount })), sortValue: (p) => p.goalCount },
+    { id: "next-step", header: m.projects_col_next_step(), cell: (p) => (p.nextStep ? nextAction(m, p.id, p.nextStep).label : m.projects_no_next_step()), sortValue: (p) => p.nextStep?.kind ?? "" },
+    { id: "pending-changes", header: m.projects_col_pending_changes(), cell: (p) => formatCount(p.pendingChanges), sortValue: (p) => p.pendingChanges, align: "right" },
     { id: "state", header: m.projects_col_state(), cell: (p) => <StatusBadge kind="project" value={p.lifecycle} />, sortValue: (p) => statusMeta("project", p.lifecycle).label },
   ]
   const rowActions = (p: ProjectSummary): MenuItem[] =>

@@ -25,7 +25,6 @@ import {
   type HomeSession,
   type LocationState,
   library,
-  type NextAction,
   type ReadyToAdd,
   type RunningWork,
   type SessionAction,
@@ -41,7 +40,7 @@ import { useFollowLink } from "@/components/app/links"
 import { StatusBadge } from "@/components/app/status"
 import { DetailPage, type DetailSection } from "@/components/templates/detail-page"
 import { formatCount } from "@/lib/format"
-import type { Messages } from "@/lib/i18n"
+import { nextAction } from "@/features/projects/next-step"
 import { AddToProjectDialog } from "./add-to-project"
 import { homeCriteriaQuery } from "@/components/domain/plan-criteria"
 import { PlanCriteriaDialog } from "@/components/domain/plan-criteria-dialog"
@@ -49,7 +48,7 @@ import { IngestionsTable, ROWS, useIngestions } from "./ingestions"
 import { HomeCalendar, TonightGoals } from "./home-planning"
 import { readError, Unavailable } from "./parts"
 import { dashboardQuery, homeWrite, locationsQuery, sessionsQuery } from "./queries"
-import { sessionLabel, useSessionSummaries } from "@/components/domain/session-label"
+import type { Messages } from "@/lib/i18n"
 
 type Follow = (link: StepLink) => void
 
@@ -275,25 +274,6 @@ function PendingTable({ dashboard, rows: dashboardRows, follow }: { dashboard: H
 }
 
 // Open work --------------------------------------------------------------------
-
-/** A Project's Next action as the library computed it (PRJ-FR-18), worded and linked. */
-export function nextAction(m: Messages, projectId: string, next: NextAction): { label: string; link: StepLink } {
-  const project = projectLink(projectId)
-  switch (next.kind) {
-    case "review_new_frames":
-      return { label: m.domain_next_review_new_frames({ count: next.frames, n: formatCount(next.frames) }), link: project }
-    case "waits_on_user":
-      return { label: next.step === "view" ? m.home_next_view() : m.home_next_sessions(), link: { ...project, search: { stage: next.step } } }
-    case "plan_tonight":
-      return { label: m.target_plan_tonight(), link: { to: "/targets" } }
-    case "apply_changes":
-      return { label: m.domain_next_apply_changes({ count: next.changes }), link: { ...project, search: { stage: "view" } } }
-    case "open_view":
-      return { label: m.home_next_open_view(), link: { ...project, search: { stage: "view" } } }
-    case "add_sessions":
-      return { label: m.project_add_sessions(), link: { ...project, search: { stage: "sessions" } } }
-  }
-}
 
 function OpenWorkTable({ projects, follow }: { projects: HomeProject[]; follow: Follow }) {
   const m = useMessages()

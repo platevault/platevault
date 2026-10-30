@@ -12,7 +12,8 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest"
 import type { ApplyPreview_Serialize, ApplyReport_Serialize, NativePathWire, Project, ProjectInputs_Serialize, ProjectSummary, WrapUpStatus } from "@/api/ipc"
 import { createQueryClient } from "@/api/query"
 import { AppRoot } from "@/app/root"
-import { m } from "@/lib/i18n"
+import { setLocale } from "@/app/preferences"
+import { LOCALES, m } from "@/lib/i18n"
 import { createShellRouter } from "@/routes"
 import { resetApplyRuns, startApply } from "./apply-run"
 import { resetCloseRuns } from "./close-run"
@@ -25,7 +26,7 @@ const G1 = "33333333-3333-3333-3333-333333333333"
 const path = (display: string): NativePathWire => ({ encoding: "unix-bytes", payload: [...new TextEncoder().encode(display)], display })
 const TEST_MS = 30_000
 
-const summary = (lifecycle: ProjectSummary["lifecycle"] = "open"): ProjectSummary => ({ id: P, name: "Cygnus HOO", lifecycle, revision: 4, subjects: ["NGC 7000"], rigCount: 1, goalCount: 0 })
+const summary = (lifecycle: ProjectSummary["lifecycle"] = "open"): ProjectSummary => ({ id: P, name: "Cygnus HOO", lifecycle, revision: 4, subjects: ["NGC 7000"], rigCount: 1, goalCount: 0, nextStep: lifecycle === "open" ? { kind: "add_sessions" } : null, pendingChanges: 0 })
 
 const INPUTS: ProjectInputs_Serialize = {
   desired: {
@@ -130,6 +131,23 @@ afterEach(() => {
   clearMocks()
   resetApplyRuns()
   resetCloseRuns()
+  act(() => setLocale("en-GB"))
+})
+
+describe("Projects list", { timeout: TEST_MS }, () => {
+  it("shows the pending next step and count in both locales", async () => {
+    for (const locale of LOCALES as readonly ("en-GB" | "pt-BR")[]) {
+      act(() => setLocale(locale))
+      host({ project_list: () => [{ ...summary(), nextStep: { kind: "apply_changes", changes: 3 }, pendingChanges: 3 }] })
+      renderAt("/projects")
+      expect(await screen.findByText(m.projects_col_next_step())).toBeInTheDocument()
+      expect(screen.getByRole("cell", { name: m.domain_next_apply_changes({ count: 3 }) })).toBeInTheDocument()
+      expect(screen.getByRole("cell", { name: "3" })).toBeInTheDocument()
+      expect(screen.getByText(m.projects_col_pending_changes())).toBeInTheDocument()
+      cleanup()
+      clearMocks()
+    }
+  })
 })
 
 describe("Apply", { timeout: TEST_MS }, () => {

@@ -1246,6 +1246,9 @@
   "projects_no_subjects": "Sem objetos",
   "projects_col_state": "Estado",
   "projects_col_goals": "Metas",
+  "projects_col_next_step": "Próxima etapa",
+  "projects_col_pending_changes": "Alterações pendentes",
+  "projects_no_next_step": "—",
   "wrapup_action": "Encerrar",
   "trash_title": "Lixeira",
   "projects_count": [

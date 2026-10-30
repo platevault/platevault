@@ -24,7 +24,7 @@ use crate::tonight::{Tonight, TonightQuery};
 use crate::{
     AdmissionBlocker, ApplyJournal, ApplyOutcome, GoalProgress, GoalShortfall, HomeAction,
     HomeProject, ImportState, LibraryError, NextAction, PreviousItemReview, Project,
-    ProjectCandidate, ProjectQuery, ProjectSuggestion, ProjectWait, QualityLabel, ReadyToAdd,
+    ProjectCandidate, ProjectQuery, ProjectSuggestion, ProjectSummary, ProjectWait, QualityLabel, ReadyToAdd,
     ReviewContext, ReviewFilter, RunState, RunningWork, ScanState, SessionAction,
     SessionFilterCounts, StorageOperationState, TargetStatus, UnmetGoal, UnreviewedSession,
 };
@@ -77,7 +77,7 @@ pub struct HomeSession {
     pub actions: Vec<SessionAction>,
 }
 
-/// One open Project's reads that Home composes.
+/// One open Project's reads that Home and the Projects list compose.
 struct ProjectReads {
     project: Project,
     goals: Vec<GoalProgress>,
@@ -105,6 +105,40 @@ impl ProjectReads {
 fn count(items: usize) -> u64 {
     u64::try_from(items).unwrap_or(u64::MAX)
 }
+impl Library {
+    async fn project_reads_for(&self, project: Project) -> Result<ProjectReads, LibraryError> {
+        let id = project.id;
+        let catalog = self.catalog();
+        let goals = self.project_progress(id).await?.goals;
+        let candidates = catalog.project_candidates(id).await?;
+        let basis = catalog.review_basis(ReviewContext::ProjectCandidates { project_id: id }).await?;
+        let mut unreviewed = BTreeMap::new();
+        for capture in &basis.captures {
+            if QualityLabel::of(&capture.quality) == QualityLabel::Unreviewed {
+                *unreviewed.entry(capture.session_id).or_default() += 1;
+            }
+        }
+        let suggestions = catalog.project_suggestions(id).await?;
+        let pending_changes = count(catalog.project_pending_changes(id).await?.len());
+        let latest_apply = catalog.latest_apply_journal(id).await?;
+        let leftovers = catalog.previous_items(id).await?;
+        let unreviewed_leftovers = count(
+            leftovers.iter().filter(|item| item.review == PreviousItemReview::Pending).count(),
+        );
+        Ok(ProjectReads {
+            project,
+            goals,
+            candidates,
+            unreviewed,
+            suggestions,
+            pending_changes,
+            latest_apply,
+            unreviewed_leftovers,
+        })
+    }
+}
+
+
 
 impl Library {
     /// Home: the top line, then Actions, the open Projects, New sessions,
@@ -146,10 +180,11 @@ impl Library {
             for (target, goal) in unmet_goals(&reads) {
                 status.entry(target).or_default().push(goal);
             }
+            let next = next_action(&reads, &tonight);
             projects.push(HomeProject {
-                project: summary,
+                project: ProjectSummary { next_step: Some(next.clone()), pending_changes: reads.pending_changes, ..summary },
                 pending_changes: reads.pending_changes,
-                next: next_action(&reads, &tonight),
+                next,
                 goals: reads.goals,
             });
         }
@@ -167,6 +202,43 @@ impl Library {
             running_work: self.running_work().await?,
         })
     }
+    /// Project list rows including each open Project's next step and pending count.
+    ///
+    /// # Errors
+    /// `InvalidInput` for an unsupported planning night; catalog failures.
+    pub async fn project_list(
+        &self,
+        query: &ProjectQuery,
+    ) -> Result<Vec<crate::ProjectSummary>, LibraryError> {
+        let catalog = self.catalog();
+        let mut summaries = catalog.list_projects(query).await?;
+        let mut open = Vec::new();
+        for summary in &summaries {
+            if summary.lifecycle.is_open() {
+                open.push(self.project_reads(summary.id).await?);
+            }
+        }
+        if open.is_empty() {
+            return Ok(summaries);
+        }
+        let goals: Vec<(&Project, &[GoalProgress])> =
+            open.iter().map(|reads| (&reads.project, reads.goals.as_slice())).collect();
+        let tonight = self.tonight_of(&TonightQuery::default(), &goals).await?;
+        let mut open_index = 0;
+        for summary in &mut summaries {
+            if !summary.lifecycle.is_open() {
+                summary.next_step = None;
+                summary.pending_changes = 0;
+                continue;
+            }
+            let reads = &open[open_index];
+            summary.next_step = Some(next_action(reads, &tonight));
+            summary.pending_changes = reads.pending_changes;
+            open_index += 1;
+        }
+        Ok(summaries)
+    }
+
 
     async fn home_sessions(
         &self,
@@ -182,35 +254,8 @@ impl Library {
     }
 
     async fn project_reads(&self, id: Uuid) -> Result<ProjectReads, LibraryError> {
-        let catalog = self.catalog();
-        let project = catalog.project(id).await?;
-        let goals = self.project_progress(id).await?.goals;
-        let candidates = catalog.project_candidates(id).await?;
-        let basis =
-            catalog.review_basis(ReviewContext::ProjectCandidates { project_id: id }).await?;
-        let mut unreviewed = BTreeMap::new();
-        for capture in &basis.captures {
-            if QualityLabel::of(&capture.quality) == QualityLabel::Unreviewed {
-                *unreviewed.entry(capture.session_id).or_default() += 1;
-            }
-        }
-        let suggestions = catalog.project_suggestions(id).await?;
-        let pending_changes = count(catalog.project_pending_changes(id).await?.len());
-        let latest_apply = catalog.latest_apply_journal(id).await?;
-        let leftovers = catalog.previous_items(id).await?;
-        let unreviewed_leftovers = count(
-            leftovers.iter().filter(|item| item.review == PreviousItemReview::Pending).count(),
-        );
-        Ok(ProjectReads {
-            project,
-            goals,
-            candidates,
-            unreviewed,
-            suggestions,
-            pending_changes,
-            latest_apply,
-            unreviewed_leftovers,
-        })
+        let project = self.catalog().project(id).await?;
+        self.project_reads_for(project).await
     }
 
     /// Every Running operation, each kind through its feature's own read; one

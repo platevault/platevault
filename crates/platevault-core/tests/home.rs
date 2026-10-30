@@ -29,10 +29,10 @@ use home_support::{
     default_site, ha_goal, indexed, quiet, running_import, running_project_operation,
     running_storage, target, tonight,
 };
-use persistence_library::{SessionFilter, SessionQuery};
 use platevault_core::apply::Unattended;
 use platevault_core::home::HomeDashboard;
 use platevault_core::library::Library;
+use persistence_library::{SessionFilter, SessionQuery};
 use platevault_core::*;
 use uuid::Uuid;
 
@@ -44,7 +44,12 @@ async fn dashboard(library: &Library) -> HomeDashboard {
 async fn home_project(world: &World) -> HomeProject {
     let mut home = dashboard(&world.library).await;
     assert_eq!(home.projects.len(), 1, "{:#?}", home.projects);
-    home.projects.remove(0)
+    let project = home.projects.remove(0);
+    let listed = world.library.project_list(&ProjectQuery::default()).await.unwrap();
+    let [summary] = listed.as_slice() else { panic!("one Project summary: {listed:#?}") };
+    assert_eq!(summary.next_step.as_ref(), Some(&project.next));
+    assert_eq!(summary.pending_changes, project.pending_changes);
+    project
 }
 
 /// Each key's first position in `json`, which must increase.
@@ -180,6 +185,12 @@ async fn next_rule1_review_new_frames_and_rule4_add_sessions() {
             ),
         ]
     );
+    let listed = indexed.library.project_list(&ProjectQuery::default()).await.unwrap();
+    for home in &home.projects {
+        let summary = listed.iter().find(|summary| summary.id == home.project.id).unwrap();
+        assert_eq!(summary.next_step.as_ref(), Some(&home.next));
+        assert_eq!(summary.pending_changes, home.pending_changes);
+    }
 }
 
 /// PRJ-FR-18 rule 2 (provisional, spec 065 PRJ-FR-18), PRJ-AC-23: a
@@ -230,6 +241,10 @@ async fn next_rule2_waits_on_calibration_then_an_unfinished_apply() {
             ],
         }
     );
+    let listed = world.library.project_list(&ProjectQuery::default()).await.unwrap();
+    let summary = listed.iter().find(|summary| summary.id == world.project).unwrap();
+    assert_eq!(summary.next_step, Some(home.projects[0].next.clone()));
+    assert_eq!(summary.pending_changes, home.projects[0].pending_changes);
 }
 
 /// PRJ-FR-18 rule 4 and rule 2, D-W110: before the first Apply a Project has
@@ -289,8 +304,10 @@ async fn next_rule3_plan_tonight_when_goal_unmet_and_window() {
     default_site(&world.library).await;
     let home = dashboard(&world.library).await;
     let target = world.catalog().project(world.project).await.unwrap().subjects[0].target_id;
-    assert!(home.tonight.has_window(target));
-    assert_eq!(home.projects[0].next, NextAction::PlanTonight { target_ids: vec![target] });
+    let listed = world.library.project_list(&ProjectQuery::default()).await.unwrap();
+    let summary = listed.iter().find(|summary| summary.id == world.project).unwrap();
+    assert_eq!(summary.next_step, Some(home.projects[0].next.clone()));
+    assert_eq!(summary.pending_changes, home.projects[0].pending_changes);
     let [status] = home.target_status.as_slice() else { panic!("{:#?}", home.target_status) };
     assert_eq!(status.target_id, target);
     assert_eq!(status.goals[0].still_needed, GoalShortfall::FrameCount { frames: 48 });
@@ -363,6 +380,38 @@ async fn a_removed_subjects_goals_count_nowhere_until_it_is_added_back() {
     assert_eq!(counted_goals(&world).await, shown, "the restored goal counts again");
 }
 
+/// The Projects list reuses the Home rule order for every Next action, and locked Projects carry neither field.
+#[tokio::test]
+async fn project_list_matches_home_next_rules_and_clears_closed_rows() {
+    let indexed = indexed().await;
+    let listed = indexed.library.project_list(&ProjectQuery::default()).await.unwrap();
+    let open = listed.iter().map(|summary| (summary.name.as_str(), summary.next_step.as_ref().unwrap())).collect::<Vec<_>>();
+    assert_eq!(open, [
+        ("Andromeda", &NextAction::AddSessions),
+        ("Summer nebulae", &NextAction::ReviewNewFrames {
+            frames: 1,
+            context: ReviewContext::ProjectCandidates { project_id: indexed.nebulae.id },
+            filter: ReviewFilter::Unreviewed,
+        }),
+    ]);
+    assert!(listed.iter().all(|summary| summary.pending_changes == 0));
+
+    let world = world(ViewMode::Symlinks).await;
+    quiet(&world).await;
+    let listed = world.library.project_list(&ProjectQuery::default()).await.unwrap();
+    assert_eq!(listed[0].next_step, Some(NextAction::AddSessions));
+    world.apply().await;
+    let listed = world.library.project_list(&ProjectQuery::default()).await.unwrap();
+    assert_eq!(listed[0].next_step, Some(NextAction::OpenView));
+
+    world.sql("UPDATE projects SET view_mode = 'copies' WHERE id = ?1", &[&world.project.to_string()]).await;
+    world.bump().await;
+    let listed = world.library.project_list(&ProjectQuery::default()).await.unwrap();
+    let pending = listed[0].pending_changes;
+    assert!(pending > 0);
+    assert_eq!(listed[0].next_step, Some(NextAction::ApplyChanges { changes: pending }));
+
+}
 /// PRJ-AC-22: Home lists open Projects only; a Closed one leaves the list.
 #[tokio::test]
 async fn closed_projects_are_not_listed() {
@@ -387,6 +436,11 @@ async fn closed_projects_are_not_listed() {
     let close = CloseRequest { project_id: world.project, desired_revision, archive: None };
     let report = world.library.close_project(&close, trash.dyn_trash(), &Unattended).await.unwrap();
     assert_eq!(report.lifecycle, ProjectLifecycle::Closed);
+    let listed = world.library.project_list(&ProjectQuery { include_closed: true, ..ProjectQuery::default() }).await.unwrap();
+    let closed = listed.iter().find(|summary| summary.id == world.project).unwrap();
+    assert_eq!(closed.lifecycle, ProjectLifecycle::Closed);
+    assert_eq!(closed.next_step, None);
+    assert_eq!(closed.pending_changes, 0);
 
     assert_eq!(dashboard(&world.library).await.projects, []);
 }

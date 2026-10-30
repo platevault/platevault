@@ -235,14 +235,17 @@ impl Catalog {
             .bind(id.to_string())
             .fetch_all(&mut *conn)
             .await?;
+            let lifecycle = from_text(&row.try_get::<String, _>("lifecycle")?)?;
             summaries.push(ProjectSummary {
                 id,
                 name: row.try_get("name")?,
-                lifecycle: from_text(&row.try_get::<String, _>("lifecycle")?)?,
+                lifecycle,
                 revision: revision(row.try_get("revision")?)?,
                 subjects,
                 rig_count: count(row, "rigs")?,
                 goal_count: count(row, "goals")?,
+                next_step: None,
+                pending_changes: 0,
             });
         }
         Ok(summaries)

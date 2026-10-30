@@ -19,7 +19,7 @@ import { wrapUpSteps } from "./wrap-up"
 
 const PROJECT = "11111111-1111-1111-1111-111111111111"
 const path = (display: string): NativePathWire => ({ encoding: "unix-bytes", payload: [...new TextEncoder().encode(display)], display })
-const HEADER: ProjectSummary = { id: PROJECT, name: "Cygnus HOO", lifecycle: "open", revision: 4, subjects: ["NGC 7000"], rigCount: 1, goalCount: 0 }
+const HEADER: ProjectSummary = { id: PROJECT, name: "Cygnus HOO", lifecycle: "open", revision: 4, subjects: ["NGC 7000"], rigCount: 1, goalCount: 0, nextStep: { kind: "add_sessions" }, pendingChanges: 0 }
 
 function preview(over: Partial<ApplyPreview_Serialize> = {}): ApplyPreview_Serialize {
   return {

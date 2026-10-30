@@ -183,7 +183,7 @@ pub async fn project_list(
 ) -> Reply<Vec<ProjectSummary>> {
     let query =
         ProjectQuery { target_id, include_closed: include_closed.unwrap_or(false), offset, limit };
-    library.catalog().list_projects(&query).await.map_err(fail(target_id))
+    library.project_list(&query).await.map_err(fail(target_id))
 }
 
 /// The Project's candidates, derived now: every current session whose
