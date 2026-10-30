@@ -6,8 +6,8 @@
 //! View, and capability evidence carries no input-list claim.
 
 use platevault_model::{
-    Capability, CapabilityEvidence, CapabilityProof, InputBehavior, LibraryError, ProfileInput,
-    ProfileKind,
+    Capability, CapabilityEvidence, CapabilityProof, FieldPath, InputBehavior, LibraryError,
+    ProfileInput, ProfileKind,
 };
 
 fn profile(args: &[&str]) -> ProfileInput {
@@ -75,5 +75,5 @@ fn read_only_input_still_needs_its_proof() {
     let evidence =
         CapabilityEvidence { input_behavior: InputBehavior::ReadOnly, proofs: Vec::new() };
     let refused = evidence.validate().unwrap_err();
-    assert_eq!(refused.field().map(|field| field.as_str()), Some("inputBehavior"), "{refused:?}");
+    assert_eq!(refused.field().map(FieldPath::as_str), Some("inputBehavior"), "{refused:?}");
 }

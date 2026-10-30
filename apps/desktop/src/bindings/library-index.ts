@@ -3697,7 +3697,9 @@ export type ErrorResponse = {
 	successors: string[],
 	/**
 	 *  The selected window a `conflict` found missing from the windows
-	 *  recomputed at its site; the key names the Target and the site.
+	 *  recomputed at its site; the key names the Target and the site. Boxed,
+	 *  like `correction`, so the response stays below the workspace's
+	 *  `large-error-threshold`.
 	 */
 	window: string | null,
 	/**

@@ -401,7 +401,9 @@ impl WindowKey {
     ) -> Result<Self, LibraryError> {
         let start_utc = start.to_offset(UtcOffset::UTC);
         if start_utc.second() != 0 || start_utc.nanosecond() != 0 {
-            return Err(invalid(format!("windowKey start {start_utc} is not a whole UTC minute")));
+            return Err(LibraryError::InvalidInput(format!(
+                "windowKey start {start_utc} is not a whole UTC minute"
+            )));
         }
         Ok(Self { target_id, site_id, start_utc })
     }
@@ -443,7 +445,9 @@ impl FromStr for WindowKey {
     type Err = LibraryError;
 
     fn from_str(text: &str) -> Result<Self, Self::Err> {
-        let malformed = || invalid(format!("windowKey {text:?} is not <target>/<site>/<start>"));
+        let malformed = || {
+            LibraryError::InvalidInput(format!("windowKey {text:?} is not <target>/<site>/<start>"))
+        };
         let mut parts = text.split('/');
         let (Some(target), Some(site), Some(start), None) =
             (parts.next(), parts.next(), parts.next(), parts.next())

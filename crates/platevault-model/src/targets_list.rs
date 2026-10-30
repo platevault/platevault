@@ -27,9 +27,6 @@ pub const MAX_PRESET_NAME: usize = 80;
 /// hours across a clock change.
 pub const ALTITUDE_SAMPLES: usize = 49;
 
-fn invalid(message: String) -> LibraryError {
-    LibraryError::InvalidInput(message)
-}
 // ---------------------------------------------------------------------------
 // Query
 // ---------------------------------------------------------------------------

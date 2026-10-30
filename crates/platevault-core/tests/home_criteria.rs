@@ -70,7 +70,7 @@ async fn invalid_criteria_are_refused() {
     let library = open(&temp.path().join("library.sqlite")).await;
     let invalid = PlanCriteria { min_duration_minutes: 0, ..criteria() };
     let error = library.save_home_criteria(0, &invalid).await.unwrap_err();
-    assert_eq!(error.field().map(|field| field.as_str()), Some("minDurationMinutes"), "{error:?}");
+    assert_eq!(error.field().map(FieldPath::as_str), Some("minDurationMinutes"), "{error:?}");
     assert_eq!(library.home_criteria().await.unwrap().revision, 0);
 }
 

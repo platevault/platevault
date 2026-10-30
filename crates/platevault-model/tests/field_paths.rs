@@ -103,7 +103,7 @@ fn reminder_lead_time_names_its_field() {
     assert_eq!(field(reminder.validate()), "leadMinutes");
     assert_eq!(
         field(reminder.validate().map_err(|error| error.within_field("reminder"))),
-        "leadMinutes"
+        "reminder.leadMinutes"
     );
 }
 

@@ -10,7 +10,7 @@
 
 use persistence_library::{Catalog, WORKFLOW_SETTINGS_ID};
 use platevault_model::{
-    Band, CalibrationSettings, DarkBiasRules, FlatRules, LibraryError, LibraryErrorCode,
+    Band, CalibrationSettings, DarkBiasRules, FieldPath, FlatRules, LibraryError, LibraryErrorCode,
     MoonAvoidanceCurve, Revision, ViewMode, WorkflowSettings,
 };
 
@@ -98,7 +98,7 @@ async fn an_invalid_setting_is_refused_naming_its_field_and_nothing_is_stored() 
     ] {
         let refused: LibraryError = catalog.save_workflow_settings(0, &invalid).await.unwrap_err();
         assert_eq!(refused.code(), LibraryErrorCode::InvalidInput, "{refused:?}");
-        assert_eq!(refused.field().map(|path| path.as_str()), Some(field), "{refused:?}");
+        assert_eq!(refused.field().map(FieldPath::as_str), Some(field), "{refused:?}");
         assert_eq!(refused.response(None, None).field.as_ref(), refused.field());
     }
     let revision: Revision = catalog.workflow_settings().await.unwrap().1;

@@ -351,8 +351,10 @@ pub struct ErrorResponse {
     /// The records that superseded a `conflict`'s record.
     pub successors: Vec<Uuid>,
     /// The selected window a `conflict` found missing from the windows
-    /// recomputed at its site; the key names the Target and the site.
-    pub window: Option<WindowKey>,
+    /// recomputed at its site; the key names the Target and the site. Boxed,
+    /// like `correction`, so the response stays below the workspace's
+    /// `large-error-threshold`.
+    pub window: Option<Box<WindowKey>>,
     /// The corrected field a `correction_*` refusal names and why no
     /// isolated patched copy can carry it; boxed so the response stays
     /// below the workspace's `large-error-threshold`.
@@ -535,7 +537,7 @@ impl LibraryError {
             Self::WindowConflict { key, current, .. } => {
                 response.identity = Some(key.target_id());
                 response.current_revision = Some(*current);
-                response.window = Some(*key);
+                response.window = Some(Box::new(*key));
             }
             Self::CorrectionUndeliverable { identity, path, field, refusal } => {
                 response.identity = Some(*identity);
