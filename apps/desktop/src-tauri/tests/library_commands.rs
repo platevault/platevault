@@ -776,7 +776,6 @@ fn workflow_settings_family_reads_and_saves_with_revisions() {
     assert_eq!(shell.call("workflow_settings_get", &json!({})), saved, "nothing else stored");
 }
 
-// keep both tests
 /// Camera IPC accepts one create, one revision-checked edit and refuses stale or invalid saves.
 #[test]
 fn library_save_camera_uses_camera_revisions_and_validation() {
@@ -829,5 +828,4 @@ fn library_data_location_returns_the_native_catalog_directory() {
     let shell = Shell::new();
     let actual = shell.call("library_data_location", &json!({}));
     assert_eq!(actual, native_path(shell.dir.path()));
-}
 }
