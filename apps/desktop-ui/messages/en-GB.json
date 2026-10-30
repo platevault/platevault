@@ -2163,6 +2163,43 @@
   "location_locate_or_remap": "Locate or remap",
   "location_retire": "Retire location",
   "location_choose_folder_again": "Choose folder again",
+  "location_remap": "Remap",
+  "location_remap_collision": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{frames} collides with another file",
+        "countPlural=*": "{frames} collide with another file"
+      }
+    }
+  ],
+  "location_remap_drift": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{frames} changed since it was last indexed",
+        "countPlural=*": "{frames} changed since they were last indexed"
+      }
+    }
+  ],
+  "equipment_edit_filters": "Edit filters",
+  "equipment_filters_title": "Filters of {name}",
+  "equipment_filter_numbered": "Filter {n}",
+  "equipment_remove_filter": "Remove filter {n}",
   "settings_sections": "Settings sections",
   "settings_back_to_session": "Back to session",
   "settings_back_to_plan": "Back to Plan",

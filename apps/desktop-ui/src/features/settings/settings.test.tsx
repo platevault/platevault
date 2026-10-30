@@ -3,8 +3,9 @@
  * (`__fixtures__/settings-host.ts`): what each section reads and sends, a
  * save that survives a remount, a failed save that keeps the user's edits, a
  * stale revision that is read again, refusals shown beside their control,
- * the native folder picker's Cancel and pick, and the Index step's planning
- * criteria (LIB-FR-31, LIB-AC-47) in both locales.
+ * the native folder picker's Cancel and pick (Add location… and Remap…), a
+ * rig's filter list, and the Index step's planning criteria (LIB-FR-31,
+ * LIB-AC-47) in both locales.
  */
 import { createMemoryHistory } from "@tanstack/react-router"
 import { clearMocks, mockIPC } from "@tauri-apps/api/mocks"
@@ -14,6 +15,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { createQueryClient } from "@/api/query"
 import { setLocale } from "@/app/preferences"
 import { AppRoot } from "@/app/root"
+import { formatCount, formatList } from "@/lib/format"
 import { DEFAULT_LOCALE, LOCALES, m } from "@/lib/i18n"
 import { createAppRouter } from "@/routes"
 import { CRITERIA, catalog, location, nativePath, scan, settingsHost } from "./__fixtures__/settings-host"
@@ -155,6 +157,141 @@ describe.each(LOCALES)("Settings in %s", (locale) => {
       await user.click(within(dialog).getByRole("button", { name: new RegExp(`^(${m.settings_save()}|${m.verb_retry()})$`) }))
       await waitFor(() => expect(host.sent("library_save_equipment").map((args) => args.expectedRevision)).toEqual([4, 7]))
       expect(host.state.rigs[0]?.equipment.telescope).toBe("Esprit 100")
+    },
+    TEST_MS,
+  )
+
+  async function openRigFilters(user: ReturnType<typeof userEvent.setup>) {
+    const row = (await screen.findByRole("rowheader", { name: "RedCat 51" })).closest("tr") as HTMLElement
+    await user.click(within(row).getByRole("button", { name: new RegExp("RedCat 51") }))
+    await user.click(await screen.findByRole("menuitem", { name: named(m.equipment_edit_filters()) }))
+    return screen.findByRole("dialog", { name: m.equipment_filters_title({ name: "RedCat 51" }) })
+  }
+
+  it(
+    "saves a rig's filter list over its revision, and the saved list shows after a remount",
+    async () => {
+      const host = serve()
+      const first = renderAt("/settings/equipment")
+      const dialog = await openRigFilters(first.user)
+      await first.user.click(within(dialog).getByRole("button", { name: m.equipment_add_filter() }))
+      const added = within(dialog).getByRole("group", { name: m.equipment_filter_numbered({ n: "2" }) })
+      await first.user.type(within(added).getByRole("textbox", { name: m.equipment_name() }), "OIII 3nm")
+      await first.user.type(within(added).getByRole("textbox", { name: m.equipment_matches_filter() }), "OIII, O3")
+      // Save stays unavailable until the new filter passes a band.
+      expect(within(dialog).getByRole("button", { name: m.settings_save() })).toHaveAttribute("aria-disabled", "true")
+      await first.user.click(within(added).getByRole("checkbox", { name: "OIII" }))
+      await first.user.click(within(dialog).getByRole("button", { name: m.settings_save() }))
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())
+      expect(host.sent("rig_filters_save")).toEqual([
+        {
+          equipmentId: "rig-1",
+          filters: [
+            { id: "f-ha", name: "Ha", matchValues: ["Ha"], bands: ["Ha"] },
+            { id: null, name: "OIII 3nm", matchValues: ["OIII", "O3"], bands: ["OIII"] },
+          ],
+          expectedRevision: 2,
+        },
+      ])
+
+      cleanup()
+      mockIPC(host.handler)
+      renderAt("/settings/equipment")
+      const row = (await screen.findByRole("rowheader", { name: "RedCat 51" })).closest("tr") as HTMLElement
+      expect(await within(row).findByText(formatList(["Ha", "OIII 3nm"]))).toBeInTheDocument()
+    },
+    TEST_MS,
+  )
+
+  it(
+    "keeps a rig's filter edits through a stale revision and saves them over the revision read again",
+    async () => {
+      const host = serve()
+      const { user } = renderAt("/settings/equipment")
+      const dialog = await openRigFilters(user)
+      // Someone else saved the list since the page read it.
+      const [rig] = host.state.rigs
+      if (rig) host.state.rigs = [{ ...rig, filters: { ...rig.filters, revision: 5 } }]
+      const name = within(within(dialog).getByRole("group", { name: m.equipment_filter_numbered({ n: "1" }) })).getByRole("textbox", { name: m.equipment_name() })
+      await user.clear(name)
+      await user.type(name, "H-alpha")
+      await user.click(within(dialog).getByRole("button", { name: m.settings_save() }))
+      expect(await within(dialog).findByText(m.action_failure_conflict())).toBeInTheDocument()
+      await waitFor(() => expect(host.sent("library_list_rig_filters").length).toBeGreaterThan(1))
+      expect(name).toHaveValue("H-alpha")
+      await user.click(within(dialog).getByRole("button", { name: new RegExp(`^(${m.settings_save()}|${m.verb_retry()})$`) }))
+      await waitFor(() => expect(host.sent("rig_filters_save").map((args) => args.expectedRevision)).toEqual([2, 5]))
+      expect(host.state.rigs[0]?.filters.filters.map((f) => f.name)).toEqual(["H-alpha"])
+    },
+    TEST_MS,
+  )
+
+  async function chooseRemap(user: ReturnType<typeof userEvent.setup>) {
+    const row = (await screen.findByRole("rowheader", { name: "Lights" })).closest("tr") as HTMLElement
+    await user.click(within(row).getByRole("button", { name: new RegExp("Lights") }))
+    await user.click(await screen.findByRole("menuitem", { name: named(m.location_remap()) }))
+    return row
+  }
+  // Read in the locale the test runs in, not when the suite is collected.
+  const remapTitle = () => m.location_remap_title({ name: "Lights", path: "/Volumes/Cold-1/Lights" })
+
+  it(
+    "remaps a location only to a picked folder: Cancel sends nothing, a pick sends the path and the row reads the new folder",
+    async () => {
+      const host = serve(catalog({ locations: [location("loc-1", "Lights", "captures")] }))
+      const { user } = renderAt("/settings/locations")
+      // Cancel in the native picker: no review, no remap, no dialog.
+      await chooseRemap(user)
+      await waitFor(() => expect(host.sent("library_pick_folder")).toHaveLength(1))
+      expect(host.sent("library_review_remap")).toEqual([])
+      expect(screen.queryByRole("dialog")).toBeNull()
+
+      host.state.picked = nativePath("/Volumes/Cold-1/Lights")
+      const row = await chooseRemap(user)
+      const dialog = await screen.findByRole("dialog", { name: remapTitle() })
+      expect(host.sent("library_review_remap")).toEqual([{ locationId: "loc-1", proposedPath: nativePath("/Volumes/Cold-1/Lights") }])
+      await user.click(within(dialog).getByRole("button", { name: m.location_remap_confirm({ count: 1, frames: formatCount(1) }) }))
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())
+      expect(host.sent("library_apply_remap")).toEqual([{ reviewId: host.state.reviews[0]?.id, expectedRevision: 1 }])
+      expect(await within(row).findByText("/Volumes/Cold-1/Lights")).toBeInTheDocument()
+    },
+    TEST_MS,
+  )
+
+  it(
+    "shows the library's refusal of a remap's review and of the remap, and keeps the location's folder",
+    async () => {
+      const host = serve(catalog({ locations: [location("loc-1", "Lights", "captures")], picked: nativePath("/Volumes/Cold-1/Lights") }))
+      const { user } = renderAt("/settings/locations")
+      host.fail("library_review_remap", "access_denied", "none")
+      const row = await chooseRemap(user)
+      expect(await screen.findByText(m.action_failure_access_denied())).toBeInTheDocument()
+      expect(screen.queryByRole("dialog")).toBeNull()
+
+      host.fail("library_apply_remap", "identity_conflict", "none")
+      await chooseRemap(user)
+      const dialog = await screen.findByRole("dialog", { name: remapTitle() })
+      await user.click(within(dialog).getByRole("button", { name: m.location_remap_confirm({ count: 1, frames: formatCount(1) }) }))
+      expect(await within(dialog).findByText(m.action_failure_identity_conflict())).toBeInTheDocument()
+      expect(host.state.locations[0]?.location.path.display).toBe("/Astro/Lights")
+      expect(within(row).getByText("/Astro/Lights")).toBeInTheDocument()
+    },
+    TEST_MS,
+  )
+
+  it(
+    "keeps Remap unavailable when the review blocks frames, and names what blocks them",
+    async () => {
+      const host = serve(catalog({ locations: [location("loc-1", "Lights", "captures")], picked: nativePath("/Volumes/Cold-1/Lights") }))
+      host.state.remapBlocked = [{ assetId: "asset-2", reason: "mismatch", message: "bytes differ" }]
+      const { user } = renderAt("/settings/locations")
+      await chooseRemap(user)
+      const dialog = await screen.findByRole("dialog", { name: remapTitle() })
+      expect(within(dialog).getByText(m.location_remap_differ({ count: 1, frames: formatCount(1) }))).toBeInTheDocument()
+      const remap = within(dialog).getByRole("button", { name: m.location_remap_confirm({ count: 1, frames: formatCount(1) }) })
+      expect(remap).toHaveAttribute("aria-disabled", "true")
+      await user.click(remap)
+      expect(host.sent("library_apply_remap")).toEqual([])
     },
     TEST_MS,
   )
