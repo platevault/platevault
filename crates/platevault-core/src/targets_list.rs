@@ -25,8 +25,8 @@ use crate::planning::{self, NightContext, TargetNight};
 use crate::targets::TargetQuery;
 use crate::{
     AngularSize, Band, BandState, BuiltinPreset, BuiltinPresetInfo, Catalogue, FieldOfView, Fit,
-    FitUnknownReason, HomeCriteria, LibraryError, MoonAvoidanceCurve, MoonCriterion,
-    MyTargetMarks, ObservingSite, ObservingWindow, PlanningUnknownReason, PresetFilters, PresetRef,
+    FitUnknownReason, HomeCriteria, LibraryError, MoonAvoidanceCurve, MoonCriterion, MyTargetMarks,
+    ObservingSite, ObservingWindow, PlanCriteria, PlanningUnknownReason, PresetFilters, PresetRef,
     Recommendation, Revision, RigFit, RigSelection, SavedPreset, SimbadSearch, TargetActivity,
     TargetRecord, TargetRow, TargetsBasis, TargetsColumn, TargetsPage, TargetsPresets,
     TargetsQuery, TargetsRig, TargetsSearchAction, TargetsSearchResult, TargetsSearchResults,
@@ -56,12 +56,7 @@ impl Library {
         query.validate()?;
         let (rigs, strip) = self.targets_rigs(query.rigs).await?;
         query.preset.map_or(Ok(()), |preset| offer(preset, &rigs, &strip))?;
-        let planning = match (self.planning_site(query.site_id).await?, self.home_criteria().await?)
-        {
-            (None, _) => Err(PlanningUnknownReason::NoSite),
-            (Some(_), HomeCriteria { criteria: None, .. }) => Err(PlanningUnknownReason::NoCriteria),
-            (Some(site), HomeCriteria { criteria: Some(criteria), .. }) => Ok((site, criteria)),
-        };
+        let planning = self.targets_planning(query.site_id).await?;
         let planning_unavailable = planning.as_ref().err().copied();
         if query.show == TargetsShow::Browse
             && query.catalogues.is_empty()
@@ -81,29 +76,7 @@ impl Library {
         }
         let marks = self.catalog().my_target_marks().await?;
         let saved = self.saved_records().await?;
-        let records = match query.show {
-            TargetsShow::MyTargets => marks
-                .ids()
-                .into_iter()
-                .filter_map(|id| saved.get(&id).cloned())
-                .map(|record| self.with_facts(record))
-                .collect(),
-            TargetsShow::Browse => {
-                let catalogues = if query.catalogues.is_empty() {
-                    &Catalogue::ALL[..]
-                } else {
-                    &query.catalogues
-                };
-                self.target_index()
-                    .browse(catalogues)
-                    .into_iter()
-                    .map(|candidate| match saved.get(&candidate.id) {
-                        Some(record) => self.with_facts(record.clone()),
-                        None => TargetRecord { candidate, decision_revision: 0 },
-                    })
-                    .collect::<Vec<_>>()
-            }
-        };
+        let records = self.shown_records(query, &marks, &saved);
         let activity = self.catalog().target_activity().await?;
         let avoidance = self.catalog().workflow_settings().await?.0.moon_avoidance;
         let curves: Vec<(Band, MoonAvoidanceCurve)> =
@@ -113,7 +86,8 @@ impl Library {
             let (site, criteria) = match planning {
                 Ok(planning) => planning,
                 Err(reason) => {
-                    let rows: Vec<Computed> = records.into_iter().map(|r| (r, Err(reason))).collect();
+                    let rows: Vec<Computed> =
+                        records.into_iter().map(|r| (r, Err(reason))).collect();
                     return Ok((None, rows));
                 }
             };
@@ -411,6 +385,56 @@ impl Library {
         self.target_index().attach_catalogue_facts(&mut record.candidate);
         record
     }
+
+    /// The planning site (the query's, else the default site) with Home's
+    /// stored criteria, or why the night's planning values are unknown, the
+    /// site first.
+    async fn targets_planning(
+        &self,
+        site_id: Option<Uuid>,
+    ) -> Result<Result<(ObservingSite, PlanCriteria), PlanningUnknownReason>, LibraryError> {
+        Ok(match (self.planning_site(site_id).await?, self.home_criteria().await?) {
+            (None, _) => Err(PlanningUnknownReason::NoSite),
+            (Some(_), HomeCriteria { criteria: None, .. }) => {
+                Err(PlanningUnknownReason::NoCriteria)
+            }
+            (Some(site), HomeCriteria { criteria: Some(criteria), .. }) => Ok((site, criteria)),
+        })
+    }
+
+    /// The Show mode's records: My targets' saved records, else the chosen
+    /// catalogues' candidates (every catalogue when none is chosen), a saved
+    /// record in place of its candidate.
+    fn shown_records(
+        &self,
+        query: &TargetsQuery,
+        marks: &MyTargetMarks,
+        saved: &HashMap<Uuid, TargetRecord>,
+    ) -> Vec<TargetRecord> {
+        match query.show {
+            TargetsShow::MyTargets => marks
+                .ids()
+                .into_iter()
+                .filter_map(|id| saved.get(&id).cloned())
+                .map(|record| self.with_facts(record))
+                .collect(),
+            TargetsShow::Browse => {
+                let catalogues = if query.catalogues.is_empty() {
+                    &Catalogue::ALL[..]
+                } else {
+                    &query.catalogues
+                };
+                self.target_index()
+                    .browse(catalogues)
+                    .into_iter()
+                    .map(|candidate| match saved.get(&candidate.id) {
+                        Some(record) => self.with_facts(record.clone()),
+                        None => TargetRecord { candidate, decision_revision: 0 },
+                    })
+                    .collect()
+            }
+        }
+    }
 }
 
 fn saved_preset(preset: PresetRef, verb: &str) -> Result<Uuid, LibraryError> {
@@ -630,8 +654,8 @@ fn graded_bands(
     for (band, curve) in curves {
         let moon = planning::curve_criterion(*curve, age);
         let key = MoonKey::of(moon);
-        let (curved, clear_minutes) = match computed.iter().find(|(known, ..)| *known == key) {
-            Some((_, curved, clear)) => (*curved, *clear),
+        let (under_moon, clear_minutes) = match computed.iter().find(|(known, ..)| *known == key) {
+            Some((_, longest_under_moon, clear)) => (*longest_under_moon, *clear),
             None if free.is_none() => (None, 0),
             None => {
                 let found = windows(moon)?;
@@ -640,7 +664,7 @@ fn graded_bands(
                 (longest(&found), clear)
             }
         };
-        bands.push(BandState { band: *band, grade: band_grade(curved, free), clear_minutes });
+        bands.push(BandState { band: *band, grade: band_grade(under_moon, free), clear_minutes });
     }
     Ok(bands)
 }
@@ -811,12 +835,13 @@ mod tests {
     #[test]
     fn recommendation_follows_the_suited_bands() {
         let state = |band, grade| BandState { band, grade, clear_minutes: 0 };
-        let mut bands =
-            vec![state(Band::L, BandGrade::Poor), state(Band::Ha, BandGrade::Marginal)];
+        let mut bands = vec![state(Band::L, BandGrade::Poor), state(Band::Ha, BandGrade::Marginal)];
         assert_eq!(recommendation(&bands), Recommendation::NarrowbandOnly);
         bands[0].grade = BandGrade::Marginal;
         assert_eq!(recommendation(&bands), Recommendation::BroadbandOk);
-        bands.iter_mut().for_each(|band| band.grade = BandGrade::Poor);
+        for band in &mut bands {
+            band.grade = BandGrade::Poor;
+        }
         assert_eq!(recommendation(&bands), Recommendation::AvoidTonight);
     }
 }

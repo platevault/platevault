@@ -13,8 +13,8 @@ use time::{Date, OffsetDateTime};
 use uuid::Uuid;
 
 use crate::{
-    Band, BandGrade, Catalogue, DarknessWindow, FieldOfView, LibraryError, NightMoon,
-    PlanCriteria, Revision, SiteBasis, TargetCandidate, TargetRecord,
+    Band, BandGrade, Catalogue, DarknessWindow, FieldOfView, LibraryError, NightMoon, PlanCriteria,
+    Revision, SiteBasis, TargetCandidate, TargetRecord,
 };
 
 time::serde::format_description!(iso_date, Date, "[year]-[month]-[day]");
@@ -187,7 +187,7 @@ pub struct TargetsSort {
 /// evening date (absent: tonight), the sort (absent: the preset's sort, else
 /// Designation ascending) and an optional page. The criteria are Home's
 /// stored ones, the one source every planning read shares.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct TargetsQuery {

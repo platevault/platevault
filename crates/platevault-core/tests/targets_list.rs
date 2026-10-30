@@ -623,7 +623,8 @@ async fn bands_are_graded_under_the_saved_moon_avoidance_curves() {
         for state in &row.bands {
             // A curve asking 180° leaves only the Moon below the horizon, which
             // it never is tonight; a curve asking nothing leaves the Img time.
-            let expected = if state.suits() { (BandGrade::Good, img) } else { (BandGrade::Poor, 0) };
+            let expected =
+                if state.suits() { (BandGrade::Good, img) } else { (BandGrade::Poor, 0) };
             assert_eq!((state.grade, state.clear_minutes), expected, "{:?}", state.band);
         }
         row.bands.iter().filter(|state| state.suits()).map(|state| state.band).collect()
@@ -672,12 +673,13 @@ async fn band_grades_and_clear_minutes_follow_the_plan_area_under_each_curve() {
     let site_record = library.catalog().site(backyard).await.unwrap();
     let mut grades = Vec::new();
     for night in [date!(2026 - 10 - 10), date!(2026 - 10 - 18), date!(2026 - 10 - 25)] {
-        let page =
-            library.target_rows(&query(TargetsShow::MyTargets, Some(backyard), night)).await;
+        let page = library.target_rows(&query(TargetsShow::MyTargets, Some(backyard), night)).await;
         let page = page.unwrap();
-        let age = planning::NightContext::new(&site_record, night, &stored).unwrap().moon_age_days();
+        let age =
+            planning::NightContext::new(&site_record, night, &stored).unwrap().moon_age_days();
         for id in [andromeda, pleiades] {
-            let free = plan_area(&library, id, backyard, night, criteria(MoonCriterion::None)).await;
+            let free =
+                plan_area(&library, id, backyard, night, criteria(MoonCriterion::None)).await;
             let free_longest = free.windows().map(|window| window.duration_minutes).max();
             let listed = row(&page, id);
             assert_eq!(listed.bands.len(), 7);
@@ -739,7 +741,7 @@ async fn rows_carry_altitude_samples_across_the_night() {
     assert!((78.6..=79.7).contains(&highest), "{highest}");
     assert!((2.8..=3.9).contains(&lowest), "{lowest}");
     assert!(row(&page, andromeda).max_altitude_deg.unwrap() <= highest + 0.1);
-    assert!(row(&page, unknown).altitude_samples_deg.is_empty());
+    assert_eq!(row(&page, unknown).altitude_samples_deg, Vec::<f64>::new());
 }
 
 /// PLAN-TGT-FR-07: the page carries the night's darkness window at the
@@ -815,7 +817,7 @@ async fn unknown_sorts_last() {
     assert!(blank.max_altitude_deg.is_none() && blank.lunar_separation_deg.is_none());
     assert!(blank.img_time_minutes.is_none() && blank.next_opposition.is_none());
     assert!(blank.bands.is_empty() && blank.recommendation.is_none());
-    assert!(blank.altitude_samples_deg.is_empty());
+    assert_eq!(blank.altitude_samples_deg, Vec::<f64>::new());
 
     for column in [
         TargetsColumn::MaxAlt,

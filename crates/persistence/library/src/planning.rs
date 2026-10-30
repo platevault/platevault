@@ -35,8 +35,7 @@ pub const PLANNING_SETTINGS_ID: Uuid = Uuid::from_u128(0x7a3c_51e0_0072_5000_800
 pub const HOME_CRITERIA_ID: Uuid = Uuid::from_u128(0x7a3c_51e0_0072_5000_8000_0000_0000_0002);
 
 /// The identity a Conflict on the default reminder lead time names.
-pub const REMINDER_LEAD_TIME_ID: Uuid =
-    Uuid::from_u128(0x7a3c_51e0_0072_5000_8000_0000_0000_0003);
+pub const REMINDER_LEAD_TIME_ID: Uuid = Uuid::from_u128(0x7a3c_51e0_0072_5000_8000_0000_0000_0003);
 
 /// An activation's subscription write: the default site, its revision and the
 /// settings revision the user confirmed, with explicit criteria and lead time.
