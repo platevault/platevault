@@ -10,8 +10,10 @@
 //! rule of PRJ-FR-18 that applies. Rule 2 names what keeps the Project waiting
 //! on the user, in [`ProjectWait`] order: a suggestion that needs calibration,
 //! the latest Apply ending Failed or Canceled, and leftovers in
-//! `View (previous)/` still waiting for review. Everything is read from the
-//! local catalog: no account, no network and no image file. Read-only.
+//! `View (previous)/` still waiting for review. The Projects list reads each
+//! open Project's pending changes and Next action the same way, asking rule
+//! 3 for tonight's windows alone. Everything is read from the local catalog:
+//! no account, no network and no image file. Read-only.
 
 use std::collections::BTreeMap;
 
@@ -20,13 +22,14 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::library::Library;
+use crate::project_progress::progress_method;
 use crate::tonight::{Tonight, TonightQuery};
 use crate::{
     AdmissionBlocker, ApplyJournal, ApplyOutcome, GoalProgress, GoalShortfall, HomeAction,
-    HomeProject, ImportState, LibraryError, NextAction, PreviousItemReview, Project,
-    ProjectCandidate, ProjectQuery, ProjectSuggestion, ProjectWait, QualityLabel, ReadyToAdd,
-    ReviewContext, ReviewFilter, RunState, RunningWork, ScanState, SessionAction,
-    SessionFilterCounts, StorageOperationState, TargetStatus, UnmetGoal, UnreviewedSession,
+    HomeProject, ImportState, LibraryError, NextAction, PreviousItemReview, Project, ProjectQuery,
+    ProjectRow, ProjectSuggestion, ProjectWait, ProjectWork, ReadyToAdd, ReviewContext,
+    ReviewFilter, RunState, RunningWork, ScanState, SessionAction, SessionFilterCounts,
+    StorageOperationState, TargetStatus, UnmetGoal, UnreviewedSession,
 };
 
 /// Home (PRJ-FR-17, root FR-020): the top line, then its six sections in
@@ -77,13 +80,13 @@ pub struct HomeSession {
     pub actions: Vec<SessionAction>,
 }
 
-/// One open Project's reads that Home composes.
+/// One open Project's reads that Home and the Projects list compose.
 struct ProjectReads {
     project: Project,
     goals: Vec<GoalProgress>,
-    candidates: Vec<ProjectCandidate>,
-    /// Unreviewed frames per candidate session.
-    unreviewed: BTreeMap<Uuid, u64>,
+    /// The candidate sessions with Unreviewed frames, in candidate order,
+    /// with how many.
+    unreviewed: Vec<(Uuid, u64)>,
     suggestions: Vec<ProjectSuggestion>,
     pending_changes: u64,
     /// The latest Apply, settled or not; `None` before the first.
@@ -146,10 +149,11 @@ impl Library {
             for (target, goal) in unmet_goals(&reads) {
                 status.entry(target).or_default().push(goal);
             }
+            let next = next_action(&reads, |target| tonight.has_window(target));
             projects.push(HomeProject {
                 project: summary,
                 pending_changes: reads.pending_changes,
-                next: next_action(&reads, &tonight),
+                next,
                 goals: reads.goals,
             });
         }
@@ -168,6 +172,42 @@ impl Library {
         })
     }
 
+    /// The Projects list (PRJ-FR-32): `query`'s Projects, each open one with
+    /// its pending changes and its Next action read as Home reads them, rule
+    /// 3 against tonight's windows at the default site under Home's stored
+    /// criteria. Read-only.
+    ///
+    /// # Errors
+    /// `InvalidInput` for an unbundled zone or a night outside the supported
+    /// calendar; `PersistenceFailure` when the catalog cannot be read.
+    pub async fn project_rows(
+        &self,
+        query: &ProjectQuery,
+    ) -> Result<Vec<ProjectRow>, LibraryError> {
+        let mut listed = Vec::new();
+        for project in self.catalog().list_projects(query).await? {
+            let reads = if project.lifecycle.is_open() {
+                Some(self.project_reads(project.id).await?)
+            } else {
+                None
+            };
+            listed.push((project, reads));
+        }
+        let targets = listed.iter().filter_map(|(_, reads)| reads.as_ref()).flat_map(unmet_targets);
+        let windows =
+            self.tonight_window_targets(&TonightQuery::default(), &targets.collect()).await?;
+        Ok(listed
+            .into_iter()
+            .map(|(project, reads)| ProjectRow {
+                project,
+                work: reads.map(|reads| ProjectWork {
+                    pending_changes: reads.pending_changes,
+                    next: next_action(&reads, |target| windows.contains(&target)),
+                }),
+            })
+            .collect())
+    }
+
     async fn home_sessions(
         &self,
         filter: SessionFilter,
@@ -184,17 +224,10 @@ impl Library {
     async fn project_reads(&self, id: Uuid) -> Result<ProjectReads, LibraryError> {
         let catalog = self.catalog();
         let project = catalog.project(id).await?;
-        let goals = self.project_progress(id).await?.goals;
-        let candidates = catalog.project_candidates(id).await?;
-        let basis =
-            catalog.review_basis(ReviewContext::ProjectCandidates { project_id: id }).await?;
-        let mut unreviewed = BTreeMap::new();
-        for capture in &basis.captures {
-            if QualityLabel::of(&capture.quality) == QualityLabel::Unreviewed {
-                *unreviewed.entry(capture.session_id).or_default() += 1;
-            }
-        }
-        let suggestions = catalog.project_suggestions(id).await?;
+        // The progress basis carries the suggestions it counted, so they are
+        // derived once.
+        let progress = catalog.project_progress_basis(id, &progress_method()).await?;
+        let unreviewed = catalog.candidate_unreviewed_frames(id).await?;
         let pending_changes = count(catalog.project_pending_changes(id).await?.len());
         let latest_apply = catalog.latest_apply_journal(id).await?;
         let leftovers = catalog.previous_items(id).await?;
@@ -203,10 +236,9 @@ impl Library {
         );
         Ok(ProjectReads {
             project,
-            goals,
-            candidates,
+            goals: progress.goals,
             unreviewed,
-            suggestions,
+            suggestions: progress.suggestions,
             pending_changes,
             latest_apply,
             unreviewed_leftovers,
@@ -272,9 +304,10 @@ impl Library {
     }
 }
 
-/// The first rule of PRJ-FR-18 that applies to the open Project.
-fn next_action(reads: &ProjectReads, tonight: &Tonight) -> NextAction {
-    let frames: u64 = reads.unreviewed.values().sum();
+/// The first rule of PRJ-FR-18 that applies to the open Project, rule 3
+/// asking `has_window` whether a Target has a window tonight.
+fn next_action(reads: &ProjectReads, has_window: impl Fn(Uuid) -> bool) -> NextAction {
+    let frames: u64 = reads.unreviewed.iter().map(|(_, frames)| frames).sum();
     if frames > 0 {
         return NextAction::ReviewNewFrames {
             frames,
@@ -286,16 +319,7 @@ fn next_action(reads: &ProjectReads, tonight: &Tonight) -> NextAction {
     if let Some(first) = waits.first() {
         return NextAction::WaitsOnUser { step: first.step(), waits };
     }
-    let target_ids: Vec<Uuid> = reads
-        .project
-        .subjects
-        .iter()
-        .filter(|subject| {
-            reads.goals.iter().any(|goal| goal.goal.subject_id == subject.id && !goal.met)
-                && tonight.has_window(subject.target_id)
-        })
-        .map(|subject| subject.target_id)
-        .collect();
+    let target_ids: Vec<Uuid> = unmet_targets(reads).filter(|target| has_window(*target)).collect();
     if !target_ids.is_empty() {
         return NextAction::PlanTonight { target_ids };
     }
@@ -306,6 +330,19 @@ fn next_action(reads: &ProjectReads, tonight: &Tonight) -> NextAction {
     } else {
         NextAction::AddSessions
     }
+}
+
+/// The subjects' Targets with a goal unmet in project, in subject order:
+/// Next rule 3's Targets before tonight's windows narrow them.
+fn unmet_targets(reads: &ProjectReads) -> impl Iterator<Item = Uuid> + '_ {
+    reads
+        .project
+        .subjects
+        .iter()
+        .filter(|subject| {
+            reads.goals.iter().any(|goal| goal.goal.subject_id == subject.id && !goal.met)
+        })
+        .map(|subject| subject.target_id)
 }
 
 fn project_waits(reads: &ProjectReads) -> Vec<ProjectWait> {
@@ -345,16 +382,13 @@ fn unreviewed_sessions(reads: &ProjectReads) -> Vec<UnreviewedSession> {
         filter: ReviewFilter::Unreviewed,
     };
     reads
-        .candidates
+        .unreviewed
         .iter()
-        .filter_map(|candidate| {
-            let frames = *reads.unreviewed.get(&candidate.session_id)?;
-            Some(UnreviewedSession {
-                project_id,
-                session_id: candidate.session_id,
-                frames,
-                actions: vec![review],
-            })
+        .map(|&(session_id, frames)| UnreviewedSession {
+            project_id,
+            session_id,
+            frames,
+            actions: vec![review],
         })
         .collect()
 }

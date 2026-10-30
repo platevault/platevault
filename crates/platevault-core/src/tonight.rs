@@ -16,6 +16,8 @@
 //! Target's position. Targets without a window tonight are left out.
 //! Read-only.
 
+use std::collections::BTreeSet;
+
 use serde::{Deserialize, Serialize};
 use time::{Date, OffsetDateTime};
 use uuid::Uuid;
@@ -138,12 +140,11 @@ impl Library {
             method: planning::METHOD.into(),
             unavailable_reason: Some(reason),
         };
-        let Some(site) = self.catalog().list_sites().await?.default_site_id else {
-            return Ok(unavailable(HomePlanningUnavailable::NoSite, None));
-        };
-        let site = self.catalog().site(site).await?;
-        let Some(criteria) = self.home_criteria().await?.criteria else {
-            return Ok(unavailable(HomePlanningUnavailable::NoCriteria, Some(&site)));
+        let (site, criteria) = match self.home_planning().await? {
+            HomePlanning::Ready(site, criteria) => (site, criteria),
+            HomePlanning::Unavailable(reason, site) => {
+                return Ok(unavailable(reason, site.as_ref()))
+            }
         };
         let marks = self.catalog().my_target_marks().await?;
         let mut records = Vec::new();
@@ -154,10 +155,7 @@ impl Library {
         let avoidance = self.catalog().workflow_settings().await?.0.moon_avoidance;
         let night = query.night;
         let (night, sky, best, graded, next) = blocking(move || {
-            let night = match night {
-                Some(night) => night,
-                None => planning::night_of(OffsetDateTime::now_utc(), &site)?,
-            };
+            let night = night_at(night, &site)?;
             let sky = planning::night_sky(&site, night, criteria.darkness)?;
             let best = best_windows(records, &site, night, criteria)?;
             let context = NightContext::new(&site, night, &criteria)?;
@@ -207,6 +205,63 @@ impl Library {
             method: sky.method,
             unavailable_reason: None,
         })
+    }
+
+    /// Which of `targets` have a window tonight at the default site under
+    /// Home's stored criteria: [`Tonight::has_window`] for these Targets
+    /// alone, without grading a goal or searching for the next good night.
+    /// None without a default site or criteria, where Tonight has no window.
+    ///
+    /// # Errors
+    /// As [`Self::tonight`].
+    pub(crate) async fn tonight_window_targets(
+        &self,
+        query: &TonightQuery,
+        targets: &BTreeSet<Uuid>,
+    ) -> Result<BTreeSet<Uuid>, LibraryError> {
+        if targets.is_empty() {
+            return Ok(BTreeSet::new());
+        }
+        let HomePlanning::Ready(site, criteria) = self.home_planning().await? else {
+            return Ok(BTreeSet::new());
+        };
+        let mut records = Vec::with_capacity(targets.len());
+        for id in targets {
+            records.push(self.catalog().target(*id).await?);
+        }
+        let night = query.night;
+        let best =
+            blocking(move || best_windows(records, &site, night_at(night, &site)?, criteria))
+                .await?;
+        Ok(best.into_iter().map(|(record, _)| record.candidate.id).collect())
+    }
+
+    /// The default site and Home's stored criteria Tonight is computed
+    /// under, or what is missing, the site first.
+    async fn home_planning(&self) -> Result<HomePlanning, LibraryError> {
+        let Some(site) = self.catalog().list_sites().await?.default_site_id else {
+            return Ok(HomePlanning::Unavailable(HomePlanningUnavailable::NoSite, None));
+        };
+        let site = self.catalog().site(site).await?;
+        Ok(match self.home_criteria().await?.criteria {
+            Some(criteria) => HomePlanning::Ready(site, criteria),
+            None => HomePlanning::Unavailable(HomePlanningUnavailable::NoCriteria, Some(site)),
+        })
+    }
+}
+
+/// What Tonight is computed under: the default site and Home's criteria,
+/// or why it has none, with the default site when there is one.
+enum HomePlanning {
+    Ready(ObservingSite, PlanCriteria),
+    Unavailable(HomePlanningUnavailable, Option<ObservingSite>),
+}
+
+/// `night`, or the night that holds now at `site`.
+fn night_at(night: Option<Date>, site: &ObservingSite) -> Result<Date, LibraryError> {
+    match night {
+        Some(night) => Ok(night),
+        None => planning::night_of(OffsetDateTime::now_utc(), site),
     }
 }
 

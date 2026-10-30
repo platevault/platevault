@@ -40,11 +40,27 @@ async fn dashboard(library: &Library) -> HomeDashboard {
     library.home_dashboard(&tonight()).await.unwrap()
 }
 
-/// The Apply world's one Project on Home.
+/// The Apply world's one Project on Home, which the Projects list carries
+/// alike.
 async fn home_project(world: &World) -> HomeProject {
     let mut home = dashboard(&world.library).await;
     assert_eq!(home.projects.len(), 1, "{:#?}", home.projects);
-    home.projects.remove(0)
+    let project = home.projects.remove(0);
+    let rows = world.library.project_rows(&ProjectQuery::default()).await.unwrap();
+    let [row] = rows.as_slice() else { panic!("one Projects list row: {rows:#?}") };
+    assert_eq!(row.work, Some(work_of(&project)));
+    project
+}
+
+/// What the Projects list carries for an open Project on Home.
+fn work_of(home: &HomeProject) -> ProjectWork {
+    ProjectWork { pending_changes: home.pending_changes, next: home.next.clone() }
+}
+
+/// The Projects list's row of Project `id` under `query`.
+async fn row_of(library: &Library, query: &ProjectQuery, id: Uuid) -> ProjectRow {
+    let rows = library.project_rows(query).await.unwrap();
+    rows.into_iter().find(|row| row.project.id == id).unwrap_or_else(|| panic!("no row for {id}"))
 }
 
 /// Each key's first position in `json`, which must increase.
@@ -180,6 +196,11 @@ async fn next_rule1_review_new_frames_and_rule4_add_sessions() {
             ),
         ]
     );
+    let rows = indexed.library.project_rows(&ProjectQuery::default()).await.unwrap();
+    for home in &home.projects {
+        let row = rows.iter().find(|row| row.project.id == home.project.id).unwrap();
+        assert_eq!(row.work, Some(work_of(home)));
+    }
 }
 
 /// PRJ-FR-18 rule 2 (provisional, spec 065 PRJ-FR-18), PRJ-AC-23: a
@@ -230,6 +251,8 @@ async fn next_rule2_waits_on_calibration_then_an_unfinished_apply() {
             ],
         }
     );
+    let row = row_of(&world.library, &ProjectQuery::default(), world.project).await;
+    assert_eq!(row.work, Some(work_of(&home.projects[0])));
 }
 
 /// PRJ-FR-18 rule 4 and rule 2, D-W110: before the first Apply a Project has
@@ -291,6 +314,8 @@ async fn next_rule3_plan_tonight_when_goal_unmet_and_window() {
     let target = world.catalog().project(world.project).await.unwrap().subjects[0].target_id;
     assert!(home.tonight.has_window(target));
     assert_eq!(home.projects[0].next, NextAction::PlanTonight { target_ids: vec![target] });
+    let row = row_of(&world.library, &ProjectQuery::default(), world.project).await;
+    assert_eq!(row.work, Some(work_of(&home.projects[0])));
     let [status] = home.target_status.as_slice() else { panic!("{:#?}", home.target_status) };
     assert_eq!(status.target_id, target);
     assert_eq!(status.goals[0].still_needed, GoalShortfall::FrameCount { frames: 48 });
@@ -363,6 +388,54 @@ async fn a_removed_subjects_goals_count_nowhere_until_it_is_added_back() {
     assert_eq!(counted_goals(&world).await, shown, "the restored goal counts again");
 }
 
+/// PRJ-FR-32: the Projects list reads each open Project's Next action and
+/// pending changes by Home's rules.
+#[tokio::test]
+async fn project_rows_follow_home_next_rules() {
+    let indexed = indexed().await;
+    let rows = indexed.library.project_rows(&ProjectQuery::default()).await.unwrap();
+    let open = rows
+        .iter()
+        .map(|row| (row.project.name.as_str(), &row.work.as_ref().unwrap().next))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        open,
+        [
+            ("Andromeda", &NextAction::AddSessions),
+            (
+                "Summer nebulae",
+                &NextAction::ReviewNewFrames {
+                    frames: 1,
+                    context: ReviewContext::ProjectCandidates { project_id: indexed.nebulae.id },
+                    filter: ReviewFilter::Unreviewed,
+                }
+            ),
+        ]
+    );
+    assert!(rows.iter().all(|row| row.work.as_ref().unwrap().pending_changes == 0));
+
+    let world = world(ViewMode::Symlinks).await;
+    quiet(&world).await;
+    let next = || async {
+        let rows = world.library.project_rows(&ProjectQuery::default()).await.unwrap();
+        rows[0].work.clone().unwrap()
+    };
+    assert_eq!(next().await.next, NextAction::AddSessions);
+    world.apply().await;
+    assert_eq!(next().await.next, NextAction::OpenView);
+
+    world
+        .sql(
+            "UPDATE projects SET view_mode = 'copies' WHERE id = ?1",
+            &[&world.project.to_string()],
+        )
+        .await;
+    world.bump().await;
+    let work = next().await;
+    assert!(work.pending_changes > 0);
+    assert_eq!(work.next, NextAction::ApplyChanges { changes: work.pending_changes });
+}
+
 /// PRJ-AC-22: Home lists open Projects only; a Closed one leaves the list.
 #[tokio::test]
 async fn closed_projects_are_not_listed() {
@@ -387,6 +460,10 @@ async fn closed_projects_are_not_listed() {
     let close = CloseRequest { project_id: world.project, desired_revision, archive: None };
     let report = world.library.close_project(&close, trash.dyn_trash(), &Unattended).await.unwrap();
     assert_eq!(report.lifecycle, ProjectLifecycle::Closed);
+    let query = ProjectQuery { include_closed: true, ..ProjectQuery::default() };
+    let closed = row_of(&world.library, &query, world.project).await;
+    assert_eq!(closed.project.lifecycle, ProjectLifecycle::Closed);
+    assert_eq!(closed.work, None);
 
     assert_eq!(dashboard(&world.library).await.projects, []);
 }
@@ -438,5 +515,44 @@ async fn running_work_lists_scan_measurement_import_project_storage() {
     assert_eq!(
         (operation.kind, project_name.as_str()),
         (ProjectOperationKind::CopyToOutput, apply_support::PROJECT)
+    );
+}
+
+/// Timing, not behavior: the Projects list over 50 open Projects at a default
+/// site, each with the NGC 7000 subject (three candidate sessions, one with
+/// Unreviewed frames) and an unmet Ha goal. Prints the median of five reads.
+#[tokio::test]
+#[ignore = "timing: cargo test -p platevault_core --test home -- --ignored --nocapture"]
+async fn project_rows_timing_for_fifty_open_projects() {
+    let indexed = indexed().await;
+    default_site(&indexed.library).await;
+    let subject = indexed.nebulae.subjects[0].target_id;
+    let catalog = indexed.library.catalog();
+    for index in 0..48 {
+        let input = ProjectInput {
+            name: format!("Bench {index:02}"),
+            notes: None,
+            subjects: vec![SubjectInput { target_id: subject, name: None }],
+            rig_ids: indexed.nebulae.rig_ids.clone(),
+            goals: vec![GoalInput {
+                target_id: subject,
+                group_id: None,
+                goal: GoalSpec::FrameCount { channel: Some("Ha".into()), goal_frames: 50 },
+            }],
+        };
+        catalog.create_project(&input).await.unwrap();
+    }
+    let query = ProjectQuery { include_closed: true, limit: 1000, ..ProjectQuery::default() };
+    let mut runs = Vec::new();
+    for _ in 0..5 {
+        let start = std::time::Instant::now();
+        let rows = indexed.library.project_rows(&query).await.unwrap();
+        runs.push(start.elapsed());
+        assert_eq!(rows.len(), 50);
+    }
+    runs.sort();
+    eprintln!(
+        "project rows, 50 open Projects: median {:?} (min {:?}, max {:?})",
+        runs[2], runs[0], runs[4]
     );
 }

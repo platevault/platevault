@@ -620,6 +620,12 @@ async fn a_stopped_close_resumes_to_archived_with_its_kept_view_repointed() {
     let report = world.library.close_project(&request, trash.dyn_trash(), &stop).await.unwrap();
     assert_eq!(report.lifecycle, ProjectLifecycle::Closing, "{report:#?}");
     assert!(!report.archive.as_ref().unwrap().settled);
+    let query = ProjectQuery { include_closed: true, ..ProjectQuery::default() };
+    let id = world.project;
+    let row = move |rows: Vec<ProjectRow>| rows.into_iter().find(|row| row.project.id == id);
+    let closing = row(world.library.project_rows(&query).await.unwrap()).unwrap();
+    assert_eq!(closing.project.lifecycle, ProjectLifecycle::Closing);
+    assert_eq!(closing.work, None);
     let status = world.library.wrap_up_status(world.project).await.unwrap();
     assert_eq!(
         status.blocker,
@@ -635,6 +641,9 @@ async fn a_stopped_close_resumes_to_archived_with_its_kept_view_repointed() {
     assert_eq!(progress.repointed_links.len(), 4);
     let status = world.library.wrap_up_status(world.project).await.unwrap();
     assert_eq!(status.lifecycle, ProjectLifecycle::Archived);
+    let archived = row(world.library.project_rows(&query).await.unwrap()).unwrap();
+    assert_eq!(archived.project.lifecycle, ProjectLifecycle::Archived);
+    assert_eq!(archived.work, None);
     let steps: Vec<_> = status.records.iter().map(|record| (record.step, record.outcome)).collect();
     assert_eq!(steps[2], (WrapUpStep::Archive, WrapUpOutcome::Finished));
 

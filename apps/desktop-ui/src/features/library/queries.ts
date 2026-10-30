@@ -55,6 +55,8 @@ const LIBRARY_READS: readonly LibraryCommand[] = [
   "libraryListOperations",
   "calibrationNeeds",
   "projectList",
+  // The Projects list's rows carry each open Project's Next action, which a session write moves as it moves Home's.
+  "projectRows",
   "projectCandidates",
   // Add to Project computes its addition at the Project's and the session's revisions; a write moves them.
   "projectPreviewSessionAddition",

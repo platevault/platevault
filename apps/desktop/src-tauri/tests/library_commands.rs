@@ -67,6 +67,7 @@ impl Shell {
         let app = mock_builder()
             .invoke_handler(tauri::generate_handler![
                 desktop_shell::commands::project_goals::project_get,
+                desktop_shell::commands::project_goals::project_rows,
                 desktop_shell::commands::project_inputs::project_inputs,
                 desktop_shell::commands::project_inputs::project_add_sessions,
                 desktop_shell::commands::project_inputs::project_remove_sessions,
@@ -375,6 +376,24 @@ fn project_get_reports_a_closed_project_lifecycle() {
     assert_eq!(actual["lifecycle"], json!(ProjectLifecycle::Closed));
     assert!(actual["closedAt"].is_string(), "{actual}");
 }
+
+/// `project_rows` returns each Project's summary with the open Project's
+/// pending changes and Next action beside it.
+#[test]
+fn project_rows_return_the_next_action_and_pending_changes() {
+    let shell = Shell::new();
+    let project = shell.open_project();
+    let listed = shell.call(
+        "project_rows",
+        &json!({ "targetId": null, "includeClosed": null, "offset": 0, "limit": 20 }),
+    );
+    let [row] = listed.as_array().expect("Projects").as_slice() else {
+        panic!("one Project: {listed:#}")
+    };
+    assert_eq!(row["id"], json!(project));
+    assert_eq!(row["work"], json!({ "pendingChanges": 0, "next": { "kind": "add_sessions" } }));
+}
+
 /// The Output listing IPC reads catalog records even when Output is absent.
 #[test]
 fn project_output_list_returns_recorded_observations_without_scanning() {

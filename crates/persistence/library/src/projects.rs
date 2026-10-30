@@ -18,8 +18,9 @@ use platevault_model::{
     GoalProgress, GoalSpec, GoalTally, GoalTemplate, GoalTemplateInput, InclusionBasis,
     LibraryError, MeasurementMethod, MeasurementOutcome, MeasurementRecord, MetricId, MetricState,
     MetricValue, Microseconds, Project, ProjectCandidate, ProjectDesired, ProjectGoal,
-    ProjectInput, ProjectQuery, ProjectSubject, ProjectSummary, ProjectViewSettings,
-    QualityCriterion, RecordValidity, ReferenceKind, Revision, SubjectInput, Units,
+    ProjectInput, ProjectQuery, ProjectSubject, ProjectSuggestion, ProjectSummary,
+    ProjectViewSettings, QualityCriterion, RecordValidity, ReferenceKind, Revision, SubjectInput,
+    Units,
 };
 
 use sqlx::sqlite::{SqliteConnection, SqliteRow};
@@ -948,13 +949,15 @@ pub async fn candidates(
 // ---------------------------------------------------------------------------
 
 /// A Project's goal progress, read from one catalog snapshot at the
-/// Project's revision.
+/// Project's revision, with the suggestions its "captured" counts.
 #[derive(Clone, Debug)]
 pub struct ProgressBasis {
     pub project_id: Uuid,
     pub revision: Revision,
     /// One row per integration or frame-count goal, in goal order.
     pub goals: Vec<GoalProgress>,
+    /// What [`Catalog::project_suggestions`] reads, from the same snapshot.
+    pub suggestions: Vec<ProjectSuggestion>,
 }
 
 impl Catalog {
@@ -1061,7 +1064,8 @@ pub async fn progress_basis(
         .filter(|goal| goal.goal.counts_frames())
         .map(|goal| goal_progress(&project.goals, goal, &frames))
         .collect();
-    Ok(ProgressBasis { project_id: project.id, revision: project.revision, goals })
+    let suggestions = suggested.iter().map(project_inputs::suggestion_of).collect();
+    Ok(ProgressBasis { project_id: project.id, revision: project.revision, goals, suggestions })
 }
 
 /// Group counted copies into content-identical frames: logical captures (D16)

@@ -25,7 +25,6 @@ import {
   type HomeSession,
   type LocationState,
   library,
-  type NextAction,
   type ReadyToAdd,
   type RunningWork,
   type SessionAction,
@@ -40,8 +39,8 @@ import { ActionError, EmptyState, UnknownValue } from "@/components/app/feedback
 import { useFollowLink } from "@/components/app/links"
 import { StatusBadge } from "@/components/app/status"
 import { DetailPage, type DetailSection } from "@/components/templates/detail-page"
+import { projectNextStep } from "@/components/domain/project-next-step"
 import { formatCount } from "@/lib/format"
-import type { Messages } from "@/lib/i18n"
 import { AddToProjectDialog } from "./add-to-project"
 import { homeCriteriaQuery } from "@/components/domain/plan-criteria"
 import { PlanCriteriaDialog } from "@/components/domain/plan-criteria-dialog"
@@ -50,6 +49,7 @@ import { HomeCalendar, TonightGoals } from "./home-planning"
 import { readError, Unavailable } from "./parts"
 import { dashboardQuery, homeWrite, locationsQuery, sessionsQuery } from "./queries"
 import { sessionLabel, useSessionSummaries } from "@/components/domain/session-label"
+import type { Messages } from "@/lib/i18n"
 
 type Follow = (link: StepLink) => void
 
@@ -276,31 +276,12 @@ function PendingTable({ dashboard, rows: dashboardRows, follow }: { dashboard: H
 
 // Open work --------------------------------------------------------------------
 
-/** A Project's Next action as the library computed it (PRJ-FR-18), worded and linked. */
-export function nextAction(m: Messages, projectId: string, next: NextAction): { label: string; link: StepLink } {
-  const project = projectLink(projectId)
-  switch (next.kind) {
-    case "review_new_frames":
-      return { label: m.domain_next_review_new_frames({ count: next.frames, n: formatCount(next.frames) }), link: project }
-    case "waits_on_user":
-      return { label: next.step === "view" ? m.home_next_view() : m.home_next_sessions(), link: { ...project, search: { stage: next.step } } }
-    case "plan_tonight":
-      return { label: m.target_plan_tonight(), link: { to: "/targets" } }
-    case "apply_changes":
-      return { label: m.domain_next_apply_changes({ count: next.changes }), link: { ...project, search: { stage: "view" } } }
-    case "open_view":
-      return { label: m.home_next_open_view(), link: { ...project, search: { stage: "view" } } }
-    case "add_sessions":
-      return { label: m.project_add_sessions(), link: { ...project, search: { stage: "sessions" } } }
-  }
-}
-
 function OpenWorkTable({ projects, follow }: { projects: HomeProject[]; follow: Follow }) {
   const m = useMessages()
   const stands = (p: HomeProject) => (p.goals.length === 0 ? m.projects_no_goals() : m.home_goals_met({ met: p.goals.filter((g) => g.met).length, total: p.goals.length }))
   const columns: Column<HomeProject>[] = [
     { id: "name", header: m.home_column_name(), rowHeader: true, truncate: true, sortValue: (p) => p.project.name, cell: (p) => p.project.name },
-    { id: "stands", header: m.home_column_progress(), truncate: true, sortValue: stands, cell: (p) => `${stands(p)} · ${m.home_next_step({ step: nextAction(m, p.project.id, p.next).label })}` },
+    { id: "stands", header: m.home_column_progress(), truncate: true, sortValue: stands, cell: (p) => `${stands(p)} · ${m.home_next_step({ step: projectNextStep(m, p.project.id, p.next).label })}` }
   ]
   return (
     <>
@@ -311,13 +292,13 @@ function OpenWorkTable({ projects, follow }: { projects: HomeProject[]; follow: 
         getRowId={(p) => p.project.id}
         rowLabel={(p) => p.project.name}
         rowActions={(p) => {
-          const next = nextAction(m, p.project.id, p.next)
+          const next = projectNextStep(m, p.project.id, p.next)
           return [
             { id: "next", label: next.label, run: () => follow(next.link) },
             { id: "open", label: m.target_open_project(), run: () => follow(projectLink(p.project.id)) },
           ]
         }}
-        onRowClick={(p) => follow(nextAction(m, p.project.id, p.next).link)}
+        onRowClick={(p) => follow(projectNextStep(m, p.project.id, p.next).link)}
         empty={<EmptyState icon={FolderPlus} title={m.home_no_projects_in_progress()} action={<ActionButton action={{ id: "new-project", label: m.newproject_open_ellipsis(), opensDialog: true, run: () => follow({ to: "/projects", search: { new: "open" } }) }} />} />}
       />
       {/* astro-plan-wre19.10: goal deadlines and season windows ("N nights left", PRJ-FR-23); 1dhpb: calibration processes. */}

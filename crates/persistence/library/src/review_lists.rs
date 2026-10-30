@@ -13,7 +13,8 @@ use std::collections::{BTreeSet, HashMap};
 use std::path::PathBuf;
 
 use platevault_model::{
-    ApplicableQuality, Asset, Availability, LibraryError, NativePath, ReviewContext,
+    ApplicableQuality, Asset, Availability, LibraryError, NativePath, ProjectCandidate,
+    QualityLabel, ReviewContext,
 };
 use sqlx::sqlite::SqliteConnection;
 use sqlx::Connection;
@@ -232,6 +233,36 @@ impl Catalog {
         Ok(basis)
     }
 
+    /// The Project's candidate sessions holding Unreviewed frames (PIX-FR-14),
+    /// each once in candidate order with how many, from one catalog
+    /// snapshot: the captures [`Self::review_basis`] lists for the Project,
+    /// counted without reading a path.
+    ///
+    /// # Errors
+    /// `NotFound` for an unknown Project; `PersistenceFailure` when the
+    /// catalog cannot be read.
+    pub async fn candidate_unreviewed_frames(&self, project_id: Uuid) -> Result<Vec<(Uuid, u64)>> {
+        let mut conn = self.reader().await?;
+        let mut snapshot = conn.begin().await?;
+        let read = CandidateCaptures::read(&mut snapshot, project_id).await?;
+        snapshot.rollback().await?;
+        let mut unreviewed: HashMap<Uuid, u64> = HashMap::new();
+        for (_, session_id, quality, _) in read.captures() {
+            if QualityLabel::of(&quality) == QualityLabel::Unreviewed {
+                *unreviewed.entry(session_id).or_default() += 1;
+            }
+        }
+        Ok(read
+            .candidates
+            .iter()
+            .filter_map(|candidate| {
+                unreviewed
+                    .remove(&candidate.session_id)
+                    .map(|frames| (candidate.session_id, frames))
+            })
+            .collect())
+    }
+
     /// Each asset in request order with its absolute path.
     ///
     /// # Errors
@@ -285,35 +316,58 @@ pub async fn absolute(
 }
 
 async fn candidates_basis(conn: &mut SqliteConnection, project: Uuid) -> Result<ReviewBasis> {
-    projects::require_project(conn, project).await?;
-    let candidates = projects::candidates(conn, project).await?;
-    let mut session_of: HashMap<Uuid, Uuid> = HashMap::new();
-    let mut sessions = BTreeSet::new();
-    for candidate in &candidates {
-        sessions.insert(candidate.session_id);
-        for asset in &candidate.asset_ids {
-            session_of.entry(*asset).or_insert(candidate.session_id);
-        }
-    }
-    let sessions: Vec<Uuid> = sessions.into_iter().collect();
-    let ids: BTreeSet<Uuid> = session_of.keys().copied().collect();
-    let all = live_assets(conn, &ids).await?;
-    let captures_of = CaptureView::read(conn, &sessions, &all).await?;
+    let read = CandidateCaptures::read(conn, project).await?;
     let mut roots = Roots::new();
     let mut captures = Vec::new();
-    for (key, present) in captures_of.group(&all) {
-        let Some(asset) = reviewed_copy(&present) else {
-            continue;
-        };
+    for (asset, session_id, quality, present) in read.captures() {
         captures.push(ReviewCapture {
             path: absolute(conn, &mut roots, asset).await?,
-            session_id: session_of[&asset.id],
-            quality: captures_of.quality(&key),
+            session_id,
+            quality,
             other_copies: present.iter().map(|copy| copy.id).filter(|id| *id != asset.id).collect(),
             asset: asset.clone(),
         });
     }
     Ok(ReviewBasis { project_id: project, captures })
+}
+
+/// The live logical captures (D16) of a Project's candidate sessions, with
+/// the candidates in their order.
+struct CandidateCaptures {
+    candidates: Vec<ProjectCandidate>,
+    /// Asset id → the candidate session that lists it first.
+    session_of: HashMap<Uuid, Uuid>,
+    assets: Vec<Asset>,
+    view: CaptureView,
+}
+
+impl CandidateCaptures {
+    async fn read(conn: &mut SqliteConnection, project: Uuid) -> Result<Self> {
+        projects::require_project(conn, project).await?;
+        let candidates = projects::candidates(conn, project).await?;
+        let mut session_of: HashMap<Uuid, Uuid> = HashMap::new();
+        let mut sessions = BTreeSet::new();
+        for candidate in &candidates {
+            sessions.insert(candidate.session_id);
+            for asset in &candidate.asset_ids {
+                session_of.entry(*asset).or_insert(candidate.session_id);
+            }
+        }
+        let sessions: Vec<Uuid> = sessions.into_iter().collect();
+        let ids: BTreeSet<Uuid> = session_of.keys().copied().collect();
+        let assets = live_assets(conn, &ids).await?;
+        let view = CaptureView::read(conn, &sessions, &assets).await?;
+        Ok(Self { candidates, session_of, assets, view })
+    }
+
+    /// Each capture's reviewed copy with its session, its applicable quality
+    /// and every copy of it present here.
+    fn captures(&self) -> impl Iterator<Item = (&Asset, Uuid, ApplicableQuality, Vec<&Asset>)> {
+        self.view.group(&self.assets).into_iter().filter_map(move |(key, present)| {
+            let asset = reviewed_copy(&present)?;
+            Some((asset, self.session_of[&asset.id], self.view.quality(&key), present))
+        })
+    }
 }
 
 /// The copy a capture is reviewed and marked through, so a mark updates the
