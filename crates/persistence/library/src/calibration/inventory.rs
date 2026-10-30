@@ -13,9 +13,9 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use platevault_model::{
-    AdoptedMaster, ApplicableQuality, Asset, Availability, CalibrationRules, CandidateRef,
-    CaptureEvidence, Classification, EvidenceField, InputForm, InputKind, InputState, Location,
-    LocationLifecycle, MasterOrigin, Session,
+    AdoptedMaster, ApplicableQuality, Asset, Availability, CalibrationMasterAge, CalibrationRules,
+    CandidateRef, CaptureEvidence, CaptureMetadata, Classification, EvidenceField, InputForm,
+    InputKind, InputState, Location, LocationLifecycle, MasterOrigin, Session,
 };
 use sqlx::sqlite::SqliteConnection;
 use uuid::Uuid;
@@ -289,6 +289,20 @@ async fn raw_set(
     Ok(Listed { summary, members, excluded })
 }
 
+fn master_age(
+    kind: InputKind,
+    observed: &CaptureMetadata,
+    today: time::Date,
+    old_after_days: u32,
+) -> Option<CalibrationMasterAge> {
+    if !matches!(kind, InputKind::Dark | InputKind::Bias) {
+        return None;
+    }
+    let captured = super::sessions::header_date(observed.date_obs.as_deref())
+        .or_else(|| super::sessions::header_date(observed.date_local.as_deref()))?;
+    Some(CalibrationMasterAge::from_capture_date(captured, today, old_after_days))
+}
+
 /// A detected master: labelled with its evidence basis and origin, never reusable.
 async fn candidate(
     conn: &mut SqliteConnection,
@@ -306,16 +320,7 @@ async fn candidate(
         None,
     );
     let kind = classification.kind;
-    let age = matches!(kind, InputKind::Dark | InputKind::Bias)
-        .then(|| super::sessions::header_date(asset.effective.date_obs.as_deref()))
-        .flatten()
-        .and_then(|captured| {
-            platevault_model::CalibrationMasterAge::from_capture_date(
-                Some(captured),
-                today,
-                old_after_days,
-            )
-        });
+    let age = master_age(kind, &asset.effective, today, old_after_days);
     let available = asset.availability == Availability::Available;
     let summary = CalibrationInputSummary {
         input: CandidateRef::Candidate { asset_id: asset.id },
@@ -362,16 +367,7 @@ fn master_listed(
 ) -> Listed {
     let evidence = CaptureEvidence::from_metadata(&master.observed, &BTreeSet::new(), None, None);
     let kind = master.kind;
-    let age = matches!(kind, InputKind::Dark | InputKind::Bias)
-        .then(|| super::sessions::header_date(master.observed.date_obs.as_deref()))
-        .flatten()
-        .and_then(|captured| {
-            platevault_model::CalibrationMasterAge::from_capture_date(
-                Some(captured),
-                today,
-                old_after_days,
-            )
-        });
+    let age = master_age(kind, &master.observed, today, old_after_days);
     let available = location.availability == Availability::Available;
     let summary = CalibrationInputSummary {
         input: CandidateRef::Master { master_id: master.id, revision: master.revision },

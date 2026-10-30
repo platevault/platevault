@@ -330,12 +330,43 @@ async fn calibration_master_rows_report_age_from_capture_date_and_current_thresh
 
     let (settings, revision) = lib.catalog.workflow_settings().await.unwrap();
     let settings = WorkflowSettings {
-        calibration: CalibrationSettings { old_master_after_days: 91, ..settings.calibration },
+        calibration: CalibrationSettings { old_master_after_days: 100, ..settings.calibration },
         ..settings
     };
     lib.catalog.save_workflow_settings(revision, &settings).await.unwrap();
     let exact = read_master().await;
     assert_eq!((exact.age_days, exact.old), (Some(100), false));
+}
+#[tokio::test]
+async fn calibration_master_age_uses_local_capture_date_when_utc_is_missing() {
+    let lib = library().await;
+    let today = time::OffsetDateTime::now_utc().date();
+    let capture = today - time::Duration::days(100);
+    let mut dark = calibration_frame("MASTER DARK", None, 300.0, &capture.to_string());
+    dark.stack_count = Some(20);
+    let generated = frame(&lib.results_root, "dark/master_dark_local.fit", dark);
+    scan_frames(&lib.catalog, &lib.results, vec![generated]).await;
+    let row = lib
+        .catalog
+        .calibration_inputs(
+            &InputQuery { form: Some(InputForm::Candidate), ..InputQuery::default() },
+            &TestRules,
+        )
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|row| {
+            row.origin.as_ref().is_some_and(|origin| {
+                matches!(
+                    origin,
+                    platevault_model::MasterOrigin::Location { relative_path, .. }
+                        if relative_path.display() == "dark/master_dark_local.fit"
+                )
+            })
+        })
+        .expect("DATE-LOC-only dark master is listed as a candidate");
+
+    assert_eq!((row.age_days, row.old), (Some(100), true));
 }
 
 #[tokio::test]
