@@ -257,7 +257,7 @@ describe("Output", { timeout: TEST_MS }, () => {
     expect(sent("project_output_list")).toHaveLength(1)
     expect(sent("project_output_rescan")).toHaveLength(0)
 
-    await user.click(screen.getByRole("button", { name: m.common_more() }))
+    await user.click(within(screen.getByRole("rowheader", { name: "final.fit" }).closest('[data-slot="box"]')!).getByRole("button", { name: m.common_more() }))
     await user.click(await screen.findByRole("menuitem", { name: m.output_rescan() }))
     await waitFor(() => expect(sent("project_output_rescan")).toHaveLength(1))
   })

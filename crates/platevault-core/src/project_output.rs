@@ -443,6 +443,9 @@ impl Library {
     /// The Project's Output listing as recorded by the last folder observation.
     /// This reads the catalog only; use [`OutputWatch::rescan`] for an explicit
     /// filesystem walk that refreshes the listing.
+    ///
+    /// # Errors
+    /// `NotFound` for an unknown Project; persistence errors for a corrupt record.
     pub async fn project_output_list(
         &self,
         project_id: Uuid,
