@@ -27,15 +27,11 @@ pub struct CalibrationMasterAge {
 }
 
 impl CalibrationMasterAge {
-    /// Compute age from the capture date, never from import time.
-    /// Any difference between two calendar dates fits in the non-negative day range.
-    ///
-    /// # Panics
-    ///
-    /// Panics only if the time library violates that range invariant.
+    /// Compute age from the capture date, never from import time; a capture
+    /// date after `today` counts as 0 days.
     #[must_use]
     pub fn from_capture_date(captured: time::Date, today: time::Date, old_after_days: u32) -> Self {
-        let days = (today - captured).whole_days().max(0) as u32;
+        let days = u32::try_from((today - captured).whole_days().max(0)).unwrap_or(u32::MAX);
         Self { days, old: days > old_after_days }
     }
 }
