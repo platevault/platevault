@@ -16,8 +16,6 @@ import { PlanCriteriaFields } from "@/components/domain/plan-criteria-fields"
 /** Maps PlanCriteria's stable refusal paths to the fields in its shared editor. */
 const CRITERIA_PATHS: FieldPaths<CriteriaField> = {
   minAltitudeDeg: "minAltitudeDeg",
-  darkness: "darkness",
-  moon: "moon",
   minSeparationDeg: "moon.minSeparationDeg",
   minDurationMinutes: "minDurationMinutes",
 }

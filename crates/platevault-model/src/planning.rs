@@ -38,14 +38,13 @@ pub fn validate_lead_minutes(lead_minutes: u32) -> Result<(), LibraryError> {
     if (MIN_LEAD_MINUTES..=MAX_LEAD_MINUTES).contains(&lead_minutes) {
         return Ok(());
     }
-    Err(invalid(format!(
-        "leadMinutes {lead_minutes} is not a whole number of minutes from \
-         {MIN_LEAD_MINUTES} to {MAX_LEAD_MINUTES}"
-    )))
-}
-
-fn invalid(message: String) -> LibraryError {
-    LibraryError::InvalidInput(message)
+    Err(LibraryError::invalid_field(
+        "leadMinutes",
+        format!(
+            "leadMinutes {lead_minutes} is not a whole number of minutes from \
+             {MIN_LEAD_MINUTES} to {MAX_LEAD_MINUTES}"
+        ),
+    ))
 }
 
 time::serde::format_description!(iso_date, Date, "[year]-[month]-[day]");
@@ -663,7 +662,7 @@ impl ReminderInput {
     /// `InvalidInput` naming `leadMinutes` outside [`validate_lead_minutes`]'s
     /// range, or the invalid criterion.
     pub fn validate(&self) -> Result<(), LibraryError> {
-validate_lead_minutes(self.lead_minutes)?;
+        validate_lead_minutes(self.lead_minutes)?;
         self.criteria.validate().map_err(|error| error.within_field("criteria"))
     }
 }

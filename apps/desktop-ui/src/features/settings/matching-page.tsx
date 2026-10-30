@@ -121,7 +121,7 @@ export function MatchingPage() {
   )
 }
 
-type Field = "centre" | "rotation" | "overlap" | "panels" | "flatFine" | "flatOffered" | "windowNights" | "oldAfter"
+type Field = "centre" | "rotation" | "overlap" | "panels" | "flatFine" | "flatOffered" | "windowDays" | "oldAfter"
 
 const atLeast = (value: number | null, min: number) => value === null || (Number.isFinite(value) && value >= min)
 
@@ -138,7 +138,7 @@ function matchingErrors(m: Messages, v: Matching): FieldErrors<Field> {
     flatFine:
       !atLeast(v.flats.fineWithinDeg, 0) ? m.common_enter_number() : v.flats.fineWithinDeg !== null && v.flats.offeredWithinDeg !== null && v.flats.fineWithinDeg > v.flats.offeredWithinDeg ? m.settings_matching_flat_rotation_order() : undefined,
     flatOffered: atLeast(v.flats.offeredWithinDeg, 0) ? undefined : m.common_enter_number(),
-    windowNights: whole(v.flats.windowNights) ? undefined : m.common_enter_number(),
+    windowDays: whole(v.darkBias.windowDays) ? undefined : m.common_enter_number(),
     oldAfter: whole(v.calibration.oldMasterAfterDays) && v.calibration.oldMasterAfterDays > 0 ? undefined : m.common_enter_number(),
   }
 }
@@ -150,7 +150,6 @@ const MATCHING_PATHS: FieldPaths<Field> = {
   panels: "framing.panelOverlapPercent",
   flatFine: "flats.fineWithinDeg",
   flatOffered: "flats.offeredWithinDeg",
-  windowNights: "flats.windowNights",
   oldAfter: "calibration.oldMasterAfterDays",
 }
 
@@ -198,8 +197,7 @@ function MatchingDialog({ record, open, onOpenChange }: { record: WorkflowSettin
         min={0}
         step={1}
         value={values.flats.windowNights}
-        onChange={(windowNights) => flats({ windowNights: windowNights ?? Number.NaN }, ["windowNights"])}
-        error={shown(errors, "windowNights")}
+        onChange={(windowNights) => set({ flats: { ...values.flats, windowNights: windowNights ?? Number.NaN } })}
       />
       <NumberField
         label={m.equipment_matching_window_days()}
@@ -207,7 +205,8 @@ function MatchingDialog({ record, open, onOpenChange }: { record: WorkflowSettin
         min={0}
         step={1}
         value={values.darkBias.windowDays}
-        onChange={(windowDays) => set({ darkBias: { windowDays: windowDays ?? Number.NaN } })}
+        onChange={(windowDays) => set({ darkBias: { windowDays: windowDays ?? Number.NaN } }, ["windowDays"])}
+        error={shown(errors, "windowDays")}
       />
       <SwitchField label={m.settings_keep_raws()} description={m.settings_keep_raws_help()} checked={values.calibration.keepRawFrames} onChange={(keepRawFrames) => set({ calibration: { ...values.calibration, keepRawFrames } })} />
       <NumberField

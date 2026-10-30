@@ -239,9 +239,8 @@ impl TargetsQuery {
                 "limit must be at least 1 when given",
             ));
         }
-self.criteria.validate().map_err(|error| error.within_field("criteria"))
+        Ok(())
     }
-
     /// The sort in effect.
     #[must_use]
     pub fn effective_sort(&self) -> TargetsSort {

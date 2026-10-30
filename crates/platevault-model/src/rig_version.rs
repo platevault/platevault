@@ -80,8 +80,8 @@ impl Camera {
         let mut ids = BTreeSet::new();
         let mut aliases = BTreeSet::new();
         let mut models: BTreeMap<String, u32> = BTreeMap::new();
-        for (index, camera) in cameras.iter().enumerate() {
-            camera.validate().map_err(|error| error.within_field(&index.to_string()))?;
+        for camera in cameras {
+            camera.validate()?;
             if !ids.insert(camera.id) {
                 return Err(invalid(format!("camera {} is listed twice", camera.id)));
             }

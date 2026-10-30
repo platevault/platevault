@@ -94,6 +94,20 @@ fn a_list_names_the_position_of_the_entry_that_fails() {
 }
 
 #[test]
+fn reminder_lead_time_names_its_field() {
+    let reminder = platevault_model::ReminderInput {
+        target_id: Uuid::new_v4(),
+        criteria: criteria(),
+        lead_minutes: 0,
+    };
+    assert_eq!(field(reminder.validate()), "leadMinutes");
+    assert_eq!(
+        field(reminder.validate().map_err(|error| error.within_field("reminder"))),
+        "leadMinutes"
+    );
+}
+
+#[test]
 fn within_field_keeps_other_failures_and_a_context_keeps_its_field() {
     let not_found = LibraryError::NotFound("site".into()).within_field("criteria");
     assert!(not_found.field().is_none(), "{not_found:?}");
