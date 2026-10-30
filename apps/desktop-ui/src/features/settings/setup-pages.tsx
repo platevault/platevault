@@ -1,8 +1,7 @@
 /**
  * First-run setup (LIB-FR-01, LIB-FR-27, LIB-FR-31; journey J19): Welcome,
- * Locations and Index, each a StepPage in the SetupFrame (no source list,
- * toolbar or status bar). The strip links every step and going back undoes
- * nothing; the order lives in each step's gate.
+ * Locations and Index. Windows Developer Mode links to the system settings
+ * page, but remains non-blocking for setup.
  *
  * - Welcome: the language select and what PlateVault does and never does.
  *   Continue opens Locations.
@@ -372,9 +371,8 @@ export function SetupIndexPage() {
  * the symlinks a Symlinks View needs, checked on the registered processing
  * location (`library_check_symlinks`): the Results location, else the
  * Captures one. The row shows on Windows only and reads On or Off by
- * itself; Check again reads it again. Copies always work, so the check
- * never blocks setup. The library has no command that opens Windows
- * settings, so Open Windows settings names that gap instead of acting.
+ * itself; Check again reads it again. Copies always work, so setup never
+ * waits for it. When Off, Open Windows settings starts the OS settings page.
  */
 function DeveloperModeCheck({ rows }: { rows: LocationRow[] }) {
   const m = useMessages()
@@ -385,8 +383,7 @@ function DeveloperModeCheck({ rows }: { rows: LocationRow[] }) {
   const openSettings: Action = {
     id: "open-windows-settings",
     label: m.settings_open_windows_settings(),
-    unavailable: { action: m.settings_open_windows_settings(), reason: m.settings_gap_windows_settings(), blockers: [] },
-    run: () => undefined,
+    run: () => library.libraryOpenDeveloperSettings(),
   }
   const result = checked.data
   const value =

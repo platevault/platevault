@@ -78,6 +78,8 @@ impl Shell {
                 desktop_shell::commands::project_apply::project_apply_preview,
                 desktop_shell::commands::project_apply::project_apply,
                 desktop_shell::commands::project_apply::library_check_symlinks,
+                desktop_shell::commands::library_dialogs::library_data_location,
+                desktop_shell::commands::library_dialogs::library_open_developer_settings,
                 desktop_shell::commands::project_output::project_copy_to_output,
                 desktop_shell::commands::project_wrap_up::project_wrap_up_status,
                 desktop_shell::commands::project_wrap_up::project_close,
@@ -110,6 +112,7 @@ impl Shell {
             .build(mock_context(noop_assets()))
             .expect("build mock app");
         app.manage(library);
+        app.manage(NativePath::from_path(dir.path()));
         app.manage(WrapUpTrash::new(Arc::new(NoTrash)));
         support::manage_runs(&app);
         let webview = WebviewWindowBuilder::new(&app, "library", WebviewUrl::default())
@@ -751,4 +754,22 @@ fn workflow_settings_family_reads_and_saves_with_revisions() {
         settings,
     );
     assert_eq!(shell.call("workflow_settings_get", &json!({})), saved, "nothing else stored");
+}
+
+#[test]
+fn library_data_location_returns_the_native_catalog_directory() {
+    let shell = Shell::new();
+    let actual = shell.call("library_data_location", &json!({}));
+    assert_eq!(actual, native_path(&shell._dir.path()));
+}
+
+#[cfg(not(target_os = "windows"))]
+#[test]
+fn opening_developer_settings_refuses_outside_windows() {
+    let shell = Shell::new();
+    let refused = shell
+        .invoke("library_open_developer_settings", &json!({}))
+        .expect_err("Windows Developer Mode settings are not available here");
+    assert_eq!(refused["code"], json!(LibraryErrorCode::SourceUnavailable));
+    assert!(refused["message"].is_null(), "refusal contains no English message: {refused}");
 }

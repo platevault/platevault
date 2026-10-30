@@ -150,6 +150,9 @@ macro_rules! library_commands {
             ipc::library_retire_location,
             ipc::library_list_operations,
             ipc::library_new_captures,
+            // Shell data directory and Windows Developer Mode settings.
+            crate::commands::library_dialogs::library_data_location,
+            crate::commands::library_dialogs::library_open_developer_settings,
             // session filters (064 LIB-FR-17, 065 PRJ-FR-19)
             crate::commands::session_filters::library_session_filter_counts,
             crate::commands::session_filters::project_prefill_from_session,
@@ -394,6 +397,8 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     // library. It is managed before any window opens, and each window's first
     // frame paints with it (`FirstFrame`).
     app.manage(Arc::new(PreferenceStore::open(preferences_path(&app)?)));
+    // About reports the catalog directory itself, preserving native path encoding.
+    app.manage(platevault_core::NativePath::from_path(&data_dir));
     let catalog = data_dir.join(CATALOG_FILE);
     let library = tauri::async_runtime::block_on(Library::open(&catalog, provider.as_ref()))
         .map_err(|error| format!("cannot open library catalog {}: {error}", catalog.display()))?;

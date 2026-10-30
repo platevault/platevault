@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Features
+
+* Settings About reports the library data directory; Setup can open Windows Developer Mode settings when the check reads Off.
+
 ## [0.6.0](https://github.com/platevault/platevault/compare/v0.5.0...v0.6.0) (2026-07-21)
 
 

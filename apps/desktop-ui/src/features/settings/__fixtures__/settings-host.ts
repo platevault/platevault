@@ -146,6 +146,10 @@ export function settingsHost(state: Catalog = catalog()) {
         const listed = a.locationId ? state.scans.filter((s) => s.locationId === a.locationId) : state.scans
         return listed.slice(a.offset as number, (a.offset as number) + (a.limit as number))
       }
+      case "library_data_location":
+        return nativePath("/PlateVault/Data")
+      case "library_open_developer_settings":
+        return null
       case "library_check_symlinks":
         return "developer_mode_off"
       case "library_pick_folder":

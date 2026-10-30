@@ -1,9 +1,9 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! The operating system's folder and file pickers and its file manager's
-//! reveal for the library shell. Cancelling a picker is no failure: it
-//! answers `None`.
+//! The library shell's native filesystem actions: OS pickers and file-manager
+//! reveal, the catalog data directory query, and the Windows Developer Mode
+//! settings launcher.
 
 use app_core::native::{reveal_path, RevealOpener};
 use contracts_core::error_code::ErrorCode;
@@ -14,6 +14,62 @@ use tauri_plugin_dialog::{DialogExt, FilePath};
 
 use super::library::fail;
 use super::native::TauriRevealOpener;
+
+/// The native data directory holding `catalog.sqlite` and its SQLite journals.
+/// # Errors: this read has no runtime failure after the library shell starts.
+#[tauri::command]
+#[specta::specta]
+pub async fn library_data_location(
+    directory: tauri::State<'_, NativePath>,
+) -> Result<NativePath, ErrorResponse> {
+    Ok(directory.inner().clone())
+}
+
+/// Open Windows' Developer Mode settings page from Setup (J18 S1).
+/// # Errors: `SourceUnavailable` if the opener refuses or the platform is not Windows.
+#[tauri::command]
+#[specta::specta]
+pub async fn library_open_developer_settings() -> Result<(), ErrorResponse> {
+    #[cfg(target_os = "windows")]
+    {
+        open_developer_settings()
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(fail(None)(LibraryError::SourceUnavailable(
+            "Developer Mode settings are only available on Windows".into(),
+        )))
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn open_developer_settings() -> Result<(), ErrorResponse> {
+    std::process::Command::new("cmd")
+        .args(["/C", "start", "", "ms-settings:developers"])
+        .spawn()
+        .map(drop)
+        .map_err(|error| {
+            fail(None)(LibraryError::SourceUnavailable(format!(
+                "cannot open Developer Mode settings: {error}"
+            )))
+        })
+}
+
+#[cfg(not(target_os = "windows"))]
+#[cfg(test)]
+mod settings_tests {
+    use platevault_core::LibraryErrorCode;
+
+    use super::*;
+
+    #[test]
+    fn unsupported_platform_refuses_the_settings_target() {
+        let refused = tauri::async_runtime::block_on(library_open_developer_settings())
+            .expect_err("Windows settings unavailable");
+        assert_eq!(refused.code, LibraryErrorCode::SourceUnavailable);
+        assert!(refused.scope.is_none());
+    }
+}
 
 /// Pick a folder.
 ///
