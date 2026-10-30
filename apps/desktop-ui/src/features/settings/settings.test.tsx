@@ -227,11 +227,13 @@ describe.each(LOCALES)("Settings in %s", (locale) => {
   )
 
   it(
-    "names the gaps instead of inventing data: About's data location and Target lookup",
+    "shows the native catalog directory on About and keeps unrelated gaps named",
     async () => {
-      serve()
+      const host = serve()
       const { user } = renderAt("/settings/about")
-      expect(await screen.findByText(m.settings_gap_data_location())).toBeInTheDocument()
+      expect(await screen.findByText(m.about_stored_in())).toBeInTheDocument()
+      expect(await screen.findByText("/PlateVault/Data")).toBeInTheDocument()
+      expect(host.sent("library_data_location")).toEqual([{}])
       await user.click(screen.getByRole("link", { name: m.settings_target_lookup() }))
       expect(await screen.findByText(m.settings_gap_target_lookup())).toBeInTheDocument()
     },
@@ -297,7 +299,7 @@ describe.each(LOCALES)("First-run setup in %s", (locale) => {
   )
 
   it(
-    "on Windows checks the processing location by itself, reads Off, offers Check again and names the Windows settings gap",
+    "on Windows opens Developer Mode settings when the check reads Off",
     async () => {
       vi.spyOn(navigator, "platform", "get").mockReturnValue("Win32")
       const results = location("loc-2", "Results", "results")
@@ -306,8 +308,12 @@ describe.each(LOCALES)("First-run setup in %s", (locale) => {
       const row = (await screen.findByRole("heading", { name: m.settings_developer_mode() })).closest("section") as HTMLElement
       expect(await within(row).findByText(m.status_off())).toBeInTheDocument()
       expect(host.sent("library_check_symlinks")).toEqual([{ folder: results.location.path }])
+      const open = within(row).getByRole("button", { name: m.settings_open_windows_settings() })
+      expect(open).not.toHaveAttribute("aria-disabled", "true")
+      await user.click(open)
+      expect(host.sent("library_open_developer_settings")).toEqual([{}])
+      expect(await within(row).findByText(m.status_off())).toBeInTheDocument()
       expect(host.sent("library_pick_folder")).toEqual([])
-      expect(within(row).getByRole("button", { name: m.settings_open_windows_settings() })).toHaveAttribute("aria-disabled", "true")
       await user.click(within(row).getByRole("button", { name: m.apps_check_again() }))
       await waitFor(() => expect(host.sent("library_check_symlinks")).toHaveLength(2))
     },

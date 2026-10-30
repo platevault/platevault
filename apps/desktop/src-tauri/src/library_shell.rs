@@ -75,6 +75,7 @@ use platevault_core::targets::SimbadConfig;
 use tauri::{Manager, RunEvent};
 
 use crate::commands::library as ipc;
+use crate::commands::library_dialogs::DataDirectory;
 use crate::commands::project_apply::ApplyRuns;
 use crate::commands::project_wrap_up::{CloseRuns, WrapUpTrash};
 
@@ -150,6 +151,9 @@ macro_rules! library_commands {
             ipc::library_retire_location,
             ipc::library_list_operations,
             ipc::library_new_captures,
+            // Shell data directory and Windows Developer Mode settings.
+            crate::commands::library_dialogs::library_data_location,
+            crate::commands::library_dialogs::library_open_developer_settings,
             // session filters (064 LIB-FR-17, 065 PRJ-FR-19)
             crate::commands::session_filters::library_session_filter_counts,
             crate::commands::session_filters::project_prefill_from_session,
@@ -395,6 +399,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     // library. It is managed before any window opens, and each window's first
     // frame paints with it (`FirstFrame`).
     app.manage(Arc::new(PreferenceStore::open(preferences_path(&app)?)));
+    app.manage(managed_data_directory(&data_dir));
     let catalog = data_dir.join(CATALOG_FILE);
     let library = tauri::async_runtime::block_on(Library::open(&catalog, provider.as_ref()))
         .map_err(|error| format!("cannot open library catalog {}: {error}", catalog.display()))?;
@@ -407,30 +412,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     let clock = Arc::new(platevault_core::notifier::SystemClock);
     tauri::async_runtime::block_on(library.attach_notifier(notifier, clock))
         .map_err(|error| format!("cannot attach the reminder notifier: {error}"))?;
-    tauri::async_runtime::spawn(crate::bootstrap::feeds::forward(
-        app.handle().clone(),
-        SCAN_PROGRESS_EVENT,
-        ScanProgressFeed::subscribe(Arc::clone(&library)),
-        |event, error| {
-            tracing::error!(
-                operation = %event.operation_id(),
-                %error,
-                "scan progress event not delivered"
-            );
-        },
-    ));
-    tauri::async_runtime::spawn(crate::bootstrap::feeds::forward(
-        app.handle().clone(),
-        crate::commands::frame_review::MEASUREMENT_PROGRESS_EVENT,
-        MeasurementProgressFeed::subscribe(Arc::clone(&library)),
-        |progress, error| {
-            tracing::error!(
-                run = %progress.operation_id,
-                %error,
-                "measurement progress event not delivered"
-            );
-        },
-    ));
+    forward_progress(&app, &library);
     // CLOSE (071): settle what a stop left of Wrap up (an interrupted Clean
     // up, a Trash step, every unsettled archive) through the host Trash (the
     // headless double in an `e2e` build). It can move whole archives, so it
@@ -514,6 +496,35 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+/// Forward scan and measurement progress from `library` to the webview as
+/// events; a delivery failure is logged, not returned.
+fn forward_progress(app: &tauri::App, library: &Arc<Library>) {
+    tauri::async_runtime::spawn(crate::bootstrap::feeds::forward(
+        app.handle().clone(),
+        SCAN_PROGRESS_EVENT,
+        ScanProgressFeed::subscribe(Arc::clone(library)),
+        |event, error| {
+            tracing::error!(
+                operation = %event.operation_id(),
+                %error,
+                "scan progress event not delivered"
+            );
+        },
+    ));
+    tauri::async_runtime::spawn(crate::bootstrap::feeds::forward(
+        app.handle().clone(),
+        crate::commands::frame_review::MEASUREMENT_PROGRESS_EVENT,
+        MeasurementProgressFeed::subscribe(Arc::clone(library)),
+        |progress, error| {
+            tracing::error!(
+                run = %progress.operation_id,
+                %error,
+                "measurement progress event not delivered"
+            );
+        },
+    ));
+}
+
 /// The shell's commands, native menu routing and plugins.
 ///
 /// # Errors
@@ -574,6 +585,13 @@ fn data_dir(app: &tauri::App) -> Result<PathBuf, Box<dyn Error>> {
         format!("cannot create library data directory {}: {error}", dir.display())
     })?;
     Ok(dir)
+}
+
+/// The data directory state `run` manages for `library_data_location`; the
+/// IPC tests manage the same value.
+#[must_use]
+pub fn managed_data_directory(path: &std::path::Path) -> DataDirectory {
+    DataDirectory::from_path(path)
 }
 
 /// The settings store's file: beside the catalog when [`DATA_DIR_ENV`]

@@ -16,6 +16,7 @@ mod support;
 use std::path::Path;
 use std::sync::Arc;
 
+use desktop_shell::commands::library_dialogs::DataDirectory;
 use desktop_shell::commands::project_wrap_up::WrapUpTrash;
 use platevault_core::custody::trash::OsTrash;
 use platevault_core::library::Library;
@@ -52,7 +53,7 @@ impl OsTrash for NoTrash {
 struct Shell {
     webview: WebviewWindow<MockRuntime>,
     _app: tauri::App<MockRuntime>,
-    _dir: tempfile::TempDir,
+    dir: tempfile::TempDir,
 }
 
 impl Shell {
@@ -78,6 +79,7 @@ impl Shell {
                 desktop_shell::commands::project_apply::project_apply_preview,
                 desktop_shell::commands::project_apply::project_apply,
                 desktop_shell::commands::project_apply::library_check_symlinks,
+                desktop_shell::commands::library_dialogs::library_data_location,
                 desktop_shell::commands::project_output::project_copy_to_output,
                 desktop_shell::commands::project_output::project_output_list,
                 desktop_shell::commands::project_wrap_up::project_wrap_up_status,
@@ -111,12 +113,13 @@ impl Shell {
             .build(mock_context(noop_assets()))
             .expect("build mock app");
         app.manage(library);
+        app.manage(shared_data_directory(dir.path()));
         app.manage(WrapUpTrash::new(Arc::new(NoTrash)));
         support::manage_runs(&app);
         let webview = WebviewWindowBuilder::new(&app, "library", WebviewUrl::default())
             .build()
             .expect("library window");
-        Self { webview, _app: app, _dir: dir }
+        Self { webview, _app: app, dir }
     }
 
     /// The library the handlers run on, to arrange what a test calls on.
@@ -182,6 +185,10 @@ impl Ipc for Shell {
     fn webview(&self) -> &WebviewWindow<MockRuntime> {
         &self.webview
     }
+}
+
+fn shared_data_directory(path: &Path) -> DataDirectory {
+    desktop_shell::library_shell::managed_data_directory(path)
 }
 
 fn unix_path(path: &str) -> Value {
@@ -764,4 +771,11 @@ fn workflow_settings_family_reads_and_saves_with_revisions() {
         settings,
     );
     assert_eq!(shell.call("workflow_settings_get", &json!({})), saved, "nothing else stored");
+}
+
+#[test]
+fn library_data_location_returns_the_native_catalog_directory() {
+    let shell = Shell::new();
+    let actual = shell.call("library_data_location", &json!({}));
+    assert_eq!(actual, native_path(shell.dir.path()));
 }
