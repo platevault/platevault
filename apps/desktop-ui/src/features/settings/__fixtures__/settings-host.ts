@@ -197,7 +197,7 @@ export function settingsHost(state: Catalog = catalog()) {
         const expectedRevision = a.expectedRevision as number | null
         const old = state.cameras.find((camera) => camera.id === input.id)
         if (old && expectedRevision !== old.revision) throw refusal("conflict", "review", old.revision)
-        if (!old && expectedRevision !== null) throw refusal("conflict", "review", null)
+        if (!old && expectedRevision !== null) throw refusal("not_found", "none")
         if (state.cameras.some((camera) => camera.id !== input.id && camera.model.toLowerCase() === input.model.toLowerCase() && camera.alias === input.alias)) {
           throw refusal("invalid_input", "none")
         }

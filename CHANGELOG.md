@@ -1,11 +1,5 @@
 # Changelog
 
-## Unreleased
-
-### Bug Fixes
-
-* restore camera-save IPC test registration, preserve toolbar-less table rendering, and use explicit expected camera revisions
-
 ## [0.6.0](https://github.com/platevault/platevault/compare/v0.5.0...v0.6.0) (2026-07-21)
 
 
