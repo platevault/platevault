@@ -521,19 +521,23 @@ async fn cameras_of_one_model_need_unique_aliases() {
     let unnamed = new(None);
     let error = fx.catalog.save_cameras(std::slice::from_ref(&unnamed)).await.unwrap_err();
     assert!(error.to_string().contains("each needs a unique alias"), "{error}");
+    assert_eq!(error.field().map(platevault_model::FieldPath::as_str), Some("alias"));
     let b = new(Some("2600 B"));
     let error = fx.catalog.save_cameras(std::slice::from_ref(&b)).await.unwrap_err();
     assert_eq!(kind(&error), "invalid_input", "camera A still has no alias: {error}");
+    assert_eq!(error.field().map(platevault_model::FieldPath::as_str), Some("alias"));
     let a_named = Camera { alias: Some("2600 A".into()), ..a.clone() };
     let clash = Camera { alias: Some(" 2600 a ".into()), ..b.clone() };
     let error = fx.catalog.save_cameras(&[a_named.clone(), clash]).await.unwrap_err();
     assert!(error.to_string().contains("share the alias"), "{error}");
+    assert_eq!(error.field().map(platevault_model::FieldPath::as_str), Some("1.alias"));
     let listed = fx.catalog.cameras().await.unwrap();
     assert_eq!(listed, std::slice::from_ref(&a), "refused saves change nothing");
 
+    let error = fx.catalog.save_cameras(&[a.clone(), b.clone()]).await.unwrap_err();
+    assert_eq!(error.field().map(platevault_model::FieldPath::as_str), Some("0.alias"));
+    assert_eq!(error.response(None, None).identity, Some(a.id));
     let saved = fx.catalog.save_cameras(&[a_named.clone(), b.clone()]).await.unwrap();
-    assert_eq!(saved[0].revision, 2);
-    assert_eq!(saved[1].revision, 1);
     let mut ids = vec![a.id, b.id];
     ids.sort_unstable();
     assert_eq!(

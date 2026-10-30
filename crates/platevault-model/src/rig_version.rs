@@ -74,8 +74,8 @@ impl Camera {
     ///
     /// # Errors
     /// `InvalidInput` naming the camera or alias; an invalid camera's field
-    /// is named below its position, while a clash between cameras names no
-    /// one field.
+    /// is named below its position, while an alias clash names the camera
+    /// whose alias is duplicated or missing.
     pub fn validate_all(cameras: &[Self]) -> Result<(), LibraryError> {
         let mut ids = BTreeSet::new();
         let mut aliases = BTreeSet::new();
@@ -87,10 +87,14 @@ impl Camera {
             }
             if let Some(alias) = camera.alias_key() {
                 if !aliases.insert(alias) {
-                    return Err(invalid(format!(
-                        "two cameras share the alias {}",
-                        camera.alias.as_deref().unwrap_or_default().trim()
-                    )));
+                    return Err(LibraryError::invalid_field(
+                        "alias",
+                        format!(
+                            "two cameras share the alias {}",
+                            camera.alias.as_deref().unwrap_or_default().trim()
+                        ),
+                    )
+                    .concerning(camera.id));
                 }
             }
             *models.entry(camera.model_key()).or_default() += 1;
@@ -99,10 +103,11 @@ impl Camera {
             camera.alias.is_none()
                 && models.get(&camera.model_key()).is_some_and(|count| *count > 1)
         }) {
-            return Err(invalid(format!(
-                "several cameras are a {}: each needs a unique alias",
-                camera.model.trim()
-            )));
+            return Err(LibraryError::invalid_field(
+                "alias",
+                format!("several cameras are a {}: each needs a unique alias", camera.model.trim()),
+            )
+            .concerning(camera.id));
         }
         Ok(())
     }

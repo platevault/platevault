@@ -786,9 +786,11 @@ fn cameras_need_unique_aliases_once_two_share_a_model() {
     };
     Camera::validate_all(&[camera(1, "ASI2600MM", None), camera(2, "ASI533MC", None)]).unwrap();
     let unaliased = [camera(1, "ASI2600MM", Some("Mono A")), camera(2, "asi2600mm ", None)];
-    assert!(Camera::validate_all(&unaliased).is_err(), "two of a model need aliases");
+    let missing_alias = Camera::validate_all(&unaliased).unwrap_err();
+    assert_eq!(missing_alias.field().map(platevault_model::FieldPath::as_str), Some("alias"));
     let clash = [camera(1, "ASI2600MM", Some("Mono")), camera(2, "ASI2600MM", Some("mono"))];
-    assert!(Camera::validate_all(&clash).is_err(), "aliases are unique");
+    let alias_clash = Camera::validate_all(&clash).unwrap_err();
+    assert_eq!(alias_clash.field().map(platevault_model::FieldPath::as_str), Some("alias"));
     Camera::validate_all(&[camera(1, "ASI2600MM", Some("A")), camera(2, "ASI2600MM", Some("B"))])
         .unwrap();
     assert!(camera(1, " ", None).validate().is_err());

@@ -456,7 +456,7 @@ describe.each(LOCALES)("Settings in %s", (locale) => {
       await user.click(within(row.closest("tr") as HTMLElement).getByRole("button", { name: new RegExp("ASI2600MM") }))
       await user.click(await screen.findByRole("menuitem", { name: named(m.settings_edit()) }))
       const dialog = await screen.findByRole("dialog")
-      host.fail("library_save_camera", "invalid_input", "none", "0.alias")
+      host.fail("library_save_camera", "invalid_input", "none", "alias")
       await user.click(within(dialog).getByRole("button", { name: m.settings_save() }))
       expect(await within(dialog).findByText(m.form_field_refused())).toBeInTheDocument()
       expect(within(dialog).getByRole("textbox", { name: m.equipment_camera_alias() })).toHaveAttribute("aria-invalid", "true")
