@@ -168,11 +168,13 @@ impl Catalog {
         Ok(OutputBasis { project_id, lifecycle, name, parent, copies, copying, panels, recorded })
     }
 
-    /// The Project's Output step: every file recorded in its `Output/`, by
-    /// path. Read-only.
+    /// The Project's Output step as last recorded, by path. Reads only the catalog;
+    /// no filesystem access occurs. Closed and Archived Projects retain their
+    /// recorded Output and are readable.
     ///
     /// # Errors
-    /// `NotFound` for an unknown Project.
+    /// `NotFound` for an unknown Project; `PersistenceFailure` for a corrupt
+    /// record.
     pub async fn project_outputs(&self, project_id: Uuid) -> Result<Vec<OutputObservation>> {
         let mut conn = self.reader().await?;
         let mut snapshot = conn.begin().await?;
@@ -181,6 +183,7 @@ impl Catalog {
         snapshot.commit().await?;
         Ok(outputs)
     }
+
 
     /// Record one pass over the Project's `Output/` (RES-FR-01): a found file
     /// takes its state, size, fingerprint and panel, keeping the Kind and

@@ -42,6 +42,20 @@ pub async fn project_copy_to_output(
 ) -> Reply<OutputObservation> {
     library.copy_to_output(project_id, &source, &name).await.map_err(fail(Some(project_id)))
 }
+/// Read the Project's Output as last recorded by the watcher. This catalog read
+/// does not access the filesystem; Rescan remains explicit via
+/// [`project_output_rescan`].
+///
+/// # Errors
+/// `NotFound` for an unknown Project; catalog errors.
+#[tauri::command]
+#[specta::specta]
+pub async fn project_output_list(
+    library: State<'_, Arc<Library>>,
+    project_id: Uuid,
+) -> Reply<Vec<OutputObservation>> {
+    library.project_output_list(project_id).await.map_err(fail(Some(project_id)))
+}
 
 /// Rescan, in the Output step's More menu: walk the Project's `Output/` now
 /// and return its Output step as recorded, a file saved since included.

@@ -189,6 +189,7 @@ macro_rules! library_commands {
             crate::commands::project_apply::library_check_symlinks,
             // output (070 RES-FR-01/02)
             crate::commands::project_output::project_copy_to_output,
+            crate::commands::project_output::project_output_list,
             crate::commands::project_output::project_output_rescan,
             crate::commands::project_output::project_dismiss_processing_master,
             crate::commands::project_output::project_restore_processing_master,

@@ -439,7 +439,17 @@ fn restorable(offer: &ProcessingMasterOffer, expected_sha256: &str) -> Result<()
     }
 }
 
-// ── Copy to Output ───────────────────────────────────────────────────────────
+impl Library {
+    /// The Project's Output listing as recorded by the last folder observation.
+    /// This reads the catalog only; use [`OutputWatch::rescan`] for an explicit
+    /// filesystem walk that refreshes the listing.
+    pub async fn project_output_list(
+        &self,
+        project_id: Uuid,
+    ) -> Result<Vec<OutputObservation>, LibraryError> {
+        self.catalog().project_outputs(project_id).await
+    }
+}
 
 impl Library {
     /// Copy to Output… (RES-FR-02, RES-AC-02/25): copy the regular file at

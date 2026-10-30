@@ -244,6 +244,24 @@ describe("Wrap up", { timeout: TEST_MS }, () => {
     await waitFor(() => expect(sent("project_close_stop")).toHaveLength(1))
   })
 })
+describe("Output", { timeout: TEST_MS }, () => {
+  it("reads the catalog listing on open and keeps Rescan explicit", async () => {
+    const user = userEvent.setup()
+    const observation = {
+      path: path("final.fit"), kind: null, channel: null, panelGroupId: null, state: "settled",
+      sizeBytes: 7, fingerprint: null, sha256: null, origin: "observed",
+    }
+    const { sent } = host({ project_output_list: () => [observation], project_output_rescan: () => [observation] })
+    renderAt(`/projects/${P}?stage=output`)
+    expect(await screen.findByRole("rowheader", { name: "final.fit" })).toBeInTheDocument()
+    expect(sent("project_output_list")).toHaveLength(1)
+    expect(sent("project_output_rescan")).toHaveLength(0)
+
+    await user.click(screen.getByRole("button", { name: m.common_more() }))
+    await user.click(await screen.findByRole("menuitem", { name: m.output_rescan() }))
+    await waitFor(() => expect(sent("project_output_rescan")).toHaveLength(1))
+  })
+})
 
 describe("A locked Project", { timeout: TEST_MS }, () => {
   it("offers no Apply, says it closed, and duplicates on the current pins", async () => {
