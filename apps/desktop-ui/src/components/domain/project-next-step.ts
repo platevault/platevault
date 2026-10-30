@@ -21,3 +21,11 @@ export function projectNextStep(m: Messages, projectId: string, next: NextAction
       return { label: m.project_add_sessions(), link: { ...project, search: { stage: "sessions" } } }
   }
 }
+
+/** Each next action's place in PRJ-FR-18's rule order, rule 4's three in the order the library tries them. */
+const RULE_ORDER: Record<NextAction["kind"], number> = { review_new_frames: 0, waits_on_user: 1, plan_tonight: 2, apply_changes: 3, open_view: 4, add_sessions: 5 }
+
+/** Sort key of a Project's next action by PRJ-FR-18's rule order; a Project without one sorts last. */
+export function projectNextStepOrder(next: NextAction | null): number {
+  return next ? RULE_ORDER[next.kind] : Object.keys(RULE_ORDER).length
+}

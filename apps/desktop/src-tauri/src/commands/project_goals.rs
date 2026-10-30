@@ -17,7 +17,7 @@ use std::sync::Arc;
 use platevault_core::library::Library;
 use platevault_core::{
     GoalInput, GoalSpec, GoalTemplate, GoalTemplateInput, Project, ProjectCandidate, ProjectInput,
-    ProjectQuery, ProjectSummary, Revision, SubjectInput,
+    ProjectQuery, ProjectRow, ProjectSummary, Revision, SubjectInput,
 };
 use tauri::State;
 use uuid::Uuid;
@@ -183,7 +183,29 @@ pub async fn project_list(
 ) -> Reply<Vec<ProjectSummary>> {
     let query =
         ProjectQuery { target_id, include_closed: include_closed.unwrap_or(false), offset, limit };
-    library.project_list(&query).await.map_err(fail(target_id))
+    library.catalog().list_projects(&query).await.map_err(fail(target_id))
+}
+
+/// The Projects list's rows (PRJ-FR-32): [`project_list`]'s Projects, each
+/// open one with its pending changes and its Next action (PRJ-FR-18), read
+/// as Home reads them. Only the Projects list reads it; a surface that needs
+/// the Projects alone reads [`project_list`].
+///
+/// # Errors
+/// `InvalidInput` for an unbundled zone or a night outside the supported
+/// calendar; `PersistenceFailure` when the catalog cannot be read.
+#[tauri::command]
+#[specta::specta]
+pub async fn project_rows(
+    library: State<'_, Arc<Library>>,
+    target_id: Option<Uuid>,
+    include_closed: Option<bool>,
+    offset: u32,
+    limit: u32,
+) -> Reply<Vec<ProjectRow>> {
+    let query =
+        ProjectQuery { target_id, include_closed: include_closed.unwrap_or(false), offset, limit };
+    library.project_rows(&query).await.map_err(fail(target_id))
 }
 
 /// The Project's candidates, derived now: every current session whose

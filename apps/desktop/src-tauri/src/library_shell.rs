@@ -169,6 +169,7 @@ macro_rules! library_commands {
             crate::commands::project_goals::project_set_goals,
             crate::commands::project_goals::project_apply_goal_template,
             crate::commands::project_goals::project_list,
+            crate::commands::project_goals::project_rows,
             crate::commands::project_goals::project_candidates,
             crate::commands::project_goals::goal_template_list,
             crate::commands::project_goals::goal_template_save,

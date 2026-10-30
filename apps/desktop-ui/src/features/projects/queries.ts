@@ -11,18 +11,22 @@
  * revision instead of repeating the stale one; any other failure keeps the
  * reads and the draft as they are.
  *
- * The header reads `project_list`'s summary; the full record comes from
- * `project_get` (`useProjectRecord`), which Edit… writes against.
+ * The header reads `project_list`'s plain summary; the full record comes
+ * from `project_get` (`useProjectRecord`), which Edit… writes against. Only
+ * the Projects list reads `project_rows`, whose open rows carry the pending
+ * changes and Next action the library computes as Home does.
  */
 import { type QueryClient, type QueryKey, useQuery } from "@tanstack/react-query"
 import { type ActionResult, type LibraryCommand, type Project, type ProjectSummary } from "@/api/ipc"
 import { libraryKey, libraryQuery } from "@/api/query"
 
-/** How many Projects one `project_list` page reads: the list page and the header read the same page. */
+/** How many Projects one `project_list` or `project_rows` page reads: the list page and the header read the same page. */
 export const PROJECT_PAGE = 1000
 
 /** Every Project, open and closed, by name. */
 export const projectsQuery = () => libraryQuery("projectList", null, true, 0, PROJECT_PAGE)
+/** The Projects list's rows: every Project, each open one with its pending changes and Next action. */
+export const projectRowsQuery = () => libraryQuery("projectRows", null, true, 0, PROJECT_PAGE)
 
 export const inputsQuery = (projectId: string) => libraryQuery("projectInputs", projectId)
 export const progressQuery = (projectId: string) => libraryQuery("projectProgress", projectId)
@@ -41,6 +45,7 @@ export const locationsQuery = () => libraryQuery("libraryListLocations")
  */
 const PROJECT_READS: readonly LibraryCommand[] = [
   "projectList",
+  "projectRows",
   "projectGet",
   "projectInputs",
   "projectProgress",

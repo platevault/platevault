@@ -78,6 +78,8 @@ export function useReviewWrites(sessionId: string) {
         client.invalidateQueries({ queryKey: libraryKey("librarySession", sessionId) }),
         client.invalidateQueries({ queryKey: libraryKey("libraryListSessions") }),
         client.invalidateQueries({ queryKey: libraryKey("homeDashboard") }),
+        // A mark moves a Project's "Review N new frames" on the Projects list as on Home.
+        client.invalidateQueries({ queryKey: libraryKey("projectRows") }),
       ])
     const latest = (frame: ReviewFrame_Serialize) => client.getQueryData(listKey)?.frames.find((f) => f.asset.id === frame.asset.id)?.asset ?? frame.asset
     let queue: Promise<unknown> = Promise.resolve()

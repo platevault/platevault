@@ -1247,7 +1247,7 @@
   "projects_col_state": "Estado",
   "projects_col_goals": "Metas",
   "projects_col_next_step": "Próxima etapa",
-  "projects_no_next_step": "—",
+  "projects_none": "Nenhuma",
   "wrapup_action": "Encerrar",
   "trash_title": "Lixeira",
   "projects_count": [

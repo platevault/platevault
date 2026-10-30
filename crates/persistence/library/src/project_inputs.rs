@@ -1806,20 +1806,24 @@ async fn restore_settings(
 // ── Suggestions and held frames, for progress too ────────────────────────────
 
 async fn suggestions(conn: &mut SqliteConnection, id: Uuid) -> Result<Vec<ProjectSuggestion>> {
-    Ok(suggested(conn, id)
-        .await?
-        .into_iter()
-        .map(|(candidate, admission)| ProjectSuggestion {
-            session_id: candidate.session_id,
-            subject_id: candidate.subject_id,
-            rig_id: candidate.rig_id,
-            basis: AdmissionBasis {
-                grouping_revision: admission.intake.grouping_revision,
-                calibration_generation: admission.calibration.generation,
-            },
-            blockers: admission.blockers,
-        })
-        .collect())
+    Ok(suggested(conn, id).await?.iter().map(suggestion_of).collect())
+}
+
+/// A [`suggested`] session as the Project offers it: its subject and rig,
+/// the admission basis it was read at and what keeps it out for now.
+pub fn suggestion_of(
+    (candidate, admission): &(ProjectCandidate, SessionAdmission),
+) -> ProjectSuggestion {
+    ProjectSuggestion {
+        session_id: candidate.session_id,
+        subject_id: candidate.subject_id,
+        rig_id: candidate.rig_id,
+        basis: AdmissionBasis {
+            grouping_revision: admission.intake.grouping_revision,
+            calibration_generation: admission.calibration.generation,
+        },
+        blockers: admission.blockers.clone(),
+    }
 }
 
 /// The Project's suggestions with their admission (PRJ-FR-09): current

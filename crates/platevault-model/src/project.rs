@@ -15,7 +15,7 @@ use std::collections::BTreeSet;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use uuid::Uuid;
 
-use crate::{LibraryError, NextAction, ProjectLifecycle, Revision};
+use crate::{LibraryError, ProjectLifecycle, Revision};
 
 fn invalid(message: String) -> LibraryError {
     LibraryError::InvalidInput(message)
@@ -526,10 +526,6 @@ pub struct ProjectSummary {
     pub subjects: Vec<String>,
     pub rig_count: u64,
     pub goal_count: u64,
-    /// The first rule of PRJ-FR-18 that applies to this open Project.
-    pub next_step: Option<NextAction>,
-    /// Changes waiting for Apply. Closed Projects have none.
-    pub pending_changes: u64,
 }
 
 /// A derived candidate session: its confirmed Target is the subject's Target and

@@ -57,8 +57,9 @@ export function myTargetsRequest(siteId: string | null = null, night: string | n
 /**
  * The reads a Targets write can change: the lists and search results that
  * show a favourite or a preset, every planning read (a criteria or Moon
- * limits change moves them), the reminder state, and Home's Tonight, which
- * names favourites.
+ * limits change moves them), the reminder state, Home's Tonight, which
+ * names favourites, and the Projects list's rows, whose "Plan tonight"
+ * reads tonight's windows.
  */
 const TARGET_READS: readonly LibraryCommand[] = [
   "planningTargetRows",
@@ -73,6 +74,7 @@ const TARGET_READS: readonly LibraryCommand[] = [
   "planningReviewCalendarExport",
   "workflowSettingsGet",
   "homeDashboard",
+  "projectRows",
 ]
 
 function isTargetRead(key: QueryKey): boolean {

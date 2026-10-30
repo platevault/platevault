@@ -104,6 +104,30 @@ pub struct HomeProject {
     pub next: NextAction,
 }
 
+/// One row of the Projects list (PRJ-FR-32): the Project's summary and, for
+/// an open Project, its pending changes and Next action, which Home reads
+/// the same way.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
+pub struct ProjectRow {
+    #[serde(flatten)]
+    pub project: ProjectSummary,
+    /// Absent for a Closing, Closed or Archived Project, which carries
+    /// neither.
+    pub work: Option<ProjectWork>,
+}
+
+/// An open Project's pending changes and Next action.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
+pub struct ProjectWork {
+    /// How many changes wait for the next Apply.
+    pub pending_changes: u64,
+    pub next: NextAction,
+}
+
 /// A new-sessions row's one-click action (PRJ-FR-17 section 2, PRJ-FR-19).
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", rename_all_fields = "camelCase")]

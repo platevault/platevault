@@ -404,6 +404,17 @@ export const commands = {
 	 */
 	projectList: (targetId: string | null, includeClosed: boolean | null, offset: number, limit: number) => typedError<ProjectSummary[], ErrorResponse>(__TAURI_INVOKE("project_list", { targetId, includeClosed, offset, limit })),
 	/**
+	 *  The Projects list's rows (PRJ-FR-32): [`project_list`]'s Projects, each
+	 *  open one with its pending changes and its Next action (PRJ-FR-18), read
+	 *  as Home reads them. Only the Projects list reads it; a surface that needs
+	 *  the Projects alone reads [`project_list`].
+	 * 
+	 *  # Errors
+	 *  `InvalidInput` for an unbundled zone or a night outside the supported
+	 *  calendar; `PersistenceFailure` when the catalog cannot be read.
+	 */
+	projectRows: (targetId: string | null, includeClosed: boolean | null, offset: number, limit: number) => typedError<ProjectRow[], ErrorResponse>(__TAURI_INVOKE("project_rows", { targetId, includeClosed, offset, limit })),
+	/**
 	 *  The Project's candidates, derived now: every current session whose
 	 *  confirmed Target is a subject's and whose confirmed rig is a Project rig,
 	 *  whether the Project holds it or not. Read-only.
@@ -6939,6 +6950,19 @@ export type ProjectProgress = {
 };
 
 /**
+ *  One row of the Projects list (PRJ-FR-32): the Project's summary and, for
+ *  an open Project, its pending changes and Next action, which Home reads
+ *  the same way.
+ */
+export type ProjectRow = {
+	/**
+	 *  Absent for a Closing, Closed or Archived Project, which carries
+	 *  neither.
+	 */
+	work: ProjectWork | null,
+} & ProjectSummary;
+
+/**
  *  One whole session the Project holds, with the admission basis it was
  *  added on and the confirmed Target it joined on: the session keeps
  *  counting toward that Target's subject after the Library re-confirms it as
@@ -6989,10 +7013,6 @@ export type ProjectSummary = {
 	subjects: string[],
 	rigCount: number,
 	goalCount: number,
-	/**  The first rule of PRJ-FR-18 that applies to this open Project. */
-	nextStep: NextAction | null,
-	/**  Changes waiting for Apply. Closed Projects have none. */
-	pendingChanges: number,
 };
 
 /**  The View step's settings (VSEL-FR-16, PREP-FR-06). */
@@ -7054,6 +7074,13 @@ export type ProjectWarning =
  *  canonical decimal seconds, ascending.
  */
 { kind: "exposure_mismatch"; subjectId: string; rigId: string; channel: string | null; lightExposures: string[]; darkExposures: string[] };
+
+/**  An open Project's pending changes and Next action. */
+export type ProjectWork = {
+	/**  How many changes wait for the next Apply. */
+	pendingChanges: number,
+	next: NextAction,
+};
 
 export type Provenance = { source: "seed"; dataset: string } | { source: "user" } | { source: "provider"; name: string; id: string | null } | { source: "observed"; fields: string[] } | { source: "inferred"; rule: string };
 

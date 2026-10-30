@@ -30,8 +30,7 @@ impl Library {
     /// `NotFound` for an unknown Project; `PersistenceFailure` when the
     /// catalog cannot be read.
     pub async fn project_progress(&self, id: Uuid) -> Result<ProjectProgress, LibraryError> {
-        let method = MeasurementMethod::new(measure::METHOD.name, measure::METHOD.version);
-        let basis = self.catalog().project_progress_basis(id, &method).await?;
+        let basis = self.catalog().project_progress_basis(id, &progress_method()).await?;
         let darks = self.catalog().project_dark_basis(id, &Rules).await?;
         Ok(ProjectProgress {
             project_id: basis.project_id,
@@ -40,6 +39,11 @@ impl Library {
             warnings: exposure_warnings(&darks),
         })
     }
+}
+
+/// The measurement method a goal's median-FWHM bar reads: this build's.
+pub(crate) fn progress_method() -> MeasurementMethod {
+    MeasurementMethod::new(measure::METHOD.name, measure::METHOD.version)
 }
 
 /// One exposure-mismatch warning per subject, rig and channel whose light

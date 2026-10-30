@@ -11,6 +11,7 @@ import userEvent from "@testing-library/user-event"
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest"
 import type { ApplyPreview_Serialize, ApplyReport_Serialize, NativePathWire, Project, ProjectInputs_Serialize, ProjectSummary, WrapUpStatus } from "@/api/ipc"
 import { createQueryClient } from "@/api/query"
+import { statusMeta } from "@/components/app/status"
 import { AppRoot } from "@/app/root"
 import { setLocale } from "@/app/preferences"
 import { LOCALES, m } from "@/lib/i18n"
@@ -26,7 +27,7 @@ const G1 = "33333333-3333-3333-3333-333333333333"
 const path = (display: string): NativePathWire => ({ encoding: "unix-bytes", payload: [...new TextEncoder().encode(display)], display })
 const TEST_MS = 30_000
 
-const summary = (lifecycle: ProjectSummary["lifecycle"] = "open"): ProjectSummary => ({ id: P, name: "Cygnus HOO", lifecycle, revision: 4, subjects: ["NGC 7000"], rigCount: 1, goalCount: 0, nextStep: lifecycle === "open" ? { kind: "add_sessions" } : null, pendingChanges: 0 })
+const summary = (lifecycle: ProjectSummary["lifecycle"] = "open"): ProjectSummary => ({ id: P, name: "Cygnus HOO", lifecycle, revision: 4, subjects: ["NGC 7000"], rigCount: 1, goalCount: 0 })
 
 const INPUTS: ProjectInputs_Serialize = {
   desired: {
@@ -138,13 +139,31 @@ describe("Projects list", { timeout: TEST_MS }, () => {
   it("shows the pending next step and count in both locales", async () => {
     for (const locale of LOCALES as readonly ("en-GB" | "pt-BR")[]) {
       act(() => setLocale(locale))
-      host({ project_list: () => [{ ...summary(), nextStep: { kind: "apply_changes", changes: 3 }, pendingChanges: 3 }] })
+      host({ project_rows: () => [{ ...summary(), work: { pendingChanges: 3, next: { kind: "apply_changes", changes: 3 } } }] })
       renderAt("/projects")
       expect(await screen.findByText("Cygnus HOO")).toBeInTheDocument()
       expect(screen.getByText(m.projects_col_next_step())).toBeInTheDocument()
       expect(screen.getByText(m.domain_next_apply_changes({ count: 3 }))).toBeInTheDocument()
       expect(screen.getByText("3")).toBeInTheDocument()
       expect(screen.getByText(m.project_pending_changes())).toBeInTheDocument()
+      cleanup()
+      clearMocks()
+    }
+  })
+
+  it("words the Next step and pending changes of a closed row in both locales", async () => {
+    for (const locale of LOCALES as readonly ("en-GB" | "pt-BR")[]) {
+      act(() => setLocale(locale))
+      const user = userEvent.setup()
+      host({ project_rows: () => [{ ...summary("closed"), work: null }] })
+      renderAt("/projects")
+      // The State facet starts on Open; All shows the closed row.
+      await user.click(await screen.findByRole("button", { name: m.filter_bar_facet_value({ label: m.projects_col_state(), value: statusMeta("project", "open").label }) }))
+      await user.click(await screen.findByRole("menuitemradio", { name: m.filter_bar_all() }))
+      const row = (await screen.findByText("Cygnus HOO")).closest("tr")
+      if (!row) throw new Error("no row for the closed Project")
+      expect(within(row).getAllByText(m.projects_none())).toHaveLength(2)
+      expect(within(row).queryByText("0")).not.toBeInTheDocument()
       cleanup()
       clearMocks()
     }
