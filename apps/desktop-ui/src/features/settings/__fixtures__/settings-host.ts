@@ -193,9 +193,11 @@ export function settingsHost(state: Catalog = catalog()) {
         state.rigs = state.rigs.filter((r) => r.equipment.id !== a.equipmentId)
         return null
       case "library_save_camera": {
-        const input = a.input as Camera
+        const input = a.input as Omit<Camera, "revision">
+        const expectedRevision = a.expectedRevision as number | null
         const old = state.cameras.find((camera) => camera.id === input.id)
-        if (old && input.revision !== old.revision) throw refusal("conflict", "review", old.revision)
+        if (old && expectedRevision !== old.revision) throw refusal("conflict", "review", old.revision)
+        if (!old && expectedRevision !== null) throw refusal("conflict", "review", null)
         if (state.cameras.some((camera) => camera.id !== input.id && camera.model.toLowerCase() === input.model.toLowerCase() && camera.alias === input.alias)) {
           throw refusal("invalid_input", "none")
         }

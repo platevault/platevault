@@ -175,7 +175,8 @@ describe.each(LOCALES)("Settings in %s", (locale) => {
       await user.type(alias, "Guide camera")
       await user.click(within(dialog).getByRole("button", { name: m.settings_save() }))
       await waitFor(() => expect(host.sent("library_save_camera")).toEqual([{
-        input: { id: camera?.id, model: "ASI2600MM", alias: "Guide camera", noDarks: false, noBias: false, revision: 3 },
+        input: { id: camera?.id, model: "ASI2600MM", alias: "Guide camera", noDarks: false, noBias: false },
+        expectedRevision: 3,
       }]))
       expect(host.state.cameras[0]?.alias).toBe("Guide camera")
 
@@ -184,7 +185,7 @@ describe.each(LOCALES)("Settings in %s", (locale) => {
       await user.type(within(add).getByRole("textbox", { name: m.equipment_camera() }), "ASI533MC")
       await user.click(within(add).getByRole("button", { name: m.settings_save() }))
       await waitFor(() => expect(host.sent("library_save_camera")).toHaveLength(2))
-      expect(host.sent("library_save_camera")[1]).toMatchObject({ input: { id: null, model: "ASI533MC", revision: 0 } })
+      expect(host.sent("library_save_camera")[1]).toMatchObject({ input: { id: null, model: "ASI533MC" }, expectedRevision: null })
       expect(await screen.findByRole("rowheader", { name: "ASI533MC" })).toBeInTheDocument()
     },
     TEST_MS,
@@ -206,11 +207,12 @@ describe.each(LOCALES)("Settings in %s", (locale) => {
       if (current) host.state.cameras = host.state.cameras.map((camera) => (camera === current ? { ...camera, revision: 8 } : camera))
       await user.click(within(dialog).getByRole("button", { name: m.settings_save() }))
       expect(await within(dialog).findByText(m.action_failure_conflict())).toBeInTheDocument()
-      await waitFor(() => expect(host.sent("library_save_camera").map((args) => (args.input as { revision: number }).revision)).toEqual([3]))
+      await waitFor(() => expect(host.sent("library_save_camera").map((args) => args.expectedRevision)).toEqual([3]))
       expect(within(dialog).getByRole("textbox", { name: m.equipment_camera() })).toHaveValue("ASI2600MM Pro")
       host.fail("library_save_camera", "invalid_input", "none")
       await user.click(within(dialog).getByRole("button", { name: m.verb_retry() }))
       expect(await within(dialog).findByText(m.action_failure_invalid_input())).toBeInTheDocument()
+      await waitFor(() => expect(host.sent("library_save_camera").map((args) => args.expectedRevision)).toEqual([3, 8]))
       expect(within(dialog).getByRole("textbox", { name: m.equipment_camera() })).toHaveValue("ASI2600MM Pro")
     },
     TEST_MS,

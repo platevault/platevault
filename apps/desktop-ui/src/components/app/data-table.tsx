@@ -400,7 +400,7 @@ export function DataTable<T>({
   groups,
   stickyFirstColumn = false,
   onRowClick,
-  toolbar = {},
+  toolbar,
   batchActions,
   rowLabel,
   rowActions,
@@ -497,7 +497,7 @@ export function DataTable<T>({
 
   const hasSlot = toolbar !== undefined || membership || (selection !== undefined && batchActions !== undefined) || columnsMenu !== null
   const batchShown = hasSlot && !membership && selectedCount > 0
-  const chips = useFacetChips({ ...(toolbar ?? {}), matchCount: toolbar?.matchCount ?? rows.length })
+  const chips = useFacetChips({ ...toolbar, matchCount: toolbar?.matchCount ?? rows.length })
 
   // Scroll padding the width of the pinned columns, so Tab never leaves a
   // focused cell under them (WCAG 2.4.11); it follows column resizes.

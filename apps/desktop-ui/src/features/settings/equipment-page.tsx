@@ -219,8 +219,7 @@ function CameraDialog({ camera, open, onOpenChange }: { camera: Camera | null; o
     alias: values.alias.trim() || null,
     noDarks: values.noDarks,
     noBias: values.noBias,
-    revision: camera?.revision ?? 0,
-  }))
+  }, camera?.revision ?? null))
 
   return (
     <FormDialog

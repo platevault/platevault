@@ -105,6 +105,7 @@ impl Shell {
                 desktop_shell::commands::project_wrap_up::project_trash_review,
                 desktop_shell::commands::project_wrap_up::project_wrap_up_trash,
                 desktop_shell::commands::project_wrap_up::project_wrap_up_archive_review,
+                desktop_shell::commands::workflow_settings::workflow_settings_get,
                 desktop_shell::commands::workflow_settings::workflow_settings_save,
                 desktop_shell::commands::rigs::library_save_camera,
             ])
@@ -771,7 +772,7 @@ fn workflow_settings_family_reads_and_saves_with_revisions() {
 fn library_save_camera_uses_camera_revisions_and_validation() {
     let shell = Shell::new();
     let camera = Uuid::new_v4();
-    let input = |id, model: &str, revision| {
+    let args = |id: Option<Uuid>, model: &str, expected_revision: Option<u64>| {
         json!({
             "input": {
                 "id": id,
@@ -779,32 +780,37 @@ fn library_save_camera_uses_camera_revisions_and_validation() {
                 "alias": null,
                 "noDarks": false,
                 "noBias": false,
-                "revision": revision,
-            }
+            },
+            "expectedRevision": expected_revision,
         })
     };
 
-    let created = shell.call("library_save_camera", &input(camera, "ASI533MC", 0));
+    let created = shell.call("library_save_camera", &args(Some(camera), "ASI533MC", None));
     assert_eq!(created["id"], json!(camera));
     assert_eq!(created["revision"], json!(1));
 
-    let edited = shell.call("library_save_camera", &input(camera, "ASI533MC Pro", 1));
+    let edited = shell.call("library_save_camera", &args(Some(camera), "ASI533MC Pro", Some(1)));
     assert_eq!(edited["model"], json!("ASI533MC Pro"));
     assert_eq!(edited["revision"], json!(2));
     shell.refuses(
         "library_save_camera",
-        &input(camera, "Stale Model", 1),
+        &args(Some(camera), "Stale Model", Some(1)),
         LibraryErrorCode::Conflict,
         camera,
     );
     let invalid_id = Uuid::new_v4();
     shell.refuses(
         "library_save_camera",
-        &input(invalid_id, "  ", 0),
+        &args(Some(invalid_id), "  ", None),
         LibraryErrorCode::InvalidInput,
         invalid_id,
     );
-    let saved = shell.call("library_save_camera", &input(camera, "ASI533MC Pro", 2));
+    let missing_id = shell
+        .invoke("library_save_camera", &args(None, "Missing id", Some(1)))
+        .expect_err("an edit without an id is refused");
+    assert_eq!(missing_id["code"], json!(LibraryErrorCode::InvalidInput));
+    assert_eq!(missing_id["identity"], Value::Null);
+    let saved = shell.call("library_save_camera", &args(Some(camera), "ASI533MC Pro", Some(2)));
     assert_eq!(saved["model"], json!("ASI533MC Pro"));
     assert_eq!(saved["revision"], json!(3));
 }
