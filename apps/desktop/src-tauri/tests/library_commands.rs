@@ -862,6 +862,21 @@ fn library_save_camera_uses_camera_revisions_and_validation() {
     let refusal =
         shell.refusal("library_save_camera", &second_args, LibraryErrorCode::InvalidInput, second);
     assert_eq!(refusal["field"], json!("alias"), "{refusal}");
+    assert_eq!(refusal["identity"], json!(second), "{refusal}");
+
+    let stored_without_alias = Uuid::new_v4();
+    shell.call("library_save_camera", &args(Some(stored_without_alias), "ASI6200MM", None));
+    let aliased_request = Uuid::new_v4();
+    let mut aliased_args = args(Some(aliased_request), "ASI6200MM", None);
+    aliased_args["input"]["alias"] = json!("Mono");
+    let refusal = shell.refusal(
+        "library_save_camera",
+        &aliased_args,
+        LibraryErrorCode::InvalidInput,
+        aliased_request,
+    );
+    assert_eq!(refusal["field"], json!("alias"), "{refusal}");
+    assert_eq!(refusal["identity"], json!(aliased_request), "{refusal}");
 }
 #[test]
 fn library_data_location_returns_the_native_catalog_directory() {

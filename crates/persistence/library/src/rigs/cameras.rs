@@ -72,48 +72,8 @@ impl Catalog {
             }
             let saved_ids: BTreeSet<_> = saved.iter().map(|camera| camera.id).collect();
             all.retain(|id, _| !saved_ids.contains(id));
-            let saved_count = saved.len();
-            let mut validation_cameras = saved;
-            validation_cameras.extend(all.into_values());
-            if let Err(error) = Camera::validate_all(&validation_cameras) {
-                let rejected_id = error.response(None, None).identity;
-                let saved_position = rejected_id
-                    .and_then(|id| {
-                        validation_cameras[..saved_count].iter().position(|camera| camera.id == id)
-                    })
-                    .or_else(|| {
-                        let rejected = rejected_id.and_then(|id| {
-                            validation_cameras[saved_count..].iter().find(|camera| camera.id == id)
-                        })?;
-                        let field = error.field()?;
-                        validation_cameras[..saved_count].iter().position(|camera| {
-                            match (field.as_str(), rejected.alias.is_some()) {
-                                ("alias", true) => camera.alias_key() == rejected.alias_key(),
-                                ("alias", false) => {
-                                    camera.alias.is_none()
-                                        && camera.model_key() == rejected.model_key()
-                                }
-                                _ => false,
-                            }
-                        })
-                    });
-                if let Some(index) = saved_position {
-                    let id = validation_cameras[index].id;
-                    let error = match error {
-                        LibraryError::Context { error, scope, .. } => {
-                            LibraryError::Context { error, scope, identity: Some(id) }
-                        }
-                        error => error.concerning(id),
-                    };
-                    return Err(if saved_count == 1 {
-                        error
-                    } else {
-                        error.within_field(&index.to_string())
-                    });
-                }
-                return Err(error);
-            }
-            let saved: Vec<_> = validation_cameras.drain(..saved_count).collect();
+            let stored: Vec<_> = all.into_values().collect();
+            Camera::validate_all(&saved, &stored)?;
             write_cameras(conn, &saved).await?;
             saved
         });
@@ -205,10 +165,8 @@ fn normalized(cameras: &[Camera]) -> Result<Vec<Camera>> {
         .enumerate()
         .map(|(index, camera)| {
             if !ids.insert(camera.id) {
-                let field =
-                    if cameras.len() == 1 { "id".to_owned() } else { format!("{index}.id") };
                 return Err(LibraryError::invalid_field(
-                    &field,
+                    &format!("{index}.id"),
                     format!("camera {} is listed twice", camera.id),
                 ));
             }
@@ -217,13 +175,7 @@ fn normalized(cameras: &[Camera]) -> Result<Vec<Camera>> {
                 alias: camera.alias.as_deref().map(|alias| alias.trim().to_owned()),
                 ..camera.clone()
             };
-            normalized.validate().map_err(|error| {
-                if cameras.len() == 1 {
-                    error
-                } else {
-                    error.within_field(&index.to_string())
-                }
-            })?;
+            normalized.validate().map_err(|error| error.within_field(&index.to_string()))?;
             Ok(normalized)
         })
         .collect()
