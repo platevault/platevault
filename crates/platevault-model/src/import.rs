@@ -387,6 +387,32 @@ pub struct ImportSummary {
     pub uncertain: u64,
 }
 
+/// Where a started import stands, as its list reads it. A settled import is
+/// Failed when nothing came across and an item failed or stayed uncertain,
+/// Partial when some items came across and some did not, otherwise Settled.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
+pub enum ImportListState {
+    Running,
+    Interrupted,
+    Failed,
+    Partial,
+    Settled,
+}
+
+/// One started import with its durable state and exact counts.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
+pub struct ImportListEntry {
+    pub id: Uuid,
+    pub source_path: NativePath,
+    pub state: ImportListState,
+    pub summary: ImportSummary,
+    pub updated_at: String,
+}
+
 /// One session the import's lights form at intake, as import review shows it
 /// before the import is confirmed (LIB-FR-04, LIB-FR-24, D-W107): a night's
 /// lights of one capture key split by framing, merged or re-split by the user.

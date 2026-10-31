@@ -6,13 +6,14 @@
  * `homeWrite` refreshes after success and after `conflict`: a stale revision
  * means the read is old, so the next attempt must read the current one. Any
  * other failure keeps the reads, and the caller keeps the user's draft, as
- * they are. `importWrite` does the same for the import's own read: the page
- * shows an import only as `import_status` reads it, never from the reply to
- * the write, so a start or a Retry settles from the durable status.
+ * they are. `importWrite` does the same for the import's own read and the
+ * import list: the page shows an import only as `import_status` reads it,
+ * never from the reply to the write, so a start or a Retry settles from the
+ * durable status.
  */
 import type { QueryClient, QueryKey } from "@tanstack/react-query"
-import type { ActionResult, ImportOperation_Serialize, LibraryCommand } from "@/api/ipc"
-import { libraryQuery } from "@/api/query"
+import type { ActionResult, ImportListState, ImportOperation_Serialize, LibraryCommand } from "@/api/ipc"
+import { libraryKey, libraryQuery } from "@/api/query"
 
 /** How many sessions one Sessions read lists; the page names the rest it does not show. */
 export const SESSION_PAGE = 500
@@ -33,6 +34,9 @@ export const rigQuery = (equipmentId: string) => libraryQuery("rigFiltersGet", e
 export const devicesQuery = () => libraryQuery("importDevicesList")
 export const sourcesQuery = () => libraryQuery("importSourcesList")
 export const importQuery = (importId: string) => libraryQuery("importStatus", importId)
+/** The import states Home's Pending ingestions lists: a cleanly settled import waits on nothing. */
+export const PENDING_IMPORT_STATES: ImportListState[] = ["running", "interrupted", "failed", "partial"]
+export const importListQuery = (states: ImportListState[]) => libraryQuery("importList", states)
 /** Home's dashboard for tonight; the library computes Tonight under Home's stored criteria (criteria.ts). */
 export const dashboardQuery = () => libraryQuery("homeDashboard", {})
 /** Home's calendar: `nights` nights from `firstNight` (site-local evening dates), computed by the library under Home's stored criteria (PLAN-FR-12). */
@@ -90,6 +94,7 @@ export async function homeWrite<T>(client: QueryClient, write: () => Promise<Act
  */
 export async function importWrite(client: QueryClient, importId: string, write: () => Promise<ActionResult<ImportOperation_Serialize>>): Promise<ActionResult<ImportOperation_Serialize>> {
   const result = await write()
-  if (result.ok || (result.failure.source === "library" && result.failure.error.code === "conflict")) await client.invalidateQueries({ queryKey: importQuery(importId).queryKey })
+  if (result.ok || (result.failure.source === "library" && result.failure.error.code === "conflict"))
+    await Promise.all([client.invalidateQueries({ queryKey: importQuery(importId).queryKey }), client.invalidateQueries({ queryKey: libraryKey("importList") })])
   return result
 }

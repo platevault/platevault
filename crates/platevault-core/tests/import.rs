@@ -1714,3 +1714,125 @@ async fn an_import_keeps_the_target_confirmed_on_the_session_its_lights_rejoin()
         "the lights rejoin the session and its confirmed Target stands"
     );
 }
+
+// ── Home's import list and Location free space (PRJ-FR-17 sections 1 and 4) ─
+
+/// A started, not yet run, Copy import of a new card with a light per minute.
+async fn started(fixture: &Fixture, name: &str, minutes: &[u32]) -> ImportOperation {
+    let shots: Vec<Pointed> = minutes.iter().map(|&minute| Pointed::at(minute)).collect();
+    let preview = preview_of(fixture, &card_with(fixture, name, &shots)).await;
+    fixture.library.start_import(preview.id, preview.revision, ImportMode::Copy).await.unwrap()
+}
+
+/// Record the first `failed` approved items as Failed and the rest as
+/// copied, then settle: the durable rows a run that lost some items leaves.
+async fn settle_with_failures(fixture: &Fixture, import: &ImportOperation, failed: usize) {
+    let catalog = fixture.library.catalog();
+    let record = catalog.import_record(import.id).await.unwrap();
+    let outcomes: Vec<ImportItemRecord> = record
+        .items
+        .into_iter()
+        .filter(|record| record.item.phase == ImportItemPhase::Pending)
+        .enumerate()
+        .map(|(index, mut record)| {
+            if index < failed {
+                record.item.phase = ImportItemPhase::Failed;
+            } else {
+                record.item.phase = ImportItemPhase::Copied;
+                record.item.landed = true;
+            }
+            record
+        })
+        .collect();
+    catalog.record_import_progress(import.id, &outcomes).await.unwrap();
+    catalog.set_import_state(import.id, ImportState::Settled).await.unwrap();
+}
+
+#[tokio::test]
+async fn the_import_list_reads_each_started_state_from_durable_status_and_filters_by_state() {
+    use ImportListState::{Failed, Interrupted, Partial, Running, Settled};
+    let fixture = Fixture::new().await;
+    let library = &fixture.library;
+    let running = started(&fixture, "running", &[0]).await;
+    let interrupted = started(&fixture, "interrupted", &[10]).await;
+    library.catalog().set_import_state(interrupted.id, ImportState::Interrupted).await.unwrap();
+    let failed = started(&fixture, "failed", &[20, 21]).await;
+    settle_with_failures(&fixture, &failed, 2).await;
+    let partial = started(&fixture, "partial", &[30, 31]).await;
+    settle_with_failures(&fixture, &partial, 1).await;
+    let clean = preview_of(&fixture, &card_with(&fixture, "settled", &[Pointed::at(40)])).await;
+    let settled = fixture.run(&clean, ImportMode::Copy, &fixture.trash()).await;
+    let previewed =
+        preview_of(&fixture, &card_with(&fixture, "previewed", &[Pointed::at(50)])).await;
+
+    let expected = [
+        (running.id, Running),
+        (interrupted.id, Interrupted),
+        (failed.id, Failed),
+        (partial.id, Partial),
+        (settled.id, Settled),
+    ];
+    let every =
+        library.import_list(&[Running, Interrupted, Failed, Partial, Settled]).await.unwrap();
+    let mut listed: Vec<(Uuid, ImportListState)> =
+        every.iter().map(|entry| (entry.id, entry.state)).collect();
+    listed.sort_by_key(|(id, _)| *id);
+    let mut wanted = expected.to_vec();
+    wanted.sort_by_key(|(id, _)| *id);
+    assert_eq!(listed, wanted, "every started import once, a preview never");
+    assert!(every.iter().all(|entry| entry.id != previewed.id));
+    assert!(
+        every.windows(2).all(|pair| pair[0].updated_at >= pair[1].updated_at),
+        "most recently updated first"
+    );
+    let row = every.iter().find(|entry| entry.id == partial.id).unwrap();
+    let record = library.catalog().import_record(partial.id).await.unwrap();
+    assert_eq!(row.source_path, record.source_path);
+    assert_eq!(row.updated_at, record.updated_at);
+    assert_eq!((row.summary.imported, row.summary.failed), (1, 1));
+
+    for (id, state) in expected {
+        let only: Vec<(Uuid, ImportListState)> = library
+            .import_list(&[state])
+            .await
+            .unwrap()
+            .iter()
+            .map(|entry| (entry.id, entry.state))
+            .collect();
+        assert_eq!(only, [(id, state)], "{state:?} only");
+    }
+    assert_eq!(library.import_list(&[]).await.unwrap(), []);
+}
+
+#[tokio::test]
+async fn a_location_reports_its_free_space_until_it_cannot_be_probed_then_unknown() {
+    let fixture = Fixture::new().await;
+    let captures = |locations: Vec<Location>| {
+        let location =
+            locations.into_iter().find(|location| location.id == fixture.captures_id).unwrap();
+        (location.free_bytes, location.low_space)
+    };
+    let (free, low) = captures(fixture.library.list_locations().await.unwrap());
+    assert!(free.is_some() && low.is_some(), "an online location is probed: {free:?} {low:?}");
+
+    let moved = fixture.temp.path().join("Captures elsewhere");
+    fs::rename(&fixture.captures, &moved).unwrap();
+    assert_eq!(
+        captures(fixture.library.list_locations().await.unwrap()),
+        (None, None),
+        "a root that fails validation is unknown, never zero"
+    );
+    fs::rename(&moved, &fixture.captures).unwrap();
+
+    fixture
+        .library
+        .catalog()
+        .mark_location_unavailable(fixture.captures_id, Availability::Offline, "ejected")
+        .await
+        .unwrap();
+    assert_eq!(
+        captures(fixture.library.list_locations().await.unwrap()),
+        (None, None),
+        "an offline location is unknown, never zero"
+    );
+}

@@ -11,8 +11,9 @@
 //! Previews and choices write nothing to any location, and the split preview
 //! saves nothing at all. Start approves the preview revision the user saw and
 //! runs the import in the background on the host OS Trash; `import_status`
-//! reads its durable progress. Retry resumes an interrupted import from its
-//! recorded journal.
+//! reads its durable progress and `import_list` every started import's
+//! state and counts. Retry resumes an interrupted import from its recorded
+//! journal.
 
 use std::sync::Arc;
 
@@ -20,8 +21,8 @@ use platevault_core::custody::trash::{OsTrash, SystemTrash};
 use platevault_core::import::ImportCheck;
 use platevault_core::library::Library;
 use platevault_core::{
-    ImportMode, ImportOperation, ImportSession, ImportSourceSpec, LocationRole, NamingFrameType,
-    NativePath, SavedSource, SavedSourceView, SplitLimits,
+    ImportListEntry, ImportListState, ImportMode, ImportOperation, ImportSession, ImportSourceSpec,
+    LocationRole, NamingFrameType, NativePath, SavedSource, SavedSourceView, SplitLimits,
 };
 use tauri::State;
 use uuid::Uuid;
@@ -272,4 +273,18 @@ pub async fn import_retry(library: State<'_, Arc<Library>>, id: Uuid) -> Reply<I
 #[specta::specta]
 pub async fn import_status(library: State<'_, Arc<Library>>, id: Uuid) -> Reply<ImportOperation> {
     library.import_operation(id).await.map_err(fail(Some(id)))
+}
+
+/// Every started import in `states`, most recently updated first, with its
+/// durable state and summary.
+///
+/// # Errors
+/// `PersistenceFailure` for an unreadable catalog.
+#[tauri::command]
+#[specta::specta]
+pub async fn import_list(
+    library: State<'_, Arc<Library>>,
+    states: Vec<ImportListState>,
+) -> Reply<Vec<ImportListEntry>> {
+    library.import_list(&states).await.map_err(fail(None))
 }

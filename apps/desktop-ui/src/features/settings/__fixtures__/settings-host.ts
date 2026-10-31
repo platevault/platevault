@@ -23,6 +23,8 @@ export function location(id: string, name: string, role: LocationState["location
       identity: { volume: { kind: "uuid", value: "vol-1" }, fileId: null } as never,
       decisionRevision: 1,
       availability: "available",
+      freeBytes: null,
+      lowSpace: null,
       lastObservedAt: null,
       lifecycle: "active",
       volumeKind: "local",

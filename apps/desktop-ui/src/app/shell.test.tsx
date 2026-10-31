@@ -66,6 +66,8 @@ function location(id: string, availability: "available" | "offline"): LocationSt
       identity: {} as never,
       decisionRevision: 1,
       availability,
+      freeBytes: null,
+      lowSpace: null,
       lastObservedAt: null,
       lifecycle: "active",
       volumeKind: "local" as never,

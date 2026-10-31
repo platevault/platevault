@@ -13,7 +13,8 @@ export const commands = {
 	 */
 	libraryRegisterLocation: (path: NativePathWire, displayName: string, role: LocationRole) => typedError<Location, ErrorResponse>(__TAURI_INVOKE("library_register_location", { path, displayName, role })),
 	/**
-	 *  Registered locations with availability, last observation and access failure.
+	 *  Registered locations with availability, last observation, access failure
+	 *  and, while online, the free space and low-space flag of their volume.
 	 * 
 	 *  # Errors
 	 *  `PersistenceFailure` when the catalog cannot be read.
@@ -1306,6 +1307,14 @@ export const commands = {
 	 *  `NotFound` for an unknown import.
 	 */
 	importStatus: (id: string) => typedError<ImportOperation_Serialize, ErrorResponse>(__TAURI_INVOKE("import_status", { id })),
+	/**
+	 *  Every started import in `states`, most recently updated first, with its
+	 *  durable state and summary.
+	 * 
+	 *  # Errors
+	 *  `PersistenceFailure` for an unreadable catalog.
+	 */
+	importList: (states: ImportListState[]) => typedError<ImportListEntry[], ErrorResponse>(__TAURI_INVOKE("import_list", { states })),
 	/**
 	 *  Merge the sessions holding `seqs` (an item of each) into one before the
 	 *  import starts; only sessions that differ in framing alone merge.
@@ -4831,6 +4840,22 @@ export type ImportItemPhase =
 /**  An interruption left a state the recorded evidence cannot prove. */
 "uncertain";
 
+/**  One started import with its durable state and exact counts. */
+export type ImportListEntry = {
+	id: string,
+	sourcePath: NativePathWire,
+	state: ImportListState,
+	summary: ImportSummary,
+	updatedAt: string,
+};
+
+/**
+ *  Where a started import stands, as its list reads it. A settled import is
+ *  Failed when nothing came across and an item failed or stayed uncertain,
+ *  Partial when some items came across and some did not, otherwise Settled.
+ */
+export type ImportListState = "running" | "interrupted" | "failed" | "partial" | "settled";
+
 /**  Copy keeps every source; Move sends each re-verified source to the OS Trash. */
 export type ImportMode = "copy" | "move";
 
@@ -5540,6 +5565,17 @@ export type Location = {
 	decisionRevision: number,
 	/**  Last-observed access state; a retired location keeps the one it had. */
 	availability: Availability,
+	/**
+	 *  Free bytes on the location's volume when the list was read; `None`
+	 *  when unknown: offline, or its root or volume cannot be probed. Records
+	 *  the catalog returns without a probe report `None` too.
+	 */
+	freeBytes: number | null,
+	/**
+	 *  Free space is under the low-space share of the volume's capacity;
+	 *  `None` exactly when [`Self::free_bytes`] is.
+	 */
+	lowSpace: boolean | null,
 	lastObservedAt: string | null,
 	lifecycle: LocationLifecycle,
 	/**

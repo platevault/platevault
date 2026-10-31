@@ -956,6 +956,13 @@ pub struct Location {
     pub decision_revision: Revision,
     /// Last-observed access state; a retired location keeps the one it had.
     pub availability: Availability,
+    /// Free bytes on the location's volume when the list was read; `None`
+    /// when unknown: offline, or its root or volume cannot be probed. Records
+    /// the catalog returns without a probe report `None` too.
+    pub free_bytes: Option<u64>,
+    /// Free space is under the low-space share of the volume's capacity;
+    /// `None` exactly when [`Self::free_bytes`] is.
+    pub low_space: Option<bool>,
     pub last_observed_at: Option<String>,
     pub lifecycle: LocationLifecycle,
     /// The kind of volume the root is on, as observed when it was registered

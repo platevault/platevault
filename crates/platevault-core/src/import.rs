@@ -55,14 +55,15 @@ use crate::{
     AssociationKind, AssociationState, Availability, CalibrationRules, CaptureMetadata,
     CorrectionInput, EntryKind, EvidenceItem, ExpectedAsset, ExpectedSession, FileIdentity,
     FramingMargins, ImageTypeEvidence, ImportBlock, ImportChoice, ImportDestination, ImportDraft,
-    ImportDuplicate, ImportItem, ImportItemPhase, ImportItemRecord, ImportMode, ImportOperation,
-    ImportRecord, ImportRig, ImportSession, ImportSessionTarget, ImportSourceSpec, ImportState,
-    ImportSummary, ImportTargetChoice, InputKind, ItemOutcome, ItemPhase, ItemReason, KeptCopy,
-    LibraryError, Location, LocationLifecycle, LocationRole, NamingFrameType, NamingMetadata,
-    NativePath, ObservationFingerprint, Provenance, ReasonCode, RigFilters, SavedSource,
-    SavedSourceView, ScanOperation, ScanState, SettleObservation, SplitLimits, StorageItem,
-    StorageItemDraft, StorageOperation, StorageOperationKind, StorageOperationState, StorageRef,
-    TargetCandidate, TransferDestination, UnknownFilter, Writability, FRAMING_LABEL_FIELD,
+    ImportDuplicate, ImportItem, ImportItemPhase, ImportItemRecord, ImportListEntry,
+    ImportListState, ImportMode, ImportOperation, ImportRecord, ImportRig, ImportSession,
+    ImportSessionTarget, ImportSourceSpec, ImportState, ImportSummary, ImportTargetChoice,
+    InputKind, ItemOutcome, ItemPhase, ItemReason, KeptCopy, LibraryError, Location,
+    LocationLifecycle, LocationRole, NamingFrameType, NamingMetadata, NativePath,
+    ObservationFingerprint, Provenance, ReasonCode, RigFilters, SavedSource, SavedSourceView,
+    ScanOperation, ScanState, SettleObservation, SplitLimits, StorageItem, StorageItemDraft,
+    StorageOperation, StorageOperationKind, StorageOperationState, StorageRef, TargetCandidate,
+    TransferDestination, UnknownFilter, Writability, FRAMING_LABEL_FIELD,
 };
 
 /// How far apart the two settle checks of a source file are, at least.
@@ -525,6 +526,48 @@ impl Library {
     pub async fn import_operation(&self, id: Uuid) -> Result<ImportOperation, LibraryError> {
         let record = self.catalog().import_record(id).await?;
         self.import_view(record).await
+    }
+
+    /// Every started import in `states`, most recently updated first, from
+    /// its durable operation and item status (Home Pending ingestions,
+    /// PRJ-FR-17 section 1). A preview is never listed; see
+    /// [`ImportListState`] for how a settled import reads.
+    ///
+    /// # Errors
+    /// `PersistenceFailure` for an unreadable catalog.
+    pub async fn import_list(
+        &self,
+        states: &[ImportListState],
+    ) -> Result<Vec<ImportListEntry>, LibraryError> {
+        let wanted = |state| states.contains(&state);
+        let mut recorded = Vec::new();
+        if wanted(ImportListState::Running) {
+            recorded.push(ImportState::Running);
+        }
+        if wanted(ImportListState::Interrupted) {
+            recorded.push(ImportState::Interrupted);
+        }
+        let settled_clean = wanted(ImportListState::Settled);
+        if settled_clean || wanted(ImportListState::Failed) || wanted(ImportListState::Partial) {
+            recorded.push(ImportState::Settled);
+        }
+        let records = self.catalog().import_records(&recorded, !settled_clean).await?;
+        Ok(records
+            .into_iter()
+            .filter_map(|record| {
+                let items: Vec<ImportItem> =
+                    record.items.into_iter().map(|item| item.item).collect();
+                let summary = summarize(&items);
+                let state = list_state(record.state, &summary)?;
+                wanted(state).then_some(ImportListEntry {
+                    id: record.id,
+                    source_path: record.source_path,
+                    state,
+                    summary,
+                    updated_at: record.updated_at,
+                })
+            })
+            .collect())
     }
 
     async fn preview_record(
@@ -1920,7 +1963,7 @@ fn source_state(root: &Path, recorded: &FileIdentity) -> Availability {
 /// A location's folder, only while it is the registered volume and folder
 /// (LIB-FR-19): the mount point an unmounted share leaves, or another folder
 /// at the path, is refused.
-fn mounted_root(location: &Location) -> Result<PathBuf, LibraryError> {
+pub(crate) fn mounted_root(location: &Location) -> Result<PathBuf, LibraryError> {
     inventory::validate_location_root(location)?;
     location.path.to_path_buf()
 }
@@ -2230,6 +2273,21 @@ const fn counts_toward(phase: ImportItemPhase) -> bool {
             | ImportItemPhase::Moved
             | ImportItemPhase::SourceKept
     )
+}
+
+/// How a started import reads in its list; `None` for a preview. Only a
+/// Failed or Uncertain item makes a settled import Failed or Partial, the
+/// rule [`persistence_library::Catalog::import_records`] prefilters on.
+fn list_state(state: ImportState, summary: &ImportSummary) -> Option<ImportListState> {
+    let lost = summary.failed + summary.uncertain;
+    Some(match state {
+        ImportState::Previewed => return None,
+        ImportState::Running => ImportListState::Running,
+        ImportState::Interrupted => ImportListState::Interrupted,
+        ImportState::Settled if lost == 0 => ImportListState::Settled,
+        ImportState::Settled if summary.imported == 0 => ImportListState::Failed,
+        ImportState::Settled => ImportListState::Partial,
+    })
 }
 
 fn summarize(items: &[ImportItem]) -> ImportSummary {
