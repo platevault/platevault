@@ -5926,7 +5926,7 @@
   "project_apply_space": "Espaço necessário",
   "project_apply_space_two_views": "{size} · espaço para duas Views completas durante a execução",
   "project_apply_unplaced": "Arquivos que o PlateVault não colocou",
-  "project_apply_waiting": "Aguardando uma ferramenta liberar um arquivo da View",
+  "project_apply_waiting": "Aguardando desde {time} uma ferramenta liberar um arquivo em {path}",
   "project_change_application": "Aplicativo alterado",
   "project_change_calibration": "{kind} alterado em {session}",
   "project_change_fix_at_source": "Abrir onde se corrige",

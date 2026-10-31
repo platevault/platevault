@@ -1756,18 +1756,7 @@ impl Run<'_> {
             if let Err(stop) = ready {
                 return self.end(stop).await;
             }
-            let (aside, waited) = self.move_old_view_aside(&view, &previous).await?;
-            let stopped = match aside {
-                Aside::Moved if waited => self.after_wait(reserved).await,
-                Aside::Moved => self.advance(ApplyPhase::OldMoved, None).await.map(|()| None),
-                Aside::Canceled => self.cancel().await.map(Some),
-                Aside::Failed => self.end(ApplyStop::AsideFailed).await.map(Some),
-            };
-            // The write above ended the recorded wait, whichever way it went.
-            if waited {
-                self.control.waiting(None);
-            }
-            if let Some(report) = stopped? {
+            if let Some(report) = self.set_old_view_aside(reserved, &view, &previous).await? {
                 return Ok(report);
             }
             if let Some(report) = self.interrupted() {
@@ -1796,9 +1785,32 @@ impl Run<'_> {
         self.finish_installed().await
     }
 
-    /// Move the old View aside (PREP-FR-18). While a tool holds a file in
+    /// Move the old View aside (PREP-FR-18), recording the phase it reached;
+    /// the report when Apply ended there instead: canceled while it waited,
+    /// refused by the OS, or the catalog moved while it waited.
+    async fn set_old_view_aside(
+        &mut self,
+        reserved: &Reserved,
+        view: &Path,
+        previous: &Path,
+    ) -> Result<Option<ApplyReport>, LibraryError> {
+        let (aside, waited) = self.move_old_view_aside(view, previous).await?;
+        let stopped = match aside {
+            Aside::Moved if waited => self.after_wait(reserved).await,
+            Aside::Moved => self.advance(ApplyPhase::OldMoved, None).await.map(|()| None),
+            Aside::Canceled => self.cancel().await.map(Some),
+            Aside::Failed => self.end(ApplyStop::AsideFailed).await.map(Some),
+        };
+        // The write above ended the recorded wait, whichever way it went.
+        if waited {
+            self.control.waiting(None);
+        }
+        stopped
+    }
+
+    /// One attempt to move the old View aside; while a tool holds a file in
     /// it, the journal records the wait, the control hears of it, and Apply
-    /// retries until the file is released or Cancel; whether it waited.
+    /// retries until the file is released or Cancel. Whether it waited.
     async fn move_old_view_aside(
         &self,
         view: &Path,

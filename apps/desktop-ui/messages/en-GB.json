@@ -5530,7 +5530,7 @@
   "project_apply_space": "Space needed",
   "project_apply_space_two_views": "{size} · room for two full Views while it runs",
   "project_apply_unplaced": "Files PlateVault didn't place",
-  "project_apply_waiting": "Waiting for a tool to release a file in View",
+  "project_apply_waiting": "Waiting since {time} for a tool to release a file in {path}",
   "project_change_application": "Application changed",
   "project_change_calibration": "{kind} changed for {session}",
   "project_change_fix_at_source": "Fix at source",

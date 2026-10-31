@@ -815,14 +815,6 @@ async fn manifests_entries_and_the_apply_journal_hold_their_invariants() {
     f4.manifest_state("1", "installed").await.unwrap();
     let error = f4.entry("1", "4", "copy").await.unwrap_err();
     assert!(error.contains("fixed once built"), "{error}");
-    refused(
-        &mut f4.conn,
-        "UPDATE apply_operations SET phase = 'settled', outcome = 'applied', \
-         settled_from = phase WHERE operation_id = ?1",
-        &[&apply],
-        "CHECK",
-    )
-    .await;
     ok(
         &mut f4.conn,
         "UPDATE apply_operations SET phase = 'settled', outcome = 'applied', \
@@ -912,6 +904,16 @@ async fn an_apply_journal_stops_with_a_known_code_that_agrees_with_its_outcome()
     ] {
         refused(&mut f4.conn, settle, &[&apply, outcome, stop], "CHECK").await;
     }
+    let unreported = "UPDATE apply_operations SET phase = 'settled', settled_from = phase, \
+         outcome = 'failed', stop = ?2, waiting_held = NULL, waiting_since = NULL \
+         WHERE operation_id = ?1";
+    refused(
+        &mut f4.conn,
+        unreported,
+        &[&apply, r#"{"code":"view_unreadable","count":2}"#],
+        "CHECK",
+    )
+    .await;
     ok(&mut f4.conn, settle, &[&apply, "failed", r#"{"code":"view_unreadable","count":2}"#]).await;
 }
 

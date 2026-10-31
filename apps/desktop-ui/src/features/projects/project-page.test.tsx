@@ -9,17 +9,19 @@ import { clearMocks, mockIPC } from "@tauri-apps/api/mocks"
 import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest"
-import type { ArchiveProgress, ApplyPreview_Serialize, ApplyReport_Serialize, NativePathWire, Project, ProjectInputs_Serialize, ProjectSummary, WrapUpStatus } from "@/api/ipc"
+import type { ArchiveProgress, ApplyPreview_Serialize, ApplyProgress, ApplyReport_Serialize, ApplyStatus_Serialize, NativePathWire, Project, ProjectInputs_Serialize, ProjectSummary, WrapUpStatus } from "@/api/ipc"
 import { createQueryClient } from "@/api/query"
 import { statusMeta } from "@/components/app/status"
 import { AppRoot } from "@/app/root"
 import { setLocale } from "@/app/preferences"
 import { LOCALES, m } from "@/lib/i18n"
+import { formatDateTime } from "@/lib/format"
 import { createShellRouter } from "@/routes"
 import { resetApplyRuns, startApply } from "./apply-run"
 import { resetCloseRuns } from "./close-run"
 import { ProjectPage } from "./project-page"
 import { ProjectsPage } from "./projects-page"
+import { pathText } from "./words"
 
 const P = "11111111-1111-1111-1111-111111111111"
 const S1 = "22222222-2222-2222-2222-222222222222"
@@ -54,6 +56,19 @@ function preview(over: Partial<ApplyPreview_Serialize> = {}): ApplyPreview_Seria
 function report(over: Partial<ApplyReport_Serialize> = {}): ApplyReport_Serialize {
   return { projectId: P, operationId: "op", generation: 1, outcome: "applied", failures: [], foreign: [], leftovers: [], keptMissing: [], correctedValues: 0, patchedCopies: 0, footprint: { frames: 0, bytes: 0, cloned: 0 }, stop: null, ...over }
 }
+
+const OP = "44444444-4444-4444-4444-444444444444"
+
+function progress(over: Partial<ApplyProgress> = {}): ApplyProgress {
+  return { operationId: OP, projectId: P, phase: "building", startedAt: "2026-10-31T09:00:00Z", waiting: null, ...over }
+}
+
+/** `project_apply`'s answer as it starts: Running with the operation id. */
+const running = (over: Partial<ApplyProgress> = {}, cancelRequested = false): ApplyStatus_Serialize => ({ state: "running", progress: progress(over), cancelRequested })
+const settled = (over: Partial<ApplyReport_Serialize> = {}): ApplyStatus_Serialize => ({ state: "settled", report: report({ operationId: OP, ...over }) })
+
+/** The run's status reads poll once a second; a settled one is seen within a few. */
+const POLLED = { timeout: 5_000 }
 
 function status(over: Partial<WrapUpStatus> = {}): WrapUpStatus {
   return { projectId: P, lifecycle: "open", desiredRevision: 4, blocker: null, records: [], current: "clean_up", ...over }
@@ -177,7 +192,8 @@ describe("Apply", { timeout: TEST_MS }, () => {
     const keep = path("notes/keep.txt")
     const { sent } = host({
       project_apply_preview: () => preview({ foreign: [{ path: keep, evidence }, { path: path("notes/leave.txt"), evidence }] }),
-      project_apply: () => report(),
+      project_apply: () => running(),
+      project_apply_status: () => settled(),
     })
     renderAt(`/projects/${P}?stage=view&apply=open`)
     const dialog = await screen.findByRole("dialog")
@@ -186,7 +202,8 @@ describe("Apply", { timeout: TEST_MS }, () => {
     await user.click(screen.getByRole("button", { name: m.project_apply() }))
     await waitFor(() => expect(sent("project_apply")).toHaveLength(1))
     expect(sent("project_apply")[0]!.args.request).toEqual({ projectId: P, desiredRevision: 4, basisDigest: "digest-a", ticked: [keep] })
-    expect(await screen.findByText(m.view_apply_applied())).toBeInTheDocument()
+    expect(await screen.findByText(m.view_apply_applied(), undefined, POLLED)).toBeInTheDocument()
+    expect(sent("project_apply_status")[0]!.args).toEqual({ operationId: OP })
   })
 
   it("lists a missing pin among the blockers and keeps Apply unavailable", async () => {
@@ -197,20 +214,49 @@ describe("Apply", { timeout: TEST_MS }, () => {
   })
 
   const ended: [string, () => unknown, string, string | null][] = [
-    ["cancelled", () => report({ outcome: "canceled", stop: { code: "canceled" } }), m.view_apply_canceled(), m.apply_stop_canceled()],
-    ["failed", () => report({ outcome: "failed", stop: { code: "originals_unverified", count: 2 } }), m.op_apply_failed(), m.apply_stop_originals_unverified({ count: 2 })],
-    ["interrupted", () => report({ outcome: null, stop: { code: "interrupted" } }), m.view_apply_unsettled(), m.apply_stop_interrupted()],
+    ["cancelled", () => settled({ outcome: "canceled", stop: { code: "canceled" } }), m.view_apply_canceled(), m.apply_stop_canceled()],
+    ["failed", () => settled({ outcome: "failed", stop: { code: "originals_unverified", count: 2 } }), m.op_apply_failed(), m.apply_stop_originals_unverified({ count: 2 })],
+    ["interrupted", () => settled({ outcome: "failed", stop: { code: "interrupted" } }), m.op_apply_failed(), m.apply_stop_interrupted()],
+    ["stopped", (): ApplyStatus_Serialize => ({ state: "stopped", progress: progress() }), m.view_apply_unsettled(), null],
   ]
   for (const [name, answer, title, line] of ended)
     it(`shows a ${name} Apply as ${name}, never as applied`, async () => {
-      host({ project_apply: answer })
+      host({ project_apply: () => running(), project_apply_status: answer })
       const { client } = renderAt(`/projects/${P}?stage=view`)
       await screen.findByText(m.project_view_settings())
       act(() => startApply(client, { projectId: P, desiredRevision: 4, basisDigest: "digest-a", ticked: [] }))
-      expect(await screen.findByText(title)).toBeInTheDocument()
+      expect(await screen.findByText(title, undefined, POLLED)).toBeInTheDocument()
       if (line) expect(screen.getByText(line)).toBeInTheDocument()
       expect(screen.queryByText(m.view_apply_applied())).toBeNull()
     })
+
+  it("shows the folder a tool holds and since when, and Cancel by the started id reads Cancelling until it settles cancelled", async () => {
+    const user = userEvent.setup()
+    const view = path("/p/Cygnus HOO/View")
+    const since = "2026-10-31T09:01:00Z"
+    let canceled = false
+    const { sent } = host({
+      project_apply: () => running({ phase: "build_verified", waiting: { held: view, since } }),
+      project_apply_status: () => (canceled ? settled({ outcome: "canceled", stop: { code: "canceled" } }) : running({ phase: "build_verified", waiting: { held: view, since } }, false)),
+      project_apply_cancel: () => {
+        canceled = true
+        return running({ phase: "build_verified", waiting: { held: view, since } }, true)
+      },
+    })
+    const { client } = renderAt(`/projects/${P}?stage=view`)
+    await screen.findByText(m.project_view_settings())
+    act(() => startApply(client, { projectId: P, desiredRevision: 4, basisDigest: "digest-a", ticked: [] }))
+    expect(await screen.findByText(m.project_apply_waiting({ time: formatDateTime(since), path: pathText(view) }))).toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: m.verb_cancel() }))
+    await waitFor(() => expect(sent("project_apply_cancel")).toHaveLength(1))
+    expect(sent("project_apply_cancel")[0]!.args).toEqual({ operationId: OP })
+    expect((await screen.findAllByText(m.view_apply_canceling())).length).toBeGreaterThan(0)
+    expect(screen.queryByText(m.view_apply_canceled())).toBeNull()
+    expect(await screen.findByText(m.view_apply_canceled(), undefined, POLLED)).toBeInTheDocument()
+    expect(screen.queryByText(m.view_apply_applied())).toBeNull()
+    // The run was followed by its id alone: the sheet's read was never polled for it.
+    expect(sent("project_apply_preview")).toHaveLength(0)
+  })
 
   it("shows a refused Apply as a refusal and re-reads the Project", async () => {
     const { sent } = host({

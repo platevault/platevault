@@ -51,7 +51,7 @@ async fn the_status_reads_which_folder_a_tool_holds_and_since_when() {
     };
     assert_eq!(phase, ApplyPhase::BuildVerified);
     assert_eq!(wait.held, NativePath::from_path(&world.view()), "it names the held View");
-    assert!(!wait.since.is_empty());
+    assert!(wait.since >= progress.started_at, "the wait began after the start: {wait:?}");
     tokio::time::sleep(Duration::from_millis(50)).await;
     let again = world.library.apply_status(operation).await.unwrap();
     assert!(
