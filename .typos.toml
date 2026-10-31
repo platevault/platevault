@@ -19,8 +19,9 @@ extend-exclude = [
     "local-branches.txt",
     # generated star-catalog seed data (Bayer designations trip the checker)
     "assets/seed/",
-    # non-English UI catalogue (Portuguese text trips the English checker)
+    # non-English UI catalogues (Portuguese text trips the English checker)
     "apps/desktop/messages/pt-BR.json",
+    "apps/desktop-ui/messages/pt-BR.json",
     # Historical review evidence embeds generated bead and review-thread IDs.
     "docs/reviews/evidence/2026-10-02/ledger-recovery-comparison.json",
 ]
@@ -66,6 +67,8 @@ Ded = "Ded"
 fo = "fo"
 # British spelling in the journey narrative.
 uncatalogued = "uncatalogued"
+# Portuguese label asserted by a pt-BR review test ("Alternar altura da tabela").
+Alternar = "Alternar"
 [default.extend-identifiers]
 # Proper name for macOS 11's version variable.
 big_sur = "big_sur"
