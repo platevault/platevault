@@ -784,13 +784,41 @@ fn cameras_need_unique_aliases_once_two_share_a_model() {
         no_bias: false,
         revision: 1,
     };
-    Camera::validate_all(&[camera(1, "ASI2600MM", None), camera(2, "ASI533MC", None)]).unwrap();
-    let unaliased = [camera(1, "ASI2600MM", Some("Mono A")), camera(2, "asi2600mm ", None)];
-    assert!(Camera::validate_all(&unaliased).is_err(), "two of a model need aliases");
-    let clash = [camera(1, "ASI2600MM", Some("Mono")), camera(2, "ASI2600MM", Some("mono"))];
-    assert!(Camera::validate_all(&clash).is_err(), "aliases are unique");
-    Camera::validate_all(&[camera(1, "ASI2600MM", Some("A")), camera(2, "ASI2600MM", Some("B"))])
+    Camera::validate_all(&[camera(1, "ASI2600MM", None), camera(2, "ASI533MC", None)], &[])
         .unwrap();
+
+    let missing_alias = Camera::validate_all(
+        &[camera(2, "asi2600mm ", Some("Mono B"))],
+        &[camera(1, "ASI2600MM", None)],
+    )
+    .unwrap_err();
+    assert_eq!(missing_alias.field().map(platevault_model::FieldPath::as_str), Some("0.alias"));
+    assert_eq!(missing_alias.response(None, None).identity, Some(id(2)));
+
+    let alias_clash = Camera::validate_all(
+        &[camera(2, "ASI533MC", Some("mono"))],
+        &[camera(1, "ASI2600MM", Some("Mono"))],
+    )
+    .unwrap_err();
+    assert_eq!(alias_clash.field().map(platevault_model::FieldPath::as_str), Some("0.alias"));
+    assert_eq!(alias_clash.response(None, None).identity, Some(id(2)));
+
+    let missing_request_alias = Camera::validate_all(
+        &[camera(1, "ASI2600MM", Some("Mono A")), camera(2, "asi2600mm ", None)],
+        &[],
+    )
+    .unwrap_err();
+    assert_eq!(
+        missing_request_alias.field().map(platevault_model::FieldPath::as_str),
+        Some("1.alias")
+    );
+    assert_eq!(missing_request_alias.response(None, None).identity, Some(id(2)));
+
+    Camera::validate_all(
+        &[camera(1, "ASI2600MM", Some("A")), camera(2, "ASI2600MM", Some("B"))],
+        &[],
+    )
+    .unwrap();
     assert!(camera(1, " ", None).validate().is_err());
     round_trip(&camera(1, "ASI2600MM", Some("A")));
     round_trip(&CameraLink { camera_id: id(1), basis: CameraBasis::Confirmed });

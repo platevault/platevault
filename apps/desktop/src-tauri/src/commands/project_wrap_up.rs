@@ -123,6 +123,19 @@ pub async fn project_wrap_up_status(
     library.wrap_up_status(project_id).await.map_err(fail(Some(project_id)))
 }
 
+/// The durable status and report of a Project's Close/archive, including after a remount or restart.
+///
+/// # Errors
+/// `NotFound` for an unknown Project; catalog or journal errors.
+#[tauri::command]
+#[specta::specta]
+pub async fn project_close_status(
+    library: State<'_, Arc<Library>>,
+    project_id: Uuid,
+) -> Reply<Option<platevault_core::ProjectCloseStatus>> {
+    library.project_close_status(project_id).await.map_err(fail(Some(project_id)))
+}
+
 /// Close project…, Archive's Proceed: with no session selected the Project
 /// closes with no archive. Returns the lifecycle it reached, its Closed
 /// snapshot and the archive's progress: Closing, unsettled, after a stop.

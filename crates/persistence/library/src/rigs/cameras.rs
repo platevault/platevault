@@ -70,7 +70,10 @@ impl Catalog {
                 all.insert(camera.id, camera.clone());
                 saved.push(camera);
             }
-            Camera::validate_all(&all.into_values().collect::<Vec<_>>())?;
+            let saved_ids: BTreeSet<_> = saved.iter().map(|camera| camera.id).collect();
+            all.retain(|id, _| !saved_ids.contains(id));
+            let stored: Vec<_> = all.into_values().collect();
+            Camera::validate_all(&saved, &stored)?;
             write_cameras(conn, &saved).await?;
             saved
         });

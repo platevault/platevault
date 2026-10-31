@@ -103,7 +103,17 @@ pub async fn library_save_camera(
         no_bias: input.no_bias,
         revision: expected_revision.unwrap_or_default(),
     };
-    let mut saved = library.catalog().save_cameras(&[camera]).await.map_err(fail(Some(id)))?;
+    let mut saved = library.catalog().save_cameras(&[camera]).await.map_err(|error| {
+        let mut response = fail(Some(id))(error);
+        if let Some(field) = response
+            .field
+            .as_ref()
+            .and_then(|field| field.as_str().strip_prefix("0.").map(str::to_owned))
+        {
+            response.field = Some(platevault_core::FieldPath::new(&field));
+        }
+        response
+    })?;
     Ok(saved.remove(0))
 }
 

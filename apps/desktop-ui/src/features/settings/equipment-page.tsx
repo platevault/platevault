@@ -222,7 +222,7 @@ interface CameraDraft {
   noDarks: boolean
   noBias: boolean
 }
-const CAMERA_PATHS: FieldPaths<keyof CameraDraft> = { model: "0.model", alias: "0.alias" }
+const CAMERA_PATHS: FieldPaths<keyof CameraDraft> = { model: "model", alias: "alias" }
 
 function cameraDraftOf(camera: Camera | null): CameraDraft {
   return {

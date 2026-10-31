@@ -25,7 +25,7 @@
  */
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { Square } from "lucide-react"
-import { type ReactNode, useState } from "react"
+import { type ReactNode, useEffect, useState } from "react"
 import {
   type ArchiveProgress,
   type ArchiveReview,
@@ -45,19 +45,19 @@ import { useMessages } from "@/app/preferences"
 import { labelOf, useSessionSummaries } from "@/components/domain/session-label"
 import { ActionButton } from "@/components/app/actions"
 import { BoxTable } from "@/components/app/box"
-import type { Action, Blocker, Column, FileRow, FlowStep, StepFlow, StepLink } from "@/components/app/contracts"
 import { ActionError, Notice, TableSkeleton, toast } from "@/components/app/feedback"
+import type { Action, Blocker, Column, FileRow, FlowStep, StepFlow, StepLink } from "@/components/app/contracts"
 import { SelectField } from "@/components/app/fields"
 import { failureMessage } from "@/components/app/run-result"
 import { stepEditable } from "@/components/app/step-flow"
 import { DetailPage } from "@/components/templates/detail-page"
 import { StepPage } from "@/components/templates/step-page"
 import { startClose, stopClose, useCloseRun } from "./close-run"
-import { formatBytes, formatDateTime } from "@/lib/format"
-import type { Messages } from "@/lib/i18n"
+import { formatBytes, formatCount, formatDateTime } from "@/lib/format"
 import { operationText } from "./apply-words"
+import type { Messages } from "@/lib/i18n"
 import type { ProjectTabProps } from "./project-page"
-import { isLocked, locationsQuery, type ProjectHeader, projectWrite, wrapUpStatusQuery } from "./queries"
+import { closeStatusQuery, invalidateProjectReads, isLocked, locationsQuery, type ProjectHeader, projectWrite, wrapUpStatusQuery } from "./queries"
 import { pathText, reasonText } from "./words"
 
 export const WRAP_UP_STEPS: readonly WrapUpStep[] = ["clean_up", "trash", "archive"]
@@ -373,7 +373,15 @@ const movable = (s: ArchiveSessionOffer) => s.keptBy.length === 0 && s.hold === 
 
 function useArchiveStep(header: ProjectHeader, status: WrapUpStatus, enabled: boolean): WrapUpStepView {
   const m = useMessages()
+  const durable = useQuery({
+    ...closeStatusQuery(header.id),
+    enabled: status.lifecycle === "closing",
+    refetchInterval: (query) => (query.state.data?.state === "running" ? 2000 : false),
+  })
   const client = useQueryClient()
+  useEffect(() => {
+    if (durable.data?.state === "settled" || durable.data?.state === "stopped") void invalidateProjectReads(client)
+  }, [client, durable.data?.state])
   const locations = useQuery({ ...locationsQuery(), enabled })
   // Archive writes to any active location (the library refuses a retired one).
   const destinations = (locations.data ?? []).filter((l) => l.location.lifecycle === "active")
@@ -384,7 +392,9 @@ function useArchiveStep(header: ProjectHeader, status: WrapUpStatus, enabled: bo
   const sessions = useSessionSummaries(review?.sessions.map((s) => s.sessionId) ?? [])
   const [ticked, setTicked] = useState<string[] | null>(null)
   const run = useCloseRun(header.id)
-  const closing: ArchiveProgress | "running" | null = run?.phase === "running" ? "running" : run?.phase === "settled" && run.result.ok ? run.result.data.archive : null
+  const durableState: "running" | "stopped" | "settled" | null = status.lifecycle === "closing" ? (durable.data?.state ?? null) : null
+  const progress = status.lifecycle === "closing" && durable.data ? durable.data.state === "settled" ? durable.data.report : durable.data.progress : null
+  const closing: ArchiveProgress | "running" | null = run?.phase === "running" || durableState === "running" ? "running" : run?.phase === "settled" && run.result.ok ? run.result.data.archive : progress
   const picked = ticked ?? review?.sessions.filter(movable).map((s) => s.sessionId) ?? []
 
   const close = (archive: { review: ArchiveReview; sessions: string[] } | null) => () =>
@@ -430,7 +440,12 @@ function useArchiveStep(header: ProjectHeader, status: WrapUpStatus, enabled: bo
   ]
   const body = (editable: boolean) =>
     closing !== null ? (
-      <ClosingView projectId={header.id} closing={closing} sessionName={(id) => labelOf(m, sessions, id)} />
+      <ClosingView
+        projectId={header.id}
+        closing={closing}
+        progress={progress}
+        sessionName={(id) => labelOf(m, sessions, id)}
+      />
     ) : (
       <>
         <SelectField
@@ -464,12 +479,13 @@ function useArchiveStep(header: ProjectHeader, status: WrapUpStatus, enabled: bo
 }
 
 /** Close running (Stop offered), or its archive's outcome per file once it settled or stopped. */
-function ClosingView({ projectId, closing, sessionName }: { projectId: string; closing: ArchiveProgress | "running"; sessionName: (id: string) => string }) {
+function ClosingView({ projectId, closing, progress, sessionName }: { projectId: string; closing: ArchiveProgress | "running"; progress: ArchiveProgress | null; sessionName: (id: string) => string }) {
   const m = useMessages()
   if (closing === "running") {
     const stop: Action = { id: "stop-archive", label: m.wrapup_stop_archive(), icon: Square, run: () => stopClose(projectId) }
     return (
       <Notice tone="info" title={m.wrapup_closing()}>
+        {progress ? <p>{m.operation_progress_count({ done: formatCount(progress.moves.filter((move) => move.outcome !== null).length), total: formatCount(progress.moves.length), unit: m.op_unit_files() })}</p> : null}
         <ActionButton action={stop} />
       </Notice>
     )

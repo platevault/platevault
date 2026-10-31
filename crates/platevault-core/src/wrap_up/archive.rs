@@ -86,6 +86,14 @@ impl Drop for Claim {
     }
 }
 
+/// Whether a journaled archive is currently driven by this process.
+pub fn archive_running(storage_operation_id: Uuid) -> bool {
+    RUNNING
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .contains(&storage_operation_id)
+}
+
 /// An archive review and the journal drafts of each selectable session.
 struct Plan {
     review: ArchiveReview,

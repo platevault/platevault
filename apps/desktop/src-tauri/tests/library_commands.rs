@@ -84,6 +84,7 @@ impl Shell {
                 desktop_shell::commands::project_output::project_copy_to_output,
                 desktop_shell::commands::project_output::project_output_list,
                 desktop_shell::commands::project_wrap_up::project_wrap_up_status,
+                desktop_shell::commands::project_wrap_up::project_close_status,
                 desktop_shell::commands::project_wrap_up::project_close,
                 desktop_shell::commands::project_wrap_up::project_duplicate,
                 desktop_shell::commands::frame_review::pix_session_intake,
@@ -522,6 +523,7 @@ fn wrap_up_family_takes_its_arguments() {
     let shell = Shell::new();
     let project = Uuid::new_v4();
     shell.refuses("project_wrap_up_status", &json!({ "projectId": project }), NOT_FOUND, project);
+    shell.refuses("project_close_status", &json!({ "projectId": project }), NOT_FOUND, project);
     shell.refuses(
         "project_close",
         &json!({ "request": { "projectId": project, "desiredRevision": 1, "archive": null } }),
@@ -541,6 +543,14 @@ fn wrap_up_family_takes_its_arguments() {
         NOT_FOUND,
         project,
     );
+}
+/// Close status IPC accepts the Project argument and reports no archive before one is started.
+#[test]
+fn project_close_status_ipc_reads_an_open_project() {
+    let shell = Shell::new();
+    let project = shell.open_project();
+
+    assert_eq!(shell.call("project_close_status", &json!({ "projectId": project })), Value::Null);
 }
 
 #[test]
@@ -829,12 +839,23 @@ fn library_save_camera_uses_camera_revisions_and_validation() {
         camera,
     );
     let invalid_id = Uuid::new_v4();
-    shell.refuses(
+    let invalid_model = shell.refusal(
         "library_save_camera",
         &args(Some(invalid_id), "  ", None),
         LibraryErrorCode::InvalidInput,
         invalid_id,
     );
+    assert_eq!(invalid_model["field"], json!("model"), "{invalid_model}");
+    let blank_alias_id = Uuid::new_v4();
+    let mut blank_alias = args(Some(blank_alias_id), "ASI2600MM", None);
+    blank_alias["input"]["alias"] = json!("  ");
+    let blank_alias = shell.refusal(
+        "library_save_camera",
+        &blank_alias,
+        LibraryErrorCode::InvalidInput,
+        blank_alias_id,
+    );
+    assert_eq!(blank_alias["field"], json!("alias"), "{blank_alias}");
     let missing_id = shell
         .invoke("library_save_camera", &args(None, "Missing id", Some(1)))
         .expect_err("an edit without an id is refused");
@@ -843,6 +864,31 @@ fn library_save_camera_uses_camera_revisions_and_validation() {
     let saved = shell.call("library_save_camera", &args(Some(camera), "ASI533MC Pro", Some(2)));
     assert_eq!(saved["model"], json!("ASI533MC Pro"));
     assert_eq!(saved["revision"], json!(3));
+    let first = Uuid::new_v4();
+    let second = Uuid::new_v4();
+    let mut first_args = args(Some(first), "ASI2600MM", None);
+    first_args["input"]["alias"] = json!("Shared alias");
+    shell.call("library_save_camera", &first_args);
+    let mut second_args = args(Some(second), "ASI533MC", None);
+    second_args["input"]["alias"] = json!("shared ALIAS");
+    let refusal =
+        shell.refusal("library_save_camera", &second_args, LibraryErrorCode::InvalidInput, second);
+    assert_eq!(refusal["field"], json!("alias"), "{refusal}");
+    assert_eq!(refusal["identity"], json!(second), "{refusal}");
+
+    let stored_without_alias = Uuid::new_v4();
+    shell.call("library_save_camera", &args(Some(stored_without_alias), "ASI6200MM", None));
+    let aliased_request = Uuid::new_v4();
+    let mut aliased_args = args(Some(aliased_request), "ASI6200MM", None);
+    aliased_args["input"]["alias"] = json!("Mono");
+    let refusal = shell.refusal(
+        "library_save_camera",
+        &aliased_args,
+        LibraryErrorCode::InvalidInput,
+        aliased_request,
+    );
+    assert_eq!(refusal["field"], json!("alias"), "{refusal}");
+    assert_eq!(refusal["identity"], json!(aliased_request), "{refusal}");
 }
 #[test]
 fn library_data_location_returns_the_native_catalog_directory() {

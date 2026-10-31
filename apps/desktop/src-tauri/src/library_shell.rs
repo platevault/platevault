@@ -200,6 +200,7 @@ macro_rules! library_commands {
             crate::commands::project_output::project_restore_processing_master,
             // wrap up (065 PRJ-FR-14/25/30, 071)
             crate::commands::project_wrap_up::project_wrap_up_status,
+            crate::commands::project_wrap_up::project_close_status,
             crate::commands::project_wrap_up::project_close,
             crate::commands::project_wrap_up::project_close_stop,
             crate::commands::project_wrap_up::project_duplicate,
