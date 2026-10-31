@@ -298,17 +298,19 @@ describe("Wrap up", { timeout: TEST_MS }, () => {
       })
       renderAt(`/projects/${P}?stage=wrap-up`)
       await waitFor(() => expect(sent("project_close_status")).toHaveLength(1))
+      // Check halfway between polls: shouldAdvanceTime also moves the clock with real time,
+      // so margins stay far wider than that drift.
       await act(async () => {
         releaseFirstStatus?.()
         await Promise.resolve()
-        await vi.advanceTimersByTimeAsync(1999)
+        await vi.advanceTimersByTimeAsync(1000)
       })
       expect(sent("project_close_status")).toHaveLength(1)
-      await act(() => vi.advanceTimersByTimeAsync(1))
-      expect(sent("project_close_status")).toHaveLength(2)
       await act(() => vi.advanceTimersByTimeAsync(2000))
-      expect(sent("project_close_status")).toHaveLength(3)
-      await waitFor(() => expect(sent("project_close_status")).toHaveLength(4))
+      expect(sent("project_close_status")).toHaveLength(2)
+      // The third poll answers stopped; its settle refresh reads once more, then polling ends.
+      await act(() => vi.advanceTimersByTimeAsync(2000))
+      expect(sent("project_close_status")).toHaveLength(4)
       await act(() => vi.advanceTimersByTimeAsync(4000))
       expect(sent("project_close_status")).toHaveLength(4)
     } finally {
