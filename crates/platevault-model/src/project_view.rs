@@ -406,6 +406,7 @@ impl EntryName {
 /// Apply moves no old View, a build with no held file waits for nothing).
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub enum ApplyPhase {
     Reserved,
     SourcesVerified,

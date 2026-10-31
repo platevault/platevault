@@ -1169,53 +1169,54 @@ pub fn held_by_a_tool(error: &io::Error) -> bool {
 /// How moving the old View aside ended.
 #[derive(Debug)]
 pub enum Aside {
-    Moved {
-        waited: bool,
-    },
+    Moved,
     /// Cancel while waiting: nothing moved.
     Canceled,
     /// The OS refused the move; the log has its error.
     Failed,
 }
 
-/// Move `from` to `to`, waiting while a tool holds a file in `from`
-/// (PREP-FR-18): the user reads "Waiting for a tool to release a file in
-/// View", it continues by itself once the file is released, and Cancel
-/// keeps the old View.
-pub async fn move_aside(
+/// One attempt to move the old View aside.
+#[derive(Debug)]
+pub enum Attempt {
+    Ended(Aside),
+    /// A tool holds a file in it: [`wait_aside`] retries.
+    Held,
+}
+
+/// Move `from` to `to` once.
+pub async fn move_aside(rename: Rename, from: &Path, to: &Path) -> Attempt {
+    let (source, target) = (from.to_path_buf(), to.to_path_buf());
+    match tokio::task::spawn_blocking(move || rename(&source, &target)).await {
+        Ok(Ok(())) => Attempt::Ended(Aside::Moved),
+        Ok(Err(error)) if held_by_a_tool(&error) => Attempt::Held,
+        Ok(Err(error)) => Attempt::Ended(aside_failed(from, &error)),
+        Err(error) => Attempt::Ended(aside_failed(from, &error)),
+    }
+}
+
+/// Retry moving `from` to `to` every `poll` while a tool holds a file in
+/// `from` (PREP-FR-18): it continues by itself once the file is released,
+/// and Cancel keeps the old View.
+pub async fn wait_aside(
     rename: Rename,
     poll: Duration,
     from: &Path,
     to: &Path,
     control: &dyn ApplyControl,
 ) -> Aside {
-    let mut waited = false;
-    let outcome = loop {
-        let (source, target) = (from.to_path_buf(), to.to_path_buf());
-        let attempt = tokio::task::spawn_blocking(move || rename(&source, &target)).await;
-        match attempt {
-            Ok(Ok(())) => break Aside::Moved { waited },
-            Ok(Err(error)) if held_by_a_tool(&error) => {
-                if !waited {
-                    waited = true;
-                    control.waiting(Some(from));
-                }
-                if control.canceled() {
-                    break Aside::Canceled;
-                }
-                tokio::time::sleep(poll).await;
-                if control.canceled() {
-                    break Aside::Canceled;
-                }
-            }
-            Ok(Err(error)) => break aside_failed(from, &error),
-            Err(error) => break aside_failed(from, &error),
+    loop {
+        if control.canceled() {
+            return Aside::Canceled;
         }
-    };
-    if waited {
-        control.waiting(None);
+        tokio::time::sleep(poll).await;
+        if control.canceled() {
+            return Aside::Canceled;
+        }
+        if let Attempt::Ended(aside) = move_aside(rename, from, to).await {
+            return aside;
+        }
     }
-    outcome
 }
 
 /// The OS refused to move the old View aside: its error goes to the log.
@@ -1425,22 +1426,15 @@ mod tests {
         Err(io::ErrorKind::ResourceBusy.into())
     }
 
+    /// Cancel, as the user asks it.
     #[derive(Default)]
     struct Control {
         cancel: AtomicBool,
-        held: std::sync::Mutex<Option<PathBuf>>,
-        released: AtomicBool,
     }
 
     impl ApplyControl for Control {
         fn canceled(&self) -> bool {
             self.cancel.load(Ordering::SeqCst)
-        }
-        fn waiting(&self, held: Option<&Path>) {
-            match held {
-                Some(folder) => *self.held.lock().unwrap() = Some(folder.to_path_buf()),
-                None => self.released.store(true, Ordering::SeqCst),
-            }
         }
     }
 
@@ -1455,12 +1449,12 @@ mod tests {
     async fn apply_waits_for_a_tool_to_release_a_file_and_continues_by_itself() {
         let temp = tempfile::tempdir().unwrap();
         let (view, previous) = view_in(&temp);
-        let control = Control::default();
+        let first = move_aside(busy_twice, &view, &previous).await;
+        assert!(matches!(first, Attempt::Held), "{first:?}");
         let moved =
-            move_aside(busy_twice, Duration::from_millis(1), &view, &previous, &control).await;
-        assert!(matches!(moved, Aside::Moved { waited: true }), "{moved:?}");
-        assert_eq!(control.held.lock().unwrap().as_deref(), Some(view.as_path()), "it names View");
-        assert!(control.released.load(Ordering::SeqCst));
+            wait_aside(busy_twice, Duration::from_millis(1), &view, &previous, &Control::default())
+                .await;
+        assert!(matches!(moved, Aside::Moved), "{moved:?}");
         assert!(!view.exists());
         assert_eq!(fs::read(previous.join("Light_001.fits")).unwrap(), b"held by a tool");
     }
@@ -1472,7 +1466,7 @@ mod tests {
         let control = Control::default();
         control.cancel.store(true, Ordering::SeqCst);
         let moved =
-            move_aside(always_busy, Duration::from_millis(1), &view, &previous, &control).await;
+            wait_aside(always_busy, Duration::from_millis(1), &view, &previous, &control).await;
         assert!(matches!(moved, Aside::Canceled), "{moved:?}");
         assert!(view.join("Light_001.fits").exists());
         assert!(!previous.exists());

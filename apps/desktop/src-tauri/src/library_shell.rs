@@ -12,11 +12,12 @@
 //! double in an `e2e` build), starts the Output watcher, which Rescan reaches
 //! as managed state, and starts [`CaptureWatch`], which counts new captures in
 //! every online Captures location (a start-up walk and a live folder watcher
-//! each). It manages the running Applies, which Cancel stops and whose waits
-//! for a tool it emits as `project_apply_waiting`, and the running Closes,
-//! which Stop interrupts. It also starts [`DeviceWatch`], which lists the
-//! connected removable devices for Import (071 STO-IMP-FR-10) and emits
-//! `import_devices` on each change. The watchers stop in the exit step. On
+//! each). It manages where the Applies' waits for a tool go, emitted as
+//! `project_apply_waiting` (the library runs and cancels each Apply), and
+//! the running Closes, which Stop interrupts. It also starts
+//! [`DeviceWatch`], which lists the connected removable devices for Import
+//! (071 STO-IMP-FR-10) and emits `import_devices` on each change. The
+//! watchers stop in the exit step. On
 //! Windows the removal notices of each watched volume that is not a network
 //! share reach the capture watcher, so the drive can eject, and they end
 //! after it stops.
@@ -76,7 +77,7 @@ use tauri::{Manager, RunEvent};
 
 use crate::commands::library as ipc;
 use crate::commands::library_dialogs::DataDirectory;
-use crate::commands::project_apply::ApplyRuns;
+use crate::commands::project_apply::ApplyEvents;
 use crate::commands::project_wrap_up::{CloseRuns, WrapUpTrash};
 
 /// Catalog and settings-store directory override, used verbatim. An `e2e`
@@ -190,6 +191,7 @@ macro_rules! library_commands {
             // apply (066 VSEL-FR-14, 069 PREP-FR-18)
             crate::commands::project_apply::project_apply_preview,
             crate::commands::project_apply::project_apply,
+            crate::commands::project_apply::project_apply_status,
             crate::commands::project_apply::project_apply_cancel,
             crate::commands::project_apply::library_check_symlinks,
             // output (070 RES-FR-01/02)
@@ -465,9 +467,8 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     app.manage(output_watch);
     app.manage(captures);
     app.manage(devices);
-    // Apply's Cancel and its waiting event, and Close's Stop (069 PREP-FR-18,
-    // 071 STO-FR-08).
-    app.manage(ApplyRuns::emitting(app.handle().clone()));
+    // Apply's waiting event and Close's Stop (069 PREP-FR-18, 071 STO-FR-08).
+    app.manage(ApplyEvents::emitting(app.handle().clone()));
     app.manage(CloseRuns::default());
     // The menu bar and tray; Quit asks first while work runs (D-W157).
     crate::native_shell_surfaces::install(app.handle())?;

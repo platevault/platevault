@@ -8,7 +8,7 @@
 //! deserialize. Included with `mod support;`; each test uses a subset.
 #![allow(dead_code)]
 
-use desktop_shell::commands::project_apply::ApplyRuns;
+use desktop_shell::commands::project_apply::ApplyEvents;
 use desktop_shell::commands::project_wrap_up::CloseRuns;
 use platevault_core::LibraryErrorCode;
 use serde_json::{json, Value};
@@ -79,10 +79,11 @@ pub fn invoke(
     .map(|body| body.deserialize::<Value>().expect("JSON reply"))
 }
 
-/// The running Applies and Closes, managed as `library_shell::run` manages
-/// them. Without them Tauri refuses `project_apply` and `project_close` with
-/// its state-not-managed string before their handlers run.
+/// Where Applies' waiting events go and the running Closes, managed as
+/// `library_shell::run` manages them. Without them Tauri refuses
+/// `project_apply` and `project_close` with its state-not-managed string
+/// before their handlers run.
 pub fn manage_runs(app: &App<MockRuntime>) {
-    app.manage(ApplyRuns::emitting(app.handle().clone()));
+    app.manage(ApplyEvents::emitting(app.handle().clone()));
     app.manage(CloseRuns::default());
 }

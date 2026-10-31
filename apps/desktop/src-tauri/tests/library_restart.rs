@@ -90,6 +90,7 @@ impl Shell {
                 desktop_shell::commands::project_inputs::project_set_view_settings,
                 desktop_shell::commands::project_apply::project_apply_preview,
                 desktop_shell::commands::project_apply::project_apply,
+                desktop_shell::commands::project_apply::project_apply_status,
                 desktop_shell::commands::home::home_dashboard,
             ])
             .build(mock_context(noop_assets()))
@@ -160,9 +161,10 @@ impl Shell {
         self.call("project_apply_preview", &json!({ "projectId": project }))
     }
 
-    /// Apply the sheet as reviewed, ticking no foreign file.
+    /// Apply the sheet as reviewed, ticking no foreign file; the report it
+    /// settles with, polled from its durable status.
     fn apply(&self, sheet: &Value) -> Value {
-        self.call(
+        let started = self.call(
             "project_apply",
             &json!({ "request": {
                 "projectId": sheet["projectId"],
@@ -170,7 +172,19 @@ impl Shell {
                 "basisDigest": sheet["basisDigest"],
                 "ticked": [],
             } }),
-        )
+        );
+        let operation = json!({ "operationId": started["progress"]["operationId"] });
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(180);
+        loop {
+            let status = self.call("project_apply_status", &operation);
+            match status["state"].as_str() {
+                Some("settled") => return status["report"].clone(),
+                Some("running") => {}
+                _ => panic!("Apply broke off: {status}"),
+            }
+            assert!(std::time::Instant::now() < deadline, "Apply never settled: {status}");
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
     }
 
     fn project_inputs(&self, project: &Value) -> Value {

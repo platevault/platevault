@@ -105,10 +105,13 @@ const SCHEMA: &str = schema_modules![
 /// Version 25 lets `reminder_subscriptions.lead_minutes` run from 31 minutes
 /// to 7 days (PLAN-FR-06), where version 24's CHECK took 1 to 1440, and adds
 /// `reminder_lead_time`.
+/// Version 26 records an Apply's wait for a tool (`apply_operations.waiting_held`,
+/// `waiting_since`) and the report it settled with (`apply_operations.report`),
+/// which version 25 has neither of.
 /// Bump it with any DDL change that `IF NOT EXISTS` would leave stale in an
 /// existing catalog, and with any stored JSON shape an existing catalog's rows
 /// can't be read as.
-pub const SCHEMA_VERSION: i64 = 25;
+pub const SCHEMA_VERSION: i64 = 26;
 const BUSY_TIMEOUT: Duration = Duration::from_secs(10);
 const READER_CONNECTIONS: u32 = 4;
 const MAX_PAGE: u32 = 1000;
@@ -203,7 +206,8 @@ mod project_operations;
 // leftovers (project_view.sql).
 mod project_view;
 pub use project_view::{
-    ApplyInputs, ApplyReservation, ApplyReserved, CorrectedSource, KeptMove, SourcePath,
+    ApplyInputs, ApplyRecord, ApplyReservation, ApplyReserved, CorrectedSource, KeptMove,
+    SourcePath,
 };
 // Issue dismissals and the issue sources core reads in one snapshot (issues.sql).
 mod issues;

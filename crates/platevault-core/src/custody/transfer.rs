@@ -1876,10 +1876,8 @@ mod tests {
     /// empty folder took after the swap checked it was free.
     #[tokio::test]
     async fn the_swap_reports_the_refusal_and_keeps_the_old_view() {
-        use crate::apply::files::{move_aside, Aside, Rename};
-        use crate::apply::Unattended;
+        use crate::apply::files::{move_aside, Aside, Attempt, Rename};
 
-        let poll = std::time::Duration::from_millis(1);
         for rename in [
             rename_noreplace as Rename,
             #[cfg(unix)]
@@ -1888,8 +1886,8 @@ mod tests {
             let temp = tempfile::tempdir().unwrap();
             let (view, previous) = view_in(&temp);
             fs::create_dir(&previous).unwrap();
-            let moved = move_aside(rename, poll, &view, &previous, &Unattended).await;
-            assert!(matches!(moved, Aside::Failed), "not refused: {moved:?}");
+            let moved = move_aside(rename, &view, &previous).await;
+            assert!(matches!(moved, Attempt::Ended(Aside::Failed)), "not refused: {moved:?}");
             kept(&view);
             assert_eq!(fs::read_dir(&previous).unwrap().count(), 0, "the empty folder stays");
         }

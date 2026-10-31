@@ -15,11 +15,12 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use apply_support::{
     calibration_frames, catalogued, corrected, digest, file_node, frame, hard_links, meta, native,
-    reads_below, scan, sep24_frame, wire, world, Recorder, World, DARKS, HA, HA_FLATS, HA_GAIN_0,
-    OIII, SEP24, SEP28,
+    reads_below, scan, sep24_frame, wire, world, Gate, Recorder, World, DARKS, HA, HA_FLATS,
+    HA_GAIN_0, OIII, PATIENCE, SEP24, SEP28,
 };
 use metadata_core::MetadataExtractor;
 use platevault_core::apply::{ApplyControl, Unattended};
@@ -1995,4 +1996,83 @@ async fn an_apply_the_os_refuses_reports_no_os_text() {
     assert_eq!(refused.outcome, Some(ApplyOutcome::Failed), "{refused:#?}");
     assert_eq!(refused.stop, Some(ApplyStop::AsideFailed), "{refused:#?}");
     assert_no_os_text(&refused, &folder);
+}
+
+/// PREP-FR-09 (astro-plan-wre19.6): starting Apply returns Running with its
+/// operation id once the reservation committed, while the build runs on;
+/// Cancel by that id reads Running with Cancel requested, never an outcome
+/// of its own, and the Apply then settles Canceled with the old View kept,
+/// its report durable. A Cancel once it settled reads that report.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_started_apply_returns_its_id_at_once_and_cancel_settles_it_canceled() {
+    let world = world(ViewMode::Copies).await;
+    world.apply().await;
+    let before = World::tree(&world.view());
+    world.bump().await;
+    let preview = world.preview().await;
+    let (gate, arrived, release) = Gate::at(ApplyPhase::SourcesVerified);
+
+    let started =
+        world.library.start_apply(&World::request(&preview), Arc::new(gate)).await.unwrap();
+    let ApplyStatus::Running { progress, cancel_requested: false } = started else {
+        panic!("not running as it starts: {started:#?}");
+    };
+    assert_eq!(progress.project_id, world.project);
+    assert_eq!(progress.waiting, None);
+    let operation = progress.operation_id;
+    tokio::task::block_in_place(|| arrived.recv_timeout(PATIENCE)).expect("the build runs on");
+    let canceling = world.library.cancel_apply(operation).await.unwrap();
+    assert!(
+        matches!(canceling, ApplyStatus::Running { cancel_requested: true, .. }),
+        "Cancel reports no outcome of its own: {canceling:#?}"
+    );
+    release.send(()).unwrap();
+
+    let report = world.settled(operation).await;
+    assert_eq!(report.outcome, Some(ApplyOutcome::Canceled), "{report:#?}");
+    assert_eq!(report.stop, Some(ApplyStop::Canceled), "{report:#?}");
+    assert_eq!(World::tree(&world.view()), before, "the old View is unchanged");
+    assert!(!world.building().exists());
+    let journal = world.journal(operation).await;
+    assert_eq!(
+        (journal.phase, journal.outcome),
+        (ApplyPhase::Settled, Some(ApplyOutcome::Canceled))
+    );
+    assert_eq!(
+        world.library.cancel_apply(operation).await.unwrap(),
+        ApplyStatus::Settled { report },
+        "a Cancel after it settled changes nothing"
+    );
+}
+
+/// PREP-FR-09: an Apply `PlateVault` stopped during reads Stopped, never
+/// Running, since nothing runs it; after a restart it reads the report the
+/// recovery settled it with.
+#[tokio::test]
+async fn an_apply_nothing_runs_never_reads_running_across_a_restart() {
+    let mut world = world(ViewMode::Copies).await;
+    world.apply().await;
+    world.bump().await;
+    let report = interrupted_at(&world, ApplyPhase::Building).await;
+    let operation = report.operation_id;
+
+    let stopped = world.library.apply_status(operation).await.unwrap();
+    assert!(
+        matches!(&stopped, ApplyStatus::Stopped { progress } if progress.phase == ApplyPhase::Building),
+        "{stopped:#?}"
+    );
+    assert!(matches!(
+        world.library.cancel_apply(operation).await.unwrap(),
+        ApplyStatus::Stopped { .. }
+    ));
+
+    world.reopen().await;
+    let ApplyStatus::Settled { report } = world.library.apply_status(operation).await.unwrap()
+    else {
+        panic!("the restart settles it");
+    };
+    assert_eq!(report.outcome, Some(ApplyOutcome::Failed), "{report:#?}");
+    assert_eq!(report.stop, Some(ApplyStop::Interrupted), "{report:#?}");
+    let unknown = world.library.apply_status(uuid::Uuid::new_v4()).await.unwrap_err();
+    assert_eq!(unknown.code(), LibraryErrorCode::NotFound);
 }
