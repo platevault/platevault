@@ -545,6 +545,8 @@ async fn cameras_of_one_model_need_unique_aliases() {
     assert_eq!(error.field().map(platevault_model::FieldPath::as_str), Some("0.alias"));
     assert_eq!(error.response(None, None).identity, Some(a.id));
     let saved = fx.catalog.save_cameras(&[a_named.clone(), b.clone()]).await.unwrap();
+    assert_eq!(saved[0].revision, 2);
+    assert_eq!(saved[1].revision, 1);
     let mut ids = vec![a.id, b.id];
     ids.sort_unstable();
     assert_eq!(
