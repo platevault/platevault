@@ -1,10 +1,10 @@
 /**
  * The Targets page's state and words, as pure functions over the library's
  * rows (PLAN-TGT-FR-01..18). Nothing here computes a planning value: the
- * library sorts, plans and grades; this module reads the URL into a
- * `TargetsQuery`, filters the rows it returned by values they carry
- * (Favourite, a band that suits the night, a Project badge), orders them by
- * the clear time it graded, and words them.
+ * library filters, sorts, plans and grades; this module reads the URL into a
+ * `TargetsQuery` (the Favourite filter, Suitable filters and a Project's
+ * subjects included, so a list longer than one page filters whole) and words
+ * the rows it returned.
  *
  * The view lives in the URL, so opening a Target and coming back keeps it:
  * `view` (planned), `mode` (browse), `cat`, `preset`, `saved`, `fav`, `good`,
@@ -91,6 +91,17 @@ export function parseFavourite(value: string | undefined): FavouriteFilter {
   return value === "yes" || value === "no" ? value : ""
 }
 
+/** The library's Favourite filter: null for All. */
+function favouriteOnly(filter: FavouriteFilter): boolean | null {
+  return filter === "" ? null : filter === "yes"
+}
+
+/** The `?fav=` a saved Favourite filter restores; absent for All. */
+function favouriteParam(favourite: boolean | null | undefined): FavouriteFilter | undefined {
+  if (favourite === null || favourite === undefined) return undefined
+  return favourite ? "yes" : "no"
+}
+
 /** `designation`, or `-img_time` for descending; null for an unknown column or none. */
 export function parseSort(value: string | undefined): TargetsSort | null {
   if (!value) return null
@@ -128,6 +139,9 @@ export interface TargetsState {
   sort: TargetsSort | null
   night: string | null
   siteId: string | null
+  favourite: FavouriteFilter
+  suitableBands: Band[]
+  projectId: string | null
 }
 
 export function readState(search: SearchParams): TargetsState {
@@ -139,6 +153,9 @@ export function readState(search: SearchParams): TargetsState {
     sort: parseSort(search.sort),
     night: search.night ?? null,
     siteId: search.site ?? null,
+    favourite: parseFavourite(search.fav),
+    suitableBands: parseBands(search.good),
+    projectId: search.project ?? null,
   }
 }
 
@@ -155,16 +172,31 @@ export function targetsQuery(state: TargetsState): TargetsQuery_Deserialize {
     offset: 0,
     limit: TARGET_PAGE,
     rigs: state.rigs,
+    favourite: favouriteOnly(state.favourite),
+    suitableBands: state.suitableBands,
+    projectId: state.projectId,
   }
 }
 
-/** What Save current… stores (PLAN-TGT-FR-10); the Favourite filter waits for astro-plan-wre19.20. */
+/** The planning context a Target page reads its row under: its list's site, night and rig selection (PLAN-TGT-FR-14). */
+export function targetContext(search: SearchParams): TargetsQuery_Deserialize {
+  return { siteId: search.site ?? null, night: search.night ?? null, rigs: parseRigs(search) }
+}
+
+/** What Save current… stores (PLAN-TGT-FR-10, FR-17): the Show mode, catalogues, preset, Favourite filter, Suitable filters, the Fit filter's single rig and the sort. */
 export function presetFilters(state: TargetsState): PresetFilters {
-  const filters: PresetFilters = { show: state.view === "browse" ? "browse" : "my_targets", catalogues: state.catalogues, preset: state.preset }
+  const filters: PresetFilters = {
+    show: state.view === "browse" ? "browse" : "my_targets",
+    catalogues: state.catalogues,
+    preset: state.preset,
+    favourite: favouriteOnly(state.favourite),
+    suitableBands: state.suitableBands,
+    rigId: state.rigs.kind === "rig" ? state.rigs.equipmentId : null,
+  }
   return state.sort ? { ...filters, sort: state.sort } : filters
 }
 
-/** The URL a saved preset restores: its Show mode, catalogues, preset and sort, every other filter cleared. */
+/** The URL a saved preset restores: saved filters replace their facets; an unsaved rig leaves the current rig alone. */
 export function presetSearch(filters: PresetFilters, savedId: string): SearchParams {
   return {
     ...viewSearch(filters.show === "browse" ? "browse" : "my"),
@@ -172,61 +204,10 @@ export function presetSearch(filters: PresetFilters, savedId: string): SearchPar
     preset: filters.preset ?? undefined,
     sort: sortParam(filters.sort ?? null),
     saved: savedId,
-    fav: undefined,
-    good: undefined,
+    fav: favouriteParam(filters.favourite),
+    good: filters.suitableBands && filters.suitableBands.length > 0 ? filters.suitableBands.join(",") : undefined,
+    ...(filters.rigId ? { rig: filters.rigId } : {}),
   }
-}
-
-/**
- * The row filters the library's request has no field for, over values each
- * row carries: the Favourite filter, Suitable filters (a chosen band the
- * library grades good or marginal for the night, PLAN-TGT-FR-15) and a
- * Project's subjects (PLAN-FR-10, a row's open-Project badges).
- */
-export interface RowFilters {
-  favourite: FavouriteFilter
-  bands: readonly Band[]
-  projectId: string | null
-}
-
-export function matchesRow(row: TargetRow_Serialize, filters: RowFilters): boolean {
-  if (filters.favourite === "yes" && !row.favourite) return false
-  if (filters.favourite === "no" && row.favourite) return false
-  if (filters.projectId && !row.projects.some((p) => p.projectId === filters.projectId)) return false
-  if (filters.bands.length > 0 && !row.bands.some((b) => suits(b) && filters.bands.includes(b.band))) return false
-  return true
-}
-
-/** Good or marginal: a band Suitable filters admits, as the library's `BandState::suits` reads it. */
-export function suits(band: BandState): boolean {
-  return band.grade === "good" || band.grade === "marginal"
-}
-
-/** The longest clear time the library graded among `bands` for the row, in minutes; 0 when none suits. */
-function clearMinutes(row: TargetRow_Serialize, bands: readonly Band[]): number {
-  return Math.max(0, ...row.bands.filter((b) => bands.includes(b.band)).map((b) => b.clearMinutes))
-}
-
-/**
- * Suitable filters' order (PLAN-TGT-FR-15): the longest clear time among the
- * chosen bands, descending; ties keep the library's order. With no band
- * chosen the rows keep the library's order.
- */
-export function byClearTime<T>(rows: readonly T[], row: (item: T) => TargetRow_Serialize, bands: readonly Band[]): T[] {
-  if (bands.length === 0) return [...rows]
-  return rows
-    .map((item, index) => ({ item, index, minutes: clearMinutes(row(item), bands) }))
-    .sort((a, b) => b.minutes - a.minutes || a.index - b.index)
-    .map((v) => v.item)
-}
-
-/**
- * In My targets (PLAN-TGT-FR-01): a favourite, an open-Project subject or a
- * Target with a session. The row has no such field yet (astro-plan-wre19.20),
- * so Browse's check reads the three values that define it.
- */
-export function inMyTargets(row: TargetRow_Serialize): boolean {
-  return row.favourite || row.projects.length > 0 || row.sessions > 0
 }
 
 // Words -----------------------------------------------------------------------
@@ -306,7 +287,7 @@ const PRESET_WORDS: Record<BuiltinPreset, { name: (m: Messages) => string; defin
   fits_nicely: { name: (m) => m.targets_preset_fits(), definition: (m) => m.targets_preset_fits_definition() },
 }
 
-/** A built-in preset's name from the catalogue by id; the library's English fields are never shown. */
+/** A built-in preset's name comes from the catalogue by id. */
 export function presetName(m: Messages, preset: BuiltinPreset): string {
   return PRESET_WORDS[preset].name(m)
 }

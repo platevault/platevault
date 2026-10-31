@@ -3,7 +3,7 @@
  * command, every call recorded with its arguments, so a test states what
  * the user sees and what each write sends.
  */
-import type { PlanCriteria, TargetCandidate, TargetRow_Serialize, TargetsBasis_Serialize, TargetsPage_Serialize } from "@/api/ipc"
+import type { PlanCriteria, TargetCandidate, TargetDetail_Serialize, TargetRow_Serialize, TargetsBasis_Serialize, TargetsPage_Serialize } from "@/api/ipc"
 
 export const CRITERIA: PlanCriteria = { minAltitudeDeg: 30, darkness: "astronomical", moon: { kind: "none" }, minDurationMinutes: 60 }
 export const SITE = { id: "site-1", name: "Backyard", revision: 2, latitudeDeg: 52.1, longitudeDeg: 5.1, elevationM: 10 }
@@ -24,6 +24,7 @@ export function row(target: TargetCandidate, over: Partial<TargetRow_Serialize> 
     target,
     saved: true,
     favourite: true,
+    inMyTargets: true,
     projects: [],
     maxAltitudeDeg: 71.4,
     lunarSeparationDeg: 88,
@@ -62,6 +63,12 @@ export function targetsPage(rows: TargetRow_Serialize[], over: Partial<TargetsPa
   }
 }
 
+/** One Target's `targets_get` answer: its row with the night `targetsPage` carries. */
+export function targetDetail(row: TargetRow_Serialize, over: Partial<TargetDetail_Serialize> = {}): TargetDetail_Serialize {
+  const { basis, moon, darkness, planningUnavailable } = targetsPage([row])
+  return { row, basis, moon, darkness, planningUnavailable, ...over }
+}
+
 export type Answer = (args: Record<string, unknown>) => unknown
 /** A failed command: the library's structured answer, which the generated client resolves as an error. */
 export const refuse = (code: string, retry = "retry") => {
@@ -88,7 +95,7 @@ export function host(answers: Record<string, Answer> = {}) {
       case "planning_list_sites":
         return { sites: [{ ...SITE, timeZone: "Europe/Amsterdam", createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z" }], defaultSiteId: SITE.id, settingsRevision: 5 }
       case "targets_presets_list":
-        return { builtin: [{ preset: "best_tonight_broadband", name: "English name", definition: "English definition" }], saved: [] }
+        return { builtin: [{ preset: "best_tonight_broadband" }], saved: [] }
       case "library_list_equipment":
       case "library_list_locations":
       case "planning_target_gaps":

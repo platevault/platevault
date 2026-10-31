@@ -112,6 +112,8 @@ impl Shell {
                 desktop_shell::commands::workflow_settings::workflow_settings_get,
                 desktop_shell::commands::workflow_settings::workflow_settings_save,
                 desktop_shell::commands::rigs::library_save_camera,
+                desktop_shell::commands::targets_list::targets_get,
+                desktop_shell::commands::targets_list::targets_presets_list,
             ])
             .build(mock_context(noop_assets()))
             .expect("build mock app");
@@ -893,4 +895,42 @@ fn library_data_location_returns_the_native_catalog_directory() {
     let shell = Shell::new();
     let actual = shell.call("library_data_location", &json!({}));
     assert_eq!(actual, native_path(shell.dir.path()));
+}
+
+/// PLAN-TGT-FR-01/14: `targets_get` takes the Target and an optional list
+/// context. An unsaved Target is refused scoped to its id; a saved one's row
+/// says whether it is in My targets, and its context's rig gives it a Fit.
+/// Built-in presets cross IPC as ids, with no English name or definition.
+#[test]
+fn targets_get_reads_one_saved_target_and_presets_cross_as_ids() {
+    let shell = Shell::new();
+    let unknown = Uuid::new_v4();
+    shell.refuses("targets_get", &json!({ "targetId": unknown }), NOT_FOUND, unknown);
+
+    let (_, target, rig) = shell.open_project_details();
+    let detail = shell.call("targets_get", &json!({ "targetId": target, "context": null }));
+    let row = &detail["row"];
+    assert_eq!(row["target"]["id"], json!(target), "{detail}");
+    assert_eq!((&row["inMyTargets"], &row["favourite"]), (&json!(true), &json!(false)), "{row}");
+    assert_eq!(row["fit"], json!([]), "no rig by default: {row}");
+    assert_eq!(detail["planningUnavailable"], "no_site", "{detail}");
+
+    let context = json!({ "night": "2026-10-10", "rigs": { "kind": "rig", "equipmentId": rig } });
+    let fitted = shell.call("targets_get", &json!({ "targetId": target, "context": context }));
+    assert_eq!(fitted["row"]["fit"].as_array().map(Vec::len), Some(1), "{fitted}");
+    let unknown_rig = json!({ "rigs": { "kind": "rig", "equipmentId": unknown } });
+    shell.refuses(
+        "targets_get",
+        &json!({ "targetId": target, "context": unknown_rig }),
+        NOT_FOUND,
+        unknown,
+    );
+
+    let presets = shell.call("targets_presets_list", &json!({ "rigs": null }));
+    let builtin = presets["builtin"].as_array().expect("built-in presets");
+    assert!(!builtin.is_empty(), "{presets}");
+    for info in builtin {
+        let keys: Vec<&String> = info.as_object().expect("an object").keys().collect();
+        assert_eq!(keys, ["preset"], "ids only: {info}");
+    }
 }

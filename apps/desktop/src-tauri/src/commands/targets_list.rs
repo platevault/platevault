@@ -13,13 +13,54 @@ use std::sync::Arc;
 
 use platevault_core::library::Library;
 use platevault_core::{
-    PresetFilters, PresetRef, Revision, RigSelection, SavedPreset, TargetsPage, TargetsPresets,
-    TargetsQuery, TargetsSearchAction, TargetsSearchResult, TargetsSearchResults,
+    PresetFilters, PresetRef, Revision, RigSelection, SavedPreset, TargetDetail, TargetsPage,
+    TargetsPresets, TargetsQuery, TargetsSearchAction, TargetsSearchResult, TargetsSearchResults,
 };
 use tauri::State;
 use uuid::Uuid;
 
 use super::library::{fail, Reply};
+
+/// One saved Target's row (PLAN-TGT-FR-14) under a list's planning context:
+/// `context`'s site, night and rig selection, so the Target page shows what
+/// its list row shows; null is the list's default context. The context's
+/// filters and page do not apply. Read-only.
+///
+/// # Errors
+/// `NotFound` for an unsaved Target or an unknown context site, rig or
+/// Project naming that missing entity; `PersistenceFailure` when a required
+/// catalog read fails.
+#[tauri::command]
+#[specta::specta]
+pub async fn targets_get(
+    library: State<'_, Arc<Library>>,
+    target_id: Uuid,
+    context: Option<TargetsQuery>,
+) -> Reply<TargetDetail> {
+    let context = context.unwrap_or_default();
+    library.catalog().target(target_id).await.map_err(fail(Some(target_id)))?;
+    match context.rigs {
+        RigSelection::Rig { equipment_id } => {
+            library.catalog().equipment(equipment_id).await.map_err(fail(Some(equipment_id)))?;
+        }
+        RigSelection::Project { project_id } => {
+            let project =
+                library.catalog().project(project_id).await.map_err(fail(Some(project_id)))?;
+            for equipment_id in project.rig_ids {
+                library
+                    .catalog()
+                    .equipment(equipment_id)
+                    .await
+                    .map_err(fail(Some(equipment_id)))?;
+            }
+        }
+        RigSelection::None => {}
+    }
+    if let Some(site_id) = context.site_id {
+        library.catalog().site(site_id).await.map_err(fail(Some(site_id)))?;
+    }
+    library.targets_get(target_id, &context).await.map_err(fail(None))
+}
 
 /// One Targets list page: My targets or Browse catalogues with tonight's
 /// planning columns, the Moon once for the toolbar, sorted with unknown
@@ -87,7 +128,7 @@ pub async fn targets_set_favourite(
 }
 
 /// The built-in presets offered for the rig selector's rigs (absent: no
-/// rig), with their definitions, then the saved presets. Mosaic candidates
+/// rig), by id with no English, then the saved presets. Mosaic candidates
 /// and Fits nicely need a rig; the narrowband presets are hidden when the
 /// selected rigs pass no Ha, SII or OIII.
 ///

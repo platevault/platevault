@@ -125,6 +125,7 @@ fn messier(rigs: RigSelection) -> TargetsQuery {
         offset: 0,
         limit: None,
         rigs,
+        ..TargetsQuery::default()
     }
 }
 

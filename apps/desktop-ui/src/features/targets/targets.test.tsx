@@ -116,16 +116,11 @@ describe("Targets list", () => {
   )
 
   it(
-    "with Suitable filters lists the rows a chosen band suits, longest clear time first",
+    "with Suitable filters asks the library for the chosen bands and keeps the order it returns",
     async () => {
       const haOnly = (minutes: number, grade: "good" | "marginal" | "poor") => [{ band: "Ha" as const, grade, clearMinutes: minutes }]
-      host({
-        planning_target_rows: () =>
-          targetsPage([
-            row(M31, { bands: haOnly(90, "marginal") }),
-            row(M33, { bands: haOnly(150, "good") }),
-            row(candidate("t-m42", "M 42"), { bands: haOnly(0, "poor") }),
-          ]),
+      const lib = host({
+        planning_target_rows: () => targetsPage([row(M33, { bands: haOnly(150, "good") }), row(M31, { bands: haOnly(90, "marginal") })]),
       })
       renderAt("/targets?good=Ha")
       const table = await screen.findByRole("table", { name: m.nav_targets() })
@@ -134,6 +129,7 @@ describe("Targets list", () => {
         .getAllByRole("rowheader")
         .map((cell) => cell.textContent)
       expect(names).toEqual(["M 33", "M 31"])
+      expect(lib.sent("planning_target_rows")[0]?.args.query).toMatchObject({ suitableBands: ["Ha"], favourite: null, projectId: null })
     },
     TEST_MS,
   )
@@ -155,6 +151,34 @@ describe("Targets list", () => {
       const table = screen.getByRole("table", { name: m.nav_targets() })
       expect(await within(table).findByText("M 31")).toBeInTheDocument()
       expect(within(table).getAllByText(`${m.status_unknown()} · ${m.targets_reason_no_site()}`).length).toBeGreaterThan(0)
+    },
+    TEST_MS,
+  )
+
+  it(
+    "opens a Browse row only when inMyTargets is true, and adds one with a session when false",
+    async () => {
+      const user = userEvent.setup()
+      const lib = host({
+        planning_target_rows: () => targetsPage([
+          row(M31, { favourite: true, inMyTargets: false, sessions: 1 }),
+          row(M33, { favourite: false, inMyTargets: true, sessions: 0 }),
+        ]),
+        targets_search_result_action: (args) => {
+          const result = args.result as { target: typeof M31; inMyTargets: boolean }
+          return { action: result.inMyTargets ? "open" : "added", target: { candidate: result.target, decisionRevision: 1 } }
+        },
+      })
+      const { history } = renderAt("/targets?mode=browse&cat=messier")
+      const table = await screen.findByRole("table", { name: m.nav_targets() })
+      await user.click(await within(table).findByText("M 31"))
+      await waitFor(() => expect(lib.sent("targets_search_result_action")).toHaveLength(1))
+      expect(lib.sent("targets_search_result_action")[0]?.args.result).toMatchObject({ target: { id: "t-m31" }, inMyTargets: false })
+      expect(history.location.pathname).toBe("/targets")
+
+      await user.click(within(table).getByText("M 33"))
+      await waitFor(() => expect(history.location.pathname).toBe("/targets/t-m33"))
+      expect(lib.sent("targets_search_result_action")).toHaveLength(1)
     },
     TEST_MS,
   )
@@ -232,15 +256,23 @@ describe("Targets list", () => {
   )
 
   it(
-    "shows a result row with no Add button, and its Favourite as not available yet",
+    "shows a result row with no Add button, and a star on a favourite result",
     async () => {
-      host({ targets_search: () => ({ results: [{ target: M33, source: "catalogue", inMyTargets: false, matchedAlias: null }], simbad: { state: "searched" } }) })
+      host({
+        targets_search: () => ({
+          results: [
+            { target: M33, source: "catalogue", favourite: false, inMyTargets: false, matchedAlias: null },
+            { target: M31, source: "my_targets", favourite: true, inMyTargets: true, matchedAlias: null },
+          ],
+          simbad: { state: "searched" },
+        }),
+      })
       renderAt("/targets?q=m%2033")
       const results = await screen.findByRole("table", { name: m.targets_caption_search({ query: "m 33" }) })
       expect(await within(results).findByText("M 33")).toBeInTheDocument()
       expect(within(results).queryByRole("button", { name: m.verb_add() })).toBeNull()
       expect(within(results).queryByRole("button", { name: m.targets_favourite_add() })).toBeNull()
-      expect(within(results).getByText(m.home_unavailable({ what: m.targets_favourite() }))).toBeInTheDocument()
+      expect(within(results).getAllByRole("img", { name: m.targets_favourite() })).toHaveLength(1)
     },
     TEST_MS,
   )
@@ -260,14 +292,15 @@ describe("Targets list", () => {
   )
 
   it(
-    "doesn't filter a page that holds only part of the list, and says those filters need the library",
+    "filters a list longer than one page in the library, so Favourite stays available",
     async () => {
-      host({ planning_target_rows: () => targetsPage([row(M31)], { total: 1500 }) })
+      const lib = host({ planning_target_rows: () => targetsPage([row(M33, { favourite: false })], { total: 1500 }) })
       renderAt("/targets?fav=no")
       const table = await screen.findByRole("table", { name: m.nav_targets() })
-      // M 31 is a favourite, yet still listed: Favourite = No is not applied to the first page alone.
-      expect(await within(table).findByText("M 31")).toBeInTheDocument()
-      expect(screen.getByRole("button", { name: m.targets_favourite() })).toHaveAttribute("aria-disabled", "true")
+      expect(await within(table).findByText("M 33")).toBeInTheDocument()
+      expect(lib.sent("planning_target_rows")[0]?.args.query).toMatchObject({ favourite: false })
+      const facet = screen.getByRole("button", { name: m.filter_bar_facet_value({ label: m.targets_favourite(), value: m.targets_favourite_no() }) })
+      expect(facet).not.toHaveAttribute("aria-disabled", "true")
     },
     TEST_MS,
   )
@@ -309,7 +342,7 @@ describe("Targets list", () => {
       await user.type(await screen.findByRole("textbox", { name: m.filter_bar_preset_name() }), "Messier tonight")
       await user.click(screen.getByRole("button", { name: m.filter_bar_preset_create() }))
       await waitFor(() => expect(lib.sent("targets_preset_save")).toHaveLength(1))
-      expect(lib.sent("targets_preset_save")[0]?.args).toEqual({ name: "Messier tonight", filters: { show: "browse", catalogues: ["messier"], preset: null } })
+      expect(lib.sent("targets_preset_save")[0]?.args).toEqual({ name: "Messier tonight", filters: { show: "browse", catalogues: ["messier"], preset: null, favourite: null, suitableBands: [], rigId: null } })
       await waitFor(() => expect(history.location.search).toContain("saved=p9"))
     },
     TEST_MS,

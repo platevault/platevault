@@ -18,27 +18,28 @@
  * - Identity and Library: the catalogue record, and the integration per
  *   channel with the session count.
  *
- * The page finds the Target among My targets' rows: there is no read of one
- * Target yet (astro-plan-wre19.20), and every Target a click opens is in
- * My targets. The rows list without Home's criteria; the planning values
- * then read unknown with that reason.
+ * The page reads its Target with `targets_get` under its list's planning
+ * context (the URL's site, night and rig), so it shows what the list row
+ * shows, in My targets or not. Without a site or Home's criteria the planning
+ * values read unknown with that reason; an unsaved Target reads as missing.
  */
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useNavigate, useParams, useSearch } from "@tanstack/react-router"
 import { CalendarArrowDown, CalendarClock, Crosshair, Star } from "lucide-react"
 import { useState } from "react"
-import type {
-  AngularSize,
-  DarknessWindow_Serialize,
-  GoalGap,
-  NightMoon_Serialize,
-  NightPlan_Serialize,
-  NoWindowReason,
-  ProjectGaps,
-  SkyCoordinates,
-  TargetRow_Serialize,
-  TargetsBasis_Serialize,
-  WindowSet_Serialize,
+import {
+  failureOf,
+  type AngularSize,
+  type DarknessWindow_Serialize,
+  type GoalGap,
+  type NightMoon_Serialize,
+  type NightPlan_Serialize,
+  type NoWindowReason,
+  type ProjectGaps,
+  type SkyCoordinates,
+  type TargetRow_Serialize,
+  type TargetsBasis_Serialize,
+  type WindowSet_Serialize,
 } from "@/api/ipc"
 import { useMessages } from "@/app/preferences"
 import { ActionButton, useAction } from "@/components/app/actions"
@@ -56,27 +57,21 @@ import type { Messages } from "@/lib/i18n"
 import { goalGradesFor } from "./good-tonight"
 import { favouriteAction, notYet, readFailure, Unknown, windowText } from "./parts"
 import { ExportCalendarDialog, NotificationsPanel, RemindersDialog } from "./planned-tools"
-import { gapsQuery, libraryQueryWhen, myTargetsRequest, PLAN_NIGHTS } from "./queries"
+import { gapsQuery, libraryQueryWhen, PLAN_NIGHTS } from "./queries"
 import { darknessTonight, moonTonight } from "./sky-tonight"
-import { bandGrades, capturedText, imgTimeText, recommendationText, type SearchParams } from "./targets-model"
+import { bandGrades, capturedText, imgTimeText, recommendationText, type SearchParams, targetContext } from "./targets-model"
 
 export function TargetPage() {
   const m = useMessages()
   const navigate = useNavigate()
   const { targetId } = useParams({ strict: false }) as { targetId: string }
   const search = useSearch({ strict: false }) as SearchParams
-  const rows = useQuery(libraryQueryWhen("planningTargetRows", [myTargetsRequest(search.site ?? null, search.night ?? null)]))
-  const page = rows.data
-  const found = page?.rows.find((r) => r.target.id === targetId) ?? null
-  // astro-plan-wre19.20 (targets_get): there is no read of one Target, so the page reads it from My targets. A Target
-  // that is only a favourite leaves My targets when Favourite goes off; the page keeps the row it last read, now not a
-  // favourite, so the page and its toggle stay where they are until the user leaves (PLAN-TGT-FR-17).
-  const [kept, setKept] = useState<TargetRow_Serialize | null>(null)
-  if (found && found !== kept) setKept(found)
-  const row = found ?? (page && kept?.target.id === targetId ? { ...kept, favourite: false } : null)
-  const basis = page?.basis ?? null
+  const read = useQuery(libraryQueryWhen("targetsGet", [targetId, targetContext(search)]))
+  const detail = read.data
   const path = [{ label: m.nav_targets(), link: { to: "/targets", search: search as Record<string, string> } }]
-  const failed = rows.error ? { error: rows.error, retry: rows.refetch } : null
+  const failure = failureOf(read.error)
+  const missing = failure?.source === "library" && failure.error.code === "not_found" && failure.error.identity === targetId
+  const failed = read.error && !missing ? { error: read.error, retry: read.refetch } : null
 
   if (failed) {
     return (
@@ -88,17 +83,17 @@ export function TargetPage() {
     )
   }
 
-  if (!page) return <DetailSkeleton label={m.common_loading()} />
-  if (!row) {
+  if (missing) {
     return (
       <DetailPage
         path={path}
         title={m.nav_targets()}
-        sections={[{ id: "missing", title: m.targets_not_in_my_targets(), content: <EmptyState icon={Crosshair} title={m.targets_not_in_my_targets()} action={<ActionButton action={{ id: "back", label: m.nav_targets(), run: () => void navigate({ to: "/targets", search }) }} />} /> }]}
+        sections={[{ id: "missing", title: m.targets_not_in_library(), content: <EmptyState icon={Crosshair} title={m.targets_not_in_library()} action={<ActionButton action={{ id: "back", label: m.nav_targets(), run: () => void navigate({ to: "/targets", search }) }} />} /> }]}
       />
     )
   }
-  return <TargetBody row={row} basis={basis} moon={page.moon} darkness={page.darkness} path={path} />
+  if (!detail) return <DetailSkeleton label={m.common_loading()} />
+  return <TargetBody row={detail.row} basis={detail.basis} moon={detail.moon} darkness={detail.darkness} path={path} />
 }
 
 function TargetBody({

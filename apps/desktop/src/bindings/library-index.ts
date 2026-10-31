@@ -1587,6 +1587,43 @@ export const commands = {
 	 */
 	planningTargetGaps: (targetId: string) => typedError<ProjectGaps[], ErrorResponse>(__TAURI_INVOKE("planning_target_gaps", { targetId })),
 	/**
+	 *  One saved Target's row (PLAN-TGT-FR-14) under a list's planning context:
+	 *  `context`'s site, night and rig selection, so the Target page shows what
+	 *  its list row shows; null is the list's default context. The context's
+	 *  filters and page do not apply. Read-only.
+	 * 
+	 *  # Errors
+	 *  `NotFound` for an unsaved Target or an unknown context site, rig or
+	 *  Project naming that missing entity; `PersistenceFailure` when a required
+	 *  catalog read fails.
+	 */
+	targetsGet: (targetId: string, context: {
+	show?: TargetsShow,
+	catalogues?: Catalogue[],
+	preset?: BuiltinPreset | null,
+	siteId?: string | null,
+	night?: string | null,
+	sort?: TargetsSort | null,
+	offset?: number,
+	/**  Rows after `offset`; absent lists every remaining row. */
+	limit?: number | null,
+	/**  The rigs Fit and the Filters strip are for (absent: no rig). */
+	rigs?: RigSelection,
+	/**  The Favourite filter, `?fav=` (PLAN-TGT-FR-17; absent: all). */
+	favourite?: boolean | null,
+	/**
+	 *  Suitable filters (PLAN-TGT-FR-15): a row qualifies when any chosen
+	 *  band is good or marginal for the night; without `sort` the list
+	 *  orders by the longest clear time among the chosen bands, descending.
+	 */
+	suitableBands?: Band[],
+	/**
+	 *  Only the subjects of this open Project, by their badge, in either
+	 *  Show mode (PLAN-FR-10).
+	 */
+	projectId?: string | null,
+} | null) => typedError<TargetDetail_Serialize, ErrorResponse>(__TAURI_INVOKE("targets_get", { targetId, context })),
+	/**
 	 *  One Targets list page: My targets or Browse catalogues with tonight's
 	 *  planning columns, the Moon once for the toolbar, sorted with unknown
 	 *  values last. `query.rigs` is the rig selector: no rig, one rig, or "this
@@ -1627,7 +1664,7 @@ export const commands = {
 	targetsSetFavourite: (targetId: string, favourite: boolean) => typedError<boolean, ErrorResponse>(__TAURI_INVOKE("targets_set_favourite", { targetId, favourite })),
 	/**
 	 *  The built-in presets offered for the rig selector's rigs (absent: no
-	 *  rig), with their definitions, then the saved presets. Mosaic candidates
+	 *  rig), by id with no English, then the saved presets. Mosaic candidates
 	 *  and Fits nicely need a rig; the narrowband presets are hidden when the
 	 *  selected rigs pass no Ha, SII or OIII.
 	 * 
@@ -2698,11 +2735,12 @@ export type BuiltinPreset = "best_tonight_broadband" | "narrowband_moon_up" | "e
 /**  Offered only with a rig selected. */
 "fits_nicely";
 
-/**  A built-in preset with its name and definition. */
+/**
+ *  A built-in preset by its id; the frontend words its name and definition
+ *  from its message catalogue, so no English crosses IPC.
+ */
 export type BuiltinPresetInfo = {
 	preset: BuiltinPreset,
-	name: string,
-	definition: string,
 };
 
 /**
@@ -6460,6 +6498,18 @@ export type PresetFilters = {
 	show?: TargetsShow,
 	catalogues?: Catalogue[],
 	preset?: BuiltinPreset | null,
+	/**  The Favourite filter, `?fav=` (PLAN-TGT-FR-17; absent: all). */
+	favourite?: boolean | null,
+	/**
+	 *  Suitable filters (PLAN-TGT-FR-15): the chosen bands, any of which
+	 *  must be good or marginal for a Target.
+	 */
+	suitableBands?: Band[],
+	/**
+	 *  The Fit filter's rig (PLAN-TGT-FR-10): one rig, or none. "This
+	 *  Project's rigs" is a Project context, not a saved filter.
+	 */
+	rigId?: string | null,
 	sort?: TargetsSort,
 };
 
@@ -8574,6 +8624,39 @@ export type TargetCoverage = {
 };
 
 /**
+ *  One saved Target's row (`targets_get`) with the night it is planned for,
+ *  as a list page under the same context carries them: the basis, the Moon,
+ *  the darkness window, or what is missing to plan, the site first.
+ */
+export type TargetDetail = TargetDetail_Serialize | TargetDetail_Deserialize;
+
+/**
+ *  One saved Target's row (`targets_get`) with the night it is planned for,
+ *  as a list page under the same context carries them: the basis, the Moon,
+ *  the darkness window, or what is missing to plan, the site first.
+ */
+export type TargetDetail_Deserialize = {
+	row: TargetRow_Deserialize,
+	basis: TargetsBasis_Deserialize | null,
+	moon: NightMoon_Deserialize | null,
+	darkness: DarknessWindow_Deserialize | null,
+	planningUnavailable: PlanningUnknownReason | null,
+};
+
+/**
+ *  One saved Target's row (`targets_get`) with the night it is planned for,
+ *  as a list page under the same context carries them: the basis, the Moon,
+ *  the darkness window, or what is missing to plan, the site first.
+ */
+export type TargetDetail_Serialize = {
+	row: TargetRow_Serialize,
+	basis: TargetsBasis_Serialize | null,
+	moon: NightMoon_Serialize | null,
+	darkness: DarknessWindow_Serialize | null,
+	planningUnavailable: PlanningUnknownReason | null,
+};
+
+/**
  *  Source of an explicitly saved target. Provenance is never client-asserted:
  *  seed candidates come from the bundled dataset, provider candidates from a
  *  fresh resolve, user candidates from the shared user-target rules.
@@ -8615,6 +8698,11 @@ export type TargetRow_Deserialize = {
 	/**  Whether the Target is a saved library record. */
 	saved: boolean,
 	favourite: boolean,
+	/**
+	 *  In My targets (PLAN-TGT-FR-01): a favourite, an open-Project subject
+	 *  or a Target with a session, the rule search results use.
+	 */
+	inMyTargets: boolean,
 	/**  Open Projects that have the Target as a subject. */
 	projects: ProjectBadge[],
 	/**  Peak geometric altitude within tonight's dark interval. */
@@ -8649,6 +8737,11 @@ export type TargetRow_Serialize = {
 	/**  Whether the Target is a saved library record. */
 	saved: boolean,
 	favourite: boolean,
+	/**
+	 *  In My targets (PLAN-TGT-FR-01): a favourite, an open-Project subject
+	 *  or a Target with a session, the rule search results use.
+	 */
+	inMyTargets: boolean,
 	/**  Open Projects that have the Target as a subject. */
 	projects: ProjectBadge[],
 	/**  Peak geometric altitude within tonight's dark interval. */
@@ -8806,8 +8899,10 @@ export type TargetsPresets = {
  *  One Targets list request: the Show mode, the chosen catalogues and preset,
  *  the planning site (absent: the default site), the night by its site-local
  *  evening date (absent: tonight), the sort (absent: the preset's sort, else
- *  Designation ascending) and an optional page. The criteria are Home's
- *  stored ones, the one source every planning read shares.
+ *  Designation ascending), the row filters and an optional page. The filters
+ *  apply before the page, so a long list filters whole (PLAN-TGT-FR-15). The
+ *  criteria are Home's stored ones, the one source every planning read
+ *  shares. The default is the list request with every field absent.
  */
 export type TargetsQuery = TargetsQuery_Serialize | TargetsQuery_Deserialize;
 
@@ -8815,8 +8910,10 @@ export type TargetsQuery = TargetsQuery_Serialize | TargetsQuery_Deserialize;
  *  One Targets list request: the Show mode, the chosen catalogues and preset,
  *  the planning site (absent: the default site), the night by its site-local
  *  evening date (absent: tonight), the sort (absent: the preset's sort, else
- *  Designation ascending) and an optional page. The criteria are Home's
- *  stored ones, the one source every planning read shares.
+ *  Designation ascending), the row filters and an optional page. The filters
+ *  apply before the page, so a long list filters whole (PLAN-TGT-FR-15). The
+ *  criteria are Home's stored ones, the one source every planning read
+ *  shares. The default is the list request with every field absent.
  */
 export type TargetsQuery_Deserialize = {
 	show?: TargetsShow,
@@ -8830,14 +8927,29 @@ export type TargetsQuery_Deserialize = {
 	limit?: number | null,
 	/**  The rigs Fit and the Filters strip are for (absent: no rig). */
 	rigs?: RigSelection,
+	/**  The Favourite filter, `?fav=` (PLAN-TGT-FR-17; absent: all). */
+	favourite?: boolean | null,
+	/**
+	 *  Suitable filters (PLAN-TGT-FR-15): a row qualifies when any chosen
+	 *  band is good or marginal for the night; without `sort` the list
+	 *  orders by the longest clear time among the chosen bands, descending.
+	 */
+	suitableBands?: Band[],
+	/**
+	 *  Only the subjects of this open Project, by their badge, in either
+	 *  Show mode (PLAN-FR-10).
+	 */
+	projectId?: string | null,
 };
 
 /**
  *  One Targets list request: the Show mode, the chosen catalogues and preset,
  *  the planning site (absent: the default site), the night by its site-local
  *  evening date (absent: tonight), the sort (absent: the preset's sort, else
- *  Designation ascending) and an optional page. The criteria are Home's
- *  stored ones, the one source every planning read shares.
+ *  Designation ascending), the row filters and an optional page. The filters
+ *  apply before the page, so a long list filters whole (PLAN-TGT-FR-15). The
+ *  criteria are Home's stored ones, the one source every planning read
+ *  shares. The default is the list request with every field absent.
  */
 export type TargetsQuery_Serialize = {
 	show: TargetsShow,
@@ -8851,6 +8963,19 @@ export type TargetsQuery_Serialize = {
 	limit: number | null,
 	/**  The rigs Fit and the Filters strip are for (absent: no rig). */
 	rigs: RigSelection,
+	/**  The Favourite filter, `?fav=` (PLAN-TGT-FR-17; absent: all). */
+	favourite: boolean | null,
+	/**
+	 *  Suitable filters (PLAN-TGT-FR-15): a row qualifies when any chosen
+	 *  band is good or marginal for the night; without `sort` the list
+	 *  orders by the longest clear time among the chosen bands, descending.
+	 */
+	suitableBands: Band[],
+	/**
+	 *  Only the subjects of this open Project, by their badge, in either
+	 *  Show mode (PLAN-FR-10).
+	 */
+	projectId: string | null,
 };
 
 /**  A selected rig as the Targets page plans for it. */
@@ -8876,6 +9001,8 @@ export type TargetsSearchAction =
 /**  One search result. A result outside My targets is added as a favourite. */
 export type TargetsSearchResult = {
 	target: TargetCandidate,
+	/**  The search table's Favourite column (PLAN-TGT-FR-17). */
+	favourite: boolean,
 	source: TargetsSearchSource,
 	inMyTargets: boolean,
 	matchedAlias: string | null,

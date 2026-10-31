@@ -99,7 +99,8 @@ impl BuiltinPreset {
             && !bands.iter().any(|band| matches!(band, Band::Ha | Band::Sii | Band::Oiii)))
     }
 
-    /// The menu name.
+    /// The English name for error text and the reserved saved-preset names;
+    /// it never crosses IPC, where the frontend words the id.
     #[must_use]
     pub const fn name(self) -> &'static str {
         match self {
@@ -110,26 +111,6 @@ impl BuiltinPreset {
             Self::PlanetaryNebulaeOiii => "Planetary nebulae OIII",
             Self::MosaicCandidates => "Mosaic candidates",
             Self::FitsNicely => "Fits nicely",
-        }
-    }
-
-    /// The definition shown with the preset.
-    #[must_use]
-    pub const fn definition(self) -> &'static str {
-        match self {
-            Self::BestTonightBroadband => {
-                "Img time above zero with a broadband band viable, sorted by Img time descending."
-            }
-            Self::NarrowbandMoonUp => {
-                "Img time above zero with Ha, SII or OIII viable while the Moon is up."
-            }
-            Self::EmissionNebulaeHa => "Emission nebulae with Ha viable.",
-            Self::GalaxiesDarkSky => {
-                "Galaxies with Img time above zero while the Moon is below the horizon."
-            }
-            Self::PlanetaryNebulaeOiii => "Planetary nebulae with OIII viable.",
-            Self::MosaicCandidates => "Targets that need 2 or more panels on a selected rig.",
-            Self::FitsNicely => "Targets covering 25% to 90% of a selected rig's field.",
         }
     }
 
@@ -181,9 +162,11 @@ pub struct TargetsSort {
 /// One Targets list request: the Show mode, the chosen catalogues and preset,
 /// the planning site (absent: the default site), the night by its site-local
 /// evening date (absent: tonight), the sort (absent: the preset's sort, else
-/// Designation ascending) and an optional page. The criteria are Home's
-/// stored ones, the one source every planning read shares.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+/// Designation ascending), the row filters and an optional page. The filters
+/// apply before the page, so a long list filters whole (PLAN-TGT-FR-15). The
+/// criteria are Home's stored ones, the one source every planning read
+/// shares. The default is the list request with every field absent.
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct TargetsQuery {
@@ -208,6 +191,18 @@ pub struct TargetsQuery {
     /// The rigs Fit and the Filters strip are for (absent: no rig).
     #[serde(default)]
     pub rigs: RigSelection,
+    /// The Favourite filter, `?fav=` (PLAN-TGT-FR-17; absent: all).
+    #[serde(default)]
+    pub favourite: Option<bool>,
+    /// Suitable filters (PLAN-TGT-FR-15): a row qualifies when any chosen
+    /// band is good or marginal for the night; without `sort` the list
+    /// orders by the longest clear time among the chosen bands, descending.
+    #[serde(default)]
+    pub suitable_bands: Vec<Band>,
+    /// Only the subjects of this open Project, by their badge, in either
+    /// Show mode (PLAN-FR-10).
+    #[serde(default)]
+    pub project_id: Option<Uuid>,
 }
 
 /// The toolbar's rig selector (PLAN-TGT-FR-11): no rig (the default), one rig
@@ -390,6 +385,9 @@ pub struct TargetRow {
     /// Whether the Target is a saved library record.
     pub saved: bool,
     pub favourite: bool,
+    /// In My targets (PLAN-TGT-FR-01): a favourite, an open-Project subject
+    /// or a Target with a session, the rule search results use.
+    pub in_my_targets: bool,
     /// Open Projects that have the Target as a subject.
     pub projects: Vec<ProjectBadge>,
     /// Peak geometric altitude within tonight's dark interval.
@@ -566,6 +564,20 @@ pub struct TargetsPage {
     pub bands: Vec<Band>,
 }
 
+/// One saved Target's row (`targets_get`) with the night it is planned for,
+/// as a list page under the same context carries them: the basis, the Moon,
+/// the darkness window, or what is missing to plan, the site first.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
+pub struct TargetDetail {
+    pub row: TargetRow,
+    pub basis: Option<TargetsBasis>,
+    pub moon: Option<NightMoon>,
+    pub darkness: Option<DarknessWindow>,
+    pub planning_unavailable: Option<PlanningUnknownReason>,
+}
+
 // ---------------------------------------------------------------------------
 // Search and Add to targets
 // ---------------------------------------------------------------------------
@@ -589,6 +601,8 @@ pub enum TargetsSearchSource {
 #[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct TargetsSearchResult {
     pub target: TargetCandidate,
+    /// The search table's Favourite column (PLAN-TGT-FR-17).
+    pub favourite: bool,
     pub source: TargetsSearchSource,
     pub in_my_targets: bool,
     pub matched_alias: Option<String>,
@@ -639,18 +653,28 @@ pub struct PresetFilters {
     pub catalogues: Vec<Catalogue>,
     #[serde(default)]
     pub preset: Option<BuiltinPreset>,
+    /// The Favourite filter, `?fav=` (PLAN-TGT-FR-17; absent: all).
+    #[serde(default)]
+    pub favourite: Option<bool>,
+    /// Suitable filters (PLAN-TGT-FR-15): the chosen bands, any of which
+    /// must be good or marginal for a Target.
+    #[serde(default)]
+    pub suitable_bands: Vec<Band>,
+    /// The Fit filter's rig (PLAN-TGT-FR-10): one rig, or none. "This
+    /// Project's rigs" is a Project context, not a saved filter.
+    #[serde(default)]
+    pub rig_id: Option<Uuid>,
     #[serde(default)]
     pub sort: TargetsSort,
 }
 
-/// A built-in preset with its name and definition.
+/// A built-in preset by its id; the frontend words its name and definition
+/// from its message catalogue, so no English crosses IPC.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct BuiltinPresetInfo {
     pub preset: BuiltinPreset,
-    pub name: String,
-    pub definition: String,
 }
 
 /// A saved preset at its revision, starting at 1.

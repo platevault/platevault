@@ -37,7 +37,7 @@ import { library, type TargetRow_Serialize, type TargetsBasis_Serialize, type Ta
 import { useMessages } from "@/app/preferences"
 import { ActionButton } from "@/components/app/actions"
 import type { Action, Column, Facet, MenuItem } from "@/components/app/contracts"
-import { EmptyState, type PageNotice, UnknownValue } from "@/components/app/feedback"
+import { EmptyState, type PageNotice } from "@/components/app/feedback"
 import type { FacetPatch } from "@/components/app/filter-bar"
 import { NightPicker, SitePicker } from "@/components/app/pickers"
 import { failureMessage } from "@/components/app/run-result"
@@ -54,18 +54,13 @@ import { useResultAction } from "./search"
 import { darknessTonight, moonTonight, sparkNight, sparkOf } from "./sky-tonight"
 import {
   bandGrades,
-  byClearTime,
   CATALOGUES,
   capturedText,
   catalogueName,
   fitText,
   imgTimeText,
-  inMyTargets,
-  matchesRow,
   oppositionText,
   facetSearch,
-  parseBands,
-  parseFavourite,
   presetDefinition,
   presetFilters,
   presetSearch,
@@ -103,9 +98,6 @@ export function TargetsPage() {
   const client = useQueryClient()
   const search = useSearch({ strict: false }) as SearchParams
   const state = readState(search)
-  const favourite = parseFavourite(search.fav)
-  const bands = parseBands(search.good)
-  const projectId = search.project ?? null
   const query = (search.q ?? "").trim()
   const searching = query.length >= MIN_QUERY
 
@@ -133,22 +125,19 @@ export function TargetsPage() {
 
   const data: TargetsPage_Serialize | undefined = page.data
   const rows = data?.rows ?? []
-  // astro-plan-wre19.20: over one page of rows these filters need the library; filtering the first page here would hide matches.
-  const partial = data ? data.total > data.rows.length : false
-  const filters = partial ? { favourite: "" as const, bands: [], projectId: null } : { favourite, bands, projectId }
-  const matched = rows.map((row, position) => ({ row, position })).filter((v) => matchesRow(v.row, filters))
-  // A header sort is the library's; without one, Suitable filters order by clear time (PLAN-TGT-FR-15).
-  const shown: RowView[] = (state.sort ? matched : byClearTime(matched, (v) => v.row, filters.bands)).map((v, position) => ({ row: v.row, position }))
+  // The library filters (Favourite, Suitable filters, the Project's subjects) and sorts before it pages (PLAN-TGT-FR-15).
+  const shown: RowView[] = rows.map((row, position) => ({ row, position }))
+  const projectId = state.projectId
   const projectName = projectId ? (rows.flatMap((r) => r.projects).find((p) => p.projectId === projectId)?.name ?? null) : null
 
   /** Open a row in My targets; add any other row to My targets as a favourite. */
-  const activate = (row: TargetRow_Serialize) => (inMyTargets(row) ? openTarget(row.target.id) : void result.act(asResult(row)))
+  const activate = (row: TargetRow_Serialize) => (row.inMyTargets ? openTarget(row.target.id) : void result.act(asResult(row)))
 
   const darkness = darknessTonight(data?.darkness ?? null)
   const columns = targetColumns(m, state, data, darkness, result.pending)
   const rowActions = (v: RowView): MenuItem[] => {
     const row = v.row
-    const open: MenuItem[] = inMyTargets(row) ? [{ id: "open", label: m.verb_open(), run: () => openTarget(row.target.id) }, { separator: true }] : []
+    const open: MenuItem[] = row.inMyTargets ? [{ id: "open", label: m.verb_open(), run: () => openTarget(row.target.id) }, { separator: true }] : []
     const fav: Action = row.saved ? favouriteAction(m, client, row.target.id, row.favourite) : { id: "favourite-add", label: m.targets_favourite_add(), icon: Star, run: () => result.act(asResult(row)) }
     // astro-plan-wre19.14: a night's plan has no read and no per-night write yet.
     const plan: Action = { id: "plan", label: m.targets_add_to_plan(), icon: CalendarClock, run: () => undefined, unavailable: notYet(m, m.targets_add_to_plan()) }
@@ -158,16 +147,16 @@ export function TargetsPage() {
   const facets: Facet[] = []
   if (state.view === "browse")
     facets.push({ id: "cat", label: m.targets_catalogues(), kind: "multi", value: state.catalogues, options: CATALOGUES.map((c) => ({ value: c, label: catalogueName(c) })) })
-  if (data && data.bands.length > 0 && !partial) facets.push(suitableFacet(m, data.bands, rows, bands))
-  if (state.view !== "planned" && !partial)
+  if (data && data.bands.length > 0) facets.push(suitableFacet(m, data.bands, state.suitableBands))
+  if (state.view !== "planned")
     facets.push({
       id: "fav",
       label: m.targets_favourite(),
       kind: "single",
-      value: favourite,
+      value: state.favourite,
       options: [
-        { value: "yes", label: m.targets_favourite_yes(), count: rows.filter((r) => r.favourite).length },
-        { value: "no", label: m.targets_favourite_no(), count: rows.filter((r) => !r.favourite).length },
+        { value: "yes", label: m.targets_favourite_yes() },
+        { value: "no", label: m.targets_favourite_no() },
       ],
     })
   // Clear empties every facet in one patch, so the URL changes once with all of them.
@@ -175,11 +164,6 @@ export function TargetsPage() {
 
   const toolbarActions: Action[] = []
   if (state.preset || activeSaved) toolbarActions.push({ id: "clear-preset", label: m.targets_clear_preset(), run: () => setParams({ preset: undefined, saved: undefined }) })
-  if (partial) {
-    const needsLibrary = (id: string, label: string): Action => ({ id, label, run: () => undefined, unavailable: { action: m.actions_blocked({ action: label }), reason: m.targets_filter_needs_library(), blockers: [] } })
-    toolbarActions.push(needsLibrary("filter-favourite", m.targets_favourite()), needsLibrary("filter-suitable", m.domain_suitable_filters()))
-    if (projectId) toolbarActions.push(needsLibrary("filter-project", m.targets_caption_project({ name: projectName ?? m.project_noun() })))
-  }
   // Clear Project leaves a single chosen rig; only "this Project's rigs" goes with the Project.
   if (projectId) toolbarActions.push({ id: "clear-project", label: m.targets_clear_project(), run: () => setParams({ project: undefined, rig: state.rigs.kind === "project" ? undefined : search.rig }) })
 
@@ -291,7 +275,7 @@ export function TargetsPage() {
 
   const sort = state.sort ? { columnId: state.sort.column, direction: state.sort.descending ? ("desc" as const) : ("asc" as const) } : null
   // A built-in preset states its definition while it is on (PLAN-TGT-FR-09), worded from the catalogue by id.
-  const summary = data ? [listSummary(m, data, shown.length, projectName), state.preset ? presetDefinition(m, state.preset) : null].filter(Boolean).join(" · ") : undefined
+  const summary = data ? [listSummary(m, data, projectName), state.preset ? presetDefinition(m, state.preset) : null].filter(Boolean).join(" · ") : undefined
   return (
     <>
       <ListPage
@@ -329,7 +313,7 @@ export function TargetsPage() {
             actions: toolbarActions,
             matchCount: shown.length,
           },
-          empty: emptyState(m, { state, data, filtered: rows.length > 0, setParams }),
+          empty: emptyState(m, { state, data, filtered: state.favourite !== "" || state.suitableBands.length > 0, setParams }),
           columnsId: "targets",
           stickyFirstColumn: true,
         }}
@@ -366,11 +350,11 @@ function useSearchBox(fromUrl: string, commit: (q: string) => void) {
 
 /** A list row as the search-result action takes it: a saved Target from the library, else a bundled catalogue entry. */
 function asResult(row: TargetRow_Serialize): TargetsSearchResult {
-  return { target: row.target, source: row.saved ? "library" : "catalogue", inMyTargets: inMyTargets(row), matchedAlias: null }
+  return { target: row.target, source: row.saved ? "library" : "catalogue", favourite: row.favourite, inMyTargets: row.inMyTargets, matchedAlias: null }
 }
 
-function listSummary(m: Messages, data: TargetsPage_Serialize, shown: number, projectName: string | null): string {
-  const count = data.total > data.rows.length ? m.targets_count_partial({ shown: formatCount(data.rows.length), total: formatCount(data.total) }) : m.plan_targets_count({ count: shown })
+function listSummary(m: Messages, data: TargetsPage_Serialize, projectName: string | null): string {
+  const count = data.total > data.rows.length ? m.targets_count_partial({ shown: formatCount(data.rows.length), total: formatCount(data.total) }) : m.plan_targets_count({ count: data.total })
   return projectName ? `${m.targets_caption_project({ name: projectName })} · ${count}` : count
 }
 
@@ -439,6 +423,11 @@ function designationCell(m: Messages, designation: string, busy: boolean): strin
   return busy ? `${designation} · ${m.common_loading()}` : designation
 }
 
+/** The Favourite column's star (PLAN-TGT-FR-17), the same in the list and the search results. */
+function favouriteMark(m: Messages, favourite: boolean) {
+  return favourite ? <Star role="img" aria-label={m.targets_favourite()} className="size-3.5 fill-warning text-warning" /> : null
+}
+
 function targetColumns(m: Messages, state: TargetsState, data: TargetsPage_Serialize | undefined, darkness: Darkness, pending: string | null): Column<RowView>[] {
   // The library ordered the rows for the requested sort; the table keeps that order.
   const order = (v: RowView) => (state.sort?.descending ? -v.position : v.position)
@@ -452,7 +441,7 @@ function targetColumns(m: Messages, state: TargetsState, data: TargetsPage_Seria
       id: "favourite",
       header: m.targets_favourite(),
       static: true,
-      cell: (v) => (v.row.favourite ? <Star role="img" aria-label={m.targets_favourite()} className="size-3.5 fill-warning text-warning" /> : null),
+      cell: (v) => favouriteMark(m, v.row.favourite),
     },
   ]
   if (state.view === "browse")
@@ -460,7 +449,7 @@ function targetColumns(m: Messages, state: TargetsState, data: TargetsPage_Seria
       id: "mine",
       header: m.targets_in_my_targets(),
       static: true,
-      cell: (v) => (inMyTargets(v.row) ? <Check role="img" aria-label={m.targets_in_my_targets()} className="size-3.5 text-success" /> : null),
+      cell: (v) => (v.row.inMyTargets ? <Check role="img" aria-label={m.targets_in_my_targets()} className="size-3.5 text-success" /> : null),
     })
   columns.push(
     { id: "type", header: m.targets_type(), truncate: true, sortValue: order, cell: (v) => v.row.target.objectType },
@@ -525,8 +514,7 @@ const SOURCE_WORDS: Record<TargetsSearchSource, (m: Messages) => string> = {
 function resultColumns(m: Messages, pending: string | null): Column<TargetsSearchResult>[] {
   return [
     { id: "designation", header: m.targets_designation(), rowHeader: true, truncate: true, truncateMin: "name", sortValue: (r) => r.target.designation, cell: (r) => designationCell(m, r.target.designation, pending === r.target.id) },
-    // astro-plan-wre19.20: a search result does not say whether it is a favourite yet.
-    { id: "favourite", header: m.targets_favourite(), static: true, cell: () => <UnknownValue label={m.home_unavailable({ what: m.targets_favourite() })} /> },
+    { id: "favourite", header: m.targets_favourite(), static: true, cell: (r) => favouriteMark(m, r.favourite) },
     { id: "name", header: m.home_column_name(), truncate: true, sortValue: (r) => r.target.commonName ?? r.matchedAlias, cell: (r) => r.target.commonName ?? r.matchedAlias ?? "–" },
     { id: "type", header: m.targets_type(), truncate: true, sortValue: (r) => r.target.objectType, cell: (r) => r.target.objectType },
     { id: "source", header: m.targets_source(), sortValue: (r) => SOURCE_WORDS[r.source](m), cell: (r) => SOURCE_WORDS[r.source](m) },
