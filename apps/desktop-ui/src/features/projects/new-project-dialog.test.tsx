@@ -67,7 +67,7 @@ afterEach(() => {
 })
 
 const NGC7000 = { id: "t-ngc7000", designation: "NGC 7000", aliases: [], commonName: "North America Nebula", objectType: "HII", coordinates: null, provenance: { source: "user" as const }, providerId: null }
-const SEARCH: TargetsSearchResults = { results: [{ target: NGC7000 as TargetsSearchResult["target"], source: "my_targets", inMyTargets: true, matchedAlias: null }], simbad: { state: "searched" } }
+const SEARCH: TargetsSearchResults = { results: [{ target: NGC7000 as TargetsSearchResult["target"], source: "my_targets", favourite: false, inMyTargets: true, matchedAlias: null }], simbad: { state: "searched" } }
 const UNSAVED = { code: "persistence_failure", identity: null, scope: null, retry: "retry", currentRevision: null, successors: [], window: null, correction: null }
 
 /** The library's answers: `rigs` from `library_list_equipment`, one My targets hit for any search, and `project_create` recorded. */

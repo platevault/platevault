@@ -31,4 +31,3 @@ function CensusFixture() {
 }
 
 createRoot(document.getElementById("root")!).render(createElement(CensusFixture))
-

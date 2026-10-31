@@ -15,7 +15,7 @@ import { setLocale } from "@/app/preferences"
 import { AppRoot } from "@/app/root"
 import { DEFAULT_LOCALE, m } from "@/lib/i18n"
 import { createShellRouter } from "@/routes"
-import { BASIS, CRITERIA, candidate, host as answers, NIGHT, refuse, row, SITE, targetsPage } from "./__fixtures__/targets-host"
+import { BASIS, CRITERIA, candidate, host as answers, NIGHT, refuse, row, SITE, targetDetail } from "./__fixtures__/targets-host"
 import { TargetPage } from "./target"
 import { TargetsPage } from "./targets"
 
@@ -77,10 +77,10 @@ const status = (subs: ReminderSubscription[]) => ({
   deliveries: [],
 })
 
-const rows = () => targetsPage([row(M31)])
+const detail = () => targetDetail(row(M31))
 
-function renderTarget() {
-  const history = createMemoryHistory({ initialEntries: ["/targets/t-m31"] })
+function renderTarget(path = "/targets/t-m31") {
+  const history = createMemoryHistory({ initialEntries: [path] })
   const pages = (appWindow: AnyRoute): AnyRoute[] => [
     createRoute({ getParentRoute: () => appWindow, path: "/targets", component: TargetsPage }),
     createRoute({ getParentRoute: () => appWindow, path: "/targets/$targetId", component: TargetPage }),
@@ -112,7 +112,7 @@ describe("Target page", () => {
     "shows each night's windows and why a night has none, at the site and zone the library planned for, in %s",
     async (locale) => {
       setLocale(locale)
-      const lib = host({ planning_target_rows: rows, planning_compute_windows: () => WINDOWS })
+      const lib = host({ targets_get: detail, planning_compute_windows: () => WINDOWS })
       renderTarget()
       expect(await screen.findByText(m.targets_no_window_never_dark())).toBeInTheDocument()
       expect(await screen.findByText(/Backyard$/)).toBeInTheDocument()
@@ -125,7 +125,7 @@ describe("Target page", () => {
   it(
     "says the windows are unknown when the Target has no catalogued coordinates",
     async () => {
-      host({ planning_target_rows: rows, planning_compute_windows: () => ({ ...WINDOWS, nights: [], unavailableReason: "target_coordinates_unknown" }) })
+      host({ targets_get: detail, planning_compute_windows: () => ({ ...WINDOWS, nights: [], unavailableReason: "target_coordinates_unknown" }) })
       renderTarget()
       expect(await screen.findByText(`${m.status_unknown()} · ${m.tonight_no_coordinates()}`)).toBeInTheDocument()
     },
@@ -136,7 +136,7 @@ describe("Target page", () => {
     "turns Favourite off from the toggle beside the title",
     async () => {
       const user = userEvent.setup()
-      const lib = host({ planning_target_rows: rows, targets_set_favourite: () => false })
+      const lib = host({ targets_get: detail, targets_set_favourite: () => false })
       renderTarget()
       const toggle = await screen.findByRole("button", { name: m.targets_favourite(), pressed: true })
       await user.click(toggle)
@@ -150,7 +150,7 @@ describe("Target page", () => {
     async () => {
       const user = userEvent.setup()
       const lib = host({
-        planning_target_rows: rows,
+        targets_get: detail,
         planning_review_reminders: (args) => ({
           targetId: "t-m31",
           designation: "M 31",
@@ -190,7 +190,7 @@ describe("Target page", () => {
       setLocale(locale)
       const user = userEvent.setup()
       const lib = host({
-        planning_target_rows: rows,
+        targets_get: detail,
         planning_reminder_lead_time: () => ({ leadMinutes: 2880, revision: 1 }),
         planning_review_reminders: (args) => ({
           targetId: "t-m31",
@@ -232,7 +232,7 @@ describe("Target page", () => {
       const user = userEvent.setup()
       const blocked = subscription({ state: "blocked", blockReason: "permission_denied", actions: ["settings", "retry"] })
       const lib = host({
-        planning_target_rows: rows,
+        targets_get: detail,
         planning_reminder_status: () => status([blocked]),
         planning_enable_reminders: () => blocked,
         planning_open_notification_settings: () => ({ opened: false, reason: null }),
@@ -253,7 +253,7 @@ describe("Target page", () => {
     async () => {
       const user = userEvent.setup()
       const lib = host({
-        planning_target_rows: rows,
+        targets_get: detail,
         planning_reminder_status: () => status([subscription()]),
         planning_disable_reminders: () => refuse("conflict", "review"),
       })
@@ -271,7 +271,7 @@ describe("Target page", () => {
     async () => {
       const user = userEvent.setup()
       const lib = host({
-        planning_target_rows: rows,
+        targets_get: detail,
         planning_compute_windows: () => WINDOWS,
         planning_review_calendar_export: () => ({
           snapshotDigest: "digest-a",
@@ -302,37 +302,48 @@ describe("Target page", () => {
   )
 
   it(
-    "keeps a favourite-only Target on screen after Favourite goes off, with the toggle off",
+    "reads its Target under the list's site, night and rig, and keeps it on screen out of My targets after Favourite goes off",
     async () => {
       const user = userEvent.setup()
       let favourite = true
       const lib = host({
-        planning_target_rows: () => targetsPage(favourite ? [row(M31, { sessions: 0, projects: [] })] : []),
+        targets_get: () => targetDetail(row(M31, { sessions: 0, projects: [], favourite, inMyTargets: favourite })),
         targets_set_favourite: (args) => {
           favourite = args.favourite as boolean
           return favourite
         },
       })
-      renderTarget()
+      renderTarget("/targets/t-m31?site=site-1&night=2026-10-29&rig=r1&fav=yes")
       await user.click(await screen.findByRole("button", { name: m.targets_favourite(), pressed: true }))
-      await waitFor(() => expect(lib.sent("planning_target_rows").length).toBeGreaterThan(1))
+      expect(lib.sent("targets_get")[0]?.args).toEqual({ targetId: "t-m31", context: { siteId: "site-1", night: "2026-10-29", rigs: { kind: "rig", equipmentId: "r1" } } })
+      await waitFor(() => expect(lib.sent("targets_get").length).toBeGreaterThan(1))
       expect(await screen.findByRole("button", { name: m.targets_favourite(), pressed: false })).toBeInTheDocument()
       expect(screen.getByRole("heading", { name: "M 31" })).toBeInTheDocument()
-      expect(screen.queryByText(m.targets_not_in_my_targets())).toBeNull()
     },
     TEST_MS,
   )
 
   it(
-    "offers Retry when My targets can't be read, and when the goal gaps can't",
+    "says a Target the library doesn't hold isn't in the library, with the way back to Targets",
+    async () => {
+      host({ targets_get: () => refuse("not_found") })
+      renderTarget()
+      expect(await screen.findAllByText(m.targets_not_in_library())).not.toHaveLength(0)
+      expect(screen.getByRole("button", { name: m.nav_targets() })).toBeInTheDocument()
+    },
+    TEST_MS,
+  )
+
+  it(
+    "offers Retry when the Target can't be read, and when the goal gaps can't",
     async () => {
       const user = userEvent.setup()
-      let rowReads = 0
+      let reads = 0
       host({
-        planning_target_rows: () => {
-          rowReads += 1
-          if (rowReads === 1) refuse("persistence_failure")
-          return rows()
+        targets_get: () => {
+          reads += 1
+          if (reads === 1) refuse("persistence_failure")
+          return detail()
         },
         planning_target_gaps: () => refuse("persistence_failure"),
       })
@@ -340,7 +351,7 @@ describe("Target page", () => {
       expect(await screen.findByText(m.action_failure_persistence_failure())).toBeInTheDocument()
       await user.click(screen.getByRole("button", { name: m.verb_retry() }))
       expect(await screen.findByRole("heading", { name: "M 31" })).toBeInTheDocument()
-      // The rows came back; the goal gaps did not, and say so with their own Retry.
+      // The Target came back; the goal gaps did not, and say so with their own Retry.
       expect(await screen.findByText(m.action_failure_persistence_failure())).toBeInTheDocument()
       expect(screen.getByRole("button", { name: m.verb_retry() })).toBeInTheDocument()
     },
@@ -354,7 +365,7 @@ describe("Target page", () => {
       let reviews = 0
       let enables = 0
       const lib = host({
-        planning_target_rows: rows,
+        targets_get: detail,
         planning_review_reminders: (args) => {
           reviews += 1
           return {
@@ -399,7 +410,7 @@ describe("Target page", () => {
       let reviews = 0
       let exports = 0
       const lib = host({
-        planning_target_rows: rows,
+        targets_get: detail,
         planning_compute_windows: () => WINDOWS,
         planning_review_calendar_export: () => {
           reviews += 1

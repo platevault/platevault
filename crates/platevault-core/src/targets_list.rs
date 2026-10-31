@@ -24,13 +24,14 @@ use crate::library::{blocking, Library};
 use crate::planning::{self, NightContext, TargetNight};
 use crate::targets::TargetQuery;
 use crate::{
-    AngularSize, Band, BandState, BuiltinPreset, BuiltinPresetInfo, Catalogue, FieldOfView, Fit,
-    FitUnknownReason, HomeCriteria, LibraryError, MoonAvoidanceCurve, MoonCriterion, MyTargetMarks,
-    ObservingSite, ObservingWindow, PlanCriteria, PlanningUnknownReason, PresetFilters, PresetRef,
-    Recommendation, Revision, RigFit, RigSelection, SavedPreset, SimbadSearch, TargetActivity,
-    TargetRecord, TargetRow, TargetsBasis, TargetsColumn, TargetsPage, TargetsPresets,
-    TargetsQuery, TargetsRig, TargetsSearchAction, TargetsSearchResult, TargetsSearchResults,
-    TargetsSearchSource, TargetsShow, TargetsSort, WindowUnavailableReason, FIT_MIN_COVERAGE,
+    AngularSize, Band, BandState, BuiltinPreset, BuiltinPresetInfo, Catalogue, DarknessWindow,
+    FieldOfView, Fit, FitUnknownReason, HomeCriteria, LibraryError, MoonAvoidanceCurve,
+    MoonCriterion, MyTargetMarks, NightMoon, ObservingSite, ObservingWindow, PlanCriteria,
+    PlanningUnknownReason, PresetFilters, PresetRef, Recommendation, Revision, RigFit,
+    RigSelection, SavedPreset, SimbadSearch, TargetActivity, TargetDetail, TargetRecord, TargetRow,
+    TargetsBasis, TargetsColumn, TargetsPage, TargetsPresets, TargetsQuery, TargetsRig,
+    TargetsSearchAction, TargetsSearchResult, TargetsSearchResults, TargetsSearchSource,
+    TargetsShow, TargetsSort, WindowUnavailableReason, FIT_MIN_COVERAGE,
 };
 
 /// Local search results listed before the SIMBAD result.
@@ -39,6 +40,47 @@ const SEARCH_LIMIT: usize = 50;
 const TARGET_PAGE: u32 = 1000;
 
 impl Library {
+    /// One saved Target's row under a list's planning context: its site,
+    /// night and rig selection (PLAN-TGT-FR-14), so a Target page shows what
+    /// its list row shows. The context's other fields, its filters and page
+    /// do not apply; `TargetsQuery::default()` is the list's default context.
+    ///
+    /// # Errors
+    /// `NotFound` for an unsaved Target, an unknown site, rig or Project;
+    /// `PersistenceFailure` when a required catalog read fails.
+    pub async fn targets_get(
+        &self,
+        target_id: Uuid,
+        context: &TargetsQuery,
+    ) -> Result<TargetDetail, LibraryError> {
+        let record = self.with_facts(self.catalog().target(target_id).await?);
+        let (rigs, strip) = self.targets_rigs(context.rigs).await?;
+        let planning = self.targets_planning(context.site_id).await?;
+        let planning_unavailable = planning.as_ref().err().copied();
+        let marks = self.catalog().my_target_marks().await?;
+        let activity = self.catalog().target_activity().await?;
+        let avoidance = self.catalog().workflow_settings().await?.0.moon_avoidance;
+        let curves: Vec<(Band, MoonAvoidanceCurve)> =
+            strip.iter().map(|band| (*band, avoidance.curve(*band))).collect();
+        let night = context.night;
+        let (sky, (record, planned)) = blocking(move || {
+            let (site, criteria) = match planning {
+                Ok(planning) => planning,
+                Err(reason) => return Ok((None, (record, Err(reason)))),
+            };
+            let (context, sky) = night_plan(&site, night, criteria)?;
+            let planned = graded_night(&context, &record, &site, &curves)?;
+            Ok((Some(sky), (record, planned)))
+        })
+        .await?;
+        let row = listed(record, planned, &marks, &activity, &rigs, true).row;
+        let (basis, moon, darkness) = match sky {
+            Some((basis, moon, darkness)) => (Some(basis), Some(moon), darkness),
+            None => (None, None, None),
+        };
+        Ok(TargetDetail { row, basis, moon, darkness, planning_unavailable })
+    }
+
     /// One Targets list page: the rows of the Show mode, catalogues and preset
     /// with the night's planning values at the planning site (the query's,
     /// else the default site) under Home's stored criteria, sorted with
@@ -91,35 +133,47 @@ impl Library {
                     return Ok((None, rows));
                 }
             };
-            let night = match night {
-                Some(night) => night,
-                None => planning::night_of(OffsetDateTime::now_utc(), &site)?,
-            };
-            let context = NightContext::new(&site, night, &criteria)?;
-            let sky = planning::night_sky(&site, night, criteria.darkness)?;
+            let (context, sky) = night_plan(&site, night, criteria)?;
             let nights = nights_of(&context, &records, &site, &curves)?;
-            let bounds = context.bounds();
-            let basis = TargetsBasis {
-                site: site.basis(),
-                time_zone: site.time_zone,
-                night,
-                night_start_utc: bounds.start,
-                night_end_utc: bounds.end,
-                criteria,
-                method: planning::METHOD.into(),
-            };
             let rows: Vec<Computed> = records.into_iter().zip(nights).collect();
-            Ok((Some((basis, sky.moon, sky.darkness)), rows))
+            Ok((Some(sky), rows))
         })
         .await?;
         let mut rows: Vec<Listed> = computed
             .into_iter()
-            .map(|(record, night)| listed(record, night, &marks, &saved, &activity, &rigs))
+            .map(|(record, night)| {
+                let saved = saved.contains_key(&record.candidate.id);
+                listed(record, night, &marks, &activity, &rigs, saved)
+            })
             .collect();
+        if let Some(favourite) = query.favourite {
+            rows.retain(|row| row.row.favourite == favourite);
+        }
+        if let Some(project_id) = query.project_id {
+            rows.retain(|row| row.row.projects.iter().any(|badge| badge.project_id == project_id));
+        }
+        if !query.suitable_bands.is_empty() {
+            rows.retain(|row| suits(&row.row, |band| query.suitable_bands.contains(&band)));
+        }
         if let Some(preset) = query.preset {
             rows.retain(|row| admits(preset, row));
         }
         sort_rows(&mut rows, query.effective_sort());
+        if query.sort.is_none() && !query.suitable_bands.is_empty() {
+            // PLAN-TGT-FR-15: the longest clear time among the chosen bands,
+            // descending; the stable sort keeps the order above for ties.
+            let clear_minutes = |listed: &Listed| {
+                listed
+                    .row
+                    .bands
+                    .iter()
+                    .filter(|state| query.suitable_bands.contains(&state.band))
+                    .map(|state| state.clear_minutes)
+                    .max()
+                    .unwrap_or_default()
+            };
+            rows.sort_by_key(|listed| std::cmp::Reverse(clear_minutes(listed)));
+        }
         let total = u32::try_from(rows.len()).unwrap_or(u32::MAX);
         let offset = usize::try_from(query.offset).unwrap_or(usize::MAX);
         let limit =
@@ -203,6 +257,7 @@ impl Library {
                 TargetsSearchResult {
                     target: hit.candidate,
                     source,
+                    favourite: marks.favourites.contains(&id),
                     in_my_targets: marks.contains(id),
                     matched_alias: hit.matched_alias,
                 }
@@ -212,6 +267,7 @@ impl Library {
             Ok(candidate) => {
                 if !results.iter().any(|result| result.target.id == candidate.id) {
                     results.push(TargetsSearchResult {
+                        favourite: marks.favourites.contains(&candidate.id),
                         in_my_targets: marks.contains(candidate.id),
                         source: TargetsSearchSource::Simbad,
                         matched_alias: None,
@@ -288,8 +344,8 @@ impl Library {
         self.catalog().set_favourite(target_id, favourite).await
     }
 
-    /// The built-in presets offered for the selected rigs, with their
-    /// definitions, then the saved presets. Mosaic candidates and Fits nicely
+    /// The built-in presets offered for the selected rigs, by id, then the
+    /// saved presets. Mosaic candidates and Fits nicely
     /// need a rig; the narrowband presets are hidden when the selected rigs
     /// pass no Ha, SII or OIII (PLAN-TGT-FR-12/13).
     ///
@@ -304,11 +360,7 @@ impl Library {
         let builtin = BuiltinPreset::ALL
             .into_iter()
             .filter(|preset| preset.offered(!rigs.is_empty(), &strip))
-            .map(|preset| BuiltinPresetInfo {
-                preset,
-                name: preset.name().to_owned(),
-                definition: preset.definition().to_owned(),
-            })
+            .map(|preset| BuiltinPresetInfo { preset })
             .collect();
         Ok(TargetsPresets { builtin, saved: self.catalog().saved_presets().await? })
     }
@@ -482,6 +534,35 @@ fn nights_of(
     })
 }
 
+/// The basis, the Moon and the darkness window a page carries once.
+type Sky = (TargetsBasis, NightMoon, Option<DarknessWindow>);
+
+/// The planning night (the request's, else tonight at the site), its
+/// context under the criteria, and its sky.
+fn night_plan(
+    site: &ObservingSite,
+    night: Option<Date>,
+    criteria: PlanCriteria,
+) -> Result<(NightContext, Sky), LibraryError> {
+    let night = match night {
+        Some(night) => night,
+        None => planning::night_of(OffsetDateTime::now_utc(), site)?,
+    };
+    let context = NightContext::new(site, night, &criteria)?;
+    let sky = planning::night_sky(site, night, criteria.darkness)?;
+    let bounds = context.bounds();
+    let basis = TargetsBasis {
+        site: site.basis(),
+        time_zone: site.time_zone.clone(),
+        night,
+        night_start_utc: bounds.start,
+        night_end_utc: bounds.end,
+        criteria,
+        method: planning::METHOD.into(),
+    };
+    Ok((context, (basis, sky.moon, sky.darkness)))
+}
+
 /// A Target's night with each strip band graded, or why it has none.
 type Planned = Result<GradedNight, PlanningUnknownReason>;
 
@@ -523,15 +604,16 @@ fn listed(
     record: TargetRecord,
     night: Planned,
     marks: &MyTargetMarks,
-    saved: &HashMap<Uuid, TargetRecord>,
     activity: &std::collections::BTreeMap<Uuid, TargetActivity>,
     rigs: &[TargetsRig],
+    saved: bool,
 ) -> Listed {
     let id = record.candidate.id;
     let TargetActivity { sessions, captured } = activity.get(&id).cloned().unwrap_or_default();
     let mut row = TargetRow {
-        saved: saved.contains_key(&id),
+        saved,
         favourite: marks.favourites.contains(&id),
+        in_my_targets: marks.contains(id),
         projects: marks.badges.get(&id).cloned().unwrap_or_default(),
         max_altitude_deg: None,
         lunar_separation_deg: None,

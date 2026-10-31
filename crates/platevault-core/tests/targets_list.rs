@@ -110,6 +110,7 @@ async fn my_targets_page_includes_a_target_with_an_indexed_session() {
     let target = row(&page, candidate.id);
     assert!(target.saved, "an indexed session's Target record remains saved");
     assert!(!target.favourite, "a session does not make its Target a favourite");
+    assert!(target.in_my_targets, "an indexed session makes it a My targets member");
     assert_eq!(target.sessions, 1);
     assert_eq!(library.catalog().target_generation().await.unwrap(), generation);
 }
@@ -158,6 +159,7 @@ fn query(show: TargetsShow, site: Option<Uuid>, night: Date) -> TargetsQuery {
         offset: 0,
         limit: None,
         rigs: RigSelection::None,
+        ..TargetsQuery::default()
     }
 }
 
@@ -248,6 +250,7 @@ async fn my_targets_is_favourites_plus_open_project_subjects_with_badge() {
     assert_eq!(designations(&page), ["IC 1396", "M 31"], "NGC 7000 is recorded but not listed");
     let ic = row(&page, ic1396.id);
     assert!(!ic.favourite);
+    assert!(ic.in_my_targets, "an open-Project subject is in My targets");
     assert_eq!(
         ic.projects,
         [ProjectBadge { project_id: summer.id, name: "Summer nebulae".into() }]
@@ -268,6 +271,148 @@ async fn my_targets_is_favourites_plus_open_project_subjects_with_badge() {
         assert_eq!(row(&page, ic1396.id).favourite, favourite);
         assert_eq!(row(&page, ic1396.id).projects.len(), 1);
     }
+}
+
+/// PLAN-TGT-FR-01/14: one saved Target's row under a list's planning context
+/// is its list row, and says whether it is in My targets as the favourite
+/// goes on and off; an unsaved catalogue Target or an unknown id is `NotFound`.
+#[tokio::test]
+async fn targets_get_reads_one_saved_row_under_the_list_context() {
+    let temp = tempfile::tempdir().unwrap();
+    let library = open(&temp.path().join("library.sqlite")).await;
+    let backyard = site(&library, "Backyard", BACKYARD, "Europe/Amsterdam").await;
+    store_criteria(&library, criteria(MoonCriterion::None)).await;
+    let m31 = seed(&library, "M 31").await;
+    let m33 = seed(&library, "M 33").await;
+    library.catalog().record_seed_target(&m31).await.unwrap();
+    let mut context = query(TargetsShow::Browse, Some(backyard), date!(2026 - 10 - 10));
+    context.catalogues = vec![Catalogue::Messier];
+
+    let detail = library.targets_get(m31.id, &context).await.unwrap();
+    let outside = &detail.row;
+    assert!(outside.saved && !outside.favourite && !outside.in_my_targets);
+    assert!(outside.img_time_minutes.is_some(), "planned at the context's site and night");
+    let page = library.target_rows(&context).await.unwrap();
+    assert_eq!(outside, row(&page, m31.id), "the Target page shows its list row");
+    assert_eq!(
+        (&detail.basis, &detail.moon, &detail.darkness, detail.planning_unavailable),
+        (&page.basis, &page.moon, &page.darkness, None),
+        "and the night its list plans for"
+    );
+
+    library.set_favourite(m31.id, true).await.unwrap();
+    let inside = library.targets_get(m31.id, &context).await.unwrap().row;
+    assert!(inside.favourite && inside.in_my_targets);
+    library.set_favourite(m31.id, false).await.unwrap();
+    let left = library.targets_get(m31.id, &TargetsQuery::default()).await.unwrap();
+    assert!(left.row.saved && !left.row.in_my_targets, "the record stays, out of My targets");
+    let default = library.target_rows(&TargetsQuery::default()).await.unwrap();
+    assert_eq!(
+        (&left.basis, left.planning_unavailable),
+        (&default.basis, default.planning_unavailable),
+        "the default context is the list's default"
+    );
+
+    for unsaved in [m33.id, Uuid::new_v4()] {
+        let missing = library.targets_get(unsaved, &context).await.unwrap_err();
+        assert!(matches!(missing, LibraryError::NotFound(_)), "{missing:?}");
+    }
+}
+
+/// PLAN-TGT-FR-15/17, PLAN-FR-10: the Favourite and Project filters apply
+/// before the page, so `total` counts every match and a list longer than one
+/// page filters whole; a search result carries its Favourite state.
+#[tokio::test]
+async fn favourite_and_project_filters_apply_before_the_page() {
+    let temp = tempfile::tempdir().unwrap();
+    let library = open(&temp.path().join("library.sqlite")).await;
+    let m31 = seed(&library, "M 31").await;
+    let m33 = seed(&library, "M 33").await;
+    for candidate in [&m31, &m33] {
+        library.catalog().record_seed_target(candidate).await.unwrap();
+    }
+    library.set_favourite(m33.id, true).await.unwrap();
+    let autumn = library
+        .catalog()
+        .create_project(&ProjectInput {
+            name: "Autumn galaxies".into(),
+            notes: None,
+            subjects: vec![SubjectInput { target_id: m31.id, name: None }],
+            rig_ids: vec![rig(&library).await],
+            goals: Vec::new(),
+        })
+        .await
+        .unwrap();
+
+    let mut browse = query(TargetsShow::Browse, None, date!(2026 - 10 - 10));
+    browse.catalogues = vec![Catalogue::Messier];
+    let all = library.target_rows(&browse).await.unwrap().total;
+    browse.limit = Some(1);
+    let first = library.target_rows(&browse).await.unwrap();
+    assert!(first.rows[0].target.id != m33.id, "unfiltered, M 33 is past the first page");
+
+    browse.favourite = Some(true);
+    let page = library.target_rows(&browse).await.unwrap();
+    assert_eq!((page.total, page.rows[0].target.id), (1, m33.id));
+    browse.favourite = Some(false);
+    let page = library.target_rows(&browse).await.unwrap();
+    assert_eq!(page.total, all - 1);
+
+    browse.favourite = None;
+    browse.project_id = Some(autumn.id);
+    let page = library.target_rows(&browse).await.unwrap();
+    assert_eq!((page.total, page.rows[0].target.id), (1, m31.id));
+
+    let search = library.targets_search("M33").await.unwrap();
+    let result = search.results.iter().find(|result| result.target.id == m33.id).unwrap();
+    assert!(result.favourite && result.in_my_targets);
+    let search = library.targets_search("M31").await.unwrap();
+    let result = search.results.iter().find(|result| result.target.id == m31.id).unwrap();
+    assert!(!result.favourite && result.in_my_targets, "a Project subject, not a favourite");
+}
+
+/// PLAN-TGT-FR-15: Suitable filters keep the rows where a chosen band is good
+/// or marginal and, without a sort, order them by the longest clear time
+/// among the chosen bands, descending; a header sort still applies.
+#[tokio::test]
+async fn suitable_filters_keep_suited_rows_by_clear_time() {
+    let temp = tempfile::tempdir().unwrap();
+    let library = open(&temp.path().join("library.sqlite")).await;
+    let backyard = site(&library, "Backyard", BACKYARD, "Europe/Amsterdam").await;
+    let andromeda = mine(&library, "Andromeda", Some((10.684_708, 41.268_75))).await.candidate.id;
+    let alcyone = mine(&library, "Alcyone", Some((56.75, 24.116_667))).await.candidate.id;
+    mine(&library, "Unplaced", None).await;
+    store_criteria(&library, criteria(MoonCriterion::None)).await;
+    // Under a curve asking 180° no band suits; one asking nothing suits.
+    let mut settings = library.workflow_settings().await.unwrap().settings;
+    let never = MoonAvoidanceCurve { distance_deg: 180.0, width_days: 30.0 };
+    for band in [Band::L, Band::R, Band::G, Band::B, Band::Ha, Band::Sii] {
+        settings.moon_avoidance.set(band, never);
+    }
+    let always = MoonAvoidanceCurve { distance_deg: 0.0, width_days: 7.0 };
+    settings.moon_avoidance.set(Band::Oiii, always);
+    library.save_workflow_settings(0, &settings).await.unwrap();
+
+    let mut request = query(TargetsShow::MyTargets, Some(backyard), date!(2026 - 10 - 25));
+    let all = library.target_rows(&request).await.unwrap();
+    assert_eq!(all.total, 3);
+    request.suitable_bands = vec![Band::Ha];
+    assert_eq!(library.target_rows(&request).await.unwrap().total, 0, "Ha suits no Target");
+
+    request.suitable_bands = vec![Band::Ha, Band::Oiii];
+    let oiii = |id: Uuid| {
+        row(&all, id).bands.iter().find(|state| state.band == Band::Oiii).unwrap().clear_minutes
+    };
+    let mut expected = vec![alcyone, andromeda];
+    expected.sort_by_key(|id| std::cmp::Reverse(oiii(*id)));
+    let page = library.target_rows(&request).await.unwrap();
+    let ids: Vec<Uuid> = page.rows.iter().map(|row| row.target.id).collect();
+    assert_eq!(ids, expected, "Unplaced has no grades; the longest clear time leads");
+    assert_ne!(oiii(alcyone), oiii(andromeda), "the clear times differ, so the order says so");
+
+    request.sort = Some(TargetsSort { column: TargetsColumn::Designation, descending: false });
+    let page = library.target_rows(&request).await.unwrap();
+    assert_eq!(designations(&page), ["Alcyone", "Andromeda"], "a header sort wins");
 }
 
 /// PLAN-TGT-AC-02, PV-PLAN-SC-05: Browse with no catalogue and no preset lists
@@ -446,6 +591,7 @@ async fn stale_search_result_without_canonical_target_is_refused() {
         })
         .unwrap(),
         source: TargetsSearchSource::Catalogue,
+        favourite: false,
         in_my_targets: false,
         matched_alias: None,
     };
@@ -891,33 +1037,36 @@ async fn no_site_shows_dash_and_add_site_reason() {
 // Presets
 // ---------------------------------------------------------------------------
 
-/// PLAN-TGT-AC-09/10, PLAN-TGT-FR-09/10: exactly the five built-ins, no "Avoid
-/// tonight"; a saved preset survives a restart with its filters, is renamed
-/// and deleted, and a built-in cannot be.
+/// PLAN-TGT-AC-09/10, PLAN-TGT-FR-09/10/17: exactly the five built-ins by id,
+/// no "Avoid tonight"; a saved preset survives a restart with its filters,
+/// the Favourite filter, Suitable filters and the Fit filter's rig among
+/// them, is renamed and deleted, and a built-in cannot be.
 #[tokio::test]
 async fn saved_preset_persists_rename_delete_builtin_immutable() {
     let temp = tempfile::tempdir().unwrap();
     let database = temp.path().join("library.sqlite");
     let library = open(&database).await;
     let presets = library.targets_presets(RigSelection::None).await.unwrap();
-    let names: Vec<&str> = presets.builtin.iter().map(|info| info.name.as_str()).collect();
+    let ids: Vec<BuiltinPreset> = presets.builtin.iter().map(|info| info.preset).collect();
     assert_eq!(
-        names,
+        ids,
         [
-            "Best tonight (broadband)",
-            "Narrowband (Moon up)",
-            "Emission nebulae Ha",
-            "Galaxies dark sky",
-            "Planetary nebulae OIII",
+            BuiltinPreset::BestTonightBroadband,
+            BuiltinPreset::NarrowbandMoonUp,
+            BuiltinPreset::EmissionNebulaeHa,
+            BuiltinPreset::GalaxiesDarkSky,
+            BuiltinPreset::PlanetaryNebulaeOiii,
         ]
     );
-    assert!(presets.builtin.iter().all(|info| !info.definition.is_empty()));
     assert_eq!(presets.saved, [] as [platevault_core::SavedPreset; 0]);
 
     let filters = PresetFilters {
         show: TargetsShow::Browse,
         catalogues: vec![Catalogue::Ngc],
         preset: Some(BuiltinPreset::GalaxiesDarkSky),
+        favourite: Some(true),
+        suitable_bands: vec![Band::Ha],
+        rig_id: Some(rig(&library).await),
         sort: TargetsSort { column: TargetsColumn::ImgTime, descending: true },
     };
     let saved = library.save_targets_preset("Autumn galaxies", &filters).await.unwrap();

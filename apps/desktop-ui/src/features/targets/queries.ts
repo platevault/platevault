@@ -4,7 +4,8 @@
  * Every read is a `libraryQuery`, so a write refreshes the reads it changes
  * by command name. The library computes every planning value: the Targets
  * rows, their night's Moon and darkness under Home's stored criteria
- * (`planning_target_rows`), a Target's windows (`planning_compute_windows`),
+ * (`planning_target_rows`), one Target's row under the same context
+ * (`targets_get`), a Target's windows (`planning_compute_windows`),
  * its goal gaps (`planning_target_gaps`) and tonight's goal grades
  * (`planning_tonight`). Nothing here derives a window, an altitude or an
  * offset.
@@ -49,7 +50,7 @@ export const reminderStatusQuery = () => libraryQuery("planningReminderStatus", 
 /** The stored lead time a new reminder starts from (PLAN-FR-06). */
 export const reminderLeadTimeQuery = () => libraryQuery("planningReminderLeadTime")
 
-/** My targets under Home's stored criteria: the Target page and the palette find a Target among these rows. */
+/** My targets under Home's stored criteria: the palette lists a Target among these rows. */
 export function myTargetsRequest(siteId: string | null = null, night: string | null = null): TargetsQuery_Deserialize {
   return { show: "my_targets", siteId, night, limit: TARGET_PAGE }
 }
@@ -63,6 +64,7 @@ export function myTargetsRequest(siteId: string | null = null, night: string | n
  */
 const TARGET_READS: readonly LibraryCommand[] = [
   "planningTargetRows",
+  "targetsGet",
   "targetsSearch",
   "targetsPresetsList",
   "planningComputeWindows",

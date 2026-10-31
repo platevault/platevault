@@ -309,6 +309,7 @@ macro_rules! library_commands {
             crate::commands::observing_plans::planning_project_windows,
             crate::commands::observing_plans::planning_target_gaps,
             // targets
+            crate::commands::targets_list::targets_get,
             crate::commands::targets_list::planning_target_rows,
             crate::commands::targets_list::targets_search,
             crate::commands::targets_list::targets_search_result_action,

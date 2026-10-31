@@ -13,11 +13,11 @@ use std::path::Path;
 
 use persistence_library::{Catalog, SessionQuery, SuggestedAssociation};
 use platevault_model::{
-    AssociationKind, AssociationState, Availability, BuiltinPreset, Catalogue, ChannelIntegration,
-    Equipment, EvidenceItem, FieldPath, LibraryError, Location, MeasurementMethod, PresetFilters,
-    ProjectBadge, ProjectInput, Provenance, ScanFile, ScanObservation, ScanProgress, ScanState,
-    Session, SubjectInput, TargetActivity, TargetRecord, TargetsColumn, TargetsSearchAction,
-    TargetsShow, TargetsSort, WrapUpOutcome, WrapUpStep,
+    AssociationKind, AssociationState, Availability, Band, BuiltinPreset, Catalogue,
+    ChannelIntegration, Equipment, EvidenceItem, FieldPath, LibraryError, Location,
+    MeasurementMethod, PresetFilters, ProjectBadge, ProjectInput, Provenance, ScanFile,
+    ScanObservation, ScanProgress, ScanState, Session, SubjectInput, TargetActivity, TargetRecord,
+    TargetsColumn, TargetsSearchAction, TargetsShow, TargetsSort, WrapUpOutcome, WrapUpStep,
 };
 use sqlx::sqlite::{SqliteConnectOptions, SqliteConnection};
 use sqlx::Connection;
@@ -60,6 +60,24 @@ fn project(name: &str, subjects: &[&TargetRecord], rig: &Equipment) -> ProjectIn
 
 async fn save(catalog: &Catalog, designation: &str) -> TargetRecord {
     catalog.save_target(&target(designation, &designation.to_lowercase()), None).await.unwrap()
+}
+
+/// PLAN-TGT-FR-01/14: a Target read is scoped to saved records, `NotFound`
+/// otherwise, and the favourite moves a Target in and out of My targets.
+#[tokio::test]
+async fn target_read_returns_not_found_and_tracks_my_target_membership() {
+    let fx = Fixture::new();
+    let catalog = Catalog::open(&fx.db).await.unwrap();
+    let target = save(&catalog, "IC 1396").await;
+    let missing = catalog.target(Uuid::new_v4()).await.unwrap_err();
+    assert!(matches!(missing, LibraryError::NotFound(_)), "{missing:?}");
+    assert!(!catalog.my_target_marks().await.unwrap().contains(target.candidate.id));
+
+    catalog.set_favourite(target.candidate.id, true).await.unwrap();
+    assert!(catalog.my_target_marks().await.unwrap().contains(target.candidate.id));
+    catalog.set_favourite(target.candidate.id, false).await.unwrap();
+    assert!(!catalog.my_target_marks().await.unwrap().contains(target.candidate.id));
+    catalog.close().await.unwrap();
 }
 
 /// D-W60, PLAN-TGT-FR-01: My targets includes ★ favourites, every subject of
@@ -450,11 +468,17 @@ async fn target_activity_counts_evidence_qualified_suggested_target() {
 // Saved presets
 // ---------------------------------------------------------------------------
 
+/// Every saved filter set, so a round trip shows each one persists
+/// (PLAN-TGT-FR-10/15/17): the Favourite filter, Suitable filters and the
+/// Fit filter's rig.
 fn autumn() -> PresetFilters {
     PresetFilters {
         show: TargetsShow::Browse,
         catalogues: vec![Catalogue::Ngc, Catalogue::Messier],
         preset: Some(BuiltinPreset::GalaxiesDarkSky),
+        favourite: Some(false),
+        suitable_bands: vec![Band::Ha, Band::Oiii],
+        rig_id: Some(Uuid::from_u128(0x0072_0010)),
         sort: TargetsSort { column: TargetsColumn::ImgTime, descending: true },
     }
 }

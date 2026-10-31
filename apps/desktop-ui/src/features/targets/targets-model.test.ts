@@ -3,18 +3,16 @@ import { m } from "@/lib/i18n"
 import { candidate, row } from "./__fixtures__/targets-host"
 import {
   bandGrades,
-  byClearTime,
   capturedText,
   fitText,
   imgTimeText,
-  inMyTargets,
-  matchesRow,
   parseRigs,
   parseSort,
   presetFilters,
   presetName,
   presetSearch,
   readState,
+  targetContext,
   targetsQuery,
   unknownReasonText,
 } from "./targets-model"
@@ -34,6 +32,9 @@ describe("the Targets URL", () => {
       offset: 0,
       limit: 1000,
       rigs: { kind: "none" },
+      favourite: null,
+      suitableBands: [],
+      projectId: null,
     })
   })
 
@@ -43,6 +44,17 @@ describe("the Targets URL", () => {
     expect(query.catalogues).toEqual([])
   })
 
+  it("sends the Favourite filter, Suitable filters and the Project's subjects to the library, which filters before it pages", () => {
+    const query = targetsQuery(readState({ fav: "no", good: "Ha,bogus,OIII", project: "p1" }))
+    expect(query).toMatchObject({ favourite: false, suitableBands: ["Ha", "OIII"], projectId: "p1" })
+    expect(targetsQuery(readState({ fav: "yes" })).favourite).toBe(true)
+  })
+
+  it("reads a Target page's planning context from its list's site, night and rig, and nothing else", () => {
+    expect(targetContext({ site: "s2", night: "2026-11-01", rig: "r1", fav: "yes", good: "Ha" })).toEqual({ siteId: "s2", night: "2026-11-01", rigs: { kind: "rig", equipmentId: "r1" } })
+    expect(targetContext({})).toEqual({ siteId: null, night: null, rigs: { kind: "none" } })
+  })
+
   it("reads the rig selector: this Project's rigs needs the Project, else one rig, else none", () => {
     expect(parseRigs({ rig: "project", project: "p1" })).toEqual({ kind: "project", projectId: "p1" })
     expect(parseRigs({ rig: "project" })).toEqual({ kind: "none" })
@@ -50,44 +62,23 @@ describe("the Targets URL", () => {
     expect(parseSort("bogus")).toBeNull()
   })
 
-  it("restores a saved preset's filters and clears the others", () => {
-    const filters = presetFilters(readState({ mode: "browse", cat: "ic", sort: "lunar" }))
-    expect(filters).toEqual({ show: "browse", catalogues: ["ic"], preset: null, sort: { column: "lunar", descending: false } })
-    expect(presetSearch(filters, "p9")).toMatchObject({ mode: "browse", cat: "ic", sort: "lunar", saved: "p9", fav: undefined, good: undefined })
+  it("saves a preset's Favourite filter, Suitable filters and single rig, and restores them clearing the others", () => {
+    const filters = presetFilters(readState({ mode: "browse", cat: "ic", sort: "lunar", fav: "yes", good: "Ha", rig: "r1" }))
+    expect(filters).toEqual({ show: "browse", catalogues: ["ic"], preset: null, favourite: true, suitableBands: ["Ha"], rigId: "r1", sort: { column: "lunar", descending: false } })
+    expect(presetSearch(filters, "p9")).toMatchObject({ mode: "browse", cat: "ic", sort: "lunar", saved: "p9", fav: "yes", good: "Ha", rig: "r1" })
+    const plain = presetFilters(readState({ rig: "project", project: "p1" }))
+    expect(plain).toMatchObject({ favourite: null, suitableBands: [], rigId: null })
+    expect(presetSearch(plain, "p8")).toMatchObject({ fav: undefined, good: undefined, rig: undefined })
   })
 })
 
-describe("row filters", () => {
-  it("filters by Favourite, a chosen band graded good or marginal, and a Project badge", () => {
-    const other = row(candidate("t-n7000", "NGC 7000"), { favourite: false, projects: [{ projectId: "p1", name: "Cygnus HOO" }] })
-    expect(matchesRow(M31, { favourite: "no", bands: [], projectId: null })).toBe(false)
-    expect(matchesRow(other, { favourite: "no", bands: [], projectId: "p1" })).toBe(true)
-    // OIII is graded poor for M 31 tonight; Ha is marginal.
-    expect(matchesRow(M31, { favourite: "", bands: ["OIII"], projectId: null })).toBe(false)
-    expect(matchesRow(M31, { favourite: "", bands: ["OIII", "Ha"], projectId: null })).toBe(true)
-  })
-
-  it("orders by the longest clear time among the chosen bands, ties in the library's order", () => {
-    const a = row(candidate("a", "A"), { bands: [{ band: "Ha", grade: "good", clearMinutes: 60 }, { band: "OIII", grade: "good", clearMinutes: 200 }] })
-    const b = row(candidate("b", "B"), { bands: [{ band: "Ha", grade: "good", clearMinutes: 120 }] })
-    const c = row(candidate("c", "C"), { bands: [{ band: "Ha", grade: "marginal", clearMinutes: 120 }] })
-    const ids = (rows: readonly (typeof a)[]) => rows.map((r) => r.target.id)
-    expect(ids(byClearTime([a, b, c], (r) => r, ["Ha"]))).toEqual(["b", "c", "a"])
-    expect(ids(byClearTime([a, b, c], (r) => r, ["Ha", "OIII"]))).toEqual(["a", "b", "c"])
-    expect(ids(byClearTime([c, b, a], (r) => r, []))).toEqual(["c", "b", "a"])
-  })
-
+describe("row words", () => {
   it("grades every band of the strip as the library graded it", () => {
     expect(bandGrades(M31.bands)).toEqual([
       { band: "L", grade: "good" },
       { band: "Ha", grade: "marginal" },
       { band: "OIII", grade: "poor" },
     ])
-  })
-
-  it("counts a favourite, a Project subject or a Target with a session as in My targets", () => {
-    expect(inMyTargets(row(candidate("a", "IC 1"), { favourite: false, sessions: 0 }))).toBe(false)
-    expect(inMyTargets(row(candidate("b", "IC 2"), { favourite: false, sessions: 1 }))).toBe(true)
   })
 })
 
