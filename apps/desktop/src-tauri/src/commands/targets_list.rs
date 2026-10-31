@@ -27,7 +27,9 @@ use super::library::{fail, Reply};
 /// filters and page do not apply. Read-only.
 ///
 /// # Errors
-/// `NotFound` for an unsaved Target or an unknown site, rig or Project.
+/// `NotFound` for an unsaved Target or an unknown context site, rig or
+/// Project naming that missing entity; `PersistenceFailure` when a required
+/// catalog read fails.
 #[tauri::command]
 #[specta::specta]
 pub async fn targets_get(
@@ -35,10 +37,29 @@ pub async fn targets_get(
     target_id: Uuid,
     context: Option<TargetsQuery>,
 ) -> Reply<TargetDetail> {
-    library
-        .targets_get(target_id, &context.unwrap_or_default())
-        .await
-        .map_err(fail(Some(target_id)))
+    let context = context.unwrap_or_default();
+    library.catalog().target(target_id).await.map_err(fail(Some(target_id)))?;
+    match context.rigs {
+        RigSelection::Rig { equipment_id } => {
+            library.catalog().equipment(equipment_id).await.map_err(fail(Some(equipment_id)))?;
+        }
+        RigSelection::Project { project_id } => {
+            let project =
+                library.catalog().project(project_id).await.map_err(fail(Some(project_id)))?;
+            for equipment_id in project.rig_ids {
+                library
+                    .catalog()
+                    .equipment(equipment_id)
+                    .await
+                    .map_err(fail(Some(equipment_id)))?;
+            }
+        }
+        RigSelection::None => {}
+    }
+    if let Some(site_id) = context.site_id {
+        library.catalog().site(site_id).await.map_err(fail(Some(site_id)))?;
+    }
+    library.targets_get(target_id, &context).await.map_err(fail(None))
 }
 
 /// One Targets list page: My targets or Browse catalogues with tonight's

@@ -156,6 +156,34 @@ describe("Targets list", () => {
   )
 
   it(
+    "opens a Browse row only when inMyTargets is true, and adds one with a session when false",
+    async () => {
+      const user = userEvent.setup()
+      const lib = host({
+        planning_target_rows: () => targetsPage([
+          row(M31, { favourite: true, inMyTargets: false, sessions: 1 }),
+          row(M33, { favourite: false, inMyTargets: true, sessions: 0 }),
+        ]),
+        targets_search_result_action: (args) => {
+          const result = args.result as { target: typeof M31; inMyTargets: boolean }
+          return { action: result.inMyTargets ? "open" : "added", target: { candidate: result.target, decisionRevision: 1 } }
+        },
+      })
+      const { history } = renderAt("/targets?mode=browse&cat=messier")
+      const table = await screen.findByRole("table", { name: m.nav_targets() })
+      await user.click(await within(table).findByText("M 31"))
+      await waitFor(() => expect(lib.sent("targets_search_result_action")).toHaveLength(1))
+      expect(lib.sent("targets_search_result_action")[0]?.args.result).toMatchObject({ target: { id: "t-m31" }, inMyTargets: false })
+      expect(history.location.pathname).toBe("/targets")
+
+      await user.click(within(table).getByText("M 33"))
+      await waitFor(() => expect(history.location.pathname).toBe("/targets/t-m33"))
+      expect(lib.sent("targets_search_result_action")).toHaveLength(1)
+    },
+    TEST_MS,
+  )
+
+  it(
     "adds a catalogue result as a favourite with the search still open, and opens a result already in My targets",
     async () => {
       const user = userEvent.setup()

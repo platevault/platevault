@@ -1593,7 +1593,9 @@ export const commands = {
 	 *  filters and page do not apply. Read-only.
 	 * 
 	 *  # Errors
-	 *  `NotFound` for an unsaved Target or an unknown site, rig or Project.
+	 *  `NotFound` for an unsaved Target or an unknown context site, rig or
+	 *  Project naming that missing entity; `PersistenceFailure` when a required
+	 *  catalog read fails.
 	 */
 	targetsGet: (targetId: string, context: {
 	show?: TargetsShow,

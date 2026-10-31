@@ -46,7 +46,7 @@ impl Library {
     /// do not apply; `TargetsQuery::default()` is the list's default context.
     ///
     /// # Errors
-    /// `NotFound` for an unsaved Target, an unknown site, rig or Project;
+    /// `NotFound` for an unsaved Target or an unknown site, rig or Project;
     /// `PersistenceFailure` when a required catalog read fails.
     pub async fn targets_get(
         &self,
@@ -54,8 +54,19 @@ impl Library {
         context: &TargetsQuery,
     ) -> Result<TargetDetail, LibraryError> {
         let record = self.with_facts(self.catalog().target(target_id).await?);
-        let (rigs, strip) = self.targets_rigs(context.rigs).await?;
-        let planning = self.targets_planning(context.site_id).await?;
+        let rigs = self.targets_rigs(context.rigs).await.map_err(|error| match context.rigs {
+            RigSelection::Rig { equipment_id } => error.concerning(equipment_id),
+            RigSelection::Project { project_id } => error.concerning(project_id),
+            RigSelection::None => error,
+        })?;
+        let (rigs, strip) = rigs;
+        let planning =
+            self.targets_planning(context.site_id).await.map_err(|error| {
+                match context.site_id {
+                    Some(site_id) => error.concerning(site_id),
+                    None => error,
+                }
+            })?;
         let planning_unavailable = planning.as_ref().err().copied();
         let marks = self.catalog().my_target_marks().await?;
         let activity = self.catalog().target_activity().await?;

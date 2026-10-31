@@ -919,10 +919,12 @@ fn targets_get_reads_one_saved_target_and_presets_cross_as_ids() {
     let fitted = shell.call("targets_get", &json!({ "targetId": target, "context": context }));
     assert_eq!(fitted["row"]["fit"].as_array().map(Vec::len), Some(1), "{fitted}");
     let unknown_rig = json!({ "rigs": { "kind": "rig", "equipmentId": unknown } });
-    let refused = shell
-        .invoke("targets_get", &json!({ "targetId": target, "context": unknown_rig }))
-        .expect_err("an unknown rig");
-    assert_eq!(refused["code"], json!(NOT_FOUND), "{refused}");
+    shell.refuses(
+        "targets_get",
+        &json!({ "targetId": target, "context": unknown_rig }),
+        NOT_FOUND,
+        unknown,
+    );
 
     let presets = shell.call("targets_presets_list", &json!({ "rigs": null }));
     let builtin = presets["builtin"].as_array().expect("built-in presets");

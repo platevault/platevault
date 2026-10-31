@@ -70,7 +70,7 @@ export function TargetPage() {
   const detail = read.data
   const path = [{ label: m.nav_targets(), link: { to: "/targets", search: search as Record<string, string> } }]
   const failure = failureOf(read.error)
-  const missing = failure?.source === "library" && failure.error.code === "not_found"
+  const missing = failure?.source === "library" && failure.error.code === "not_found" && failure.error.identity === targetId
   const failed = read.error && !missing ? { error: read.error, retry: read.refetch } : null
 
   if (failed) {

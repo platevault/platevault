@@ -159,3 +159,4 @@ describe("generated IPC importer boundary", () => {
     assert.deepEqual(imports('import { x } from "@/lib/bindings/index"', "src/app/boot.ts"), [])
   })
 })
+

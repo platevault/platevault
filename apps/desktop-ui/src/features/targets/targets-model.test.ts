@@ -68,7 +68,9 @@ describe("the Targets URL", () => {
     expect(presetSearch(filters, "p9")).toMatchObject({ mode: "browse", cat: "ic", sort: "lunar", saved: "p9", fav: "yes", good: "Ha", rig: "r1" })
     const plain = presetFilters(readState({ rig: "project", project: "p1" }))
     expect(plain).toMatchObject({ favourite: null, suitableBands: [], rigId: null })
-    expect(presetSearch(plain, "p8")).toMatchObject({ fav: undefined, good: undefined, rig: undefined })
+    expect(presetSearch(plain, "p8")).toMatchObject({ fav: undefined, good: undefined })
+    expect(presetSearch(plain, "p8")).not.toHaveProperty("rig")
+    expect({ ...{ rig: "rig-current" }, ...presetSearch(plain, "p8") }).toHaveProperty("rig", "rig-current")
   })
 })
 

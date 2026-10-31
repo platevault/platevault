@@ -196,7 +196,7 @@ export function presetFilters(state: TargetsState): PresetFilters {
   return state.sort ? { ...filters, sort: state.sort } : filters
 }
 
-/** The URL a saved preset restores: everything it saved, every other filter cleared. */
+/** The URL a saved preset restores: saved filters replace their facets; an unsaved rig leaves the current rig alone. */
 export function presetSearch(filters: PresetFilters, savedId: string): SearchParams {
   return {
     ...viewSearch(filters.show === "browse" ? "browse" : "my"),
@@ -206,7 +206,7 @@ export function presetSearch(filters: PresetFilters, savedId: string): SearchPar
     saved: savedId,
     fav: favouriteParam(filters.favourite),
     good: filters.suitableBands && filters.suitableBands.length > 0 ? filters.suitableBands.join(",") : undefined,
-    rig: filters.rigId ?? undefined,
+    ...(filters.rigId ? { rig: filters.rigId } : {}),
   }
 }
 
@@ -287,7 +287,7 @@ const PRESET_WORDS: Record<BuiltinPreset, { name: (m: Messages) => string; defin
   fits_nicely: { name: (m) => m.targets_preset_fits(), definition: (m) => m.targets_preset_fits_definition() },
 }
 
-/** A built-in preset's name from the catalogue by id; the library's English fields are never shown. */
+/** A built-in preset's name comes from the catalogue by id. */
 export function presetName(m: Messages, preset: BuiltinPreset): string {
   return PRESET_WORDS[preset].name(m)
 }

@@ -326,10 +326,30 @@ describe("Target page", () => {
   it(
     "says a Target the library doesn't hold isn't in the library, with the way back to Targets",
     async () => {
-      host({ targets_get: () => refuse("not_found") })
+      host({
+        targets_get: () => {
+          throw { code: "not_found", identity: "t-m31", scope: null, retry: "none", currentRevision: null, successors: [], window: null, correction: null }
+        },
+      })
       renderTarget()
       expect(await screen.findAllByText(m.targets_not_in_library())).not.toHaveLength(0)
       expect(screen.getByRole("button", { name: m.nav_targets() })).toBeInTheDocument()
+    },
+    TEST_MS,
+  )
+
+  it(
+    "shows Retry when a context entity, not the Target, is missing",
+    async () => {
+      host({
+        targets_get: () => {
+          throw { code: "not_found", identity: "missing-rig", scope: null, retry: "none", currentRevision: null, successors: [], window: null, correction: null }
+        },
+      })
+      renderTarget()
+      expect(await screen.findByText(m.action_failure_not_found())).toBeInTheDocument()
+      expect(screen.getByRole("button", { name: m.verb_retry() })).toBeInTheDocument()
+      expect(screen.queryByText(m.targets_not_in_library())).toBeNull()
     },
     TEST_MS,
   )

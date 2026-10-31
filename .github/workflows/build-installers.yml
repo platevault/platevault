@@ -628,3 +628,4 @@ jobs:
             installers-signed/*.exe.sig installers-signed/*.msi.sig \
             --repo "${GITHUB_REPOSITORY}" \
             --clobber
+
