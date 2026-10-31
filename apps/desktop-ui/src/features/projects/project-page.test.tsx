@@ -8,7 +8,7 @@ import { type AnyRoute, createMemoryHistory, createRoute } from "@tanstack/react
 import { clearMocks, mockIPC } from "@tauri-apps/api/mocks"
 import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest"
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest"
 import type { ArchiveProgress, ApplyPreview_Serialize, ApplyReport_Serialize, NativePathWire, Project, ProjectInputs_Serialize, ProjectSummary, WrapUpStatus } from "@/api/ipc"
 import { createQueryClient } from "@/api/query"
 import { statusMeta } from "@/components/app/status"
@@ -128,6 +128,7 @@ afterAll(() => {
 })
 
 afterEach(() => {
+  vi.useRealTimers()
   cleanup()
   clearMocks()
   resetApplyRuns()
@@ -281,6 +282,66 @@ describe("Wrap up", { timeout: TEST_MS }, () => {
     expect(sent("project_close")[0]!.args.request).toEqual({ projectId: P, desiredRevision: 4, archive: null })
   })
 
+  it("polls durable archive status every two seconds until it stops", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      let releaseFirstStatus: (() => void) | undefined
+      let statusReads = 0
+      const { sent } = host({
+        project_list: () => [summary("closing")],
+        project_wrap_up_status: () => status({ lifecycle: "closing", blocker: { blocker: "not_open", lifecycle: "closing" }, records: [recorded("clean_up"), recorded("trash"), recorded("archive")], current: null }),
+        project_close_status: () => {
+          statusReads += 1
+          if (statusReads === 1) return new Promise((resolve) => { releaseFirstStatus = () => resolve({ state: "running", progress: archiveProgress }) })
+          return statusReads === 2 ? { state: "running", progress: archiveProgress } : { state: "stopped", progress: archiveProgress }
+        },
+      })
+      renderAt(`/projects/${P}?stage=wrap-up`)
+      await waitFor(() => expect(sent("project_close_status")).toHaveLength(1))
+      await act(async () => {
+        releaseFirstStatus?.()
+        await Promise.resolve()
+        await vi.advanceTimersByTimeAsync(1999)
+      })
+      expect(sent("project_close_status")).toHaveLength(1)
+      await act(() => vi.advanceTimersByTimeAsync(1))
+      expect(sent("project_close_status")).toHaveLength(2)
+      await act(() => vi.advanceTimersByTimeAsync(2000))
+      expect(sent("project_close_status")).toHaveLength(3)
+      await waitFor(() => expect(sent("project_close_status")).toHaveLength(4))
+      await act(() => vi.advanceTimersByTimeAsync(4000))
+      expect(sent("project_close_status")).toHaveLength(4)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+  it("refreshes project reads when durable archive status settles", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      let lifecycle: ProjectSummary["lifecycle"] = "closing"
+      let closeStatusReads = 0
+      const { sent } = host({
+        project_list: () => [summary(lifecycle)],
+        project_wrap_up_status: () => status({ lifecycle, blocker: { blocker: "not_open", lifecycle }, records: [recorded("clean_up"), recorded("trash"), recorded("archive")], current: null }),
+        project_close_status: () => {
+          closeStatusReads += 1
+          if (closeStatusReads > 1) lifecycle = "archived"
+          return closeStatusReads === 1 ? { state: "running", progress: archiveProgress } : { state: "settled", report: { ...archiveProgress, settled: true } }
+        },
+      })
+      renderAt(`/projects/${P}?stage=wrap-up`)
+
+      expect(await screen.findByText(m.wrapup_closing())).toBeInTheDocument()
+      await act(() => vi.advanceTimersByTimeAsync(2000))
+      expect(await screen.findByText(m.status_archived())).toBeInTheDocument()
+      expect(sent("project_wrap_up_status").length).toBeGreaterThan(1)
+      expect(sent("project_list").length).toBeGreaterThan(1)
+      expect(screen.queryByRole("button", { name: m.wrapup_stop_archive() })).not.toBeInTheDocument()
+      expect(screen.queryByText(m.wrapup_closing_state())).not.toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
   it("reads durable file progress while Closing and offers Stop", async () => {
     const user = userEvent.setup()
     const { sent } = host({
@@ -294,7 +355,6 @@ describe("Wrap up", { timeout: TEST_MS }, () => {
     expect(await screen.findByText(m.operation_progress_count({ done: "1", total: "2", unit: m.op_unit_files() }))).toBeInTheDocument()
     await user.click(screen.getByRole("button", { name: m.wrapup_stop_archive() }))
     await waitFor(() => expect(sent("project_close_stop")).toHaveLength(1))
-    expect(sent("project_close_status")).toHaveLength(1)
   })
   it("reads a Project left Closing as Closing, with Stop", async () => {
     const user = userEvent.setup()

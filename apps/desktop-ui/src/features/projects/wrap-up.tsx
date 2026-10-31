@@ -25,7 +25,7 @@
  */
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { Square } from "lucide-react"
-import { type ReactNode, useState } from "react"
+import { type ReactNode, useEffect, useState } from "react"
 import {
   type ArchiveProgress,
   type ArchiveReview,
@@ -57,7 +57,7 @@ import { formatBytes, formatCount, formatDateTime } from "@/lib/format"
 import { operationText } from "./apply-words"
 import type { Messages } from "@/lib/i18n"
 import type { ProjectTabProps } from "./project-page"
-import { closeStatusQuery, isLocked, locationsQuery, type ProjectHeader, projectWrite, wrapUpStatusQuery } from "./queries"
+import { closeStatusQuery, invalidateProjectReads, isLocked, locationsQuery, type ProjectHeader, projectWrite, wrapUpStatusQuery } from "./queries"
 import { pathText, reasonText } from "./words"
 
 export const WRAP_UP_STEPS: readonly WrapUpStep[] = ["clean_up", "trash", "archive"]
@@ -379,6 +379,9 @@ function useArchiveStep(header: ProjectHeader, status: WrapUpStatus, enabled: bo
     refetchInterval: (query) => (query.state.data?.state === "running" ? 2000 : false),
   })
   const client = useQueryClient()
+  useEffect(() => {
+    if (durable.data?.state === "settled" || durable.data?.state === "stopped") void invalidateProjectReads(client)
+  }, [client, durable.data?.state])
   const locations = useQuery({ ...locationsQuery(), enabled })
   // Archive writes to any active location (the library refuses a retired one).
   const destinations = (locations.data ?? []).filter((l) => l.location.lifecycle === "active")
@@ -389,8 +392,8 @@ function useArchiveStep(header: ProjectHeader, status: WrapUpStatus, enabled: bo
   const sessions = useSessionSummaries(review?.sessions.map((s) => s.sessionId) ?? [])
   const [ticked, setTicked] = useState<string[] | null>(null)
   const run = useCloseRun(header.id)
-  const durableState: "running" | "stopped" | "settled" | null = durable.data?.state ?? null
-  const progress = durable.data ? durable.data.state === "settled" ? durable.data.report : durable.data.progress : null
+  const durableState: "running" | "stopped" | "settled" | null = status.lifecycle === "closing" ? (durable.data?.state ?? null) : null
+  const progress = status.lifecycle === "closing" && durable.data ? durable.data.state === "settled" ? durable.data.report : durable.data.progress : null
   const closing: ArchiveProgress | "running" | null = run?.phase === "running" || durableState === "running" ? "running" : run?.phase === "settled" && run.result.ok ? run.result.data.archive : progress
   const picked = ticked ?? review?.sessions.filter(movable).map((s) => s.sessionId) ?? []
 

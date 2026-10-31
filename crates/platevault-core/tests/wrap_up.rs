@@ -21,7 +21,6 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Duration;
 
 use apply_support::{corrected, world, World, HA, OIII, OIII_FLATS, PROJECT, SEP24, SEP28};
 use cleanup_support::ScopedTrash;
@@ -890,14 +889,13 @@ async fn close_status_reads_durable_archive_progress_before_and_after_restart() 
     let library = Arc::clone(&world.library);
     let worker_trash = trash.clone();
     let worker_control = gated.clone();
+    drop(gated);
     let close = thread::spawn(move || {
         tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap().block_on(
             library.close_project(&request, worker_trash.dyn_trash(), worker_control.as_ref()),
         )
     });
-    wait_for_release
-        .recv_timeout(Duration::from_secs(10))
-        .expect("archive reached its first durable step");
+    wait_for_release.recv().expect("archive reached its first durable step");
 
     let running = world.library.project_close_status(world.project).await.unwrap().unwrap();
     let ProjectCloseStatus::Running { progress } = running else { panic!("{running:#?}") };

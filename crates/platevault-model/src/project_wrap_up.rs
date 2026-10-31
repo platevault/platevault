@@ -63,17 +63,6 @@ pub enum ProjectCloseStatus {
     Settled { report: ArchiveProgress },
 }
 
-impl ProjectCloseStatus {
-    /// The archive progress for either an active or completed Close.
-    #[must_use]
-    pub const fn progress(&self) -> &ArchiveProgress {
-        match self {
-            Self::Running { progress } | Self::Stopped { progress } => progress,
-            Self::Settled { report } => report,
-        }
-    }
-}
-
 // ── Clean up ─────────────────────────────────────────────────────────────────
 
 /// What one Clean up row is.
