@@ -50,6 +50,30 @@ pub struct WrapUpStatus {
     pub current: Option<WrapUpStep>,
 }
 
+/// The durable state of a Project's Close/archive run.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "state", rename_all = "snake_case", rename_all_fields = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
+pub enum ProjectCloseStatus {
+    /// The Project's archive operation is active; `progress` is its durable journal view.
+    Running { progress: ArchiveProgress },
+    /// The operation was stopped before it settled; recovery resumes from `progress`.
+    Stopped { progress: ArchiveProgress },
+    /// The archive settled, with one outcome per reviewed file.
+    Settled { report: ArchiveProgress },
+}
+
+impl ProjectCloseStatus {
+    /// The archive progress for either an active or completed Close.
+    #[must_use]
+    pub const fn progress(&self) -> &ArchiveProgress {
+        match self {
+            Self::Running { progress } | Self::Stopped { progress } => progress,
+            Self::Settled { report } => report,
+        }
+    }
+}
+
 // ── Clean up ─────────────────────────────────────────────────────────────────
 
 /// What one Clean up row is.

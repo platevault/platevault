@@ -50,6 +50,31 @@ impl Library {
         self.catalog().wrap_up_status(project_id).await
     }
 
+    /// Read the durable state and per-file progress of a Project's Close/archive.
+    /// An active operation is running; an unsettled operation left by another
+    /// process is stopped and can be resumed by `recover_wrap_up`.
+    ///
+    /// # Errors
+    /// `NotFound` for an unknown Project; catalog errors.
+    pub async fn project_close_status(
+        &self,
+        project_id: Uuid,
+    ) -> Result<Option<crate::ProjectCloseStatus>, LibraryError> {
+        let Some(run) = self.catalog().project_archive_run(project_id).await? else {
+            return Ok(None);
+        };
+        let locations = self.catalog().list_locations().await?;
+        let by_id = locations.into_iter().map(|location| (location.id, location)).collect();
+        let progress = run.progress(&by_id);
+        Ok(Some(if run.settled() {
+            crate::ProjectCloseStatus::Settled { report: progress }
+        } else if crate::wrap_up::archive::archive_running(run.storage_operation_id) {
+            crate::ProjectCloseStatus::Running { progress }
+        } else {
+            crate::ProjectCloseStatus::Stopped { progress }
+        }))
+    }
+
     /// Reopen `step` from the step strip: it and the later steps are no
     /// longer recorded, until the Project is closed.
     ///
